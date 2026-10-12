@@ -8,7 +8,7 @@ const fixture = (name: string) => readFileSync(new URL(`fixtures/${name}`, impor
 const FAILED_LOG = fixture('edge-kind-e2e-failed.log')
 const UP_SH = fixture('edge-up-phases.sh')
 const CLAIMS = fixture('edge-self-host-claims.md')
-const REPO = 'gaboracnicolai/edge-infra'
+const REPO = 'Talyvor/edge-infra'
 const NOW = new Date('2026-10-07T01:00:00Z')
 
 /** gh as GitHub answers it for a night whose Kind E2E failed and whose Test passed `startedAt`. */
@@ -47,7 +47,7 @@ describe('B34.3 — Talyvor Edge in the nightly report', () => {
     expect(edge.claims.find((c) => c.row === 15)?.state).toBe('partly: rows 2–3 proven')
 
     const report = renderEdge(edge).join('\n')
-    expect(report).toContain('| Kind E2E | **failure** in PHASE 32 | [37407614407](https://github.com/gaboracnicolai/edge-infra/actions/runs/37407614407) |')
+    expect(report).toContain('| Kind E2E | **failure** in PHASE 32 | [37407614407](https://github.com/Talyvor/edge-infra/actions/runs/37407614407) |')
     expect(report).toContain('| Test | green |')
     expect(report).toContain('| Kind Backup | **no nightly run on main** |')
     expect(report).toContain('| 32 | no internet at run time: every node cut off, the stack restarted cold, and not one DNS query for a name outside the cluster | **failed**: X PHASE32 FAIL')

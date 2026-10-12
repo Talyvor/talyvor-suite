@@ -183,7 +183,7 @@ a delay. Observed on suite #39: the pre-rebase head had **0 runs**; the same tre
 rebased had 1. Nothing was red; nothing had run.
 
 ```sh
-REPO=gaboracnicolai/talyvor-suite
+REPO=Talyvor/talyvor-suite
 SHA=$(git rev-parse HEAD)          # ⚠ FULL 40 chars — see the trap below
 
 N=$(gh api "repos/$REPO/actions/runs?head_sha=$SHA" --jq '.total_count')
@@ -208,7 +208,7 @@ and all were green.)*
 ## 2. Build (on your workstation)
 
 ```sh
-git clone https://github.com/gaboracnicolai/talyvor-suite.git && cd talyvor-suite
+git clone https://github.com/Talyvor/talyvor-suite.git && cd talyvor-suite
 pnpm install --frozen-lockfile
 VITE_CONTACT_EMAIL=hello@talyvor.com \
   scripts/build-release.sh                # → apps/web/dist + bff-linux-amd64
@@ -740,7 +740,7 @@ that a container is running.
 
 | | Track | Docs |
 |---|---|---|
-| Image | `ghcr.io/gaboracnicolai/talyvor-track:latest` | `ghcr.io/gaboracnicolai/talyvor-docs:latest` |
+| Image | `ghcr.io/talyvor/talyvor-track:latest` | `ghcr.io/talyvor/talyvor-docs:latest` |
 | Published on | merge to `main` | merge to `main` |
 | Database | `talyvor_track` | `talyvor_docs` |
 | Migrations | **separate step — does NOT migrate on boot** | **on boot, fail-closed** |
@@ -872,7 +872,7 @@ Confirm you actually got a current image rather than a stale `:latest` from a
 previous pull:
 
 ```bash
-docker image inspect ghcr.io/gaboracnicolai/talyvor-track:latest \
+docker image inspect ghcr.io/talyvor/talyvor-track:latest \
   --format '{{index .Config.Labels "org.opencontainers.image.revision"}}{{"\n"}}{{.Created}}'
 ```
 

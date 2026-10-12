@@ -241,7 +241,7 @@ You already clone the suite there to build the BFF (README §2), so **no extra c
 needed** — it is the same checkout:
 
 ```sh
-git clone https://github.com/gaboracnicolai/talyvor-suite.git && cd talyvor-suite
+git clone https://github.com/Talyvor/talyvor-suite.git && cd talyvor-suite
 bash deploy/check-images.sh
 ```
 
@@ -280,8 +280,9 @@ for this commit" from "an image exists but `:latest` points somewhere else" —
 those need different responses, so the check must distinguish them.
 
 All three services publish `:latest` **and** `:<full-sha>` to
-`ghcr.io/gaboracnicolai/talyvor-<svc>` (verified: lens `images.yaml:50-52`,
-track `ci.yaml:203-205`, docs `ci.yaml:163-165`).
+`ghcr.io/talyvor/talyvor-<svc>` (verified: lens `images.yaml:54-56`,
+track `ci.yaml:354-356`, docs `ci.yaml:324-326`). Until the repositories moved to the
+Talyvor organisation on 12 Oct 2026 the images were under `ghcr.io/gaboracnicolai`.
 
 ```sh
 # Run on your workstation. Needs: docker logged in to ghcr.io (read:packages).
@@ -310,7 +311,7 @@ that only showed up by running it, each of which would have made the check lie:
 
 | Verdict | What it means | Do this |
 |---|---|---|
-| `MISSING` | The image workflow never succeeded for this commit (the Docker Hub timeout case). | Re-run the image workflow **for that exact SHA**: `gh workflow run images.yaml --repo gaboracnicolai/talyvor-lens --ref main`. Wait, then re-run STEP 0. |
+| `MISSING` | The image workflow never succeeded for this commit (the Docker Hub timeout case). | Re-run the image workflow **for that exact SHA**: `gh workflow run images.yaml --repo Talyvor/talyvor-lens --ref main`. Wait, then re-run STEP 0. |
 | `STALE` | An image for this commit exists, but `:latest` was overwritten by a later re-run of an **older** commit — exactly what happened today. | **Do not deploy `:latest`.** Pin the compose/unit to `:<sha>` for that service (see the note under each service's step), or re-run the workflow so `:latest` is re-pushed from this commit. |
 | `NO-LATEST` | Tag missing entirely. | Same as `MISSING` — re-run the workflow. |
 | `UNKNOWN` | The **lookup** failed — network, auth, or rate limit. **Not** the same as MISSING. | Retry. Do not re-run a build on the strength of this, and do not deploy: you have learned nothing about the image either way. |
@@ -321,7 +322,7 @@ manifest digests answers the actual question, and reports `<none>` distinctly
 from a mismatch — which is the distinction that failed today.
 
 > **If you must proceed with `STALE`:** pin by digest, never by `:latest`.
-> `image: ghcr.io/gaboracnicolai/talyvor-lens@sha256:<by_sha digest>` is
+> `image: ghcr.io/talyvor/talyvor-lens@sha256:<by_sha digest>` is
 > unambiguous and immune to a later re-push.
 
 ### ⚠ STEP 0b — after the LAST merge, wait for the image. This is a step, not a note.

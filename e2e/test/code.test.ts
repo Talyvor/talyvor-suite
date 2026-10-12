@@ -4,7 +4,7 @@ import type { Gh } from '../src/edge.ts'
 import { codeItemsFor, coveredScenarios } from '../src/filing.ts'
 import type { AgentLine } from '../src/lens.ts'
 
-const REPO = 'gaboracnicolai/talyvor-code'
+const REPO = 'Talyvor/talyvor-code'
 const line = (entry_id: string, kind: string, amount_ulxc: number, ref = ''): AgentLine =>
   ({ entry_id, kind, amount_ulxc, ref, counterparty: 'spend', balance_after_ulxc: 0, at: '2026-10-07T03:00:00Z' })
 

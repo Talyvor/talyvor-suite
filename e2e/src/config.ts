@@ -112,9 +112,9 @@ export const DEFAULTS = {
   outDir: 'out',
   exploreMinutes: 30,
   explorerModel: 'claude-haiku-4-5',
-  lensRepo: 'https://github.com/gaboracnicolai/talyvor-lens.git',
-  trackRepo: 'https://github.com/gaboracnicolai/talyvor-track.git',
-  docsRepo: 'https://github.com/gaboracnicolai/talyvor-docs.git',
+  lensRepo: 'https://github.com/Talyvor/talyvor-lens.git',
+  trackRepo: 'https://github.com/Talyvor/talyvor-track.git',
+  docsRepo: 'https://github.com/Talyvor/talyvor-docs.git',
 } as const
 
 export function parseConfig(argv: string[], env: Record<string, string | undefined>): RunConfig {

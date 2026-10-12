@@ -76,7 +76,7 @@ jobs:
       # promising a 404. Last in the job so the extra checkout cannot touch the steps above.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
         with:
-          repository: gaboracnicolai/talyvor-lens
+          repository: Talyvor/talyvor-lens
           path: .lens
           persist-credentials: false
       - run: node scripts/lens-routes.mjs .lens --check

@@ -8,7 +8,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
-export const EDGE_REPO = 'gaboracnicolai/edge-infra'
+export const EDGE_REPO = 'Talyvor/edge-infra'
 /** A nightly run older than this is reported as stale, never as green. */
 export const STALE_HOURS = 36
 const KIND_E2E = 'Kind E2E'

@@ -29,8 +29,8 @@ LENS_SYNTHETIC_KEY=… pnpm --filter @talyvor/e2e run \
 | `--track-src` | `E2E_TRACK_SRC` | `<out>/track-src` | a checkout of talyvor-track whose routes the coverage map lists (B34.9); `none` lists none. Kept up to Track's main from `E2E_TRACK_REPO` the way `--lens-src` is |
 | `--docs-src` | `E2E_DOCS_SRC` | `<out>/docs-src` | the same for talyvor-docs, from `E2E_DOCS_REPO` |
 | `--testers-md` | `E2E_TESTERS_MD` | `~/talyvor-queue/TESTERS.md` | where the run's short summary goes; `none` writes none |
-| `--edge-repo` | `E2E_EDGE_REPO` | `gaboracnicolai/edge-infra` | the repo whose nightly workflows the report's Talyvor Edge section reads with `gh`; `none` reads none |
-| `--code-repo` | `E2E_CODE_REPO` | `gaboracnicolai/talyvor-code` | the repo whose CLI the run builds from main and runs on an agent's key, and whose extension's and plugin's CI the report reads with `gh` (B34.10); `none` does neither |
+| `--edge-repo` | `E2E_EDGE_REPO` | `Talyvor/edge-infra` | the repo whose nightly workflows the report's Talyvor Edge section reads with `gh`; `none` reads none |
+| `--code-repo` | `E2E_CODE_REPO` | `Talyvor/talyvor-code` | the repo whose CLI the run builds from main and runs on an agent's key, and whose extension's and plugin's CI the report reads with `gh` (B34.10); `none` does neither |
 | `--code-src` | `E2E_CODE_SRC` | `<out>/code-src` | the checkout the CLI is built from; not given, the run keeps its own there, brought up to main each run the way `--lens-src` is |
 | `--upstream-port` | `E2E_UPSTREAM_PORT` | 0 | B28.287 — the port the run's synthetic upstream listens on, for a Lens started with `LENS_VLLM_BASE_URL=http://<this machine>:<port>`; 0 (production, whose vLLM traffic goes nowhere the run can see) leaves `keys-not-forwarded` a SKIP |
 | `--hostile-prs` | `E2E_HOSTILE_PRS` | on | B28.289 — the hostile pull requests made against each repo's main after the scenarios; `none` makes none |
