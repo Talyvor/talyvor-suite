@@ -17,7 +17,9 @@
 #
 # "Absent" is never one state. It is at least never-existed, not-yet, not-expected, and
 # lookup-failed — and each wants a different thing from you.
-owner=gaboracnicolai
+# Lowercase: an image name must be. GitHub calls the organisation "Talyvor" and treats the name in any
+# letter case as the same, so this one value serves the registry, git and gh alike.
+owner=talyvor
 status=0
 for svc in lens track docs; do
   repo="ghcr.io/$owner/talyvor-$svc"

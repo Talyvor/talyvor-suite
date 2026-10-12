@@ -16,7 +16,7 @@ export const DOCUMENTATION_PATH = '/documentation'
 export const LENS_ORIGIN = 'https://lens.talyvor.com'
 
 export const CODE_MARKETPLACE_URL = 'https://marketplace.visualstudio.com/items?itemName=talyvor.talyvor-code'
-export const CODE_INSTALL_URL = 'https://raw.githubusercontent.com/gaboracnicolai/talyvor-code/main/install.sh'
+export const CODE_INSTALL_URL = 'https://raw.githubusercontent.com/Talyvor/talyvor-code/main/install.sh'
 
 export interface Claim {
   /** One sentence: what a person can do. */
@@ -251,4 +251,4 @@ export const LICENCES: Licence[] = [
   { repo: 'talyvor-code', what: 'The VS Code extension and the CLI', licence: 'Business Source License 1.1' },
 ]
 
-export const licenceUrl = (repo: string) => `https://github.com/gaboracnicolai/${repo}/blob/main/LICENSE`
+export const licenceUrl = (repo: string) => `https://github.com/Talyvor/${repo}/blob/main/LICENSE`

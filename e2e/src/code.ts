@@ -16,7 +16,7 @@ import { refreshLensCheckout } from './coverage.ts'
 import { type Gh, ghCLI } from './edge.ts'
 import { type AgentLine, type LensClient, type SyntheticUser, describe } from './lens.ts'
 
-export const CODE_REPO = 'gaboracnicolai/talyvor-code'
+export const CODE_REPO = 'Talyvor/talyvor-code'
 /** The CLI's cheapest model, by the id its own catalogue validates; `ask` uses it by default. */
 export const CODE_MODEL = 'claude-haiku-4-5'
 /** What the agent is funded with: the most its two calls can cost, since Lens refuses it more. */

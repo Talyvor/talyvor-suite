@@ -4,7 +4,7 @@
 #          client secret, and any gateway secrets)
 [Unit]
 Description=Talyvor suite BFF (loopback; Caddy is the ingress)
-Documentation=https://github.com/gaboracnicolai/talyvor-suite/tree/main/deploy
+Documentation=https://github.com/Talyvor/talyvor-suite/tree/main/deploy
 After=network-online.target
 Wants=network-online.target
 
