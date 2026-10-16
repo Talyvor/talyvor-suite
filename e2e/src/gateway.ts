@@ -409,23 +409,30 @@ export function gatewayKeys(): Scenario {
         step(await refused(other.value.key, 'that key, once deleted'))
       }
 
-      // 8. The shared pool of provider keys is Talyvor's: the workspace may read it, and may neither add to it nor take from it.
+      // 8. The shared pool of provider keys is Talyvor's: the workspace may neither read it, add to it nor take from it.
+      // Only the admin key, where the run holds one, can show the pool did not change.
       const size = async () => {
-        const r = await lens.as(app.user.token, 'GET', '/v1/api/keys/pool')
+        if (!lens.canAdmin) return undefined
+        const r = await lens.asAdmin('GET', '/v1/api/keys/pool')
+        if (r.status !== 200) return `${r.status}`
         const v = JSON.parse(r.text) as unknown
         return Array.isArray(v) ? v.length : v === null ? 0 : Object.keys(v as object).length
       }
       const pool0 = await size()
+      const read = await lens.as(app.user.token, 'GET', '/v1/api/keys/pool')
       const add = await lens.as(app.user.token, 'POST', '/v1/api/keys/pool', { provider: route.provider, key: `sk-e2e-placeholder-${RUN_SALT}` })
       const take = await lens.as(app.user.token, 'DELETE', `/v1/api/keys/pool/e2e-${RUN_SALT}`)
-      ctx.evidence.push({ note: `the pool: add ${add.status} ${refusalOf(add.text)}; take ${take.status} ${refusalOf(take.text)}` })
+      ctx.evidence.push({ note: `the pool: read ${read.status} ${refusalOf(read.text)}; add ${add.status} ${refusalOf(add.text)}; take ${take.status} ${refusalOf(take.text)}` })
+      if (!(read.status === 401 && /admin credentials required/.test(refusalOf(read.text)))) wrong.push(`reading the shared pool with the workspace's own token answered ${read.status} ${read.text.slice(0, 160)}, not 401 "admin credentials required"`)
       for (const [what, r] of [['adding a key to the shared pool', add], ['taking one from it', take]] as const) {
         if (r.status !== 401 && r.status !== 403) wrong.push(`${what} with the workspace's own token answered ${r.status}, not a refusal`)
       }
       const pool1 = await size()
-      if (pool1 !== pool0) wrong.push(`the shared pool held ${pool0} entries and holds ${pool1} after the workspace was refused`)
+      if (pool0 === undefined) ctx.evidence.push({ note: 'the pool is not counted before and after: this run holds no admin key' })
+      else if (typeof pool0 === 'string' || typeof pool1 === 'string') wrong.push(`the admin key's GET /v1/api/keys/pool answered ${pool0} before and ${pool1} after`)
+      else if (pool1 !== pool0) wrong.push(`the shared pool held ${pool0} entries and holds ${pool1} after the workspace was refused`)
 
-      return verdictOf(wrong, 'a key made, listed by its prefix, served at the catalog price and counted; completing a rotation refused until the new key served, the old key refused after it; an abandoned rotation\'s key never served; a key rotated at once and one deleted refused; a /v1/api/keys key served and refused once deleted; the shared pool refused the workspace both ways')
+      return verdictOf(wrong, 'a key made, listed by its prefix, served at the catalog price and counted; completing a rotation refused until the new key served, the old key refused after it; an abandoned rotation\'s key never served; a key rotated at once and one deleted refused; a /v1/api/keys key served and refused once deleted; the shared pool refused the workspace its read, an add and a take')
     },
   }
 }
