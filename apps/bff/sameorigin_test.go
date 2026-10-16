@@ -349,6 +349,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodDelete, path: "/api/track/boards/x1", body: ``},
 		{method: http.MethodDelete, path: "/api/track/workspaces/x1", body: `{"confirm":"acme"}`},
 		{method: http.MethodPost, path: "/api/track/workspaces/x1/restore", body: ``},
+		{method: http.MethodPost, path: "/api/track/webhooks", body: `{"url":"https://hooks.example.com/t"}`},
+		{method: http.MethodDelete, path: "/api/track/webhooks/x1", body: ``},
 		{method: http.MethodPut, path: "/api/docs/spaces/s1/pages/p1/pin", body: ``},
 		{method: http.MethodDelete, path: "/api/docs/spaces/s1/pages/p1/pin", body: ``},
 		{method: http.MethodPost, path: "/api/track/teams/x1/cycles", body: `{"name":"c","start_date":"2026-10-01T00:00:00Z","end_date":"2026-10-15T00:00:00Z"}`},

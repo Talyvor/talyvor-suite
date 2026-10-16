@@ -158,6 +158,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/track/workspaces/deleted", a.trackDeletedWorkspaces())
 	a.mux.HandleFunc("/api/track/workspaces/{id}", a.trackDeleteWorkspace())
 	a.mux.HandleFunc("/api/track/workspaces/{id}/restore", a.trackRestoreWorkspace())
+	// B39.23 — the session's Track workspace's webhooks: register one, remove one. See track_webhooks.go.
+	a.mux.HandleFunc("/api/track/webhooks", a.trackCreateWebhook())
+	a.mux.HandleFunc("/api/track/webhooks/{id}", a.trackDeleteWebhook())
 	a.mux.HandleFunc("/api/docs/spaces", a.requireSession(a.docsSpaces()))
 
 	// Docs Tier-1 id-routes: space detail, page list, page detail. These take ids

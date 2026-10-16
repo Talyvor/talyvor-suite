@@ -35,6 +35,11 @@ export interface RunConfig {
    * (LENS_VLLM_BASE_URL); 0 leaves keys-not-forwarded a SKIP
    */
   upstreamPort: number
+  /**
+   * B39.23 — how track-webhook-signed's receiver is reached from Track: 'cloudflared' (a quick tunnel, no account; Track
+   * refuses a private address) or 'none' (its loopback address, for the self-test's stub Track)
+   */
+  hookTunnel: string
   users: number
   /** How many users drive a browser at the same moment. */
   concurrency: number
@@ -164,6 +169,7 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     webhookSecret: env.LENS_STRIPE_TEST_WEBHOOK_SECRET ?? '',
     operatorReadKey: env.LENS_OPERATOR_READ_KEY ?? '',
     upstreamPort: Math.floor(num('upstream-port', 'E2E_UPSTREAM_PORT', 0, true)),
+    hookTunnel: pick('hook-tunnel', 'E2E_HOOK_TUNNEL') ?? 'cloudflared',
     users: light ? LIGHT_USERS : Math.floor(num('users', 'E2E_USERS', DEFAULTS.users)),
     concurrency: Math.floor(num('concurrency', 'E2E_CONCURRENCY', DEFAULTS.concurrency)),
     capUSD: num('cap-usd', 'E2E_CAP_USD', DEFAULTS.capUSD),

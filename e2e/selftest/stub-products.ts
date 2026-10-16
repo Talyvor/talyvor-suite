@@ -13,6 +13,7 @@
 //   docs-share-unsigned — Docs opens a share link whatever its signature says (B28.447)
 //   docs-collab-drop    — Docs drops an edit acknowledged on the live-edit socket when the socket closes (B28.447)
 //   docs-team-grant-sticky — someone taken off a team keeps the access the team was given on a page (B28.450)
+//   track-hook-sig — Track signs a webhook with the secret's text, not the key its base64 part decodes to (B39.23)
 
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http'
@@ -199,6 +200,22 @@ async function syncSpend(ws: string, email: string): Promise<void> {
   }
 }
 
+interface Hook { id: string; workspace: string; url: string; events: string[]; secret: string; created_at: string }
+const hooks: Hook[] = []
+
+/** B39.23 — one POST of the event to each of the workspace's hooks subscribed to it (none named = all), as Track's sink sends it. */
+function deliver(ws: string, type: string, data: Record<string, unknown>): void {
+  const payload = JSON.stringify({ type, timestamp: now(), data: { ...data, workspace_id: ws } })
+  for (const h of hooks.filter((x) => x.workspace === ws && (x.events.length === 0 || x.events.includes(type)))) {
+    const msg = `msg_${id()}`
+    const ts = String(Math.floor(Date.now() / 1000))
+    const key = BREAK === 'track-hook-sig' ? Buffer.from(h.secret) : Buffer.from(h.secret.replace(/^whsec_/, ''), 'base64')
+    const sig = `v1,${createHmac('sha256', key).update(`${msg}.${ts}.${payload}`).digest('base64')}`
+    void fetch(h.url, { method: 'POST', headers: { 'content-type': 'application/json', 'webhook-id': msg, 'webhook-timestamp': ts, 'webhook-signature': sig }, body: payload })
+      .catch(() => undefined)
+  }
+}
+
 serve(TRACK_PORT, 'track', async (req, res, path, url) => {
   if (path === '/mcp' && req.method === 'POST') return trackMCP(req, res)
   if (path === '/v1/workspaces') {
@@ -230,6 +247,24 @@ serve(TRACK_PORT, 'track', async (req, res, path, url) => {
   const m = /^\/v1\/workspaces\/([^/]+)(\/.*)$/.exec(path)
   if (m === null) return json(res, 404, { error: 'stub track: no such route' })
   const [, ws, rest] = m
+  // B39.23 — Track's workspace webhooks (talyvor-track internal/webhooks): the owner registers a URL and gets its
+  // whsec_ secret once; each issue update is POSTed to every URL subscribed to it, signed the Standard Webhooks way.
+  if (rest === '/webhooks' && req.method === 'POST') {
+    if (byEmail.get(String(req.headers['x-user-email'] ?? '')) !== ws) return json(res, 403, { error: 'owner role required', code: 'OWNER_REQUIRED' })
+    const { url: to = '', events = [] } = await body<{ url?: string; events?: string[] }>(req)
+    if (!/^https?:\/\/[^/]/.test(to)) return json(res, 400, { error: 'url must be an https:// URL', code: 'BAD_URL' })
+    const h: Hook = { id: id(), workspace: ws, url: to, events, secret: `whsec_${randomBytes(24).toString('base64')}`, created_at: now() }
+    hooks.push(h)
+    const { workspace: _w, ...out } = h
+    return json(res, 201, out)
+  }
+  const hookID = /^\/webhooks\/([^/]+)$/.exec(rest)
+  if (hookID !== null && req.method === 'DELETE') {
+    const at = hooks.findIndex((h) => h.workspace === ws && h.id === hookID[1])
+    if (at < 0) return json(res, 404, { error: 'webhook not found', code: 'NOT_FOUND' })
+    hooks.splice(at, 1)
+    return json(res, 204, null)
+  }
   if (req.method === 'GET' && (rest === '/issues' || /^\/issues\/[^/]+$/.test(rest))) await syncSpend(ws, String(req.headers['x-user-email'] ?? ''))
   const mine = issues.filter((i) => i.workspace === ws)
   if (rest === '/teams') return json(res, 200, [TEAM])
@@ -297,7 +332,9 @@ serve(TRACK_PORT, 'track', async (req, res, path, url) => {
   const sub = one[2] ?? ''
   const thread = comments.filter((c) => c.issue_id === issue.id)
   if (sub === '' && req.method === 'PATCH') {
-    Object.assign(issue, await body<Partial<Issue>>(req), { updated_at: now() })
+    const changes = await body<Partial<Issue>>(req)
+    Object.assign(issue, changes, { updated_at: now() })
+    deliver(ws, 'issue.updated', { team_id: issue.team_id, issue_id: issue.id, actor_id: 'synthetic', changes })
     return json(res, 200, issue)
   }
   if (sub === '') return json(res, 200, issue)

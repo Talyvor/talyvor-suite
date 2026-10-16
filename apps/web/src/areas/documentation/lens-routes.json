@@ -123,8 +123,7 @@
         { "method": "POST", "path": "/v1/workspaces/{wsID}/key-rotations/{rotationID}/complete", "does": "Finish a rotation and retire the old key" },
         { "method": "POST", "path": "/v1/workspaces/{wsID}/key-rotations/{rotationID}/abandon", "does": "Abandon a rotation and keep the old key" },
         { "method": "POST", "path": "/v1/api/keys", "does": "Mint a key for the calling workspace" },
-        { "method": "DELETE", "path": "/v1/api/keys/{keyID}", "does": "Revoke a key of the calling workspace" },
-        { "method": "GET", "path": "/v1/api/keys/pool", "does": "Statistics for the provider-key pool" }
+        { "method": "DELETE", "path": "/v1/api/keys/{keyID}", "does": "Revoke a key of the calling workspace" }
       ]
     },
     {
@@ -191,8 +190,6 @@
         { "method": "GET", "path": "/v1/routing/intelligence/status", "does": "Whether learned routing is on and trained" },
         { "method": "GET", "path": "/v1/workspaces/{wsID}/routing/recommendation", "does": "The model Lens recommends for a feature and input size" },
         { "method": "PUT", "path": "/v1/workspaces/{wsID}/cost-optimize-routing", "does": "Allow routing to a cheaper model of equal quality" },
-        { "method": "GET", "path": "/v1/api/fallback/chains", "does": "The provider fallback chains" },
-        { "method": "GET", "path": "/v1/local/endpoints", "does": "Local model endpoints Lens can route to" },
         { "method": "PUT", "path": "/v1/workspaces/{wsID}/compression", "does": "Set the prompt-compression policy" },
         { "method": "GET", "path": "/v1/workspaces/{wsID}/compression/savings", "does": "What compression saved" },
         { "method": "PUT", "path": "/v1/workspaces/{wsID}/tare", "does": "Turn Tare (lossless prompt trimming) on or off" },
