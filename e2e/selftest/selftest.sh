@@ -114,7 +114,7 @@ LENS_SYNTHETIC_KEY=$key LENS_MODERATOR_KEY=$moderator LENS_API_KEY=$admin LENS_O
   --build-md "${E2E_BUILD_MD:-$tmp/BUILD.md}" --testers-md "${E2E_TESTERS_MD:-$tmp/TESTERS.md}" \
   ${E2E_LENS_SRC:+--lens-src "$E2E_LENS_SRC"} ${E2E_TRACK_SRC:+--track-src "$E2E_TRACK_SRC"} ${E2E_DOCS_SRC:+--docs-src "$E2E_DOCS_SRC"} \
   ${E2E_LIGHT:+--light} ${E2E_DAY_CAP_USD:+--day-cap-usd "$E2E_DAY_CAP_USD"} \
-  --explorers "${E2E_EXPLORERS:-2}" --explore-minutes "${E2E_EXPLORE_MINUTES:-1}" || code=$?
+  --hook-tunnel none --explorers "${E2E_EXPLORERS:-2}" --explore-minutes "${E2E_EXPLORE_MINUTES:-1}" || code=$?
 # B28.289 — the suite's own hostile pull request, a dependency whose postinstall runs code, must be caught for real.
 # B28.294 — the light pass makes none.
 results=$(ls -t "${E2E_OUT:-$here/../out}"/run-*.json | head -1)

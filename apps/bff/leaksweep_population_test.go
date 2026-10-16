@@ -501,9 +501,13 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	// a one-time challenge and stores nothing readable; …/{id}/confirm relays the payee as it now reads, read back through GET
 	// /api/money/payees; /api/money/mandates/{id}/revoke the mandate, read back through GET /api/money/mandates; and
 	// /api/money/payouts/{id}/approve the batch, read back through GET /api/money/payouts/{id} — all in the sweep's reach.
-	if len(methodOnly) > 122 {
+	//
+	// THE HUNDRED-AND-TWENTY-THIRD AND TWENTY-FOURTH ARE B39.23'S TRACK WEBHOOKS: POST /api/track/webhooks and DELETE
+	// /api/track/webhooks/{id}. Each relays Track's answer — the webhook with its secret, shown once by design, or
+	// nothing — and holds nothing; Track lists no secret on any read.
+	if len(methodOnly) > 124 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 122 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 124 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}
