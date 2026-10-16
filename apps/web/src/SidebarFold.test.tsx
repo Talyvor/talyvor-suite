@@ -128,7 +128,8 @@ describe('the sidebar folds to its group titles (B24.1)', () => {
     }
     // FLOOR: most addresses have a row of their own; an equality over empty lists proves nothing.
     expect(marked).toBeGreaterThanOrEqual(CONSOLE_ROUTES.length - 5)
-  })
+    // Slow by nature: it renders every console address in turn, so it grows with the console.
+  }, 15_000)
 
   it('navigating to a page in a folded group opens that group', async () => {
     const nav = await mountAt('/ledger')

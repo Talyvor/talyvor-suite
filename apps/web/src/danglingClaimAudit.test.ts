@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 
 import ts from 'typescript'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 /**
  * A DELETION LEAVES ITS DOCUMENTATION BEHIND, AND FOUR SURVIVORS OF ONE DELETION WERE LIVE.
@@ -274,6 +274,14 @@ function seePointers(): { resolved: SeePointer[]; dangling: SeePointer[]; commen
 
 // ════════════════════════════════════════════════════════════════════════════════════════
 
+// Each scan parses both packages; the cases share one of each rather than parsing per case (B39.2).
+let docBlocks: ReturnType<typeof membersWithMultipleDocBlocks>
+let pointers: ReturnType<typeof seePointers>
+beforeAll(() => {
+  docBlocks = membersWithMultipleDocBlocks()
+  pointers = seePointers()
+})
+
 describe('the census finds a population', () => {
   /**
    * ⚠ THE FLOORS ARE LITERALS, NEVER A COUNT COMPARED AGAINST ITSELF. A scan that reads nothing
@@ -285,7 +293,7 @@ describe('the census finds a population', () => {
     const files = allSourceFiles()
     expect(files.length).toBeGreaterThanOrEqual(150) // measured 212
 
-    const { members, documented } = membersWithMultipleDocBlocks()
+    const { members, documented } = docBlocks
     expect(members).toBeGreaterThanOrEqual(500) // measured 764
 
     // And the comment-range reader genuinely works in the POSITIVE direction. Without this, a
@@ -303,7 +311,7 @@ describe('the census finds a population', () => {
   })
 
   it('reads comments, and most see-pointers resolve', () => {
-    const { resolved, dangling, commentLines: scanned } = seePointers()
+    const { resolved, dangling, commentLines: scanned } = pointers
     expect(scanned).toBeGreaterThanOrEqual(5000) // measured 13434; proves the reader ran
 
     // The population floor for RULE B specifically. Nine were measured; six is the floor, so a
@@ -318,7 +326,7 @@ describe('the census finds a population', () => {
 
 describe('RULE A — no interface member carries two doc blocks', () => {
   it('every documented member is documented once', () => {
-    const { orphans } = membersWithMultipleDocBlocks()
+    const { orphans } = docBlocks
     const report = orphans.map(
       (o) =>
         `${o.file}:${o.line} — member \`${o.member}\` has ${o.blocks} leading doc blocks; the first ` +
@@ -330,7 +338,7 @@ describe('RULE A — no interface member carries two doc blocks', () => {
 
 describe('RULE B — every `see <path>` names a file that exists', () => {
   it('a comment sending the reader somewhere sends them somewhere real', () => {
-    const { dangling } = seePointers()
+    const { dangling } = pointers
     const report = dangling.map(
       (d) => `${d.file}:${d.line} — points at ${d.target}, which is not on disk: ${d.text}`,
     )

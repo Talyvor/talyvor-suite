@@ -94,7 +94,8 @@ describe('the navigation is wallet-first (B28.7)', () => {
       expect(h1.textContent, `${href} opened no page`).not.toBe('Not found')
       expect(screen.queryByText(/Nothing at this address/), `${href} fell to the catch-all`).toBeNull()
     }
-  })
+    // Slow by nature: it renders the page behind every sidebar link in turn, so it grows with the console.
+  }, 15_000)
 
   it('B28.45 — approving one takes the badge from 3 to 2 without a reload', async () => {
     const waiting = [...APPROVALS, { ...APPROVALS[0], id: 'apr_4', created_at: '2026-10-04T12:00:00Z' }]
