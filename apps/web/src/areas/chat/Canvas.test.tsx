@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
-import { CANVAS_READY } from './Canvas'
+import { CANVAS_READY, CANVAS_SAVE_AFTER_MS } from './Canvas'
 
 // B28.120 — the canvas. The BFF is mocked at the wire with an answer that writes a page in an ```html block. That the
 // page is drawn in a real browser, and an edit to it is drawn and still there after a reload, is the e2e scenario
@@ -52,47 +52,55 @@ function drawn(): unknown {
 
 describe('the canvas (B28.120)', () => {
   it('draws an HTML block as a sandboxed page, keeps an edit to it after a reload, and restores the original', async () => {
-    mockBff()
-    window.history.pushState({}, '', '/chat')
-    render(<App />)
-    await screen.findByRole('button', { name: 'Model: Claude Opus 5' })
-    fireEvent.change(screen.getByPlaceholderText('Ask anything'), { target: { value: 'Make me a launch page' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    // Fake time, so the save's CANVAS_SAVE_AFTER_MS passes without being waited out (B39.2).
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      mockBff()
+      window.history.pushState({}, '', '/chat')
+      render(<App />)
+      await screen.findByRole('button', { name: 'Model: Claude Opus 5' })
+      fireEvent.change(screen.getByPlaceholderText('Ask anything'), { target: { value: 'Make me a launch page' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
-    // Only the HTML block opens in the canvas.
-    const open = await screen.findByRole('button', { name: 'Open in canvas' })
-    expect(screen.getAllByRole('button', { name: /Open in canvas/ })).toHaveLength(1)
-    fireEvent.click(open)
-    const canvas = screen.getByTestId('canvas')
-    expect(within(canvas).getByTestId('canvas-title').textContent).toBe('Launch plan')
-    // Its scripts may run; it gets no origin, so it cannot reach the console, its storage or its cookies.
-    expect(frame().getAttribute('sandbox')).toBe('allow-scripts')
-    expect(frame().getAttribute('src')).toBe('/canvas')
-    expect(drawn()).toBe(page)
+      // Only the HTML block opens in the canvas.
+      const open = await screen.findByRole('button', { name: 'Open in canvas' })
+      expect(screen.getAllByRole('button', { name: /Open in canvas/ })).toHaveLength(1)
+      fireEvent.click(open)
+      const canvas = screen.getByTestId('canvas')
+      expect(within(canvas).getByTestId('canvas-title').textContent).toBe('Launch plan')
+      // Its scripts may run; it gets no origin, so it cannot reach the console, its storage or its cookies.
+      expect(frame().getAttribute('sandbox')).toBe('allow-scripts')
+      expect(frame().getAttribute('src')).toBe('/canvas')
+      expect(drawn()).toBe(page)
 
-    fireEvent.click(within(canvas).getByRole('button', { name: 'Code' }))
-    const edited = page.replace('<h1>Hello</h1>', '<h1>Hello, edited</h1>')
-    fireEvent.change(within(canvas).getByLabelText('HTML'), { target: { value: edited } })
-    await waitFor(() => expect(within(canvas).getByTestId('canvas-saved').textContent).toBe('Edited · saved in this browser with the conversation'))
-    fireEvent.click(within(canvas).getByRole('button', { name: 'Preview' }))
-    expect(drawn()).toBe(edited)
+      fireEvent.click(within(canvas).getByRole('button', { name: 'Code' }))
+      const edited = page.replace('<h1>Hello</h1>', '<h1>Hello, edited</h1>')
+      fireEvent.change(within(canvas).getByLabelText('HTML'), { target: { value: edited } })
+      await vi.advanceTimersByTimeAsync(CANVAS_SAVE_AFTER_MS) // the save waits this long after the last keystroke
+      await waitFor(() => expect(within(canvas).getByTestId('canvas-saved').textContent).toBe('Edited · saved in this browser with the conversation'))
+      fireEvent.click(within(canvas).getByRole('button', { name: 'Preview' }))
+      expect(drawn()).toBe(edited)
 
-    // Opened again, the conversation's answer is as it was written and its page as it was edited.
-    cleanup()
-    queryClient.clear()
-    render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Open in canvas · edited' }))
-    expect(drawn()).toBe(edited)
-    expect(screen.getAllByTestId('turn-reply')[0].textContent).toContain('<h1>Hello</h1>')
+      // Opened again, the conversation's answer is as it was written and its page as it was edited.
+      cleanup()
+      queryClient.clear()
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Open in canvas · edited' }))
+      expect(drawn()).toBe(edited)
+      expect(screen.getAllByTestId('turn-reply')[0].textContent).toContain('<h1>Hello</h1>')
 
-    // Restored, it is the answer's own again, and so after another reload.
-    fireEvent.click(screen.getByRole('button', { name: 'Restore the original' }))
-    await waitFor(() => expect(drawn()).toBe(page))
-    fireEvent.click(screen.getByRole('button', { name: 'Close canvas' }))
-    expect(screen.queryByTestId('canvas')).toBeNull()
-    cleanup()
-    queryClient.clear()
-    render(<App />)
-    expect(await screen.findByRole('button', { name: 'Open in canvas' })).toBeTruthy()
+      // Restored, it is the answer's own again, and so after another reload.
+      fireEvent.click(screen.getByRole('button', { name: 'Restore the original' }))
+      await vi.advanceTimersByTimeAsync(CANVAS_SAVE_AFTER_MS)
+      await waitFor(() => expect(drawn()).toBe(page))
+      fireEvent.click(screen.getByRole('button', { name: 'Close canvas' }))
+      expect(screen.queryByTestId('canvas')).toBeNull()
+      cleanup()
+      queryClient.clear()
+      render(<App />)
+      expect(await screen.findByRole('button', { name: 'Open in canvas' })).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
