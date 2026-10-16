@@ -604,7 +604,8 @@ function SellerTaxForm({ tax }: { tax: SellerTax }) {
 
       <div className="flex flex-col gap-2">
         <div>
-          <Button variant="primary" type="submit" disabled={save.isPending}>
+          {/* Plain, not teal: Selling's one teal action is Connect with Stripe (the e2e market-brand tour). */}
+          <Button type="submit" disabled={save.isPending}>
             {save.isPending ? "Saving…" : "Save tax details"}
           </Button>
         </div>

@@ -101,4 +101,33 @@ describe('the marketplace in the brand', () => {
     expect(within(mine).getByText('You')).toBeTruthy()
     expect(within(mine).getByTestId('listing-price').textContent).toBe('0.25 LXC')
   })
+
+  // Once Lens holds LENS_PROVIDER_SECRET_KEK, the tax form renders on Selling beside the Stripe connect. The e2e
+  // market-brand tour allows Selling one teal action, Connect with Stripe; Save tax details is a plain button.
+  it('keeps Connect with Stripe the one teal action on Selling while tax details can be saved', async () => {
+    const main = await at('/marketplace/selling', {
+      ...SELLING,
+      '/api/marketplace/payouts': {
+        account: null,
+        in_holdback_usd_micros: 300_000,
+        available_usd_micros: 900_000,
+        owed_usd_micros: 0,
+        paid_out_usd_micros: 0,
+        minimum_usd_micros: 25_000_000,
+        paid_this_month: false,
+        quote: { gross_usd_micros: 900_000, account_fee_usd_micros: 0, payout_fee_usd_micros: 0, net_usd_micros: 900_000 },
+        payouts: [],
+      },
+      '/api/marketplace/seller-tax': {
+        workspace_id: 'ws-fixture', seller_type: '', first_name: '', middle_name: '', last_name: '', legal_name: '',
+        address: '', country: '', tins: [], date_of_birth: '', company_registration_number: '', vat_number: '',
+        vat_valid: false, account_identifier: '', account_holder: '', self_billing_agreed_version: '',
+        complete: false, missing: ['seller_type', 'address', 'country', 'tins', 'account_identifier', 'account_holder'],
+        reminders_sent: 0, accepting: true,
+      },
+    })
+    expect(within(main).getByRole('button', { name: 'Save tax details' })).toBeTruthy()
+    expect(within(main).getByRole('button', { name: 'Connect with Stripe' })).toBeTruthy()
+    expect(primaries(main)).toEqual(['Connect with Stripe'])
+  })
 })
