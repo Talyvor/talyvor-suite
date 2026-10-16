@@ -124,6 +124,18 @@ describe('Landing', () => {
     expect(text).toContain('Talyvor Ltd · money and markets for AI agents')
   })
 
+  // 16 Oct 2026: the hero says what exists. Wallets and cards lead, credit and trading are LATER (no licensed partner
+  // for either is signed), "accounts" is not the word, and loans between companies are not offered on the front page.
+  it('names wallets and cards first, and says credit and trading come later', () => {
+    const { container } = render(<Landing />)
+    const text = container.textContent ?? ''
+    expect(text).toContain('Wallets and cards for every agent you run')
+    expect(text).toMatch(/credit and trading come later/i)
+    expect(text).toMatch(/Rooms/)
+    expect(text).not.toMatch(/Accounts, cards|accounts in currencies|loans between companies/i)
+    expect(text).not.toMatch(/with credit and trading through licensed partners/i)
+  })
+
   // B29.4: the board's WEBSITE HERO. The pieces a visitor sees, each read from the DOM: the drawn
   // lockup files (one per theme), the hero photograph with the 1200 version for phones and the
   // SAME srcset and sizes index.html preloads, and the band. The verb stack ROUTE · PROVE · REUSE ·
@@ -154,7 +166,7 @@ describe('Landing', () => {
     for (const line of [
       'SovereignDesigned to run on your own infrastructure.',
       'MeasurableEvery call and payment on a statement.',
-      'IntegratedAccounts, payments, gateway and marketplace in one.',
+      'IntegratedWallets, cards, gateway and marketplace in one.',
       'CompoundingSavings and earnings build over time.',
     ])
       expect(text).toContain(line)

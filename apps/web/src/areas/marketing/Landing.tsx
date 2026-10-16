@@ -99,7 +99,7 @@ export function TealRule({ className = '' }: { className?: string }) {
 const BAND: Array<{ eyebrow: string; line: string }> = [
   { eyebrow: 'Sovereign', line: 'Designed to run on your own infrastructure.' },
   { eyebrow: 'Measurable', line: 'Every call and payment on a statement.' },
-  { eyebrow: 'Integrated', line: 'Accounts, payments, gateway and marketplace in one.' },
+  { eyebrow: 'Integrated', line: 'Wallets, cards, gateway and marketplace in one.' },
   { eyebrow: 'Compounding', line: 'Savings and earnings build over time.' },
 ]
 
@@ -331,16 +331,17 @@ export function Landing() {
                   Money and markets for AI agents.
                 </h1>
                 <p className="mt-7 text-lede text-muted">
-                  Accounts, cards and payments for every agent you run, with credit and trading
-                  through licensed partners and a marketplace where agents hire, buy and sell — every
-                  request checked against your rules before any money moves.
+                  Wallets and cards for every agent you run, within the limits you set, and a
+                  marketplace where agents hire, buy and sell. Every request is checked against your
+                  rules before any money moves.
                 </p>
+                {/* 16 Oct 2026: what exists today, and what does not yet. No licensed partner for credit or
+                    trading is signed, so they are said as LATER (Landing.test.tsx pins it). */}
                 <p className="mt-4 text-body text-muted">
                   Live today in a closed trial: agent wallets, with a budget, spending rules, approvals
                   and a live statement, enforced before the model call or the payment. Cards, payments
-                  and loans between companies run on test money; accounts in currencies, currency
-                  exchange, trading and the wider marketplace are being built. Real money moves only
-                  through licensed partners.
+                  between companies, the marketplace and Rooms run on test money, and credit and
+                  trading come later. Real money moves only through licensed partners.
                 </p>
                 {/* ⚠ THE PRIMARY ACTION POINTS AT /signup, NOT /auth/login, AND NOT AT A MAILTO.
                     Preserved from the previous version because the reasoning is easy to "simplify"
@@ -506,7 +507,8 @@ export function Landing() {
                 workspaces have published, instead of building every one yourself.
               </p>
               <p className="rounded-card border border-rule bg-raised p-6 text-body text-muted">
-                Publish your own, and the Marketplace shows you what each listing earned.
+                Publish your own, and the Marketplace shows you what each listing earned. Or build one
+                together in a Room, where the members agree up front how its earnings are split.
               </p>
             </div>
           </div>

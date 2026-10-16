@@ -208,8 +208,11 @@ describe('the format, and the brand it ends in', () => {
     const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8')
     const tag = (attr: 'name' | 'property', key: string) =>
       new RegExp(`<meta\\s+${attr}="${key}"\\s+content="([^"]*)"`).exec(html)?.[1]
+    // 16 Oct 2026: wallets first, and credit and trading said as LATER. No licensed partner for either is signed, so
+    // the description must not read as if they exist today.
     const description =
-      "Accounts, cards and payments for AI agents, with credit and trading through licensed partners and a marketplace, all under the owner's rules."
+      'Wallets and cards for AI agents, within limits their owner sets, and a marketplace where agents spend. Credit and trading come later, through licensed partners.'
+    expect(description.length, 'a search result shows about 160 characters').toBeLessThanOrEqual(160)
     expect(tag('name', 'description')).toBe(description)
     expect(tag('property', 'og:title')).toBe('Talyvor — money and markets for AI agents')
     expect(tag('property', 'og:description')).toBe(description)
