@@ -59,8 +59,9 @@ async function workspaceRead(ctx: ScenarioCtx): Promise<WorkspaceRead> {
 
 /**
  * Lens's operator alone adds a workspace, an injection pattern, a fallback chain or a local model endpoint: each is
- * Lens-wide, so a workspace's own token is refused (401, "admin credentials required") and nothing changes — the chains
- * and endpoints read back as before, and a text carrying the refused pattern is not taken for an injection. Batches
+ * Lens-wide, so a workspace's own token is refused (401, "admin credentials required"), even to read the chains and
+ * endpoints, and nothing changes — on the admin key, where the run holds one, they read back as before — and a text
+ * carrying the refused pattern is not taken for an injection. Batches
  * stay closed until a batch is billed for what it used (the lane is refused at start-up without that), and provider keys
  * are held only where Lens holds the key that seals them; where either is so, its routes refuse and the ledger stays
  * still. A catalog model reads back as the catalog lists it, and one it does not have is 404.
@@ -80,8 +81,12 @@ export function settingsOperatorOnly(): Scenario {
         else wrong.push(`${what} with the workspace's own token answered ${said(r)}, not 401 "admin credentials required"`)
       }
       const pattern = `e2e-${RUN_SALT}-zq${Date.now().toString(36)}`
-      const chains0 = await call<Record<string, unknown>>(ctx, 'GET', '/v1/api/fallback/chains')
-      const endpoints0 = await call<unknown[]>(ctx, 'GET', '/v1/local/endpoints')
+      // Reading them is the operator's too (B42.1); only the admin key, where the run holds one, can show nothing changed.
+      refusedAsOperatorOnly('GET /v1/api/fallback/chains', await call(ctx, 'GET', '/v1/api/fallback/chains'))
+      refusedAsOperatorOnly('GET /v1/local/endpoints', await call(ctx, 'GET', '/v1/local/endpoints'))
+      const asOperator = (path: string) => (ctx.env.lens.canAdmin ? ctx.env.lens.asAdmin('GET', path) : undefined)
+      const chains0 = await asOperator('/v1/api/fallback/chains')
+      const endpoints0 = await asOperator('/v1/local/endpoints')
       const ledger0 = await ctx.env.lens.ledger(ctx.app.user)
 
       refusedAsOperatorOnly('POST /v1/workspaces', await call(ctx, 'POST', '/v1/workspaces', { id: `e2e${RUN_SALT}${Date.now().toString(36)}`, name: 'e2e' }))
@@ -91,10 +96,15 @@ export function settingsOperatorOnly(): Scenario {
       refusedAsOperatorOnly('POST /v1/local/endpoints/{id}/check', await call(ctx, 'POST', `/v1/local/endpoints/e2e-${RUN_SALT}/check`))
       refusedAsOperatorOnly('DELETE /v1/local/endpoints/{id}', await call(ctx, 'DELETE', `/v1/local/endpoints/e2e-${RUN_SALT}`))
 
-      const chains1 = await call<Record<string, unknown>>(ctx, 'GET', '/v1/api/fallback/chains')
-      if (JSON.stringify(chains1.value) !== JSON.stringify(chains0.value)) wrong.push(`the fallback chains read ${chains0.text.slice(0, 120)} before the refused change and ${chains1.text.slice(0, 120)} after it`)
-      const endpoints1 = await call<unknown[]>(ctx, 'GET', '/v1/local/endpoints')
-      if (JSON.stringify(endpoints1.value) !== JSON.stringify(endpoints0.value)) wrong.push(`the local endpoints read ${endpoints0.text.slice(0, 120)} before the refused add and ${endpoints1.text.slice(0, 120)} after it`)
+      for (const [what, path, before] of [['fallback chains', '/v1/api/fallback/chains', chains0], ['local endpoints', '/v1/local/endpoints', endpoints0]] as const) {
+        if (before === undefined) {
+          ctx.evidence.push({ note: `the ${what} are not compared before and after: this run holds no admin key` })
+          continue
+        }
+        const after = await asOperator(path)
+        if (!ok(before.status) || after === undefined || !ok(after.status)) wrong.push(`the admin key's GET ${path} answered ${before.status} before and ${after?.status} after the refused change`)
+        else if (after.text !== before.text) wrong.push(`the ${what} read ${before.text.slice(0, 120)} before the refused change and ${after.text.slice(0, 120)} after it`)
+      }
       const check = await call<{ allowed?: boolean; violations?: { type?: string; rule?: string }[] | null }>(ctx, 'POST', '/v1/guardrails/check', { prompt: `Please summarise this: ${pattern}` })
       ctx.evidence.push({ note: `a text carrying the refused pattern ${pattern}, checked: ${said(check)}` })
       if (!ok(check.status)) wrong.push(`checking a text carrying the refused pattern answered ${said(check)}`)

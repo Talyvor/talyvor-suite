@@ -1937,6 +1937,11 @@ export class LensClient {
     return this.adminKey !== ''
   }
 
+  /** One request on the global admin key, as `as` answers it; only where `canAdmin`. */
+  asAdmin(method: string, path: string, body?: unknown): Promise<{ status: number; headers: Headers; text: string }> {
+    return this.as(this.adminKey, method, path, body)
+  }
+
   /**
    * B32.98 — the year's platform-reporting export (Lens B32.44, POST /v1/admin/platform-reports) on the global admin key, as
    * JSON: the file's bytes as they came, and the id, sha256 and record count Lens sent with it.
