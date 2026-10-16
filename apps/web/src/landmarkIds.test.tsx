@@ -132,6 +132,7 @@ async function at(address: string) {
 describe('no two things in this product answer to the same name', () => {
   it(
     'every address renders unique ids and no dangling reference',
+    // Slow by nature: it renders every address in the product in turn, so it grows with the console.
     { timeout: 60_000 },
     async () => {
       const problems: string[] = []

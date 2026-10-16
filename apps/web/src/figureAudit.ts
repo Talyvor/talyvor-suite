@@ -1,3 +1,5 @@
+import { onCommit } from './auditScope'
+
 /**
  * THE RENDERED-FIGURE AUDIT — what the user actually sees, not what the code called it.
  *
@@ -178,8 +180,8 @@ const records: RenderedFigure[] = []
 const seen = new Set<string>()
 let offenders: RenderedFigure[] = []
 
-function scan(): void {
-  for (const f of figuresIn(document.body)) {
+function scan(scope: ParentNode): void {
+  for (const f of figuresIn(scope)) {
     const key = `${f.onFace}|${f.tag}|${f.className}|${f.text}`
     if (seen.has(key)) continue
     seen.add(key)
@@ -190,7 +192,7 @@ function scan(): void {
 
 /** Start recording. Called once per test file, from test-setup.ts. */
 export function installFigureAudit(): void {
-  new MutationObserver(scan).observe(document, { subtree: true, childList: true, characterData: true })
+  onCommit(scan)
 }
 
 /** Every figure this test file has rendered so far, on the face or not. */

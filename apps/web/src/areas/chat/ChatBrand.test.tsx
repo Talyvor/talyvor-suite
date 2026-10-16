@@ -89,5 +89,5 @@ describe('chat in the brand (B29.10)', () => {
     expect(lines.parentElement).toHaveClass('bg-raised', 'rounded-card')
     expect(within(lines).getByText('From your agents’ statements')).toHaveClass('text-eyebrow', 'uppercase', 'text-label')
     expect(within(lines).getByRole('link', { name: /^Researcher: −1\.23 LXC/ })).toBeInTheDocument()
-  }, 15_000)
+  })
 })

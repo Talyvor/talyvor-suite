@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { brotliDecompressSync } from 'node:zlib'
 
 import { ownText } from './figureAudit'
+import { onCommit } from './auditScope'
 
 /**
  * EVERY CHARACTER THIS PRODUCT RENDERS, ASKED OF THE FACES IT ACTUALLY SERVES.
@@ -584,8 +585,8 @@ let offenders: RenderedGlyph[] = []
 const monoByFile = new Map<string, number>()
 let currentFile = ''
 
-function scan(): void {
-  for (const el of Array.from(document.body.querySelectorAll('*'))) {
+function scan(scope: ParentNode): void {
+  for (const el of Array.from(scope.querySelectorAll('*'))) {
     if (el.closest('.katex') !== null) continue
     const text = ownText(el)
     if (!text) continue
@@ -621,7 +622,7 @@ function scan(): void {
 
 /** Start recording. Called once per test file, from test-setup.ts. */
 export function installGlyphAudit(): void {
-  new MutationObserver(scan).observe(document, { subtree: true, childList: true, characterData: true })
+  onCommit(scan)
 }
 
 export function setGlyphAuditFile(file: string): void {

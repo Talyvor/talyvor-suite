@@ -140,22 +140,28 @@ describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
   // B17.33 — a Move out that meets a deploy's restart (a 502, then no answer) is sent again under one
   // Idempotency-Key and lands once, instead of "Not moved."
   it('moves credits out of a pot through a restart, sending the same key until it is answered', async () => {
-    mockBff()
-    window.history.pushState({}, '', '/agents')
-    render(<App />)
-    fireEvent.change(await screen.findByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '1.2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Move in' }))
-    expect(await within(screen.getByTestId('pot')).findByText('1.2', { selector: '.font-figure' })).toBeTruthy()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      mockBff()
+      window.history.pushState({}, '', '/agents')
+      render(<App />)
+      fireEvent.change(await screen.findByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '1.2' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Move in' }))
+      expect(await within(screen.getByTestId('pot')).findByText('1.2', { selector: '.font-figure' })).toBeTruthy()
 
-    potOut.blips.push(502, 'drop')
-    fireEvent.change(screen.getByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '0.4' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Move out' }))
-    expect(await within(screen.getByTestId('pot')).findByText('0.8', { selector: '.font-figure' }, { timeout: 5_000 })).toBeTruthy()
-    expect(within(screen.getByTestId('pot')).queryByRole('alert')).toBeNull()
-    expect(potOut.keys).toHaveLength(3)
-    expect(potOut.keys[0]).not.toBe('')
-    expect(new Set(potOut.keys).size).toBe(1)
-  }, 15_000)
+      potOut.blips.push(502, 'drop')
+      fireEvent.change(screen.getByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '0.4' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Move out' }))
+      await vi.advanceTimersByTimeAsync(4_000) // the card's two retry delays, without waiting them out
+      expect(await within(screen.getByTestId('pot')).findByText('0.8', { selector: '.font-figure' })).toBeTruthy()
+      expect(within(screen.getByTestId('pot')).queryByRole('alert')).toBeNull()
+      expect(potOut.keys).toHaveLength(3)
+      expect(potOut.keys[0]).not.toBe('')
+      expect(new Set(potOut.keys).size).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 
   it('completes an escrow, fills and locks a pot, and places a simulated order that shows in the portfolio', async () => {
     const sent = mockBff()

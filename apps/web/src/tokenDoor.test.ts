@@ -524,6 +524,7 @@ describe('the sweep', () => {
       ['border-transparent', ['(control)']],
     ])
     expect(bypasses(control, asked)).toEqual(['border-black  ((control))'])
+    // Slow by nature: it sweeps every class the product's source uses through the token door.
   }, 15_000)
 
   it('nothing reaches past a closed door', async () => {

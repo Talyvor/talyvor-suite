@@ -1,3 +1,5 @@
+import { onCommit } from './auditScope'
+
 /**
  * THE FOCUS AUDIT — the accent is the product's focus signal, and it must be the ONLY one.
  *
@@ -175,20 +177,20 @@ function ringedByRawAttribute(root: ParentNode): number {
   return n
 }
 
-function scan(): void {
-  for (const o of focusOffendersIn(document.body)) {
+function scan(scope: ParentNode): void {
+  for (const o of focusOffendersIn(scope)) {
     const key = `${o.tag}|${o.type}|${o.className}|${o.text}`
     if (records.some((r) => `${r.tag}|${r.type}|${r.className}|${r.text}` === key)) continue
     records.push(o)
     offenders.push(o)
   }
-  const ringed = ringedByRawAttribute(document.body)
+  const ringed = ringedByRawAttribute(scope)
   if (ringed > 0) ringSightings.push({ file: currentFile, ringed })
 }
 
 /** Start recording. Called once per test file, from test-setup.ts. */
 export function installFocusAudit(): void {
-  new MutationObserver(scan).observe(document, { subtree: true, childList: true, characterData: true })
+  onCommit(scan, { widen: isKeyboardFocusable })
 }
 
 export function setFocusAuditFile(file: string): void {

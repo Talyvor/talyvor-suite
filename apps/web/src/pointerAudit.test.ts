@@ -190,17 +190,17 @@ const PINS: Record<string, Pin> = {
     fragment: 'NOTHING HERE CLAIMS THE CONVERSATION IS BILLED',
     why: 'the measurement that keeps areas/chat out of the population entirely, so an absent area reads as decided rather than forgotten',
   },
-  'apps/web/src/eyebrowAudit.ts:25|apps/web/src/areas/lens/Overview.tsx:206': {
+  'apps/web/src/eyebrowAudit.ts:27|apps/web/src/areas/lens/Overview.tsx:206': {
     kind: 'LIVE',
     fragment: 'text-eyebrow uppercase',
     why: "the console's densest eyebrow, the surface `319335c` dropped `uppercase` from to prove 678 tests could not see it",
   },
-  'apps/web/src/eyebrowAudit.ts:49|packages/ui/src/components/MuNumeral.tsx:31': {
+  'apps/web/src/eyebrowAudit.ts:51|packages/ui/src/components/MuNumeral.tsx:31': {
     kind: 'LIVE',
     fragment: 'text-eyebrow uppercase',
     why: 'the element that OPENS the eyebrow, quoted to show CaseSafe sits inside it rather than on it',
   },
-  'apps/web/src/placeholderAudit.ts:34|apps/web/src/areas/lens/Keys.tsx:114': {
+  'apps/web/src/placeholderAudit.ts:36|apps/web/src/areas/lens/Keys.tsx:114': {
     kind: 'LIVE',
     fragment: 'placeholder={k.key_prefix}',
     why: 'the site that passes a placeholder THROUGH a component, the whole argument for reading the DOM',
@@ -255,12 +255,12 @@ const PINS: Record<string, Pin> = {
     fragment: '<Failed what="the mint ledger" error={ledger.error} />',
     why: 'the same line quoted VERBATIM beside the must-stay-green control that asserts its wording, so the quote and the assertion cannot drift apart',
   },
-  'apps/web/src/caseAudit.ts:11|packages/ui/src/components/CaseSafe.tsx:85': {
+  'apps/web/src/caseAudit.ts:13|packages/ui/src/components/CaseSafe.tsx:85': {
     kind: 'LIVE',
     fragment: 'normal-case',
     why: 'the ONE applied `normal-case` in the product; the sentence says "exactly ONE ... in the product" in the present tense',
   },
-  'apps/web/src/caseAudit.ts:42|apps/web/src/areas/marketing/Landing.tsx:67': {
+  'apps/web/src/caseAudit.ts:44|apps/web/src/areas/marketing/Landing.tsx:67': {
     kind: 'LIVE',
     fragment: 'font-figure text-eyebrow uppercase text-label',
     why: 'the uppercase label whose µ arrives as a prop from 130 lines away — the reason the rule cannot be a source rule',
@@ -348,12 +348,12 @@ const PINS: Record<string, Pin> = {
   // The four pointers the numeric-field audit and its tests write. Both sites they quote are the
   // MEASUREMENT that rule is built on: one is the offender it was written for, the other is the
   // exemption — a field whose value IS a figure and correctly is not on the face.
-  'apps/web/src/fieldFaceAudit.ts:18|apps/web/src/areas/lens/ConvertLens.tsx:326': {
+  'apps/web/src/fieldFaceAudit.ts:20|apps/web/src/areas/lens/ConvertLens.tsx:326': {
     kind: 'LIVE',
     fragment: 'inputMode="decimal"',
     why: 'the one field in the product that declares itself numeric — the defect this audit was written for',
   },
-  'apps/web/src/fieldFaceAudit.ts:68|apps/web/src/areas/lens/ConvertLens.tsx:326': {
+  'apps/web/src/fieldFaceAudit.ts:70|apps/web/src/areas/lens/ConvertLens.tsx:326': {
     kind: 'LIVE',
     fragment: 'inputMode="decimal"',
     why: 'the same site quoted where the rule argues the declaration is written in a DIFFERENT FILE from the class list',

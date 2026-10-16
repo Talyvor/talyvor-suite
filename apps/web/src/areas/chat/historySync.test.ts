@@ -78,7 +78,7 @@ describe('history sync', () => {
     onDevice('tablet')
     await expect(turnOnSync(SCOPE, 'not the passphrase', [])).rejects.toThrow(SyncError)
     expect(await syncHistory(SCOPE, [])).toBeNull()
-  }, 30_000)
+  })
 
   it('off, it stays local: a device that never turned sync on sends nothing', async () => {
     onDevice('desk')
@@ -117,5 +117,5 @@ describe('history sync', () => {
     onDevice('phone')
     const phone = await syncHistory(SCOPE, phoneList)
     expect(phone?.conversations.map((c) => `${c.id}:${c.title}`)).toEqual(['c3:Third', 'c1:Offsite'])
-  }, 30_000)
+  })
 })

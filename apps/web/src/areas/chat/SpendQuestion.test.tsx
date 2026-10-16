@@ -100,5 +100,5 @@ describe('asking what the agents spent (B28.349)', () => {
     expect(row).toHaveAttribute('aria-current', 'true')
     expect(row).toHaveTextContent('1.23 LXC')
     expect(screen.getByTestId('agent-open')).toHaveTextContent('Researcher')
-  }, 15_000)
+  })
 })

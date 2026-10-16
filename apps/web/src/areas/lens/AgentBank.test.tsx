@@ -144,24 +144,30 @@ describe('Agent Bank', () => {
   // B17.26 — a Take back that meets a deploy's restart (a 502, then no answer) is sent again under one
   // Idempotency-Key and lands, instead of "Nothing changed. You can try again."
   it('takes LXC back through a restart, sending the same key until it is answered', async () => {
-    const bff = mockBff()
-    window.history.pushState({}, '', '/agents')
-    render(<App />)
-    await screen.findByTestId('agent-first')
-    await createAgent('South')
-    fireEvent.change(screen.getByLabelText('Amount in LXC for South'), { target: { value: '1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Fund' }))
-    await waitFor(() => expect(screen.getByTestId('agent-balance-agt_1')).toHaveTextContent('1 LXC'))
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const bff = mockBff()
+      window.history.pushState({}, '', '/agents')
+      render(<App />)
+      await screen.findByTestId('agent-first')
+      await createAgent('South')
+      fireEvent.change(screen.getByLabelText('Amount in LXC for South'), { target: { value: '1' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Fund' }))
+      await waitFor(() => expect(screen.getByTestId('agent-balance-agt_1')).toHaveTextContent('1 LXC'))
 
-    bff.blips.push(502, 'drop')
-    fireEvent.change(screen.getByLabelText('Amount in LXC for South'), { target: { value: '0.25' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Take back' }))
-    await waitFor(() => expect(screen.getByText(/South now holds/)).toHaveTextContent('South now holds 0.75 LXC.'), { timeout: 5_000 })
-    expect(screen.queryByRole('alert')).toBeNull()
-    expect(bff.moveKeys).toHaveLength(3)
-    expect(bff.moveKeys[0]).not.toBe('')
-    expect(new Set(bff.moveKeys).size).toBe(1)
-  }, 15_000)
+      bff.blips.push(502, 'drop')
+      fireEvent.change(screen.getByLabelText('Amount in LXC for South'), { target: { value: '0.25' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Take back' }))
+      await vi.advanceTimersByTimeAsync(4_000) // the card's two retry delays, without waiting them out
+      await waitFor(() => expect(screen.getByText(/South now holds/)).toHaveTextContent('South now holds 0.75 LXC.'))
+      expect(screen.queryByRole('alert')).toBeNull()
+      expect(bff.moveKeys).toHaveLength(3)
+      expect(bff.moveKeys[0]).not.toBe('')
+      expect(new Set(bff.moveKeys).size).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 
   it('creates and funds an agent, refuses a payment over its daily limit, and pays once approved from the inbox', async () => {
     const bff = mockBff()
@@ -212,6 +218,5 @@ describe('Agent Bank', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     await waitFor(() => expect(screen.getByTestId('agent-balance-agt_2')).toHaveTextContent('7 LXC'))
     expect(screen.getByTestId('agent-balance-agt_1')).toHaveTextContent('3 LXC')
-    // A long walk: on CI it took 3.9–4.5 s of the default 5 s before B28.24 added two limits to the form.
-  }, 15_000)
+  })
 })

@@ -83,12 +83,15 @@ function answerProbe(body: unknown): void {
 const SETTLE_MS = 4000
 
 beforeEach(() => {
+  // Fake time, so SETTLE_MS of retry delays pass without four real seconds per case (B39.2).
+  vi.useFakeTimers({ shouldAdvanceTime: true })
   calls = []
   queryClient.clear()
   window.history.pushState({}, '', '/')
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   queryClient.clear()
 })
@@ -114,7 +117,7 @@ describe('the console when its one auth probe fails', () => {
   it('⚠ does not re-probe the dead BFF without bound', async () => {
     failEveryRequest()
     render(<App />)
-    await new Promise((r) => setTimeout(r, SETTLE_MS))
+    await vi.advanceTimersByTimeAsync(SETTLE_MS)
     expect(
       probeCalls(),
       `/auth/me was requested ${probeCalls()} times in ${SETTLE_MS}ms. The configured retry is ` +
@@ -126,7 +129,7 @@ describe('the console when its one auth probe fails', () => {
   it('reaches a settled error rather than fetching for ever', async () => {
     failEveryRequest()
     render(<App />)
-    await new Promise((r) => setTimeout(r, SETTLE_MS))
+    await vi.advanceTimersByTimeAsync(SETTLE_MS)
     const state = queryClient.getQueryState(['auth-me'])
     expect(
       `${state?.status}/${state?.fetchStatus}`,
@@ -137,9 +140,8 @@ describe('the console when its one auth probe fails', () => {
   it('says what is wrong on the surface rather than showing a blank page', async () => {
     failEveryRequest()
     render(<App />)
-    await waitFor(() => expect(document.body.textContent ?? '').toMatch(/Couldn’t load|Couldn't load/), {
-      timeout: 5000,
-    })
+    await vi.advanceTimersByTimeAsync(SETTLE_MS)
+    await waitFor(() => expect(document.body.textContent ?? '').toMatch(/Couldn’t load|Couldn't load/))
   })
 })
 

@@ -86,6 +86,7 @@ describe('B27.12 — every screen says the read failed instead of crashing', () 
     expect(silent, `read {} and did not say the read failed:\n  ${silent.join('\n  ')}`).toEqual([])
     // FLOOR: the sweep reached the screens that read Lens, not only the ones that read nothing.
     expect(reading).toBeGreaterThanOrEqual(15)
+    // Slow by nature: it renders every screen in turn, so it grows with the console.
   }, 60_000)
 
   it('a screen that throws anyway says it could not be read, and Try again draws it again', () => {
