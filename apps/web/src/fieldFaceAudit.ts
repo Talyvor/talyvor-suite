@@ -1,3 +1,5 @@
+import { onCommit } from './auditScope'
+
 /**
  * THE NUMERIC-FIELD AUDIT — the one numeral in this product that lives in a PROPERTY.
  *
@@ -193,16 +195,16 @@ let offenders: UnfacedField[] = []
 const seen = new Set<string>()
 let currentFile = ''
 
-function scan(): void {
+function scan(scope: ParentNode): void {
   // ⚠ THE FLOOR COUNTS EVERY NUMERIC FIELD RENDERED, not just the offenders — otherwise a file
   // whose fields are all correct satisfies nothing, and "everything here is fine" and "the
   // observer is dead" become the same observation. placeholderAudit.ts makes the same argument.
-  for (const el of Array.from(document.body.querySelectorAll('input'))) {
+  for (const el of Array.from(scope.querySelectorAll('input'))) {
     if (!declaresNumeric(el)) continue
     records.set(currentFile, (records.get(currentFile) ?? 0) + 1)
     break
   }
-  for (const f of unfacedFieldsIn(document.body)) {
+  for (const f of unfacedFieldsIn(scope)) {
     const key = `${f.tag}|${f.declaredBy}|${f.className}|${f.label}`
     if (seen.has(key)) continue
     seen.add(key)
@@ -212,13 +214,7 @@ function scan(): void {
 
 /** Start recording. Called once per test file, from each project's setup. */
 export function installFieldFaceAudit(): void {
-  new MutationObserver(scan).observe(document, {
-    subtree: true,
-    childList: true,
-    characterData: true,
-    attributes: true,
-    attributeFilter: ['inputmode', 'type', 'class'],
-  })
+  onCommit(scan, { attributes: ['inputmode', 'type', 'class'] })
 }
 
 /** Which test file is running, so the floor can be read per file. */

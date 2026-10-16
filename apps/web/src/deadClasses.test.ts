@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import postcss from 'postcss'
 import tailwind from 'tailwindcss'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import tailwindConfig, { buildContent, contentTransform } from '../tailwind.config'
 // Deep relative import on purpose: one implementation of the comment stripper, with ONE set of
 // positive controls (packages/ui/src/__tests__/typeface.test.tsx). Two copies of a scanner is
@@ -290,6 +290,12 @@ describe('the generator is asked, not a table', () => {
  * as dead. That is a loud false positive, not a silent pass — the failure mode this block exists
  * for cannot happen through it.
  */
+// One Tailwind run over the app, shared by every case that adds no content of its own (B39.2).
+let generated: Set<string>
+beforeAll(async () => {
+  generated = await generatedClassNames()
+})
+
 describe('the sweep reads the whole tree', () => {
   // Keys only — the glob is lazy, so nothing here imports a module or runs a side effect. BOTH
   // roots, because `roots` has two: a comparison that saw only `apps/web/src` would be green
@@ -310,7 +316,7 @@ describe('the sweep reads the whole tree', () => {
     swept.clear()
     // The REAL sweep, called exactly as the guard below calls it. Reading `swept` afterwards is
     // what makes this an assertion about the walk under test rather than about a copy of it.
-    collectUsedTokens(await generatedClassNames())
+    collectUsedTokens(generated)
     const glob = new Set(globbed)
     const rel = (p: string) =>
       p.slice(p.indexOf('/apps/') >= 0 ? p.indexOf('/apps/') + 1 : p.indexOf('/packages/') + 1)
@@ -329,7 +335,7 @@ describe('the sweep reads the whole tree', () => {
 
 describe('the sweep', () => {
   it('finds classes to check — it must not pass by finding nothing', async () => {
-    const used = collectUsedTokens(await generatedClassNames())
+    const used = collectUsedTokens(generated)
     expect(used.size).toBeGreaterThan(150)
     // and it still sees the classes that live INSIDE cn(), which is where most of them are —
     // the comparison-operand rule above must not have swallowed the whole call.
@@ -344,7 +350,7 @@ describe('the sweep', () => {
   })
 
   it('every class the source writes is a class Tailwind emits', async () => {
-    const emitted = await generatedClassNames()
+    const emitted = generated
     const used = collectUsedTokens(emitted)
     const handWritten = handWrittenClassNames()
     const dead = [...used.entries()]

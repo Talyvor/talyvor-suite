@@ -1,3 +1,5 @@
+import { onCommit } from './auditScope'
+
 /**
  * THE RENDERED-PLACEHOLDER AUDIT — the one text in the product that is painted by the browser.
  *
@@ -94,18 +96,18 @@ const seenPlaceholders = new Map<string, Set<string>>()
 let offenders: UnstyledPlaceholder[] = []
 let currentFile = ''
 
-function scan(): void {
+function scan(scope: ParentNode): void {
   // ⚠ The FLOOR counts every placeholder rendered, not just the offenders — otherwise a file
   // whose fields are all correct would satisfy nothing and the floor could not tell "this fixture
   // stopped rendering its field" from "everything here is fine".
-  for (const el of Array.from(document.body.querySelectorAll('[placeholder]'))) {
+  for (const el of Array.from(scope.querySelectorAll('[placeholder]'))) {
     const text = el.getAttribute('placeholder') ?? ''
     if (text === '') continue
     let seen = seenPlaceholders.get(currentFile)
     if (!seen) seenPlaceholders.set(currentFile, (seen = new Set()))
     seen.add(text)
   }
-  for (const p of unstyledPlaceholdersIn(document.body)) {
+  for (const p of unstyledPlaceholdersIn(scope)) {
     const key = `${p.tag}|${p.className}|${p.placeholder}`
     if (records.some((r) => `${r.tag}|${r.className}|${r.placeholder}` === key)) continue
     records.push(p)
@@ -115,13 +117,7 @@ function scan(): void {
 
 /** Start recording. Called once per test file, from test-setup.ts. */
 export function installPlaceholderAudit(): void {
-  new MutationObserver(scan).observe(document, {
-    subtree: true,
-    childList: true,
-    characterData: true,
-    attributes: true,
-    attributeFilter: ['placeholder', 'class'],
-  })
+  onCommit(scan, { attributes: ['placeholder', 'class'] })
 }
 
 /** Which test file is running, so the floor can be read per file. */

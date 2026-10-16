@@ -1,3 +1,5 @@
+import { onCommit } from './auditScope'
+
 /**
  * THE CASE AUDIT — a casing transform must not REPLACE a character it was only asked to re-case.
  *
@@ -263,20 +265,20 @@ let currentFile = ''
 /** The micro sign this product uses. U+00B5, never U+03BC — see the hole stated above. */
 export const MICRO_SIGN = 'µ'
 
-function scan(): void {
-  for (const o of caseOffendersIn(document.body)) {
+function scan(scope: ParentNode): void {
+  for (const o of caseOffendersIn(scope)) {
     const key = `${o.codePoint}|${o.transform}|${o.tag}|${o.className}|${o.text}`
     if (records.some((r) => `${r.codePoint}|${r.transform}|${r.tag}|${r.className}|${r.text}` === key)) continue
     records.push(o)
     offenders.push(o)
   }
-  const safe = protectedCharactersIn(document.body, MICRO_SIGN)
+  const safe = protectedCharactersIn(scope, MICRO_SIGN)
   if (safe > 0) microSightings.push({ file: currentFile, protected: safe })
 }
 
 /** Start recording. Called once per test file, from test-setup.ts. */
 export function installCaseAudit(): void {
-  new MutationObserver(scan).observe(document, { subtree: true, childList: true, characterData: true })
+  onCommit(scan)
 }
 
 /** Told which file is running, so the floor can name it. */

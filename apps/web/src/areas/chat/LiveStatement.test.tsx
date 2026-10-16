@@ -47,31 +47,37 @@ afterEach(() => {
 
 describe('The live statement beside Chat (B28.351)', () => {
   it('shows a new debit within 5 seconds without a reload, marked new and linked to its row', async () => {
-    expect(LIVE_STATEMENT_POLL_MS).toBeLessThan(5_000)
-    const bff = mockBff()
-    window.history.pushState({}, '', '/chat')
-    render(<App />)
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      expect(LIVE_STATEMENT_POLL_MS).toBeLessThan(5_000)
+      const bff = mockBff()
+      window.history.pushState({}, '', '/chat')
+      render(<App />)
 
-    const panel = await screen.findByTestId('chat-live-statement')
-    expect(await within(panel).findAllByTestId('live-statement-line')).toHaveLength(1)
-    expect(within(panel).getByLabelText('Agent')).toHaveValue('agt_1')
-    expect(within(panel).getByTestId('live-statement-line')).toHaveTextContent(/^Funded by the workspace\+5 LXC/)
-    expect(within(panel).getByTestId('live-statement-line')).not.toHaveAttribute('data-new')
+      const panel = await screen.findByTestId('chat-live-statement')
+      expect(await within(panel).findAllByTestId('live-statement-line')).toHaveLength(1)
+      expect(within(panel).getByLabelText('Agent')).toHaveValue('agt_1')
+      expect(within(panel).getByTestId('live-statement-line')).toHaveTextContent(/^Funded by the workspace\+5 LXC/)
+      expect(within(panel).getByTestId('live-statement-line')).not.toHaveAttribute('data-new')
 
-    // The agent makes a call: Lens adds the debit. Nothing on the page is touched.
-    const started = Date.now()
-    bff.lines.agt_1.push({ entry_id: 'ent_2', kind: 'spend', amount_ulxc: -12_345, counterparty: 'claude-opus-5', balance_after_ulxc: 5 * M - 12_345, at: '2026-10-06T05:01:00Z' })
-    await waitFor(() => expect(within(panel).getAllByTestId('live-statement-line')).toHaveLength(2), { timeout: 5_000 })
-    expect(Date.now() - started).toBeLessThan(5_000)
+      // The agent makes a call: Lens adds the debit. Nothing on the page is touched.
+      const started = Date.now()
+      bff.lines.agt_1.push({ entry_id: 'ent_2', kind: 'spend', amount_ulxc: -12_345, counterparty: 'claude-opus-5', balance_after_ulxc: 5 * M - 12_345, at: '2026-10-06T05:01:00Z' })
+      await vi.advanceTimersByTimeAsync(LIVE_STATEMENT_POLL_MS) // one poll, in fake time (B39.2)
+      await waitFor(() => expect(within(panel).getAllByTestId('live-statement-line')).toHaveLength(2))
+      expect(Date.now() - started).toBeLessThan(5_000)
 
-    const [debit, fund] = within(panel).getAllByTestId('live-statement-line')
-    expect(debit).toHaveAttribute('data-new', 'true')
-    expect(debit).toHaveAttribute('href', '/agents?agent=agt_1&entry=ent_2')
-    expect(debit).toHaveTextContent(/^New: Spent on a request−0\.012345 LXC/)
-    expect(debit).toHaveTextContent('Balance 4.987655 LXC')
-    expect(fund).not.toHaveAttribute('data-new')
-    expect(within(panel).getByRole('status')).toHaveTextContent('New on Researcher’s statement: Spent on a request')
-  }, 10_000)
+      const [debit, fund] = within(panel).getAllByTestId('live-statement-line')
+      expect(debit).toHaveAttribute('data-new', 'true')
+      expect(debit).toHaveAttribute('href', '/agents?agent=agt_1&entry=ent_2')
+      expect(debit).toHaveTextContent(/^New: Spent on a request−0\.012345 LXC/)
+      expect(debit).toHaveTextContent('Balance 4.987655 LXC')
+      expect(fund).not.toHaveAttribute('data-new')
+      expect(within(panel).getByRole('status')).toHaveTextContent('New on Researcher’s statement: Spent on a request')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 
   it('follows the agent picked, and remembers it in this browser', async () => {
     const bff = mockBff()

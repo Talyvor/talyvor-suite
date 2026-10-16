@@ -553,35 +553,51 @@ describe('the Features screen', () => {
   // 15 s, and a failed re-read hid every control on the page. Lens's reply to the write says what it
   // recorded, so that is what shows; a failed re-read leaves the switches where they are.
   it('a switch shows what Lens recorded from its own reply, and switches back, while the re-read fails', async () => {
-    const posts: Array<{ url: string; body: unknown }> = []
-    mockBff(posts, { featuresReads: 1 })
-    window.history.pushState({}, '', '/features')
-    render(<App />)
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const posts: Array<{ url: string; body: unknown }> = []
+      mockBff(posts, { featuresReads: 1 })
+      window.history.pushState({}, '', '/features')
+      render(<App />)
 
-    await waitFor(() => expect(within(row('Tare')).getByTestId('state-Tare')).toHaveTextContent('Off'))
-    fireEvent.click(screen.getByRole('switch', { name: 'Tare: turn on' }))
-    await waitFor(() => expect(within(row('Tare')).getByTestId('state-Tare')).toHaveTextContent('On'))
-    expect(screen.getByRole('switch', { name: 'Tare: turn off' })).toBeEnabled()
-    expect(screen.getByRole('combobox', { name: 'Request logging' })).toBeInTheDocument()
+      await waitFor(() => expect(within(row('Tare')).getByTestId('state-Tare')).toHaveTextContent('Off'))
+      fireEvent.click(screen.getByRole('switch', { name: 'Tare: turn on' }))
+      await waitFor(() => expect(within(row('Tare')).getByTestId('state-Tare')).toHaveTextContent('On'))
+      expect(screen.getByRole('switch', { name: 'Tare: turn off' })).toBeEnabled()
+      expect(screen.getByRole('combobox', { name: 'Request logging' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Tare: turn off' }))
-    await waitFor(() => expect(within(row('Tare')).getByTestId('state-Tare')).toHaveTextContent('Off'))
-    expect(posts.map((p) => p.body)).toEqual([{ tare_policy: 'always' }, { tare_policy: 'disabled' }])
-    expect(await screen.findByRole('status')).toHaveTextContent('Couldn’t re-read this workspace’s settings just now')
-    expect(screen.getByRole('switch', { name: 'Tare: turn on' })).toBeEnabled()
+      fireEvent.click(screen.getByRole('switch', { name: 'Tare: turn off' }))
+      await waitFor(() => expect(within(row('Tare')).getByTestId('state-Tare')).toHaveTextContent('Off'))
+      expect(posts.map((p) => p.body)).toEqual([{ tare_policy: 'always' }, { tare_policy: 'disabled' }])
+      await vi.advanceTimersByTimeAsync(2_000) // the re-read's one retry, READ_EVERY_MS later (B39.2)
+      expect(await screen.findByRole('status')).toHaveTextContent('Couldn’t re-read this workspace’s settings just now')
+      expect(screen.getByRole('switch', { name: 'Tare: turn on' })).toBeEnabled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // B17.35 — the e2e run of 2026-10-03 opened Features while Lens restarted: the read failed, then
   // came back without the guardrail policy, and the row read "Could not be read" with no switch.
   it('opened while Lens restarts, the screen keeps reading and the injection switch appears once Lens answers', async () => {
-    mockBff([], { restarting: ['502', 'no guardrails'] })
-    window.history.pushState({}, '', '/features')
-    render(<App />)
-    const state = () => screen.getByTestId('state-Prompt-injection detection')
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      mockBff([], { restarting: ['502', 'no guardrails'] })
+      window.history.pushState({}, '', '/features')
+      render(<App />)
+      const state = () => screen.getByTestId('state-Prompt-injection detection')
+      const reads = () => vi.mocked(fetch).mock.calls.filter(([u]) => u === '/api/features')
 
-    await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([u]) => u === '/api/features')).toHaveLength(2), { timeout: 4000 })
-    expect(state()).toHaveTextContent('Checking…')
-    await waitFor(() => expect(screen.getByRole('switch', { name: 'Prompt-injection detection: turn off' })).toBeChecked(), { timeout: 4000 })
-    expect(state()).toHaveTextContent('On')
-  }, 10_000)
+      // One READ_EVERY_MS (2 s) apart, in fake time rather than waited out (B39.2).
+      await waitFor(() => expect(reads()).toHaveLength(1))
+      await vi.advanceTimersByTimeAsync(2_000)
+      await waitFor(() => expect(reads()).toHaveLength(2))
+      expect(state()).toHaveTextContent('Checking…')
+      await vi.advanceTimersByTimeAsync(2_000)
+      await waitFor(() => expect(screen.getByRole('switch', { name: 'Prompt-injection detection: turn off' })).toBeChecked())
+      expect(state()).toHaveTextContent('On')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

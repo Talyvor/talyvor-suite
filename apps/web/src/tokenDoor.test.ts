@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import postcss from 'postcss'
 import tailwind from 'tailwindcss'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import tailwindConfig, { absoluteContent, buildContent } from '../tailwind.config'
 import preset from '@talyvor/ui/preset'
 // Deep relative import on purpose, exactly as deadClasses.test.ts does it: ONE implementation
@@ -327,6 +327,13 @@ function bypasses(door: Door, used: Map<string, string[]>): string[] {
   return out.sort()
 }
 
+// Two full Tailwind runs over the app: every case that adds no content reads the same door, so it is
+// built once for the file rather than once per case (B39.2).
+let door: Door
+beforeAll(async () => {
+  door = await readDoor()
+})
+
 describe('the classification is total and the instrument works', () => {
   /**
    * ⚠ THE INSTRUMENT MUST ASK THE BUILD'S QUESTION. Every generator-reading guard in this repo
@@ -364,7 +371,6 @@ describe('the classification is total and the instrument works', () => {
   })
 
   it('token and default are told apart on known answers', async () => {
-    const door = await readDoor()
     // Tokens — the preset serves their value.
     for (const t of ['rounded-card', 'rounded-control', 'rounded-pill', 'text-body', 'text-eyebrow', 'bg-canvas', 'font-figure']) {
       expect(door.tokenClasses.has(t), `${t} should be token-derived`).toBe(true)
@@ -454,7 +460,6 @@ describe('the sweep reads the whole tree', () => {
   })
 
   it('the fs walk and Vite’s glob agree on the file set, both directions', async () => {
-    const door = await readDoor()
     swept.clear()
     // The REAL sweep, called exactly as the guard below calls it. Reading `swept` afterwards is
     // what makes this an assertion about the walk under test rather than about a copy of it.
@@ -477,7 +482,6 @@ describe('the sweep reads the whole tree', () => {
 
 describe('the sweep', () => {
   it('finds classes to check — it must not pass by finding nothing', async () => {
-    const door = await readDoor()
     const used = collectUsedTokens(new Set(door.withPreset.keys()))
     expect(used.size).toBeGreaterThan(150)
     expect(door.tokenClasses.size).toBeGreaterThan(40)
@@ -490,7 +494,6 @@ describe('the sweep', () => {
   })
 
   it('is a rule about something — the closed families are really in use', async () => {
-    const door = await readDoor()
     const used = collectUsedTokens(new Set(door.withPreset.keys()))
     // ⚠ THE FLOOR. Once the thirteen are fixed this test's headline assertion is `[]`, and an
     // empty answer is what a BROKEN sweep also returns. So the tokens the fix moves TO must be
@@ -505,7 +508,6 @@ describe('the sweep', () => {
   })
 
   it('the exemption is narrow and is not stale', async () => {
-    const door = await readDoor()
     const used = collectUsedTokens(new Set(door.withPreset.keys()))
     // In use — otherwise NOT_A_HUE is guarding nothing and should go.
     expect(used.has('border-transparent'), 'the transparent exemption is stale').toBe(true)
@@ -524,10 +526,10 @@ describe('the sweep', () => {
       ['border-transparent', ['(control)']],
     ])
     expect(bypasses(control, asked)).toEqual(['border-black  ((control))'])
+    // Slow by nature: the control builds a door of its own — two more Tailwind runs over the whole app.
   }, 15_000)
 
   it('nothing reaches past a closed door', async () => {
-    const door = await readDoor()
     const used = collectUsedTokens(new Set(door.withPreset.keys()))
     const found = bypasses(door, used)
     expect(

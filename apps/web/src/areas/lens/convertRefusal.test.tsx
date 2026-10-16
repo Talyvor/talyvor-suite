@@ -211,16 +211,21 @@ describe('B. a refused READ reaches the one bar that speaks for all of them', ()
 const PAST_FIRST_RETRY_MS = 1600
 
 async function quoteFetchesAfterFirstRetryWindow(status: number) {
-  mockBff({ quoteStatus: status })
-  render(
-    <QueryClientProvider client={queryClient}>
-      <ConvertLens lensBalanceMicros={10_000_000} />
-    </QueryClientProvider>,
-  )
-  fireEvent.click(await screen.findByRole('button', { name: /Convert to LXC/i }))
-  await waitFor(() => expect(quoteFetches).toBeGreaterThan(0))
-  await new Promise((r) => setTimeout(r, PAST_FIRST_RETRY_MS))
-  return quoteFetches
+  vi.useFakeTimers({ shouldAdvanceTime: true }) // the window passes in fake time, not waited out (B39.2)
+  try {
+    mockBff({ quoteStatus: status })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ConvertLens lensBalanceMicros={10_000_000} />
+      </QueryClientProvider>,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /Convert to LXC/i }))
+    await waitFor(() => expect(quoteFetches).toBeGreaterThan(0))
+    await vi.advanceTimersByTimeAsync(PAST_FIRST_RETRY_MS)
+    return quoteFetches
+  } finally {
+    vi.useRealTimers()
+  }
 }
 
 describe('C. a 401 is a verdict, so the app stops asking', () => {

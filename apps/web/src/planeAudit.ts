@@ -11,6 +11,7 @@ import {
 } from '@talyvor/ui'
 
 import { ownText } from './figureAudit'
+import { onCommit } from './auditScope'
 
 /**
  * EVERY LINE OF TEXT IS SCORED AGAINST THE PLANE IT ACTUALLY LANDS ON, on every surface.
@@ -172,8 +173,8 @@ const census = new Set<string>()
 const explicitPlaneByFile = new Map<string, number>()
 let currentFile = ''
 
-function scan(): void {
-  for (const el of Array.from(document.body.querySelectorAll('*'))) {
+function scan(scope: ParentNode): void {
+  for (const el of Array.from(scope.querySelectorAll('*'))) {
     const text = ownText(el).trim()
     if (text === '') continue
     const role = roleOf(el)
@@ -199,7 +200,7 @@ function scan(): void {
 
 /** Start recording. Called once per test file, from test-setup.ts. */
 export function installPlaneAudit(): void {
-  new MutationObserver(scan).observe(document, { subtree: true, childList: true, characterData: true })
+  onCommit(scan)
 }
 
 export function setPlaneAuditFile(file: string): void {

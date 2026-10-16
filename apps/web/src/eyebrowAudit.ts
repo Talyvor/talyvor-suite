@@ -1,3 +1,5 @@
+import { onCommit } from './auditScope'
+
 /**
  * THE EYEBROW AUDIT — the token carries the size and the tracking; the CALL SITE carries the case,
  * and until now nobody checked that it did.
@@ -156,8 +158,8 @@ const sightings: { file: string; eyebrows: number }[] = []
 let offenders: EyebrowOffender[] = []
 let currentFile = ''
 
-function scan(): void {
-  for (const o of eyebrowOffendersIn(document.body)) {
+function scan(scope: ParentNode): void {
+  for (const o of eyebrowOffendersIn(scope)) {
     const key = `${o.tag}|${o.className}|${o.text}`
     if (records.some((r) => `${r.tag}|${r.className}|${r.text}` === key)) continue
     records.push(o)
@@ -169,7 +171,7 @@ function scan(): void {
   // means the floor can only be met by the mechanism the rule is about — the same correction
   // caseAudit's MUST_PROTECT_MICRO_SIGN records paying for.
   let n = 0
-  for (const el of Array.from(document.body.querySelectorAll('*'))) {
+  for (const el of Array.from(scope.querySelectorAll('*'))) {
     if (!isEyebrow(el)) continue
     if (transformInEffect(el).transform === 'uppercase') n += 1
   }
@@ -178,7 +180,7 @@ function scan(): void {
 
 /** Start recording. Called once per test file, from test-setup.ts. */
 export function installEyebrowAudit(): void {
-  new MutationObserver(scan).observe(document, { subtree: true, childList: true, characterData: true })
+  onCommit(scan)
 }
 
 /** Told which file is running, so the floor can name it. */

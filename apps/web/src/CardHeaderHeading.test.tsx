@@ -286,6 +286,7 @@ describe('a card header is a section title, so it is a heading element', () => {
           `Measured census:\n${table(measured)}`,
       ).toBe(CARD_HEADER_CENSUS[address])
     }
+    // Slow by nature: it renders every gated address in turn, so it grows with the console.
   }, 15_000)
 
   it('the sweep actually reaches card headers — a floor over the whole gated set', async () => {
@@ -305,6 +306,7 @@ describe('a card header is a section title, so it is a heading element', () => {
       'the card-header selector matched (almost) nothing across every gated address — the sweep ' +
         'above is passing because it has no subject, not because the product is right',
     ).toBeGreaterThan(15)
+    // Slow by nature: it renders every gated address in turn, so it grows with the console.
   }, 15_000)
 
   it('nothing ELSE on the page became a heading — the over-correction this file refuses', async () => {
