@@ -2442,6 +2442,9 @@ export function chatAutoModel(seed: number): Scenario {
       try {
         return await askAuto(ctx, seed)
       } finally {
+        // B17.219 — out of the temporary chat the question was asked in, so the scenarios after this one keep theirs.
+        const toggle = ctx.app.page.getByRole('button', { name: 'Temporary chat' })
+        if ((await toggle.getAttribute('aria-pressed').catch(() => null)) === 'true') await toggle.click().catch(() => undefined)
         await ctx.app.chooseModel(start)
         await ctx.app.newChat()
       }
@@ -2453,6 +2456,10 @@ async function askAuto(ctx: ScenarioCtx, seed: number): Promise<Verdict> {
   const { app, env } = ctx
   await app.newChat()
   if (!(await app.chooseModel('Auto (cheapest good)'))) return { pass: false, detail: 'the model picker does not offer Auto (cheapest good)' }
+  // B17.219 — asked in a temporary chat, served nothing from the cache or the pool (as chat-cheaper, B17.204).
+  const toggle = app.page.getByRole('button', { name: 'Temporary chat' })
+  await toggle.waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS })
+  if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click()
   const seen = new Set((await env.lens.ledger(app.user)).map((r) => r.id))
   const t = await ask(ctx, `Name the smallest planet in one word. (${freshWord(seed * 10 + 3, 1 + Math.floor(Math.random() * 999_999))})`)
   const noPrice = priced(t)
