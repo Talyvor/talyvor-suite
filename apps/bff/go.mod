@@ -1,4 +1,4 @@
-module github.com/gaboracnicolai/talyvor-suite/apps/bff
+module github.com/talyvor/suite/apps/bff
 
 go 1.25.0
 
