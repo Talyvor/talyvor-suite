@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -45,5 +46,30 @@ func TestDocsWebhooks_CreateDeleteApprovalReachDocs(t *testing.T) {
 	rec = cycleReq(t, a, sess, http.MethodPost, "/api/docs/webhooks", `{"url":"https://127.0.0.1/x"}`)
 	if rec.Code != http.StatusBadRequest || rec.Body.String() == "" {
 		t.Fatalf("a refused create = %d %s, want Docs' 400 passed through", rec.Code, rec.Body.String())
+	}
+}
+
+// B39.34 — Settings → Email branding reads and sets the SESSION's Docs workspace's branding with the body untouched,
+// and Docs' 400 comes back with its message, which Settings shows.
+func TestDocsEmailBranding_ReachesDocs(t *testing.T) {
+	docs := newStatusUpstream(t, http.StatusOK, `{"from_name":"Acme","header_color":"#1E40AF","logo_url":""}`)
+	a, sess := productApp(t, nil, docs)
+
+	rec := cycleReq(t, a, sess, http.MethodGet, "/api/docs/email-branding", "")
+	if rec.Code != http.StatusOK || docs.method != http.MethodGet || docs.path != "/v1/workspaces/track-ws-7/email-branding" {
+		t.Fatalf("get: %d, upstream got %s %s", rec.Code, docs.method, docs.path)
+	}
+	body := `{"from_name":"Acme","header_color":"#1E40AF","logo_url":"https://acme.example/logo.png"}`
+	rec = cycleReq(t, a, sess, http.MethodPut, "/api/docs/email-branding", body)
+	if rec.Code != http.StatusOK || docs.method != http.MethodPut || docs.path != "/v1/workspaces/track-ws-7/email-branding" ||
+		string(docs.reqBody) != body || docs.headers.Get("X-User-Email") == "" {
+		t.Fatalf("put: %d, upstream got %s %s %s", rec.Code, docs.method, docs.path, docs.reqBody)
+	}
+
+	refused := newStatusUpstream(t, http.StatusBadRequest, `{"error":"header_color must be a colour like #1E40AF"}`)
+	a, sess = productApp(t, nil, refused)
+	rec = cycleReq(t, a, sess, http.MethodPut, "/api/docs/email-branding", `{"header_color":"red"}`)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "header_color must be") {
+		t.Fatalf("a refused put = %d %s, want Docs' 400 and its message", rec.Code, rec.Body.String())
 	}
 }

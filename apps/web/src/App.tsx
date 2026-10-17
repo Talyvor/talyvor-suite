@@ -62,6 +62,7 @@ import { OperatorTax } from './areas/lens/OperatorTax'
 import { OperatorCompliance } from './areas/lens/OperatorCompliance'
 import { VerificationScreen } from './areas/lens/Verification'
 import { CapabilityTermsScreen } from './areas/lens/CapabilityTerms'
+import { DocsEmailBranding } from './areas/docs/DocsEmailBranding'
 import { DocsWebhooks } from './areas/docs/DocsWebhooks'
 import { InvoicesScreen } from './areas/lens/Invoices'
 import { PayScreen } from './areas/lens/Pay'
@@ -278,6 +279,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/settings/terms', title: 'Capability terms', element: <CapabilityTermsScreen /> },
   // B39.25 — a Docs workspace's owner adds, rotates and deletes its signed webhooks.
   { path: '/settings/webhooks', title: 'Webhooks', element: <DocsWebhooks /> },
+  // B39.34 — a Docs workspace's owner sets the From name, header colour and logo of its Docs email.
+  { path: '/settings/email-branding', title: 'Email branding', element: <DocsEmailBranding /> },
   // B30.97 — invoices from an agent's currency account, each with its public pay link.
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.
@@ -515,6 +518,7 @@ function Sidebar() {
         {item('/settings/verification', 'Verification', 'prove')}
         {item('/settings/terms', 'Capability terms', 'page')}
         {item('/settings/webhooks', 'Webhooks', 'plug')}
+        {item('/settings/email-branding', 'Email branding', 'page')}
       </Group>
       {/* B18.25 — offered only to someone the BFF's operator gate will admit. */}
       {me.data?.operator ? (

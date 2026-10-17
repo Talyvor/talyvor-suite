@@ -117,6 +117,8 @@ const BODIES: Record<string, unknown> = {
   },
   // B27.15 — Docs counts the fixture's person as a member, so the sidebar reads its pins.
   '/api/docs/membership': { member: true },
+  // B39.34 — Settings → Email branding, as a workspace that branded its Docs email.
+  '/api/docs/email-branding': { from_name: 'Acme Robotics', header_color: '#1E40AF', logo_url: '' },
   '/auth/me': { mode: 'disabled', authenticated: false, user: null },
 
   '/api/context': {

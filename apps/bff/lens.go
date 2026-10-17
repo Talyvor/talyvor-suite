@@ -257,6 +257,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/docs/webhooks", a.docsWebhooks())
 	a.mux.HandleFunc("/api/docs/webhooks/{id}", a.docsDeleteWebhook())
 	a.mux.HandleFunc("/api/docs/webhooks/{id}/rotate", a.docsRotateWebhook()) // B39.25
+	a.mux.HandleFunc("/api/docs/email-branding", a.docsEmailBranding())       // B39.34 — see docs_branding.go
 	a.mux.HandleFunc("/api/docs/spaces/{spaceID}/pages/{pageID}/approval", a.docsRequestApproval())
 	a.mux.HandleFunc("/api/docs/spaces/{spaceID}/pages/{pageID}", a.requireSession(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPatch {
