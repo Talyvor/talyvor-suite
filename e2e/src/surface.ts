@@ -140,6 +140,7 @@ async function ecbRates(): Promise<Rates | string> {
     const res = await fetch(ECB_DAILY, { signal: AbortSignal.timeout(15_000) })
     if (!res.ok) return `the ECB's daily file answered ${res.status}`
     const xml = await res.text()
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const rate = (c: string) => Number(new RegExp(`currency=['"]${c}['"]\\s+rate=['"]([0-9.]+)['"]`).exec(xml)?.[1] ?? NaN)
     const day = /time=['"](\d{4}-\d{2}-\d{2})['"]/.exec(xml)?.[1]
     if (day === undefined || !(rate('USD') > 0) || !(rate('GBP') > 0)) return 'the ECB\'s daily file holds no USD and GBP rate'

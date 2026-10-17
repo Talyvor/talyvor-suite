@@ -977,6 +977,8 @@ func TestReturnToSanitised(t *testing.T) {
 		{"/\\evil.example.com", "/"},
 		{"ledger", "/"},
 		{"javascript:alert(1)", "/"},
+		{"/\t/evil.example.com", "/"},
+		{"/\n/evil.example.com", "/"},
 	}
 	for _, c := range cases {
 		if got := sanitizeReturnTo(c.in); got != c.want {

@@ -24,6 +24,8 @@ func setSecurityHeaders(h http.Header) {
 	h.Set("Content-Security-Policy", contentSecurityPolicy)
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Referrer-Policy", "same-origin")
+	// B42.5 — a body relayed from Lens is never sniffed into HTML: it is only ever what its Content-Type says.
+	h.Set("X-Content-Type-Options", "nosniff")
 }
 
 // inlineScript is a <script> element and its text; one with a src= is a file, which 'self' already covers.

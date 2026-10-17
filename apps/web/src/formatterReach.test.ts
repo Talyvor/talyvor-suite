@@ -263,6 +263,7 @@ function resolveRelative(fromAbs: string, spec: string): Source | undefined {
  * barrel also does `export * from './components'`, and a star has no name in it to read.
  */
 function resolveBarrel(name: string): Source | undefined {
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   const decl = new RegExp(`export\\s+(?:async\\s+)?(?:function|const|class)\\s+${name}\\b|export\\s+\\{[^}]*\\b${name}\\b[^}]*\\}\\s*(?!from)`)
   return sources.find((s) => !s.test && s.abs.startsWith(UI_SRC) && s.abs !== resolve(UI_SRC, 'index.ts') && decl.test(s.text))
 }

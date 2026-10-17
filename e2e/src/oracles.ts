@@ -146,11 +146,13 @@ export function footerUSD(f: Extract<Footer, { kind: 'priced' }>, usdPerLXC: num
 export function statesNumber(answer: string, n: number): boolean {
   const plain = String(n)
   const grouped = n.toLocaleString('en-US')
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   return [plain, grouped].some((form) => new RegExp(`(^|[^\\d.,])${form.replace(/[.,]/g, '\\$&')}(?![\\d]|[.,]\\d)`).test(answer))
 }
 
 /** True when `answer` names `word`, case-insensitively, as a whole word. */
 export function namesWord(answer: string, word: string): boolean {
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   return new RegExp(`(^|\\W)${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\W|$)`, 'i').test(answer)
 }
 

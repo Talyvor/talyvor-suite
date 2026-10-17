@@ -251,6 +251,7 @@ function bindsOnly(b: AIBody): string[] | null {
   // class runs on into the next line and swallows `type docs…` up to its first capital. Measured:
   // all three Go declarations parsed as null with that class and read as MISSING, which is a red
   // for a declaration that is present — the guard failing shut. Same-line only, for both spellings.
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   const re = new RegExp(`UPSTREAM-BINDS-ONLY ${b.subject}:([a-z0-9_,* \\t]*)`, 'g')
   const hits = [...source(b.file).matchAll(re)]
   if (hits.length !== 1) return null

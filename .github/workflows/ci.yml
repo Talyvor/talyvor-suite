@@ -199,6 +199,20 @@ jobs:
         with:
           node-version: 22
       - run: pnpm audit
+      # B42.5 — and what the shipped app depends on, on its own line, so a prod finding is never read as a dev one.
+      - run: pnpm audit --prod
+
+  # B42.5 — Semgrep's managed default rules, pinned by version and digest as Docs and Track pin them. Fails on
+  # ERROR severity; every WARNING it reports is fixed or carries a `nosemgrep: <rule> -- <reason>` in place.
+  semgrep:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    container:
+      image: semgrep/semgrep:1.165.0@sha256:f4791a54c891eabe1188248135574e6e03dfc31dfd3f3b747c7bec7079bfed1b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
+      - run: semgrep scan --config p/default --metrics=off --severity ERROR --error --quiet
 
   # B28.211 — the suite container image (Dockerfile): build it and prove it serves. It runs in the
   # posture a cluster runs it in — OIDC, bound beyond loopback — against a stub issuer that shares

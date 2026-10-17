@@ -7,6 +7,7 @@ import { AgentCredentialCard } from './AgentCredential'
 // BFF answers as Lens B30.5 does: the credential, then verify's answer; and for a frozen agent, 409 with Lens's sentence.
 
 const agent = { id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-01T09:00:00Z' }
+// nosemgrep: generic.secrets.security.detected-jwt-token.detected-jwt-token -- test-only made-up token (payload {"sub":"agt_1"}, signature the bytes "sig"); it signs nothing
 const TOKEN = 'eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJhZ3RfMSJ9.c2ln'
 
 function mockBff(frozen = false) {

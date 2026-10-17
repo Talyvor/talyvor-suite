@@ -25,6 +25,7 @@ const SWAP_FULL = 0.75
 /** macOS `sysctl -n vm.swapusage`: "total = 9216.00M  used = 7900.25M  free = 1315.75M  (encrypted)". */
 export function parseSwapUsage(text: string): { usedMB: number; totalMB: number } | undefined {
   const mb = (name: string): number | undefined => {
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const m = new RegExp(`${name} = ([\\d.]+)([MG])`).exec(text)
     return m === null ? undefined : Number(m[1]) * (m[2] === 'G' ? 1024 : 1)
   }
@@ -41,6 +42,7 @@ export function parsePressureLevel(text: string): MemorySample['pressure'] {
 /** Linux /proc/meminfo's SwapTotal and SwapFree, in kB. */
 export function parseMeminfo(text: string): { usedMB: number; totalMB: number } | undefined {
   const kb = (name: string): number | undefined => {
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const m = new RegExp(`^${name}:\\s+(\\d+) kB`, 'm').exec(text)
     return m === null ? undefined : Number(m[1])
   }

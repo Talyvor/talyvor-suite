@@ -21,6 +21,7 @@ func TestAppPageCarriesSecurityHeaders(t *testing.T) {
 		"Content-Security-Policy": "frame-ancestors 'none'",
 		"X-Frame-Options":         "DENY",
 		"Referrer-Policy":         "same-origin",
+		"X-Content-Type-Options":  "nosniff",
 	} {
 		if got := rec.Header().Get(name); !strings.Contains(got, want) {
 			t.Errorf("%s: %q, want it to carry %q", name, got, want)

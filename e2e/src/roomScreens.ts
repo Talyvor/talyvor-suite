@@ -125,6 +125,7 @@ export function roomInviteScreen(i: number): Scenario {
         if (!heading) return fail(`the invite link's screen does not show the room "${title}": ${(await other.page.locator('body').innerText().catch(() => '')).slice(0, 300)}`)
         const shown = await other.page.locator('body').innerText()
         ctx.evidence.push({ note: `the invite link's screen: ${shown.replace(/\s+/g, ' ').slice(0, 400)}` })
+        // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
         if (!/Default price per use\s+\$0\.02\b/.test(shown) || !new RegExp(`Version\\s+${terms.version}\\b`).test(shown)) {
           return fail(`the invite link's screen does not show Lens's terms (version ${terms.version}, $0.02 a use): ${shown.replace(/\s+/g, ' ').slice(0, 300)}`)
         }

@@ -209,6 +209,7 @@ describe('the format, and the brand it ends in', () => {
     // tags are the whole of what a search result or a shared link shows.
     const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8')
     const tag = (attr: 'name' | 'property', key: string) =>
+      // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
       new RegExp(`<meta\\s+${attr}="${key}"\\s+content="([^"]*)"`).exec(html)?.[1]
     // 16 Oct 2026: wallets first, and credit and trading said as LATER. No licensed partner for either is signed, so
     // the description must not read as if they exist today.
@@ -229,6 +230,7 @@ describe('the format, and the brand it ends in', () => {
 
   it('ships the brand icons the tab, the Home Screen and an install name (B29.1)', () => {
     const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8')
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const link = (rel: string, href: string) => new RegExp(`<link rel="${rel}" href="${href}"`).test(html)
     expect(link('icon', '/favicon.ico')).toBe(true)
     expect(link('icon', '/favicon.svg')).toBe(true)

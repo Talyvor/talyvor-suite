@@ -254,6 +254,7 @@ func (a *app) taxRelay(w http.ResponseWriter, r *http.Request, s session, method
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
+	// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- Lens's body sent as application/json, and every response carries nosniff (setSecurityHeaders)
 	_, _ = w.Write(raw)
 }
 

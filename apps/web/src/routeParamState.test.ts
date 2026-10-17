@@ -96,12 +96,15 @@ export function unguardedParams(source: string): string[] {
     // One hop of derivation: `const pageIdentity = `${spaceId}/${pageId}`` stands for both.
     const identities = new Set([p])
     for (const [, name, init] of text.matchAll(DERIVED)) {
+      // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
       if (new RegExp(`\\b${p}\\b`).test(init) && !init.includes('useState')) identities.add(name)
     }
     return !states.some((s) =>
       [...identities].some(
         (e) =>
+          // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
           new RegExp(`\\b${s}\\b\\s*!==?\\s*${e}\\b`).test(text) ||
+          // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
           new RegExp(`\\b${e}\\b\\s*!==?\\s*${s}\\b`).test(text),
       ),
     )

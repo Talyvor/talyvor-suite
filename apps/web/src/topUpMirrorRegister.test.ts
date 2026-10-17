@@ -337,6 +337,7 @@ describe('every sentence that spells the allow-list spells the one that is enfor
 
 /** A `minTopUpCents` / `maxTopUpCents` constant's value, as Go writes it (`1_000`), or null. */
 function bound(text: string, name: 'minTopUpCents' | 'maxTopUpCents'): string | null {
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   return new RegExp(`${name} int64 = ([0-9_]+)`).exec(text)?.[1] ?? null
 }
 

@@ -53,6 +53,7 @@ describe('the legal pages', () => {
       expect(target?.tagName, `${a.getAttribute('href')} points at no section`).toBe('SECTION')
     }
 
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const end = screen.getByText(new RegExp(`^End of ${title}\\.`))
     expect(end).toHaveTextContent(`End of ${title}. Last updated 10 October 2026. Back to the contents`)
     expect(screen.getByText(/Draft — needs legal review/)).toBeInTheDocument()

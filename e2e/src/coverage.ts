@@ -173,6 +173,7 @@ export function lensRoutesFromGo(src: string): Entry[] {
       out.push({ kind: 'lens', path: m[3], method, feature: '' })
       continue
     }
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const loops = [...src.slice(0, m.index).matchAll(new RegExp(`for _, ${m[4]} := range \\[\\]string\\{([^}]*)\\}`, 'g'))]
     const values = loops.length === 0 ? [] : [...loops[loops.length - 1][1].matchAll(/"([^"]*)"/g)].map((v) => v[1])
     const tail = m[5] ?? ''
@@ -449,6 +450,7 @@ function pathOf(expr: string, scope: Scope | undefined, pkg: GoPackage, depth = 
       }
       // A parameter its caller did not bind holds what the caller passes, which is not known here.
       if (scope?.fn.params.includes(piece)) return undefined
+      // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
       const local = scope === undefined ? null : new RegExp(`(?:^|[;{]|\\n)\\s*${piece}\\s*:?=(?!=)\\s*`).exec(scope.fn.body)
       if (local !== null && scope !== undefined) {
         const v = pathOf(statementAt(scope.fn.body, local.index + local[0].length), scope, pkg, depth + 1)
@@ -625,6 +627,7 @@ export class Matcher {
         if (isParam(s)) return '[^/]+'
         return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       }).join('/')
+      // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
       const re = new RegExp(`^/${body}${tree ? '.*' : ''}$`)
       const literals = segs.filter((s) => s !== '' && !isParam(s) && !/^\{\w+\.\.\.\}$/.test(s)).length
       return { entry, re, rank: [tree || rest ? 0 : 1, literals, segs.length] }

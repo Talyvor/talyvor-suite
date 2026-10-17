@@ -84,6 +84,7 @@ function mockBff() {
     const award = /^\/api\/rooms\/room_1\/prizes\/([^/]+)\/award$/.exec(url)
     if (award && method === 'POST') {
       const p = prizes.find((x) => x.id === award[1])!
+      // nosemgrep: javascript.lang.security.insecure-object-assign.insecure-object-assign -- test-only: a fetch mock updating its own fixture object
       Object.assign(p, { status: 'awarded', contribution_id: body.contribution_id, winner_workspace_id: OTHER, awarded_at: '2026-10-07T11:00:00Z' })
       return json({ prize: p, licence: { use_id: 'u_1' } })
     }

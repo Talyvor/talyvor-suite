@@ -59,6 +59,7 @@ export function leaksIn(text: string, needles: readonly Needle[], shape: RegExp 
   for (const n of needles) {
     if (!found.has(n.secret) && (text.includes(n.text) || (n.fold && lower.includes(n.text)))) found.set(n.secret, `${n.secret} ${n.part}`)
   }
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   const shaped = [...text.matchAll(new RegExp(shape.source, 'g'))].map((m) => m[0])
     .filter((m) => !needles.some((n) => found.has(n.secret) && n.text.includes(m)))
     .map((m) => `${m.slice(0, 10)}… (shaped like a key)`)

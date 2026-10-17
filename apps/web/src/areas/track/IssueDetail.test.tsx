@@ -59,6 +59,7 @@ function mockBff(over: Partial<typeof ISSUE> = {}) {
     }
     if (path.endsWith('/comments')) return json(comments)
     if (path === '/api/track/issues/iss-1' && method === 'PATCH') {
+      // nosemgrep: javascript.lang.security.insecure-object-assign.insecure-object-assign -- test-only: a fetch mock updating its own fixture object
       Object.assign(issue, body)
       return json(issue)
     }

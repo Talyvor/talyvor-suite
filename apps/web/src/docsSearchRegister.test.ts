@@ -336,8 +336,10 @@ function refusalUses(name: string): number {
   const body = route
     .split('\n')
     .filter((l) => !l.trim().startsWith('//'))
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     .filter((l) => !new RegExp(`^const ${name}\\b`).test(l.trim()))
     .join('\n')
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   return [...body.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].length
 }
 

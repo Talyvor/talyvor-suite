@@ -38,6 +38,7 @@ export async function changeOnce(dir: string, file: string, from: string | RegEx
   const src = await readFile(path, 'utf8').catch(() => {
     throw new Stale(`${file} is not on main`)
   })
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   const n = typeof from === 'string' ? src.split(from).length - 1 : [...src.matchAll(new RegExp(from.source, 'g'))].length
   if (typeof from === 'string' ? n !== 1 : n === 0) {
     throw new Stale(`${file} holds ${n} of the line it changes, not ${typeof from === 'string' ? 'one' : 'any'}: ${String(from).slice(0, 100)}`)

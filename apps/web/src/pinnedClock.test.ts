@@ -132,6 +132,7 @@ function insideStringLiteral(line: string, at: number): boolean {
  */
 function readLine(line: string, components: string[], file = '<probe>', lineNo = 1): Render[] {
   if (components.length === 0) return []
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   const re = new RegExp(`<(${components.join('|')})(\\s[^>]*?)?/?>`, 'g')
   const out: Render[] = []
   for (const m of line.matchAll(re)) {

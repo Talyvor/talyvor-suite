@@ -610,6 +610,7 @@ func relayFlushing(w http.ResponseWriter, src io.Reader) {
 		n, err := src.Read(buf)
 		if n > 0 {
 			_ = rc.SetWriteDeadline(time.Now().Add(streamWriteWindow))
+			// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- Lens's stream relayed under Lens's own Content-Type, and every response carries nosniff (setSecurityHeaders)
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				return // the browser hung up mid-write
 			}

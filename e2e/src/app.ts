@@ -339,6 +339,7 @@ export class AppUser {
       await trigger.click()
       await this.page.getByRole('combobox', { name: 'Search models' }).or(this.page.getByLabel('Search models')).first().fill(displayName)
       // An option is named by the model and then its price ("Claude Haiku 4.5 $1.00 / $5.00").
+      // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
       const name = new RegExp(`^${displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}( \\(selected\\))? \\$`)
       const option = this.page.getByRole('option', { name }).first()
       try {

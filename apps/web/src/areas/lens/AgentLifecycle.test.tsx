@@ -25,6 +25,7 @@ function mockBff() {
       return json({ workspace_balance_ulxc: 20_000_000, allocated_ulxc: held, unallocated_ulxc: 20_000_000 - held, spent_ulxc: 0, agents: [agent] })
     }
     if (url === '/api/agents/agt_1' && method === 'PATCH') {
+      // nosemgrep: javascript.lang.security.insecure-object-assign.insecure-object-assign -- test-only: a fetch mock updating its own fixture object
       Object.assign(agent, JSON.parse(String(init?.body)))
       return json(agent)
     }

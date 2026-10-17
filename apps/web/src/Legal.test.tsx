@@ -111,6 +111,7 @@ describe('a signed-in person can reach the policies without typing a URL', () =>
   ])('reaches %s from inside the app by clicking', async (label, heading) => {
     mockSignedIn()
     at('/')
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const link = await screen.findByRole('link', { name: new RegExp(`^${label}$`, 'i') })
     fireEvent.click(link)
     expect(await screen.findByRole('heading', { name: heading })).toBeInTheDocument()

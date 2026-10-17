@@ -1127,6 +1127,7 @@ func (a *app) forwardProductWith(w http.ResponseWriter, r *http.Request, product
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- JSON this handler marshalled itself, under application/json
 		_, _ = w.Write(out)
 		return
 	}
@@ -1387,7 +1388,7 @@ func (a *app) spaHandler() http.Handler {
 		log.Printf("bff: WARNING web bundle not found at %s — API works, app will 404 until you `pnpm build`", index)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		clean := filepath.Clean(r.URL.Path)
+		clean := filepath.Clean("/" + r.URL.Path) // rooted first, so ".." cannot climb above dist
 		full := filepath.Join(dist, clean)
 		// Contain within dist (defence in depth; http.FileServer already cleans).
 		if full != dist && !strings.HasPrefix(full, dist+string(os.PathSeparator)) {

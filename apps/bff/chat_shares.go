@@ -235,6 +235,7 @@ func (a *app) serveAppNotFound(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusNotFound)
 	if r.Method == http.MethodGet {
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the app's own index.html read from disk, not request data
 		_, _ = w.Write(page)
 	}
 }

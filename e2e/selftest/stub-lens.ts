@@ -1471,6 +1471,7 @@ createServer(async (req, res) => {
       if (budget !== null && req.method === 'PATCH') {
         const b = ws.budgets.find((x) => x.id === budget[1])
         if (b === undefined) return json(res, 404, { error: 'no such budget' })
+        // nosemgrep: javascript.lang.security.insecure-object-assign.insecure-object-assign -- test-only: the self-test's stub Lens updating its own in-memory fixture
         Object.assign(b, JSON.parse((await read(req)) || '{}'), { id: b.id, workspace_id: ws.id, scope: b.scope, spent_usd: b.spent_usd, updated_at: new Date().toISOString() })
         return json(res, 200, b)
       }
