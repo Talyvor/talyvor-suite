@@ -310,6 +310,8 @@ export class AppUser {
   async openChat(): Promise<void> {
     await this.page.goto(this.appURL + '/chat')
     await this.page.locator('#chat-message').waitFor({ state: 'visible' })
+    // B17.215 — until then the screen is an empty chat that the latest conversation replaces a moment later.
+    await this.page.getByText('Reading who is signed in…').waitFor({ state: 'hidden' })
   }
 
   /**
