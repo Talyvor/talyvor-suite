@@ -570,6 +570,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/fork", a.requireTenant(a.handleRoomFork))
 	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/vote", a.requireTenant(a.handleRoomVote))
 	a.mux.HandleFunc("/api/rooms/{id}/runs", a.requireTenant(a.handleRoomRun))
+	a.mux.HandleFunc("/api/rooms/{id}/ask", a.requireTenant(a.handleRoomAsk))
 	// B32.55 — room settings: members and roles, terms, invite links and prizes. See rooms.go.
 	a.mux.HandleFunc("/api/rooms/{id}/members/{ws}", a.requireTenant(a.handleRoomMember))
 	a.mux.HandleFunc("/api/rooms/{id}/terms", a.requireTenant(a.handleRoomTerms))

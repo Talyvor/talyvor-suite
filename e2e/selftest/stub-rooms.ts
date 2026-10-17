@@ -874,7 +874,7 @@ async function roomAsk(req: IncomingMessage, res: ServerResponse, p: string, ws:
   if (pay === 'room') spendWallet(r, `ask:${model}`)
   const latest = (messages.get(r.id) ?? []).filter((m) => m.deleted_at === undefined).slice(-CONTEXT_MESSAGES)
   const answer = latest.length === 0 ? 'Nothing has been said in this room yet.'
-    : `This room has ${latest.length} recent message(s); the latest says: ${latest[latest.length - 1].body.split('\n')[0]}`
+    : `This room has ${latest.length} recent message(s); the latest say: ${latest.map((m) => m.body).join(' / ').slice(-1000)}`
   const buyer = pay === 'room' ? r.owner_workspace_id : ws
   const m = post(r.id, ws, `asked the room's AI ${paidBy(pay)}: ${question}\n\n${answer}`, 'run',
     { run: 'ask', model, pay, payer_workspace_id: buyer, ...(pay === 'room' ? { wallet_agent_id: walletID(r) } : {}) })

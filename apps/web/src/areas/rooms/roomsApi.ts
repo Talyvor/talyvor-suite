@@ -251,6 +251,8 @@ export interface RunRequest {
 
 /** Lens rooms.RunResult: the use, and the run message the room got. */
 export interface RunResult {
+  /** An ask's answer (B41.60). */
+  answer?: string
   pay: 'room' | 'self'
   payer_workspace_id: string
   message?: RoomMessage
@@ -405,6 +407,8 @@ export const roomsApi = {
   decide: (id: string, cid: string, status: 'accepted' | 'rejected') =>
     post<Contribution>(`/api/rooms/${e(id)}/contributions/${e(cid)}`, { status }, 'PATCH'),
   run: (id: string, req: RunRequest) => post<RunResult>(`/api/rooms/${e(id)}/runs`, req),
+  // B41.60 — the room's AI, whose context is the room's latest messages, its spec among them.
+  ask: (id: string, req: { question: string; model: string; pay: 'room' | 'self' }) => post<RunResult>(`/api/rooms/${e(id)}/ask`, req),
   // B32.55 — room settings.
   changeMember: (id: string, ws: string, change: MemberChange) =>
     post<Member>(`/api/rooms/${e(id)}/members/${e(ws)}`, change, 'PATCH'),

@@ -361,9 +361,9 @@ function RoomPage() {
   const t = r.terms
   const members = r.members ?? []
   const asks = r.me === null || !r.me.terms_current
-  // B32.54 — a member under the current terms is in the room: its conversation, contributions and runs (Room.tsx).
+  // B32.54 — a member under the current terms is in the room: its conversation, contributions, runs and spec (Room.tsx).
   const inside = !asks
-  const n = (i: number) => String(inside ? i + 3 : i).padStart(2, '0')
+  const n = (i: number) => String(inside ? i + 4 : i).padStart(2, '0')
   return (
     <>
       <Region

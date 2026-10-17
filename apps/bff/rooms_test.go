@@ -139,12 +139,16 @@ func TestRoomEventsStreamAndRoomWritesRelay(t *testing.T) {
 	if rec := doJSON(a, http.MethodPost, "/api/rooms/room_1/runs", `{"target":"c_2","payer_workspace_id":"ws_other"}`); rec.Code != http.StatusBadRequest {
 		t.Fatalf("a run naming its own payer = %d, want 400 before Lens is asked", rec.Code)
 	}
+	if rec := doJSON(a, http.MethodPost, "/api/rooms/room_1/ask", `{"question":"what is the spec?","model":"m","pay":"self"}`); rec.Code != http.StatusOK {
+		t.Fatalf("ask = %d %s", rec.Code, rec.Body.String())
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	want := []string{
 		"GET /v1/rooms/room_1/events 7 ",
 		`PUT /v1/rooms/room_1/contributions/c_2/vote  {"value":-1}`,
 		`POST /v1/rooms/room_1/runs  {"target":"c_2","input":"go","pay":"room"}`,
+		`POST /v1/rooms/room_1/ask  {"question":"what is the spec?","model":"m","pay":"self"}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("Lens received\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

@@ -511,9 +511,13 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	// answer as Track's do; the third relays the approval request Docs made, and holds nothing. B39.25 put GET on
 	// /api/docs/webhooks (the list, no secret on it, now in the sweep's reach) and took its place with POST
 	// /api/docs/webhooks/{id}/rotate, which relays the new secret, shown once like the create's.
-	if len(methodOnly) > 127 {
+	//
+	// THE HUNDRED-AND-TWENTY-EIGHTH IS B41.60'S ASKING THE ROOM'S AI, POST only: /api/rooms/{id}/ask. It relays Lens's
+	// answer and holds nothing; the question and the answer are read back as a run message through
+	// GET /api/rooms/{id}/messages, which the sweep reaches.
+	if len(methodOnly) > 128 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 127 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 128 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}
