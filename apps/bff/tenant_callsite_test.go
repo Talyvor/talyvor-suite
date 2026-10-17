@@ -385,6 +385,11 @@ func TestDocsWorkspacePathOnlyForWorkspaceScopedUpstreamRoutes(t *testing.T) {
 		// AFTER the literal mount, so the workspace prefix is still the session's alone.
 		"docsTeams:/teams":      "GET|POST /v1/workspaces/{wsID}/teams — internal/team/handler.go Mount",
 		"docsTeamMember:/teams": "PUT|DELETE /v1/workspaces/{wsID}/teams/{teamID}/members/{memberID} — internal/team/handler.go Mount",
+		// B39.24 — talyvor-docs d819707 (B39.14): internal/webhooks/handler.go Mount registers POST
+		// `/workspaces/{wsID}/webhooks` and DELETE `/workspaces/{wsID}/webhooks/{id}`, and each one's first act (owner) is
+		// AuthorizeWorkspace on that {wsID}. The delete appends its id AFTER the literal mount.
+		"docsCreateWebhook:/webhooks": "POST /v1/workspaces/{wsID}/webhooks — internal/webhooks/handler.go Mount",
+		"docsDeleteWebhook:/webhooks": "DELETE /v1/workspaces/{wsID}/webhooks/{id} — internal/webhooks/handler.go Mount",
 	}
 
 	type site struct{ fn, suffix string }

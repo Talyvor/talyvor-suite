@@ -36,7 +36,7 @@ export function verifies(secret: string, id: string, timestamp: string, body: st
 }
 
 /** A receiver on loopback: each POST is kept and answered 204; GET /<probe> answers the probe, to find the tunnel up. */
-async function receiver(probe: string): Promise<{ port: number; got: Delivery[]; close: () => Promise<void> }> {
+export async function receiver(probe: string): Promise<{ port: number; got: Delivery[]; close: () => Promise<void> }> {
   const got: Delivery[] = []
   const server = createServer((req, res) => {
     const chunks: Buffer[] = []
@@ -51,7 +51,7 @@ async function receiver(probe: string): Promise<{ port: number; got: Delivery[];
 }
 
 /** A Cloudflare quick tunnel to `port`: its https URL once it answers `probe`, or why not. */
-async function tunnel(port: number, probe: string): Promise<{ url: string; proc: ChildProcess }> {
+export async function tunnel(port: number, probe: string): Promise<{ url: string; proc: ChildProcess }> {
   const proc = spawn('cloudflared', ['tunnel', '--no-autoupdate', '--url', `http://127.0.0.1:${port}`], { stdio: ['ignore', 'ignore', 'pipe'] })
   const url = await new Promise<string>((ok, no) => {
     let log = ''
