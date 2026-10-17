@@ -353,6 +353,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodDelete, path: "/api/track/webhooks/x1", body: ``},
 		{method: http.MethodPost, path: "/api/docs/webhooks", body: `{"url":"https://hooks.example.com/d"}`},
 		{method: http.MethodDelete, path: "/api/docs/webhooks/x1", body: ``},
+		{method: http.MethodPost, path: "/api/docs/webhooks/x1/rotate", body: ``},
 		{method: http.MethodPost, path: "/api/docs/spaces/s1/pages/p1/approval", body: `{"reviewers":["m-1"]}`},
 		{method: http.MethodPut, path: "/api/docs/spaces/s1/pages/p1/pin", body: ``},
 		{method: http.MethodDelete, path: "/api/docs/spaces/s1/pages/p1/pin", body: ``},

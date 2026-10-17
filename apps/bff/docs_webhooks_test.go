@@ -18,6 +18,16 @@ func TestDocsWebhooks_CreateDeleteApprovalReachDocs(t *testing.T) {
 		t.Fatalf("create: %d, upstream got %s %s %s", rec.Code, docs.method, docs.path, docs.reqBody)
 	}
 
+	rec = cycleReq(t, a, sess, http.MethodGet, "/api/docs/webhooks", "")
+	if docs.method != http.MethodGet || docs.path != "/v1/workspaces/track-ws-7/webhooks" {
+		t.Fatalf("list: %d, upstream got %s %s", rec.Code, docs.method, docs.path)
+	}
+
+	rec = cycleReq(t, a, sess, http.MethodPost, "/api/docs/webhooks/wh-1/rotate", "")
+	if docs.method != http.MethodPost || docs.path != "/v1/workspaces/track-ws-7/webhooks/wh-1/rotate" {
+		t.Fatalf("rotate: %d, upstream got %s %s", rec.Code, docs.method, docs.path)
+	}
+
 	rec = cycleReq(t, a, sess, http.MethodDelete, "/api/docs/webhooks/wh-1", "")
 	if docs.method != http.MethodDelete || docs.path != "/v1/workspaces/track-ws-7/webhooks/wh-1" {
 		t.Fatalf("delete: %d, upstream got %s %s", rec.Code, docs.method, docs.path)

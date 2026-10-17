@@ -687,6 +687,7 @@ const ARRAYS: Record<string, unknown[]> = {
   '/api/track/boards': [],
   // B18.27 — the sidebar's pinned Docs pages, kept by Docs.
   '/api/docs/pins': [],
+  '/api/docs/webhooks': [],
   '/api/docs/spaces': [
     {
       id: 'sp-eng',

@@ -62,6 +62,7 @@ import { OperatorTax } from './areas/lens/OperatorTax'
 import { OperatorCompliance } from './areas/lens/OperatorCompliance'
 import { VerificationScreen } from './areas/lens/Verification'
 import { CapabilityTermsScreen } from './areas/lens/CapabilityTerms'
+import { DocsWebhooks } from './areas/docs/DocsWebhooks'
 import { InvoicesScreen } from './areas/lens/Invoices'
 import { PayScreen } from './areas/lens/Pay'
 import { PayInvoicePage } from './areas/pay/PayInvoice'
@@ -275,6 +276,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/settings/verification', title: 'Verification', element: <VerificationScreen /> },
   // B30.103 — each money capability's terms, read and accepted before its first use.
   { path: '/settings/terms', title: 'Capability terms', element: <CapabilityTermsScreen /> },
+  // B39.25 — a Docs workspace's owner adds, rotates and deletes its signed webhooks.
+  { path: '/settings/webhooks', title: 'Webhooks', element: <DocsWebhooks /> },
   // B30.97 — invoices from an agent's currency account, each with its public pay link.
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.
@@ -511,6 +514,7 @@ function Sidebar() {
         {item('/members', 'Members', 'members')}
         {item('/settings/verification', 'Verification', 'prove')}
         {item('/settings/terms', 'Capability terms', 'page')}
+        {item('/settings/webhooks', 'Webhooks', 'plug')}
       </Group>
       {/* B18.25 — offered only to someone the BFF's operator gate will admit. */}
       {me.data?.operator ? (

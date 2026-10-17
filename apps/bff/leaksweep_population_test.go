@@ -508,7 +508,9 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	//
 	// THE HUNDRED-AND-TWENTY-FIFTH TO TWENTY-SEVENTH ARE B39.24'S DOCS ROUTES: POST /api/docs/webhooks, DELETE
 	// /api/docs/webhooks/{id} and POST /api/docs/spaces/{spaceID}/pages/{pageID}/approval. The first two relay Docs'
-	// answer as Track's do; the third relays the approval request Docs made, and holds nothing.
+	// answer as Track's do; the third relays the approval request Docs made, and holds nothing. B39.25 put GET on
+	// /api/docs/webhooks (the list, no secret on it, now in the sweep's reach) and took its place with POST
+	// /api/docs/webhooks/{id}/rotate, which relays the new secret, shown once like the create's.
 	if len(methodOnly) > 127 {
 		sort.Strings(methodOnly)
 		t.Fatalf("routes answering 405 to GET = %d, want at most 127 — a route left the leak sweep's "+
