@@ -6,6 +6,9 @@
 //     and exactly one mail at the stub, to their address. The member then turns issue.assigned off
 //     (PUT …/notification-preferences/issue.assigned {"email":false}), the owner reassigns the issue to them, and no new
 //     row is written and no mail sent.
+//   B39.29 — the member turns issue.assigned back on and the daily digest on (…/notification-preferences/digest
+//     {"email":true}); three issues assigned to them write three outbox rows that stay unsent, and the stub gets
+//     nothing. The 09:00 UTC send itself has no on-demand trigger, so Track's own test proves it.
 // The deployed Track's outbox is in a database the run never connects to, so this Track is the run's own.
 
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
@@ -78,10 +81,11 @@ export function trackAssignEmail(seed: number): Scenario {
   return {
     id: 'track-assign-email',
     owner: 'talyvor-track',
-    items: ['B39.15', 'B39.26'],
+    items: ['B39.15', 'B39.26', 'B39.29'],
     feature: 'Track assignment email',
     title: 'Track assignment email: an issue assigned to a second member writes exactly one outbox row, sent, and one mail ' +
-      'at the SMTP stub; once they turn issue.assigned off, a reassignment writes no row and sends nothing',
+      'at the SMTP stub; once they turn issue.assigned off, a reassignment writes no row and sends nothing; ' +
+      'with the daily digest on, three assignments write three rows that stay unsent and send nothing',
     run: async (ctx) => {
       const src = ctx.env.trackSrc
       if (src === 'none' || !existsSync(join(src, 'cmd', 'track', 'main.go'))) throw new CannotTest(`no Track checkout at ${src} (--track-src)`)
@@ -152,7 +156,7 @@ export function trackAssignEmail(seed: number): Scenario {
         if (ownerID === undefined || !/^[0-9a-f-]{36}$/.test(memberID)) return { pass: false, detail: `the roster does not name both members: ${roster.text}` }
         const issue = await call<{ id: string }>(owner, 'POST', `/workspaces/${ws}/issues`, { title: `Assigned by e2e ${seed} ${probe}` })
         if (issue.status !== 201 && issue.status !== 200) return { pass: false, detail: `the issue was not made: ${issue.status} ${issue.text}` }
-        const assign = (to: string) => call<{ assignee_id?: string }>(owner, 'PATCH', `/workspaces/${ws}/issues/${encodeURIComponent(issue.value.id)}`, { assignee_id: to })
+        const assign = (to: string, id = issue.value.id) => call<{ assignee_id?: string }>(owner, 'PATCH', `/workspaces/${ws}/issues/${encodeURIComponent(id)}`, { assignee_id: to })
         const rows = async () => {
           const [n, sent] = (await sql(`SELECT count(*), count(sent_at) FROM notification_outbox WHERE member_id = '${memberID}'`)).split('|').map(Number)
           return { n, sent }
@@ -185,7 +189,28 @@ export function trackAssignEmail(seed: number): Scenario {
         ctx.evidence.push({ note: `after turning issue.assigned off and the reassignment: ${r.n} outbox row(s) for the member; ${smtp.got.length} mail(s) at the stub` })
         if (r.n !== 1) return { pass: false, detail: `with issue.assigned off, the reassignment still wrote ${r.n - 1} new outbox row(s)` }
         if (smtp.got.length !== 1) return { pass: false, detail: `with issue.assigned off, the stub got ${smtp.got.length - 1} more mail(s)` }
-        return { pass: true, detail: `one assignment, one outbox row sent and one mail to ${second.email}; with issue.assigned off, a reassignment wrote no row and sent nothing` }
+
+        // B39.29: a digest member's rows are written as usual and held for the 09:00 UTC run, which a quiet window
+        // straddling 09:00 would see; that run is Track's own test, so then this half cannot be tested.
+        const utc = new Date()
+        if (utc.getUTCHours() === 8 && utc.getUTCMinutes() >= 58) throw new CannotTest('the digest half would straddle the 09:00 UTC digest run')
+        for (const kind of ['issue.assigned', 'digest']) {
+          const on = await call<{ email: boolean }>(second, 'PUT', `/workspaces/${ws}/notification-preferences/${kind}`, { email: true })
+          if (on.status !== 200 || on.value?.email !== true) return { pass: false, detail: `the member could not turn ${kind} on: ${on.status} ${on.text}` }
+        }
+        for (let k = 1; k <= 3; k++) {
+          const made = await call<{ id: string }>(owner, 'POST', `/workspaces/${ws}/issues`, { title: `Digest ${k} by e2e ${seed} ${probe}` })
+          const to = made.status === 201 || made.status === 200 ? await assign(memberID, made.value.id) : undefined
+          if (to?.status !== 200 || to.value?.assignee_id !== memberID) return { pass: false, detail: `digest issue ${k} was not assigned to the member: ${made.status} ${made.text}; ${to?.status} ${to?.text}` }
+        }
+        await new Promise((ok) => setTimeout(ok, QUIET_MS))
+        r = await rows()
+        ctx.evidence.push({ note: `after turning the digest on and three assignments: ${r.n} outbox row(s) for the member, ${r.sent} sent; ${smtp.got.length} mail(s) at the stub` })
+        if (r.n !== 4) return { pass: false, detail: `with the digest on, three assignments wrote ${r.n - 1} outbox row(s), not three` }
+        if (r.sent !== 1) return { pass: false, detail: `with the digest on, ${r.sent - 1} of the three held rows were sent before the 09:00 digest` }
+        if (smtp.got.length !== 1) return { pass: false, detail: `with the digest on, the stub got ${smtp.got.length - 1} mail(s) before the 09:00 digest` }
+        return { pass: true, detail: `one assignment, one outbox row sent and one mail to ${second.email}; with issue.assigned off, a reassignment wrote no row and sent nothing; ` +
+          'with the digest on, three assignments wrote three rows held unsent and no mail' }
       } finally {
         track?.kill()
         await run('docker', ['rm', '-f', pg]).catch(() => undefined)
