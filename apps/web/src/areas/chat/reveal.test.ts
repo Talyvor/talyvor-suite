@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { FINISH_HORIZON_MS, Reveal, STREAM_HORIZON_MS, useRevealedText } from './reveal'
 
@@ -51,6 +51,23 @@ describe('useRevealedText', () => {
     expect(live.result.current.text.length).toBeGreaterThan(0)
     expect(live.result.current.text.length).toBeLessThan(answer.length)
     expect(answer.startsWith(live.result.current.text)).toBe(true)
+  })
+
+  it('B17.216 — a late frame that shows the rest of an answer still leaves it a frame on screen before it settles', async () => {
+    const queued: FrameRequestCallback[] = []
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => queued.push(cb))
+    try {
+      const answer = '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30'
+      const hook = renderHook(({ text, live }) => useRevealedText(text, live), { initialProps: { text: '', live: true } })
+      hook.rerender({ text: answer, live: false })
+      // One frame five seconds late: everything that was left is shown in it, and the answer is still revealing.
+      act(() => queued.shift()?.(performance.now() + 5_000))
+      expect(hook.result.current).toEqual({ text: answer, revealing: true })
+      act(() => queued.shift()?.(performance.now() + 5_016))
+      expect(hook.result.current).toEqual({ text: answer, revealing: false })
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('B28.113 — an answer continued keeps the text it already showed, and paces only what is added', async () => {
