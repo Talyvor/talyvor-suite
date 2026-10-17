@@ -196,7 +196,7 @@ export function trackAssignEmail(seed: number): Scenario {
   }
 }
 
-async function freePort(): Promise<number> {
+export async function freePort(): Promise<number> {
   const s = createServer()
   await new Promise<void>((ok) => s.listen(0, '127.0.0.1', ok))
   const { port } = s.address() as AddressInfo

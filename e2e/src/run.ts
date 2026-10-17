@@ -356,6 +356,7 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
       outDir: cfg.outDir,
       lensSrc: cfg.lensSrc,
       trackSrc: cfg.trackSrc,
+      docsSrc: cfg.docsSrc,
       webhookSecret: cfg.webhookSecret,
       operatorReadKey: cfg.operatorReadKey,
       upstreamPort: cfg.upstreamPort,
