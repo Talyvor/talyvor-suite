@@ -56,6 +56,12 @@ function mockBff() {
   return { sent }
 }
 
+/** Answers the first-payment scam questions (B41.13): told to pay urgently, then details by email or chat. */
+function answer(form: HTMLElement, urgent: 'Yes' | 'No', byMessage: 'Yes' | 'No') {
+  fireEvent.click(within(within(form).getByRole('radiogroup', { name: 'Were you told to pay urgently?' })).getByLabelText(urgent))
+  fireEvent.click(within(within(form).getByRole('radiogroup', { name: 'Did the bank details arrive by email or chat?' })).getByLabelText(byMessage))
+}
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
@@ -83,6 +89,8 @@ describe('the Pay screen', () => {
     fireEvent.change(within(form).getByLabelText('To'), { target: { value: 'payee_1' } })
     fireEvent.change(within(form).getByLabelText('Amount in GBP'), { target: { value: '20.00' } })
     fireEvent.change(within(form).getByLabelText('Reference'), { target: { value: 'Rent' } })
+    answer(form, 'No', 'No')
+    expect(within(form).queryByTestId('scam-warning')).toBeNull()
     fireEvent.click(within(form).getByRole('button', { name: 'Send' }))
     const row = await screen.findByTestId('payment-mpay_1')
     expect(bff.sent[1].body).toMatchObject({ account_id: 'macc_agt', payee_id: 'payee_1', amount_minor: 2000, currency: 'GBP', reference: 'Rent' })
@@ -90,6 +98,38 @@ describe('the Pay screen', () => {
     expect(within(row).getByText('£20.00')).toBeTruthy()
     expect(within(row).getByText('Completed')).toBeTruthy()
     expect(screen.getByTestId('pay-count').textContent).toBe('1 payment out, 1 completed')
+  })
+
+  it('asks two scam questions before a first payment: a yes warns and needs a second confirmation, and a second payment asks nothing', async () => {
+    const bff = mockBff()
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+    const payeeForm = await screen.findByTestId('new-payee')
+    fireEvent.change(within(payeeForm).getByLabelText('Payee’s name'), { target: { value: 'Acme Ltd' } })
+    fireEvent.change(within(payeeForm).getByLabelText('Sort code'), { target: { value: '04-00-04' } })
+    fireEvent.change(within(payeeForm).getByLabelText('Account number'), { target: { value: '12345678' } })
+    fireEvent.click(within(payeeForm).getByRole('button', { name: 'Save payee' }))
+    await screen.findByTestId('payee-payee_1')
+
+    const form = screen.getByTestId('send-payment')
+    fireEvent.change(within(form).getByLabelText('To'), { target: { value: 'payee_1' } })
+    fireEvent.change(within(form).getByLabelText('Amount in GBP'), { target: { value: '20.00' } })
+    const send = within(form).getByRole('button', { name: 'Send' }) as HTMLButtonElement
+    expect(send.disabled).toBe(true) // unanswered
+    answer(form, 'No', 'Yes')
+    const warning = within(form).getByTestId('scam-warning')
+    expect(warning.textContent).toContain('This could be a scam.')
+    expect(send.disabled).toBe(true) // a yes needs the second confirmation
+    fireEvent.click(within(warning).getByRole('checkbox'))
+    expect(send.disabled).toBe(false)
+    fireEvent.click(send)
+    await screen.findByTestId('payment-mpay_1')
+    expect(bff.sent).toHaveLength(2)
+
+    fireEvent.change(within(form).getByLabelText('To'), { target: { value: 'payee_1' } })
+    fireEvent.change(within(form).getByLabelText('Amount in GBP'), { target: { value: '5.00' } })
+    expect(within(form).queryByTestId('scam-check')).toBeNull()
+    expect((within(form).getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('uploads a payouts CSV as text/csv under one key and shows each row’s result', async () => {

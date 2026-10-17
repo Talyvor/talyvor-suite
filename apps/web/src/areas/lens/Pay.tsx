@@ -114,7 +114,7 @@ export function PayScreen() {
           (open.length === 0 ? (
             <p className="text-body text-muted" data-testid="pay-no-account">No currency account yet: open the company’s account on Invoices, then pay from it here.</p>
           ) : (
-            <SendPayment accounts={open} payees={saved} accountName={accountName} />
+            <SendPayment accounts={open} payees={saved} sent={sent} accountName={accountName} />
           ))}
         <Waiting agentName={agentName} />
         {reading(payments, 'Your payments') ??
@@ -269,8 +269,25 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
   )
 }
 
+/** The two scam questions asked before a first payment to a payee (B41.13). */
+const SCAM_QUESTIONS = [
+  { key: 'urgent', text: 'Were you told to pay urgently?' },
+  { key: 'by_message', text: 'Did the bank details arrive by email or chat?' },
+] as const
+type ScamAnswers = Partial<Record<(typeof SCAM_QUESTIONS)[number]['key'], boolean>>
+
 /** One payment to a saved payee, from the company's or an agent's account (B30.17). */
-function SendPayment({ accounts, payees, accountName }: { accounts: CurrencyAccount[]; payees: OutsidePayee[]; accountName: (a: CurrencyAccount) => string }) {
+function SendPayment({
+  accounts,
+  payees,
+  sent,
+  accountName,
+}: {
+  accounts: CurrencyAccount[]
+  payees: OutsidePayee[]
+  sent: OutsidePayment[]
+  accountName: (a: CurrencyAccount) => string
+}) {
   const qc = useQueryClient()
   const [accountID, setAccountID] = useState(accounts[0]?.id ?? '')
   const [payeeID, setPayeeID] = useState('')
@@ -278,10 +295,16 @@ function SendPayment({ accounts, payees, accountName }: { accounts: CurrencyAcco
   const [reference, setReference] = useState('')
   const [key, setKey] = useState(newMoveKey)
   const [made, setMade] = useState<OutsidePayment | null>(null)
+  const [answers, setAnswers] = useState<ScamAnswers>({})
+  const [stillPay, setStillPay] = useState(false)
   const account = accounts.find((a) => a.id === accountID) ?? accounts[0]
   const payee = payees.find((p) => p.id === payeeID)
   const minor = minorOf(amount)
-  const complete = account !== undefined && payee !== undefined && !payee.needs_confirmation && minor !== null
+  // B41.13: before the first payment to a payee, both questions are answered; a yes to either needs a second confirmation.
+  const first = payee !== undefined && !sent.some((p) => p.payee_id === payee.id)
+  const risky = SCAM_QUESTIONS.some((q) => answers[q.key] === true)
+  const checked = !first || (SCAM_QUESTIONS.every((q) => answers[q.key] !== undefined) && (!risky || stillPay))
+  const complete = account !== undefined && payee !== undefined && !payee.needs_confirmation && minor !== null && checked
   const pay = useMutation({
     mutationFn: () =>
       agentBankApi.payOutside({ account_id: account?.id ?? '', payee_id: payeeID, amount_minor: minor ?? 0, currency: account?.currency ?? '', reference: reference.trim(), idempotency_key: key }),
@@ -290,6 +313,8 @@ function SendPayment({ accounts, payees, accountName }: { accounts: CurrencyAcco
       setAmount('')
       setReference('')
       setKey(newMoveKey())
+      setAnswers({})
+      setStillPay(false)
       void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
     },
@@ -321,7 +346,16 @@ function SendPayment({ accounts, payees, accountName }: { accounts: CurrencyAcco
           </label>
           <label className={field}>
             To
-            <select aria-label="To" className={`${select} w-full`} value={payeeID} onChange={(e) => setPayeeID(e.target.value)}>
+            <select
+              aria-label="To"
+              className={`${select} w-full`}
+              value={payeeID}
+              onChange={(e) => {
+                setPayeeID(e.target.value)
+                setAnswers({})
+                setStillPay(false)
+              }}
+            >
               <option value="">Choose a payee</option>
               {payees.map((p) => (
                 <option key={p.id} value={p.id} disabled={p.needs_confirmation}>
@@ -340,6 +374,52 @@ function SendPayment({ accounts, payees, accountName }: { accounts: CurrencyAcco
             <Input aria-label="Reference" placeholder="What the payee sees" value={reference} onChange={(e) => setReference(e.target.value)} />
           </label>
         </div>
+        {first ? (
+          <fieldset className="flex flex-col gap-2 border-t border-rule pt-3" data-testid="scam-check">
+            <legend className="text-body text-ink">First payment to {payee.name}: two quick questions</legend>
+            {SCAM_QUESTIONS.map((q) => (
+              <div key={q.key} role="radiogroup" aria-label={q.text} className="flex flex-wrap items-center gap-3 text-body text-ink">
+                <span className="min-w-0 flex-1">{q.text}</span>
+                {([true, false] as const).map((yes) => (
+                  <label key={String(yes)} className="flex items-center gap-1 text-caption text-muted">
+                    <input
+                      type="radio"
+                      name={`scam-${q.key}`}
+                      className={`h-4 w-4 accent-accent transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+                      checked={answers[q.key] === yes}
+                      onChange={() => {
+                        setAnswers((a) => ({ ...a, [q.key]: yes }))
+                        setStillPay(false)
+                      }}
+                    />
+                    {yes ? 'Yes' : 'No'}
+                  </label>
+                ))}
+              </div>
+            ))}
+            {risky ? (
+              <div role="alert" className="flex flex-col gap-2 rounded-control border border-rule-strong px-3 py-2" data-testid="scam-warning">
+                <p className="flex flex-wrap items-center gap-2 text-body text-ink">
+                  <Pill status="slashed">Stop and check</Pill>
+                  <span>This could be a scam.</span>
+                </p>
+                <p className="text-caption text-ink">
+                  Fraudsters rush people into paying, and they send or change bank details by email or chat. Before you pay, call {payee.name} on a
+                  number you already have — not one from the message — and check the details. Money sent to a fraudster is often not recovered.
+                </p>
+                <label className="flex items-start gap-2 text-caption text-ink">
+                  <input
+                    type="checkbox"
+                    className={`mt-0.5 h-4 w-4 shrink-0 accent-accent transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+                    checked={stillPay}
+                    onChange={(e) => setStillPay(e.target.checked)}
+                  />
+                  <span>I have checked the details with {payee.name} directly and still want to pay.</span>
+                </label>
+              </div>
+            ) : null}
+          </fieldset>
+        ) : null}
         <div>
           <Button type="submit" variant="primary" disabled={!complete || pay.isPending}>
             {pay.isPending ? 'Sending…' : 'Send'}
