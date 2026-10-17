@@ -3,7 +3,8 @@
 // On Lens's API the owner accepts the terms of currency_accounts, payments_in and payments_out, opens the company's GBP
 // account, makes an agent and opens its GBP account, and puts test money in it the one way there is today: an invoice from
 // that account, paid by card on its pay page (B30.97) — the account must hold the invoice's total more afterwards. On the
-// screen the owner saves a payee (its name must read Exact match), pays it £20.00 from the agent's account (the row must
+// screen the owner saves a payee (its name must read Exact match), answers the first-payment scam questions with a yes (the
+// warning must show and Send must wait for the second confirmation, B41.13), pays it £20.00 from the agent's account (the row must
 // show £20.00; Lens's record must hold the payment at 2,000 minor and the agent's account 2,000 minor less: the posting is
 // what makes it paid), sets up a £10.00 weekly standing order to it (Lens's schedules must hold it as a standing order to
 // that payee), grants it a mandate as an outside business (the pull key shown once; Lens's mandates must list it), and
@@ -148,6 +149,13 @@ export function payScreen(): Scenario {
         await send.getByLabel('To', { exact: true }).selectOption(payeeID)
         await send.getByLabel('Amount in GBP').fill('20.00')
         await send.getByLabel('Reference').fill(reference)
+        // B41.13: a first payment asks two scam questions; a yes shows the warning and Send waits for a second confirmation.
+        await send.getByRole('radiogroup', { name: 'Were you told to pay urgently?' }).getByLabel('No').check()
+        await send.getByRole('radiogroup', { name: 'Did the bank details arrive by email or chat?' }).getByLabel('Yes').check()
+        const warning = send.getByTestId('scam-warning')
+        if (!(await warning.isVisible())) return fail('answering yes to "Did the bank details arrive by email or chat?" showed no scam warning')
+        if (await send.getByRole('button', { name: 'Send' }).isEnabled()) return fail('Send was enabled after a risky scam answer, before the second confirmation')
+        await warning.getByRole('checkbox').check()
         await send.getByRole('button', { name: 'Send' }).click()
         const paymentRow = page.locator('[data-testid^="payment-"]').first()
         await paymentRow.or(send.getByRole('alert')).first().waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
