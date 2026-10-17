@@ -704,8 +704,11 @@ const VLLM = process.env.LENS_VLLM_BASE_URL ?? ''
 const CREDENTIAL_HEADERS = ['authorization', 'x-talyvor-key', 'x-api-key', 'proxy-authorization']
 /** What fetch sets itself, or refuses to be given. */
 const HOP_HEADERS = new Set(['host', 'connection', 'content-length', 'transfer-encoding', 'keep-alive', 'upgrade', 'expect', 'accept-encoding'])
+/** The vLLM paths the stub forwards; any other path a caller names is never sent upstream. */
+const VLLM_PATHS = new Set(['v1/chat/completions', 'v1/completions', 'v1/embeddings'])
 
 async function vllm(req: IncomingMessage, res: ServerResponse, path: string, raw: string): Promise<void> {
+  if (!VLLM_PATHS.has(path)) return json(res, 404, { error: 'vLLM path not served' })
   const stream = (JSON.parse(raw || '{}') as { stream?: boolean }).stream === true
   const kept = stream ? (broke('key-forward-stream') ? CREDENTIAL_HEADERS : []) : broke('key-forward') ? ['x-talyvor-key', 'x-api-key'] : []
   const headers: Record<string, string> = {}

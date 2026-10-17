@@ -36,6 +36,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -45,6 +46,14 @@ import (
 
 // testToolsPath is where Talyvor test tools is, on this app's own origin.
 const testToolsPath = "/mcp/test-tools"
+
+// testToolsHost is the host the relay sends Talyvor test tools' requests to; the transport answers it in-process.
+const testToolsHost = "test-tools.talyvor.invalid"
+
+// connectorAddress is the only shape of address a connector is dialled at: https to a dotted DNS name. An IP literal,
+// localhost or a bare single-label name only ever reaches this side of the network, so it is refused before any
+// dialling; the dialler still checks where a name resolves.
+var connectorAddress = regexp.MustCompile(`(?i)^https://([a-z0-9-]+\.)+[a-z][a-z0-9-]*[a-z0-9](:[0-9]{1,5})?(/[^\s#]*)?$`)
 
 // testToolsName is the test connector's name, as its initialize answer gives it and the Connectors page shows it.
 const testToolsName = "Talyvor test tools"
@@ -191,14 +200,21 @@ type connectorSession struct {
 // openConnector starts a session with a connector — initialize, then notifications/initialized — and returns the
 // server's name as it gave it.
 func (a *app) openConnector(r *http.Request, u *url.URL, token string) (*connectorSession, string, error) {
+	self := a.ownHosts(r)
 	s := &connectorSession{
 		client: &http.Client{
 			Timeout:       connectorTimeout,
-			Transport:     connectorTransport{self: a.ownHosts(r), out: a.connectorOut},
+			Transport:     connectorTransport{self: append(slices.Clone(self), testToolsHost), out: a.connectorOut},
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		url:   u.String(),
 		token: strings.TrimSpace(token),
+	}
+	if isTestTools(u, self) {
+		s.url = "https://" + testToolsHost + testToolsPath
+	} else if target := u.String(); connectorAddress.MatchString(target) {
+		s.url = target
+	} else {
+		return nil, "", errConnectorPrivate
 	}
 	reply, err := s.request(r.Context(), "initialize", map[string]any{
 		"protocolVersion": connectorProtocolVersion,
