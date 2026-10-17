@@ -85,6 +85,7 @@ import { creditsTopUp, evals, lensTokens, namedIdsIsolated, nodes, outputsAttrib
 import { ledgerCallOnce, ledgerMovesAtOnce } from './concurrency.ts'
 import { webhookReplayed, webhookUnsigned } from './webhooks.ts'
 import { trackWebhookSigned } from './trackWebhooks.ts'
+import { docsWebhookSigned } from './docsWebhooks.ts'
 import { agentRulesUnbypassable } from './rules.ts'
 import { poolIsolation } from './pool.ts'
 import { injectionExfil } from './injection.ts'
@@ -142,7 +143,7 @@ export interface RunEnv {
   operatorReadKey: string
   /** B28.287 — the port the synthetic upstream listens on, where the Lens under test sends its vLLM traffic (E2E_UPSTREAM_PORT); 0 when not given. */
   upstreamPort: number
-  /** B39.23 — 'cloudflared' or 'none': how track-webhook-signed's receiver is reached from Track (E2E_HOOK_TUNNEL). */
+  /** B39.23 — 'cloudflared' or 'none': how track-webhook-signed's and docs-webhook-signed's receivers are reached (E2E_HOOK_TUNNEL). */
   hookTunnel: string
   /** B29.21 — where the run's screenshots for the report go: `dir` on disk, `link` the same place as the report links it. */
   shots: { dir: string; link: string }
@@ -5042,6 +5043,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   if (i === 1) list.push(walletFX(i), trackWorkspaceRestore(i))
   // B39.23 — Track's signed issue webhooks, once a run: one issue update reaches a receiver the run serves, signed.
   if (i === 6) list.push(trackWebhookSigned(i))
+  // B39.24 — and Docs' signed approval webhooks: one approval request reaches a receiver the run serves, signed.
+  if (i === 6) list.push(docsWebhookSigned(i))
   if (i === 2) list.push(wrongAnswerStored(i))
   if (i === 3) list.push(trackSearchCycleBoard(i), patternMiningSwitch())
   // B34.9 — and the one Track route the app sends a request to that none of those reached: a project started on Projects.

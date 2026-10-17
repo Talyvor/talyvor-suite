@@ -14,6 +14,7 @@
 //   docs-collab-drop    — Docs drops an edit acknowledged on the live-edit socket when the socket closes (B28.447)
 //   docs-team-grant-sticky — someone taken off a team keeps the access the team was given on a page (B28.450)
 //   track-hook-sig — Track signs a webhook with the secret's text, not the key its base64 part decodes to (B39.23)
+//   docs-hook-twice — Docs sends an approval.requested webhook twice under two ids (B39.24)
 
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http'
@@ -202,11 +203,13 @@ async function syncSpend(ws: string, email: string): Promise<void> {
 
 interface Hook { id: string; workspace: string; url: string; events: string[]; secret: string; created_at: string }
 const hooks: Hook[] = []
+/** B39.24 — Docs' workspace webhooks, kept apart from Track's as the two products keep them. */
+const docsHooks: Hook[] = []
 
-/** B39.23 — one POST of the event to each of the workspace's hooks subscribed to it (none named = all), as Track's sink sends it. */
-function deliver(ws: string, type: string, data: Record<string, unknown>): void {
+/** B39.23 — one POST of the event to each of the workspace's hooks subscribed to it (none named = all), as Track's and Docs' sinks send it. */
+function deliver(ws: string, type: string, data: Record<string, unknown>, to: Hook[] = hooks): void {
   const payload = JSON.stringify({ type, timestamp: now(), data: { ...data, workspace_id: ws } })
-  for (const h of hooks.filter((x) => x.workspace === ws && (x.events.length === 0 || x.events.includes(type)))) {
+  for (const h of to.filter((x) => x.workspace === ws && (x.events.length === 0 || x.events.includes(type)))) {
     const msg = `msg_${id()}`
     const ts = String(Math.floor(Date.now() / 1000))
     const key = BREAK === 'track-hook-sig' ? Buffer.from(h.secret) : Buffer.from(h.secret.replace(/^whsec_/, ''), 'base64')
@@ -606,9 +609,39 @@ serve(DOCS_PORT, 'docs', async (req, res, path, url) => {
     }
     return json(res, 200, p)
   }
+  // B39.24 — a page's approval request (talyvor-docs internal/approval): made, and sent to the workspace's Docs webhooks.
+  if ((m = /^\/v1\/spaces\/([^/]+)\/pages\/([^/]+)\/approval$/.exec(path)) && req.method === 'POST') {
+    const [, space, pageID] = m
+    const sp = spaces.find((x) => x.id === space)
+    if (sp === undefined || !pages.some((x) => x.space_id === space && x.id === pageID)) return json(res, 404, { error: 'not found' })
+    const { reviewers = [], message = '' } = await body<{ reviewers?: string[]; message?: string }>(req)
+    if (reviewers.length === 0) return json(res, 400, { error: 'approval: at least one reviewer required' })
+    const r = { id: id(), page_id: pageID, workspace_id: sp.workspace, reviewers, message, status: 'pending', created_at: now() }
+    const event = { actor_id: 'synthetic', request_id: r.id, page_id: pageID, reviewers, status: r.status, due_date: null }
+    deliver(sp.workspace, 'approval.requested', event, docsHooks)
+    if (BREAK === 'docs-hook-twice') deliver(sp.workspace, 'approval.requested', event, docsHooks)
+    return json(res, 201, r)
+  }
   if ((m = /^\/v1\/workspaces\/([^/]+)(\/.*)$/.exec(path)) === null) return json(res, 404, { error: 'stub docs: no such route' })
   const [, ws, rest] = m
   const mine = spaces.filter((s) => s.workspace === ws)
+  // B39.24 — Docs' workspace webhooks (talyvor-docs internal/webhooks): owner only, the whsec_ secret given once.
+  if (rest === '/webhooks' && req.method === 'POST') {
+    if (byEmail.get(String(req.headers['x-user-email'] ?? '')) !== ws) return json(res, 403, { error: 'owner role required', code: 'OWNER_REQUIRED' })
+    const { url: to = '', events = [] } = await body<{ url?: string; events?: string[] }>(req)
+    if (!/^https?:\/\/[^/]/.test(to)) return json(res, 400, { error: 'url must be an https:// URL', code: 'BAD_URL' })
+    const h: Hook = { id: id(), workspace: ws, url: to, events, secret: `whsec_${randomBytes(24).toString('base64')}`, created_at: now() }
+    docsHooks.push(h)
+    const { workspace: _w, ...out } = h
+    return json(res, 201, out)
+  }
+  const docsHookID = /^\/webhooks\/([^/]+)$/.exec(rest)
+  if (docsHookID !== null && req.method === 'DELETE') {
+    const at = docsHooks.findIndex((h) => h.workspace === ws && h.id === docsHookID[1])
+    if (at < 0) return json(res, 404, { error: 'webhook not found', code: 'NOT_FOUND' })
+    docsHooks.splice(at, 1)
+    return json(res, 204, null)
+  }
   if (rest === '/teams' || rest.startsWith('/teams/')) {
     const me = callerIn(req, ws)
     if (me === undefined) return json(res, 403, { error: 'not a member of this workspace' })
