@@ -248,6 +248,7 @@ func TestTrackProxyAttachesGatewayCredentials(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/track/workspaces", nil)
+	req.Header.Set("X-Talyvor-Workspace", "SOMEBODY-ELSE")
 	req.AddCookie(sess)
 	a.ServeHTTP(rec, req)
 
@@ -268,6 +269,10 @@ func TestTrackProxyAttachesGatewayCredentials(t *testing.T) {
 	}
 	if got := track.headers.Get("X-Auth-Iss"); got != "https://idp.example.com" {
 		t.Fatalf("X-Auth-Iss = %q, want the configured issuer", got)
+	}
+	// Track bills a Chat answer naming an issue to this Lens workspace (B17.209) — the session's, never the client's.
+	if got := track.headers.Get("X-Talyvor-Workspace"); got != "u-test-workspace" {
+		t.Fatalf("X-Talyvor-Workspace = %q, want the session's Lens workspace", got)
 	}
 	if !strings.Contains(rec.Body.String(), "ws-t1") {
 		t.Fatalf("upstream body not streamed: %s", rec.Body.String())
