@@ -133,6 +133,7 @@ func (a *app) handleRoomJoin(w http.ResponseWriter, r *http.Request, t tenant) {
 //	POST  /api/rooms/{id}/contributions/{cid}/fork         {title, description, artifact, changelog, price_usd_micros}
 //	PUT   /api/rooms/{id}/contributions/{cid}/vote         {value}: +1 or −1, the latest counting
 //	POST  /api/rooms/{id}/runs                             {target, version, input, variables, model, pay, max_price_usd_micros}
+//	POST  /api/rooms/{id}/ask                              {question, model, pay}: the room's AI, read the room's latest messages
 //
 // Lens decides who may post, contribute, vote and run, and on whose money: paying "room", the room's wallet judges and
 // pays; paying "self", the member's own workspace. The run's message — what ran, what it cost and who paid — reaches
@@ -147,6 +148,7 @@ var (
 	roomDecisionKeys = map[string][]string{"status": nil}
 	roomRunKeys      = map[string][]string{"target": nil, "version": nil, "input": nil, "variables": nil, "model": nil, "pay": nil,
 		"max_price_usd_micros": nil}
+	roomAskKeys = map[string][]string{"question": nil, "model": nil, "pay": nil}
 )
 
 // roomPath is Lens's path for a room's sub-resource, from the request's {id} and, when cid is true, its {cid}.
@@ -345,6 +347,27 @@ func (a *app) handleRoomRun(w http.ResponseWriter, r *http.Request, t tenant) {
 	defer cancel()
 	a.marketRelay(w, r.WithContext(ctx), marketUseClient, t.token, http.MethodPost, path, body,
 		"Paid listings cannot be used on this deployment yet: it has no marketplace bill to put them on.")
+}
+
+// handleRoomAsk — POST /api/rooms/{id}/ask: B41.60, a member asks the room's AI, whose context is the room's latest
+// messages — the room's spec among them. A model call, so it carries the use's bound as a run does.
+func (a *app) handleRoomAsk(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	path, ok := roomPath(w, r, "/ask", false)
+	if !ok {
+		return
+	}
+	body, ok := roomBody(w, r, 64<<10, roomAskKeys)
+	if !ok {
+		return
+	}
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(marketUseTimeout + 10*time.Second))
+	ctx, cancel := context.WithTimeout(r.Context(), marketUseTimeout)
+	defer cancel()
+	a.marketRelay(w, r.WithContext(ctx), marketUseClient, t.token, http.MethodPost, path, body, "")
 }
 
 // B32.55 — room settings. Lens's members, terms, invites and prizes (B32.28, B32.29, B32.35), relayed the same way, on

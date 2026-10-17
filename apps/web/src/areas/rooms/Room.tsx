@@ -21,12 +21,14 @@ import {
   upsertMessage,
   usdText,
 } from './roomsApi'
+import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 
 // Room.tsx — B32.54: the room screen, for a member under the room's current terms. The conversation is fed by the
 // room's event stream (Lens B32.30 through apps/bff/rooms.go), so another member's message appears as it is posted;
 // the contributions board proposes, forks and votes on work (B32.31); and the run panel runs a contribution or a
 // marketplace listing on the room's budget or the member's own (B32.33), whose run message — what it cost and who
-// paid — reaches everyone in the room. The room wallet's spend this month against its budget sits at the top.
+// paid — reaches everyone in the room. The room wallet's spend this month against its budget sits at the top. B41.60:
+// the room's spec, a Docs page kept current in the conversation, and asking the room's AI, which reads it (RoomSpec.tsx).
 //
 // Lens decides everything — who may post, contribute, vote, accept and spend — and its sentence is shown on a refusal.
 
@@ -127,19 +129,23 @@ function isRun(m: RoomMessage): m is RoomMessage & { refs: RunRefs } {
   return m.kind === 'run' && m.refs !== null && typeof (m.refs as RunRefs).pay === 'string'
 }
 
-function MessageItem({ m, me }: { m: RoomMessage; me: string }) {
+function MessageItem({ m, me, room }: { m: RoomMessage; me: string; room?: RoomDetail }) {
   const run = isRun(m)
+  const spec = room ? currentSpec([m], room) : null
   return (
     <li className={cn('flex flex-col gap-1', run && 'rounded-card border border-rule bg-raised p-3')} data-testid="room-message">
       <span className="flex items-baseline gap-2 text-caption text-muted">
         <Author ws={m.author_workspace_id} me={me} />
         {run ? <span className="font-figure text-eyebrow uppercase text-label">Run</span> : null}
         {m.kind === 'contribution' ? <span className="font-figure text-eyebrow uppercase text-label">Contribution</span> : null}
+        {spec ? <span className="font-figure text-eyebrow uppercase text-label">Spec</span> : null}
         <span className="font-figure">{formatWhen(m.created_at)}</span>
         {m.edited_at && !m.deleted_at ? <span>edited</span> : null}
       </span>
       {m.deleted_at ? (
         <span className="text-body italic text-muted">Message deleted.</span>
+      ) : spec ? (
+        <SpecMessage spec={spec} />
       ) : (
         <span className="whitespace-pre-wrap break-words text-body text-ink">{m.body}</span>
       )}
@@ -212,7 +218,7 @@ function Conversation({ room, me }: { room: RoomDetail; me: string }) {
       ) : (
         <ol ref={listRef} aria-label="Messages" aria-live="polite" className="flex max-h-96 flex-col gap-4 overflow-y-auto pr-1">
           {messages.map((m) => (
-            <MessageItem key={m.id} m={m} me={me} />
+            <MessageItem key={m.id} m={m} me={me} room={room} />
           ))}
         </ol>
       )}
@@ -651,6 +657,7 @@ export function RoomLive({ room }: { room: RoomDetail }) {
       <Conversation room={room} me={me} />
       <Board room={room} me={me} />
       <RunPanel room={room} me={me} />
+      <RoomSpec room={room} me={me} messagesKey={messagesKey(room.id)} />
     </>
   )
 }
