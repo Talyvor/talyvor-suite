@@ -183,6 +183,12 @@ export function csrfRefused(): Scenario {
   }
 }
 
+/** An ID token no issuer signed: `alg: none`, the run's salt where the signature goes. */
+function unsignedIDToken(): string {
+  const part = (v: object) => Buffer.from(JSON.stringify(v)).toString('base64url')
+  return `${part({ alg: 'none' })}.${part({ sub: `phone-bearer-${RUN_SALT}` })}.${RUN_SALT}`
+}
+
 /** B40.24 — the phone app's way in: a session as `Authorization: Bearer`, with no cookie and no Origin. */
 export function phoneBearer(): Scenario {
   return {
@@ -209,7 +215,7 @@ export function phoneBearer(): Scenario {
       }
       const wrong: string[] = []
       const read = await bearer('GET', '/api/agents')
-      const forged = await bearer('POST', '/auth/mobile/session', { id_token: `eyJhbGciOiJub25lIn0.eyJzdWIiOiJ4In0.${RUN_SALT}` })
+      const forged = await bearer('POST', '/auth/mobile/session', { id_token: unsignedIDToken() })
       const out = await bearer('POST', '/auth/logout')
       const after = await bearer('GET', '/api/agents')
       ctx.evidence.push({ note: `Bearer, no cookie, no Origin: GET /api/agents ${read.status}, POST /auth/mobile/session with an unsigned ID token ${forged.status}, ` +
