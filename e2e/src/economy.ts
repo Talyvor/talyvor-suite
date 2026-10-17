@@ -395,6 +395,80 @@ export function nodes(): Scenario {
   }
 }
 
+// ─── ids another workspace owns ─────────────────────────────────────────────────────────────────────
+
+interface SessionRead { id: string; workspace_id: string; turn_count: number }
+interface TopPattern { prompt_hash: string; hit_count: number }
+
+/**
+ * B42.13 — what B42.2 made Lens refuse. A workspace that names another's session on a model call, or another's prompt
+ * hash in feedback, is answered 404 and nothing of the owner's moves: its session's turns, its answer's hit count, its
+ * ledger. The caller's own session still works, and the owner's own feedback still moves its hit count, so the hash
+ * named is a real one. (Another company's node heartbeat is refused in `nodes`.)
+ */
+export function namedIdsIsolated(): Scenario {
+  return {
+    id: 'named-ids-isolated',
+    owner: 'talyvor-lens',
+    own: true,
+    feature: 'Lens API',
+    title: "another workspace's session on a model call and its prompt hash in feedback are refused 404, the owner's turns, hit count and ledger unmoved; the caller's own session still works",
+    run: async (ctx) => {
+      const wrong: string[] = []
+      const there = await another(ctx)
+      const { route, model } = judgeRoute(ctx)
+      const mine = await proxyKey(ctx, `named ids ${RUN_SALT}`)
+      if (typeof mine === 'string') return fail(mine)
+      const theirs = await proxyKey(there, `named ids ${RUN_SALT}`)
+      if (typeof theirs === 'string') return fail(theirs)
+      const session = async (c: ScenarioCtx, id: string) => (await call<SessionRead>(c, 'GET', `/v1/sessions/${encodeURIComponent(id)}`)).value
+      const oneTurn = (s: SessionRead | undefined, c: ScenarioCtx) => s?.workspace_id === c.app.user.workspaceID && s.turn_count === 1
+
+      // The owner's session, one turn.
+      const sid = `e2e-${RUN_SALT}-${Date.now().toString(36)}-owner`
+      const a = await ask(ctx, mine.key, route, model.id, `the owner's question in session ${sid}`, { 'X-Talyvor-Session': sid })
+      const served = await servedRight(ctx, a, model, "the owner's question in its session")
+      if (served !== undefined) return fail(served)
+      const before = await session(ctx, sid)
+      if (!oneTurn(before, ctx)) return fail(`the owner's session reads ${JSON.stringify(before)}, not one turn of its own`)
+      const mine0 = await holdings(ctx)
+
+      // Another workspace names it on its own key: refused before the model call, nothing charged to either.
+      const b = await ask(there, theirs.key, route, model.id, `another workspace naming session ${sid}`, { 'X-Talyvor-Session': sid })
+      if (b.status !== 404) wrong.push(`another workspace naming the owner's session answered ${b.status} ${b.error}, not 404`)
+      if (b.fresh.length > 0) wrong.push(`another workspace naming the owner's session took ${rowsText(b.fresh)}`)
+      const after = await session(ctx, sid)
+      if (!oneTurn(after, ctx)) wrong.push(`after another workspace named it, the owner's session reads ${JSON.stringify(after)}, not the one turn it had`)
+
+      // Its own session still works.
+      const own = `e2e-${RUN_SALT}-${Date.now().toString(36)}-other`
+      const c = await ask(there, theirs.key, route, model.id, `another workspace's own session ${own}`, { 'X-Talyvor-Session': own })
+      const w = await servedRight(there, c, model, "another workspace's question in its own session")
+      if (w !== undefined) wrong.push(w)
+      const ownRead = await session(there, own)
+      if (!oneTurn(ownRead, there)) wrong.push(`another workspace's own session reads ${JSON.stringify(ownRead)}, not one turn of its own`)
+
+      // The owner's stored answer, named by its prompt hash.
+      const patterns = async () => list((await call<TopPattern[] | null>(ctx, 'GET', '/v1/api/cache/top-patterns?limit=100')).value)
+      const hash = (await within(patterns, (p) => p.length > 0, STORED_WAIT_MS))[0]?.prompt_hash
+      if (hash === undefined) wrong.push(`the owner's answer left no prompt hash in GET /v1/api/cache/top-patterns within ${STORED_WAIT_MS / 1000}s, so there is none to name`)
+      else {
+        const hits = async () => (await patterns()).find((p) => p.prompt_hash === hash)?.hit_count
+        const h0 = await hits()
+        const foreign = refused("another workspace's feedback on the owner's prompt hash", await call(there, 'POST', '/v1/feedback', { prompt_hash: hash, signal: 'positive' }), 404)
+        if (foreign !== undefined) wrong.push(foreign)
+        const h1 = await hits()
+        if (h1 !== h0) wrong.push(`another workspace's feedback moved the owner's hit count from ${h0} to ${h1}`)
+        const self = await call(ctx, 'POST', '/v1/feedback', { prompt_hash: hash, signal: 'positive' })
+        const h2 = await hits()
+        if (!ok(self.status) || h0 === undefined || h2 !== h0 + 1) wrong.push(`the owner's own feedback on its prompt hash answered ${said(self)} and its hit count went from ${h0} to ${h2}, not up by one`)
+      }
+      wrong.push(...await movedSince(ctx, mine0, 'the owner'))
+      return verdictOf(wrong, `another workspace naming the owner's session was refused 404 with nothing charged and the session still one turn; its own session served one turn; its feedback on the owner's prompt hash refused 404 with the hit count unmoved, the owner's own moving it by one`)
+    },
+  }
+}
+
 // ─── PoVI ───────────────────────────────────────────────────────────────────────────────────────────
 
 /** A PoVI receipt as a node signs it (talyvor-lens internal/povi/receipt.go CanonicalPayload). */

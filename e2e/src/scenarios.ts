@@ -81,7 +81,7 @@ import { agentCredential } from './kya.ts'
 import { lineage } from './lineage.ts'
 import { roomDecideRun, roomInviteScreen } from './roomScreens.ts'
 import { call, said, settingsConfigBudgets, settingsGuardrails, settingsOperatorOnly, settingsPrompts, settingsStoredAnswers, settingsSwitches, settingsTareDistill } from './settings.ts'
-import { creditsTopUp, evals, lensTokens, nodes, outputsAttribution, povi } from './economy.ts'
+import { creditsTopUp, evals, lensTokens, namedIdsIsolated, nodes, outputsAttribution, povi } from './economy.ts'
 import { ledgerCallOnce, ledgerMovesAtOnce } from './concurrency.ts'
 import { webhookReplayed, webhookUnsigned } from './webhooks.ts'
 import { trackWebhookSigned } from './trackWebhooks.ts'
@@ -5068,6 +5068,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // own: what Lens runs is checked on what it stores, and what it has switched off refuses and moves nothing.
   if (i === 1) list.push(evals(), lensTokens())
   if (i === 3) list.push(outputsAttribution(), nodes())
+  // B42.13 — another workspace's session and prompt hash, once a run, on a workspace of its own and one it makes.
+  if (i === 3) list.push(namedIdsIsolated())
   if (i === 5) list.push(povi())
   if (i === 8) list.push(creditsTopUp(i))
   // B28.279 — the ledger under concurrency, once a run, each on a workspace of its own: moves sent at once and keys sent
