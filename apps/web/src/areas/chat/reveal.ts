@@ -115,14 +115,16 @@ export function useRevealedText(text: string, live: boolean): { text: string; re
         frame.current = null
         return
       }
-      setCount(p.step(Math.max(0, now - last)))
-      last = now
+      // B17.216 — settles a frame after the whole answer was shown, never in the same one: a late frame (a busy
+      // machine) can reveal all that was left at once, and the price must not land in the frame the last text does.
       if (p.finished) {
         pacer.current = null
         frame.current = null
         setRevealing(false)
         return
       }
+      setCount(p.step(Math.max(0, now - last)))
+      last = now
       frame.current = requestAnimationFrame(tick)
     }
     frame.current = requestAnimationFrame(tick)
