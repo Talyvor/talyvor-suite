@@ -1667,6 +1667,14 @@ export function chatApprovalFaceID(seed: number): Scenario {
         await page.screenshot({ path: shot })
         ctx.evidence.push({ note: `the card at ${width}px: ${shot}` })
       }
+      // B41.40 — the card's words are explained one tap away.
+      await approval.getByRole('button', { name: 'What does “Waiting for you” mean?' }).click()
+      const explained = approval.getByTestId('term-explained').filter({ hasText: /Nothing moves until you approve/ })
+      try {
+        await explained.waitFor({ timeout: ACTION_TIMEOUT_MS })
+      } catch {
+        return fail(`tapping ? beside "Waiting for you" explained nothing; the card reads: ${(await approval.innerText()).trim()}`)
+      }
 
       await approval.getByRole('button', { name: 'Approve with Face ID', exact: true }).click()
       const refused = await outcome(approval.getByRole('status').filter({ hasText: /^Approved and paid/ }), approval)

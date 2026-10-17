@@ -12,6 +12,7 @@ import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice,
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentCredentialCard } from './AgentCredential'
 import { CurrencyPicker, Lxc } from './money'
+import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
 import { AgentAddress, AgentTransfers, CreditLinePanel, Loans, MoneyRequests, OfferLoan, RecurringTransfer, SendAndRequest } from './WalletMoney'
@@ -1872,8 +1873,16 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
             <tr className="text-left text-caption text-muted">
               <th className="px-gutter py-2 font-normal">When</th>
               <th className="py-2 font-normal">What</th>
-              <th className="py-2 text-right font-normal">Amount</th>
-              <th className="px-gutter py-2 text-right font-normal">Balance</th>
+              <th className="py-2 text-right font-normal">
+                <span className="inline-flex flex-wrap items-center justify-end gap-1">
+                  Amount <Term term="LXC">{TERMS.lxc}</Term>
+                </span>
+              </th>
+              <th className="px-gutter py-2 text-right font-normal">
+                <span className="inline-flex flex-wrap items-center justify-end gap-1">
+                  Balance <Term term="Balance">{TERMS.balance}</Term>
+                </span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1890,6 +1899,9 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
                   <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span data-testid="statement-what">{lineText(l, nameOf)}</span>
                     <Pill status={lineStatus(l).status}>{lineStatus(l).label}</Pill>
+                    <Term term={lineText(l, nameOf)}>
+                      {`${KIND_TERMS[l.kind] ?? ''} ${lineStatus(l).status === 'held' ? TERMS.held : TERMS.settled}`.trim()}
+                    </Term>
                   </span>
                 </td>
                 <td className="py-2 text-right font-figure">
@@ -2186,7 +2198,11 @@ export function Approvals({
         <p className="text-body text-muted">Reading…</p>
       ) : (
         <Card>
-          <CardHeader>Waiting for a person</CardHeader>
+          <CardHeader>
+            <span className="inline-flex flex-wrap items-center gap-2">
+              Waiting for a person <Term term="Waiting for a person">{`${TERMS.approval} ${TERMS.lxc}`}</Term>
+            </span>
+          </CardHeader>
           {pending.length === 0 ? (
             <p className="px-gutter py-3 text-body text-muted">
               Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount.

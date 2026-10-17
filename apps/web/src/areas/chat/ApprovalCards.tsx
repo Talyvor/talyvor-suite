@@ -9,6 +9,7 @@ import { type AgentApproval, AgentBankError, agentBankApi, refusalText } from '.
 import { formatWhen } from '../lens/format'
 import { Lxc, pegQuery } from '../lens/money'
 import { passkeysSupported, registerThisDevice, signApproval } from '../lens/passkeys'
+import { TERMS, Term } from '../lens/Term'
 import { Card } from '../lens/walletBrand'
 import { PENDING_POLL_MS } from '../lens/WalletScreens'
 import { isSessionExpired } from '../../lib/productState'
@@ -121,23 +122,27 @@ export function ApprovalCards() {
             <div className="flex flex-col gap-2 px-4 py-3">
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
                 {open ? <Pill status="held">Waiting for you</Pill> : null}
+                {open ? <Term term="Waiting for you">{TERMS.approval}</Term> : null}
                 <span>
                   Asked <span className="font-figure">{formatWhen(a.created_at)}</span>
                 </span>
               </p>
-              <p className="text-body text-ink" data-testid="chat-approval-asks">
-                {a.payee ? (
-                  <>
-                    {nameOf(a.agent_id)} wants to pay {a.payee.name || a.payee.id} <Lxc ulxc={a.amount_ulxc} />
-                    {a.memo ? ` — ${a.memo}` : ''}
-                  </>
-                ) : (
-                  <>
-                    {nameOf(a.agent_id)} wants to spend <Lxc ulxc={a.amount_ulxc} /> on{' '}
-                    {a.reason || (a.model ? `a request to ${a.model}` : 'a payment')}
-                  </>
-                )}
-              </p>
+              <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
+                <p className="text-body text-ink" data-testid="chat-approval-asks">
+                  {a.payee ? (
+                    <>
+                      {nameOf(a.agent_id)} wants to pay {a.payee.name || a.payee.id} <Lxc ulxc={a.amount_ulxc} />
+                      {a.memo ? ` — ${a.memo}` : ''}
+                    </>
+                  ) : (
+                    <>
+                      {nameOf(a.agent_id)} wants to spend <Lxc ulxc={a.amount_ulxc} /> on{' '}
+                      {a.reason || (a.model ? `a request to ${a.model}` : 'a payment')}
+                    </>
+                  )}
+                </p>
+                <Term term="LXC">{TERMS.lxc}</Term>
+              </div>
               {a.payee && a.reason ? <p className="text-caption text-muted">{a.reason}</p> : null}
               {open ? (
                 // One-handed on a phone: two full-width buttons under the sentence; side by side on a wide screen.
@@ -156,6 +161,11 @@ export function ApprovalCards() {
                   >
                     Deny
                   </Button>
+                  {signed ? (
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
+                      Face ID <Term term="Approve with Face ID">{TERMS.faceid}</Term>
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
               {open && !signed && keys.isSuccess && passkeysSupported() ? (
