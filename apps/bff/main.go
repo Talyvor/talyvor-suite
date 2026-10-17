@@ -74,13 +74,15 @@ type config struct {
 	provisionSecret string
 	webDist         string // path to the built apps/web bundle to serve
 
-	authMode         string        // "oidc" | "disabled" — REQUIRED; silence is not a mode
-	publicBaseURL    string        // oidc: browser-facing origin (https://app.talyvor.com); no path
-	oidcIssuer       string        // oidc: discovery base, e.g. https://idp.example.com
-	oidcClientID     string        // oidc: this BFF's client id at the IdP
-	oidcClientSecret string        // oidc: confidential-client secret (PKCE is added on top)
-	allowedEmails    []string      // oidc: lower-cased allowlist; ["*"] = any issuer identity
-	sessionTTL       time.Duration // oidc: absolute session lifetime
+	authMode         string // "oidc" | "disabled" — REQUIRED; silence is not a mode
+	publicBaseURL    string // oidc: browser-facing origin (https://app.talyvor.com); no path
+	oidcIssuer       string // oidc: discovery base, e.g. https://idp.example.com
+	oidcClientID     string // oidc: this BFF's client id at the IdP
+	oidcClientSecret string // oidc: confidential-client secret (PKCE is added on top)
+	// oidc: the phone app's public client ids (iOS, Android). Empty ⇒ POST /auth/mobile/session refuses.
+	oidcMobileClientIDs []string
+	allowedEmails       []string      // oidc: lower-cased allowlist; ["*"] = any issuer identity
+	sessionTTL          time.Duration // oidc: absolute session lifetime
 
 	// Track/Docs upstreams (inc6). Both gate /v1 behind gatewayauth: the request
 	// must carry X-Gateway-Auth == their GATEWAY_AUTH_SECRET before the identity
@@ -185,6 +187,11 @@ func loadOIDCConfig(cfg config) (config, error) {
 	cfg.oidcIssuer = os.Getenv("OIDC_ISSUER")
 	cfg.oidcClientID = os.Getenv("OIDC_CLIENT_ID")
 	cfg.oidcClientSecret = os.Getenv("OIDC_CLIENT_SECRET")
+	for _, id := range strings.Split(os.Getenv("OIDC_MOBILE_CLIENT_IDS"), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			cfg.oidcMobileClientIDs = append(cfg.oidcMobileClientIDs, id)
+		}
+	}
 
 	if cfg.oidcIssuer == "" {
 		return cfg, errors.New("BFF_AUTH_MODE=oidc: OIDC_ISSUER is required (the provider's discovery base URL)")

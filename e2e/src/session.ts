@@ -183,6 +183,52 @@ export function csrfRefused(): Scenario {
   }
 }
 
+/** An ID token no issuer signed: `alg: none`, the run's salt where the signature goes. */
+function unsignedIDToken(): string {
+  const part = (v: object) => Buffer.from(JSON.stringify(v)).toString('base64url')
+  return `${part({ alg: 'none' })}.${part({ sub: `phone-bearer-${RUN_SALT}` })}.${RUN_SALT}`
+}
+
+/** B40.24 — the phone app's way in: a session as `Authorization: Bearer`, with no cookie and no Origin. */
+export function phoneBearer(): Scenario {
+  return {
+    id: 'phone-bearer',
+    owner: 'talyvor-suite',
+    own: true,
+    feature: 'Session and sign-in',
+    items: ['B40.24'],
+    title: "a signed-in session sent as a Bearer token, with no cookie and no Origin, reads the agents and signs out; after that it reads nothing, " +
+      'and an ID token the issuer never signed is refused at POST /auth/mobile/session',
+    run: async (ctx) => {
+      const origin = new URL(ctx.app.page.url()).origin
+      const session = (await ctx.app.context.cookies(origin)).find((c) => c.name === SESSION_COOKIE)
+      if (session === undefined) return fail(`the browser holds no ${SESSION_COOKIE} cookie to send as a Bearer token`)
+      const bearer = async (method: string, path: string, body?: unknown): Promise<Sent> => {
+        const headers: Record<string, string> = { Authorization: `Bearer ${session.value}`, Accept: 'application/json' }
+        if (body !== undefined) headers['Content-Type'] = 'application/json'
+        try {
+          const res = await fetch(`${origin}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), redirect: 'manual', signal: AbortSignal.timeout(ACTION_MS) })
+          return { status: res.status, text: await res.text(), location: '' }
+        } catch (e) {
+          return { status: 0, text: e instanceof Error ? e.message : String(e), location: '' }
+        }
+      }
+      const wrong: string[] = []
+      const read = await bearer('GET', '/api/agents')
+      const forged = await bearer('POST', '/auth/mobile/session', { id_token: unsignedIDToken() })
+      const out = await bearer('POST', '/auth/logout')
+      const after = await bearer('GET', '/api/agents')
+      ctx.evidence.push({ note: `Bearer, no cookie, no Origin: GET /api/agents ${read.status}, POST /auth/mobile/session with an unsigned ID token ${forged.status}, ` +
+        `POST /auth/logout ${out.status}, GET /api/agents after ${after.status}` })
+      if (read.status !== 200) wrong.push(`GET /api/agents with the session as a Bearer token was answered ${read.status || read.text}: ${read.text.slice(0, 120)}`)
+      if (forged.status !== 401 && forged.status !== 404) wrong.push(`an unsigned ID token at POST /auth/mobile/session was answered ${forged.status}, not 401 (or 404 while no phone client is set)`)
+      if (out.status !== 204) wrong.push(`POST /auth/logout with the Bearer token and no Origin was answered ${out.status || out.text}, not 204`)
+      if (after.status !== 401) wrong.push(`after signing out with the Bearer token it still reads: ${after.status}`)
+      return verdictOf(wrong, `the session as a Bearer token read the agents (${read.status}) and signed out (${out.status}), then read nothing (${after.status}); an unsigned ID token was refused ${forged.status}`)
+    },
+  }
+}
+
 /** The payloads, as Markdown in an answer: each sets the flag to where it ran from, if it ever runs. */
 function answerPayload(): string {
   const set = (where: string) => `window.${FLAG}='${where}'`

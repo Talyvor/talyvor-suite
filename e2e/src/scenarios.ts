@@ -92,7 +92,7 @@ import { agentRulesUnbypassable } from './rules.ts'
 import { poolIsolation } from './pool.ts'
 import { injectionExfil } from './injection.ts'
 import { fileBombBounded, ssrfRefused } from './ssrf.ts'
-import { csrfRefused, scriptInert } from './session.ts'
+import { csrfRefused, phoneBearer, scriptInert } from './session.ts'
 import { connectOAuth } from './connect.ts'
 import { keysNotForwarded, keysUnlisted } from './keys.ts'
 import { rateLimitsHold } from './ratelimit.ts'
@@ -5116,6 +5116,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.286 — the session cookie and the app's writes, once a run, each on a workspace of its own: a write from anywhere but
   // the app's own Origin is refused 403 with nothing written, and a script in a Chat answer or a room message never runs.
   if (i === 1) list.push(csrfRefused(), scriptInert())
+  // B40.24 — the phone app's Bearer session, once a run, on a workspace of its own: it reads and signs out with no cookie and no Origin.
+  if (i === 1) list.push(phoneBearer())
   // B28.287 — the workspace's keys, once a run, each on a workspace of its own: no list or stats read returns one, and a
   // synthetic upstream Lens sends its vLLM traffic to sees none of the credentials a request came with.
   if (i === 9) list.push(keysUnlisted(), keysNotForwarded())

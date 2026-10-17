@@ -286,6 +286,8 @@ var publicWriteRoutes = map[string]string{
 		"200 so the endpoint tells a caller nothing — oauth_test.go asserts a revoked token is refused",
 	"/": "the SPA fallback. There is no handler behind an unsafe method here — the router " +
 		"answers 404 and nothing is reached, so there is no session to require",
+	"/auth/mobile/session": "B40.24 — the phone app's sign-in, which by definition runs before any session exists. " +
+		"The ID token for a phone client is its credential; mobile_session_test.go asserts a web-client token gets 401",
 	"/auth/synthetic": "B17.2 — the synthetic sign-in, which by definition runs before any session " +
 		"exists. It needs the operator key instead (401 without it) and answers 404 while " +
 		"LENS_SYNTHETIC_KEY is unset, as here; synthetic_test.go owns both refusals",
