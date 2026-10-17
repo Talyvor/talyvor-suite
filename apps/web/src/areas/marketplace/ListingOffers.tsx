@@ -1,10 +1,19 @@
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Pill, Row } from '@talyvor/ui'
 import { newMoveKey } from '../lens/agentBankApi'
 import { formatUSD } from '../lens/format'
+import { BuyerProtection } from './BuyerProtection'
 import { LICENCES_KEY, day } from './Licences'
-import { type Listing, type MarketLicence, type Offer, formatDisplay, marketApi, refusalText } from './marketApi'
+import {
+  type Listing,
+  type MarketLicence,
+  type Offer,
+  UPCOMING_INVOICE,
+  formatDisplay,
+  marketApi,
+  refusalText,
+} from './marketApi'
 import { Card, Note, selectClass } from './parts'
 
 // ListingOffers.tsx — B32.57: a listing's offers as choices. Each is a way to pay — per use, rent, buy or subscribe —
@@ -111,6 +120,16 @@ function OfferPrice({ o }: { o: Offer }) {
   )
 }
 
+/** The day this month's marketplace bill is charged: its Stripe period's end, or — before Lens lists invoices — the
+ *  calendar month's. */
+function useBillDue(enabled: boolean): string {
+  const invoices = useQuery({ queryKey: ['market-invoices'], queryFn: marketApi.invoices, retry: false, enabled })
+  const upcoming = invoices.data?.find((i) => i.id === UPCOMING_INVOICE)
+  if (upcoming) return upcoming.period_end
+  const now = new Date()
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString()
+}
+
 function OfferChoice({
   listing,
   o,
@@ -136,6 +155,7 @@ function OfferChoice({
   const more = details(o)
   const usd = formatUSD(o.price_usd_micros)
   const sellable = !own && o.kind !== 'per_use' && o.id !== undefined
+  const due = useBillDue(sellable && key !== null)
   return (
     <li className="border-b border-rule last:border-b-0" data-testid="listing-offer">
       <Row
@@ -175,6 +195,7 @@ function OfferChoice({
             )}
             . <Figure>{usd}</Figure> goes on this month’s marketplace bill; uses it covers add nothing to it.
           </p>
+          <BuyerProtection paid={due} due />
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" disabled={license.isPending} onClick={() => license.mutate(key)}>
               {license.isPending ? (

@@ -67,6 +67,7 @@ import { marketBillInvoices } from './billInvoices.ts'
 import { chatListing } from './chatListing.ts'
 import { marketBuyerCurrency } from './buyerCurrency.ts'
 import { marketReceipts } from './receipts.ts'
+import { buyerProtection } from './buyerProtection.ts'
 import { verificationLevels } from './verification.ts'
 import { compliance } from './compliance.ts'
 import { invoicePayLink } from './invoices.ts'
@@ -5269,6 +5270,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // one receipt numbered TEST-<year>-NNNNNN with the bill's lines and totals, as a page and a PDF, refused to its agent key; a DE
   // business's bill paid next is receipted in turn, reverse charged with no VAT and the note.
   if (i === 5) list.push(marketReceipts(i))
+  // B41.90 — buyer protection at checkout, once a run: a rent's checkout in the app says what the 14-day holdback protects and the
+  // day it ends, 14 days to a bill period plus 14 days away; Not now leaves the bill as it was.
+  if (i === 5) list.push(buyerProtection(i))
   // B28.385 — the bill by Stripe invoice (talyvor-lens B28.140), once a run, on workspaces of its own: two bills paid and a
   // use left unpaid list as the period in progress then two invoices, each with its billing period and PDF; each invoice's
   // bill holds its own uses, the refunded one reading refunded, its total the invoice's less refunds, as its receipt collected.

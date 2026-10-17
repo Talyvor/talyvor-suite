@@ -354,6 +354,10 @@ describe("your licences and your bill", () => {
     const link = await screen.findByTestId("market-receipt-link");
     expect(link.getAttribute("href")).toBe("/api/marketplace/receipts/rcp_1");
     expect(link.getAttribute("target")).toBe("_blank");
+    // B41.90 — the receipt says what the 14-day holdback protects, and until when.
+    expect(screen.getByTestId("buyer-protection").textContent).toBe(
+      "Buyer protection until 19 Oct 2026. The seller is paid 14 days after your bill is paid. Until then, if a listing does not do what it says, you get your money back.",
+    );
     const page = await fetch(link.getAttribute("href")!);
     expect(page.headers.get("Content-Type")).toBe("text/html");
     expect(await page.text()).toContain("Receipt TEST-2026-000001");

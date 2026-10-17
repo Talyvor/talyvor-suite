@@ -35,6 +35,7 @@ import {
 import { ReviewQueue } from "./Review";
 import { SellerStatementsCard } from "./SellerStatements";
 import { SellerTaxCard, SellerTaxNotice } from "./SellerTax";
+import { BuyerProtection } from "./BuyerProtection";
 import {
   type BillLine,
   type Listing,
@@ -959,6 +960,7 @@ function Receipts() {
                 <span className="font-figure">
                   {formatUSD(r.tax_usd_micros)}
                 </span>
+                <BuyerProtection paid={r.issued_at} />
               </>
             }
           >
