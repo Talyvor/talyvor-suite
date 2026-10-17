@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button, Input, NavIcon, Row, cn, focusRing, inlineLink } from '@talyvor/ui'
 import { Region, RegionScreen } from '../../components/Region'
+import { getJSON } from '../../lib/api'
+import { trackIssueText } from '../chat/TrackIssuePicker'
+import type { TrackIssue } from '../track/types'
 import { formatWhen } from '../lens/format'
 import { parsePrice } from '../marketplace/marketApi'
 import { Card, Note, pressed, readFailure, selectClass } from '../marketplace/parts'
@@ -16,6 +19,8 @@ import {
   SPLIT_RULES,
   STORED_NOTICE,
   byTopic,
+  issueBackLink,
+  issueRoomDescription,
   parseShare,
   roomRefusal,
   roomsApi,
@@ -188,11 +193,26 @@ function NewRoom() {
   const [split, setSplit] = useState<SplitRule>('owner_decides')
   const [share, setShare] = useState('')
   const [spend, setSpend] = useState<SpendPolicy>('owner_only')
+  // B41.61 — /rooms/new?issue=<id>, from a Track issue: the form starts with the issue's title and description, the
+  // description ending with a link back to it, and private, since an issue is the workspace's own.
+  const issueID = useSearchParams()[0].get('issue') ?? ''
+  const issue = useQuery({
+    queryKey: ['track-issue', issueID],
+    queryFn: () => getJSON<TrackIssue>(`/api/track/issues/${encodeURIComponent(issueID)}`),
+    enabled: issueID !== '',
+  }).data
+  const [seededFrom, setSeededFrom] = useState('')
+  if (issue && seededFrom !== issue.id) {
+    setSeededFrom(issue.id)
+    setTitle(issue.title.slice(0, 120))
+    setDescription(issueRoomDescription(issue, window.location.origin))
+    setVisibility('private')
+  }
   const micros = parsePrice(price)
   const bps = parseShare(share)
   const create = useMutation({
-    mutationFn: () =>
-      roomsApi.create({
+    mutationFn: async () => {
+      const room = await roomsApi.create({
         title: title.trim(),
         topic: topic.trim(),
         description: description.trim(),
@@ -203,7 +223,12 @@ function NewRoom() {
           default_price_usd_micros: micros ?? 0,
           spend_policy: spend,
         },
-      }),
+      })
+      // The issue is the room's first message too, so the room's AI, which reads the messages, has it. The room is
+      // open either way, and its description carries the issue, so a refused message does not stop it.
+      if (issue && seededFrom === issue.id) await roomsApi.post(room.id, trackIssueText(issue).slice(0, 8000)).catch(() => undefined)
+      return room
+    },
     onSuccess: (room) => {
       void qc.invalidateQueries({ queryKey: ROOMS_KEY })
       navigate(roomHref(room.id))
@@ -223,6 +248,15 @@ function NewRoom() {
         for everyone to find; a private one only for the workspaces you invite.
       </p>
       {limits ? <p className="text-caption text-muted">{limitsLine(limits)}</p> : null}
+      {issue ? (
+        <p className="text-caption text-muted">
+          From Track issue{' '}
+          <Link className={`font-figure text-ink ${inlineLink}`} to={`/track/issues/${encodeURIComponent(issue.id)}`}>
+            {issue.identifier}
+          </Link>
+          : the room opens with its title and description, and with the issue as its first message.
+        </p>
+      ) : null}
       <Card>
         <form
           className="flex flex-col gap-4 p-gutter"
@@ -363,6 +397,7 @@ function RoomPage() {
   const asks = r.me === null || !r.me.terms_current
   // B32.54 — a member under the current terms is in the room: its conversation, contributions, runs and spec (Room.tsx).
   const inside = !asks
+  const about = issueBackLink(r.description, window.location.origin)
   const n = (i: number) => String(inside ? i + 4 : i).padStart(2, '0')
   return (
     <>
@@ -373,7 +408,15 @@ function RoomPage() {
         sectionClassName="pb-8 pt-4 wide:pb-10"
         className="flex max-w-2xl flex-col gap-3"
       >
-        {r.description ? <p className="text-body text-muted">{r.description}</p> : null}
+        {about.text ? <p className="whitespace-pre-line text-body text-muted">{about.text}</p> : null}
+        {about.issue ? (
+          <p className="text-caption text-muted">
+            Opened from Track issue{' '}
+            <Link className={`font-figure text-ink ${inlineLink}`} to={about.issue.path}>
+              {about.issue.identifier}
+            </Link>
+          </p>
+        ) : null}
         <p className="rounded-card border border-rule bg-raised p-4 text-body text-ink" data-testid="room-stored-notice">
           {STORED_NOTICE}
         </p>

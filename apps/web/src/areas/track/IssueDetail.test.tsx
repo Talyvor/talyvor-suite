@@ -98,6 +98,12 @@ describe('a ticket can be read', () => {
     expect(await screen.findByText('Original description.')).toBeInTheDocument()
   })
 
+  it('offers to open a room from the issue', async () => {
+    open()
+    const link = await screen.findByRole('link', { name: 'Open a room' })
+    expect(link.getAttribute('href')).toBe('/rooms/new?issue=iss-1')
+  })
+
   it('shows the comment thread', async () => {
     open()
     expect(await screen.findByText('Seen it under load.')).toBeInTheDocument()
