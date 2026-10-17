@@ -388,8 +388,10 @@ func TestDocsWorkspacePathOnlyForWorkspaceScopedUpstreamRoutes(t *testing.T) {
 		// B39.24 — talyvor-docs d819707 (B39.14): internal/webhooks/handler.go Mount registers POST
 		// `/workspaces/{wsID}/webhooks` and DELETE `/workspaces/{wsID}/webhooks/{id}`, and each one's first act (owner) is
 		// AuthorizeWorkspace on that {wsID}. The delete appends its id AFTER the literal mount.
-		"docsCreateWebhook:/webhooks": "POST /v1/workspaces/{wsID}/webhooks — internal/webhooks/handler.go Mount",
+		// B39.25 adds GET on the same mount and POST `/workspaces/{wsID}/webhooks/{id}/rotate`, both behind owner.
+		"docsWebhooks:/webhooks":      "GET|POST /v1/workspaces/{wsID}/webhooks — internal/webhooks/handler.go Mount",
 		"docsDeleteWebhook:/webhooks": "DELETE /v1/workspaces/{wsID}/webhooks/{id} — internal/webhooks/handler.go Mount",
+		"docsRotateWebhook:/webhooks": "POST /v1/workspaces/{wsID}/webhooks/{id}/rotate — internal/webhooks/handler.go Mount",
 	}
 
 	type site struct{ fn, suffix string }

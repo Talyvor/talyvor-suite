@@ -132,6 +132,7 @@ const PINNED: Readonly<Record<string, string>> = {
   '/settings': 'Settings',
   '/settings/verification': 'Verification',
   '/settings/terms': 'Capability terms',
+  '/settings/webhooks': 'Webhooks',
   '/money/invoices': 'Invoices',
   '/money/pay': 'Pay',
   '/features': 'Features',

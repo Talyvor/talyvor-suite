@@ -15,6 +15,7 @@
 //   docs-team-grant-sticky — someone taken off a team keeps the access the team was given on a page (B28.450)
 //   track-hook-sig — Track signs a webhook with the secret's text, not the key its base64 part decodes to (B39.23)
 //   docs-hook-twice — Docs sends an approval.requested webhook twice under two ids (B39.24)
+//   docs-hook-rotate-ignored — Docs answers a rotate with a new secret but keeps signing with the old one (B39.25)
 
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http'
@@ -634,6 +635,18 @@ serve(DOCS_PORT, 'docs', async (req, res, path, url) => {
     docsHooks.push(h)
     const { workspace: _w, ...out } = h
     return json(res, 201, out)
+  }
+  // B39.25 — the list (no secret on it) and the rotate (a new secret, given once), owner only like the create.
+  if (rest === '/webhooks' && req.method === 'GET') {
+    if (byEmail.get(String(req.headers['x-user-email'] ?? '')) !== ws) return json(res, 403, { error: 'owner role required', code: 'OWNER_REQUIRED' })
+    return json(res, 200, docsHooks.filter((h) => h.workspace === ws).map(({ id: hid, url: u, events, created_at }) => ({ id: hid, url: u, events, created_at })))
+  }
+  const rotateID = /^\/webhooks\/([^/]+)\/rotate$/.exec(rest)
+  if (rotateID !== null && req.method === 'POST') {
+    const h = docsHooks.find((x) => x.workspace === ws && x.id === rotateID[1])
+    if (h === undefined) return json(res, 404, { error: 'webhook not found', code: 'NOT_FOUND' })
+    if (BREAK !== 'docs-hook-rotate-ignored') h.secret = `whsec_${randomBytes(24).toString('base64')}`
+    return json(res, 200, { id: h.id, secret: BREAK === 'docs-hook-rotate-ignored' ? `whsec_${randomBytes(24).toString('base64')}` : h.secret })
   }
   const docsHookID = /^\/webhooks\/([^/]+)$/.exec(rest)
   if (docsHookID !== null && req.method === 'DELETE') {

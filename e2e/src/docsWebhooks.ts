@@ -5,6 +5,8 @@
 //     from the answer), for approval.requested only, and asks for approval on a page it made before: the receiver gets
 //     exactly one POST, approval.requested for that page, whose webhook-signature verifies — v1, base64 HMAC-SHA256 of
 //     "<webhook-id>.<webhook-timestamp>.<body>", keyed with the base64 part of the secret.
+//   B39.25 (Settings → Webhooks): before asking, the list names the hook with no secret on it, and a rotate answers a new
+//     whsec_ secret, the one the delivery must then verify under.
 // Docs refuses a private address, so the receiver is reached the way track-webhook-signed's is (--hook-tunnel).
 
 import type { ChildProcess } from 'node:child_process'
@@ -28,10 +30,10 @@ export function docsWebhookSigned(seed: number): Scenario {
   return {
     id: 'docs-webhook-signed',
     owner: 'talyvor-docs',
-    items: ['B39.14', 'B39.24'],
+    items: ['B39.14', 'B39.24', 'B39.25'],
     feature: 'Docs webhooks',
     title: 'Docs webhooks: the owner registers a URL for approval.requested and asks for approval on a page; the URL gets ' +
-      'exactly one POST, for that page, whose webhook-signature verifies the Standard Webhooks way under the secret Docs gave once',
+      'exactly one POST, for that page, whose webhook-signature verifies the Standard Webhooks way under the secret its rotate gave',
     run: async (ctx) => {
       const probe = `e2e-${randomBytes(8).toString('hex')}`
       const rx = await receiver(probe)
@@ -69,6 +71,19 @@ export function docsWebhookSigned(seed: number): Scenario {
         hook = reg.value
         if (!/^whsec_[A-Za-z0-9+/=]+$/.test(hook.secret ?? '')) return { pass: false, detail: `Docs' create answer carried no whsec_ secret: ${JSON.stringify(hook).slice(0, 200)}` }
 
+        // B39.25 — what Settings → Webhooks reads and does: the list carries no secret, and a rotate replaces it.
+        const listed = await bff<Array<Record<string, unknown>>>(ctx, 'GET', '/api/docs/webhooks')
+        if (!listed.ok) return { pass: false, detail: `the webhooks were not listed: ${said(listed)}` }
+        const row = listed.value.find((x) => x.id === hook?.id)
+        if (row === undefined || row.url !== to) return { pass: false, detail: `the list does not name ${hook.id} at ${to}: ${JSON.stringify(listed.value).slice(0, 200)}` }
+        if (JSON.stringify(listed.value).includes('whsec_')) return { pass: false, detail: 'the webhook list carries a secret, which Docs gives only on create and rotate' }
+        const rotated = await bff<{ secret: string }>(ctx, 'POST', `/api/docs/webhooks/${encodeURIComponent(hook.id)}/rotate`)
+        if (!rotated.ok || !/^whsec_[A-Za-z0-9+/=]+$/.test(rotated.value.secret ?? '') || rotated.value.secret === hook.secret) {
+          return { pass: false, detail: `the rotate did not answer a new whsec_ secret: ${rotated.ok ? 'the same or none' : said(rotated)}` }
+        }
+        ctx.evidence.push({ note: `listed without a secret; rotated to a ${rotated.value.secret.slice(0, 6)}… secret` })
+        hook = { ...hook, secret: rotated.value.secret }
+
         const asked = await bff<{ id: string }>(ctx, 'POST', `/api/docs/spaces/${encodeURIComponent(space.value.id)}/pages/${encodeURIComponent(page.value.id)}/approval`,
           { reviewers: [reviewer], message: `Please sign off ${seed}` })
         if (!asked.ok) return { pass: false, detail: `approval was not requested: ${said(asked)}` }
@@ -86,14 +101,14 @@ export function docsWebhookSigned(seed: number): Scenario {
         const failures: string[] = []
         if (id === '' || !/^\d+$/.test(ts)) failures.push(`webhook-id "${id}", webhook-timestamp "${ts}"`)
         else if (Math.abs(Number(ts) - d.at / 1000) > TOLERANCE_S) failures.push(`webhook-timestamp ${ts} is more than ${TOLERANCE_S} s from when it arrived`)
-        if (!verifies(hook.secret, id, ts, d.body, String(d.headers['webhook-signature'] ?? ''))) failures.push('its webhook-signature does not verify under the secret Docs gave')
+        if (!verifies(hook.secret, id, ts, d.body, String(d.headers['webhook-signature'] ?? ''))) failures.push('its webhook-signature does not verify under the secret the rotate gave')
         let event: { type?: string; data?: { page_id?: string; request_id?: string } } = {}
         try { event = JSON.parse(d.body) } catch { failures.push('its body is not JSON') }
         if (event.type !== 'approval.requested' || event.data?.page_id !== page.value.id || event.data?.request_id !== asked.value.id) {
           failures.push(`it is ${event.type} for page ${event.data?.page_id} (request ${event.data?.request_id}), not approval.requested for ${page.value.id} (request ${asked.value.id})`)
         }
         return failures.length === 0
-          ? { pass: true, detail: `one signed approval.requested for page ${page.value.id}, verified under the whsec_ secret` }
+          ? { pass: true, detail: `one signed approval.requested for page ${page.value.id}, verified under the rotated whsec_ secret` }
           : { pass: false, detail: failures.join('; ') }
       } finally {
         if (hook !== undefined) await bff(ctx, 'DELETE', `/api/docs/webhooks/${encodeURIComponent(hook.id)}`).catch(() => undefined)
