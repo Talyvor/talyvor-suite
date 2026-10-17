@@ -8,7 +8,7 @@
 //   review-refused-kept — a buyer who never paid is refused 403, but its review is written anyway, and counts once it pays
 //   review-linked       — a buyer sharing a card with the seller may review, and is counted
 //   trust-mcp-unreplied — market_listing's trust leaves the seller's replies out
-//   card-link-missing   — no synthetic card link, as on a Lens without B32.102: 404
+//   card-link-missing   — no synthetic card link, as on a Lens without B32.102: 404, which market-trust FAILs
 
 import { randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'

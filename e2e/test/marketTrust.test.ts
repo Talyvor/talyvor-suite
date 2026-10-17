@@ -49,8 +49,10 @@ describe('market-trust (B32.89)', () => {
     expect(evidence.map((e) => `${e.note} ${e.answer ?? ''}`).join('\n')).toMatch(/the buyer linked to the seller reviews it 5 refused 403: market: only a buyer who paid/)
   })
 
-  it('SKIPs after everything else has passed on a Lens with no synthetic card link', async () => {
-    await expect(runAgainstStub('card-link-missing')).rejects.toThrow(/^the rest passed \(2 paying buyers' billed uses .*\), but a buyer sharing a card with the seller cannot be made: this Lens has no synthetic card link .*B32\.102\): 404$/)
+  it('FAILs on a Lens with no synthetic card link', async () => {
+    const { verdict } = await runAgainstStub('card-link-missing')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^linking a fourth workspace to the seller by a card .*B32\.102\) was refused: refused 404/)
   })
 
   it('FAILs when a refused review is written anyway', async () => {

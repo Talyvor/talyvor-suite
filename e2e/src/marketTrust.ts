@@ -14,8 +14,7 @@
 // hidden from every read whatever was written, so its refusal is its 403 and the count. MCP market_listing, called with
 // an agent's own key, must answer the same trust.
 //
-// While Lens has no synthetic card link the linked buyer cannot be made: the scenario SKIPs naming it, after everything
-// else has passed — a FAIL in the rest is still a FAIL.
+// The linked buyer is made by Lens's synthetic card link (B32.102, merged): a Lens without it FAILs, it no longer SKIPs.
 
 import { isDeepStrictEqual } from 'node:util'
 import { fail } from './bank.ts'
@@ -93,17 +92,13 @@ export function marketTrust(seed: number): Scenario {
       // A buyer linked to the seller by a card both paid with pays for a use, and is refused.
       const link = await lens.linkCard(linked, seller)
       ctx.evidence.push({ note: `a fourth workspace (${linked.workspaceID}) and the seller pay with one card (synthetic card link)`, answer: said(link) })
-      const unlinkable = !link.ok && (link.status === 404 || link.status === 405)
-        ? `this Lens has no synthetic card link (POST /v1/synthetic/workspaces/{ws}/card-link, talyvor-lens B32.102): ${link.status}` : undefined
-      if (!link.ok && unlinkable === undefined) return fail(`linking a fourth workspace to the seller by a card was refused: ${said(link)}`)
-      if (unlinkable === undefined) {
-        const u = await pay(linked, 'the buyer linked to the seller')
-        if (typeof u === 'string') return fail(u)
-        const r = await review(linked, 5, 'My own listing, five stars.')
-        ctx.evidence.push({ note: 'the buyer linked to the seller reviews it 5', answer: said(r) })
-        const no = refused('a buyer who paid for a use but shares a card with the seller', r)
-        if (no !== undefined) return fail(no)
-      }
+      if (!link.ok) return fail(`linking a fourth workspace to the seller by a card (POST /v1/synthetic/workspaces/{ws}/card-link, talyvor-lens B32.102) was refused: ${said(link)}`)
+      const u = await pay(linked, 'the buyer linked to the seller')
+      if (typeof u === 'string') return fail(u)
+      const r = await review(linked, 5, 'My own listing, five stars.')
+      ctx.evidence.push({ note: 'the buyer linked to the seller reviews it 5', answer: said(r) })
+      const no = refused('a buyer who paid for a use but shares a card with the seller', r)
+      if (no !== undefined) return fail(no)
 
       // The two paying buyers review it; the seller replies to the 3.
       const written: Review[] = []
@@ -134,7 +129,7 @@ export function marketTrust(seed: number): Scenario {
       const shown = `count ${t.reviews.count}, average ${t.reviews.average}, stars ${JSON.stringify(t.reviews.stars)}, recent ${JSON.stringify(recent.map((r) => [r.id, r.rating, r.reply ?? '']))}`
       if (t.listing_id !== id || t.publisher.workspace_id !== seller.workspaceID) return fail(`the trust read is of ${t.listing_id} published by ${t.publisher.workspace_id}, not ${id} by the seller ${seller.workspaceID}`)
       if (t.reviews.count > 2 || recent.length > 2) {
-        return fail(`only the two paying buyers' reviews count, but the trust read holds more — a refused review was written (the workspace refused first has paid since${unlinkable === undefined ? ', and the linked buyer\'s refused one would be hidden' : ''}): ${shown}`)
+        return fail(`only the two paying buyers' reviews count, but the trust read holds more — a refused review was written (the workspace refused first has paid since, and the linked buyer\'s refused one would be hidden): ${shown}`)
       }
       if (t.reviews.count !== 2 || t.reviews.average !== AVERAGE || !isDeepStrictEqual(t.reviews.stars, STARS) || recent.length !== 2 || !written.every((w) => byID.has(w.id))) {
         return fail(`two paying buyers reviewed it ${RATINGS.join(' and ')} (${written.map((w) => w.id).join(', ')}): the trust read must count 2, average ${AVERAGE}, stars ${JSON.stringify(STARS)}, both reviews in recent; it reads ${shown}`)
@@ -146,11 +141,10 @@ export function marketTrust(seed: number): Scenario {
       if (typeof mcp === 'string') return fail(mcp)
       if (!isDeepStrictEqual(mcp, t)) return fail(`MCP market_listing's trust differs from the trust read: ${JSON.stringify(mcp)} against ${JSON.stringify(t)}`)
 
-      const passed = `${written.length} paying buyers' billed uses on their bills, reviews ${written.map((w, n) => `${w.id} ${RATINGS[n]}`).join(' and ')} counted: ` +
+      return { pass: true, detail: `${written.length} paying buyers' billed uses on their bills, reviews ${written.map((w, n) => `${w.id} ${RATINGS[n]}`).join(' and ')} counted: ` +
         `count 2, average ${AVERAGE}, stars ${JSON.stringify(STARS)}, the seller's reply on the ${RATINGS[1]}; a workspace that never paid was refused 403 and, ` +
-        `once it paid (${late.id}), still nothing of its counted`
-      if (unlinkable !== undefined) throw new CannotTest(`the rest passed (${passed}), but a buyer sharing a card with the seller cannot be made: ${unlinkable}`)
-      return { pass: true, detail: `${passed}; a buyer sharing a card with the seller paid for a use and was refused 403; MCP market_listing's trust equals the read` }
+        `once it paid (${late.id}), still nothing of its counted; a buyer sharing a card with the seller paid for a use and was refused 403; ` +
+        "MCP market_listing's trust equals the read" }
     },
   }
 }
