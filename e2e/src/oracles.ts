@@ -187,6 +187,14 @@ export function freshWord(seed: number, salt = RUN_SALT): string {
 }
 
 /**
+ * B17.222 — `n` of this run's words, for a published template to be mostly its own: Lens holds a publish ≥0.92 similar
+ * to any earlier night's approved listing (B32.46), and twelve of them keep a short template's score under 0.8.
+ */
+export function freshWords(seed: number, n: number, salt = RUN_SALT): string {
+  return Array.from({ length: n }, (_, i) => freshWord(seed * 16 + i, salt)).join(' ')
+}
+
+/**
  * B35.8 — the testers' own network failing, not the feature: the browser's "Failed to fetch", Chromium's net::ERR_ codes
  * (ERR_INTERNET_DISCONNECTED, ERR_NETWORK_CHANGED, …) and the BFF's 502 when it cannot reach Lens.
  */
