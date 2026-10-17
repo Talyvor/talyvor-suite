@@ -466,6 +466,7 @@ function collab(req: IncomingMessage, socket: Duplex): void {
     socket.end('HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n')
     return
   }
+  // nosemgrep: crypto-weak-algorithm -- SHA-1 is what RFC 6455 fixes for Sec-WebSocket-Accept; the self-test's stub keeps no secret with it
   const accept = createHash('sha1').update(`${req.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64')
   socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`)
   let buf = Buffer.alloc(0)

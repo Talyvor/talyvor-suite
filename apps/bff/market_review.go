@@ -134,6 +134,7 @@ func (a *app) moderate(w http.ResponseWriter, r *http.Request, s session, client
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- Lens's body sent as application/json, and every response carries nosniff (setSecurityHeaders)
 		_, _ = w.Write(raw)
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
 		log.Printf("bff: marketplace review %s %s: Lens refused the moderator key (%d)", method, lensPath, resp.StatusCode)

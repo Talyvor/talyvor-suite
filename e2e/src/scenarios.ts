@@ -1210,6 +1210,7 @@ export function socialPreview(): Scenario {
       try {
         const html = await (await page.request.get(page.url())).text()
         const meta = (attr: string, key: string) =>
+          // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
           new RegExp(`<meta\\s+${attr}="${key}"\\s+content="([^"]*)"`).exec(html)?.[1] ?? ''
         const title = /<title>([^<]*)<\/title>/.exec(html)?.[1] ?? ''
         const image = meta('property', 'og:image')
@@ -1261,6 +1262,7 @@ export function brandIcons(): Scenario {
           if (!linked || res.status() !== 200 || !ct.startsWith(type)) missing.push(path)
           return res
         }
+        // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
         const linked = (rel: string, href: string) => new RegExp(`<link rel="${rel}" href="${href}"`).test(html)
         await want('/favicon.ico', 'image/x-icon', linked('icon', '/favicon.ico'))
         await want('/favicon.svg', 'image/svg+xml', linked('icon', '/favicon.svg'))

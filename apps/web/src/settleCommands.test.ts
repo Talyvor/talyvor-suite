@@ -909,6 +909,7 @@ const upstreamFiles = (): { census: string; repo: string; path: string; symbol: 
  */
 const namesSymbol = (command: string, symbol: string): boolean =>
   symbol !== '' &&
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   new RegExp(`\\b${symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(command)
 
 describe('R8 — every metered census names an upstream file the register can settle', () => {

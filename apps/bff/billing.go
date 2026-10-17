@@ -460,6 +460,7 @@ func (a *app) handleSubscribe(w http.ResponseWriter, r *http.Request, t tenant) 
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- Lens's body sent as application/json, and every response carries nosniff (setSecurityHeaders)
 		_, _ = w.Write(upstream)
 	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusNotImplemented ||
 		resp.StatusCode == http.StatusBadRequest:

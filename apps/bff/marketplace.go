@@ -90,6 +90,7 @@ func (a *app) marketRelay(w http.ResponseWriter, r *http.Request, client *http.C
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && json.Valid(raw):
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- Lens's body sent as application/json, and every response carries nosniff (setSecurityHeaders)
 		_, _ = w.Write(raw)
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
 		var refusal struct {
@@ -479,6 +480,7 @@ func (a *app) handleMarketReceipt(w http.ResponseWriter, r *http.Request, t tena
 		if format == "pdf" {
 			w.Header().Set("Content-Disposition", `inline; filename="talyvor-receipt.pdf"`)
 		}
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the receipt under its own type with a sandbox CSP and nosniff set just above
 		_, _ = w.Write(raw)
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
 		var refusal struct {

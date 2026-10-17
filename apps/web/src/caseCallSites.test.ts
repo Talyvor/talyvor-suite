@@ -472,6 +472,7 @@ const PINS: Record<string, Pin> = {
  * "is this sentence classified" and the number tests do the arithmetic and say what it should be.
  */
 function keyOf(c: { file: string; sentence: string; written: string }): string {
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   const sentence = c.sentence.replace(/[`'"]/g, '').replace(new RegExp(`\\b${c.written}\\b`, 'i'), '<N>')
   return `${c.file}|${sentence}`
 }

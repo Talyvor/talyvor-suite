@@ -19,6 +19,7 @@ function fakeLens() {
       run?.()
       const body = JSON.parse(String(init?.body)) as { base_version: number; salt: string; iv: string; ciphertext: string }
       if (body.base_version !== stored.version) return new Response(JSON.stringify({ error: 'stale' }), { status: 409 })
+      // nosemgrep: javascript.lang.security.insecure-object-assign.insecure-object-assign -- test-only: a fetch mock updating its own fixture object
       Object.assign(stored, { version: stored.version + 1, salt: body.salt, iv: body.iv, ciphertext: body.ciphertext })
       return new Response(JSON.stringify({ version: stored.version }), { status: 200 })
     }

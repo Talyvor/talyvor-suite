@@ -1072,6 +1072,7 @@ export function sentKeys(b: LensBody): string[] | null {
  * class that admits the newline runs into the next line and swallows it.
  */
 export function bindsOnly(b: LensBody): string[] | null {
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-support module imported only by vitest guards (it reads files with node:fs): the subject is a constant in this file, never a person's input
   const re = new RegExp(
     `UPSTREAM-BINDS-ONLY ${b.subject}:([a-z0-9_,* \\t]*)`,
     "g",

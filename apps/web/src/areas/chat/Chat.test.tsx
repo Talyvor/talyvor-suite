@@ -192,6 +192,7 @@ function renderChat() {
 async function chooseModel(name: string) {
   const trigger = await screen.findByRole('button', { name: /^Model: / })
   fireEvent.click(trigger)
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   fireEvent.click(await screen.findByRole('option', { name: new RegExp(`^${name}\\b`) }))
   await screen.findByRole('button', { name: `Model: ${name}` })
 }

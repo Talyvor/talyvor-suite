@@ -225,5 +225,6 @@ func (a *app) handleDocumentUpload(w http.ResponseWriter, r *http.Request, t ten
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(resp.StatusCode)
+	// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- Lens's body sent as application/json, and every response carries nosniff (setSecurityHeaders)
 	_, _ = w.Write(answer)
 }

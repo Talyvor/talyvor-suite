@@ -41,6 +41,7 @@ func (a *app) operatorRelay(w http.ResponseWriter, r *http.Request, lensPath str
 	case err == nil:
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- Lens's body sent as application/json, and every response carries nosniff (setSecurityHeaders)
 		_, _ = w.Write(raw)
 	case errors.Is(err, errLensRefusedKey):
 		log.Printf("bff: operator read %s: %v", lensPath, err)

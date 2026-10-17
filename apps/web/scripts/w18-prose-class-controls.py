@@ -78,7 +78,7 @@ def restore(originals):
 
 def vitest(project_dir):
     """Every failing test id in one project, from the JSON reporter."""
-    out = tempfile.mktemp(suffix=".json")
+    out = os.path.join(tempfile.mkdtemp(), "report.json")  # a private dir, so no other user can plant the file
     subprocess.run(
         ["npx", "vitest", "run", "--reporter=json", f"--outputFile={out}"],
         cwd=os.path.join(REPO, project_dir),

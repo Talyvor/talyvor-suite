@@ -296,7 +296,9 @@ func randomToken() (string, error) {
 // never be usable as an open redirector.
 func sanitizeReturnTo(raw string) string {
 	if raw == "" || !strings.HasPrefix(raw, "/") ||
-		strings.HasPrefix(raw, "//") || strings.Contains(raw, "\\") {
+		strings.HasPrefix(raw, "//") || strings.Contains(raw, "\\") ||
+		// Browsers drop tab/CR/LF from a Location, so "/\t/evil.example" lands on //evil.example.
+		strings.IndexFunc(raw, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0 {
 		return "/"
 	}
 	return raw
@@ -548,6 +550,7 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("bff: session created for sub=%s", idt.Subject)
+	// nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- returnTo passed sanitizeReturnTo at login: a same-app path, never a host
 	http.Redirect(w, r, p.returnTo, http.StatusFound)
 }
 
@@ -666,7 +669,7 @@ func writeDeniedPage(w http.ResponseWriter, email string) {
 	data := struct {
 		Email               string
 		MarkDark, MarkLight template.HTML
-	}{Email: email, MarkDark: template.HTML(markFlatDark), MarkLight: template.HTML(markFlatLight)}
+	}{Email: email, MarkDark: template.HTML(markFlatDark), MarkLight: template.HTML(markFlatLight)} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
 	if err := deniedPageTmpl.Execute(w, data); err != nil {
 		log.Printf("bff: denied page render: %v", err)
 	}

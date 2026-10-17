@@ -85,6 +85,7 @@ export function Canvas({
     const draw = (e: MessageEvent) => {
       const page = frame.current?.contentWindow
       // To '*': the page has no origin to name, which is the point of it.
+      // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration -- the sandboxed frame's origin is opaque, so no name exists; the target is that frame's own window, and the data is the person's own canvas
       if (page && e.source === page && e.data === CANVAS_READY) page.postMessage(drawing.current, '*')
     }
     window.addEventListener('message', draw)

@@ -140,6 +140,7 @@ afterEach(() => {
 
 describe('the no-flash script in index.html — the only thing that decides the first paint', () => {
   it('is the one script this file runs: exactly one inline <script>, and it reads the theme key', () => {
+    // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag -- test-only: a test's own message text, never put into a page
     expect(INLINE, 'index.html has no attribute-less <script> — this file is testing nothing').toHaveLength(1)
     expect(INLINE[0], 'the inline script does not mention the theme key — wrong script extracted').toContain(
       STORAGE_KEY,

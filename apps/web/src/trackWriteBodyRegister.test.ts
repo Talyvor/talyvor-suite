@@ -264,6 +264,7 @@ function upstreamPathOf(args: string, file: string): string | null {
     if (!ident) return null
     const assigns = [
       ...file.matchAll(
+        // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
         new RegExp(`\\b${ident[1]}\\s*:=\\s*trackWorkspacePath\\(ws,\\s*([\\s\\S]*?)\\)\\n`, 'g'),
       ),
     ]

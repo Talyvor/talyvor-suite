@@ -91,6 +91,7 @@ function mockBff() {
       return json({ error: 'the upstream sentence' }, refuseWrites)
     }
     if (path.startsWith('/api/track/issues/iss-1') && method === 'PATCH') {
+      // nosemgrep: javascript.lang.security.insecure-object-assign.insecure-object-assign -- test-only: a fetch mock updating its own fixture object
       Object.assign(stored, JSON.parse(String(init?.body ?? '{}')))
       return json(stored)
     }

@@ -89,6 +89,7 @@ func (a *app) relayProviderKey(w http.ResponseWriter, r *http.Request, t tenant,
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- Lens's body sent as application/json, and every response carries nosniff (setSecurityHeaders)
 		_, _ = w.Write(raw)
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
 		var refusal struct {

@@ -349,6 +349,7 @@ export function scriptInert(): Scenario {
         }
         if (dialogs.length > 0) wrong.push(`a dialog opened: ${dialogs.join(' | ')}`)
         return verdictOf(wrong, `Chat showed the made-up answer with its <script> as text and nothing runnable in it; ` +
+          // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag -- test-only: a test's own message text, never put into a page
           `${posted.ok ? 'the room showed the stored message with nothing runnable in it' : `Lens refused the message (${posted.status})`}; no flag set, no dialog`)
       } finally {
         page.off('dialog', onDialog)

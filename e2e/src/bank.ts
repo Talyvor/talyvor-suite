@@ -87,6 +87,7 @@ export class AgentBankScreen {
     const form = this.page.locator('form').filter({ has: this.page.getByLabel('New agent name') })
     await this.page.getByLabel('New agent name').fill(name)
     await form.getByRole('button', { name: 'Create agent' }).click()
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     return outcome(this.page.getByTestId('agent-open').filter({ hasText: new RegExp(`^${esc(name)}$`) }), form)
   }
 
@@ -98,6 +99,7 @@ export class AgentBankScreen {
     await this.page.reload()
     await this.ready()
     if (agent === undefined) return
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const open = this.page.getByTestId('agent-open').filter({ hasText: new RegExp(`^${esc(agent.name)}$`) })
     if (await open.isVisible()) return
     await this.page.getByTestId(`agent-balance-${agent.id}`).locator('xpath=..').getByRole('button', { name: /^(Manage|Open)$/ }).click()
@@ -367,6 +369,7 @@ export class AgentBankScreen {
     await form.getByRole('group', { name: 'Rules to start from' }).getByRole('button', { name: template, exact: true }).click()
     await this.page.getByLabel('New agent name').fill(name)
     await form.getByRole('button', { name: 'Create agent' }).click()
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const err = await outcome(this.page.getByTestId('agent-open').filter({ hasText: new RegExp(`^${esc(name)}$`) }), form)
     if (err !== undefined) return err
     const unsaved = form.getByRole('alert')
@@ -400,6 +403,7 @@ export class AgentBankScreen {
     await c.getByLabel(`Name of ${agent.name}`).fill(name)
     await c.getByLabel(`What ${agent.name} is for`).fill(description)
     await c.getByRole('button', { name: 'Save', exact: true }).click()
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     return outcome(this.page.getByTestId('agent-open').filter({ hasText: new RegExp(`^${esc(name)}$`) }), c)
   }
 
@@ -521,6 +525,7 @@ export class AgentBankScreen {
     // move's answer is the first one that is not a 5xx — or, when every send met the restart, the alert.
     const refused = row.getByRole('alert')
     const answered = this.page
+      // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
       .waitForResponse((r) => r.request().method() === 'POST' && r.status() < 500 && new RegExp(`/pots/[^/]+/${dir}$`).test(new URL(r.url()).pathname), { timeout: ACTION_TIMEOUT_MS })
       .catch(() => undefined)
     await row.getByRole('button', { name: dir === 'in' ? 'Move in' : 'Move out' }).click()

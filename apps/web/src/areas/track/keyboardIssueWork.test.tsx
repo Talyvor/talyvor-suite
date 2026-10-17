@@ -51,6 +51,7 @@ function fakeTrack() {
     const one = url.match(/^\/api\/track\/issues\/(iss-\d+)$/)
     if (one && method === 'PATCH') {
       const it = issues.find((i) => i.id === one[1])!
+      // nosemgrep: javascript.lang.security.insecure-object-assign.insecure-object-assign -- test-only: a fetch mock updating its own fixture object
       Object.assign(it, JSON.parse(String(init?.body)))
       return json(it)
     }

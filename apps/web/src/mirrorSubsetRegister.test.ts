@@ -156,6 +156,7 @@ const MIRRORS: Mirror[] = [
  * shrug.
  */
 function upstreamSpelling(file: string, iface: string): string[] {
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   const re = new RegExp(`UPSTREAM-SPELLING ${iface}:([a-z0-9_?,\\s*]*)`, 'g')
   const hits = [...source(file).matchAll(re)]
   if (hits.length !== 1) return []
@@ -243,6 +244,7 @@ function interfaceFields(file: string, iface: string): string[] | null {
  * absent line is a red.
  */
 function upstreamOnly(file: string, iface: string): string[] | null {
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   const re = new RegExp(`UPSTREAM-ONLY ${iface}:([a-z0-9_?,\\s*]*)`, 'g')
   const hits = [...source(file).matchAll(re)]
   if (hits.length !== 1) return null

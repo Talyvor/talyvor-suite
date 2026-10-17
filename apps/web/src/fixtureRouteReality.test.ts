@@ -112,6 +112,7 @@ export function fixtureLiterals(): Map<string, string[]> {
  *  an address no browser can reach through this BFF. */
 export function reachableBy(literal: string, route: string): boolean {
   const path = literal.split('?')[0]
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
   const rx = new RegExp(
     '^' +
       route
