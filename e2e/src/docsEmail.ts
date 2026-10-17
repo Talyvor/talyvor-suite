@@ -4,6 +4,9 @@
 //     started with DOCS_EMAIL_ENABLED=true and its SMTP pointed at the stub track-assign-email uses (never Cloudflare).
 //     The author asks two reviewers to approve a page: exactly two outbox rows, both sent_at set, and exactly two mails
 //     at the stub, one to each reviewer. The author then comments on the page, and no new row is written.
+//   B39.33 — then, on the same Docs, the author's own email switches (B39.32, …/notification-preferences): the defaults
+//     read approval.requested on and freshness.digest off, freshness.digest is turned on and reads back on, an unknown
+//     kind is refused 400, and a workspace the author is not a member of is refused 403.
 // Docs keeps no roster of its own: workspace_members mirrors Track's, so the run seeds that mirror in its own database
 // the way Docs' tests do, in place of the sync from a Track this run does not start.
 
@@ -33,10 +36,11 @@ export function docsApprovalEmail(seed: number): Scenario {
   return {
     id: 'docs-approval-email',
     owner: 'talyvor-docs',
-    items: ['B39.16', 'B39.28'],
+    items: ['B39.16', 'B39.28', 'B39.32', 'B39.33'],
     feature: 'Docs approval-request email',
     title: 'Docs approval-request email: asking two reviewers to approve a page writes exactly two outbox rows, both sent, ' +
-      'and two mails at the SMTP stub, one to each; a comment on the page writes no row',
+      'and two mails at the SMTP stub, one to each; a comment on the page writes no row; a member switches the stale-page ' +
+      'digest on and reads it back, and is refused an unknown kind (400) and another workspace (403)',
     run: async (ctx) => {
       const src = ctx.env.docsSrc
       if (src === 'none' || !existsSync(join(src, 'cmd', 'docs', 'main.go'))) throw new CannotTest(`no Docs checkout at ${src} (--docs-src)`)
@@ -133,7 +137,28 @@ export function docsApprovalEmail(seed: number): Scenario {
         ctx.evidence.push({ note: `after the comment: ${r.n} outbox row(s); ${smtp.got.length} mail(s) at the stub` })
         if (r.n !== 2) return { pass: false, detail: `the comment wrote ${r.n - 2} new outbox row(s)` }
         if (smtp.got.length !== 2) return { pass: false, detail: `after the comment the stub got ${smtp.got.length - 2} more mail(s)` }
-        return { pass: true, detail: `one request to two reviewers, two outbox rows sent and one mail each to ${want.join(' and ')}; a comment wrote no row and sent nothing` }
+
+        // B39.33 — the member's own switches, as Settings → Notifications will read and set them.
+        type Prefs = Record<string, boolean>
+        const prefs = `/workspaces/${encodeURIComponent(ws)}/notification-preferences`
+        const before = await call<Prefs>('GET', prefs, undefined)
+        const turned = await call<Prefs>('PUT', prefs, { 'freshness.digest': true })
+        const after = await call<Prefs>('GET', prefs, undefined)
+        const unknown = await call('PUT', prefs, { 'page.deleted': true })
+        const elsewhere = await call('GET', `/workspaces/ws_e2e_other_${probe}/notification-preferences`, undefined)
+        ctx.evidence.push({ note: `preferences: defaults ${before.status} ${before.text.trim()}; on ${turned.status} ${turned.text.trim()}; ` +
+          `read back ${after.status} ${after.text.trim()}; unknown kind ${unknown.status}; another workspace ${elsewhere.status}` })
+        if (before.status !== 200 || before.value?.['approval.requested'] !== true || before.value?.['freshness.digest'] !== false) {
+          return { pass: false, detail: `the defaults are not approval.requested on, freshness.digest off: ${before.status} ${before.text}` }
+        }
+        if (turned.status !== 200 || turned.value?.['freshness.digest'] !== true) return { pass: false, detail: `freshness.digest was not turned on: ${turned.status} ${turned.text}` }
+        if (after.status !== 200 || after.value?.['freshness.digest'] !== true || after.value?.['approval.requested'] !== true) {
+          return { pass: false, detail: `reading back did not show freshness.digest on and approval.requested still on: ${after.status} ${after.text}` }
+        }
+        if (unknown.status !== 400) return { pass: false, detail: `an unknown kind answered ${unknown.status}, not 400: ${unknown.text}` }
+        if (elsewhere.status !== 403) return { pass: false, detail: `a workspace the author is not a member of answered ${elsewhere.status}, not 403: ${elsewhere.text}` }
+        return { pass: true, detail: `one request to two reviewers, two outbox rows sent and one mail each to ${want.join(' and ')}; a comment wrote no row and sent nothing; ` +
+          'the digest switched on and read back on, an unknown kind 400, another workspace 403' }
       } finally {
         docs?.kill()
         await run('docker', ['rm', '-f', pg]).catch(() => undefined)
