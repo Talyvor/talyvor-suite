@@ -10,7 +10,7 @@ import type { Locator, Page } from 'playwright'
 import { type AppUser, chargeULXC } from './app.ts'
 import { worstInputTokens } from './budget.ts'
 import type { Agent, AgentBook, AgentLine, AgentRulesRead, Answered, JudgeReply, LedgerRow, SyntheticUser } from './lens.ts'
-import { listPriceUSD, seeded, statesNumber } from './oracles.ts'
+import { freshWord, listPriceUSD, seeded, statesNumber } from './oracles.ts'
 import { keptOf, percent, platformFeeBPS } from './fees.ts'
 import { feeVerdict } from './pricing.ts'
 import { otherCompanyOnTeam } from './room.ts'
@@ -3550,7 +3550,8 @@ export function marketplaceSale(seed: number, partner: number): Scenario {
   const a = 100 + Math.floor(r() * 900)
   const b = 100 + Math.floor(r() * 900)
   const price = 500_000
-  const template = `What is {{a}} + {{b}}? ${NUMBER_ONLY}`
+  // B17.221 — words of the run's own, so no earlier night's approved listing holds this one as its copy (Lens B32.46).
+  const template = `What is {{a}} + {{b}}? ${NUMBER_ONLY} (${freshWord(seed * 37 + 7)} ${freshWord(seed * 37 + 8)})`
   return {
     id: 'marketplace-sale',
     owner: 'talyvor-lens',
