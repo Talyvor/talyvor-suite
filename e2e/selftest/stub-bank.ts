@@ -664,10 +664,11 @@ export class Bank {
 
   /** What a served request cost, posted from the agent to spend, naming its model — beside the workspace's ledger row —
    *  and B32.11's platform fee on it, its own posting. */
-  spent(agent: Agent, charge: number, model: string, fee: number): string | undefined {
-    const entry = charge > 0 ? this.post(agent.ws, 'spend', [[`agent:${agent.id}`, -charge, 'spend'], ['spend', charge, `agent:${agent.id}`]], undefined, modelCapKey(model)) : undefined
+  spent(agent: Agent, charge: number, model: string, fee: number, kind: 'spend' | 'hold' = 'spend'): string | undefined {
+    const entry = charge > 0 ? this.post(agent.ws, kind, [[`agent:${agent.id}`, -charge, 'spend'], ['spend', charge, `agent:${agent.id}`]], undefined, modelCapKey(model)) : undefined
     if (fee > 0) this.post(agent.ws, 'platform_fee', [[`agent:${agent.id}`, -fee, 'spend'], ['spend', fee, `agent:${agent.id}`]], undefined, modelCapKey(model))
     // B28.377 — the spend line's entry: a scheduled prompt's run names the statement line it was charged on.
+    // B17.223 — `kind` 'hold' posts it as Lens does with reservations on, where the run names the hold.
     return entry
   }
 
