@@ -86,6 +86,7 @@ import { ledgerCallOnce, ledgerMovesAtOnce } from './concurrency.ts'
 import { webhookReplayed, webhookUnsigned } from './webhooks.ts'
 import { trackWebhookSigned } from './trackWebhooks.ts'
 import { docsWebhookSigned } from './docsWebhooks.ts'
+import { trackAssignEmail } from './trackEmail.ts'
 import { agentRulesUnbypassable } from './rules.ts'
 import { poolIsolation } from './pool.ts'
 import { injectionExfil } from './injection.ts'
@@ -137,6 +138,8 @@ export interface RunEnv {
   outDir: string
   /** B28.440 — the run's checkout of talyvor-lens (--lens-src), whose sdk/typescript the SDK quickstart runs; 'none' when not given. */
   lensSrc: string
+  /** B39.26 — the run's checkout of talyvor-track (--track-src), which track-assign-email builds and starts; 'none' when not given. */
+  trackSrc: string
   /** B28.280 — the signing secret of Lens's test-mode Stripe webhook (LENS_STRIPE_TEST_WEBHOOK_SECRET); '' when not given. */
   webhookSecret: string
   /** B30.123 — Lens's operator read key (LENS_OPERATOR_READ_KEY), for the reconciliation and safeguarding reads; '' when not given. */
@@ -5045,6 +5048,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   if (i === 6) list.push(trackWebhookSigned(i))
   // B39.24 — and Docs' signed approval webhooks: one approval request reaches a receiver the run serves, signed.
   if (i === 6) list.push(docsWebhookSigned(i))
+  // B39.26 — and Track's assignment email, on a Track the run starts itself with its SMTP on a stub the run serves.
+  if (i === 6) list.push(trackAssignEmail(i))
   if (i === 2) list.push(wrongAnswerStored(i))
   if (i === 3) list.push(trackSearchCycleBoard(i), patternMiningSwitch())
   // B34.9 — and the one Track route the app sends a request to that none of those reached: a project started on Projects.
