@@ -9,6 +9,9 @@
 //   B39.29 — the member turns issue.assigned back on and the daily digest on (…/notification-preferences/digest
 //     {"email":true}); three issues assigned to them write three outbox rows that stay unsent, and the stub gets
 //     nothing. The 09:00 UTC send itself has no on-demand trigger, so Track's own test proves it.
+//   B39.30 — before the first assignment the owner brands the workspace (PATCH {"email_header_color","logo_url"}, and a
+//     colour that is not #rrggbb is refused 400); the first mail is From "<workspace name> via Talyvor" and its HTML part
+//     carries the colour and the logo.
 // The deployed Track's outbox is in a database the run never connects to, so this Track is the run's own.
 
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
@@ -81,10 +84,10 @@ export function trackAssignEmail(seed: number): Scenario {
   return {
     id: 'track-assign-email',
     owner: 'talyvor-track',
-    items: ['B39.15', 'B39.26', 'B39.29'],
+    items: ['B39.15', 'B39.26', 'B39.29', 'B39.30'],
     feature: 'Track assignment email',
     title: 'Track assignment email: an issue assigned to a second member writes exactly one outbox row, sent, and one mail ' +
-      'at the SMTP stub; once they turn issue.assigned off, a reassignment writes no row and sends nothing; ' +
+      'at the SMTP stub, From "<workspace> via Talyvor" with the workspace\'s colour and logo; once they turn issue.assigned off, a reassignment writes no row and sends nothing; ' +
       'with the daily digest on, three assignments write three rows that stay unsent and send nothing',
     run: async (ctx) => {
       const src = ctx.env.trackSrc
@@ -162,6 +165,12 @@ export function trackAssignEmail(seed: number): Scenario {
           return { n, sent }
         }
 
+        const brand = { email_header_color: '#1E40AF', logo_url: 'https://example.com/logo.png' }
+        const branded = await call<{ name: string }>(owner, 'PATCH', `/workspaces/${ws}`, brand)
+        if (branded.status !== 200 || !branded.value?.name) return { pass: false, detail: `the owner could not brand the workspace: ${branded.status} ${branded.text}` }
+        const red = await call(owner, 'PATCH', `/workspaces/${ws}`, { email_header_color: 'red' })
+        if (red.status !== 400) return { pass: false, detail: `a header colour of "red" was answered ${red.status}, not 400: ${red.text}` }
+
         const first = await assign(memberID)
         if (first.status !== 200 || first.value?.assignee_id !== memberID) return { pass: false, detail: `the issue was not assigned to the second member: ${first.status} ${first.text}` }
         const sentAt = Date.now()
@@ -175,6 +184,13 @@ export function trackAssignEmail(seed: number): Scenario {
         if (r.n !== 1 || r.sent !== 1) return { pass: false, detail: `one assignment wrote ${r.n} outbox row(s) for the member, ${r.sent} sent — not exactly one, sent. Track: ${log.slice(-300)}` }
         if (smtp.got.length !== 1 || smtp.got[0].to.join(',') !== second.email) {
           return { pass: false, detail: `the stub got ${smtp.got.length} mail(s) (to ${smtp.got.map((m) => m.to.join(',')).join('; ')}), not exactly one to ${second.email}` }
+        }
+        const fromLine = /^From: .*$/m.exec(smtp.got[0].data)?.[0] ?? ''
+        const html = smtp.got[0].data.split(/^Content-Type: text\/html.*$/m)[1] ?? ''
+        ctx.evidence.push({ note: `the branded mail: ${fromLine}; HTML header ${/<tr><td style="background:[^"]*">.*?<\/td>/.exec(html)?.[0] ?? '(none)'}` })
+        if (!fromLine.includes(`${branded.value.name} via Talyvor`)) return { pass: false, detail: `the mail is not From "${branded.value.name} via Talyvor": ${fromLine}` }
+        if (!html.includes(`background:${brand.email_header_color}`) || !html.includes(`src="${brand.logo_url}"`)) {
+          return { pass: false, detail: `the mail's HTML part lacks the colour ${brand.email_header_color} or the logo ${brand.logo_url}: ${html.slice(0, 600)}` }
         }
 
         const off = await call<{ email: boolean }>(second, 'PUT', `/workspaces/${ws}/notification-preferences/issue.assigned`, { email: false })
@@ -209,7 +225,7 @@ export function trackAssignEmail(seed: number): Scenario {
         if (r.n !== 4) return { pass: false, detail: `with the digest on, three assignments wrote ${r.n - 1} outbox row(s), not three` }
         if (r.sent !== 1) return { pass: false, detail: `with the digest on, ${r.sent - 1} of the three held rows were sent before the 09:00 digest` }
         if (smtp.got.length !== 1) return { pass: false, detail: `with the digest on, the stub got ${smtp.got.length - 1} mail(s) before the 09:00 digest` }
-        return { pass: true, detail: `one assignment, one outbox row sent and one mail to ${second.email}; with issue.assigned off, a reassignment wrote no row and sent nothing; ` +
+        return { pass: true, detail: `one assignment, one outbox row sent and one mail to ${second.email}, From "${branded.value.name} via Talyvor" with its colour and logo; with issue.assigned off, a reassignment wrote no row and sent nothing; ` +
           'with the digest on, three assignments wrote three rows held unsent and no mail' }
       } finally {
         track?.kill()
