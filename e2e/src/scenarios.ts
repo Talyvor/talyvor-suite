@@ -93,6 +93,7 @@ import { poolIsolation } from './pool.ts'
 import { injectionExfil } from './injection.ts'
 import { fileBombBounded, ssrfRefused } from './ssrf.ts'
 import { csrfRefused, scriptInert } from './session.ts'
+import { connectOAuth } from './connect.ts'
 import { keysNotForwarded, keysUnlisted } from './keys.ts'
 import { rateLimitsHold } from './ratelimit.ts'
 import { marketDiscoverScreen, marketDiscovery } from './discovery.ts'
@@ -5118,6 +5119,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.287 — the workspace's keys, once a run, each on a workspace of its own: no list or stats read returns one, and a
   // synthetic upstream Lens sends its vLLM traffic to sees none of the credentials a request came with.
   if (i === 9) list.push(keysUnlisted(), keysNotForwarded())
+  // B40.6 — an assistant signs in the way Claude's connector does, once a run, on a workspace of its own: DCR and CIMD
+  // clients through the consent screen to a token /mcp takes, the refresh rotating, and replay and revocation refused.
+  if (i === 9) list.push(connectOAuth())
   // B28.288 — Lens's rate limiter, once a run, on a workspace of its own: a burst of reads at once on one token is refused
   // past the limit, each refusal saying when to come back, and the next read once that has passed is served.
   if (i === 7) list.push(rateLimitsHold())

@@ -98,6 +98,13 @@ import (
 // A reason is a claim about the product, checkable by reading the file named in it. The day it
 // stops being true, the STALE direction below is what makes someone delete the line.
 var publicReadRoutes = map[string]string{
+	"/.well-known/oauth-protected-resource": "B40.6 — RFC 9728 metadata an assistant reads before anyone has signed in: " +
+		"which server signs people in for /mcp, and nothing per-person — oauth_test.go asserts what it carries",
+	"/.well-known/oauth-protected-resource/mcp": "B40.6 — the same RFC 9728 document at the path the 401's resource_metadata names",
+	"/.well-known/oauth-authorization-server": "B40.6 — RFC 8414 metadata: the endpoint addresses an assistant needs " +
+		"before it can sign anyone in — oauth_test.go asserts them",
+	"/oauth/authorize": "B40.6 — where an assistant sends the person. Signed out it redirects to /auth/login and back; " +
+		"an unknown client is told so on a page before any session is looked at (the 400 here) — oauth_test.go owns both",
 	"/api/version": "the version surface is deliberately unauthenticated so an operator can " +
 		"identify a deployment before signing in — version_test.go asserts the 200 and the reason",
 	"/healthz": "B28.211 — the container probe; a kubelet or load balancer has no session. It says " +
@@ -270,6 +277,13 @@ func TestRouteMountsLiveInLensGoAlone(t *testing.T) {
 // a refusal, each with the reason. Same contract as publicReadRoutes: a reason is a claim about
 // the product, and the stale direction below deletes it the day it stops being true.
 var publicWriteRoutes = map[string]string{
+	"/oauth/authorize": "B40.6 — the consent screen's answer. It needs the session that saw the screen and its one-time " +
+		"consent id, so with no session it answers 400 and grants nothing — oauth_test.go owns it",
+	"/oauth/register": "B40.6 — RFC 7591 registration, called by an assistant's server before any person has signed in; " +
+		"it creates a public client that can do nothing until a person consents",
+	"/oauth/token": "B40.6 — called by an assistant's server; the PKCE verifier or the refresh token is the credential",
+	"/oauth/revoke": "B40.6 — RFC 7009: holding a token is the proof needed to end it, and an unknown token is answered " +
+		"200 so the endpoint tells a caller nothing — oauth_test.go asserts a revoked token is refused",
 	"/": "the SPA fallback. There is no handler behind an unsafe method here — the router " +
 		"answers 404 and nothing is reached, so there is no session to require",
 	"/auth/synthetic": "B17.2 — the synthetic sign-in, which by definition runs before any session " +

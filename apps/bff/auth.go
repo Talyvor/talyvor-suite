@@ -145,6 +145,12 @@ func (s *ttlMap[T]) take(id string) (T, bool) {
 	return v, true
 }
 
+func (s *ttlMap[T]) size() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.m)
+}
+
 func (s *ttlMap[T]) delete(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

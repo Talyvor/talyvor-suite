@@ -51,6 +51,9 @@ type app struct {
 
 	// connectorOut is how Chat's external MCP connectors are reached: public addresses only (chat_connectors.go).
 	connectorOut http.RoundTripper
+
+	// oauth is Talyvor Connect's authorization server for outside assistants (oauth.go).
+	oauth *oauthServer
 }
 
 func newApp(cfg config, auth *authenticator) *app {
@@ -63,7 +66,18 @@ func newApp(cfg config, auth *authenticator) *app {
 		sessionKeys:  map[string]sessionKeyLease{},
 		fxSource:     ecbDailyURL,
 		connectorOut: newConnectorTransport(),
+		oauth:        newOAuthServer(),
 	}
+
+	// Talyvor Connect (B40.6, oauth.go): an outside assistant signs in as a person and reaches /mcp.
+	a.mux.HandleFunc("/.well-known/oauth-protected-resource", a.oauthOn(a.handleProtectedResourceMetadata))
+	a.mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", a.oauthOn(a.handleProtectedResourceMetadata))
+	a.mux.HandleFunc("/.well-known/oauth-authorization-server", a.oauthOn(a.handleAuthServerMetadata))
+	a.mux.HandleFunc("/oauth/register", a.oauthOn(a.handleOAuthRegister))
+	a.mux.HandleFunc("/oauth/authorize", a.oauthOn(a.handleOAuthAuthorize))
+	a.mux.HandleFunc("/oauth/token", a.oauthOn(a.handleOAuthToken))
+	a.mux.HandleFunc("/oauth/revoke", a.oauthOn(a.handleOAuthRevoke))
+	a.mux.HandleFunc("/mcp", a.oauthOn(a.handleMCP))
 
 	// The auth surface. Registered in every mode: in disabled mode the login
 	// machinery answers an explicit 404 (not a silent SPA fallback) and /auth/me
@@ -746,13 +760,13 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // webhook, a service-to-service POST — has no Origin to send, so requiring one would break it
 // rather than protect it.
 //
-// ⚠ THE LIST IS EMPTY, and that is a finding rather than an oversight: every /api/* route in
-// this BFF is session-gated and browser-driven, and /auth/logout is a browser POST that the
-// app itself issues. If a webhook is ever mounted here it goes in this function WITH a reason,
-// and it must carry its own authentication (an HMAC signature) — an Origin exemption is not a
-// pass on authenticating the caller.
+// Every /api/* route in this BFF is session-gated and browser-driven, and /auth/logout is a
+// browser POST that the app itself issues. The only exemptions are the OAuth endpoints an
+// assistant's server calls (oauthMachinePath), each authenticating its caller without a cookie.
+// Anything added here goes in WITH a reason, and it must carry its own authentication — an
+// Origin exemption is not a pass on authenticating the caller.
 func originExemptPath(path string) bool {
-	return false
+	return oauthMachinePath(path)
 }
 
 // sameOriginWriteAllowed is the SINGLE decider. Reads are never gated: applying this to GET
