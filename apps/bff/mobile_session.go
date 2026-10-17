@@ -13,6 +13,8 @@ import (
 	"log"
 	"net/http"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -69,8 +71,10 @@ func (a *app) handleMobileSession(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "id_token failed verification"})
 		return
 	}
-	// One session per ID token: a copy replayed before it expires is refused.
-	sum := sha256.Sum256([]byte(in.IDToken))
+	// One session per ID token: a copy replayed before it expires is refused. Keyed on the verified claims, not the
+	// raw string, so a re-encoded copy of the same token is the same token.
+	sum := sha256.Sum256([]byte(strings.Join([]string{idt.Issuer, idt.Subject, strconv.FormatInt(idt.IssuedAt.UnixNano(), 10),
+		strings.Join(idt.Audience, " "), idt.Nonce, idt.AccessTokenHash}, "\x00")))
 	mine, _ := randomToken()
 	if a.auth.spentIDTokens.adopt(hex.EncodeToString(sum[:]), spentIDToken{by: mine, expires: idt.Expiry}).by != mine {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "this id_token was already used — sign in again"})
