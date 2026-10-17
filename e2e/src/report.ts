@@ -121,6 +121,7 @@ function evidenceLines(evidence: Evidence[]): string[] {
     if (e.question !== undefined) out.push(`  - asked: ${e.question}`)
     if (e.answer !== undefined && e.answer !== '') out.push(`  - answer: ${e.answer.replace(/\s+/g, ' ').slice(0, 300)}`)
     if (e.footer !== undefined && e.footer !== '') out.push(`  - under it: ${e.footer}`)
+    if (e.served !== undefined) out.push(`  - served: ${e.served}`)
     if (e.error !== undefined) out.push(`  - refused: ${e.error}`)
     if (e.shot !== undefined) out.push(`  - screenshot: [${e.shot.split('/').pop()}](${e.shot})`)
     if (e.ledger !== undefined) {

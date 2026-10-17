@@ -107,7 +107,7 @@ const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim()
 /** The last two questions or refusals of a verdict's evidence, one line each. */
 function shownOf(o: Outcome): string[] {
   return o.evidence.filter((e) => e.question !== undefined || e.error !== undefined).slice(-2)
-    .map((e) => oneLine(`asked "${e.question ?? ''}" → ${e.error !== undefined ? `refused: ${e.error}` : `"${(e.answer ?? '').slice(0, 160)}" [${e.footer ?? ''}]`}`))
+    .map((e) => oneLine(`asked "${e.question ?? ''}" → ${e.error !== undefined ? `refused: ${e.error}` : `"${(e.answer ?? '').slice(0, 160)}" [${e.footer ?? ''}]${e.served === undefined ? '' : ` (served: ${e.served})`}`}`))
 }
 
 /** B28.292 — the rounds of the weekly deep red-team pass that FAILed a scenario, and whether nothing else that night did. */

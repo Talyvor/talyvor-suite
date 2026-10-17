@@ -35,6 +35,20 @@ export interface JudgeReply {
   replayed: boolean
   /** Lens served another workspace's answer from the pool and charged this (X-Talyvor-Pool-Charged-ULXC). */
   pooledULXC: number | undefined
+  /** B28.458 — the path Lens served it by (servedBy), so a wrong answer in the report says where it came from. */
+  served: string
+}
+
+/** B28.458 — the headers Lens sets to say which path served an answer: its request, cache, routing, fallback, node. */
+const SERVED_HEADERS = ['X-Talyvor-Request-ID', 'X-Talyvor-Cache', 'X-Talyvor-Routed', 'X-Talyvor-Fallback-Model',
+  'X-Talyvor-Model-Override', 'X-Talyvor-Node-Served', 'X-Talyvor-Local-Model']
+
+/** B28.458 — which Lens path served an answer: replayed or not, the pooled charge, and each of SERVED_HEADERS Lens sent. */
+export function servedBy(h: Headers): string {
+  const pooled = h.get('X-Talyvor-Pool-Charged-ULXC')
+  return [h.get('X-Talyvor-Cache-Replay') === 'true' ? 'replayed' : 'not replayed',
+    pooled === null ? 'no pooled charge' : `pooled ${pooled} µLXC`,
+    ...SERVED_HEADERS.flatMap((n) => (h.has(n) ? [`${n}: ${h.get(n)}`] : []))].join(', ')
 }
 
 /** B17.6 — an answer Lens may refuse: what it answered, or its status and sentence. */
@@ -1156,6 +1170,7 @@ export class LensClient {
       outputTokens: body.usage?.output_tokens ?? 0,
       replayed: res.headers.get('X-Talyvor-Cache-Replay') === 'true',
       pooledULXC: res.headers.has('X-Talyvor-Pool-Charged-ULXC') ? Number(res.headers.get('X-Talyvor-Pool-Charged-ULXC')) : undefined,
+      served: servedBy(res.headers),
     }
   }
 
@@ -1181,6 +1196,7 @@ export class LensClient {
         outputTokens: body.usage?.output_tokens ?? 0,
         replayed: res.headers.get('X-Talyvor-Cache-Replay') === 'true',
         pooledULXC: res.headers.has('X-Talyvor-Pool-Charged-ULXC') ? Number(res.headers.get('X-Talyvor-Pool-Charged-ULXC')) : undefined,
+        served: servedBy(res.headers),
       },
     }
   }
@@ -1598,6 +1614,7 @@ export class LensClient {
         outputTokens: body.usage?.output_tokens ?? 0,
         replayed: res.headers.get('X-Talyvor-Cache-Replay') === 'true',
         pooledULXC: res.headers.has('X-Talyvor-Pool-Charged-ULXC') ? Number(res.headers.get('X-Talyvor-Pool-Charged-ULXC')) : undefined,
+        served: servedBy(res.headers),
       },
     }
   }
