@@ -81,6 +81,7 @@ import { payScreen } from './payScreen.ts'
 import { operatorComplianceBoundary } from './operatorCompliance.ts'
 import { agentCredential } from './kya.ts'
 import { lineage } from './lineage.ts'
+import { roomFromIssue } from './roomFromIssue.ts'
 import { roomDecideRun, roomInviteScreen } from './roomScreens.ts'
 import { call, said, settingsConfigBudgets, settingsGuardrails, settingsOperatorOnly, settingsPrompts, settingsStoredAnswers, settingsSwitches, settingsTareDistill } from './settings.ts'
 import { creditsTopUp, evals, lensTokens, namedIdsIsolated, nodes, outputsAttribution, povi } from './economy.ts'
@@ -5160,6 +5161,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // on settings, a private room refused to a company without its link and joined through the link's own screen until it
   // is used up, and on the room screen a contribution accepted and a run refused for a missing variable, nothing charged.
   if (i === 6) list.push(roomInviteScreen(i), roomDecideRun())
+  // B41.61 — a room opened from a Track issue's screen, once a run, on a Team workspace of its own: the issue's title, its
+  // description ending with a link back to the issue, the issue as the room's first message, and the room screen's link back.
+  if (i === 6) list.push(roomFromIssue(i))
   // B32.82 — a private room by invite link and Free's room limits, once a run, on a Free workspace of its own: one public
   // room past the plan and a private one refused naming rooms_plan_limits, then on Team a private room joined by a link
   // whose use Lens counts, and revoked, the link 404 to a third company. The operator closes its rooms at the end.

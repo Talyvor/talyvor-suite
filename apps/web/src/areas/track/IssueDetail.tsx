@@ -381,6 +381,10 @@ export function IssueDetail() {
           <span className="font-mono text-caption text-muted">{it.identifier}</span>
           <StatusPill status={it.status} />
           {wayBack}
+          {/* B41.61 — a room for the issue, opened with its title and description and a link back here. */}
+          <Link className={`text-body text-accent ${inlineLink}`} to={`/rooms/new?issue=${encodeURIComponent(it.id)}`}>
+            Open a room
+          </Link>
         </div>
       </Region>
 

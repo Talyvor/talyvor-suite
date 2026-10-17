@@ -31,8 +31,11 @@ function room(id: string, owner: string, title: string, topic: string): Rm {
   }
 }
 
+const posted: { room: string; body: string }[] = []
+
 function mockBff(seed: Rm[] = []) {
   const rooms: Rm[] = [...seed]
+  posted.length = 0
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -54,7 +57,11 @@ function mockBff(seed: Rm[] = []) {
       const owned = rooms.filter((r) => r.owner_workspace_id === ME && r.visibility === 'public').length
       if (body.visibility === 'public' && owned >= 3)
         return json({ error: REFUSAL, setting: 'rooms_plan_limits', plan: 'free', limit: 'public_rooms', max: 3, allows: 'team' }, 402)
-      const r = { ...room(`room_${rooms.length + 1}`, ME, String(body.title), String(body.topic)), visibility: String(body.visibility) }
+      const r = {
+        ...room(`room_${rooms.length + 1}`, ME, String(body.title), String(body.topic)),
+        visibility: String(body.visibility),
+        description: String(body.description),
+      }
       rooms.push(r)
       return json(detail(r), 201)
     }
@@ -71,6 +78,13 @@ function mockBff(seed: Rm[] = []) {
           private_rooms_open: owned.filter((r) => r.visibility === 'private').length,
         },
       })
+    }
+    if (url === '/api/track/issues/iss_9')
+      return json({ id: 'iss_9', identifier: 'ENG-9', title: 'Cache stampede on cold start', status: 'todo', description: 'Every pod reloads at once.' })
+    const msg = /^\/api\/rooms\/([^/]+)\/messages$/.exec(url)
+    if (msg && method === 'POST') {
+      posted.push({ room: msg[1], body: String(body.body) })
+      return json({ id: 'm1', cursor: 1, room_id: msg[1], author_workspace_id: ME, kind: 'text', body: body.body, refs: null, created_at: '' }, 201)
     }
     const join = /^\/api\/rooms\/([^/]+)\/join$/.exec(url)
     const one = /^\/api\/rooms\/([^/]+)$/.exec(url)
@@ -129,6 +143,21 @@ describe('rooms', () => {
       expect(within(screen.getByRole('list', { name: 'Open rooms' })).queryByRole('link', { name: 'Agent pricing research' })).toBeNull(),
     )
     expect(within(screen.getByRole('list', { name: 'Open rooms' })).getByRole('link', { name: 'Open-source evals' })).toBeTruthy()
+  })
+
+  // B41.61 — a room opened from a Track issue has the issue's title and description, a link back to it, and the issue
+  // as its first message for the room's AI.
+  it('opens a room from a Track issue with its title, description and a link back to it', async () => {
+    mockBff()
+    await at('/rooms/new?issue=iss_9')
+    await waitFor(() => expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Cache stampede on cold start'))
+    expect((screen.getByLabelText('Who can find it') as HTMLSelectElement).value).toBe('private')
+    fireEvent.change(screen.getByLabelText('Who can find it'), { target: { value: 'public' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Open room' }))
+    expect(await screen.findByRole('heading', { name: 'Cache stampede on cold start' })).toBeTruthy()
+    expect(screen.getByText('Every pod reloads at once.')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'ENG-9' }).getAttribute('href')).toBe('/track/issues/iss_9')
+    expect(posted).toEqual([{ room: 'room_1', body: '# ENG-9 Cache stampede on cold start\n\nStatus: Todo\n\nEvery pod reloads at once.\n' }])
   })
 
   it('a Free workspace’s fourth public room shows Lens’s rooms_plan_limits refusal and opens nothing', async () => {

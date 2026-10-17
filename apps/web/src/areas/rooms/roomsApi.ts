@@ -443,3 +443,22 @@ export function roomRefusal(err: unknown): string {
   }
   return 'Nothing happened. You can try again.'
 }
+
+// B41.61 — a room opened from a Track issue: its description ends with a line linking back to the issue, which the
+// room's screen shows as a link. Lens keeps a description to 4,000 characters, so the issue's text gives way to the line.
+const ISSUE_LINE = /\n*From Track issue (\S+): (https?:\/\/[^\s/]+)(\/track\/issues\/[^\s/?#]+)$/
+
+/** A room's description for a Track issue: the issue's description, then the line linking back to it. */
+export function issueRoomDescription(issue: { id: string; identifier: string; description: string }, origin: string): string {
+  const line = `From Track issue ${issue.identifier}: ${origin}/track/issues/${encodeURIComponent(issue.id)}`
+  const text = issue.description.trim().slice(0, 4000 - line.length - 2).trim()
+  return text === '' ? line : `${text}\n\n${line}`
+}
+
+/** A description split into its text and the Track issue it links back to — only on this site, since anyone can write
+ *  the line into a public room's description. `path` is the issue's address here. */
+export function issueBackLink(description: string, origin: string): { text: string; issue?: { identifier: string; path: string } } {
+  const m = ISSUE_LINE.exec(description)
+  if (!m || m[2] !== origin) return { text: description }
+  return { text: description.slice(0, m.index), issue: { identifier: m[1], path: m[3] } }
+}
