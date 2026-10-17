@@ -305,6 +305,8 @@ func (a *app) oauthClientFor(ctx context.Context, id string) (oauthClient, error
 	}
 	ctx, cancel := context.WithTimeout(ctx, oauthCIMDTimeout)
 	defer cancel()
+	// CIMD is exactly this: fetching the address the client names. connectorOut refuses private and
+	// loopback addresses at dial time; https only, no redirects, 5 s and 64 KiB at most.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, id, nil)
 	if err != nil {
 		return oauthClient{}, err
