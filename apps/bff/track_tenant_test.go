@@ -195,7 +195,7 @@ func TestTrack_BootstrapFailureDoesNotAbortLogin(t *testing.T) {
 				return true
 			}
 			// Only the login path — trackWorkspaceFor legitimately returns on failure.
-			if fn.Name.Name != "handleCallback" {
+			if fn.Name.Name != "provisionSession" {
 				return true
 			}
 			checked = true
@@ -224,7 +224,7 @@ func TestTrack_BootstrapFailureDoesNotAbortLogin(t *testing.T) {
 		})
 	}
 	if !checked {
-		t.Fatal("handleCallback no longer calls bootstrapTrackWorkspace — either the wiring was " +
+		t.Fatal("provisionSession (the login step handleCallback and the phone sign-in share) no longer calls bootstrapTrackWorkspace — either the wiring was " +
 			"removed (Track is back to a shared workspace) or this guard has drifted")
 	}
 }

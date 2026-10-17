@@ -199,12 +199,16 @@ func (s *ttlMap[T]) update(id string, fn func(T) T) (T, bool) {
 
 // authenticator owns the OIDC round-trip and both stores.
 type authenticator struct {
-	cfg        config
-	verifier   *oidc.IDTokenVerifier
-	oauth      oauth2.Config
-	httpClient *http.Client
-	pending    *ttlMap[pendingLogin]
-	sessions   *ttlMap[session]
+	cfg      config
+	verifier *oidc.IDTokenVerifier
+	// mobileVerifier checks the phone app's ID tokens (mobile_session.go). Nil while
+	// OIDC_MOBILE_CLIENT_IDS is empty, and then POST /auth/mobile/session refuses.
+	mobileVerifier *oidc.IDTokenVerifier
+	spentIDTokens  *ttlMap[spentIDToken]
+	oauth          oauth2.Config
+	httpClient     *http.Client
+	pending        *ttlMap[pendingLogin]
+	sessions       *ttlMap[session]
 	// sealer makes a session id carry its session, so a restart does not sign anyone out (B17.40).
 	// Nil without LENS_PROVISION_SECRET: sessions are then in memory only.
 	sealer *sessionSealer
@@ -222,6 +226,10 @@ func newAuthenticator(ctx context.Context, cfg config) (*authenticator, error) {
 		return nil, fmt.Errorf("OIDC discovery against %s: %w", cfg.oidcIssuer, err)
 	}
 	a.verifier = provider.Verifier(&oidc.Config{ClientID: cfg.oidcClientID})
+	if len(cfg.oidcMobileClientIDs) > 0 {
+		// go-oidc checks one audience; the phone has one per platform, so mobileAudienceOK checks them.
+		a.mobileVerifier = provider.Verifier(&oidc.Config{SkipClientIDCheck: true})
+	}
 	a.oauth = oauth2.Config{
 		ClientID:     cfg.oidcClientID,
 		ClientSecret: cfg.oidcClientSecret,
@@ -237,7 +245,8 @@ func newAuthenticator(ctx context.Context, cfg config) (*authenticator, error) {
 // directly by tests; production always goes through newAuthenticator.
 func newSessionOnlyAuthenticator(cfg config) *authenticator {
 	return &authenticator{cfg: cfg, pending: newTTLMap[pendingLogin](), sessions: newTTLMap[session](),
-		sealer: newSessionSealer(cfg.provisionSecret, cfg.sessionTTL)}
+		spentIDTokens: newTTLMap[spentIDToken](),
+		sealer:        newSessionSealer(cfg.provisionSecret, cfg.sessionTTL)}
 }
 
 // session returns the session stored under sid, restoring it from its seal when this process has
@@ -268,7 +277,12 @@ func (auth *authenticator) endSession(sid string) {
 
 // sessionAndIDFrom is sessionFrom plus the session id, for callers that must write the session
 // back (the pooling choice).
+// A Bearer token naming a session (the phone app, mobile_session.go) wins over the cookie; any other
+// Bearer (an assistant's OAuth token, oauth.go) leaves the cookie to decide.
 func (auth *authenticator) sessionAndIDFrom(r *http.Request) (string, session, bool) {
+	if sid, s, ok := auth.bearerSession(r); ok {
+		return sid, s, true
+	}
 	ck, err := r.Cookie(sessionCookieName)
 	if err != nil || ck.Value == "" {
 		return "", session{}, false
@@ -277,12 +291,19 @@ func (auth *authenticator) sessionAndIDFrom(r *http.Request) (string, session, b
 	return ck.Value, s, ok
 }
 
-func (auth *authenticator) sessionFrom(r *http.Request) (session, bool) {
-	ck, err := r.Cookie(sessionCookieName)
-	if err != nil || ck.Value == "" {
-		return session{}, false
+// bearerSession is the session a non-browser client names with `Authorization: Bearer <session id>`.
+func (auth *authenticator) bearerSession(r *http.Request) (string, session, bool) {
+	sid, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if sid == "" || sid == r.Header.Get("Authorization") {
+		return "", session{}, false
 	}
-	return auth.session(ck.Value)
+	s, ok := auth.session(sid)
+	return sid, s, ok
+}
+
+func (auth *authenticator) sessionFrom(r *http.Request) (session, bool) {
+	_, s, ok := auth.sessionAndIDFrom(r)
+	return s, ok
 }
 
 // randomToken returns 256 bits of crypto/rand, URL-safe. Used for session ids,
@@ -501,25 +522,41 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 	if old, err := r.Cookie(sessionCookieName); err == nil {
 		a.auth.endSession(old.Value)
 	}
+	s, perr := a.provisionSession(ctx, idt.Subject, claims.Email)
+	if perr != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{
+			"error": "could not provision your workspace — try again shortly"})
+		return
+	}
+	if err := a.startSession(w, r, s, int(a.cfg.sessionTTL.Seconds())); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
+		return
+	}
+	log.Printf("bff: session created for sub=%s", idt.Subject)
+	// nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- returnTo passed sanitizeReturnTo at login: a same-app path, never a host
+	http.Redirect(w, r, p.returnTo, http.StatusFound)
+}
+
+// provisionSession turns an identity the allowlist admitted into a session, not yet stored: the
+// browser callback and the phone sign-in (mobile_session.go) both come through here.
+func (a *app) provisionSession(ctx context.Context, sub, email string) (session, error) {
 	// PROVISION: turn this identity into a tenant before the session exists. The workspace id is
 	// derived by LENS from the identity we present — the BFF never names a workspace, so no bug
 	// here can aim at another tenant. A provisioning failure is a hard stop: falling back to a
 	// shared workspace is the exact state this replaced, so there is no fallback path at all.
-	prov, perr := a.provisionForSession(ctx, provisionIdentity(a.cfg.oidcIssuer, idt.Subject))
+	prov, perr := a.provisionForSession(ctx, provisionIdentity(a.cfg.oidcIssuer, sub))
 	if perr != nil {
-		log.Printf("bff: provisioning FAILED for sub=%s: %s", idt.Subject, redactSecret(perr.Error()))
-		writeJSON(w, http.StatusBadGateway, map[string]string{
-			"error": "could not provision your workspace — try again shortly"})
-		return
+		log.Printf("bff: provisioning FAILED for sub=%s: %s", sub, redactSecret(perr.Error()))
+		return session{}, perr
 	}
 	// TRACK: bootstrap this identity's Track workspace too. Deliberately NOT a hard stop,
 	// unlike the Lens provisioning above — Lens is the tenancy root, Track is one product of
 	// several, and a Track blip taking out Lens access is worse than no Track workspace. An
 	// empty result is stored as empty and re-asked on first use, never treated as settled.
-	trackWS, terr := a.bootstrapTrackWorkspace(ctx, strings.ToLower(claims.Email), idt.Subject, a.cfg.oidcIssuer)
+	trackWS, terr := a.bootstrapTrackWorkspace(ctx, strings.ToLower(email), sub, a.cfg.oidcIssuer)
 	if terr != nil && !errors.Is(terr, errTrackNotConfigured) {
 		log.Printf("bff: track bootstrap FAILED for sub=%s (login continues): %s",
-			idt.Subject, redactSecret(terr.Error()))
+			sub, redactSecret(terr.Error()))
 	}
 	// DOCS: ask Docs to read this workspace's roster from Track NOW, rather than on its next
 	// periodic sweep. Without this, a person who signs up and goes straight to Docs finds their
@@ -533,13 +570,13 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 	if trackWS != "" {
 		if derr := a.nudgeDocsMemberSync(ctx, trackWS); derr != nil && !errors.Is(derr, errDocsNotConfigured) {
 			log.Printf("bff: docs member-sync nudge failed for sub=%s (login continues; Docs' own "+
-				"sweep will reconcile within its interval): %s", idt.Subject, redactSecret(derr.Error()))
+				"sweep will reconcile within its interval): %s", sub, redactSecret(derr.Error()))
 		}
 	}
 
-	if err := a.startSession(w, r, session{
-		sub:     idt.Subject,
-		email:   strings.ToLower(claims.Email),
+	return session{
+		sub:     sub,
+		email:   strings.ToLower(email),
 		expires: time.Now().Add(a.cfg.sessionTTL),
 
 		workspaceID:  prov.WorkspaceID,
@@ -551,13 +588,7 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 		cachePoolable: prov.CachePoolable,
 		// Ask the pooling question exactly once: on the login that CREATED the workspace.
 		needsPoolingChoice: prov.Created,
-	}, int(a.cfg.sessionTTL.Seconds())); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
-		return
-	}
-	log.Printf("bff: session created for sub=%s", idt.Subject)
-	// nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- returnTo passed sanitizeReturnTo at login: a same-app path, never a host
-	http.Redirect(w, r, p.returnTo, http.StatusFound)
+	}, nil
 }
 
 // startSession stores a new session and hands the browser its id. It is the one place a whole
@@ -567,19 +598,28 @@ func (a *app) startSession(w http.ResponseWriter, r *http.Request, s session, ma
 	if old, err := r.Cookie(sessionCookieName); err == nil {
 		a.auth.endSession(old.Value)
 	}
+	sid, err := a.auth.storeSession(s)
+	if err != nil {
+		return err
+	}
+	setCookie(w, sessionCookieName, sid, maxAge)
+	return nil
+}
+
+// storeSession stores a new session and returns its id. A cookie or a phone's bearer token carries it.
+func (auth *authenticator) storeSession(s session) (string, error) {
 	var sid string
 	var err error
-	if a.auth.sealer != nil {
-		sid, err = a.auth.sealer.seal(s)
+	if auth.sealer != nil {
+		sid, err = auth.sealer.seal(s)
 	} else {
 		sid, err = randomToken()
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
-	a.auth.sessions.put(sid, s)
-	setCookie(w, sessionCookieName, sid, maxAge)
-	return nil
+	auth.sessions.put(sid, s)
+	return sid, nil
 }
 
 // deniedPageTmpl is the ENTIRE first impression for an authenticated-but-unauthorised identity —
@@ -745,6 +785,11 @@ func (a *app) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if a.handleAuthUnavailable(w) {
+		return
+	}
+	if sid, _, ok := a.auth.bearerSession(r); ok {
+		a.auth.endSession(sid) // the phone signing out; it holds no cookie to clear
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if ck, err := r.Cookie(sessionCookieName); err == nil {

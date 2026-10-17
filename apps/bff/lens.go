@@ -86,6 +86,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/auth/callback", a.handleCallback)
 	a.mux.HandleFunc("/auth/logout", a.handleLogout)
 	a.mux.HandleFunc("/auth/me", a.handleMe)
+	a.mux.HandleFunc("/auth/mobile/session", a.handleMobileSession)
 	// B17.2 — a synthetic test user signs in with the operator key; 404 unless LENS_SYNTHETIC_KEY
 	// is set. See synthetic.go.
 	a.mux.HandleFunc("/auth/synthetic", a.handleSyntheticSignIn)
@@ -766,7 +767,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Anything added here goes in WITH a reason, and it must carry its own authentication — an
 // Origin exemption is not a pass on authenticating the caller.
 func originExemptPath(path string) bool {
-	return oauthMachinePath(path)
+	return oauthMachinePath(path) || path == mobileSessionPath // the phone app; the ID token is its proof
 }
 
 // sameOriginWriteAllowed is the SINGLE decider. Reads are never gated: applying this to GET
@@ -794,6 +795,13 @@ func (a *app) sameOriginWriteAllowed(r *http.Request) bool {
 	}
 	if originExemptPath(r.URL.Path) {
 		return true
+	}
+	// A Bearer session is the phone app's, and it is then the request's only identity
+	// (sessionAndIDFrom): a cross-site page can neither set that header nor borrow a cookie through it.
+	if a.auth != nil {
+		if _, _, ok := a.auth.bearerSession(r); ok {
+			return true
+		}
 	}
 	return r.Header.Get("Origin") == a.cfg.publicBaseURL
 }

@@ -215,7 +215,7 @@ func TestDocsNudge_FailureDoesNotAbortLogin(t *testing.T) {
 	for name, file := range bffSourceFiles(t) {
 		ast.Inspect(file, func(n ast.Node) bool {
 			fn, ok := n.(*ast.FuncDecl)
-			if !ok || fn.Body == nil || fn.Name.Name != "handleCallback" ||
+			if !ok || fn.Body == nil || fn.Name.Name != "provisionSession" ||
 				!callsFunc(fn, "nudgeDocsMemberSync") {
 				return true
 			}
@@ -245,7 +245,7 @@ func TestDocsNudge_FailureDoesNotAbortLogin(t *testing.T) {
 		})
 	}
 	if !checked {
-		t.Fatal("handleCallback no longer calls nudgeDocsMemberSync — either the nudge was removed " +
+		t.Fatal("provisionSession (the login step handleCallback and the phone sign-in share) no longer calls nudgeDocsMemberSync — either the nudge was removed " +
 			"(first-visit Docs writes 403 until the next sweep) or this guard has drifted")
 	}
 }

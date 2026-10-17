@@ -73,6 +73,7 @@ without.
 | `OIDC_ISSUER` | — | `oidc`: discovery base URL |
 | `OIDC_CLIENT_ID` | — | `oidc` |
 | `OIDC_CLIENT_SECRET` | — | `oidc`: confidential client; PKCE is on top, not instead |
+| `OIDC_MOBILE_CLIENT_IDS` | (empty) | `oidc`: the phone app's client ids, comma-separated; its ID token is traded at `POST /auth/mobile/session` for a Bearer session. Empty: that route answers 404 |
 | `OIDC_ALLOWED_EMAILS` | — | `oidc`: comma-separated, or `*` for any authenticated identity |
 | `BFF_SESSION_TTL` | `12h` | absolute session lifetime; sessions are in-memory |
 | `OPERATOR_SUBS` | — | OIDC `sub`s that may read every tenant. Unset means **nobody** |

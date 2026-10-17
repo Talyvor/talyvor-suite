@@ -237,8 +237,9 @@ type fakeIDP struct {
 	// knobs
 	sub           string
 	email         string
-	emailVerified *bool // nil = omit the claim entirely
-	wrongNonce    bool  // mint the id_token with a corrupted nonce
+	emailVerified *bool  // nil = omit the claim entirely
+	wrongNonce    bool   // mint the id_token with a corrupted nonce
+	aud           string // mint for this audience instead of clientID (the phone app's clients)
 }
 
 type idpCode struct{ challenge, nonce, redirectURI string }
@@ -360,6 +361,9 @@ func (f *fakeIDP) mintIDToken(nonce string) string {
 	claims := map[string]any{
 		"iss": f.srv.URL, "sub": f.sub, "aud": f.clientID,
 		"exp": now.Add(5 * time.Minute).Unix(), "iat": now.Unix(), "nonce": nonce,
+	}
+	if f.aud != "" {
+		claims["aud"] = f.aud
 	}
 	if f.email != "" {
 		claims["email"] = f.email
