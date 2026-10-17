@@ -193,12 +193,15 @@ async function useIt(button: RegExp | string) {
 
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   vi.restoreAllMocks()
   queryClient.clear()
 })
 
 describe('listing page 2', () => {
   it('rents a listing from its page in the buyer’s currency, then uses it with no new bill line', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-08T10:00:00Z'))
     const { bill, sent } = mockBff()
     await at('/marketplace/listings/lst_rent')
     const offer = await screen.findByTestId('listing-offer')
@@ -212,6 +215,11 @@ describe('listing page 2', () => {
     await waitFor(() => expect(within(screen.getByTestId('listing-offer')).getByTestId('offer-price').textContent).toBe('€21.82'))
 
     fireEvent.click(within(screen.getByTestId('listing-offer')).getByRole('button', { name: 'Rent' }))
+    // B41.90 — checkout says what the 14-day holdback protects and until when: before Lens lists invoices, this
+    // month's bill is charged on the 1st of the next.
+    expect((await screen.findByTestId('buyer-protection')).textContent).toBe(
+      'Buyer protection until 15 Nov 2026. The seller is paid 14 days after your bill is paid — this one on 1 Nov 2026. Until then, if a listing does not do what it says, you get your money back.',
+    )
     fireEvent.click(await screen.findByRole('button', { name: 'Rent for $20.00' }))
     const held = await screen.findByTestId('listing-held')
     expect(held.textContent).toContain('You rent it under the commercial licence until 7 Nov 2026, following its latest version')
