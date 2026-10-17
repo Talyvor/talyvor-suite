@@ -7,6 +7,9 @@
 //   B39.33 — then, on the same Docs, the author's own email switches (B39.32, …/notification-preferences): the defaults
 //     read approval.requested on and freshness.digest off, freshness.digest is turned on and reads back on, an unknown
 //     kind is refused 400, and a workspace the author is not a member of is refused 403.
+//   B39.34 — before asking, the author, the workspace's owner, brands its mail (B39.20, …/email-branding, the route
+//     Settings → Email branding sets): a colour of "red" is refused 400, the brand is taken 200, and both mails are
+//     From "<from_name> via Talyvor" with that colour and logo in their HTML part.
 // Docs keeps no roster of its own: workspace_members mirrors Track's, so the run seeds that mirror in its own database
 // the way Docs' tests do, in place of the sync from a Track this run does not start.
 
@@ -36,10 +39,10 @@ export function docsApprovalEmail(seed: number): Scenario {
   return {
     id: 'docs-approval-email',
     owner: 'talyvor-docs',
-    items: ['B39.16', 'B39.28', 'B39.32', 'B39.33'],
+    items: ['B39.16', 'B39.28', 'B39.32', 'B39.33', 'B39.34'],
     feature: 'Docs approval-request email',
     title: 'Docs approval-request email: asking two reviewers to approve a page writes exactly two outbox rows, both sent, ' +
-      'and two mails at the SMTP stub, one to each; a comment on the page writes no row; a member switches the stale-page ' +
+      'and two mails at the SMTP stub, one to each, From "<brand> via Talyvor" with the owner\'s colour and logo; a comment on the page writes no row; a member switches the stale-page ' +
       'digest on and reads it back, and is refused an unknown kind (400) and another workspace (403)',
     run: async (ctx) => {
       const src = ctx.env.docsSrc
@@ -73,7 +76,7 @@ export function docsApprovalEmail(seed: number): Scenario {
         const ws = `ws_e2e_${probe}`
         const [author, carol, dave]: Who[] = ['author', 'carol', 'dave'].map((n) => ({ email: `${n}-${probe}@e2e.talyvor.test`, id: `mbr_${n}_${probe}` }))
         await sql(`INSERT INTO workspace_members (workspace_id, email, role, member_id) VALUES ${
-          [author, carol, dave].map((m) => `('${ws}', '${m.email}', 'member', '${m.id}')`).join(', ')}`)
+          [author, carol, dave].map((m) => `('${ws}', '${m.email}', '${m === author ? 'owner' : 'member'}', '${m.id}')`).join(', ')}`)
 
         const secret = randomBytes(32).toString('hex')
         const listen = await freePort()
@@ -115,6 +118,13 @@ export function docsApprovalEmail(seed: number): Scenario {
         if (page.status !== 201 && page.status !== 200) return { pass: false, detail: `the page was not made: ${page.status} ${page.text}` }
         const onPage = `${pages}/${encodeURIComponent(page.value.id)}`
 
+        // B39.34 — the owner brands the workspace's mail, as Settings → Email branding does.
+        const brand = { from_name: `Acme ${probe}`, header_color: '#1E40AF', logo_url: 'https://example.com/logo.png' }
+        const red = await call('PUT', `/workspaces/${encodeURIComponent(ws)}/email-branding`, { ...brand, header_color: 'red' })
+        if (red.status !== 400) return { pass: false, detail: `a header colour of "red" was answered ${red.status}, not 400: ${red.text}` }
+        const branded = await call('PUT', `/workspaces/${encodeURIComponent(ws)}/email-branding`, brand)
+        if (branded.status !== 200) return { pass: false, detail: `the owner could not brand the workspace's mail: ${branded.status} ${branded.text}` }
+
         const asked = await call('POST', `${onPage}/approval`, { reviewers: [carol.id, dave.id], message: `please check, e2e ${probe}` })
         if (asked.status !== 201) return { pass: false, detail: `approval was not requested: ${asked.status} ${asked.text}` }
         const askedAt = Date.now()
@@ -129,6 +139,15 @@ export function docsApprovalEmail(seed: number): Scenario {
         const to = smtp.got.map((m) => m.to.join(',')).sort()
         const want = [carol.email, dave.email].sort()
         if (to.join(';') !== want.join(';')) return { pass: false, detail: `the stub got ${smtp.got.length} mail(s) to ${to.join('; ')}, not one each to ${want.join(' and ')}` }
+        for (const m of smtp.got) {
+          const fromLine = /^From: .*$/m.exec(m.data)?.[0] ?? ''
+          const html = m.data.split(/^Content-Type: text\/html.*$/m)[1] ?? ''
+          ctx.evidence.push({ note: `the branded mail to ${m.to.join(',')}: ${fromLine}; HTML header ${/<tr><td style="background:[^"]*">.*?<\/td>/.exec(html)?.[0] ?? '(none)'}` })
+          if (!fromLine.includes(`${brand.from_name} via Talyvor`)) return { pass: false, detail: `the mail to ${m.to.join(',')} is not From "${brand.from_name} via Talyvor": ${fromLine}` }
+          if (!html.includes(`background:${brand.header_color}`) || !html.includes(`src="${brand.logo_url}"`)) {
+            return { pass: false, detail: `the mail to ${m.to.join(',')} lacks the colour ${brand.header_color} or the logo ${brand.logo_url} in its HTML part: ${html.slice(0, 600)}` }
+          }
+        }
 
         const said = await call('POST', `${onPage}/comments`, { content: `a comment from e2e ${probe}` })
         if (said.status !== 201) return { pass: false, detail: `the comment was not posted: ${said.status} ${said.text}` }
@@ -157,7 +176,7 @@ export function docsApprovalEmail(seed: number): Scenario {
         }
         if (unknown.status !== 400) return { pass: false, detail: `an unknown kind answered ${unknown.status}, not 400: ${unknown.text}` }
         if (elsewhere.status !== 403) return { pass: false, detail: `a workspace the author is not a member of answered ${elsewhere.status}, not 403: ${elsewhere.text}` }
-        return { pass: true, detail: `one request to two reviewers, two outbox rows sent and one mail each to ${want.join(' and ')}; a comment wrote no row and sent nothing; ` +
+        return { pass: true, detail: `one request to two reviewers, two outbox rows sent and one mail each to ${want.join(' and ')}, From "${brand.from_name} via Talyvor" with its colour and logo ("red" refused 400); a comment wrote no row and sent nothing; ` +
           'the digest switched on and read back on, an unknown kind 400, another workspace 403' }
       } finally {
         docs?.kill()

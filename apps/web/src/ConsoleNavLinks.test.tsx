@@ -114,6 +114,7 @@ const SIDEBAR_DESTINATIONS = [
   '/settings/verification',
   '/settings/terms',
   '/settings/webhooks',
+  '/settings/email-branding',
   // B30.97 — the first Money item: invoices and their pay links.
   '/money/invoices',
   '/money/pay',

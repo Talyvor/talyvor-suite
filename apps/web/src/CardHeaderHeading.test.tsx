@@ -177,6 +177,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B30.103 — every capability with terms, in one card.
   '/settings/terms': 1,
   '/settings/webhooks': 0,
+  '/settings/email-branding': 0,
   // B30.97 — the accounts, the new invoice form, and the invoices issued.
   '/money/invoices': 3,
   // B30.96 — payees, send, payments out, standing orders, mandates and bulk payouts.

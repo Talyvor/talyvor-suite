@@ -392,6 +392,9 @@ func TestDocsWorkspacePathOnlyForWorkspaceScopedUpstreamRoutes(t *testing.T) {
 		"docsWebhooks:/webhooks":      "GET|POST /v1/workspaces/{wsID}/webhooks — internal/webhooks/handler.go Mount",
 		"docsDeleteWebhook:/webhooks": "DELETE /v1/workspaces/{wsID}/webhooks/{id} — internal/webhooks/handler.go Mount",
 		"docsRotateWebhook:/webhooks": "POST /v1/workspaces/{wsID}/webhooks/{id}/rotate — internal/webhooks/handler.go Mount",
+		// B39.34 — talyvor-docs c790d0a (B39.20): internal/email/branding.go Mount registers GET and PUT
+		// `/workspaces/{wsID}/email-branding`, and each one's first act is AuthorizeWorkspace on that {wsID}; PUT then needs owner.
+		"docsEmailBranding:/email-branding": "GET|PUT /v1/workspaces/{wsID}/email-branding — internal/email/branding.go Mount",
 	}
 
 	type site struct{ fn, suffix string }
