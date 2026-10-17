@@ -659,6 +659,21 @@ describe('conversation history', () => {
     expect(said.filter((t) => t.includes('No conversations yet'))).toEqual([])
   })
 
+  // B17.215 — a question typed before the saved conversations are read stays in a new chat: reopening the latest one
+  // under it would send it there.
+  it('keeps a new chat being typed into when the saved conversations arrive', async () => {
+    seed('user-a', { id: 'a', title: 'Kept', updated_at: 1 })
+    let known!: () => void
+    mockChat({ identityAfter: new Promise<void>((resolve) => (known = resolve)) })
+    renderChat()
+    expect(await screen.findByText('Reading who is signed in…')).toBeTruthy()
+    fireEvent.change(await screen.findByPlaceholderText('Ask anything'), { target: { value: 'A new question' } })
+    known()
+    expect(await screen.findByRole('button', { name: 'Kept' })).toBeTruthy()
+    expect(screen.queryByTestId('turn-assistant')).toBeNull()
+    expect((screen.getByPlaceholderText('Ask anything') as HTMLTextAreaElement).value).toBe('A new question')
+  })
+
   it('is not shown to a different account on the same browser', async () => {
     seed('user-a', { id: 'a', title: 'Private', updated_at: 1 })
     mockChat({ sub: 'user-b' })

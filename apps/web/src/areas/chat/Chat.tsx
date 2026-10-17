@@ -453,6 +453,8 @@ export function Chat() {
   const temporaryRef = useRef(temporary)
   temporaryRef.current = temporary
   const unsavedRef = useRef<Conversation[]>([])
+  const draftRef = useRef(draft)
+  draftRef.current = draft
 
   // Reopening the tab lands on the most recent conversation — "it is still there", literally.
   // A conversation begun before the identity was known is saved under it now, and stays on screen.
@@ -474,7 +476,8 @@ export function Chat() {
     setHistory(read)
     // B28.110 — an archived conversation was put away, so a reload does not reopen it.
     // B28.131 — a temporary chat begun before who is signed in was known stays open.
-    if (!temporaryRef.current) open(read.list.find((c) => !c.archived))
+    // B17.215 — and so does a new chat already being typed into: the question would land in the reopened one.
+    if (!temporaryRef.current && draftRef.current.trim() === '') open(read.list.find((c) => !c.archived))
   }, [scope, open])
 
   useEffect(() => {
