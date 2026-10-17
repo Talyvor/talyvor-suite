@@ -756,7 +756,7 @@ async function agentAsks(ctx: ScenarioCtx, key: string, prompt: string, note: st
       : listPriceUSD(model, reply.inputTokens, reply.outputTokens)
   env.cap.settle(hold, cost)
   if (!reply.replayed) env.book.add(app.user.workspaceID, reply.pooledULXC ?? chargeULXC(cost, env.usdPerLXC))
-  ctx.evidence.push({ note, question: prompt, answer: reply.text })
+  ctx.evidence.push({ note, question: prompt, answer: reply.text, served: reply.served })
   return r
 }
 

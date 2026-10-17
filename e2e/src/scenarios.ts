@@ -110,6 +110,8 @@ export interface Evidence {
   answer?: string
   footer?: string
   error?: string
+  /** B28.458 — the Lens path that served the answer (lens.ts servedBy): its request id, cache, routing, fallback, node. */
+  served?: string
   ledger?: { type: string; amount_ulxc: number; created_at: string }[]
   /** B29.21 — a screenshot of what the note describes, as the day's report links it. */
   shot?: string

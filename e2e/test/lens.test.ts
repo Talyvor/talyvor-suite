@@ -1,6 +1,8 @@
 import { createServer, type Server } from 'node:http'
 import { afterEach, describe, expect, it } from 'vitest'
-import { LensClient } from '../src/lens.ts'
+import { itemsFor } from '../src/filing.ts'
+import { LensClient, servedBy } from '../src/lens.ts'
+import { type ReportedRun, renderRun } from '../src/report.ts'
 
 // B17.32 — user 146's marketplace use was charged, and the read-back that books it met a Lens answering
 // 502: the use went unbooked and the ledger read "4 spend rows for 3 charged answers". A ledger read now
@@ -94,4 +96,38 @@ describe("Lens's synthetic limit (B17.201)", () => {
     expect(incidents).toHaveLength(2)
     expect(incidents[1]).toMatch(/POST \/v1\/synthetic\/workspaces met Lens's synthetic limit \(at most 10 synthetic calls a minute\); waited 1s and sent it again \(2 of 3\)/)
   }, 10_000)
+})
+
+// B28.458 — agent-pause-all's "9792" for 6235 + 3767 came three nights running, and nothing in the report said whether
+// the model, a stored or pooled answer, a fallback model or a node served it. An agent's answer now names its path.
+describe('the path that served an agent its answer (B28.458)', () => {
+  const served = { 'X-Talyvor-Request-ID': 'req_42', 'X-Talyvor-Cache': 'semantic', 'X-Talyvor-Routed': 'haiku-sonnet',
+    'X-Talyvor-Fallback-Model': 'm2', 'X-Talyvor-Model-Override': 'm3', 'X-Talyvor-Node-Served': 'node_7',
+    'X-Talyvor-Local-Model': 'llama', 'X-Talyvor-Cache-Replay': 'true', 'X-Talyvor-Pool-Charged-ULXC': '420' }
+
+  it('reads each header Lens set into the reply, and the report and its filed item name it', async () => {
+    server = createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json', ...served })
+        .end(JSON.stringify({ content: [{ type: 'text', text: '9792' }], usage: { input_tokens: 1, output_tokens: 1 } }))
+    })
+    await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r))
+    const { port } = server.address() as { port: number }
+    const r = await new LensClient(`http://127.0.0.1:${port}`, 'key').askAsAgent('agent_key', 'anthropic', 'm', 'What is 6235 + 3767?', 16)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.value.served).toBe('replayed, pooled 420 µLXC, X-Talyvor-Request-ID: req_42, X-Talyvor-Cache: semantic, ' +
+      'X-Talyvor-Routed: haiku-sonnet, X-Talyvor-Fallback-Model: m2, X-Talyvor-Model-Override: m3, X-Talyvor-Node-Served: node_7, X-Talyvor-Local-Model: llama')
+
+    const run: ReportedRun = {
+      started_at: '2026-10-09T01:00:00.000Z', finished_at: '2026-10-09T01:10:00.000Z', app: 'https://app', lens: 'https://lens',
+      users: 1, model: 'm', cap_usd: 5, spent_usd: 0, stopped_at_cap: false, counts: { PASS: 0, FAIL: 1, SKIP: 0, ERROR: 0 },
+      outcomes: [{ scenario: 'agent-pause-all', title: 'pause all', user: 42, workspace: 'ws42', status: 'FAIL', detail: 'answered wrong',
+        evidence: [{ note: 'started again', question: 'What is 6235 + 3767?', answer: r.value.text, served: r.value.served }] }],
+    }
+    expect(renderRun(run)).toContain(`  - served: ${r.value.served}`)
+    expect(itemsFor('# queue\n', run, 'r.md').append).toContain(`→ "9792" [] (served: ${r.value.served})`)
+  })
+
+  it('says when nothing was replayed or pooled and Lens set none of the headers', async () => {
+    expect(servedBy(new Headers())).toBe('not replayed, no pooled charge')
+  })
 })
