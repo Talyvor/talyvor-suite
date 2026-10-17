@@ -558,6 +558,7 @@ func TestLeakSweep_CoversEveryMountedWriteRoute(t *testing.T) {
 	so, soSid := sameOriginApp(t)
 	op, opSess, _ := operatorApp(t, []string{"sub-operator"})
 	prod, prodSess := productApp(t, newCaptureUpstream(t, `[{"id":"ws-t1"}]`), newCaptureUpstream(t, `[{"id":"sp-1"}]`))
+	asst, asstSess := oauthApp(t)
 
 	fixtures := []struct {
 		name   string
@@ -567,10 +568,13 @@ func TestLeakSweep_CoversEveryMountedWriteRoute(t *testing.T) {
 		// EMPTY IS NOT "unset by accident": productApp has no publicBaseURL, and the single
 		// Origin rule compares Origin against it, so sending none is what that app accepts.
 		origin string
+		// bearer is an assistant's OAuth access token (B40.6): the only credential /mcp takes.
+		bearer string
 	}{
-		{"same-origin", so, &http.Cookie{Name: sessionCookieName, Value: soSid}, testPublicOrigin},
-		{"product", prod, prodSess, ""},
-		{"operator", op, opSess, opOrigin},
+		{"same-origin", so, &http.Cookie{Name: sessionCookieName, Value: soSid}, testPublicOrigin, ""},
+		{"product", prod, prodSess, "", ""},
+		{"operator", op, opSess, opOrigin, ""},
+		{"assistant", asst, asstSess, oauthOrigin, seedOAuthToken(asst)},
 	}
 
 	// One body naming every field the swept handlers read. A handler that decodes none of them
@@ -607,6 +611,9 @@ func TestLeakSweep_CoversEveryMountedWriteRoute(t *testing.T) {
 					req.Header.Set("Origin", f.origin)
 				}
 				req.AddCookie(f.cookie)
+				if f.bearer != "" {
+					req.Header.Set("Authorization", "Bearer "+f.bearer)
+				}
 				rec := httptest.NewRecorder()
 				f.a.ServeHTTP(rec, req)
 

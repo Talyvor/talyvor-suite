@@ -467,6 +467,12 @@ func everyMutatingRoute() []mutatingRoute {
 // is wired to a real handler, the exemption stops applying and the route must be swept or
 // re-justified. A bare "/api/admin/ is exempt" would have hidden exactly that day.
 var notSweptWrite = map[string]string{
+	"/oauth/authorize": "B40.6 — Origin-GATED, but it answers in the BFF and writes nothing upstream, so this table's arrival " +
+		"assertion cannot hold for it; TestOAuthFlowAsClaudeRunsIt posts a consent from another site and asserts the 403",
+	"/oauth/register": "B40.6 — exempt from the Origin rule (oauthMachinePath): an assistant's server sends no Origin, and the call creates nothing a person has agreed to",
+	"/oauth/token":    "B40.6 — exempt (oauthMachinePath): an assistant's server calls it with the PKCE verifier or refresh token as its credential",
+	"/oauth/revoke":   "B40.6 — exempt (oauthMachinePath): the token being revoked is its own credential",
+	"/mcp":            "B40.6 — exempt (oauthMachinePath): an assistant's bearer token, never the cookie, is what it accepts",
 	"/auth/logout": "a browser POST the app issues at itself; it is swept by TestLogout_RefusesCrossOrigin, " +
 		"which drives it directly rather than through this table because it has no JSON body and no upstream.",
 	"/api/admin/billing/purchases":   "operator read surface, adminNotWired — see the note above",
