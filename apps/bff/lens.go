@@ -1089,7 +1089,10 @@ func (a *app) forwardProductWith(w http.ResponseWriter, r *http.Request, product
 	req.Header.Set("X-User-Email", sess.email) // the workspace-membership join key
 	req.Header.Set("X-User-Id", sess.sub)
 	req.Header.Set("X-Auth-Iss", a.cfg.oidcIssuer)
-	for k, v := range extra { // server-side headers only, and never one of the four above
+	if sess.workspaceID != "" { // the Lens workspace Docs and Track bill this caller's AI cost to
+		req.Header.Set("X-Talyvor-Workspace", sess.workspaceID)
+	}
+	for k, v := range extra { // server-side headers only, and never one of the five above
 		if req.Header.Get(k) == "" {
 			req.Header[k] = v
 		}
