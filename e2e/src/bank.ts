@@ -2852,7 +2852,7 @@ export function chatScheduledPrompt(seed: number): Scenario {
         }
         if (answer === '') return fail('the scheduled prompt was answered, but the card shows no answer')
         if (!statesNumber(answer, want)) ctx.evidence.push({ note: `the model's answer does not state ${want}; the prompt still ran on ${agent.name}'s wallet` })
-        if (!added.some((l) => l.kind === 'spend' && l.entry_id === run.entry_id) || net >= 0) {
+        if (!added.some((l) => requestLine(l) && l.entry_id === run.entry_id) || net >= 0) {
           return fail(`the scheduled prompt was answered, but its charge is not on ${agent.name}'s statement: the run names line ${run.entry_id ?? '(none)'}, the new lines are ${JSON.stringify(added)} — a scheduled prompt is billed to the paying agent's wallet (B28.125)`)
         }
         if (run.charged_ulxc !== -net) return fail(`the run says it took ${run.charged_ulxc} µLXC from ${agent.name}; its statement's new lines come to ${-net}`)

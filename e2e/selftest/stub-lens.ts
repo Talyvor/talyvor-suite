@@ -671,7 +671,7 @@ function runPromptSchedule(s: PromptSchedule, now: number): void {
       const charge = Math.ceil((((tokens(s.prompt) + 8) * model.input_per_1m + tokens(answer) * model.output_per_1m) / 1e6 / USD_PER_LXC) * 1e6)
       const fee = book(ws, -charge, 'spend', `${model.id} answer (scheduled prompt)`)
       ws.usage.total++
-      const entry = broke('schedule-free') ? undefined : bank.spent(agent, charge, model.id, fee)
+      const entry = broke('schedule-free') ? undefined : bank.spent(agent, charge, model.id, fee, 'hold')
       s.runs.unshift({ ran_at, outcome: 'answered', answer, request_id: 'req_' + randomBytes(8).toString('hex'),
         charged_ulxc: broke('schedule-free') ? 0 : charge + fee, ...(entry === undefined ? {} : { entry_id: entry }) })
     }
