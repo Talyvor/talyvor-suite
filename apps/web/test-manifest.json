@@ -107,6 +107,7 @@
   "src/areas/lens/OperatorWorkspaces.test.tsx": 3,
   "src/areas/lens/Overview.test.tsx": 23,
   "src/areas/lens/Pay.test.tsx": 3,
+  "src/areas/lens/PlainLanguage.test.tsx": 2,
   "src/areas/lens/Plan.test.tsx": 3,
   "src/areas/lens/PlanChange.test.tsx": 2,
   "src/areas/lens/PlanRenewal.test.tsx": 2,
