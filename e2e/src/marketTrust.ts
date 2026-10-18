@@ -4,7 +4,7 @@
 // paid for it reviews it and is refused (PUT …/marketplace/listings/{id}/review, 403). Two new buyers each make one billed
 // use of it (POST …/listings/{id}/use) and review it, 5 and 3; the seller replies to the 3 (PUT …/reviews/{id}/reply). A
 // fourth workspace is linked to the seller by a card both paid with (talyvor-lens B32.102's synthetic card link), makes a
-// billed use, and is refused too. The workspace refused first then pays for a use, and reviews nothing.
+// use Lens answers as a wash trade (charge linked, 0 µLXC, nothing on its bill: talyvor-lens B20.2), and is refused too. The workspace refused first then pays for a use, and reviews nothing.
 //
 // Lens's reads are the oracle. Each paying buyer's bill holds its one billed use of the listing (market_uses), not
 // refunded: what makes it a paying buyer. The trust read (GET /v1/marketplace/listings/{id}/trust) counts the reviews of
@@ -62,14 +62,17 @@ export function marketTrust(seed: number): Scenario {
       const refused = (what: string, r: Answered<Review>): string | undefined =>
         r.status === 403 ? undefined : `${what} must be refused 403 reviewing the listing; Lens answered ${said(r)}`
 
-      // A use, billed: its market_uses row is the one line for the listing on its buyer's bill.
-      const pay = async (who: SyntheticUser, what: string): Promise<Use | string> => {
+      // A use, billed: its market_uses row is the one line for the listing on its buyer's bill. Any other charge is free and
+      // puts no line for the listing there.
+      const pay = async (who: SyntheticUser, what: string, charge = 'billed'): Promise<Use | string> => {
+        const price = charge === 'billed' ? PRICE_ULXC : 0
         const u = await lens.act<Use>(who, 'POST', `/v1/workspaces/{ws}/marketplace/listings/${id}/use`, { variables: { word: 'trusted' } })
         ctx.evidence.push({ note: `${what} (${who.workspaceID}) uses the listing`, answer: said(u) })
         if (!u.ok) return `${what}'s use of the listing was refused: ${said(u)}`
-        if (u.value.charge !== 'billed' || u.value.price_ulxc !== PRICE_ULXC) return `${what}'s use ${u.value.id} answered charge ${u.value.charge} at ${u.value.price_ulxc} µLXC, not billed at ${PRICE_ULXC}`
+        if (u.value.charge !== charge || u.value.price_ulxc !== price) return `${what}'s use ${u.value.id} answered charge ${u.value.charge} at ${u.value.price_ulxc} µLXC, not ${charge} at ${price}`
         const lines = ((await lens.marketBill(who)).lines ?? []).filter((l) => l.listing_id === id)
         ctx.evidence.push({ note: `${what}'s bill, the listing's lines`, answer: JSON.stringify(lines) })
+        if (charge !== 'billed') return lines.length === 0 ? u.value : `${what}'s use was ${charge}, so its bill should hold no line for the listing; it holds ${JSON.stringify(lines)}`
         if (lines.length !== 1 || lines[0].use_id !== u.value.id || lines[0].price_ulxc !== PRICE_ULXC || lines[0].refunded_at !== undefined) {
           return `${what}'s bill should hold its use ${u.value.id} as the one line for the listing, ${PRICE_ULXC} µLXC, not refunded; it holds ${JSON.stringify(lines)}`
         }
@@ -89,15 +92,15 @@ export function marketTrust(seed: number): Scenario {
         if (typeof u === 'string') return fail(u)
       }
 
-      // A buyer linked to the seller by a card both paid with pays for a use, and is refused.
+      // A buyer linked to the seller by a card both paid with uses it as a wash trade, charged nothing, and is refused.
       const link = await lens.linkCard(linked, seller)
       ctx.evidence.push({ note: `a fourth workspace (${linked.workspaceID}) and the seller pay with one card (synthetic card link)`, answer: said(link) })
       if (!link.ok) return fail(`linking a fourth workspace to the seller by a card (POST /v1/synthetic/workspaces/{ws}/card-link, talyvor-lens B32.102) was refused: ${said(link)}`)
-      const u = await pay(linked, 'the buyer linked to the seller')
+      const u = await pay(linked, 'the buyer linked to the seller', 'linked')
       if (typeof u === 'string') return fail(u)
       const r = await review(linked, 5, 'My own listing, five stars.')
       ctx.evidence.push({ note: 'the buyer linked to the seller reviews it 5', answer: said(r) })
-      const no = refused('a buyer who paid for a use but shares a card with the seller', r)
+      const no = refused('a buyer who used it but shares a card with the seller', r)
       if (no !== undefined) return fail(no)
 
       // The two paying buyers review it; the seller replies to the 3.
@@ -143,7 +146,7 @@ export function marketTrust(seed: number): Scenario {
 
       return { pass: true, detail: `${written.length} paying buyers' billed uses on their bills, reviews ${written.map((w, n) => `${w.id} ${RATINGS[n]}`).join(' and ')} counted: ` +
         `count 2, average ${AVERAGE}, stars ${JSON.stringify(STARS)}, the seller's reply on the ${RATINGS[1]}; a workspace that never paid was refused 403 and, ` +
-        `once it paid (${late.id}), still nothing of its counted; a buyer sharing a card with the seller paid for a use and was refused 403; ` +
+        `once it paid (${late.id}), still nothing of its counted; a buyer sharing a card with the seller used it as a wash trade, charged linked at 0 µLXC with nothing on its bill, and was refused 403; ` +
         "MCP market_listing's trust equals the read" }
     },
   }

@@ -6,7 +6,8 @@
 // with its seller, may review it, and only such buyers' reviews are counted — asked at every read, as Lens asks. The Bank
 // (stub-bank.ts) holds the listings and the uses; this desk keeps the reviews and the cards. Its defects:
 //   review-refused-kept — a buyer who never paid is refused 403, but its review is written anyway, and counts once it pays
-//   review-linked       — a buyer sharing a card with the seller may review, and is counted
+//   review-linked       — a buyer sharing a card with the seller may review, though its use was free, and is counted
+//   linked-billed       — a buyer sharing a card with the seller is billed for a use, not charged linked (Bank's use route)
 //   trust-mcp-unreplied — market_listing's trust leaves the seller's replies out
 //   card-link-missing   — no synthetic card link, as on a Lens without B32.102: 404, which market-trust FAILs
 
@@ -45,13 +46,14 @@ export class TrustDesk {
     this.d = d
   }
 
-  private linked(a: string, b: string): boolean {
+  /** Whether two workspaces share a card: a use between them is a wash trade, charged linked (talyvor-lens B20.2). */
+  linked(a: string, b: string): boolean {
     const mine = this.cards.get(a)
     return mine !== undefined && [...(this.cards.get(b) ?? [])].some((c) => mine.has(c))
   }
 
   private counts(r: StubReview, seller: string): boolean {
-    return this.d.paid(r.listing_id, r.buyer) && (!this.linked(seller, r.buyer) || this.d.broken('review-linked'))
+    return this.linked(seller, r.buyer) ? this.d.broken('review-linked') : this.d.paid(r.listing_id, r.buyer)
   }
 
   private out(r: StubReview, replies = true): object {
@@ -101,7 +103,7 @@ export class TrustDesk {
       const l = this.d.listing(m[1], ws)
       if (l === undefined) return json(res, 404, { error: 'market: no such listing' }), true
       const paid = this.d.paid(l.id, ws)
-      const may = l.workspace_id !== ws && paid && (!this.linked(l.workspace_id, ws) || this.d.broken('review-linked'))
+      const may = l.workspace_id !== ws && (this.linked(l.workspace_id, ws) ? this.d.broken('review-linked') : paid)
       const had = this.reviews.find((x) => x.listing_id === l.id && x.buyer === ws)
       const fresh = (): StubReview => ({ id: `mrv_${randomBytes(8).toString('hex')}`, listing_id: l.id, buyer: ws, rating, text, reply: '', created_at: now, updated_at: now })
       if (!may) {
