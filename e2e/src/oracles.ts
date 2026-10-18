@@ -194,6 +194,30 @@ export function freshWords(seed: number, n: number, salt = RUN_SALT): string {
   return Array.from({ length: n }, (_, i) => freshWord(seed * 16 + i, salt)).join(' ')
 }
 
+const SUM_TOPICS: readonly [who: string, things: string][] = [
+  ['beekeeper', 'hives'], ['librarian', 'atlases'], ['baker', 'sourdough loaves'], ['lighthouse keeper', 'lamp wicks'],
+  ['glassblower', 'vases'], ['marine biologist', 'tagged turtles'], ['bicycle mechanic', 'inner tubes'], ['cheesemaker', 'wheels of gouda'],
+  ['astronomer', 'meteor sightings'], ['florist', 'tulip bulbs'], ['blacksmith', 'horseshoes'], ['violin maker', 'spruce tops'],
+  ['orchard farmer', 'crates of apples'], ['museum curator', 'Roman coins'], ['park ranger', 'trail markers'], ['potter', 'glazed bowls'],
+]
+const SUM_PLACES = ['Lisbon', 'Kyoto', 'Reykjavik', 'Nairobi', 'Montreal', 'Valparaíso', 'Tbilisi', 'Hobart', 'Marrakesh', 'Bergen', 'Oaxaca', 'Hanoi']
+const SUM_FRAMES: readonly ((who: string, things: string, place: string) => string)[] = [
+  (w, t, p) => `A ${w} in ${p} keeps ${t} in two sheds: {{a}} in the first and {{b}} in the second. How many ${t} are there in all?`,
+  (w, t, p) => `Over a rainy weekend in ${p}, a ${w} counted {{a}} ${t} on Saturday and {{b}} on Sunday. What is the weekend's total?`,
+  (w, t, p) => `For the harvest fair in ${p}, a ${w} ordered {{a}} ${t} from one supplier and {{b}} from another. Add the two orders together.`,
+  (w, t, p) => `The ${w}s' guild of ${p} holds {{a}} ${t} in its old hall and {{b}} in the new one. How many does the guild hold?`,
+]
+
+/**
+ * B17.244 — a word problem whose answer is {{a}} + {{b}}, its topic drawn from real words by `seed` and `salt`. Lens holds a
+ * publish as a copy by meaning (B32.46: the embedding cosine), which made-up words barely move; a topic of its own does.
+ */
+export function sumTask(seed: number, salt = RUN_SALT): string {
+  const r = seeded(salt * 7919 + seed)
+  const [who, things] = SUM_TOPICS[Math.floor(r() * SUM_TOPICS.length)]
+  return SUM_FRAMES[Math.floor(r() * SUM_FRAMES.length)](who, things, SUM_PLACES[Math.floor(r() * SUM_PLACES.length)])
+}
+
 /**
  * B35.8 — the testers' own network failing, not the feature: the browser's "Failed to fetch", Chromium's net::ERR_ codes
  * (ERR_INTERNET_DISCONNECTED, ERR_NETWORK_CHANGED, …) and the BFF's 502 when it cannot reach Lens.

@@ -10,7 +10,7 @@ import type { Locator, Page } from 'playwright'
 import { type AppUser, chargeULXC } from './app.ts'
 import { worstInputTokens } from './budget.ts'
 import type { Agent, AgentBook, AgentLine, AgentRulesRead, Answered, JudgeReply, LedgerRow, SyntheticUser } from './lens.ts'
-import { freshWords, listPriceUSD, seeded, statesNumber } from './oracles.ts'
+import { listPriceUSD, seeded, statesNumber, sumTask } from './oracles.ts'
 import { keptOf, percent, platformFeeBPS } from './fees.ts'
 import { feeVerdict } from './pricing.ts'
 import { otherCompanyOnTeam } from './room.ts'
@@ -614,13 +614,14 @@ async function said(scope: Locator): Promise<string> {
   return (await note.innerText()).trim()
 }
 
-/** Marketplace → Publish: a prompt listing; answers its id, or Lens's refusal. */
-export async function publishPrompt(app: AppUser, l: { title: string; template: string; priceULXC: number; model: string }): Promise<{ id?: string; error?: string }> {
+/** Marketplace → Publish: a prompt listing, public unless it says otherwise; answers its id, or Lens's refusal or copy hold. */
+export async function publishPrompt(app: AppUser, l: { title: string; template: string; priceULXC: number; model: string; visibility?: 'public' | 'unlisted' }): Promise<{ id?: string; error?: string }> {
   const page = await app.tab('/marketplace/publish')
   try {
     // B29.11 — the kind is picked by its icon, one toggle of the group named Kind.
     await page.getByRole('group', { name: 'Kind' }).getByRole('button', { name: 'Prompt', exact: true }).click()
     // A label that wraps a select or a hint names its control with them too: matched by its start.
+    if (l.visibility !== undefined) await page.getByRole('combobox', { name: /^Visibility/ }).selectOption(l.visibility)
     await page.getByLabel('Price per use, in LXC').fill(lxcText(l.priceULXC))
     await page.getByLabel('Title', { exact: true }).fill(l.title)
     await page.getByRole('textbox', { name: /^Template/ }).fill(l.template)
@@ -632,7 +633,14 @@ export async function publishPrompt(app: AppUser, l: { title: string; template: 
     await page.waitForURL(/\/marketplace\/listings\/[^/]+$/, { timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
     const m = /\/marketplace\/listings\/([^/?#]+)$/.exec(page.url())
     if (m !== null) return { id: decodeURIComponent(m[1]) }
-    return { error: (await refused.count()) > 0 ? (await refused.first().innerText()).trim() : `still on ${page.url()}` }
+    if ((await refused.count()) > 0) return { error: (await refused.first().innerText()).trim() }
+    // B17.244 — Lens held it as a near-copy (B32.46): the note names the listing it is nearest to and how similar.
+    const held = page.getByTestId('similar-hold')
+    if ((await held.count()) > 0) {
+      const nearest = await held.getByRole('link').first().getAttribute('href')
+      return { error: `${(await held.locator('p').first().innerText()).trim()} (${nearest})` }
+    }
+    return { error: `still on ${page.url()}` }
   } finally {
     await page.close()
   }
@@ -3561,7 +3569,8 @@ export function marketplaceSale(seed: number, partner: number): Scenario {
   const b = 100 + Math.floor(r() * 900)
   const price = 500_000
   // B17.222 — mostly words of the run's own, so its score against every earlier night's approved listing stays well under Lens's copy hold (B32.46).
-  const template = `What is {{a}} + {{b}}? ${NUMBER_ONLY} (${freshWords(seed * 37 + 7, 12)})`
+  // B17.244 — a topic of the run's own, published unlisted: Lens compares a publish with approved public listings only, so the nightly adders stop holding each other as copies.
+  const template = `${sumTask(seed * 37 + 7)} ${NUMBER_ONLY}`
   return {
     id: 'marketplace-sale',
     owner: 'talyvor-lens',
@@ -3571,7 +3580,7 @@ export function marketplaceSale(seed: number, partner: number): Scenario {
       const seller = await env.signInUser(partner)
       let published
       try {
-        published = await publishPrompt(seller, { title: `Adder ${seed}-${a}`, template, priceULXC: price, model: app.modelNameInUse })
+        published = await publishPrompt(seller, { title: `Adder ${seed}-${a}`, template, priceULXC: price, model: app.modelNameInUse, visibility: 'unlisted' })
       } finally {
         await seller.close()
       }

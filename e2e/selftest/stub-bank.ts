@@ -234,7 +234,16 @@ interface Listing {
   changelogs?: Record<number, string>
   /** B32.90 — what it can do, from MARKET_CAPABILITIES in their order */
   capabilities?: string[]
+  /** B17.244 — the approved public listing of another workspace its first version was held as a copy of (Lens B32.46) */
+  similar?: { listing_id: string; title: string; score: number; remixable: boolean }
 }
+
+/**
+ * B17.244 — an adder's meaning, as the stub tells copies apart: its template without what it says in brackets. Only the
+ * scenarios' adders ({{a}} + {{b}}) are compared; the stub models no other copy.
+ */
+const gist = (a: Record<string, unknown>): string =>
+  typeof a.template === 'string' && a.template.includes('{{a}} + {{b}}') ? a.template.replace(/\([^)]*\)/g, '').trim() : ''
 /** B32.90 — Lens market.Collection: a curator's list of listings, in its order; the operator features one. */
 interface StubCollection { id: string; workspace_id: string; title: string; description: string; public: boolean; featured: boolean; featured_at?: string; listing_ids: string[]; created_at: string; updated_at: string }
 /** B34.4 — Lens market.Offer, a listing's licence remix grant and lineage edge, a licence, and a simulated portfolio. */
@@ -1060,7 +1069,7 @@ export class Bank {
     // B28.162 — every version, each with its own artifact and changelog.
     return { ...rest, versions: Object.entries(l.artifacts ?? { 1: artifact }).map(([n, a]) => ({ version: Number(n),
       artifact_sha256: createHash('sha256').update(JSON.stringify(a)).digest('hex'), changelog: l.changelogs?.[Number(n)] ?? changelog,
-      scan: {}, created_at: l.created_at, needs: { input: l.kind === 'agent' || l.kind === 'skill', variables: vars, model: String(a.model ?? '') },
+      scan: l.similar === undefined || n !== '1' ? {} : { similar: l.similar }, created_at: l.created_at, needs: { input: l.kind === 'agent' || l.kind === 'skill', variables: vars, model: String(a.model ?? '') },
       ...(viewer === l.workspace_id ? { artifact: a } : {}) })) }
   }
 
@@ -2281,6 +2290,13 @@ export class Bank {
       // Lens's scan names the phrases it read as an injection (market/scan.go), on the version it held.
       const injection = [...new Set([...`${b.title} ${b.description ?? ''} ${JSON.stringify(b.artifact)}`.matchAll(new RegExp(READS_AS_INJECTION.source, 'gi'))].map((x) => x[0].toLowerCase()))]
       if (injection.length > 0) Object.assign(l, { review_status: 'held', review_reason: `version 1: it may be a prompt injection (${injection.join(', ')})` })
+      // B17.244 — a publish is compared with every approved public listing of another workspace, whatever its own visibility.
+      const copied = gist(b.artifact) === '' || parents.length > 0 ? undefined
+        : [...this.listings.values()].find((o) => o.workspace_id !== ws.id && o.review_status === 'approved' && o.visibility === 'public' && gist(o.artifact) === gist(b.artifact!))
+      if (copied !== undefined && l.review_status === 'approved') {
+        Object.assign(l, { review_status: 'held', review_reason: `version 1: it is 100% similar to "${copied.title}", which it does not declare as a parent`,
+          similar: { listing_id: copied.id, title: copied.title, score: 1, remixable: false } })
+      }
       const priced = (b.offers ?? []).length > 0 ? this.setOffers(l, b.offers ?? [], now) : undefined
       if (priced !== undefined) return json(res, 400, { error: priced }), true
       this.listings.set(l.id, l)
