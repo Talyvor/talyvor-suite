@@ -450,6 +450,16 @@ func (a *app) handleAIStream() http.HandlerFunc {
 		w.Header().Set("X-Accel-Buffering", "no")
 		w.WriteHeader(resp.StatusCode)
 		relayFlushing(w, resp.Body)
+		// B17.228 — an answer about a Track issue is added to the issue's AI cost now, not at Track's next sync.
+		if issue != "" && resp.StatusCode == http.StatusOK {
+			if in, ok := a.trackSpendFor(r); ok {
+				go func() {
+					ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Second)
+					defer cancel()
+					a.syncTrackSpend(ctx, in)
+				}()
+			}
+		}
 	})
 }
 
