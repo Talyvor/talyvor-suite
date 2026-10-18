@@ -732,14 +732,14 @@ async function oneCharge(ctx: ScenarioCtx, fresh: readonly LedgerRow[]): Promise
  * An agent asks one question with its own key. Its worst case is held against the cap first; a served
  * answer is booked, as every charged answer is, for the ledger read-back.
  */
-async function agentAsks(ctx: ScenarioCtx, key: string, prompt: string, note: string, modelID = ctx.env.judgeModel): Promise<Answered<JudgeReply>> {
+async function agentAsks(ctx: ScenarioCtx, key: string, prompt: string, note: string, modelID = ctx.env.judgeModel, headers: Record<string, string> = {}): Promise<Answered<JudgeReply>> {
   const { env, app } = ctx
   const model = env.catalog.find((m) => m.id === modelID)
   if (model === undefined) throw new Error(`the catalog has no model ${modelID}`)
   const hold = env.cap.reserve(listPriceUSD(model, worstInputTokens(prompt.length), AGENT_MAX_TOKENS))
   let r: Answered<JudgeReply>
   try {
-    r = await env.lens.askAsAgent(key, env.judgeProvider, modelID, prompt, AGENT_MAX_TOKENS)
+    r = await env.lens.askAsAgent(key, env.judgeProvider, modelID, prompt, AGENT_MAX_TOKENS, headers)
   } catch (e) {
     env.cap.settle(hold, undefined)
     throw e
@@ -1447,7 +1447,9 @@ export function agentPauseAll(seed: number): Scenario {
       const again = await bank.resumeAll()
       if (again !== undefined) return fail(`Start every agent again was refused: ${again}`)
       const { q, want } = sum(r)
-      const t = await agentAsks(ctx, agents[0].key, q, `${agents[0].a.name}, started again`)
+      // B28.459 — past every stored answer, as rules.ts asks: "served" means the model answered. A wrong answer stored
+      // once was replayed to every night's fresh workspace from the shared pool; the fresh answer replaces it.
+      const t = await agentAsks(ctx, agents[0].key, q, `${agents[0].a.name}, started again`, undefined, { 'X-Talyvor-Cache': 'bypass' })
       if (!t.ok) return fail(`started again, ${agents[0].a.name} is still refused: ${t.status} ${t.error}`)
       if (!statesNumber(t.value.text, want)) return fail(`answered wrong: expected ${want}, got "${t.value.text}"`)
       return { pass: true, detail: 'both agents refused (403, every agent paused) with nothing charged; started again, served' }
