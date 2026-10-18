@@ -484,6 +484,8 @@ function think(messages: Msg[]): string {
   if ((m = /What is (\d+) \+ (\d+)\?/.exec(q))) return String(Number(m[1]) + Number(m[2]))
   if ((m = /What is (\d+) times (\d+)\?/.exec(q))) return String(Number(m[1]) * Number(m[2]))
   if ((m = /what is (\d+) minus (\d+)\?/i.exec(q))) return String(Number(m[1]) - Number(m[2]))
+  // B17.244 — the marketplace adders' word problems (oracles.ts sumTask): the sum of their two numbers.
+  if ((m = /(\d+)\D+?(\d+)\D*?(?:in all\?|total\?|together\.|guild hold\?)/.exec(q))) return String(Number(m[1]) + Number(m[2]))
   if ((m = /^Is (\d+)( not)? greater than (\d+)\?/.exec(q))) return (Number(m[1]) > Number(m[3])) !== (m[2] !== undefined) ? 'Yes' : 'No'
   if (/^Let x = \d+/.test(q)) return 'OK'
   if ((m = /What is x \+ (\d+)\?/.exec(q))) return String(Number(/Let x = (\d+)/.exec(all)?.[1] ?? NaN) + Number(m[1]))

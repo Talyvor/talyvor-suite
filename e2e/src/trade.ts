@@ -19,7 +19,7 @@ import type { Agent, BillLine, Listing, Loan, MarketEarnings, MarketJournal, Mar
 import { ACTION_TIMEOUT_MS, type AgentBankScreen, agentIn, bookOf, card, fail, lxcText, openAgent, publishPrompt, runListing, spendRows, withBank } from './bank.ts'
 import { worstInputTokens } from './budget.ts'
 import { keptOf, percent } from './fees.ts'
-import { RUN_SALT, freshWord, freshWords, listPriceUSD, seeded, statesNumber } from './oracles.ts'
+import { RUN_SALT, freshWord, freshWords, listPriceUSD, seeded, statesNumber, sumTask } from './oracles.ts'
 import { otherCompanyOnTeam } from './room.ts'
 import { CannotTest, type Scenario, type ScenarioCtx } from './scenarios.ts'
 
@@ -708,8 +708,8 @@ export function marketTakedown(seed: number, seller: number): Scenario {
   const a = 100 + Math.floor(r() * 900)
   const b = 100 + Math.floor(r() * 900)
   const price = 300_000
-  // B17.222 — mostly words of the run's own, so its score against every earlier night's approved listing stays well under Lens's copy hold (B32.46).
-  const template = `What is {{a}} + {{b}}? Reply with the number only. (${freshWords(seed * 43 + 3, 12)})`
+  // B17.244 — a topic of the run's own, so it is not every earlier night's approved adder by meaning (Lens B32.46); public, so its takedown leaves the catalog.
+  const template = `${sumTask(seed * 43 + 3)} Reply with the number only.`
   return {
     id: 'market-takedown',
     owner: 'talyvor-lens',
@@ -784,8 +784,8 @@ export function marketAbuse(seed: number): Scenario {
   const a = 100 + Math.floor(r() * 900)
   const b = 100 + Math.floor(r() * 900)
   const price = 400_000
-  // B17.222 — mostly words of the run's own, so its score against every earlier night's approved listing stays well under Lens's copy hold (B32.46).
-  const template = `What is {{a}} + {{b}}? Reply with the number only. (${freshWords(seed * 47 + 5, 12)})`
+  // B17.244 — a topic of the run's own, so it is not every earlier night's approved adder by meaning (Lens B32.46); unlisted, so it never joins what they are compared with.
+  const template = `${sumTask(seed * 47 + 5)} Reply with the number only.`
   // An access key's shape, made at run time so no key-shaped literal sits in this file.
   const key = 'AKIA' + Array.from({ length: 16 }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'[Math.floor(r() * 32)]).join('')
   return {
@@ -804,7 +804,7 @@ export function marketAbuse(seed: number): Scenario {
       if ((await env.lens.ownListings(app.user)).some((l) => l.title === keyed)) return fail("refused, the listing carrying the key is among the seller's listings")
 
       const title = `Own sums ${seed}-${a}`
-      const published = await publishPrompt(app, { title, template, priceULXC: price, model: app.modelNameInUse })
+      const published = await publishPrompt(app, { title, template, priceULXC: price, model: app.modelNameInUse, visibility: 'unlisted' })
       ctx.evidence.push({ note: `publish "${title}" at ${lxcText(price)} LXC a use: ${published.id ?? published.error}` })
       if (published.id === undefined) return fail(`publishing was refused: ${published.error}`)
       const id = published.id
