@@ -7,7 +7,7 @@ import type { Evidence, ScenarioCtx, Verdict } from '../src/scenarios.ts'
 
 // B32.89 — market-trust against the stub Lens (selftest/stub-trust.ts, stub-bank.ts): it passes on a Lens whose trust
 // panel counts only the reviews of buyers who paid for a use and share no card with the seller, and FAILs when a refused
-// review is written anyway, when a linked buyer may review, and when MCP's trust differs from the read.
+// review is written anyway, when a linked buyer is billed or may review, and when MCP's trust differs from the read.
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -44,7 +44,7 @@ async function runAgainstStub(broken: string): Promise<{ verdict: Verdict; evide
 describe('market-trust (B32.89)', () => {
   it('passes on a Lens that counts only paying buyers not linked to the seller, and answers MCP the same', async () => {
     const { verdict, evidence } = await runAgainstStub('')
-    expect(verdict.detail).toMatch(/^2 paying buyers' billed uses on their bills, reviews mrv_\w+ 5 and mrv_\w+ 3 counted: count 2, average 4, stars \[0,0,1,0,1\], the seller's reply on the 3; a workspace that never paid was refused 403 and, once it paid \(use_\w+\), still nothing of its counted; a buyer sharing a card with the seller paid for a use and was refused 403; MCP market_listing's trust equals the read$/)
+    expect(verdict.detail).toMatch(/^2 paying buyers' billed uses on their bills, reviews mrv_\w+ 5 and mrv_\w+ 3 counted: count 2, average 4, stars \[0,0,1,0,1\], the seller's reply on the 3; a workspace that never paid was refused 403 and, once it paid \(use_\w+\), still nothing of its counted; a buyer sharing a card with the seller used it as a wash trade, charged linked at 0 µLXC with nothing on its bill, and was refused 403; MCP market_listing's trust equals the read$/)
     expect(verdict.pass).toBe(true)
     expect(evidence.map((e) => `${e.note} ${e.answer ?? ''}`).join('\n')).toMatch(/the buyer linked to the seller reviews it 5 refused 403: market: only a buyer who paid/)
   })
@@ -61,10 +61,16 @@ describe('market-trust (B32.89)', () => {
     expect(verdict.detail).toMatch(/^only the two paying buyers' reviews count, but the trust read holds more — a refused review was written .*: count 3, average 4\.33/)
   })
 
+  it('FAILs when a buyer sharing a card with the seller is billed for its use', async () => {
+    const { verdict } = await runAgainstStub('linked-billed')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^the buyer linked to the seller's use use_\w+ answered charge billed at 1000000 µLXC, not linked at 0$/)
+  })
+
   it('FAILs when a buyer sharing a card with the seller may review', async () => {
     const { verdict } = await runAgainstStub('review-linked')
     expect(verdict).toMatchObject({ pass: false })
-    expect(verdict.detail).toMatch(/^a buyer who paid for a use but shares a card with the seller must be refused 403 reviewing the listing; Lens answered 200/)
+    expect(verdict.detail).toMatch(/^a buyer who used it but shares a card with the seller must be refused 403 reviewing the listing; Lens answered 200/)
   })
 
   it("FAILs when MCP market_listing's trust leaves the seller's reply out", async () => {

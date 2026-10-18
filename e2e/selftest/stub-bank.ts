@@ -2415,7 +2415,9 @@ export class Bank {
       const model = b.model || String(artifact.model ?? '')
       if (model === '') return json(res, 400, { error: 'market: this listing names no model, so the use must' }), true
       const covered = l.workspace_id === ws.id ? undefined : this.coveringLicence(ws.id, l.id, agent, now)
-      let charge = l.workspace_id === ws.id && !this.broken('self-use-billed') ? 'own' : covered !== undefined ? 'licensed' : l.price_per_use_ulxc === 0 ? 'free' : 'billed'
+      let charge = l.workspace_id === ws.id && !this.broken('self-use-billed') ? 'own'
+        : this.trustDesk.linked(l.workspace_id, ws.id) && !this.broken('linked-billed') ? 'linked'
+        : covered !== undefined ? 'licensed' : l.price_per_use_ulxc === 0 ? 'free' : 'billed'
       // B32.79 — a billed use is a trial while the buyer has one of the listing's trial uses left.
       const given = (l.offers ?? []).find((o) => o.kind === 'per_use' && o.licence === 'commercial')?.trial_uses ?? 0
       const had = this.uses.filter((u) => u.buyer === ws.id && u.listing_id === l.id && u.trial_ulxc !== undefined).length
