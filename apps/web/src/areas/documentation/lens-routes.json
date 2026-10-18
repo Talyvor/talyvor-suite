@@ -346,9 +346,7 @@
         { "method": "GET", "path": "/v1/tokens/rates", "does": "What each kind of contribution earns" },
         { "method": "GET", "path": "/v1/economy/stats", "does": "Network-wide figures" },
         { "method": "GET", "path": "/v1/economy/conversion-rate", "does": "The current LENS to LXC rate" },
-        { "method": "GET", "path": "/v1/economy/conversion-rate/history", "does": "Past LENS to LXC rates" },
-        { "method": "GET", "path": "/v1/insights/routing", "does": "Routing patterns across opted-in workspaces" },
-        { "method": "GET", "path": "/v1/oracle/stats", "does": "Price oracle figures" }
+        { "method": "GET", "path": "/v1/economy/conversion-rate/history", "does": "Past LENS to LXC rates" }
       ]
     },
     {
