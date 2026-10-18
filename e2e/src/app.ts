@@ -359,6 +359,9 @@ export class AppUser {
 
   async newChat(): Promise<void> {
     this.conversationChars = 0
+    // B17.236 — the thread is drawn only once the model catalog is read; before that no question is on screen even with a
+    // conversation open, and skipping the click left the question to go into that conversation.
+    await this.page.getByText('Reading the model catalog…').waitFor({ state: 'hidden' })
     // The button is disabled on an empty conversation, which is already a new chat.
     if ((await this.page.locator('[data-testid="turn-user"]').count()) === 0) return
     await this.page.getByRole('button', { name: 'New chat' }).first().click()
