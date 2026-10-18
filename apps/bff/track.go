@@ -25,10 +25,12 @@ package main
 // parameter cannot misrepresent the result).
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // trackIssueFilterKeys are the opaque-value filters forwarded verbatim
@@ -182,6 +184,12 @@ func (a *app) trackIssueDetail() http.HandlerFunc {
 		ws, ok := a.trackWorkspaceFor(w, r)
 		if !ok {
 			return
+		}
+		// B17.228 — the issue's AI cost includes the Chat answers asked about it, credited before it is read.
+		if in, ok := a.trackSpendFor(r); ok {
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			a.syncTrackSpend(ctx, in)
+			cancel()
 		}
 		a.forwardProduct(w, r, "track", a.cfg.trackBaseURL, a.cfg.trackGatewaySecret,
 			trackWorkspacePath(ws, "/issues/"+url.PathEscape(id)), "", http.MethodGet, nil, nil)

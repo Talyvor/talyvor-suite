@@ -54,6 +54,9 @@ type app struct {
 
 	// oauth is Talyvor Connect's authorization server for outside assistants (oauth.go).
 	oauth *oauthServer
+
+	// trackSpendSynced is when each Track workspace last asked Track to credit its Chat spend (track_spend.go).
+	trackSpendSynced sync.Map
 }
 
 func newApp(cfg config, auth *authenticator) *app {
