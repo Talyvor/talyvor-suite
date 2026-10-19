@@ -59,6 +59,7 @@
 //   key-listed  — the workspace's list of API keys shows each key whole (B28.287)
 //   ratelimit-open — the rate limiter lets every request through, as Lens's does when Redis errors and it fails open (B28.288)
 //   retry-after — a request the rate limiter refuses is answered 429 without Retry-After (B28.288)
+//   ws-limits-ignored — a workspace an operator gave limits of its own is held to the defaults all the same (B39.35)
 //   ratelimit-open-later — the rate limiter holds for the first workspace that bursts it and lets every one after through,
 //                 as Lens's does once Redis starts erroring after the night's own run (B28.292: only the deep pass FAILs)
 //   web-search  — Search the web is ignored: nothing is searched, and an answer cites no page (B28.372)
@@ -535,30 +536,43 @@ function json(res: ServerResponse, status: number, body: unknown, headers: Recor
 }
 
 /**
- * B28.288 — Lens's rate limiter (talyvor-lens internal/ratelimit, its DefaultRules' second): 100 requests a second a key,
- * the one past it answered 429 with Retry-After, X-RateLimit-Remaining 0 and the window it hit. Counted on the workspace
- * read alone (GET /v1/workspaces/{ws}, which rate-limits-hold bursts), so no other scenario's requests are refused here.
- * STUB_BREAK=ratelimit-open lets every request through, as Lens's limiter does when Redis errors; retry-after refuses
- * without saying when to come back.
+ * B28.288 — Lens's rate limiter (talyvor-lens internal/ratelimit, its DefaultRules): 100 requests a second and 1,000 a
+ * minute a key, the first window past its limit answered 429 with Retry-After, X-RateLimit-Remaining 0 and the window it
+ * hit. Counted on the workspace read alone (GET /v1/workspaces/{ws}, which rate-limits-hold and workspace-limits-raised
+ * burst), so no other scenario's requests are refused here. STUB_BREAK=ratelimit-open lets every request through, as
+ * Lens's limiter does when Redis errors; retry-after refuses without saying when to come back; ws-limits-ignored holds a
+ * workspace an operator raised to the defaults (B39.35).
  */
-const PER_SECOND = 100
+const DEFAULT_LIMITS = { requests_per_second: 100, requests_per_minute: 1000, requests_per_hour: 10_000 }
+/** talyvor-lens B39.9 — the workspaces an operator gave limits of their own (PUT /v1/admin/workspaces/{ws}/rate-limits). */
+const wsLimits = new Map<string, typeof DEFAULT_LIMITS>()
 const windows = new Map<string, { from: number; n: number }>()
 /** The first workspace a burst took past the limit, for STUB_BREAK=ratelimit-open-later. */
 let firstBurst: string | undefined
 function limited(res: ServerResponse, ws: string, credential: string): boolean {
   const now = Date.now()
-  const seen = windows.get(`${ws}:${credential}`)
-  const w = seen === undefined || now - seen.from >= 1000 ? { from: now, n: 0 } : seen
-  w.n++
-  windows.set(`${ws}:${credential}`, w)
-  if (w.n > PER_SECOND) firstBurst ??= ws
-  if (w.n <= PER_SECOND || broke('ratelimit-open') || (broke('ratelimit-open-later') && firstBurst !== ws)) {
-    res.setHeader('X-RateLimit-Remaining', String(Math.max(PER_SECOND - w.n, 0)))
+  const rule = (broke('ws-limits-ignored') ? undefined : wsLimits.get(ws)) ?? DEFAULT_LIMITS
+  let hit: { limit_type: string; secs: number } | undefined
+  let remaining = Infinity
+  // As Lens: each window in turn, and the first past its limit refuses without counting the ones after it.
+  for (const [name, ms, limit] of [['second', 1000, rule.requests_per_second], ['minute', 60_000, rule.requests_per_minute]] as const) {
+    const seen = windows.get(`${ws}:${credential}:${name}`)
+    const w = seen === undefined || now - seen.from >= ms ? { from: now, n: 0 } : seen
+    w.n++
+    windows.set(`${ws}:${credential}:${name}`, w)
+    if (w.n > limit) {
+      hit = { limit_type: name, secs: Math.max(1, Math.ceil((w.from + ms - now) / 1000)) }
+      break
+    }
+    remaining = Math.min(remaining, limit - w.n)
+  }
+  if (hit !== undefined) firstBurst ??= ws
+  if (hit === undefined || broke('ratelimit-open') || (broke('ratelimit-open-later') && firstBurst !== ws)) {
+    res.setHeader('X-RateLimit-Remaining', String(hit === undefined ? remaining : 0))
     return false
   }
-  const secs = Math.max(1, Math.ceil((w.from + 1000 - now) / 1000))
-  json(res, 429, { error: 'rate limit exceeded', limit_type: 'second', retry_after_seconds: secs },
-    { ...(broke('retry-after') ? {} : { 'Retry-After': String(secs) }), 'X-RateLimit-Remaining': '0' })
+  json(res, 429, { error: 'rate limit exceeded', limit_type: hit.limit_type, retry_after_seconds: hit.secs },
+    { ...(broke('retry-after') ? {} : { 'Retry-After': String(hit.secs) }), 'X-RateLimit-Remaining': '0' })
   return true
 }
 
@@ -1189,6 +1203,19 @@ createServer(async (req, res) => {
     if (p === '/v1/admin/screening') {
       if (bearer === '' || ![process.env.STUB_OPERATOR_READ_KEY, process.env.STUB_ADMIN_KEY].includes(bearer)) return json(res, 401, { error: 'admin credentials required' })
       return json(res, 200, { lists: [], cases: bank.complianceCases(url.searchParams.get('status') ?? ''), fuzzy_threshold_bps: 9000 })
+    }
+    // talyvor-lens B39.9 — one workspace's own request limits, on the admin key, as Lens: an omitted one keeps its default.
+    const limitsOf = /^\/v1\/admin\/workspaces\/([^/]+)\/rate-limits$/.exec(p)
+    if (limitsOf !== null) {
+      if (bearer === '' || bearer !== process.env.STUB_ADMIN_KEY) return json(res, 401, { error: 'admin credentials required' })
+      const ws = limitsOf[1]
+      if (req.method === 'PUT') {
+        const set = { ...DEFAULT_LIMITS, ...(JSON.parse(await read(req)) as Partial<typeof DEFAULT_LIMITS>) }
+        if (!Object.values(set).every((n) => Number.isInteger(n) && n > 0)) return json(res, 400, { error: 'every limit must be a positive whole number' })
+        wsLimits.set(ws, set)
+      } else if (req.method === 'DELETE') wsLimits.delete(ws)
+      const own = wsLimits.get(ws)
+      return json(res, 200, { workspace_id: ws, custom: own !== undefined, ...(own ?? DEFAULT_LIMITS) })
     }
     // talyvor-lens B30.11 — the reconciliation runs and the safeguarding view, on the operator read key or the admin key, as Lens.
     if (p === '/v1/admin/reconciliation' || p === '/v1/admin/safeguarding') {
