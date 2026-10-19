@@ -98,7 +98,7 @@ import { fileBombBounded, ssrfRefused } from './ssrf.ts'
 import { csrfRefused, phoneBearer, scriptInert } from './session.ts'
 import { connectOAuth } from './connect.ts'
 import { keysNotForwarded, keysUnlisted } from './keys.ts'
-import { rateLimitsHold } from './ratelimit.ts'
+import { rateLimitsHold, workspaceLimitsRaised } from './ratelimit.ts'
 import { marketDiscoverScreen, marketDiscovery } from './discovery.ts'
 import { royaltiesNotHeadline } from './royalties.ts'
 import { statementLineKinds } from './statementKinds.ts'
@@ -5132,6 +5132,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.288 — Lens's rate limiter, once a run, on a workspace of its own: a burst of reads at once on one token is refused
   // past the limit, each refusal saying when to come back, and the next read once that has passed is served.
   if (i === 7) list.push(rateLimitsHold())
+  // B39.35 — one workspace's own request limits, once a run, on two workspaces of its own: raised on the admin key, its
+  // 1,001st read in a minute is served while the other's is refused for the minute, and deleted it is back on the defaults.
+  if (i === 7) list.push(workspaceLimitsRaised())
   // B32.90 — the marketplace's search, collections and trending, once a run, on workspaces of its own: searched by
   // capability and price it finds only what matches, a collection lists its listings in order, and a featured one is first.
   if (i === 5) list.push(marketDiscovery())
