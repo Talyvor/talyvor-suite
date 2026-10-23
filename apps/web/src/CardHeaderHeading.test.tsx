@@ -178,6 +178,8 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/settings/terms': 1,
   '/settings/webhooks': 0,
   '/settings/email-branding': 0,
+  // B40.8 — one card per assistant.
+  '/settings/connect': 8,
   // B30.97 — the accounts, the new invoice form, and the invoices issued.
   '/money/invoices': 3,
   // B30.96 — payees, send, payments out, standing orders, mandates and bulk payouts.

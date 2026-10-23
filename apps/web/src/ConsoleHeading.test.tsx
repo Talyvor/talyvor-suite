@@ -109,6 +109,7 @@ const PINNED: Readonly<Record<string, string>> = {
   '/settings/terms': 'Capability terms',
   '/settings/webhooks': 'Webhooks',
   '/settings/email-branding': 'Email branding',
+  '/settings/connect': 'Connect your AI',
   '/money/invoices': 'Invoices',
   '/money/pay': 'Pay',
   '/features': 'Features',

@@ -6,6 +6,7 @@
 //     serves), each take the person through the consent screen in the browser — the three scopes in plain words — and
 //     back to a loopback callback with the code, the state and iss; the code and its PKCE verifier buy an access token
 //     /mcp takes. The refresh token rotates, a rotated one sent again ends the connection, and a revoked token is refused.
+//     B40.8: a third client shows on Settings → Connect your AI with its last use, and its Revoke button ends it.
 // A CIMD document must be at a public https address, so it is served through a Cloudflare quick tunnel; with
 // --hook-tunnel none (the self-test) a second DCR client takes its place and the evidence says so.
 
@@ -42,10 +43,11 @@ export function connectOAuth(): Scenario {
     id: 'connect-oauth',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B40.6'],
+    items: ['B40.6', 'B40.8'],
     feature: 'Talyvor Connect',
     title: 'an assistant signs in the way Claude does: a 401 naming resource_metadata, discovery, a client by DCR and one by CIMD, ' +
-      'PKCE and the consent screen in the browser, the token and a rotating refresh — and a revoked token is refused',
+      'PKCE and the consent screen in the browser, the token and a rotating refresh — and a revoked token is refused, ' +
+      'by the revocation endpoint and by its button on Settings → Connect your AI',
     run: async (ctx) => {
       const origin = new URL(ctx.app.page.url()).origin
       const wrong: string[] = []
@@ -102,6 +104,9 @@ export function connectOAuth(): Scenario {
           if (typeof second === 'string') return { pass: false, detail: second }
           clients.push(second)
         }
+        const fromSettings = await register('Settings')
+        if (typeof fromSettings === 'string') return { pass: false, detail: fromSettings }
+        clients.push(fromSettings)
 
         // 3. Each client through the browser's consent screen to its token.
         const tokens: Record<string, Tokens> = {}
@@ -156,8 +161,28 @@ export function connectOAuth(): Scenario {
         if (live.status === 401) wrong.push(`the ${other.how} access token was refused before it was revoked`)
         if (rev.status !== 200 || dead.status !== 401) wrong.push(`revoking answered ${rev.status} and /mcp then answered ${dead.status}, not 200 and 401`)
 
+        // 6. B40.8: the third connection is on Settings → Connect your AI with its last use, and its button revokes it.
+        const page = ctx.app.page
+        const name = 'e2e assistant (Settings)'
+        const held = tokens.Settings
+        if (held === undefined) return { pass: false, detail: 'no Settings token to revoke from the page' }
+        await page.goto(`${origin}/settings/connect`)
+        const row = page.locator('li').filter({ hasText: name })
+        await row.waitFor({ timeout: 15_000 })
+        const rowText = (await row.innerText()).replace(/\s+/g, ' ')
+        const address = await page.getByText(`${origin}/mcp`, { exact: true }).count()
+        ctx.evidence.push({ note: `Settings → Connect your AI: address shown ${address > 0}; row "${rowText}"` })
+        if (address === 0) wrong.push(`the page does not show the address ${origin}/mcp`)
+        if (!/Last used (?!never)/.test(rowText)) wrong.push(`the connected assistant's row does not show its last use: "${rowText}"`)
+        await page.getByRole('button', { name: `Revoke ${name}` }).click()
+        await row.waitFor({ state: 'detached', timeout: 15_000 })
+        const revoked = await mcp(origin, held.access_token)
+        ctx.evidence.push({ note: `after its Revoke button: the row is gone; /mcp with its token ${revoked.status}` })
+        if (revoked.status !== 401) wrong.push(`/mcp answered ${revoked.status} to a token revoked from Settings, not 401`)
+        await page.goto(origin)
+
         return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
-          : { pass: true, detail: `${clients.map((c) => c.how).join(' and ')} clients signed in through the consent screen; refresh rotated, replay and revocation were refused` }
+          : { pass: true, detail: `${clients.map((c) => c.how).join(', ')} clients signed in through the consent screen; refresh rotated, replay and revocation were refused, and Settings listed and revoked one` }
       } finally {
         proc?.kill()
         server.closeAllConnections()
