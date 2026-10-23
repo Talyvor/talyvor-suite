@@ -62,6 +62,7 @@ import { OperatorTax } from './areas/lens/OperatorTax'
 import { OperatorCompliance } from './areas/lens/OperatorCompliance'
 import { VerificationScreen } from './areas/lens/Verification'
 import { CapabilityTermsScreen } from './areas/lens/CapabilityTerms'
+import { ConnectAI } from './areas/lens/ConnectAI'
 import { DocsEmailBranding } from './areas/docs/DocsEmailBranding'
 import { DocsWebhooks } from './areas/docs/DocsWebhooks'
 import { InvoicesScreen } from './areas/lens/Invoices'
@@ -281,6 +282,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/settings/webhooks', title: 'Webhooks', element: <DocsWebhooks /> },
   // B39.34 — a Docs workspace's owner sets the From name, header colour and logo of its Docs email.
   { path: '/settings/email-branding', title: 'Email branding', element: <DocsEmailBranding /> },
+  // B40.8 — the MCP address, how to add it to each assistant, and the assistants connected, each revocable.
+  { path: '/settings/connect', title: 'Connect your AI', element: <ConnectAI /> },
   // B30.97 — invoices from an agent's currency account, each with its public pay link.
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.
@@ -519,6 +522,7 @@ function Sidebar() {
         {item('/settings/terms', 'Capability terms', 'page')}
         {item('/settings/webhooks', 'Webhooks', 'plug')}
         {item('/settings/email-branding', 'Email branding', 'page')}
+        {item('/settings/connect', 'Connect your AI', 'plug')}
       </Group>
       {/* B18.25 — offered only to someone the BFF's operator gate will admit. */}
       {me.data?.operator ? (

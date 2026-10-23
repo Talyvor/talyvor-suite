@@ -129,6 +129,18 @@ const BODIES: Record<string, unknown> = {
   '/api/docs/membership': { member: true },
   // B39.34 — Settings → Email branding, as a workspace that branded its Docs email.
   '/api/docs/email-branding': { from_name: 'Acme Robotics', header_color: '#1E40AF', logo_url: '' },
+  // B40.8 — Settings → Connect your AI, with Claude connected and used.
+  '/api/connect/assistants': {
+    assistants: [
+      {
+        id: 'g-1',
+        name: 'Claude',
+        scopes: ['wallets:read', 'invoices:draft', 'payments:prepare'],
+        connected_at: '2026-10-20T09:00:00Z',
+        last_used_at: '2026-10-23T08:15:00Z',
+      },
+    ],
+  },
   '/auth/me': { mode: 'disabled', authenticated: false, user: null },
 
   '/api/context': {
