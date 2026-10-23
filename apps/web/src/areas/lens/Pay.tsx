@@ -7,12 +7,14 @@ import { formatWhen } from './format'
 import { CAPABILITIES_KEY, Note, readFailure } from './WalletMoney'
 import { APPROVALS_KEY, BOOK_KEY, PASSKEYS_KEY } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
-import { signApproval, signPayee } from './passkeys'
+import { assertOver, signApproval, signPayee } from './passkeys'
 import {
   type AgentApproval,
+  type AssistantRequest,
   type AgentSchedule,
   type CurrencyAccount,
   type Mandate,
+  type MandateTerms,
   type OutsidePayee,
   type OutsidePayment,
   type PayeeRequest,
@@ -36,6 +38,7 @@ export const PAYMENTS_KEY = ['money-payments']
 export const MANDATES_KEY = ['money-mandates']
 export const PAYOUTS_KEY = ['money-payouts']
 export const SCHEDULES_KEY = ['agent-schedules']
+export const ASSISTANT_REQUESTS_KEY = ['money-assistant-requests']
 /** What a payment out moves under: out of a currency account, through payments_out. */
 const PAY_CAPABILITIES = ['currency_accounts', 'payments_out']
 const EVERY: AgentSchedule['every'][] = ['hour', 'day', 'week', 'month']
@@ -62,7 +65,7 @@ const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString(
 const status = (s: string, of: Record<string, { text: string; pill: PillStatus }>) => of[s] ?? { text: s, pill: 'idle' as PillStatus }
 
 /** The payee's account details, as it gave them. */
-function detailsOf(p: OutsidePayee): string {
+function detailsOf(p: PayeeRequest): string {
   if (p.iban) return `${p.iban}${p.bic ? ` · ${p.bic}` : ''}`
   if (p.routing_number) return `${p.routing_number} · ${p.account_number ?? ''}`
   return `${p.sort_code ?? ''} · ${p.account_number ?? ''}`
@@ -74,6 +77,9 @@ export function PayScreen() {
   const payments = useQuery({ queryKey: PAYMENTS_KEY, queryFn: agentBankApi.payments })
   const caps = useQuery({ queryKey: CAPABILITIES_KEY, queryFn: agentBankApi.capabilities })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
+  const asked = useQuery({ queryKey: ASSISTANT_REQUESTS_KEY, queryFn: agentBankApi.assistantRequests })
+  const askedPayees = (asked.data?.requests ?? []).filter((r) => r.kind === 'payee')
+  const askedMandates = (asked.data?.requests ?? []).filter((r) => r.kind === 'mandate')
   const open = (accounts.data?.accounts ?? []).filter((a) => a.status === 'open')
   const agentAccounts = open.filter((a) => a.purpose === 'agent')
   const saved = payees.data?.payees ?? []
@@ -99,6 +105,12 @@ export function PayScreen() {
             <span>Payments leave with test money only for now.</span>
           </p>
         ) : null}
+        {askedPayees.length + askedMandates.length > 0 ? (
+          <p className="text-body text-ink" data-testid="pay-asked">
+            Your assistant is waiting for you: <span className="font-figure">{askedPayees.length}</span> {askedPayees.length === 1 ? 'payee' : 'payees'} to save and{' '}
+            <span className="font-figure">{askedMandates.length}</span> {askedMandates.length === 1 ? 'mandate' : 'mandates'} to sign, below.
+          </p>
+        ) : null}
         {payments.isSuccess ? (
           <p className="text-body text-ink" data-testid="pay-count">
             <span className="font-figure">{sent.length}</span> {sent.length === 1 ? 'payment' : 'payments'} out,{' '}
@@ -107,8 +119,10 @@ export function PayScreen() {
         ) : null}
       </Region>
       <Region index="01" label="Payees" heading="People and companies you pay" className="flex max-w-2xl flex-col gap-3">
+        {askedPayees.length > 0 ? <AssistantPayees requests={askedPayees} /> : null}
         {reading(payees, 'Your payees') ?? <Payees payees={saved} />}
       </Region>
+
       <Region index="02" label="Send" heading="Pay a saved payee" className="flex max-w-2xl flex-col gap-3">
         {reading(accounts, 'Your accounts') ??
           (open.length === 0 ? (
@@ -148,6 +162,11 @@ export function PayScreen() {
       <Region index="05" label="Bulk payouts" heading="Pay many at once from a file" className="flex max-w-2xl flex-col gap-3">
         <Payouts />
       </Region>
+      {askedMandates.length > 0 ? (
+        <Region index="06" label="Assistant permissions" heading="Sign what an assistant may pay for you" className="flex max-w-2xl flex-col gap-3">
+          <AssistantMandates requests={askedMandates} payeeName={payeeName} />
+        </Region>
+      ) : null}
     </RegionScreen>
   )
 }
@@ -266,6 +285,158 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
         </form>
       </div>
     </Card>
+  )
+}
+
+/** B40.35 — payees an assistant asked to add: none is a payee until the person presses Save, through the same route as the form. */
+function AssistantPayees({ requests }: { requests: AssistantRequest[] }) {
+  const qc = useQueryClient()
+  const [made, setMade] = useState<OutsidePayee | null>(null)
+  const done = () => {
+    void qc.invalidateQueries({ queryKey: ASSISTANT_REQUESTS_KEY })
+    void qc.invalidateQueries({ queryKey: PAYEES_KEY })
+  }
+  const save = useMutation({
+    mutationFn: async (r: AssistantRequest & { kind: 'payee' }) => {
+      const p = await agentBankApi.createPayee(r.details)
+      await agentBankApi.dismissAssistantRequest(r.id)
+      return p
+    },
+    onSuccess: (p) => {
+      setMade(p)
+      done()
+    },
+  })
+  const dismiss = useMutation({ mutationFn: agentBankApi.dismissAssistantRequest, onSuccess: done })
+  return (
+    <Card>
+      <CardHeader>Payees your assistant asked to add</CardHeader>
+      <div className="flex flex-col gap-3 px-gutter py-3">
+        <p className="text-caption text-muted">Check each against what the payee told you. Nothing is saved, or can be paid, until you press Save.</p>
+        <ul className="flex flex-col gap-2" aria-label="Payees your assistant asked to add">
+          {requests.map((r) =>
+            r.kind === 'payee' ? (
+              <li key={r.id} className="flex flex-col gap-2 border-b border-rule pb-2 last:border-b-0 last:pb-0" data-testid={`asked-payee-${r.id}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-body text-ink">
+                  <span>
+                    {r.details.name} · {r.details.country}
+                  </span>
+                  <Pill status="held">Asked by {r.assistant}</Pill>
+                </div>
+                <p className="text-caption text-muted">
+                  <span className="font-figure">{detailsOf(r.details)}</span>
+                  {' · '}
+                  <span className="font-figure">{formatWhen(r.created_at)}</span>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="primary" disabled={save.isPending} onClick={() => save.mutate(r)}>
+                    {save.isPending && save.variables?.id === r.id ? 'Checking…' : 'Save payee'}
+                  </Button>
+                  <Button type="button" disabled={dismiss.isPending} onClick={() => dismiss.mutate(r.id)}>
+                    Dismiss
+                  </Button>
+                </div>
+              </li>
+            ) : null,
+          )}
+        </ul>
+        {save.isError ? <Note ok={false}>{refusalText(save.error)}</Note> : null}
+        {dismiss.isError ? <Note ok={false}>{refusalText(dismiss.error)}</Note> : null}
+        {made !== null ? (
+          <Note ok>
+            {made.name} saved: {status(made.check, CHECK).text.toLowerCase()}
+            {made.needs_confirmation ? '. Confirm it with a passkey before the first payment.' : '.'}
+          </Note>
+        ) : null}
+      </div>
+    </Card>
+  )
+}
+
+const NEW_PAYEE: Record<string, (hours: number) => string> = {
+  always_ask: () => 'The first payment to any payee always waits for your approval.',
+  confirmation_of_payee: () => 'A payee is paid without asking only once its name matches its account.',
+  cooling_off: (h) => `A newly added payee is paid without asking only ${h} hours after it was added.`,
+}
+
+/** A drafted mandate in plain words: exactly the terms the passkey signs. */
+export function mandateInWords(assistant: string, t: MandateTerms, payeeName: (id: string) => string): string[] {
+  const money = (m: Record<string, number> | null | undefined) =>
+    Object.entries(m ?? {})
+      .map(([cur, minor]) => formatMinor(minor, cur))
+      .join(' or ')
+  const to = [
+    ...(t.scope.payees ?? []).map(payeeName),
+    ...(t.scope.payee_categories ?? []).map((c) => `any payee in ${c}`),
+    ...(t.scope.sellers ?? []).map((id) => `marketplace seller ${id}`),
+    ...(t.scope.rooms ?? []).map((id) => `room ${id}`),
+  ]
+  const lim = t.limits ?? {}
+  const limits = [
+    [lim.per_payment, 'a payment'],
+    [lim.per_day, 'a day'],
+    [lim.per_month, 'a month'],
+    [lim.batch_total, 'a batch'],
+  ]
+    .filter(([m]) => Object.keys(m ?? {}).length > 0)
+    .map(([m, per]) => `${money(m as Record<string, number>)} ${per as string}`)
+  if ((lim.payments_per_hour ?? 0) > 0) limits.push(`${lim.payments_per_hour} payments an hour`)
+  return [
+    `Payments ${assistant} prepares for ${to.join(', ')}, in ${(t.scope.currencies ?? []).join(', ')}, are paid without asking you again.`,
+    limits.length > 0 ? `At most ${limits.join(', ')}.` : 'No limit on amounts.',
+    ...(Object.keys(t.requires_approval_above ?? {}).length > 0 ? [`A payment above ${money(t.requires_approval_above)} waits for your approval.`] : []),
+    (NEW_PAYEE[t.new_payee.policy] ?? (() => `New payees: ${t.new_payee.policy}.`))(t.new_payee.cooling_off_hours ?? 0),
+    `Until ${formatWhen(t.expires_at)}. You can revoke it at any time.`,
+  ]
+}
+
+/** B40.35 — permission mandates an assistant drafted: none has any effect until the person's passkey signs it (Lens B40.2). */
+function AssistantMandates({ requests, payeeName }: { requests: AssistantRequest[]; payeeName: (id: string) => string }) {
+  const qc = useQueryClient()
+  const [signed, setSigned] = useState(false)
+  const done = () => void qc.invalidateQueries({ queryKey: ASSISTANT_REQUESTS_KEY })
+  const sign = useMutation({
+    mutationFn: async (id: string) => {
+      const prepared = await agentBankApi.prepareAssistantMandate(id)
+      return agentBankApi.signAssistantMandate(id, prepared.canonical, await assertOver(prepared))
+    },
+    onSuccess: () => {
+      setSigned(true)
+      done()
+    },
+  })
+  const dismiss = useMutation({ mutationFn: agentBankApi.dismissAssistantRequest, onSuccess: done })
+  return (
+    <>
+      {requests.map((r) =>
+        r.kind === 'mandate' ? (
+          <Card key={r.id}>
+            <CardHeader>{r.assistant} asks for a permission mandate</CardHeader>
+            <div className="flex flex-col gap-3 px-gutter py-3" data-testid={`asked-mandate-${r.id}`}>
+              <ul className="flex list-disc flex-col gap-1 pl-5 text-body text-ink">
+                {mandateInWords(r.assistant, r.details, payeeName).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+              <p className="text-caption text-muted">
+                Drafted <span className="font-figure">{formatWhen(r.created_at)}</span>. It does nothing until you sign it.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="primary" disabled={sign.isPending} onClick={() => sign.mutate(r.id)}>
+                  {sign.isPending && sign.variables === r.id ? 'Signing…' : 'Sign with a passkey'}
+                </Button>
+                <Button type="button" disabled={dismiss.isPending} onClick={() => dismiss.mutate(r.id)}>
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </Card>
+        ) : null,
+      )}
+      {sign.isError ? <Note ok={false}>{refusalText(sign.error)}</Note> : null}
+      {dismiss.isError ? <Note ok={false}>{refusalText(dismiss.error)}</Note> : null}
+      {signed ? <Note ok>Signed. The mandate is in force until it ends or you revoke it.</Note> : null}
+    </>
   )
 }
 

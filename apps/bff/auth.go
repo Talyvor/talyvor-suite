@@ -197,6 +197,19 @@ func (s *ttlMap[T]) update(id string, fn func(T) T) (T, bool) {
 	return v, true
 }
 
+// matching is every live value keep says yes to.
+func (s *ttlMap[T]) matching(keep func(T) bool) []T {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now, out := time.Now(), []T{}
+	for _, v := range s.m {
+		if !now.After(v.expiresAt()) && keep(v) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // authenticator owns the OIDC round-trip and both stores.
 type authenticator struct {
 	cfg      config

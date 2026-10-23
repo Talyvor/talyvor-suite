@@ -137,12 +137,13 @@ type oauthServer struct {
 	grants   *ttlMap[oauthGrant]
 	access   *ttlMap[oauthToken]
 	refresh  *ttlMap[oauthToken]
+	drafts   *ttlMap[assistantDraft] // B40.35: payees and mandates an assistant left for the person to confirm (mcp_drafts.go)
 }
 
 func newOAuthServer() *oauthServer {
 	return &oauthServer{clients: newTTLMap[oauthClient](), consents: newTTLMap[oauthConsent](),
 		codes: newTTLMap[oauthCode](), grants: newTTLMap[oauthGrant](),
-		access: newTTLMap[oauthToken](), refresh: newTTLMap[oauthToken]()}
+		access: newTTLMap[oauthToken](), refresh: newTTLMap[oauthToken](), drafts: newTTLMap[assistantDraft]()}
 }
 
 func tokenKey(tok string) string {

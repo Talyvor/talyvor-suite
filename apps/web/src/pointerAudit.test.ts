@@ -434,7 +434,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the BFF half of the same parenthesis — the sentence promises this line says the payment happens at Stripe AFTER the redirect',
   },
-  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:869': {
+  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:874': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'the first of the TWO independent clamps the page ceiling rests on, quoted verbatim by the sentence that cites it',
@@ -444,7 +444,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the example that paragraph gives of a citation checkable from here — now checked, which is what it asked for',
   },
-  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:869': {
+  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:874': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'its second example, pinned for the same reason',
@@ -501,12 +501,12 @@ const PINS: Record<string, Pin> = {
   // in THIS repository can move without touching the screen. That is exactly the rot this file
   // was written for: `billing.go:180` moved and the sentence explaining "nothing was charged"
   // ended up pointing at the one function that cannot charge.
-  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/lens.go:1121': {
+  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/lens.go:1126': {
     kind: 'LIVE',
     fragment: 'X-User-Email',
     why: 'the screen marks YOUR row by comparing /auth/me\'s email to the roster; the claim that this header is the membership join key is the whole basis for that being a join rather than a guess',
   },
-  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/auth.go:822': {
+  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/auth.go:835': {
     kind: 'LIVE',
     fragment: 's.email',
     why: 'the other half of the same argument — the browser may only mark a row if /auth/me serves the SAME value the BFF forwards upstream',
@@ -531,17 +531,17 @@ const PINS: Record<string, Pin> = {
     fragment: 'TRACK_BASE_URL',
     why: 'the same claim at the case that asserts it, so the case and the header cannot drift apart',
   },
-  'apps/web/src/areas/lens/Members.test.tsx:51|apps/bff/auth.go:822': {
+  'apps/web/src/areas/lens/Members.test.tsx:51|apps/bff/auth.go:835': {
     kind: 'LIVE',
     fragment: 's.email',
     why: 'the fixture claims to serve /auth/me "in the exact shape" — a fixture more generous than the real handler is how the docs translate probe went green in English',
   },
-  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/lens.go:1121': {
+  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/lens.go:1126': {
     kind: 'LIVE',
     fragment: 'X-User-Email',
     why: 'the case that argues the comparison must be EXACT rests on this being the key the upstream joined on',
   },
-  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/auth.go:822': {
+  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/auth.go:835': {
     kind: 'LIVE',
     fragment: 's.email',
     why: 'same sentence, the /auth/me half',

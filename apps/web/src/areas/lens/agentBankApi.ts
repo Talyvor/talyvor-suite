@@ -679,6 +679,13 @@ export const agentBankApi = {
   confirmPayee: (id: string, assertion: PasskeyAssertion) => send<OutsidePayee>('POST', `/api/money/payees/${e(id)}/confirm`, { assertion }),
   payments: () => getJSON<{ payments: OutsidePayment[] | null }>('/api/money/payments', { payments: 'list' }),
   payOutside: (body: OutsidePaymentRequest) => send<OutsidePayment>('POST', '/api/money/payments', body),
+  // B40.35 — payees and permission mandates an assistant asked for, saved or signed only by the person.
+  assistantRequests: () => getJSON<{ requests: AssistantRequest[] | null }>('/api/money/assistant-requests', { requests: 'list' }),
+  dismissAssistantRequest: (id: string) => send<void>('POST', `/api/money/assistant-requests/${e(id)}/dismiss`),
+  prepareAssistantMandate: (id: string) =>
+    send<{ canonical: string; challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/assistant-requests/${e(id)}/prepare`),
+  signAssistantMandate: (id: string, canonical: string, assertion: PasskeyAssertion) =>
+    send<unknown>('POST', `/api/money/assistant-requests/${e(id)}/sign`, { canonical, assertion }),
   mandates: () => getJSON<{ granted: Mandate[] | null; received: Mandate[] | null }>('/api/money/mandates', { granted: 'list', received: 'list' }),
   grantMandate: (body: MandateGrant) => send<Mandate>('POST', '/api/money/mandates', body),
   revokeMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/revoke`),
@@ -737,6 +744,22 @@ export interface OutsidePayee {
   /** set while screening holds the payee for an operator */
   screening?: string
 }
+
+/** Lens economy.PermissionMandateTerms (B40.2), as an assistant drafted them, so any part may be missing: amounts are minor units by currency. */
+export interface MandateTerms {
+  clients: string[]
+  scope: { payees?: string[] | null; payee_categories?: string[] | null; sellers?: string[] | null; rooms?: string[] | null; currencies?: string[] | null }
+  limits?: { per_payment?: Record<string, number> | null; per_day?: Record<string, number> | null; per_month?: Record<string, number> | null; batch_total?: Record<string, number> | null; payments_per_hour?: number }
+  requires_approval_above?: Record<string, number> | null
+  new_payee: { policy: string; cooling_off_hours?: number }
+  expires_at: string
+}
+
+/** B40.35 — what an assistant asked for that only the person may do (BFF mcp_drafts.go). */
+export type AssistantRequest = { id: string; assistant: string; created_at: string } & (
+  | { kind: 'payee'; details: PayeeRequest }
+  | { kind: 'mandate'; details: MandateTerms }
+)
 
 export interface PayeeRequest {
   name: string

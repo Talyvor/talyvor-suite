@@ -14,6 +14,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { Scenario } from './scenarios.ts'
+import { softPasskey } from './payees.ts'
 import { call, said } from './settings.ts'
 import { tunnel } from './trackWebhooks.ts'
 
@@ -181,18 +182,22 @@ interface RPCResult {
 //     DCR is allowed through the consent screen in the browser; on its token /mcp lists the tools with their annotations
 //     (get_balances read-only, prepare_batch destructive, nothing that pays), get_balances reads the GBP account,
 //     draft_invoice keeps a draft, and prepare_batch for the two payees answers pending approval with the approval link
-//     and the talyvor:// deep link, and still reads pending after. The money: no payment out, every account's test money
-//     and the workspace's ledger exactly as they were before the assistant connected.
+//     and the talyvor:// deep link, and still reads pending after. B40.35: create_payee_request is no payee on Lens until
+//     the person presses Save on the Pay screen, where it waits; draft_mandate reads there in plain words and is no
+//     mandate on Lens until it is signed with a passkey (this run's software passkey, through the screen's own two BFF
+//     calls). The money: no payment out, every account's test money and the workspace's ledger exactly as they were
+//     before the assistant connected.
 export function connectMCP(): Scenario {
   return {
     id: 'connect-mcp',
     owner: 'talyvor-suite',
     own: true,
     agents: 1,
-    items: ['B40.7'],
+    items: ['B40.7', 'B40.35'],
     feature: 'Talyvor Connect',
     title: 'an assistant on /mcp lists the tools with their annotations, reads a balance, drafts an invoice and prepares a two-payee ' +
-      'batch that stays pending approval — no payment out, and the accounts and the ledger unchanged',
+      'batch that stays pending approval; the payee and the mandate it asks for exist only once the person saves and signs them — ' +
+      'no payment out, and the accounts and the ledger unchanged',
     run: async (ctx) => {
       const origin = new URL(ctx.app.page.url()).origin
       const lensCall = async <T>(method: string, path: string, body: unknown, note: string) => {
@@ -283,6 +288,52 @@ export function connectMCP(): Scenario {
       const status = await tool('get_request_status', { request_id: pr.id ?? '' })
       if (status.structuredContent?.status !== 'pending_approval') wrong.push(`the prepared batch then read ${JSON.stringify(status.structuredContent?.status)}, not pending_approval`)
 
+      // 3b. B40.35 — a payee and a mandate the assistant asks for wait for the person, on the Pay screen.
+      const askedName = `Nightly MCP Asked Supplier ${randomBytes(3).toString('hex')} Ltd`
+      const askedPayees = async () => ((await call<{ payees: { name: string }[] | null }>(ctx, 'GET', '/v1/money/payees')).value?.payees ?? []).filter((p) => p.name === askedName).length
+      const mandates = async () => ((await call<{ mandates: unknown[] | null }>(ctx, 'GET', '/v1/money/permission-mandates')).value?.mandates ?? []).length
+      const reg = await call<{ challenge: string; rp_id: string }>(ctx, 'POST', '/v1/workspaces/{ws}/agents/passkeys/challenge', {})
+      if (reg.value === undefined) return { pass: false, detail: `the passkey registration challenge answered ${said(reg)}` }
+      const key = softPasskey(reg.value.rp_id)
+      const registered = await call(ctx, 'POST', '/v1/workspaces/{ws}/agents/passkeys', key.register(reg.value.challenge, 'Nightly MCP passkey'))
+      if (registered.status !== 201) return { pass: false, detail: `registering a passkey answered ${said(registered)}` }
+      const mandatesBefore = await mandates()
+      const asked = await tool('create_payee_request', { name: askedName, country: 'GB', sort_code: '040004', account_number: '34567890' })
+      const drafted = await tool('draft_mandate', { scope: { payees: [payees[0]], currencies: ['GBP'] }, limits: { per_payment: { GBP: 5000 } },
+        new_payee: { policy: 'always_ask' }, expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 19) + 'Z' })
+      const askedID = String(asked.structuredContent?.id ?? '')
+      const mandateID = String(drafted.structuredContent?.id ?? '')
+      const early = [await askedPayees(), await mandates() - mandatesBefore]
+      ctx.evidence.push({ note: `after the assistant asked: ${early[0]} payees named ${askedName} and ${early[1]} new mandates on Lens` })
+      if (asked.isError !== false || drafted.isError !== false || askedID === '' || mandateID === '') wrong.push(`create_payee_request or draft_mandate was refused: ${JSON.stringify([asked, drafted]).slice(0, 400)}`)
+      else if (early[0] !== 0 || early[1] !== 0) wrong.push(`the assistant's request alone made ${early[0]} payees and ${early[1]} mandates on Lens`)
+      else {
+        const page = ctx.app.page
+        await page.goto(`${origin}/money/pay`)
+        const card = page.getByTestId(`asked-payee-${askedID}`)
+        const mandate = page.getByTestId(`asked-mandate-${mandateID}`)
+        try {
+          await card.waitFor({ timeout: 30_000 })
+          await mandate.waitFor({ timeout: 30_000 })
+          const words = (await mandate.innerText()).replace(/\s+/g, ' ')
+          ctx.evidence.push({ note: `the Pay screen: "${(await card.innerText()).replace(/\s+/g, ' ')}"; the mandate: "${words}"` })
+          if (!words.includes('paid without asking you again') || !words.includes('£50.00 a payment')) wrong.push(`the drafted mandate reads "${words}"`)
+          await card.getByRole('button', { name: 'Save payee' }).click()
+          await card.waitFor({ state: 'detached', timeout: 30_000 })
+        } catch (err) {
+          wrong.push(`the Pay screen did not show and save the assistant's payee and mandate: ${String(err).slice(0, 300)}`)
+        }
+        // The screen's own two calls, signed with this run's software passkey where a browser would ask Face ID.
+        const post = (path: string, body?: unknown) => page.request.post(`${origin}/api/money/assistant-requests/${mandateID}/${path}`, { headers: { Origin: origin }, data: body ?? {} })
+        const prepared = await (await post('prepare')).json() as { canonical?: string; challenge?: string }
+        const signed = await post('sign', { canonical: prepared.canonical, assertion: key.assert(prepared.challenge ?? '') })
+        const late = [await askedPayees(), await mandates() - mandatesBefore]
+        ctx.evidence.push({ note: `after Save and the passkey: sign answered ${signed.status()}; ${late[0]} payees named ${askedName}, ${late[1]} new mandates on Lens` })
+        if (late[0] !== 1) wrong.push(`after Save, ${late[0]} payees are named ${askedName}, not 1`)
+        if (signed.status() !== 201 || late[1] !== 1) wrong.push(`signing the drafted mandate answered ${signed.status()} ${(await signed.text()).slice(0, 200)} and made ${late[1]} mandates, not 201 and 1`)
+        await page.goto(origin)
+      }
+
       // 4. The money: nothing moved.
       const after = await money()
       ctx.evidence.push({ note: `after the assistant: accounts ${after.accounts}, ${after.payments} payments out, ${after.ledger} ledger rows` })
@@ -290,7 +341,7 @@ export function connectMCP(): Scenario {
         wrong.push(`money moved: accounts ${before.accounts} → ${after.accounts}, payments out ${before.payments} → ${after.payments}, ledger rows ${before.ledger} → ${after.ledger}`)
       }
       return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
-        : { pass: true, detail: `${listed.length} tools listed with their annotations, none that pays; the balance read, an invoice drafted, and request ${pr.id} prepared for two payees pending approval — no payment out, the accounts and ${after.ledger} ledger rows unchanged` }
+        : { pass: true, detail: `${listed.length} tools listed with their annotations, none that pays; the balance read, an invoice drafted, request ${pr.id} prepared for two payees pending approval, and the asked-for payee and mandate made only by Save and the passkey — no payment out, the accounts and ${after.ledger} ledger rows unchanged` }
     },
   }
 }

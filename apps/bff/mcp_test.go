@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -42,6 +43,14 @@ func (f *fakeLensForMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			`"approval_url":"https://app.talyvor.com/approve/pr-1","deep_link":"talyvor://approve/pr-1","items":[{},{}]}`)
 	case "GET /v1/money/payment-requests/pr-1":
 		_, _ = io.WriteString(w, `{"id":"pr-1","status":"pending_approval","approval_url":"https://app.talyvor.com/approve/pr-1","deep_link":"talyvor://approve/pr-1"}`)
+	case "POST /v1/money/payees":
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"id":"py-new","name":"`+body["name"].(string)+`","check":"exact_match"}`)
+	case "POST /v1/money/permission-mandates/prepare":
+		_, _ = io.WriteString(w, `{"canonical":"{\"id\":\"pm-1\"}","challenge":"ch-1","allow_credentials":["cred-1"]}`)
+	case "POST /v1/money/permission-mandates":
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"id":"pm-1","status":"active"}`)
 	default:
 		_, _ = io.WriteString(w, `{}`)
 	}
@@ -159,13 +168,15 @@ func TestMCPNoToolMovesMoney(t *testing.T) {
 		g.Who.lensToken = "jwt-for-ws-ada"
 		return g
 	})
-	args := map[string]any{"idempotency_key": "k", "payee_id": "py-1", "currency": "GBP", "amount_minor": 1, "listing_id": "l-1",
+	args := map[string]any{"name": "Acme Ltd", "country": "GB", "iban": "GB33BUKB20201555555555", "expires_at": "2027-01-31T00:00:00Z",
+		"scope": map[string]any{"payees": []any{"py-1"}, "currencies": []any{"GBP"}}, "new_payee": map[string]any{"policy": "always_ask"},
+		"idempotency_key": "k", "payee_id": "py-1", "currency": "GBP", "amount_minor": 1, "listing_id": "l-1",
 		"request_id": "pr-1", "invoice_id": "inv-1", "items": []any{map[string]any{"payee_id": "py-1"}}}
 	allowed := map[string]bool{}
 	for _, r := range []string{"GET /v1/money/accounts", "GET /v1/workspaces/ws-ada/agents", "GET /v1/money/payees",
 		"GET /v1/money/permission-mandates", "GET /v1/marketplace/search", "GET /v1/marketplace/listings/l-1",
 		"GET /v1/money/payment-requests/pr-1", "POST /v1/money/invoices", "POST /v1/money/invoices/inv-1/send",
-		"POST /v1/money/payment-requests", "POST /v1/money/payment-requests/pr-1/cancel"} {
+		"POST /v1/money/payment-requests", "POST /v1/money/payment-requests/pr-1/cancel", "POST /v1/money/permission-mandates/prepare"} {
 		allowed[r] = true
 	}
 	for _, tool := range mcpTools {
@@ -176,8 +187,15 @@ func TestMCPNoToolMovesMoney(t *testing.T) {
 		if r := toolCall(t, a, token, tool.name, args); r["isError"] != false {
 			t.Fatalf("%s: %v", tool.name, r)
 		}
-		if len(lens.calls) != before+1 {
-			t.Fatalf("%s made %d Lens calls, want one", tool.name, len(lens.calls)-before)
+		want := 1
+		if tool.keeps == "payee" {
+			want = 0 // only kept, for the person to save
+		}
+		if len(lens.calls) != before+want {
+			t.Fatalf("%s made %d Lens calls, want %d", tool.name, len(lens.calls)-before, want)
+		}
+		if len(lens.calls) == before {
+			continue
 		}
 		f := strings.Fields(lens.calls[before])
 		if !allowed[f[0]+" "+f[1]] {
@@ -221,5 +239,63 @@ func TestMCPRefusesAWorkspaceOtherThanTheConsentedOne(t *testing.T) {
 		if !strings.HasPrefix(c, "POST /v1/provision ") {
 			t.Fatalf("Lens was asked %q for a grant whose workspace could not be confirmed", c)
 		}
+	}
+}
+
+// TestMCPPayeeAndMandateWaitForThePerson is B40.35's DONE: an assistant's create_payee_request appears on the Pay screen
+// and is a payee only after the person saves it; its draft_mandate appears for signing and is a mandate only after the
+// passkey signs it — and covers only that assistant, whatever it asked for.
+func TestMCPPayeeAndMandateWaitForThePerson(t *testing.T) {
+	a, lens, ck := mcpApp(t)
+	client := jsonOf(t, serve(a, "POST", "/oauth/register", "", `{"client_name":"Claude","redirect_uris":["`+claudeReturn+`"]}`, nil, nil))
+	token := connect(t, a, ck, client["client_id"].(string))["access_token"].(string)
+	saw := func(route string) bool {
+		_, ok := lens.sent[route]
+		return ok
+	}
+	waiting := func() []any {
+		rec := serve(a, "GET", "/api/money/assistant-requests", "", "", nil, ck)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("assistant requests: %d %s", rec.Code, rec.Body.String())
+		}
+		return jsonOf(t, rec)["requests"].([]any)
+	}
+
+	pr := toolCall(t, a, token, "create_payee_request", map[string]any{"name": "Acme Ltd", "country": "gb", "sort_code": "201555", "account_number": "55555555"})
+	if pr["isError"] != false || !strings.Contains(pr["content"].([]any)[0].(map[string]any)["text"].(string), "Nothing has been saved") || saw("POST /v1/money/payees") {
+		t.Fatalf("create_payee_request: %v; Lens saw %v", pr, lens.calls)
+	}
+	list := waiting()
+	if len(list) != 1 || list[0].(map[string]any)["kind"] != "payee" || list[0].(map[string]any)["assistant"] != "Claude" {
+		t.Fatalf("the Pay screen shows %v", list)
+	}
+	// The person presses Save: the existing route saves it, and the request is dismissed.
+	details, _ := json.Marshal(list[0].(map[string]any)["details"])
+	if rec := serve(a, "POST", "/api/money/payees", oauthOrigin, string(details), nil, ck); rec.Code != http.StatusCreated || lens.sent["POST /v1/money/payees"]["country"] != "GB" {
+		t.Fatalf("save: %d %s, sent up %v", rec.Code, rec.Body.String(), lens.sent["POST /v1/money/payees"])
+	}
+	if rec := serve(a, "POST", "/api/money/assistant-requests/"+list[0].(map[string]any)["id"].(string)+"/dismiss", oauthOrigin, "", nil, ck); rec.Code != http.StatusNoContent || len(waiting()) != 0 {
+		t.Fatalf("dismiss: %d, still waiting %v", rec.Code, waiting())
+	}
+
+	dm := toolCall(t, a, token, "draft_mandate", map[string]any{"clients": []any{"chat", "voice"}, "principal": map[string]any{"type": "company", "name": "Evil"},
+		"scope": map[string]any{"payees": []any{"py-1"}, "currencies": []any{"GBP"}}, "limits": map[string]any{"per_payment": map[string]any{"GBP": 50000}},
+		"new_payee": map[string]any{"policy": "always_ask"}, "expires_at": "2027-01-31T00:00:00Z"})
+	terms := lens.sent["POST /v1/money/permission-mandates/prepare"]
+	if dm["isError"] != false || saw("POST /v1/money/permission-mandates") || fmt.Sprint(terms["clients"]) != "[mcp:"+client["client_id"].(string)+"]" ||
+		terms["principal"].(map[string]any)["type"] != "person" {
+		t.Fatalf("draft_mandate: %v; checked with Lens as %v", dm, terms)
+	}
+	id := waiting()[0].(map[string]any)["id"].(string)
+	if rec := serve(a, "POST", "/api/money/assistant-requests/"+id+"/prepare", oauthOrigin, "", nil, ck); rec.Code != http.StatusOK || jsonOf(t, rec)["challenge"] != "ch-1" {
+		t.Fatalf("prepare: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := serve(a, "POST", "/api/money/assistant-requests/"+id+"/sign", oauthOrigin, `{"canonical":"{}"}`, nil, ck); rec.Code != http.StatusBadRequest || saw("POST /v1/money/permission-mandates") {
+		t.Fatalf("a mandate was kept without a passkey: %d", rec.Code)
+	}
+	signed := `{"canonical":"{\"id\":\"pm-1\"}","assertion":{"credential_id":"cred-1","client_data_json":"e30","authenticator_data":"AA","signature":"AA"}}`
+	if rec := serve(a, "POST", "/api/money/assistant-requests/"+id+"/sign", oauthOrigin, signed, nil, ck); rec.Code != http.StatusCreated ||
+		lens.sent["POST /v1/money/permission-mandates"]["assertion"] == nil || len(waiting()) != 0 {
+		t.Fatalf("sign: %d %s, still waiting %v", rec.Code, rec.Body.String(), waiting())
 	}
 }

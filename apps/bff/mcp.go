@@ -11,8 +11,10 @@ package main
 // Streamable HTTP with no stream and no session: every POST is one JSON-RPC message, answered as JSON. The versions and
 // the 2026-07-28 stateless rules are Lens's own (talyvor-lens internal/mcp/server.go).
 //
-// shortcut: no create_payee_request or draft_mandate yet — the app has no screen to confirm an assistant's payee or sign a
-// drafted mandate (B40.35) — and no bills_due or safe_to_spend until Lens has bills (B41.101) and the figure (B41.105) (B40.36).
+// create_payee_request and draft_mandate keep what the assistant sent for the person to save or sign on the Pay screen
+// (B40.35, mcp_drafts.go): neither saves a payee nor signs a mandate.
+//
+// shortcut: no bills_due or safe_to_spend until Lens has bills (B41.101) and the figure (B41.105) (B40.36).
 
 import (
 	"bytes"
@@ -75,7 +77,8 @@ func (m mcpArgs) without(keys ...string) mcpArgs {
 	return out
 }
 
-// lensCall is the one Lens request a tool call makes; body is nil or JSON.
+// lensCall is the one Lens request a tool call makes; body is nil or JSON. A tool that keeps a draft (mcpTool.keeps) keeps
+// body, and makes no Lens request when method is "".
 type lensCall struct {
 	method, path   string
 	body           []byte
@@ -85,6 +88,7 @@ type lensCall struct {
 type mcpTool struct {
 	name, title, description, scope string
 	kind                            int
+	keeps                           string // "payee" or "mandate": kept for the person to confirm (mcp_drafts.go)
 	props                           map[string]any
 	required                        []string
 	call                            func(t tenant, g oauthGrant, args mcpArgs, raw json.RawMessage) (lensCall, error)
@@ -134,6 +138,8 @@ var (
 		"amount_minor": map[string]any{"type": "integer", "minimum": 1, "description": "In the currency's minor units: pence, cents."},
 		"reference":    map[string]any{"type": "string", "maxLength": 140},
 	}
+	mcpAmounts = map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "integer", "minimum": 1},
+		"description": "Currency to minor units, e.g. {\"GBP\": 50000}."}
 )
 
 func withIdemKey(props map[string]any) map[string]any {
@@ -226,6 +232,35 @@ var mcpTools = []mcpTool{
 		description: "Sends a drafted invoice to its customer and opens its pay link.",
 		props:       map[string]any{"invoice_id": mcpStr}, required: []string{"invoice_id"},
 		call: mcpByID(http.MethodPost, "/v1/money/invoices", "invoice_id", "/send")},
+
+	{name: "create_payee_request", title: "Ask to add a payee", scope: "invoices:draft", kind: mcpWrites, keeps: "payee",
+		description: "Asks the person to add a payee outside Talyvor. It is not saved, and cannot be paid, until the person saves it in Talyvor.",
+		props: map[string]any{"name": map[string]any{"type": "string", "maxLength": 140, "description": "The name on the account."},
+			"country":   map[string]any{"type": "string", "description": "Two letters: GB, IE, US."},
+			"sort_code": mcpStr, "account_number": mcpStr, "iban": mcpStr, "bic": mcpStr, "routing_number": mcpStr},
+		required: []string{"name", "country"},
+		call:     mcpCreatePayeeRequest},
+	{name: "draft_mandate", title: "Draft a permission mandate", scope: "payments:prepare", kind: mcpWrites, keeps: "mandate",
+		description: "Drafts a permission mandate for this assistant: whom it may prepare payments to, in which currencies and up to what limits. " +
+			"It has no effect until the person signs it in Talyvor.",
+		props: map[string]any{
+			"scope": map[string]any{"type": "object", "properties": map[string]any{
+				"payees":           map[string]any{"type": "array", "items": mcpStr, "description": "Saved payees' ids, from list_payees."},
+				"payee_categories": map[string]any{"type": "array", "items": mcpStr},
+				"sellers":          map[string]any{"type": "array", "items": mcpStr, "description": "Marketplace sellers' ids."},
+				"currencies":       map[string]any{"type": "array", "items": mcpItemArgs["currency"]}},
+				"required": []string{"currencies"}},
+			"limits": map[string]any{"type": "object", "description": "Each a map of currency to minor units; a currency left out has no limit of that kind.",
+				"properties": map[string]any{"per_payment": mcpAmounts, "per_day": mcpAmounts, "per_month": mcpAmounts, "batch_total": mcpAmounts,
+					"payments_per_hour": map[string]any{"type": "integer", "minimum": 0}}},
+			"requires_approval_above": mcpAmounts,
+			"new_payee": map[string]any{"type": "object", "properties": map[string]any{
+				"policy":            map[string]any{"type": "string", "enum": []string{"always_ask", "confirmation_of_payee", "cooling_off"}},
+				"cooling_off_hours": map[string]any{"type": "integer", "minimum": 0}}, "required": []string{"policy"}},
+			"expires_at": map[string]any{"type": "string", "description": "RFC 3339, e.g. 2027-01-31T00:00:00Z"},
+		},
+		required: []string{"scope", "new_payee", "expires_at"},
+		call:     mcpDraftMandate},
 
 	{name: "prepare_payment", title: "Prepare a payment for approval", scope: "payments:prepare", kind: mcpSends,
 		description: "Prepares one payment to a saved payee as a request the person approves in Talyvor. It pays nothing.",
@@ -447,7 +482,10 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 	if err != nil {
 		return mcpRefusal(req.ID, err.Error())
 	}
-	status, raw, err := a.mcpLens(ctx, t, c)
+	status, raw := http.StatusOK, []byte(nil)
+	if c.method != "" {
+		status, raw, err = a.mcpLens(ctx, t, c)
+	}
 	switch {
 	case err != nil || status >= 500:
 		log.Printf("bff: mcp %s for client %q: lens %d %v", tool.name, g.ClientName, status, err)
@@ -461,6 +499,11 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 		}
 		return mcpRefusal(req.ID, refusal.Error)
 	}
+	if tool.keeps != "" {
+		if raw, err = a.keepDraft(t, g, tool.keeps, c.body); err != nil {
+			return mcpRefusal(req.ID, err.Error())
+		}
+	}
 	var out map[string]any
 	if json.Unmarshal(raw, &out) != nil {
 		out = map[string]any{"result": json.RawMessage(raw)}
@@ -473,6 +516,13 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 		// A link the client can show as one; resource_link arrived with 2025-06-18, so older clients are not sent it.
 		if version >= "2025-06-18" {
 			content = append(content, map[string]any{"type": "resource_link", "uri": link, "name": "Approve in Talyvor", "mimeType": "text/html"})
+		}
+	}
+	if link, _ := out["confirm_url"].(string); link != "" && tool.keeps != "" {
+		content = append([]map[string]any{{"type": "text", "text": "Nothing has been saved or signed. It waits for the person to confirm it in Talyvor at " +
+			link + "."}}, content...)
+		if version >= "2025-06-18" {
+			content = append(content, map[string]any{"type": "resource_link", "uri": link, "name": "Confirm in Talyvor", "mimeType": "text/html"})
 		}
 	}
 	return mcpOK(req.ID, map[string]any{"content": content, "structuredContent": out, "isError": false})

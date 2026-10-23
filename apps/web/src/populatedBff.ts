@@ -71,6 +71,16 @@ const BODIES: Record<string, unknown> = {
     ],
     received: [],
   },
+  // B40.35 — a payee and a permission mandate an assistant asked for over /mcp, waiting for the person.
+  '/api/money/assistant-requests': {
+    requests: [
+      { id: 'ar_m', kind: 'mandate', assistant: 'Claude', created_at: '2026-10-23T09:05:00Z', confirm_url: '/money/pay', status: 'pending_confirmation',
+        details: { principal: { type: 'person', name: 'ada@example.com' }, clients: ['mcp:tlv_oc_claude'], scope: { payees: ['payee_1'], currencies: ['GBP'] },
+          limits: { per_payment: { GBP: 50000 }, per_month: { GBP: 200000 } }, requires_approval_above: { GBP: 20000 }, new_payee: { policy: 'always_ask' }, expires_at: '2027-01-31T00:00:00Z' } },
+      { id: 'ar_p', kind: 'payee', assistant: 'Claude', created_at: '2026-10-23T09:00:00Z', confirm_url: '/money/pay', status: 'pending_confirmation',
+        details: { name: 'Brightline Studio Ltd', country: 'GB', sort_code: '200000', account_number: '55779911' } },
+    ],
+  },
   '/api/money/payouts': {
     payouts: [
       { id: 'mpob_1', funding: 'test', status: 'approved', rows_total: 3, rows_valid: 2, rows_invalid: 1, totals_minor: { GBP: 1100 }, approved_by: 'owner', approved_at: '2026-10-10T11:00:00Z', created_at: '2026-10-10T10:30:00Z' },
