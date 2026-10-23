@@ -79,6 +79,11 @@ describe('agent-pause-all (B28.459)', () => {
     expect(evidence.find((e) => e.note?.endsWith('started again'))?.served).toMatch(/^not replayed, no pooled charge/)
   }, 30_000)
 
+  it('FAILs when the started-again question is answered from the wrong pooled answer, not the model', async () => {
+    const { verdict } = await pauseAllTwice('pool-stale,bypass-ignored')
+    expect(verdict).toMatchObject({ pass: false, detail: expect.stringMatching(/answered wrong: expected \d+, got "\d+"/) })
+  }, 30_000)
+
   // B28.458 — the report names the request that served the answer; an answer Lens sends without one FAILs.
   it('names the request that served the started-again answer, and FAILs when Lens sends none', async () => {
     const { verdict, evidence } = await pauseAllTwice()

@@ -1427,7 +1427,7 @@ export function agentPauseAll(seed: number): Scenario {
     id: 'agent-pause-all',
     owner: 'talyvor-lens',
     agents: 2,
-    items: ['B28.458'],
+    items: ['B28.458', 'B28.459'],
     title: 'Pause every agent stops every agent before the provider; started again, they are served',
     run: (ctx) => withBank(ctx, async (bank) => {
       const agents: { a: Agent; key: string }[] = []
