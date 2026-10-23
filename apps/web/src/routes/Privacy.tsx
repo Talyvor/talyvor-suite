@@ -29,8 +29,8 @@ import {
 //   payouts            areas/marketplace/Marketplace.tsx (Stripe asks; Talyvor never sees bank details)
 //   deletion           areas/lens/StoredAnswers.tsx, areas/track/WorkspaceSettings.tsx
 
-/** The day these words last changed (B44.1 added the waitlist). Change it with them. */
-const UPDATED = '2026-10-23'
+/** The day these words last changed (B44.2 added the advertising cookie). Change it with them. */
+const UPDATED = '2026-10-24'
 
 export function Privacy() {
   return (
@@ -95,6 +95,15 @@ export function Privacy() {
             {COMPANY_CONTACT}
           </a>
           .
+        </p>
+      </Section>
+
+      <Section title="Cookies">
+        <p className="text-reading">
+          Our public pages use one advertising cookie, Meta&rsquo;s, to measure our ads, and only if
+          you accept it in the cookie banner. With it, Meta learns that one of these pages was viewed
+          or that someone joined the waitlist; never your email address or anything you type. To
+          withdraw, open Cookie settings at the foot of the page and choose Reject.
         </p>
       </Section>
 

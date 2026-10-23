@@ -62,3 +62,32 @@ func TestCanvasIsItsOwnDocument(t *testing.T) {
 		t.Errorf("X-Frame-Options: %q", got)
 	}
 }
+
+// TestPublicSitePolicyAddsOnlyMeta — B44.2: talyvor.com's public pages may load Meta's pixel, and nothing else changes:
+// take the two Meta hosts back out and what is left is the app's policy, which every other page keeps byte for byte.
+func TestPublicSitePolicyAddsOnlyMeta(t *testing.T) {
+	const theme = "document.documentElement.setAttribute('data-theme', 'dark')"
+	dist := t.TempDir()
+	page := `<!doctype html><title>app</title><script>` + theme + `</script><script type="module" src="/assets/index-HASH1.js"></script>`
+	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte(page), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := newApp(config{lensBaseURL: "http://127.0.0.1:1", provisionSecret: testProvisionSecret, webDist: dist, authMode: authModeDisabled}, nil)
+	today := appPagePolicy([]byte(page))
+	for _, path := range []string{"/", "/ledger", "/signin", "/settings/terms", "/share/abc", "/pay/abc", "/marketingx", "/pricing/x"} {
+		if got := getPath(t, a, path).Header().Get("Content-Security-Policy"); got != today {
+			t.Errorf("GET %s: CSP %q, want today's %q", path, got, today)
+		}
+	}
+	for _, path := range []string{"/marketing", "/marketing/", "/pricing", "/documentation", "/documentation/wallets", "/signup", "/privacy", "/terms"} {
+		got := getPath(t, a, path).Header().Get("Content-Security-Policy")
+		if !strings.Contains(got, "script-src 'self' https://connect.facebook.net ") ||
+			!strings.HasSuffix(got, "; connect-src 'self' https://www.facebook.com https://connect.facebook.net") {
+			t.Errorf("GET %s: CSP %q does not allow Meta's script and events", path, got)
+		}
+		stripped := strings.NewReplacer(" https://connect.facebook.net", "", " https://www.facebook.com", "").Replace(got)
+		if stripped != today+"; connect-src 'self'" {
+			t.Errorf("GET %s: CSP without Meta's hosts is %q, want today's %q plus connect-src 'self'", path, stripped, today)
+		}
+	}
+}
