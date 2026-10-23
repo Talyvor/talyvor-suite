@@ -65,6 +65,15 @@ const BODIES: Record<string, unknown> = {
       { id: 'mpay_1', account_id: 'macc_agt', agent_id: 'agt_research', payee_id: 'payee_1', payee_name: 'Acme Hosting Ltd', amount_minor: 2000, currency: 'GBP', funding: 'test', reference: 'October hosting', idempotency_key: 'k1', status: 'completed', created_at: '2026-10-10T10:00:00Z', updated_at: '2026-10-10T10:00:05Z' },
     ],
   },
+  // B40.9 — a prepared request at the address the console sweep visits (/approve/:id): two to approve, one blocked.
+  '/api/money/payment-requests/%3Aid': {
+    id: 'preq_1', status: 'pending_approval', summary: '3 payments for Researcher', client: 'mcp:tlv_oc_claude', agent_id: 'agt_research', totals: { GBP: 32050 }, created_at: '2026-10-23T09:00:00Z',
+    items: [
+      { position: 1, payee_id: 'payee_1', payee_name: 'Acme Hosting Ltd', currency: 'GBP', amount_minor: 12000, reference: 'November hosting', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking', rule: 'requires_approval_above' },
+      { position: 2, payee_id: 'payee_2', payee_name: 'Nord Research GmbH', currency: 'GBP', amount_minor: 19150, reference: 'Survey panel Q4', decision: 'needs_approval', reason: 'no permission mandate the person signed covers this payment' },
+      { position: 3, payee_id: 'payee_9', payee_name: 'Quickcash Ventures', currency: 'GBP', amount_minor: 900, reference: 'Fee', decision: 'blocked', reason: "the agent's rules block this payee", rule: 'payee' },
+    ],
+  },
   '/api/money/mandates': {
     granted: [
       { id: 'mdt_1', agent_id: 'agt_research', account_id: 'macc_agt', currency: 'GBP', payee_business_id: 'acme-hosting', payee_id: 'payee_1', payee_name: 'Acme Hosting Ltd', max_per_pull_minor: 500, max_per_month_minor: 2000, pulled_this_month_minor: 500, expires_at: '2027-10-10T23:59:59Z', status: 'active', created_at: '2026-10-10T09:00:00Z' },

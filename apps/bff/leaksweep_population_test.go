@@ -520,9 +520,13 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	// answers nothing; …/{id}/prepare relays the drafted mandate's canonical terms and a one-time challenge, holding
 	// nothing new; and …/{id}/sign relays the mandate Lens kept, read back through the MCP's list_mandates. The waiting
 	// requests themselves are GET /api/money/assistant-requests, in the sweep's reach.
-	if len(methodOnly) > 131 {
+	//
+	// THE HUNDRED-AND-THIRTY-SECOND AND THIRD ARE B40.9'S, POST only: /api/money/payment-requests/{id}/approval relays the
+	// statement and a one-time challenge, holding nothing; …/{id}/approve relays the request Lens approved, which is
+	// read back through GET /api/money/payment-requests/{id}, in the sweep's reach.
+	if len(methodOnly) > 133 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 131 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 133 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}

@@ -210,7 +210,8 @@ interface RPCResult {
 //     and the talyvor:// deep link, and still reads pending after. B40.35: create_payee_request is no payee on Lens until
 //     the person presses Save on the Pay screen, where it waits; draft_mandate reads there in plain words and is no
 //     mandate on Lens until it is signed with a passkey (this run's software passkey, through the screen's own two BFF
-//     calls). The money: no payment out, every account's test money and the workspace's ledger exactly as they were
+//     calls). B40.9: the approval link opens one card with both payments and their total, and with the second unticked
+//     the statement the passkey would sign names only the first. The money: no payment out, every account's test money and the workspace's ledger exactly as they were
 //     before the assistant connected.
 export function connectMCP(): Scenario {
   return {
@@ -218,7 +219,7 @@ export function connectMCP(): Scenario {
     owner: 'talyvor-suite',
     own: true,
     agents: 1,
-    items: ['B40.7', 'B40.35'],
+    items: ['B40.7', 'B40.35', 'B40.9'],
     feature: 'Talyvor Connect',
     title: 'an assistant on /mcp lists the tools with their annotations, reads a balance, drafts an invoice and prepares a two-payee ' +
       'batch that stays pending approval; the payee and the mandate it asks for exist only once the person saves and signs them — ' +
@@ -356,6 +357,31 @@ export function connectMCP(): Scenario {
         ctx.evidence.push({ note: `after Save and the passkey: sign answered ${signed.status()}; ${late[0]} payees named ${askedName}, ${late[1]} new mandates on Lens` })
         if (late[0] !== 1) wrong.push(`after Save, ${late[0]} payees are named ${askedName}, not 1`)
         if (signed.status() !== 201 || late[1] !== 1) wrong.push(`signing the drafted mandate answered ${signed.status()} ${(await signed.text()).slice(0, 200)} and made ${late[1]} mandates, not 201 and 1`)
+        await page.goto(origin)
+      }
+
+      // 3c. B40.9 — the approval link opens one card with both payments and their total; unticking the second leaves a
+      //     statement for the passkey that names only the first (the screen's own call; approving itself is B40.21's).
+      if (pr.id !== undefined && pr.approval_url !== undefined) {
+        const page = ctx.app.page
+        try {
+          await page.goto(`${origin}${new URL(pr.approval_url).pathname}`)
+          const card = page.getByTestId('approve-card')
+          await card.waitFor({ timeout: 30_000 })
+          const words = (await card.innerText()).replace(/\s+/g, ' ')
+          ctx.evidence.push({ note: `the approval card: "${words}"` })
+          if (!words.includes('Nightly MCP Supplier One Ltd') || !words.includes('Nightly MCP Supplier Two Ltd') || !words.includes('Test money')) wrong.push(`the approval card does not show both payees and Test money: "${words}"`)
+          if (!(await page.getByTestId('approve-total').innerText()).includes('2 of 2 payments to approve, total £30.00')) wrong.push(`the approval card's total reads "${await page.getByTestId('approve-total').innerText()}"`)
+          await page.getByRole('checkbox', { name: 'Approve £20.00 to Nightly MCP Supplier Two Ltd' }).click()
+          const total = await page.getByTestId('approve-total').innerText()
+          if (!total.includes('1 of 2 payments to approve, total £10.00')) wrong.push(`after unticking the second payment the card reads "${total}"`)
+        } catch (err) {
+          wrong.push(`the approval link did not open a card with both payments: ${String(err).slice(0, 300)}`)
+        }
+        const prepared = await page.request.post(`${origin}/api/money/payment-requests/${pr.id}/approval`, { headers: { Origin: origin }, data: { positions: [1] } })
+        const statement = JSON.parse(String(((await prepared.json()) as { statement?: string }).statement ?? '{}')) as { items?: { reference: string }[] }
+        ctx.evidence.push({ note: `the statement for the first payment alone: ${prepared.status()} ${JSON.stringify(statement).slice(0, 400)}` })
+        if (JSON.stringify((statement.items ?? []).map((it) => it.reference)) !== JSON.stringify(['MCP bill 1'])) wrong.push(`the statement to sign names ${JSON.stringify(statement.items)}, not only MCP bill 1`)
         await page.goto(origin)
       }
 

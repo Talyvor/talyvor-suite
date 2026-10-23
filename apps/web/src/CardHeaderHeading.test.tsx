@@ -184,6 +184,8 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/money/invoices': 3,
   // B30.96 — payees, send, payments out, standing orders, mandates and bulk payouts.
   '/money/pay': 8, // B40.35: the assistant's payee requests and its drafted mandate, under the populated fixture
+  // B40.9 — one card: the prepared request.
+  '/approve/:id': 1,
   '/features': 0,
   '/features/try/tare': 0,
   '/features/try/conversion': 0,

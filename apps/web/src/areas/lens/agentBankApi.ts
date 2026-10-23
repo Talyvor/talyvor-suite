@@ -686,6 +686,12 @@ export const agentBankApi = {
     send<{ canonical: string; challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/assistant-requests/${e(id)}/prepare`),
   signAssistantMandate: (id: string, canonical: string, assertion: PasskeyAssertion) =>
     send<unknown>('POST', `/api/money/assistant-requests/${e(id)}/sign`, { canonical, assertion }),
+  // B40.9 — a prepared request (Lens B40.3) and its one approval with a passkey over the statement Lens writes (B40.5).
+  paymentRequest: (id: string) => getSaid<PaymentRequest>(`/api/money/payment-requests/${e(id)}`),
+  requestApproval: (id: string, positions: number[]) =>
+    send<{ statement: string; challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payment-requests/${e(id)}/approval`, { positions }),
+  approveRequest: (id: string, statement: string, assertion: PasskeyAssertion) =>
+    send<PaymentRequest>('POST', `/api/money/payment-requests/${e(id)}/approve`, { statement, assertion }),
   mandates: () => getJSON<{ granted: Mandate[] | null; received: Mandate[] | null }>('/api/money/mandates', { granted: 'list', received: 'list' }),
   grantMandate: (body: MandateGrant) => send<Mandate>('POST', '/api/money/mandates', body),
   revokeMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/revoke`),
@@ -752,6 +758,43 @@ export interface MandateTerms {
   limits?: { per_payment?: Record<string, number> | null; per_day?: Record<string, number> | null; per_month?: Record<string, number> | null; batch_total?: Record<string, number> | null; payments_per_hour?: number }
   requires_approval_above?: Record<string, number> | null
   new_payee: { policy: string; cooling_off_hours?: number }
+  expires_at: string
+}
+
+/** Lens economy.PaymentRequest (B40.3): each item auto, needs_approval or blocked, with the rule that decided it. */
+export interface PaymentRequest {
+  id: string
+  /** pending_approval | auto | blocked | approved | cancelled */
+  status: string
+  summary: string
+  client: string
+  agent_id?: string
+  totals: Record<string, number>
+  items: PaymentRequestItem[]
+  created_at: string
+}
+
+export interface PaymentRequestItem {
+  position: number
+  payee_id: string
+  payee_name: string
+  listing_id?: string
+  currency: string
+  amount_minor: number
+  reference: string
+  /** auto | needs_approval | blocked */
+  decision: string
+  reason: string
+  rule?: string
+  pay_status?: string
+  pay_detail?: string
+}
+
+/** Lens economy.ApprovalStatement (B40.5): exactly what the passkey signs. */
+export interface ApprovalStatement {
+  request_id: string
+  items: { position: number; payee_id: string; currency: string; amount_minor: number; reference: string }[]
+  totals: Record<string, number>
   expires_at: string
 }
 

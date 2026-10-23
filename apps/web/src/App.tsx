@@ -67,6 +67,7 @@ import { DocsEmailBranding } from './areas/docs/DocsEmailBranding'
 import { DocsWebhooks } from './areas/docs/DocsWebhooks'
 import { InvoicesScreen } from './areas/lens/Invoices'
 import { PayScreen } from './areas/lens/Pay'
+import { ApproveScreen } from './areas/lens/Approve'
 import { PayInvoicePage } from './areas/pay/PayInvoice'
 import { OperatorWorkspaces } from './areas/lens/OperatorWorkspaces'
 import { Landing } from './areas/marketing/Landing'
@@ -288,6 +289,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.
   { path: '/money/pay', title: 'Pay', element: <PayScreen /> },
+  // B40.9 — the page a prepared request's approval link opens (Lens B40.3), from Chat, an assistant or a push.
+  { path: '/approve/:id', title: 'Approve payments', element: <ApproveScreen /> },
   // B8.2 — every capability, what it does and costs, whether it is on, and its switch.
   { path: '/features', title: 'Features', element: <Features /> },
   // B11.3 — run Tare or document conversion on your own input: no model call, no charge.

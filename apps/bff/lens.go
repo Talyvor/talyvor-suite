@@ -522,6 +522,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/assistant-requests/{id}/dismiss", a.requireTenant(a.handleAssistantRequestDismiss))
 	a.mux.HandleFunc("/api/money/assistant-requests/{id}/prepare", a.requireTenant(a.handleAssistantMandatePrepare))
 	a.mux.HandleFunc("/api/money/assistant-requests/{id}/sign", a.requireTenant(a.handleAssistantMandateSign))
+	// B40.9 — the approval screen: a prepared request, approved once with a passkey. See money_requests.go.
+	a.mux.HandleFunc("/api/money/payment-requests/{id}", a.requireTenant(a.handleMoneyPaymentRequest))
+	a.mux.HandleFunc("/api/money/payment-requests/{id}/approval", a.requireTenant(a.handleMoneyPaymentRequestApproval))
+	a.mux.HandleFunc("/api/money/payment-requests/{id}/approve", a.requireTenant(a.handleMoneyPaymentRequestApprove))
 	a.mux.HandleFunc("/api/money/payouts", a.requireTenant(a.handleMoneyPayouts))
 	a.mux.HandleFunc("/api/money/payouts/{id}", a.requireTenant(a.handleMoneyPayout))
 	a.mux.HandleFunc("/api/money/payouts/{id}/approve", a.requireTenant(a.handleMoneyPayoutApprove))
