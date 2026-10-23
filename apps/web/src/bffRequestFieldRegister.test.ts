@@ -52,6 +52,12 @@ const MIN_BODY_SITES = 9 // 11 measured
  * exemption that grows.
  */
 const unboundedBodies: Record<string, string> = {
+  // B40.12 — the microphone's recording, as multipart form data with its one file field.
+  'src/areas/chat/voice.ts form':
+    'transcribe(audio) — the recording the browser made, as FormData with the field file. handleVoiceTranscription reads ' +
+    'NO field of it: io.ReadAll then straight through to lens POST /v1/audio/transcriptions with its own multipart ' +
+    'Content-Type (chat_voice.go). The consumer is Lens\'s HandleTranscription (internal/proxy/speech.go), which reads ' +
+    'the file field and refuses a form without one in its own words, so there is no BFF field contract here to join to.',
   // B30.96 — a payout batch is the CSV file as the person chose it, sent as text/csv under an Idempotency-Key.
   'src/areas/lens/agentBankApi.ts csv':
     'uploadPayouts(csv: string, key) — the payouts CSV read off the chosen file. handleMoneyPayouts reads NO field of ' +

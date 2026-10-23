@@ -16,7 +16,7 @@ import { AgentBankError, type ApprovalStatement, type PaymentRequest, type Payme
 // verified or not), amount and reference, where the money comes from and the rule that asked; the person unticks what
 // they will not pay and approves the rest with one passkey over the statement Lens writes for exactly those (B40.5).
 
-const paymentRequestKey = (id: string) => ['money-payment-request', id]
+export const paymentRequestKey = (id: string) => ['money-payment-request', id]
 
 const DECIDED: Record<string, string> = {
   approved: 'Approved. Each payment you approved is paid once.',
@@ -67,7 +67,8 @@ export function ApproveScreen() {
   )
 }
 
-function ApprovalCard({ id, request: r }: { id: string; request: PaymentRequest }) {
+/** B40.12 — also the card Chat shows for a payment it prepared. */
+export function ApprovalCard({ id, request: r }: { id: string; request: PaymentRequest }) {
   const qc = useQueryClient()
   const payees = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees })
   const payments = useQuery({ queryKey: PAYMENTS_KEY, queryFn: agentBankApi.payments })

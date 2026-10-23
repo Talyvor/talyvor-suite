@@ -65,6 +65,9 @@ import { LAUNCH_COMMAND, LaunchAgentCard } from './LaunchAgent'
 import { TASK_COMMAND, TaskCard } from './AgentTask'
 import { CardFreezeCard, FREEZE_COMMAND } from './CardFreeze'
 import { STATEMENT_COMMAND, StatementCard } from './StatementCommand'
+import { type Amount, PayCard, bareAmount, isPayCommand, parsePay } from './PayCommand'
+import { VoiceButton } from './VoiceButton'
+import { sayAloud } from './voice'
 import { SCHEDULE_COMMAND, ScheduleCard } from './ScheduledPrompt'
 import { AskAboveCard, RuleCard, isAskAboveCommand, isRuleCommand } from './RuleCommand'
 import { ForecastCard, isRunOutQuestion } from './ForecastQuestion'
@@ -271,6 +274,7 @@ function answeredHere(question: string): boolean {
     SCHEDULE_COMMAND.test(question) ||
     FREEZE_COMMAND.test(question) ||
     STATEMENT_COMMAND.test(question) ||
+    isPayCommand(question) ||
     isRuleCommand(question) ||
     isAskAboveCommand(question) ||
     isRunOutQuestion(question) ||
@@ -336,6 +340,15 @@ export function Chat() {
   const [freezes, setFreezes] = useState<{ id: number; command: string }[]>([])
   // B28.98 — each /statement typed here: a card that downloads an agent's statement, or every agent's.
   const [statements, setStatements] = useState<{ id: number; command: string }[]>([])
+  // B40.12 — "pay the ACME invoice", said or typed: prepared on a card, paid only once approved with a passkey.
+  const [pays, setPays] = useState<{ id: number; command: string; voice: boolean; amount?: Amount }[]>([])
+  // B40.12 — the question send() is given came from the microphone; and its answer is to be read aloud when it ends.
+  const voicedRef = useRef(false)
+  const speakRef = useRef(false)
+  const [voiceNote, setVoiceNote] = useState<string | null>(null)
+  const say = useCallback((words: string) => {
+    sayAloud(words).catch((e: unknown) => setVoiceNote(e instanceof Error ? e.message : 'The answer could not be read aloud just now.'))
+  }, [])
   // B28.357 — each "Will Researcher run out this month?": a card that answers it from Lens's forecast.
   const [forecasts, setForecasts] = useState<{ id: number; question: string }[]>([])
   // B28.371 — each "Remember that …": a card that says it was remembered, or that memory is off.
@@ -858,9 +871,13 @@ export function Chat() {
             }
             setPending(false)
             setUnreadable(unrecognised)
+            // B40.12 — a question said aloud is answered aloud too, as well as on screen.
+            if (speakRef.current && answer.trim() !== '') say(answer)
+            speakRef.current = false
           },
           onError: (message, remedy) => {
             failed = true
+            speakRef.current = false
             setPending(false)
             setFailure({ text: message, remedy })
           },
@@ -911,7 +928,7 @@ export function Chat() {
         ),
       )
     },
-    [activeId, budget, catalog.data, paidBy, payers, pending, project, promptName, listing, qc, selected, store, told, webSearch, runCode, temporary, poolOff, connectors, connectorKey],
+    [activeId, budget, catalog.data, paidBy, payers, pending, project, promptName, listing, qc, say, selected, store, told, webSearch, runCode, temporary, poolOff, connectors, connectorKey],
   )
 
   // B28.354 — a new payer is kept with the conversation at once, so reopening it keeps the choice.
@@ -973,7 +990,22 @@ export function Chat() {
   const send = useCallback(
     (text: string = draft) => {
       const question = text.trim()
+      const voiced = voicedRef.current
+      voicedRef.current = false
       if (question === '') return
+      // B40.12 — "£120" said or typed while a payment waits for its amount is that amount, not a question.
+      const owed = [...pays].reverse().find((p) => p.amount === undefined)
+      const much = owed === undefined ? null : bareAmount(question)
+      if (owed !== undefined && much !== null) {
+        setDraft('')
+        setPays((l) => l.map((p) => (p.id === owed.id ? { ...p, amount: much } : p)))
+        return
+      }
+      if (isPayCommand(question)) {
+        setDraft('')
+        setPays((l) => [...l, { id: ++launchSeq.current, command: question, voice: voiced, amount: parsePay(question)?.amount }])
+        return
+      }
       if (LAUNCH_COMMAND.test(question)) {
         setDraft('')
         setLaunches((l) => [...l, { id: ++launchSeq.current, command: question }])
@@ -1038,9 +1070,10 @@ export function Chat() {
       const docs = attachments
       setAttachments([])
       setAttachError(null)
+      speakRef.current = voiced
       void run([...messages, docs.length > 0 ? { role: 'user', content: question, attachments: docs } : { role: 'user', content: question }])
     },
-    [attachments, draft, memory.on, messages, paidBy, pending, refuseOverBudget, run, selected, temporary, updateMemory, uploading],
+    [attachments, draft, memory.on, messages, paidBy, pays, pending, refuseOverBudget, run, selected, temporary, updateMemory, uploading],
   )
 
   const attach = useCallback(
@@ -1575,6 +1608,23 @@ export function Chat() {
               </section>
             ) : null}
 
+            {/* B40.12 — a payment asked for in words, prepared here and paid only once approved with a passkey. */}
+            {pays.length > 0 ? (
+              <section aria-label="Payments asked for" className="flex flex-col gap-3 pb-6">
+                {pays.map((l) => (
+                  <PayCard
+                    key={l.id}
+                    command={l.command}
+                    voice={l.voice}
+                    amount={l.amount}
+                    onAmount={(amount) => setPays((ls) => ls.map((x) => (x.id === l.id ? { ...x, amount } : x)))}
+                    say={say}
+                    onClose={() => setPays((ls) => ls.filter((x) => x.id !== l.id))}
+                  />
+                ))}
+              </section>
+            ) : null}
+
             {/* B28.352 — a rule typed in plain words, on a card here to check and save instead of a question. */}
             {ruleCards.length > 0 ? (
               <section aria-label="Setting rules" className="flex flex-col gap-3 pb-6">
@@ -1663,6 +1713,12 @@ export function Chat() {
               draft={draft}
               onDraft={setDraft}
               onSend={() => send()}
+              onVoice={(text) => {
+                voicedRef.current = true
+                send(text)
+              }}
+              voiceNote={voiceNote}
+              onVoiceNote={setVoiceNote}
               onStop={stop}
               pending={pending}
               picker={picker}
@@ -2531,6 +2587,9 @@ function Composer({
   draft,
   onDraft,
   onSend,
+  onVoice,
+  voiceNote,
+  onVoiceNote,
   onStop,
   pending,
   picker,
@@ -2558,6 +2617,10 @@ function Composer({
   draft: string
   onDraft: (text: string) => void
   onSend: () => void
+  /** B40.12 — what the person said into the microphone, sent as the question. */
+  onVoice: (text: string) => void
+  voiceNote: string | null
+  onVoiceNote: (note: string | null) => void
   onStop: () => void
   pending: boolean
   picker: PickerCatalog
@@ -2695,6 +2758,7 @@ function Composer({
         <TrackIssuePicker disabled={pending || selected === undefined} onPick={onAttachIssue} />
         <WebSearchToggle on={webSearch} onChange={onWebSearch} disabled={pending || selected === undefined} />
         <RunCodeToggle on={runCode} onChange={onRunCode} disabled={pending || selected === undefined} />
+        <VoiceButton disabled={pending || selected === undefined} onText={onVoice} onNote={onVoiceNote} />
         <ModelPicker catalog={picker} selected={selected} onSelect={onSelectModel} disabled={pending} openAsk={pickerAsk} onOpened={onPickerOpened} />
         <div className="flex-1" />
         {pending ? (
@@ -2715,6 +2779,11 @@ function Composer({
           </Button>
         )}
       </div>
+      {voiceNote !== null ? (
+        <p className="px-4 pb-3 text-caption text-muted" role="status" data-testid="voice-note">
+          {voiceNote}
+        </p>
+      ) : null}
       {waiting && uploading.length > 0 ? (
         <p className="px-4 pb-3 text-caption text-muted" role="status" data-testid="send-waiting">
           Sends when {andList(uploading)} {uploading.length === 1 ? 'has' : 'have'} uploaded.
