@@ -5,6 +5,7 @@ import { useDocumentTitle } from '../../documentTitle'
 import { HOLDBACK_HOURS, LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Waitlist } from '../../components/Waitlist'
+import { CookieSettingsLink } from './MetaPixel'
 import { COMING, FOOTER_LINE, POSITIONING_LINE, POSITIONING_SENTENCES, STATUS_LINE } from '../../positioning'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). It must render with no
@@ -612,6 +613,7 @@ export function Landing() {
             <a href="#pooling" className={inlineLink}>
               Repeated questions
             </a>
+            <CookieSettingsLink />
           </div>
         </div>
         <div className="mx-auto w-full max-w-6xl px-gutter pb-6">

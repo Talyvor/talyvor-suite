@@ -36,7 +36,7 @@ describe('the legal pages', () => {
 
   it.each([
     ['Terms', '2026-10-10', '10 October 2026'],
-    ['Privacy', '2026-10-23', '23 October 2026'], // B44.1 added the waitlist
+    ['Privacy', '2026-10-24', '24 October 2026'], // B44.2 added the advertising cookie
   ])('%s is dated, lists every section, and says where it ends', async (title, day, long) => {
     const { container } = at(`/${title.toLowerCase()}`)
     await screen.findByRole('heading', { level: 1, name: title })

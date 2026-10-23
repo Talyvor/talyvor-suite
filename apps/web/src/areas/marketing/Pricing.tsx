@@ -10,6 +10,7 @@ import {
   type PricingState,
 } from './pricingApi'
 import { CompanyLine } from '../../components/CompanyLine'
+import { CookieSettingsLink } from './MetaPixel'
 import { FOOTER_LINE, STATUS_LINE } from '../../positioning'
 import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, TAX_LINE } from './PriceCard'
 
@@ -356,6 +357,7 @@ export function Pricing() {
             <a href="/documentation" className={inlineLink}>
               Documentation
             </a>
+            <CookieSettingsLink />
           </div>
         </div>
         <div className="mx-auto w-full max-w-5xl px-gutter pb-6">

@@ -139,6 +139,7 @@
   "src/areas/marketing/economics.test.ts": 3,
   "src/areas/marketing/Journey.test.tsx": 5,
   "src/areas/marketing/Landing.test.tsx": 12,
+  "src/areas/marketing/MetaPixel.test.tsx": 10,
   "src/areas/marketing/Pricing.test.tsx": 6,
   "src/areas/marketplace/Discover.test.tsx": 3,
   "src/areas/marketplace/EarningsList.test.tsx": 1,

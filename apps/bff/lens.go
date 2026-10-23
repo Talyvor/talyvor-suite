@@ -1449,7 +1449,11 @@ func (a *app) spaHandler() http.Handler {
 			return
 		}
 		if page, err := os.ReadFile(index); err == nil {
-			w.Header().Set("Content-Security-Policy", appPagePolicy(page))
+			policy := appPagePolicy(page)
+			if isPublicSitePath(clean) {
+				policy = publicSitePolicy(policy)
+			}
+			w.Header().Set("Content-Security-Policy", policy)
 		}
 		setMustRevalidate(w)        // the fallback is index.html, which every deploy replaces in place
 		http.ServeFile(w, r, index) // client route (or missing bundle → 404 from ServeFile)
