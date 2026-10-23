@@ -137,6 +137,7 @@ const PINNED: Readonly<Record<string, string>> = {
   '/settings/connect': 'Connect your AI',
   '/money/invoices': 'Invoices',
   '/money/pay': 'Pay',
+  '/approve/:id': 'Approve payments',
   '/features': 'Features',
   '/features/try/tare': 'Try Tare',
   '/features/try/conversion': 'Try document conversion',

@@ -979,6 +979,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/permission-mandates", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPermissionMandateCreateBody",
   },
+  // B40.9 — the approval screen: the statement over the ticked items, then the passkey's approval of it (Lens B40.5).
+  {
+    route: "POST /v1/money/payment-requests/{id}/approval",
+    file: "apps/bff/money_requests.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPaymentRequestApproval(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/payment_requests_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/payment-requests/{id}/approval", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPaymentRequestApprovalBody",
+  },
+  {
+    route: "POST /v1/money/payment-requests/{id}/approve",
+    file: "apps/bff/money_requests.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPaymentRequestApprove(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/payment_requests_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/payment-requests/{id}/approve", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPaymentRequestApproveBody",
+  },
 ];
 
 /**
