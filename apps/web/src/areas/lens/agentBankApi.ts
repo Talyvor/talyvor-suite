@@ -687,6 +687,9 @@ export const agentBankApi = {
   signAssistantMandate: (id: string, canonical: string, assertion: PasskeyAssertion) =>
     send<unknown>('POST', `/api/money/assistant-requests/${e(id)}/sign`, { canonical, assertion }),
   // B40.9 — a prepared request (Lens B40.3) and its one approval with a passkey over the statement Lens writes (B40.5).
+  /** B40.12 — a payment Chat prepared, from voice or typed, for the person to approve; nothing is paid here. */
+  prepareRequest: (body: { voice: boolean; items: { payee_id: string; currency: string; amount_minor: number; reference: string }[] }, key: string) =>
+    send<PaymentRequest>('POST', '/api/money/payment-requests', body, { 'Idempotency-Key': key }),
   paymentRequest: (id: string) => getSaid<PaymentRequest>(`/api/money/payment-requests/${e(id)}`),
   requestApproval: (id: string, positions: number[]) =>
     send<{ statement: string; challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payment-requests/${e(id)}/approval`, { positions }),

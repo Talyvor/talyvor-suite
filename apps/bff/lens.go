@@ -360,6 +360,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B28.127 — a chat shared as a link a stranger reads signed out, until it is turned off. See chat_shares.go.
 	a.mux.HandleFunc("/api/chat/shares", a.requireTenant(a.handleChatShares))
 	a.mux.HandleFunc("/api/chat/shares/{id}", a.requireTenant(a.handleChatShareRevoke))
+	// B40.12 — talking to Talyvor in Chat: the recording transcribed and the answer spoken, through Lens. See chat_voice.go.
+	a.mux.HandleFunc("/api/chat/voice/transcriptions", a.requireTenant(a.handleVoiceTranscription))
+	a.mux.HandleFunc("/api/chat/voice/speech", a.requireTenant(a.handleVoiceSpeech))
 	a.mux.HandleFunc("/api/public/chats/{token}", a.publicChatShare())
 	a.mux.Handle("/share/{token}", a.sharePage())
 
@@ -528,6 +531,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/assistant-requests/{id}/prepare", a.requireTenant(a.handleAssistantMandatePrepare))
 	a.mux.HandleFunc("/api/money/assistant-requests/{id}/sign", a.requireTenant(a.handleAssistantMandateSign))
 	// B40.9 — the approval screen: a prepared request, approved once with a passkey. See money_requests.go.
+	a.mux.HandleFunc("/api/money/payment-requests", a.requireTenant(a.handleMoneyPaymentRequests)) // B40.12, chat_voice.go
 	a.mux.HandleFunc("/api/money/payment-requests/{id}", a.requireTenant(a.handleMoneyPaymentRequest))
 	a.mux.HandleFunc("/api/money/payment-requests/{id}/approval", a.requireTenant(a.handleMoneyPaymentRequestApproval))
 	a.mux.HandleFunc("/api/money/payment-requests/{id}/approve", a.requireTenant(a.handleMoneyPaymentRequestApprove))

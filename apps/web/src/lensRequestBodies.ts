@@ -1013,6 +1013,26 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payment-requests/{id}/approve", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPaymentRequestApproveBody",
   },
+  // B40.12 — Chat's voice: an answer read aloud (Lens B40.10), and a payment asked for in words, prepared (Lens B40.3).
+  {
+    route: "POST /v1/audio/speech",
+    file: "apps/bff/chat_voice.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"input": in.Input})',
+    upstreamFile: "internal/proxy/speech.go",
+    upstreamAnchor: "func (p *Proxy) HandleSpeech(",
+    subject: "lensSpeechBody",
+  },
+  {
+    route: "POST /v1/money/payment-requests",
+    file: "apps/bff/chat_voice.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]any{"client": client, "items": in.Items})',
+    upstreamFile: "cmd/lens/payment_requests_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/payment-requests", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPaymentRequestBody",
+  },
 ];
 
 /**
