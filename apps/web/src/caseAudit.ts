@@ -41,7 +41,7 @@ import { onCommit } from './auditScope'
  * ── WHY IT IS NOT A SOURCE RULE ──────────────────────────────────────────────────────────────
  *
  * The `uppercase` and the µ are in different places and neither knows about the other.
- * Landing.tsx:68 is `<span className="font-figure text-eyebrow uppercase text-label">`, and line 69
+ * Landing.tsx:69 is `<span className="font-figure text-eyebrow uppercase text-label">`, and line 69
  * hands its {unit} to CaseSafe — no µ near either. The µ arrives as a PROP from six call sites
  * (`unit="µLXC list"`, `"µLXC charged"`, `"µLXC saved"`, `"µLENS earned"`, `"µLXC you pay"`,
  * `"µLXC kept"`). No grep for "µ near uppercase" connects a prop to the class list that will

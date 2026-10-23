@@ -29,8 +29,8 @@ import {
 //   payouts            areas/marketplace/Marketplace.tsx (Stripe asks; Talyvor never sees bank details)
 //   deletion           areas/lens/StoredAnswers.tsx, areas/track/WorkspaceSettings.tsx
 
-/** The day these words last changed (B27.38 added Tare training). Change it with them. */
-const UPDATED = '2026-10-10'
+/** The day these words last changed (B44.1 added the waitlist). Change it with them. */
+const UPDATED = '2026-10-23'
 
 export function Privacy() {
   return (
@@ -83,6 +83,19 @@ export function Privacy() {
             cache, and it is the mechanism the whole product is built on.
           </li>
         </ul>
+      </Section>
+
+      <Section title="The waitlist">
+        <p className="text-reading">
+          If you join the waitlist we store your email address, when you joined, the page you joined
+          from and the campaign tags in its link (utm_source, utm_medium, utm_campaign) — never your
+          IP address or browser. We use it only to invite you to the trial, and keep it until you
+          join or ask us to remove it: email{' '}
+          <a className={inlineLink} href={`mailto:${COMPANY_CONTACT}`}>
+            {COMPANY_CONTACT}
+          </a>
+          .
+        </p>
       </Section>
 
       <Section title="What Agent Wallets stores">

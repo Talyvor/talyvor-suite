@@ -34,16 +34,19 @@ describe('the legal pages', () => {
     )
   })
 
-  it.each(['Terms', 'Privacy'])('%s is dated, lists every section, and says where it ends', async (title) => {
+  it.each([
+    ['Terms', '2026-10-10', '10 October 2026'],
+    ['Privacy', '2026-10-23', '23 October 2026'], // B44.1 added the waitlist
+  ])('%s is dated, lists every section, and says where it ends', async (title, day, long) => {
     const { container } = at(`/${title.toLowerCase()}`)
     await screen.findByRole('heading', { level: 1, name: title })
 
     const dates = Array.from(container.querySelectorAll('main time')).map((t) => [t.getAttribute('dateTime'), t.textContent])
     expect(dates).toEqual([
-      ['2026-10-10', '10 October 2026'],
-      ['2026-10-10', '10 October 2026'],
+      [day, long],
+      [day, long],
     ])
-    expect(screen.getByText(/Last updated/, { selector: 'header p' })).toHaveTextContent('Last updated 10 October 2026.')
+    expect(screen.getByText(/Last updated/, { selector: 'header p' })).toHaveTextContent(`Last updated ${long}.`)
 
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
     const links = within(screen.getByRole('navigation', { name: 'On this page' })).getAllByRole('link')
@@ -55,7 +58,7 @@ describe('the legal pages', () => {
 
     // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const end = screen.getByText(new RegExp(`^End of ${title}\\.`))
-    expect(end).toHaveTextContent(`End of ${title}. Last updated 10 October 2026. Back to the contents`)
+    expect(end).toHaveTextContent(`End of ${title}. Last updated ${long}. Back to the contents`)
     expect(screen.getByText(/Draft — needs legal review/)).toBeInTheDocument()
     // B27.38 — each says what Tare training keeps and why, in a paragraph marked as a draft.
     const tare = screen.getByRole('heading', { level: 2, name: /Tare training|Learning from your prose/ }).closest('section')!

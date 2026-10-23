@@ -1,5 +1,6 @@
 import { Button, Card, Mark, ThemeToggle, Wordmark, inlineLink } from '@talyvor/ui'
 import { CompanyLine } from '../../components/CompanyLine'
+import { Waitlist } from '../../components/Waitlist'
 import { STATUS_LINE } from '../../positioning'
 import { useSignupProbe, type SignupState } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
@@ -159,7 +160,7 @@ function AccessLine({ state }: { state: SignupState }) {
     return (
       <p className="text-caption text-faint">
         Talyvor is in a closed trial right now, so access is granted per address. If you have
-        already been added, continue below — otherwise there is nothing to fill in here yet.
+        already been added, continue above — otherwise join the waitlist below.
       </p>
     )
   }
@@ -237,6 +238,8 @@ export function SignUp() {
             <a href={loginHref('/')}>Continue</a>
           </Button>
           <AccessLine state={signup} />
+          {/* B44.1 — while sign-up is closed, a stranger can still leave an email. */}
+          {signup === 'closed' && <Waitlist />}
           {/* B27.22 — sharing is on from the first request, so a stranger is told before they
               continue, with the way to switch it off. */}
           <SharedAnswersFact className="text-caption text-faint" />

@@ -4,6 +4,7 @@ import { useSignupProbe } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
 import { HOLDBACK_HOURS, LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
 import { CompanyLine } from '../../components/CompanyLine'
+import { Waitlist } from '../../components/Waitlist'
 import { COMING, FOOTER_LINE, POSITIONING_LINE, POSITIONING_SENTENCES, STATUS_LINE } from '../../positioning'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). It must render with no
@@ -367,6 +368,8 @@ export function Landing() {
                       <a href="#wallets">See how it works</a>
                     </Button>
                   </div>
+                  {/* B44.1 — the visitor the ads bring can leave an email while the trial is closed. */}
+                  <Waitlist className="mt-6 max-w-xl" />
                   <p className="mt-4 max-w-xl text-caption text-faint">{STATUS_LINE}</p>
                 </div>
               </div>

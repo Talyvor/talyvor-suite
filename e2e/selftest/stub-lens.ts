@@ -547,6 +547,8 @@ function json(res: ServerResponse, status: number, body: unknown, headers: Recor
  */
 const DEFAULT_LIMITS = { requests_per_second: 100, requests_per_minute: 1000, requests_per_hour: 10_000 }
 /** talyvor-lens B39.9 — the workspaces an operator gave limits of their own (PUT /v1/admin/workspaces/{ws}/rate-limits). */
+/** B44.6 — the waitlist's rows, by email. */
+const waitlist = new Map<string, Record<string, string | null>>()
 const wsLimits = new Map<string, typeof DEFAULT_LIMITS>()
 const windows = new Map<string, { from: number; n: number }>()
 /** The first workspace a burst took past the limit, for STUB_BREAK=ratelimit-open-later. */
@@ -1218,6 +1220,17 @@ createServer(async (req, res) => {
       } else if (req.method === 'DELETE') wsLimits.delete(ws)
       const own = wsLimits.get(ws)
       return json(res, 200, { workspace_id: ws, custom: own !== undefined, ...(own ?? DEFAULT_LIMITS) })
+    }
+    // talyvor-lens B44.6 — the talyvor.com waitlist: one row per email, written by the BFF, read on the operator read key, as Lens.
+    if (p === '/v1/waitlist' && req.method === 'POST') {
+      const w = JSON.parse(await read(req)) as Record<string, string>
+      const fresh = !waitlist.has(w.email)
+      if (fresh) waitlist.set(w.email, { email: w.email, created_at: new Date().toISOString(), page: w.page || null, utm_source: w.utm_source || null, utm_medium: w.utm_medium || null, utm_campaign: w.utm_campaign || null })
+      return json(res, 200, { stored: fresh })
+    }
+    if (p === '/v1/admin/waitlist') {
+      if (bearer === '' || ![process.env.STUB_OPERATOR_READ_KEY, process.env.STUB_ADMIN_KEY].includes(bearer)) return json(res, 401, { error: 'admin credentials required' })
+      return json(res, 200, { signups: [...waitlist.values()] })
     }
     // talyvor-lens B30.11 — the reconciliation runs and the safeguarding view, on the operator read key or the admin key, as Lens.
     if (p === '/v1/admin/reconciliation' || p === '/v1/admin/safeguarding') {

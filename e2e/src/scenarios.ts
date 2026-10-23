@@ -79,6 +79,7 @@ import { termsAndCredentialScreens } from './termsScreen.ts'
 import { invoicesScreen } from './invoiceScreen.ts'
 import { payScreen } from './payScreen.ts'
 import { operatorComplianceBoundary } from './operatorCompliance.ts'
+import { waitlistJoin } from './waitlist.ts'
 import { agentCredential } from './kya.ts'
 import { lineage } from './lineage.ts'
 import { roomFromIssue } from './roomFromIssue.ts'
@@ -5274,6 +5275,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B30.104 — the operator's Compliance page, once a run: a tester, never an operator, asking the BFF for the reconciliation and
   // safeguarding figures is refused 403 for both, and the page says only operators can see it and shows none of them.
   if (i === 3) list.push(operatorComplianceBoundary())
+  // B44.1 — talyvor.com's waitlist, once a run: a stranger joins on /marketing twice and reads "You’re on the list." both
+  // times, Lens holds one row for the address and none for a honeypot bot, and the CSV refuses the stranger 401.
+  if (i === 3) list.push(waitlistJoin())
   // B32.65 — lineage and licences, once a run, on workspaces of its own: A at a 20% royalty is remixed into B at 10% and B
   // into C, each under its remix licence; C rented and used twice is one line on its buyer's bill; the paid rent splits
   // Talyvor's fee, C, B and A in the design's proportions on each author's earnings and journal, and its refund reverses all four.
