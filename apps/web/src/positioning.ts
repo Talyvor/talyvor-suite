@@ -21,4 +21,4 @@ export const STATUS_LINE =
   'Closed trial on test money. US first, then the UK and the EU. Real money moves only through licensed partners.'
 
 /** The footer's short form of the line, beside the company name. */
-export const FOOTER_LINE = 'Talyvor Ltd · the financial ecosystem for the AI agent economy · a MIXT company'
+export const FOOTER_LINE = 'Talyvor Ltd · the financial ecosystem for the AI agent economy'
