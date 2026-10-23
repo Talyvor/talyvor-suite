@@ -71,7 +71,7 @@ export async function signPayee(payeeID: string): Promise<PasskeyAssertion> {
   return assertOver(await agentBankApi.payeeChallenge(payeeID))
 }
 
-async function assertOver({ challenge, allow_credentials }: { challenge: string; allow_credentials: string[] | null }): Promise<PasskeyAssertion> {
+export async function assertOver({ challenge, allow_credentials }: { challenge: string; allow_credentials: string[] | null }): Promise<PasskeyAssertion> {
   const cred = (await navigator.credentials.get({
     publicKey: {
       challenge: fromB64u(challenge),

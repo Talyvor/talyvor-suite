@@ -11,7 +11,7 @@ const ACCOUNTS = [
   { id: 'macc_agt', agent_id: 'agt_1', currency: 'GBP', purpose: 'agent', status: 'open', name: 'GBP account', balance_minor: 10000, test_minor: 10000, live_minor: 0 },
 ]
 
-function mockBff() {
+function mockBff(asked: unknown[] = []) {
   const sent: Array<{ url: string; headers: Record<string, string>; body: unknown }> = []
   const payees: unknown[] = []
   const payments: unknown[] = []
@@ -34,6 +34,14 @@ function mockBff() {
           { line: 3, payee_id: 'nobody', amount_minor: 100, currency: 'GBP', reference: '', status: 'invalid', detail: 'no such payee' }] }, 201)
     }
     if (url === '/api/money/payouts') return json({ payouts: [] })
+    if (url === '/api/money/assistant-requests') return json({ requests: asked })
+    if (url.startsWith('/api/money/assistant-requests/')) {
+      sent.push({ url, headers: init?.headers as Record<string, string>, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      const [, id, move] = /assistant-requests\/([^/]+)\/(\w+)$/.exec(url) ?? []
+      if (move === 'prepare') return json({ canonical: '{"id":"pm-1"}', challenge: 'Y2gx', allow_credentials: ['Y3JlZDE'] })
+      asked.splice(asked.findIndex((r) => (r as { id: string }).id === id), 1)
+      return move === 'sign' ? json({ id: 'pm-1', status: 'active' }, 201) : new Response(null, { status: 204 })
+    }
     if (url === '/api/money/payees' && init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as Record<string, string>
       sent.push({ url, headers: init.headers as Record<string, string>, body })
@@ -148,5 +156,40 @@ describe('the Pay screen', () => {
     expect(bff.sent[0].body).toBe(csv)
     expect(within(batch).getByTestId('payout-row-3').textContent).toContain('no such payee')
     expect(within(batch).getByRole('button', { name: 'Approve and pay 1 row' })).toBeTruthy()
+  })
+
+  // B40.35 — what an assistant asked for over /mcp waits here: a payee is saved only when the person presses Save, through the
+  // same route as the form; a drafted mandate reads in plain words and is kept only with the passkey's signature.
+  it('saves an assistant’s payee only on Save, and signs its drafted mandate with a passkey', async () => {
+    const bff = mockBff([
+      { id: 'ar_p', kind: 'payee', assistant: 'Claude', created_at: '2026-10-23T09:00:00Z', details: { name: 'Acme Ltd', country: 'GB', sort_code: '040004', account_number: '12345678' } },
+      { id: 'ar_m', kind: 'mandate', assistant: 'Claude', created_at: '2026-10-23T09:01:00Z', details: { clients: ['mcp:tlv_oc_1'],
+        scope: { payees: ['payee_9'], payee_categories: null, sellers: null, currencies: ['GBP'] },
+        limits: { per_payment: { GBP: 50000 }, per_day: null, per_month: { GBP: 200000 }, batch_total: null, payments_per_hour: 0 },
+        requires_approval_above: { GBP: 20000 }, new_payee: { policy: 'always_ask', cooling_off_hours: 0 }, expires_at: '2027-01-31T00:00:00Z' } },
+    ])
+    const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
+      response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+
+    const payee = await screen.findByTestId('asked-payee-ar_p')
+    expect(screen.getByTestId('pay-asked').textContent).toContain('1 payee to save and 1 mandate to sign')
+    expect(bff.sent).toHaveLength(0) // nothing saved before the person presses Save
+    fireEvent.click(within(payee).getByRole('button', { name: 'Save payee' }))
+    await screen.findByTestId('payee-payee_1')
+    expect(bff.sent[0]).toMatchObject({ url: '/api/money/payees', body: { name: 'Acme Ltd', country: 'GB', sort_code: '040004', account_number: '12345678' } })
+    expect(bff.sent[1].url).toBe('/api/money/assistant-requests/ar_p/dismiss')
+
+    const mandate = screen.getByTestId('asked-mandate-ar_m')
+    expect(mandate.textContent).toContain('Payments Claude prepares for payee_9, in GBP, are paid without asking you again.')
+    expect(mandate.textContent).toContain('At most £500.00 a payment, £2,000.00 a month.')
+    expect(mandate.textContent).toContain('A payment above £200.00 waits for your approval.')
+    fireEvent.click(within(mandate).getByRole('button', { name: 'Sign with a passkey' }))
+    await screen.findByText('Signed. The mandate is in force until it ends or you revoke it.')
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(bff.sent.slice(2).map((x) => x.url)).toEqual(['/api/money/assistant-requests/ar_m/prepare', '/api/money/assistant-requests/ar_m/sign'])
+    expect(bff.sent[3].body).toMatchObject({ canonical: '{"id":"pm-1"}', assertion: { credential_id: 'AQ', signature: 'BA' } })
   })
 })

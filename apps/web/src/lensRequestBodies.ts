@@ -956,6 +956,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payment-requests", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPaymentRequestBody",
   },
+  // B40.35 — an assistant's drafted permission mandate, checked by Lens's prepare and signed by the person (Lens B40.2).
+  {
+    route: "POST /v1/money/permission-mandates/prepare",
+    file: "apps/bff/mcp_drafts.go",
+    kind: "anon-struct",
+    fn: "func mcpDraftMandate(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/permission_mandates_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/permission-mandates/prepare", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPermissionMandatePrepareBody",
+  },
+  {
+    route: "POST /v1/money/permission-mandates",
+    file: "apps/bff/mcp_drafts.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleAssistantMandateSign(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/permission_mandates_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/permission-mandates", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPermissionMandateCreateBody",
+  },
 ];
 
 /**
@@ -1015,6 +1038,14 @@ export const NON_LENS_ANON_SITES = [
   {
     file: "session_seal.go",
     what: "sessionSealer.seal (B17.40) marshals sealedSession, the session sealed into its own cookie id so a restart does not sign anyone out. It is encrypted and only this BFF ever reads it back — no request body, sent to no repository, so there is no key set to ask about and this site is exempt.",
+  },
+  {
+    file: "mcp_drafts.go",
+    what: "mcpCreatePayeeRequest (B40.35) marshals mcpPayeeDetails, an assistant's create_payee_request arguments, to KEEP them in the BFF's memory for the person — no request body, sent to no repository. The person's Save sends them through POST /api/money/payees, whose own marshal is the lensPayeeCreateBody row, so the key set Lens binds is asked there and this site is exempt.",
+  },
+  {
+    file: "mcp_drafts.go",
+    what: "keepDraft (B40.35) marshals assistantDraft, the waiting request, as the tool's answer to the assistant over /mcp — a RESPONSE, sent to no repository, so there is no key set to ask about and this site is exempt.",
   },
 ] as const;
 

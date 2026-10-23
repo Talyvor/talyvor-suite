@@ -515,6 +515,11 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/payments", a.requireTenant(a.handleMoneyPayments))
 	a.mux.HandleFunc("/api/money/mandates", a.requireTenant(a.handleMoneyMandates))
 	a.mux.HandleFunc("/api/money/mandates/{id}/revoke", a.requireTenant(a.handleMoneyMandateRevoke))
+	// B40.35 — payees and mandates an assistant asked for, saved or signed only by the person. See mcp_drafts.go.
+	a.mux.HandleFunc("/api/money/assistant-requests", a.requireTenant(a.handleAssistantRequests))
+	a.mux.HandleFunc("/api/money/assistant-requests/{id}/dismiss", a.requireTenant(a.handleAssistantRequestDismiss))
+	a.mux.HandleFunc("/api/money/assistant-requests/{id}/prepare", a.requireTenant(a.handleAssistantMandatePrepare))
+	a.mux.HandleFunc("/api/money/assistant-requests/{id}/sign", a.requireTenant(a.handleAssistantMandateSign))
 	a.mux.HandleFunc("/api/money/payouts", a.requireTenant(a.handleMoneyPayouts))
 	a.mux.HandleFunc("/api/money/payouts/{id}", a.requireTenant(a.handleMoneyPayout))
 	a.mux.HandleFunc("/api/money/payouts/{id}/approve", a.requireTenant(a.handleMoneyPayoutApprove))
