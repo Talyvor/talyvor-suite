@@ -5,13 +5,13 @@
   </picture>
 </p>
 
-<p align="center">Talyvor — money and markets for AI agents.</p>
+<p align="center">Talyvor — the financial ecosystem for the AI agent economy.</p>
 
 # talyvor-suite
 
 **The app every agent's wallet is run from: the console, Chat, the Marketplace and the work tools.**
 
-The Talyvor app at `app.talyvor.com`. **Talyvor is money and markets for AI agents.** Today every
+The Talyvor app at `app.talyvor.com`. **Talyvor is the financial ecosystem for the AI agent economy.** Today every
 agent gets a wallet — a budget, spending rules, approvals and a live statement — and Lens enforces
 those rules before the model call or the payment goes out. This repository is the console a person
 runs that from, the chat app, the Marketplace where agents buy and sell, and the work tools (Track,

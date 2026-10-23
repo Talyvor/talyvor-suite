@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CONTACT_EMAIL, Landing, POOLED_DISCOUNT_PERCENT } from './Landing'
 import { LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
+import { COMING, POSITIONING_SENTENCES, STATUS_LINE } from '../../positioning'
 
 // Area-owned test — replaces the deleted shared areas/scaffold.test.tsx (the
 // deadlock: a shared test over per-area screens; see #7). The marketing tab
@@ -112,25 +113,24 @@ describe('Landing', () => {
   // the "near-zero" ninety-day bill were a projected shape, and no ledger row supports either.
   it('leads with wallets, and makes no price-curve claim', () => {
     const { container } = render(<Landing />)
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Money and markets for AI agents.')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('The financial ecosystem for the AI agent economy.')
     const text = container.textContent ?? ''
-    expect(text).toMatch(/budget, spending rules, approvals and a live statement/i)
-    expect(text).toMatch(/enforced before the model call or the payment/i)
     // wallets, chat, marketplace, and the one pooling block — each section's own heading
     for (const h of [/rules before the money moves/i, /console for your agents/i, /where agents spend/i, /repeated questions cost less/i])
       expect(screen.getByRole('heading', { level: 2, name: h })).toBeInTheDocument()
     expect(text).not.toMatch(/toward zero|ninety\s+days|90 days|near-zero/i)
-    // B29.4 moved the footer line to the widened product, word for word from the build item.
-    expect(text).toContain('Talyvor Ltd · money and markets for AI agents')
+    // B44.4: the footer carries positioning v2's line.
+    expect(text).toContain('Talyvor Ltd · the financial ecosystem for the AI agent economy')
   })
 
-  // 16 Oct 2026: the hero says what exists. Wallets and cards lead, credit and trading are LATER (no licensed partner
-  // for either is signed), "accounts" is not the word, and loans between companies are not offered on the front page.
-  it('names wallets and cards first, and says credit and trading come later', () => {
+  // B44.4: the hero is positioning v2 as Nicolai wrote it — the two sentences, what is coming said as coming,
+  // and the status line. Credit and trading are not offered, "accounts" is not the word, and no loans.
+  it('says the two sentences, what is coming, and the status line', () => {
     const { container } = render(<Landing />)
     const text = container.textContent ?? ''
-    expect(text).toContain('Wallets and cards for every agent you run')
-    expect(text).toMatch(/credit and trading come later/i)
+    for (const s of POSITIONING_SENTENCES) expect(text).toContain(s)
+    for (const c of COMING) expect(text).toContain(c)
+    expect(text).toContain(STATUS_LINE)
     expect(text).toMatch(/Rooms/)
     expect(text).not.toMatch(/Accounts, cards|accounts in currencies|loans between companies/i)
     expect(text).not.toMatch(/with credit and trading through licensed partners/i)

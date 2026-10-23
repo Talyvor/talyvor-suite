@@ -120,7 +120,7 @@ describe('/pricing', () => {
     expect(enterprise).toHaveTextContent('Platform fee on AI spendAgreed')
     expect(enterprise).toHaveTextContent('AgentsUnlimited')
     expect(enterprise).toHaveTextContent('Talyvor EdgeIncluded')
-    expect(within(enterprise).getByRole('link', { name: 'Talk to us' })).toHaveAttribute('href', 'mailto:nicolai@talyvor.com')
+    expect(within(enterprise).getByRole('link', { name: 'Talk to us' })).toHaveAttribute('href', 'mailto:hello@talyvor.com')
 
     const offers = screen.getAllByTestId('pricing-plan').map((card) => card.textContent)
     expect(offers).toHaveLength(3)

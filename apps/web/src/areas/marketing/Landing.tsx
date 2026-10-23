@@ -4,6 +4,7 @@ import { useSignupProbe } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
 import { HOLDBACK_HOURS, LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
 import { CompanyLine } from '../../components/CompanyLine'
+import { COMING, FOOTER_LINE, POSITIONING_LINE, POSITIONING_SENTENCES, STATUS_LINE } from '../../positioning'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). It must render with no
 // session, no router context, and no providers: Landing.test.tsx renders <Landing /> bare, so
@@ -326,23 +327,26 @@ export function Landing() {
           <div className="relative z-10 mx-auto w-full max-w-6xl px-gutter pb-12 pt-14 wide:pb-28 wide:pt-24">
             <div className="wide:w-1/2 wide:pr-12">
               <div className="tal-stagger">
-                <p className="text-eyebrow uppercase text-label">For companies running AI agents</p>
+                {/* Positioning v2 (23 Oct 2026, B44.4): the line, then the two sentences, as written. The old
+                    headline stays only as this supporting eyebrow. */}
+                <p className="text-eyebrow uppercase text-label">Money and markets for AI agents</p>
                 <h1 id="hero-heading" className="mt-6 text-display-1 text-ink">
-                  Money and markets for AI agents.
+                  {POSITIONING_LINE}
                 </h1>
-                <p className="mt-7 text-lede text-muted">
-                  Wallets and cards for every agent you run, within the limits you set, and a
-                  marketplace where agents hire, buy and sell. Every request is checked against your
-                  rules before any money moves.
-                </p>
-                {/* 16 Oct 2026: what exists today, and what does not yet. No licensed partner for credit or
-                    trading is signed, so they are said as LATER (Landing.test.tsx pins it). */}
-                <p className="mt-4 text-body text-muted">
-                  Live today in a closed trial: agent wallets, with a budget, spending rules, approvals
-                  and a live statement, enforced before the model call or the payment. Cards, payments
-                  between companies, the marketplace and Rooms run on test money, and credit and
-                  trading come later. Real money moves only through licensed partners.
-                </p>
+                <p className="mt-7 text-lede text-muted">{POSITIONING_SENTENCES[0]}</p>
+                <p className="mt-4 text-body text-muted">{POSITIONING_SENTENCES[1]}</p>
+                {/* Said as coming, never as live (Landing.test.tsx pins it). */}
+                <div className="mt-6">
+                  <p className="text-eyebrow uppercase text-label">Coming</p>
+                  <ul className="mt-2 flex flex-col gap-1.5">
+                    {COMING.map((c) => (
+                      <li key={c} className="flex gap-2.5 text-body text-muted">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-pill bg-accent" aria-hidden="true" />
+                        <span>{c}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
                 {/* ⚠ THE PRIMARY ACTION POINTS AT /signup, NOT /auth/login, AND NOT AT A MAILTO.
                     Preserved from the previous version because the reasoning is easy to "simplify"
                     away: an earlier draft sent people to sign-in on the theory that a stranger could
@@ -363,6 +367,7 @@ export function Landing() {
                       <a href="#wallets">See how it works</a>
                     </Button>
                   </div>
+                  <p className="mt-4 max-w-xl text-caption text-faint">{STATUS_LINE}</p>
                 </div>
               </div>
               <p className="mt-4 text-caption text-faint">
@@ -582,9 +587,7 @@ export function Landing() {
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-gutter py-6">
           <div className="flex items-center gap-2.5">
             <Mark size={20} aria-hidden />
-            <div className="font-figure text-eyebrow uppercase text-faint">
-              Talyvor Ltd · money and markets for AI agents
-            </div>
+            <div className="font-figure text-eyebrow uppercase text-faint">{FOOTER_LINE}</div>
           </div>
           <div className="text-caption text-faint">
             <a href="/privacy" className={inlineLink}>
@@ -609,6 +612,7 @@ export function Landing() {
           </div>
         </div>
         <div className="mx-auto w-full max-w-6xl px-gutter pb-6">
+          <p className="mb-2 text-caption text-faint">{STATUS_LINE}</p>
           <CompanyLine />
         </div>
       </footer>

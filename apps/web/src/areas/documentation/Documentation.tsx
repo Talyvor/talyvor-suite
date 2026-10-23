@@ -14,6 +14,7 @@ import {
 } from './content'
 import lensRoutes from './lens-routes.json'
 import { SiteFooter, SiteHeader } from '../../components/SiteChrome'
+import { POSITIONING_LINE } from '../../positioning'
 
 // /documentation (B27.31) — what Talyvor does today, one claim per thing a person can do, each
 // linked to the screen or route that does it. Public, OUTSIDE the AuthGate like /marketing and
@@ -131,7 +132,7 @@ export function Documentation() {
             </h1>
             <TealRule className="mt-6" />
             <p className="mt-6 max-w-xl text-lede text-muted">
-              Talyvor is money and markets for AI agents. Today every AI agent gets a wallet: a
+              {POSITIONING_LINE} Today every AI agent gets a wallet: a
               budget, spending rules, approvals and a live statement, and Lens checks the rules
               before the model is called or the payment moves. Every line below is something you can do now. Each links to the screen that does it, or
               names the API route. Nothing here is planned work.
