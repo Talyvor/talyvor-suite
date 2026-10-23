@@ -1,5 +1,6 @@
 import { Button, Mark, ThemeToggle, Wordmark, focusRing, inlineLink } from '@talyvor/ui'
 import { CompanyLine } from './CompanyLine'
+import { FOOTER_LINE, STATUS_LINE } from '../positioning'
 
 // B29.13 — the logo header and the footer the public reading pages share: /documentation, /privacy,
 // /terms and a published board. The header is Pricing's: the drawn mark and wordmark with the product
@@ -65,7 +66,7 @@ export function SiteFooter({ links, width = 'max-w-5xl' }: { links: SiteLink[]; 
       <div className={`mx-auto flex w-full ${width} flex-wrap items-center justify-between gap-3 px-gutter py-6`}>
         <div className="flex items-center gap-2.5">
           <Mark size={20} aria-hidden />
-          <div className="font-figure text-eyebrow uppercase text-faint">Talyvor Ltd · money and markets for AI agents</div>
+          <div className="font-figure text-eyebrow uppercase text-faint">{FOOTER_LINE}</div>
         </div>
         <div className="text-caption text-faint">
           {links.map((l, i) => (
@@ -79,6 +80,7 @@ export function SiteFooter({ links, width = 'max-w-5xl' }: { links: SiteLink[]; 
         </div>
       </div>
       <div className={`mx-auto w-full ${width} px-gutter pb-6`}>
+        <p className="mb-2 text-caption text-faint">{STATUS_LINE}</p>
         <CompanyLine />
       </div>
     </footer>

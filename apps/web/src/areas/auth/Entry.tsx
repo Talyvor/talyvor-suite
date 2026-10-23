@@ -1,5 +1,6 @@
 import { Button, Card, Mark, ThemeToggle, Wordmark, inlineLink } from '@talyvor/ui'
 import { CompanyLine } from '../../components/CompanyLine'
+import { STATUS_LINE } from '../../positioning'
 import { useSignupProbe, type SignupState } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
 import { SharedAnswersFact } from '../../components/StoredAnswersFacts'
@@ -128,7 +129,8 @@ function EntryFrame({ children }: { children: React.ReactNode }) {
           />
         </div>
         <Card className="w-full max-w-md">{children}</Card>
-        <CompanyLine className="mt-6 w-full max-w-md" />
+        <p className="mt-6 w-full max-w-md text-caption text-faint">{STATUS_LINE}</p>
+        <CompanyLine className="mt-2 w-full max-w-md" />
       </main>
     </div>
   )
@@ -204,7 +206,7 @@ export function SignUp() {
           <TealRule />
           {/* WHAT IT IS, in one line. A stranger decides here whether to keep reading. */}
           <p className="text-body text-muted">
-            Talyvor is money and markets for AI agents. Today each agent gets a wallet: a budget,
+            Talyvor is the financial ecosystem for the AI agent economy. Today each agent gets a wallet: a budget,
             spending rules, approvals and a live statement, enforced before the model call or the
             payment.
           </p>

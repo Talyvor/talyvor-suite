@@ -10,6 +10,7 @@ import {
   type PricingState,
 } from './pricingApi'
 import { CompanyLine } from '../../components/CompanyLine'
+import { FOOTER_LINE, STATUS_LINE } from '../../positioning'
 import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, TAX_LINE } from './PriceCard'
 
 // /pricing (B5.2) — what anything costs, for a buyer who has not signed up. Public, OUTSIDE the
@@ -342,9 +343,7 @@ export function Pricing() {
 
       <footer className="border-t border-rule">
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-gutter py-6">
-          <div className="font-figure text-eyebrow uppercase text-faint">
-            Talyvor Ltd · money and markets for AI agents
-          </div>
+          <div className="font-figure text-eyebrow uppercase text-faint">{FOOTER_LINE}</div>
           <div className="text-caption text-faint">
             <a href="/privacy" className={inlineLink}>
               Privacy
@@ -360,6 +359,7 @@ export function Pricing() {
           </div>
         </div>
         <div className="mx-auto w-full max-w-5xl px-gutter pb-6">
+          <p className="mb-2 text-caption text-faint">{STATUS_LINE}</p>
           <CompanyLine />
         </div>
       </footer>

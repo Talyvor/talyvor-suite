@@ -67,7 +67,7 @@ describe('the legal pages say who runs Talyvor', () => {
     await screen.findByRole('heading', { name: /^terms$/i })
     const first = screen.getByRole('main').querySelector('header + p')
     expect(first?.textContent).toBe(
-      'These terms are between you and TALYVOR LTD, a company registered in England and Wales (number 17299143) whose registered office is 71-75 Shelton Street, Covent Garden, London, United Kingdom, WC2H 9JQ. Contact: nicolai@talyvor.com.',
+      'These terms are between you and TALYVOR LTD, a company registered in England and Wales (number 17299143) whose registered office is 71-75 Shelton Street, Covent Garden, London, United Kingdom, WC2H 9JQ. Contact: hello@talyvor.com.',
     )
   })
 
@@ -77,7 +77,7 @@ describe('the legal pages say who runs Talyvor', () => {
     await screen.findByRole('heading', { name: /^privacy$/i })
     const first = screen.getByRole('main').querySelector('header + p')
     expect(first?.textContent).toBe(
-      'TALYVOR LTD (company number 17299143, registered office 71-75 Shelton Street, Covent Garden, London, United Kingdom, WC2H 9JQ) runs Talyvor and decides how the personal data this notice describes is used. Contact: nicolai@talyvor.com.',
+      'TALYVOR LTD (company number 17299143, registered office 71-75 Shelton Street, Covent Garden, London, United Kingdom, WC2H 9JQ) runs Talyvor and decides how the personal data this notice describes is used. Contact: hello@talyvor.com.',
     )
   })
 })

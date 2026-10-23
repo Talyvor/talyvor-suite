@@ -14,7 +14,7 @@
     "@talyvor/ui": "workspace:*",
     "@tanstack/react-query": "^5.62.0",
     "clsx": "^2.1.1",
-    "dompurify": "^3.4.16",
+    "dompurify": "^3.4.17",
     "katex": "^0.19.0",
     "lowlight": "^3.3.0",
     "mermaid": "^12.1.0",
@@ -42,7 +42,7 @@
     "postcss": "^8.5.29",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
-    "vite": "^6.0.7",
-    "vitest": "^4.1.11"
+    "vite": "^6.4.4",
+    "vitest": "^4.1.12"
   }
 }

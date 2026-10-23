@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { STATUS_LINE } from '../../positioning'
 
 // Entry.test.tsx — THE TWO FRONT DOORS.
 //
@@ -131,7 +132,7 @@ describe('the signup page is written for someone who has never heard of us', () 
     const text = document.body.textContent ?? ''
 
     // 1. what it is — in one line, on the page, before they commit to anything.
-    expect(text).toMatch(/Talyvor is money and markets for AI agents/i)
+    expect(text).toMatch(/Talyvor is the financial ecosystem for the AI agent economy/i)
     expect(text).not.toMatch(/self-hosted/i) // B28.3: nothing self-hosts Lens
     // 2. what happens when they continue — no surprise redirect.
     expect(text).toMatch(/you[’']ll be (sent|taken)/i)
@@ -174,11 +175,15 @@ describe('the signup page is written for someone who has never heard of us', () 
 // ─── the promise is DERIVED, never hardcoded ────────────────────────────────
 
 describe('what the page promises tracks the actual gate', () => {
+  // B44.4's status line ("Closed trial on test money…") is the product's status, the same in every state of the
+  // gate, so these read the page without it: what they test is the access line the gate decides.
+  const accessText = () => (document.body.textContent ?? '').replace(STATUS_LINE, '')
+
   it('OPEN: says a stranger can start, with no invitation', async () => {
     mockMe({ signup_open: true })
     at('/signup')
     await screen.findByRole('heading', { level: 1 })
-    const text = document.body.textContent ?? ''
+    const text = accessText()
     expect(text).toMatch(/no invitation|anyone can|open to anyone/i)
     expect(text).not.toMatch(/closed trial|invitation only|invite only|by hand/i)
   })
@@ -187,7 +192,7 @@ describe('what the page promises tracks the actual gate', () => {
     mockMe({ signup_open: false })
     at('/signup')
     await screen.findByRole('heading', { level: 1 })
-    const text = document.body.textContent ?? ''
+    const text = accessText()
     // The refusal happens at OUR denied page and is explained there — but sending someone
     // into a refusal you could have predicted is still a page lying to a reader.
     expect(text).toMatch(/closed trial|invitation|invite/i)
@@ -198,7 +203,7 @@ describe('what the page promises tracks the actual gate', () => {
     mockMe({ fail: true })
     at('/signup')
     await screen.findByRole('heading', { level: 1 })
-    const text = document.body.textContent ?? ''
+    const text = accessText()
     // Absence of knowledge must render as absence of claim. Guessing "closed" turns away a
     // stranger who could have signed up; guessing "open" walks them into a refusal. Neither
     // sentence is available, so neither is printed.

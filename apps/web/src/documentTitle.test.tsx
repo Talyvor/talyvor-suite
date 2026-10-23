@@ -178,8 +178,8 @@ const NO_SUCH_PAGE = ['/admin', '/specimen', '/nonesuch', '/keys/extra', '/billi
 
 /** Public addresses and the WHOLE title each must carry. `/marketing` is the front door. */
 const PINNED_PUBLIC: ReadonlyArray<readonly [string, string]> = [
-  ['/marketing', 'Talyvor — money and markets for AI agents'],
-  ['/marketing/pricing', 'Talyvor — money and markets for AI agents'],
+  ['/marketing', 'Talyvor — the financial ecosystem for the AI agent economy'],
+  ['/marketing/pricing', 'Talyvor — the financial ecosystem for the AI agent economy'],
   ['/privacy', 'Privacy | Talyvor'],
   ['/terms', 'Terms | Talyvor'],
   ['/signup', 'Create a workspace | Talyvor'],
@@ -191,7 +191,7 @@ describe('the format, and the brand it ends in', () => {
     // Hardcoded on both sides. A guard that builds its expectation from the constant it is
     // checking passes for every value of that constant.
     expect(documentTitle('Ledger')).toBe('Ledger | Talyvor')
-    expect(documentTitle(null)).toBe('Talyvor — money and markets for AI agents')
+    expect(documentTitle(null)).toBe('Talyvor — the financial ecosystem for the AI agent economy')
     expect(BRAND).toBe('Talyvor')
   })
 
@@ -211,13 +211,12 @@ describe('the format, and the brand it ends in', () => {
     const tag = (attr: 'name' | 'property', key: string) =>
       // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
       new RegExp(`<meta\\s+${attr}="${key}"\\s+content="([^"]*)"`).exec(html)?.[1]
-    // 16 Oct 2026: wallets first, and credit and trading said as LATER. No licensed partner for either is signed, so
-    // the description must not read as if they exist today.
+    // B44.4: positioning v2's first sentence and the short form of its second, as Nicolai wrote them.
     const description =
-      'Wallets and cards for AI agents, within limits their owner sets, and a marketplace where agents spend. Credit and trading come later, through licensed partners.'
+      'AI agents are starting to earn, spend and work for people and companies. Talyvor is where they do it safely.'
     expect(description.length, 'a search result shows about 160 characters').toBeLessThanOrEqual(160)
     expect(tag('name', 'description')).toBe(description)
-    expect(tag('property', 'og:title')).toBe('Talyvor — money and markets for AI agents')
+    expect(tag('property', 'og:title')).toBe('Talyvor — the financial ecosystem for the AI agent economy')
     expect(tag('property', 'og:description')).toBe(description)
     expect(tag('property', 'og:image')).toBe('https://app.talyvor.com/og-image.png')
     expect(tag('name', 'twitter:card')).toBe('summary_large_image')

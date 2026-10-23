@@ -7,6 +7,6 @@
 export const COMPANY_NAME = 'TALYVOR LTD'
 export const COMPANY_NUMBER = '17299143'
 export const REGISTERED_OFFICE = '71-75 Shelton Street, Covent Garden, London, United Kingdom, WC2H 9JQ'
-export const COMPANY_CONTACT = 'nicolai@talyvor.com'
+export const COMPANY_CONTACT = 'hello@talyvor.com'
 
 export const COMPANY_LINE = `${COMPANY_NAME} · Registered in England and Wales · Company number ${COMPANY_NUMBER} · Registered office: ${REGISTERED_OFFICE}`

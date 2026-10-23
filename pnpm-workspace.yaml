@@ -22,6 +22,10 @@ blockExoticSubdeps: true
 # with 7.1.6 forced, apps/web's built CSS was byte-identical to the 6.1.4 build (measured).
 overrides:
   postcss-selector-parser@<7.1.6: ^7.1.6
+  # B44.4 — vite 6.4.4 (GHSA-587h-7wmj-h5pm) would lift rollup to 4.64.x, and every rollup from 4.63.0 lists
+  # @napi-rs/lzma-linux-x64-gnu as an optional dependency that rollup's own code never loads (linux-x64-glibc
+  # only: the CI runner). Kept at main's 4.62.2 until that is explained; see ~/talyvor-queue/FOUND.md.
+  rollup: 4.62.2
 # Each ignore is an advisory with no fix to take. Drop the line when its condition stops holding.
 auditConfig:
   ignoreGhsas:
