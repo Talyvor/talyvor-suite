@@ -17,6 +17,9 @@ export function MetaPixel() {
   const started = useRef(false)
 
   useEffect(() => {
+    // A client-side move into the app (the legal pages' "Back to Talyvor") would keep the pixel and this document's
+    // public-page security policy: load the app afresh instead.
+    if (started.current && !isPublicPath(pathname)) return window.location.reload()
     if (!live || consent !== 'accepted') return
     if (!started.current) started.current = startPixel(META_DATASET_ID)
     if (started.current) track('PageView')

@@ -19,9 +19,9 @@ async function withDatasetId(value: string) {
 const metaScripts = () => [...document.querySelectorAll('script')].filter((s) => /facebook/.test(s.src))
 const calls = () => (window.fbq?.queue ?? []).map((args) => [...args])
 
-function GoToPricing() {
+function GoTo({ path }: { path: string }) {
   const navigate = useNavigate()
-  return <button className={focusRing} onClick={() => navigate('/pricing')}>to pricing</button>
+  return <button className={focusRing} onClick={() => navigate(path)}>to {path}</button>
 }
 
 function mount(path: string) {
@@ -30,7 +30,7 @@ function mount(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <MetaPixel />
       <Routes>
-        <Route path="/marketing" element={<><Waitlist /><GoToPricing /></>} />
+        <Route path="/marketing" element={<><Waitlist /><GoTo path="/pricing" /></>} />
         <Route path="*" element={null} />
       </Routes>
     </MemoryRouter>,
@@ -78,7 +78,7 @@ describe('MetaPixel', () => {
     expect(leads).toEqual([['track', 'Lead']])
     expect(JSON.stringify(calls())).not.toMatch(/ann|lee|example/)
 
-    act(() => fireEvent.click(screen.getByRole('button', { name: 'to pricing' })))
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'to /pricing' })))
     expect(calls().filter((c) => c[1] === 'PageView')).toHaveLength(2)
     expect(metaScripts()).toHaveLength(1)
   })
@@ -107,6 +107,25 @@ describe('MetaPixel', () => {
     expect(calls().at(-1)).toEqual(['consent', 'revoke'])
     expect(reload).toHaveBeenCalledTimes(1)
     expect(JSON.parse(localStorage.getItem(CONSENT_KEY) ?? '{}').choice).toBe('rejected')
+  })
+
+  it('a client-side move into the app after Accept reloads, so the app never runs with the pixel', () => {
+    const reload = vi.fn()
+    vi.stubGlobal('location', { ...window.location, pathname: '/privacy', reload })
+    window.history.pushState({}, '', '/privacy')
+    render(
+      <MemoryRouter initialEntries={['/privacy']}>
+        <MetaPixel />
+        <Routes>
+          <Route path="/privacy" element={<GoTo path="/" />} />
+          <Route path="*" element={null} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    expect(reload).not.toHaveBeenCalled()
+    act(() => fireEvent.click(screen.getByRole('button', { name: 'to /' })))
+    expect(reload).toHaveBeenCalledTimes(1)
   })
 
   it('with the ID empty: no banner and no request', async () => {
