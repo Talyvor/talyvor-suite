@@ -933,6 +933,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/mandates", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensMandateGrantBody",
   },
+  // B40.7 — the MCP server at /mcp: an assistant drafts an invoice (Lens B30.20) and prepares payment requests (Lens B40.3).
+  {
+    route: "POST /v1/money/invoices",
+    file: "apps/bff/mcp.go",
+    kind: "anon-struct",
+    fn: '{name: "draft_invoice", title: "Draft an invoice",',
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_invoices_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/invoices", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensMCPInvoiceDraftBody",
+  },
+  {
+    route: "POST /v1/money/payment-requests",
+    file: "apps/bff/mcp.go",
+    kind: "map-literal",
+    anchor:
+      'json.Marshal(map[string]any{"client": "mcp:" + g.ClientID, "items": items(a)})',
+    upstreamFile: "cmd/lens/payment_requests_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/payment-requests", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPaymentRequestBody",
+  },
 ];
 
 /**

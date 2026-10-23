@@ -182,10 +182,10 @@ func TestOAuthFlowAsClaudeRunsIt(t *testing.T) {
 	dcrID := client["client_id"].(string)
 	byDCR := connect(t, a, ck, dcrID)
 
-	// 4. The access token reaches the MCP address, naming the person, the workspace and the client.
+	// 4. The access token reaches the MCP server (mcp.go).
 	for _, tok := range []map[string]any{byCIMD, byDCR} {
 		rec := mcpWith(a, tok["access_token"].(string))
-		if rec.Code == http.StatusUnauthorized || jsonOf(t, rec)["workspace_id"] != "ws-ada" || jsonOf(t, rec)["acting_as"] != "ada@example.com" {
+		if rec.Code != http.StatusOK || jsonOf(t, rec)["result"].(map[string]any)["serverInfo"].(map[string]any)["name"] != "talyvor" {
 			t.Fatalf("a fresh access token at /mcp: %d %s", rec.Code, rec.Body.String())
 		}
 	}

@@ -216,13 +216,16 @@ describe('every request body this BFF sends talyvor-lens is a question the regis
   })
 
   it('the register holds no lens request-body entry this table does not account for', () => {
+    // B40.7: two rows may send one route (the Invoices screen and the MCP server's draft_invoice), and then share its
+    // one entry, which the per-row rule above holds to each row's key set.
+    const routes = new Set(LENS_BODIES.map((b) => b.upstreamAnchor)).size
     expect(
       LENS_ENTRIES.length,
       `deploy/decision-expiry.sh holds ${LENS_ENTRIES.length} settle commands naming one of this ` +
-        `table's upstream anchors, and the table has ${LENS_BODIES.length} rows. An entry with no ` +
+        `table's upstream anchors, and the table's rows send ${routes} routes. An entry with no ` +
         'row is a question asked on behalf of a body nobody sends — it goes stale with nothing ' +
         'watching and its pass reads as coverage. Add the row or delete the entry.',
-    ).toBe(LENS_BODIES.length)
+    ).toBe(routes)
   })
 })
 

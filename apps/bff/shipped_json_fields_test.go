@@ -52,6 +52,8 @@ import (
 // builtByThisService: the BFF fills these itself, so an unfilled field is a
 // value this process invented. These are the ones worth checking.
 var builtByThisService = map[string]string{
+	"mcpResponse":          "the MCP server's JSON-RPC answer to an assistant, built in handleMCP (B40.7)",
+	"mcpError":             "the JSON-RPC error inside an mcpResponse, built by mcpErr (B40.7)",
 	"chatTool":             "a Lens MCP tool Chat may offer a model, rebuilt from Lens's tools/list in handleChatTools (B28.349)",
 	"chatToolResult":       "one Chat tool call's text and isError, assembled from Lens's tools/call content in handleChatToolCall (B28.349)",
 	"connectorTool":        "one of a person's MCP connector's tools, rebuilt from its tools/list in handleConnectorTools (B28.122)",
@@ -88,6 +90,7 @@ var builtByThisService = map[string]string{
 // reply. The BFF never fills these, so "no assignment" is correct rather than
 // suspicious and checking them would report the decoder as a defect.
 var decodedFromUpstream = map[string]string{
+	"mcpMessage":             "an assistant's JSON-RPC message POSTed to /mcp, decoded in handleMCP (B40.7)",
 	"mcpReply":               "Lens's POST /mcp JSON-RPC reply, decoded in mcpCall() (B28.349)",
 	"invoiceLine":            "one line of an invoice, decoded from the screen's POST and re-encoded wholesale in handleMoneyInvoices (B30.97)",
 	"connectorBody":          "the browser's body naming a connector, its token and a tool call, decoded wholesale in readConnectorBody (B28.122)",

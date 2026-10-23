@@ -14,6 +14,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { Scenario } from './scenarios.ts'
+import { call, said } from './settings.ts'
 import { tunnel } from './trackWebhooks.ts'
 
 const SCOPE_WORDS = ['See your wallets and bills', 'Draft invoices and payees', 'Prepare payments for you to approve']
@@ -161,6 +162,135 @@ export function connectOAuth(): Scenario {
         server.closeAllConnections()
         server.close()
       }
+    },
+  }
+}
+
+/** What /mcp answers a JSON-RPC message with: a tool's result, the server's description or its tools. */
+interface RPCResult {
+  isError?: boolean
+  error?: unknown
+  structuredContent?: Record<string, unknown>
+  serverInfo?: { name?: string }
+  tools?: { name: string; annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean } }[]
+}
+
+// B40.7 — AN ASSISTANT USES TALYVOR'S MCP SERVER, AND IT PREPARES AND NEVER PAYS. One scenario, once a run, on a workspace
+// of its own:
+//   connect-mcp — on Lens's API the owner opens a GBP account for an agent and saves two payees. An assistant registered by
+//     DCR is allowed through the consent screen in the browser; on its token /mcp lists the tools with their annotations
+//     (get_balances read-only, prepare_batch destructive, nothing that pays), get_balances reads the GBP account,
+//     draft_invoice keeps a draft, and prepare_batch for the two payees answers pending approval with the approval link
+//     and the talyvor:// deep link, and still reads pending after. The money: no payment out, every account's test money
+//     and the workspace's ledger exactly as they were before the assistant connected.
+export function connectMCP(): Scenario {
+  return {
+    id: 'connect-mcp',
+    owner: 'talyvor-suite',
+    own: true,
+    agents: 1,
+    items: ['B40.7'],
+    feature: 'Talyvor Connect',
+    title: 'an assistant on /mcp lists the tools with their annotations, reads a balance, drafts an invoice and prepares a two-payee ' +
+      'batch that stays pending approval — no payment out, and the accounts and the ledger unchanged',
+    run: async (ctx) => {
+      const origin = new URL(ctx.app.page.url()).origin
+      const lensCall = async <T>(method: string, path: string, body: unknown, note: string) => {
+        const r = await call<T>(ctx, method, path, body)
+        ctx.evidence.push({ note, answer: said(r) })
+        return r
+      }
+      // 1. On Lens's API: the terms, an agent with a GBP account, and two saved payees.
+      const terms = await lensCall<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
+      for (const t of (terms.value?.terms ?? []).filter((x) => ['currency_accounts', 'payments_in'].includes(x.capability) && x.accepted == null)) {
+        const ok = await lensCall('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
+        if (ok.status !== 201) return { pass: false, detail: `accepting ${t.capability}'s terms answered ${said(ok)}` }
+      }
+      if ((await lensCall('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the company GBP account')).status !== 201) return { pass: false, detail: 'the company GBP account was not opened' }
+      const agent = await lensCall<{ id: string }>('POST', '/v1/workspaces/{ws}/agents', { name: `MCP agent ${randomBytes(3).toString('hex')}` }, 'an agent')
+      if (agent.value?.id === undefined) return { pass: false, detail: `making an agent answered ${said(agent)}` }
+      const account = await lensCall<{ id: string }>('POST', '/v1/money/accounts', { currency: 'GBP', agent_id: agent.value.id }, "the agent's GBP account")
+      if (account.status !== 201 || account.value === undefined) return { pass: false, detail: `the agent's GBP account answered ${said(account)}` }
+      const payees: string[] = []
+      for (const [name, number] of [['Nightly MCP Supplier One Ltd', '12345678'], ['Nightly MCP Supplier Two Ltd', '23456789']]) {
+        const p = await lensCall<{ id: string }>('POST', '/v1/money/payees', { name, country: 'GB', sort_code: '040004', account_number: number }, `the payee ${name}`)
+        if (p.status !== 201 || p.value === undefined) return { pass: false, detail: `saving ${name} answered ${said(p)}` }
+        payees.push(p.value.id)
+      }
+      const money = async () => {
+        const accounts = await call<{ accounts: { id: string; test_minor: number }[] | null }>(ctx, 'GET', '/v1/money/accounts')
+        const payments = await call<{ payments: unknown[] | null }>(ctx, 'GET', '/v1/money/payments')
+        const ledger = await ctx.env.lens.ledger(ctx.app.user)
+        return { accounts: JSON.stringify((accounts.value?.accounts ?? []).map((a) => [a.id, a.test_minor])), payments: (payments.value?.payments ?? []).length, ledger: ledger.length }
+      }
+      const before = await money()
+      ctx.evidence.push({ note: `before the assistant: accounts ${before.accounts}, ${before.payments} payments out, ${before.ledger} ledger rows` })
+
+      // 2. An assistant connects through the consent screen.
+      const server = createServer((_req, res) => res.writeHead(200, { 'Content-Type': 'text/plain' }).end('back at the assistant'))
+      await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok))
+      const callback = `http://127.0.0.1:${(server.address() as AddressInfo).port}/callback`
+      let token = ''
+      try {
+        const reg = await (await fetch(`${origin}/oauth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ client_name: 'e2e assistant (MCP)', redirect_uris: [callback] }) })).json() as { client_id?: string }
+        if (reg.client_id === undefined) return { pass: false, detail: `registering the assistant answered ${JSON.stringify(reg)}` }
+        const verifier = randomBytes(32).toString('base64url')
+        const q = new URLSearchParams({ response_type: 'code', client_id: reg.client_id, redirect_uri: callback, state: 's',
+          code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
+          scope: 'wallets:read invoices:draft payments:prepare', resource: `${origin}/mcp` })
+        await ctx.app.page.goto(`${origin}/oauth/authorize?${q}`)
+        await Promise.all([ctx.app.page.waitForURL((u) => u.href.startsWith(callback), { timeout: 30_000 }), ctx.app.page.getByRole('button', { name: 'Allow' }).click()])
+        const code = new URL(ctx.app.page.url()).searchParams.get('code') ?? ''
+        const tok = await form(`${origin}/oauth/token`, { grant_type: 'authorization_code', code, redirect_uri: callback, client_id: reg.client_id, code_verifier: verifier })
+        token = String(tok.json.access_token ?? '')
+        if (token === '') return { pass: false, detail: `the token endpoint answered ${tok.status} ${JSON.stringify(tok.json)}` }
+      } finally {
+        server.close()
+        await ctx.app.page.goto(origin)
+      }
+
+      // 3. The tools.
+      let id = 0
+      const rpc = async (method: string, params?: unknown): Promise<RPCResult> => {
+        const res = await fetch(`${origin}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'MCP-Protocol-Version': '2025-06-18' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }) })
+        const body = await res.json() as { result?: RPCResult; error?: unknown }
+        ctx.evidence.push({ note: `${method} ${JSON.stringify(params ?? {}).slice(0, 200)}: ${res.status} ${JSON.stringify(body).slice(0, 600)}` })
+        return body.result ?? { isError: true, error: body.error }
+      }
+      const tool = (name: string, args: Record<string, unknown>) => rpc('tools/call', { name, arguments: args })
+      const wrong: string[] = []
+      const init = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'e2e', version: '1' } })
+      if (init.serverInfo?.name !== 'talyvor') wrong.push(`initialize answered ${JSON.stringify(init)}`)
+      const listed = (await rpc('tools/list')).tools ?? []
+      const ann = (n: string) => listed.find((t) => t.name === n)?.annotations
+      if (ann('get_balances')?.readOnlyHint !== true || ann('prepare_batch')?.destructiveHint !== true) wrong.push(`the tools are not listed with their annotations: ${JSON.stringify(listed.map((t) => [t.name, t.annotations]))}`)
+      const payers = listed.filter((t) => /(^|_)(pay|approve|transfer|payout)(_|$)/.test(t.name))
+      if (payers.length > 0) wrong.push(`/mcp lists tools that pay: ${payers.map((t) => t.name).join(', ')}`)
+
+      const bal = await tool('get_balances', {})
+      if (bal.isError !== false || !JSON.stringify(bal.structuredContent ?? {}).includes(account.value.id)) wrong.push(`get_balances does not read the agent's GBP account: ${JSON.stringify(bal).slice(0, 300)}`)
+      const inv = await tool('draft_invoice', { account_id: account.value.id, customer_name: 'Nightly Customer Ltd', customer_email: 'customer@example.com',
+        due_date: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10), lines: [{ description: 'Research', quantity: 2, unit_amount_minor: 5000, vat_rate_bps: 2000 }] })
+      if (inv.isError !== false || inv.structuredContent?.status !== 'draft') wrong.push(`draft_invoice did not keep a draft: ${JSON.stringify(inv).slice(0, 300)}`)
+      const items = payees.map((p, i) => ({ payee_id: p, currency: 'GBP', amount_minor: 1000 * (i + 1), reference: `MCP bill ${i + 1}` }))
+      const batch = await tool('prepare_batch', { idempotency_key: `e2e-${randomBytes(8).toString('hex')}`, items })
+      const pr = (batch.structuredContent ?? {}) as { id?: string; status?: string; approval_url?: string; deep_link?: string; items?: unknown[] }
+      if (batch.isError !== false || pr.status !== 'pending_approval' || pr.items?.length !== 2 || !pr.approval_url?.includes(`/approve/${pr.id}`) || pr.deep_link !== `talyvor://approve/${pr.id}`) {
+        wrong.push(`prepare_batch did not answer a two-item request pending approval with both links: ${JSON.stringify(batch).slice(0, 400)}`)
+      }
+      const status = await tool('get_request_status', { request_id: pr.id ?? '' })
+      if (status.structuredContent?.status !== 'pending_approval') wrong.push(`the prepared batch then read ${JSON.stringify(status.structuredContent?.status)}, not pending_approval`)
+
+      // 4. The money: nothing moved.
+      const after = await money()
+      ctx.evidence.push({ note: `after the assistant: accounts ${after.accounts}, ${after.payments} payments out, ${after.ledger} ledger rows` })
+      if (after.accounts !== before.accounts || after.payments !== before.payments || after.ledger !== before.ledger) {
+        wrong.push(`money moved: accounts ${before.accounts} → ${after.accounts}, payments out ${before.payments} → ${after.payments}, ledger rows ${before.ledger} → ${after.ledger}`)
+      }
+      return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
+        : { pass: true, detail: `${listed.length} tools listed with their annotations, none that pays; the balance read, an invoice drafted, and request ${pr.id} prepared for two payees pending approval — no payment out, the accounts and ${after.ledger} ledger rows unchanged` }
     },
   }
 }

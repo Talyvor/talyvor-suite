@@ -10,8 +10,8 @@ package main
 // tokens with rotating refresh tokens, and RFC 7009 revocation. Every client is public: PKCE is
 // the proof of possession, so no client secret is issued or accepted.
 //
-// A grant names the person (sub, email), the workspace and the client; B40.7's tools read it
-// through oauthGrantFrom.
+// A grant names the person (sub, email), the workspace and the client; B40.7's tools (mcp.go) read
+// it through oauthGrantFrom.
 //
 // shortcut: grants, codes and registered clients live in this process's memory, so a BFF restart
 // signs every assistant out and it asks the person to connect again; move them to a store when the
@@ -78,8 +78,14 @@ type oauthClient struct {
 
 func (c oauthClient) expiresAt() time.Time { return c.expires }
 
-// oauthWho is the person and workspace a grant acts for, copied from their session at consent.
-type oauthWho struct{ sub, email, workspaceID string }
+// oauthWho is the person and workspace a grant acts for, copied from their session at consent, with the session's
+// Lens credential: the MCP tools (mcp.go) call Lens with it, re-minted by provisioning as a session's is (tenant.go).
+type oauthWho struct {
+	sub, email, workspaceID string
+	lensToken               string
+	lensTokenExp            time.Time
+	synthetic               bool
+}
 
 type oauthConsent struct {
 	client                            oauthClient
@@ -494,7 +500,8 @@ func (a *app) oauthAuthorizeAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.oauth.codes.put(tokenKey(code), oauthCode{clientID: c.client.id, clientName: c.client.name, redirectURI: c.redirectURI,
-		challenge: c.challenge, scope: c.sc, who: oauthWho{sub: s.sub, email: s.email, workspaceID: s.workspaceID},
+		challenge: c.challenge, scope: c.sc, who: oauthWho{sub: s.sub, email: s.email, workspaceID: s.workspaceID,
+			lensToken: s.lensToken, lensTokenExp: s.lensTokenExp, synthetic: s.synthetic},
 		expires: time.Now().Add(oauthCodeTTL)})
 	if !isCIMDClientID(c.client.id) {
 		a.oauth.clients.update(c.client.id, func(cl oauthClient) oauthClient { cl.expires = time.Now().Add(oauthClientTTL); return cl })
@@ -649,24 +656,6 @@ func (a *app) oauthGrantFrom(w http.ResponseWriter, r *http.Request) (oauthGrant
 	w.Header().Set("WWW-Authenticate", challenge)
 	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in to Talyvor from your assistant to use this"})
 	return oauthGrant{}, false
-}
-
-// handleMCP is the protected resource's front door. B40.7 puts the MCP server behind it; until then a
-// signed-in assistant is told who it is acting for and that the tools are not there yet.
-func (a *app) handleMCP(w http.ResponseWriter, r *http.Request) {
-	// Streamable HTTP lets a server with no SSE stream and no sessions answer GET and DELETE 405.
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
-	}
-	g, ok := a.oauthGrantFrom(w, r)
-	if !ok {
-		return
-	}
-	writeJSON(w, http.StatusNotImplemented, map[string]string{
-		"error":     "Talyvor's tools for assistants are not available yet",
-		"acting_as": g.Who.email, "workspace_id": g.Who.workspaceID, "client": g.ClientName,
-	})
 }
 
 // ─── the consent screen ────────────────────────────────────────────────────────────────────────
