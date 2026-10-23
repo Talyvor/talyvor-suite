@@ -1,5 +1,6 @@
 import { Button, Mark, ThemeToggle, Wordmark, focusRing, inlineLink } from '@talyvor/ui'
 import { CompanyLine } from './CompanyLine'
+import { CookieSettingsLink } from '../areas/marketing/MetaPixel'
 import { FOOTER_LINE } from '../positioning'
 
 // B29.13 — the logo header and the footer the public reading pages share: /documentation, /privacy,
@@ -77,6 +78,7 @@ export function SiteFooter({ links, width = 'max-w-5xl' }: { links: SiteLink[]; 
               </a>
             </span>
           ))}
+          <CookieSettingsLink />
         </div>
       </div>
       <div className={`mx-auto w-full ${width} px-gutter pb-6`}>

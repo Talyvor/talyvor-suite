@@ -77,6 +77,7 @@ import { Pricing } from './areas/marketing/Pricing'
 import { Documentation } from './areas/documentation/Documentation'
 import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH } from './areas/documentation/content'
 import { ClaudeConnector } from './areas/documentation/ClaudeConnector'
+import { MetaPixel } from './areas/marketing/MetaPixel'
 import { Privacy } from './routes/Privacy'
 import { Terms } from './routes/Terms'
 import { SignIn, SignUp } from './areas/auth/Entry'
@@ -729,6 +730,8 @@ export function App() {
             reset mounted in `AppShell` would be correct on all twelve gated addresses and
             absent from every page a stranger sees. */}
         <ScrollToTopOnPush />
+        {/* B44.2 — the cookie banner and Meta pixel; it renders nothing off the public pages. */}
+        <MetaPixel />
         <Routes>
           {/* Public marketing landing — OUTSIDE the AuthGate by design. */}
           <Route path="/marketing/*" element={<Landing />} />
