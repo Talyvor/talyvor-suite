@@ -500,7 +500,7 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 		return mcpRefusal(req.ID, refusal.Error)
 	}
 	if tool.keeps != "" {
-		if raw, err = a.keepDraft(t, g, tool.keeps, c.body); err != nil {
+		if raw, err = a.keepDraft(t, g, tool.keeps, c.body, raw); err != nil {
 			return mcpRefusal(req.ID, err.Error())
 		}
 	}

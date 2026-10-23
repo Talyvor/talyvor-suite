@@ -16,6 +16,7 @@ package main
 import (
 	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,11 +32,12 @@ type assistantDraft struct {
 	ID          string          `json:"id"`
 	Kind        string          `json:"kind"` // "payee" or "mandate"
 	Assistant   string          `json:"assistant"`
-	Details     json.RawMessage `json:"details"` // the payee's details, or the mandate's terms as Lens's prepare takes them
+	Details     json.RawMessage `json:"details"` // the payee's details, or the mandate's terms as Lens's prepare wrote them
 	CreatedAt   time.Time       `json:"created_at"`
 	ConfirmURL  string          `json:"confirm_url"`
 	Status      string          `json:"status"`
 	workspaceID string
+	grantID     string // the connection that asked: revoked, its requests are gone
 	expires     time.Time
 }
 
@@ -69,8 +71,8 @@ func mcpCreatePayeeRequest(_ tenant, _ oauthGrant, _ mcpArgs, raw json.RawMessag
 // mcpDraftMandate checks the terms with Lens's prepare, which keeps nothing, and keeps them for the person to sign. The
 // mandate is always the person's, and covers only this assistant, whatever the arguments say.
 func mcpDraftMandate(_ tenant, g oauthGrant, _ mcpArgs, raw json.RawMessage) (lensCall, error) {
-	// The objects go up as the assistant wrote them: Lens binds only the terms it knows, and the person reads each of them
-	// in plain words before signing.
+	// The objects go up as the assistant wrote them; what is kept is Lens's canonical form of them (keepDraft), so the
+	// person reads exactly the terms Lens bound — not a key Go matched case-insensitively that the screen would not.
 	var in struct {
 		Principal             map[string]string `json:"principal"`
 		Clients               []string          `json:"clients"`
@@ -90,9 +92,19 @@ func mcpDraftMandate(_ tenant, g oauthGrant, _ mcpArgs, raw json.RawMessage) (le
 	return lensCall{method: http.MethodPost, path: "/v1/money/permission-mandates/prepare", body: body}, err
 }
 
-// keepDraft keeps what a tool drafted for the grant's workspace, and answers the assistant with it.
-func (a *app) keepDraft(t tenant, g oauthGrant, kind string, details []byte) ([]byte, error) {
-	waiting := a.oauth.drafts.matching(func(d assistantDraft) bool { return d.workspaceID == t.workspaceID })
+// keepDraft keeps what a tool drafted for the grant's workspace, and answers the assistant with it. A mandate is kept as
+// the canonical terms Lens's prepare answered with.
+func (a *app) keepDraft(t tenant, g oauthGrant, kind string, details, lensAnswer []byte) ([]byte, error) {
+	if kind == "mandate" {
+		var prepared struct {
+			Canonical string `json:"canonical"`
+		}
+		if json.Unmarshal(lensAnswer, &prepared) != nil || prepared.Canonical == "" {
+			return nil, errors.New("Talyvor could not check these terms just now. Try again shortly.")
+		}
+		details = []byte(prepared.Canonical)
+	}
+	waiting := a.waitingFor(t)
 	if len(waiting) >= assistantDraftsMax {
 		return nil, fmt.Errorf("%d requests already wait for the person in Talyvor; they have to look at those first", len(waiting))
 	}
@@ -103,7 +115,7 @@ func (a *app) keepDraft(t tenant, g oauthGrant, kind string, details []byte) ([]
 	now := time.Now()
 	d := assistantDraft{ID: "ar_" + id, Kind: kind, Assistant: cmp.Or(g.ClientName, "An assistant"), Details: details,
 		CreatedAt: now, ConfirmURL: a.cfg.publicBaseURL + "/money/pay", Status: "pending_confirmation",
-		workspaceID: t.workspaceID, expires: now.Add(oauthGrantMaxAge)}
+		workspaceID: t.workspaceID, grantID: g.ID, expires: now.Add(oauthGrantMaxAge)}
 	a.oauth.drafts.put(d.ID, d)
 	return json.Marshal(d)
 }
@@ -114,9 +126,19 @@ func (a *app) handleAssistantRequests(w http.ResponseWriter, r *http.Request, t 
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	list := a.oauth.drafts.matching(func(d assistantDraft) bool { return d.workspaceID == t.workspaceID })
+	list := a.waitingFor(t)
 	slices.SortFunc(list, func(x, y assistantDraft) int { return y.CreatedAt.Compare(x.CreatedAt) })
 	writeJSON(w, http.StatusOK, map[string]any{"requests": list})
+}
+
+// waitingFor is the workspace's requests whose connection is still there.
+func (a *app) waitingFor(t tenant) []assistantDraft {
+	return a.oauth.drafts.matching(func(d assistantDraft) bool { return d.workspaceID == t.workspaceID && a.draftLive(d) })
+}
+
+func (a *app) draftLive(d assistantDraft) bool {
+	_, ok := a.oauth.grants.get(d.grantID)
+	return ok
 }
 
 // assistantDraftOf is the {id} request when it is this workspace's, of the kind wanted ("" for any).
@@ -126,7 +148,7 @@ func (a *app) assistantDraftOf(w http.ResponseWriter, r *http.Request, t tenant,
 		return assistantDraft{}, false
 	}
 	d, ok := a.oauth.drafts.get(r.PathValue("id"))
-	if !ok || d.workspaceID != t.workspaceID || kind != "" && d.Kind != kind {
+	if !ok || d.workspaceID != t.workspaceID || kind != "" && d.Kind != kind || !a.draftLive(d) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such request from an assistant"})
 		return assistantDraft{}, false
 	}

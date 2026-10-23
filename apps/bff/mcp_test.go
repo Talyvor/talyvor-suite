@@ -286,7 +286,11 @@ func TestMCPPayeeAndMandateWaitForThePerson(t *testing.T) {
 		terms["principal"].(map[string]any)["type"] != "person" {
 		t.Fatalf("draft_mandate: %v; checked with Lens as %v", dm, terms)
 	}
-	id := waiting()[0].(map[string]any)["id"].(string)
+	kept := waiting()[0].(map[string]any)
+	if kept["details"].(map[string]any)["id"] != "pm-1" {
+		t.Fatalf("the screen is shown %v, not the canonical terms Lens bound", kept["details"])
+	}
+	id := kept["id"].(string)
 	if rec := serve(a, "POST", "/api/money/assistant-requests/"+id+"/prepare", oauthOrigin, "", nil, ck); rec.Code != http.StatusOK || jsonOf(t, rec)["challenge"] != "ch-1" {
 		t.Fatalf("prepare: %d %s", rec.Code, rec.Body.String())
 	}
@@ -297,5 +301,14 @@ func TestMCPPayeeAndMandateWaitForThePerson(t *testing.T) {
 	if rec := serve(a, "POST", "/api/money/assistant-requests/"+id+"/sign", oauthOrigin, signed, nil, ck); rec.Code != http.StatusCreated ||
 		lens.sent["POST /v1/money/permission-mandates"]["assertion"] == nil || len(waiting()) != 0 {
 		t.Fatalf("sign: %d %s, still waiting %v", rec.Code, rec.Body.String(), waiting())
+	}
+
+	// Revoked, the connection's requests are gone with it.
+	toolCall(t, a, token, "create_payee_request", map[string]any{"name": "Acme Ltd", "country": "GB", "iban": "GB33BUKB20201555555555"})
+	for _, g := range a.oauth.grants.matching(func(oauthGrant) bool { return true }) {
+		a.oauth.grants.delete(g.ID)
+	}
+	if left := waiting(); len(left) != 0 {
+		t.Fatalf("a revoked connection's requests still wait: %v", left)
 	}
 }
