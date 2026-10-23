@@ -45,6 +45,9 @@ type app struct {
 	// public caches /api/pricing's Lens reads, so an anonymous route does not dial Lens per hit.
 	public pricingReads
 
+	// waitlist counts talyvor.com waitlist submits per IP for the last hour (waitlist.go).
+	waitlist waitlistHits
+
 	// fx caches the ECB's euro reference rates for /api/fx (fx.go); fxSource is where they are read.
 	fx       fxReads
 	fxSource string
@@ -267,6 +270,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	// and docs_collab.go.
 	a.mux.HandleFunc("/api/docs/spaces/{spaceID}/pages/{pageID}/share", a.docsSharePageLink())
 	a.mux.HandleFunc("/api/public/docs/{token}", a.publicDocsShare())
+	// B44.1 — talyvor.com's waitlist: anyone joins, only the operator reads it. See waitlist.go.
+	a.mux.HandleFunc("/api/waitlist", a.handleWaitlist)
 	a.mux.Handle("/docs/s/{token}", a.docsSharePage())
 	a.mux.HandleFunc("/api/docs/collab/{pageID}/ws", a.docsCollab())
 	// B28.450 — a page shared with a team, and who is on the team. See docs_teams.go.

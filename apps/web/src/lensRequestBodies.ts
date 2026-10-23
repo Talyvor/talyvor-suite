@@ -766,6 +766,17 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor: "type Prompt struct {",
     subject: "lensPromptCreateBody",
   },
+  // B44.1 — talyvor.com's waitlist: one signup, on the provision secret (B44.6).
+  {
+    route: "POST /v1/waitlist",
+    file: "apps/bff/waitlist.go",
+    kind: "map-literal",
+    anchor:
+      'json.Marshal(map[string]string{"email": email, "page": in.Page, "utm_source": in.UTMSource, "utm_medium": in.UTMMedium, "utm_campaign": in.UTMCampaign})',
+    upstreamFile: "cmd/lens/waitlist_handler.go",
+    upstreamAnchor: "type waitlistRequest struct {",
+    subject: "lensWaitlistBody",
+  },
   // B32.63 — the operator loads a tax rates file (Lens B32.101 adds the route).
   {
     route: "POST /v1/admin/tax/rates/import",

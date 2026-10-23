@@ -294,6 +294,8 @@ var publicWriteRoutes = map[string]string{
 	"/auth/logout": "session teardown, which cannot require the session it is tearing down. " +
 		"503 here only because this fixture configures no IdP (a.auth is nil); " +
 		"logout_test.go owns what it does when one exists",
+	"/api/waitlist": "B44.1 — talyvor.com's waitlist, joined by a visitor who has no account. It stores one email in " +
+		"Lens and nothing else, 5 tries an hour per IP; reading it back (GET) needs the operator — waitlist_test.go owns both",
 	"/api/public/pay/{token}/card": "B30.97 — the pay page's card button: the payer, signed out, asks Lens for a " +
 		"Stripe test-mode Checkout for what the invoice is due. The token is the credential, checked for shape " +
 		"before any dial; Lens is called with no credential and only it decides what is due — money_invoices_test.go owns both",

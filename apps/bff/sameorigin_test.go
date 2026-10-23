@@ -195,6 +195,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/features/budget", body: `{"limit_usd":50,"enforcement":"hard_block"}`},
 		{method: http.MethodPost, path: "/api/features/pattern-mining", body: `{"opted_in":false}`},
 		{method: http.MethodPost, path: "/api/ai/feedback", body: `{"request_id":"r1","signal":"negative"}`},
+		{method: http.MethodPost, path: "/api/waitlist", body: `{"email":"a@example.com"}`}, // B44.1
 		{method: http.MethodPost, path: "/api/features/stored-answers/delete", body: `{"scope":"shared","confirm":"ws"}`},
 		{method: http.MethodPost, path: "/api/features/deletion-requests", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents", body: `{"name":"a"}`},
