@@ -14,7 +14,7 @@ import type { ChildProcess } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import type { Scenario } from './scenarios.ts'
+import type { Scenario, ScenarioCtx } from './scenarios.ts'
 import { softPasskey } from './payees.ts'
 import { call, said } from './settings.ts'
 import { tunnel } from './trackWebhooks.ts'
@@ -201,6 +201,44 @@ interface RPCResult {
   tools?: { name: string; annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean } }[]
 }
 
+/** An assistant registered by DCR and allowed through the consent screen in the browser: its access token, or the failure. */
+async function connectAssistant(ctx: ScenarioCtx, origin: string, name: string): Promise<string | { pass: false; detail: string }> {
+  const server = createServer((_req, res) => res.writeHead(200, { 'Content-Type': 'text/plain' }).end('back at the assistant'))
+  await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok))
+  const callback = `http://127.0.0.1:${(server.address() as AddressInfo).port}/callback`
+  try {
+    const reg = await (await fetch(`${origin}/oauth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_name: name, redirect_uris: [callback] }) })).json() as { client_id?: string }
+    if (reg.client_id === undefined) return { pass: false, detail: `registering the assistant answered ${JSON.stringify(reg)}` }
+    const verifier = randomBytes(32).toString('base64url')
+    const q = new URLSearchParams({ response_type: 'code', client_id: reg.client_id, redirect_uri: callback, state: 's',
+      code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
+      scope: 'wallets:read invoices:draft payments:prepare', resource: `${origin}/mcp` })
+    await ctx.app.page.goto(`${origin}/oauth/authorize?${q}`)
+    await Promise.all([ctx.app.page.waitForURL((u) => u.href.startsWith(callback), { timeout: 30_000 }), ctx.app.page.getByRole('button', { name: 'Allow' }).click()])
+    const code = new URL(ctx.app.page.url()).searchParams.get('code') ?? ''
+    const tok = await form(`${origin}/oauth/token`, { grant_type: 'authorization_code', code, redirect_uri: callback, client_id: reg.client_id, code_verifier: verifier })
+    const token = String(tok.json.access_token ?? '')
+    return token !== '' ? token : { pass: false, detail: `the token endpoint answered ${tok.status} ${JSON.stringify(tok.json)}` }
+  } finally {
+    server.close()
+    await ctx.app.page.goto(origin)
+  }
+}
+
+/** JSON-RPC to /mcp on token, each message and its answer kept as evidence. */
+function mcpTools(ctx: ScenarioCtx, origin: string, token: string) {
+  let id = 0
+  const rpc = async (method: string, params?: unknown): Promise<RPCResult> => {
+    const res = await fetch(`${origin}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'MCP-Protocol-Version': '2025-06-18' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }) })
+    const body = await res.json() as { result?: RPCResult; error?: unknown }
+    ctx.evidence.push({ note: `${method} ${JSON.stringify(params ?? {}).slice(0, 200)}: ${res.status} ${JSON.stringify(body).slice(0, 600)}` })
+    return body.result ?? { isError: true, error: body.error }
+  }
+  return { rpc, tool: (name: string, args: Record<string, unknown>) => rpc('tools/call', { name, arguments: args }) }
+}
+
 // B40.7 — AN ASSISTANT USES TALYVOR'S MCP SERVER, AND IT PREPARES AND NEVER PAYS. One scenario, once a run, on a workspace
 // of its own:
 //   connect-mcp — on Lens's API the owner opens a GBP account for an agent and saves two payees. An assistant registered by
@@ -258,39 +296,11 @@ export function connectMCP(): Scenario {
       ctx.evidence.push({ note: `before the assistant: accounts ${before.accounts}, ${before.payments} payments out, ${before.ledger} ledger rows` })
 
       // 2. An assistant connects through the consent screen.
-      const server = createServer((_req, res) => res.writeHead(200, { 'Content-Type': 'text/plain' }).end('back at the assistant'))
-      await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok))
-      const callback = `http://127.0.0.1:${(server.address() as AddressInfo).port}/callback`
-      let token = ''
-      try {
-        const reg = await (await fetch(`${origin}/oauth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ client_name: 'e2e assistant (MCP)', redirect_uris: [callback] }) })).json() as { client_id?: string }
-        if (reg.client_id === undefined) return { pass: false, detail: `registering the assistant answered ${JSON.stringify(reg)}` }
-        const verifier = randomBytes(32).toString('base64url')
-        const q = new URLSearchParams({ response_type: 'code', client_id: reg.client_id, redirect_uri: callback, state: 's',
-          code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
-          scope: 'wallets:read invoices:draft payments:prepare', resource: `${origin}/mcp` })
-        await ctx.app.page.goto(`${origin}/oauth/authorize?${q}`)
-        await Promise.all([ctx.app.page.waitForURL((u) => u.href.startsWith(callback), { timeout: 30_000 }), ctx.app.page.getByRole('button', { name: 'Allow' }).click()])
-        const code = new URL(ctx.app.page.url()).searchParams.get('code') ?? ''
-        const tok = await form(`${origin}/oauth/token`, { grant_type: 'authorization_code', code, redirect_uri: callback, client_id: reg.client_id, code_verifier: verifier })
-        token = String(tok.json.access_token ?? '')
-        if (token === '') return { pass: false, detail: `the token endpoint answered ${tok.status} ${JSON.stringify(tok.json)}` }
-      } finally {
-        server.close()
-        await ctx.app.page.goto(origin)
-      }
+      const token = await connectAssistant(ctx, origin, 'e2e assistant (MCP)')
+      if (typeof token !== 'string') return token
 
       // 3. The tools.
-      let id = 0
-      const rpc = async (method: string, params?: unknown): Promise<RPCResult> => {
-        const res = await fetch(`${origin}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'MCP-Protocol-Version': '2025-06-18' },
-          body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }) })
-        const body = await res.json() as { result?: RPCResult; error?: unknown }
-        ctx.evidence.push({ note: `${method} ${JSON.stringify(params ?? {}).slice(0, 200)}: ${res.status} ${JSON.stringify(body).slice(0, 600)}` })
-        return body.result ?? { isError: true, error: body.error }
-      }
-      const tool = (name: string, args: Record<string, unknown>) => rpc('tools/call', { name, arguments: args })
+      const { rpc, tool } = mcpTools(ctx, origin, token)
       const wrong: string[] = []
       const init = await rpc('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'e2e', version: '1' } })
       if (init.serverInfo?.name !== 'talyvor') wrong.push(`initialize answered ${JSON.stringify(init)}`)
@@ -393,6 +403,127 @@ export function connectMCP(): Scenario {
       }
       return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
         : { pass: true, detail: `${listed.length} tools listed with their annotations, none that pays; the balance read, an invoice drafted, request ${pr.id} prepared for two payees pending approval, and the asked-for payee and mandate made only by Save and the passkey — no payment out, the accounts and ${after.ledger} ledger rows unchanged` }
+    },
+  }
+}
+
+// B40.21 — AN ASSISTANT PREPARES A BATCH OVER MCP, AND THE PERSON APPROVES IT ONCE. One scenario, once a run, on a workspace
+// of its own:
+//   connect-approve — on Lens's API the owner opens the company's GBP account, saves two payees and registers this run's
+//     software passkey. An assistant connected through the consent screen asks prepare_batch to pay raw bank details:
+//     refused, and nothing moves. It prepares a batch for the two saved payees; the person approves both with one passkey,
+//     through the approval screen's own two calls. Then exactly two payments out post, each with its payee, amount and
+//     reference, and the company's account is down by their total; the same approval sent again is refused 409 and posts
+//     nothing. An assistant's batch pays from the company's account, so that account must hold the test money.
+export function connectApprove(): Scenario {
+  return {
+    id: 'connect-approve',
+    owner: 'talyvor-lens',
+    own: true,
+    items: ['B40.21'],
+    feature: 'Talyvor Connect',
+    title: 'an assistant prepares a two-payee batch over MCP and the person approves it once with a passkey: exactly two payments ' +
+      'post with their references and the company account is down by their total, a replayed approval posts nothing, and a ' +
+      'batch carrying raw bank details is refused',
+    run: async (ctx) => {
+      const origin = new URL(ctx.app.page.url()).origin
+      const lensCall = async <T>(method: string, path: string, body: unknown, note: string) => {
+        const r = await call<T>(ctx, method, path, body)
+        ctx.evidence.push({ note, answer: said(r) })
+        return r
+      }
+      // 1. On Lens's API: the terms, the company's GBP account, two saved payees and a passkey.
+      const terms = await lensCall<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
+      for (const t of (terms.value?.terms ?? []).filter((x) => ['currency_accounts', 'payments_in', 'payments_out'].includes(x.capability) && x.accepted == null)) {
+        const ok = await lensCall('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
+        if (ok.status !== 201) return { pass: false, detail: `accepting ${t.capability}'s terms answered ${said(ok)}` }
+      }
+      const company = await lensCall<{ id: string }>('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the company GBP account')
+      if (company.status !== 201 || company.value === undefined) return { pass: false, detail: `the company GBP account answered ${said(company)}` }
+      const names = ['Nightly Approve Supplier One Ltd', 'Nightly Approve Supplier Two Ltd']
+      const payees: string[] = []
+      for (const [i, name] of names.entries()) {
+        const p = await lensCall<{ id: string }>('POST', '/v1/money/payees', { name, country: 'GB', sort_code: '040004', account_number: `4567890${i}` }, `the payee ${name}`)
+        if (p.status !== 201 || p.value === undefined) return { pass: false, detail: `saving ${name} answered ${said(p)}` }
+        payees.push(p.value.id)
+      }
+      const reg = await lensCall<{ challenge: string; rp_id: string }>('POST', '/v1/workspaces/{ws}/agents/passkeys/challenge', {}, 'the passkey registration challenge')
+      if (reg.value === undefined) return { pass: false, detail: `the passkey registration challenge answered ${said(reg)}` }
+      const key = softPasskey(reg.value.rp_id)
+      const registered = await lensCall('POST', '/v1/workspaces/{ws}/agents/passkeys', key.register(reg.value.challenge, 'Nightly approve passkey'), 'the passkey')
+      if (registered.status !== 201) return { pass: false, detail: `registering a passkey answered ${said(registered)}` }
+
+      interface Payment { id: string; payee_id: string; amount_minor: number; currency: string; reference: string; status: string }
+      const money = async (note: string) => {
+        const accounts = await call<{ accounts: { id: string; test_minor: number }[] | null }>(ctx, 'GET', '/v1/money/accounts')
+        const payments = await call<{ payments: Payment[] | null }>(ctx, 'GET', '/v1/money/payments')
+        const m = { held: (accounts.value?.accounts ?? []).find((a) => a.id === company.value?.id)?.test_minor ?? -1, payments: payments.value?.payments ?? [] }
+        ctx.evidence.push({ note: `${note}: the company GBP account holds ${m.held} minor of test money; ${m.payments.length} payments out ${JSON.stringify(m.payments.map((p) => [p.reference, p.amount_minor, p.status]))}` })
+        return m
+      }
+      const before = await money('before the assistant')
+
+      // 2. An assistant connects; a batch carrying raw bank details is refused, and nothing moves.
+      const token = await connectAssistant(ctx, origin, 'e2e assistant (approve)')
+      if (typeof token !== 'string') return token
+      const { tool } = mcpTools(ctx, origin, token)
+      const wrong: string[] = []
+      const raw = await tool('prepare_batch', { idempotency_key: `e2e-${randomBytes(8).toString('hex')}`,
+        items: [{ name: 'Nightly Raw Details Ltd', sort_code: '040004', account_number: '56789012', currency: 'GBP', amount_minor: 500, reference: 'MCP raw details' }] })
+      if (raw.isError !== true || raw.structuredContent?.id !== undefined) wrong.push(`prepare_batch with raw bank details was not refused: ${JSON.stringify(raw).slice(0, 300)}`)
+
+      // 3. A batch for the two saved payees, pending approval.
+      const items = payees.map((p, i) => ({ payee_id: p, currency: 'GBP', amount_minor: 1000 * (i + 1), reference: `MCP approve ${i + 1} ${randomBytes(3).toString('hex')}` }))
+      const total = items.reduce((s, it) => s + it.amount_minor, 0)
+      const batch = await tool('prepare_batch', { idempotency_key: `e2e-${randomBytes(8).toString('hex')}`, items })
+      const pr = (batch.structuredContent ?? {}) as { id?: string; status?: string; items?: unknown[] }
+      if (batch.isError !== false || pr.id === undefined || pr.status !== 'pending_approval' || pr.items?.length !== 2) {
+        wrong.push(`prepare_batch did not answer a two-item request pending approval: ${JSON.stringify(batch).slice(0, 400)}`)
+        return { pass: false, detail: wrong.join('; ') }
+      }
+
+      // 4. One approval for both, signed with the passkey: the approval screen's own two calls.
+      const post = (path: string, body: unknown) => ctx.app.page.request.post(`${origin}/api/money/payment-requests/${pr.id}/${path}`, { headers: { Origin: origin }, data: body })
+      const prepared = await post('approval', { positions: [1, 2] })
+      const toSign = await prepared.json() as { statement?: string; challenge?: string; allow_credentials?: string[] | null }
+      ctx.evidence.push({ note: `the statement to sign: ${prepared.status()} ${String(toSign.statement).slice(0, 600)}` })
+      const named = (JSON.parse(toSign.statement ?? '{}') as { items?: { reference: string }[] }).items?.map((it) => it.reference) ?? []
+      if (prepared.status() !== 200 || JSON.stringify(named) !== JSON.stringify(items.map((it) => it.reference))) {
+        return { pass: false, detail: `the statement to approve both answered ${prepared.status()} naming ${JSON.stringify(named)}, not both payments` }
+      }
+      if (!(toSign.allow_credentials ?? []).includes(key.credentialID)) wrong.push(`the approval's challenge does not allow this run's passkey: ${JSON.stringify(toSign.allow_credentials)}`)
+      const approval = { statement: toSign.statement, assertion: key.assert(toSign.challenge ?? '') }
+      const approved = await post('approve', approval)
+      const paid = await approved.json() as { status?: string; items?: { position: number; payment_id?: string; pay_status?: string; pay_detail?: string }[] }
+      ctx.evidence.push({ note: `approve: ${approved.status()} ${JSON.stringify(paid).slice(0, 800)}` })
+      if (approved.status() !== 200 || paid.status !== 'approved') wrong.push(`approving answered ${approved.status()} ${JSON.stringify(paid).slice(0, 300)}`)
+      const unpaid = (paid.items ?? []).filter((it) => !it.payment_id)
+      if (unpaid.length > 0) wrong.push(`after the approval ${unpaid.length} of 2 items have no payment: ${unpaid.map((it) => `item ${it.position} ${it.pay_status} "${it.pay_detail}"`).join('; ')}`)
+
+      // 5. The money: exactly the two payments, and the account down by their total.
+      const after = await money('after the approval')
+      const fresh = after.payments.filter((p) => !before.payments.some((b) => b.id === p.id))
+      for (const [i, it] of items.entries()) {
+        const p = fresh.filter((x) => x.reference === it.reference)
+        if (p.length !== 1 || p[0].payee_id !== it.payee_id || p[0].amount_minor !== it.amount_minor || p[0].currency !== 'GBP') {
+          wrong.push(`Lens lists ${p.length} payments referenced "${it.reference}" (${JSON.stringify(p)}), not one of ${it.amount_minor} GBP to ${names[i]}`)
+        }
+      }
+      if (fresh.length !== 2) wrong.push(`the approval posted ${fresh.length} payments out, not 2`)
+      if (after.held !== before.held - total) wrong.push(`the company GBP account went from ${before.held} to ${after.held} minor of test money, not down by ${total}`)
+
+      // 6. The same approval again: refused, and nothing more posts.
+      const replay = await post('approve', approval)
+      const again = await money('after the replayed approval')
+      ctx.evidence.push({ note: `the approval sent again: ${replay.status()} ${(await replay.text()).slice(0, 300)}` })
+      if (replay.status() !== 409) wrong.push(`the replayed approval answered ${replay.status()}, not 409`)
+      if (again.payments.length !== after.payments.length || again.held !== after.held) {
+        wrong.push(`the replayed approval moved money: ${after.payments.length} → ${again.payments.length} payments out, the account ${after.held} → ${again.held} minor`)
+      }
+      await ctx.app.page.goto(origin)
+
+      return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
+        : { pass: true, detail: `raw bank details refused; request ${pr.id} approved once with a passkey paid exactly two payments (${items.map((it) => it.reference).join(', ')}), the company account ${before.held} → ${after.held} minor; the replay answered 409 and posted nothing` }
     },
   }
 }
