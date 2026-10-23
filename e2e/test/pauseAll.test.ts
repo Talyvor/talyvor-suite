@@ -47,11 +47,11 @@ function bankOf(base: string, lens: LensClient, user: SyntheticUser): AgentBankS
   } as unknown as AgentBankScreen
 }
 
-async function pauseAllTwice(): Promise<{ verdict: Verdict; evidence: Evidence[] }> {
+async function pauseAllTwice(stubBreak = 'pool-stale'): Promise<{ verdict: Verdict; evidence: Evidence[] }> {
   const port = await freePort()
   const base = `http://127.0.0.1:${port}`
   stub = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../selftest/stub-lens.ts', import.meta.url).pathname], {
-    env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'pause-key', STUB_BREAK: 'pool-stale' },
+    env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'pause-key', STUB_BREAK: stubBreak },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
   await new Promise<void>((resolve, reject) => {
@@ -78,4 +78,13 @@ describe('agent-pause-all (B28.459)', () => {
     expect(verdict).toMatchObject({ pass: true })
     expect(evidence.find((e) => e.note?.endsWith('started again'))?.served).toMatch(/^not replayed, no pooled charge/)
   }, 30_000)
+
+  // B28.458 — the report names the request that served the answer; an answer Lens sends without one FAILs.
+  it('names the request that served the started-again answer, and FAILs when Lens sends none', async () => {
+    const { verdict, evidence } = await pauseAllTwice()
+    expect(evidence.find((e) => e.note?.endsWith('started again'))?.served).toMatch(/X-Talyvor-Request-ID: req_[0-9a-f]+/)
+    stub?.kill()
+    expect((await pauseAllTwice('pool-stale,request-id')).verdict).toMatchObject({ pass: false, detail: expect.stringMatching(/which Lens request served/) })
+    expect(verdict).toMatchObject({ pass: true })
+  }, 60_000)
 })

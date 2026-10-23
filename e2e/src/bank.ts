@@ -1427,6 +1427,7 @@ export function agentPauseAll(seed: number): Scenario {
     id: 'agent-pause-all',
     owner: 'talyvor-lens',
     agents: 2,
+    items: ['B28.458'],
     title: 'Pause every agent stops every agent before the provider; started again, they are served',
     run: (ctx) => withBank(ctx, async (bank) => {
       const agents: { a: Agent; key: string }[] = []
@@ -1460,6 +1461,10 @@ export function agentPauseAll(seed: number): Scenario {
       const t = await agentAsks(ctx, agents[0].key, q, `${agents[0].a.name}, started again`, undefined, { 'X-Talyvor-Cache': 'bypass' })
       if (!t.ok) return fail(`started again, ${agents[0].a.name} is still refused: ${t.status} ${t.error}`)
       if (!statesNumber(t.value.text, want)) return fail(`answered wrong: expected ${want}, got "${t.value.text}"`)
+      // B28.458 — the report names the request and the path that served it, so a wrong answer says where it came from.
+      if (!/^(not )?replayed, .*X-Talyvor-Request-ID: \S+/.test(t.value.served)) {
+        return fail(`the report cannot say which Lens request served the started-again answer: "${t.value.served}"`)
+      }
       return { pass: true, detail: 'both agents refused (403, every agent paused) with nothing charged; started again, served' }
     }),
   }

@@ -78,6 +78,7 @@
 //   status-truth — /healthz reads degraded while /status.json reads operational (B37.7)
 //   pool-stale  — the pool keeps every answer with its first number 210 short, as the "9792" for 6235 + 3767 that
 //                 agent-pause-all was replayed from 9 Oct on (B28.459): only a question asked past the cache is right
+//   request-id  — an answer carries no X-Talyvor-Request-ID, so the report cannot say which request served it (B28.458)
 //   reconciliation-missing — yesterday's pounds run has a payment the partner's statement does not show, and the £7.00
 //                 shortfall it leaves in the safeguarding view (B30.123)
 //
@@ -902,7 +903,7 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
 
   const key = JSON.stringify([model.id, messages.map((m) => [m.role, text(m)])])
   const rid = 'req_' + randomBytes(10).toString('hex')
-  headers['X-Talyvor-Request-ID'] = rid
+  if (!broke('request-id')) headers['X-Talyvor-Request-ID'] = rid
   answered.set(rid, { ws: ws.id, key })
   const bypass = req.headers['x-talyvor-cache'] === 'bypass' && !(BREAK === 'logging' && ws.settings.logging_policy === 'none')
   let answer: string
