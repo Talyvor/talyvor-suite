@@ -673,6 +673,9 @@ type passkeyAssertion struct {
 	ClientDataJSON    string `json:"client_data_json"`
 	AuthenticatorData string `json:"authenticator_data"`
 	Signature         string `json:"signature"`
+	// B40.37: a phone's device key signs instead (Lens's passkey.Assertion, B40.4); forwarded unchanged.
+	DeviceID  string `json:"device_id,omitempty"`
+	Challenge string `json:"challenge,omitempty"`
 }
 
 // handlePasskeyChallenge — POST /api/agents/passkeys/challenge.
