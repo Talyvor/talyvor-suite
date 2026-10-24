@@ -3515,6 +3515,63 @@ export function approvalsBadge(seed: number): Scenario {
   }
 }
 
+/**
+ * B41.33 — the approvals inbox. Five payments by one agent are held for a person; on Approvals the list is
+ * narrowed to that agent, all five are ticked and approved together. Lens must hold each of the five approved,
+ * exactly once, and nothing else decided; approving moves no money, read back from the payer's lines.
+ */
+export function approvalsInbox(seed: number): Scenario {
+  return {
+    id: 'approvals-inbox',
+    owner: 'talyvor-suite',
+    items: ['B41.33'],
+    agents: 2,
+    title: 'the approvals inbox: five held payments narrowed to their agent, ticked and approved together, each approved once in Lens',
+    run: (ctx) => withBank(ctx, async (bank) => {
+      const payer = await openAgent(ctx, bank, `Inbox payer ${seed}`)
+      if (typeof payer === 'string') return fail(payer)
+      const payee = await openAgent(ctx, bank, `Inbox payee ${seed}`)
+      if (typeof payee === 'string') return fail(payee)
+      let err = await bank.move(payer, 6e6, 'Fund')
+      if (err !== undefined) return fail(`funding was refused: ${err}`)
+      err = await bank.setLimit(payer, 'Ask a person above', 500_000)
+      if (err !== undefined) return fail(`the approval amount was not saved: ${err}`)
+      for (let k = 1; k <= 5; k++) {
+        const said = await bank.pay(payer, payee, 1e6, `inbox ${seed} #${k}`)
+        if (!/waiting in Approvals/.test(said)) return fail(`a payment above the approval amount was not held for a person: "${said}"`)
+      }
+      const before = await ctx.env.lens.agentApprovals(ctx.app.user)
+      const filed = before.filter((x) => x.agent_id === payer.id && x.status === 'pending')
+      if (filed.length !== 5) return fail(`Lens has ${filed.length} pending approval(s) for ${payer.name}, not 5: ${JSON.stringify(filed)}`)
+      const others = before.filter((x) => x.agent_id !== payer.id && x.status === 'pending').map((x) => x.id)
+
+      const { page } = bank
+      await page.getByRole('navigation', { name: 'Sections' }).locator('a[href="/approvals"]').click()
+      await page.getByRole('heading', { level: 1, name: 'Approvals' }).waitFor({ timeout: ACTION_TIMEOUT_MS })
+      await page.getByLabel('Show approvals for').selectOption({ label: payer.name })
+      await page.getByLabel('Select all 5').check({ timeout: ACTION_TIMEOUT_MS })
+      await page.getByRole('button', { name: 'Approve 5', exact: true }).click()
+      const said = page.getByRole('status').filter({ hasText: /^Approved 5/ }).or(page.getByRole('alert')).first()
+      await said.waitFor({ timeout: ACTION_TIMEOUT_MS })
+      const text = (await said.innerText()).trim()
+      ctx.evidence.push({ note: `Approve 5 on Approvals: ${text}` })
+      if (!/^Approved 5/.test(text)) return fail(`approving five together was not confirmed: "${text}"`)
+
+      const after = await ctx.env.lens.agentApprovals(ctx.app.user)
+      const now = (id: string) => after.find((x) => x.id === id)?.status
+      const notApproved = filed.filter((x) => now(x.id) !== 'approved').map((x) => `${x.id}=${now(x.id) ?? 'gone'}`)
+      if (notApproved.length > 0) return fail(`after Approve 5, not every one is approved in Lens: ${notApproved.join(', ')}`)
+      const touched = others.filter((id) => now(id) !== 'pending')
+      if (touched.length > 0) return fail(`Approve 5 on ${payer.name}'s approvals also decided others: ${touched.join(', ')}`)
+      const pays = (await ctx.env.lens.agentLines(ctx.app.user, payer.id)).filter((l) => l.kind === 'pay')
+      if (pays.length !== 0) return fail(`approving moved money: ${payer.name} has ${pays.length} pay line(s): ${JSON.stringify(pays)}`)
+      const held = agentIn(await bookOf(ctx), payer.id)?.balance_ulxc
+      if (held !== 6e6) return fail(`${payer.name} holds ${held} µLXC after the approvals, not the 6000000 it was funded`)
+      return { pass: true, detail: `five held payments narrowed to ${payer.name} and approved together: all five approved in Lens, ${others.length} other pending approval(s) untouched, no pay line, balance 6000000 µLXC` }
+    }),
+  }
+}
+
 export function companyPayment(seed: number, partner: number): Scenario {
   const amount = 700_000
   return {

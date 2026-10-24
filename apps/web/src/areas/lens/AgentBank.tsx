@@ -2054,6 +2054,9 @@ const DECIDED: Record<AgentApproval['status'], { status: PillStatus; label: stri
   denied: { status: 'slashed', label: 'Denied' },
 }
 
+/** How far a waiting row is swiped right before it is approved (B41.33). */
+const SWIPE_PX = 96
+
 // Exported because Chat's approval cards (B28.84) sign with the same passkeys.
 export const PASSKEYS_KEY = ['agent-passkeys']
 
@@ -2136,42 +2139,84 @@ export function Approvals({
   const keys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
   const signed = (keys.data?.passkeys ?? []).length > 0
   const [outcome, setOutcome] = useState<{ ok: boolean; text: React.ReactNode } | null>(null)
+  // B41.33 — the inbox: narrowed by agent and kind, several decided together, worked from the keyboard or by a swipe.
+  const [byAgent, setByAgent] = useState('')
+  const [byKind, setByKind] = useState<'' | 'payment' | 'model'>('')
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const swipeFrom = useRef<{ id: string; x: number; y: number } | null>(null)
+  const [swiping, setSwiping] = useState<{ id: string; dx: number } | null>(null)
+  const decideOne = async (a: AgentApproval, decision: 'approve' | 'deny'): Promise<React.ReactNode> => {
+    // B19.10: once the workspace has a passkey, Lens takes a decision only signed with one — Face ID
+    // (or Touch ID, or the device's PIN) asks here, over a challenge naming this approval alone.
+    await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined)
+    const p = held[a.id]
+    if (decision === 'deny') return <>Denied. {nameOf(a.agent_id)}’s request will be refused.</>
+    if (!p) return <>Approved. {nameOf(a.agent_id)}’s next identical request goes through, once.</>
+    // The payment this screen sent, sent again: Lens lets it through once against this approval.
+    const paid = await agentBankApi.pay(p.from, p.to, p.amount, p.memo)
+    onSent(a.id)
+    return (
+      <>
+        Approved and paid {lxc(paid.amount_ulxc)} from {nameOf(p.from)} to {nameOf(p.to)}.
+      </>
+    )
+  }
+  const settled = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: APPROVALS_KEY }),
+      qc.invalidateQueries({ queryKey: BOOK_KEY }),
+      qc.invalidateQueries({ queryKey: ['agent-statement'] }),
+    ])
   const decide = useMutation({
-    mutationFn: async ({ a, decision }: { a: AgentApproval; decision: 'approve' | 'deny' }) => {
-      // B19.10: once the workspace has a passkey, Lens takes a decision only signed with one — Face ID
-      // (or Touch ID, or the device's PIN) asks here, over a challenge naming this approval alone.
-      await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined)
-      const p = held[a.id]
-      if (decision === 'deny') return { ok: true, text: <>Denied. {nameOf(a.agent_id)}’s request will be refused.</> }
-      if (!p) {
-        return {
-          ok: true,
-          text: <>Approved. {nameOf(a.agent_id)}’s next identical request goes through, once.</>,
-        }
-      }
-      // The payment this screen sent, sent again: Lens lets it through once against this approval.
-      const paid = await agentBankApi.pay(p.from, p.to, p.amount, p.memo)
-      onSent(a.id)
-      return {
-        ok: true,
-        text: (
-          <>
-            Approved and paid {lxc(paid.amount_ulxc)} from {nameOf(p.from)} to {nameOf(p.to)}.
-          </>
-        ),
-      }
-    },
+    mutationFn: async ({ a, decision }: { a: AgentApproval; decision: 'approve' | 'deny' }) => ({ ok: true, text: await decideOne(a, decision) }),
     onSuccess: setOutcome,
     onError: (err) => setOutcome({ ok: false, text: refusalText(err) }),
-    onSettled: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: APPROVALS_KEY }),
-        qc.invalidateQueries({ queryKey: BOOK_KEY }),
-        qc.invalidateQueries({ queryKey: ['agent-statement'] }),
-      ]),
+    onSettled: settled,
   })
+  // Several at once only while the workspace signs nothing: one passkey over many approvals needs Lens B41.204.
+  const bulk = useMutation({
+    mutationFn: async ({ chosen, decision }: { chosen: AgentApproval[]; decision: 'approve' | 'deny' }) => {
+      for (const a of chosen) await decideOne(a, decision)
+      const n = chosen.length
+      return {
+        ok: true,
+        text: decision === 'approve' ? `Approved ${n}. Each agent’s next identical request goes through, once.` : `Denied ${n}. Those requests will be refused.`,
+      }
+    },
+    onSuccess: (o) => {
+      setOutcome(o)
+      setPicked(new Set())
+    },
+    onError: (err) => setOutcome({ ok: false, text: refusalText(err) }),
+    onSettled: settled,
+  })
+  const busy = decide.isPending || bulk.isPending
   const all = (list.data?.approvals ?? []).filter((a) => agentId === undefined || a.agent_id === agentId)
-  const pending = all.filter((a) => a.status === 'pending')
+  const waiting = all.filter((a) => a.status === 'pending')
+  const pending = waiting.filter((a) => (byAgent === '' || a.agent_id === byAgent) && (byKind === '' || (byKind === 'payment') === !a.model))
+  const chosen = pending.filter((a) => picked.has(a.id))
+  const toggle = (id: string) =>
+    setPicked((s) => {
+      const next = new Set(s)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+  // j/k or the arrows move between waiting rows; a approves, d denies, x ticks — only while focus is in the list.
+  const onKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const t = e.target as HTMLElement
+    if (e.metaKey || e.ctrlKey || e.altKey || t.tagName === 'SELECT' || (t.tagName === 'INPUT' && (t as HTMLInputElement).type !== 'checkbox')) return
+    const rows = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[data-approval]'))
+    const row = t.closest<HTMLElement>('[data-approval]')
+    const a = pending.find((x) => x.id === row?.dataset.approval)
+    const at = row ? rows.indexOf(row) : -1
+    if (e.key === 'j' || e.key === 'ArrowDown') rows[Math.min(at + 1, rows.length - 1)]?.focus()
+    else if (e.key === 'k' || e.key === 'ArrowUp') rows[Math.max(at - 1, 0)]?.focus()
+    else if (a && !busy && e.key === 'a') decide.mutate({ a, decision: 'approve' })
+    else if (a && !busy && e.key === 'd') decide.mutate({ a, decision: 'deny' })
+    else if (a && !signed && e.key === 'x') toggle(a.id)
+    else return
+    e.preventDefault()
+  }
   const decided = all.filter((a) => a.status !== 'pending').slice(0, 5)
   const what = (a: AgentApproval) =>
     a.reason ? a.reason : a.model ? `a request to ${a.model}` : a.payee ? `a payment to ${PAYEE_KIND[a.payee.kind] ?? 'an account'}` : 'a payment'
@@ -2203,45 +2248,124 @@ export function Approvals({
               Waiting for a person <Term term="Waiting for a person">{`${TERMS.approval} ${TERMS.lxc}`}</Term>
             </span>
           </CardHeader>
-          {pending.length === 0 ? (
-            <p className="px-gutter py-3 text-body text-muted">
-              Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount.
-            </p>
-          ) : (
-            pending.map((a) => (
-              <Row
-                key={a.id}
-                stack
-                label={asks(a)}
-                hint={
-                  <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <Pill status={DECIDED.pending.status}>{DECIDED.pending.label}</Pill>
-                    <span>
-                      {what(a)}, asked <span className="font-figure">{formatWhen(a.created_at)}</span>
-                    </span>
-                  </span>
-                }
-              >
-                {/* One-handed on a phone: two full-width buttons under the sentence and the thumb; side by side on a wide screen. */}
-                <div className="flex w-full flex-col gap-2 wide:w-auto wide:flex-row wide:items-center">
-                  <Button
-                    variant={primary ? 'primary' : 'default'}
-                    className="h-12 w-full wide:h-8 wide:w-auto"
-                    disabled={decide.isPending}
-                    onClick={() => decide.mutate({ a, decision: 'approve' })}
-                  >
-                    {signed ? 'Approve with Face ID' : 'Approve'}
+          {waiting.length > 0 ? (
+            <div className="flex flex-col gap-2 border-b border-rule px-gutter py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {agentId === undefined ? (
+                  <select aria-label="Show approvals for" className={`${scheduleSelect} w-48`} value={byAgent} onChange={(e) => setByAgent(e.target.value)}>
+                    <option value="">Every agent</option>
+                    {[...new Set(waiting.map((a) => a.agent_id))].map((id) => (
+                      <option key={id} value={id}>
+                        {nameOf(id)}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <select aria-label="Show which kind" className={`${scheduleSelect} w-60`} value={byKind} onChange={(e) => setByKind(e.target.value as typeof byKind)}>
+                  <option value="">Payments and requests</option>
+                  <option value="payment">Payments</option>
+                  <option value="model">Requests to a model</option>
+                </select>
+                {!signed && pending.length > 0 ? (
+                  <label className="inline-flex items-center gap-2 text-body text-ink">
+                    <input
+                      type="checkbox"
+                      className={`h-4 w-4 accent-accent transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+                      checked={chosen.length === pending.length}
+                      onChange={() => setPicked(chosen.length === pending.length ? new Set() : new Set(pending.map((a) => a.id)))}
+                    />
+                    Select all {pending.length}
+                  </label>
+                ) : null}
+              </div>
+              {chosen.length > 0 ? (
+                <div className="flex flex-col gap-2 wide:flex-row">
+                  <Button variant={primary ? 'primary' : 'default'} className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'approve' })}>
+                    Approve {chosen.length}
                   </Button>
-                  <Button
-                    className="h-12 w-full wide:h-8 wide:w-auto"
-                    disabled={decide.isPending}
-                    onClick={() => decide.mutate({ a, decision: 'deny' })}
-                  >
-                    Deny
+                  <Button className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'deny' })}>
+                    Deny {chosen.length}
                   </Button>
                 </div>
-              </Row>
-            ))
+              ) : null}
+              <p className="hidden text-caption text-muted wide:block">Keys: j and k move, a approves, d denies{signed ? '' : ', x selects'}.</p>
+              <p className="text-caption text-muted wide:hidden">Swipe a request right to approve it.</p>
+            </div>
+          ) : null}
+          {pending.length === 0 ? (
+            <p className="px-gutter py-3 text-body text-muted">
+              {waiting.length > 0
+                ? 'Nothing waiting matches these filters.'
+                : 'Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount.'}
+            </p>
+          ) : (
+            <div role="group" aria-label="Waiting for a person" onKeyDown={onKeys}>
+              {pending.map((a) => (
+                <Row
+                  key={a.id}
+                  stack
+                  tabIndex={0}
+                  data-approval={a.id}
+                  className={`touch-pan-y ${focusRing} ${swiping?.id === a.id ? '' : 'transition-transform duration-200'}`}
+                  style={swiping?.id === a.id ? { transform: `translateX(${swiping.dx}px)` } : undefined}
+                  onTouchStart={(e) => {
+                    swipeFrom.current = { id: a.id, x: e.touches[0].clientX, y: e.touches[0].clientY }
+                  }}
+                  onTouchMove={(e) => {
+                    const s = swipeFrom.current
+                    const dx = e.touches[0].clientX - (s?.x ?? 0)
+                    if (s && dx > 0 && dx > Math.abs(e.touches[0].clientY - s.y)) setSwiping({ id: a.id, dx: Math.min(dx, SWIPE_PX * 1.5) })
+                  }}
+                  onTouchEnd={(e) => {
+                    const s = swipeFrom.current
+                    swipeFrom.current = null
+                    setSwiping(null)
+                    const dx = e.changedTouches[0].clientX - (s?.x ?? 0)
+                    // Right only: a swipe approves (with Face ID once the workspace signs), never denies by accident.
+                    if (s?.id === a.id && !busy && dx >= SWIPE_PX && dx > Math.abs(e.changedTouches[0].clientY - s.y)) decide.mutate({ a, decision: 'approve' })
+                  }}
+                  label={
+                    !signed ? (
+                      <span className="inline-flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          className={`mt-1 h-4 w-4 shrink-0 accent-accent transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+                          checked={picked.has(a.id)}
+                          onChange={() => toggle(a.id)}
+                          aria-label={`Select ${nameOf(a.agent_id)}’s ${what(a)}`}
+                        />
+                        {asks(a)}
+                      </span>
+                    ) : (
+                      asks(a)
+                    )
+                  }
+                  hint={
+                    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <Pill status={DECIDED.pending.status}>{DECIDED.pending.label}</Pill>
+                      <span>
+                        {what(a)}, asked <span className="font-figure">{formatWhen(a.created_at)}</span>
+                      </span>
+                    </span>
+                  }
+                >
+                  {/* One-handed on a phone: two full-width buttons under the sentence and the thumb; side by side on a wide screen. */}
+                  <div className="flex w-full flex-col gap-2 wide:w-auto wide:flex-row wide:items-center">
+                    <Button
+                      variant={primary ? 'primary' : 'default'}
+                      className="h-12 w-full wide:h-8 wide:w-auto"
+                      disabled={busy}
+                      onClick={() => decide.mutate({ a, decision: 'approve' })}
+                    >
+                      {signed ? 'Approve with Face ID' : 'Approve'}
+                    </Button>
+                    <Button className="h-12 w-full wide:h-8 wide:w-auto" disabled={busy} onClick={() => decide.mutate({ a, decision: 'deny' })}>
+                      Deny
+                    </Button>
+                  </div>
+                </Row>
+              ))}
+            </div>
           )}
           {decided.map((a) => (
             <Row key={a.id} label={asks(a)} hint={what(a)}
