@@ -607,6 +607,8 @@ function AppShell() {
   useDocumentTitle(page)
   return (
     <Shell
+      // B47.2 — Chat has the whole page: the suite's sidebar waits off to the left until Menu asks for it.
+      drawer={pathname === '/chat' || pathname.startsWith('/chat/')}
       sidebar={<Sidebar />}
       nav={
         <>

@@ -10,13 +10,15 @@ export interface ShellProps {
   nav?: React.ReactNode
   children: React.ReactNode
   className?: string
+  /** B47.2 — the sidebar is a drawer at every width, opened only by Menu (Chat takes the whole page). */
+  drawer?: boolean
 }
 
 // Sidebar + content, side-by-side at and above the `wide` (840px) breakpoint. Below it the page
 // starts at the top: the sidebar is a drawer, opened by the Menu button in the sticky top bar and
 // closed by Escape, the backdrop, or following one of its links. It is the same <aside> at every
 // width — off-screen and invisible (so nothing in it takes focus) until opened.
-export function Shell({ sidebar, nav, children, className }: ShellProps) {
+export function Shell({ sidebar, nav, children, className, drawer = false }: ShellProps) {
   const [open, setOpen] = useState(false)
   const asideId = useId()
   const asideRef = useRef<HTMLElement | null>(null)
@@ -37,12 +39,12 @@ export function Shell({ sidebar, nav, children, className }: ShellProps) {
   }, [open])
 
   return (
-    <div className={cn('flex min-h-full flex-col wide:flex-row', className)}>
+    <div className={cn('flex min-h-full flex-col', !drawer && 'wide:flex-row', className)}>
       {open ? (
         <button
           type="button"
           aria-label="Close navigation"
-          className="fixed inset-0 z-20 bg-canvas opacity-80 wide:hidden"
+          className={cn('fixed inset-0 z-20 bg-canvas opacity-80', !drawer && 'wide:hidden')}
           onClick={() => setOpen(false)}
         />
       ) : null}
@@ -51,7 +53,7 @@ export function Shell({ sidebar, nav, children, className }: ShellProps) {
         ref={asideRef}
         className={cn(
           'fixed inset-y-0 left-0 z-30 w-72 max-w-full shrink-0 border-r border-rule bg-sidebar',
-          'wide:static wide:visible wide:z-auto wide:w-60',
+          !drawer && 'wide:static wide:visible wide:z-auto wide:w-60',
           open ? 'visible' : 'invisible',
         )}
         aria-label="Primary"
@@ -65,7 +67,7 @@ export function Shell({ sidebar, nav, children, className }: ShellProps) {
         <header
           className={cn(
             'sticky top-0 z-10 flex min-h-row items-center justify-between gap-gutter border-b border-rule bg-canvas px-gutter py-2',
-            !nav && 'wide:hidden',
+            !nav && !drawer && 'wide:hidden',
           )}
         >
           <button
@@ -74,7 +76,8 @@ export function Shell({ sidebar, nav, children, className }: ShellProps) {
             aria-expanded={open}
             aria-controls={asideId}
             className={cn(
-              'inline-flex h-8 shrink-0 items-center rounded-control px-2 text-caption text-muted transition-colors duration-200 hover:text-ink wide:hidden',
+              'inline-flex h-8 shrink-0 items-center rounded-control px-2 text-caption text-muted transition-colors duration-200 hover:text-ink',
+              !drawer && 'wide:hidden',
               focusRing,
             )}
             onClick={() => setOpen((o) => !o)}

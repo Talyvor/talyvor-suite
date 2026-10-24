@@ -87,4 +87,22 @@ describe('components render + carry accessible semantics', () => {
     expect(menu).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('button', { name: 'Close navigation' })).toBeNull()
   })
+
+  it('Shell drawer (B47.2): at every width the sidebar stays hidden until Menu opens it', () => {
+    render(
+      <Shell drawer sidebar={<a href="#chat" className={focusRing}>Chat</a>} nav={<h1>Chat</h1>}>
+        page
+      </Shell>,
+    )
+    const menu = screen.getByRole('button', { name: 'Menu' })
+    const aside = document.querySelector('aside')!
+    expect(menu.className.split(' ')).not.toContain('wide:hidden')
+    expect(aside.className).not.toMatch(/wide:/)
+    expect(aside.className.split(' ')).toContain('invisible')
+    fireEvent.click(menu)
+    expect(aside.className.split(' ')).toContain('visible')
+    expect(screen.getByRole('button', { name: 'Close navigation' }).className).not.toMatch(/wide:/)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(aside.className.split(' ')).toContain('invisible')
+  })
 })
