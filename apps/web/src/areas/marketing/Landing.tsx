@@ -5,7 +5,7 @@ import { useDocumentTitle } from '../../documentTitle'
 import { HOLDBACK_HOURS, LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Waitlist } from '../../components/Waitlist'
-import { COMING, FOOTER_LINE, POSITIONING_LINE, POSITIONING_SENTENCES, STATUS_LINE } from '../../positioning'
+import { FOOTER_LINE, ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from '../../positioning'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). It must render with no
 // session, no router context, and no providers: Landing.test.tsx renders <Landing /> bare, so
@@ -336,18 +336,8 @@ export function Landing() {
                 </h1>
                 <p className="mt-7 text-lede text-muted">{POSITIONING_SENTENCES[0]}</p>
                 <p className="mt-4 text-body text-muted">{POSITIONING_SENTENCES[1]}</p>
-                {/* Said as coming, never as live (Landing.test.tsx pins it). */}
-                <div className="mt-6">
-                  <p className="text-eyebrow uppercase text-label">Coming</p>
-                  <ul className="mt-2 flex flex-col gap-1.5">
-                    {COMING.map((c) => (
-                      <li key={c} className="flex gap-2.5 text-body text-muted">
-                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-pill bg-accent" aria-hidden="true" />
-                        <span>{c}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {/* Said as on its way, never as live and never as a label (Landing.test.tsx pins it). */}
+                <p className="mt-4 text-body text-muted">{ON_ITS_WAY}</p>
                 {/* ⚠ THE PRIMARY ACTION POINTS AT /signup, NOT /auth/login, AND NOT AT A MAILTO.
                     Preserved from the previous version because the reasoning is easy to "simplify"
                     away: an earlier draft sent people to sign-in on the theory that a stranger could
@@ -368,9 +358,8 @@ export function Landing() {
                       <a href="#wallets">See how it works</a>
                     </Button>
                   </div>
-                  {/* B44.1 — the visitor the ads bring can leave an email while the trial is closed. */}
+                  {/* B44.1 — the visitor the ads bring can leave an email while access is by invitation. */}
                   <Waitlist className="mt-6 max-w-xl" />
-                  <p className="mt-4 max-w-xl text-caption text-faint">{STATUS_LINE}</p>
                 </div>
               </div>
               <p className="mt-4 text-caption text-faint">
@@ -389,8 +378,8 @@ export function Landing() {
                   is not printed in either direction. */}
               {signup === 'closed' ? (
                 <p className="mt-5 max-w-xl text-body text-muted">
-                  Talyvor is in a closed trial just now, so access is granted per address — start at
-                  sign-up and we will come back to you.
+                  We’re letting the first companies in one at a time — start at sign-up and we’ll
+                  come back to you.
                 </p>
               ) : null}
               {signup === 'open' ? (
@@ -615,7 +604,6 @@ export function Landing() {
           </div>
         </div>
         <div className="mx-auto w-full max-w-6xl px-gutter pb-6">
-          <p className="mb-2 text-caption text-faint">{STATUS_LINE}</p>
           <CompanyLine />
         </div>
       </footer>

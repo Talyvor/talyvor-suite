@@ -95,7 +95,7 @@ export function Waitlist({ className }: { className?: string }) {
         </p>
       )}
       <p id={`${id}-note`} className="mt-2 text-caption text-faint">
-        We’ll email you when your place in the trial opens. No newsletter.{' '}
+        We’ll email you when your place opens. No newsletter.{' '}
         <a href="/privacy" className={inlineLink}>
           Privacy
         </a>

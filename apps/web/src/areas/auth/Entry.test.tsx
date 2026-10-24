@@ -1,7 +1,6 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
-import { STATUS_LINE } from '../../positioning'
 
 // Entry.test.tsx — THE TWO FRONT DOORS.
 //
@@ -177,7 +176,7 @@ describe('the signup page is written for someone who has never heard of us', () 
 describe('what the page promises tracks the actual gate', () => {
   // B44.4's status line ("Closed trial on test money…") is the product's status, the same in every state of the
   // gate, so these read the page without it: what they test is the access line the gate decides.
-  const accessText = () => (document.body.textContent ?? '').replace(STATUS_LINE, '')
+  const accessText = () => document.body.textContent ?? ''
 
   it('OPEN: says a stranger can start, with no invitation', async () => {
     mockMe({ signup_open: true })
@@ -195,7 +194,7 @@ describe('what the page promises tracks the actual gate', () => {
     const text = accessText()
     // The refusal happens at OUR denied page and is explained there — but sending someone
     // into a refusal you could have predicted is still a page lying to a reader.
-    expect(text).toMatch(/closed trial|invitation|invite/i)
+    expect(text).toMatch(/first companies in one at a time/i)
     expect(text).not.toMatch(/no invitation needed|anyone can start/i)
   })
 

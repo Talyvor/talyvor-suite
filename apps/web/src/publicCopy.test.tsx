@@ -1,14 +1,14 @@
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from './App'
-import { DOCUMENTATION_PATH } from './areas/documentation/content'
-import { STATUS_LINE } from './positioning'
+import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH } from './areas/documentation/content'
 
 // B44.4: what every public page says, read from the rendered page a signed-out visitor gets. Positioning v2
 // (23 Oct 2026) names words that never appear on a public page; this fails on any of them, on an old
-// headline back in the title or an h1, on a missing line or status line, and on any address but hello@.
+// headline back in the title or an h1, on a missing line, and on any address but hello@. B46.1 (Nick, 24 Oct
+// 2026): the site is in plain words, so the old status line and every disclaimer phrase now fail it too.
 
-const PUBLIC_ROUTES = ['/marketing', '/pricing', '/signup', '/signin', DOCUMENTATION_PATH, '/privacy', '/terms']
+const PUBLIC_ROUTES = ['/marketing', '/pricing', '/signup', '/signin', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms']
 // The pages that name the product carry the line; /signin is a door with nothing to pitch.
 const NAMES_THE_PRODUCT = new Set(['/marketing', '/pricing', '/signup', DOCUMENTATION_PATH, '/privacy', '/terms'])
 
@@ -18,6 +18,14 @@ const FORBIDDEN: [string, RegExp][] = [
   ['Moldovagaz', /moldovagaz/i],
   ['banking', /banking/i],
   ['agent bank', /agent bank/i],
+  ['closed trial', /closed trial/i],
+  ['test money', /test money/i],
+  ['US first', /\bUS first\b/i],
+  ['then the UK and the EU', /then the UK and the EU/i],
+  ['licensed partner', /licensed partners?/i],
+  ['illustration', /illustration/i],
+  ['Coming soon', /coming soon/i],
+  ['Nicolai Gaborac', /nicolai gaborac/i],
 ]
 const OLD_LINE = /^\s*(talyvor\s*—\s*)?money and markets for ai agents\.?\s*$/i
 
@@ -51,7 +59,6 @@ describe('every public page speaks positioning v2', () => {
     expect(document.title, `${path}'s title is the old line`).not.toMatch(OLD_LINE)
     expect(h1.textContent, `${path}'s h1 is the old line`).not.toMatch(OLD_LINE)
 
-    expect(text, `${path} has no status line`).toContain(STATUS_LINE)
     if (NAMES_THE_PRODUCT.has(path))
       expect(text, `${path} does not carry the line`).toMatch(/the financial ecosystem for the AI agent economy/i)
 

@@ -40,7 +40,6 @@ describe(CLAUDE_CONNECTOR_PATH, () => {
     expect(rows.map((r) => r.firstChild?.firstChild?.textContent)).toEqual(listing.tools.map((t) => t.name))
     expect(screen.getByRole('link', { name: 'Privacy › AI assistants you connect' })).toHaveAttribute('href', '/privacy#ai-assistants-you-connect')
     expect(screen.getByRole('link', { name: COMPANY_CONTACT })).toHaveAttribute('href', `mailto:${COMPANY_CONTACT}`)
-    expect(screen.getByText('Preview — test money only')).toBeInTheDocument()
   })
 
   it('links to a privacy section that says what an assistant receives and what it cannot do', async () => {

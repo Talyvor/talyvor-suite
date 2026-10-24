@@ -12,20 +12,7 @@ import { formatBPS, formatLimit, formatMinor, planName, type Fees, type PlanGate
 // plan unlocks is Lens's plan gates (B32.12); every fee is Lens's GET /v1/public/fees (B32.8). A figure Lens did
 // not state is not printed. The only figure written here is Free's: it is the plan with no price.
 //
-// Money features, and every fee on a money capability that is still RED or AMBER, carry "Preview — test money
-// only". The public page cannot read which capability has a clearance, so the label stays until one can.
-
-export const PREVIEW_LABEL = 'Preview — test money only'
-
-export function PreviewLabel() {
-  // The status hue is the dot, never the words (packages/ui invariant: text is never a hue).
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-pill border border-rule-strong px-2 py-0.5 text-caption text-ink">
-      <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-pill bg-held" />
-      {PREVIEW_LABEL}
-    </span>
-  )
-}
+// B46.1 (Nick, 24 Oct 2026): no preview or test-money labels on the public page; the fees are stated plainly.
 
 /** "a, b or c". */
 function either(items: string[]): string {
@@ -148,13 +135,11 @@ export function CompanyCard({
         ) : null}
         <Row label="Own provider keys">{ownKeys(gate, pricing)}</Row>
         <Row label="Money features">
-          {gate.live_money ? 'Live as each is cleared' : null}
-          <PreviewLabel />
+          {gate.live_money ? 'Included as our money partners switch on' : 'Not included'}
         </Row>
         {fees ? (
           <Row label="FX margin over the reference rate">
             {contracted ? 'Agreed' : fx ? <span className="font-figure">{formatBPS(fx)}</span> : '—'}
-            {!contracted && fx ? <PreviewLabel /> : null}
           </Row>
         ) : null}
         <Row label="Slack and Teams approvals">{included(gate.slack_teams_approvals)}</Row>
@@ -281,24 +266,20 @@ export function FeesOnAnyPlan({ fees }: { fees: Fees | undefined }) {
       )}
       <Row label="Loans arranged">
         <span className="font-figure">{formatBPS(fees.lending_fee_bps)}</span>
-        <PreviewLabel />
       </Row>
       <Row label="International payments">
         <span>
           <span className="font-figure">{intlPaymentFees(fees)}</span> plus the partner’s cost
         </span>
-        <PreviewLabel />
       </Row>
       <Row label="Agent cards">
         Free to issue
-        <PreviewLabel />
       </Row>
       <Row label="Accepting payments">
         <span>
           <span className="font-figure">{formatBPS(fees.merchant_fee_bps)}</span> plus card processing, or{' '}
           <span className="font-figure">{formatBPS(fees.merchant_a2a_fee_bps)}</span> from an account
         </span>
-        <PreviewLabel />
       </Row>
     </dl>
   )

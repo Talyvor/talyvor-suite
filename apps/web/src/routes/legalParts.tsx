@@ -96,7 +96,7 @@ function LegalHeader({ title, updated }: { title: string; updated: string }) {
       <h1 className="mt-4 text-display-2 text-ink">{title}</h1>
       <TealRule className="mt-6" />
       <p className="mt-6 text-reading text-muted">
-        Last updated <Updated updated={updated} />. Written from the code, for a closed trial.{' '}
+        Last updated <Updated updated={updated} />. Written from the code.{' '}
         <Link className={inlineLink} to={title === 'Privacy' ? '/terms' : '/privacy'}>
           {title === 'Privacy' ? 'Terms' : 'Privacy'}
         </Link>

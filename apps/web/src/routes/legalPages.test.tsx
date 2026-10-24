@@ -35,7 +35,7 @@ describe('the legal pages', () => {
   })
 
   it.each([
-    ['Terms', '2026-10-10', '10 October 2026'],
+    ['Terms', '2026-10-24', '24 October 2026'],
     ['Privacy', '2026-10-24', '24 October 2026'], // B40.20 added AI assistants you connect
   ])('%s is dated, lists every section, and says where it ends', async (title, day, long) => {
     const { container } = at(`/${title.toLowerCase()}`)

@@ -1,7 +1,6 @@
 import { Button, Card, Mark, ThemeToggle, Wordmark, inlineLink } from '@talyvor/ui'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Waitlist } from '../../components/Waitlist'
-import { STATUS_LINE } from '../../positioning'
 import { useSignupProbe, type SignupState } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
 import { SharedAnswersFact } from '../../components/StoredAnswersFacts'
@@ -130,8 +129,7 @@ function EntryFrame({ children }: { children: React.ReactNode }) {
           />
         </div>
         <Card className="w-full max-w-md">{children}</Card>
-        <p className="mt-6 w-full max-w-md text-caption text-faint">{STATUS_LINE}</p>
-        <CompanyLine className="mt-2 w-full max-w-md" />
+        <CompanyLine className="mt-6 w-full max-w-md" />
       </main>
     </div>
   )
@@ -152,15 +150,15 @@ function AccessLine({ state }: { state: SignupState }) {
   if (state === 'open') {
     return (
       <p className="text-caption text-faint">
-        Open to anyone — no invitation needed, and nothing to pay during the trial.
+        Open to anyone — no invitation needed.
       </p>
     )
   }
   if (state === 'closed') {
     return (
       <p className="text-caption text-faint">
-        Talyvor is in a closed trial right now, so access is granted per address. If you have
-        already been added, continue above — otherwise join the waitlist below.
+        We’re letting the first companies in one at a time. If you’ve already been added, continue
+        above — otherwise join the waitlist below.
       </p>
     )
   }
