@@ -63,6 +63,8 @@ describe('Search the web (B28.372)', () => {
     window.history.pushState({}, '', '/chat')
     render(<App />)
     await screen.findByRole('button', { name: 'Model: Claude Opus 5' })
+    // B45.1 — behind the composer's Files and tools.
+    fireEvent.click(screen.getByRole('button', { name: 'Files and tools' }))
     const toggle = screen.getByRole('button', { name: 'Search the web' })
     expect(toggle.getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(toggle)
@@ -86,6 +88,7 @@ describe('Search the web (B28.372)', () => {
     expect(within(await screen.findByRole('navigation', { name: 'Sources this answer cites' })).getAllByRole('link')).toHaveLength(2)
 
     // Off, the next question is not searched and its answer lists nothing.
+    fireEvent.click(screen.getByRole('button', { name: 'Files and tools' }))
     expect(screen.getByRole('button', { name: 'Search the web' }).getAttribute('aria-pressed')).toBe('false')
     await ask('And what does that mean for me?')
     await waitFor(() => expect(screen.getAllByTestId('turn-reply')).toHaveLength(2))

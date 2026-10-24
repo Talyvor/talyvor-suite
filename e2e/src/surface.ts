@@ -1325,6 +1325,8 @@ export function chatDocsPage(seed: number): Scenario {
       try {
         if (new URL(page.url()).pathname !== '/chat') await app.openChat()
         await app.newChat()
+        // B45.1 — behind the composer's Files and tools.
+        await page.getByRole('button', { name: 'Files and tools' }).click()
         await page.getByRole('button', { name: 'Docs page' }).click()
         const panel = page.getByRole('dialog', { name: 'Attach a Docs page' })
         const spaces = panel.getByRole('group', { name: 'Docs spaces' })
@@ -1402,6 +1404,8 @@ export function chatShareLink(seed: number): Scenario {
       if (t.error !== undefined) return fail(`refused: ${t.error}`)
       const stranger = await browser.newContext()
       try {
+        // B45.1 — a conversation's actions wait behind one control.
+        await page.getByRole('button', { name: 'Conversation actions' }).click({ timeout: ACTION_TIMEOUT_MS })
         await page.getByRole('button', { name: 'Share', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
         const panel = page.getByRole('region', { name: 'Share this chat' })
         await panel.getByRole('button', { name: 'Create link' }).or(panel.getByRole('alert')).first().waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS })
@@ -1498,6 +1502,8 @@ export function chatExportImport(seed: number): Scenario {
       ctx.evidence.push({ note: `exported: ${JSON.stringify(before.costs)}; total "${before.total}"` })
       if (before.costs.length !== 2 || before.total === '') return fail(`the chat shows ${before.costs.length} prices and the total "${before.total}" before it is exported`)
 
+      // B45.1 — a conversation's actions wait behind one control.
+      await page.getByRole('button', { name: 'Conversation actions' }).click({ timeout: ACTION_TIMEOUT_MS })
       await page.getByRole('button', { name: 'Share', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
       const panel = page.getByRole('region', { name: 'Share this chat' })
       await mkdir(env.outDir, { recursive: true })
@@ -1598,6 +1604,8 @@ export function chatTrackIssue(seed: number): Scenario {
       try {
         if (new URL(page.url()).pathname !== '/chat') await app.openChat()
         await app.newChat()
+        // B45.1 — behind the composer's Files and tools.
+        await page.getByRole('button', { name: 'Files and tools' }).click()
         await page.getByRole('button', { name: 'Track issue' }).click()
         const panel = page.getByRole('dialog', { name: 'Attach a Track issue' })
         await panel.getByRole('textbox', { name: 'Filter issues' }).fill(made.identifier)

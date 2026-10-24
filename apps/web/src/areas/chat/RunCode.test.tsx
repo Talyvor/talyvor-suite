@@ -65,6 +65,8 @@ describe('Run code (B28.373)', () => {
     window.history.pushState({}, '', '/chat')
     render(<App />)
     await screen.findByRole('button', { name: 'Model: Claude Opus 5' })
+    // B45.1 — behind the composer's Files and tools.
+    fireEvent.click(screen.getByRole('button', { name: 'Files and tools' }))
     const toggle = screen.getByRole('button', { name: 'Run code' })
     expect(toggle.getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(toggle)
@@ -92,6 +94,7 @@ describe('Run code (B28.373)', () => {
     expect(within(again).getAllByTestId('turn-code-run-output')[0].textContent).toBe('541\n')
 
     // Off, the next question goes without it and its answer shows no code.
+    fireEvent.click(screen.getByRole('button', { name: 'Files and tools' }))
     expect(screen.getByRole('button', { name: 'Run code' }).getAttribute('aria-pressed')).toBe('false')
     await ask('Thanks.')
     await waitFor(() => expect(screen.getAllByTestId('turn-reply')).toHaveLength(2))

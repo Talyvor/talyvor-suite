@@ -411,11 +411,18 @@ export function Chat() {
   const pricedWith = [promptText, told].filter((t) => t !== '').join('\n\n')
 
   // The rail: hidden on a wide screen by choice (remembered per browser), a drawer on a narrow one.
-  const [railHidden, setRailHidden] = useState(readRailHidden)
+  const [railHidden, setRailHidden] = useState(() => readFlag(RAIL_HIDDEN_KEY))
   const [drawerOpen, setDrawerOpen] = useState(false)
-  useEffect(() => writeRailHidden(railHidden), [railHidden])
+  useEffect(() => writeFlag(RAIL_HIDDEN_KEY, railHidden), [railHidden])
+  // B45.1 — who pays, the prompt, the budget, sharing, the statement and the prices: one control away, not on the page.
+  const [optionsOpen, setOptionsOpen] = useState(() => readFlag(OPTIONS_OPEN_KEY))
+  useEffect(() => writeFlag(OPTIONS_OPEN_KEY, optionsOpen), [optionsOpen])
   // B28.351 — the live statement: a column beside the conversation on a wide screen, a drawer on a narrower one.
+  // B45.1 — only once asked for, so a first visit is one column. Beside, the choice is kept in this browser;
+  // as a drawer it covers the conversation, so it is opened afresh each time and never by a narrowing window.
   const statementBeside = useMediaQuery(STATEMENT_BESIDE)
+  const [statementKept, setStatementKept] = useState(() => readFlag(STATEMENT_OPEN_KEY))
+  useEffect(() => writeFlag(STATEMENT_OPEN_KEY, statementKept), [statementKept])
   const [statementOpen, setStatementOpen] = useState(false)
   const closeStatement = useCallback(() => setStatementOpen(false), [])
   const toggleRail = useCallback(() => setRailHidden((h) => !h), [])
@@ -1290,15 +1297,37 @@ export function Chat() {
   const active = history.list.find((c) => c.id === activeId)
 
   // The newest turn stays in view as it streams, unless the reader has scrolled up to read.
+  // B45.1 — "at the bottom" is where the reader last scrolled to, not a guess from how far the answer grew:
+  // a burst taller than any margin would otherwise let the view go, and a reader inside the margin be pulled down.
   const endRef = useRef<HTMLDivElement | null>(null)
+  const atBottom = useRef(true)
+  useEffect(() => {
+    const onScroll = () => {
+      atBottom.current = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 48
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
   const lastContent = messages[messages.length - 1]?.content
   const follow = useCallback(() => {
     const el = endRef.current
     if (el === null || typeof el.scrollIntoView !== 'function') return
-    const nearBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 160
-    if (nearBottom) el.scrollIntoView({ block: 'end' })
+    if (atBottom.current) el.scrollIntoView({ block: 'end' })
   }, [])
+  // A question sent, or another conversation opened, starts at its newest turn.
+  useEffect(() => {
+    atBottom.current = true
+  }, [messages.length])
   useEffect(follow, [messages.length, lastContent, follow])
+  // And whatever else grows under it — an answer's actions and price, a card — is followed too, while at the bottom.
+  const columnRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = columnRef.current
+    if (el === null || typeof ResizeObserver !== 'function') return
+    const watch = new ResizeObserver(follow)
+    watch.observe(el)
+    return () => watch.disconnect()
+  }, [follow])
 
   const rail = (
     <ChatRail
@@ -1400,16 +1429,19 @@ export function Chat() {
 
       <div className="relative flex min-w-0 flex-1 flex-col" {...drop.handlers}>
         {drop.dragging ? <DropOverlay /> : null}
-        <div className="flex min-h-row flex-wrap items-center gap-2 px-gutter pt-2">
+        {/* B45.1 — one quiet line: the conversations (a drawer on a phone) and the open conversation's name.
+            Everything else lives in the sidebar or behind the composer's Options. */}
+        <div className="flex min-h-row items-center gap-2 px-gutter pt-2">
           <button
             type="button"
-            className={cn(railButtonClass, 'wide:hidden')}
+            className={cn(railIconClass, 'wide:hidden')}
             onClick={() => setDrawerOpen(true)}
+            aria-label="Conversations"
+            title="Conversations"
           >
-            Conversations
+            <SidebarGlyph />
           </button>
-          {/* B28.110 — on a narrow screen the open conversation's name and actions take a line of their own. */}
-          <div className="order-last min-w-0 grow basis-full wide:order-none wide:basis-0">
+          <div className="mx-auto w-full min-w-0 max-w-3xl">
             {active !== undefined ? (
               <ConversationTitle
                 conversation={active}
@@ -1452,26 +1484,10 @@ export function Chat() {
               <ProjectLine project={project} onOpen={() => open(undefined, project.id)} />
             ) : null}
           </div>
-          <div className="ml-auto flex items-center gap-1">
-            {/* B28.131 — on or off, a new chat: a temporary chat is never mixed into one that is kept. */}
-            <TemporaryChatToggle
-              on={temporary}
-              disabled={pending}
-              onChange={(on) => {
-                open(undefined)
-                setTemporary(on)
-              }}
-            />
-            {!statementBeside ? (
-              <button type="button" className={railButtonClass} onClick={() => setStatementOpen(true)}>
-                Statement
-              </button>
-            ) : null}
-          </div>
         </div>
 
         <div className="flex flex-1 flex-col px-gutter">
-          <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
+          <div ref={columnRef} className="mx-auto flex w-full max-w-3xl flex-1 flex-col">
             {temporary ? <TemporaryChatNotice /> : null}
             {catalog.isPending || providers.isPending ? (
               <p className="mt-10 text-body text-muted">Reading the model catalog…</p>
@@ -1695,7 +1711,6 @@ export function Chat() {
                 does not read, so part of the answer may be missing.
               </p>
             ) : null}
-            <div ref={endRef} />
           </div>
         </div>
 
@@ -1730,8 +1745,40 @@ export function Chat() {
               onWebSearch={setWebSearch}
               runCode={runCode}
               onRunCode={setRunCode}
+              optionsOpen={optionsOpen}
+              onOptions={() => setOptionsOpen((o) => !o)}
             />
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+            {/* B45.1 — what this conversation is sent with stays in view only when it was chosen or matters now. */}
+            {!optionsOpen && (listing !== undefined || draftOver !== undefined) ? (
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                {listing !== undefined ? <ListingChip listing={listing} onRemove={removeListing} disabled={pending} /> : null}
+                {draftOver !== undefined ? (
+                  <p className="text-caption text-ink" data-testid="cost-over-budget">
+                    Over this chat’s budget
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {optionsOpen ? (
+            <div id="chat-options" role="group" aria-label="Chat options" className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+              {/* B28.131 — on or off, a new chat: a temporary chat is never mixed into one that is kept. */}
+              <TemporaryChatToggle
+                on={temporary}
+                disabled={pending}
+                onChange={(on) => {
+                  open(undefined)
+                  setTemporary(on)
+                }}
+              />
+              {/* B28.351 — the live statement, beside the conversation on a wide screen, a drawer on a narrower one. */}
+              <button
+                type="button"
+                className={railButtonClass}
+                onClick={() => (statementBeside ? setStatementKept((k) => !k) : setStatementOpen(true))}
+                aria-expanded={statementBeside ? statementKept : statementOpen}
+              >
+                Statement
+              </button>
               {/* B28.354 — which wallet pays for this conversation. */}
               <PaidBy book={payersBook} payers={payers} value={paidBy} onChange={choosePayer} disabled={pending} />
               {/* B28.370 — the named prompt from the library this conversation is sent with. */}
@@ -1775,8 +1822,11 @@ export function Chat() {
                 </p>
               ) : null}
             </div>
+            ) : null}
           </div>
         </div>
+        {/* The page's true bottom, under the composer: following the answer to here is what keeps it "at the bottom". */}
+        <div ref={endRef} />
       </div>
 
       {/* B28.120 — the canvas, open: beside the conversation where the statement stands, a drawer on a narrower screen. */}
@@ -1791,11 +1841,20 @@ export function Chat() {
           </Drawer>
         )
       ) : statementBeside ? (
-        <aside aria-label="Statement" className="sticky top-12 flex h-below-header w-80 shrink-0 flex-col border-l border-rule bg-sidebar">
-          {/* B28.358 — what the cache, the shared pool, conversion and Tare saved in this conversation. */}
-          <ChatSavings messages={messages} />
-          <LiveStatement follow={paidBy} />
-        </aside>
+        statementKept ? (
+          <aside aria-label="Statement" className="sticky top-12 flex h-below-header w-80 shrink-0 flex-col border-l border-rule bg-sidebar">
+            <div className="flex justify-end px-2 pt-2">
+              <button type="button" className={railIconClass} onClick={() => setStatementKept(false)} aria-label="Close statement" title="Close statement">
+                <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M4 4l8 8M12 4l-8 8" />
+                </svg>
+              </button>
+            </div>
+            {/* B28.358 — what the cache, the shared pool, conversion and Tare saved in this conversation. */}
+            <ChatSavings messages={messages} />
+            <LiveStatement follow={paidBy} />
+          </aside>
+        ) : null
       ) : statementOpen ? (
         <Drawer side="right" label="Statement" onClose={closeStatement}>
           <ChatSavings messages={messages} />
@@ -1828,6 +1887,12 @@ const railButtonClass = cn(
   focusRing,
 )
 
+/** B45.1 — the composer's icon controls: a square target the size of Send. */
+const composerIconClass = cn(
+  'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-control text-muted transition-colors duration-200 hover:text-ink',
+  focusRing,
+)
+
 /** A quiet action under a turn, drawn as Reply's Regenerate is. */
 const turnActionClass = cn('rounded-control px-2 py-1 text-caption text-muted transition-colors duration-200 hover:text-ink', focusRing)
 
@@ -1844,19 +1909,22 @@ const RAIL_SHORTCUT =
 
 /** Per browser, like the conversations themselves. */
 export const RAIL_HIDDEN_KEY = 'talyvor.chat.rail-hidden'
+/** B45.1 — the composer's Options, and the statement, opened once stay open in this browser. */
+export const OPTIONS_OPEN_KEY = 'talyvor.chat.options-open'
+export const STATEMENT_OPEN_KEY = 'talyvor.chat.statement-open'
 
-function readRailHidden(): boolean {
+function readFlag(key: string): boolean {
   try {
-    return window.localStorage.getItem(RAIL_HIDDEN_KEY) === '1'
+    return window.localStorage.getItem(key) === '1'
   } catch {
     return false
   }
 }
 
-function writeRailHidden(hidden: boolean): void {
+function writeFlag(key: string, on: boolean): void {
   try {
-    if (hidden) window.localStorage.setItem(RAIL_HIDDEN_KEY, '1')
-    else window.localStorage.removeItem(RAIL_HIDDEN_KEY)
+    if (on) window.localStorage.setItem(key, '1')
+    else window.localStorage.removeItem(key)
   } catch {
     // Storage refused: the choice lasts for this visit only.
   }
@@ -2443,7 +2511,7 @@ function Reply({
         <ConnectorCalls calls={message.connector_calls} usdPerLXC={usdPerLXC} />
       ) : null}
       {message.content !== '' && message.incomplete !== 'blank' && !answering && !shown.revealing ? (
-        <div className="mt-2 flex flex-wrap items-center gap-1">
+        <div className="mt-2 flex min-h-8 flex-wrap items-center gap-1">
           {message.incomplete === 'cut_off' ? (
             // B28.81 — the model stopped at its length limit: the answer ends mid-way, and says so.
             // B28.113 — and Continue asks the model to go on from there.
@@ -2516,6 +2584,9 @@ function Reply({
             </p>
           ) : null}
         </div>
+      ) : answering || shown.revealing ? (
+        // B45.1 — the action row's room, held while the answer is written, so its arrival shifts nothing.
+        <div aria-hidden="true" className="mt-2 h-8" data-testid="turn-actions-room" />
       ) : null}
     </div>
   )
@@ -2601,6 +2672,8 @@ function Composer({
   onWebSearch,
   runCode,
   onRunCode,
+  optionsOpen,
+  onOptions,
 }: {
   attachments: ChatAttachment[]
   onAttach: (files: File[]) => void
@@ -2635,9 +2708,15 @@ function Composer({
   /** B28.373 — Run code is on. */
   runCode: boolean
   onRunCode: (on: boolean) => void
+  /** B45.1 — the conversation's options under the composer are open. */
+  optionsOpen: boolean
+  onOptions: () => void
 }) {
   const boxRef = useRef<HTMLTextAreaElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
+  // B45.1 — attach and the tools wait behind one control; a tool that is on stays in view so it is never on unseen.
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const off = pending || selected === undefined
   // The box grows with what is typed, up to a limit, then scrolls.
   useLayoutEffect(() => {
     const el = boxRef.current
@@ -2738,28 +2817,60 @@ function Composer({
       <span id="chat-message-keys" className="sr-only">
         Enter sends. Shift+Enter adds a new line.
       </span>
-      <div className="flex items-center gap-2 px-2 pb-2 pt-1">
-        <FilePicker
-          ref={fileRef}
-          accept={[...Object.keys(ATTACHABLE), ...Object.keys(IMAGE_TYPES)]
-            .map((ext) => `.${ext}`)
-            .join(',')}
-          onFiles={onAttach}
-        />
+      <FilePicker
+        ref={fileRef}
+        accept={[...Object.keys(ATTACHABLE), ...Object.keys(IMAGE_TYPES)]
+          .map((ext) => `.${ext}`)
+          .join(',')}
+        onFiles={onAttach}
+      />
+      {toolsOpen || webSearch || runCode ? (
+        <div id="chat-tools" role="group" aria-label="Files and tools" className="flex flex-wrap items-center gap-2 px-2 pt-1">
+          {toolsOpen ? (
+            <>
+              <button type="button" className={cn(railButtonClass, 'disabled:opacity-50')} disabled={off} onClick={() => fileRef.current?.click()}>
+                Attach
+              </button>
+              <DocsPagePicker disabled={off} onPick={onAttachPage} />
+              <TrackIssuePicker disabled={off} onPick={onAttachIssue} />
+            </>
+          ) : null}
+          {toolsOpen || webSearch ? <WebSearchToggle on={webSearch} onChange={onWebSearch} disabled={off} /> : null}
+          {toolsOpen || runCode ? <RunCodeToggle on={runCode} onChange={onRunCode} disabled={off} /> : null}
+        </div>
+      ) : null}
+      <div className="flex items-center gap-1 px-2 pb-2 pt-1">
         <button
           type="button"
-          className={cn(railButtonClass, 'disabled:opacity-50')}
-          disabled={pending || selected === undefined}
-          onClick={() => fileRef.current?.click()}
+          className={composerIconClass}
+          onClick={() => setToolsOpen((o) => !o)}
+          aria-label="Files and tools"
+          aria-expanded={toolsOpen}
+          aria-controls="chat-tools"
+          title="Files and tools"
         >
-          Attach
+          <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M8 3v10M3 8h10" />
+          </svg>
         </button>
-        <DocsPagePicker disabled={pending || selected === undefined} onPick={onAttachPage} />
-        <TrackIssuePicker disabled={pending || selected === undefined} onPick={onAttachIssue} />
-        <WebSearchToggle on={webSearch} onChange={onWebSearch} disabled={pending || selected === undefined} />
-        <RunCodeToggle on={runCode} onChange={onRunCode} disabled={pending || selected === undefined} />
-        <VoiceButton disabled={pending || selected === undefined} onText={onVoice} onNote={onVoiceNote} />
+        <button
+          type="button"
+          className={composerIconClass}
+          onClick={onOptions}
+          aria-label="Chat options"
+          aria-expanded={optionsOpen}
+          aria-controls="chat-options"
+          title="Chat options"
+        >
+          <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M2 5h7M12 5h2M2 11h2M7 11h7" />
+            <circle cx="10.5" cy="5" r="1.5" />
+            <circle cx="5.5" cy="11" r="1.5" />
+          </svg>
+        </button>
         <ModelPicker catalog={picker} selected={selected} onSelect={onSelectModel} disabled={pending} openAsk={pickerAsk} onOpened={onPickerOpened} />
+        <div className="flex-1" />
+        <VoiceButton disabled={off} onText={onVoice} onNote={onVoiceNote} />
         <div className="flex-1" />
         {pending ? (
           // ⚠ KEYED APART FROM Send. Reusing one <button> and flipping its type lets the click on
@@ -2831,6 +2942,7 @@ function ConversationTitle({
   onDeleteCancel: () => void
   onDeleteConfirm: () => void
 }) {
+  const [actions, setActions] = useState(false)
   if (renaming !== null) {
     return (
       <form
@@ -2872,29 +2984,49 @@ function ConversationTitle({
     )
   }
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex flex-wrap items-center gap-1">
       <h2 className="min-w-0 flex-1 truncate text-body font-medium text-ink">{conversation.title}</h2>
+      {/* B45.1 — the conversation's actions wait behind one control. */}
+      <button
+        type="button"
+        className={railIconClass}
+        onClick={() => setActions((a) => !a)}
+        aria-label="Conversation actions"
+        aria-expanded={actions}
+        title="Conversation actions"
+      >
+        <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="currentColor">
+          <circle cx="3.5" cy="8" r="1.25" />
+          <circle cx="8" cy="8" r="1.25" />
+          <circle cx="12.5" cy="8" r="1.25" />
+        </svg>
+      </button>
       {conversation.archived ? (
         <span className="text-caption text-muted" data-testid="conversation-archived">
           Archived
         </span>
-      ) : (
-        <button type="button" className={railButtonClass} onClick={onPin} disabled={disabled}>
-          {conversation.pinned ? 'Unpin' : 'Pin'}
-        </button>
-      )}
-      <button type="button" className={railButtonClass} onClick={onArchive} disabled={disabled}>
-        {conversation.archived ? 'Unarchive' : 'Archive'}
-      </button>
-      <button type="button" className={railButtonClass} onClick={onShare} disabled={disabled}>
-        Share
-      </button>
-      <button type="button" className={railButtonClass} onClick={onRenameStart} disabled={disabled}>
-        Rename
-      </button>
-      <button type="button" className={railButtonClass} onClick={onDeleteStart} disabled={disabled}>
-        Delete
-      </button>
+      ) : null}
+      {actions ? (
+        <div className="flex basis-full flex-wrap justify-end gap-1 wide:basis-auto">
+          {conversation.archived ? null : (
+            <button type="button" className={railButtonClass} onClick={onPin} disabled={disabled}>
+              {conversation.pinned ? 'Unpin' : 'Pin'}
+            </button>
+          )}
+          <button type="button" className={railButtonClass} onClick={onArchive} disabled={disabled}>
+            {conversation.archived ? 'Unarchive' : 'Archive'}
+          </button>
+          <button type="button" className={railButtonClass} onClick={onShare} disabled={disabled}>
+            Share
+          </button>
+          <button type="button" className={railButtonClass} onClick={onRenameStart} disabled={disabled}>
+            Rename
+          </button>
+          <button type="button" className={railButtonClass} onClick={onDeleteStart} disabled={disabled}>
+            Delete
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }

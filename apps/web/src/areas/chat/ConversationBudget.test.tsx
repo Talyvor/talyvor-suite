@@ -1,6 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { OPTIONS_OPEN_KEY } from './Chat'
+
+// B45.1 — a first visit keeps Options closed; this file reads what is behind it.
+beforeEach(() => window.localStorage.setItem(OPTIONS_OPEN_KEY, '1'))
 
 // B28.361 — a budget per conversation. The BFF is mocked at the wire: every request the conversation makes carries
 // its id and, once one is set, its budget in µLXC (what talyvor-lens B28.100 counts and refuses by); and a question

@@ -1,9 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { Chat } from './Chat'
+import { Chat, STATEMENT_OPEN_KEY } from './Chat'
+
+// B45.1 — a first visit keeps the statement closed; this file reads what is behind it.
+beforeEach(() => window.localStorage.setItem(STATEMENT_OPEN_KEY, '1'))
 
 // B28.358 — "Saved in this chat", beside the conversation: what the cache, the shared pool, conversion and Tare
 // saved, added up from the headers Lens sent with each answer. Driven through the real Chat screen, its fetch

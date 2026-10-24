@@ -1,7 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { CHARGE_FRAME } from './chatStream'
+import { OPTIONS_OPEN_KEY } from './Chat'
+
+// B45.1 — a first visit keeps Options closed; this file reads what is behind it.
+beforeEach(() => window.localStorage.setItem(OPTIONS_OPEN_KEY, '1'))
 
 // B28.104 — the plan's allowance used and the prepaid balance, under the box in Chat. The BFF is mocked at the wire:
 // once the answer is streamed, Lens's /api/billing/allowance (or, without a plan, /api/lxc/balance) reads 1620 µLXC

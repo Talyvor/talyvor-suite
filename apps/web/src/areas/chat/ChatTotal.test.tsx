@@ -1,6 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { OPTIONS_OPEN_KEY } from './Chat'
+
+// B45.1 — a first visit keeps Options closed; this file reads what is behind it.
+beforeEach(() => window.localStorage.setItem(OPTIONS_OPEN_KEY, '1'))
 
 // B28.101 — a running total for the conversation. The BFF is mocked at the wire; the total under the box is the
 // prices under the answers added up, and a reload, which reads the conversation back from this browser, shows the

@@ -1111,6 +1111,8 @@ export function pinnedSurvivesReload(seed: number): Scenario {
         if (restore === null) return { pass: false, detail: '/auth/me named nobody, so Chat keeps no history to pin' }
         await page.reload()
         await page.getByRole('list', { name: 'Saved conversations' }).getByRole('button', { name: title }).click({ timeout: ACTION_TIMEOUT_MS })
+        // B45.1 — a conversation's actions wait behind one control.
+        await page.getByRole('button', { name: 'Conversation actions' }).click({ timeout: ACTION_TIMEOUT_MS })
         await page.getByRole('button', { name: 'Pin', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
         await page.getByRole('button', { name: 'Unpin', exact: true }).waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS })
 
@@ -4174,6 +4176,8 @@ export function chatWebSearch(seed: number): Scenario {
       const { page } = app
       await app.newChat()
       const toggle = page.getByRole('button', { name: 'Search the web' })
+      // B45.1 — behind the composer's Files and tools, unless it is already on.
+      if (!(await toggle.isVisible())) await page.getByRole('button', { name: 'Files and tools' }).click({ timeout: ACTION_TIMEOUT_MS })
       await toggle.waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS })
       if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click()
       try {
@@ -4238,6 +4242,8 @@ export function chatRunCode(seed: number): Scenario {
       const { page } = app
       await app.newChat()
       const toggle = page.getByRole('button', { name: 'Run code' })
+      // B45.1 — behind the composer's Files and tools, unless it is already on.
+      if (!(await toggle.isVisible())) await page.getByRole('button', { name: 'Files and tools' }).click({ timeout: ACTION_TIMEOUT_MS })
       await toggle.waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS })
       if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click()
       try {

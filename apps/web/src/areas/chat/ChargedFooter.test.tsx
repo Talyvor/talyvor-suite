@@ -1,8 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { REPORT_CHARGE_HEADER } from './chatApi'
 import { CHARGE_FRAME } from './chatStream'
+import { OPTIONS_OPEN_KEY } from './Chat'
+
+// B45.1 — a first visit keeps Options closed; this file reads what is behind it.
+beforeEach(() => window.localStorage.setItem(OPTIONS_OPEN_KEY, '1'))
 
 // B28.362 — the real charge, not the estimate. The BFF is mocked at the wire with the frame Lens adds to say what an
 // answer was charged (chatStream.ts CHARGE_FRAME, talyvor-lens B28.102). Under the answer that figure replaces the

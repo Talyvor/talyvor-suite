@@ -1,6 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { STATEMENT_OPEN_KEY } from './Chat'
+
+// B45.1 — a first visit keeps the statement closed; this file reads what is behind it.
+beforeEach(() => window.localStorage.setItem(STATEMENT_OPEN_KEY, '1'))
 
 // B28.87 — fund, withdraw, pause and pause-all from Chat, each asked once more before anything is sent. The BFF is
 // mocked at the wire: nothing is posted until the question is answered Yes. That the next agent call is refused after
