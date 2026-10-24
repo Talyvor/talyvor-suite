@@ -104,14 +104,14 @@ describe('/pricing', () => {
     expect(team).toHaveTextContent('Seats6')
     expect(team).toHaveTextContent('Platform fee on AI spend3.25%')
     expect(team).toHaveTextContent('Own provider keys$209 add-on')
-    expect(team).toHaveTextContent('Money featuresLive as each is clearedPreview — test money only')
+    expect(team).toHaveTextContent('Money featuresIncluded as our money partners switch on')
     expect(team).toHaveTextContent('FX margin over the reference rate0.6%')
     expect(team).toHaveTextContent('Slack and Teams approvalsIncluded')
     expect(team).toHaveTextContent('SSO and audit export—')
 
     const free = screen.getByTestId('company-plan-free')
     expect(within(free).getByTestId('price-free')).toHaveTextContent('$0')
-    expect(free).toHaveTextContent('Money featuresPreview — test money only')
+    expect(free).toHaveTextContent('Money featuresNot included')
     expect(free).toHaveTextContent('FX margin over the reference rate—')
     expect(free).toHaveTextContent('Own provider keys—')
     expect(within(screen.getByTestId('company-plan-business')).getByTestId('price-business')).toHaveTextContent('$349')
@@ -132,9 +132,9 @@ describe('/pricing', () => {
     const fees = screen.getByTestId('fees-any-plan')
     expect(fees).toHaveTextContent('Sellers earn 88%; Talyvor keeps 12%')
     expect(fees).toHaveTextContent('Services and compute4%')
-    expect(fees).toHaveTextContent('Loans arranged1.5%Preview — test money only')
+    expect(fees).toHaveTextContent('Loans arranged1.5%')
     expect(fees).toHaveTextContent('£4, €5 or $8 plus the partner’s cost')
-    expect(fees).toHaveTextContent('Accepting payments0.8% plus card processing, or 1.1% from an accountPreview')
+    expect(fees).toHaveTextContent('Accepting payments0.8% plus card processing, or 1.1% from an account')
     expect(screen.getByTestId('tax-line')).toHaveTextContent(
       'Prices are in US dollars. Where Talyvor must charge VAT or sales tax, it is added at checkout and shown before you pay.',
     )

@@ -63,7 +63,6 @@ export function ClaudeConnector() {
               Claude prepares; you decide. A payment Claude prepares waits in Talyvor until you approve it there, with
               your passkey.
             </p>
-            <p className="mt-4 font-figure text-caption uppercase text-faint">Preview — test money only</p>
           </div>
         </section>
 

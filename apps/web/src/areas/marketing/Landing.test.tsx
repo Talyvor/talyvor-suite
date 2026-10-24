@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CONTACT_EMAIL, Landing, POOLED_DISCOUNT_PERCENT } from './Landing'
 import { LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
-import { COMING, POSITIONING_SENTENCES, STATUS_LINE } from '../../positioning'
+import { ON_ITS_WAY, POSITIONING_SENTENCES } from '../../positioning'
 
 // Area-owned test — replaces the deleted shared areas/scaffold.test.tsx (the
 // deadlock: a shared test over per-area screens; see #7). The marketing tab
@@ -123,14 +123,14 @@ describe('Landing', () => {
     expect(text).toContain('Talyvor Ltd · the financial ecosystem for the AI agent economy')
   })
 
-  // B44.4: the hero is positioning v2 as Nicolai wrote it — the two sentences, what is coming said as coming,
-  // and the status line. Credit and trading are not offered, "accounts" is not the word, and no loans.
-  it('says the two sentences, what is coming, and the status line', () => {
+  // B44.4: the hero is positioning v2 as Nick wrote it — the two sentences and what is coming said as coming;
+  // since B46.1 in passing, with no status line. Credit and trading are not offered, "accounts" is not the
+  // word, and no loans.
+  it('says the two sentences and what is on its way', () => {
     const { container } = render(<Landing />)
     const text = container.textContent ?? ''
     for (const s of POSITIONING_SENTENCES) expect(text).toContain(s)
-    for (const c of COMING) expect(text).toContain(c)
-    expect(text).toContain(STATUS_LINE)
+    expect(text).toContain(ON_ITS_WAY)
     expect(text).toMatch(/Rooms/)
     expect(text).not.toMatch(/Accounts, cards|accounts in currencies|loans between companies/i)
     expect(text).not.toMatch(/with credit and trading through licensed partners/i)

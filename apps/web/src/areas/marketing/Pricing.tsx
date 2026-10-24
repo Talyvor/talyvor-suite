@@ -10,7 +10,7 @@ import {
   type PricingState,
 } from './pricingApi'
 import { CompanyLine } from '../../components/CompanyLine'
-import { FOOTER_LINE, STATUS_LINE } from '../../positioning'
+import { FOOTER_LINE } from '../../positioning'
 import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, TAX_LINE } from './PriceCard'
 
 // /pricing (B5.2) — what anything costs, for a buyer who has not signed up. Public, OUTSIDE the
@@ -359,7 +359,6 @@ export function Pricing() {
           </div>
         </div>
         <div className="mx-auto w-full max-w-5xl px-gutter pb-6">
-          <p className="mb-2 text-caption text-faint">{STATUS_LINE}</p>
           <CompanyLine />
         </div>
       </footer>

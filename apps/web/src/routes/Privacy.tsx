@@ -89,7 +89,7 @@ export function Privacy() {
         <p className="text-reading">
           If you join the waitlist we store your email address, when you joined, the page you joined
           from and the campaign tags in its link (utm_source, utm_medium, utm_campaign) — never your
-          IP address or browser. We use it only to invite you to the trial, and keep it until you
+          IP address or browser. We use it only to invite you in, and keep it until you
           join or ask us to remove it: email{' '}
           <a className={inlineLink} href={`mailto:${COMPANY_CONTACT}`}>
             {COMPANY_CONTACT}
@@ -343,7 +343,7 @@ export function Privacy() {
         <LawyerReview compact>
           A deletion that waits on an operator with no stated turnaround, and ledger records kept
           after it, both need to be assessed against erasure rights before the service is offered
-          outside a closed trial.
+          more widely.
         </LawyerReview>
       </Section>
 

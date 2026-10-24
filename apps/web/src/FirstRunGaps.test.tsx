@@ -101,7 +101,7 @@ describe('the marketing page offers a way in', () => {
     at('/marketing')
     await screen.findAllByRole('link', { name: /get started/i })
     await waitFor(() => {
-      expect(screen.getByText(/closed trial just now/i)).toBeInTheDocument()
+      expect(screen.getByText(/first companies in one at a time/i)).toBeInTheDocument()
     })
     expect(screen.queryByText(/no invitation needed/i)).toBeNull()
   })

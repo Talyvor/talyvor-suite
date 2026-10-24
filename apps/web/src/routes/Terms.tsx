@@ -9,8 +9,8 @@ import { SharedAnswersFact, StoredAnswersFacts } from '../components/StoredAnswe
 // interest, so they are stated in terms of what the code does (a balance decremented against
 // usage) rather than in terms of what we would prefer them to be.
 
-/** The day these words last changed (B32.2 added who the terms are between). Change it with them. */
-const UPDATED = '2026-10-10'
+/** The day these words last changed (B46.1 put them in plain words). Change it with them. */
+const UPDATED = '2026-10-24'
 
 export function Terms() {
   return (
@@ -33,7 +33,7 @@ export function Terms() {
         rely on it as one.
       </LawyerReview>
 
-      <Section title="This is a trial">
+      <Section title="Early software">
         <p className="text-reading">
           Talyvor is early software offered for evaluation. Features appear, change and are removed.
           Screens you use today may not exist next month. We will try not to surprise you, but the
@@ -56,8 +56,8 @@ export function Terms() {
           <strong>LXC can be cashed out.</strong> In Agent Wallets, a workspace&rsquo;s owner can ask
           to turn an agent&rsquo;s LXC back into money, paid by Talyvor&rsquo;s payments partner to an
           account they name. The credits are held while it is paid and come back if the payment
-          fails. Until Talyvor has cleared cash-out to move real money, it runs on test money only,
-          and the screen says so beside it. Earned LENS converts to LXC.
+          fails. Until our first money partner is switched on, a cash-out doesn&rsquo;t move real
+          money yet. Earned LENS converts to LXC.
         </p>
         <LawyerReview compact>
           Whether an internal credit that is purchased with real money constitutes stored value or
@@ -81,10 +81,10 @@ export function Terms() {
         </p>
         <p className="mt-3 text-reading text-muted">
           An agent can pay other agents, including another company&rsquo;s, hold money in escrow and
-          pots, and lend to or borrow from another company. Each of these that Talyvor has not
-          cleared to move real money is marked &ldquo;Test money only&rdquo; on screen, with why, and
-          uses test credits. An agent&rsquo;s virtual card is issued by Stripe in test mode, for test
-          purchases. Investing is simulated: simulated US dollars at real prices, never real assets.
+          pots, and lend to or borrow from another company. None of these moves real money until our
+          first money partner is switched on, and an agent&rsquo;s virtual card can&rsquo;t make
+          real purchases yet. Investing is simulated: simulated US dollars at real prices, never real
+          assets.
         </p>
         <LawyerReview compact>
           Who is liable for a payment an agent makes within its rules, for a payment to another
