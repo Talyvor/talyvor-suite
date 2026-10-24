@@ -5,7 +5,7 @@ import { matchRoutes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, CONSOLE_ROUTES, queryClient } from '../../App'
 import { Landing } from '../marketing/Landing'
-import { DOCUMENTATION_PATH, LICENCES } from './content'
+import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH, LICENCES } from './content'
 
 // B27.31 — /documentation opens signed out, and every link on it reaches a screen the app mounts.
 //
@@ -33,7 +33,7 @@ function mountedRoutes(): Array<{ path: string }> {
   for (const m of source('App.tsx').matchAll(/<Route path="(\/[^"]*)"/g)) {
     if (m[1] !== '/*') routes.push(m[1])
   }
-  routes.push(DOCUMENTATION_PATH)
+  routes.push(DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH)
   for (const { path } of CONSOLE_ROUTES) {
     if (!path.endsWith('/*')) {
       routes.push(path)
@@ -99,6 +99,7 @@ describe('/documentation', () => {
       'Agent Wallets — Issue a key',
       'Setup',
       'Agent Wallets — Statement',
+      'Talyvor in Claude',
     ])
     const contents = within(screen.getByRole('navigation', { name: 'On this page' })).getAllByRole('link')
     expect(contents.slice(0, 2).map((a) => a.textContent)).toEqual(['Start here', 'Agent Wallets'])

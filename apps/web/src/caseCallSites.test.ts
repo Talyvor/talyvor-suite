@@ -436,16 +436,17 @@ const PINS: Record<string, Pin> = {
   // 127 → 128 at B30.97: the eyebrow on an invoice's pay page.
   // 128 → 129 at B41.60: the Spec eyebrow on a room's spec message.
   // 129 → 130 at B44.4: the Coming eyebrow in the /marketing hero.
+  // 130 → 132 at B40.20: the Preview line and the tools table's head on /documentation/claude.
   'apps/web/src/caseAudit.ts|<N> uppercase class lists': {
     kind: 'LIVE',
     of: 'TOTAL',
-    states: 130,
+    states: 132,
     why: "the argument for why the rule cannot live in the token — #99 wrote TWENTY here, the 'twenty other' figure with `other` dropped",
   },
   'apps/web/src/caseAudit.ts|uppercase (<N> class lists': {
     kind: 'LIVE',
     of: 'TOTAL',
-    states: 130,
+    states: 132,
     why: '#99 wrote 25 here: every occurrence of the WORD in non-test source with comments kept, which counts the paragraphs about the class',
   },
   'packages/ui/src/components/CaseSafe.tsx|<N> other uppercase class lists': {
