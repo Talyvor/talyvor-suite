@@ -81,6 +81,7 @@ import { payScreen } from './payScreen.ts'
 import { operatorComplianceBoundary } from './operatorCompliance.ts'
 import { waitlistJoin } from './waitlist.ts'
 import { chatFirstMessage } from './chatFirstMessage.ts'
+import { chatSidebar } from './chatSidebar.ts'
 import { voiceChatPay } from './voiceChat.ts'
 import { deviceKeysThroughBFF } from './deviceKeys.ts'
 import { agentCredential } from './kya.ts'
@@ -5292,6 +5293,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B45.3 — Chat's first visit, once a run, on a workspace of its own: a browser that has never opened /chat sends a first
   // message within 10 seconds of landing, at 1440 px and on a 390 px phone, and axe finds nothing on the page unnamed.
   if (i === 2) list.push(chatFirstMessage())
+  // B47.2 — Chat's page, once a run: /chat opens with the suite sidebar hidden, Menu opens it over the chat without moving it
+  // and Escape closes it, at 1440 px and on a 390 px phone; Home shows the sidebar as it did before.
+  if (i === 2) list.push(chatSidebar())
   // B40.12 — Chat's voice, once a run: a payment asked for in Chat read back with the payee and £1.50 and no account number,
   // the same payment prepared as said aloud needing approval as a voice request, and no payment on the ledger without a passkey.
   if (i === 4) list.push(voiceChatPay())
