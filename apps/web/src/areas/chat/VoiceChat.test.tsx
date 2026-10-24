@@ -1,9 +1,11 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../App'
+import { forgetSpeechAvailable } from './voice'
+import { MIC_REFUSED, NOT_HEARD } from './VoiceButton'
 
 // B40.12 — talking to Talyvor in Chat, driven at the wire: the microphone's recording goes to the BFF's transcription
-// route, the words go through Chat's normal pipeline, and the answer is shown and read aloud through the speech route.
+// route, the words land in the box and, once sent, go through Chat's normal pipeline, and the answer is shown and read aloud through the speech route.
 // "Pay the ACME invoice" said aloud is prepared as a voice request, read back with the payee and the amount — never the
 // account number — and paid only once a passkey signs the approval.
 
@@ -23,6 +25,9 @@ const REQUEST = {
 
 /** What the person "says": each recording the fake microphone hands over is transcribed as the next of these. */
 let heard: string[] = []
+/** B47.1 — how the transcription route answers: the once-per-page probe (no body), and a recording. */
+let probeStatus = 400
+let transcribeStatus = 200
 
 class FakeRecorder {
   state = 'inactive'
@@ -59,7 +64,9 @@ function mockBff() {
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
     if (url === '/api/ai/stream/anthropic/v1/messages') return new Response(ANSWER, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
     if (url === '/api/chat/voice/transcriptions') {
-      transcribed.push((init?.body as FormData).get('file'))
+      if (init?.body === undefined) return json({ error: 'probe' }, probeStatus)
+      transcribed.push((init.body as FormData).get('file'))
+      if (transcribeStatus !== 200) return json({ error: 'speech is not configured on this Lens' }, transcribeStatus)
       return json({ text: heard.shift() ?? '' })
     }
     if (url === '/api/chat/voice/speech') {
@@ -82,13 +89,17 @@ function mockBff() {
     }
     return new Response('null', { status: 404 })
   })
-  return { spoken, transcribed, prepared, approvals, approved }
+  const asked = () => vi.mocked(fetch).mock.calls.filter(([u]) => String(u) === '/api/ai/stream/anthropic/v1/messages').length
+  return { spoken, transcribed, prepared, approvals, approved, asked }
 }
 
 const played = vi.fn()
 
 beforeEach(() => {
   heard = []
+  probeStatus = 400
+  transcribeStatus = 200
+  forgetSpeechAvailable()
   vi.stubGlobal('MediaRecorder', FakeRecorder)
   Object.defineProperty(navigator, 'mediaDevices', {
     configurable: true,
@@ -119,18 +130,17 @@ afterEach(() => {
 })
 
 /** Tap the microphone, "talk", tap it again: the recording goes off to be heard. */
-async function say(words: string) {
+async function dictate(words: string) {
   heard.push(words)
-  const mic = await screen.findByRole('button', { name: /^Talk/ })
-  await act(async () => {
-    fireEvent.pointerDown(mic, { button: 0 })
-    fireEvent.pointerUp(mic)
-  })
-  const listening = await screen.findByRole('button', { name: 'Listening… let go or tap to send' })
-  await act(async () => {
-    fireEvent.pointerDown(listening, { button: 0 })
-    fireEvent.pointerUp(listening)
-  })
+  fireEvent.click(await screen.findByRole('button', { name: 'Talk' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop recording' }))
+}
+
+/** Dictate, then press Send: what was said lands in the box and goes only when sent. */
+async function say(words: string) {
+  await dictate(words)
+  await waitFor(() => expect(screen.getByLabelText('Your message')).toHaveValue(words))
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 }
 
 async function openChat() {
@@ -183,5 +193,76 @@ describe('talking to Talyvor in Chat (B40.12)', () => {
     expect(bff.approvals).toEqual([{ positions: [1] }])
     expect(navigator.credentials.get).toHaveBeenCalledTimes(1)
     expect(bff.approved).toHaveLength(1)
+  })
+})
+
+describe('the composer’s microphone (B47.1)', () => {
+  it('sits immediately left of Send, records on a tap, and puts what was said in the box without sending it', async () => {
+    const bff = mockBff()
+    await openChat()
+    const mic = await screen.findByRole('button', { name: 'Talk' })
+    expect(mic.nextElementSibling).toBe(screen.getByRole('button', { name: 'Send' }))
+
+    heard.push('What did my agents spend?')
+    fireEvent.click(mic)
+    await screen.findByRole('button', { name: 'Stop recording' })
+    expect(screen.getByTestId('voice-recording')).toHaveTextContent('0:00')
+    expect(document.body).not.toHaveTextContent(/let go/i)
+    fireEvent.click(screen.getByRole('button', { name: 'Stop recording' }))
+
+    await waitFor(() => expect(screen.getByLabelText('Your message')).toHaveValue('What did my agents spend?'))
+    expect(bff.transcribed).toHaveLength(1)
+    expect(bff.asked()).toBe(0)
+    expect(screen.queryAllByTestId('turn-user')).toHaveLength(0)
+  })
+
+  it('cancels a recording on Esc: nothing is transcribed and the box stays empty', async () => {
+    const bff = mockBff()
+    await openChat()
+    fireEvent.click(await screen.findByRole('button', { name: 'Talk' }))
+    await screen.findByRole('button', { name: 'Stop recording' })
+    fireEvent.keyDown(window, { key: 'Escape' })
+
+    await screen.findByRole('button', { name: 'Talk' })
+    expect(bff.transcribed).toHaveLength(0)
+    expect(screen.getByLabelText('Your message')).toHaveValue('')
+  })
+
+  it('shows no microphone when the server says speech is not configured', async () => {
+    probeStatus = 503
+    mockBff()
+    await openChat()
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u) === '/api/chat/voice/transcriptions')).toBe(true))
+    expect(screen.queryByTestId('chat-mic')).toBeNull()
+  })
+
+  it('takes the microphone away when a recording meets the 503', async () => {
+    transcribeStatus = 503
+    mockBff()
+    await openChat()
+    await dictate('hello')
+    await waitFor(() => expect(screen.queryByTestId('chat-mic')).toBeNull())
+    expect(screen.getByLabelText('Your message')).toHaveValue('')
+  })
+
+  it('says one plain line on any other failure and keeps the recording out of the box', async () => {
+    transcribeStatus = 500
+    mockBff()
+    await openChat()
+    await dictate('hello')
+    await waitFor(() => expect(screen.getByTestId('voice-note')).toHaveTextContent(NOT_HEARD))
+    expect(screen.getByLabelText('Your message')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Talk' })).toBeEnabled()
+  })
+
+  it('asks for the microphone only on a tap, and says how to allow it when refused', async () => {
+    mockBff()
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockRejectedValueOnce(new DOMException('denied', 'NotAllowedError'))
+    await openChat()
+    const mic = await screen.findByRole('button', { name: 'Talk' })
+    expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled()
+    fireEvent.click(mic)
+    await waitFor(() => expect(screen.getByTestId('voice-note')).toHaveTextContent(MIC_REFUSED))
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1)
   })
 })

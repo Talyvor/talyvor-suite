@@ -1729,8 +1729,9 @@ export function Chat() {
               onDraft={setDraft}
               onSend={() => send()}
               onVoice={(text) => {
+                // B47.1 — what was said lands in the box to edit; once sent, the answer is read aloud as before.
                 voicedRef.current = true
-                send(text)
+                setDraft((d) => (d.trim() === '' ? text : `${d.trimEnd()} ${text}`))
               }}
               voiceNote={voiceNote}
               onVoiceNote={setVoiceNote}
@@ -2690,7 +2691,7 @@ function Composer({
   draft: string
   onDraft: (text: string) => void
   onSend: () => void
-  /** B40.12 — what the person said into the microphone, sent as the question. */
+  /** B47.1 — what the person said into the microphone, put in the box for them to send. */
   onVoice: (text: string) => void
   voiceNote: string | null
   onVoiceNote: (note: string | null) => void
@@ -2870,8 +2871,15 @@ function Composer({
         </button>
         <ModelPicker catalog={picker} selected={selected} onSelect={onSelectModel} disabled={pending} openAsk={pickerAsk} onOpened={onPickerOpened} />
         <div className="flex-1" />
-        <VoiceButton disabled={off} onText={onVoice} onNote={onVoiceNote} />
-        <div className="flex-1" />
+        {/* B47.1 — the microphone sits immediately left of Send. */}
+        <VoiceButton
+          disabled={off}
+          onText={(text) => {
+            onVoice(text)
+            boxRef.current?.focus()
+          }}
+          onNote={onVoiceNote}
+        />
         {pending ? (
           // ⚠ KEYED APART FROM Send. Reusing one <button> and flipping its type lets the click on
           // Stop land on a submit button by the time the browser acts on it, which would send
