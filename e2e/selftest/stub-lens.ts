@@ -95,6 +95,9 @@
 // (stub-bank.ts): the review queue answers the moderator key in STUB_MODERATOR_KEY, Lens's minute tick
 // runs every two seconds, and Stripe's Connect onboarding is a page at /stub-connect/….
 //
+// B47.3: speech is not configured, as on a Lens without LENS_DEEPGRAM_API_KEY; STUB_SPEECH=on configures it, and every
+// recording is heard as "Please show me the balance of my wallet." (the run's microphone clip).
+//
 // B26.24: every read the self-test makes is answered in the shape a real Lens answers it, held to
 // lens-shapes.json by test/stubLens.test.ts. A route this stub does not know is a 404 it logs as
 // "stub lens: no such route", which the self-test names — never a `{}` that a screen then throws on.
@@ -1353,6 +1356,20 @@ createServer(async (req, res) => {
     const ws = byToken.get(bearer) ?? byKey.get(bearer)
     if (ws === undefined) return json(res, 401, { error: 'unauthorized' })
     if (p === '/v1/catalog/models') return json(res, 200, CATALOG)
+    // B47.3 — speech (talyvor-lens internal/proxy/speech.go). As a Lens without LENS_DEEPGRAM_API_KEY, both routes say speech
+    // is not configured before reading the request; with STUB_SPEECH=on, a recording is heard as the run's clip says.
+    if ((p === '/v1/audio/transcriptions' || p === '/v1/audio/speech') && req.method === 'POST') {
+      const body = await readBytes(req)
+      if (process.env.STUB_SPEECH !== 'on') return json(res, 503, { error: 'speech is not configured on this Lens' })
+      if (p === '/v1/audio/speech') {
+        res.writeHead(200, { 'Content-Type': 'audio/mpeg' })
+        return void res.end(Buffer.alloc(64))
+      }
+      if (!body.includes('name="file"')) return json(res, 400, { error: 'the audio goes in the multipart field "file"' })
+      // A few seconds of a browser's recording are kilobytes; less is a recording of nothing.
+      if (body.length < 2_000) return json(res, 400, { error: 'the audio file is empty or could not be read' })
+      return json(res, 200, { text: 'Please show me the balance of my wallet.' })
+    }
     // B28.349 — Lens's MCP JSON-RPC route, on the workspace's own token: Chat's read-only wallet tool.
     if (p === '/mcp' && req.method === 'POST') {
       const rpc = JSON.parse((await read(req)) || '{}') as Parameters<Bank['mcp']>[1] & { params?: { arguments?: Record<string, unknown> } }

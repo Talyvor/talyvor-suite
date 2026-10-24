@@ -5,6 +5,7 @@
 // read back from Lens, never judged by a status code. The speech route must answer either audio or Lens's "speech is not
 // configured" sentence; which one is in the detail.
 
+import { fileURLToPath } from 'node:url'
 import { fail } from './bank.ts'
 import { RUN_SALT } from './oracles.ts'
 import type { Scenario, Verdict } from './scenarios.ts'
@@ -110,6 +111,99 @@ export function voiceChatPay(): Scenario {
       if (payments.status !== 200 || payments.value === undefined) return fail(`reading the payments answered ${said(payments)}`)
       const paymentsToPayee = (payments.value.payments ?? []).filter((p) => p.payee_id === payeeID).length
       return voiceVerdict({ payee, readback, approveCard, pageText, voiceRequest, speech, paymentsToPayee })
+    },
+  }
+}
+
+// B47.3 — Chat's microphone end to end. The run's browser hears fixtures/voice-sentence.wav as its microphone (run.ts), and
+// the page is asked whether speech is configured the way Chat asks it (an empty POST: Lens answers 503 before reading the
+// form when it is not). Not configured: the microphone must not show. Configured: tap, the clip is recorded, tap, and the
+// words must land in the composer and stay there, not sent.
+
+/** What the run's fake microphone says: "Please show me the balance of my wallet." (macOS `say`, 16 kHz 16-bit WAV). */
+export const VOICE_CLIP = fileURLToPath(new URL('../fixtures/voice-sentence.wav', import.meta.url))
+/** Words of the clip any transcription of it holds. */
+export const CLIP_WORDS = ['balance', 'wallet'] as const
+/** Long enough for the clip (1.9 s) to play through at least once whatever moment recording starts in its loop. */
+const RECORD_MS = 4_500
+const SETTLE_MS = 3_000
+
+export interface MicSeen {
+  /** What the empty transcription POST answered: 503 is "speech is not configured". */
+  probe: number
+  micShown: boolean
+  composer: string
+  note: string
+  /** Turns the person sent that say what the clip says, before the tap and after the transcript landed. */
+  sentBefore: number
+  sentAfter: number
+}
+
+const heard = (text: string) => {
+  const words = text.toLowerCase().replace(/[^a-z\s]/g, ' ')
+  return CLIP_WORDS.every((w) => words.includes(w))
+}
+
+export function micVerdict(seen: MicSeen): Verdict {
+  if (seen.probe === 503) {
+    if (seen.micShown) return fail('Chat shows the microphone though the server says speech is not configured (the transcription route answered 503)')
+    return { pass: true, detail: 'speech is not configured on this server (503), and Chat shows no microphone' }
+  }
+  if (!seen.micShown) return fail(`Chat shows no microphone though the transcription route answered ${seen.probe}, not 503`)
+  const wrong: string[] = []
+  if (!heard(seen.composer)) {
+    wrong.push(`after recording the clip the composer holds "${seen.composer}", not the words ${CLIP_WORDS.join(' and ')}${seen.note === '' ? '' : ` (Chat said "${seen.note}")`}`)
+  }
+  if (seen.sentAfter !== seen.sentBefore) wrong.push('the transcript was sent without the person pressing Send')
+  if (wrong.length > 0) return fail(wrong.join('; '))
+  return { pass: true, detail: `speech is configured (${seen.probe} to an empty recording); the clip landed in the composer as "${seen.composer}", unsent` }
+}
+
+export function voiceChatMic(): Scenario {
+  return {
+    id: 'voice-chat-mic',
+    owner: 'talyvor-suite',
+    items: ['B47.1'],
+    feature: 'Chat',
+    title: 'Chat’s microphone shows only when speech is configured, and a recorded clip lands in the composer as text, unsent',
+    run: async (ctx) => {
+      const page = await ctx.app.tab('/chat')
+      const seen: MicSeen = { probe: 0, micShown: false, composer: '', note: '', sentBefore: 0, sentAfter: 0 }
+      try {
+        const box = page.locator('#chat-message')
+        await box.waitFor({ timeout: TIMEOUT_MS })
+        seen.probe = await page.evaluate(async () => (await fetch('/api/chat/voice/transcriptions', { method: 'POST' })).status)
+        ctx.evidence.push({ note: 'an empty recording to the transcription route, as Chat asks whether speech is configured', answer: String(seen.probe) })
+        const mic = page.getByTestId('chat-mic')
+        if (seen.probe === 503) {
+          // The page asked the same question when it opened; by now its answer is in.
+          await page.waitForTimeout(SETTLE_MS)
+          seen.micShown = await mic.isVisible()
+          return micVerdict(seen)
+        }
+        seen.micShown = await mic.waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false)
+        if (!seen.micShown) return micVerdict(seen)
+        const sent = () => page.getByTestId('turn-user').evaluateAll((els, words) =>
+          els.filter((e) => words.every((w) => (e.textContent ?? '').toLowerCase().includes(w))).length, [...CLIP_WORDS])
+        seen.sentBefore = await sent()
+        await mic.click()
+        await page.getByTestId('voice-recording').waitFor({ timeout: TIMEOUT_MS })
+        await page.waitForTimeout(RECORD_MS)
+        await mic.click()
+        // Back to idle: the microphone reads "Talk" and can be tapped again (or is gone, if speech went off meanwhile).
+        await page.waitForFunction(() => {
+          const b = document.querySelector<HTMLButtonElement>('[data-testid="chat-mic"]')
+          return b === null || (b.getAttribute('aria-label') === 'Talk' && !b.disabled)
+        }, undefined, { timeout: TIMEOUT_MS })
+        await page.waitForTimeout(SETTLE_MS)
+        seen.composer = (await box.inputValue()).trim()
+        seen.note = ((await page.getByTestId('voice-note').textContent({ timeout: 1_000 }).catch(() => '')) ?? '').trim()
+        seen.sentAfter = await sent()
+        ctx.evidence.push({ note: 'the clip recorded with the microphone, then the composer', answer: JSON.stringify({ composer: seen.composer, note: seen.note }) })
+        return micVerdict(seen)
+      } finally {
+        await page.close().catch(() => undefined)
+      }
     },
   }
 }
