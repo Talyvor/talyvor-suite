@@ -1033,6 +1033,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payment-requests", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPaymentRequestBody",
   },
+  // B40.31 — the phone app's device key, registered and given its push token (Lens B40.4, B40.15).
+  {
+    route: "POST /v1/money/devices",
+    file: "apps/bff/money_devices.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyDevices(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/device_keys_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/devices", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensDeviceKeyRegisterBody",
+  },
+  {
+    route: "POST /v1/money/devices/{id}/push-token",
+    file: "apps/bff/money_devices.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyDevicePushToken(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/device_keys_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/devices/{id}/push-token", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensDevicePushTokenBody",
+  },
 ];
 
 /**
