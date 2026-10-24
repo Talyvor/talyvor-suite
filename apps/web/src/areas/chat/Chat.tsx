@@ -111,6 +111,8 @@ import { formatWhen } from '../lens/format'
 import { Lxc, pegQuery } from '../lens/money'
 import { Card } from '../lens/walletBrand'
 import { RoomsRail } from '../rooms/Rooms'
+import { TALY_LINES } from '../../taly/lines'
+import { TalyIntro } from '../../taly/TalyIntro'
 
 // THE CHAT SCREEN — W4.6.1 step 6. The first surface that puts Model 2 in front of a person.
 //
@@ -2391,7 +2393,8 @@ function Greeting({
 }) {
   return (
     <div className="flex flex-1 flex-col justify-center py-10">
-      <h2 className="text-title text-ink">What can I help with?</h2>
+      <TalyIntro />
+      <h2 className="mt-2 text-title text-ink">{TALY_LINES.greetings[0]}</h2>
       {/* B28.115 — a new chat says what it is sent with, and where that is changed. */}
       {custom.trim() !== '' ? (
         <p className="mt-2 text-caption text-muted" data-testid="custom-instructions-line">

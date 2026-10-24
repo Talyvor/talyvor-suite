@@ -4,6 +4,7 @@ import { Button, Input, cn, focusRing, inlineLink } from '@talyvor/ui'
 
 import type { Conversation, History } from './history'
 import type { Project, Projects } from './projects'
+import { TalyIntro } from '../../taly/TalyIntro'
 
 // B28.109 — projects in Chat: the rail's list of them, a project's own page (its instructions and its chats), and the
 // line over a conversation that says which project's instructions it is sent with.
@@ -130,6 +131,7 @@ export function ProjectHome({
   const chats = history.list.filter((c) => c.project_id === project.id)
   return (
     <div className="flex flex-col gap-6 py-10" data-testid="project-home">
+      <TalyIntro />
       <div>
         <span className="font-figure text-eyebrow uppercase text-label">Project</span>
         <h2 className="mt-1 truncate text-title text-ink">{project.name}</h2>

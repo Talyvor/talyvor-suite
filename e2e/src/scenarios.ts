@@ -674,6 +674,24 @@ export function sidebarStaysHidden(): Scenario {
   }
 }
 
+/** B45.5 — Taly's first message in a new chat says it is an AI assistant. Nothing is asked, so it costs nothing. */
+export function talyIntro(): Scenario {
+  return {
+    id: 'taly-intro',
+    owner: 'talyvor-suite',
+    title: 'a new chat opens with Taly saying it is an AI assistant',
+    run: async (ctx) => {
+      await ctx.app.newChat()
+      const intro = ctx.app.page.getByTestId('taly-intro')
+      const text = await intro.waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS }).then(() => intro.innerText(), () => '')
+      ctx.evidence.push({ note: `new chat intro: "${text}"` })
+      return /Taly/.test(text) && /AI assistant/.test(text)
+        ? { pass: true, detail: `Taly introduced itself: "${text}"` }
+        : { pass: false, detail: text ? `the intro does not say Taly is an AI assistant: "${text}"` : 'a new chat showed no intro from Taly' }
+    },
+  }
+}
+
 /** B28.275 — a question sent in a tab that does not yet know who is signed in is kept: after a reload it is in
  *  the list and on screen, not "No conversations yet". The tab's /auth/me is held in this browser until the
  *  answer is in, and the answer is made up in the browser, so it costs nothing. */
@@ -4837,7 +4855,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     // B28.358 — then a repeat in a new chat, and Saved in this chat totals what its answer's headers said it saved.
     // B28.373 — and "the 100th prime" with Run code on: 541, printed by the code the model ran in the sandbox.
     // B28.131 — and a temporary chat: nothing of it kept in the browser, its answer neither served from nor kept in the cache.
-    case 1: list.push(repeatInNewChat(i), chatSavingsPanel(i), chatRunCode(i), chatTemporary(i)); break
+    // B45.5 — and before them, a new chat opening with Taly saying it is an AI assistant.
+    case 1: list.push(talyIntro(), repeatInNewChat(i), chatSavingsPanel(i), chatRunCode(i), chatTemporary(i)); break
     // B28.275 — then a question sent before the tab knows who is signed in, still there after a reload.
     // B28.108 — and a word from an old answer finding its conversation among 500.
     // B28.109 — and a new chat in a project, sent with the project's instructions.

@@ -957,6 +957,8 @@ it('nothing asked yet: an example question is asked when clicked', async () => {
   const { posted } = mockChat({ body: 'data: [DONE]\n\n' })
   renderChat()
   expect(await screen.findByRole('heading', { name: 'What can I help with?' })).toBeTruthy()
+  // B45.5 — Taly's first message in a new conversation says it is an AI assistant.
+  expect(screen.getByTestId('taly-intro').textContent).toMatch(/Taly, Talyvor’s AI assistant/)
   await chooseModel('GPT-4o')
   fireEvent.click(screen.getByRole('button', { name: EXAMPLE_PROMPTS[0] }))
   await waitFor(() => expect(posted).toHaveBeenCalledTimes(1))

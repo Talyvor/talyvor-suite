@@ -266,6 +266,7 @@
   "src/Sharing.test.tsx": 4,
   "src/SidebarFold.test.tsx": 8,
   "src/statusChangeRefusal.test.tsx": 7,
+  "src/taly/lines.test.tsx": 5,
   "src/timerCleanup.test.tsx": 5,
   "src/tokenDoor.test.ts": 10,
   "src/topUpMirrorRegister.test.ts": 11,
