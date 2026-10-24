@@ -104,7 +104,7 @@ describe('payment cards in the conversation (B45.2)', () => {
     expect(card.textContent).toContain('Asks for approval: above the £100.00 the mandate pays without asking.')
     expect(card.textContent).toContain('requires_approval_above')
     expect(within(card).getByRole('button', { name: 'Decline' })).toBeTruthy()
-    expect(bff.sent).toEqual([`tool ${JSON.stringify({ name: 'prepare_payment', arguments: ARGS, confirmed: false })}`])
+    expect(bff.sent).toEqual([`tool ${JSON.stringify({ name: 'prepare_payment', arguments: ARGS })}`])
 
     // The person dismisses Face ID: nothing is approved, and the card still asks.
     bff.get.mockRejectedValueOnce(new DOMException('The operation was cancelled.', 'NotAllowedError'))

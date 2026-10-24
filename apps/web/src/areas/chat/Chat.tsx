@@ -66,6 +66,7 @@ import { TASK_COMMAND, TaskCard } from './AgentTask'
 import { CardFreezeCard, FREEZE_COMMAND } from './CardFreeze'
 import { STATEMENT_COMMAND, StatementCard } from './StatementCommand'
 import { type Amount, PayCard, bareAmount, isPayCommand, parsePay } from './PayCommand'
+import { PreparedPayment } from './PaymentCards'
 import { VoiceButton } from './VoiceButton'
 import { sayAloud } from './voice'
 import { SCHEDULE_COMMAND, ScheduleCard } from './ScheduledPrompt'
@@ -681,6 +682,7 @@ export function Chat() {
       let codeRuns: ChatMessage['code_runs']
       let toolsUsed: ChatMessage['tools_used']
       let filed: ChatMessage['filed']
+      let prepared: ChatMessage['prepared']
       let connectorCalls: ChatMessage['connector_calls']
       let failed = false
       // B28.349 — Lens's read-only wallet tools, read once: a spend question is answered from the statements.
@@ -714,7 +716,7 @@ export function Chat() {
               return next
             })
           },
-          onDone: ({ unrecognised, usage, model: servedBy, converted, source: from, saved: conversion, tare: trimmed, requestId: rid, finish, spend: lines, requests: took, paidBy: billedTo, chargedULXC, promptResolved, listingCharge, citations: pages, codeRuns: ran, toolsUsed: usedTools, filed: filedIssues, connectorCalls: madeCalls }) => {
+          onDone: ({ unrecognised, usage, model: servedBy, converted, source: from, saved: conversion, tare: trimmed, requestId: rid, finish, spend: lines, requests: took, paidBy: billedTo, chargedULXC, promptResolved, listingCharge, citations: pages, codeRuns: ran, toolsUsed: usedTools, filed: filedIssues, prepared: preparedRequests, connectorCalls: madeCalls }) => {
             if (carriedDocs) {
               sentTurn = turn.map((m, i) => (i === asked ? { ...m, converted } : m))
               setMessages((prev) => prev.map((m, i) => (i === asked ? { ...m, converted } : m)))
@@ -845,6 +847,16 @@ export function Chat() {
                 return next
               })
             }
+            // B45.2 — the payments the answer prepared, each its approval card in the conversation.
+            if (preparedRequests !== undefined) {
+              prepared = preparedRequests
+              setMessages((prev) => {
+                const next = [...prev]
+                const last = next[next.length - 1]
+                if (last !== undefined && last.role === 'assistant') next[next.length - 1] = { ...last, prepared: preparedRequests }
+                return next
+              })
+            }
             // B28.122 — the calls made with connectors' tools, under the answer, each priced: Lens's charge for the request
             // that read its answer when it said, else that request's tokens at the answer's model's price.
             if (madeCalls !== undefined) {
@@ -920,7 +932,7 @@ export function Chat() {
         return
       }
       if (temp) return
-      const answered: ChatMessage = { role: 'assistant', content: answer, cost, source, saved, tare, request_id: requestId, incomplete, spend, requests, payer: answerPayer, charged_ulxc: charged, auto, ...(usedPrompt !== undefined ? { prompt: usedPrompt } : {}), ...(usedListing !== undefined ? { listing: usedListing } : {}), ...(citations !== undefined ? { citations } : {}), ...(codeRuns !== undefined ? { code_runs: codeRuns } : {}), ...(toolsUsed !== undefined ? { tools_used: toolsUsed } : {}), ...(filed !== undefined ? { filed } : {}), ...(connectorCalls !== undefined ? { connector_calls: connectorCalls } : {}), ...carry }
+      const answered: ChatMessage = { role: 'assistant', content: answer, cost, source, saved, tare, request_id: requestId, incomplete, spend, requests, payer: answerPayer, charged_ulxc: charged, auto, ...(usedPrompt !== undefined ? { prompt: usedPrompt } : {}), ...(usedListing !== undefined ? { listing: usedListing } : {}), ...(citations !== undefined ? { citations } : {}), ...(codeRuns !== undefined ? { code_runs: codeRuns } : {}), ...(toolsUsed !== undefined ? { tools_used: toolsUsed } : {}), ...(filed !== undefined ? { filed } : {}), ...(prepared !== undefined ? { prepared } : {}), ...(connectorCalls !== undefined ? { connector_calls: connectorCalls } : {}), ...carry }
       store((list) =>
         upsertConversation(
           list,
@@ -2510,6 +2522,7 @@ function Reply({
       {message.citations !== undefined && message.incomplete !== 'blank' && !answering && !shown.revealing ? <Sources citations={message.citations} /> : null}
       {message.code_runs !== undefined && message.code_runs.length > 0 && message.incomplete !== 'blank' && !answering && !shown.revealing ? <CodeRuns runs={message.code_runs} /> : null}
       {message.filed !== undefined && message.filed.length > 0 && !answering && !shown.revealing ? <FiledIssues issues={message.filed} /> : null}
+      {message.prepared !== undefined && !answering && !shown.revealing ? message.prepared.map((id) => <PreparedPayment key={id} id={id} />) : null}
       {message.tools_used !== undefined && message.tools_used.length > 0 && !answering && !shown.revealing ? <ToolsUsed names={message.tools_used} /> : null}
       {message.connector_calls !== undefined && message.connector_calls.length > 0 && !answering && !shown.revealing ? (
         <ConnectorCalls calls={message.connector_calls} usdPerLXC={usdPerLXC} />

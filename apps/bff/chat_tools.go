@@ -15,7 +15,8 @@ package main
 // ⚠ ONLY THE TOOLS chatTools NAMES ARE RELAYED, WHATEVER THE MODEL ASKS FOR. Lens's /mcp also lists tools
 // that move money (wallet_send, agent_pay, …). A question in Chat is not a payment, and a prompt-injected
 // document must not be able to make one, so a tool is listed and called only when chatTools names it — and
-// none of them moves money. The one that changes something (Track's create_issue) runs only with
+// none of them moves money. B45.2: prepare_payment and prepare_batch only prepare a request (Lens B40.3), which
+// Chat shows as B40.9's card and pays only once the person approves it there with a passkey. The one that changes something (Track's create_issue) runs only with
 // "confirmed": true, which Chat sends once the person has said yes to that one call on screen.
 //
 // The contract for B28.83 (talyvor-lens side): Lens's /mcp, called with a workspace's own token, lists
@@ -43,7 +44,7 @@ const productMCPPath = "/mcp"
 // chatToolSpec is how Chat may use one tool: whose /mcp answers it, whether it changes anything, and the
 // arguments the BFF sets itself — left out of the schema the model sees, and whatever the model sent for
 // them dropped. For Track and Docs, workspace_id is the session's workspace and team_id its first team; Lens
-// reads the workspace from the session's token.
+// reads the workspace from the session's token, and a prepared payment's client is "chat" under a fresh key.
 type chatToolSpec struct {
 	product string
 	writes  bool
@@ -51,11 +52,14 @@ type chatToolSpec struct {
 }
 
 // chatTools are the MCP tools Chat may use. All of them read, but Track's create_issue, which files an issue
-// and runs only once the person has confirmed it.
+// and runs only once the person has confirmed it, and Lens's prepare tools, which pay nothing: the card they
+// open in the conversation is where the person approves, with a passkey, or declines.
 var chatTools = map[string]chatToolSpec{
 	"wallet_agents_spend": {product: "lens"},
 	"get_spend_summary":   {product: "lens", session: []string{"workspace_id"}},
 	"get_cache_stats":     {product: "lens", session: []string{"workspace_id"}},
+	"prepare_payment":     {product: "lens", session: []string{"client", "idempotency_key"}},
+	"prepare_batch":       {product: "lens", session: []string{"client", "idempotency_key"}},
 	"create_issue":        {product: "track", writes: true, session: []string{"workspace_id", "team_id"}},
 	"search_issues":       {product: "track", session: []string{"workspace_id"}},
 	"list_issues":         {product: "track", session: []string{"workspace_id"}},
@@ -357,6 +361,18 @@ func (a *app) handleChatToolCall(w http.ResponseWriter, r *http.Request, t tenan
 	var status int
 	var err error
 	if spec.product == "lens" {
+		if slices.Contains(spec.session, "client") {
+			args["client"] = "chat"
+		}
+		if slices.Contains(spec.session, "idempotency_key") {
+			// One call the browser sends once: Lens prepares one request for it.
+			key, kerr := randomToken()
+			if kerr != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Lens could not be asked just now"})
+				return
+			}
+			args["idempotency_key"] = key
+		}
 		reply, status, err = a.mcpCall(r, t, "tools/call", map[string]any{"name": in.Name, "arguments": args})
 	} else {
 		if !a.productConfigured(spec.product) {
