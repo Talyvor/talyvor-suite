@@ -1111,8 +1111,10 @@ export function pinnedSurvivesReload(seed: number): Scenario {
         if (restore === null) return { pass: false, detail: '/auth/me named nobody, so Chat keeps no history to pin' }
         await page.reload()
         await page.getByRole('list', { name: 'Saved conversations' }).getByRole('button', { name: title }).click({ timeout: ACTION_TIMEOUT_MS })
-        // B45.1 — a conversation's actions wait behind one control.
-        await page.getByRole('button', { name: 'Conversation actions' }).click({ timeout: ACTION_TIMEOUT_MS })
+        // B45.1 — a conversation's actions wait behind one control, unless they are open already.
+        if (!(await page.getByRole('button', { name: 'Pin', exact: true }).isVisible())) {
+          await page.getByRole('button', { name: 'Conversation actions' }).click({ timeout: ACTION_TIMEOUT_MS })
+        }
         await page.getByRole('button', { name: 'Pin', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
         await page.getByRole('button', { name: 'Unpin', exact: true }).waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS })
 
