@@ -4,8 +4,12 @@
 // back from Lens as a voice request needing approval. Nothing is approved, so the ledger must hold no payment to the payee —
 // read back from Lens, never judged by a status code. The speech route must answer either audio or Lens's "speech is not
 // configured" sentence; which one is in the detail.
+// B45.27 — and "Hey Taly": with speech configured, a stand-in for the browser's on-device recogniser is put in the page; Hey
+// Taly turned on must listen on the device, stop while the tab is hidden and listen again once it is back, and "Hey Taly, pay
+// <payee> £1.50 …" must end in the same read-back and approval card, never a payment. Without speech it must not be offered.
 
 import { fileURLToPath } from 'node:url'
+import type { Page } from 'playwright'
 import { fail } from './bank.ts'
 import { RUN_SALT } from './oracles.ts'
 import type { Scenario, Verdict } from './scenarios.ts'
@@ -24,6 +28,18 @@ export interface VoiceSeen {
   voiceRequest: { status: number; client?: string; decisions?: string[] }
   speech: { status: number; contentType: string; error: string }
   paymentsToPayee: number
+  /** B45.27 — what Hey Taly did in the page. */
+  heyTaly: HeyTalySeen
+}
+
+export interface HeyTalySeen {
+  offered: boolean
+  onDevice: boolean
+  /** Recognisers listening while the tab was hidden, and once it was back in view. */
+  whileHidden: number
+  whenBack: number
+  readback: string
+  approveCard: boolean
 }
 
 export function voiceVerdict(seen: VoiceSeen): Verdict {
@@ -42,13 +58,83 @@ export function voiceVerdict(seen: VoiceSeen): Verdict {
   const spoke = seen.speech.status === 200 && seen.speech.contentType.startsWith('audio/')
   const unconfigured = seen.speech.status === 503 && seen.speech.error.includes('speech is not configured')
   if (!spoke && !unconfigured) wrong.push(`the speech route answered ${seen.speech.status} ${seen.speech.contentType} "${seen.speech.error}", neither audio nor "speech is not configured"`)
+  const h = seen.heyTaly
+  if (!spoke && h.offered) wrong.push('Chat offers Hey Taly though speech is not configured')
+  if (spoke) {
+    if (!h.offered) wrong.push('Chat does not offer Hey Taly though speech is configured and the browser recognises on the device')
+    else {
+      if (!h.onDevice) wrong.push('Hey Taly listened without asking the recogniser to stay on the device')
+      if (h.whileHidden !== 0) wrong.push(`Hey Taly kept ${h.whileHidden} recognisers listening while the tab was hidden`)
+      if (h.whenBack !== 1) wrong.push(`Hey Taly had ${h.whenBack} recognisers listening once the tab was back, not 1`)
+      if (!h.readback.includes(want) || !h.readback.includes('passkey') || !h.approveCard) {
+        wrong.push(`"Hey Taly, pay …" read back "${h.readback}"${h.approveCard ? '' : ' with no approval card'}, not ${want} awaiting a passkey`)
+      }
+    }
+  }
   if (seen.paymentsToPayee !== 0) wrong.push(`Lens holds ${seen.paymentsToPayee} payments to the payee though nothing was approved`)
   if (wrong.length > 0) return fail(wrong.join('; '))
   return {
     pass: true,
     detail: `Chat read back "${seen.readback}" with the approval card and no account number; the voice request is one needs_approval from "voice"; ` +
-      `no payment to the payee on the ledger; speech ${spoke ? 'answered audio' : 'is not configured on this Lens'}`,
+      `no payment to the payee on the ledger; speech ${spoke ? 'answered audio' : 'is not configured on this Lens'}; ` +
+      (spoke ? `Hey Taly listened on the device, stopped while hidden, and read back "${h.readback}"` : 'Hey Taly is not offered'),
   }
+}
+
+/** Stands in for the browser's on-device recogniser: it says it can listen on the device and keeps who is listening. */
+function fakeRecogniser() {
+  const live: { processLocally: boolean; onresult: ((e: unknown) => void) | null }[] = []
+  class Recogniser {
+    static available = async () => 'available'
+    lang = ''
+    continuous = false
+    interimResults = true
+    processLocally = false
+    onresult: ((e: unknown) => void) | null = null
+    onend: (() => void) | null = null
+    onerror: (() => void) | null = null
+    start() {
+      live.push(this)
+    }
+    abort() {
+      const i = live.indexOf(this)
+      if (i >= 0) live.splice(i, 1)
+    }
+  }
+  const hear = (words: string) => live[0]?.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: words }], { isFinal: true })] })
+  Object.assign(window, { SpeechRecognition: Recogniser, heyTalyTest: { live, hear } })
+}
+
+const HEY_TALY_WAIT_MS = 10_000
+
+async function sayHeyTaly(page: Page, payee: string): Promise<HeyTalySeen> {
+  const seen: HeyTalySeen = { offered: false, onDevice: false, whileHidden: -1, whenBack: -1, readback: '', approveCard: false }
+  await page.addInitScript(fakeRecogniser)
+  await page.reload()
+  const toggle = page.getByTestId('hey-taly')
+  seen.offered = await toggle.waitFor({ timeout: HEY_TALY_WAIT_MS }).then(() => true, () => false)
+  if (!seen.offered) return seen
+  type Test = { heyTalyTest: { live: { processLocally: boolean }[]; hear: (w: string) => void } }
+  const listening = () => page.evaluate(() => (window as unknown as Test).heyTalyTest.live.length)
+  const showTab = (state: string) => page.evaluate((state) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+    document.dispatchEvent(new Event('visibilitychange'))
+  }, state)
+  await toggle.click()
+  await page.waitForFunction(() => (window as unknown as Test).heyTalyTest.live.length === 1, undefined, { timeout: TIMEOUT_MS }).catch(() => undefined)
+  seen.onDevice = await page.evaluate(() => (window as unknown as Test).heyTalyTest.live[0]?.processLocally === true)
+  await showTab('hidden')
+  await page.waitForTimeout(1_000)
+  seen.whileHidden = await listening()
+  await showTab('visible')
+  await page.waitForFunction(() => (window as unknown as Test).heyTalyTest.live.length > 0, undefined, { timeout: TIMEOUT_MS }).catch(() => undefined)
+  seen.whenBack = await listening()
+  await page.evaluate((words) => (window as unknown as Test).heyTalyTest.hear(words), `Hey Taly, pay ${payee} £1.50 for the nightly invoice`)
+  const line = page.getByTestId('chat-pay-readback').last()
+  await line.waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
+  seen.readback = ((await line.textContent().catch(() => '')) ?? '').trim()
+  seen.approveCard = await page.getByTestId('approve-card').last().isVisible().catch(() => false)
+  return seen
 }
 
 export function voiceChatPay(): Scenario {
@@ -56,7 +142,7 @@ export function voiceChatPay(): Scenario {
     id: 'voice-chat-pay',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B40.12'],
+    items: ['B40.12', 'B45.27'],
     feature: 'Chat',
     title: 'a payment asked for in Chat is prepared, read back with the payee and amount and no account number, and a voice request needs approval; nothing is paid without a passkey',
     run: async (ctx) => {
@@ -72,6 +158,7 @@ export function voiceChatPay(): Scenario {
       let pageText = ''
       let voiceRequest: VoiceSeen['voiceRequest'] = { status: 0 }
       let speech: VoiceSeen['speech'] = { status: 0, contentType: '', error: '' }
+      let heyTaly: HeyTalySeen = { offered: false, onDevice: false, whileHidden: -1, whenBack: -1, readback: '', approveCard: false }
       try {
         const box = page.getByPlaceholder('Ask anything')
         await box.waitFor({ timeout: TIMEOUT_MS })
@@ -102,6 +189,9 @@ export function voiceChatPay(): Scenario {
           return { status: r.status, contentType, error }
         })
         ctx.evidence.push({ note: 'Chat asks for an answer read aloud', answer: JSON.stringify(speech) })
+
+        heyTaly = await sayHeyTaly(page, payee)
+        ctx.evidence.push({ note: 'Hey Taly turned on, the tab hidden and shown, then “Hey Taly, pay …” said', answer: JSON.stringify(heyTaly) })
       } finally {
         await page.close().catch(() => undefined)
       }
@@ -110,7 +200,7 @@ export function voiceChatPay(): Scenario {
       ctx.evidence.push({ note: 'Lens’s payments out afterwards', answer: said(payments) })
       if (payments.status !== 200 || payments.value === undefined) return fail(`reading the payments answered ${said(payments)}`)
       const paymentsToPayee = (payments.value.payments ?? []).filter((p) => p.payee_id === payeeID).length
-      return voiceVerdict({ payee, readback, approveCard, pageText, voiceRequest, speech, paymentsToPayee })
+      return voiceVerdict({ payee, readback, approveCard, pageText, voiceRequest, speech, paymentsToPayee, heyTaly })
     },
   }
 }
