@@ -70,9 +70,19 @@ export function marketVersions(seed: number): Scenario {
       const shown = await uploadInApp(ctx.app, id)
       ctx.evidence.push({ note: `the seller opens the listing in the app and, under New version, publishes version 2, answering ${V2.word}, "${CHANGELOG}"`, answer: shown })
       if (!/^Version 2 is published\b/.test(shown)) return fail(`publishing version 2 under New version did not read "Version 2 is published.": ${shown}`)
-      return versionsHold(ctx, seller, buyer, id)
+      return (await approveHeld(ctx, id, shown)) ?? versionsHold(ctx, seller, buyer, id)
     },
   }
+}
+
+/** B17.262 — a held version 2 leaves version 1 live (Lens B17.206) until a moderator approves it, as with a held version 1. */
+export async function approveHeld(ctx: ScenarioCtx, id: string, shown: string): Promise<Verdict | undefined> {
+  if (!/held for review/.test(shown)) return undefined
+  const { lens } = ctx.env
+  if (!lens.canModerate) throw new CannotTest('version 2 was held for review, and approving it needs a moderator key: LENS_MODERATOR_KEY, from `lens moderator-keys create`')
+  const ok = await lens.moderate(id, 'approve')
+  ctx.evidence.push({ note: 'a moderator approves the held version 2', answer: said(ok) })
+  return ok.ok ? undefined : fail(`approving the held version 2 of ${id}: ${said(ok)}`)
 }
 
 /** After version 2 is uploaded: Lens reads both versions, version 1 unchanged, and runs the version a use names. */
