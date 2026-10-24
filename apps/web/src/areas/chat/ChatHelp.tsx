@@ -167,7 +167,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          Attach sits beside the model picker. PDF, Word, Excel, PowerPoint, CSV, HTML, JSON, XML, text and
+          Attach is under + (Files and tools) in the message box. PDF, Word, Excel, PowerPoint, CSV, HTML, JSON, XML, text and
           Markdown files can be attached, each up to 25 MB. A document is uploaded once, and every later
           question in the conversation can still see it. Files can also be dragged onto the chat and dropped, and a
           screenshot or a copied file pasted into the message box is attached the same way.
@@ -278,7 +278,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
           otherwise.
         </p>
         <p>
-          The line under the message box is the selected model&rsquo;s list price per million tokens. It is
+          Chat options, beside +, opens the selected model&rsquo;s list price per million tokens. It is
           the catalog rate, not this conversation&rsquo;s bill.
         </p>
         <p>
@@ -322,7 +322,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
       <p>
         In this browser only, for the account you are signed in with — not on Talyvor&rsquo;s servers.
         Another browser or device will not have them, and clearing this site&rsquo;s data removes them.
-        Rename or delete a conversation from the bar above it; New chat starts a fresh one.
+        Rename or delete a conversation from Conversation actions beside its name; New chat starts a fresh one.
       </p>
     ),
   },
