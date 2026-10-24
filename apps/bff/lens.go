@@ -430,6 +430,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/features/stored-answers", a.requireTenant(a.handleStoredAnswers))
 	a.mux.HandleFunc("/api/features/stored-answers/delete", a.requireTenant(a.handleStoredAnswersDelete))
 	a.mux.HandleFunc("/api/features/deletion-requests", a.requireTenant(a.handleDeletionRequests))
+	// B46.16 — the workspace's name, asked at sign-up and shown in the sidebar. See workspace_name.go.
+	a.mux.HandleFunc("/api/workspace/name", a.requireTenant(a.handleWorkspaceName))
 	// B19.4 — the Agent Bank: agents, their balances and rules, payments between them, and the
 	// approvals inbox. See agent_bank.go.
 	a.mux.HandleFunc("/api/agents", a.requireTenant(a.handleAgents))

@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Input } from '@talyvor/ui'
 import { api } from '../../lib/api'
+import { useAuthMeReader } from '../../lib/authMe'
 import { BOOK_KEY } from './AgentBank'
 import { CopyBlock } from './Setup'
 import { toolsFor } from './setupSnippets'
 import {
+  WORKSPACE_NAME_KEY,
   type Agent,
   type AgentBook,
   type AgentKey,
@@ -19,7 +21,7 @@ import {
 // Onboarding.tsx — B46.2 (B45.8's flow): a new workspace's first agent in one click on Home. Sign up, then
 // "Your first agent is ready": the agent is made, given the workspace's free credit, and its key is shown
 // once with a copy button; then Home. No budget, funding or identity forms on the way — the agent's rules
-// are Agent Wallets' to set later. No disclaimer sentence, here or anywhere in the app (B46.14, Nick, 24 Oct 2026).
+// are Agent Wallets' to set later. B46.16: the workspace is named in the same click, before the agent is made. No disclaimer sentence, here or anywhere in the app (B46.14, Nick, 24 Oct 2026).
 
 const lxc = (micros: number) => (
   <>
@@ -32,6 +34,15 @@ const REQUEST_KINDS: readonly StatementLine['kind'][] = ['spend', 'hold', 'settl
 /** The oldest line a request put on the statement; Lens lists it newest first. Chat's launch card (B28.350) reads it too. */
 export const firstRequest = (lines: StatementLine[] | null | undefined): StatementLine | null =>
   [...(lines ?? [])].reverse().find((l) => REQUEST_KINDS.includes(l.kind)) ?? null
+
+// Webmail is a person's address, not a company's: those domains name no workspace.
+const WEBMAIL = new Set(['gmail', 'googlemail', 'outlook', 'hotmail', 'live', 'msn', 'yahoo', 'icloud', 'me', 'mac', 'aol', 'proton', 'protonmail', 'gmx', 'yandex', 'zoho', 'mail'])
+
+/** "ada@acme.co.uk" → "Acme"; a webmail address or none → "". */
+export const nameFromEmail = (email: string | undefined): string => {
+  const label = (email?.split('@')[1] ?? '').split('.')[0].toLowerCase()
+  return !label || WEBMAIL.has(label) ? '' : label[0].toUpperCase() + label.slice(1)
+}
 
 interface Ready {
   agent: Agent
@@ -78,6 +89,11 @@ function ReadyView({ ready, onFinished }: { ready: Ready; onFinished: () => void
  */
 export function FirstAgent({ book, onStarted, onFinished }: { book: AgentBook; onStarted: () => void; onFinished: () => void }) {
   const qc = useQueryClient()
+  const email = useAuthMeReader().data?.user?.email
+  // Prefilled once the session is read, until the person types their own.
+  const [typedWorkspace, setWorkspace] = useState<string | null>(null)
+  const workspace = typedWorkspace ?? nameFromEmail(email)
+  const [named, setNamed] = useState(false)
   const [name, setName] = useState('My first agent')
   // Each step is kept once Lens did it, and the move keeps its Idempotency-Key, so a retry after a failure
   // makes no second agent and moves the credit once.
@@ -87,6 +103,11 @@ export function FirstAgent({ book, onStarted, onFinished }: { book: AgentBook; o
   const [ready, setReady] = useState<Ready | null>(null)
   const make = useMutation({
     mutationFn: async (): Promise<Ready> => {
+      if (!named) {
+        await agentBankApi.setWorkspaceName(workspace.trim())
+        setNamed(true)
+        void qc.invalidateQueries({ queryKey: WORKSPACE_NAME_KEY })
+      }
       const a = agent ?? (await agentBankApi.create(name.trim()))
       if (!agent) {
         setAgent(a)
@@ -112,12 +133,19 @@ export function FirstAgent({ book, onStarted, onFinished }: { book: AgentBook; o
           className="flex w-full flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault()
-            if ((agent || name.trim()) && !make.isPending) make.mutate()
+            if ((named || workspace.trim()) && (agent || name.trim()) && !make.isPending) make.mutate()
           }}
         >
-          <Input aria-label="Agent name" value={agent?.name ?? name} disabled={agent !== null} onChange={(e) => setName(e.target.value)} />
+          <label className="flex w-full flex-col gap-1 text-caption text-ink">
+            Workspace name
+            <Input value={workspace} maxLength={80} disabled={named} onChange={(e) => setWorkspace(e.target.value)} />
+          </label>
+          <label className="flex w-full flex-col gap-1 text-caption text-ink">
+            Agent name
+            <Input value={agent?.name ?? name} disabled={agent !== null} onChange={(e) => setName(e.target.value)} />
+          </label>
           <div>
-            <Button type="submit" variant="primary" disabled={(!agent && !name.trim()) || make.isPending}>
+            <Button type="submit" variant="primary" disabled={(!named && !workspace.trim()) || (!agent && !name.trim()) || make.isPending}>
               {make.isPending ? 'Getting it ready…' : 'Create my first agent'}
             </Button>
           </div>

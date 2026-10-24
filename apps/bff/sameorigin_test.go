@@ -198,6 +198,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/waitlist", body: `{"email":"a@example.com"}`}, // B44.1
 		{method: http.MethodPost, path: "/api/features/stored-answers/delete", body: `{"scope":"shared","confirm":"ws"}`},
 		{method: http.MethodPost, path: "/api/features/deletion-requests", body: `{}`},
+		{method: http.MethodPut, path: "/api/workspace/name", body: `{"name":"a"}`}, // B46.16
 		{method: http.MethodPost, path: "/api/agents", body: `{"name":"a"}`},
 		{method: http.MethodPost, path: "/api/agents/x1/fund", body: `{"amount_ulxc":1}`},
 		{method: http.MethodPost, path: "/api/agents/x1/withdraw", body: `{"amount_ulxc":1}`},
