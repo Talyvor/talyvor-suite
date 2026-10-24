@@ -64,3 +64,48 @@ func TestApprovalScreenWritesReachLensAsNamed(t *testing.T) {
 		t.Errorf("read went to %s", got[2])
 	}
 }
+
+// B40.37 — a phone approves with its device key ({device_id, challenge, signature}); the BFF forwards those three to
+// Lens as sent on each route that takes an assertion, where it used to drop device_id and challenge.
+func TestDeviceAssertionReachesLensOnEveryDecisionRoute(t *testing.T) {
+	var mu sync.Mutex
+	got := map[string]string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		got[r.URL.Path] = string(raw)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"approved"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	device := `{"device_id":"dev_9","challenge":"Y2gtMQ","signature":"c2lnLTE"}`
+	for _, c := range []struct{ path, body, lens string }{
+		{"/api/agents/approvals/ap_1/approve", `{"assertion":` + device + `}`, "/approvals/ap_1/approve"},
+		{"/api/agents/approvals/ap_2/deny", `{"assertion":` + device + `}`, "/approvals/ap_2/deny"},
+		{"/api/money/payment-requests/preq_1/approve", `{"statement":"{}","assertion":` + device + `}`, "/v1/money/payment-requests/preq_1/approve"},
+	} {
+		if rec := doJSON(a, http.MethodPost, c.path, c.body); rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d %s", c.path, rec.Code, rec.Body.String())
+		}
+		mu.Lock()
+		var body string
+		for p, b := range got {
+			if strings.HasSuffix(p, c.lens) {
+				body = b
+			}
+		}
+		mu.Unlock()
+		for _, want := range []string{`"device_id":"dev_9"`, `"challenge":"Y2gtMQ"`, `"signature":"c2lnLTE"`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: Lens got %q, missing %s", c.path, body, want)
+			}
+		}
+	}
+}
