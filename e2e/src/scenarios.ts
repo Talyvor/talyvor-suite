@@ -80,6 +80,7 @@ import { invoicesScreen } from './invoiceScreen.ts'
 import { payScreen } from './payScreen.ts'
 import { operatorComplianceBoundary } from './operatorCompliance.ts'
 import { waitlistJoin } from './waitlist.ts'
+import { chatFirstMessage } from './chatFirstMessage.ts'
 import { voiceChatPay } from './voiceChat.ts'
 import { deviceKeysThroughBFF } from './deviceKeys.ts'
 import { agentCredential } from './kya.ts'
@@ -548,7 +549,7 @@ export function stoppedThenAnswers(seed: number): Scenario {
 }
 
 /** B28.81 — an answer stream as the model's provider shapes it: `text`, then why the model stopped. */
-function madeUpAnswer(provider: string, text: string, cutOff: boolean): string {
+export function madeUpAnswer(provider: string, text: string, cutOff: boolean): string {
   const frame = (o: unknown) => `data: ${JSON.stringify(o)}\n\n`
   if (provider === 'anthropic') {
     return (text === '' ? '' : frame({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text } })) +
@@ -5288,6 +5289,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B44.1 — talyvor.com's waitlist, once a run: a stranger joins on /marketing twice and reads "You’re on the list." both
   // times, Lens holds one row for the address and none for a honeypot bot, and the CSV refuses the stranger 401.
   if (i === 3) list.push(waitlistJoin())
+  // B45.3 — Chat's first visit, once a run, on a workspace of its own: a browser that has never opened /chat sends a first
+  // message within 10 seconds of landing, at 1440 px and on a 390 px phone, and axe finds nothing on the page unnamed.
+  if (i === 2) list.push(chatFirstMessage())
   // B40.12 — Chat's voice, once a run: a payment asked for in Chat read back with the payee and £1.50 and no account number,
   // the same payment prepared as said aloud needing approval as a voice request, and no payment on the ledger without a passkey.
   if (i === 4) list.push(voiceChatPay())
