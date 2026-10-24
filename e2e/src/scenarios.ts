@@ -28,7 +28,7 @@ import {
   statesNumber,
 } from './oracles.ts'
 import { BillingPlanCard, DocsPage, FeaturesScreen, type LoggingPolicy, TrackScreen, subscribeWithTestCard, tryConversion, tryTare } from './screens.ts'
-import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, approvalsBadge, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, walletHome, walletOnboarding } from './bank.ts'
+import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, approvalsBadge, approvalsInbox, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, walletHome, walletOnboarding } from './bank.ts'
 import { chatMoneyRequests, marketAbuse, marketAgentCommitment, marketAgentMCP, marketBillRefund, marketJournal, marketOffers, marketPayout, marketRent, marketTrial, marketPayoutConnect, marketHeldSeller, marketReview, marketTakedown, walletCard, walletCardPurchase, walletCashOut, walletEscrow, walletLoan, walletLoanDefault, walletLoanRepay, walletPots, walletGiveBack, walletRecurring, walletRequest, walletSendRefund } from './trade.ts'
 import type { Inventory } from './coverage.ts'
 import { apiKeyRevoke, byokAddon, chatConnectors, chatDocsPage, chatExportImport, chatFileBug, chatShareLink, chatToolGuard, chatTrackIssue, docsShareCollab, docsTeamGrant, docsTools, lensConvert, patternMiningSwitch, planChange, providerKeys, sessionSignOut, trackProject, trackSearchCycleBoard, trackWorkspaceRestore, walletFX, wrongAnswerStored } from './surface.ts'
@@ -4990,7 +4990,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     // B28.305 — then an agent created from a rule template: Lens holds exactly the template's rules.
     // B28.38 — then a payment approved from its push notification, with the app not opened.
     // B28.45 — then the Approvals badge, live: one approved here and one in another tab, no reload.
-    case 3: list.push(agentApproval(i), agentArchive(i), agentRuleTemplate(i), agentApprovalPush(i), approvalsBadge(i)); break
+    // B41.33 — then the inbox: five held payments narrowed to their agent and approved together, each once.
+    case 3: list.push(agentApproval(i), agentArchive(i), agentRuleTemplate(i), agentApprovalPush(i), approvalsBadge(i), approvalsInbox(i)); break
     // B28.26 — first, 61 requests in a minute under a 60-a-minute rule: the 61st writes no hold.
     case 4:
       list.push(agentRequestRate(i))
