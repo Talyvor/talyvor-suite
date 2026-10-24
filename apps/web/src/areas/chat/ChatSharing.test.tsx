@@ -1,7 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { POOL_HEADER } from './chatApi'
+import { OPTIONS_OPEN_KEY } from './Chat'
+
+// B45.1 — a first visit keeps Options closed; this file reads what is behind it.
+beforeEach(() => window.localStorage.setItem(OPTIONS_OPEN_KEY, '1'))
 
 // B28.381 — a chat kept out of the shared pool. The BFF is mocked at the wire: what reaches it is what Lens is asked
 // with (talyvor-lens B28.133 honours it). That another workspace is never served such a chat's answer is the e2e

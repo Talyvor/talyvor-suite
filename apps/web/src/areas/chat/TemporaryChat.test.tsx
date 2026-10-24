@@ -1,8 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { CACHE_STORE_HEADER } from './chatApi'
 import { historyKey } from './history'
+import { OPTIONS_OPEN_KEY } from './Chat'
+
+// B45.1 — a first visit keeps Options closed; this file reads what is behind it.
+beforeEach(() => window.localStorage.setItem(OPTIONS_OPEN_KEY, '1'))
 
 // B28.131 — temporary chat. The BFF is mocked at the wire; what each question asked Lens for is recorded. That a
 // deployment neither serves a temporary chat's answer from the cache nor keeps it there is the e2e scenario chat-temporary.

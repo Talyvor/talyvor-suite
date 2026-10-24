@@ -1,8 +1,12 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import type { StatementLine } from '../lens/agentBankApi'
 import { RECENT_CALLS, recentCalls } from './RecentCalls'
+import { STATEMENT_OPEN_KEY } from './Chat'
+
+// B45.1 — a first visit keeps the statement closed; this file reads what is behind it.
+beforeEach(() => window.localStorage.setItem(STATEMENT_OPEN_KEY, '1'))
 
 // B28.356 — the talyvor-suite side of B28.93: an agent's recent calls beside the conversation. The BFF is mocked at
 // the wire with the statement Lens answers (newest first). That the rows match a real agent's statement on Lens is

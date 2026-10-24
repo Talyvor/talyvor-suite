@@ -1,7 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { LIVE_STATEMENT_AGENT_KEY, LIVE_STATEMENT_POLL_MS } from './LiveStatement'
+import { STATEMENT_OPEN_KEY } from './Chat'
+
+// B45.1 — a first visit keeps the statement closed; this file reads what is behind it.
+beforeEach(() => window.localStorage.setItem(STATEMENT_OPEN_KEY, '1'))
 
 // B28.351 — an agent's statement beside the conversation, live. The BFF is mocked at the wire: the panel reads
 // GET /api/agents/{id}/statement (newest first) on its own, and a line Lens adds shows without a reload. That a real

@@ -290,6 +290,12 @@ export class AppUser {
         return res.status
       }, { u: user, key: opts.syntheticKey })
       if (status !== 200) throw new SignInRefused(`POST /auth/synthetic answered ${status} for ${user.workspaceID}`)
+      // B45.1 — Chat opens with its Options and the statement closed, and keeps them open once opened. The scenarios
+      // read what is behind them, so this browser has opened both, as a person who uses them has; a first visit is B45.3's.
+      await page.evaluate(() => {
+        localStorage.setItem('talyvor.chat.options-open', '1')
+        localStorage.setItem('talyvor.chat.statement-open', '1')
+      })
       const app = new AppUser(user, context, page, opts.appURL, opts.cap, opts.catalog, opts.modelName, opts.book, opts.usdPerLXC,
         opts.recorder, tag)
       holder.app = app

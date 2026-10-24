@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ATTACH_LIMIT_BYTES, Chat, EXAMPLE_PROMPTS, IMAGE_LIMIT_BYTES, savedLine } from './Chat'
+import { ATTACH_LIMIT_BYTES, Chat, EXAMPLE_PROMPTS, IMAGE_LIMIT_BYTES, OPTIONS_OPEN_KEY, savedLine } from './Chat'
 import { CONTINUE_PROMPT, type Conversation, historyKey, loadConversations } from './history'
 import { InstructionsPage } from './InstructionsPage'
 import { PromptsPage } from './PromptsPage'
@@ -197,6 +197,11 @@ async function chooseModel(name: string) {
   await screen.findByRole('button', { name: `Model: ${name}` })
 }
 
+/** B45.1 — a conversation's Pin, Archive, Share, Rename and Delete wait behind one control. */
+async function openActions() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Conversation actions' }))
+}
+
 async function ask(text: string) {
   const box = await screen.findByPlaceholderText('Ask anything')
   fireEvent.change(box, { target: { value: text } })
@@ -292,6 +297,8 @@ describe('the model picker reads the deployment, not this file', () => {
   })
 
   it('shows the LIST price of the chosen model and says what it is', async () => {
+    // B45.1 — the prices sit behind the composer's Options.
+    window.localStorage.setItem(OPTIONS_OPEN_KEY, '1')
     mockChat()
     renderChat()
     await chooseModel('GPT-4o')
@@ -686,6 +693,7 @@ describe('conversation history', () => {
     seed('user-a', { id: 'a', title: 'Capital of France?', updated_at: 1 })
     mockChat()
     renderChat()
+    await openActions()
     fireEvent.click(await screen.findByRole('button', { name: 'Rename' }))
     fireEvent.change(screen.getByLabelText('Conversation name'), { target: { value: 'Geography' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
@@ -698,6 +706,7 @@ describe('conversation history', () => {
     mockChat()
     const tab = renderChat()
     fireEvent.click(await screen.findByRole('button', { name: 'Older' }))
+    await openActions()
     fireEvent.click(await screen.findByRole('button', { name: 'Pin' }))
     tab.unmount()
     expect(loadConversations('user-a').list.find((c) => c.id === 'a')?.pinned).toBe(true)
@@ -710,6 +719,7 @@ describe('conversation history', () => {
     expect(pinned.compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.click(within(pinned).getByRole('button', { name: 'Older' }))
+    await openActions()
     fireEvent.click(await screen.findByRole('button', { name: 'Unpin' }))
     await waitFor(() => expect(screen.queryByRole('list', { name: 'Pinned conversations' })).toBeNull())
     expect(within(screen.getByRole('list', { name: 'Saved conversations' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Newer', 'Older'])
@@ -720,6 +730,7 @@ describe('conversation history', () => {
     mockChat({ body: 'data: {"choices":[{"delta":{"content":"Again."}}]}\n\ndata: [DONE]\n\n' })
     const tab = renderChat()
     await waitFor(() => expect(screen.getByTestId('turn-assistant').textContent).toContain('answer to Newer'))
+    await openActions()
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }))
     expect(await screen.findByTestId('conversation-archived')).toBeTruthy()
     expect(within(screen.getByRole('list', { name: 'Saved conversations' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Older'])
@@ -732,6 +743,7 @@ describe('conversation history', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(toggle)
     fireEvent.click(within(screen.getByRole('list', { name: 'Archived conversations' })).getByRole('button', { name: 'Newer' }))
+    await openActions()
     fireEvent.click(await screen.findByRole('button', { name: 'Unarchive' }))
     await waitFor(() => expect(screen.queryByRole('button', { name: /^Archived/ })).toBeNull())
     expect(within(screen.getByRole('list', { name: 'Saved conversations' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['Newer', 'Older'])
@@ -782,6 +794,7 @@ describe('conversation history', () => {
     seed('user-a', { id: 'a', title: 'Older', updated_at: 1 }, { id: 'b', title: 'Newer', updated_at: 2 })
     mockChat()
     renderChat()
+    await openActions()
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     expect(loadConversations('user-a').list).toHaveLength(2)
     fireEvent.click(screen.getByRole('button', { name: 'Delete conversation' }))
@@ -888,6 +901,8 @@ describe('what each answer cost', () => {
   })
 
   it('B28.99 — shows a price range while a question is typed, none for a command, and the answer’s price lands inside it', async () => {
+    // B45.1 — the prices sit behind the composer's Options.
+    window.localStorage.setItem(OPTIONS_OPEN_KEY, '1')
     mockChat({
       usdPerLXC: 0.1,
       body:
@@ -1426,6 +1441,7 @@ describe('attached documents (B10.3)', () => {
     })
     renderChat()
     await chooseModel('GPT-4o')
+    fireEvent.click(screen.getByRole('button', { name: 'Files and tools' }))
     fireEvent.click(screen.getByRole('button', { name: 'Docs page' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Release checklist' }))
     const chip = await screen.findByRole('list', { name: 'Attached documents' })
@@ -1465,6 +1481,7 @@ describe('attached documents (B10.3)', () => {
     )
     renderChat()
     await chooseModel('GPT-4o')
+    fireEvent.click(screen.getByRole('button', { name: 'Files and tools' }))
     fireEvent.click(screen.getByRole('button', { name: 'Track issue' }))
     fireEvent.click(await screen.findByRole('button', { name: 'ENG-7 Export times out' }))
     const chip = await screen.findByRole('list', { name: 'Attached documents' })
@@ -1547,6 +1564,7 @@ describe('a new chat carries nothing from another (B16.4)', () => {
     await ask('what is the capital of the UK?')
     await answered(4)
 
+    await openActions()
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete conversation' }))
     await ask('what is the capital of the UK?')
@@ -1669,6 +1687,8 @@ describe('custom instructions (B28.115)', () => {
 
 describe('prompt library (B28.370)', () => {
   it('a prompt saved in the library is used in a new chat by name, and the answer says Lens swapped it in', async () => {
+    // B45.1 — the prices and the prompt sit behind the composer's Options.
+    window.localStorage.setItem(OPTIONS_OPEN_KEY, '1')
     const { posted } = mockChat({
       body: 'data: {"choices":[{"delta":{"content":"Happy to help."}}]}\n\ndata: [DONE]\n\n',
       prompts: [],
@@ -1931,5 +1951,41 @@ describe('images for models that read them (B28.379)', () => {
     await ask('Compare them')
     await screen.findByText(/^The images in this conversation are too large to send together — at most 4 MB in all\./)
     expect(posted).not.toHaveBeenCalled()
+  })
+})
+
+describe('one column, one composer (B45.1)', () => {
+  it('a first visit shows the conversation and the composer; files, tools and options are one control away', async () => {
+    mockChat()
+    const tab = renderChat()
+    await screen.findByRole('button', { name: /^Model: / })
+    // Nothing but the conversation and the composer: no statement, no options, no tools.
+    expect(screen.queryByRole('complementary', { name: 'Statement' })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Chat options' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Search the web' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Attach' })).toBeNull()
+
+    const tools = screen.getByRole('button', { name: 'Files and tools' })
+    fireEvent.click(tools)
+    expect(tools.getAttribute('aria-expanded')).toBe('true')
+    expect(within(screen.getByRole('group', { name: 'Files and tools' })).getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(
+      expect.arrayContaining(['Attach', 'Search the web', 'Run code']),
+    )
+    // A tool that is on stays in view once the tray is closed, so it is never on unseen.
+    fireEvent.click(screen.getByRole('button', { name: 'Search the web' }))
+    fireEvent.click(tools)
+    expect(screen.getByRole('button', { name: 'Search the web' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByRole('button', { name: 'Attach' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chat options' }))
+    const options = screen.getByRole('group', { name: 'Chat options' })
+    expect(within(options).getByRole('button', { name: 'Temporary chat' })).toBeTruthy()
+    fireEvent.click(within(options).getByRole('button', { name: 'Statement' }))
+    expect(await screen.findByRole('complementary', { name: 'Statement' })).toBeTruthy()
+    // Opened once, both are there after a reload.
+    tab.unmount()
+    renderChat()
+    expect(await screen.findByRole('group', { name: 'Chat options' })).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: 'Statement' })).toBeTruthy()
   })
 })

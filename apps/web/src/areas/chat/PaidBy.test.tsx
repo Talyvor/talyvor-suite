@@ -1,7 +1,14 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { historyKey } from './history'
+import { OPTIONS_OPEN_KEY, STATEMENT_OPEN_KEY } from './Chat'
+
+// B45.1 — a first visit keeps Options and the statement closed; this file reads what is behind them.
+beforeEach(() => {
+  window.localStorage.setItem(OPTIONS_OPEN_KEY, '1')
+  window.localStorage.setItem(STATEMENT_OPEN_KEY, '1')
+})
 
 // B28.354 — choosing which wallet pays for a conversation. The BFF is mocked at the wire: every request the
 // conversation makes carries the agent chosen in X-Talyvor-Paid-By, and the answer says that agent paid only when
