@@ -18,7 +18,7 @@ import {
   refusalText,
   retryMoveThroughRestart,
 } from './agentBankApi'
-import { Note, TestMoneyOnly, readFailure } from './WalletMoney'
+import { Note, readFailure } from './WalletMoney'
 
 // WalletHoldings.tsx — B22.12: Agent Wallets' escrow (Lens B22.6), pots (B22.7), simulated portfolios and
 // orders (B22.8) and cash-out (B22.9). Each capability carries its class the way B22.10's screens show it:
@@ -146,7 +146,6 @@ export function Pots({ agent }: { agent: Agent }) {
           workspace can spend them until they are moved back out, and a locked pot keeps them until its date. Pots earn no
           interest.
         </p>
-        <TestMoneyOnly capability="rules_approvals_statements_pots" />
       </div>
       {list.isError ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The pots')}</p>
@@ -224,7 +223,6 @@ export function PayIntoEscrow({ agent }: { agent: Agent }) {
           The credits leave {agent.name} now and are held, in neither side’s balance, until you confirm the work was
           delivered or the release date passes with no dispute. A dispute holds them until Talyvor decides.
         </p>
-        <TestMoneyOnly capability="escrow" />
         <div className="flex flex-wrap items-center gap-2">
           <Input aria-label="Hold for (wallet ID or @handle)" placeholder="@handle or wallet ID" className="wide:w-48" value={who} onChange={(e) => setWho(e.target.value)} />
           <Input
@@ -243,8 +241,7 @@ export function PayIntoEscrow({ agent }: { agent: Agent }) {
         </div>
         {pay.isSuccess ? (
           <Note ok>
-            Held {lxc(pay.data.amount_ulxc)}
-            {pay.data.test_funded_ulxc > 0 ? ' of test money' : ''} until{' '}
+            Held {lxc(pay.data.amount_ulxc)} until{' '}
             <span className="font-figure">{formatWhen(pay.data.release_at)}</span>. It is under Escrow.
           </Note>
         ) : null}
@@ -297,7 +294,6 @@ function EscrowRow({ escrow, agents }: { escrow: Escrow; agents: Agent[] }) {
           : `${nameOf(escrow.payee_agent_id)} is owed by ${escrow.payer_agent_id}`}{' '}
         {lxc(escrow.amount_ulxc)}
         <Pill status={status}>{label}</Pill>
-        {escrow.test_funded_ulxc > 0 ? <Pill status="held">Test money</Pill> : null}
       </p>
       <p className="text-caption text-muted">
         Releases <span className="font-figure">{formatWhen(escrow.release_at)}</span> unless disputed
@@ -331,9 +327,6 @@ export function Escrows({ agents }: { agents: Agent[] }) {
   return (
     <Card>
       <CardHeader>Escrow</CardHeader>
-      <div className="px-gutter pt-3">
-        <TestMoneyOnly capability="escrow" />
-      </div>
       {list.isError ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The escrows')}</p>
       ) : list.isSuccess && escrows.length === 0 ? (
@@ -401,7 +394,6 @@ function PortfolioView({ agent, portfolio, instruments }: { agent: Agent; portfo
     <div className="flex flex-col gap-2 border-t border-rule px-gutter py-3" data-testid="portfolio">
       <p className="flex flex-wrap items-center gap-2 text-body text-ink">
         {portfolio.name}
-        <Pill status="idle">Simulated</Pill>
         <span>
           worth <span className="font-figure">{formatUSD(portfolio.value_uusd)}</span>: <span className="font-figure">{formatUSD(portfolio.cash_uusd)}</span>{' '}
           cash, started with <span className="font-figure">{formatUSD(portfolio.starting_cash_uusd)}</span>
@@ -504,11 +496,6 @@ export function Portfolios({ agent }: { agent: Agent }) {
           {quotes.data?.market_data ? ` (${quotes.data.market_data})` : ''}. No credits move, and no order is ever sent to a
           market.
         </p>
-        <TestMoneyOnly
-          capability="invest_and_trade"
-          label="Simulated only"
-          why="Talyvor trades real assets only through an authorised broker partner, and has none yet, so every portfolio here is simulated."
-        />
       </div>
       {list.isError ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The portfolios')}</p>
@@ -570,7 +557,6 @@ export function CashOutCard({ agent }: { agent: Agent }) {
           Turn {agent.name}’s credits back into money, paid to the account you name. The credits are held while Talyvor’s
           payments partner pays it, and come back if the payment fails. Only the workspace’s owner can ask.
         </p>
-        <TestMoneyOnly capability="cash_out" />
         <div className="flex flex-wrap items-center gap-2">
           <Input
             aria-label="Amount in LXC to cash out"
@@ -593,8 +579,7 @@ export function CashOutCard({ agent }: { agent: Agent }) {
         </div>
         {ask.isSuccess ? (
           <Note ok>
-            Asked: {lxc(ask.data.amount_ulxc)}
-            {ask.data.test_funded_ulxc > 0 ? ' of test money' : ''} is held and is under Cash-outs until it is paid.
+            Asked: {lxc(ask.data.amount_ulxc)} is held and is under Cash-outs until it is paid.
           </Note>
         ) : null}
         {ask.isError ? <Note ok={false}>Not cashed out. {refusalText(ask.error)}</Note> : null}
@@ -618,9 +603,6 @@ export function CashOuts({ agents }: { agents: Agent[] }) {
   return (
     <Card>
       <CardHeader>Cash-outs</CardHeader>
-      <div className="px-gutter pt-3">
-        <TestMoneyOnly capability="cash_out" />
-      </div>
       {list.isError ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The cash-outs')}</p>
       ) : list.isSuccess && cashOuts.length === 0 ? (
@@ -633,7 +615,6 @@ export function CashOuts({ agents }: { agents: Agent[] }) {
             hint={`${formatWhen(c.created_at)}${c.detail ? ` · ${c.detail}` : ''}`}
           >
             <span className="flex flex-wrap items-center gap-2" data-testid="cash-out">
-              {c.test_funded_ulxc > 0 ? <Pill status="held">Test money</Pill> : null}
               {lxc(c.amount_ulxc)} = <span className="font-figure">{formatUSD(c.amount_uusd)}</span>
               <Pill status={CASH_OUT_STATUS[c.status][1]}>{CASH_OUT_STATUS[c.status][0]}</Pill>
             </span>

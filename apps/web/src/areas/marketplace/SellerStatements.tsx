@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button, CardHeader, Pill, cn } from "@talyvor/ui";
+import { Button, CardHeader, cn } from "@talyvor/ui";
 import { formatUSD, formatWhen } from "../lens/format";
 import {
   type SelfBill,
@@ -94,9 +94,6 @@ function SelfBilledInvoice({ bill }: { bill: SelfBill }) {
           </span>
           <span className="font-figure text-body text-ink">{bill.number}</span>
         </span>
-        {bill.preview ? (
-          <Pill status="parked">Preview — test money only</Pill>
-        ) : null}
       </div>
       <p className="text-caption text-muted">
         Issued{" "}

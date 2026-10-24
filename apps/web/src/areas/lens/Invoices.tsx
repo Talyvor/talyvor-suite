@@ -4,7 +4,7 @@ import { Button, CardHeader, Input, Pill, focusRing, inlineLink, type PillStatus
 import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { formatWhen } from './format'
-import { CAPABILITIES_KEY, Note, readFailure } from './WalletMoney'
+import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
 import { type CurrencyAccount, type Invoice, type InvoiceRequest, agentBankApi, formatMinor, minorOf, refusalText } from './agentBankApi'
 
@@ -15,8 +15,6 @@ import { type CurrencyAccount, type Invoice, type InvoiceRequest, agentBankApi, 
 
 export const INVOICES_KEY = ['money-invoices']
 export const MONEY_ACCOUNTS_KEY = ['money-accounts']
-/** What an invoice's money moves under: a card or transfer comes in through payments_in, into a currency account. */
-const INVOICE_CAPABILITIES = ['currency_accounts', 'payments_in']
 const CURRENCIES = ['GBP', 'EUR', 'USD']
 
 const STATUS: Record<Invoice['status'], { text: string; pill: PillStatus }> = {
@@ -38,11 +36,8 @@ function inThirtyDays(): string {
 export function InvoicesScreen() {
   const invoices = useQuery({ queryKey: INVOICES_KEY, queryFn: agentBankApi.invoices })
   const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
-  const caps = useQuery({ queryKey: CAPABILITIES_KEY, queryFn: agentBankApi.capabilities })
   const list = invoices.data?.invoices ?? []
   const agentAccounts = (accounts.data?.accounts ?? []).filter((a) => a.purpose === 'agent' && a.status === 'open')
-  const preview =
-    !caps.isSuccess || (caps.data.capabilities ?? []).some((c) => INVOICE_CAPABILITIES.includes(c.capability) && !c.real_money)
   return (
     <RegionScreen>
       <Region
@@ -56,12 +51,6 @@ export function InvoicesScreen() {
           An agent issues an invoice in pounds, euros or dollars and sends a pay link. Whoever holds the link pays by card, by a
           transfer quoting the reference, or from one of their own Talyvor agents, and the money lands in the agent’s account.
         </p>
-        {preview ? (
-          <p className="flex flex-wrap items-center gap-2 text-caption text-ink" data-testid="invoices-preview">
-            <Pill status="held">Preview — test money only</Pill>
-            <span>Invoices are paid with test money only for now.</span>
-          </p>
-        ) : null}
         {invoices.isSuccess ? (
           <p className="text-body text-ink" data-testid="invoices-count">
             <span className="font-figure">{list.length}</span> {list.length === 1 ? 'invoice' : 'invoices'},{' '}

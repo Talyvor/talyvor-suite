@@ -8,7 +8,6 @@ import { CAPABILITIES_KEY, Note, readFailure } from './WalletMoney'
 import {
   type VerificationBody,
   type VerificationCheck,
-  type WalletCapability,
   type WorkspaceVerification,
   agentBankApi,
   refusalText,
@@ -50,7 +49,6 @@ const useCapabilities = () => useQuery({ queryKey: CAPABILITIES_KEY, queryFn: ag
 
 export function VerificationScreen() {
   const v = useVerification()
-  const caps = useCapabilities()
   const level = rank(v.data?.level)
   return (
     <RegionScreen>
@@ -65,7 +63,6 @@ export function VerificationScreen() {
           Each level lets your agents do more with live money. Talyvor checks one level at a time and keeps the level, who
           checked it, when, and the checker’s reference as its evidence — never a copy of a document.
         </p>
-        <PreviewNotice caps={caps.isSuccess ? (caps.data.capabilities ?? []) : null} />
         {v.isError ? (
           <p className="text-body text-muted">{readFailure(v.error, 'Your verification')}</p>
         ) : v.isPending ? (
@@ -101,17 +98,6 @@ export function VerificationScreen() {
   )
 }
 
-/** "Preview — test money only" while any capability is AMBER or RED and takes test money; also while they are unread. */
-function PreviewNotice({ caps }: { caps: WalletCapability[] | null }) {
-  if (caps !== null && !caps.some((c) => c.class !== 'GREEN' && !c.real_money)) return null
-  return (
-    <p className="flex flex-wrap items-center gap-2 text-caption text-ink" data-testid="verification-preview">
-      <Pill status="held">Preview — test money only</Pill>
-      <span>Accounts, payments, currencies, trading and credit take test money only for now.</span>
-    </p>
-  )
-}
-
 function LevelCard({ v }: { v: WorkspaceVerification }) {
   const level = rank(v.level)
   const live = rank(v.live_level)
@@ -136,12 +122,11 @@ function LevelCard({ v }: { v: WorkspaceVerification }) {
           </div>
         </dl>
         <p className="text-caption text-ink">
-          Live money is judged by your live level, which counts only checks a real provider passed. With test money every
-          level may try everything.
+          Live money is judged by your live level, which counts only checks a real provider passed.
         </p>
         {level > live ? (
           <p className="text-caption text-ink" data-testid="verification-test-only">
-            Your checks above {v.live_level} were passed by the Test provider, so they count for test money only.
+            Your checks above {v.live_level} were passed by the Test provider, so they do not count for live money.
           </p>
         ) : null}
       </div>
@@ -262,7 +247,7 @@ function NextCheck({ v }: { v: WorkspaceVerification }) {
 function CheckOutcome({ c }: { c: VerificationCheck }) {
   const what = `${c.level} — ${MEANING[c.level] ?? c.level}`
   if (c.status === 'completed') {
-    return <Note ok>{c.test ? `Passed by the Test provider: ${what}. It counts for test money only.` : `Passed: ${what}.`}</Note>
+    return <Note ok>{c.test ? `Passed by the Test provider: ${what}. It does not count for live money.` : `Passed: ${what}.`}</Note>
   }
   if (c.status === 'pending') return <Note ok>The check for {what} is pending with the provider.</Note>
   return <Note ok={false}>The check for {what} did not pass{c.detail ? `: ${c.detail}` : '.'}</Note>
@@ -303,7 +288,7 @@ function CheckList() {
               {c.test ? (
                 <p className="flex items-center gap-1.5 text-caption text-ink">
                   <span className="h-1.5 w-1.5 shrink-0 rounded-pill bg-held" aria-hidden="true" />
-                  Test — counts for test money only
+                  Test check — not counted for live money
                 </p>
               ) : null}
               <p className="text-caption text-muted">
@@ -339,7 +324,7 @@ function CapabilityLevels() {
           : live >= n
             ? { text: 'Reached for live money', pill: 'settled' }
             : level >= n
-              ? { text: 'Reached for test money only', pill: 'held' }
+              ? { text: 'Reached with test checks only', pill: 'held' }
               : { text: 'Not reached yet', pill: 'idle' }
         return (
           <Card key={l} data-testid={`verification-needs-${l}`}>

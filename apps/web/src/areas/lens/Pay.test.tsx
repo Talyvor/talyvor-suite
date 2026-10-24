@@ -83,7 +83,8 @@ describe('the Pay screen', () => {
     render(<App />)
 
     const payeeForm = await screen.findByTestId('new-payee')
-    expect(screen.getByTestId('pay-preview').textContent).toContain('Preview — test money only')
+    expect(screen.queryByTestId('pay-preview')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/test money/i)
     fireEvent.change(within(payeeForm).getByLabelText('Payee’s name'), { target: { value: 'Acme Ltd' } })
     fireEvent.change(within(payeeForm).getByLabelText('Sort code'), { target: { value: '04-00-04' } })
     fireEvent.change(within(payeeForm).getByLabelText('Account number'), { target: { value: '12345678' } })

@@ -86,7 +86,7 @@ function details(o: Offer): React.ReactNode[] {
   if (o.kind === 'per_use' && o.trial_uses) {
     out.push(
       <>
-        your first <Figure>{o.trial_uses}</Figure> uses are free trials — Trial — test money, not billed
+        your first <Figure>{o.trial_uses}</Figure> uses are free trials, not billed
       </>,
     )
   }

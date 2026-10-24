@@ -7,7 +7,6 @@ import { Button, focusRing, inlineLink } from '@talyvor/ui'
 import { BOOK_KEY } from '../lens/AgentBank'
 import { cardKey } from '../lens/AgentCardPanel'
 import { type AgentCard, agentBankApi, refusalText } from '../lens/agentBankApi'
-import { TestMoneyOnly } from '../lens/WalletMoney'
 import { Card } from '../lens/walletBrand'
 
 // B28.360 — freeze or unfreeze an agent's card from Chat (B28.97). `/freeze Researcher` typed in the composer is not
@@ -31,7 +30,6 @@ export function parseFreeze(command: string): { freeze: boolean; agent: string }
   return { freeze, agent }
 }
 
-const PREVIEW = 'Preview — test money only'
 
 const selectClass = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 
@@ -75,7 +73,6 @@ export function CardFreezeCard({ command, onClose }: { command: string; onClose:
           <p className="text-caption text-muted">
             {verb} an agent’s card <span className="break-all font-mono">{command}</span>
           </p>
-          <TestMoneyOnly capability="agent_card" label={PREVIEW} />
           {done !== null ? (
             <>
               <p role="status" className="text-body text-ink" data-testid="chat-card-freeze-done">

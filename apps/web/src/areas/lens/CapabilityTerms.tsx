@@ -6,7 +6,7 @@ import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { Markdown } from '../chat/Markdown'
 import { formatWhen } from './format'
-import { CAPABILITIES_KEY, Note, readFailure } from './WalletMoney'
+import { Note, readFailure } from './WalletMoney'
 import { type WorkspaceTerms, agentBankApi, refusalText } from './agentBankApi'
 
 // CapabilityTerms.tsx — B30.103: each money capability's terms (Lens B30.9). Every capability with terms, its latest
@@ -28,11 +28,9 @@ function state(t: WorkspaceTerms): { text: string; pill: PillStatus } {
 
 export function CapabilityTermsScreen() {
   const terms = useQuery({ queryKey: TERMS_KEY, queryFn: agentBankApi.terms })
-  const caps = useQuery({ queryKey: CAPABILITIES_KEY, queryFn: agentBankApi.capabilities })
   const [open, setOpen] = useState<string | null>(null)
   const list = terms.data?.terms ?? []
   const accepted = list.filter((t) => t.accepted).length
-  const preview = !caps.isSuccess || (caps.data.capabilities ?? []).some((c) => c.class !== 'GREEN' && !c.real_money)
   return (
     <RegionScreen>
       <Region
@@ -43,7 +41,7 @@ export function CapabilityTermsScreen() {
         className="flex max-w-2xl flex-col gap-3"
       >
         <p className="text-body text-muted">
-          Each money capability asks you to accept its terms before its first use, with test money or live. When Talyvor
+          Each money capability asks you to accept its terms before its first use. When Talyvor
           publishes a new version, the capability asks again before its next use.
         </p>
         <p className="text-body text-muted">
@@ -53,12 +51,6 @@ export function CapabilityTermsScreen() {
           </Link>
           .
         </p>
-        {preview ? (
-          <p className="flex flex-wrap items-center gap-2 text-caption text-ink" data-testid="terms-preview">
-            <Pill status="held">Preview — test money only</Pill>
-            <span>Accounts, payments, currencies, trading and credit take test money only for now.</span>
-          </p>
-        ) : null}
         {terms.isSuccess && list.length > 0 ? (
           <p className="text-body text-ink" data-testid="terms-count">
             <span className="font-figure">{accepted}</span> of <span className="font-figure">{list.length}</span> accepted

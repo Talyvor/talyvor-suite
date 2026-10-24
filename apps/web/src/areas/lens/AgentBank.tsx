@@ -1814,7 +1814,7 @@ export function lineText(l: StatementLine, nameOf: (id: string) => string): stri
     case 'transfer':
       return out ? `Transferred to ${other}` : `Transfer from ${other}`
     case 'reversal':
-      return out ? `Test money given back to ${other}` : `Test money returned by ${other}`
+      return out ? `Given back to ${other}` : `Returned by ${other}`
     case 'escrow':
       return out ? 'Held in escrow' : 'Released from escrow'
     case 'card':

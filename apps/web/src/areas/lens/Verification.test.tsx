@@ -65,12 +65,13 @@ describe('the Verification screen', () => {
 
     expect(await screen.findByRole('heading', { name: 'Reach L1: email and phone confirmed' })).toBeTruthy()
     expect(screen.getByTestId('verification-level').textContent).toContain('L0')
-    expect(screen.getByTestId('verification-preview').textContent).toContain('Preview — test money only')
+    expect(screen.queryByTestId('verification-preview')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/test money/i)
 
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'owner@example.com' } })
     fireEvent.change(screen.getByLabelText('Phone, in international form'), { target: { value: '+447700900123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Check email and phone' }))
-    expect(await screen.findByText('Passed by the Test provider: L1 — email and phone confirmed. It counts for test money only.')).toBeTruthy()
+    expect(await screen.findByText('Passed by the Test provider: L1 — email and phone confirmed. It does not count for live money.')).toBeTruthy()
 
     expect(await screen.findByRole('heading', { name: 'Reach L2: identity checked' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Ada Owner' } })
@@ -81,16 +82,16 @@ describe('the Verification screen', () => {
     expect(await screen.findByRole('heading', { name: 'Reach L3: company checked' })).toBeTruthy()
     expect(screen.getByTestId('verification-level').textContent).toBe('L2identity checked')
     expect(screen.getByTestId('verification-live-level').textContent).toBe('L0signed in')
-    expect(screen.getByTestId('verification-test-only').textContent).toContain('count for test money only')
+    expect(screen.getByTestId('verification-test-only').textContent).toContain('do not count for live money')
     const rows = screen.getAllByTestId('verification-check')
     expect(rows.map((r) => r.textContent?.slice(0, 2))).toEqual(['L2', 'L1'])
-    for (const r of rows) expect(within(r).getByText('Test — counts for test money only')).toBeTruthy()
+    for (const r of rows) expect(within(r).getByText('Test check — not counted for live money')).toBeTruthy()
     expect(within(rows[0]).getByText('kyc_test_2')).toBeTruthy()
 
     expect(screen.getByTestId('capability-level-spend_on_talyvor').textContent).toBe('Spending on TalyvorL0')
     expect(screen.getByTestId('capability-level-payments_out').textContent).toBe('Paying people and companies outside TalyvorL2')
     expect(screen.getByTestId('capability-level-b2b_credit').textContent).toBe('Credit lines and loans to companiesL3')
-    expect(within(screen.getByTestId('verification-needs-L2')).getByText('Reached for test money only')).toBeTruthy()
+    expect(within(screen.getByTestId('verification-needs-L2')).getByText('Reached with test checks only')).toBeTruthy()
     expect(within(screen.getByTestId('verification-needs-L3')).getByText('Not reached yet')).toBeTruthy()
 
     expect(sent).toEqual([

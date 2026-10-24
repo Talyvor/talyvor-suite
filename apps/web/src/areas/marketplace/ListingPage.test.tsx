@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
 // B32.57 — listing page 2, walked the way its DONE line reads: a listing is rented from its page and then used, and the
-// use adds no line to the bill; a trial use is labelled test money; the originals and the trust figures are shown. The
+// use adds no line to the bill; a trial use is labelled a free trial; the originals and the trust figures are shown. The
 // mock BFF answers as Lens does: an offer read prices it in the buyer's currency (B32.51), a licence covers the
 // workspace's uses (B32.19), a per-use offer's first uses are trials (B32.21), and the trust read is B32.49's.
 
@@ -236,16 +236,16 @@ describe('listing page 2', () => {
     await waitFor(() => expect(screen.getByTestId('market-bill-total').textContent).toBe('$20.00'))
   })
 
-  it('runs a trial use, labelled test money and not billed', async () => {
+  it('runs a trial use, labelled a free trial and not billed', async () => {
     const { bill } = mockBff()
     await at('/marketplace/listings/lst_trial')
     const offer = await screen.findByTestId('listing-offer')
     expect(offer.textContent).toContain('Pay per use · Commercial licence')
-    expect(offer.textContent).toContain('your first 3 uses are free trials — Trial — test money, not billed')
+    expect(offer.textContent).toContain('your first 3 uses are free trials, not billed')
     expect(within(offer).queryByRole('button')).toBeNull()
 
     const result = await useIt('Try it')
-    expect(within(result).getByTestId('market-use-trial').textContent).toBe('Trial — test money, not billed')
+    expect(within(result).getByTestId('market-use-trial').textContent).toBe('Free trial, not billed')
     expect(result.textContent).toContain('Billed, it would have cost $0.50.')
     expect(result.textContent).toContain('Trial uses left: 2.')
     expect(bill).toEqual([])

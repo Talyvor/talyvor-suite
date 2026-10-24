@@ -3284,76 +3284,76 @@ export function chatWalletAlerts(seed: number): Scenario {
   }
 }
 
+/** B46.2 — sign-up to Home with a working first agent takes under two minutes (B45.8). */
+export const FIRST_AGENT_WITHIN_MS = 120_000
+/** B46.2 — the one sentence sign-up says until a partner serves the workspace real money (apps/web Onboarding.tsx). */
+export const NOT_REAL_MONEY_YET = 'Until our first money partner is switched on, the balances you see here aren’t real money yet.'
+
 /**
- * B28.8 — a brand-new workspace's first agent, from Home's three steps, with no full-screen consent page:
- * created with a monthly budget and an approval amount, funded, given a key — and its first request, sent
- * with that key, shown on Home as it lands on its statement. Sharing is one line on Home to untick. Every
- * figure is read back from Lens: the agent's owner and rules, its balance and the workspace's, and the
- * fund and request lines on its statement.
+ * B46.2 (B28.8's scenario, rebuilt) — a brand-new workspace's first agent, in one click on Home, timed from opening
+ * the app to Home with a working agent: made, given the workspace's free credit, its key shown once with a copy
+ * button, and its first request served on that key. The sentence about real money is said there while no partner
+ * serves the workspace, and not after "Go to Home". Every figure is read back from Lens: the agent's owner and
+ * balance, the workspace's, and the fund and request lines on its statement.
  */
 export function walletOnboarding(seed: number): Scenario {
   const r = seeded(seed * 41 + 3)
-  const budget = 5e6
-  const approval = 1e6
-  const amount = 2e6
   return {
     id: 'wallet-onboarding',
     owner: 'talyvor-suite',
-    items: ['B28.8'],
+    items: ['B28.8', 'B46.2'],
     agents: 1,
-    title: 'a new workspace creates, funds and keys its first agent in Home’s three steps and sees its first request land, with no consent page',
+    title: 'a new workspace reaches Home with a funded, keyed first agent in one click, inside two minutes, told once that its balances aren’t real money yet',
     run: async (ctx) => {
       const before = await bookOf(ctx)
       if (before.agents.length > 0) throw new CannotTest(`the workspace already has ${before.agents.length} agent(s), so Home opens no onboarding`)
+      if (before.unallocated_ulxc <= 0) throw new CannotTest('the workspace has no free credit to give its first agent')
+      const live = (await ctx.env.lens.walletCapabilities(ctx.app.user)).some((c) => c.class !== 'GREEN' && c.real_money)
+      const started = Date.now()
       const page = await ctx.app.tab('/')
       try {
         await page.getByText('Give every agent a wallet.', { exact: true }).waitFor({ timeout: ACTION_TIMEOUT_MS })
         if ((await page.getByText(/Share your answers, and earn from them/).count()) > 0) return fail('the full-screen sharing-consent page is still shown')
         if ((await page.getByRole('checkbox', { name: /Share answers with other companies/ }).count()) !== 1) return fail('Home has no one-line sharing notice')
         const steps = page.getByTestId('wallet-onboarding')
+        const sentence = page.getByText(NOT_REAL_MONEY_YET, { exact: true })
+        if (!live) await sentence.waitFor({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
+        const saidAtSignUp = await sentence.count()
+        if (saidAtSignUp !== (live ? 0 : 1)) {
+          return fail(`with ${live ? 'a partner' : 'no partner'} serving real money, sign-up says "${NOT_REAL_MONEY_YET}" ${saidAtSignUp} time(s), not ${live ? 0 : 1}`)
+        }
         const name = `First ${seed}`
         await page.getByLabel('Agent name').fill(name)
-        await page.getByLabel('Monthly budget, in LXC').fill(lxcText(budget))
-        await page.getByLabel('Ask a person above, in LXC').fill(lxcText(approval))
-        await page.getByRole('button', { name: 'Create agent' }).click()
-        const fundField = page.getByLabel(`Amount to fund ${name}, in LXC`)
-        let err = await outcome(fundField, steps)
-        if (err !== undefined) return fail(`step 1, creating ${name}, was refused: ${err}`)
-        await fundField.fill(lxcText(amount))
-        await page.getByRole('button', { name: `Fund ${name}` }).click()
-        err = await outcome(page.getByRole('button', { name: 'Issue its key' }), steps)
-        if (err !== undefined) return fail(`step 2, funding ${lxcText(amount)} LXC, was refused: ${err}`)
-        await page.getByRole('button', { name: 'Issue its key' }).click()
-        err = await outcome(page.getByTestId('onboarding-key'), steps)
-        if (err !== undefined) return fail(`step 3, issuing the key, was refused: ${err}`)
-        const key = (await page.getByTestId('onboarding-key').innerText()).trim()
+        await page.getByRole('button', { name: 'Create my first agent' }).click()
+        const err = await outcome(page.getByTestId('first-agent-ready'), steps)
+        if (err !== undefined) return fail(`making ${name} ready was refused: ${err}`)
+        const keyBlock = page.getByTestId('onboarding-key')
+        const key = (await keyBlock.locator('pre').innerText()).trim()
+        if ((await keyBlock.getByRole('button', { name: /copy/i }).count()) !== 1) return fail('the key is shown without its copy button')
+        await page.getByRole('button', { name: 'Go to Home' }).click()
+        await page.getByText('Your agents’ wallets, at a glance.', { exact: true }).waitFor({ timeout: ACTION_TIMEOUT_MS })
+        if ((await sentence.count()) > 0) return fail(`Home says "${NOT_REAL_MONEY_YET}" again after sign-up`)
 
+        const served = await agentAsks(ctx, key, sum(r).q, 'the first request, with the key sign-up showed')
+        const elapsed = Date.now() - started
+        if (!served.ok) return fail(`${name}'s first request, with the key sign-up showed, was refused: ${served.status} ${served.error}`)
         const book = await bookOf(ctx)
         const a = book.agents.find((x) => x.name === name && x.archived_at === undefined)
-        if (a === undefined) return fail(`Home's three steps finished, but Lens has no agent named ${name}`)
+        if (a === undefined) return fail(`sign-up said ${name} was ready, but Lens has no agent named ${name}`)
         if (a.owner_user_id === '') return fail(`${name} was created with no owner`)
-        if (a.balance_ulxc !== amount) return fail(`funded ${amount} µLXC on Home; Lens says ${name} holds ${a.balance_ulxc}`)
-        if (book.allocated_ulxc !== before.allocated_ulxc + amount || book.workspace_balance_ulxc !== before.workspace_balance_ulxc) {
-          return fail(`the funding did not come out of the workspace: allocated ${before.allocated_ulxc} → ${book.allocated_ulxc}, workspace ${before.workspace_balance_ulxc} → ${book.workspace_balance_ulxc} µLXC`)
-        }
-        const rules = await ctx.env.lens.agentRules(ctx.app.user, a.id)
-        if (rules.monthly_limit_ulxc !== budget || rules.approval_above_ulxc !== approval) {
-          return fail(`typed a ${budget} µLXC budget and a ${approval} µLXC approval amount; Lens stored ${rules.monthly_limit_ulxc} and ${rules.approval_above_ulxc}`)
-        }
-
-        const served = await agentAsks(ctx, key, sum(r).q, 'the first request, with the key Home issued')
-        if (!served.ok) return fail(`${name}'s first request, with the key Home issued, was refused: ${served.status} ${served.error}`)
-        const shown = (await page.getByTestId('onboarding-first-request').innerText({ timeout: 60_000 })).trim()
         const lines = await ctx.env.lens.agentLines(ctx.app.user, a.id)
-        ctx.evidence.push({ note: `Home: "${shown}"; ${name}'s statement: ${lines.map((l) => `${l.kind} ${l.amount_ulxc}`).join(', ')}` })
+        ctx.evidence.push({ note: `${elapsed} ms to Home and a served request; ${name}'s statement: ${lines.map((l) => `${l.kind} ${l.amount_ulxc}`).join(', ')}` })
         const funded = lines.filter((l) => l.kind === 'fund')
-        if (funded.length !== 1 || funded[0].amount_ulxc !== amount) return fail(`${name}'s statement should hold one fund line of ${amount} µLXC: ${JSON.stringify(funded)}`)
-        const request = [...lines].reverse().find((l) => ['spend', 'hold', 'settle', 'release'].includes(l.kind))
-        if (request === undefined) return fail(`served, yet ${name}'s statement has no line for the request`)
-        if (!shown.includes(lxcText(Math.abs(request.amount_ulxc)))) {
-          return fail(`Lens put ${request.kind} ${request.amount_ulxc} µLXC on ${name}'s statement; Home says "${shown}"`)
+        if (funded.length !== 1 || funded[0].amount_ulxc !== before.unallocated_ulxc) {
+          return fail(`${name}'s statement should hold one fund line of the workspace's free ${before.unallocated_ulxc} µLXC: ${JSON.stringify(funded)}`)
         }
-        return { pass: true, detail: `${name} created with its budget and approval amount, funded ${lxcText(amount)} LXC and keyed on Home; its first request (${request.kind} ${request.amount_ulxc} µLXC) shown as it landed; no consent page` }
+        if (book.workspace_balance_ulxc > before.workspace_balance_ulxc) {
+          return fail(`the workspace's balance grew from ${before.workspace_balance_ulxc} to ${book.workspace_balance_ulxc} µLXC while its first agent was funded`)
+        }
+        const request = lines.find((l) => ['spend', 'hold', 'settle', 'release'].includes(l.kind))
+        if (request === undefined) return fail(`served, yet ${name}'s statement has no line for the request`)
+        if (elapsed >= FIRST_AGENT_WITHIN_MS) return fail(`sign-up to Home with a working ${name} took ${elapsed} ms, not under ${FIRST_AGENT_WITHIN_MS}`)
+        return { pass: true, detail: `${name} made ready in one click, funded the workspace's ${lxcText(before.unallocated_ulxc)} LXC, its first request (${request.kind} ${request.amount_ulxc} µLXC) served on the key shown; Home with a working agent in ${elapsed} ms; told once its balances aren't real money yet` }
       } finally {
         await page.close()
       }

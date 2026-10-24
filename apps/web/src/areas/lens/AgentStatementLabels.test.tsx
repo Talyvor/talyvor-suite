@@ -25,7 +25,7 @@ const rows: Array<[StatementLine, string]> = [
   [line('pay', -3, 'agent:agt_2', 'draft'), 'Paid Writer — draft'],
   [line('transfer', 5, 'agent:agt_2', 'tr_1'), 'Transfer from Writer'],
   [line('transfer', -2, 'agent:agt_2', 'tr_2'), 'Transferred to Writer'],
-  [line('reversal', -5, 'agent:agt_2'), 'Test money given back to Writer'],
+  [line('reversal', -5, 'agent:agt_2'), 'Given back to Writer'],
   [line('escrow', -6, 'escrow:esc_1'), 'Held in escrow'],
   [line('escrow', 6, 'escrow:esc_1'), 'Released from escrow'],
   [line('card', -7, 'spend', 'iauth_1'), 'Card charge'],

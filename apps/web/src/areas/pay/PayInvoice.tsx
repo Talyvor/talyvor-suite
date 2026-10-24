@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { Button, CardHeader, Pill, focusRing, inlineLink } from '@talyvor/ui'
+import { Button, CardHeader, focusRing, inlineLink } from '@talyvor/ui'
 
 import { useDocumentTitle } from '../../documentTitle'
 import { ApiError } from '../../lib/api'
@@ -17,7 +17,6 @@ import { AgentBankError, type PayPage, agentBankApi, formatMinor, refusalText } 
 // (App.tsx) for the same reason as a shared chat: the payer has no account here. It shows the invoice as Lens serves it
 // to a payer — no ids, no ledger — and three ways to pay what is due: a card (Stripe test mode, through Lens), a transfer
 // to the issuer's account details quoting the reference, or one of the visitor's own Talyvor agents once they sign in.
-// "Preview — test money only" while Lens says so.
 
 const FOOTER_LINKS = [
   { href: '/privacy', label: 'Privacy' },
@@ -71,7 +70,6 @@ function Body({ token }: { token: string }) {
 
   const p = page.data
   const inv = p.invoice
-  const preview = p.notice.startsWith('Preview')
   const headline =
     inv.status === 'paid'
       ? 'Paid — thank you'
@@ -89,12 +87,6 @@ function Body({ token }: { token: string }) {
         {headline}
       </h1>
       <TealRule className="mt-5" />
-      {preview ? (
-        <p className="mt-5 flex flex-wrap items-center gap-2 text-caption text-ink" data-testid="pay-preview">
-          <Pill status="held">Preview — test money only</Pill>
-          <span>{p.notice}</span>
-        </p>
-      ) : null}
       {returned && inv.status !== 'paid' ? (
         <p className="mt-5 text-body text-muted" role="status">
           Thank you. Your card payment is being confirmed; this page updates as soon as the invoice reads paid.

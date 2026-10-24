@@ -274,7 +274,7 @@ describe("a seller's tax details and weekly statements", () => {
 
     const invoice = within(st).getByTestId("statement-invoice");
     expect(within(invoice).getByText("TEST-SB-000002")).toBeTruthy();
-    expect(within(invoice).getByText("Preview — test money only")).toBeTruthy();
+    expect(invoice.textContent).not.toMatch(/test money/i);
     expect(within(invoice).getByTestId("statement-invoice-note").textContent).toBe(
       "VAT on your supply: under review",
     );

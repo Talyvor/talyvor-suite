@@ -7,7 +7,7 @@ import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
 import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, PauseEveryAgent, rulesKey } from './AgentBank'
 import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi } from './agentBankApi'
 import { Lxc } from './money'
-import { WalletOnboarding } from './Onboarding'
+import { FirstAgent } from './Onboarding'
 import { SharingLine } from './Sharing'
 
 // Home.tsx — B28.6: the first screen after sign-in is the wallet home. It answers, in order:
@@ -22,8 +22,8 @@ import { SharingLine } from './Sharing'
 // B29.8 — it opens like the board's PRODUCT UI tile: "Welcome to Talyvor", then a raised card for each
 // product, each opening the route its sidebar row opens. The figures above are unchanged, one region down.
 //
-// A workspace with no agents yet opens in onboarding mode: what it holds, the three steps that give its
-// first agent a wallet (B28.8, Onboarding.tsx), and the one line that says whether it shares answers. Like Overview's first run, that is a MEASUREMENT — the book answered and
+// A workspace with no agents yet opens in onboarding mode: what it holds, the one click that makes its
+// first agent ready (B46.2, Onboarding.tsx), and the one line that says whether it shares answers. Like Overview's first run, that is a MEASUREMENT — the book answered and
 // listed no agents — never a default: a read that failed is not an empty workspace.
 
 const lxc = (micros: number) => <Lxc ulxc={micros} />
@@ -251,16 +251,15 @@ function useForecast() {
   return useQuery({ queryKey: FORECAST_KEY, queryFn: agentBankApi.forecast })
 }
 
-/** Onboarding: the workspace's first agent, in three steps (B28.8), and the one line about sharing. */
+/** Onboarding: the workspace's first agent, in one click (B46.2), and the one line about sharing. */
 function FirstWallet({ book, onStarted, onFinished }: { book: AgentBook; onStarted: () => void; onFinished: () => void }) {
   return (
     <>
       <p className="max-w-2xl text-body text-muted" data-testid="home-onboarding">
         Every AI agent gets a wallet: a budget, rules and approvals, checked by Lens before the model is called or a
-        payment moves. This workspace holds {lxc(book.workspace_balance_ulxc)}; give its first agent a wallet in three
-        steps.
+        payment moves. This workspace holds {lxc(book.workspace_balance_ulxc)}; your first agent is one click away.
       </p>
-      <WalletOnboarding book={book} onStarted={onStarted} onFinished={onFinished} />
+      <FirstAgent book={book} onStarted={onStarted} onFinished={onFinished} />
       <SharingLine />
       <p className="text-caption text-muted">
         Already pointing tools at Lens with a workspace key?{' '}

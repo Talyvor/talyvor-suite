@@ -51,7 +51,8 @@ describe('the Invoices screen', () => {
     render(<App />)
 
     const form = await screen.findByTestId('new-invoice')
-    expect(screen.getByTestId('invoices-preview').textContent).toContain('Preview — test money only')
+    expect(screen.queryByTestId('invoices-preview')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/test money/i)
     expect(screen.getByText('No invoice issued yet: create one above, and it appears here when it is issued.')).toBeTruthy()
     fireEvent.change(within(form).getByLabelText('Paid into'), { target: { value: 'macc_agt' } })
     fireEvent.change(within(form).getByLabelText('Customer'), { target: { value: 'Acme' } })

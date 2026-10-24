@@ -104,16 +104,13 @@ afterEach(() => {
 })
 
 describe('money between owners on Agent Wallets', () => {
-  it('marks each AMBER capability test money only, and why', async () => {
+  it('carries no test-money label on any AMBER capability (B46.2)', async () => {
     mockBff()
     window.history.pushState({}, '', '/agents')
     render(<App />)
-    for (const c of ['pay_another_owner', 'loans_between_companies']) {
-      const marks = await screen.findAllByTestId(`test-money-only-${c}`)
-      expect(marks[0].textContent).toContain('Test money only')
-      expect(marks[0].textContent).toMatch(/lawyer’s sign-off/)
-    }
-    expect(screen.queryByTestId('test-money-only-company_credit_line')).toBeNull() // GREEN: nothing to mark
+    await screen.findByTestId('agent-address')
+    expect(screen.queryByTestId(/^test-money-only-/)).toBeNull()
+    expect(document.body.textContent).not.toMatch(/test money|test credits|licensed partner|lawyer’s sign-off/i)
     // Never the word bank — but for the European Central Bank, whose rate the card panel (B19.24) names.
     expect((document.body.textContent ?? '').replace(/European Central Bank/g, '')).not.toMatch(/\bbank\b/i)
   })
@@ -128,7 +125,7 @@ describe('money between owners on Agent Wallets', () => {
     fireEvent.change(screen.getByLabelText('Amount in LXC to send'), { target: { value: '5' } })
     fireEvent.change(screen.getByLabelText('What it is for'), { target: { value: 'design work' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send credits' }))
-    expect((await screen.findByText(/Sent/)).textContent).toMatch(/Sent 5 LXC of test money\. It went to another owner’s agent\./)
+    expect((await screen.findByText(/Sent/)).textContent).toMatch(/Sent 5 LXC\. It went to another owner’s agent\./)
     expect(sent).toContainEqual({ method: 'POST', url: '/api/agents/agt_1/send', body: { to: '@bea', amount_ulxc: 5_000_000, memo: 'design work' } })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Accept' }))
