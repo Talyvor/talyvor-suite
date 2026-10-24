@@ -127,6 +127,8 @@
 //   version-pin-ignored — a use runs the listing's latest version whatever version it names
 // B17.203: not a defect but Lens's B32.46 copy check, as every night's production run meets it on market-remix-licence:
 //   version-held — a new version holds its listing for review, as one near-identical to another night's listing is held
+// B17.262: not a defect but Lens's B17.206 held version, as every night's production run meets it on market-versions:
+//   version-2-held — a new version is held for review while the one before it stays live, until a moderator approves it
 //
 // B32.93 adds two defects of a bill's tax (Lens B32.39), beside stub-tax.ts's tax-reverse-charged:
 //   bill-gross-untaxed — the bill's gross is its net, the tax left out
@@ -228,6 +230,8 @@ interface Listing {
   /** why it is held or was taken down, as Lens says it */
   review_reason?: string
   artifact: Record<string, unknown>; changelog: string
+  /** B17.262 — the version held for review: until approved, an unpinned use runs the one before it */
+  held_version?: number
   /** B34.4 — every version's artifact, how it is sold, and whether others may build on it */
   artifacts?: Record<number, Record<string, unknown>>; offers?: StubOffer[]; remix_policy?: string; remix_share_bps?: number
   /** B28.162 — every version's changelog, once it has a second */
@@ -1495,7 +1499,7 @@ export class Bank {
     const l = this.listings.get(m[1])
     if (l === undefined) return json(res, 404, { error: 'market: no such listing' }), true
     if (m[2] === 'approve') {
-      if (!this.broken('approve-noop')) Object.assign(l, { review_status: 'approved', review_reason: undefined })
+      if (!this.broken('approve-noop')) Object.assign(l, { review_status: 'approved', review_reason: undefined, held_version: undefined })
       return json(res, 200, this.listingOut(l, l.workspace_id)), true
     }
     const { reason = '' } = await this.body<{ reason?: string }>(req)
@@ -2360,7 +2364,8 @@ export class Bank {
         l.artifact = b.artifact
         l.changelog = b.changelog ?? ''
         if (this.broken('version-held')) Object.assign(l, { review_status: 'held', review_reason: `version ${l.latest_version}: it is 98% similar to another listing, which it does not declare as a parent` })
-        return json(res, 201, { version: l.latest_version, changelog: l.changelog, created_at: now }), true
+        if (this.broken('version-2-held')) l.held_version = l.latest_version
+        return json(res, 201, { version: l.latest_version, changelog: l.changelog, created_at: now, scan: { held: l.held_version !== undefined } }), true
       }
       if (m[2] === 'offers' && method === 'PUT') {
         const { offers = [] } = await this.body<{ offers?: Omit<StubOffer, 'id' | 'created_at'>[] }>(req)
@@ -2432,7 +2437,7 @@ export class Bank {
       if (l.review_status === 'taken_down') return json(res, 403, { error: 'market: the listing was taken down' }), true
       const b = await this.body<{ version?: number; model?: string; variables?: Record<string, string>; max_price_usd_micros?: number }>(req)
       // B28.162 — the version named, or the latest; STUB_BREAK=version-pin-ignored runs the latest whatever is named.
-      const version = this.broken('version-pin-ignored') ? l.latest_version : b.version || l.latest_version
+      const version = this.broken('version-pin-ignored') ? l.latest_version : b.version || (l.held_version ? l.held_version - 1 : l.latest_version)
       const artifact = (l.artifacts ?? { 1: l.artifact })[version]
       if (artifact === undefined) return json(res, 404, { error: `market: no such listing: it has no version ${version}` }), true
       const template = String(artifact.template ?? '')

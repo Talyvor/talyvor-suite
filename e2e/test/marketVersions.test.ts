@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { LensClient } from '../src/lens.ts'
-import { versionsHold } from '../src/marketVersions.ts'
+import { approveHeld, versionsHold } from '../src/marketVersions.ts'
 import type { ScenarioCtx, Verdict } from '../src/scenarios.ts'
 
 // B28.162 — market-versions' Lens checks against the stub Lens (selftest/stub-bank.ts), with version 2 posted as the app's New
@@ -24,7 +24,7 @@ afterEach(() => {
   stub = undefined
 })
 
-async function runAgainstStub(broken: string): Promise<Verdict> {
+async function runAgainstStub(broken: string, shown = 'Version 2 is published.'): Promise<Verdict> {
   const port = await freePort()
   stub = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../selftest/stub-lens.ts', import.meta.url).pathname], {
     env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'versions-key', STUB_MODERATOR_KEY: 'tlv_mod_versions', STUB_BREAK: broken },
@@ -43,7 +43,7 @@ async function runAgainstStub(broken: string): Promise<Verdict> {
   const v2 = await lens.act(seller, 'POST', `/v1/workspaces/{ws}/marketplace/listings/${v1.value.id}/versions`,
     { artifact: { template: 'Reply with the single word: BRAVO', model: 'claude-haiku-4-5' }, changelog: 'Answers BRAVO now', parents: [] })
   if (!v2.ok) throw new Error(`uploading version 2: ${v2.status}`)
-  return versionsHold(ctx, seller, buyer, v1.value.id)
+  return (await approveHeld(ctx, v1.value.id, shown)) ?? versionsHold(ctx, seller, buyer, v1.value.id)
 }
 
 describe('market-versions (B28.162)', () => {
@@ -56,5 +56,16 @@ describe('market-versions (B28.162)', () => {
   it('FAILs when a use pinned to version 1 runs the latest', async () => {
     const verdict = await runAgainstStub('version-pin-ignored')
     expect(verdict).toEqual({ pass: false, detail: 'a use pinned to version 1 should run version 1 and answer ALPHA; it ran version 2 and answered "BRAVO"' })
+  })
+
+  // B17.262 — Lens holds a version 2 that copies another night's listing and keeps version 1 live until a moderator approves it.
+  it('passes once a moderator approves a held version 2', async () => {
+    const verdict = await runAgainstStub('version-2-held', 'Version 2 is published, and held for review.')
+    expect(verdict.pass).toBe(true)
+  })
+
+  it('FAILs on a held version 2 nobody approves: the unpinned use runs version 1', async () => {
+    const verdict = await runAgainstStub('version-2-held')
+    expect(verdict).toEqual({ pass: false, detail: 'an unpinned use should run version 2 and answer BRAVO; it ran version 1 and answered "ALPHA"' })
   })
 })
