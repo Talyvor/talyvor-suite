@@ -26,7 +26,19 @@ const answer = sse(
 
 const estimated = answer.replace(/data: \{"type":"talyvor\.charge"[^\n]*\n\n/, '')
 
-function mockBff() {
+// B17.264 — an answer that ran code: Lens charged the round that asked to run it and the round that answered, and sent a
+// charge frame for each (19680 then 17600 µLXC, as in run-2026-10-24T00-01-03-166Z). The footer states both.
+const ranCode = sse(
+  { type: CHARGE_FRAME, charged_ulxc: 19680 },
+  { type: 'talyvor.code_run', stdout: '42\n', stderr: '', exit_code: 0 },
+  { type: 'message_start', message: { model: 'claude-opus-5', usage: { input_tokens: 12, output_tokens: 1 } } },
+  { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '42.' } },
+  { type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 3 } },
+  { type: CHARGE_FRAME, charged_ulxc: 17600 },
+  { type: 'message_stop' },
+)
+
+function mockBff(streamed = answer) {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -37,7 +49,7 @@ function mockBff() {
     if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], usd_per_lxc: 0.1 })
     // Lens says what it charged only when Chat asked.
     const asked = new Headers(init?.headers).get(REPORT_CHARGE_HEADER) === 'true'
-    if (url === '/api/ai/stream/anthropic/v1/messages') return new Response(asked ? answer : estimated, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    if (url === '/api/ai/stream/anthropic/v1/messages') return new Response(asked ? streamed : estimated, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
     return new Response('null', { status: 404 })
   })
 }
@@ -68,5 +80,18 @@ describe('the real charge under an answer (B28.362)', () => {
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('turn-cost').textContent).toBe(charged))
     expect(screen.getByTestId('chat-total').textContent).toBe('This chat so far ≈ 0.00162 LXC · 1 answer')
+  })
+})
+
+describe('every request an answer was charged for (B17.264)', () => {
+  it('states the sum Lens charged across the rounds and how many requests', async () => {
+    mockBff(ranCode)
+    window.history.pushState({}, '', '/chat')
+    render(<App />)
+    await screen.findByRole('button', { name: 'Model: Claude Opus 5' })
+    fireEvent.change(screen.getByPlaceholderText('Ask anything'), { target: { value: 'What is 6 × 7?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(screen.getByTestId('turn-cost').textContent).toBe('0.03728 LXC charged · Claude Opus 5 · 12 in / 3 out tokens · 2 requests'))
   })
 })

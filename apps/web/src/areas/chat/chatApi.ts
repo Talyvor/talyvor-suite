@@ -780,7 +780,8 @@ export interface StreamHandlers {
     toolCalls?: ToolCall[]
     /** B28.349 — askChat: the statement lines Lens's wallet tool read the answer from. */
     spend?: SpendLine[]
-    /** B28.349 — askChat: how many requests to the model the answer took, when more than one. */
+    /** B28.349 — how many requests to the model the answer took, when more than one: for askChat, every round's; B17.264,
+     *  within one stream, one per charge frame Lens sent (a Run code or web search round is charged on its own). */
     requests?: number
     /** B28.354 — the agent Lens says it billed for the answer (X-Talyvor-Paid-By); absent when the workspace paid. */
     paidBy?: string
@@ -924,6 +925,8 @@ export async function streamChat(
   let served: string | undefined
   let finish: string | undefined
   let charged: number | undefined
+  // B17.264 — Lens sends a charge frame for each request it charged in this stream; the answer cost all of them.
+  let charges = 0
   let citations: Citation[] | undefined
   const codeRuns: CodeRun[] = []
   // B28.349 — the tool calls arriving in pieces, by their index in the answer.
@@ -950,7 +953,10 @@ export async function streamChat(
         usage = mergeUsage(usage, got.usage)
         served = got.model ?? served
         finish = got.finish ?? finish
-        charged = got.charged_ulxc ?? charged
+        if (got.charged_ulxc !== undefined) {
+          charged = (charged ?? 0) + got.charged_ulxc
+          charges += 1
+        }
         citations = got.citations ?? citations
         codeRuns.push(...(got.codeRuns ?? []))
         if (got.error !== undefined) {
@@ -960,7 +966,7 @@ export async function streamChat(
         for (const d of got.deltas) handlers.onDelta(d.text)
         for (const p of got.toolCalls ?? []) gather(p)
         if (got.done) {
-          handlers.onDone({ unrecognised, usage, model: served, converted, source, saved, tare, requestId, finish, toolCalls: toolCalls(), paidBy: paidByLens, chargedULXC: charged, promptResolved, listingCharge, citations, codeRuns })
+          handlers.onDone({ unrecognised, usage, model: served, converted, source, saved, tare, requestId, finish, toolCalls: toolCalls(), paidBy: paidByLens, chargedULXC: charged, promptResolved, listingCharge, citations, codeRuns, ...(charges > 1 ? { requests: charges } : {}) })
           return
         }
       }
@@ -975,7 +981,7 @@ export async function streamChat(
   // reported as one: it is what a truncated relay, a killed upstream or a 10s client timeout look
   // like. Step 3 found exactly that shape (a whole-exchange Timeout guillotining long completions),
   // so a chat screen that rendered it as a finished answer would hide the defect it was built after.
-  handlers.onDone({ unrecognised, usage, model: served, converted, source, saved, tare, requestId, finish, toolCalls: toolCalls(), paidBy: paidByLens, chargedULXC: charged, promptResolved, listingCharge, citations, codeRuns })
+  handlers.onDone({ unrecognised, usage, model: served, converted, source, saved, tare, requestId, finish, toolCalls: toolCalls(), paidBy: paidByLens, chargedULXC: charged, promptResolved, listingCharge, citations, codeRuns, ...(charges > 1 ? { requests: charges } : {}) })
 }
 
 /** B28.349 — how many times one question may go to the model: the tools' answers go back at most twice. */
@@ -1023,6 +1029,8 @@ export async function askChat(
   // B28.362 — what Lens charged for the requests so far; unknown once one of them went unsaid.
   let charged: number | undefined = 0
   let unrecognised = 0
+  // B17.264 — the requests the question took: a round may have taken more than one (a Run code or web search round).
+  let requests = 0
   let written = false
   // B28.372 — the pages Lens last said it searched, over every request the question took.
   let citations: Citation[] | undefined
@@ -1071,6 +1079,7 @@ export async function askChat(
     tare = addTare(tare, done.tare)
     charged = charged === undefined || done.chargedULXC === undefined ? undefined : charged + done.chargedULXC
     unrecognised += done.unrecognised
+    requests += done.requests ?? 1
     citations = done.citations ?? citations
     codeRuns.push(...(done.codeRuns ?? []))
     billed = billed === null || billed === done.paidBy ? done.paidBy : undefined
@@ -1083,7 +1092,7 @@ export async function askChat(
     reading = []
     const calls = done.toolCalls ?? []
     if (calls.length === 0 || round === MAX_TOOL_ROUNDS) {
-      handlers.onDone({ ...done, usage, tare, unrecognised, chargedULXC: charged, citations, codeRuns, paidBy: billed ?? undefined, ...(spend.length > 0 ? { spend } : {}), ...(round > 1 ? { requests: round } : {}), ...(used.length > 0 ? { toolsUsed: used } : {}), ...(filed.length > 0 ? { filed } : {}), ...(connectorCalls.length > 0 ? { connectorCalls } : {}) })
+      handlers.onDone({ ...done, usage, tare, unrecognised, chargedULXC: charged, citations, codeRuns, paidBy: billed ?? undefined, ...(spend.length > 0 ? { spend } : {}), ...(requests > 1 ? { requests } : {}), ...(used.length > 0 ? { toolsUsed: used } : {}), ...(filed.length > 0 ? { filed } : {}), ...(connectorCalls.length > 0 ? { connectorCalls } : {}) })
       return
     }
     // B28.374 — a call that changes something is put to the person first, one at a time; a no is the model's answer.
