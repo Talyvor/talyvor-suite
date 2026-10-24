@@ -254,6 +254,17 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor: "func FileRequestHandler(store Deleter) http.HandlerFunc {",
     subject: "lensDeletionRequestBody",
   },
+  // B46.16 — sign-up names the workspace.
+  {
+    route: "PUT /v1/workspaces/{wsID}/name",
+    file: "apps/bff/workspace_name.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"name": in.Name})',
+    upstreamFile: "cmd/lens/workspace_name_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/workspaces/{wsID}/name", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensWorkspaceNameBody",
+  },
   // B19.4 — the Agent Bank: creating an agent, issuing it a key, moving LXC, its rules, paying.
   {
     route: "POST /v1/workspaces/{wsID}/agents",

@@ -88,6 +88,8 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "the agent has no automatic top-up"})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/topup"):
 			_, _ = w.Write(raw)
+		case strings.HasSuffix(r.URL.Path, "/name") && r.Method == http.MethodPut: // B46.16
+			_, _ = w.Write(raw)
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules"):
 			_, _ = w.Write(raw)
 		case strings.HasSuffix(r.URL.Path, "/agents/approvals"):

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, CONSOLE_ROUTES, queryClient } from '../../App'
 import { PRODUCT_CARDS } from './Home'
+import { nameFromEmail } from './Onboarding'
 
 // B28.6 — the first screen after sign-in is the wallet home. DONE reads: "after sign-in a returning
 // user lands on Home and sees per-agent budget-used and the approvals count". The mock BFF answers the
@@ -131,6 +132,7 @@ function mockNewWorkspace() {
   let agent: { id: string; name: string; balance_ulxc: number; spent_ulxc: number; keys: string[]; created_at: string; owner_user_id: string } | null = null
   let rules = { max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 0, approval_above_ulxc: 0, allowed_models: null, allowed_providers: null, active_from: '', active_until: '', timezone: '' }
   const lines: object[] = []
+  let workspaceName = 'new@example.com'
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
     const method = init?.method ?? 'GET'
@@ -140,6 +142,8 @@ function mockNewWorkspace() {
     if (url === '/auth/me')
       return json({ mode: 'oidc', authenticated: true, user: { sub: 'u1', email: 'new@example.com' }, workspace_id: 'ws_new', cache_poolable: true, needs_pooling_choice: true })
     if (url === '/api/context') return json({ workspace_id: 'ws_new', lens_base_url: 'http://lens:8080', lens_public_base_url: 'https://lens.example.com' })
+    if (url === '/api/workspace/name' && method === 'PUT') workspaceName = body.name
+    if (url === '/api/workspace/name') return json({ id: 'ws_new', name: workspaceName })
     if (url === '/api/agents' && method === 'POST') {
       agent = { id: 'agt_new', name: body.name, balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-04T12:00:00Z', owner_user_id: 'u1' }
       return json(agent, 201)
@@ -187,6 +191,9 @@ describe('Home — the first agent in one click (B46.2)', () => {
     expect(screen.getByRole('checkbox', { name: /Share answers with other companies/i })).toBeChecked()
     expect(await screen.findByTestId('wallet-onboarding')).not.toHaveTextContent(/real money|money partner/i)
 
+    // B46.16 — the workspace's name, prefilled from the email's domain, saved in the same click.
+    expect(screen.getByLabelText('Workspace name')).toHaveValue('Example')
+    fireEvent.change(screen.getByLabelText('Workspace name'), { target: { value: 'Acme Labs' } })
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'Researcher' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create my first agent' }))
 
@@ -198,12 +205,19 @@ describe('Home — the first agent in one click (B46.2)', () => {
     expect(screen.getAllByText(/OPENAI_API_KEY="tlv_ak_1234secret"/).length).toBeGreaterThan(0)
 
     // What reached the BFF, in order: the agent, all the workspace's free credit into it, the key.
-    expect(writes.map((w) => w.path)).toEqual(['POST /api/agents', 'POST /api/agents/agt_new/fund', 'POST /api/agents/agt_new/keys'])
-    expect(writes[1].body).toEqual({ amount_ulxc: 20 * M })
+    expect(writes.map((w) => w.path)).toEqual(['PUT /api/workspace/name', 'POST /api/agents', 'POST /api/agents/agt_new/fund', 'POST /api/agents/agt_new/keys'])
+    expect(writes[0].body).toEqual({ name: 'Acme Labs' })
+    expect(writes[2].body).toEqual({ amount_ulxc: 20 * M })
+    expect(await screen.findByTestId('sidebar-workspace-name')).toHaveTextContent('Acme Labs')
 
     // Home hands back its wallets view.
     fireEvent.click(screen.getByRole('button', { name: 'Go to Home' }))
     expect(await screen.findByText('Your agents’ wallets, at a glance.')).toBeInTheDocument()
+  })
+
+  it('a webmail address prefills no workspace name', () => {
+    expect(nameFromEmail('ada@gmail.com')).toBe('')
+    expect(nameFromEmail('ada@acme.co.uk')).toBe('Acme')
   })
 })
 

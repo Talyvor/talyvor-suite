@@ -431,6 +431,8 @@ export class Bank {
   /** B32.88 — the rooms' room_* tools on an agent's key (stub-rooms.ts roomAgentTool), as stub-lens.ts sets them. */
   roomTool?: (name: string, args: Record<string, unknown>, ws: string, agent: RoomAgent, judge: Judge) => { ok: true; body: unknown } | { ok: false; error: string }
   private readonly agents = new Map<string, Agent>()
+  /** B46.16 — each workspace's name, as Lens B46.15 keeps it. */
+  private readonly workspaceNames = new Map<string, string>()
   private readonly keys = new Map<string, Agent>()
   /** B28.359 — each agent key's id, to its key: Lens revokes an agent's key on the workspace's key route. */
   private readonly keyByID = new Map<string, string>()
@@ -1954,6 +1956,14 @@ export class Bank {
     const now = new Date().toISOString()
     let m: RegExpExecArray | null
     if (rest === '/agents' && method === 'GET') return json(res, 200, this.book(ws)), true
+    if (rest === '/name') {
+      if (method === 'PUT') {
+        const name = ((await this.body<{ name?: string }>(req)).name ?? '').trim()
+        if (name.length < 1 || name.length > 80) return json(res, 400, { error: 'a workspace name is 1 to 80 characters' }), true
+        this.workspaceNames.set(ws.id, name)
+      }
+      return json(res, 200, { id: ws.id, name: this.workspaceNames.get(ws.id) ?? ws.id }), true
+    }
     if (rest === '/agents' && method === 'POST') {
       const { name = '' } = await this.body<{ name?: string }>(req)
       if (name === '') return json(res, 400, { error: 'body must be {"name": "<agent name>"}' }), true

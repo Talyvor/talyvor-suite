@@ -489,6 +489,8 @@ async function statementFile(agentID: string | null, from: string, to: string, f
   return res.blob()
 }
 
+export const WORKSPACE_NAME_KEY = ['workspace-name']
+
 export const agentBankApi = {
   book: () => getJSON<AgentBook>('/api/agents', {
       workspace_balance_ulxc: 'number',
@@ -498,6 +500,9 @@ export const agentBankApi = {
       agents: 'array',
     }),
   create: (name: string) => send<Agent>('POST', '/api/agents', { name }),
+  /** B46.16 — the workspace's name (Lens B46.15): asked at sign-up on Home's first-agent card, shown in the sidebar. */
+  workspaceName: () => getJSON<{ id: string; name: string }>('/api/workspace/name', { name: 'string' }),
+  setWorkspaceName: (name: string) => send<{ id: string; name: string }>('PUT', '/api/workspace/name', { name }),
   fund: (id: string, amount_ulxc: number, key: string) =>
     send<{ balance_ulxc: number }>('POST', `/api/agents/${e(id)}/fund`, { amount_ulxc }, { 'Idempotency-Key': key }),
   withdraw: (id: string, amount_ulxc: number, key: string) =>

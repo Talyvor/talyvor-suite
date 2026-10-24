@@ -3300,9 +3300,9 @@ export function walletOnboarding(seed: number): Scenario {
   return {
     id: 'wallet-onboarding',
     owner: 'talyvor-suite',
-    items: ['B28.8', 'B46.2', 'B46.14'],
+    items: ['B28.8', 'B46.2', 'B46.14', 'B46.16'],
     agents: 1,
-    title: 'a new workspace reaches Home with a funded, keyed first agent in one click, inside two minutes, with no disclaimer line on the way',
+    title: 'a new workspace names itself and reaches Home with a funded, keyed first agent in one click, inside two minutes, with no disclaimer line on the way',
     run: async (ctx) => {
       const before = await bookOf(ctx)
       if (before.agents.length > 0) throw new CannotTest(`the workspace already has ${before.agents.length} agent(s), so Home opens no onboarding`)
@@ -3317,6 +3317,8 @@ export function walletOnboarding(seed: number): Scenario {
         await steps.waitFor({ timeout: ACTION_TIMEOUT_MS })
         const atSignUp = (await steps.innerText()).match(DISCLAIMER)
         if (atSignUp) return fail(`sign-up carries a disclaimer line: "${atSignUp[0]}"`)
+        const workspace = `Workspace ${seed}`
+        await page.getByLabel('Workspace name').fill(workspace)
         const name = `First ${seed}`
         await page.getByLabel('Agent name').fill(name)
         await page.getByRole('button', { name: 'Create my first agent' }).click()
@@ -3330,6 +3332,10 @@ export function walletOnboarding(seed: number): Scenario {
         const onHome = (await page.locator('body').innerText()).match(DISCLAIMER)
         if (onHome) return fail(`Home carries a disclaimer line after sign-up: "${onHome[0]}"`)
 
+        const shown = (await page.getByTestId('sidebar-workspace-name').innerText()).trim()
+        if (shown !== workspace) return fail(`sign-up named the workspace "${workspace}", and the sidebar shows "${shown}"`)
+        const kept = await ctx.env.lens.workspaceName(ctx.app.user)
+        if (kept !== workspace) return fail(`sign-up named the workspace "${workspace}", and Lens reads back "${kept}"`)
         const served = await agentAsks(ctx, key, sum(r).q, 'the first request, with the key sign-up showed')
         const elapsed = Date.now() - started
         if (!served.ok) return fail(`${name}'s first request, with the key sign-up showed, was refused: ${served.status} ${served.error}`)
@@ -3349,7 +3355,7 @@ export function walletOnboarding(seed: number): Scenario {
         const request = lines.find((l) => ['spend', 'hold', 'settle', 'release'].includes(l.kind))
         if (request === undefined) return fail(`served, yet ${name}'s statement has no line for the request`)
         if (elapsed >= FIRST_AGENT_WITHIN_MS) return fail(`sign-up to Home with a working ${name} took ${elapsed} ms, not under ${FIRST_AGENT_WITHIN_MS}`)
-        return { pass: true, detail: `${name} made ready in one click, funded the workspace's ${lxcText(before.unallocated_ulxc)} LXC, its first request (${request.kind} ${request.amount_ulxc} µLXC) served on the key shown; Home with a working agent in ${elapsed} ms; no disclaimer line on the way` }
+        return { pass: true, detail: `"${workspace}" named and ${name} made ready in one click, funded the workspace's ${lxcText(before.unallocated_ulxc)} LXC, its first request (${request.kind} ${request.amount_ulxc} µLXC) served on the key shown; Home with a working agent in ${elapsed} ms; no disclaimer line on the way` }
       } finally {
         await page.close()
       }

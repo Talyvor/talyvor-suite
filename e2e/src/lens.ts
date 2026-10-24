@@ -1288,6 +1288,11 @@ export class LensClient {
     return (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/forecast`, this.bearer(user.token))) as SpendForecastRead
   }
 
+  /** B46.16 — the workspace's name, as Lens keeps it (talyvor-lens B46.15). */
+  async workspaceName(user: SyntheticUser): Promise<string> {
+    return ((await this.call('GET', `/v1/workspaces/${user.workspaceID}/name`, this.bearer(user.token))) as { name: string }).name
+  }
+
   /** B17.6 — one agent's account, newest first (Lens B19.3). */
   async agentLines(user: SyntheticUser, agentID: string): Promise<AgentLine[]> {
     const body = (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/${agentID}/statement`, this.bearer(user.token))) as { lines?: AgentLine[] | null }

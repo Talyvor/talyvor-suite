@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useMemo } from 'react'
-import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryCache, QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import {
   BrowserRouter,
   Link,
@@ -28,6 +28,7 @@ import { useDocumentTitle } from './documentTitle'
 import { ApiError, UnreadableError } from './lib/api'
 import { Overview } from './areas/lens/Overview'
 import { Home } from './areas/lens/Home'
+import { WORKSPACE_NAME_KEY, agentBankApi } from './areas/lens/agentBankApi'
 import { Ledger } from './areas/lens/Ledger'
 import { Earnings, EarningsMoved, ROYALTIES_PATH } from './areas/lens/Earnings'
 import { Keys } from './areas/lens/Keys'
@@ -381,6 +382,8 @@ function Sidebar() {
   const { pathname } = useLocation()
   const me = useAuthMeReader()
   const pending = usePendingApprovals()
+  // B46.16 — the name sign-up gave the workspace, under the brand.
+  const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
   const item = (
     to: string,
     label: string,
@@ -445,6 +448,11 @@ function Sidebar() {
           <span className="sr-only">{fold.anyOpen ? 'Fold all' : 'Open all'}</span>
         </button>
       </div>
+      {workspace.data?.name ? (
+        <div className="-mt-4 truncate px-3 text-caption text-ink" title={workspace.data.name} data-testid="sidebar-workspace-name">
+          {workspace.data.name}
+        </div>
+      ) : null}
       {/* B28.7 — WALLET-FIRST. The product is agent wallets, so the wallet's own screens lead and never
           fold away: the home, what is waiting for a person, the agents and their statements, then Chat.
           Everything else is grouped below them, in the order a person reaches for it. */}
