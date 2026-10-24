@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { App } from '../../App'
+import { App, queryClient } from '../../App'
 import { forgetSpeechAvailable } from './voice'
 import { MIC_REFUSED, NOT_HEARD } from './VoiceButton'
 
@@ -123,6 +123,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  queryClient.clear()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   window.localStorage.clear()
@@ -264,5 +265,95 @@ describe('the composer’s microphone (B47.1)', () => {
     fireEvent.click(mic)
     await waitFor(() => expect(screen.getByTestId('voice-note')).toHaveTextContent(MIC_REFUSED))
     expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1)
+  })
+})
+
+// B45.27 — "Hey Taly", heard by the browser's own recogniser on the device (a stand-in here), only while the tab is in view.
+class FakeRecognition {
+  static live: FakeRecognition[] = []
+  static where = 'available'
+  static available = vi.fn(async () => FakeRecognition.where)
+  lang = ''
+  continuous = false
+  interimResults = true
+  processLocally = false
+  onresult: ((e: { resultIndex: number; results: unknown[] }) => void) | null = null
+  onend: (() => void) | null = null
+  onerror: ((e: { error: string }) => void) | null = null
+  start() {
+    FakeRecognition.live.push(this)
+  }
+  abort() {
+    FakeRecognition.live = FakeRecognition.live.filter((r) => r !== this)
+  }
+  hear(words: string) {
+    this.onresult?.({ resultIndex: 0, results: [Object.assign([{ transcript: words }], { isFinal: true })] })
+  }
+}
+
+let shown: DocumentVisibilityState = 'visible'
+function tabIs(state: DocumentVisibilityState) {
+  shown = state
+  fireEvent(document, new Event('visibilitychange'))
+}
+
+describe('Hey Taly (B45.27)', () => {
+  beforeEach(() => {
+    FakeRecognition.live = []
+    FakeRecognition.where = 'available'
+    shown = 'visible'
+    vi.stubGlobal('SpeechRecognition', FakeRecognition)
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => shown })
+  })
+
+  it('listens on the device once turned on, and never while the tab is hidden', async () => {
+    mockBff()
+    await openChat()
+    const toggle = await screen.findByRole('button', { name: 'Hey Taly' })
+    expect(FakeRecognition.live).toHaveLength(0)
+    fireEvent.click(toggle)
+    await waitFor(() => expect(FakeRecognition.live).toHaveLength(1))
+    expect(FakeRecognition.live[0].processLocally).toBe(true)
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+    tabIs('hidden')
+    await waitFor(() => expect(FakeRecognition.live).toHaveLength(0))
+    tabIs('visible')
+    await waitFor(() => expect(FakeRecognition.live).toHaveLength(1))
+  })
+
+  it('is not offered where the browser would send the audio away to recognise it', async () => {
+    FakeRecognition.where = 'unavailable'
+    mockBff()
+    await openChat()
+    await screen.findByRole('button', { name: 'Talk' })
+    await waitFor(() => expect(FakeRecognition.available).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'Hey Taly' })).toBeNull()
+  })
+
+  it('“Hey Taly, pay ACME £120” lands in the box and, sent, ends in a spoken read-back and a passkey, never a payment from the voice alone', async () => {
+    const bff = mockBff()
+    await openChat()
+    fireEvent.click(await screen.findByRole('button', { name: 'Hey Taly' }))
+    await waitFor(() => expect(FakeRecognition.live).toHaveLength(1))
+    FakeRecognition.live[0].hear('Hey Taly, pay ACME £120')
+    // It lands in the box like a recording, and goes only when sent.
+    await waitFor(() => expect(screen.getByLabelText('Your message')).toHaveValue('pay ACME £120'))
+    expect(bff.prepared).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    const readback = await screen.findByTestId('chat-pay-readback')
+    expect(readback).toHaveTextContent('I’ve prepared a payment of £120.00 to ACME Ltd. Nothing is paid until you approve it with your passkey.')
+    expect(bff.prepared).toEqual([{ body: { voice: true, items: [{ payee_id: 'payee_acme', currency: 'GBP', amount_minor: 12000, reference: '' }] }, key: expect.any(String) }])
+    await waitFor(() => expect(bff.spoken.at(-1)).toMatch(/I’ve prepared a payment of £120\.00 to ACME Ltd\. Nothing is paid until you approve it with your passkey\.$/))
+    // Heard on the device: no recording went anywhere to be transcribed.
+    expect(bff.transcribed).toHaveLength(0)
+
+    expect(bff.approved).toHaveLength(0)
+    const card = screen.getByTestId('approve-card')
+    fireEvent.click(within(card).getByRole('button', { name: 'Approve 1 payment with a passkey' }))
+    await within(card).findByText('Approved. Each payment you approved is paid once.')
+    expect(navigator.credentials.get).toHaveBeenCalledTimes(1)
+    expect(bff.approved).toHaveLength(1)
   })
 })

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cn, focusRing } from '@talyvor/ui'
 
 import { AI_NOTICE, AI_NOTICE_KEY, speechAvailable, transcribe, VoiceError } from './voice'
+import { canWake, listenForWake, readyToWake, WAKE_KEY } from './wakeWord'
 
 // B47.1 — the composer's microphone, immediately left of Send: tap to start, tap again to stop. What was said lands in
 // the box for the person to edit; nothing is sent until they press Send. Esc cancels a recording. When the server says
@@ -12,6 +13,8 @@ type State = 'idle' | 'starting' | 'recording' | 'transcribing'
 
 export const MIC_REFUSED = 'Chat can’t use the microphone. Allow it for this site in your browser’s settings, then try again.'
 export const NOT_HEARD = 'Couldn’t hear that. Try again.'
+/** B45.27 — said when "Hey Taly" wakes Chat with nothing after it. */
+export const LISTENING = 'Listening…'
 
 /** Whether this browser can record at all; without it there is no microphone in the composer. */
 export function canRecord(): boolean {
@@ -24,6 +27,13 @@ const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2,
 export function VoiceButton({ disabled, onText, onNote }: { disabled: boolean; onText: (text: string) => void; onNote: (note: string | null) => void }) {
   const [state, setState] = useState<State>('idle')
   const [available, setAvailable] = useState(false)
+  // B45.27 — Hey Taly: offered only where the browser recognises speech on the device; on once the person turns it on.
+  const [wakeable, setWakeable] = useState(false)
+  const [wake, setWake] = useState(() => window.localStorage.getItem(WAKE_KEY) === 'on')
+  const [visible, setVisible] = useState(() => document.visibilityState === 'visible')
+  // The listening outlives a render: it reads the latest callbacks rather than restart on each new one.
+  const said = useRef({ onNote, onText })
+  said.current = { onNote, onText }
   const [seconds, setSeconds] = useState(0)
   const [level, setLevel] = useState(0)
   const recorder = useRef<MediaRecorder | null>(null)
@@ -38,6 +48,36 @@ export function VoiceButton({ disabled, onText, onNote }: { disabled: boolean; o
       live = false
     }
   }, [])
+
+  useEffect(() => {
+    let live = true
+    void canWake().then((can) => live && setWakeable(can))
+    const seen = () => setVisible(document.visibilityState === 'visible')
+    document.addEventListener('visibilitychange', seen)
+    return () => {
+      live = false
+      document.removeEventListener('visibilitychange', seen)
+    }
+  }, [])
+
+  // B45.27 — listening for "Hey Taly" only while the tab is in view and nothing else is using the microphone. What follows
+  // it lands in the box like a recording, unsent: a voice in the room, or Chat's own read-aloud answer, never acts alone.
+  useEffect(() => {
+    if (!available || !wakeable || !wake || !visible || disabled || state !== 'idle') return
+    const told = () => window.localStorage.getItem(AI_NOTICE_KEY) === null
+    return listenForWake({
+      onWake: () => said.current.onNote(told() ? `${AI_NOTICE} ${LISTENING}` : LISTENING),
+      onRequest: (text) => {
+        said.current.onNote(told() ? AI_NOTICE : null)
+        said.current.onText(text)
+      },
+      onRefused: () => {
+        setWake(false)
+        window.localStorage.removeItem(WAKE_KEY)
+        said.current.onNote(MIC_REFUSED)
+      },
+    })
+  }, [available, wakeable, wake, visible, disabled, state])
 
   // A microphone left open when Chat closes is let go.
   useEffect(() => () => recorder.current?.stream.getTracks().forEach((t) => t.stop()), [])
@@ -131,9 +171,45 @@ export function VoiceButton({ disabled, onText, onNote }: { disabled: boolean; o
     setState('recording')
   }
 
+  const toggleWake = async () => {
+    if (wake) {
+      setWake(false)
+      window.localStorage.removeItem(WAKE_KEY)
+      return
+    }
+    if (!(await readyToWake())) {
+      setWakeable(false)
+      return
+    }
+    window.localStorage.setItem(WAKE_KEY, 'on')
+    setWake(true)
+  }
+
   const recording = state === 'recording'
   return (
     <>
+      {wakeable ? (
+        <button
+          type="button"
+          className={cn(
+            'inline-flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-control border border-rule bg-surface px-2 text-caption text-ink',
+            'transition-colors duration-200 hover:border-rule-strong',
+            wake && 'bg-accent-tint',
+            focusRing,
+          )}
+          aria-label="Hey Taly"
+          aria-pressed={wake}
+          title={wake ? 'Listening for “Hey Taly” while this tab is open. Tap to stop.' : 'Say “Hey Taly” to talk, only while this tab is open'}
+          data-testid="hey-taly"
+          onClick={() => void toggleWake()}
+        >
+          {/* Lit while listening; on a phone the waves alone, so the model's name keeps its room. */}
+          <svg aria-hidden="true" viewBox="0 0 16 16" className={cn('h-4 w-4', wake && visible ? 'text-accent' : 'text-muted')} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+            <path d="M3 6.5v3M6 4v8M9 5.5v5M12 7v2" />
+          </svg>
+          <span className="hidden sm:inline">Hey Taly</span>
+        </button>
+      ) : null}
       {recording ? (
         <span className="flex items-center gap-2 px-1 text-caption text-muted" role="status" data-testid="voice-recording">
           <span aria-hidden="true" className="flex h-4 items-center gap-0.5">

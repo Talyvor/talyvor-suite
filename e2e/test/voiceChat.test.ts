@@ -13,6 +13,7 @@ const PASSING: VoiceSeen = {
   voiceRequest: { status: 201, client: 'voice', decisions: ['needs_approval'] },
   speech: { status: 503, contentType: 'application/json', error: 'speech is not configured on this Lens' },
   paymentsToPayee: 0,
+  heyTaly: { offered: false, onDevice: false, whileHidden: -1, whenBack: -1, landed: false, unsentFirst: false, readback: '', approveCard: false },
 }
 
 describe('voice-chat-pay (B40.12)', () => {
@@ -22,5 +23,18 @@ describe('voice-chat-pay (B40.12)', () => {
     expect(voiceVerdict({ ...PASSING, pageText: 'account 12345678' }).pass).toBe(false)
     expect(voiceVerdict({ ...PASSING, voiceRequest: { status: 201, client: 'chat', decisions: ['auto'] } }).pass).toBe(false)
     expect(voiceVerdict({ ...PASSING, speech: { status: 502, contentType: 'application/json', error: 'Lens could not answer just now' } }).pass).toBe(false)
+  })
+})
+
+describe('voice-chat-pay: Hey Taly (B45.27)', () => {
+  const SPOKE = { status: 200, contentType: 'audio/mpeg', error: '' }
+  const HEARD = { offered: true, onDevice: true, whileHidden: 0, whenBack: 1, landed: true, unsentFirst: true, readback: PASSING.readback, approveCard: true }
+  it('passes only when Hey Taly listens on the device, never while the tab is hidden, and ends in a read-back awaiting a passkey', () => {
+    expect(voiceVerdict({ ...PASSING, speech: SPOKE, heyTaly: HEARD }).pass).toBe(true)
+    expect(voiceVerdict({ ...PASSING, speech: SPOKE, heyTaly: { ...HEARD, whileHidden: 1 } }).pass).toBe(false)
+    expect(voiceVerdict({ ...PASSING, speech: SPOKE, heyTaly: { ...HEARD, onDevice: false } }).pass).toBe(false)
+    expect(voiceVerdict({ ...PASSING, speech: SPOKE, heyTaly: { ...HEARD, readback: '', approveCard: false } }).pass).toBe(false)
+    expect(voiceVerdict({ ...PASSING, speech: SPOKE, heyTaly: { ...HEARD, unsentFirst: false } }).pass).toBe(false)
+    expect(voiceVerdict({ ...PASSING, heyTaly: HEARD }).pass).toBe(false)
   })
 })
