@@ -398,14 +398,14 @@ export function trackSearchCycleBoard(seed: number): Scenario {
         const p = track.page
 
         // Search issues.
-        const hits = await eventually(ctx, 3, async () => {
+        const hits = await eventually(ctx, 3, () => metered(ctx, 'track', word.length, async () => {
           await p.locator('#track-search').fill(word)
           await p.getByRole('button', { name: 'Search', exact: true }).click()
           const c = card(p, 'Search issues')
           await c.getByRole('button', { name: 'Search', exact: true }).waitFor({ timeout: 30_000 }).catch(() => undefined)
           await c.locator('li').or(c.getByText(/^Track returned no issues|^Couldn’t search|^Track answered in a shape/)).first().waitFor({ timeout: 30_000 }).catch(() => undefined)
           return (await c.innerText()).replace(/\s+/g, ' ')
-        }, (t) => t.includes(found))
+        }), (t) => t.includes(found))
         ctx.evidence.push({ note: `Search issues "${word}": ${hits.slice(0, 400)}` })
         if (!hits.includes(found)) failures.push(`searching "${word}" did not list "${found}"`)
         if (hits.includes(other)) failures.push(`searching "${word}" also listed "${other}"`)
@@ -667,12 +667,12 @@ export function docsTools(seed: number): Scenario {
         const search = await ctx.app.tab('/docs')
         try {
           const s = card(search, 'Search the documentation')
-          const results = await eventually(ctx, 3, async () => {
+          const results = await eventually(ctx, 3, () => metered(ctx, 'docs', word.length, async () => {
             await s.getByLabel('Search').fill(word)
             await s.getByRole('button', { name: 'Search', exact: true }).click()
             await s.locator('li').or(s.getByText(/no pages|No pages|Couldn’t search|nothing/i)).first().waitFor({ timeout: 30_000 }).catch(() => undefined)
             return (await s.innerText()).replace(/\s+/g, ' ')
-          }, (r) => r.includes(suggested || title))
+          }), (r) => r.includes(suggested || title))
           const now = await stored()
           const held = typeof now === 'string' ? title : now.title
           ctx.evidence.push({ note: `Search the documentation "${word}": ${results.slice(0, 300)}` })

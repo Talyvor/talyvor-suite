@@ -3382,11 +3382,13 @@ async function everySwitch(ctx: ScenarioCtx, f: FeaturesScreen, r: () => number)
  */
 const PRODUCT_AI = { docs: { model: 'claude-sonnet-4-6', maxOutput: 2048 }, track: { model: 'claude-sonnet-4-6', maxOutput: 1024 } }
 
+/** B17.263 — how long a Docs or Track AI action's spend rows may take to reach the ledger once it has answered. */
+const METERED_WAIT_MS = 10_000
+
 /**
- * A Docs or Track AI action. Those products call Lens on their own account, so the charge never
- * reaches this user's ledger or its footer: the cap holds the worst case — the product's model (the
- * priciest chat model if the catalog lacks it), the whole input, its most output — and counts it,
- * since what it really cost cannot be read.
+ * A Docs or Track AI action. The cap holds the worst case first — the product's model (the priciest chat model if the
+ * catalog lacks it), the whole input, its most output. B17.263 — the product calls Lens on this user's workspace, so
+ * each spend row the action wrote is booked as it is and the cap settles at what it charged (the worst case if none).
  */
 export async function metered<T>(ctx: ScenarioCtx, product: keyof typeof PRODUCT_AI, inputChars: number, action: () => Promise<T>): Promise<T> {
   const { model, maxOutput } = PRODUCT_AI[product]
@@ -3394,10 +3396,19 @@ export async function metered<T>(ctx: ScenarioCtx, product: keyof typeof PRODUCT
   const worst = Math.max(...(named.length > 0 ? named : chatModels(ctx.env.catalog)).map((m) =>
     listPriceUSD(m, worstInputTokens(inputChars), maxOutput)))
   const hold = ctx.env.cap.reserve(worst)
+  let spent: number | undefined
   try {
-    return await action()
+    const before = new Set((await ctx.env.lens.ledger(ctx.app.user)).map((r) => r.id))
+    const done = await action()
+    const settled = (rows: LedgerRow[]) => rows.some((r) => r.type === 'spend') &&
+      rows.filter((r) => r.type !== 'spend' && r.type !== 'platform_fee').reduce((n, r) => n + r.amount_ulxc, 0) === 0
+    const fresh = await within(async () => (await ctx.env.lens.ledger(ctx.app.user)).filter((r) => !before.has(r.id)), settled, METERED_WAIT_MS)
+    const spends = fresh.filter((r) => r.type === 'spend')
+    for (const r of spends) ctx.env.book.add(ctx.app.user.workspaceID, -r.amount_ulxc)
+    if (spends.length > 0) spent = (spends.reduce((n, r) => n - r.amount_ulxc, 0) / 1e6) * ctx.env.usdPerLXC
+    return done
   } finally {
-    ctx.env.cap.settle(hold, undefined)
+    ctx.env.cap.settle(hold, spent)
   }
 }
 
