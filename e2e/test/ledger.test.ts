@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ChargeBook } from '../src/app.ts'
 import type { Fees, LedgerRow } from '../src/lens.ts'
-import { type RunEnv, checkLedger } from '../src/scenarios.ts'
+import { type RunEnv, type ScenarioCtx, checkLedger, metered } from '../src/scenarios.ts'
+import { SpendCap } from '../src/budget.ts'
 
 const fees: Fees = { market_take_bps: 1500, services_take_bps: 500, platform_fee_bps: { free: 550, team: 300, business: 100, enterprise: 100 } }
 
@@ -45,5 +46,24 @@ describe('the ledger read-back (B35.7)', () => {
         pass: false, detail: '1 of 1 spend rows have no platform_fee row of 3% beside them, as Lens states the fee on team: 700 µLXC at  wants a 21 µLXC fee',
       })
     }
+  })
+})
+
+describe('a Docs or Track AI action on the ledger (B17.263)', () => {
+  it('books each spend row the action wrote, and the cap settles at what it charged', async () => {
+    const user = { index: 5, workspaceID: 'ws_5', token: 't', expiresAt: '' }
+    const book = new ChargeBook()
+    const cap = new SpendCap(100)
+    const earlier = charge(0, 300)
+    let rows = earlier
+    const catalog = [{ id: 'claude-sonnet-4-6', provider: 'anthropic', display_name: 'Claude Sonnet 4.6', input_per_1m: 3, output_per_1m: 15 }]
+    const ctx = { app: { user }, env: { book, cap, catalog, usdPerLXC: 0.01, lens: { ledger: async () => rows } } } as unknown as ScenarioCtx
+    const answer = await metered(ctx, 'docs', 100, async () => {
+      rows = [...charge(1, 300), ...charge(2, 300), ...earlier]
+      return 'summary'
+    })
+    expect(answer).toBe('summary')
+    expect(book.of(user.workspaceID)).toMatchObject({ count: 2, ulxc: 1400 })
+    expect(cap.spentUSD).toBeCloseTo((1400 / 1e6) * 0.01)
   })
 })
