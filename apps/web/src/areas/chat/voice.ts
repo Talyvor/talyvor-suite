@@ -1,6 +1,6 @@
 // B40.12 — talking to Talyvor in Chat. What the person says is recorded in the browser, transcribed by Lens (B40.10,
-// through the BFF's /api/chat/voice/transcriptions) and sent as the question; the answer is shown and read aloud by
-// Lens's speech (/api/chat/voice/speech). Both are billed like any model call. Voice reads and prepares: a payment said
+// through the BFF's /api/chat/voice/transcriptions) and put in the composer for the person to send (B47.1); the answer
+// is shown and read aloud by Lens's speech (/api/chat/voice/speech). Both are billed like any model call. Voice reads and prepares: a payment said
 // aloud is only prepared, and paid once the person approves it with a passkey (PayCommand.tsx). There is no voiceprint:
 // a voice is never a way to approve anything.
 
@@ -34,11 +34,31 @@ async function refusal(res: Response, path: string, fallback: string): Promise<V
   return new VoiceError(res.status, path, sentence)
 }
 
+let probed: Promise<boolean> | null = null
+
+/** B47.1 — whether this server has speech, asked once per page. An empty POST costs nothing: Lens answers 503 when
+ * speech is not configured before it reads the form, and refuses the missing file otherwise. Only the 503 hides the
+ * microphone; a network failure leaves it, and the recording then says what went wrong. */
+export function speechAvailable(): Promise<boolean> {
+  probed ??= fetch('/api/chat/voice/transcriptions', { method: 'POST', credentials: 'same-origin' }).then(
+    (res) => res.status !== 503,
+    () => true,
+  )
+  return probed
+}
+
+/** For tests: forget the answer, as a new page would. */
+export function forgetSpeechAvailable() {
+  probed = null
+}
+
 /** The recording, as text. */
 export async function transcribe(audio: Blob): Promise<string> {
   const form = new FormData()
   form.append('file', audio, audio.type.includes('mp4') ? 'speech.mp4' : audio.type.includes('ogg') ? 'speech.ogg' : 'speech.webm')
   const res = await fetch('/api/chat/voice/transcriptions', { method: 'POST', body: form, credentials: 'same-origin' })
+  // B47.1 — speech is not configured: the rest of this page has no microphone.
+  if (res.status === 503) probed = Promise.resolve(false)
   if (!res.ok) throw await refusal(res, '/api/chat/voice/transcriptions', 'What you said could not be heard just now.')
   return (((await res.json()) as { text?: string }).text ?? '').trim()
 }
