@@ -12,6 +12,9 @@
 
 export const DOCUMENTATION_PATH = '/documentation'
 
+/** B40.20 — the Claude connector's page, which Claude's connector directory links to. */
+export const CLAUDE_CONNECTOR_PATH = `${DOCUMENTATION_PATH}/claude`
+
 /** The hosted gateway. Answered /healthz, /status and /openapi.json on 2026-10-04. */
 export const LENS_ORIGIN = 'https://lens.talyvor.com'
 
@@ -63,6 +66,11 @@ export const START: Claim[] = [
     text: 'Watch its statement: every request the agent makes is a line with what it cost and the balance left.',
     href: '/agents',
     label: 'Agent Wallets — Statement',
+  },
+  {
+    text: 'Connect Claude, so it can read your accounts and prepare payments that you approve in Talyvor.',
+    href: CLAUDE_CONNECTOR_PATH,
+    label: 'Talyvor in Claude',
   },
 ]
 

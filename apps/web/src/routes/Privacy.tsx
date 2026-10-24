@@ -29,8 +29,8 @@ import {
 //   payouts            areas/marketplace/Marketplace.tsx (Stripe asks; Talyvor never sees bank details)
 //   deletion           areas/lens/StoredAnswers.tsx, areas/track/WorkspaceSettings.tsx
 
-/** The day these words last changed (B44.1 added the waitlist). Change it with them. */
-const UPDATED = '2026-10-23'
+/** The day these words last changed (B40.20 added AI assistants). Change it with them. */
+const UPDATED = '2026-10-24'
 
 export function Privacy() {
   return (
@@ -146,6 +146,35 @@ export function Privacy() {
           seller&rsquo;s earnings. A report someone files about a listing is kept with its reason
           and details. If you connect a Stripe account to be paid, Stripe asks who you are and where
           to send the money; Talyvor never sees your bank details.
+        </p>
+      </Section>
+
+      <Section title="AI assistants you connect">
+        <p className="text-reading">
+          If you connect an assistant such as Claude to Talyvor, you sign in to Talyvor and choose what it may do: see
+          your wallets and bills, draft invoices and payees, or prepare payments for you to approve. It then acts as you,
+          in your workspace, and only within what you chose.
+        </p>
+        <ul className="mt-3 flex list-disc flex-col gap-2 pl-5 text-reading text-muted">
+          <li>
+            <strong className="text-ink">What the assistant receives.</strong> The answer to each thing it asks for —
+            your balances, agents, saved payees, mandates, marketplace listings, invoices and payment requests. That
+            answer goes to the assistant&rsquo;s provider (Anthropic, for Claude), and from then on is governed by
+            their terms, not ours.
+          </li>
+          <li>
+            <strong className="text-ink">What we keep.</strong> The connection: the assistant&rsquo;s name, what you
+            allowed, when you connected it and when it last called Talyvor, for at most 90 days. A payee or mandate it
+            drafts is kept until you save, sign or dismiss it, and a payment it prepares is a request in your workspace
+            that you approve or decline. We do not keep your conversation with the assistant.
+          </li>
+          <li>
+            <strong className="text-ink">What it cannot do.</strong> No assistant can pay, approve, save a payee or
+            sign a mandate. You do each of those yourself, in Talyvor, with your passkey.
+          </li>
+        </ul>
+        <p className="mt-3 text-reading text-muted">
+          You can see every assistant you connected, and end its access at once, in Settings › Connect your AI.
         </p>
       </Section>
 

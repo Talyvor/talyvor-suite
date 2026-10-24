@@ -36,7 +36,7 @@ interface Assistant {
   note?: string
 }
 
-const ASSISTANTS: Assistant[] = [
+export const ASSISTANTS: Assistant[] = [
   {
     name: 'Claude',
     steps: [

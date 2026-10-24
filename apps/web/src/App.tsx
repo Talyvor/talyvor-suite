@@ -73,7 +73,8 @@ import { OperatorWorkspaces } from './areas/lens/OperatorWorkspaces'
 import { Landing } from './areas/marketing/Landing'
 import { Pricing } from './areas/marketing/Pricing'
 import { Documentation } from './areas/documentation/Documentation'
-import { DOCUMENTATION_PATH } from './areas/documentation/content'
+import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH } from './areas/documentation/content'
+import { ClaudeConnector } from './areas/documentation/ClaudeConnector'
 import { Privacy } from './routes/Privacy'
 import { Terms } from './routes/Terms'
 import { SignIn, SignUp } from './areas/auth/Entry'
@@ -723,6 +724,8 @@ export function App() {
           {/* B27.31 — what the product does, each claim linked to its screen. Public for the same
               reason as the price list. Not /docs: that is the Docs product, behind the gate. */}
           <Route path={DOCUMENTATION_PATH} element={<Documentation />} />
+          {/* B40.20 — the Claude connector's page, which Claude's directory links to. Public for the same reason. */}
+          <Route path={CLAUDE_CONNECTOR_PATH} element={<ClaudeConnector />} />
           {/* Legal pages are public for the same reason: someone deciding whether to sign up must
               be able to read what the service does with their data BEFORE creating an account.
               Putting these behind the gate would mean you had to agree in order to read. */}

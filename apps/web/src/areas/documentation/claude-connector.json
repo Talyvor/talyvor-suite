@@ -1,0 +1,28 @@
+{
+  "name": "Talyvor",
+  "summary": "See your accounts, agents, payees and invoices, search the marketplace, draft invoices, and prepare payments that you approve in Talyvor. No tool pays.",
+  "server": "https://app.talyvor.com/mcp",
+  "allowedLinkUris": ["https://app.talyvor.com", "talyvor:"],
+  "examplePrompts": [
+    "What's due this week?",
+    "Prepare payment of my bills due Friday",
+    "Find a translation agent under £20 a month"
+  ],
+  "tools": [
+    { "name": "get_balances", "title": "Balances", "kind": "read" },
+    { "name": "list_agents", "title": "Agents and their wallets", "kind": "read" },
+    { "name": "list_payees", "title": "Saved payees", "kind": "read" },
+    { "name": "list_mandates", "title": "Permission mandates", "kind": "read" },
+    { "name": "market_search", "title": "Search the marketplace", "kind": "read" },
+    { "name": "market_listing", "title": "Marketplace listing", "kind": "read" },
+    { "name": "get_request_status", "title": "Payment request status", "kind": "read" },
+    { "name": "draft_invoice", "title": "Draft an invoice", "kind": "write" },
+    { "name": "send_invoice", "title": "Send an invoice", "kind": "send" },
+    { "name": "create_payee_request", "title": "Ask to add a payee", "kind": "write" },
+    { "name": "draft_mandate", "title": "Draft a permission mandate", "kind": "write" },
+    { "name": "prepare_payment", "title": "Prepare a payment for approval", "kind": "send" },
+    { "name": "prepare_batch", "title": "Prepare payments for approval", "kind": "send" },
+    { "name": "request_marketplace_purchase", "title": "Prepare a marketplace purchase for approval", "kind": "send" },
+    { "name": "cancel_request", "title": "Cancel a payment request", "kind": "send" }
+  ]
+}
