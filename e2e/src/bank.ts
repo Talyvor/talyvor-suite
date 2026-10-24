@@ -3286,14 +3286,13 @@ export function chatWalletAlerts(seed: number): Scenario {
 
 /** B46.2 — sign-up to Home with a working first agent takes under two minutes (B45.8). */
 export const FIRST_AGENT_WITHIN_MS = 120_000
-/** B46.2 — the one sentence sign-up says until a partner serves the workspace real money (apps/web Onboarding.tsx). */
-export const NOT_REAL_MONEY_YET = 'Until our first money partner is switched on, the balances you see here aren’t real money yet.'
+/** B46.14 — sign-up and Home carry no disclaimer line (Nick, 24 Oct 2026); B46.2's sentence was the last. */
+export const DISCLAIMER = /real money|money partner|test money/i
 
 /**
  * B46.2 (B28.8's scenario, rebuilt) — a brand-new workspace's first agent, in one click on Home, timed from opening
  * the app to Home with a working agent: made, given the workspace's free credit, its key shown once with a copy
- * button, and its first request served on that key. The sentence about real money is said there while no partner
- * serves the workspace, and not after "Go to Home". Every figure is read back from Lens: the agent's owner and
+ * button, and its first request served on that key, with no disclaimer line at sign-up or on Home. Every figure is read back from Lens: the agent's owner and
  * balance, the workspace's, and the fund and request lines on its statement.
  */
 export function walletOnboarding(seed: number): Scenario {
@@ -3301,14 +3300,13 @@ export function walletOnboarding(seed: number): Scenario {
   return {
     id: 'wallet-onboarding',
     owner: 'talyvor-suite',
-    items: ['B28.8', 'B46.2'],
+    items: ['B28.8', 'B46.2', 'B46.14'],
     agents: 1,
-    title: 'a new workspace reaches Home with a funded, keyed first agent in one click, inside two minutes, told once that its balances aren’t real money yet',
+    title: 'a new workspace reaches Home with a funded, keyed first agent in one click, inside two minutes, with no disclaimer line on the way',
     run: async (ctx) => {
       const before = await bookOf(ctx)
       if (before.agents.length > 0) throw new CannotTest(`the workspace already has ${before.agents.length} agent(s), so Home opens no onboarding`)
       if (before.unallocated_ulxc <= 0) throw new CannotTest('the workspace has no free credit to give its first agent')
-      const live = (await ctx.env.lens.walletCapabilities(ctx.app.user)).some((c) => c.class !== 'GREEN' && c.real_money)
       const started = Date.now()
       const page = await ctx.app.tab('/')
       try {
@@ -3316,12 +3314,9 @@ export function walletOnboarding(seed: number): Scenario {
         if ((await page.getByText(/Share your answers, and earn from them/).count()) > 0) return fail('the full-screen sharing-consent page is still shown')
         if ((await page.getByRole('checkbox', { name: /Share answers with other companies/ }).count()) !== 1) return fail('Home has no one-line sharing notice')
         const steps = page.getByTestId('wallet-onboarding')
-        const sentence = page.getByText(NOT_REAL_MONEY_YET, { exact: true })
-        if (!live) await sentence.waitFor({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
-        const saidAtSignUp = await sentence.count()
-        if (saidAtSignUp !== (live ? 0 : 1)) {
-          return fail(`with ${live ? 'a partner' : 'no partner'} serving real money, sign-up says "${NOT_REAL_MONEY_YET}" ${saidAtSignUp} time(s), not ${live ? 0 : 1}`)
-        }
+        await steps.waitFor({ timeout: ACTION_TIMEOUT_MS })
+        const atSignUp = (await steps.innerText()).match(DISCLAIMER)
+        if (atSignUp) return fail(`sign-up carries a disclaimer line: "${atSignUp[0]}"`)
         const name = `First ${seed}`
         await page.getByLabel('Agent name').fill(name)
         await page.getByRole('button', { name: 'Create my first agent' }).click()
@@ -3332,7 +3327,8 @@ export function walletOnboarding(seed: number): Scenario {
         if ((await keyBlock.getByRole('button', { name: /copy/i }).count()) !== 1) return fail('the key is shown without its copy button')
         await page.getByRole('button', { name: 'Go to Home' }).click()
         await page.getByText('Your agents’ wallets, at a glance.', { exact: true }).waitFor({ timeout: ACTION_TIMEOUT_MS })
-        if ((await sentence.count()) > 0) return fail(`Home says "${NOT_REAL_MONEY_YET}" again after sign-up`)
+        const onHome = (await page.locator('body').innerText()).match(DISCLAIMER)
+        if (onHome) return fail(`Home carries a disclaimer line after sign-up: "${onHome[0]}"`)
 
         const served = await agentAsks(ctx, key, sum(r).q, 'the first request, with the key sign-up showed')
         const elapsed = Date.now() - started
@@ -3353,7 +3349,7 @@ export function walletOnboarding(seed: number): Scenario {
         const request = lines.find((l) => ['spend', 'hold', 'settle', 'release'].includes(l.kind))
         if (request === undefined) return fail(`served, yet ${name}'s statement has no line for the request`)
         if (elapsed >= FIRST_AGENT_WITHIN_MS) return fail(`sign-up to Home with a working ${name} took ${elapsed} ms, not under ${FIRST_AGENT_WITHIN_MS}`)
-        return { pass: true, detail: `${name} made ready in one click, funded the workspace's ${lxcText(before.unallocated_ulxc)} LXC, its first request (${request.kind} ${request.amount_ulxc} µLXC) served on the key shown; Home with a working agent in ${elapsed} ms; told once its balances aren't real money yet` }
+        return { pass: true, detail: `${name} made ready in one click, funded the workspace's ${lxcText(before.unallocated_ulxc)} LXC, its first request (${request.kind} ${request.amount_ulxc} µLXC) served on the key shown; Home with a working agent in ${elapsed} ms; no disclaimer line on the way` }
       } finally {
         await page.close()
       }
@@ -3770,7 +3766,7 @@ export function spendPlainWords(): Scenario {
         const page = await ctx.app.tab(path)
         try {
           await page.getByText(MONTH_ROW, { exact: true }).first().waitFor({ timeout: ACTION_TIMEOUT_MS })
-          const text = (await page.locator('main').innerText()).replace(/\s+/g, ' ')
+          const text = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
           if (!text.includes(MONTH_HINT)) return fail(`${path} shows "${MONTH_ROW}" without "${MONTH_HINT}"`)
           const jargon = SPEND_JARGON.filter((w) => w.test(text))
           if (jargon.length > 0) return fail(`${path} still says ${jargon.map(String).join(', ')}`)
@@ -3885,7 +3881,7 @@ export function billingReturnPages(): Scenario {
             const said = (await page.locator('main h2').first().innerText({ timeout: 1_000 }).catch(() => '')).trim()
             return fail(`${path} does not head itself "${heading}"${said !== '' ? ` (it says "${said}")` : ''}`)
           }
-          const text = (await page.locator('main').innerText()).replace(/\s+/g, ' ')
+          const text = (await page.locator('body').innerText()).replace(/\s+/g, ' ')
           const wrong = RETURN_CONTRADICTIONS.filter((w) => w.test(text))
           if (wrong.length > 0) return fail(`${path} still says ${wrong.map(String).join(', ')}`)
           seen.push(`${path}: "${heading}"`)

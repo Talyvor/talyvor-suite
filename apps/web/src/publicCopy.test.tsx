@@ -85,6 +85,8 @@ const SIGNED_IN_FORBIDDEN: [string, RegExp][] = [
   ['illustration', /illustration/i],
   ['Coming soon', /coming soon/i],
   ['Nicolai Gaborac', /nicolai gaborac/i],
+  // B46.14: B46.2's sign-up sentence, "…aren’t real money yet", is not said anywhere either.
+  ['real money yet', /real money yet|first money partner/i],
 ]
 
 describe('no signed-in address carries a disclaimer label', () => {
