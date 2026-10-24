@@ -1,6 +1,6 @@
 // B45.27 — "Hey Taly": a wake word heard on this device, only while Chat's tab is open and in view. The browser's own
 // speech recogniser listens on the device (processLocally), so no audio leaves it; what the person says after "Hey Taly"
-// goes to Chat as a spoken question, exactly as if they had tapped the microphone and pressed Send. A browser that cannot
+// lands in Chat's box, exactly as if they had tapped the microphone, and goes once they press Send. A browser that cannot
 // recognise speech on the device has no Hey Taly, and a hidden tab stops listening at once (phones forbid background wake
 // words, and so do we). A payment said this way is only prepared: it is read back and paid once a passkey approves it.
 

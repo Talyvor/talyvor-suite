@@ -1735,11 +1735,6 @@ export function Chat() {
                 voicedRef.current = true
                 setDraft((d) => (d.trim() === '' ? text : `${d.trimEnd()} ${text}`))
               }}
-              onSpoken={(text) => {
-                // B45.27 — what was said after "Hey Taly" goes as a spoken question, its answer read aloud.
-                voicedRef.current = true
-                send(text)
-              }}
               voiceNote={voiceNote}
               onVoiceNote={setVoiceNote}
               onStop={stop}
@@ -2668,7 +2663,6 @@ function Composer({
   onDraft,
   onSend,
   onVoice,
-  onSpoken,
   voiceNote,
   onVoiceNote,
   onStop,
@@ -2702,8 +2696,6 @@ function Composer({
   onSend: () => void
   /** B47.1 — what the person said into the microphone, put in the box for them to send. */
   onVoice: (text: string) => void
-  /** B45.27 — what the person said after "Hey Taly", sent as a spoken question. */
-  onSpoken: (text: string) => void
   voiceNote: string | null
   onVoiceNote: (note: string | null) => void
   onStop: () => void
@@ -2889,7 +2881,6 @@ function Composer({
             onVoice(text)
             boxRef.current?.focus()
           }}
-          onSpoken={onSpoken}
           onNote={onVoiceNote}
         />
         {pending ? (

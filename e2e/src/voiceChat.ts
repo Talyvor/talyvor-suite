@@ -6,7 +6,8 @@
 // configured" sentence; which one is in the detail.
 // B45.27 — and "Hey Taly": with speech configured, a stand-in for the browser's on-device recogniser is put in the page; Hey
 // Taly turned on must listen on the device, stop while the tab is hidden and listen again once it is back, and "Hey Taly, pay
-// <payee> £1.50 …" must end in the same read-back and approval card, never a payment. Without speech it must not be offered.
+// <payee> £1.50 …" must land in the box unsent and, sent, end in the same read-back and approval card, never a payment.
+// Without speech it must not be offered.
 
 import { fileURLToPath } from 'node:url'
 import type { Page } from 'playwright'
@@ -38,6 +39,9 @@ export interface HeyTalySeen {
   /** Recognisers listening while the tab was hidden, and once it was back in view. */
   whileHidden: number
   whenBack: number
+  /** The words after "Hey Taly" landed in the box, and nothing was prepared before the run sent them. */
+  landed: boolean
+  unsentFirst: boolean
   readback: string
   approveCard: boolean
 }
@@ -66,6 +70,7 @@ export function voiceVerdict(seen: VoiceSeen): Verdict {
       if (!h.onDevice) wrong.push('Hey Taly listened without asking the recogniser to stay on the device')
       if (h.whileHidden !== 0) wrong.push(`Hey Taly kept ${h.whileHidden} recognisers listening while the tab was hidden`)
       if (h.whenBack !== 1) wrong.push(`Hey Taly had ${h.whenBack} recognisers listening once the tab was back, not 1`)
+      if (!h.landed || !h.unsentFirst) wrong.push('what was said after “Hey Taly” did not land in the box unsent')
       if (!h.readback.includes(want) || !h.readback.includes('passkey') || !h.approveCard) {
         wrong.push(`"Hey Taly, pay …" read back "${h.readback}"${h.approveCard ? '' : ' with no approval card'}, not ${want} awaiting a passkey`)
       }
@@ -108,7 +113,7 @@ function fakeRecogniser() {
 const HEY_TALY_WAIT_MS = 10_000
 
 async function sayHeyTaly(page: Page, payee: string): Promise<HeyTalySeen> {
-  const seen: HeyTalySeen = { offered: false, onDevice: false, whileHidden: -1, whenBack: -1, readback: '', approveCard: false }
+  const seen: HeyTalySeen = { offered: false, onDevice: false, whileHidden: -1, whenBack: -1, landed: false, unsentFirst: false, readback: '', approveCard: false }
   await page.addInitScript(fakeRecogniser)
   await page.reload()
   const toggle = page.getByTestId('hey-taly')
@@ -129,7 +134,13 @@ async function sayHeyTaly(page: Page, payee: string): Promise<HeyTalySeen> {
   await showTab('visible')
   await page.waitForFunction(() => (window as unknown as Test).heyTalyTest.live.length > 0, undefined, { timeout: TIMEOUT_MS }).catch(() => undefined)
   seen.whenBack = await listening()
-  await page.evaluate((words) => (window as unknown as Test).heyTalyTest.hear(words), `Hey Taly, pay ${payee} £1.50 for the nightly invoice`)
+  const words = `pay ${payee} £1.50 for the nightly invoice`
+  await page.evaluate((words) => (window as unknown as Test).heyTalyTest.hear(words), `Hey Taly, ${words}`)
+  // What was said lands in the box, unsent, as a recording does; the run sends it.
+  const box = page.locator('#chat-message')
+  seen.landed = await page.waitForFunction((w) => document.querySelector<HTMLTextAreaElement>('#chat-message')?.value === w, words, { timeout: TIMEOUT_MS }).then(() => true, () => false)
+  seen.unsentFirst = (await page.getByTestId('chat-pay-readback').count()) === 0
+  await box.press('Enter')
   const line = page.getByTestId('chat-pay-readback').last()
   await line.waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
   seen.readback = ((await line.textContent().catch(() => '')) ?? '').trim()
@@ -158,7 +169,7 @@ export function voiceChatPay(): Scenario {
       let pageText = ''
       let voiceRequest: VoiceSeen['voiceRequest'] = { status: 0 }
       let speech: VoiceSeen['speech'] = { status: 0, contentType: '', error: '' }
-      let heyTaly: HeyTalySeen = { offered: false, onDevice: false, whileHidden: -1, whenBack: -1, readback: '', approveCard: false }
+      let heyTaly: HeyTalySeen = { offered: false, onDevice: false, whileHidden: -1, whenBack: -1, landed: false, unsentFirst: false, readback: '', approveCard: false }
       try {
         const box = page.getByPlaceholder('Ask anything')
         await box.waitFor({ timeout: TIMEOUT_MS })

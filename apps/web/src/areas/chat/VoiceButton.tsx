@@ -24,18 +24,7 @@ export function canRecord(): boolean {
 /** m:ss, as the recording runs. */
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
-export function VoiceButton({
-  disabled,
-  onText,
-  onSpoken,
-  onNote,
-}: {
-  disabled: boolean
-  onText: (text: string) => void
-  /** B45.27 — what was said after "Hey Taly", to be sent as a spoken question. */
-  onSpoken: (text: string) => void
-  onNote: (note: string | null) => void
-}) {
+export function VoiceButton({ disabled, onText, onNote }: { disabled: boolean; onText: (text: string) => void; onNote: (note: string | null) => void }) {
   const [state, setState] = useState<State>('idle')
   const [available, setAvailable] = useState(false)
   // B45.27 — Hey Taly: offered only where the browser recognises speech on the device; on once the person turns it on.
@@ -43,8 +32,8 @@ export function VoiceButton({
   const [wake, setWake] = useState(() => window.localStorage.getItem(WAKE_KEY) === 'on')
   const [visible, setVisible] = useState(() => document.visibilityState === 'visible')
   // The listening outlives a render: it reads the latest callbacks rather than restart on each new one.
-  const said = useRef({ onNote, onSpoken })
-  said.current = { onNote, onSpoken }
+  const said = useRef({ onNote, onText })
+  said.current = { onNote, onText }
   const [seconds, setSeconds] = useState(0)
   const [level, setLevel] = useState(0)
   const recorder = useRef<MediaRecorder | null>(null)
@@ -71,7 +60,8 @@ export function VoiceButton({
     }
   }, [])
 
-  // B45.27 — listening for "Hey Taly" only while the tab is in view and nothing else is using the microphone.
+  // B45.27 — listening for "Hey Taly" only while the tab is in view and nothing else is using the microphone. What follows
+  // it lands in the box like a recording, unsent: a voice in the room, or Chat's own read-aloud answer, never acts alone.
   useEffect(() => {
     if (!available || !wakeable || !wake || !visible || disabled || state !== 'idle') return
     const told = () => window.localStorage.getItem(AI_NOTICE_KEY) === null
@@ -79,7 +69,7 @@ export function VoiceButton({
       onWake: () => said.current.onNote(told() ? `${AI_NOTICE} ${LISTENING}` : LISTENING),
       onRequest: (text) => {
         said.current.onNote(told() ? AI_NOTICE : null)
-        said.current.onSpoken(text)
+        said.current.onText(text)
       },
       onRefused: () => {
         setWake(false)

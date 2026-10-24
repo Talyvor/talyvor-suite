@@ -331,12 +331,16 @@ describe('Hey Taly (B45.27)', () => {
     expect(screen.queryByRole('button', { name: 'Hey Taly' })).toBeNull()
   })
 
-  it('“Hey Taly, pay ACME £120” ends in a spoken read-back and a passkey, never a payment from the voice alone', async () => {
+  it('“Hey Taly, pay ACME £120” lands in the box and, sent, ends in a spoken read-back and a passkey, never a payment from the voice alone', async () => {
     const bff = mockBff()
     await openChat()
     fireEvent.click(await screen.findByRole('button', { name: 'Hey Taly' }))
     await waitFor(() => expect(FakeRecognition.live).toHaveLength(1))
     FakeRecognition.live[0].hear('Hey Taly, pay ACME £120')
+    // It lands in the box like a recording, and goes only when sent.
+    await waitFor(() => expect(screen.getByLabelText('Your message')).toHaveValue('pay ACME £120'))
+    expect(bff.prepared).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     const readback = await screen.findByTestId('chat-pay-readback')
     expect(readback).toHaveTextContent('I’ve prepared a payment of £120.00 to ACME Ltd. Nothing is paid until you approve it with your passkey.')
