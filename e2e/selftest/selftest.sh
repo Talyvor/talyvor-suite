@@ -10,6 +10,8 @@
 #                                                         # keys-not-forwarded runs rather than SKIPs
 #   E2E_LIGHT=1 pnpm --filter @talyvor/e2e selftest       # B28.294: the light pass, its own six users; with
 #                                                         # E2E_DAY_CAP_USD it has what the runs in E2E_OUT left of it
+#   STUB_SPEECH=on pnpm --filter @talyvor/e2e selftest   # B47.3: the stub Lens has speech, so voice-chat-mic records
+#                                                         # its clip rather than checking the microphone is hidden
 #   E2E_FAULTS=1 pnpm --filter @talyvor/e2e selftest      # B26.18: the run's browser is killed mid-run, then
 #                                                         # Lens; the report and summary must still be written
 #                                                         # and name both

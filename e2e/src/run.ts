@@ -35,6 +35,7 @@ import { groupLeads, reportPath, writeReport, writeTesters } from './report.ts'
 import { archiveAll, roomForAgents } from './room.ts'
 import { CannotTest, type Evidence, LEDGER_READBACK, type RunEnv, type Scenario, checkLedger, journeyFor, scenarioItems } from './scenarios.ts'
 import { type Versions, productionVersions, readVersions, versionsLine } from './versions.ts'
+import { VOICE_CLIP } from './voiceChat.ts'
 
 /** The repository this file is in: reports go to its docs/e2e unless told otherwise. */
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -203,7 +204,10 @@ class Browsers {
   private launch(): Promise<Browser> {
     // B28.38: the full Chromium, in its new headless mode — the headless shell refuses notifications, so
     // the approval push could not be shown.
-    const launched: Promise<Browser> = chromium.launch({ headless: !this.headed, channel: 'chromium' }).then((b) => {
+    // B47.3 — its microphone, granted without asking, hears VOICE_CLIP on a loop (voice-chat-mic).
+    const launched: Promise<Browser> = chromium.launch({ headless: !this.headed, channel: 'chromium', args: [
+      '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${VOICE_CLIP}`,
+    ] }).then((b) => {
       b.on('disconnected', () => {
         if (this.closing) return
         this.incidents.push(`${stamp()} the browser went away mid-run (it crashed or was killed); the users in it errored and the rest had a new one`)

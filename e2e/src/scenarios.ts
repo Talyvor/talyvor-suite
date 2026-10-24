@@ -82,7 +82,7 @@ import { operatorComplianceBoundary } from './operatorCompliance.ts'
 import { waitlistJoin } from './waitlist.ts'
 import { chatFirstMessage } from './chatFirstMessage.ts'
 import { chatSidebar } from './chatSidebar.ts'
-import { voiceChatPay } from './voiceChat.ts'
+import { voiceChatMic, voiceChatPay } from './voiceChat.ts'
 import { deviceKeysThroughBFF } from './deviceKeys.ts'
 import { agentCredential } from './kya.ts'
 import { lineage } from './lineage.ts'
@@ -5299,6 +5299,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B40.12 — Chat's voice, once a run: a payment asked for in Chat read back with the payee and £1.50 and no account number,
   // the same payment prepared as said aloud needing approval as a voice request, and no payment on the ledger without a passkey.
   if (i === 4) list.push(voiceChatPay())
+  // B47.3 — Chat's microphone, once a run: hidden while speech is not configured; otherwise the run's fake microphone says a
+  // known sentence, and its words must land in the composer, unsent.
+  if (i === 4) list.push(voiceChatMic())
   // B40.31 — the phone app's device keys through the BFF, once a run: a challenge, a key with no attestation refused in Lens's
   // words, an empty list and an unknown key's revoke 404 from Lens.
   if (i === 6) list.push(deviceKeysThroughBFF())
