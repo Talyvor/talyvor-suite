@@ -9,7 +9,7 @@ import { type Escrow, type MoneyRequest, agentBankApi, refusalText } from '../le
 import { formatWhen } from '../lens/format'
 import { Lxc } from '../lens/money'
 import { ESCROWS_KEY } from '../lens/WalletHoldings'
-import { REQUESTS_KEY, TestMoneyOnly } from '../lens/WalletMoney'
+import { REQUESTS_KEY } from '../lens/WalletMoney'
 import { Card } from '../lens/walletBrand'
 import { PENDING_POLL_MS } from '../lens/WalletScreens'
 import { isSessionExpired } from '../../lib/productState'
@@ -27,7 +27,6 @@ interface Outcome {
 
 type Open = { kind: 'request'; r: MoneyRequest } | { kind: 'escrow'; e: Escrow }
 
-const PREVIEW = 'Preview — test money only'
 
 export function MoneyCards() {
   const qc = useQueryClient()
@@ -123,7 +122,6 @@ export function MoneyCards() {
   }
   if (shown.length === 0) return null
 
-  const crossesOwners = shown.some((o) => o.kind === 'request' && o.r.from_workspace_id !== o.r.to_workspace_id)
   const busy = answer.isPending || confirm.isPending
   // One-handed on a phone: full-width buttons under the sentence; side by side on a wide screen.
   const buttons = 'flex w-full flex-col gap-2 wide:flex-row wide:items-center'
@@ -131,8 +129,6 @@ export function MoneyCards() {
 
   return (
     <section aria-label="Money waiting for you" className="flex flex-col gap-3 pb-6">
-      {crossesOwners ? <TestMoneyOnly capability="pay_another_owner" label={PREVIEW} /> : null}
-      {shown.some((o) => o.kind === 'escrow') ? <TestMoneyOnly capability="escrow" label={PREVIEW} /> : null}
       {shown.map((o) => {
         const id = idOf(o)
         const waiting = open.some((x) => idOf(x) === id)

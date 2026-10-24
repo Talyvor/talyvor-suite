@@ -105,9 +105,6 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
       <CardHeader>{r.summary || 'Payments waiting for your approval'}</CardHeader>
       <div className="flex flex-col gap-3 px-gutter py-3" data-testid="approve-card">
         <p className="flex flex-wrap items-center gap-2 text-caption text-ink">
-          {/* Lens pays every approved item with test money (economy/payment_approvals.go, FundingTest).
-              shortcut: always shown, drop it once Lens pays approved requests with live money. */}
-          <Pill status="held">Test money</Pill>
           <span>
             From {agent ? `${agent}’s account` : 'the company’s account'} · asked by {askedBy(r.client)} ·{' '}
             <span className="font-figure">{formatWhen(r.created_at)}</span>

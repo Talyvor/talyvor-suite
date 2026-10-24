@@ -123,16 +123,13 @@ afterEach(() => {
 })
 
 describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
-  it('marks escrow and cash-out test money only and investing simulated, each with why', async () => {
+  it('carries no test-money label on escrow, cash-out or investing (B46.2)', async () => {
     mockBff()
     window.history.pushState({}, '', '/agents')
     render(<App />)
-    const cashOut = await screen.findAllByTestId('test-money-only-cash_out')
-    expect(cashOut[0].textContent).toContain('Test money only')
-    expect(cashOut[0].textContent).toContain('needs a licensed partner')
-    expect((await screen.findAllByTestId('test-money-only-escrow'))[0].textContent).toMatch(/Test money only.*lawyer’s sign-off/)
-    expect((await screen.findByTestId('test-money-only-invest_and_trade')).textContent).toMatch(/Simulated only.*authorised broker partner/)
-    expect(screen.queryByTestId('test-money-only-rules_approvals_statements_pots')).toBeNull() // GREEN: nothing to mark
+    await screen.findByTestId('portfolio')
+    expect(screen.queryByTestId(/^test-money-only-/)).toBeNull()
+    expect(document.body.textContent).not.toMatch(/test money|test credits|licensed partner/i)
     // Never the word bank — but for the European Central Bank, whose rates the simulator and card panel name.
     expect((document.body.textContent ?? '').replace(/European Central Bank/g, '')).not.toMatch(/\bbank\b/i)
   })

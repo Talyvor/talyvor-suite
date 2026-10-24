@@ -21,8 +21,8 @@ import { Card, Note, selectClass, useRunnableModels } from './parts'
 // listing survives into the next.
 //
 // B32.57 — a use a licence covers (Lens B32.19) is charged 'licensed': nothing new goes on the bill. A per-use offer's
-// first uses may be free trials (B32.21): the button reads Try it, and a trial's answer is marked "Trial — test money,
-// not billed" with what it would have cost. The version to run is the latest unless the buyer picks another.
+// first uses may be free trials (B32.21): the button reads Try it, and a trial's answer is marked "Free trial, not
+// billed" with what it would have cost. The version to run is the latest unless the buyer picks another.
 
 const CHARGED: Record<ListingUse['charge'], (u: ListingUse) => React.ReactNode> = {
   billed: (u) => (
@@ -36,7 +36,7 @@ const CHARGED: Record<ListingUse['charge'], (u: ListingUse) => React.ReactNode> 
   licensed: () => 'Covered by your licence: nothing new goes on your bill.',
   trial: (u) => (
     <>
-      Trial — test money, not billed.
+      Free trial, not billed.
       {u.would_have_cost_usd_micros ? (
         <>
           {' '}
@@ -61,7 +61,7 @@ function UseResult({ u }: { u: ListingUse }) {
       <div className="flex flex-col gap-3 px-gutter py-3" data-testid="market-use-result">
         {u.trial ? (
           <span className="flex" data-testid="market-use-trial">
-            <Pill status="held">Trial — test money, not billed</Pill>
+            <Pill status="held">Free trial, not billed</Pill>
           </span>
         ) : null}
         {u.kind === 'evaluation' ? (
@@ -146,8 +146,7 @@ export function UseListing({ listing, own, held }: { listing: Listing; own: bool
           </>
         ) : trying ? (
           <>
-            Your first <span className="font-figure">{trialUses}</span> uses of it are free trials: Trial — test money, not
-            billed. Once they are used, each use costs{' '}
+            Your first <span className="font-figure">{trialUses}</span> uses of it are free trials, not billed. Once they are used, each use costs{' '}
             <span className="font-figure">{formatULXC(listing.price_per_use_ulxc)}</span>, billed monthly on your card. The
             models it calls are billed to you as usual.
           </>

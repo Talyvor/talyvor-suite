@@ -104,7 +104,6 @@ const day = (iso: string) => iso.slice(0, 10)
 export function OperatorCompliance() {
   const caps = useQuery({ queryKey: CAPABILITIES_KEY, queryFn: agentBankApi.capabilities })
   const capList = caps.data?.capabilities ?? []
-  const preview = !caps.isSuccess || capList.some((c) => c.class !== 'GREEN' && !c.real_money)
   return (
     <RegionScreen>
       <Region
@@ -119,12 +118,6 @@ export function OperatorCompliance() {
           against what the account partner holds for them; and each day’s check of the ledger against the partner’s
           statements, with every payment they disagree on.
         </p>
-        {preview ? (
-          <p className="flex flex-wrap items-center gap-2 text-caption text-ink" data-testid="compliance-preview">
-            <Pill status="held">Preview — test money only</Pill>
-            <span>Accounts, payments, currencies, trading and credit take test money only for now.</span>
-          </p>
-        ) : null}
       </Region>
       <Region index="01" label="Clearances" heading="Every money capability, its class and its clearance">
         {caps.isError ? (

@@ -10,7 +10,6 @@ import {
   type AgentTransfer,
   type Loan,
   type LoanOffer,
-  type WalletCapability,
   agentBankApi,
   formatULXC,
   parseLXC,
@@ -23,9 +22,7 @@ import {
 // company's credit line (B22.4), and loans between companies — offered, accepted, their instalments,
 // late and default (B22.5).
 //
-// Every capability here carries its class (B22.1). An AMBER or RED one that Talyvor has not cleared takes
-// test money only, and the screen says so beside it, with why, in one plain sentence. Lens decides; the
-// screen shows Lens's figures and, on a refusal, Lens's own sentence.
+// Lens decides; the screen shows Lens's figures and, on a refusal, Lens's own sentence.
 
 export const CAPABILITIES_KEY = ['wallet-capabilities']
 export const REQUESTS_KEY = ['wallet-requests']
@@ -46,36 +43,6 @@ export function Note({ ok, children }: { ok: boolean; children: React.ReactNode 
 
 export function readFailure(err: unknown, what: string): string {
   return isSessionExpired(err) ? `${what} can’t be read until you sign in again.` : `${what} could not be read just now.`
-}
-
-/** Why a class keeps a capability to test money, in one plain sentence. */
-const WHY: Record<WalletCapability['class'], string> = {
-  GREEN: '',
-  AMBER: 'Talyvor is waiting for a lawyer’s sign-off before this moves real money, so for now it uses test credits only.',
-  RED: 'This needs a licensed partner before it can use real money, so for now it uses test credits only.',
-}
-
-function useCapabilities() {
-  return useQuery({ queryKey: CAPABILITIES_KEY, queryFn: agentBankApi.capabilities })
-}
-
-/**
- * "Test money only" beside an AMBER or RED capability Talyvor has not cleared, and why. Nothing for a
- * GREEN one or a cleared one, and nothing while the classes are unread. A capability that never touches
- * credits here (B22.12's simulated investing) names what it uses instead, with label and why.
- */
-export function TestMoneyOnly({ capability, label = 'Test money only', why }: { capability: string; label?: string; why?: string }) {
-  const caps = useCapabilities()
-  const c = caps.data?.capabilities?.find((x) => x.capability === capability)
-  if (!c || c.real_money) return null
-  return (
-    <p className="flex flex-wrap items-center gap-2 text-caption text-ink" data-testid={`test-money-only-${capability}`}>
-      <Pill status="held">{label}</Pill>
-      <span>
-        {c.name}: {why ?? WHY[c.class]}
-      </span>
-    </p>
-  )
 }
 
 /** The agent's address: its wallet ID, and a handle others can send to. */
@@ -166,7 +133,6 @@ export function SendAndRequest({ agent }: { agent: Agent }) {
           To or from any agent on Talyvor, by its wallet ID or @handle. Credits stay credits: the other side can spend
           them only on Talyvor. Sending is judged by {agent.name}’s rules.
         </p>
-        <TestMoneyOnly capability="pay_another_owner" />
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Send or request">
           <Button aria-pressed={mode === 'send'} className={pressed} onClick={() => setMode('send')}>
             Send
@@ -198,8 +164,7 @@ export function SendAndRequest({ agent }: { agent: Agent }) {
         </div>
         {move.isSuccess && sent ? (
           <Note ok>
-            Sent {lxc(sent.amount_ulxc)}
-            {sent.test_funded_ulxc > 0 ? ' of test money' : ''}. {sent.class === 'AMBER' ? 'It went to another owner’s agent.' : 'It stayed with one owner.'}
+            Sent {lxc(sent.amount_ulxc)}. {sent.class === 'AMBER' ? 'It went to another owner’s agent.' : 'It stayed with one owner.'}
           </Note>
         ) : null}
         {move.isSuccess && !sent ? <Note ok>Asked. They see the request and can accept or decline it.</Note> : null}
@@ -239,7 +204,6 @@ export function RecurringTransfer({ agent }: { agent: Agent }) {
         }}
       >
         <p className="text-body text-muted">Pay any agent on Talyvor the same amount every day, week or month.</p>
-        <TestMoneyOnly capability="pay_another_owner" />
         <div className="flex flex-wrap items-center gap-2">
           <Input
             aria-label="Pay every period to (wallet ID or @handle)"
@@ -318,7 +282,6 @@ export function AgentTransfers({ agent }: { agent: Agent }) {
         transfers.map((t) => (
           <Row key={t.id} label={transferText(t, agent.id)} hint={formatWhen(t.created_at)}>
             <span className="flex flex-wrap items-center gap-2">
-              {t.test_funded_ulxc > 0 ? <Pill status="held">Test money</Pill> : null}
               {t.refunded_by ? <Pill status="settled">Given back</Pill> : null}
               {lxc(t.from_agent_id === agent.id ? -t.amount_ulxc : t.amount_ulxc)}
               {!t.refundable ? null : asking === t.id ? (
@@ -421,7 +384,6 @@ export function CreditLinePanel() {
     <Card>
       <CardHeader>Credit line</CardHeader>
       <div className="flex flex-col gap-2 px-gutter py-3">
-        <TestMoneyOnly capability="company_credit_line" />
         {line.isError ? (
           <p className="text-body text-muted">{readFailure(line.error, 'The credit line')}</p>
         ) : line.isSuccess && line.data === null ? (
@@ -555,9 +517,6 @@ export function Loans({ agents }: { agents: Agent[] }) {
   return (
     <Card>
       <CardHeader>Loans</CardHeader>
-      <div className="px-gutter pt-3">
-        <TestMoneyOnly capability="loans_between_companies" />
-      </div>
       {list.isError ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The loans')}</p>
       ) : list.isSuccess && loans.length === 0 ? (
@@ -614,7 +573,6 @@ export function OfferLoan({ agent }: { agent: Agent }) {
           To another company’s agent. The borrower repays in equal instalments with the interest; a missed one makes the
           loan late, and missed again it is in default. Both companies see every instalment.
         </p>
-        <TestMoneyOnly capability="loans_between_companies" />
         <div className="flex flex-wrap items-center gap-2">
           <Input aria-label="Lend to (wallet ID or @handle)" placeholder="@handle or wallet ID" className="wide:w-48" value={to} onChange={(e) => setTo(e.target.value)} />
           <Input aria-label="Loan amount in LXC" inputMode="decimal" placeholder="LXC" className="w-24 font-figure" value={principal} onChange={(e) => setPrincipal(e.target.value)} />

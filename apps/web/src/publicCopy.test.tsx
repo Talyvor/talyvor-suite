@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { App, queryClient } from './App'
+import { App, CONSOLE_ROUTES, queryClient } from './App'
+import { populatedBff } from './populatedBff'
 import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH } from './areas/documentation/content'
 
 // B44.4: what every public page says, read from the rendered page a signed-out visitor gets. Positioning v2
@@ -71,4 +72,39 @@ describe('every public page speaks positioning v2', () => {
     )
     for (const address of shown) expect(address, `${path} shows ${address}`).toBe('hello@talyvor.com')
   })
+})
+
+// B46.2 (Nick, 24 Oct 2026): the app drops the disclosure layer too. Every signed-in address, populated the
+// way populatedBffCoverage proves it is, says none of the disclaimer phrases; "bank" alone is allowed.
+const SIGNED_IN_FORBIDDEN: [string, RegExp][] = [
+  ['banking', /banking/i],
+  ['test money', /test money/i],
+  ['test credits', /test credits/i],
+  ['closed trial', /closed trial/i],
+  ['licensed partner', /licensed partners?/i],
+  ['illustration', /illustration/i],
+  ['Coming soon', /coming soon/i],
+  ['Nicolai Gaborac', /nicolai gaborac/i],
+]
+
+describe('no signed-in address carries a disclaimer label', () => {
+  it('every console address', async () => {
+    const said: string[] = []
+    for (const r of CONSOLE_ROUTES) {
+      const address = r.path.replace(/\/\*$/, '') || '/'
+      populatedBff((impl) => {
+        vi.spyOn(globalThis, 'fetch').mockImplementation(impl as never)
+      })
+      window.history.pushState({}, '', address)
+      const { container } = render(<App />)
+      await screen.findByRole('navigation', { name: /sections/i })
+      await new Promise((done) => setTimeout(done, 80))
+      const text = container.textContent ?? ''
+      for (const [word, re] of SIGNED_IN_FORBIDDEN) if (re.test(text)) said.push(`${address} says "${word}"`)
+      vi.restoreAllMocks()
+      cleanup()
+      queryClient.clear()
+    }
+    expect(said).toEqual([])
+  }, 20_000)
 })

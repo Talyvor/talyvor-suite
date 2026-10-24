@@ -77,7 +77,7 @@ describe('Freeze or unfreeze an agent’s card from Chat (B28.360)', () => {
     const card = await typeInChat('/freeze Researcher')
     await waitFor(() => expect(within(card).getByLabelText('Agent')).toHaveValue('agt_1'))
     expect(await within(card).findByTestId('chat-card-freeze-state')).toHaveTextContent('Researcher’s card •••• 4242 takes purchases now')
-    expect(within(card).getByText('Preview — test money only')).toBeInTheDocument()
+    expect(card.textContent).not.toMatch(/test money/i)
     fireEvent.click(within(card).getByRole('button', { name: 'Freeze Researcher’s card' }))
     expect(await within(card).findByTestId('chat-card-freeze-done')).toHaveTextContent(
       'Frozen. Every purchase on Researcher’s card •••• 4242 is refused, and nothing leaves its wallet, until you unfreeze it.',

@@ -1,31 +1,34 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { Button, Input, inlineLink } from '@talyvor/ui'
+import { Button, Input } from '@talyvor/ui'
 import { api } from '../../lib/api'
-import { BOOK_KEY, rulesKey, statementKey } from './AgentBank'
+import { BOOK_KEY } from './AgentBank'
 import { CopyBlock } from './Setup'
 import { toolsFor } from './setupSnippets'
+import { CAPABILITIES_KEY } from './WalletMoney'
 import {
   type Agent,
   type AgentBook,
   type AgentKey,
   type StatementLine,
+  type WalletCapability,
   agentBankApi,
   formatULXC,
   newMoveKey,
-  parseLXC,
   refusalText,
-  retryMoveThroughRestart,
 } from './agentBankApi'
 
-// Onboarding.tsx — B28.8: a new workspace's first agent, in three steps on Home. It replaced the
-// full-screen sharing-consent page a new workspace used to open on; sharing is now one line on Home.
-//   1. Create the agent with a monthly budget and the amount above which a person must approve.
-//   2. Fund it from the workspace.
-//   3. Issue its key and copy a snippet, then watch its first request land on its statement.
-// Each step writes through the same BFF routes and query keys as Agent Wallets, so what is done here
-// is what that screen shows. Lens judges every write; a refusal shows Lens's own sentence.
+// Onboarding.tsx — B46.2 (B45.8's flow): a new workspace's first agent in one click on Home. Sign up, then
+// "Your first agent is ready": the agent is made, given the workspace's free credit, and its key is shown
+// once with a copy button; then Home. No budget, funding or identity forms on the way — the agent's rules
+// are Agent Wallets' to set later. The one sentence about real money is said here, once, and nowhere else.
+
+/** Said once, at sign-up, until a partner serves the workspace real money (Nick, 24 Oct 2026). */
+export const NOT_REAL_MONEY_YET = 'Until our first money partner is switched on, the balances you see here aren’t real money yet.'
+
+/** A partner serves the workspace real money: Lens says an AMBER or RED capability takes it now. GREEN is Talyvor's own credit. */
+export const partnerLive = (caps: WalletCapability[] | null | undefined): boolean =>
+  (caps ?? []).some((c) => c.class !== 'GREEN' && c.real_money)
 
 const lxc = (micros: number) => (
   <>
@@ -33,288 +36,114 @@ const lxc = (micros: number) => (
   </>
 )
 
-function Refused({ error }: { error: unknown }) {
-  return (
-    <p role="alert" className="text-caption text-ink">
-      {refusalText(error)}
-    </p>
-  )
-}
-
-/** Step 1: the agent, its monthly budget and its approval amount. A blank approval amount asks nobody. */
-function CreateStep({ onCreated }: { onCreated: (a: Agent) => void }) {
-  const qc = useQueryClient()
-  const [name, setName] = useState('')
-  const [budget, setBudget] = useState('')
-  const [approval, setApproval] = useState('')
-  const budgetMicros = parseLXC(budget)
-  const approvalMicros = approval.trim() === '' ? 0 : parseLXC(approval)
-  // The agent is kept once Lens made it, so a rules write that failed is tried again without a second agent.
-  const [made, setMade] = useState<Agent | null>(null)
-  const create = useMutation({
-    mutationFn: async () => {
-      const a = made ?? (await agentBankApi.create(name.trim()))
-      setMade(a)
-      const current = await agentBankApi.rules(a.id)
-      const saved = await agentBankApi.setRules(a.id, {
-        ...current,
-        monthly_limit_ulxc: budgetMicros ?? 0,
-        approval_above_ulxc: approvalMicros ?? 0,
-      })
-      qc.setQueryData(rulesKey(a.id), saved)
-      return a
-    },
-    onSuccess: onCreated,
-    onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
-  })
-  const ready = (made !== null || name.trim() !== '') && budgetMicros !== null && approvalMicros !== null
-  return (
-    <form
-      className="mt-4 flex w-full flex-col gap-3"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (ready && !create.isPending) create.mutate()
-      }}
-    >
-      <Input aria-label="Agent name" placeholder="Agent name" value={made?.name ?? name} disabled={made !== null} onChange={(e) => setName(e.target.value)} />
-      <div className="flex flex-col gap-3 wide:flex-row">
-        <Input
-          aria-label="Monthly budget, in LXC"
-          inputMode="decimal"
-          placeholder="Monthly budget, LXC"
-          className="font-figure"
-          value={budget}
-          onChange={(e) => setBudget(e.target.value)}
-        />
-        <Input
-          aria-label="Ask a person above, in LXC"
-          inputMode="decimal"
-          placeholder="Ask a person above, LXC"
-          className="font-figure"
-          value={approval}
-          onChange={(e) => setApproval(e.target.value)}
-        />
-      </div>
-      <p className="text-caption font-normal text-muted">
-        Lens refuses what would take it past its budget this month, and holds anything above the approval amount for a
-        person to approve. Leave the approval amount blank and nothing is held.
-      </p>
-      <div>
-        <Button type="submit" variant="primary" disabled={!ready || create.isPending}>
-          {create.isPending ? 'Creating…' : made ? 'Save its rules' : 'Create agent'}
-        </Button>
-      </div>
-      {create.isError ? <Refused error={create.error} /> : null}
-    </form>
-  )
-}
-
-/** Step 2: the workspace funds the agent. With nothing free to give, Billing is where credit comes from. */
-function FundStep({ agent, book, onFunded }: { agent: Agent; book: AgentBook; onFunded: () => void }) {
-  const qc = useQueryClient()
-  const [amount, setAmount] = useState('')
-  const micros = parseLXC(amount)
-  // B17.26 — the amount and the Idempotency-Key are the mutation's own, so a retry through a deploy's
-  // restart repeats both and Lens moves the LXC once.
-  const fund = useMutation({
-    mutationFn: ({ ulxc, key }: { ulxc: number; key: string }) => agentBankApi.fund(agent.id, ulxc, key),
-    retry: retryMoveThroughRestart,
-    retryDelay: (failures) => Math.min(500 * 2 ** failures, 4_000),
-    onSuccess: onFunded,
-    onSettled: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: BOOK_KEY }),
-        qc.invalidateQueries({ queryKey: statementKey(agent.id) }),
-      ]),
-  })
-  if (book.unallocated_ulxc <= 0) {
-    return (
-      <div className="mt-4 flex flex-col items-start gap-3">
-        <p className="text-body text-ink" data-testid="onboarding-no-credit">
-          The workspace has no LXC free to give {agent.name}. Put credit in it on Billing, then fund {agent.name} here.
-        </p>
-        <Button asChild variant="primary">
-          <Link to="/billing">Open Billing</Link>
-        </Button>
-      </div>
-    )
-  }
-  return (
-    <form
-      className="mt-4 flex w-full flex-col gap-3"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (micros !== null && !fund.isPending) fund.mutate({ ulxc: micros, key: newMoveKey() })
-      }}
-    >
-      <p className="text-body text-ink">
-        The workspace has {lxc(book.unallocated_ulxc)} free. {agent.name} spends only what you give it.
-      </p>
-      <div className="flex items-center gap-2">
-        <Input
-          aria-label={`Amount to fund ${agent.name}, in LXC`}
-          inputMode="decimal"
-          placeholder="LXC"
-          className="w-28 font-figure"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-        <Button type="submit" variant="primary" disabled={micros === null || fund.isPending}>
-          {fund.isPending ? 'Funding…' : `Fund ${agent.name}`}
-        </Button>
-      </div>
-      {fund.isError ? <Refused error={fund.error} /> : null}
-    </form>
-  )
-}
-
 const REQUEST_KINDS: readonly StatementLine['kind'][] = ['spend', 'hold', 'settle', 'release']
 
 /** The oldest line a request put on the statement; Lens lists it newest first. Chat's launch card (B28.350) reads it too. */
 export const firstRequest = (lines: StatementLine[] | null | undefined): StatementLine | null =>
   [...(lines ?? [])].reverse().find((l) => REQUEST_KINDS.includes(l.kind)) ?? null
 
-/** Step 3: its key, a snippet to paste, and the statement read until the agent's first request is on it. */
-function KeyStep({ agent }: { agent: Agent }) {
-  const qc = useQueryClient()
-  const [issued, setIssued] = useState<AgentKey | null>(null)
-  const issue = useMutation({
-    mutationFn: () => agentBankApi.issueKey(agent.id, agent.name),
-    onSuccess: (k) => setIssued(k), // held in this component only; shown while the step is open
-    onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
-  })
-  const ctx = useQuery({ queryKey: ['context'], queryFn: api.context, staleTime: 60_000 })
-  // Read every three seconds once the key exists, until a request has landed. Lens lists newest first.
-  const st = useQuery({
-    queryKey: statementKey(agent.id),
-    queryFn: () => agentBankApi.statement(agent.id),
-    enabled: issued !== null,
-    refetchInterval: (q) => (firstRequest(q.state.data?.lines) === null ? 3_000 : false),
-  })
-  const first = firstRequest(st.data?.lines)
+interface Ready {
+  agent: Agent
+  key: AgentKey
+  funded_ulxc: number
+}
 
-  if (issued === null) {
-    return (
-      <div className="mt-4 flex flex-col items-start gap-3">
-        <p className="text-caption font-normal text-muted">A key that spends only {agent.name}’s wallet, under its rules. It is shown once.</p>
-        <Button variant="primary" disabled={issue.isPending} onClick={() => issue.mutate()}>
-          {issue.isPending ? 'Issuing…' : 'Issue its key'}
-        </Button>
-        {issue.isError ? <Refused error={issue.error} /> : null}
-      </div>
-    )
-  }
-  const base = ctx.data?.lens_public_base_url ?? ''
-  const tools = toolsFor(base, issued.key).filter((t) => t.kind === 'env')
+/** The key, once, with its copy button and the two lines to point a tool at Lens. */
+function ReadyView({ ready, onFinished }: { ready: Ready; onFinished: () => void }) {
+  const ctx = useQuery({ queryKey: ['context'], queryFn: api.context, staleTime: 60_000 })
+  const tools = toolsFor(ctx.data?.lens_public_base_url ?? '', ready.key.key).filter((t) => t.kind === 'env')
   return (
-    <div className="mt-4 flex w-full flex-col gap-3">
+    <div className="flex w-full flex-col gap-3" data-testid="first-agent-ready">
+      <p className="text-head text-ink">Your first agent is ready</p>
       <p className="text-body text-ink">
-        {agent.name}’s key — store it now, it will not be shown again:{' '}
-        <span className="break-all font-mono" data-testid="onboarding-key">
-          {issued.key}
-        </span>
+        {ready.funded_ulxc > 0 ? (
+          <>{ready.agent.name} holds {lxc(ready.funded_ulxc)}. </>
+        ) : (
+          <>The workspace had no credit to give {ready.agent.name}; add some on Billing, then fund it on Agent Wallets. </>
+        )}
+        Its key is shown once — copy it now:
       </p>
-      {ctx.isError ? (
-        <p className="text-caption text-muted">The address to point it at could not be read just now; Setup has it.</p>
-      ) : !ctx.data ? (
-        <p className="text-caption text-muted">Reading the address to point it at…</p>
-      ) : tools.length === 0 ? (
-        <p className="text-caption text-muted">
-          This deployment publishes no Lens address yet, so there is nothing to point it at.{' '}
-          <Link to="/setup" className={inlineLink}>
-            Setup
-          </Link>{' '}
-          says who sets it.
-        </p>
-      ) : (
-        tools.map((t) => (
-          <div key={t.id} className="flex flex-col gap-1">
-            <p className="text-caption text-ink">{t.name}</p>
-            <CopyBlock text={t.copyText} label="the two lines" />
-          </div>
-        ))
-      )}
-      {first !== null ? (
-        <p role="status" className="text-body text-ink" data-testid="onboarding-first-request">
-          {agent.name}’s first request is on its statement: {first.amount_ulxc < 0 ? '−' : '+'}
-          {lxc(Math.abs(first.amount_ulxc))}, leaving {lxc(first.balance_after_ulxc)} in its wallet.
-        </p>
-      ) : st.isError ? (
-        <p className="text-caption text-muted">{agent.name}’s statement could not be read just now; Agent Wallets has it.</p>
-      ) : (
-        <p className="text-caption text-muted" data-testid="onboarding-waiting">
-          Waiting for {agent.name}’s first request. Send one with the key, and it lands here.
-        </p>
-      )}
+      <div data-testid="onboarding-key">
+        <CopyBlock text={ready.key.key} label="the key" />
+      </div>
+      {tools.map((t) => (
+        <div key={t.id} className="flex flex-col gap-1">
+          <p className="text-caption text-ink">{t.name}</p>
+          <CopyBlock text={t.copyText} label="the two lines" />
+        </div>
+      ))}
+      <div>
+        <Button variant="primary" onClick={onFinished}>
+          Go to Home
+        </Button>
+      </div>
     </div>
   )
 }
 
-interface StepView {
-  index: string
-  title: string
-  done: React.ReactNode | null
-  body: React.ReactNode | null
-}
-
 /**
- * The three steps. `onStarted` fires once the agent exists, so Home keeps this open after the book
- * lists it; `onFinished` hands Home back its wallets view.
+ * One click: the agent, the workspace's free credit moved to it, and its key. `onStarted` fires once the
+ * agent exists, so Home keeps this open after the book lists it; `onFinished` hands Home back its wallets.
  */
-export function WalletOnboarding({ book, onStarted, onFinished }: { book: AgentBook; onStarted: () => void; onFinished: () => void }) {
-  const [agentID, setAgentID] = useState<string | null>(null)
-  const [funded, setFunded] = useState(false)
-  // The book's copy of the agent, so its balance is Lens's; the created one until the book has re-read.
-  const [created, setCreated] = useState<Agent | null>(null)
-  const agent = (agentID && book.agents.find((a) => a.id === agentID)) || created
-  const steps: StepView[] = [
-    {
-      index: '01',
-      title: 'Create an agent with a budget.',
-      done: agent ? <>{agent.name} exists, with its budget and approval amount set.</> : null,
-      body: agent ? null : (
-        <CreateStep
-          onCreated={(a) => {
-            setCreated(a)
-            setAgentID(a.id)
-            onStarted()
-          }}
-        />
-      ),
+export function FirstAgent({ book, onStarted, onFinished }: { book: AgentBook; onStarted: () => void; onFinished: () => void }) {
+  const qc = useQueryClient()
+  const caps = useQuery({ queryKey: CAPABILITIES_KEY, queryFn: agentBankApi.capabilities })
+  const [name, setName] = useState('My first agent')
+  // Each step is kept once Lens did it, and the move keeps its Idempotency-Key, so a retry after a failure
+  // makes no second agent and moves the credit once.
+  const [agent, setAgent] = useState<Agent | null>(null)
+  const [funded, setFunded] = useState<number | null>(null)
+  const [moveKey] = useState(newMoveKey)
+  const [ready, setReady] = useState<Ready | null>(null)
+  const make = useMutation({
+    mutationFn: async (): Promise<Ready> => {
+      const a = agent ?? (await agentBankApi.create(name.trim()))
+      if (!agent) {
+        setAgent(a)
+        onStarted()
+      }
+      let given = funded
+      if (given === null) {
+        given = book.unallocated_ulxc
+        if (given > 0) await agentBankApi.fund(a.id, given, moveKey)
+        setFunded(given)
+      }
+      return { agent: a, key: await agentBankApi.issueKey(a.id, a.name), funded_ulxc: given }
     },
-    {
-      index: '02',
-      title: 'Fund it.',
-      done: agent && funded ? <>{agent.name} holds {lxc(agent.balance_ulxc)}.</> : null,
-      body: agent && !funded ? <FundStep agent={agent} book={book} onFunded={() => setFunded(true)} /> : null,
-    },
-    {
-      index: '03',
-      title: 'Issue its key, and watch its first request.',
-      done: null,
-      body: agent && funded ? <KeyStep agent={agent} /> : null,
-    },
-  ]
+    onSuccess: setReady,
+    onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
+  })
   return (
-    <>
-      <ol className="mt-2 grid gap-px border border-rule bg-rule" data-testid="wallet-onboarding">
-        {steps.map((s) => (
-          <li key={s.index} className="flex flex-col items-start bg-surface px-gutter py-5" aria-current={s.body ? 'step' : undefined}>
-            <span className="font-figure text-eyebrow uppercase text-faint">Step {s.index}</span>
-            <p className={`mt-3 text-body ${s.done || s.body ? 'text-ink' : 'text-muted'}`}>{s.title}</p>
-            {s.done ? <p className="mt-1 text-caption font-normal text-muted">{s.done}</p> : null}
-            {s.body}
-          </li>
-        ))}
-      </ol>
-      {agent && funded ? (
-        <div className="flex flex-wrap gap-2">
-          <Button asChild>
-            <Link to="/agents">Open {agent.name}’s wallet</Link>
-          </Button>
-          <Button onClick={onFinished}>Done</Button>
-        </div>
-      ) : null}
-    </>
+    <div className="flex flex-col items-start gap-3 border border-rule bg-surface px-gutter py-5" data-testid="wallet-onboarding">
+      {/* Unread capabilities say the sentence: the app never implies real money it cannot show. */}
+      {partnerLive(caps.data?.capabilities) ? null : (
+        <p className="text-body text-ink" data-testid="not-real-money-yet">
+          {NOT_REAL_MONEY_YET}
+        </p>
+      )}
+      {ready ? (
+        <ReadyView ready={ready} onFinished={onFinished} />
+      ) : (
+        <form
+          className="flex w-full flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if ((agent || name.trim()) && !make.isPending) make.mutate()
+          }}
+        >
+          <Input aria-label="Agent name" value={agent?.name ?? name} disabled={agent !== null} onChange={(e) => setName(e.target.value)} />
+          <div>
+            <Button type="submit" variant="primary" disabled={(!agent && !name.trim()) || make.isPending}>
+              {make.isPending ? 'Getting it ready…' : 'Create my first agent'}
+            </Button>
+          </div>
+          {make.isError ? (
+            <p role="alert" className="text-caption text-ink">
+              {refusalText(make.error)}
+            </p>
+          ) : null}
+        </form>
+      )}
+    </div>
   )
 }

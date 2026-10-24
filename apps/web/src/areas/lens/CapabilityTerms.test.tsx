@@ -59,7 +59,8 @@ describe('the Capability terms screen', () => {
     expect(within(fx).getByText('Not accepted yet')).toBeTruthy()
     expect(within(screen.getByTestId('terms-payments_out')).getByText('Version 2 is new — accept it again')).toBeTruthy()
     expect(screen.getByTestId('terms-count').textContent).toBe('0 of 2 accepted')
-    expect(screen.getByTestId('terms-preview').textContent).toContain('Preview — test money only')
+    expect(screen.queryByTestId('terms-preview')).toBeNull()
+    expect(document.body.textContent).not.toMatch(/test money/i)
     expect(bff.convert().status).toBe(403)
 
     fireEvent.click(within(fx).getByRole('button', { name: 'Read and accept' }))

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, CONSOLE_ROUTES, queryClient } from '../../App'
 import { PRODUCT_CARDS } from './Home'
+import { NOT_REAL_MONEY_YET } from './Onboarding'
 
 // B28.6 — the first screen after sign-in is the wallet home. DONE reads: "after sign-in a returning
 // user lands on Home and sees per-agent budget-used and the approvals count". The mock BFF answers the
@@ -116,16 +117,16 @@ describe('Home — the wallet home (B28.6)', () => {
     render(<App />)
 
     expect(await screen.findByText('Give every agent a wallet.')).toBeInTheDocument()
-    expect(screen.getByTestId('home-onboarding')).toHaveTextContent('give its first agent a wallet in three steps')
-    expect(screen.getByRole('button', { name: 'Create agent' })).toBeDisabled()
+    expect(screen.getByTestId('home-onboarding')).toHaveTextContent('your first agent is one click away')
+    expect(screen.getByRole('button', { name: 'Create my first agent' })).toBeEnabled()
     expect(screen.queryByTestId('home-approvals-waiting')).not.toBeInTheDocument()
   })
 })
 
-// B28.8 — DONE reads: "a brand-new workspace reaches a funded agent with a key without ever seeing a
-// full-screen consent page". The BFF below keeps state the way Lens does: an agent created, its rules
-// saved, LXC moved out of the workspace into it, a key issued, and a request on its statement.
-function mockNewWorkspace() {
+// B46.2 — a brand-new workspace reaches Home with a funded, keyed first agent in one click, with no consent
+// page, and is told once that its balances aren't real money yet. The BFF below keeps state the way Lens
+// does: an agent created, the workspace's free LXC moved into it, a key issued.
+function mockNewWorkspace(capabilities: object[] = []) {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   const writes: { path: string; body: unknown }[] = []
   let agent: { id: string; name: string; balance_ulxc: number; spent_ulxc: number; keys: string[]; created_at: string; owner_user_id: string } | null = null
@@ -169,14 +170,15 @@ function mockNewWorkspace() {
     }
     if (url === '/api/agents/approvals') return json({ approvals: [] })
     if (url === '/api/agents/forecast') return json({ spent_ulxc: 0, forecast_ulxc: 0, agents: [] })
+    if (url === '/api/wallets/capabilities') return json({ capabilities })
     if (url.startsWith('/api/')) return json({})
     return new Response('null', { status: 404 })
   })
   return writes
 }
 
-describe('Home — three-step wallet onboarding (B28.8)', () => {
-  it('a brand-new workspace reaches a funded agent with a key, and sees its first request, with no consent page', async () => {
+describe('Home — the first agent in one click (B46.2)', () => {
+  it('a brand-new workspace reaches a funded agent with a key in one click, told once it is not real money yet', async () => {
     const writes = mockNewWorkspace()
     window.history.pushState({}, '', '/')
     render(<App />)
@@ -184,38 +186,35 @@ describe('Home — three-step wallet onboarding (B28.8)', () => {
     expect(await screen.findByText('Give every agent a wallet.')).toBeInTheDocument()
     expect(screen.queryByText(/Share your answers, and earn from them/i)).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: /Share answers with other companies/i })).toBeChecked()
+    expect(await screen.findByTestId('not-real-money-yet')).toHaveTextContent(NOT_REAL_MONEY_YET)
 
-    // 1 — the agent, with a budget and an approval amount.
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'Researcher' } })
-    fireEvent.change(screen.getByLabelText('Monthly budget, in LXC'), { target: { value: '10' } })
-    fireEvent.change(screen.getByLabelText('Ask a person above, in LXC'), { target: { value: '0.5' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Create my first agent' }))
 
-    // 2 — fund it. The onboarding stays open though the book now lists the agent.
-    fireEvent.change(await screen.findByLabelText('Amount to fund Researcher, in LXC'), { target: { value: '5' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Fund Researcher' }))
-
-    // 3 — its key, a snippet carrying it, and its first request on its statement.
-    fireEvent.click(await screen.findByRole('button', { name: 'Issue its key' }))
-    expect(await screen.findByTestId('onboarding-key')).toHaveTextContent('tlv_ak_1234secret')
+    const ready = await screen.findByTestId('first-agent-ready')
+    expect(ready).toHaveTextContent('Your first agent is ready')
+    expect(ready).toHaveTextContent('Researcher holds 20 LXC.')
+    expect(screen.getByTestId('onboarding-key')).toHaveTextContent('tlv_ak_1234secret')
+    expect(within(screen.getByTestId('onboarding-key')).getByRole('button', { name: /copy/i })).toBeInTheDocument()
     expect(screen.getAllByText(/OPENAI_API_KEY="tlv_ak_1234secret"/).length).toBeGreaterThan(0)
-    expect(await screen.findByTestId('onboarding-first-request', {}, { timeout: 5_000 })).toHaveTextContent(
-      'Researcher’s first request is on its statement: −0.0012 LXC, leaving 4.9988 LXC in its wallet.',
-    )
 
-    // What reached the BFF, in order: the agent, its rules, the funding, the key. Sharing was not written.
-    await waitFor(() => expect(writes.map((w) => w.path)).toEqual([
-      'POST /api/agents',
-      'PUT /api/agents/agt_new/rules',
-      'POST /api/agents/agt_new/fund',
-      'POST /api/agents/agt_new/keys',
-    ]))
-    expect(writes[1].body).toMatchObject({ monthly_limit_ulxc: 10 * M, approval_above_ulxc: 500_000 })
-    expect(writes[2].body).toEqual({ amount_ulxc: 5 * M })
+    // What reached the BFF, in order: the agent, all the workspace's free credit into it, the key.
+    expect(writes.map((w) => w.path)).toEqual(['POST /api/agents', 'POST /api/agents/agt_new/fund', 'POST /api/agents/agt_new/keys'])
+    expect(writes[1].body).toEqual({ amount_ulxc: 20 * M })
 
-    // Done hands Home back its wallets view.
-    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    // Home hands back its wallets view, and the sentence is not said again.
+    fireEvent.click(screen.getByRole('button', { name: 'Go to Home' }))
     expect(await screen.findByText('Your agents’ wallets, at a glance.')).toBeInTheDocument()
+    expect(screen.queryByText(NOT_REAL_MONEY_YET)).not.toBeInTheDocument()
+  })
+
+  it('says nothing about real money once a partner serves the workspace', async () => {
+    mockNewWorkspace([{ capability: 'payments_out', name: 'Payments out', class: 'RED', real_money: true }])
+    window.history.pushState({}, '', '/')
+    render(<App />)
+    expect(await screen.findByRole('button', { name: 'Create my first agent' })).toBeInTheDocument()
+    await waitFor(() => expect(queryClient.getQueryData(['wallet-capabilities'])).toBeDefined())
+    expect(screen.queryByTestId('not-real-money-yet')).not.toBeInTheDocument()
   })
 })
 

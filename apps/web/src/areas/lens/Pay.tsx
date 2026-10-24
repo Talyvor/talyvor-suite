@@ -4,7 +4,7 @@ import { Button, CardHeader, Input, Pill, focusRing, type PillStatus } from '@ta
 import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { formatWhen } from './format'
-import { CAPABILITIES_KEY, Note, readFailure } from './WalletMoney'
+import { Note, readFailure } from './WalletMoney'
 import { APPROVALS_KEY, BOOK_KEY, PASSKEYS_KEY } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { assertOver, signApproval, signPayee } from './passkeys'
@@ -39,8 +39,6 @@ export const MANDATES_KEY = ['money-mandates']
 export const PAYOUTS_KEY = ['money-payouts']
 export const SCHEDULES_KEY = ['agent-schedules']
 export const ASSISTANT_REQUESTS_KEY = ['money-assistant-requests']
-/** What a payment out moves under: out of a currency account, through payments_out. */
-const PAY_CAPABILITIES = ['currency_accounts', 'payments_out']
 const EVERY: AgentSchedule['every'][] = ['hour', 'day', 'week', 'month']
 
 const PAYMENT_STATUS: Record<string, { text: string; pill: PillStatus }> = {
@@ -75,7 +73,6 @@ export function PayScreen() {
   const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
   const payees = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees })
   const payments = useQuery({ queryKey: PAYMENTS_KEY, queryFn: agentBankApi.payments })
-  const caps = useQuery({ queryKey: CAPABILITIES_KEY, queryFn: agentBankApi.capabilities })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const asked = useQuery({ queryKey: ASSISTANT_REQUESTS_KEY, queryFn: agentBankApi.assistantRequests })
   const askedPayees = (asked.data?.requests ?? []).filter((r) => r.kind === 'payee')
@@ -84,7 +81,6 @@ export function PayScreen() {
   const agentAccounts = open.filter((a) => a.purpose === 'agent')
   const saved = payees.data?.payees ?? []
   const sent = payments.data?.payments ?? []
-  const preview = !caps.isSuccess || (caps.data.capabilities ?? []).some((c) => PAY_CAPABILITIES.includes(c.capability) && !c.real_money)
   const agentName = (id: string | undefined) => book.data?.agents?.find((x) => x.id === id)?.name ?? id ?? ''
   const accountName = (a: CurrencyAccount) => `${a.purpose === 'agent' ? agentName(a.agent_id) : 'The company'} · ${a.currency}`
   const payeeName = (id: string | undefined) => saved.find((p) => p.id === id)?.name ?? id ?? ''
@@ -99,12 +95,6 @@ export function PayScreen() {
           one payment, a standing order, a mandate the payee pulls within, or a file of payouts approved once. An agent’s own request
           above its approval amount waits here for you.
         </p>
-        {preview ? (
-          <p className="flex flex-wrap items-center gap-2 text-caption text-ink" data-testid="pay-preview">
-            <Pill status="held">Preview — test money only</Pill>
-            <span>Payments leave with test money only for now.</span>
-          </p>
-        ) : null}
         {askedPayees.length + askedMandates.length > 0 ? (
           <p className="text-body text-ink" data-testid="pay-asked">
             Your assistant is waiting for you: <span className="font-figure">{askedPayees.length}</span> {askedPayees.length === 1 ? 'payee' : 'payees'} to save and{' '}
@@ -512,7 +502,7 @@ function SendPayment({
               ))}
             </select>
             <span>
-              Holds <span className="font-figure">{formatMinor(account?.test_minor ?? 0, account?.currency ?? 'GBP')}</span> of test money
+              Holds <span className="font-figure">{formatMinor(account?.test_minor ?? 0, account?.currency ?? 'GBP')}</span>
             </span>
           </label>
           <label className={field}>

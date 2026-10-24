@@ -61,7 +61,7 @@ describe('the approval screen', () => {
     render(<App />)
 
     const card = await screen.findByTestId('approve-card')
-    expect(card.textContent).toContain('Test money')
+    expect(card.textContent).not.toMatch(/test money/i)
     await within(card).findByText(/From Researcher’s account · asked by an assistant you connected/)
     expect(screen.getByTestId('approve-total').textContent).toBe('2 of 2 payments to approve, total £165.50')
     const acme = await within(card).findByTestId('approve-item-1')

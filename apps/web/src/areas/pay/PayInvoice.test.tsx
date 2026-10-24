@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
-// B30.97 — the pay page, signed out: it shows the invoice as Lens serves it with "Preview — test money only", the card button asks
+// B30.97 — the pay page, signed out: it shows the invoice as Lens serves it with no test-money label (B46.2), the card button asks
 // the BFF's public route for the checkout and sends the browser there, and back with ?paid=card it reads again until paid.
 
 const TOKEN = '0123456789abcdef0123456789abcdef0123456789abcdef'
@@ -44,7 +44,7 @@ afterEach(() => {
 })
 
 describe('the pay page', () => {
-  it('shows the invoice with Preview — test money only, sends the payer to the checkout Lens opened, and reads paid on return', async () => {
+  it('shows the invoice with no test-money label, sends the payer to the checkout Lens opened, and reads paid on return', async () => {
     const bff = mockBff()
     const assign = vi.fn()
     vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, assign, pathname: `/pay/${TOKEN}`, search: '' } as Location)
@@ -52,7 +52,7 @@ describe('the pay page', () => {
     const view = render(<App />)
 
     expect((await screen.findByTestId('pay-headline')).textContent).toBe('£120.00 due by 2026-12-31')
-    expect(screen.getByTestId('pay-preview').textContent).toContain('Preview — test money only')
+    expect(document.body.textContent).not.toMatch(/test money/i)
     expect(screen.getByTestId('pay-due').textContent).toBe('£120.00')
     expect(screen.getByTestId('pay-reference').textContent).toContain('TLV-AGT a1b2c3')
     expect(await screen.findByRole('link', { name: 'Sign in' })).toBeTruthy()

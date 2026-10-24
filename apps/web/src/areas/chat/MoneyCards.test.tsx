@@ -75,7 +75,7 @@ describe('Chat money requests and escrows (B28.355)', () => {
   it('accepts another agent’s request in Chat: paid once, the card says so and links the statement', async () => {
     const bff = mockBff()
     const card = await openChat()
-    expect(screen.getByRole('region', { name: 'Money waiting for you' })).toHaveTextContent('Preview — test money only')
+    expect(screen.getByRole('region', { name: 'Money waiting for you' })).not.toHaveTextContent(/test money/i)
     fireEvent.click(within(card).getByRole('button', { name: 'Accept' }))
 
     expect(await within(card).findByRole('status')).toHaveTextContent(/^Accepted\. Researcher paid Maker 0\.8 LXC\. See it on Researcher’s statement$/)

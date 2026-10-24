@@ -59,7 +59,7 @@ describe('the operator’s Compliance page (B30.104)', () => {
     mockBff()
     const nav = await at('/operator/compliance')
     expect(within(nav).getByRole('link', { name: 'Compliance' })).toHaveAttribute('href', '/operator/compliance')
-    expect(await screen.findByTestId('compliance-preview')).toHaveTextContent('Preview — test money only')
+    expect(screen.queryByTestId('compliance-preview')).toBeNull()
 
     const caps = await screen.findAllByTestId('compliance-capability')
     expect(caps.map((r) => r.textContent)).toEqual([

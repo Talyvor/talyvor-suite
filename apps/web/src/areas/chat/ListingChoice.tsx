@@ -54,7 +54,7 @@ const CHARGED: Record<string, string> = {
   own: 'your own listing, so nothing was charged for it',
   linked: 'your workspace and the seller’s are linked, so nothing was charged for it',
   licensed: 'covered by your licence: nothing new goes on your bill',
-  trial: 'a trial use — test money, not billed',
+  trial: 'a free trial use, not billed',
 }
 
 /** Under an answer asked through a listing: how Lens said it charged the use, or that Lens did not say it used it. */
