@@ -692,6 +692,42 @@ export function talyIntro(): Scenario {
   }
 }
 
+/** B45.6 — Taly's button on a signed-in page: asked "what is this?" on Agent Wallets, Taly is told that page and what it
+ *  shows, and Esc closes it. The answer is made up in the browser from what Taly was told, so it costs nothing. */
+export function talyButton(): Scenario {
+  return {
+    id: 'taly-button',
+    owner: 'talyvor-suite',
+    items: ['B45.6'],
+    title: 'Taly’s button on Agent Wallets answers "what is this?" about that page, and Esc closes it',
+    run: async (ctx) => {
+      const page = ctx.app.page
+      let told = ''
+      await page.route('**/api/ai/stream/**', (route) => {
+        const provider = /\/api\/ai\/stream\/([^/]+)\//.exec(route.request().url())?.[1] ?? 'anthropic'
+        const body = (route.request().postDataJSON() ?? {}) as { system?: unknown; messages?: { role: string; content: unknown }[] }
+        told = String(body.system ?? body.messages?.find((m) => m.role === 'system')?.content ?? '')
+        return route.fulfill({ status: 200, contentType: 'text/event-stream', body: madeUpAnswer(provider, `You are looking at: ${told.slice(0, 300)}`, false) })
+      }, { times: 1 })
+      await page.goto(new URL('/agents', page.url()).toString())
+      await page.getByRole('button', { name: 'Ask Taly' }).click({ timeout: ACTION_TIMEOUT_MS })
+      const panel = page.getByRole('dialog', { name: /^Taly, on / })
+      const input = panel.getByRole('textbox', { name: 'Ask Taly about this page' })
+      await input.fill('what is this?')
+      await panel.getByRole('button', { name: 'Send' }).click({ timeout: ACTION_TIMEOUT_MS })
+      const answer = panel.getByTestId('taly-answer').last()
+      await answer.filter({ hasText: 'You are looking at' }).waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
+      const said = await answer.innerText().catch(() => '')
+      await page.keyboard.press('Escape')
+      const closed = await panel.waitFor({ state: 'hidden', timeout: ACTION_TIMEOUT_MS }).then(() => true, () => false)
+      ctx.evidence.push({ note: `Taly was told "${told.slice(0, 160)}"; answered "${said.slice(0, 160)}"; closed on Esc: ${closed}` })
+      if (!/"Agent Wallets" page/.test(told)) return { pass: false, detail: told ? `Taly was not told it is on Agent Wallets: "${told.slice(0, 160)}"` : 'no question reached the model from Taly' }
+      if (!/Agent Wallets/.test(said)) return { pass: false, detail: `Taly's answer did not reach the panel: "${said.slice(0, 160)}"` }
+      return closed ? { pass: true, detail: 'Taly answered about Agent Wallets and closed on Esc' } : { pass: false, detail: 'Esc did not close Taly' }
+    },
+  }
+}
+
 /** B28.275 — a question sent in a tab that does not yet know who is signed in is kept: after a reload it is in
  *  the list and on screen, not "No conversations yet". The tab's /auth/me is held in this browser until the
  *  answer is in, and the answer is made up in the browser, so it costs nothing. */
@@ -4856,7 +4892,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     // B28.373 — and "the 100th prime" with Run code on: 541, printed by the code the model ran in the sandbox.
     // B28.131 — and a temporary chat: nothing of it kept in the browser, its answer neither served from nor kept in the cache.
     // B45.5 — and before them, a new chat opening with Taly saying it is an AI assistant.
-    case 1: list.push(talyIntro(), repeatInNewChat(i), chatSavingsPanel(i), chatRunCode(i), chatTemporary(i)); break
+    // B45.6 — and Taly's button on Agent Wallets, asked "what is this?".
+    case 1: list.push(talyIntro(), talyButton(), repeatInNewChat(i), chatSavingsPanel(i), chatRunCode(i), chatTemporary(i)); break
     // B28.275 — then a question sent before the tab knows who is signed in, still there after a reload.
     // B28.108 — and a word from an old answer finding its conversation among 500.
     // B28.109 — and a new chat in a project, sent with the project's instructions.

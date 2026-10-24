@@ -24,6 +24,7 @@ import {
   type NavIconName,
 } from '@talyvor/ui'
 import { AuthGate, SessionChip } from './components/AuthGate'
+import { TalyButton } from './taly/TalyButton'
 import { useDocumentTitle } from './documentTitle'
 import { ApiError, UnreadableError } from './lib/api'
 import { Overview } from './areas/lens/Overview'
@@ -677,6 +678,8 @@ function AppShell() {
           />
         </Routes>
       </ScreenBoundary>
+      {/* B45.6 — Taly, on every signed-in page, told which page it is on. */}
+      <TalyButton page={page} path={pathname} />
     </Shell>
   )
 }
