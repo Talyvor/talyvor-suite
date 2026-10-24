@@ -109,3 +109,33 @@ func TestDeviceAssertionReachesLensOnEveryDecisionRoute(t *testing.T) {
 		}
 	}
 }
+
+// B40.39 — the phone's Bills due list reaches Lens's B40.38 list under the session's token with only the status, and
+// Lens's {"requests": […]} comes back as it was sent.
+func TestPendingPaymentRequestsListRelaysStatusOnly(t *testing.T) {
+	var mu sync.Mutex
+	got := ""
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		mu.Lock()
+		got = r.Method + " " + r.URL.Path + "?" + r.URL.RawQuery + " auth=" + r.Header.Get("Authorization")
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"requests":[{"id":"preq_1","status":"pending_approval"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	rec := doJSON(a, http.MethodGet, "/api/money/payment-requests?status=pending_approval&workspace=other", ``)
+	if rec.Code != http.StatusOK || rec.Body.String() != `{"requests":[{"id":"preq_1","status":"pending_approval"}]}` {
+		t.Fatalf("list = %d %s", rec.Code, rec.Body.String())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !strings.HasPrefix(got, "GET /v1/money/payment-requests?status=pending_approval auth=Bearer ") || strings.HasSuffix(got, "Bearer ") {
+		t.Errorf("Lens saw %q, want only the status under the session's token", got)
+	}
+}

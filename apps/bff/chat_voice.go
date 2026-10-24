@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -19,6 +20,7 @@ import (
 //	POST /api/chat/voice/speech          {"input"}                  → POST /v1/audio/speech         → the audio
 //	POST /api/money/payment-requests     {"voice", "items": [{payee_id, currency, amount_minor, reference}]}
 //	                                     → POST /v1/money/payment-requests as client "voice" (or "chat"), Idempotency-Key passed on
+//	GET  /api/money/payment-requests?status=pending_approval → GET /v1/money/payment-requests (B40.39) → {"requests": […]}
 
 // voiceAudioMaxBytes is Lens's own limit on a recording (25 MB) with room for the multipart envelope.
 const voiceAudioMaxBytes = 26 << 20
@@ -111,8 +113,17 @@ func (a *app) voiceRelay(w http.ResponseWriter, r *http.Request, t tenant, path 
 // handleMoneyPaymentRequests — POST /api/money/payment-requests: a payment Chat prepared for the person to approve.
 // Lens judges each item and moves no money; a request from voice always needs approval (Lens B40.3).
 func (a *app) handleMoneyPaymentRequests(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method == http.MethodGet {
+		// B40.39: the phone's Bills due. Only status goes up; Lens refuses any status but pending_approval.
+		path := "/v1/money/payment-requests"
+		if s := r.URL.Query().Get("status"); s != "" {
+			path += "?" + url.Values{"status": {s}}.Encode()
+		}
+		a.agentBankRelayPath(w, r, t, http.MethodGet, path, nil)
+		return
+	}
 	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
+		methodNotAllowed(w, "GET, POST")
 		return
 	}
 	// Only the item fields go up: a bank detail the browser sent is dropped, as Lens refuses one from an assistant.

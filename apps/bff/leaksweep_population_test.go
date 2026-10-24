@@ -525,16 +525,15 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	// statement and a one-time challenge, holding nothing; …/{id}/approve relays the request Lens approved, which is
 	// read back through GET /api/money/payment-requests/{id}, in the sweep's reach.
 	//
-	// THE HUNDRED-AND-THIRTY-FOURTH TO SIXTH ARE B40.12'S, POST only: /api/chat/voice/transcriptions and …/speech relay
-	// Lens's transcript and audio and hold nothing; /api/money/payment-requests relays the request Lens prepared, which
-	// is read back through GET /api/money/payment-requests/{id}, in the sweep's reach.
+	// THE HUNDRED-AND-THIRTY-FOURTH AND FIFTH ARE B40.12'S, POST only: /api/chat/voice/transcriptions and …/speech relay
+	// Lens's transcript and audio and hold nothing. (/api/money/payment-requests answers GET since B40.39.)
 	//
-	// THE HUNDRED-AND-THIRTY-SEVENTH TO NINTH ARE B40.31'S, POST only: /api/money/devices/challenge relays a one-time
+	// THE HUNDRED-AND-THIRTY-SIXTH TO EIGHTH ARE B40.31'S, POST only: /api/money/devices/challenge relays a one-time
 	// challenge and holds nothing; …/{id}/revoke and …/{id}/push-token relay the device key Lens changed, which is read
 	// back through GET /api/money/devices, in the sweep's reach.
-	if len(methodOnly) > 139 {
+	if len(methodOnly) > 138 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 139 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 138 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}

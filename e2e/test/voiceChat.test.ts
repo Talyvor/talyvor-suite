@@ -10,7 +10,8 @@ const PASSING: VoiceSeen = {
   readback: 'I’ve prepared a payment of £1.50 to Nightly Voice Payee x1. Nothing is paid until you approve it with your passkey.',
   approveCard: true,
   pageText: 'Chat … Nightly Voice Payee x1 £1.50',
-  voiceRequest: { status: 201, client: 'voice', decisions: ['needs_approval'] },
+  voiceRequest: { status: 201, client: 'voice', decisions: ['needs_approval'], id: 'preq_1' },
+  billsDue: { status: 200, listed: true },
   speech: { status: 503, contentType: 'application/json', error: 'speech is not configured on this Lens' },
   paymentsToPayee: 0,
   heyTaly: { offered: false, onDevice: false, whileHidden: -1, whenBack: -1, landed: false, unsentFirst: false, readback: '', approveCard: false },
@@ -22,6 +23,8 @@ describe('voice-chat-pay (B40.12)', () => {
     expect(voiceVerdict({ ...PASSING, paymentsToPayee: 1 }).pass).toBe(false)
     expect(voiceVerdict({ ...PASSING, pageText: 'account 12345678' }).pass).toBe(false)
     expect(voiceVerdict({ ...PASSING, voiceRequest: { status: 201, client: 'chat', decisions: ['auto'] } }).pass).toBe(false)
+    expect(voiceVerdict({ ...PASSING, billsDue: { status: 405, listed: false } }).pass).toBe(false)
+    expect(voiceVerdict({ ...PASSING, billsDue: { status: 200, listed: false } }).pass).toBe(false)
     expect(voiceVerdict({ ...PASSING, speech: { status: 502, contentType: 'application/json', error: 'Lens could not answer just now' } }).pass).toBe(false)
   })
 })

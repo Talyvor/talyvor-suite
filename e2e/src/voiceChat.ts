@@ -8,6 +8,7 @@
 // Taly turned on must listen on the device, stop while the tab is hidden and listen again once it is back, and "Hey Taly, pay
 // <payee> £1.50 …" must land in the box unsent and, sent, end in the same read-back and approval card, never a payment.
 // Without speech it must not be offered.
+// B40.39 — the voice request must then be on the phone's Bills due list, GET /api/money/payment-requests?status=pending_approval.
 
 import { fileURLToPath } from 'node:url'
 import type { Page } from 'playwright'
@@ -26,7 +27,9 @@ export interface VoiceSeen {
   readback: string
   approveCard: boolean
   pageText: string
-  voiceRequest: { status: number; client?: string; decisions?: string[] }
+  voiceRequest: { status: number; client?: string; decisions?: string[]; id?: string }
+  /** B40.39 — what the Bills due list answered, and whether the voice request is on it. */
+  billsDue: { status: number; listed: boolean }
   speech: { status: number; contentType: string; error: string }
   paymentsToPayee: number
   /** B45.27 — what Hey Taly did in the page. */
@@ -58,6 +61,8 @@ export function voiceVerdict(seen: VoiceSeen): Verdict {
   if (v.status !== 201 && v.status !== 200) wrong.push(`preparing the payment as voice answered ${v.status}`)
   else if (v.client !== 'voice' || !(v.decisions ?? []).every((d) => d === 'needs_approval') || (v.decisions ?? []).length !== 1) {
     wrong.push(`Lens prepared the voice payment as client "${v.client}" with decisions ${JSON.stringify(v.decisions)}, not one needs_approval from "voice"`)
+  } else if (seen.billsDue.status !== 200 || !seen.billsDue.listed) {
+    wrong.push(`Bills due answered ${seen.billsDue.status}${seen.billsDue.status === 200 ? ' without the voice request waiting for approval' : ''}`)
   }
   const spoke = seen.speech.status === 200 && seen.speech.contentType.startsWith('audio/')
   const unconfigured = seen.speech.status === 503 && seen.speech.error.includes('speech is not configured')
@@ -80,7 +85,7 @@ export function voiceVerdict(seen: VoiceSeen): Verdict {
   if (wrong.length > 0) return fail(wrong.join('; '))
   return {
     pass: true,
-    detail: `Chat read back "${seen.readback}" with the approval card and no account number; the voice request is one needs_approval from "voice"; ` +
+    detail: `Chat read back "${seen.readback}" with the approval card and no account number; the voice request is one needs_approval from "voice", listed in Bills due; ` +
       `no payment to the payee on the ledger; speech ${spoke ? 'answered audio' : 'is not configured on this Lens'}; ` +
       (spoke ? `Hey Taly listened on the device, stopped while hidden, and read back "${h.readback}"` : 'Hey Taly is not offered'),
   }
@@ -153,7 +158,7 @@ export function voiceChatPay(): Scenario {
     id: 'voice-chat-pay',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B40.12', 'B45.27'],
+    items: ['B40.12', 'B45.27', 'B40.39'],
     feature: 'Chat',
     title: 'a payment asked for in Chat is prepared, read back with the payee and amount and no account number, and a voice request needs approval; nothing is paid without a passkey',
     run: async (ctx) => {
@@ -168,6 +173,7 @@ export function voiceChatPay(): Scenario {
       let approveCard = false
       let pageText = ''
       let voiceRequest: VoiceSeen['voiceRequest'] = { status: 0 }
+      let billsDue: VoiceSeen['billsDue'] = { status: 0, listed: false }
       let speech: VoiceSeen['speech'] = { status: 0, contentType: '', error: '' }
       let heyTaly: HeyTalySeen = { offered: false, onDevice: false, whileHidden: -1, whenBack: -1, landed: false, unsentFirst: false, readback: '', approveCard: false }
       try {
@@ -188,10 +194,17 @@ export function voiceChatPay(): Scenario {
             headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
             body: JSON.stringify({ voice: true, items: [{ payee_id: payeeID, currency: 'GBP', amount_minor: minor, reference: 'Nightly voice' }] }),
           })
-          const body = (await r.json().catch(() => ({}))) as { client?: string; items?: { decision: string }[] }
-          return { status: r.status, client: body.client, decisions: (body.items ?? []).map((i) => i.decision) }
+          const body = (await r.json().catch(() => ({}))) as { id?: string; client?: string; items?: { decision: string }[] }
+          return { status: r.status, id: body.id, client: body.client, decisions: (body.items ?? []).map((i) => i.decision) }
         }, { payeeID, minor: AMOUNT_MINOR, key: `voice-${RUN_SALT}-${Date.now().toString(36)}` })
         ctx.evidence.push({ note: 'the same payment prepared as said aloud', answer: JSON.stringify(voiceRequest) })
+
+        billsDue = await page.evaluate(async (id) => {
+          const r = await fetch('/api/money/payment-requests?status=pending_approval')
+          const body = (await r.json().catch(() => ({}))) as { requests?: { id: string }[] }
+          return { status: r.status, listed: id !== undefined && (body.requests ?? []).some((q) => q.id === id) }
+        }, voiceRequest.id)
+        ctx.evidence.push({ note: 'the phone’s Bills due list afterwards', answer: JSON.stringify(billsDue) })
 
         speech = await page.evaluate(async () => {
           const r = await fetch('/api/chat/voice/speech', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ input: 'Hello.' }) })
@@ -211,7 +224,7 @@ export function voiceChatPay(): Scenario {
       ctx.evidence.push({ note: 'Lens’s payments out afterwards', answer: said(payments) })
       if (payments.status !== 200 || payments.value === undefined) return fail(`reading the payments answered ${said(payments)}`)
       const paymentsToPayee = (payments.value.payments ?? []).filter((p) => p.payee_id === payeeID).length
-      return voiceVerdict({ payee, readback, approveCard, pageText, voiceRequest, speech, paymentsToPayee, heyTaly })
+      return voiceVerdict({ payee, readback, approveCard, pageText, voiceRequest, billsDue, speech, paymentsToPayee, heyTaly })
     },
   }
 }
