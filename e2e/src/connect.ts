@@ -380,7 +380,8 @@ export function connectMCP(): Scenario {
           await card.waitFor({ timeout: 30_000 })
           const words = (await card.innerText()).replace(/\s+/g, ' ')
           ctx.evidence.push({ note: `the approval card: "${words}"` })
-          if (!words.includes('Nightly MCP Supplier One Ltd') || !words.includes('Nightly MCP Supplier Two Ltd') || !words.includes('Test money')) wrong.push(`the approval card does not show both payees and Test money: "${words}"`)
+          // B46.2 (Nick, 24 Oct): the card carries no "Test money" chip any more, so only the payees are read.
+          if (!words.includes('Nightly MCP Supplier One Ltd') || !words.includes('Nightly MCP Supplier Two Ltd')) wrong.push(`the approval card does not show both payees: "${words}"`)
           if (!(await page.getByTestId('approve-total').innerText()).includes('2 of 2 payments to approve, total £30.00')) wrong.push(`the approval card's total reads "${await page.getByTestId('approve-total').innerText()}"`)
           await page.getByRole('checkbox', { name: 'Approve £20.00 to Nightly MCP Supplier Two Ltd' }).click()
           const total = await page.getByTestId('approve-total').innerText()
