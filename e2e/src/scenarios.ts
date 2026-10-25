@@ -1441,7 +1441,7 @@ export function walletHero(): Scenario {
   return {
     id: 'wallet-hero',
     owner: 'talyvor-suite',
-    items: ['B28.2'],
+    items: ['B28.2', 'B17.256'],
     title: 'the front door leads with a wallet for every agent, not pooling',
     run: async (ctx) => {
       const page = await ctx.app.tab('/marketing')
@@ -1451,13 +1451,17 @@ export function walletHero(): Scenario {
         const text = await page.locator('main').innerText()
         const footer = await page.locator('footer').innerText()
         ctx.evidence.push({ note: `h1="${h1}" h2=${JSON.stringify(sections)} footer="${footer.split('\n')[0]}"` })
+        // B17.256: positioning v2 (B44.4, Nicolai's words of 23 Oct) is the hero now; wallets lead what it lists,
+        // and the wallet section names the four things an agent's wallet does.
         const missing = [
-          h1 === 'Money and markets for AI agents.' ? '' : `the hero (h1 reads "${h1}")`,
-          /budget, spending rules, approvals and a live statement/i.test(text) ? '' : 'the wallet subhead',
+          h1 === 'The financial ecosystem for the AI agent economy.' ? '' : `the hero (h1 reads "${h1}")`,
+          /where they do it safely: wallets and cards/i.test(text) ? '' : 'the wallet lead in the hero',
+          ...[/a budget of its own/i, /spending rules/i, /approvals/i, /a live statement/i]
+            .map((w) => (w.test(text) ? '' : `the wallet section's ${w}`)),
           ...[/rules before the money moves/i, /console for your agents/i, /where agents spend/i, /repeated questions cost less/i]
             .map((h) => (sections.some((s) => h.test(s)) ? '' : `a section heading ${h}`)),
           /toward zero|ninety\s+days|near-zero/i.test(text) ? 'the price-curve claim is still there' : '',
-          /Talyvor Ltd · money and markets for AI agents/i.test(footer) ? '' : 'the footer line',
+          /Talyvor Ltd · the financial ecosystem for the AI agent economy/i.test(footer) ? '' : 'the footer line',
         ].filter((m) => m !== '')
         return missing.length === 0
           ? { pass: true, detail: 'leads with wallets; wallets, chat, marketplace and pooling sections present; no price curve' }
