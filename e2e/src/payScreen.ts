@@ -128,7 +128,9 @@ export function payScreen(): Scenario {
         if (!((await page.getByTestId('pay-preview').textContent()) ?? '').includes('Preview — test money only')) {
           return fail('the Pay screen does not say "Preview — test money only"')
         }
-        const refusalOf = async (form: ReturnType<typeof page.getByTestId>) => (await form.getByRole('alert').allTextContents()).join(' ').trim()
+        // The scam warning is role="alert" too, and stays up while the payment sends: it is not a refusal.
+        const refusals = (form: ReturnType<typeof page.getByTestId>) => form.locator('[role="alert"]:not([data-testid="scam-warning"])')
+        const refusalOf = async (form: ReturnType<typeof page.getByTestId>) => (await refusals(form).allTextContents()).join(' ').trim()
 
         const payeeForm = page.getByTestId('new-payee')
         await payeeForm.waitFor({ timeout: TIMEOUT_MS })
@@ -158,7 +160,7 @@ export function payScreen(): Scenario {
         await warning.getByRole('checkbox').check()
         await send.getByRole('button', { name: 'Send' }).click()
         const paymentRow = page.locator('[data-testid^="payment-"]').first()
-        await paymentRow.or(send.getByRole('alert')).first().waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
+        await paymentRow.or(refusals(send)).first().waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
         if (!(await paymentRow.isVisible())) return fail(`sending £20.00 on the screen: ${(await refusalOf(send)) || 'no payment row appeared'}`)
         const paymentShown = ((await paymentRow.textContent()) ?? '').trim()
         ctx.evidence.push({ note: `the payment row on the screen: ${paymentShown.slice(0, 200)}` })
