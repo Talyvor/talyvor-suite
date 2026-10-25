@@ -259,3 +259,173 @@ export function billsPayAllDue(): Scenario {
     },
   }
 }
+
+// B40.22 — a bill goes in, and "pay all due" pays it once. Once a run, in the browser, on a workspace of its own.
+//
+// On Lens's API the owner accepts the money terms, opens the company's GBP account, saves two suppliers as payees and registers
+// this run's software passkey. In the browser three PDF invoices are added: the first supplier's invoice, a second copy of it (a
+// different document with the same supplier and invoice number), and the second supplier's invoice printing bank details other
+// than its saved payee's. The copy must say "Already in your inbox"; the screen and Lens must hold one bill per invoice — the first
+// matched to its saved payee, the second flagged bank_details_differ ("Bank details differ from …"). "Pay 2 bills" opens one
+// approval card for both. Then, on the screen's own two calls signed with the passkey: exactly one payment per bill, each to its
+// supplier's saved payee (never the details printed on the invoice), the company account down by the total; the same approval
+// again answers 409 and moves nothing, and the bills read paid. Screenshots at 1440 and 390.
+// shortcut: until Lens takes test money into a company account (B30.15) the account holds nothing, so after the card the run
+// SKIPs rather than approve payments that cannot post; the money half runs the night B30.15 lands.
+export function billsDuplicateChangedDetails(): Scenario {
+  return {
+    id: 'bills-duplicate-changed-details',
+    owner: 'talyvor-suite',
+    own: true,
+    items: ['B40.22'],
+    title: 'two copies of one PDF invoice are one bill, an invoice printing changed bank details is flagged, and "pay all due" with one ' +
+      'passkey approval pays each bill once to its saved payee',
+    run: async (ctx) => {
+      const origin = new URL(ctx.app.page.url()).origin
+      const lens = async <T>(method: string, path: string, body: unknown, note: string) => {
+        const r = await call<T>(ctx, method, path, body)
+        ctx.evidence.push({ note, answer: said(r) })
+        return r
+      }
+      const terms = await lens<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
+      for (const t of (terms.value?.terms ?? []).filter((x) => ['currency_accounts', 'payments_in', 'payments_out'].includes(x.capability) && x.accepted == null)) {
+        const ok = await lens('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
+        if (ok.status !== 201) return fail(`accepting ${t.capability}'s terms answered ${said(ok)}`)
+      }
+      const company = await lens<{ id: string }>('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the company GBP account')
+      if (company.status !== 201 || company.value === undefined) return fail(`opening the company GBP account answered ${said(company)}`)
+      const salt = randomBytes(3).toString('hex')
+      const due = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10)
+      const stamp = String(Date.now()).slice(-6)
+      // The second supplier's invoice prints account `printed`, not the saved payee's `account`.
+      const bills = [['Nightly Cleaning', 25_000, '250.00', 'Saved payee:'], ['Nightly Couriers', 8_999, '89.99', 'Bank details differ from']].map(([name, minor, shown, flag], i) => ({
+        supplier: `${name} ${salt} Ltd`, minor: minor as number, shown: shown as string, flag: flag as string, number: `INV-${salt}-${i + 1}`,
+        account: `6${stamp}${i}`, printed: i === 0 ? `6${stamp}${i}` : `5${stamp}${i}`, payee: '' }))
+      const total = bills.reduce((t, b) => t + b.minor, 0)
+      for (const b of bills) {
+        const p = await lens<{ id: string }>('POST', '/v1/money/payees', { name: b.supplier, country: 'GB', sort_code: '040004', account_number: b.account }, `the owner saves ${b.supplier}`)
+        if (p.status !== 201 || p.value === undefined) return fail(`saving ${b.supplier} answered ${said(p)}`)
+        b.payee = p.value.id
+      }
+      const reg = await lens<{ challenge: string; rp_id: string }>('POST', '/v1/workspaces/{ws}/agents/passkeys/challenge', {}, 'the passkey registration challenge')
+      if (reg.value === undefined) return fail(`the passkey registration challenge answered ${said(reg)}`)
+      const key = softPasskey(reg.value.rp_id)
+      const registered = await lens('POST', '/v1/workspaces/{ws}/agents/passkeys', key.register(reg.value.challenge, 'Nightly bills passkey'), 'the passkey')
+      if (registered.status !== 201) return fail(`registering a passkey answered ${said(registered)}`)
+
+      interface Payment { id: string; payee_id: string; amount_minor: number; currency: string; reference: string; status: string }
+      const money = async (note: string) => {
+        const accounts = await call<{ accounts: { id: string; test_minor: number }[] | null }>(ctx, 'GET', '/v1/money/accounts')
+        const payments = await call<{ payments: Payment[] | null }>(ctx, 'GET', '/v1/money/payments')
+        const m = { held: (accounts.value?.accounts ?? []).find((a) => a.id === company.value?.id)?.test_minor ?? -1, payments: payments.value?.payments ?? [] }
+        ctx.evidence.push({ note: `${note}: the company GBP account holds ${m.held} minor of test money; ${m.payments.length} payments out ${JSON.stringify(m.payments.map((p) => [p.reference, p.payee_id, p.amount_minor, p.status]))}` })
+        return m
+      }
+      const pdf = (b: (typeof bills)[number], extra: string[]) =>
+        invoicePDF([b.supplier, 'INVOICE', `Invoice number: ${b.number}`, `Due date: ${due}`, `Total due: GBP ${b.shown}`, 'Sort code: 04-00-04', `Account number: ${b.printed}`, ...extra])
+
+      // In the browser: the invoice, its copy, and the changed-details invoice; one bill each; one card for both.
+      const page = await ctx.app.tab('/money/pay')
+      let request = ''
+      try {
+        const form = page.getByTestId('bill-upload')
+        await form.waitFor({ timeout: TIMEOUT_MS })
+        const add = async (file: string, doc: Buffer, want: string) => {
+          await form.getByLabel('Invoice file').setInputFiles({ name: file, mimeType: 'application/pdf', buffer: doc })
+          await form.getByRole('button', { name: 'Add bill' }).click()
+          await form.getByRole('status').filter({ hasText: want }).or(form.getByRole('alert')).first().waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
+          const text = (await form.locator('[role="status"], [role="alert"]').allTextContents()).join(' ').trim()
+          ctx.evidence.push({ note: `the owner adds ${file}: the screen says "${text}"` })
+          return text
+        }
+        const [first, second] = bills
+        for (const [file, doc, want] of [
+          [`${first.number}.pdf`, pdf(first, []), `Added: ${first.supplier}`],
+          [`${first.number}-copy.pdf`, pdf(first, ['Copy sent again: please pay the original once']), `Already in your inbox: ${first.supplier}`],
+          [`${second.number}.pdf`, pdf(second, ['Please note our new bank details']), `Added: ${second.supplier}`],
+        ] as const) {
+          const text = await add(file, doc, want)
+          if (text !== want) return fail(`adding ${file} on the screen said "${text}", not "${want}"`)
+        }
+        for (const b of bills) {
+          const rows = page.locator('[data-testid^="bill-bill"]').filter({ hasText: b.number })
+          await rows.first().waitFor({ timeout: TIMEOUT_MS })
+          if ((await rows.count()) !== 1) return fail(`the screen lists ${await rows.count()} bills for ${b.number}, not 1`)
+          const shown = ((await rows.textContent()) ?? '').trim()
+          ctx.evidence.push({ note: `the bill on the screen: ${shown.slice(0, 300)}` })
+          if (!shown.includes(`${b.flag} ${b.supplier}`)) return fail(`the bill ${b.number} reads "${shown.slice(0, 200)}": it does not say "${b.flag} ${b.supplier}"`)
+        }
+        ctx.evidence.push({ note: `the bills inbox, ${await screenshots(ctx, page, 'bills-changed-details')}` })
+
+        // Lens's record: one bill per invoice, each matched as the screen said.
+        const listed = await lens<{ bills: Bill[] | null }>('GET', '/v1/money/bills', undefined, 'Lens’s record of the workspace’s bills')
+        const all = listed.value?.bills ?? []
+        if (all.length !== 2) return fail(`after three uploads of two invoices Lens holds ${all.length} bills, not 2: ${JSON.stringify(all.map((b) => b.invoice_number))}`)
+        for (const [b, want] of [[first, 'matched'], [second, 'bank_details_differ']] as const) {
+          const got = all.find((x) => x.invoice_number === b.number)
+          if (got === undefined || got.payee_match !== want || got.amount_minor !== b.minor || got.status !== 'due') {
+            return fail(`Lens records ${b.number} as ${JSON.stringify(got && [got.payee_match, got.amount_minor, got.status])}, not ${want}, ${b.minor}, due`)
+          }
+        }
+
+        const panel = page.getByTestId('bills-pay')
+        await panel.getByRole('button', { name: 'Pay 2 bills' }).waitFor({ timeout: TIMEOUT_MS })
+        const sum = await panel.getByTestId('bills-pay-total').innerText()
+        if (sum !== 'Total £339.99') return fail(`with both bills due the Pay screen reads "${sum}", not "Total £339.99"`)
+        await panel.getByRole('button', { name: 'Pay 2 bills' }).click()
+        await page.waitForURL(/\/approve\/[^/]+$/, { timeout: TIMEOUT_MS })
+        request = decodeURIComponent(new URL(page.url()).pathname.split('/').pop() ?? '')
+        const card = page.getByTestId('approve-card')
+        await card.waitFor({ timeout: TIMEOUT_MS })
+        const words = (await card.innerText()).replace(/\s+/g, ' ')
+        ctx.evidence.push({ note: `the approval card for request ${request}: "${words.slice(0, 600)}"` })
+        const head = await page.getByTestId('approve-total').innerText()
+        if (!head.includes('2 of 2 payments to approve, total £339.99')) return fail(`the approval card reads "${head}", not "2 of 2 payments to approve, total £339.99"`)
+        for (const b of bills) {
+          if (!words.includes(b.supplier) || !words.includes(`Reference: ${b.number}`)) return fail(`the approval card does not show ${b.supplier} with reference ${b.number}: "${words.slice(0, 400)}"`)
+        }
+        ctx.evidence.push({ note: `the one approval card, ${await screenshots(ctx, page, 'bills-changed-details-card')}` })
+      } finally {
+        await page.close()
+      }
+
+      // The money: only once the company account can hold test money (B30.15).
+      const before = await money('before the approval')
+      if (before.payments.length !== 0) return fail(`preparing the bills paid something: ${before.payments.length} payments out before any approval`)
+      if (before.held < total) throw new CannotTest(`the bills read one per invoice with the changed details flagged and the card for request ${request} read 2 bills, £339.99, ` +
+        `but the company GBP account holds ${before.held} minor of test money and Lens cannot yet take test money into a company account (B30.15), so the payments cannot post`)
+
+      const post = (path: string, body: unknown) => ctx.app.page.request.post(`${origin}/api/money/${path}`, { headers: { Origin: origin }, data: body })
+      const wrong: string[] = []
+      const prepared = await post(`payment-requests/${request}/approval`, { positions: [1, 2] })
+      const toSign = await prepared.json() as { statement?: string; challenge?: string }
+      ctx.evidence.push({ note: `the statement to sign: ${prepared.status()} ${String(toSign.statement).slice(0, 600)}` })
+      if (prepared.status() !== 200) return fail(`the statement to approve the two bills answered ${prepared.status()}`)
+      const approval = { statement: toSign.statement, assertion: key.assert(toSign.challenge ?? '') }
+      const approved = await post(`payment-requests/${request}/approve`, approval)
+      ctx.evidence.push({ note: `approve: ${approved.status()} ${(await approved.text()).slice(0, 800)}` })
+      if (approved.status() !== 200) wrong.push(`approving the two bills answered ${approved.status()}`)
+
+      // The ledger: one payment per bill, to its saved payee; the account down by the total.
+      const after = await money('after the approval')
+      for (const b of bills) {
+        const p = after.payments.filter((x) => x.reference === b.number)
+        if (p.length !== 1 || p[0].payee_id !== b.payee || p[0].amount_minor !== b.minor || p[0].currency !== 'GBP') {
+          wrong.push(`Lens lists ${p.length} payments referenced ${b.number} (${JSON.stringify(p)}), not one of ${b.minor} GBP to the saved payee ${b.payee}`)
+        }
+      }
+      if (after.payments.length !== 2) wrong.push(`one approval posted ${after.payments.length} payments out, not 2`)
+      if (after.held !== before.held - total) wrong.push(`the company GBP account went from ${before.held} to ${after.held} minor, not down by ${total}`)
+      const replay = await post(`payment-requests/${request}/approve`, approval)
+      const last = await money('after the approval was sent again')
+      if (replay.status() !== 409) wrong.push(`the replayed approval answered ${replay.status()}, not 409`)
+      if (last.payments.length !== after.payments.length || last.held !== after.held) wrong.push(`the replay moved money: ${after.payments.length} → ${last.payments.length} payments out`)
+      const read = await call<{ bills: Bill[] | null }>(ctx, 'GET', '/v1/money/bills')
+      const unpaid = (read.value?.bills ?? []).filter((b) => b.status !== 'paid')
+      if (unpaid.length > 0) wrong.push(`after the approval ${unpaid.length} bills still read ${unpaid.map((b) => b.status).join(', ')}, not paid`)
+      return wrong.length > 0 ? fail(wrong.join('; '))
+        : { pass: true, detail: `three uploads, two bills (${bills.map((b) => b.number).join(', ')}), the changed details flagged; one passkey approval of request ${request} ` +
+          `paid each once to its saved payee, the company account ${before.held} → ${after.held} minor; the replay 409 and nothing more posted` }
+    },
+  }
+}
