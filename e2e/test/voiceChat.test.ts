@@ -7,7 +7,7 @@ import { type VoiceSeen, voiceVerdict } from '../src/voiceChat.ts'
 
 const PASSING: VoiceSeen = {
   payee: 'Nightly Voice Payee x1',
-  readback: 'I’ve prepared a payment of £1.50 to Nightly Voice Payee x1. Nothing is paid until you approve it with your passkey.',
+  readback: 'Pay Nightly Voice Payee x1 £1.50 for invoice 4471 — look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.',
   approveCard: true,
   pageText: 'Chat … Nightly Voice Payee x1 £1.50',
   voiceRequest: { status: 201, client: 'voice', decisions: ['needs_approval'], id: 'preq_1' },
@@ -22,6 +22,8 @@ describe('voice-chat-pay (B40.12)', () => {
     expect(voiceVerdict(PASSING).pass).toBe(true)
     expect(voiceVerdict({ ...PASSING, paymentsToPayee: 1 }).pass).toBe(false)
     expect(voiceVerdict({ ...PASSING, pageText: 'account 12345678' }).pass).toBe(false)
+    // B41.37 — the old read-back, without the invoice or the phone, no longer passes.
+    expect(voiceVerdict({ ...PASSING, readback: 'I’ve prepared a payment of £1.50 to Nightly Voice Payee x1. Nothing is paid until you approve it with your passkey.' }).pass).toBe(false)
     expect(voiceVerdict({ ...PASSING, voiceRequest: { status: 201, client: 'chat', decisions: ['auto'] } }).pass).toBe(false)
     expect(voiceVerdict({ ...PASSING, billsDue: { status: 405, listed: false } }).pass).toBe(false)
     expect(voiceVerdict({ ...PASSING, billsDue: { status: 200, listed: false } }).pass).toBe(false)

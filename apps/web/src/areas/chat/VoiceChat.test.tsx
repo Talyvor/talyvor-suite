@@ -17,6 +17,8 @@ const ANSWER = sse(
   { type: 'message_stop' },
 )
 const ACME = { id: 'payee_acme', name: 'ACME Ltd', country: 'GB', sort_code: '040004', account_number: '12345678', check: 'exact_match' }
+// B41.37 — the company's one open GBP account: a voice payment in pounds is read back as coming from it.
+const MAIN = { id: 'acct_main', currency: 'GBP', purpose: 'company', status: 'open', name: 'Main', balance_minor: 500000, test_minor: 500000, live_minor: 0 }
 const ITEM = { position: 1, payee_id: 'payee_acme', payee_name: 'ACME Ltd', currency: 'GBP', amount_minor: 12000, reference: 'ACME invoice' }
 const REQUEST = {
   id: 'preq_1', status: 'pending_approval', summary: 'Pay ACME Ltd', client: 'voice', totals: { GBP: 12000 }, created_at: '2026-10-24T09:00:00Z',
@@ -54,6 +56,7 @@ function mockBff() {
   const prepared: { body: unknown; key: string | null }[] = []
   const approvals: unknown[] = []
   const approved: unknown[] = []
+  let item = ITEM
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -74,18 +77,23 @@ function mockBff() {
       return new Response(new Blob(['ID3'], { type: 'audio/mpeg' }), { status: 200, headers: { 'Content-Type': 'audio/mpeg' } })
     }
     if (url === '/api/money/payees') return json({ payees: [ACME] })
+    if (url === '/api/money/accounts') return json({ accounts: [MAIN, { ...MAIN, id: 'acct_eur', currency: 'EUR', name: 'Euro' }] })
     if (url === '/api/money/payments') return json({ payments: [] })
     if (url === '/api/money/payment-requests' && init?.method === 'POST') {
-      prepared.push({ body: JSON.parse(String(init.body)), key: new Headers(init.headers).get('Idempotency-Key') })
-      return json(REQUEST, 201)
+      const body = JSON.parse(String(init.body)) as { items: { amount_minor: number; reference: string }[] }
+      prepared.push({ body, key: new Headers(init.headers).get('Idempotency-Key') })
+      // Lens answers with what was asked: the amount and the reference as sent.
+      const { amount_minor, reference } = body.items[0]
+      item = { ...ITEM, amount_minor, reference }
+      return json({ ...REQUEST, totals: { GBP: amount_minor }, items: [{ ...REQUEST.items[0], amount_minor, reference }] }, 201)
     }
     if (url === '/api/money/payment-requests/preq_1/approval') {
       approvals.push(JSON.parse(String(init?.body)))
-      return json({ statement: JSON.stringify({ request_id: 'preq_1', items: [ITEM], totals: { GBP: 12000 } }), challenge: 'AAAA', allow_credentials: ['AAAA'] })
+      return json({ statement: JSON.stringify({ request_id: 'preq_1', items: [item], totals: { GBP: item.amount_minor } }), challenge: 'AAAA', allow_credentials: ['AAAA'] })
     }
     if (url === '/api/money/payment-requests/preq_1/approve') {
       approved.push(JSON.parse(String(init?.body)))
-      return json({ ...REQUEST, status: 'approved', items: [{ ...REQUEST.items[0], pay_status: 'paid' }] })
+      return json({ ...REQUEST, status: 'approved', items: [{ ...REQUEST.items[0], ...item, pay_status: 'paid' }] })
     }
     return new Response('null', { status: 404 })
   })
@@ -176,11 +184,11 @@ describe('talking to Talyvor in Chat (B40.12)', () => {
     await say('£120')
 
     const readback = await screen.findByTestId('chat-pay-readback')
-    expect(readback).toHaveTextContent('I’ve prepared a payment of £120.00 to ACME Ltd. Nothing is paid until you approve it with your passkey.')
+    expect(readback).toHaveTextContent('Pay ACME Ltd £120.00 from Main for the ACME invoice — look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.')
     expect(bff.prepared).toEqual([
       { body: { voice: true, items: [{ payee_id: 'payee_acme', currency: 'GBP', amount_minor: 12000, reference: 'ACME invoice' }] }, key: expect.any(String) },
     ])
-    await waitFor(() => expect(bff.spoken.at(-1)).toBe('I’ve prepared a payment of £120.00 to ACME Ltd. Nothing is paid until you approve it with your passkey.'))
+    await waitFor(() => expect(bff.spoken.at(-1)).toBe('Pay ACME Ltd £120.00 from Main for the ACME invoice — look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.'))
     // The account number is never shown or said; the question was never sent to the model.
     expect(document.body).not.toHaveTextContent('12345678')
     expect(bff.spoken.join(' ')).not.toContain('12345678')
@@ -194,6 +202,21 @@ describe('talking to Talyvor in Chat (B40.12)', () => {
     expect(bff.approvals).toEqual([{ positions: [1] }])
     expect(navigator.credentials.get).toHaveBeenCalledTimes(1)
     expect(bff.approved).toHaveLength(1)
+  })
+
+  it('reads back “pay ACME £1,240 for invoice 4471” with the payee, amount, account and invoice, said and shown alike (B41.37)', async () => {
+    const bff = mockBff()
+    await openChat()
+    await say('Pay ACME £1,240 for invoice 4471.')
+
+    const words = 'Pay ACME Ltd £1,240.00 from Main for invoice 4471 — look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.'
+    expect(await screen.findByTestId('chat-pay-readback')).toHaveTextContent(words)
+    await waitFor(() => expect(bff.spoken.at(-1)).toBe(`You’re talking to an AI. ${words}`))
+    expect(bff.prepared).toEqual([
+      { body: { voice: true, items: [{ payee_id: 'payee_acme', currency: 'GBP', amount_minor: 124000, reference: 'invoice 4471' }] }, key: expect.any(String) },
+    ])
+    expect(bff.spoken.join(' ')).not.toContain('12345678')
+    expect(bff.approved).toHaveLength(0)
   })
 })
 
@@ -343,9 +366,9 @@ describe('Hey Taly (B45.27)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     const readback = await screen.findByTestId('chat-pay-readback')
-    expect(readback).toHaveTextContent('I’ve prepared a payment of £120.00 to ACME Ltd. Nothing is paid until you approve it with your passkey.')
+    expect(readback).toHaveTextContent('Pay ACME Ltd £120.00 from Main — look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.')
     expect(bff.prepared).toEqual([{ body: { voice: true, items: [{ payee_id: 'payee_acme', currency: 'GBP', amount_minor: 12000, reference: '' }] }, key: expect.any(String) }])
-    await waitFor(() => expect(bff.spoken.at(-1)).toMatch(/I’ve prepared a payment of £120\.00 to ACME Ltd\. Nothing is paid until you approve it with your passkey\.$/))
+    await waitFor(() => expect(bff.spoken.at(-1)).toMatch(/Pay ACME Ltd £120\.00 from Main — look at your phone, or approve below, to confirm\. Nothing is paid until you approve it with your passkey\.$/))
     // Heard on the device: no recording went anywhere to be transcribed.
     expect(bff.transcribed).toHaveLength(0)
 
