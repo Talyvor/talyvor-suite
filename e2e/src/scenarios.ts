@@ -73,6 +73,7 @@ import { verificationLevels } from './verification.ts'
 import { compliance } from './compliance.ts'
 import { invoicePayLink } from './invoices.ts'
 import { outsidePayees } from './payees.ts'
+import { permissionMandate } from './permissionMandates.ts'
 import { capabilityTerms } from './capabilityTerms.ts'
 import { verificationScreen } from './verificationScreen.ts'
 import { termsAndCredentialScreens } from './termsScreen.ts'
@@ -5377,6 +5378,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B40.31 — the phone app's device keys through the BFF, once a run: a challenge, a key with no attestation refused in Lens's
   // words, an empty list and an unknown key's revoke 404 from Lens.
   if (i === 6) list.push(deviceKeysThroughBFF())
+  // B40.26 — a signed permission mandate, once a run, on a workspace of its own: kept with the signed JSON; £90 allowed, £120 needs
+  // approval, a third payee blocked, £90 by voice needs approval; an altered one refused; revoked, all three blocked.
+  if (i === 6) list.push(permissionMandate())
   // B32.65 — lineage and licences, once a run, on workspaces of its own: A at a 20% royalty is remixed into B at 10% and B
   // into C, each under its remix licence; C rented and used twice is one line on its buyer's bill; the paid rent splits
   // Talyvor's fee, C, B and A in the design's proportions on each author's earnings and journal, and its refund reverses all four.
