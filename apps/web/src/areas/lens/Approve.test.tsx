@@ -5,13 +5,13 @@ import { App, queryClient } from '../../App'
 // B40.9 — the approval link opens one card with each item and the total; unticking an item approves only the others, and
 // the passkey signs Lens's statement only when it names exactly the payments still ticked.
 
-const ITEMS = [
+const BASE = [
   { position: 1, payee_id: 'payee_1', payee_name: 'Acme Ltd', currency: 'GBP', amount_minor: 12000, reference: 'INV-7', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking', rule: 'requires_approval_above' },
   { position: 2, payee_id: 'payee_2', payee_name: 'Brightline Studio', currency: 'GBP', amount_minor: 4550, reference: 'May', decision: 'needs_approval', reason: 'no permission mandate the person signed covers this payment' },
   { position: 3, payee_id: 'payee_3', payee_name: 'Shady Co', currency: 'GBP', amount_minor: 900, reference: 'X', decision: 'blocked', reason: "the agent's rules block this payee", rule: 'payee' },
 ]
 
-function mockBff(lie = false) {
+function mockBff(lie = false, ITEMS: Record<string, unknown>[] = BASE) {
   const sent: Array<{ url: string; body: Record<string, unknown> }> = []
   let request: Record<string, unknown> = { id: 'preq_1', status: 'pending_approval', summary: '3 payments for Researcher', client: 'mcp:tlv_oc_claude', agent_id: 'agt_1',
     totals: { GBP: 17450 }, items: ITEMS, created_at: '2026-10-23T09:00:00Z' }
@@ -28,11 +28,11 @@ function mockBff(lie = false) {
     if (url === '/api/money/payments') return json({ payments: [{ id: 'mpay_0', account_id: 'macc_agt', payee_id: 'payee_1', payee_name: 'Acme Ltd', amount_minor: 100, currency: 'GBP', funding: 'test', reference: 'Apr', idempotency_key: 'k', status: 'completed', created_at: '2026-10-02T09:00:00Z', updated_at: '2026-10-02T09:00:00Z' }] })
     if (url === '/api/money/payment-requests/preq_1') return json(request)
     if (url === '/api/money/payment-requests/preq_1/approval') {
-      const body = JSON.parse(String(init?.body)) as { positions: number[] }
+      const body = JSON.parse(String(init?.body)) as { positions: number[]; reason?: string }
       sent.push({ url, body })
-      const items = ITEMS.filter((it) => (lie ? [1, 2] : body.positions).includes(it.position))
+      const items = (ITEMS as typeof BASE).filter((it) => (lie ? [1, 2] : body.positions).includes(it.position))
         .map(({ position, payee_id, payee_name, currency, amount_minor, reference }) => ({ position, payee_id, payee_name, currency, amount_minor, reference }))
-      const statement = JSON.stringify({ version: 'v1', request_id: 'preq_1', workspace_id: 'ws', payload_hash: 'h', items, totals: { GBP: 12000 }, expires_at: '2026-10-23T09:15:00Z' })
+      const statement = JSON.stringify({ version: 'v1', request_id: 'preq_1', workspace_id: 'ws', payload_hash: 'h', items, totals: { GBP: 12000 }, reason: body.reason, expires_at: '2026-10-23T09:15:00Z' })
       return json({ statement, challenge: 'Y2gx', allow_credentials: ['Y3JlZDE'], user_verification: 'required' })
     }
     if (url === '/api/money/payment-requests/preq_1/approve') {
@@ -99,5 +99,33 @@ describe('the approval screen', () => {
     await screen.findByText('What you were asked to sign is not what is shown here, so nothing was signed. Reload the page.')
     expect(bff.get).not.toHaveBeenCalled()
     expect(bff.sent.map((x) => x.url)).toEqual(['/api/money/payment-requests/preq_1/approval'])
+  })
+
+  // B41.3 — Lens's flags (B41.103) each show on their item; a duplicate is approved only with a reason, signed in the statement.
+  it('shows each flag and approves a flagged duplicate only with a reason the passkey signs', async () => {
+    const flagged = [
+      { ...BASE[0], flags: [{ code: 'duplicate', detail: 'invoice INV-7 was paid to Acme Ltd already, £120.00 on 2026-10-02' }] },
+      { ...BASE[1], flags: [{ code: 'bank_details_changed', detail: 'the bank details on invoice May differ from those saved for Brightline Studio: the saved ones are paid' },
+        { code: 'first_payment', detail: 'the first payment to Brightline Studio' }] },
+    ]
+    const bff = mockBff(false, flagged)
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+
+    const acme = await screen.findByTestId('approve-item-1')
+    await within(acme).findByText('Possible duplicate')
+    expect(screen.getByTestId('approve-flag-1-duplicate').textContent).toBe('Invoice INV-7 was paid to Acme Ltd already, £120.00 on 2026-10-02.')
+    const bright = screen.getByTestId('approve-item-2')
+    expect(within(bright).getByText('Bank details changed')).toBeTruthy()
+    expect(within(bright).getByText('First payment')).toBeTruthy()
+
+    const button = screen.getByRole('button', { name: 'Approve 2 payments with a passkey' })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(screen.getByRole('textbox', { name: /Say why you are paying it/ }), { target: { value: '  The supplier re-sent a corrected invoice.  ' } })
+    fireEvent.click(button)
+    await screen.findByText('Approved. Each payment you approved is paid once.')
+
+    expect(bff.sent[0].body).toEqual({ positions: [1, 2], reason: 'The supplier re-sent a corrected invoice.' })
+    expect(JSON.parse(String(bff.sent[1].body.statement))).toMatchObject({ reason: 'The supplier re-sent a corrected invoice.' })
   })
 })
