@@ -77,6 +77,7 @@ import { permissionMandate } from './permissionMandates.ts'
 import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { batchApproval } from './batchApproval.ts'
+import { speechThroughLens } from './speech.ts'
 import { capabilityTerms } from './capabilityTerms.ts'
 import { verificationScreen } from './verificationScreen.ts'
 import { termsAndCredentialScreens } from './termsScreen.ts'
@@ -5378,6 +5379,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B47.3 — Chat's microphone, once a run: hidden while speech is not configured; otherwise the run's fake microphone says a
   // known sentence, and its words must land in the composer, unsent.
   if (i === 4) list.push(voiceChatMic())
+  // B40.32 — speech through Lens on an agent's own key, once a run, on a workspace of its own: a recorded clip transcribed and a
+  // sentence spoken are one charge each on the agent's statement at the catalog's prices; without speech, both say so and nothing moves.
+  if (i === 4) list.push(speechThroughLens())
   // B40.31 — the phone app's device keys through the BFF, once a run: a challenge, a key with no attestation refused in Lens's
   // words, an empty list and an unknown key's revoke 404 from Lens.
   if (i === 6) list.push(deviceKeysThroughBFF())
