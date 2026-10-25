@@ -753,6 +753,23 @@ export class Bank {
     this.agents.set(agentID, { id: agentID, ws, name, owner_user_id: ws, created_at: new Date().toISOString(), keys: [id('key_')], rules: noRules(), kind: 'room' })
   }
 
+  /**
+   * B45.36 — Lens B45.7's StartWorkspace: a new workspace's first agent with one key, funded `money` the workspace was just
+   * credited. STUB_BREAK=first-agent-twice gives a workspace that already has one another.
+   */
+  startWorkspace(ws: string, money: number): { agent: Agent; key: string; key_id: string } | undefined {
+    if (this.activeAgents(ws) > 0 && !this.broken('first-agent-twice')) return undefined
+    const a: Agent = { id: id('agt_'), ws, name: 'My first agent', owner_user_id: ws, created_at: new Date().toISOString(), keys: [], rules: noRules() }
+    this.agents.set(a.id, a)
+    const key = 'tlv_' + randomBytes(24).toString('hex')
+    const keyID = id('key_')
+    this.keys.set(key, a)
+    this.keyByID.set(keyID, key)
+    a.keys.push(keyID)
+    if (money > 0) this.post(ws, 'fund', [['workspace', -money, `agent:${a.id}`], [`agent:${a.id}`, money, 'workspace']], 'starter')
+    return { agent: a, key, key_id: keyID }
+  }
+
   /** B32.85 — what one agent holds, as its postings sum. */
   agentBalance(agentID: string): number {
     return this.balance(`agent:${agentID}`)

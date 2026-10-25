@@ -27,6 +27,7 @@
 //   royalty     — an answer served from the pool to another synthetic workspace mints its contributor nothing
 //   roi-brand   — the ROI report wears the old navy and Inter, loads a font from another host, loses its
 //                 mark and prints on a dark canvas (B29.29)
+//   first-agent-twice — a second sign-in of the same identity returns a first agent again, and makes it (B45.36)
 //   seats-allows — a plan's seat refusal names no plan that would allow the member (B32.71)
 //   savings     — a replay does not say what it saved, as Lens before B28.95 (B28.358)
 //   charge      — the stream says a model's answer was charged a µLXC more than its spend row (B28.362)
@@ -1294,6 +1295,27 @@ createServer(async (req, res) => {
         out.push({ workspace_id: id, token: ws.token, expires_at: expires })
       }
       return json(res, 201, { created: out.length, plan, workspaces: out })
+    }
+    // talyvor-lens B45.7 — the BFF's sign-in, on its provisioning secret: the identity's workspace, and on its first sight a
+    // first agent with its key and STUB_STARTER_TEST_MONEY_ULXC of test money (1 LXC unset; Lens's default is 0).
+    if (p === '/v1/provision' && req.method === 'POST') {
+      if ((process.env.STUB_PROVISION_SECRET ?? '') === '' || req.headers['x-gateway-auth'] !== process.env.STUB_PROVISION_SECRET) {
+        return json(res, 401, { error: 'provisioning credentials required' })
+      }
+      const { identity = '' } = JSON.parse((await read(req)) || '{}') as { identity?: string }
+      if (identity === '') return json(res, 400, { error: 'identity required' })
+      const id = 'u' + createHash('sha256').update(identity).digest('hex').slice(0, 26)
+      const existed = workspaces.has(id)
+      const ws = workspaces.get(id) ?? newWorkspace(id, 'tok-' + randomBytes(16).toString('hex'))
+      workspaces.set(id, ws)
+      byToken.set(ws.token, ws)
+      const money = Number(process.env.STUB_STARTER_TEST_MONEY_ULXC ?? 1_000_000)
+      const started = existed && !broke('first-agent-twice') ? undefined : bank.startWorkspace(id, money)
+      if (started !== undefined && money > 0) book(ws, money, 'starter_test_money', 'starting test money', { funding: 'test', agent_id: started.agent.id })
+      const expires = new Date(Date.now() + 3600e3).toISOString().replace(/\.\d+Z$/, 'Z')
+      return json(res, 200, { workspace_id: id, created: !existed, cache_poolable: ws.settings.cache_poolable, token: ws.token, expires_at: expires,
+        ...(started === undefined ? {} : { first_agent: { agent: { id: started.agent.id, name: started.agent.name }, rules: started.agent.rules,
+          template: 'support-bot', key: started.key, key_id: started.key_id, test_money_ulxc: Math.max(money, 0) } }) })
     }
     if (p === '/v1/economy/conversion-rate') return json(res, 200, { lens_per_lxc: 1, rate: 1, usd_per_lxc: USD_PER_LXC })
     if (WEBHOOK_SECRETS[p] !== undefined && req.method === 'POST') return await stripeWebhook(req, res, WEBHOOK_SECRETS[p])
