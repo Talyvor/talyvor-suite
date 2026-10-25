@@ -25,9 +25,24 @@ describe('Waitlist', () => {
     expect(url).toBe('/api/waitlist')
     expect(JSON.parse(init.body as string)).toEqual({
       email: 'ann@example.com', website: '', page: '/marketing',
-      utm_source: 'meta', utm_medium: '', utm_campaign: 'oct',
+      utm_source: 'meta', utm_medium: '', utm_campaign: 'oct', ref: '',
     })
     window.removeEventListener(WAITLIST_JOINED_EVENT, joined)
+  })
+
+  it('sends the ?ref code it arrived with and shows the joiner their own link to share', async () => {
+    window.history.pushState({}, '', '/marketing?ref=abcd234567')
+    const fetchMock = vi.fn(async () => new Response('{"ok":true,"ref_code":"k3m7q2xa9b"}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<Waitlist />)
+    fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'bea@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Join the waitlist' }))
+
+    await waitFor(() => expect(screen.getByText('Move up the list: share your link')).toBeTruthy())
+    expect(screen.getByText(`${window.location.origin}/marketing?ref=k3m7q2xa9b`)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeTruthy()
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(JSON.parse(init.body as string).ref).toBe('abcd234567')
   })
 
   it('shows the server’s refusal and keeps the form', async () => {

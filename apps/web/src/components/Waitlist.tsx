@@ -1,8 +1,10 @@
 import { useId, useState } from 'react'
 import { Button, Input, inlineLink } from '@talyvor/ui'
+import { CopyButton } from '../areas/chat/CopyButton'
 
 // B44.1 — talyvor.com's waitlist: one email field and one button, on /marketing and on /signup while
 // sign-up is closed. A plain fetch, no providers: Landing renders bare (see Landing.tsx).
+// B45.21 — a joiner gets their own link (/marketing?ref=<code>); joining through someone's link counts once for them.
 
 /** Fired on window the moment someone joins. B44.2 counts a Lead on it; nothing personal rides on it. */
 export const WAITLIST_JOINED_EVENT = 'talyvor:waitlist-joined'
@@ -15,12 +17,28 @@ export function Waitlist({ className }: { className?: string }) {
   const [website, setWebsite] = useState('')
   const [state, setState] = useState<State>('idle')
   const [error, setError] = useState('')
+  const [refCode, setRefCode] = useState('')
 
   if (state === 'joined') {
+    // /marketing, not the bare host: it is where this form lives, so the code arrives where it is read.
+    const link = `${window.location.origin}/marketing?ref=${refCode}`
     return (
-      <p role="status" className={`text-body text-ink ${className ?? ''}`}>
-        You’re on the list.
-      </p>
+      <div className={className}>
+        <p role="status" className="text-body text-ink">
+          You’re on the list.
+        </p>
+        {refCode && (
+          <>
+            <p className="mt-3 text-body text-muted">Move up the list: share your link</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <code className="max-w-full break-all rounded-control border border-rule px-3 py-2 font-mono text-caption text-ink">
+                {link}
+              </code>
+              <CopyButton text={link} label="Copy link" className="border border-rule" />
+            </div>
+          </>
+        )}
+      </div>
     )
   }
 
@@ -40,9 +58,12 @@ export function Waitlist({ className }: { className?: string }) {
           utm_source: q.get('utm_source') ?? '',
           utm_medium: q.get('utm_medium') ?? '',
           utm_campaign: q.get('utm_campaign') ?? '',
+          ref: q.get('ref') ?? '',
         }),
       })
       if (res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { ref_code?: string }
+        setRefCode(body.ref_code ?? '')
         setState('joined')
         window.dispatchEvent(new Event(WAITLIST_JOINED_EVENT))
         return
