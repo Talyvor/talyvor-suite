@@ -720,6 +720,22 @@ export const agentBankApi = {
     return (await res.json()) as PayoutBatch
   },
   approvePayout: (id: string) => send<PayoutBatch>('POST', `/api/money/payouts/${e(id)}/approve`),
+  // B41.1 — the bills inbox (Lens B41.101): an invoice uploaded as it is, read into a bill; created is false when it was there already.
+  bills: () => getJSON<{ bills: Bill[] | null }>('/api/money/bills', { bills: 'list' }),
+  uploadBill: async (file: File) => {
+    const path = `/api/money/bills?source=upload&filename=${e(file.name)}`
+    const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream', Accept: 'application/json' }, body: file })
+    if (!res.ok) {
+      let sentence = ''
+      try {
+        sentence = ((await res.json()) as { error?: string }).error ?? ''
+      } catch {
+        // a body that is not JSON carries no sentence
+      }
+      throw new AgentBankError(res.status, '/api/money/bills', sentence)
+    }
+    return { bill: (await res.json()) as Bill, created: res.status === 201 }
+  },
 }
 
 /** What a schedule asks for: a payment to another agent or a listing in µLXC, or (B30.18) a standing order to a saved outside payee. */
@@ -895,6 +911,32 @@ export interface PayoutRow {
   status: string
   payment_id?: string
   detail?: string
+}
+
+/** Lens economy.Bill (B41.101): an invoice the workspace received; the printed bank details are shown, never paid on their own. */
+export interface Bill {
+  id: string
+  source: string
+  filename?: string
+  supplier: string
+  invoice_number: string
+  amount_minor: number
+  currency: string
+  /** YYYY-MM-DD */
+  due_date?: string
+  sort_code?: string
+  account_number?: string
+  iban?: string
+  bic?: string
+  routing_number?: string
+  payee_id?: string
+  /** matched | bank_details_differ | new_payee */
+  payee_match: string
+  /** due | paid */
+  status: string
+  /** the fields reading the invoice could not find */
+  missing: string[] | null
+  created_at: string
 }
 
 /** Lens economy.PayoutBatch (B30.21): rows only when one batch is read. */

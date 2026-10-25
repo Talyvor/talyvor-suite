@@ -264,6 +264,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/mandates", body: `{"account_id":"x1","payee_business_id":"b","payee_id":"x1","payee_name":"n","max_per_pull_minor":1,"max_per_month_minor":1,"expires_at":"2099-01-01T00:00:00Z"}`},
 		{method: http.MethodPost, path: "/api/money/mandates/x1/revoke", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/payouts", body: `{}`},
+		{method: http.MethodPost, path: "/api/money/bills", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/payouts/x1/approve", body: `{}`},
 		{method: http.MethodPost, path: "/api/admin/platform-reports", body: `{"year":2026}`},
 		{method: http.MethodDelete, path: "/api/agents/x1/topup", body: `{}`},
