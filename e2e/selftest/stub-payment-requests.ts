@@ -8,16 +8,22 @@
 // …/{id}/approval answers the statement and its challenge, POST …/{id}/approve takes it signed by a device key or a passkey and
 // pays each approved item once from the preparer's account, and GET …/{id}/record is the request's hash-chained record. Its defect:
 //   batch-approval-replay-pays — the same approval sent again is taken, and pays every item again
+// B41.2 — and pay all due (Lens B41.102): POST /v1/money/bills/pay {bill_ids} prepares the bills named, or every bill due no
+// live request holds, as one request whose items are the bills — paid to their saved payee at their amount, their invoice
+// number the reference — blocked when the bill was paid, is in another live request or has no saved payee; once paid, a
+// bill reads paid. Its defect:
+//   bill-paid-twice            — a bill already paid, or in another live request, is prepared again needing approval
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, randomUUID } from 'node:crypto'
 
 interface ItemIn { payee_id?: string; currency?: string; amount_minor?: number; reference?: string }
-interface Item { position: number; payee_id: string; payee_name: string; currency: string; amount_minor: number; reference: string; decision: string; reason: string; rule?: string; mandate_id?: string; payment_id?: string; pay_status?: string; pay_detail?: string }
+interface Item { bill_id?: string; position: number; payee_id: string; payee_name: string; currency: string; amount_minor: number; reference: string; decision: string; reason: string; rule?: string; mandate_id?: string; payment_id?: string; pay_status?: string; pay_detail?: string }
 interface Request { id: string; kind: string; status: string; client: string; agent_id?: string; canonical: string; payload_hash: string; approval_url: string; deep_link: string; items: Item[] }
 interface Entry { seq: number; kind: string; body: string; prev_hash: string; hash: string }
 interface Assertion { credential_id?: string; device_id?: string; challenge?: string; signature?: string }
 type Paid = { id: string } | { status: number; error: string }
+type StubBill = { id: string; supplier: string; invoice_number: string; amount_minor: number; currency: string; payee_id?: string; status: string; due_date: string }
 type Judge = (ws: string, p: { client: string; payee_id: string; currency: string; amount_minor: number }) => { decision: string; rule: string; reason: string; mandate_id: string } | undefined
 
 const PAYEE_DETAILS = ['sort_code', 'account_number', 'iban', 'bic', 'swift', 'routing_number', 'bank_account', 'bank_details', 'account_details', 'account_name']
@@ -48,9 +54,12 @@ export class PaymentRequestDesk {
   private readonly refused: (ws: string, a: Assertion | undefined, challenge: string) => string | undefined
   /** B40.29 — one payment out from the agent's account in the currency (the company's for ''), as stub-payees.ts pays. */
   private readonly pay: (ws: string, agentID: string, b: { payee_id: string; amount_minor: number; currency: string; reference: string; idempotency_key: string }) => Paid
+  /** B41.2 — the workspace's bills (stub-payees.ts); a bill paid here is marked paid on it. */
+  private readonly bills: (ws: string) => StubBill[]
 
   constructor(json: PaymentRequestDesk['json'], read: PaymentRequestDesk['read'], broken: PaymentRequestDesk['broken'], payees: PaymentRequestDesk['payees'], judge: Judge,
-    refused: PaymentRequestDesk['refused'], pay: PaymentRequestDesk['pay']) {
+    refused: PaymentRequestDesk['refused'], pay: PaymentRequestDesk['pay'], bills: PaymentRequestDesk['bills']) {
+    this.bills = bills
     this.json = json
     this.read = read
     this.broken = broken
@@ -102,6 +111,8 @@ export class PaymentRequestDesk {
       const key = `${id}:${it.position}${replay ? `:${randomUUID()}` : ''}`
       const p = this.pay(ws, r.agent_id ?? '', { payee_id: it.payee_id, amount_minor: it.amount_minor, currency: it.currency, reference: it.reference, idempotency_key: key })
       Object.assign(it, 'id' in p ? { payment_id: p.id, pay_status: 'completed' } : { pay_status: 'failed', pay_detail: p.error })
+      const bill = 'id' in p && it.bill_id !== undefined ? this.bills(ws).find((x) => x.id === it.bill_id) : undefined
+      if (bill !== undefined) bill.status = 'paid'
       this.audit(id, 'provider_call', { position: it.position, authority: 'approval', idempotency_key: key, ...('id' in p ? { payment_id: p.id } : { error: p.error }) })
     }
     return this.json(res, 200, r), true
@@ -109,6 +120,7 @@ export class PaymentRequestDesk {
 
   /** The payment-request routes, on workspace `ws`'s key (B40.29: `agentID` its agent's own key's): true when `path` was one of them. */
   async route(req: IncomingMessage, res: ServerResponse, ws: string, path: string, agentID = ''): Promise<boolean> {
+    if (path === '/v1/money/bills/pay' && req.method === 'POST' && agentID === '') return this.billsPay(req, res, ws), true
     if (!path.startsWith('/v1/money/payment-requests')) return false
     const act = /^\/v1\/money\/payment-requests\/([^/]+)\/(approval|approve|record)$/.exec(path)
     if (act !== null) return this.approval(req, res, ws, agentID, act[1], act[2])
@@ -133,12 +145,48 @@ export class PaymentRequestDesk {
     if (seen !== undefined && !this.broken('payment-request-key-reused')) {
       return this.json(res, 409, { error: 'economy: this Idempotency-Key was already used for a different request' }), true
     }
+    return this.create(res, ws, key, args, client, agentID, items)
+  }
+
+  /** B41.2 — POST /v1/money/bills/pay: the bills named, or each bill due no live request holds, as one request of bill items. */
+  private async billsPay(req: IncomingMessage, res: ServerResponse, ws: string): Promise<void> {
+    const key = String(req.headers['idempotency-key'] ?? '')
+    if (key === '') return this.json(res, 400, { error: 'economy: invalid payment request: an Idempotency-Key is required' })
+    const body = JSON.parse((await this.read(req)) || '{}') as { client?: string; bill_ids?: string[] }
+    const client = body.client ?? 'chat'
+    const bills = this.bills(ws)
+    const taken = (id: string) => [...this.requests.values()].find((r) => r.status !== 'cancelled' && r.canonical.includes(`"workspace_id":"${ws}"`) &&
+      (r.items ?? []).some((it) => it.bill_id === id && it.decision !== 'blocked' && it.pay_status !== 'failed'))
+    const ids = body.bill_ids ?? bills.filter((b) => b.status === 'due' && taken(b.id) === undefined).map((b) => b.id)
+    if (ids.length === 0) return this.json(res, 400, { error: 'economy: invalid payment request: no bill is due' })
+    const items: Parameters<PaymentRequestDesk['create']>[6] = []
+    for (const id of ids) {
+      const b = bills.find((x) => x.id === id)
+      if (b === undefined) return this.json(res, 400, { error: `economy: invalid payment request: item ${items.length + 1}: no bill of this workspace has the id "${id}"` })
+      const held = taken(b.id)
+      // STUB_BREAK=bill-paid-twice — a paid or held bill is prepared again as if due.
+      const blocked = this.broken('bill-paid-twice') ? undefined : b.status === 'paid' ? 'the bill was paid already'
+        : held !== undefined ? `the bill is in payment request ${held.id} already: approve or cancel that one` : !b.payee_id ? 'the supplier is not a saved payee yet: save it as a payee first' : undefined
+      items.push({ bill_id: b.id, payee_id: b.payee_id ?? '', listing_id: '', currency: b.currency, amount_minor: b.amount_minor, reference: b.invoice_number || b.supplier, blocked })
+    }
+    const args = JSON.stringify({ client, bills: ids })
+    const seen = this.keys.get(`${ws}\n${key}`)
+    if (seen !== undefined && seen.args === args) return this.json(res, 200, this.requests.get(seen.id))
+    if (seen !== undefined) return this.json(res, 409, { error: 'economy: this Idempotency-Key was already used for a different request' })
+    this.create(res, ws, key, args, client, '', items)
+  }
+
+  /** One request of `items`, each judged as Lens's judgePaymentItems does, kept under `key` for `args`. */
+  private create(res: ServerResponse, ws: string, key: string, args: string, client: string, agentID: string,
+    items: { payee_id: string; listing_id: string; currency: string; amount_minor: number; reference: string; bill_id?: string; blocked?: string }[]): true {
     const id = `preq_${randomUUID()}`
     const kind = items.length > 1 ? 'batch' : 'payment'
-    const canonical = JSON.stringify({ version: '1', id, workspace_id: ws, kind, items })
+    const canonical = JSON.stringify({ version: '1', id, workspace_id: ws, kind, items: items.map(({ blocked: _, ...it }) => it) })
     const judged: Item[] = items.map((it, i) => {
       const payee = this.payees(ws).find((p) => p.id === it.payee_id)
-      const base = { position: i + 1, payee_id: it.payee_id, payee_name: payee?.name ?? '', currency: it.currency, amount_minor: it.amount_minor, reference: it.reference }
+      const base = { position: i + 1, payee_id: it.payee_id, payee_name: payee?.name ?? '', currency: it.currency, amount_minor: it.amount_minor, reference: it.reference,
+        ...(it.bill_id === undefined ? {} : { bill_id: it.bill_id }) }
+      if (it.blocked !== undefined) return { ...base, decision: 'blocked', reason: it.blocked, rule: 'bill' }
       if (payee === undefined) return { ...base, decision: 'blocked', reason: 'no saved payee of this workspace has this id', rule: 'payee' }
       if (payee.needs_confirmation) return { ...base, decision: 'blocked', rule: 'payee',
         reason: "this payee's name did not match its account: the owner confirms it with a passkey before the first payment" }

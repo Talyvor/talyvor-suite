@@ -1024,6 +1024,17 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payment-requests/{id}/approve", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPaymentRequestApproveBody",
   },
+  // B41.2 — pay all due: the ticked bills as one payment request (Lens B41.102), approved on the B40.9 card.
+  {
+    route: "POST /v1/money/bills/pay",
+    file: "apps/bff/money_bills.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]any{"client": "chat", "bill_ids": in.BillIDs})',
+    upstreamFile: "cmd/lens/money_bills_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/bills/pay", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensBillsPayBody",
+  },
   // B40.12 — Chat's voice: an answer read aloud (Lens B40.10), and a payment asked for in words, prepared (Lens B40.3).
   {
     route: "POST /v1/audio/speech",

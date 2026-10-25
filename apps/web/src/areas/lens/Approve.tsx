@@ -7,7 +7,7 @@ import { Region, RegionScreen } from '../../components/Region'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
-import { PAYEES_KEY, PAYMENTS_KEY } from './Pay'
+import { BILLS_KEY, PAYEES_KEY, PAYMENTS_KEY } from './Pay'
 import { assertOver } from './passkeys'
 import { AgentBankError, type ApprovalStatement, type PaymentRequest, type PaymentRequestItem, agentBankApi, formatMinor, refusalText } from './agentBankApi'
 
@@ -89,7 +89,12 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
       if (!sameAsShown(prepared.statement, ticked)) throw new Error('mismatch')
       return agentBankApi.approveRequest(r.id, prepared.statement, await assertOver(prepared))
     },
-    onSuccess: (done) => qc.setQueryData(paymentRequestKey(r.id), done),
+    onSuccess: (done) => {
+      qc.setQueryData(paymentRequestKey(r.id), done)
+      // B41.2 — a request made of bills marks each bill it paid as paid.
+      void qc.invalidateQueries({ queryKey: BILLS_KEY })
+      void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
+    },
   })
 
   // Known and verified are read from the payees and past payments; unread, they are not claimed either way.
