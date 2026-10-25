@@ -90,6 +90,13 @@ const BODIES: Record<string, unknown> = {
         details: { name: 'Brightline Studio Ltd', country: 'GB', sort_code: '200000', account_number: '55779911' } },
     ],
   },
+  // B41.1 — an invoice read into a bill, its supplier not yet a saved payee.
+  '/api/money/bills': {
+    bills: [
+      { id: 'bill_1', source: 'upload', filename: 'acme.pdf', supplier: 'Acme Hosting Ltd', invoice_number: 'INV-2041', amount_minor: 12000, currency: 'GBP', due_date: '2026-11-10',
+        sort_code: '040004', account_number: '12345678', payee_match: 'new_payee', status: 'due', missing: [], created_at: '2026-10-25T09:00:00Z' },
+    ],
+  },
   '/api/money/payouts': {
     payouts: [
       { id: 'mpob_1', funding: 'test', status: 'approved', rows_total: 3, rows_valid: 2, rows_invalid: 1, totals_minor: { GBP: 1100 }, approved_by: 'owner', approved_at: '2026-10-10T11:00:00Z', created_at: '2026-10-10T10:30:00Z' },

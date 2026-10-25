@@ -65,6 +65,12 @@ const unboundedBodies: Record<string, string> = {
     'Lens\'s CSV parser (cmd/lens/money_payouts_handler.go parsePayoutCSV), which reads the named columns payee_id, ' +
     'amount, currency and reference and reports a row it cannot read as invalid with the reason, so there is no BFF ' +
     'field contract here to join to.',
+  // B41.1 — an invoice is the file as the person chose it, sent under its own media type.
+  'src/areas/lens/agentBankApi.ts file':
+    'uploadBill(file: File) — the invoice file itself. handleMoneyBills reads NO field of it: io.ReadAll then straight ' +
+    'through to lens POST /v1/money/bills under the file\'s own Content-Type (money_bills.go). The consumer is Lens\'s ' +
+    'document converter and ReadBill (internal/economy/money_bills.go), which refuses a type it cannot read in its own ' +
+    'words, so there is no BFF field contract here to join to.',
   // ⚠ KEYED BY FILE + THE BODY EXPRESSION, NOT BY ROUTE OR BY LINE. Two of the three have no
   // literal route at the call site at all (the path and even the method are parameters), so a
   // route key would collide them onto one entry; a line number drifts on any edit above it.

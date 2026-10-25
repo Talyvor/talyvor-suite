@@ -11,6 +11,7 @@ import { assertOver, signApproval, signPayee } from './passkeys'
 import {
   type AgentApproval,
   type AssistantRequest,
+  type Bill,
   type AgentSchedule,
   type CurrencyAccount,
   type Mandate,
@@ -39,6 +40,7 @@ export const MANDATES_KEY = ['money-mandates']
 export const PAYOUTS_KEY = ['money-payouts']
 export const SCHEDULES_KEY = ['agent-schedules']
 export const ASSISTANT_REQUESTS_KEY = ['money-assistant-requests']
+export const BILLS_KEY = ['money-bills']
 const EVERY: AgentSchedule['every'][] = ['hour', 'day', 'week', 'month']
 
 const PAYMENT_STATUS: Record<string, { text: string; pill: PillStatus }> = {
@@ -152,8 +154,11 @@ export function PayScreen() {
       <Region index="05" label="Bulk payouts" heading="Pay many at once from a file" className="flex max-w-2xl flex-col gap-3">
         <Payouts />
       </Region>
+      <Region index="06" label="Bills" heading="Bills you received" className="flex max-w-2xl flex-col gap-3">
+        <Bills payeeName={payeeName} />
+      </Region>
       {askedMandates.length > 0 ? (
-        <Region index="06" label="Assistant permissions" heading="Sign what an assistant may pay for you" className="flex max-w-2xl flex-col gap-3">
+        <Region index="07" label="Assistant permissions" heading="Sign what an assistant may pay for you" className="flex max-w-2xl flex-col gap-3">
           <AssistantMandates requests={askedMandates} payeeName={payeeName} />
         </Region>
       ) : null}
@@ -1143,5 +1148,122 @@ function Batch({ b }: { b: PayoutBatch }) {
       </div>
       {approve.isError ? <Note ok={false}>{refusalText(approve.error)}</Note> : null}
     </div>
+  )
+}
+
+const PAYEE_MATCH: Record<string, { text: (name: string) => string; pill: PillStatus }> = {
+  matched: { text: (name) => `Saved payee: ${name}`, pill: 'settled' },
+  bank_details_differ: { text: (name) => `Bank details differ from ${name}`, pill: 'slashed' },
+  new_payee: { text: () => 'New payee', pill: 'held' },
+}
+const MISSING: Record<string, string> = { supplier: 'supplier', amount: 'amount', currency: 'currency', due_date: 'due date', invoice_number: 'invoice number' }
+
+/** B41.1 — the bills inbox: an invoice uploaded as a file becomes one bill, matched to a saved payee or marked a new payee (Lens B41.101). */
+function Bills({ payeeName }: { payeeName: (id: string | undefined) => string }) {
+  const qc = useQueryClient()
+  const bills = useQuery({ queryKey: BILLS_KEY, queryFn: agentBankApi.bills })
+  const [file, setFile] = useState<File | null>(null)
+  const upload = useMutation({
+    mutationFn: () => agentBankApi.uploadBill(file as File),
+    onSuccess: () => {
+      setFile(null)
+      void qc.invalidateQueries({ queryKey: BILLS_KEY })
+    },
+  })
+  const list = bills.data?.bills ?? []
+  return (
+    <Card>
+      <CardHeader>Bills inbox</CardHeader>
+      <div className="flex flex-col gap-3 px-gutter py-3">
+        <form
+          className="flex flex-col gap-3"
+          data-testid="bill-upload"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (file !== null && !upload.isPending) upload.mutate()
+          }}
+        >
+          <p className="text-caption text-muted">
+            Add an invoice you received — a PDF, Word, HTML or text file — and Talyvor reads its supplier, amount, due date and invoice number and finds the saved payee. Bank details
+            printed on an invoice are shown, never paid on their own: a bill is paid to a saved payee. The same invoice added twice is one bill.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              aria-label="Invoice file"
+              type="file"
+              accept=".pdf,.docx,.html,.htm,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/html,text/plain,text/markdown"
+              className="file:mr-3 file:border-0 file:bg-transparent file:text-caption file:text-ink"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+            <Button type="submit" disabled={file === null || upload.isPending}>
+              {upload.isPending ? 'Reading invoice…' : 'Add bill'}
+            </Button>
+          </div>
+          {upload.isError ? <Note ok={false}>{refusalText(upload.error)}</Note> : null}
+          {upload.isSuccess ? (
+            <Note ok>{upload.data.created ? `Added: ${upload.data.bill.supplier || 'a bill'}` : `Already in your inbox: ${upload.data.bill.supplier || 'this bill'}`}</Note>
+          ) : null}
+        </form>
+        {bills.isError ? (
+          <p className="text-body text-muted">{readFailure(bills.error, 'Your bills')}</p>
+        ) : bills.isPending ? (
+          <p className="text-body text-muted">Reading…</p>
+        ) : list.length === 0 ? (
+          <p className="text-body text-muted" data-testid="bills-empty">
+            No bills yet: add an invoice you received above.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2" aria-label="Bills">
+            {list.map((b) => (
+              <BillRow key={b.id} b={b} payeeName={payeeName} />
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
+  )
+}
+
+function BillRow({ b, payeeName }: { b: Bill; payeeName: (id: string | undefined) => string }) {
+  const match = PAYEE_MATCH[b.payee_match] ?? { text: () => b.payee_match, pill: 'idle' as PillStatus }
+  const missing = (b.missing ?? []).map((m) => MISSING[m] ?? m)
+  const printed = b.iban ? `${b.iban}${b.bic ? ` · ${b.bic}` : ''}` : b.routing_number ? `${b.routing_number} · ${b.account_number ?? ''}` : b.sort_code ? `${b.sort_code} · ${b.account_number ?? ''}` : ''
+  return (
+    <li className="flex flex-col gap-1 rounded-card border border-rule p-3" data-testid={`bill-${b.id}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-body text-ink">
+        <span className="min-w-0">
+          {b.supplier || 'Supplier not read'}
+          {b.invoice_number ? (
+            <>
+              {' '}
+              · <span className="font-figure">{b.invoice_number}</span>
+            </>
+          ) : null}
+        </span>
+        <span className="flex items-center gap-2">
+          {b.amount_minor > 0 && b.currency ? <span className="font-figure">{formatMinor(b.amount_minor, b.currency)}</span> : null}
+          <Pill status={b.status === 'paid' ? 'settled' : 'held'}>{b.status === 'paid' ? 'Paid' : 'Due'}</Pill>
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-muted">
+        <span>
+          {b.due_date ? (
+            <>
+              Due <span className="font-figure">{b.due_date}</span>
+            </>
+          ) : (
+            'No due date read'
+          )}
+          {printed ? (
+            <>
+              {' '}
+              · printed details <span className="font-figure">{printed}</span>
+            </>
+          ) : null}
+        </span>
+        <Pill status={match.pill}>{match.text(payeeName(b.payee_id))}</Pill>
+      </div>
+      {missing.length > 0 ? <p className="text-caption text-muted">Could not read: {missing.join(', ')}</p> : null}
+    </li>
   )
 }

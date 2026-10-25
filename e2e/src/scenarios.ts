@@ -82,6 +82,7 @@ import { capabilityTerms } from './capabilityTerms.ts'
 import { verificationScreen } from './verificationScreen.ts'
 import { termsAndCredentialScreens } from './termsScreen.ts'
 import { invoicesScreen } from './invoiceScreen.ts'
+import { billsInbox } from './billsInbox.ts'
 import { payScreen } from './payScreen.ts'
 import { operatorComplianceBoundary } from './operatorCompliance.ts'
 import { waitlistJoin } from './waitlist.ts'
@@ -5365,6 +5366,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // card-funded GBP account and posted, a weekly standing order and a mandate recorded, a payouts CSV validated row by row with
   // the unknown payee's row invalid and nothing moved from the company's empty account.
   if (i === 3) list.push(payScreen())
+  // B41.1 — the Pay screen's bills inbox, once a run, in the browser on a workspace of its own: an uploaded PDF invoice read into
+  // one bill with its supplier, invoice number, £123.45 and due date, flagged New payee; added again, still one bill there and in Lens.
+  if (i === 3) list.push(billsInbox())
   // B30.104 — the operator's Compliance page, once a run: a tester, never an operator, asking the BFF for the reconciliation and
   // safeguarding figures is refused 403 for both, and the page says only operators can see it and shows none of them.
   if (i === 3) list.push(operatorComplianceBoundary())

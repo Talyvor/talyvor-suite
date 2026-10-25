@@ -15,6 +15,7 @@ function mockBff(asked: unknown[] = []) {
   const sent: Array<{ url: string; headers: Record<string, string>; body: unknown }> = []
   const payees: unknown[] = []
   const payments: unknown[] = []
+  const bills: unknown[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -34,6 +35,14 @@ function mockBff(asked: unknown[] = []) {
           { line: 3, payee_id: 'nobody', amount_minor: 100, currency: 'GBP', reference: '', status: 'invalid', detail: 'no such payee' }] }, 201)
     }
     if (url === '/api/money/payouts') return json({ payouts: [] })
+    if (url.startsWith('/api/money/bills?') && init?.method === 'POST') {
+      sent.push({ url, headers: init.headers as Record<string, string>, body: init.body })
+      const again = bills.length > 0
+      if (!again) bills.push({ id: 'bill_1', source: 'upload', filename: 'acme.pdf', supplier: 'Acme Hosting Ltd', invoice_number: 'INV-2041', amount_minor: 12000, currency: 'GBP',
+        due_date: '2026-11-10', sort_code: '040004', account_number: '12345678', payee_match: 'new_payee', status: 'due', missing: [], created_at: '2026-10-25T09:00:00Z' })
+      return json(bills[0], again ? 200 : 201)
+    }
+    if (url === '/api/money/bills') return json({ bills })
     if (url === '/api/money/assistant-requests') return json({ requests: asked })
     if (url.startsWith('/api/money/assistant-requests/')) {
       sent.push({ url, headers: init?.headers as Record<string, string>, body: init?.body ? JSON.parse(String(init.body)) : undefined })
@@ -157,6 +166,27 @@ describe('the Pay screen', () => {
     expect(bff.sent[0].body).toBe(csv)
     expect(within(batch).getByTestId('payout-row-3').textContent).toContain('no such payee')
     expect(within(batch).getByRole('button', { name: 'Approve and pay 1 row' })).toBeTruthy()
+  })
+
+  // B41.1 — an invoice uploaded as a file goes up as its own type and becomes one bill; the same invoice again is the same bill.
+  it('adds an uploaded PDF invoice as one bill marked New payee, and the same invoice again stays one bill', async () => {
+    const bff = mockBff()
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+    const form = await screen.findByTestId('bill-upload')
+    const file = new File(['%PDF-1.4'], 'acme.pdf', { type: 'application/pdf' })
+    fireEvent.change(within(form).getByLabelText('Invoice file'), { target: { files: [file] } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Add bill' }))
+    const bill = await screen.findByTestId('bill-bill_1')
+    expect(bff.sent[0].url).toBe('/api/money/bills?source=upload&filename=acme.pdf')
+    expect(bff.sent[0].headers['Content-Type']).toBe('application/pdf')
+    expect(bff.sent[0].body).toBe(file)
+    for (const text of ['Acme Hosting Ltd', 'INV-2041', '£120.00', 'Due 2026-11-10', 'New payee']) expect(bill.textContent).toContain(text)
+    expect(await within(form).findByText('Added: Acme Hosting Ltd')).toBeTruthy()
+    fireEvent.change(within(form).getByLabelText('Invoice file'), { target: { files: [file] } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Add bill' }))
+    expect(await within(form).findByText('Already in your inbox: Acme Hosting Ltd')).toBeTruthy()
+    expect(within(screen.getByRole('list', { name: 'Bills' })).getAllByRole('listitem')).toHaveLength(1)
   })
 
   // B40.35 — what an assistant asked for over /mcp waits here: a payee is saved only when the person presses Save, through the

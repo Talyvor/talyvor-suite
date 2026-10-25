@@ -18,6 +18,10 @@
 // Stripe's field ids; the 4242 card posts what is due into the issuer's account and sends the browser back to the pay link with
 // ?paid=card), and POST /v1/money/invoices/{id}/send and …/void. Its defect:
 //   invoice-card-unposted  — a card payment marks the invoice paid and credits the issuer's account nothing
+// B41.1 — and the bills inbox (POST and GET /v1/money/bills, Lens B41.101): a PDF's text lines read for the supplier (its first
+// line), invoice number, amount due, due date and bank details, matched to a saved payee by its account number or marked
+// new_payee; the same document twice is one bill. Its defect:
+//   bill-duplicated        — the same invoice uploaded again is stored as a second bill
 // B30.96 — and the Pay screen's other desks: a payment names the account it pays from (account_id); mandates (POST and GET
 // /v1/money/mandates, POST …/{id}/revoke, Lens B30.19: an outside business's grant answers its pull_key once); and bulk
 // payouts (POST /v1/money/payouts as text/csv or JSON rows, GET …, GET …/{id}, POST …/{id}/approve, Lens B30.21): every row
@@ -74,6 +78,8 @@ export class PayeeDesk {
   /** B30.96 — the mandates granted and the payout batches uploaded, by workspace. */
   private readonly mandates = new Map<string, StubMandate[]>()
   private readonly batches = new Map<string, StubBatch[]>()
+  /** B41.1 — the bills each workspace received, each with the digest of its document. */
+  private readonly bills = new Map<string, (Record<string, unknown> & { id: string; digest: string })[]>()
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
   private readonly body: <T>(req: IncomingMessage) => Promise<T>
@@ -122,6 +128,7 @@ export class PayeeDesk {
     if (await this.invoiceRoute(req, res, ws, path)) return true
     if (await this.mandateRoute(req, res, ws, path, list)) return true
     if (await this.payoutRoute(req, res, ws, path, list)) return true
+    if (await this.billRoute(req, res, ws, path, list)) return true
     if (path === '/v1/money/payees' && req.method === 'GET') return this.json(res, 200, { payees: list }), true
     if (path === '/v1/money/payees' && req.method === 'POST') {
       const b = await this.body<Record<string, string>>(req)
@@ -268,6 +275,30 @@ export class PayeeDesk {
     if (m.status !== 'active') return this.json(res, 409, { error: 'economy: the mandate is revoked' }), true
     Object.assign(m, { status: 'revoked', revoked_at: new Date().toISOString(), revoked_by: 'owner' })
     return this.json(res, 200, m), true
+  }
+
+  /** B41.1 — the bills inbox (Lens B41.101): an invoice read into one bill, matched to a saved payee or marked new_payee. */
+  private async billRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string, payees: Payee[]): Promise<boolean> {
+    const list = this.bills.get(ws) ?? []
+    const shown = ({ digest: _, ...b }: (typeof list)[number]) => b
+    if (path === '/v1/money/bills' && req.method === 'GET') return this.json(res, 200, { bills: list.map(shown) }), true
+    if (path !== '/v1/money/bills' || req.method !== 'POST') return false
+    if (!(req.headers['content-type'] ?? '').startsWith('application/pdf')) return this.json(res, 415, { error: 'the stub reads PDF invoices only' }), true
+    const doc = await this.read(req)
+    const digest = createHash('sha256').update(doc).digest('hex')
+    const had = list.find((b) => b.digest === digest)
+    if (had !== undefined && !this.broken('bill-duplicated')) return this.json(res, 200, shown(had)), true
+    const lines = [...doc.matchAll(/\((.*?)\) Tj/g)].map((m) => m[1].replace(/\\(.)/g, '$1'))
+    const after = (label: RegExp) => lines.map((l) => label.exec(l)?.[1]?.trim()).find((v) => v !== undefined) ?? ''
+    const amount = /^(GBP|EUR|USD) ([\d,]+)\.(\d{2})$/.exec(after(/^Total due:\s*(.+)$/i))
+    const account = after(/^Account number:\s*(\d+)$/i)
+    const payee = payees.find((p) => account !== '' && p.account_number === account)
+    const b = { id: `bill_${randomUUID()}`, workspace_id: ws, source: new URL(req.url ?? '/', 'http://stub').searchParams.get('source') || 'upload', supplier: lines[0] ?? '',
+      invoice_number: after(/^Invoice number:\s*(\S+)$/i), amount_minor: amount ? Number(amount[2].replace(/,/g, '')) * 100 + Number(amount[3]) : 0, currency: amount?.[1] ?? '',
+      due_date: after(/^Due date:\s*(\d{4}-\d{2}-\d{2})$/i), sort_code: after(/^Sort code:\s*([\d-]+)$/i).replace(/-/g, ''), account_number: account,
+      ...(payee ? { payee_id: payee.id } : {}), payee_match: payee ? 'matched' : 'new_payee', status: 'due', missing: [], created_at: new Date().toISOString(), digest }
+    this.bills.set(ws, [...list, b])
+    return this.json(res, 201, shown(b)), true
   }
 
   /** B30.96 — bulk payouts (Lens B30.21): a CSV or JSON rows validated row by row on upload, paid once on one approval. */
