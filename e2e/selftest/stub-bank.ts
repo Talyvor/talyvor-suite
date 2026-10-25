@@ -148,6 +148,7 @@ import { HOLD_REASON, TaxDesk } from './stub-tax.ts'
 import { VerificationDesk } from './stub-verification.ts'
 import { PayeeDesk } from './stub-payees.ts'
 import { PermissionMandateDesk } from './stub-permission-mandates.ts'
+import { DeviceKeyDesk } from './stub-device-keys.ts'
 import { PaymentRequestDesk } from './stub-payment-requests.ts'
 import { TermsDesk } from './stub-terms.ts'
 import { type KYAFacts, KYADesk } from './stub-kya.ts'
@@ -489,6 +490,8 @@ export class Bank {
   private readonly payees: PayeeDesk
   /** B40.26 — signed permission mandates and their evaluator (stub-permission-mandates.ts). */
   private readonly permissionMandates: PermissionMandateDesk
+  /** B40.28 — the phone app's device keys, which sign approvals (stub-device-keys.ts). */
+  private readonly devices: DeviceKeyDesk
   /** B40.27 — prepared payment requests, judged against the saved payees and the mandates (stub-payment-requests.ts). */
   private readonly paymentRequests: PaymentRequestDesk
   /** B30.122 — each B30 capability's terms and the workspace's acceptances (stub-terms.ts). */
@@ -509,6 +512,7 @@ export class Bank {
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })))
     this.paymentRequests = new PaymentRequestDesk(d.json, d.read, (name) => this.broken(name), (ws) => this.payees.payeesOf(ws),
       (ws, p) => this.permissionMandates.judge(ws, p))
+    this.devices = new DeviceKeyDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
     this.terms = new TermsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), B30_CAPABILITIES)
     this.kya = new KYADesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agent) => this.kyaFacts(ws, agent))
     this.trustDesk = new TrustDesk({ json: d.json, body: (req) => this.body(req), broken: (name) => this.broken(name),
@@ -1547,6 +1551,7 @@ export class Bank {
     const { json } = this.d
     if (await this.payees.route(req, res, viewer, path)) return true
     if (await this.permissionMandates.route(req, res, viewer, path)) return true
+    if (await this.devices.route(req, res, viewer, path)) return true
     if (await this.paymentRequests.route(req, res, viewer, path)) return true
     if (path === '/v1/wallets/capabilities') {
       const b30 = (this.broken('b30-capability-gone') ? B30_CAPABILITIES.filter((c) => c.capability !== 'fx') : B30_CAPABILITIES)
@@ -2013,8 +2018,12 @@ export class Bank {
       if (a === undefined) return json(res, 404, { error: 'economy: no such pending approval in this workspace' }), true
       // The stub checks the assertion names one of the workspace's passkeys; Lens verifies its signature too.
       const keys = this.passkeys.get(ws.id) ?? []
-      const signedWith = (await this.body<{ assertion?: { credential_id?: string } }>(req)).assertion?.credential_id
-      if (keys.length > 0 && !keys.some((k) => k.credential_id === signedWith)) {
+      const assertion = (await this.body<{ assertion?: { credential_id?: string; device_id?: string; challenge?: string; signature?: string } }>(req)).assertion
+      // B40.28 — or one of its device keys signed it, refused once that key is revoked (stub-device-keys.ts).
+      if (assertion?.device_id !== undefined) {
+        const refused = this.devices.refused(ws.id, assertion)
+        if (refused !== undefined) return json(res, 403, { error: refused }), true
+      } else if ((keys.length > 0 || this.devices.any(ws.id)) && !keys.some((k) => k.credential_id === assertion?.credential_id)) {
         return json(res, 403, { error: 'economy: approvals in this workspace are signed: approve with a registered passkey' }), true
       }
       a.status = m[2] === 'approve' ? 'approved' : 'denied'

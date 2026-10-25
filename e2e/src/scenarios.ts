@@ -75,6 +75,7 @@ import { invoicePayLink } from './invoices.ts'
 import { outsidePayees } from './payees.ts'
 import { permissionMandate } from './permissionMandates.ts'
 import { paymentRequestBatch } from './paymentRequests.ts'
+import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { capabilityTerms } from './capabilityTerms.ts'
 import { verificationScreen } from './verificationScreen.ts'
 import { termsAndCredentialScreens } from './termsScreen.ts'
@@ -5385,6 +5386,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B40.27 — an assistant prepares a batch under a signed mandate, once a run, on a workspace of its own: two items need
   // approval, a no-match payee blocked, the payload hashed; the same key the same request, a changed amount 409; nothing paid.
   if (i === 6) list.push(paymentRequestBatch())
+  // B40.28 — a phone's device key, once a run, on a workspace of its own: it signs an agent's approval, which is approved;
+  // revoked, its signature on a new approval is refused, an unsigned decision too, and that approval stays pending.
+  if (i === 6) list.push(deviceKeyApproval())
   // B32.65 — lineage and licences, once a run, on workspaces of its own: A at a 20% royalty is remixed into B at 10% and B
   // into C, each under its remix licence; C rented and used twice is one line on its buyer's bill; the paid rent splits
   // Talyvor's fee, C, B and A in the design's proportions on each author's earnings and journal, and its refund reverses all four.
