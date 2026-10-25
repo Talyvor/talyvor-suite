@@ -1298,10 +1298,10 @@ export function socialPreview(): Scenario {
             `og:description="${meta('property', 'og:description')}" og:image="${image}" -> ${img?.status() ?? 'not fetched'} ${imgType}`,
         })
         const missing = [
-          title === 'Talyvor — money and markets for AI agents' ? '' : '<title>',
+          title === 'Talyvor — the financial ecosystem for the AI agent economy' ? '' : '<title>',
           tab === title ? '' : 'the tab title after the app ran',
           meta('name', 'description') === '' ? 'meta description' : '',
-          meta('property', 'og:title') === 'Talyvor — money and markets for AI agents' ? '' : 'og:title',
+          meta('property', 'og:title') === 'Talyvor — the financial ecosystem for the AI agent economy' ? '' : 'og:title',
           meta('property', 'og:description') === '' ? 'og:description' : '',
           img?.status() === 200 && imgType.startsWith('image/') ? '' : 'og:image that loads',
           meta('name', 'twitter:card') === 'summary_large_image' ? '' : 'twitter:card',
