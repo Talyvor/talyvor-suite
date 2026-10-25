@@ -511,7 +511,11 @@ export class Bank {
     this.permissionMandates = new PermissionMandateDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })))
     this.paymentRequests = new PaymentRequestDesk(d.json, d.read, (name) => this.broken(name), (ws) => this.payees.payeesOf(ws),
-      (ws, p) => this.permissionMandates.judge(ws, p))
+      (ws, p) => this.permissionMandates.judge(ws, p),
+      // B40.29 — an approval is signed over its challenge by a device key, or by one of the workspace's passkeys (named, as above).
+      (ws, a, challenge) => a?.device_id !== undefined ? (a.challenge !== challenge ? "economy: the signature is not over this approval's challenge" : this.devices.refused(ws, a))
+        : (this.passkeys.get(ws) ?? []).some((k) => k.credential_id === a?.credential_id) ? undefined : 'economy: the approval is not signed: sign its challenge with a passkey or the phone app',
+      (ws, agentID, b) => this.payees.payItem(ws, agentID, b))
     this.devices = new DeviceKeyDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
     this.terms = new TermsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), B30_CAPABILITIES)
     this.kya = new KYADesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agent) => this.kyaFacts(ws, agent))
@@ -525,6 +529,12 @@ export class Bank {
   /** B30.109 — the compliance cases screening opened, in `status` ('' for all), newest first (stub-payees.ts). */
   complianceCases(status: string): unknown[] {
     return this.payees.complianceCases(status)
+  }
+
+  /** B40.29 — the payment-request routes on an agent's own key, which Lens judges as the agent itself. */
+  async agentPaymentRequests(req: IncomingMessage, res: ServerResponse, path: string, key: string): Promise<boolean> {
+    const who = this.agentOfKey(key)
+    return who !== undefined && this.paymentRequests.route(req, res, who.ws.id, path, who.agent.id)
   }
 
   /** The workspace and agent an agent key belongs to. */

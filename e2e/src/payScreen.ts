@@ -46,6 +46,32 @@ async function account(ctx: ScenarioCtx, id: string, note: string): Promise<Acco
   return (r.value.accounts ?? []).find((a) => a.id === id) ?? `GET /v1/money/accounts no longer lists ${id}`
 }
 
+/** Pays the invoice behind its pay link's `token` by test card on its pay page, signed out: why not, or undefined once it reads paid. */
+export async function payInvoiceByCard(ctx: ScenarioCtx, token: string): Promise<string | undefined> {
+  const browser = ctx.app.page.context().browser()
+  if (browser === null) return 'the run’s browser is gone'
+  const stranger = await browser.newContext()
+  try {
+    const pay = await stranger.newPage()
+    const appURL = new URL(ctx.app.page.url()).origin
+    await pay.goto(`${appURL}/pay/${token}`)
+    const headline = pay.getByTestId('pay-headline')
+    await headline.waitFor({ timeout: TIMEOUT_MS })
+    const card = pay.getByRole('button', { name: /^Pay .* by card$/ })
+    if (!(await card.isVisible())) return 'the funding invoice’s pay page offers no card: Lens has no Stripe test-mode key, or the invoice is not payable'
+    await card.click()
+    await pay.waitForURL((u) => u.origin !== appURL, { timeout: CHECKOUT_MS })
+    await payWithTestCard(pay, 'funding@example.com')
+    await pay.waitForURL((u) => u.origin === appURL && u.pathname === `/pay/${token}`, { timeout: CHECKOUT_MS })
+    await headline.filter({ hasText: 'Paid — thank you' }).waitFor({ timeout: CHECKOUT_MS }).catch(() => undefined)
+    const read = ((await headline.textContent()) ?? '').trim()
+    if (read !== 'Paid — thank you') return `after the card payment the funding invoice’s pay page reads "${read}", not "Paid — thank you"`
+  } finally {
+    await stranger.close().catch(() => undefined)
+  }
+  return undefined
+}
+
 export function payScreen(): Scenario {
   return {
     id: 'pay-screen',
@@ -90,27 +116,8 @@ export function payScreen(): Scenario {
       ctx.evidence.push({ note: `the owner issues and sends a ${FUND_MINOR} minor invoice from the agent’s account, to fund it`, answer: said(invoice) })
       const token = /\/pay\/([A-Za-z0-9_-]+)/.exec(invoice.value?.pay_url ?? '')?.[1] ?? ''
       if (invoice.status !== 201 || token === '') return fail(`issuing the funding invoice answered ${said(invoice)}`)
-      const browser = ctx.app.page.context().browser()
-      if (browser === null) return fail('the run’s browser is gone')
-      const stranger = await browser.newContext()
-      try {
-        const pay = await stranger.newPage()
-        const appURL = new URL(ctx.app.page.url()).origin
-        await pay.goto(`${appURL}/pay/${token}`)
-        const headline = pay.getByTestId('pay-headline')
-        await headline.waitFor({ timeout: TIMEOUT_MS })
-        const card = pay.getByRole('button', { name: /^Pay .* by card$/ })
-        if (!(await card.isVisible())) return fail('the funding invoice’s pay page offers no card: Lens has no Stripe test-mode key, or the invoice is not payable')
-        await card.click()
-        await pay.waitForURL((u) => u.origin !== appURL, { timeout: CHECKOUT_MS })
-        await payWithTestCard(pay, 'funding@example.com')
-        await pay.waitForURL((u) => u.origin === appURL && u.pathname === `/pay/${token}`, { timeout: CHECKOUT_MS })
-        await headline.filter({ hasText: 'Paid — thank you' }).waitFor({ timeout: CHECKOUT_MS }).catch(() => undefined)
-        const read = ((await headline.textContent()) ?? '').trim()
-        if (read !== 'Paid — thank you') return fail(`after the card payment the funding invoice’s pay page reads "${read}", not "Paid — thank you"`)
-      } finally {
-        await stranger.close().catch(() => undefined)
-      }
+      const unpaid = await payInvoiceByCard(ctx, token)
+      if (unpaid !== undefined) return fail(unpaid)
       const funded = await account(ctx, acct.id, 'the agent’s GBP account after the card payment')
       if (typeof funded === 'string') return fail(funded)
       if (funded.test_minor !== empty.test_minor + FUND_MINOR) {
