@@ -35,9 +35,19 @@ const totalsOf = (items: PaymentRequestItem[]) =>
     .map(([cur, minor]) => formatMinor(minor, cur))
     .join(', ')
 
-/** The statement Lens wrote is what the passkey signs: refuse to sign one that is not exactly the ticked payments. */
-function sameAsShown(statement: string, shown: PaymentRequestItem[]): boolean {
+/** B41.3 — each risk Lens found on an item (B41.103), in words; a duplicate or changed bank details needs a reason to approve. */
+const FLAGS: Record<string, { label: string; needsReason: boolean }> = {
+  duplicate: { label: 'Possible duplicate', needsReason: true },
+  bank_details_changed: { label: 'Bank details changed', needsReason: true },
+  first_payment: { label: 'First payment', needsReason: false },
+  unusual_amount: { label: 'Unusual amount', needsReason: false },
+}
+const needsReason = (it: PaymentRequestItem) => (it.flags ?? []).some((f) => FLAGS[f.code]?.needsReason)
+
+/** The statement Lens wrote is what the passkey signs: refuse to sign one that is not exactly the ticked payments and reason. */
+function sameAsShown(statement: string, shown: PaymentRequestItem[], reason: string): boolean {
   const s = JSON.parse(statement) as ApprovalStatement
+  if ((s.reason ?? '') !== reason) return false
   const key = (x: { position: number; payee_id: string; currency: string; amount_minor: number; reference: string }) =>
     [x.position, x.payee_id, x.currency, x.amount_minor, x.reference].join('\u0000')
   const want = shown.map(key).sort()
@@ -81,12 +91,15 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
     setUnticked(new Set())
   }
   const ticked = asked.filter((it) => !unticked.has(it.position))
+  const [why, setWhy] = useState('')
+  const reasonNeeded = ticked.some(needsReason)
+  const reason = reasonNeeded ? why.trim() : ''
   const toggle = (p: number) => setUnticked((s) => (s.has(p) ? new Set([...s].filter((x) => x !== p)) : new Set(s).add(p)))
 
   const approve = useMutation({
     mutationFn: async () => {
-      const prepared = await agentBankApi.requestApproval(r.id, ticked.map((it) => it.position))
-      if (!sameAsShown(prepared.statement, ticked)) throw new Error('mismatch')
+      const prepared = await agentBankApi.requestApproval(r.id, ticked.map((it) => it.position), reason)
+      if (!sameAsShown(prepared.statement, ticked, reason)) throw new Error('mismatch')
       return agentBankApi.approveRequest(r.id, prepared.statement, await assertOver(prepared))
     },
     onSuccess: (done) => {
@@ -152,12 +165,23 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
                   <div className="flex flex-wrap items-center gap-2 text-caption text-muted">
                     {it.payee_id && checked ? (
                       <>
-                        <Pill status={paidBefore.has(it.payee_id) ? 'settled' : 'held'}>{paidBefore.has(it.payee_id) ? 'Known payee' : 'New payee'}</Pill>
+                        {/* Lens's flags say a first payment itself (B41.103); older requests carry none. */}
+                        {it.flags ? null : <Pill status={paidBefore.has(it.payee_id) ? 'settled' : 'held'}>{paidBefore.has(it.payee_id) ? 'Known payee' : 'New payee'}</Pill>}
                         <Pill status={verified ? 'settled' : 'held'}>{verified ? 'Verified' : 'Not verified'}</Pill>
                       </>
                     ) : null}
+                    {(it.flags ?? []).map((f) => (
+                      <Pill key={f.code} status={FLAGS[f.code]?.needsReason ? 'slashed' : 'held'}>
+                        {FLAGS[f.code]?.label ?? f.code}
+                      </Pill>
+                    ))}
                     {it.reference ? <span className="break-all">Reference: {it.reference}</span> : null}
                   </div>
+                  {(it.flags ?? []).map((f) => (
+                    <p key={f.code} className="text-caption text-muted" data-testid={`approve-flag-${it.position}-${f.code}`}>
+                      {f.detail.charAt(0).toUpperCase() + f.detail.slice(1)}.
+                    </p>
+                  ))}
                   <p className="text-caption text-muted">
                     {it.decision === 'auto'
                       ? 'Inside a mandate you signed: paid with this request, no approval needed.'
@@ -172,12 +196,25 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
             )
           })}
         </ul>
+        {pending && reasonNeeded ? (
+          <label className="flex flex-col gap-1 text-caption text-ink">
+            A payment you ticked may be a duplicate or has changed bank details. Say why you are paying it: your reason is signed with the approval.
+            <textarea
+              rows={2}
+              maxLength={500}
+              placeholder="Why this is right to pay"
+              className={`w-full rounded-control border border-rule bg-surface p-3 text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+              value={why}
+              onChange={(e) => setWhy(e.target.value)}
+            />
+          </label>
+        ) : null}
         {pending ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="primary" disabled={ticked.length === 0 || approve.isPending} onClick={() => approve.mutate()}>
+            <Button type="button" variant="primary" disabled={ticked.length === 0 || (reasonNeeded && !reason) || approve.isPending} onClick={() => approve.mutate()}>
               {approve.isPending ? 'Approving…' : `Approve ${ticked.length === 1 ? '1 payment' : `${ticked.length} payments`} with a passkey`}
             </Button>
-            {ticked.length === 0 ? <span className="text-caption text-muted">Tick at least one payment.</span> : null}
+            {ticked.length === 0 ? <span className="text-caption text-muted">Tick at least one payment.</span> : reasonNeeded && !reason ? <span className="text-caption text-muted">Give a reason first.</span> : null}
           </div>
         ) : null}
         {approve.isError ? (

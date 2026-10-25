@@ -11,7 +11,7 @@ import (
 // (Lens B40.3), approved once with a passkey over exactly the items shown (Lens B40.5), on this session's own token.
 //
 //	GET  /api/money/payment-requests/{id}                               the request: each item, its decision and rule
-//	POST /api/money/payment-requests/{id}/approval {positions}          the statement approving those items, its challenge
+//	POST /api/money/payment-requests/{id}/approval {positions, reason}  the statement approving those items, its challenge
 //	                                                                    and the passkeys that may sign it
 //	POST /api/money/payment-requests/{id}/approve {statement, assertion} keep the signed approval; Lens pays each item once
 //
@@ -30,7 +30,8 @@ func (a *app) handleMoneyPaymentRequest(w http.ResponseWriter, r *http.Request, 
 	a.agentBankRelayPath(w, r, t, http.MethodGet, "/v1/money/payment-requests/"+url.PathEscape(id), nil)
 }
 
-// handleMoneyPaymentRequestApproval — POST /api/money/payment-requests/{id}/approval {positions}: the statement to sign.
+// handleMoneyPaymentRequestApproval — POST /api/money/payment-requests/{id}/approval {positions, reason}: the statement to
+// sign; reason is why ticked items flagged a duplicate or changed bank details are paid (B41.3), signed into it by Lens.
 func (a *app) handleMoneyPaymentRequestApproval(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
@@ -41,7 +42,8 @@ func (a *app) handleMoneyPaymentRequestApproval(w http.ResponseWriter, r *http.R
 		return
 	}
 	var in struct {
-		Positions []int `json:"positions"`
+		Positions []int  `json:"positions"`
+		Reason    string `json:"reason,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<14)).Decode(&in); err != nil || len(in.Positions) == 0 {
 		// Never empty: Lens reads no positions as "every item", and the screen approves only what is ticked.

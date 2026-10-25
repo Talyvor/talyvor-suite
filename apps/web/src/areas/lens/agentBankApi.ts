@@ -696,8 +696,10 @@ export const agentBankApi = {
   prepareRequest: (body: { voice: boolean; items: { payee_id: string; currency: string; amount_minor: number; reference: string }[] }, key: string) =>
     send<PaymentRequest>('POST', '/api/money/payment-requests', body, { 'Idempotency-Key': key }),
   paymentRequest: (id: string) => getSaid<PaymentRequest>(`/api/money/payment-requests/${e(id)}`),
-  requestApproval: (id: string, positions: number[]) =>
-    send<{ statement: string; challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payment-requests/${e(id)}/approval`, { positions }),
+  /** B41.3 — `reason` is why ticked items flagged a duplicate or changed bank details are paid; Lens signs it into the statement. */
+  requestApproval: (id: string, positions: number[], reason = '') =>
+    send<{ statement: string; challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payment-requests/${e(id)}/approval`,
+      reason ? { positions, reason } : { positions }),
   approveRequest: (id: string, statement: string, assertion: PasskeyAssertion) =>
     send<PaymentRequest>('POST', `/api/money/payment-requests/${e(id)}/approve`, { statement, assertion }),
   mandates: () => getJSON<{ granted: Mandate[] | null; received: Mandate[] | null }>('/api/money/mandates', { granted: 'list', received: 'list' }),
@@ -814,13 +816,17 @@ export interface PaymentRequestItem {
   rule?: string
   pay_status?: string
   pay_detail?: string
+  /** B41.3 (Lens B41.103) — duplicate | bank_details_changed | first_payment | unusual_amount, each with Lens's words. */
+  flags?: { code: string; detail: string }[]
 }
 
 /** Lens economy.ApprovalStatement (B40.5): exactly what the passkey signs. */
 export interface ApprovalStatement {
   request_id: string
-  items: { position: number; payee_id: string; currency: string; amount_minor: number; reference: string }[]
+  items: { position: number; payee_id: string; currency: string; amount_minor: number; reference: string; overrides?: string[] }[]
   totals: Record<string, number>
+  /** B41.3 — why the flagged items it overrides are approved. */
+  reason?: string
   expires_at: string
 }
 

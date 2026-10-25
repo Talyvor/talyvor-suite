@@ -267,7 +267,9 @@ export function billsPayAllDue(): Scenario {
 // different document with the same supplier and invoice number), and the second supplier's invoice printing bank details other
 // than its saved payee's. The copy must say "Already in your inbox"; the screen and Lens must hold one bill per invoice — the first
 // matched to its saved payee, the second flagged bank_details_differ ("Bank details differ from …"). "Pay 2 bills" opens one
-// approval card for both. Then, on the screen's own two calls signed with the passkey: exactly one payment per bill, each to its
+// approval card for both. B41.3: the card flags the second bill "Bank details changed" and each "First payment",
+// and asks for a reason; the screen's own statement call without a reason answers 400, and with one its statement carries the
+// reason and the second item's bank_details_changed override. Then, on the screen's own two calls signed with the passkey: exactly one payment per bill, each to its
 // supplier's saved payee (never the details printed on the invoice), the company account down by the total; the same approval
 // again answers 409 and moves nothing, and the bills read paid. Screenshots at 1440 and 390.
 // shortcut: until Lens takes test money into a company account (B30.15) the account holds nothing, so after the card the run
@@ -277,9 +279,9 @@ export function billsDuplicateChangedDetails(): Scenario {
     id: 'bills-duplicate-changed-details',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B40.22'],
-    title: 'two copies of one PDF invoice are one bill, an invoice printing changed bank details is flagged, and "pay all due" with one ' +
-      'passkey approval pays each bill once to its saved payee',
+    items: ['B40.22', 'B41.3'],
+    title: 'two copies of one PDF invoice are one bill, an invoice printing changed bank details is flagged on the bill and the approval ' +
+      'card and needs a reason, and "pay all due" with one passkey approval pays each bill once to its saved payee',
     run: async (ctx) => {
       const origin = new URL(ctx.app.page.url()).origin
       const lens = async <T>(method: string, path: string, body: unknown, note: string) => {
@@ -384,9 +386,37 @@ export function billsDuplicateChangedDetails(): Scenario {
         for (const b of bills) {
           if (!words.includes(b.supplier) || !words.includes(`Reference: ${b.number}`)) return fail(`the approval card does not show ${b.supplier} with reference ${b.number}: "${words.slice(0, 400)}"`)
         }
+        // B41.3 — each risk its own flag on its item, and the changed details hold the button until a reason is given. A Pill
+        // shows its label in capitals, so innerText is read lower-cased.
+        for (const [position, code, label] of [[1, 'first_payment', 'First payment'], [2, 'first_payment', 'First payment'], [2, 'bank_details_changed', 'Bank details changed']] as const) {
+          const item = page.getByTestId(`approve-item-${position}`)
+          const flagged = (await item.getByTestId(`approve-flag-${position}-${code}`).count()) === 1 && (await item.innerText()).toLowerCase().includes(label.toLowerCase())
+          if (!flagged) return fail(`item ${position} of the approval card does not show "${label}" (${code}): "${(await item.innerText()).replace(/\s+/g, ' ').slice(0, 300)}"`)
+        }
+        if ((await page.getByTestId('approve-item-1').innerText()).toLowerCase().includes('bank details changed')) return fail('the first bill, paid to its saved details, is flagged "Bank details changed" on the card')
+        const button = page.getByRole('button', { name: 'Approve 2 payments with a passkey' })
+        if (!(await button.isDisabled())) return fail('with the changed bank details ticked and no reason given, "Approve 2 payments with a passkey" can be pressed')
+        await page.getByRole('textbox', { name: /Say why you are paying it/ }).fill('The nightly checked the new details with the supplier.')
+        if (await button.isDisabled()) return fail('with a reason given, "Approve 2 payments with a passkey" still cannot be pressed')
         ctx.evidence.push({ note: `the one approval card, ${await screenshots(ctx, page, 'bills-changed-details-card')}` })
       } finally {
         await page.close()
+      }
+
+      // B41.3 — the screen's statement call: refused without a reason; with one, the reason and the override are what is signed.
+      const post = (path: string, body: unknown) => ctx.app.page.request.post(`${origin}/api/money/${path}`, { headers: { Origin: origin }, data: body })
+      const unreasoned = await post(`payment-requests/${request}/approval`, { positions: [1, 2] })
+      ctx.evidence.push({ note: `the statement without a reason: ${unreasoned.status()} ${(await unreasoned.text()).slice(0, 300)}` })
+      if (unreasoned.status() !== 400) return fail(`the statement approving the changed bank details without a reason answered ${unreasoned.status()}, not 400`)
+      const reason = 'The nightly checked the new details with the supplier.'
+      const prepared = await post(`payment-requests/${request}/approval`, { positions: [1, 2], reason })
+      const toSign = await prepared.json() as { statement?: string; challenge?: string }
+      ctx.evidence.push({ note: `the statement to sign: ${prepared.status()} ${String(toSign.statement).slice(0, 600)}` })
+      if (prepared.status() !== 200) return fail(`the statement to approve the two bills with a reason answered ${prepared.status()}`)
+      const st = JSON.parse(toSign.statement ?? '{}') as { reason?: string; items?: { position: number; overrides?: string[] }[] }
+      const overrides = (p: number) => st.items?.find((x) => x.position === p)?.overrides ?? []
+      if (st.reason !== reason || !overrides(2).includes('bank_details_changed') || overrides(1).length !== 0) {
+        return fail(`the statement to sign carries reason ${JSON.stringify(st.reason)} and overrides ${JSON.stringify([overrides(1), overrides(2)])}, not the reason given and bank_details_changed on item 2 only`)
       }
 
       // The money: only once the company account can hold test money (B30.15).
@@ -395,12 +425,7 @@ export function billsDuplicateChangedDetails(): Scenario {
       if (before.held < total) throw new CannotTest(`the bills read one per invoice with the changed details flagged and the card for request ${request} read 2 bills, £339.99, ` +
         `but the company GBP account holds ${before.held} minor of test money and Lens cannot yet take test money into a company account (B30.15), so the payments cannot post`)
 
-      const post = (path: string, body: unknown) => ctx.app.page.request.post(`${origin}/api/money/${path}`, { headers: { Origin: origin }, data: body })
       const wrong: string[] = []
-      const prepared = await post(`payment-requests/${request}/approval`, { positions: [1, 2] })
-      const toSign = await prepared.json() as { statement?: string; challenge?: string }
-      ctx.evidence.push({ note: `the statement to sign: ${prepared.status()} ${String(toSign.statement).slice(0, 600)}` })
-      if (prepared.status() !== 200) return fail(`the statement to approve the two bills answered ${prepared.status()}`)
       const approval = { statement: toSign.statement, assertion: key.assert(toSign.challenge ?? '') }
       const approved = await post(`payment-requests/${request}/approve`, approval)
       ctx.evidence.push({ note: `approve: ${approved.status()} ${(await approved.text()).slice(0, 800)}` })

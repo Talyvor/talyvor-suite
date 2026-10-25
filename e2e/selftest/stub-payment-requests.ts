@@ -13,17 +13,21 @@
 // number the reference — blocked when the bill was paid, is in another live request or has no saved payee; once paid, a
 // bill reads paid. Its defect:
 //   bill-paid-twice            — a bill already paid, or in another live request, is prepared again needing approval
+// B41.3 — and its risk flags (Lens B41.103): a bill printing other bank details than its saved payee's is flagged
+// bank_details_changed, a payee never paid first_payment; a flagged change is never auto-paid, and …/approval refuses it
+// without a "reason", which goes into the statement. Its defect:
+//   flagged-approved-unreasoned — a flagged item's statement is written without a reason
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, randomUUID } from 'node:crypto'
 
 interface ItemIn { payee_id?: string; currency?: string; amount_minor?: number; reference?: string }
-interface Item { bill_id?: string; position: number; payee_id: string; payee_name: string; currency: string; amount_minor: number; reference: string; decision: string; reason: string; rule?: string; mandate_id?: string; payment_id?: string; pay_status?: string; pay_detail?: string }
+interface Item { flags?: { code: string; detail: string }[]; bill_id?: string; position: number; payee_id: string; payee_name: string; currency: string; amount_minor: number; reference: string; decision: string; reason: string; rule?: string; mandate_id?: string; payment_id?: string; pay_status?: string; pay_detail?: string }
 interface Request { id: string; kind: string; status: string; client: string; agent_id?: string; canonical: string; payload_hash: string; approval_url: string; deep_link: string; items: Item[] }
 interface Entry { seq: number; kind: string; body: string; prev_hash: string; hash: string }
 interface Assertion { credential_id?: string; device_id?: string; challenge?: string; signature?: string }
 type Paid = { id: string } | { status: number; error: string }
-type StubBill = { id: string; supplier: string; invoice_number: string; amount_minor: number; currency: string; payee_id?: string; status: string; due_date: string }
+type StubBill = { id: string; supplier: string; invoice_number: string; amount_minor: number; currency: string; payee_id?: string; payee_match?: string; status: string; due_date: string }
 type Judge = (ws: string, p: { client: string; payee_id: string; currency: string; amount_minor: number }) => { decision: string; rule: string; reason: string; mandate_id: string } | undefined
 
 const PAYEE_DETAILS = ['sort_code', 'account_number', 'iban', 'bic', 'swift', 'routing_number', 'bank_account', 'bank_details', 'account_details', 'account_name']
@@ -85,11 +89,18 @@ export class PaymentRequestDesk {
     if (req.method !== 'POST') return false
     if (agentID !== '') return this.json(res, 403, { error: "only the workspace's owner or an admin approves a payment request" }), true
     if (action === 'approval') {
-      const { positions = [] } = JSON.parse((await this.read(req)) || '{}') as { positions?: number[] }
+      const { positions = [], reason = '' } = JSON.parse((await this.read(req)) || '{}') as { positions?: number[]; reason?: string }
       const items = (r.items ?? []).filter((it) => it.decision === 'needs_approval' && (positions.length === 0 || positions.includes(it.position)))
       if (items.length === 0) return this.json(res, 400, { error: 'economy: invalid payment request: no item of this request needs approval' }), true
-      const statement = JSON.stringify({ version: '1', request_id: id, payload_hash: r.payload_hash, items: items.map(({ position, payee_id, payee_name, currency, amount_minor, reference }) =>
-        ({ position, payee_id, payee_name, currency, amount_minor, reference })), expires_at: new Date(Date.now() + 15 * 60_000).toISOString() })
+      const overrides = (it: Item) => (it.flags ?? []).map((f) => f.code).filter((c) => c === 'duplicate' || c === 'bank_details_changed')
+      // STUB_BREAK=flagged-approved-unreasoned — a flagged item's statement is written without a reason.
+      const unreasoned = items.find((it) => overrides(it).length > 0)
+      if (unreasoned !== undefined && reason.trim() === '' && !this.broken('flagged-approved-unreasoned')) {
+        return this.json(res, 400, { error: `economy: invalid payment request: item ${unreasoned.position} is flagged ${overrides(unreasoned).join(' and ')}: approving it needs a reason, signed with the approval` }), true
+      }
+      const statement = JSON.stringify({ version: '1', request_id: id, payload_hash: r.payload_hash, items: items.map((it) => ({ position: it.position, payee_id: it.payee_id,
+        payee_name: it.payee_name, currency: it.currency, amount_minor: it.amount_minor, reference: it.reference, ...(overrides(it).length > 0 ? { overrides: overrides(it) } : {}) })),
+        ...(reason.trim() === '' ? {} : { reason: reason.trim() }), expires_at: new Date(Date.now() + 15 * 60_000).toISOString() })
       const challenge = createHash('sha256').update(statement).digest('base64url')
       this.statements.set(id, { statement, challenge })
       return this.json(res, 200, { statement, challenge, allow_credentials: [], user_verification: 'required' }), true
@@ -190,10 +201,19 @@ export class PaymentRequestDesk {
       if (payee === undefined) return { ...base, decision: 'blocked', reason: 'no saved payee of this workspace has this id', rule: 'payee' }
       if (payee.needs_confirmation) return { ...base, decision: 'blocked', rule: 'payee',
         reason: "this payee's name did not match its account: the owner confirms it with a passkey before the first payment" }
+      const bill = it.bill_id === undefined ? undefined : this.bills(ws).find((x) => x.id === it.bill_id)
+      const paid = [...this.requests.values()].some((q) => q.items.some((x) => x.payee_id === it.payee_id && x.pay_status === 'completed'))
+      const flags = [
+        ...(bill?.payee_match === 'bank_details_differ' ? [{ code: 'bank_details_changed', detail: `the bank details on invoice ${it.reference} differ from those saved for ${payee.name}: the saved ones are paid` }] : []),
+        ...(paid ? [] : [{ code: 'first_payment', detail: `the first payment to ${payee.name}` }]),
+      ]
+      if (flags.some((f) => f.code === 'bank_details_changed')) {
+        return { ...base, flags, decision: 'needs_approval', reason: 'flagged bank_details_changed: a person approves it with a passkey and a reason', rule: 'risk' }
+      }
       const d = this.judge(ws, { client, ...it })
-      if (d === undefined) return { ...base, decision: 'needs_approval', reason: 'no permission mandate the person signed covers this payment' }
-      if (d.decision === 'allow') return { ...base, decision: 'auto', reason: 'inside the mandate', mandate_id: d.mandate_id }
-      return { ...base, decision: 'needs_approval', reason: d.reason, rule: d.rule, mandate_id: d.mandate_id }
+      if (d === undefined) return { ...base, flags, decision: 'needs_approval', reason: 'no permission mandate the person signed covers this payment' }
+      if (d.decision === 'allow') return { ...base, flags, decision: 'auto', reason: 'inside the mandate', mandate_id: d.mandate_id }
+      return { ...base, flags, decision: 'needs_approval', reason: d.reason, rule: d.rule, mandate_id: d.mandate_id }
     })
     const r: Request = { id, kind, status: judged.every((i) => i.decision === 'auto') ? 'auto' : 'pending_approval', client, ...(agentID === '' ? {} : { agent_id: agentID }), canonical,
       payload_hash: createHash('sha256').update(canonical).digest('hex'), approval_url: `https://app.talyvor.com/approve/${id}`, deep_link: `talyvor://approve/${id}`, items: judged }

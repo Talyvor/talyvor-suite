@@ -32,7 +32,7 @@ func TestApprovalScreenWritesReachLensAsNamed(t *testing.T) {
 	if rec := doJSON(a, http.MethodPost, "/api/money/payment-requests/preq_1/approval", `{"positions":[]}`); rec.Code != http.StatusBadRequest {
 		t.Fatalf("an approval with nothing ticked = %d, want 400", rec.Code)
 	}
-	if rec := doJSON(a, http.MethodPost, "/api/money/payment-requests/preq_1/approval", `{"positions":[1,3],"all":true}`); rec.Code != http.StatusOK {
+	if rec := doJSON(a, http.MethodPost, "/api/money/payment-requests/preq_1/approval", `{"positions":[1,3],"all":true,"reason":"re-sent invoice"}`); rec.Code != http.StatusOK {
 		t.Fatalf("approval = %d %s", rec.Code, rec.Body.String())
 	}
 	if rec := doJSON(a, http.MethodPost, "/api/money/payment-requests/preq_1/approve",
@@ -53,8 +53,8 @@ func TestApprovalScreenWritesReachLensAsNamed(t *testing.T) {
 			t.Errorf("call %d did not go up under the session's token: %s", i, call)
 		}
 	}
-	if !strings.HasPrefix(got[0], "POST /v1/money/payment-requests/preq_1/approval ") || !strings.HasSuffix(got[0], ` {"positions":[1,3]}`) {
-		t.Errorf("approval did not go up with only the ticked positions: %s", got[0])
+	if !strings.HasPrefix(got[0], "POST /v1/money/payment-requests/preq_1/approval ") || !strings.HasSuffix(got[0], ` {"positions":[1,3],"reason":"re-sent invoice"}`) {
+		t.Errorf("approval did not go up with only the ticked positions and the reason: %s", got[0])
 	}
 	if !strings.HasPrefix(got[1], "POST /v1/money/payment-requests/preq_1/approve ") || !strings.Contains(got[1], `"statement":"{\"items\":[]}"`) ||
 		!strings.Contains(got[1], `"signature":"s"`) || strings.Contains(got[1], `"by"`) {
