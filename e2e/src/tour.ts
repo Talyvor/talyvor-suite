@@ -313,6 +313,8 @@ export function walletBrand(): Scenario {
         try {
           await page.locator('header h1').filter({ hasText: screen.title }).waitFor({ timeout: HEADING_TIMEOUT_MS })
           await page.waitForLoadState('networkidle', { timeout: SETTLE_TIMEOUT_MS }).catch(() => undefined)
+          // B17.237 — the heading is the shell's; a screen's cards come with its first read, which can outlast the settle.
+          await page.locator('main .rounded-card').first().waitFor({ timeout: HEADING_TIMEOUT_MS }).catch(() => undefined)
           // The theme first, then a pause: a Button's colour eases over 200ms, and read mid-ease it is neither theme's teal.
           await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'))
           await page.waitForTimeout(400)
@@ -336,7 +338,10 @@ export function walletBrand(): Scenario {
             const lines = Array.from(main.querySelectorAll('[data-testid="agent-statement"] tbody tr'))
             const pilled = lines.filter((tr) => tr.querySelector('span.rounded-pill') !== null).length
             const waiting = Array.from(main.querySelectorAll('span.rounded-pill')).filter((p) => (p.textContent ?? '').trim() === 'Waiting').length
-            return { teal, cards, amounts: amounts.length, notMono, lines: lines.length, pilled, waiting }
+            const unread = Array.from(main.querySelectorAll('p'))
+              .map((p) => (p.textContent ?? '').trim())
+              .find((t) => /^Reading…$|could not be read|can’t be read/.test(t))
+            return { teal, cards, amounts: amounts.length, notMono, lines: lines.length, pilled, waiting, unread }
           }, DARK_WALLET)
           if (seen === null) {
             wrong.push(`${screen.path} has no main`)
@@ -346,7 +351,7 @@ export function walletBrand(): Scenario {
           // Approve reads "Approve with Face ID" once the workspace signs its approvals.
           const one = teal === null ? seen.teal.length === 0 : seen.teal.length === 1 && seen.teal[0].startsWith(teal)
           if (!one) wrong.push(`${screen.path} fills [${seen.teal.join(', ')}] teal; want ${teal ?? 'nothing'}${screen.path === '/approvals' ? ` (Lens has ${pending} pending)` : ''}`)
-          if (seen.cards.length === 0) wrong.push(`${screen.path} shows no card`)
+          if (seen.cards.length === 0) wrong.push(`${screen.path} shows no card${seen.unread ? ` ("${seen.unread}")` : ''}`)
           const flat = seen.cards.filter((c) => c !== DARK_WALLET.raised)
           if (flat.length > 0) wrong.push(`${screen.path}: ${flat.length} card(s) not on raised ${DARK_WALLET.raised}: ${flat.join(', ')}`)
           if (seen.notMono.length > 0) wrong.push(`${screen.path}: amounts off the figure face: ${seen.notMono.slice(0, 3).join('; ')}`)
@@ -704,6 +709,8 @@ export function screensBrand(): Scenario {
         try {
           await page.locator('header h1').filter({ hasText: screen.title }).waitFor({ timeout: HEADING_TIMEOUT_MS })
           await page.waitForLoadState('networkidle', { timeout: SETTLE_TIMEOUT_MS }).catch(() => undefined)
+          // B17.237 — the heading is the shell's; a screen's cards come with its first read, which can outlast the settle.
+          await page.locator('main .rounded-card').first().waitFor({ timeout: HEADING_TIMEOUT_MS }).catch(() => undefined)
           // The theme first, then a pause: a Button's colour eases over 200ms, and read mid-ease it is neither theme's teal.
           await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'))
           await page.waitForTimeout(400)
