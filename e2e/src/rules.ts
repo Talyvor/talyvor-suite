@@ -18,6 +18,8 @@ import type { Scenario, ScenarioCtx } from './scenarios.ts'
 /** What the agent is funded with: enough for every request and payment here, so none is refused for want of LXC. */
 const FUND_ULXC = 1_000_000
 const REPLY_MAX_TOKENS = 16
+/** The control's one served ask: room for claude-sonnet-5, which writes "a + b = **c**" and is cut off or empty at 16. */
+const CONTROL_MAX_TOKENS = 256
 /** The approval amount, and a payment ten times it. */
 const APPROVAL_ABOVE_ULXC = 1_000
 const PAY_ULXC = 10_000
@@ -196,10 +198,10 @@ export function agentRulesUnbypassable(): Scenario {
       const a = 1000 + Math.floor(Math.random() * 9000)
       const b = 1000 + Math.floor(Math.random() * 9000)
       const prompt = `What is ${a} + ${b}? Reply with the number only. (${RUN_SALT})`
-      const hold = env.cap.reserve(listPriceUSD(model, worstInputTokens(prompt.length), REPLY_MAX_TOKENS))
+      const hold = env.cap.reserve(listPriceUSD(model, worstInputTokens(prompt.length), CONTROL_MAX_TOKENS))
       let served: Answered<JudgeReply>
       try {
-        served = await lens.askAsAgent(key, env.judgeProvider, model.id, prompt, REPLY_MAX_TOKENS, { 'X-Talyvor-Cache': 'bypass' })
+        served = await lens.askAsAgent(key, env.judgeProvider, model.id, prompt, CONTROL_MAX_TOKENS, { 'X-Talyvor-Cache': 'bypass' })
         env.cap.settle(hold, served.ok ? listPriceUSD(model, served.value.inputTokens, served.value.outputTokens) : undefined)
       } catch (e) {
         env.cap.settle(hold, undefined)
