@@ -375,13 +375,14 @@ export function readingPages(): Scenario {
 /** B29.28 — the oracle for a Docs page: what is off-brand about it, in words; nothing when it is the brand. */
 // B32.2 — the company line on every page of the website, and who runs Talyvor at the top of the legal
 // pages. Typed here, not imported from the app: the oracle is the register's words, not the code's.
+// The contact is hello@talyvor.com since B44.4 (#764).
 export const COMPANY_LINE = 'TALYVOR LTD · Registered in England and Wales · Company number 17299143 · ' +
   'Registered office: 71-75 Shelton Street, Covent Garden, London, United Kingdom, WC2H 9JQ'
 const OPENINGS: Record<string, string> = {
   '/terms': 'These terms are between you and TALYVOR LTD, a company registered in England and Wales (number 17299143) ' +
-    'whose registered office is 71-75 Shelton Street, Covent Garden, London, United Kingdom, WC2H 9JQ. Contact: nicolai@talyvor.com.',
+    'whose registered office is 71-75 Shelton Street, Covent Garden, London, United Kingdom, WC2H 9JQ. Contact: hello@talyvor.com.',
   '/privacy': 'TALYVOR LTD (company number 17299143, registered office 71-75 Shelton Street, Covent Garden, London, United Kingdom, ' +
-    'WC2H 9JQ) runs Talyvor and decides how the personal data this notice describes is used. Contact: nicolai@talyvor.com.',
+    'WC2H 9JQ) runs Talyvor and decides how the personal data this notice describes is used. Contact: hello@talyvor.com.',
 }
 const COMPANY_PAGES = ['/marketing', '/pricing', '/documentation', '/terms', '/privacy', '/signin', '/signup', '/settings'] as const
 
