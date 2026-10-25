@@ -65,6 +65,17 @@ export class PermissionMandateDesk {
     return this.json(res, 200, { ...this.evaluate(JSON.parse(m.canonical) as Terms, m.revoked_at, await this.body<Payment>(req)), mandate_id: m.id }), true
   }
 
+  /** B40.27 — `p` judged against `ws`'s active mandates as Lens's judgePaymentItems picks: the first that allows, else the closest. */
+  judge(ws: string, p: Payment): { decision: string; rule: string; reason: string; mandate_id: string } | undefined {
+    let closest: { decision: string; rule: string; reason: string; mandate_id: string } | undefined
+    for (const m of (this.kept.get(ws) ?? []).filter((x) => x.status === 'active')) {
+      const d = { ...this.evaluate(JSON.parse(m.canonical) as Terms, m.revoked_at, p), mandate_id: m.id }
+      if (d.decision === 'allow') return d
+      if (closest === undefined || (closest.decision === 'block' && d.decision === 'needs_approval')) closest = d
+    }
+    return closest
+  }
+
   private evaluate(t: Terms, revokedAt: string | undefined, p: Payment): { decision: string; rule: string; reason: string } {
     const cur = (p.currency ?? '').toUpperCase()
     const amount = p.amount_minor ?? 0
