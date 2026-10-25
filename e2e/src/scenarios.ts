@@ -102,6 +102,7 @@ import { injectionExfil } from './injection.ts'
 import { fileBombBounded, ssrfRefused } from './ssrf.ts'
 import { csrfRefused, phoneBearer, scriptInert } from './session.ts'
 import { connectApprove, connectMCP, connectOAuth } from './connect.ts'
+import { mcpSDKAgentPay } from './mcpSDK.ts'
 import { keysNotForwarded, keysUnlisted } from './keys.ts'
 import { rateLimitsHold, workspaceLimitsRaised } from './ratelimit.ts'
 import { marketDiscoverScreen, marketDiscovery } from './discovery.ts'
@@ -5216,6 +5217,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B40.21 — an assistant prepares a two-payee batch over MCP, once a run, on a workspace of its own: one passkey approval
   // posts exactly the two payments, a replayed approval posts nothing, and raw bank details are refused.
   if (i === 8) list.push(connectApprove())
+  // B40.25 — the official MCP SDK client on an agent's own key, once a run, on a workspace of its own: Lens's tools listed with
+  // their annotations, agent_balance read, and agent_pay one entry of two postings, one on each agent's statement, summing to zero.
+  if (i === 7) list.push(mcpSDKAgentPay(i))
   // B28.288 — Lens's rate limiter, once a run, on a workspace of its own: a burst of reads at once on one token is refused
   // past the limit, each refusal saying when to come back, and the next read once that has passed is served.
   if (i === 7) list.push(rateLimitsHold())
