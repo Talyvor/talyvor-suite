@@ -19,6 +19,7 @@
     "openai": "^4.104.0",
     "playwright": "^1.63.0",
     "typescript": "^5.7.2",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "zod": "^4.6.7"
   }
 }
