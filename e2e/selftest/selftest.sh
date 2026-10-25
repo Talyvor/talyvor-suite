@@ -43,7 +43,7 @@ tmp=$(mktemp -d)
 (cd "$root/apps/bff" && go build -o "$tmp/bff" .)
 [ -f "$root/apps/web/dist/index.html" ] || pnpm --dir "$root" --filter @talyvor/web build
 
-STUB_PORT=$stub_port STUB_APP_URL="http://localhost:$bff_port" LENS_VLLM_BASE_URL=${E2E_UPSTREAM_PORT:+http://127.0.0.1:$E2E_UPSTREAM_PORT} LENS_SYNTHETIC_KEY=$key STUB_MODERATOR_KEY=$moderator STUB_ADMIN_KEY=$admin STUB_OPERATOR_READ_KEY=$operator_read STUB_WEBHOOK_SECRET=$webhook_secret node --experimental-strip-types --no-warnings "$here/stub-lens.ts" >"$tmp/stub.log" 2>&1 &
+STUB_PROVISION_SECRET=selftest STUB_PORT=$stub_port STUB_APP_URL="http://localhost:$bff_port" LENS_VLLM_BASE_URL=${E2E_UPSTREAM_PORT:+http://127.0.0.1:$E2E_UPSTREAM_PORT} LENS_SYNTHETIC_KEY=$key STUB_MODERATOR_KEY=$moderator STUB_ADMIN_KEY=$admin STUB_OPERATOR_READ_KEY=$operator_read STUB_WEBHOOK_SECRET=$webhook_secret node --experimental-strip-types --no-warnings "$here/stub-lens.ts" >"$tmp/stub.log" 2>&1 &
 stub=$!
 TRACK_PORT=$track_port DOCS_PORT=$docs_port GATEWAY_SECRET=$gateway LENS_URL="http://127.0.0.1:$stub_port" LENS_SYNTHETIC_KEY=$key node --experimental-strip-types --no-warnings "$here/stub-products.ts" &
 products=$!
@@ -109,7 +109,7 @@ if [ "${E2E_FAULTS:-}" = 1 ]; then
 fi
 
 code=0
-LENS_SYNTHETIC_KEY=$key LENS_MODERATOR_KEY=$moderator LENS_API_KEY=$admin LENS_OPERATOR_READ_KEY=$operator_read LENS_STRIPE_TEST_WEBHOOK_SECRET=$webhook_secret node --experimental-strip-types --no-warnings "$here/../src/run.ts" \
+LENS_SYNTHETIC_KEY=$key LENS_MODERATOR_KEY=$moderator LENS_API_KEY=$admin LENS_OPERATOR_READ_KEY=$operator_read LENS_PROVISION_SECRET=selftest LENS_STRIPE_TEST_WEBHOOK_SECRET=$webhook_secret node --experimental-strip-types --no-warnings "$here/../src/run.ts" \
   --app "http://localhost:$bff_port" --lens "http://127.0.0.1:$stub_port" \
   --users "${E2E_USERS:-10}" --concurrency "${E2E_CONCURRENCY:-5}" --cap-usd "${E2E_CAP_USD:-1}" \
   --out "${E2E_OUT:-$here/../out}" --report-dir "${E2E_REPORT_DIR:-${E2E_OUT:-$here/../out}}" \

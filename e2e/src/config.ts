@@ -31,6 +31,11 @@ export interface RunConfig {
    */
   operatorReadKey: string
   /**
+   * B45.36 — LENS_PROVISION_SECRET: the secret the BFF provisions a person's workspace with at sign-in, the same value Lens
+   * boots with, so a fresh identity can sign in as a new person does; '' leaves first-agent a SKIP
+   */
+  provisionSecret: string
+  /**
    * B28.287 — the port the synthetic upstream listens on, where the Lens under test sends its vLLM traffic
    * (LENS_VLLM_BASE_URL); 0 leaves keys-not-forwarded a SKIP
    */
@@ -168,6 +173,7 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     adminKey: env.LENS_API_KEY ?? '',
     webhookSecret: env.LENS_STRIPE_TEST_WEBHOOK_SECRET ?? '',
     operatorReadKey: env.LENS_OPERATOR_READ_KEY ?? '',
+    provisionSecret: env.LENS_PROVISION_SECRET ?? '',
     upstreamPort: Math.floor(num('upstream-port', 'E2E_UPSTREAM_PORT', 0, true)),
     hookTunnel: pick('hook-tunnel', 'E2E_HOOK_TUNNEL') ?? 'cloudflared',
     users: light ? LIGHT_USERS : Math.floor(num('users', 'E2E_USERS', DEFAULTS.users)),

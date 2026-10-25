@@ -363,6 +363,7 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
       docsSrc: cfg.docsSrc,
       webhookSecret: cfg.webhookSecret,
       operatorReadKey: cfg.operatorReadKey,
+      provisionSecret: cfg.provisionSecret,
       upstreamPort: cfg.upstreamPort,
       hookTunnel: cfg.hookTunnel,
       // B29.21 — beside the day's report, one folder a run, so the report's links outlive out/.
