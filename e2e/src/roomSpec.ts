@@ -1,4 +1,4 @@
-// B41.60 — a Docs page as the room's living spec, on Lens's API, once a run, on a workspace of its own.
+// B41.60 — a Docs page as the room's living spec, on Lens's API, once a run, on a Team workspace of its own.
 //
 // The room screen attaches a Docs page by posting its text to the room as a spec message (apps/web RoomSpec.tsx
 // specBody), and posts the page again, as the spec's update, when it is edited in Docs. The room's AI reads the room's
@@ -22,6 +22,8 @@ export function roomSpec(i: number): Scenario {
     id: 'room-spec',
     owner: 'talyvor-suite',
     feature: 'Rooms',
+    // A private room: Free opens none.
+    plan: 'team',
     own: true,
     title: "a room's spec, posted from a Docs page, is in the room's AI's context, and its update replaces it: asked for the spec's code word, the AI " +
       'answers the word the latest spec names',
