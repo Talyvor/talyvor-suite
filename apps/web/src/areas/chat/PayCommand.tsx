@@ -5,7 +5,8 @@ import { Link } from 'react-router-dom'
 import { Button, Input, inlineLink } from '@talyvor/ui'
 
 import { ApprovalCard, paymentRequestKey } from '../lens/Approve'
-import { type OutsidePayee, agentBankApi, formatMinor, minorOf, newMoveKey, refusalText, type PaymentRequest } from '../lens/agentBankApi'
+import { type CurrencyAccount, type OutsidePayee, agentBankApi, formatMinor, minorOf, newMoveKey, refusalText, type PaymentRequest } from '../lens/agentBankApi'
+import { MONEY_ACCOUNTS_KEY } from '../lens/Invoices'
 import { PAYEES_KEY } from '../lens/Pay'
 import { Card } from '../lens/walletBrand'
 
@@ -62,7 +63,10 @@ export function parsePay(text: string): PayAsk | null {
     .replace(/[\s,.!]+$/, '')
     .trim()
   if (payee === '') return null
-  return { payee, amount: found?.amount, reference: invoice !== null ? `${payee} ${invoice[1].toLowerCase()}` : '' }
+  // B41.37 — "for invoice 4471" (or "invoice number 4471") is the reference as said; otherwise "ACME invoice".
+  const numbered = /\b(invoice|bill)\s+(?:no\.?\s*|number\s+|#\s*)?(\d[\w-]*)/i.exec(rest)
+  const reference = numbered !== null ? `${numbered[1].toLowerCase()} ${numbered[2]}` : invoice !== null ? `${payee} ${invoice[1].toLowerCase()}` : ''
+  return { payee, amount: found?.amount, reference }
 }
 
 export const isPayCommand = (text: string) => parsePay(text) !== null
@@ -80,14 +84,23 @@ export function payeesCalled(payees: OutsidePayee[], said: string): OutsidePayee
 /** A payee's own currency: a US routing number pays dollars, an IBAN outside the UK euros, anything else pounds. */
 const currencyOf = (p: OutsidePayee) => (p.routing_number ? 'USD' : p.iban && !/^GB/i.test(p.iban) ? 'EUR' : 'GBP')
 
-/** The read-back: the payee and the amount, and that nothing is paid yet. */
-export function readBack(r: PaymentRequest): string {
+/** B41.37 — the account a request with no agent pays from, as Lens picks it: the company's open account in that
+ *  currency. Named only when there is exactly one, so the read-back never names the wrong account. */
+export function payingAccountName(accounts: CurrencyAccount[], currency: string): string {
+  const open = accounts.filter((a) => a.purpose === 'company' && a.currency === currency && a.status !== 'closed')
+  return open.length === 1 ? open[0].name : ''
+}
+
+/** The read-back, said and shown alike: the payee, the amount, the account it comes from and what it is for — never an
+ *  account number — and that nothing is paid until a passkey approves it. */
+export function readBack(r: PaymentRequest, from = ''): string {
   const it = r.items[0]
   if (it === undefined) return 'Nothing was prepared.'
-  const what = `${formatMinor(it.amount_minor, it.currency)} to ${it.payee_name}`
-  return it.decision === 'blocked'
-    ? `The payment of ${what} can’t be made: ${it.reason}.`
-    : `I’ve prepared a payment of ${what}. Nothing is paid until you approve it with your passkey.`
+  const amount = formatMinor(it.amount_minor, it.currency)
+  if (it.decision === 'blocked') return `The payment of ${amount} to ${it.payee_name} can’t be made: ${it.reason}.`
+  const ref = it.reference.trim()
+  const what = ref === '' ? '' : /^(?:invoice|bill)\b/i.test(ref) ? ` for ${ref}` : ` for the ${ref}`
+  return `Pay ${it.payee_name} ${amount}${from === '' ? '' : ` from ${from}`}${what} — look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.`
 }
 
 export function PayCard({
@@ -108,6 +121,8 @@ export function PayCard({
 }) {
   const [ask] = useState(() => parsePay(command))
   const payees = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees })
+  const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
+  const from = (r: PaymentRequest) => payingAccountName(accounts.data?.accounts ?? [], r.items[0]?.currency ?? '')
   const matches = ask === null ? [] : payeesCalled(payees.data?.payees ?? [], ask.payee)
   const [chosen, setChosen] = useState<string | null>(null)
   const payee = matches.length === 1 ? matches[0] : matches.find((p) => p.id === chosen)
@@ -120,7 +135,7 @@ export function PayCard({
         { voice, items: [{ payee_id: to.id, currency: much.currency ?? currencyOf(to), amount_minor: much.minor, reference: ask?.reference ?? '' }] },
         key,
       ),
-    onSuccess: (r) => (voice ? say(readBack(r)) : undefined),
+    onSuccess: (r) => (voice ? say(readBack(r, from(r))) : undefined),
   })
   const prepared = useQuery({
     queryKey: paymentRequestKey(prepare.data?.id ?? ''),
@@ -131,10 +146,11 @@ export function PayCard({
 
   const started = useRef(false)
   useEffect(() => {
-    if (payee === undefined || amount === undefined || started.current) return
+    // Waits for the accounts too, so the read-back said aloud names the account it comes from.
+    if (payee === undefined || amount === undefined || accounts.isPending || started.current) return
     started.current = true
     prepare.mutate({ to: payee, much: amount })
-  }, [amount, payee, prepare])
+  }, [accounts.isPending, amount, payee, prepare])
   const asked = useRef(false)
   useEffect(() => {
     if (!voice || payee === undefined || amount !== undefined || asked.current) return
@@ -209,7 +225,7 @@ export function PayCard({
             <p className="text-body text-muted">Preparing the payment…</p>
           ) : (
             <p className="text-body text-ink" role="status" data-testid="chat-pay-readback">
-              {readBack(request)}
+              {readBack(request, from(request))}
             </p>
           )}
           <div>

@@ -1,5 +1,5 @@
 // B40.12 — talking to Talyvor in Chat. Once a run, on a workspace of its own: the owner saves a payee on Lens's API, then
-// in Chat types "pay <payee> £1.50 for the nightly invoice" and must read back the payee and £1.50, see the approval card,
+// in Chat types "pay <payee> £1.50 for invoice 4471" and must read back the payee and £1.50, see the approval card,
 // and never see the payee's account number. The same payment prepared as if said aloud (the BFF's voice route) must come
 // back from Lens as a voice request needing approval. Nothing is approved, so the ledger must hold no payment to the payee —
 // read back from Lens, never judged by a status code. The speech route must answer either audio or Lens's "speech is not
@@ -9,6 +9,8 @@
 // <payee> £1.50 …" must land in the box unsent and, sent, end in the same read-back and approval card, never a payment.
 // Without speech it must not be offered.
 // B40.39 — the voice request must then be on the phone's Bills due list, GET /api/money/payment-requests?status=pending_approval.
+// B41.37 — the read-back is one sentence, "Pay <payee> £1.50 … for invoice 4471 — look at your phone, or approve below, to confirm",
+// naming the invoice as said and never the account number.
 
 import { fileURLToPath } from 'node:url'
 import type { Page } from 'playwright'
@@ -51,9 +53,14 @@ export interface HeyTalySeen {
 
 export function voiceVerdict(seen: VoiceSeen): Verdict {
   const wrong: string[] = []
-  const want = `£1.50 to ${seen.payee}`
-  if (!seen.readback.includes(want) || !seen.readback.includes('Nothing is paid until you approve it with your passkey')) {
-    wrong.push(`Chat read back "${seen.readback}", not the payee and amount (${want}) and that nothing is paid until a passkey approves it`)
+  const want = `Pay ${seen.payee} £1.50`
+  if (
+    !seen.readback.startsWith(want) ||
+    !seen.readback.includes('for invoice 4471 — look at your phone, or approve below, to confirm') ||
+    !seen.readback.includes('Nothing is paid until you approve it with your passkey') ||
+    seen.readback.includes(ACCOUNT_NUMBER)
+  ) {
+    wrong.push(`Chat read back "${seen.readback}", not the payee and amount (${want}), invoice 4471, and that nothing is paid until a passkey approves it`)
   }
   if (!seen.approveCard) wrong.push('Chat showed no approval card for the prepared payment')
   if (seen.pageText.includes(ACCOUNT_NUMBER)) wrong.push('Chat showed the payee’s account number')
@@ -76,7 +83,7 @@ export function voiceVerdict(seen: VoiceSeen): Verdict {
       if (h.whileHidden !== 0) wrong.push(`Hey Taly kept ${h.whileHidden} recognisers listening while the tab was hidden`)
       if (h.whenBack !== 1) wrong.push(`Hey Taly had ${h.whenBack} recognisers listening once the tab was back, not 1`)
       if (!h.landed || !h.unsentFirst) wrong.push('what was said after “Hey Taly” did not land in the box unsent')
-      if (!h.readback.includes(want) || !h.readback.includes('passkey') || !h.approveCard) {
+      if (!h.readback.startsWith(want) || !h.readback.includes('passkey') || !h.approveCard) {
         wrong.push(`"Hey Taly, pay …" read back "${h.readback}"${h.approveCard ? '' : ' with no approval card'}, not ${want} awaiting a passkey`)
       }
     }
@@ -139,7 +146,7 @@ async function sayHeyTaly(page: Page, payee: string): Promise<HeyTalySeen> {
   await showTab('visible')
   await page.waitForFunction(() => (window as unknown as Test).heyTalyTest.live.length > 0, undefined, { timeout: TIMEOUT_MS }).catch(() => undefined)
   seen.whenBack = await listening()
-  const words = `pay ${payee} £1.50 for the nightly invoice`
+  const words = `pay ${payee} £1.50 for invoice 4471`
   await page.evaluate((words) => (window as unknown as Test).heyTalyTest.hear(words), `Hey Taly, ${words}`)
   // What was said lands in the box, unsent, as a recording does; the run sends it.
   const box = page.locator('#chat-message')
@@ -158,7 +165,7 @@ export function voiceChatPay(): Scenario {
     id: 'voice-chat-pay',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B40.12', 'B45.27', 'B40.39'],
+    items: ['B40.12', 'B45.27', 'B40.39', 'B41.37'],
     feature: 'Chat',
     title: 'a payment asked for in Chat is prepared, read back with the payee and amount and no account number, and a voice request needs approval; nothing is paid without a passkey',
     run: async (ctx) => {
@@ -179,7 +186,7 @@ export function voiceChatPay(): Scenario {
       try {
         const box = page.getByPlaceholder('Ask anything')
         await box.waitFor({ timeout: TIMEOUT_MS })
-        await box.fill(`pay ${payee} £1.50 for the nightly invoice`)
+        await box.fill(`pay ${payee} £1.50 for invoice 4471`)
         await box.press('Enter')
         const line = page.getByTestId('chat-pay-readback')
         await line.waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
