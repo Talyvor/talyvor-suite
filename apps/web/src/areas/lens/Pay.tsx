@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, focusRing, type PillStatus } from '@talyvor/ui'
 import { Card } from './walletBrand'
@@ -1171,6 +1172,20 @@ function Bills({ payeeName }: { payeeName: (id: string | undefined) => string })
     },
   })
   const list = bills.data?.bills ?? []
+  // B41.2 — pay all due: the ticked bills become one payment request (Lens B41.102), approved once on its card at /approve/<id>.
+  const navigate = useNavigate()
+  const [unticked, setUnticked] = useState<Set<string>>(new Set())
+  const [payKey, setPayKey] = useState(newMoveKey)
+  const due = list.filter(payable)
+  const ticked = due.filter((b) => !unticked.has(b.id))
+  const pay = useMutation({
+    mutationFn: () => agentBankApi.payBills(ticked.map((b) => b.id), payKey),
+    onSuccess: (r) => {
+      setPayKey(newMoveKey())
+      void qc.invalidateQueries({ queryKey: BILLS_KEY })
+      navigate(`/approve/${encodeURIComponent(r.id)}`)
+    },
+  })
   return (
     <Card>
       <CardHeader>Bills inbox</CardHeader>
@@ -1213,32 +1228,85 @@ function Bills({ payeeName }: { payeeName: (id: string | undefined) => string })
             No bills yet: add an invoice you received above.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2" aria-label="Bills">
-            {list.map((b) => (
-              <BillRow key={b.id} b={b} payeeName={payeeName} />
-            ))}
-          </ul>
+          <>
+            <ul className="flex flex-col gap-2" aria-label="Bills">
+              {list.map((b) => (
+                <BillRow
+                  key={b.id}
+                  b={b}
+                  payeeName={payeeName}
+                  ticked={payable(b) ? !unticked.has(b.id) : undefined}
+                  onTick={() => {
+                    setUnticked((s) => (s.has(b.id) ? new Set([...s].filter((x) => x !== b.id)) : new Set(s).add(b.id)))
+                    setPayKey(newMoveKey())
+                  }}
+                />
+              ))}
+            </ul>
+            {due.length > 0 ? (
+              <div className="flex flex-col gap-2" data-testid="bills-pay">
+                <p className="text-caption text-muted">
+                  Pay the bills you tick as one batch: one card shows their count, total and every payee, and you approve it once with a passkey. Each bill is then paid
+                  separately, with its invoice number as the reference, and never twice.
+                  {list.some((b) => b.status === 'due' && !b.payee_id) ? ' A bill whose supplier is not a saved payee can be paid once you save the supplier as a payee.' : ''}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="primary" disabled={ticked.length === 0 || pay.isPending} onClick={() => pay.mutate()}>
+                    {pay.isPending ? 'Preparing…' : `Pay ${ticked.length === 1 ? '1 bill' : `${ticked.length} bills`}`}
+                  </Button>
+                  {ticked.length > 0 ? (
+                    <span className="text-caption text-muted" data-testid="bills-pay-total">
+                      Total <span className="font-figure">{totalOf(ticked)}</span>
+                    </span>
+                  ) : (
+                    <span className="text-caption text-muted">Tick at least one bill.</span>
+                  )}
+                </div>
+                {pay.isError ? <Note ok={false}>{refusalText(pay.error)}</Note> : null}
+              </div>
+            ) : null}
+          </>
         )}
       </div>
     </Card>
   )
 }
 
-function BillRow({ b, payeeName }: { b: Bill; payeeName: (id: string | undefined) => string }) {
+/** B41.2 — a bill Lens can pay: still due, its amount read, and its supplier a saved payee (never the details printed on it). */
+const payable = (b: Bill) => b.status === 'due' && !!b.payee_id && b.amount_minor > 0 && !!b.currency
+
+/** Totals by currency, as one line: "£12.00, €3.00". */
+const totalOf = (bills: Bill[]) =>
+  Object.entries(bills.reduce<Record<string, number>>((t, b) => ({ ...t, [b.currency]: (t[b.currency] ?? 0) + b.amount_minor }), {}))
+    .map(([cur, minor]) => formatMinor(minor, cur))
+    .join(', ')
+
+function BillRow({ b, payeeName, ticked, onTick }: { b: Bill; payeeName: (id: string | undefined) => string; ticked?: boolean; onTick: () => void }) {
   const match = PAYEE_MATCH[b.payee_match] ?? { text: () => b.payee_match, pill: 'idle' as PillStatus }
   const missing = (b.missing ?? []).map((m) => MISSING[m] ?? m)
   const printed = b.iban ? `${b.iban}${b.bic ? ` · ${b.bic}` : ''}` : b.routing_number ? `${b.routing_number} · ${b.account_number ?? ''}` : b.sort_code ? `${b.sort_code} · ${b.account_number ?? ''}` : ''
   return (
     <li className="flex flex-col gap-1 rounded-card border border-rule p-3" data-testid={`bill-${b.id}`}>
       <div className="flex flex-wrap items-center justify-between gap-2 text-body text-ink">
-        <span className="min-w-0">
-          {b.supplier || 'Supplier not read'}
-          {b.invoice_number ? (
-            <>
-              {' '}
-              · <span className="font-figure">{b.invoice_number}</span>
-            </>
+        <span className="flex min-w-0 items-center gap-2">
+          {ticked !== undefined ? (
+            <input
+              type="checkbox"
+              className={`h-4 w-4 shrink-0 accent-accent transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+              checked={ticked}
+              onChange={onTick}
+              aria-label={`Pay ${formatMinor(b.amount_minor, b.currency)} to ${b.supplier || 'this supplier'}`}
+            />
           ) : null}
+          <span className="min-w-0">
+            {b.supplier || 'Supplier not read'}
+            {b.invoice_number ? (
+              <>
+                {' '}
+                · <span className="font-figure">{b.invoice_number}</span>
+              </>
+            ) : null}
+          </span>
         </span>
         <span className="flex items-center gap-2">
           {b.amount_minor > 0 && b.currency ? <span className="font-figure">{formatMinor(b.amount_minor, b.currency)}</span> : null}

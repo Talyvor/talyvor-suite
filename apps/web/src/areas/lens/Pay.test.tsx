@@ -11,11 +11,10 @@ const ACCOUNTS = [
   { id: 'macc_agt', agent_id: 'agt_1', currency: 'GBP', purpose: 'agent', status: 'open', name: 'GBP account', balance_minor: 10000, test_minor: 10000, live_minor: 0 },
 ]
 
-function mockBff(asked: unknown[] = []) {
+function mockBff(asked: unknown[] = [], bills: unknown[] = []) {
   const sent: Array<{ url: string; headers: Record<string, string>; body: unknown }> = []
   const payees: unknown[] = []
   const payments: unknown[] = []
-  const bills: unknown[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -43,6 +42,20 @@ function mockBff(asked: unknown[] = []) {
       return json(bills[0], again ? 200 : 201)
     }
     if (url === '/api/money/bills') return json({ bills })
+    if (url === '/api/money/bills/pay') {
+      const body = JSON.parse(String(init?.body)) as { bill_ids: string[] }
+      sent.push({ url, headers: init?.headers as Record<string, string>, body })
+      const items = body.bill_ids.map((id, i) => {
+        const b = bills.find((x) => (x as { id: string }).id === id) as { supplier: string; payee_id: string; currency: string; amount_minor: number; invoice_number: string }
+        return { position: i + 1, payee_id: b.payee_id, payee_name: b.supplier, currency: b.currency, amount_minor: b.amount_minor, reference: b.invoice_number, bill_id: id,
+          decision: 'needs_approval', reason: 'no permission mandate the person signed covers this payment' }
+      })
+      return json({ id: 'preq_1', kind: 'batch', status: 'pending_approval', client: 'chat', items, created_at: '2026-10-25T09:00:00Z' }, 201)
+    }
+    if (url === '/api/money/payment-requests/preq_1') return json({ id: 'preq_1', kind: 'batch', status: 'pending_approval', client: 'chat', created_at: '2026-10-25T09:00:00Z',
+      items: (bills.slice(0, 2) as { supplier: string; payee_id: string; currency: string; amount_minor: number; invoice_number: string; id: string }[]).map((b, i) => ({
+        position: i + 1, payee_id: b.payee_id, payee_name: b.supplier, currency: b.currency, amount_minor: b.amount_minor, reference: b.invoice_number, bill_id: b.id,
+        decision: 'needs_approval', reason: 'no permission mandate the person signed covers this payment' })) })
     if (url === '/api/money/assistant-requests') return json({ requests: asked })
     if (url.startsWith('/api/money/assistant-requests/')) {
       sent.push({ url, headers: init?.headers as Record<string, string>, body: init?.body ? JSON.parse(String(init.body)) : undefined })
@@ -187,6 +200,38 @@ describe('the Pay screen', () => {
     fireEvent.click(within(form).getByRole('button', { name: 'Add bill' }))
     expect(await within(form).findByText('Already in your inbox: Acme Hosting Ltd')).toBeTruthy()
     expect(within(screen.getByRole('list', { name: 'Bills' })).getAllByRole('listitem')).toHaveLength(1)
+  })
+
+  // B41.2 — pay all due: the bills ticked go up as one request under one key, and its card shows their count, total and payees.
+  it('pays the ticked due bills as one request and opens its one approval card with the count, total and every payee', async () => {
+    const bill = (id: string, supplier: string, minor: number, extra: object = {}) => ({ id, source: 'upload', supplier, invoice_number: `INV-${id}`, amount_minor: minor,
+      currency: 'GBP', due_date: '2026-11-10', payee_id: `payee_${id}`, payee_match: 'matched', status: 'due', missing: [], created_at: '2026-10-25T09:00:00Z', ...extra })
+    const bff = mockBff([], [
+      bill('1', 'Acme Hosting Ltd', 12000),
+      bill('2', 'Brightline Studio Ltd', 3050),
+      bill('3', 'Cloud Rent Ltd', 5000),
+      bill('4', 'Paid Already Ltd', 999, { status: 'paid' }),
+      bill('5', 'Unknown Supplier Ltd', 777, { payee_id: undefined, payee_match: 'new_payee' }),
+    ])
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+    const panel = await screen.findByTestId('bills-pay')
+    // Only a due bill with a saved payee can be ticked.
+    expect(screen.queryByRole('checkbox', { name: 'Pay £9.99 to Paid Already Ltd' })).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'Pay £7.77 to Unknown Supplier Ltd' })).toBeNull()
+    expect(within(panel).getByTestId('bills-pay-total').textContent).toBe('Total £200.50')
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Pay £50.00 to Cloud Rent Ltd' }))
+    expect(within(panel).getByTestId('bills-pay-total').textContent).toBe('Total £150.50')
+    fireEvent.click(within(panel).getByRole('button', { name: 'Pay 2 bills' }))
+
+    const card = await screen.findByTestId('approve-card')
+    const pay = bff.sent.filter((s) => s.url === '/api/money/bills/pay')
+    expect(pay).toHaveLength(1)
+    expect(pay[0].body).toEqual({ bill_ids: ['1', '2'] })
+    expect(pay[0].headers['Idempotency-Key'].length).toBeGreaterThan(8)
+    expect(within(card).getByTestId('approve-total').textContent).toBe('2 of 2 payments to approve, total £150.50')
+    for (const text of ['Acme Hosting Ltd', 'Brightline Studio Ltd', 'Reference: INV-1', 'Reference: INV-2']) expect(card.textContent).toContain(text)
+    expect(within(card).getByRole('button', { name: 'Approve 2 payments with a passkey' })).toBeTruthy()
   })
 
   // B40.35 — what an assistant asked for over /mcp waits here: a payee is saved only when the person presses Save, through the

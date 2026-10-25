@@ -530,6 +530,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B41.1 — the bills inbox: an uploaded invoice becomes a bill (Lens B41.101). See money_bills.go.
 	a.mux.HandleFunc("/api/money/bills", a.requireTenant(a.handleMoneyBills))
 	a.mux.HandleFunc("/api/money/bills/{id}", a.requireTenant(a.handleMoneyBill))
+	a.mux.HandleFunc("/api/money/bills/pay", a.requireTenant(a.handleMoneyBillsPay)) // B41.2
 	// B40.35 — payees and mandates an assistant asked for, saved or signed only by the person. See mcp_drafts.go.
 	a.mux.HandleFunc("/api/money/assistant-requests", a.requireTenant(a.handleAssistantRequests))
 	a.mux.HandleFunc("/api/money/assistant-requests/{id}/dismiss", a.requireTenant(a.handleAssistantRequestDismiss))

@@ -108,6 +108,11 @@ export class PayeeDesk {
     return this.payees.get(ws) ?? []
   }
 
+  /** B41.2 — the bills `ws` received, for paying them as one request (stub-payment-requests.ts). */
+  billsOf(ws: string): { id: string; supplier: string; invoice_number: string; amount_minor: number; currency: string; payee_id?: string; status: string; due_date: string }[] {
+    return (this.bills.get(ws) ?? []) as unknown as ReturnType<PayeeDesk['billsOf']>
+  }
+
   /** B30.109 — the compliance cases in `status` (every one for ''), newest first, as GET /v1/admin/screening lists them. */
   complianceCases(status: string): Case[] {
     return this.cases.filter((c) => status === '' || c.status === status).reverse()

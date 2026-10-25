@@ -515,7 +515,7 @@ export class Bank {
       // B40.29 — an approval is signed over its challenge by a device key, or by one of the workspace's passkeys (named, as above).
       (ws, a, challenge) => a?.device_id !== undefined ? (a.challenge !== challenge ? "economy: the signature is not over this approval's challenge" : this.devices.refused(ws, a))
         : (this.passkeys.get(ws) ?? []).some((k) => k.credential_id === a?.credential_id) ? undefined : 'economy: the approval is not signed: sign its challenge with a passkey or the phone app',
-      (ws, agentID, b) => this.payees.payItem(ws, agentID, b))
+      (ws, agentID, b) => this.payees.payItem(ws, agentID, b), (ws) => this.payees.billsOf(ws))
     this.devices = new DeviceKeyDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
     this.terms = new TermsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), B30_CAPABILITIES)
     this.kya = new KYADesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agent) => this.kyaFacts(ws, agent))

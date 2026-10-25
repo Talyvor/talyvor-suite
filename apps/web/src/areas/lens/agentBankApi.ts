@@ -736,6 +736,8 @@ export const agentBankApi = {
     }
     return { bill: (await res.json()) as Bill, created: res.status === 201 }
   },
+  /** B41.2 — the ticked bills as one payment request (Lens B41.102), for one approval on /approve/<id>; nothing is paid here. */
+  payBills: (billIDs: string[], key: string) => send<PaymentRequest>('POST', '/api/money/bills/pay', { bill_ids: billIDs }, { 'Idempotency-Key': key }),
 }
 
 /** What a schedule asks for: a payment to another agent or a listing in µLXC, or (B30.18) a standing order to a saved outside payee. */
