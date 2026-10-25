@@ -97,6 +97,11 @@ export class PayeeDesk {
     this.appURL = where.appURL
   }
 
+  /** B40.27 — workspace `ws`'s saved payees, as a payment request finds them. */
+  payeesOf(ws: string): Payee[] {
+    return this.payees.get(ws) ?? []
+  }
+
   /** B30.109 — the compliance cases in `status` (every one for ''), newest first, as GET /v1/admin/screening lists them. */
   complianceCases(status: string): Case[] {
     return this.cases.filter((c) => status === '' || c.status === status).reverse()

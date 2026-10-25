@@ -148,6 +148,7 @@ import { HOLD_REASON, TaxDesk } from './stub-tax.ts'
 import { VerificationDesk } from './stub-verification.ts'
 import { PayeeDesk } from './stub-payees.ts'
 import { PermissionMandateDesk } from './stub-permission-mandates.ts'
+import { PaymentRequestDesk } from './stub-payment-requests.ts'
 import { TermsDesk } from './stub-terms.ts'
 import { type KYAFacts, KYADesk } from './stub-kya.ts'
 import { type Lineage, TrustDesk } from './stub-trust.ts'
@@ -488,6 +489,8 @@ export class Bank {
   private readonly payees: PayeeDesk
   /** B40.26 — signed permission mandates and their evaluator (stub-permission-mandates.ts). */
   private readonly permissionMandates: PermissionMandateDesk
+  /** B40.27 — prepared payment requests, judged against the saved payees and the mandates (stub-payment-requests.ts). */
+  private readonly paymentRequests: PaymentRequestDesk
   /** B30.122 — each B30 capability's terms and the workspace's acceptances (stub-terms.ts). */
   private readonly terms: TermsDesk
   /** B30.118 — each agent's Know Your Agent credential (stub-kya.ts). */
@@ -504,6 +507,8 @@ export class Bank {
       { read: d.read, base: d.base, appURL: d.appURL })
     this.permissionMandates = new PermissionMandateDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })))
+    this.paymentRequests = new PaymentRequestDesk(d.json, d.read, (name) => this.broken(name), (ws) => this.payees.payeesOf(ws),
+      (ws, p) => this.permissionMandates.judge(ws, p))
     this.terms = new TermsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), B30_CAPABILITIES)
     this.kya = new KYADesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agent) => this.kyaFacts(ws, agent))
     this.trustDesk = new TrustDesk({ json: d.json, body: (req) => this.body(req), broken: (name) => this.broken(name),
@@ -1542,6 +1547,7 @@ export class Bank {
     const { json } = this.d
     if (await this.payees.route(req, res, viewer, path)) return true
     if (await this.permissionMandates.route(req, res, viewer, path)) return true
+    if (await this.paymentRequests.route(req, res, viewer, path)) return true
     if (path === '/v1/wallets/capabilities') {
       const b30 = (this.broken('b30-capability-gone') ? B30_CAPABILITIES.filter((c) => c.capability !== 'fx') : B30_CAPABILITIES)
         .map((c) => (c.capability === 'payments_out' && this.broken('level-needed-wrong') ? { ...c, level_needed: 'L0' } : c))
