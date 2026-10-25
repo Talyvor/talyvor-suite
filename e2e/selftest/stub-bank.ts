@@ -939,10 +939,13 @@ export class Bank {
   /**
    * B32.81 — Lens's market_* tools on an agent's own key (talyvor-lens B32.23 internal/mcp/market_tools.go): search, a
    * listing's offers, a licence and a use, each run as the marketplace's route runs on that key, so its rules judge it;
-   * a refusal is a tool result marked isError that says why.
+   * a refusal is a tool result marked isError that says why. B40.25: and the official SDK's handshake (initialize, its
+   * notification, ping, tools/list), agent_balance and agent_pay (talyvor-lens internal/mcp/agent_tools.go).
+   * STUB_BREAK=agent-pay-unposted answers agent_pay with an entry and posts nothing.
    */
   async agentMCP(req: IncomingMessage, res: ServerResponse, key: string, path: string): Promise<boolean> {
     const who = this.agentOfKey(key)
+    if (path === '/mcp' && req.method === 'GET' && who !== undefined) return res.writeHead(405).end(), true
     if (path !== '/mcp' || req.method !== 'POST' || who === undefined) return false
     const rpc = await this.body<{ id?: unknown; method?: string; params?: { name?: string; arguments?: Record<string, unknown> } }>(req)
     const name = rpc.method === 'tools/call' ? rpc.params?.name ?? '' : ''
@@ -972,6 +975,21 @@ export class Bank {
     if (name === 'wallet_credential') {
       const c = this.kya.current(who.ws.id, who.agent.id)
       return (c.status === 200 ? text(c.body) : reply({ content: [{ type: 'text', text: (c.body as { error: string }).error }], isError: true })), true
+    }
+    if (rpc.method === 'initialize') return reply({ protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'talyvor', version: 'stub' } }), true
+    if (rpc.method?.startsWith('notifications/') === true) return res.writeHead(202).end(), true
+    if (rpc.method === 'ping') return reply({}), true
+    if (rpc.method === 'tools/list') {
+      const tool = (n: string, title: string, moves: boolean) => ({ name: n, inputSchema: { type: 'object' }, annotations: { title, readOnlyHint: !moves, destructiveHint: moves } })
+      return reply({ tools: [tool('agent_balance', 'Your balance and rules', false), tool('agent_pay', 'Pay an agent', true)] }), true
+    }
+    if (name === 'agent_balance') return text({ agent: (this.book(who.ws) as { agents: { id: string }[] }).agents.find((x) => x.id === who.agent.id) }), true
+    if (name === 'agent_pay') {
+      if (this.broken('agent-pay-unposted')) return text({ entry_id: id('ent_'), amount_ulxc: a.amount_ulxc }), true
+      const out = { status: 0, text: '' }
+      const sink = { writeHead: (s: number) => { out.status = s; return sink }, setHeader: () => sink, end: (t?: string) => { out.text = t ?? '' } } as unknown as ServerResponse
+      this.pay(sink, who.ws, who.agent, String(a.to_agent_id ?? ''), Number(a.amount_ulxc ?? 0), String(a.memo ?? ''))
+      return answer({ status: out.status, body: JSON.parse(out.text || '{}') as { error?: string } }), true
     }
     const listing = String(a.listing_id ?? '')
     switch (name) {
