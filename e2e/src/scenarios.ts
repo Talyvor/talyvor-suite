@@ -82,7 +82,7 @@ import { capabilityTerms } from './capabilityTerms.ts'
 import { verificationScreen } from './verificationScreen.ts'
 import { termsAndCredentialScreens } from './termsScreen.ts'
 import { invoicesScreen } from './invoiceScreen.ts'
-import { billsInbox, billsPayAllDue } from './billsInbox.ts'
+import { billsDuplicateChangedDetails, billsInbox, billsPayAllDue } from './billsInbox.ts'
 import { payScreen } from './payScreen.ts'
 import { operatorComplianceBoundary } from './operatorCompliance.ts'
 import { waitlistJoin } from './waitlist.ts'
@@ -5372,6 +5372,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.2 — pay all due, once a run, in the browser on a workspace of its own: three bills ticked open one approval card with their
   // count, total and payees; one passkey approval posts three payments with their invoice numbers, and no bill is paid twice.
   if (i === 3) list.push(billsPayAllDue())
+  // B40.22 — a bill goes in, and pay all due pays it once, in the browser on a workspace of its own: an invoice and its copy are one
+  // bill, an invoice printing changed bank details is flagged; one passkey approval pays each bill once, to its saved payee.
+  if (i === 3) list.push(billsDuplicateChangedDetails())
   // B30.104 — the operator's Compliance page, once a run: a tester, never an operator, asking the BFF for the reconciliation and
   // safeguarding figures is refused 403 for both, and the page says only operators can see it and shows none of them.
   if (i === 3) list.push(operatorComplianceBoundary())

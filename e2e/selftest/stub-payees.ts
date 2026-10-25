@@ -19,9 +19,11 @@
 // ?paid=card), and POST /v1/money/invoices/{id}/send and …/void. Its defect:
 //   invoice-card-unposted  — a card payment marks the invoice paid and credits the issuer's account nothing
 // B41.1 — and the bills inbox (POST and GET /v1/money/bills, Lens B41.101): a PDF's text lines read for the supplier (its first
-// line), invoice number, amount due, due date and bank details, matched to a saved payee by its account number or marked
-// new_payee; the same document twice is one bill. Its defect:
+// line), invoice number, amount due, due date and bank details, matched to a saved payee by its account number, else by its
+// name (bank_details_differ when the invoice prints other details), or marked new_payee; the same document, or the same
+// supplier's same invoice number, is one bill. Its defects:
 //   bill-duplicated        — the same invoice uploaded again is stored as a second bill
+//   bill-details-unflagged — B40.22: an invoice printing other bank details than its supplier's saved payee reads matched
 // B30.96 — and the Pay screen's other desks: a payment names the account it pays from (account_id); mandates (POST and GET
 // /v1/money/mandates, POST …/{id}/revoke, Lens B30.19: an outside business's grant answers its pull_key once); and bulk
 // payouts (POST /v1/money/payouts as text/csv or JSON rows, GET …, GET …/{id}, POST …/{id}/approve, Lens B30.21): every row
@@ -291,17 +293,21 @@ export class PayeeDesk {
     if (!(req.headers['content-type'] ?? '').startsWith('application/pdf')) return this.json(res, 415, { error: 'the stub reads PDF invoices only' }), true
     const doc = await this.read(req)
     const digest = createHash('sha256').update(doc).digest('hex')
-    const had = list.find((b) => b.digest === digest)
-    if (had !== undefined && !this.broken('bill-duplicated')) return this.json(res, 200, shown(had)), true
     const lines = [...doc.matchAll(/\((.*?)\) Tj/g)].map((m) => m[1].replace(/\\(.)/g, '$1'))
     const after = (label: RegExp) => lines.map((l) => label.exec(l)?.[1]?.trim()).find((v) => v !== undefined) ?? ''
+    const supplier = lines[0] ?? ''
+    const number = after(/^Invoice number:\s*(\S+)$/i)
+    const had = list.find((b) => b.digest === digest || (number !== '' && b.invoice_number === number && String(b.supplier).toLowerCase() === supplier.toLowerCase()))
+    if (had !== undefined && !this.broken('bill-duplicated')) return this.json(res, 200, shown(had)), true
     const amount = /^(GBP|EUR|USD) ([\d,]+)\.(\d{2})$/.exec(after(/^Total due:\s*(.+)$/i))
     const account = after(/^Account number:\s*(\d+)$/i)
-    const payee = payees.find((p) => account !== '' && p.account_number === account)
-    const b = { id: `bill_${randomUUID()}`, workspace_id: ws, source: new URL(req.url ?? '/', 'http://stub').searchParams.get('source') || 'upload', supplier: lines[0] ?? '',
-      invoice_number: after(/^Invoice number:\s*(\S+)$/i), amount_minor: amount ? Number(amount[2].replace(/,/g, '')) * 100 + Number(amount[3]) : 0, currency: amount?.[1] ?? '',
+    const byDetails = payees.find((p) => account !== '' && p.account_number === account)
+    const payee = byDetails ?? payees.find((p) => supplier !== '' && p.name.toLowerCase() === supplier.toLowerCase())
+    const match = payee === undefined ? 'new_payee' : byDetails !== undefined || account === '' || this.broken('bill-details-unflagged') ? 'matched' : 'bank_details_differ'
+    const b = { id: `bill_${randomUUID()}`, workspace_id: ws, source: new URL(req.url ?? '/', 'http://stub').searchParams.get('source') || 'upload', supplier,
+      invoice_number: number, amount_minor: amount ? Number(amount[2].replace(/,/g, '')) * 100 + Number(amount[3]) : 0, currency: amount?.[1] ?? '',
       due_date: after(/^Due date:\s*(\d{4}-\d{2}-\d{2})$/i), sort_code: after(/^Sort code:\s*([\d-]+)$/i).replace(/-/g, ''), account_number: account,
-      ...(payee ? { payee_id: payee.id } : {}), payee_match: payee ? 'matched' : 'new_payee', status: 'due', missing: [], created_at: new Date().toISOString(), digest }
+      ...(payee ? { payee_id: payee.id } : {}), payee_match: match, status: 'due', missing: [], created_at: new Date().toISOString(), digest }
     this.bills.set(ws, [...list, b])
     return this.json(res, 201, shown(b)), true
   }
