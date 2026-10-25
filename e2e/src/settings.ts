@@ -57,13 +57,31 @@ async function workspaceRead(ctx: ScenarioCtx): Promise<WorkspaceRead> {
 
 // ─── what only Lens's operator may change, and what this deployment does not run ─────
 
+type Said = { status: number; error: string; text: string }
+
+/**
+ * PUT and DELETE …/provider-keys/openai where the workspace may hold none (B17.275): either this deployment does not
+ * mount the routes (both 404), or it does and the plan has no own provider keys — the PUT refused 402 by the plan gate,
+ * the DELETE 404 with nothing stored, and GET …/provider-keys lists no OpenAI key.
+ */
+export function providerKeysRefused(put: Said, del: Said, listed?: Said): { right: string; wrong?: undefined } | { wrong: string } {
+  if (put.status === 404 && del.status === 404) return { right: 'provider keys: not held here, 404' }
+  if (put.status !== 402 || !/plan/i.test(put.error) || del.status !== 404) {
+    return { wrong: `with no provider keys held here, PUT and DELETE …/provider-keys/openai answered ${said(put)} and ${said(del)}, not 404 and 404, nor 402 by the plan gate and 404` }
+  }
+  if (listed === undefined || !ok(listed.status) || listed.text.includes('"openai"')) {
+    return { wrong: `the plan gate refused the OpenAI key (402) yet GET …/provider-keys answered ${listed === undefined ? 'nothing' : said(listed)}` }
+  }
+  return { right: 'provider keys: not on this plan, PUT 402 by the plan gate, DELETE 404, none listed' }
+}
+
 /**
  * Lens's operator alone adds a workspace, an injection pattern, a fallback chain or a local model endpoint: each is
  * Lens-wide, so a workspace's own token is refused (401, "admin credentials required"), even to read the chains and
  * endpoints, and nothing changes — on the admin key, where the run holds one, they read back as before — and a text
  * carrying the refused pattern is not taken for an injection. Batches
  * stay closed until a batch is billed for what it used (the lane is refused at start-up without that), and provider keys
- * are held only where Lens holds the key that seals them; where either is so, its routes refuse and the ledger stays
+ * are held only where Lens holds the key that seals them and the plan has them; where either is not so, its routes refuse and the ledger stays
  * still. A catalog model reads back as the catalog lists it, and one it does not have is 404.
  */
 export function settingsOperatorOnly(): Scenario {
@@ -110,7 +128,7 @@ export function settingsOperatorOnly(): Scenario {
       if (!ok(check.status)) wrong.push(`checking a text carrying the refused pattern answered ${said(check)}`)
       else if ((check.value?.violations ?? []).some((v) => /injection/i.test(`${v.type ?? ''} ${v.rule ?? ''}`))) wrong.push(`the refused pattern ${pattern} is taken for an injection: ${check.text.slice(0, 200)}`)
 
-      // Switched off here: batches (no billing settle is wired, so Lens refuses the lane) and provider keys (no sealing key).
+      // Switched off here: batches (no billing settle is wired, so Lens refuses the lane) and provider keys (no sealing key, or a plan without them).
       const k = await proxyKey(ctx, `batch ${RUN_SALT}`)
       if (typeof k === 'string') return fail(k)
       const { model } = judgeRoute(ctx)
@@ -129,9 +147,13 @@ export function settingsOperatorOnly(): Scenario {
         if (!ok(del.status)) wrong.push(`removing the OpenAI key answered ${said(del)}`)
         const after = await call<unknown>(ctx, 'GET', '/v1/workspaces/{ws}/provider-keys')
         if (after.text.includes('"openai"')) wrong.push(`the removed OpenAI key is still listed: ${after.text.slice(0, 160)}`)
-      } else if (put.status !== 404 || del.status !== 404) {
-        wrong.push(`with no provider keys held here, PUT and DELETE …/provider-keys/openai answered ${put.status} and ${del.status}, not 404`)
-      } else right.push('provider keys: not held here, 404')
+      } else {
+        // Mounted, but the plan has no own provider keys (B32.12): what Lens lists shows nothing was kept.
+        const listed = put.status === 402 ? await call(ctx, 'GET', '/v1/workspaces/{ws}/provider-keys') : undefined
+        const v = providerKeysRefused(put, del, listed)
+        if (v.wrong !== undefined) wrong.push(v.wrong)
+        else right.push(v.right)
+      }
       const ledger1 = await ctx.env.lens.ledger(ctx.app.user)
       const moved = ledger1.filter((r) => !ledger0.some((o) => o.id === r.id))
       if (moved.length > 0) wrong.push(`what was refused moved the ledger: ${rowsText(moved)}`)

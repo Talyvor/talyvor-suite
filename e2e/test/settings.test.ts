@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { answerText } from '../src/gateway.ts'
-import { memo, rows } from '../src/settings.ts'
+import { memo, providerKeysRefused, rows } from '../src/settings.ts'
 
 describe('every Lens setting has a tester (B34.7)', () => {
   it('reads a served answer in either API\'s shape, and nothing from a body that is not one', () => {
@@ -24,5 +24,16 @@ describe('every Lens setting has a tester (B34.7)', () => {
     expect(Buffer.from(doc.source.data, 'base64').toString()).toBe(m.html)
     expect(m.html).toContain('The access code is HERON-7.')
     expect(text.type).toBe('text')
+  })
+
+  it('takes provider keys refused by the plan gate (402, DELETE 404, none listed) as right, as well as routes not mounted (B17.275)', () => {
+    const r = (status: number, error = '', text = '') => ({ status, error, text })
+    const gate = r(402, 'LENS_PLAN_GATES: the free plan does not include own provider keys — the team plan has them with the BYOK add-on')
+    const none = r(404, 'no key stored for that provider')
+    expect(providerKeysRefused(gate, none, r(200, '', '[]')).wrong).toBeUndefined()
+    expect(providerKeysRefused(r(404), r(404)).wrong).toBeUndefined()
+    expect(providerKeysRefused(gate, none, r(200, '', '[{"provider":"openai","last4":"wxyz"}]')).wrong).toContain('GET …/provider-keys')
+    expect(providerKeysRefused(r(402, 'insufficient credit'), none, r(200, '', '[]')).wrong).toContain('nor 402 by the plan gate')
+    expect(providerKeysRefused(gate, r(500, 'boom'), r(200, '', '[]')).wrong).toBeDefined()
   })
 })
