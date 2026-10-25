@@ -97,6 +97,7 @@
 //
 // B47.3: speech is not configured, as on a Lens without LENS_DEEPGRAM_API_KEY; STUB_SPEECH=on configures it, and every
 // recording is heard as "Please show me the balance of my wallet." (the run's microphone clip).
+// B40.32: an agent's speech call is charged on its statement at the catalog's price; STUB_BREAK=speech-twice charges it twice.
 //
 // B26.24: every read the self-test makes is answered in the shape a real Lens answers it, held to
 // lens-shapes.json by test/stubLens.test.ts. A route this stub does not know is a 404 it logs as
@@ -160,6 +161,9 @@ const CATALOG = [
   model('gemini-flash-lite', 'google', 'Gemini Flash-Lite', 0.1, 0.4, '2026-07-21', 'fast', false),
   // Not a chat model, as in production: every-model must not try it.
   model('text-embedding-3-large', 'openai', 'Embedding 3 large', 0.13, 0, '2024-01-25', 'embedding', false),
+  // B40.10 — speech models, priced by the minute heard and the character spoken (talyvor-lens catalog seed); no token rates.
+  { ...model('nova-3', 'deepgram', 'Deepgram Nova-3', 0, 0, '2025-02-12', 'speech', false), per_minute: 0.0043 },
+  { ...model('aura-2', 'deepgram', 'Deepgram Aura-2', 0, 0, '2025-04-15', 'speech', false), per_1m_chars: 30 },
 ]
 const CONFIGURED = new Set(['anthropic', 'openai'])
 
@@ -1354,23 +1358,33 @@ createServer(async (req, res) => {
     }
     if (p.startsWith('/v1/money/payment-requests') && await bank.agentPaymentRequests(req, res, p, bearer)) return
     // The BFF runs a marketplace use on the session key the chat streams on (B20.3).
-    const ws = byToken.get(bearer) ?? byKey.get(bearer)
-    if (ws === undefined) return json(res, 401, { error: 'unauthorized' })
-    if (p === '/v1/catalog/models') return json(res, 200, CATALOG)
     // B47.3 — speech (talyvor-lens internal/proxy/speech.go). As a Lens without LENS_DEEPGRAM_API_KEY, both routes say speech
     // is not configured before reading the request; with STUB_SPEECH=on, a recording is heard as the run's clip says.
-    if ((p === '/v1/audio/transcriptions' || p === '/v1/audio/speech') && req.method === 'POST') {
+    // B40.32 — on an agent's key too, which is charged the catalog's price once: the clip's length at nova-3's per_minute, the
+    // sentence's characters at aura-2's per_1m_chars. STUB_BREAK=speech-twice charges each call twice.
+    const speaker = bank.agentOfKey(bearer)
+    if ((p === '/v1/audio/transcriptions' || p === '/v1/audio/speech') && req.method === 'POST' && (byToken.has(bearer) || byKey.has(bearer) || speaker !== undefined)) {
       const body = await readBytes(req)
       if (process.env.STUB_SPEECH !== 'on') return json(res, 503, { error: 'speech is not configured on this Lens' })
+      const charge = (model: string, usd: number) => {
+        for (let n = broke('speech-twice') ? 2 : 1; speaker !== undefined && n > 0; n--) bank.spent(speaker.agent, Math.ceil(Math.round(usd / USD_PER_LXC * 1e12) / 1e6), model, 0)
+      }
       if (p === '/v1/audio/speech') {
+        const input = (JSON.parse(body.toString() || '{}') as { input?: string }).input ?? ''
+        charge('aura-2', [...input].length * 30 / 1e6)
         res.writeHead(200, { 'Content-Type': 'audio/mpeg' })
         return void res.end(Buffer.alloc(64))
       }
       if (!body.includes('name="file"')) return json(res, 400, { error: 'the audio goes in the multipart field "file"' })
       // A few seconds of a browser's recording are kilobytes; less is a recording of nothing.
       if (body.length < 2_000) return json(res, 400, { error: 'the audio file is empty or could not be read' })
+      // shortcut: every recording is heard as fixtures/voice-sentence.wav, 61238 data bytes at 32000 a second, as Deepgram measures it.
+      charge('nova-3', 61238 / 32000 / 60 * 0.0043)
       return json(res, 200, { text: 'Please show me the balance of my wallet.' })
     }
+    const ws = byToken.get(bearer) ?? byKey.get(bearer)
+    if (ws === undefined) return json(res, 401, { error: 'unauthorized' })
+    if (p === '/v1/catalog/models') return json(res, 200, CATALOG)
     // B28.349 — Lens's MCP JSON-RPC route, on the workspace's own token: Chat's read-only wallet tool.
     if (p === '/mcp' && req.method === 'POST') {
       const rpc = JSON.parse((await read(req)) || '{}') as Parameters<Bank['mcp']>[1] & { params?: { arguments?: Record<string, unknown> } }
