@@ -21,10 +21,10 @@ func waitlistApp(t *testing.T) (*app, *http.Cookie, *http.Cookie, *[]map[string]
 			var body map[string]string
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			*posted = append(*posted, body)
-			_, _ = io.WriteString(w, `{"stored":true}`)
+			_, _ = io.WriteString(w, `{"stored":true,"ref_code":"k3m7q2xa9b"}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/admin/waitlist" && r.Header.Get("Authorization") == "Bearer op-read-key":
 			_, _ = io.WriteString(w, `{"signups":[`+
-				`{"email":"ann@example.com","created_at":"2026-10-23T20:00:00Z","page":"/marketing","utm_source":"meta","utm_medium":null,"utm_campaign":"=launch"},`+
+				`{"email":"ann@example.com","created_at":"2026-10-23T20:00:00Z","page":"/marketing","utm_source":"meta","utm_medium":null,"utm_campaign":"=launch","ref_code":"k3m7q2xa9b","referrals":2},`+
 				`{"email":"probe-1@e2e.talyvor.test","created_at":"2026-10-23T21:00:00Z","page":"/signup"}]}`)
 		default:
 			w.WriteHeader(http.StatusForbidden)
@@ -60,8 +60,27 @@ func TestWaitlist_JoinSendsTheNormalisedEmailToLensOnTheProvisionSecret(t *testi
 		t.Fatalf("Lens was sent %v", *posted)
 	}
 	for k := range (*posted)[0] {
-		if k != "email" && k != "page" && !strings.HasPrefix(k, "utm_") {
+		if k != "email" && k != "page" && k != "ref" && !strings.HasPrefix(k, "utm_") {
 			t.Fatalf("Lens was sent a %q field: %v", k, (*posted)[0])
+		}
+	}
+}
+
+// B45.21 — the referrer's code goes to Lens (anything not shaped like a code is dropped), and the joiner gets their own back.
+func TestWaitlist_JoinForwardsTheRefAndAnswersWithTheJoinersOwnCode(t *testing.T) {
+	a, _, _, posted := waitlistApp(t)
+	for _, c := range []struct{ ref, sent string }{{" AbCd234567 ", "abcd234567"}, {"x'; drop", ""}, {"", ""}} {
+		rec := joinWaitlist(a, "203.0.113.3", `{"email":"bea@example.com","ref":"`+c.ref+`"}`)
+		var out struct {
+			OK      bool   `json:"ok"`
+			RefCode string `json:"ref_code"`
+		}
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		if rec.Code != http.StatusOK || !out.OK || out.RefCode != "k3m7q2xa9b" {
+			t.Fatalf("ref %q: %d %s", c.ref, rec.Code, rec.Body.String())
+		}
+		if got := (*posted)[len(*posted)-1]["ref"]; got != c.sent {
+			t.Fatalf("ref %q: Lens was sent ref %q, want %q", c.ref, got, c.sent)
 		}
 	}
 }
@@ -117,8 +136,8 @@ func TestWaitlist_CSVIsTheOperatorsOnly(t *testing.T) {
 	if rec := get(user, ""); rec.Code != http.StatusForbidden {
 		t.Fatalf("non-operator: %d", rec.Code)
 	}
-	want := "email,created_at,page,utm_source,utm_medium,utm_campaign\n" +
-		"ann@example.com,2026-10-23T20:00:00Z,/marketing,meta,,'=launch\n" +
+	want := "email,created_at,page,utm_source,utm_medium,utm_campaign,ref_code,referrals\n" +
+		"ann@example.com,2026-10-23T20:00:00Z,/marketing,meta,,'=launch,k3m7q2xa9b,2\n" +
 		"# left out: 1 nightly tester signups (@e2e.talyvor.test)\n"
 	for name, rec := range map[string]*httptest.ResponseRecorder{"operator": get(op, ""), "operator key": get(nil, "op-read-key")} {
 		if rec.Code != http.StatusOK || rec.Body.String() != want || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/csv") {

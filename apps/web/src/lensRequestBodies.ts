@@ -783,7 +783,7 @@ export const LENS_BODIES: LensBody[] = [
     file: "apps/bff/waitlist.go",
     kind: "map-literal",
     anchor:
-      'json.Marshal(map[string]string{"email": email, "page": in.Page, "utm_source": in.UTMSource, "utm_medium": in.UTMMedium, "utm_campaign": in.UTMCampaign})',
+      'json.Marshal(map[string]string{"email": email, "page": in.Page, "utm_source": in.UTMSource, "utm_medium": in.UTMMedium, "utm_campaign": in.UTMCampaign, "ref": ref})',
     upstreamFile: "cmd/lens/waitlist_handler.go",
     upstreamAnchor: "type waitlistRequest struct {",
     subject: "lensWaitlistBody",

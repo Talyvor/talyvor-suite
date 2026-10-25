@@ -2,8 +2,9 @@ package main
 
 // waitlist.go — B44.1: talyvor.com's waitlist.
 //
-//	POST /api/waitlist {email, page, utm_source, utm_medium, utm_campaign, website}  NO SESSION
+//	POST /api/waitlist {email, page, utm_source, utm_medium, utm_campaign, ref, website}  NO SESSION
 //	     → Lens POST /v1/waitlist on LENS_PROVISION_SECRET (B44.6), one row per email
+//	     ← {ok, ref_code}: the joiner's own referral code (B45.21), for the link they share
 //	GET  /api/waitlist  the operator, or Bearer LENS_OPERATOR_READ_KEY → CSV of every signup
 //
 // The BFF has no store of its own, so the row lives in Lens. Never the IP or the user agent: the IP is
@@ -18,6 +19,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +32,9 @@ const (
 	// testersWaitlistDomain is the nightly testers' address domain (e2e/src/waitlist.ts): left out of the CSV, counted.
 	testersWaitlistDomain = "@e2e.talyvor.test"
 )
+
+// waitlistRefCode is the shape of Lens's ref codes (10 lowercase base32 characters); anything else is dropped, not refused.
+var waitlistRefCode = regexp.MustCompile(`^[a-z2-7]{1,32}$`)
 
 // waitlistHits counts submits per client IP over the last hour. shortcut: in memory, so a restart forgets
 // it and two BFFs count apart; move it to Lens if the BFF ever runs more than one copy.
@@ -107,6 +112,7 @@ func (a *app) waitlistJoin(w http.ResponseWriter, r *http.Request) {
 		UTMSource   string `json:"utm_source"`
 		UTMMedium   string `json:"utm_medium"`
 		UTMCampaign string `json:"utm_campaign"`
+		Ref         string `json:"ref"`     // B45.21: the referrer's code from ?ref=<code>
 		Website     string `json:"website"` // the honeypot: hidden from people, filled by bots
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&in); err != nil {
@@ -123,7 +129,11 @@ func (a *app) waitlistJoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// UPSTREAM-BINDS-ONLY lensWaitlistBody: none
-	body, _ := json.Marshal(map[string]string{"email": email, "page": in.Page, "utm_source": in.UTMSource, "utm_medium": in.UTMMedium, "utm_campaign": in.UTMCampaign})
+	ref := strings.ToLower(strings.TrimSpace(in.Ref))
+	if !waitlistRefCode.MatchString(ref) {
+		ref = ""
+	}
+	body, _ := json.Marshal(map[string]string{"email": email, "page": in.Page, "utm_source": in.UTMSource, "utm_medium": in.UTMMedium, "utm_campaign": in.UTMCampaign, "ref": ref})
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, a.cfg.lensBaseURL+"/v1/waitlist", bytes.NewReader(body))
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "lens upstream request"})
@@ -142,7 +152,12 @@ func (a *app) waitlistJoin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "We couldn’t add you just now. Try again."})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true}) // the same answer whether or not the email was new
+	var out struct {
+		RefCode string `json:"ref_code"`
+	}
+	_ = json.NewDecoder(io.LimitReader(resp.Body, 4<<10)).Decode(&out) // no code means no link, never a failed join
+	// The same answer whether or not the email was new: a repeat gets its existing code back (Lens B45.35).
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "ref_code": out.RefCode})
 }
 
 // waitlistExport is the CSV, for an operator session or a caller holding the operator read key.
@@ -171,6 +186,8 @@ func (a *app) writeWaitlistCSV(w http.ResponseWriter, r *http.Request) {
 			UTMSource   *string `json:"utm_source"`
 			UTMMedium   *string `json:"utm_medium"`
 			UTMCampaign *string `json:"utm_campaign"`
+			RefCode     string  `json:"ref_code"`
+			Referrals   int     `json:"referrals"`
 		} `json:"signups"`
 	}
 	if err == nil {
@@ -189,14 +206,14 @@ func (a *app) writeWaitlistCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	var buf bytes.Buffer
 	cw := csv.NewWriter(&buf)
-	_ = cw.Write([]string{"email", "created_at", "page", "utm_source", "utm_medium", "utm_campaign"})
+	_ = cw.Write([]string{"email", "created_at", "page", "utm_source", "utm_medium", "utm_campaign", "ref_code", "referrals"})
 	testers := 0
 	for _, s := range out.Signups {
 		if strings.HasSuffix(s.Email, testersWaitlistDomain) {
 			testers++
 			continue
 		}
-		_ = cw.Write([]string{csvSafe(s.Email), s.CreatedAt, str(s.Page), str(s.UTMSource), str(s.UTMMedium), str(s.UTMCampaign)})
+		_ = cw.Write([]string{csvSafe(s.Email), s.CreatedAt, str(s.Page), str(s.UTMSource), str(s.UTMMedium), str(s.UTMCampaign), csvSafe(s.RefCode), strconv.Itoa(s.Referrals)})
 	}
 	_ = cw.Write([]string{"# left out: " + strconv.Itoa(testers) + " nightly tester signups (" + testersWaitlistDomain + ")"})
 	cw.Flush()
