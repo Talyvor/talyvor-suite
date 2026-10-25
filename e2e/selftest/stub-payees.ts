@@ -193,6 +193,12 @@ export class PayeeDesk {
     return this.json(res, 201, p)
   }
 
+  /** B40.29 — one payment out of an approved request's item, from `agentID`'s account in its currency (the company's for ''). */
+  payItem(ws: string, agentID: string, b: { payee_id: string; amount_minor: number; currency: string; reference: string; idempotency_key: string }): Payment | { status: number; error: string } {
+    const account = (this.accounts.get(ws) ?? []).find((a) => a.currency === b.currency && (a.agent_id ?? '') === agentID)
+    return this.pay(ws, this.payees.get(ws) ?? [], { ...b, account_id: account?.id ?? 'none' })
+  }
+
   /** B30.17 — one payment out, as a payment or (B30.96) a payout row makes it: each refusal as Lens words it; only compliance-live-paid moves live money. */
   private pay(ws: string, payees: Payee[], b: { payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string }): Payment | { status: number; error: string } {
     const accounts = this.accounts.get(ws) ?? []

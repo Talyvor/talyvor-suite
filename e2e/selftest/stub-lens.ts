@@ -1352,6 +1352,7 @@ createServer(async (req, res) => {
       return json(res, 200, { rows: (of?.tagged ?? []).filter((e) => e.at >= since).map((e) => ({ request_id: e.request_id, feature: e.feature,
         issue_id: e.issue, cost_usd: e.cost_usd, input_tokens: 0, output_tokens: 0, ts: new Date(e.at).toISOString() })), next_cursor: '' })
     }
+    if (p.startsWith('/v1/money/payment-requests') && await bank.agentPaymentRequests(req, res, p, bearer)) return
     // The BFF runs a marketplace use on the session key the chat streams on (B20.3).
     const ws = byToken.get(bearer) ?? byKey.get(bearer)
     if (ws === undefined) return json(res, 401, { error: 'unauthorized' })
