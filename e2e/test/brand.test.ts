@@ -116,7 +116,7 @@ describe('the hero-fade oracle (B36.1)', () => {
 
 describe('the company-line oracle (B32.2)', () => {
   const terms = 'These terms are between you and TALYVOR LTD, a company registered in England and Wales (number 17299143) ' +
-    'whose registered office is 71-75 Shelton Street, Covent Garden, London, United Kingdom, WC2H 9JQ. Contact: nicolai@talyvor.com.'
+    'whose registered office is 71-75 Shelton Street, Covent Garden, London, United Kingdom, WC2H 9JQ. Contact: hello@talyvor.com.'
 
   it('passes a page that names the company, and Terms opening with who it is between', () => {
     expect(companyFaults('/pricing', `Pricing … ${COMPANY_LINE}`, '')).toEqual([])
