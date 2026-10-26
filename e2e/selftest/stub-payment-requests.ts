@@ -22,6 +22,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, randomUUID } from 'node:crypto'
 
 interface ItemIn { payee_id?: string; currency?: string; amount_minor?: number; reference?: string }
+type ItemOut = { payee_id: string; listing_id: string; currency: string; amount_minor: number; reference: string; bill_id?: string; blocked?: string }
 interface Item { flags?: { code: string; detail: string }[]; bill_id?: string; position: number; payee_id: string; payee_name: string; currency: string; amount_minor: number; reference: string; decision: string; reason: string; rule?: string; mandate_id?: string; payment_id?: string; pay_status?: string; pay_detail?: string }
 interface Request { id: string; kind: string; status: string; client: string; agent_id?: string; canonical: string; payload_hash: string; approval_url: string; deep_link: string; items: Item[] }
 interface Entry { seq: number; kind: string; body: string; prev_hash: string; hash: string }
@@ -88,6 +89,13 @@ export class PaymentRequestDesk {
     if (action === 'record' && req.method === 'GET') return this.json(res, 200, { request_id: id, entries: this.records.get(id) ?? [], verified: true, broken: '' }), true
     if (req.method !== 'POST') return false
     if (agentID !== '') return this.json(res, 403, { error: "only the workspace's owner or an admin approves a payment request" }), true
+    // B45.2 — Decline on Chat's card: a pending request is cancelled, and none of it is paid.
+    if (action === 'cancel') {
+      if (r.status !== 'pending_approval') return this.json(res, 409, { error: `economy: this payment request is ${r.status}: it cannot be cancelled` }), true
+      r.status = 'cancelled'
+      this.audit(id, 'cancel', {})
+      return this.json(res, 200, r), true
+    }
     if (action === 'approval') {
       const { positions = [], reason = '' } = JSON.parse((await this.read(req)) || '{}') as { positions?: number[]; reason?: string }
       const items = (r.items ?? []).filter((it) => it.decision === 'needs_approval' && (positions.length === 0 || positions.includes(it.position)))
@@ -133,7 +141,7 @@ export class PaymentRequestDesk {
   async route(req: IncomingMessage, res: ServerResponse, ws: string, path: string, agentID = ''): Promise<boolean> {
     if (path === '/v1/money/bills/pay' && req.method === 'POST' && agentID === '') return this.billsPay(req, res, ws), true
     if (!path.startsWith('/v1/money/payment-requests')) return false
-    const act = /^\/v1\/money\/payment-requests\/([^/]+)\/(approval|approve|record)$/.exec(path)
+    const act = /^\/v1\/money\/payment-requests\/([^/]+)\/(approval|approve|record|cancel)$/.exec(path)
     if (act !== null) return this.approval(req, res, ws, agentID, act[1], act[2])
     const one = /^\/v1\/money\/payment-requests\/([^/]+)$/.exec(path)
     if (one !== null && req.method === 'GET') {
@@ -188,8 +196,24 @@ export class PaymentRequestDesk {
   }
 
   /** One request of `items`, each judged as Lens's judgePaymentItems does, kept under `key` for `args`. */
-  private create(res: ServerResponse, ws: string, key: string, args: string, client: string, agentID: string,
-    items: { payee_id: string; listing_id: string; currency: string; amount_minor: number; reference: string; bill_id?: string; blocked?: string }[]): true {
+  private create(res: ServerResponse, ws: string, key: string, args: string, client: string, agentID: string, items: ItemOut[]): true {
+    return this.json(res, 201, this.make(ws, key, args, client, agentID, items)), true
+  }
+
+  /** B45.34 — Lens's prepare_payment over /mcp as Chat calls it, the owner's: the request prepared (the same key and arguments,
+   *  the same one), or the refusal an isError carries. */
+  prepareTool(ws: string, a: { idempotency_key?: string; client?: string } & ItemIn): { request: Request } | { refused: string } {
+    const key = a.idempotency_key ?? ''
+    if (key === '') return { refused: 'economy: invalid payment request: an idempotency_key is required' }
+    const client = a.client ?? 'chat'
+    const items = [{ payee_id: a.payee_id ?? '', listing_id: '', currency: (a.currency ?? '').toUpperCase(), amount_minor: a.amount_minor ?? 0, reference: a.reference ?? '' }]
+    const args = JSON.stringify({ client, items })
+    const seen = this.keys.get(`${ws}\n${key}`)
+    if (seen !== undefined) return seen.args === args ? { request: this.requests.get(seen.id) as Request } : { refused: 'economy: this Idempotency-Key was already used for a different request' }
+    return { request: this.make(ws, key, args, client, '', items) }
+  }
+
+  private make(ws: string, key: string, args: string, client: string, agentID: string, items: ItemOut[]): Request {
     const id = `preq_${randomUUID()}`
     const kind = items.length > 1 ? 'batch' : 'payment'
     const canonical = JSON.stringify({ version: '1', id, workspace_id: ws, kind, items: items.map(({ blocked: _, ...it }) => it) })
@@ -220,6 +244,6 @@ export class PaymentRequestDesk {
     this.requests.set(id, r)
     this.keys.set(`${ws}\n${key}`, { args, id })
     this.audit(id, 'request', { client, agent_id: agentID, payload_hash: r.payload_hash })
-    return this.json(res, 201, r), true
+    return r
   }
 }

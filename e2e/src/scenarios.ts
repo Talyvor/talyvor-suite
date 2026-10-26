@@ -87,6 +87,7 @@ import { payScreen } from './payScreen.ts'
 import { operatorComplianceBoundary } from './operatorCompliance.ts'
 import { waitlistJoin } from './waitlist.ts'
 import { chatFirstMessage } from './chatFirstMessage.ts'
+import { chatPaymentCard } from './chatPaymentCard.ts'
 import { chatSidebar } from './chatSidebar.ts'
 import { voiceChatMic, voiceChatPay } from './voiceChat.ts'
 import { firstAgent } from './firstAgent.ts'
@@ -5387,6 +5388,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B45.3 — Chat's first visit, once a run, on a workspace of its own: a browser that has never opened /chat sends a first
   // message within 10 seconds of landing, at 1440 px and on a 390 px phone, and axe finds nothing on the page unnamed.
   if (i === 2) list.push(chatFirstMessage())
+  // B45.34 — a payment Chat prepares, once a run, on a workspace of its own: its card under the answer shows the payee, £120.00,
+  // the reference, the rule that asked (limits.per_payment) and Approve / Decline; no payment before approval; Decline pays nothing.
+  if (i === 2) list.push(chatPaymentCard())
   // B47.2 — Chat's page, once a run: /chat opens with the suite sidebar hidden, Menu opens it over the chat without moving it
   // and Escape closes it, at 1440 px and on a 390 px phone; Home shows the sidebar as it did before.
   if (i === 2) list.push(chatSidebar())
