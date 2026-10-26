@@ -433,7 +433,7 @@ export function connectApprove(): Scenario {
         ctx.evidence.push({ note, answer: said(r) })
         return r
       }
-      // 1. On Lens's API: the terms, the company's GBP account, two saved payees and a passkey.
+      // 1. On Lens's API: the terms, the company's GBP account with GBP 50.00 of test money, two saved payees and a passkey.
       const terms = await lensCall<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
       for (const t of (terms.value?.terms ?? []).filter((x) => ['currency_accounts', 'payments_in', 'payments_out'].includes(x.capability) && x.accepted == null)) {
         const ok = await lensCall('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
@@ -441,6 +441,8 @@ export function connectApprove(): Scenario {
       }
       const company = await lensCall<{ id: string }>('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the company GBP account')
       if (company.status !== 201 || company.value === undefined) return { pass: false, detail: `the company GBP account answered ${said(company)}` }
+      const funded = await lensCall('POST', `/v1/money/accounts/${company.value.id}/test-money`, { amount_minor: 5000, idempotency_key: `e2e-${randomBytes(8).toString('hex')}` }, 'the owner puts GBP 50.00 of test money in the company account')
+      if (funded.status !== 201) return { pass: false, detail: `putting test money in the company GBP account answered ${said(funded)}` }
       const names = ['Nightly Approve Supplier One Ltd', 'Nightly Approve Supplier Two Ltd']
       const payees: string[] = []
       for (const [i, name] of names.entries()) {

@@ -221,6 +221,14 @@ export async function proxyKey(ctx: ScenarioCtx, name: string): Promise<{ key: s
   return made.value
 }
 
+/** MCP 2024-11-05's endpoint event: its data is the URI to POST to, resolved against the stream's URL — /mcp with this stream's sessionId. */
+export function isMCPEndpointEvent(event: string): boolean {
+  const m = /^event: endpoint\ndata: (.+)$/.exec(event)
+  if (m === null) return false
+  const uri = new URL(m[1], 'https://lens.invalid/mcp/sse')
+  return uri.pathname === '/mcp' && (uri.searchParams.get('sessionId') ?? '') !== ''
+}
+
 export const verdictOf = (wrong: readonly string[], right: string): Verdict => wrong.length > 0 ? fail(wrong.join('; ')) : { pass: true, detail: right }
 
 // ─── the scenarios ───────────────────────────────────────────────────────────
@@ -306,8 +314,8 @@ export function gatewayMCP(): Scenario {
 
       const sse = await env.lens.firstEvent(app.user.token, '/mcp/sse', SSE_WAIT_MS)
       ctx.evidence.push({ note: `GET /mcp/sse: ${sse.status} ${JSON.stringify(sse.event)}` })
-      if (sse.status !== 200 || !/^event: endpoint\ndata: \{"uri":"\/mcp"\}$/.test(sse.event)) {
-        wrong.push(sse.status === 0 ? `GET /mcp/sse sent nothing in ${SSE_WAIT_MS / 1000} s, not even its headers` : `GET /mcp/sse answered ${sse.status} and opened on ${JSON.stringify(sse.event)}, not the endpoint event naming /mcp`)
+      if (sse.status !== 200 || !isMCPEndpointEvent(sse.event)) {
+        wrong.push(sse.status === 0 ? `GET /mcp/sse sent nothing in ${SSE_WAIT_MS / 1000} s, not even its headers` : `GET /mcp/sse answered ${sse.status} and opened on ${JSON.stringify(sse.event)}, not the endpoint event naming /mcp?sessionId=…`)
       }
       const sseBare = await env.lens.firstEvent('', '/mcp/sse', SSE_WAIT_MS)
       if (sseBare.status !== 401) wrong.push(`GET /mcp/sse with no credential answered ${sseBare.status}, not 401`)
