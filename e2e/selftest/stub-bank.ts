@@ -904,6 +904,11 @@ export class Bank {
    */
   mcp(ws: string, rpc: { id?: unknown; method?: string; params?: { name?: string; arguments?: { from?: string; to?: string; agent?: string } } }): object {
     const reply = (result: object) => ({ jsonrpc: '2.0', id: rpc.id ?? null, result })
+    // B45.34 — prepare_payment, as Chat calls it for a payment the person then approves or declines on the card (B45.2).
+    if (rpc.method === 'tools/call' && rpc.params?.name === 'prepare_payment') {
+      const got = this.paymentRequests.prepareTool(ws, (rpc.params.arguments ?? {}) as Parameters<PaymentRequestDesk['prepareTool']>[1])
+      return reply('request' in got ? { content: [{ type: 'text', text: JSON.stringify(got.request) }] } : { content: [{ type: 'text', text: got.refused }], isError: true })
+    }
     if (rpc.method === 'tools/list') {
       return reply({ tools: [{ name: 'wallet_agents_spend',
         description: 'What this workspace’s agents spent over a period, per agent, with every statement line it was spent in. Amounts are µLXC (1 LXC = 1,000,000 µLXC).',
