@@ -89,6 +89,7 @@ import { waitlistJoin } from './waitlist.ts'
 import { chatFirstMessage } from './chatFirstMessage.ts'
 import { chatSidebar } from './chatSidebar.ts'
 import { voiceChatMic, voiceChatPay } from './voiceChat.ts'
+import { firstAgent } from './firstAgent.ts'
 import { deviceKeysThroughBFF } from './deviceKeys.ts'
 import { agentCredential } from './kya.ts'
 import { lineage } from './lineage.ts'
@@ -165,6 +166,8 @@ export interface RunEnv {
   webhookSecret: string
   /** B30.123 — Lens's operator read key (LENS_OPERATOR_READ_KEY), for the reconciliation and safeguarding reads; '' when not given. */
   operatorReadKey: string
+  /** B45.36 — the BFF's provisioning secret (LENS_PROVISION_SECRET), for a fresh identity's first sign-in; '' when not given. */
+  provisionSecret: string
   /** B28.287 — the port the synthetic upstream listens on, where the Lens under test sends its vLLM traffic (E2E_UPSTREAM_PORT); 0 when not given. */
   upstreamPort: number
   /** B39.23 — 'cloudflared' or 'none': how track-webhook-signed's and docs-webhook-signed's receivers are reached (E2E_HOOK_TUNNEL). */
@@ -5393,6 +5396,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B47.3 — Chat's microphone, once a run: hidden while speech is not configured; otherwise the run's fake microphone says a
   // known sentence, and its words must land in the composer, unsent.
   if (i === 4) list.push(voiceChatMic())
+  // B45.36 — a new workspace's first agent, once a run, on an identity of its own: the first sign-in returns its key, a request
+  // on it is a line on the agent's statement (and its starting test money a starter_test_money row), a second sign-in makes no second agent.
+  if (i === 2) list.push(firstAgent())
   // B40.32 — speech through Lens on an agent's own key, once a run, on a workspace of its own: a recorded clip transcribed and a
   // sentence spoken are one charge each on the agent's statement at the catalog's prices; without speech, both say so and nothing moves.
   if (i === 4) list.push(speechThroughLens())
