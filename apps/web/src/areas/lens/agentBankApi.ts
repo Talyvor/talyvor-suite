@@ -532,6 +532,8 @@ export const agentBankApi = {
   /** B28.32 — end the agent's boost on that limit now, before its time. */
   endBoost: (id: string, rule: string) => send<void>('DELETE', `/api/agents/${e(id)}/rules/boosts/${e(rule)}`),
   statement: (id: string) => getJSON<{ lines: StatementLine[] | null }>(`/api/agents/${e(id)}/statement`, { lines: 'list' }),
+  /** B46.9 — the agent's wallet on the money layer (Lens B46.4): its balance and how to pay into it. */
+  wallet: (id: string) => getSaid<AgentMoneyWallet>(`/api/agents/${e(id)}/wallet`),
   statementFile,
   /** B19.24 — the agent's test-mode card and every purchase on it; null when it has none (Lens answers 404). */
   card: async (id: string): Promise<{ card: AgentCard; authorizations: CardAuthorization[] | null } | null> => {
@@ -759,6 +761,20 @@ export interface ScheduleRequest {
 }
 
 /** Lens economy.OutsidePayee (B30.16): a saved payee outside Talyvor, with what its bank said of the name. */
+/** Lens economy.AgentWallet (B46.4): what the agent's wallet holds, and the details its partner gives for paying into it. */
+export interface AgentMoneyWallet {
+  account_id: string
+  agent_id: string
+  /** USDC, kept to six decimal places */
+  asset: string
+  partner: string
+  balance_minor: number
+  receive: { asset: string; holder?: string; iban?: string; bic?: string; network?: string; address?: string }
+  /** TEST while the sandbox serves it: its details are made up and there is nothing to pay into */
+  mode: 'TEST' | 'LIVE'
+  notice?: string
+}
+
 export interface OutsidePayee {
   id: string
   name: string

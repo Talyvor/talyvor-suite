@@ -54,6 +54,9 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 		case strings.HasSuffix(r.URL.Path, "/transfers/xfr_given/refund"):
 			w.WriteHeader(http.StatusConflict)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "economy: this transfer was already refunded"})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/wallet"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"agent_id": "agt_1", "asset": "USDC", "balance_minor": 2_500_000, "mode": "LIVE",
+				"receive": map[string]any{"asset": "USDC", "network": "base", "address": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"}})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules/history"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"versions": []map[string]any{
 				{"version": 2, "rules": map[string]any{"daily_limit_ulxc": 1_000_000}, "changed_by": "jwt:user:ws_1", "change": "template researcher", "created_at": "2026-10-05T09:01:00Z"},
@@ -418,6 +421,20 @@ func TestRuleSimulationReachesLens(t *testing.T) {
 	want := `/agents/agt_1/rules/simulate {"amount_ulxc":6000000,"model":"","provider":"","payee":{"kind":"agent","id":"agt_bea"},"at":"2026-10-05T09:00:00Z"}`
 	if len(f.got) != 1 || !strings.HasPrefix(f.got[0], "POST /v1/workspaces/") || !strings.HasSuffix(f.got[0], want) || strings.Contains(f.got[0], "ws_other") {
 		t.Fatalf("Lens got %q; want POST …%s", f.got, want)
+	}
+}
+
+// B46.9 — the agent's wallet reaches Lens's money-layer wallet and answers its balance and receive details.
+func TestAgentWalletReachesLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	rec := doJSON(a, http.MethodGet, "/api/agents/agt_1/wallet", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"address":"0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"`) {
+		t.Fatalf("wallet = %d %s", rec.Code, rec.Body.String())
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.got) != 1 || !strings.HasPrefix(f.got[0], "GET /v1/workspaces/") || !strings.HasSuffix(f.got[0], "/agents/agt_1/wallet ") {
+		t.Fatalf("Lens got %q; want GET …/agents/agt_1/wallet", f.got)
 	}
 }
 
