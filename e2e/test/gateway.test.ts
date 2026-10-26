@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { catalogULXC, cheapestOf, refusedVerdict, servedVerdict } from '../src/gateway.ts'
+import { catalogULXC, cheapestOf, isMCPEndpointEvent, refusedVerdict, servedVerdict } from '../src/gateway.ts'
 import type { LedgerRow } from '../src/lens.ts'
 
 // One request on a workspace key as Lens wrote it on 7 Oct 2026: its hold, the hold released, the spend, its fee.
@@ -18,6 +18,14 @@ function served(spend: number, fee: number, hold = 85, start = 1_000_000_000): L
 const nano = { id: 'gpt-4.1-nano', provider: 'openai', display_name: 'GPT-4.1 nano', input_per_1m: 0.1, output_per_1m: 0.4 }
 
 describe("every way into Lens's gateway (B34.6)", () => {
+  it("reads /mcp/sse's endpoint event as the URI MCP 2024-11-05 sends: /mcp with a sessionId (B17.285)", () => {
+    expect(isMCPEndpointEvent('event: endpoint\ndata: /mcp?sessionId=0123456789abcdef0123456789abcdef')).toBe(true)
+    expect(isMCPEndpointEvent('event: endpoint\ndata: {"uri":"/mcp"}')).toBe(false)
+    expect(isMCPEndpointEvent('event: endpoint\ndata: /mcp')).toBe(false)
+    expect(isMCPEndpointEvent('event: endpoint\ndata: /v1/chat?sessionId=ab')).toBe(false)
+    expect(isMCPEndpointEvent('event: message\ndata: /mcp?sessionId=ab')).toBe(false)
+  })
+
   it('prices a request at the catalog price in whole µLXC, rounded up, with no float left over', () => {
     // 34 in / 2 out at $0.10 / $0.40 a million is 4.2 µUSD: 42 µLXC at $0.10 an LXC, where a float gives 42.00000000000001.
     expect(catalogULXC(nano, 34, 2, 0.1)).toBe(42)
