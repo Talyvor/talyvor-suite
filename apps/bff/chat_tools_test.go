@@ -205,3 +205,74 @@ func TestChatToolsFileATrackIssueOnlyOnceThePersonSaidYes(t *testing.T) {
 		t.Fatalf("Track got gateway proof %q and identity %q; want the BFF's proof and the signed-in person", h.Get("X-Gateway-Auth"), h.Get("X-User-Email"))
 	}
 }
+
+// B45.2 — Chat offers Lens's prepare_payment and prepare_batch, which pay nothing: the request goes up as client "chat"
+// under a key the BFF picks, whatever the model sent for either; cancel_request and anything that pays stay out.
+func TestChatToolsPrepareAPaymentAsChatAndNothingMore(t *testing.T) {
+	var mu sync.Mutex
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		calls = append(calls, string(raw))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(string(raw), `"tools/list"`) {
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[
+				{"name":"prepare_payment","description":"Prepares one payment","inputSchema":{"type":"object","properties":{"idempotency_key":{"type":"string"},"client":{"type":"string"},"payee_id":{"type":"string"}},"required":["idempotency_key","payee_id"]}},
+				{"name":"prepare_batch","description":"Prepares several","inputSchema":{"type":"object","properties":{"idempotency_key":{"type":"string"},"client":{"type":"string"},"items":{"type":"array"}},"required":["idempotency_key","items"]}},
+				{"name":"cancel_request","description":"Cancels","inputSchema":{"type":"object"}},
+				{"name":"agent_pay","description":"Pay an agent","inputSchema":{"type":"object"}}]}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\"id\":\"preq_1\",\"status\":\"pending_approval\"}"}]}}`)
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	rec := doJSON(a, http.MethodGet, "/api/chat/tools", "")
+	var listed struct {
+		Tools []chatTool `json:"tools"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &listed)
+	names := []string{}
+	for _, tl := range listed.Tools {
+		names = append(names, tl.Name)
+		if strings.Contains(string(tl.InputSchema), "idempotency_key") || strings.Contains(string(tl.InputSchema), `"client"`) || tl.Writes {
+			t.Errorf("%s is offered as %s writes=%v; want no idempotency_key or client for the model, and no yes asked (it pays nothing)", tl.Name, tl.InputSchema, tl.Writes)
+		}
+	}
+	if strings.Join(names, ",") != "prepare_payment,prepare_batch" {
+		t.Fatalf("GET /api/chat/tools offered %v; want prepare_payment and prepare_batch alone", names)
+	}
+
+	keys := map[string]bool{}
+	for range 2 {
+		rec = doJSON(a, http.MethodPost, "/api/chat/tools/call", `{"name":"prepare_payment","arguments":{"payee_id":"payee_1","currency":"GBP","amount_minor":12000,"client":"mcp:evil","idempotency_key":"k","Client":"x"}}`)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "preq_1") {
+			t.Fatalf("prepare_payment = %d %s", rec.Code, rec.Body.String())
+		}
+		mu.Lock()
+		last := calls[len(calls)-1]
+		mu.Unlock()
+		var rpc struct {
+			Params struct {
+				Arguments map[string]any `json:"arguments"`
+			} `json:"params"`
+		}
+		_ = json.Unmarshal([]byte(last), &rpc)
+		args := rpc.Params.Arguments
+		key, _ := args["idempotency_key"].(string)
+		if args["client"] != "chat" || args["Client"] != nil || key == "" || key == "k" || args["payee_id"] != "payee_1" {
+			t.Fatalf("Lens got %v; want client chat, the BFF's own key and the model's payment", args)
+		}
+		keys[key] = true
+	}
+	if len(keys) != 2 {
+		t.Fatalf("two calls went up under keys %v; want a fresh key for each", keys)
+	}
+}

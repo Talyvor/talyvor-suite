@@ -702,6 +702,8 @@ export const agentBankApi = {
       reason ? { positions, reason } : { positions }),
   approveRequest: (id: string, statement: string, assertion: PasskeyAssertion) =>
     send<PaymentRequest>('POST', `/api/money/payment-requests/${e(id)}/approve`, { statement, assertion }),
+  /** B45.2 — declined: Lens cancels the request and pays none of it. */
+  cancelRequest: (id: string) => send<PaymentRequest>('POST', `/api/money/payment-requests/${e(id)}/cancel`),
   mandates: () => getJSON<{ granted: Mandate[] | null; received: Mandate[] | null }>('/api/money/mandates', { granted: 'list', received: 'list' }),
   grantMandate: (body: MandateGrant) => send<Mandate>('POST', '/api/money/mandates', body),
   revokeMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/revoke`),

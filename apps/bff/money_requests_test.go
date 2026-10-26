@@ -139,3 +139,31 @@ func TestPendingPaymentRequestsListRelaysStatusOnly(t *testing.T) {
 		t.Errorf("Lens saw %q, want only the status under the session's token", got)
 	}
 }
+
+// B45.2 — Decline on a payment card in Chat cancels the request at Lens under the session's token, with no body.
+func TestDeclineCancelsTheRequestAtLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" auth="+r.Header.Get("Authorization")+" "+string(raw))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"preq_1","status":"cancelled"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	if rec := doJSON(a, http.MethodGet, "/api/money/payment-requests/preq_1/cancel", ``); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET cancel = %d, want 405", rec.Code)
+	}
+	rec := doJSON(a, http.MethodPost, "/api/money/payment-requests/preq_1/cancel", `{"status":"approved"}`)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"cancelled"`) {
+		t.Fatalf("cancel = %d %s", rec.Code, rec.Body.String())
+	}
+	if len(got) != 1 || !strings.HasPrefix(got[0], "POST /v1/money/payment-requests/preq_1/cancel auth=Bearer ") || !strings.HasSuffix(got[0], " ") {
+		t.Fatalf("Lens saw %q; want one bodiless POST to the request's cancel under the session's token", got)
+	}
+}

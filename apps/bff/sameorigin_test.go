@@ -255,6 +255,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/payment-requests", body: `{"voice":true,"items":[{"payee_id":"p1","currency":"GBP","amount_minor":1}]}`},
 		{method: http.MethodPost, path: "/api/chat/voice/speech", body: `{"input":"hi"}`},
 		{method: http.MethodPost, path: "/api/chat/voice/transcriptions", body: `{}`},
+		{method: http.MethodPost, path: "/api/money/payment-requests/x1/cancel", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/payment-requests/x1/approve", body: `{"statement":"{}","assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
 		{method: http.MethodPost, path: "/api/money/devices/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/devices", body: `{"platform":"ios","name":"n","public_key":"p","challenge":"c","signature":"s","attestation":"a"}`},

@@ -174,6 +174,9 @@ export interface ChatMessage {
   tools_used?: string[]
   /** B28.374 — on an answer: the Track issues it filed, each linked to the issue. Screen-side only. */
   filed?: FiledIssue[]
+  /** B45.2 — on an answer: the payment requests it prepared with Lens, by id, each shown as its approval card or, once
+   *  decided, its receipt. Screen-side only. */
+  prepared?: string[]
   /** B28.122 — on an answer: each call it made with a connector's tool, and what the request that read its answer cost.
    *  Screen-side only. */
   connector_calls?: ConnectorCall[]
@@ -315,6 +318,19 @@ export const SPEND_TOOL = 'wallet_agents_spend'
 
 /** B28.374 — the tool "file this as a bug" is filed with: Track's create_issue. */
 export const ISSUE_TOOL = 'create_issue'
+
+/** B45.2 — the tools an assistant prepares payments with in Chat (Lens B40.3): they pay nothing. */
+export const PREPARE_TOOLS = ['prepare_payment', 'prepare_batch']
+
+/** B45.2 — the request id in what a prepare tool answered: Lens's payment request, {"id", "status", …}. */
+export function preparedRequest(text: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(text)
+    return isObject(parsed) && typeof parsed.id === 'string' && parsed.id !== '' ? parsed.id : undefined
+  } catch {
+    return undefined
+  }
+}
 
 /** B28.374 — a Track issue an answer filed: Track's id for it, its key (ENG-42) and its title. */
 export interface FiledIssue {
@@ -801,6 +817,8 @@ export interface StreamHandlers {
     toolsUsed?: string[]
     /** B28.374 — askChat: the Track issues the answer filed. */
     filed?: FiledIssue[]
+    /** B45.2 — askChat: the payment requests the answer prepared. */
+    prepared?: string[]
     /** B28.122 — askChat: the calls the answer made with connectors' tools, each with the request that read its answer. */
     connectorCalls?: ConnectorCall[]
   }) => void
@@ -1039,6 +1057,7 @@ export async function askChat(
   // B28.374 — the Talyvor tools it used and the issues it filed, over every request the question took.
   const used: string[] = []
   const filed: FiledIssue[] = []
+  const prepared: string[] = []
   const spend: SpendLine[] = []
   // B28.122 — the calls made with connectors' tools; `reading` are the last round's, whose answers the next request reads,
   // and `among` how many calls of any tool that request reads the answers of.
@@ -1092,7 +1111,7 @@ export async function askChat(
     reading = []
     const calls = done.toolCalls ?? []
     if (calls.length === 0 || round === MAX_TOOL_ROUNDS) {
-      handlers.onDone({ ...done, usage, tare, unrecognised, chargedULXC: charged, citations, codeRuns, paidBy: billed ?? undefined, ...(spend.length > 0 ? { spend } : {}), ...(requests > 1 ? { requests } : {}), ...(used.length > 0 ? { toolsUsed: used } : {}), ...(filed.length > 0 ? { filed } : {}), ...(connectorCalls.length > 0 ? { connectorCalls } : {}) })
+      handlers.onDone({ ...done, usage, tare, unrecognised, chargedULXC: charged, citations, codeRuns, paidBy: billed ?? undefined, ...(spend.length > 0 ? { spend } : {}), ...(requests > 1 ? { requests } : {}), ...(used.length > 0 ? { toolsUsed: used } : {}), ...(filed.length > 0 ? { filed } : {}), ...(prepared.length > 0 ? { prepared } : {}), ...(connectorCalls.length > 0 ? { connectorCalls } : {}) })
       return
     }
     // B28.374 — a call that changes something is put to the person first, one at a time; a no is the model's answer.
@@ -1135,6 +1154,8 @@ export async function askChat(
       if (!used.includes(c.name)) used.push(c.name)
       const issue = c.name === ISSUE_TOOL ? filedIssue(results[i].text) : undefined
       if (issue !== undefined && !filed.some((f) => f.id === issue.id)) filed.push(issue)
+      const request = PREPARE_TOOLS.includes(c.name) ? preparedRequest(results[i].text) : undefined
+      if (request !== undefined && !prepared.includes(request)) prepared.push(request)
       if (c.name !== SPEND_TOOL) return
       for (const l of spendLines(results[i].text)) {
         if (!spend.some((s) => s.agent_id === l.agent_id && s.entry_id === l.entry_id)) spend.push(l)

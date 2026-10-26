@@ -541,6 +541,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/payment-requests/{id}", a.requireTenant(a.handleMoneyPaymentRequest))
 	a.mux.HandleFunc("/api/money/payment-requests/{id}/approval", a.requireTenant(a.handleMoneyPaymentRequestApproval))
 	a.mux.HandleFunc("/api/money/payment-requests/{id}/approve", a.requireTenant(a.handleMoneyPaymentRequestApprove))
+	a.mux.HandleFunc("/api/money/payment-requests/{id}/cancel", a.requireTenant(a.handleMoneyPaymentRequestCancel))
 	a.mux.HandleFunc("/api/money/devices/challenge", a.requireTenant(a.handleMoneyDeviceChallenge)) // B40.31, money_devices.go
 	a.mux.HandleFunc("/api/money/devices", a.requireTenant(a.handleMoneyDevices))
 	a.mux.HandleFunc("/api/money/devices/{id}/revoke", a.requireTenant(a.handleMoneyDeviceRevoke))

@@ -30,7 +30,7 @@ const askedBy = (client: string) =>
   client.startsWith('mcp:') ? 'an assistant you connected' : client.startsWith('key:') ? 'an agent' : client === 'chat' ? 'Chat' : client === 'voice' ? 'a voice request' : client
 
 /** Totals by currency, as one line: "£12.00, €3.00". */
-const totalsOf = (items: PaymentRequestItem[]) =>
+export const totalsOf = (items: PaymentRequestItem[]) =>
   Object.entries(items.reduce<Record<string, number>>((t, it) => ({ ...t, [it.currency]: (t[it.currency] ?? 0) + it.amount_minor }), {}))
     .map(([cur, minor]) => formatMinor(minor, cur))
     .join(', ')
@@ -108,6 +108,11 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
       void qc.invalidateQueries({ queryKey: BILLS_KEY })
       void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
     },
+  })
+  // B45.2 — declined: Lens cancels the request, so none of it is paid.
+  const decline = useMutation({
+    mutationFn: () => agentBankApi.cancelRequest(r.id),
+    onSuccess: (done) => qc.setQueryData(paymentRequestKey(r.id), done),
   })
 
   // Known and verified are read from the payees and past payments; unread, they are not claimed either way.
@@ -211,8 +216,11 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
         ) : null}
         {pending ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="primary" disabled={ticked.length === 0 || (reasonNeeded && !reason) || approve.isPending} onClick={() => approve.mutate()}>
+            <Button type="button" variant="primary" disabled={ticked.length === 0 || (reasonNeeded && !reason) || approve.isPending || decline.isPending} onClick={() => approve.mutate()}>
               {approve.isPending ? 'Approving…' : `Approve ${ticked.length === 1 ? '1 payment' : `${ticked.length} payments`} with a passkey`}
+            </Button>
+            <Button type="button" disabled={approve.isPending || decline.isPending} onClick={() => decline.mutate()}>
+              {decline.isPending ? 'Declining…' : 'Decline'}
             </Button>
             {ticked.length === 0 ? <span className="text-caption text-muted">Tick at least one payment.</span> : reasonNeeded && !reason ? <span className="text-caption text-muted">Give a reason first.</span> : null}
           </div>
@@ -224,6 +232,7 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
               : refusalText(approve.error)}
           </Note>
         ) : null}
+        {decline.isError ? <Note ok={false}>{refusalText(decline.error)}</Note> : null}
       </div>
     </Card>
   )

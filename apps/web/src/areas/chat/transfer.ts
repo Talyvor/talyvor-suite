@@ -114,6 +114,7 @@ const TURN: Shape = {
   'artifact_edits?': (v) => v !== null && typeof v === 'object' && !Array.isArray(v) && Object.values(v).every((x) => typeof x === 'string'),
   'tools_used?': listOf((x) => typeof x === 'string'),
   'filed?': listOf(shaped({ id: 'string', identifier: 'string', title: 'string' })),
+  'prepared?': listOf((x) => typeof x === 'string'),
   'connector_calls?': listOf(
     shaped({
       connector: 'string',

@@ -17,6 +17,8 @@ const DID: Record<string, string> = {
   get_spend_summary: 'Read your spend in Lens',
   get_cache_stats: 'Read your cache savings in Lens',
   create_issue: 'Filed an issue in Track',
+  prepare_payment: 'Prepared a payment for you to approve',
+  prepare_batch: 'Prepared payments for you to approve',
   search_issues: 'Searched Track',
   list_issues: 'Listed issues in Track',
   get_issue: 'Read an issue in Track',

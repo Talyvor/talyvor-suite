@@ -14,6 +14,7 @@ import (
 //	POST /api/money/payment-requests/{id}/approval {positions, reason}  the statement approving those items, its challenge
 //	                                                                    and the passkeys that may sign it
 //	POST /api/money/payment-requests/{id}/approve {statement, assertion} keep the signed approval; Lens pays each item once
+//	POST /api/money/payment-requests/{id}/cancel                        B45.2: Decline on Chat's card — nothing is paid
 //
 // Lens decides everything: who may approve, what the statement says, whether the signature covers it and what posts.
 
@@ -76,4 +77,17 @@ func (a *app) handleMoneyPaymentRequestApprove(w http.ResponseWriter, r *http.Re
 	// UPSTREAM-BINDS-ONLY lensPaymentRequestApproveBody: none
 	body, _ := json.Marshal(in)
 	a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/payment-requests/"+url.PathEscape(id)+"/approve", body)
+}
+
+// handleMoneyPaymentRequestCancel — POST /api/money/payment-requests/{id}/cancel: declined, so Lens pays none of it.
+func (a *app) handleMoneyPaymentRequestCancel(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	id, ok := pathID(w, "request id", r.PathValue("id"))
+	if !ok {
+		return
+	}
+	a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/payment-requests/"+url.PathEscape(id)+"/cancel", nil)
 }
