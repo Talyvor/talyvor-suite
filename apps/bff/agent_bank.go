@@ -27,6 +27,7 @@ import (
 //	GET  /api/agents/{id}/rules/boosts                 B28.32: the limits raised for now, and until when
 //	POST /api/agents/{id}/rules/boosts {"rule", "value", "until"}   B28.32: raise a limit until a time; it reverts by itself
 //	DELETE /api/agents/{id}/rules/boosts/{rule}        B28.32: end a boost before its time
+//	GET  /api/agents/{id}/wallet                       B46.9: its wallet on the money layer — balance and how to pay into it
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
 //	GET  /api/agents/{id}/statement?from=&to=&format=json|csv   B19.22: its statement for a period, to download
 //	GET  /api/agents/statement?from=&to=&format=json|csv        B19.22: every account in the bank, for a period
@@ -295,6 +296,20 @@ func (a *app) handleAgentRulesSimulate(w http.ResponseWriter, r *http.Request, t
 	// UPSTREAM-BINDS-ONLY lensAgentRulesSimulateBody: none
 	body, _ := json.Marshal(in)
 	a.agentBankRelay(w, r, t, http.MethodPost, suffix, body)
+}
+
+// handleAgentWallet — GET /api/agents/{id}/wallet (B46.9): the agent's wallet on the money layer (Lens B46.4) — its
+// balance and the details its partner gives for paying into it.
+func (a *app) handleAgentWallet(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	suffix, ok := agentSuffix(w, r, "wallet")
+	if !ok {
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, suffix, nil)
 }
 
 // handleAgentRulesHistory — GET /api/agents/{id}/rules/history (B28.31): every version of the agent's rules, newest

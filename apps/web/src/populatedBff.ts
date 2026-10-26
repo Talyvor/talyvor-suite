@@ -476,6 +476,17 @@ const BY_PATH: Record<string, unknown> = {
     active_until: '',
     timezone: '',
   },
+  // B46.9 — the Researcher's wallet on the money layer, served by the sandbox: nothing to pay into yet.
+  '/api/agents/agt_research/wallet': {
+    account_id: 'macc_research',
+    agent_id: 'agt_research',
+    asset: 'USDC',
+    partner: 'sandbox',
+    balance_minor: 2_500_000,
+    receive: { asset: 'USDC', network: 'base', address: '0x0000000000000000000000000000000000000000' },
+    mode: 'TEST',
+    notice: 'This address is a preview. It isn’t on any chain yet, so don’t send money to it.',
+  },
   // B28.31 — the Researcher's rules history: saved with a 5 LXC daily limit, then a person asked to approve above 2 LXC.
   '/api/agents/agt_research/rules/history': {
     versions: [

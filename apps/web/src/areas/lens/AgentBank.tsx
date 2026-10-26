@@ -11,6 +11,7 @@ import { CATALOG_KEY } from '../marketplace/parts'
 import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, signApproval } from './passkeys'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentCredentialCard } from './AgentCredential'
+import { AgentMoneyWalletCard } from './AgentMoneyWallet'
 import { CurrencyPicker, Lxc } from './money'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
@@ -2486,6 +2487,7 @@ export function AgentBank() {
               <PauseAgent agent={agent} />
               <AgentDetails key={`details-${agent.id}`} agent={agent} />
               <Money agent={agent} book={book.data} />
+              <AgentMoneyWalletCard key={`wallet-${agent.id}`} agent={agent} />
               <Rules key={`rules-${agent.id}`} agent={agent} agents={live} />
               <TryRules key={`try-${agent.id}`} agent={agent} agents={live} />
               {live.length > 1 ? (
