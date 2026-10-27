@@ -13,7 +13,7 @@
 // company's account, which bulk payouts pay from, holds nothing until money in (B30.15) lands, so the two good rows read
 // invalid for want of funds and nothing moves — asserted on the account. Screenshots at 1440 and 390.
 
-import { fail } from './bank.ts'
+import { DISCLAIMER, fail } from './bank.ts'
 import { RUN_SALT } from './oracles.ts'
 import type { Scenario, ScenarioCtx } from './scenarios.ts'
 import { payWithTestCard } from './screens.ts'
@@ -132,9 +132,8 @@ export function payScreen(): Scenario {
       const page = await ctx.app.tab('/money/pay')
       try {
         await page.locator('header h1').filter({ hasText: 'Pay' }).waitFor({ timeout: TIMEOUT_MS })
-        if (!((await page.getByTestId('pay-preview').textContent()) ?? '').includes('Preview — test money only')) {
-          return fail('the Pay screen does not say "Preview — test money only"')
-        }
+        const onScreen = (await page.locator('body').innerText()).match(DISCLAIMER)
+        if (onScreen) return fail(`the Pay screen carries a disclaimer line: "${onScreen[0]}"`)
         // The scam warning is role="alert" too, and stays up while the payment sends: it is not a refusal.
         const refusals = (form: ReturnType<typeof page.getByTestId>) => form.locator('[role="alert"]:not([data-testid="scam-warning"])')
         const refusalOf = async (form: ReturnType<typeof page.getByTestId>) => (await refusals(form).allTextContents()).join(' ').trim()

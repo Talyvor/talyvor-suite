@@ -32,7 +32,7 @@ func TestInvoicesReachLensAndThePayPageCarriesNoCredential(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"url":"https://checkout.stripe.com/c/pay/cs_test_1"}`))
 		case strings.HasPrefix(r.URL.Path, "/v1/pay/"):
-			_, _ = w.Write([]byte(`{"notice":"Preview — test money only. Nothing paid here moves real money.","card":true,"invoice":{"number":"INV-000001","status":"sent"}}`))
+			_, _ = w.Write([]byte(`{"card":true,"invoice":{"number":"INV-000001","status":"sent"}}`))
 		default:
 			_, _ = w.Write([]byte(`{"invoices":[]}`))
 		}
@@ -52,7 +52,7 @@ func TestInvoicesReachLensAndThePayPageCarriesNoCredential(t *testing.T) {
 	// The pay page and the card button: the shell's own fetch, no session cookie, and Lens is called with no bearer.
 	page := httptest.NewRecorder()
 	a.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/api/public/pay/abcdefghijklmnopqrstuvwx", nil))
-	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Preview — test money only") {
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), `"INV-000001"`) {
 		t.Fatalf("pay page = %d %s", page.Code, page.Body.String())
 	}
 	card := httptest.NewRecorder()

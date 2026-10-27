@@ -71,12 +71,12 @@ afterEach(() => {
 })
 
 describe("an agent's card on Agent Wallets", () => {
-  it('issues a test card, then shows an approved and a declined purchase with the reason and the rate', async () => {
+  it('issues a card, then shows an approved and a declined purchase with the reason and the rate', async () => {
     const sent = mockBff()
     window.history.pushState({}, '', '/agents')
     render(<App />)
 
-    const issue = await screen.findByRole('button', { name: 'Issue a test card' })
+    const issue = await screen.findByRole('button', { name: 'Issue a card' })
     expect((issue as HTMLButtonElement).disabled).toBe(true) // the cardholder Stripe needs comes first
     for (const [label, value] of [
       ['First name', 'Ada'],
@@ -92,7 +92,7 @@ describe("an agent's card on Agent Wallets", () => {
     const card = await screen.findByTestId('agent-card')
     expect(card.textContent).toContain('•••• 4242')
     expect(card.textContent).toContain('expires 09/29 · GBP')
-    expect(within(card).getByText('Test mode')).toBeTruthy()
+    expect(card.textContent).not.toMatch(/test mode/i)
 
     const rows = within(screen.getByTestId('agent-card-purchases')).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(2)
@@ -121,7 +121,7 @@ describe("an agent's card on Agent Wallets", () => {
     window.history.pushState({}, '', '/agents')
     render(<App />)
 
-    const issue = await screen.findByRole('button', { name: 'Issue a test card' })
+    const issue = await screen.findByRole('button', { name: 'Issue a card' })
     for (const [label, value] of [
       ['First name', 'Ada'],
       ['Last name', 'Lovelace'],

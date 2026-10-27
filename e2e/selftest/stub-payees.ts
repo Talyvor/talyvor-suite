@@ -63,8 +63,6 @@ interface Payment { id: string; workspace_id: string; account_id: string; payee_
 
 const CURRENCIES = ['GBP', 'EUR', 'USD']
 const HELD = 'screening: held — the name is close to one on a sanctions list, and waits for an operator to release it'
-const DETAILS_NOTICE = 'Preview — test money only. These details are made up and reach no bank: nothing paid to them moves real money.'
-const PAY_NOTICE = 'Preview — test money only. Nothing paid here moves real money.'
 /** Minor units as Lens prints them: "GBP 10.00". */
 const money = (minor: number, currency: string): string => `${currency} ${(minor / 100).toFixed(2)}`
 
@@ -184,7 +182,7 @@ export class PayeeDesk {
       const currency = (b.currency ?? '').toUpperCase()
       const agentID = b.agent_id ?? ''
       if (!CURRENCIES.includes(currency)) return this.json(res, 400, { error: `economy: invalid currency account: an account is in GBP, EUR or USD, not "${currency}"` })
-      if (b.funding === 'live') return this.json(res, 403, { error: 'currency_accounts is class RED: it takes test money only until Talyvor records a clearance for it, and this would use real money' })
+      if (b.funding === 'live') return this.json(res, 403, { error: 'currency_accounts is class RED: it takes no real money until Talyvor records a clearance for it, and this would use real money' })
       if (accounts.some((a) => a.currency === currency && (a.agent_id ?? '') === agentID)) {
         return this.json(res, 409, { error: `economy: an account is already open: ${agentID === '' ? "the company's" : "the agent's"} ${currency} account` })
       }
@@ -408,11 +406,9 @@ export class PayeeDesk {
     if (!verify('sha256', signed, key, Buffer.from(a.signature ?? '', 'base64url'))) return 'passkey: the passkey ceremony is not valid: the signature does not verify'
     return undefined
   }
-  /** B30.14 — what a payer pays into `a`: its company's details, made up by the Test partner, and an agent account's payment reference. */
-  private details(ws: string, a: Account): { payment_reference?: string } & Record<string, unknown> {
-    const company = (this.accounts.get(ws) ?? []).find((x) => x.id === (a.parent_account_id ?? a.id)) ?? a
-    return { account_id: a.id, account_ref: `test:${company.id}`, holder: `${ws} Ltd`, currency: a.currency, sort_code: '040004', account_number: '12345678',
-      ...(a.purpose === 'agent' ? { payment_reference: this.references.get(a.id) } : {}), mode: 'TEST', notice: DETAILS_NOTICE }
+  /** B30.14 — what a payer pays into `a`: the Test partner's details reach no bank, so none (B49.1), and an agent account's payment reference. */
+  private details(_ws: string, a: Account): { payment_reference?: string } & Record<string, unknown> {
+    return { account_id: a.id, currency: a.currency, ...(a.purpose === 'agent' ? { payment_reference: this.references.get(a.id) } : {}), mode: 'TEST' }
   }
 
   /** An invoice as Lens answers it: payments only once there are any (omitempty). */
@@ -504,13 +500,8 @@ export class PayeeDesk {
       if (inv === undefined) return this.json(res, 404, { error: 'economy: no such invoice' }), true
       const { workspace_id: _w, agent_id: _a, account_id: _c, pay_token: _t, payments: _p, ...shown } = inv
       const payable = inv.status === 'sent' || inv.status === 'overdue'
-      const page: Record<string, unknown> = { notice: PAY_NOTICE, card: payable, invoice: shown }
-      const account = (this.accounts.get(inv.workspace_id) ?? []).find((a) => a.id === inv.account_id)
-      if (account !== undefined && payable) {
-        const d = this.details(inv.workspace_id, account)
-        page.transfer = { details: d, mode: 'TEST', reference: `${d.payment_reference ?? ''} ${inv.reference}` }
-      }
-      return this.json(res, 200, page), true
+      // The Test partner's details reach no bank, so the page offers no transfer (Lens B49.1).
+      return this.json(res, 200, { card: payable, invoice: shown }), true
     }
     const card = /^\/v1\/pay\/([^/]+)\/card$/.exec(path)
     if (card !== null && req.method === 'POST') {

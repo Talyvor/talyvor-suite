@@ -1311,7 +1311,7 @@ createServer(async (req, res) => {
       byToken.set(ws.token, ws)
       const money = Number(process.env.STUB_STARTER_TEST_MONEY_ULXC ?? 1_000_000)
       const started = existed && !broke('first-agent-twice') ? undefined : bank.startWorkspace(id, money)
-      if (started !== undefined && money > 0) book(ws, money, 'starter_test_money', 'starting test money', { funding: 'test', agent_id: started.agent.id })
+      if (started !== undefined && money > 0) book(ws, money, 'starter_test_money', 'starting credits', { funding: 'test', agent_id: started.agent.id })
       const expires = new Date(Date.now() + 3600e3).toISOString().replace(/\.\d+Z$/, 'Z')
       return json(res, 200, { workspace_id: id, created: !existed, cache_poolable: ws.settings.cache_poolable, token: ws.token, expires_at: expires,
         ...(started === undefined ? {} : { first_agent: { agent: { id: started.agent.id, name: started.agent.name }, rules: started.agent.rules,

@@ -1,13 +1,13 @@
 // B30.116 — the Verification screen (/settings/verification), once a run, in the browser, on a workspace of its own so
 // it starts at L0 every night. The owner confirms an email and phone from the screen's form (L1), then has its identity
 // checked (L2). The Test provider checked both, so the screen must show L2, the live level L0, both checks marked
-// "Test — counts for test money only" with their evidence references, "Preview — test money only", and beside paying
+// "Test check — not counted for live money" with their evidence references, no disclaimer line (B49.2), and beside paying
 // outside Talyvor (payments_out) L2 and beside credit to companies (b2b_credit) L3. Screenshots at 1440 and 390.
 
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Page } from 'playwright'
-import { fail } from './bank.ts'
+import { DISCLAIMER, fail } from './bank.ts'
 import { RUN_SALT } from './oracles.ts'
 import type { Scenario } from './scenarios.ts'
 import { LEVELS_NEEDED } from './verification.ts'
@@ -59,8 +59,9 @@ export function verificationScreen(): Scenario {
         const live = await text('verification-live-level')
         ctx.evidence.push({ note: `the screen shows level "${level}" and live level "${live}"` })
         if (!level.startsWith('L2')) return fail(`after two checks the screen shows the level "${level}", not L2`)
-        if (!live.startsWith('L0')) return fail(`after two Test checks the screen shows the live level "${live}", not L0: a Test pass counts for test money only`)
-        if (!(await text('verification-preview')).includes('Preview — test money only')) return fail('the screen does not say "Preview — test money only"')
+        if (!live.startsWith('L0')) return fail(`after two Test checks the screen shows the live level "${live}", not L0: a Test pass does not count for live money`)
+        const onScreen = (await page.locator('body').innerText()).match(DISCLAIMER)
+        if (onScreen) return fail(`the Verification screen carries a disclaimer line: "${onScreen[0]}"`)
 
         const checks = await page.getByTestId('verification-check').allTextContents()
         ctx.evidence.push({ note: `the checks listed: ${checks.join(' | ')}` })
@@ -68,7 +69,7 @@ export function verificationScreen(): Scenario {
         for (const [i, want] of ['L2', 'L1'].entries()) {
           const c = checks[i]
           if (!c.startsWith(want)) return fail(`check ${i + 1}, newest first, is "${c}", not ${want}`)
-          if (!c.includes('Test — counts for test money only')) return fail(`the ${want} check is not marked "Test — counts for test money only": "${c}"`)
+          if (!c.includes('Test check — not counted for live money')) return fail(`the ${want} check is not marked "Test check — not counted for live money": "${c}"`)
           if (!/Evidence reference\s*\S+/.test(c)) return fail(`the ${want} check shows no evidence reference: "${c}"`)
         }
 
@@ -91,7 +92,7 @@ export function verificationScreen(): Scenario {
         return {
           pass: true,
           detail: 'from the screen\'s forms: email and phone made L1 and identity L2; it shows L2, live L0, both checks marked Test with ' +
-            'their evidence references, Preview — test money only, payments_out at L2 and b2b_credit at L3',
+            'their evidence references, no disclaimer line, payments_out at L2 and b2b_credit at L3',
         }
       } finally {
         await page.close()

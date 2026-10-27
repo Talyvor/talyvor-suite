@@ -36,7 +36,7 @@ describe('the legal pages', () => {
 
   it.each([
     ['Terms', '2026-10-24', '24 October 2026'],
-    ['Privacy', '2026-10-25', '25 October 2026'], // B44.2 added the advertising cookie
+    ['Privacy', '2026-10-27', '27 October 2026'], // B49.2 named virtual cards plainly
   ])('%s is dated, lists every section, and says where it ends', async (title, day, long) => {
     const { container } = at(`/${title.toLowerCase()}`)
     await screen.findByRole('heading', { level: 1, name: title })

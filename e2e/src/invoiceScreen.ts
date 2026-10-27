@@ -4,15 +4,15 @@
 // On Lens's API the owner accepts the terms of currency_accounts and payments_in, opens the company's GBP account, makes an
 // agent and opens the agent's GBP account (Lens B30.13: an agent's is a sub-account of the company's). On the screen the
 // owner issues an invoice from that account — two lines, one with VAT — with "Create and send": the row must read Sent with
-// a pay link. A stranger (a fresh browser context, signed out) opens the link: the page must say "Preview — test money
-// only" and the total due, and "Pay … by card" must open a checkout that takes the 4242 test card and come back to the
+// a pay link. A stranger (a fresh browser context, signed out) opens the link: the page must show the total due and no
+// disclaimer line (B49.2), and "Pay … by card" must open a checkout that takes the 4242 test card and come back to the
 // link reading "Paid — thank you". Then Lens's own record (GET /v1/money/invoices on the owner's token, not through the
 // screen) must hold the invoice paid, with one card payment of the total, and the agent's GBP account (GET /v1/money/accounts)
-// must hold the total more test money than before: the posting is what makes it paid. The screen must read Paid as well.
+// must hold the total more than before: the posting is what makes it paid. The screen must read Paid as well.
 // Screenshots of both screens at 1440 and 390.
 
 
-import { fail } from './bank.ts'
+import { DISCLAIMER, fail } from './bank.ts'
 import { RUN_SALT } from './oracles.ts'
 import type { Scenario, ScenarioCtx } from './scenarios.ts'
 import { payWithTestCard } from './screens.ts'
@@ -54,9 +54,9 @@ export function invoicesScreen(): Scenario {
     own: true,
     agents: 1,
     items: ['B30.97'],
-    title: 'the Invoices screen issues and sends an invoice from an agent’s GBP account; its public pay page, opened signed out, says ' +
-      '"Preview — test money only", takes the test card and reads paid; Lens records the invoice paid by one card payment of the ' +
-      'total and the agent’s account holds the total more test money; the screen reads Paid',
+    title: 'the Invoices screen issues and sends an invoice from an agent’s GBP account; its public pay page, opened signed out, carries ' +
+      'no disclaimer line, takes the test card and reads paid; Lens records the invoice paid by one card payment of the ' +
+      'total and the agent’s account holds the total more; the screen reads Paid',
     run: async (ctx) => {
       // The terms, the company's GBP account, an agent and its GBP account, on Lens's API.
       const terms = await call<{ terms: Terms[] | null }>(ctx, 'GET', TERMS)
@@ -89,9 +89,8 @@ export function invoicesScreen(): Scenario {
       const page = await ctx.app.tab('/money/invoices')
       try {
         await page.locator('header h1').filter({ hasText: 'Invoices' }).waitFor({ timeout: TIMEOUT_MS })
-        if (!((await page.getByTestId('invoices-preview').textContent()) ?? '').includes('Preview — test money only')) {
-          return fail('the Invoices screen does not say "Preview — test money only"')
-        }
+        const onScreen = (await page.locator('body').innerText()).match(DISCLAIMER)
+        if (onScreen) return fail(`the Invoices screen carries a disclaimer line: "${onScreen[0]}"`)
         const form = page.getByTestId('new-invoice')
         await form.waitFor({ timeout: TIMEOUT_MS })
         await form.getByLabel('Paid into').selectOption(account.id)
@@ -134,8 +133,8 @@ export function invoicesScreen(): Scenario {
         await pay.goto(`${appURL}/pay/${token}`)
         const headline = pay.getByTestId('pay-headline')
         await headline.waitFor({ timeout: TIMEOUT_MS })
-        const preview = ((await pay.getByTestId('pay-preview').textContent().catch(() => '')) ?? '').trim()
-        if (!preview.includes('Preview — test money only')) return fail(`the pay page does not say "Preview — test money only": "${preview || 'nothing'}"`)
+        const onPage = (await pay.locator('body').innerText()).match(DISCLAIMER)
+        if (onPage) return fail(`the pay page carries a disclaimer line: "${onPage[0]}"`)
         const due = ((await pay.getByTestId('pay-due').textContent()) ?? '').trim()
         if (due !== TOTAL_TEXT) return fail(`the pay page says ${due} is due, not ${TOTAL_TEXT}`)
         ctx.evidence.push({ note: `the pay page, signed out, before paying, ${await screenshots(ctx, pay, 'pay-page')}` })
@@ -187,7 +186,7 @@ export function invoicesScreen(): Scenario {
       }
       return {
         pass: true,
-        detail: `${number} for ${TOTAL_TEXT} issued and sent on the screen; its pay page, signed out, said Preview — test money only, took the test ` +
+        detail: `${number} for ${TOTAL_TEXT} issued and sent on the screen; its pay page, signed out, carried no disclaimer line, took the test ` +
           `card and read Paid — thank you; Lens records it paid by one card payment of ${TOTAL_MINOR} minor, the agent’s GBP account ` +
           `${before.test_minor} → ${after.test_minor}; the screen reads Paid`,
       }

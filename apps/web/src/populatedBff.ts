@@ -36,9 +36,7 @@ const BODIES: Record<string, unknown> = {
   // B27.30 — a published board, at the address the public-route sweeps visit (`/board/:token`).
   // B30.97 — an invoice's pay page, at the address the public-route sweeps visit (`/pay/:token`).
   '/api/public/pay/%3Atoken': {
-    notice: 'Preview — test money only. Nothing paid here moves real money.',
     card: true,
-    transfer: { details: { holder: 'Fixture Ltd', currency: 'GBP', sort_code: '040004', account_number: '12345678' }, mode: 'TEST', reference: 'TLV-AGT-1 a1b2c3d4e5f6' },
     invoice: {
       id: 'inv_1', issuer: 'Fixture Ltd', number: 'INV-000001', reference: 'a1b2c3d4e5f6', currency: 'GBP', customer_name: 'Acme Hosting',
       lines: [{ description: 'Research, October', quantity: 2, unit_amount_minor: 5000, vat_rate_bps: 2000, net_minor: 10000, vat_minor: 2000 }],
@@ -483,9 +481,8 @@ const BY_PATH: Record<string, unknown> = {
     asset: 'USDC',
     partner: 'sandbox',
     balance_minor: 2_500_000,
-    receive: { asset: 'USDC', network: 'base', address: '0x0000000000000000000000000000000000000000' },
+    receive: { asset: 'USDC' },
     mode: 'TEST',
-    notice: 'This address is a preview. It isn’t on any chain yet, so don’t send money to it.',
   },
   // B28.31 — the Researcher's rules history: saved with a 5 LXC daily limit, then a person asked to approve above 2 LXC.
   '/api/agents/agt_research/rules/history': {

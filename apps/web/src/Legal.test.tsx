@@ -253,11 +253,11 @@ describe('both documents state their absences rather than reading as complete', 
     expect(document.body.textContent ?? '').not.toMatch(/no mechanism to convert/i)
   })
 
-  it('privacy names the wallet data it keeps: statements, approvals, passkeys and test-mode cards', async () => {
+  it('privacy names the wallet data it keeps: statements, approvals, passkeys and virtual cards', async () => {
     mockBff()
     at('/privacy')
     expect(await screen.findByRole('heading', { name: /What Agent Wallets stores/i })).toBeInTheDocument()
-    for (const what of ['Statements.', 'Rules and approvals.', 'Passkeys.', 'Test-mode cards.'])
+    for (const what of ['Statements.', 'Rules and approvals.', 'Passkeys.', 'Virtual cards.'])
       expect(screen.getByText(what)).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /What the Marketplace stores and shows/i })).toBeInTheDocument()
   })

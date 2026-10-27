@@ -56,7 +56,7 @@ function Preview({ b }: { b: Branding }) {
   return (
     <figure className="flex max-w-2xl flex-col gap-2">
       <figcaption className="text-caption text-muted">
-        Preview — mail arrives from <span className="text-ink">“{name} via Talyvor”</span>
+        Mail arrives from <span className="text-ink">“{name} via Talyvor”</span>
       </figcaption>
       <div className="overflow-hidden rounded-control border border-rule">
         <div data-testid="branding-preview" className="px-6 py-5" style={{ background: color }}>

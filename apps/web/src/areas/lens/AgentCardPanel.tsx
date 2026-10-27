@@ -38,7 +38,6 @@ function CardFace({ card }: { card: AgentCard }) {
       <span className="text-caption text-muted">
         expires {String(card.exp_month).padStart(2, '0')}/{String(card.exp_year).slice(-2)} · {card.currency.toUpperCase()}
       </span>
-      {card.livemode ? null : <Pill status="held">Test mode</Pill>}
       {card.frozen ? <Pill status="slashed">Frozen</Pill> : null}
     </div>
   )
@@ -129,10 +128,9 @@ function IssueCard({ agent }: { agent: Agent }) {
       }}
     >
       <p className="text-body text-muted">
-        Give {agent.name} a virtual card for test purchases. Each purchase is paid from its wallet only if its rules
+        Give {agent.name} a virtual card. Each purchase is paid from its wallet only if its rules
         allow it, converted from pounds at the day’s European Central Bank rate. Stripe issues the card to a person —
-        the cardholder — and a merchant may ask for their billing address. Their phone number is optional on a test
-        card.
+        the cardholder — and a merchant may ask for their billing address. Their phone number is optional.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {FIELDS.map((f) => (
@@ -156,7 +154,7 @@ function IssueCard({ agent }: { agent: Agent }) {
       ) : null}
       <div>
         <Button type="submit" disabled={!ready || issue.isPending}>
-          {issue.isPending ? 'Issuing…' : 'Issue a test card'}
+          {issue.isPending ? 'Issuing…' : 'Issue a card'}
         </Button>
       </div>
       {issue.isError ? (

@@ -128,7 +128,7 @@ export class TaxDesk {
       supplier: { legal_name: 'TALYVOR LTD', address: '1 Test Street, London', vat_number: '' },
       buyer: { workspace_id: buyer, name: p?.legal_name ?? '', country: p?.country ?? '', business: p !== undefined && p.business && p.tax_id_valid, ...(p?.tax_id_valid ? { vat_number: p.tax_id } : {}) },
       lines, net_usd_micros: net, tax_usd_micros: tax, gross_usd_micros: gross, gross_cents: Math.round(gross / 10_000), stripe_total_cents: null, reverse_charge: reverse,
-      notes: [...new Set(lines.filter((l) => l.treatment === 'reverse_charge').map((l) => l.note))], preview: true, preview_reason: 'Preview — test money only' })
+      notes: [...new Set(lines.filter((l) => l.treatment === 'reverse_charge').map((l) => l.note))], preview: true, preview_reason: 'VAT registration pending' })
   }
 
   /**
