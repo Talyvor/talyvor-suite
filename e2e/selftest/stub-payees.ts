@@ -29,6 +29,9 @@
 // payouts (POST /v1/money/payouts as text/csv or JSON rows, GET …, GET …/{id}, POST …/{id}/approve, Lens B30.21): every row
 // validated on upload — the payee saved and confirmed, the amount positive in a money currency, the company's account in
 // the currency holding enough after the valid rows before it — and paid, once, on one approval.
+// B46.12 — and the Test partner's refusal: a payment whose minor units end in 13 is refused and lists failed, its hold back in
+// the account (Lens's payment_out_failed). Its defect:
+//   refused-payment-held   — the refused payment's money stays out of the account
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -235,10 +238,13 @@ export class PayeeDesk {
     if (holds < amount && !(funding === 'live' && this.broken('compliance-live-paid'))) {
       return { status: 409, error: `economy: insufficient funds: the account holds ${money(holds, currency)} of ${funding} money, and this payment is ${money(amount, currency)}` }
     }
-    account[funding === 'live' ? 'live_minor' : 'test_minor'] -= amount
-    account.balance_minor -= amount
+    const refused = amount % 100 === 13
+    if (!refused || this.broken('refused-payment-held')) {
+      account[funding === 'live' ? 'live_minor' : 'test_minor'] -= amount
+      account.balance_minor -= amount
+    }
     const p: Payment = { id: `mpay_${randomUUID()}`, workspace_id: ws, account_id: account.id, payee_id: payee.id, payee_name: payee.name, amount_minor: amount, currency,
-      funding, reference: b.reference ?? '', idempotency_key: b.idempotency_key, status: 'completed', created_at: new Date().toISOString() }
+      funding, reference: b.reference ?? '', idempotency_key: b.idempotency_key, status: refused ? 'failed' : 'completed', created_at: new Date().toISOString() }
     this.payments.set(ws, [p, ...payments])
     return p
   }

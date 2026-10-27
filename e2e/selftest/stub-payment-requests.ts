@@ -137,8 +137,8 @@ export class PaymentRequestDesk {
     return this.json(res, 200, r), true
   }
 
-  /** The payment-request routes, on workspace `ws`'s key (B40.29: `agentID` its agent's own key's): true when `path` was one of them. */
-  async route(req: IncomingMessage, res: ServerResponse, ws: string, path: string, agentID = ''): Promise<boolean> {
+  /** The payment-request routes, on workspace `ws`'s key (B40.29: `agentID` its agent's own key's, `keyID` that key's id): true when `path` was one of them. */
+  async route(req: IncomingMessage, res: ServerResponse, ws: string, path: string, agentID = '', keyID = ''): Promise<boolean> {
     if (path === '/v1/money/bills/pay' && req.method === 'POST' && agentID === '') return this.billsPay(req, res, ws), true
     if (!path.startsWith('/v1/money/payment-requests')) return false
     const act = /^\/v1\/money\/payment-requests\/([^/]+)\/(approval|approve|record|cancel)$/.exec(path)
@@ -156,7 +156,7 @@ export class PaymentRequestDesk {
     if (detail !== '') return this.json(res, 400, { error: `economy: invalid payment request: payee details supplied by the assistant (${detail}): pay a saved payee by its payee_id` }), true
     const key = String(req.headers['idempotency-key'] ?? '')
     if (key === '') return this.json(res, 400, { error: 'economy: invalid payment request: an Idempotency-Key is required' }), true
-    const client = agentID !== '' ? `key:${agentID}` : body.client ?? 'chat'
+    const client = agentID !== '' ? `key:${keyID}` : body.client ?? 'chat' // B46.12: Lens judges an agent's key as "key:<api key id>"
     const items = (body.items ?? []).map((i) => ({ payee_id: i.payee_id ?? '', listing_id: '', currency: (i.currency ?? '').toUpperCase(), amount_minor: i.amount_minor ?? 0, reference: i.reference ?? '' }))
     const args = JSON.stringify({ client, items })
     const seen = this.keys.get(`${ws}\n${key}`)
