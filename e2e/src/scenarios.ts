@@ -77,6 +77,7 @@ import { permissionMandate } from './permissionMandates.ts'
 import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { batchApproval } from './batchApproval.ts'
+import { moneyLayerContract } from './moneyContract.ts'
 import { speechThroughLens } from './speech.ts'
 import { capabilityTerms } from './capabilityTerms.ts'
 import { verificationScreen } from './verificationScreen.ts'
@@ -5425,6 +5426,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B40.29 — one approval for an agent's two-item batch, once a run, on a workspace of its own: signed with the phone's device
   // key it pays exactly two payments out from the agent's card-funded account; replayed, 409 and nothing moves; the record verifies.
   if (i === 6) list.push(batchApproval())
+  // B46.12 — the money layer's contract on the sandbox, once a run, on a workspace of its own: a new agent has a wallet; £20.00 over
+  // its mandate waits for approval with nothing moved; approved once it is one payment out, the replay 409; a refused one half-done in nothing.
+  if (i === 3) list.push(moneyLayerContract())
   // B32.65 — lineage and licences, once a run, on workspaces of its own: A at a 20% royalty is remixed into B at 10% and B
   // into C, each under its remix licence; C rented and used twice is one line on its buyer's bill; the paid rent splits
   // Talyvor's fee, C, B and A in the design's proportions on each author's earnings and journal, and its refund reverses all four.

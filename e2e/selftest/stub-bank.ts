@@ -534,7 +534,8 @@ export class Bank {
   /** B40.29 — the payment-request routes on an agent's own key, which Lens judges as the agent itself. */
   async agentPaymentRequests(req: IncomingMessage, res: ServerResponse, path: string, key: string): Promise<boolean> {
     const who = this.agentOfKey(key)
-    return who !== undefined && this.paymentRequests.route(req, res, who.ws.id, path, who.agent.id)
+    const keyID = [...this.keyByID].find(([, k]) => k === key)?.[0] ?? ''
+    return who !== undefined && this.paymentRequests.route(req, res, who.ws.id, path, who.agent.id, keyID)
   }
 
   /** The workspace and agent an agent key belongs to. */
@@ -2271,6 +2272,10 @@ export class Bank {
           this.post(ws.id, kind, [['workspace', -sign * n, `agent:${a.id}`], [`agent:${a.id}`, sign * n, 'workspace']], key === '' ? undefined : key)
         }
         return json(res, 200, { agent_id: a.id, balance_ulxc: this.balance(`agent:${a.id}`) }), true
+      }
+      // B46.4 — the agent's wallet, as the sandbox serves it: nothing to pay into, mode TEST.
+      if (action === '/wallet' && method === 'GET') {
+        return json(res, 200, { account_id: `macc_wallet_${a.id}`, agent_id: a.id, asset: 'USDC', partner: 'sandbox', balance_minor: 0, test_minor: 0, live_minor: 0, receive: {}, mode: 'TEST' }), true
       }
       if (action === '/rules' && method === 'GET') return json(res, 200, a.rules), true
       if (action === '/rules' && method === 'PUT') {
