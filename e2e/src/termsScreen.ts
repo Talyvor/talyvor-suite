@@ -14,7 +14,7 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Locator, Page } from 'playwright'
-import { fail } from './bank.ts'
+import { DISCLAIMER, fail } from './bank.ts'
 import { checkWithJWKS } from './kya.ts'
 import { RUN_SALT } from './oracles.ts'
 import type { Scenario, ScenarioCtx } from './scenarios.ts'
@@ -70,9 +70,8 @@ export function termsAndCredentialScreens(): Scenario {
         await row.waitFor({ timeout: TIMEOUT_MS })
         const shown = ((await row.textContent()) ?? '').trim()
         if (!shown.includes('Not accepted yet')) return fail(`the screen shows ${CAPABILITY} as "${shown}", while Lens has it not accepted`)
-        if (!((await page.getByTestId('terms-preview').textContent()) ?? '').includes('Preview — test money only')) {
-          return fail('the Capability terms screen does not say "Preview — test money only"')
-        }
+        const onScreen = (await page.locator('body').innerText()).match(DISCLAIMER)
+        if (onScreen) return fail(`the Capability terms screen carries a disclaimer line: "${onScreen[0]}"`)
 
         await row.getByRole('button', { name: 'Read and accept' }).click()
         const text = row.getByTestId('terms-text')

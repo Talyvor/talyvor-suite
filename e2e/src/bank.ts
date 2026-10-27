@@ -557,14 +557,14 @@ export class AgentBankScreen {
     return said(c)
   }
 
-  /** Card → Issue a test card, to the cardholder `holder`; Lens's refusal, if it was refused. */
+  /** Card → Issue a card, to the cardholder `holder`; Lens's refusal, if it was refused. */
   async issueCard(agent: Agent, holder: { first: string; last: string; line1: string; city: string; postcode: string }): Promise<string | undefined> {
     await this.fresh(agent)
     const c = card(this.page, 'Card')
     for (const [label, v] of [['First name', holder.first], ['Last name', holder.last], ['Address', holder.line1], ['Town or city', holder.city], ['Postcode', holder.postcode]]) {
       await c.getByLabel(label, { exact: true }).fill(v)
     }
-    await c.getByRole('button', { name: 'Issue a test card' }).click()
+    await c.getByRole('button', { name: 'Issue a card' }).click()
     return outcome(c.getByTestId('agent-card'), c)
   }
 
@@ -3286,8 +3286,8 @@ export function chatWalletAlerts(seed: number): Scenario {
 
 /** B46.2 — sign-up to Home with a working first agent takes under two minutes (B45.8). */
 export const FIRST_AGENT_WITHIN_MS = 120_000
-/** B46.14 — sign-up and Home carry no disclaimer line (Nick, 24 Oct 2026); B46.2's sentence was the last. */
-export const DISCLAIMER = /real money|money partner|test money/i
+/** B46.14 — sign-up and Home carry no disclaimer line (Nick, 24 Oct 2026); B49.2 — nor any money screen or the pay page (Nick, 27 Oct 2026). */
+export const DISCLAIMER = /real money|money partner|test money|preview —|closed trial/i
 
 /**
  * B46.2 (B28.8's scenario, rebuilt) — a brand-new workspace's first agent, in one click on Home, timed from opening

@@ -377,7 +377,7 @@ const CAPABILITIES = [
   ['pay_another_owner', 'Pay another owner'], ['loans_between_companies', 'Loans between companies'], ['escrow', 'Escrow'],
   ['rules_approvals_statements_pots', 'Rules, approvals, statements and pots'], ['cash_out', 'Cash out'], ['company_credit_line', 'Company credit line'],
 ].map(([capability, name]) => ({ capability, name, class: 'AMBER', real_money: false, level_needed: LEVEL_NEEDED[capability] ?? 'L2' }))
-/** B28.360 — an agent's card, RED in Lens (economy.CapabilityAgentCard): the card freeze in Chat says it is test money only. */
+/** B28.360 — an agent's card, RED in Lens (economy.CapabilityAgentCard): the card freeze in Chat carries no test-money label (B46.2). */
 const CARD_CAPABILITY = { capability: 'agent_card', name: 'Cards', class: 'RED', real_money: false, level_needed: 'L2' }
 /** B30.115 — and the money-and-markets ones B30.1 added, in Lens's classes; `b30-capability-gone` drops fx. B30.117: each with
  * the level its live money needs, as LEVEL_NEEDED gives it (else L2); `level-needed-wrong` lists payments_out at L0. */

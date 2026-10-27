@@ -25,12 +25,12 @@ import {
 // and in this repo, for the wallet and Marketplace claims (B28.16):
 //   wallet records     areas/lens/agentBankApi.ts (AgentApproval, Passkey, AgentCard, Cardholder)
 //   passkeys, pushes   areas/lens/passkeys.ts (Lens keeps the public key; pushes via /sw.js)
-//   test-mode cards    areas/lens/AgentCardPanel.tsx ("Test mode" unless livemode)
+//   virtual cards      areas/lens/AgentCardPanel.tsx
 //   payouts            areas/marketplace/Marketplace.tsx (Stripe asks; Talyvor never sees bank details)
 //   deletion           areas/lens/StoredAnswers.tsx, areas/track/WorkspaceSettings.tsx
 
-/** The day these words last changed (B44.2 added the advertising cookie). Change it with them. */
-const UPDATED = '2026-10-25'
+/** The day these words last changed (B49.2 named virtual cards plainly). Change it with them. */
+const UPDATED = '2026-10-27'
 
 export function Privacy() {
   return (
@@ -133,8 +133,8 @@ export function Privacy() {
             key. If you turn on notifications, we keep the push address your browser gives us.
           </li>
           <li>
-            <strong className="text-ink">Test-mode cards.</strong> An agent&rsquo;s virtual card is
-            issued by Stripe, in test mode, for test purchases, to a person you name: the
+            <strong className="text-ink">Virtual cards.</strong> An agent&rsquo;s virtual card is
+            issued by Stripe to a person you name: the
             cardholder&rsquo;s name, email, billing address and, if you give one, phone number are
             sent to Stripe for that. We keep the card&rsquo;s last four digits and expiry, and each
             purchase: the merchant, the amount, and whether the agent&rsquo;s rules allowed it and

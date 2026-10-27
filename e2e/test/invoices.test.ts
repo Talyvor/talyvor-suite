@@ -44,12 +44,12 @@ describe('invoice-pay-link (B30.130)', () => {
   it('passes on a Lens that sends the invoice, serves its pay page to anyone and refuses an unfunded payer, moving nothing', async () => {
     const { verdict, evidence } = await runAgainstStub('')
     expect(verdict.detail).toBe("a GBP invoice of £145.00 (two lines, 20% VAT on one) issued from the agent's account and sent, with a number, a reference and a pay link; " +
-      "its pay page read with no credential, test money only, offering a transfer quoting the agent's payment reference and the invoice's, naming no issuer id; " +
+      "its pay page read with no credential, with no notice and no transfer to the Test partner's details, naming no issuer id; " +
       "another company's agent holding £0.00 refused 409; the invoice still sent with £145.00 due and no payment, both agents' accounts still 0; " +
       'the paid path waits on payments in (B30.15)')
     expect(verdict.pass).toBe(true)
     expect(evidence.find((e) => e.note?.includes('issues and sends'))?.answer).toMatch(/^201 .*"number":"INV-000001"/)
-    expect(evidence.find((e) => e.note?.includes('no credential'))?.answer).toMatch(/^200 .*Preview — test money only/)
+    expect(evidence.find((e) => e.note?.includes('no credential'))?.answer).toMatch(/^200 \{"card":/)
     expect(evidence.find((e) => e.note?.includes('empty GBP account'))?.answer).toMatch(/^refused 409: .*holds GBP 0\.00/)
   })
 

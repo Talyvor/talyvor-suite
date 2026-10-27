@@ -5,7 +5,7 @@
 // The owner accepts currency_accounts' terms and opens a GBP account on test money. Saving a TESTSANCTION payee is refused 403
 // by screening, and the refusal names the compliance case the hit opened; a TESTPENDING payee is saved but held for review on a
 // case of its own, and a payment to it is refused 403 naming that case. A live payment to a clean payee is refused naming live
-// money, and a live EUR account is refused 403 naming currency_accounts' class, which takes test money only until Talyvor records
+// money, and a live EUR account is refused 403 naming currency_accounts' class, which takes no real money until Talyvor records
 // a clearance. Then the GBP account must still hold 0 test and 0 live, no EUR account may exist and no payment row may have
 // been made. With the operator read key, both cases are read on GET /v1/admin/screening: blocked and held, on this workspace.
 
@@ -89,8 +89,8 @@ export function compliance(): Scenario {
       if (!/live/.test(live.error)) return fail(`the refusal must name live money; Lens said ${JSON.stringify(live.error)}`)
       const liveAccount = await call('POST', '/v1/money/accounts', { currency: 'EUR', funding: 'live' }, 'the owner opens a EUR account on live money')
       if (liveAccount.ok || liveAccount.status !== 403) return fail(`a live account on an uncleared capability must be refused 403; Lens answered ${said(liveAccount)}`)
-      if (!/class (RED|AMBER)/.test(liveAccount.error) || !/test money only/.test(liveAccount.error)) {
-        return fail(`the refusal must name the capability's class and that it takes test money only; Lens said ${JSON.stringify(liveAccount.error)}`)
+      if (!/class (RED|AMBER)/.test(liveAccount.error) || !/no real money until/.test(liveAccount.error)) {
+        return fail(`the refusal must name the capability's class and that it takes no real money until cleared; Lens said ${JSON.stringify(liveAccount.error)}`)
       }
 
       // Nothing posted: the GBP account as it opened, no EUR account, no payment row.
@@ -126,7 +126,7 @@ export function compliance(): Scenario {
         pass: true,
         detail: 'a TESTSANCTION payee refused 403 by screening on a blocked compliance case; a TESTPENDING payee saved and held on its case, and a £10.00 ' +
           'payment to it refused 403 naming that case; a live £10.00 payment refused naming live money and a live EUR account refused 403 naming its class, ' +
-          'test money only; the GBP account still 0 test and 0 live, no EUR account and no payment row' + seen,
+          'no real money until cleared; the GBP account still 0 test and 0 live, no EUR account and no payment row' + seen,
       }
     },
   }

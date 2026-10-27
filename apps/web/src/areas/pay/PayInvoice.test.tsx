@@ -54,7 +54,7 @@ describe('the pay page', () => {
     expect((await screen.findByTestId('pay-headline')).textContent).toBe('£120.00 due by 2026-12-31')
     expect(document.body.textContent).not.toMatch(/test money/i)
     expect(screen.getByTestId('pay-due').textContent).toBe('£120.00')
-    expect(screen.getByTestId('pay-reference').textContent).toContain('TLV-AGT a1b2c3')
+    expect(screen.queryByTestId('pay-reference')).toBeNull() // the Test partner's details are not shown (B49.2)
     expect(await screen.findByRole('link', { name: 'Sign in' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Pay £120.00 by card' }))
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_test_1'))

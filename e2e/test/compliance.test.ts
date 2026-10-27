@@ -45,7 +45,7 @@ describe('compliance (B30.109)', () => {
     const { verdict, evidence } = await runAgainstStub('')
     expect(verdict.detail).toBe('a TESTSANCTION payee refused 403 by screening on a blocked compliance case; a TESTPENDING payee saved and held on its case, and a £10.00 ' +
       'payment to it refused 403 naming that case; a live £10.00 payment refused naming live money and a live EUR account refused 403 naming its class, ' +
-      "test money only; the GBP account still 0 test and 0 live, no EUR account and no payment row; both cases on the operator's screening view, blocked and held")
+      "no real money until cleared; the GBP account still 0 test and 0 live, no EUR account and no payment row; both cases on the operator's screening view, blocked and held")
     expect(verdict.pass).toBe(true)
     expect(evidence.find((e) => e.note?.includes('TESTSANCTION'))?.answer).toMatch(/^refused 403: .*\(compliance case cc_/)
     expect(evidence.find((e) => e.note?.includes('blocked cases'))?.answer).toMatch(/^200 .*"status":"blocked"/)

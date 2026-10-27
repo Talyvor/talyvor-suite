@@ -2,8 +2,8 @@
 //
 // One test company's agent issues an invoice from its GBP account — two lines, VAT on one — and sends it, so Lens answers
 // its number, reference, pay token and pay link with the total. The pay page behind the link is read with no credential:
-// "Preview — test money only", the invoice sent with the total due, a transfer offered that quotes the agent's payment
-// reference and the invoice's, and none of the issuer's ids or the token on it. Another company's agent, with a GBP
+// the invoice sent with the total due, no notice, no transfer to the Test partner's details (they reach no bank, B49.1),
+// and none of the issuer's ids or the token on it. Another company's agent, with a GBP
 // account of its own holding nothing, pays it through the link and must be refused 409 for want of money; the invoice
 // must still read sent with the total due and no payment, and neither agent's account may have moved.
 //
@@ -22,7 +22,7 @@ interface Account { id: string; agent_id?: string; currency: string; purpose: st
 interface Invoice { id: string; workspace_id?: string; agent_id?: string; account_id?: string; number: string; reference: string; pay_token?: string; pay_url?: string
   currency: string; subtotal_minor: number; vat_minor: number; total_minor: number; paid_minor: number; due_minor: number; status: string; payments?: unknown[] }
 /** The public pay page (GET /v1/pay/{token}). */
-interface PayPage { notice: string; card: boolean; transfer?: { details: unknown; mode: string; reference: string }; invoice: Invoice }
+interface PayPage { notice?: string; card: boolean; transfer?: { details: unknown; mode: string; reference: string }; invoice: Invoice }
 
 const TERMS = '/v1/workspaces/{ws}/terms'
 const LINES = [
@@ -43,8 +43,8 @@ export function invoicePayLink(): Scenario {
     own: true,
     feature: 'Agent Wallets',
     items: ['B30.20'],
-    title: 'invoices and pay links: an agent issues and sends a GBP invoice with VAT; its pay page reads with no credential, test money only, ' +
-      "quoting the agent's payment reference, naming no issuer id; another company's unfunded agent is refused 409 and nothing moves",
+    title: 'invoices and pay links: an agent issues and sends a GBP invoice with VAT; its pay page reads with no credential, ' +
+      "with no notice and no transfer to the Test partner's details, naming no issuer id; another company's unfunded agent is refused 409 and nothing moves",
     run: async (ctx) => {
       const { lens } = ctx.env
       const [issuer, payer] = await lens.createUsers(2)
@@ -74,7 +74,7 @@ export function invoicePayLink(): Scenario {
         return { agent: agent.id, account: opened.value }
       }
 
-      // The issuer: its agent's account, the reference a transfer quotes, and the invoice, sent.
+      // The issuer: its agent's account, its payment reference, and the invoice, sent.
       const issuing = await openAgentAccount(issuer, 'the issuer', 'Nightly invoicing agent')
       if (typeof issuing === 'string') return fail(issuing)
       const details = await call<{ payment_reference?: string; mode: string }>(issuer, 'GET', `/v1/money/accounts/${issuing.account.id}/details`, undefined,
@@ -83,7 +83,6 @@ export function invoicePayLink(): Scenario {
       if (details.value.mode !== 'TEST' || !PAYMENT_REFERENCE.test(details.value.payment_reference ?? '')) {
         return fail(`an agent account's details are mode TEST with a TLV payment reference; Lens answered ${said(details)}`)
       }
-      const reference = details.value.payment_reference ?? ''
       const due = new Date(Date.now() + 7 * 86_400e3).toISOString().slice(0, 10)
       const issued = await call<Invoice>(issuer, 'POST', '/v1/money/invoices', { account_id: issuing.account.id, customer_name: 'Nightly Payer Ltd',
         customer_email: 'payer@nightly.test', lines: LINES, due_date: due, send: true }, 'the issuer issues and sends an invoice from the agent\'s GBP account')
@@ -102,15 +101,14 @@ export function invoicePayLink(): Scenario {
       ctx.evidence.push({ note: 'the pay link is opened with no credential', answer: `${page.status} ${page.text.slice(0, 400)}` })
       if (page.status !== 200) return fail(`the pay page must answer 200 to anyone with the link; Lens answered ${page.status}: ${page.text.slice(0, 200)}`)
       const pay = JSON.parse(page.text) as PayPage
-      if (!/Preview — test money only/.test(pay.notice ?? '')) return fail(`the pay page must say "Preview — test money only"; its notice is ${JSON.stringify(pay.notice ?? '')}`)
+      if (pay.notice !== undefined) return fail(`the pay page carries no notice (B49.1); it says ${JSON.stringify(pay.notice)}`)
       if (pay.invoice?.number !== inv.number || pay.invoice.status !== 'sent' || pay.invoice.due_minor !== TOTAL) {
         return fail(`the pay page shows invoice ${inv.number} sent with ${TOTAL} due; it shows ${JSON.stringify(pay.invoice).slice(0, 300)}`)
       }
       const leaked = ['workspace_id', 'agent_id', 'account_id', 'pay_token'].filter((k) => k in pay.invoice)
       if (leaked.length > 0) return fail(`the pay page must name none of the issuer's ids or the token; it carries ${leaked.join(', ')}`)
-      if (pay.transfer === undefined || !pay.transfer.reference.includes(reference) || !pay.transfer.reference.includes(inv.reference)) {
-        return fail(`the pay page offers a transfer quoting the agent's payment reference ${reference} and the invoice's ${inv.reference}; it offers ${JSON.stringify(pay.transfer)}`)
-      }
+      // The Test partner's details reach no bank, so the page offers no transfer to them (B49.1).
+      if (pay.transfer !== undefined) return fail(`the pay page offers no transfer to the Test partner's details; it offers ${JSON.stringify(pay.transfer)}`)
 
       // Another company's agent, holding nothing, pays through the link.
       const paying = await openAgentAccount(payer, 'the payer', 'Nightly paying agent')
@@ -138,7 +136,7 @@ export function invoicePayLink(): Scenario {
       return {
         pass: true,
         detail: "a GBP invoice of £145.00 (two lines, 20% VAT on one) issued from the agent's account and sent, with a number, a reference and a pay link; " +
-          "its pay page read with no credential, test money only, offering a transfer quoting the agent's payment reference and the invoice's, naming no issuer id; " +
+          "its pay page read with no credential, with no notice and no transfer to the Test partner's details, naming no issuer id; " +
           "another company's agent holding £0.00 refused 409; the invoice still sent with £145.00 due and no payment, both agents' accounts still 0; " +
           'the paid path waits on payments in (B30.15)',
       }

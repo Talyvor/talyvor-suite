@@ -3,7 +3,7 @@ import { type WalletSeen, walletVerdict } from '../src/agentWallet.ts'
 
 const sandbox: WalletSeen = {
   lens: { balance: '0.00 USDC', mode: 'TEST', payInto: '0xmadeup' },
-  text: 'Wallet Wallet agent holds 0.00 USDC. Add money This address is a preview. Send',
+  text: 'Wallet Wallet agent holds 0.00 USDC. Add money Wallet agent’s wallet has no details to pay into yet. Send',
   copy: false,
   approval: true,
   payments: 0,

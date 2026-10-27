@@ -12,7 +12,7 @@ import type { Agent } from './agentBankApi'
 const AGENT = { id: 'agt_1', name: 'Researcher', balance_ulxc: 0, owner_user_id: 'u1' } as Agent
 const ADDRESS = '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed'
 const SANDBOX = { agent_id: 'agt_1', asset: 'USDC', partner: 'sandbox', balance_minor: 2_500_000, mode: 'TEST',
-  receive: { asset: 'USDC', network: 'base', address: '0xsandbox' }, notice: 'This address is a preview. It isn’t on any chain yet, so don’t send money to it.' }
+  receive: { asset: 'USDC', network: 'base', address: '0xsandbox' } }
 const LIVE_ADDRESS = { ...SANDBOX, partner: 'circle', mode: 'LIVE', notice: undefined, receive: { asset: 'USDC', network: 'base', address: ADDRESS } }
 const LIVE_IBAN = { ...SANDBOX, partner: 'swan', mode: 'LIVE', notice: undefined, receive: { asset: 'EUR', holder: 'Acme Robotics SAS', iban: 'FR7630006000011234567890189', bic: 'AGRIFRPP' } }
 const REQUEST = { id: 'preq_1', status: 'pending_approval', summary: '1 payment to Acme Ltd', client: 'chat', totals: { GBP: 1250 }, created_at: '2026-10-26T09:00:00Z',
@@ -51,11 +51,11 @@ afterEach(() => {
 })
 
 describe('the agent’s money-layer wallet', () => {
-  it('on the sandbox shows the balance and Lens’s sentence, nothing to copy, and a send goes to approval', async () => {
+  it('on the sandbox shows the balance, no details and no notice, nothing to copy, and a send goes to approval', async () => {
     const { sent } = mockBff(SANDBOX)
     const card = await screen.findByTestId('agent-money-wallet')
     await within(card).findByText('2.50 USDC')
-    expect(within(card).getByTestId('wallet-no-details').textContent).toBe(SANDBOX.notice)
+    expect(within(card).getByTestId('wallet-no-details').textContent).toBe('Researcher’s wallet has no details to pay into yet.')
     expect(within(card).queryByText('0xsandbox')).toBeNull()
     expect(within(card).queryByRole('button', { name: /copy/i })).toBeNull()
 

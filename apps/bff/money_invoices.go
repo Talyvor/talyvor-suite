@@ -21,7 +21,7 @@ import (
 //
 // and, with NO session — the payer has no account here, the pay link is the credential:
 //
-//	GET  /api/public/pay/{token}                    the invoice, what is due and how to pay it ("Preview — test money only")
+//	GET  /api/public/pay/{token}                    the invoice, what is due and how to pay it
 //	POST /api/public/pay/{token}/card               a Stripe test-mode Checkout for what is due: {url}
 //
 // Lens decides everything: whose account may issue, what is due, which states may be paid and what each payment posts.

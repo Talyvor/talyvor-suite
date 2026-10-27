@@ -162,7 +162,8 @@ function Body({ token }: { token: string }) {
         {payable(p) ? (
           <>
             <PayByCard token={token} page={p} />
-            {p.transfer ? <PayByTransfer transfer={p.transfer} /> : null}
+            {/* B49.2 — the Test partner's details reach no bank: show none rather than label them */}
+            {p.transfer?.mode === 'LIVE' ? <PayByTransfer transfer={p.transfer} /> : null}
             <PayByAgent token={token} page={p} />
           </>
         ) : null}
@@ -242,7 +243,6 @@ function PayByTransfer({ transfer }: { transfer: NonNullable<PayPage['transfer']
             </dd>
           </div>
         </dl>
-        {transfer.mode === 'TEST' ? <p className="text-caption text-muted">These are test account details: no real transfer reaches them.</p> : null}
       </div>
     </Card>
   )

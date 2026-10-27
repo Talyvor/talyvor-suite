@@ -27,7 +27,7 @@ export const KIND_TERMS: Record<PostingKind, string> = {
   credit_line: 'Credit line: your workspace’s agreed credit paid for this because the wallet was short. It is owed and paid back later.',
   pay: 'A payment between this agent and another one.',
   transfer: 'Transfer: money moved between two wallets in your workspace.',
-  reversal: 'Given back: a test-money payment was undone and the money returned.',
+  reversal: 'Given back: a payment was undone and the money returned.',
   escrow: 'Escrow: money locked until the work it pays for is delivered. Nobody can spend it meanwhile.',
   card: 'Card: a payment made with this agent’s card, or money a seller refunded to it.',
   cash_out: 'Cash-out: money sent from the wallet to an account outside Talyvor.',
