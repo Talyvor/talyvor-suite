@@ -157,9 +157,12 @@ export interface Charged {
   unseen: number
 }
 
-/** Dollars → µLXC as Lens debits a charge: rounded UP (talyvor-lens internal/proxy/shadow_lxc.go). */
+/**
+ * Dollars → µLXC as Lens debits a charge: rounded UP (talyvor-lens internal/proxy/shadow_lxc.go).
+ * B17.294 — snapped to a millionth of a µLXC first, so a float error (3364.0000000000005) is not a fraction to round up.
+ */
 export function chargeULXC(usd: number, usdPerLXC: number): number {
-  return Math.ceil((usd / usdPerLXC) * 1e6)
+  return Math.ceil(Math.round((usd / usdPerLXC) * 1e12) / 1e6)
 }
 
 /**

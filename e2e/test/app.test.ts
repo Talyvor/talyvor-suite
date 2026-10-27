@@ -1,7 +1,8 @@
 import { EventEmitter } from 'node:events'
 import type { Browser } from 'playwright'
 import { describe, expect, it } from 'vitest'
-import { AppUser, ChargeBook, Pace, bookAnswer, noAnswer, readAnswered, whileUp } from '../src/app.ts'
+import { AppUser, ChargeBook, Pace, bookAnswer, chargeULXC, noAnswer, readAnswered, whileUp } from '../src/app.ts'
+import { listPriceUSD } from '../src/oracles.ts'
 
 describe('noAnswer (B26.20)', () => {
   const q = 'What is the code word in the attached document?'
@@ -75,5 +76,14 @@ describe('an answer is booked the moment its footer is read (B35.8)', () => {
     await expect(readAnswered(footer, timedOut, (text) => bookAnswer(book, 'ws_86', text, catalog, 0.1))).rejects.toThrow('Timeout 30000ms')
     // 40 in and 6 out at $1 and $5 a million is $0.00007, 700 µLXC at $0.10 an LXC.
     expect(book.of('ws_86')).toEqual({ count: 1, ulxc: 700, slack: 0, unseen: 0 })
+  })
+})
+
+describe('chargeULXC rounds up only a real fraction (B17.294)', () => {
+  it('prices GPT-4.1 mini at 817 in / 6 out as the 3364 µLXC Lens charged, and still rounds a real fraction up', () => {
+    const mini = { input_per_1m: 0.4, output_per_1m: 1.6 }
+    expect(chargeULXC(listPriceUSD(mini, 817, 6), 0.1)).toBe(3364)
+    expect(chargeULXC(listPriceUSD(mini, 817, 7), 0.1)).toBe(3380)
+    expect(chargeULXC(0.00000001, 0.1)).toBe(1)
   })
 })
