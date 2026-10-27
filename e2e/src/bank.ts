@@ -774,6 +774,23 @@ function sum(r: () => number): { q: string; want: number } {
   return { q: `What is ${a} + ${b}? ${NUMBER_ONLY}`, want: a + b }
 }
 
+/**
+ * B17.295 — a four-digit sum with no carries (each digit pair under 10). agent-model-limit is about the cap and the
+ * posting, and from 18 Oct claude-sonnet-5 answered user 72's 5312 + 8686 wrong night after night.
+ */
+export function carryFreeSum(r: () => number): { q: string; want: number } {
+  let a = 0
+  let b = 0
+  for (let place = 0; place < 4; place++) {
+    const lo = place === 0 ? 1 : 0
+    const x = lo + Math.floor(r() * (9 - lo))
+    const y = lo + Math.floor(r() * (10 - x - lo))
+    a = a * 10 + x
+    b = b * 10 + y
+  }
+  return { q: `What is ${a} + ${b}? ${NUMBER_ONLY}`, want: a + b }
+}
+
 // ─── the catalog ─────────────────────────────────────────────────────────────
 
 export function agentOpenFund(seed: number): Scenario {
@@ -935,7 +952,7 @@ export function agentModelLimit(seed: number): Scenario {
       const stored = (await env.lens.agentRules(ctx.app.user, a.id)).model_daily_limits_ulxc ?? {}
       ctx.evidence.push({ note: `Lens stores ${a.name}'s per-model daily limits as ${JSON.stringify(stored)}` })
       const key = await bank.issueKey(a)
-      const { q, want } = sum(r)
+      const { q, want } = carryFreeSum(r)
       const lines0 = await env.lens.agentLines(ctx.app.user, a.id)
       const spends0 = new Set((await spendRows(ctx)).map((x) => x.id))
       const refused = await agentAsks(ctx, key, q, `${dear.id}, past its daily limit of 0.000001 LXC`, dear.id)
