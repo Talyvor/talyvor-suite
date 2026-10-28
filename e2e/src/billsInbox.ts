@@ -300,9 +300,9 @@ export function billsDuplicateChangedDetails(): Scenario {
       const salt = randomBytes(3).toString('hex')
       const due = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10)
       const stamp = String(Date.now()).slice(-6)
-      // The second supplier's invoice prints account `printed`, not the saved payee's `account`.
+      // The second supplier's invoice prints account `printed`, not the saved payee's `account`. Lens reads an invoice number in capitals.
       const bills = [['Nightly Cleaning', 25_000, '250.00', 'Saved payee:'], ['Nightly Couriers', 8_999, '89.99', 'Bank details differ from']].map(([name, minor, shown, flag], i) => ({
-        supplier: `${name} ${salt} Ltd`, minor: minor as number, shown: shown as string, flag: flag as string, number: `INV-${salt}-${i + 1}`,
+        supplier: `${name} ${salt} Ltd`, minor: minor as number, shown: shown as string, flag: flag as string, number: `INV-${salt.toUpperCase()}-${i + 1}`,
         account: `6${stamp}${i}`, printed: i === 0 ? `6${stamp}${i}` : `5${stamp}${i}`, payee: '' }))
       const total = bills.reduce((t, b) => t + b.minor, 0)
       for (const b of bills) {
