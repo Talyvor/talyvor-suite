@@ -111,6 +111,7 @@ import { agentRulesUnbypassable } from './rules.ts'
 import { poolIsolation } from './pool.ts'
 import { injectionExfil } from './injection.ts'
 import { fileBombBounded, ssrfRefused } from './ssrf.ts'
+import { approvalReused, csrfEveryWrite, moneyTampered, xssShownBack } from './security.ts'
 import { csrfRefused, phoneBearer, scriptInert } from './session.ts'
 import { connectApprove, connectContact, connectMCP, connectOAuth } from './connect.ts'
 import { mcpSDKAgentPay } from './mcpSDK.ts'
@@ -5213,6 +5214,12 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // key, once a run, on a workspace of its own: obeyed or asked of the real model, nothing but the read-only tool runs,
   // no key is carried, nothing loads an address and the ledger moves by the model's charge alone.
   if (i === 4) list.push(injectionExfil())
+  // B50.7 — the security red team's own families, once a run, each on a workspace of its own: a key replayed with a changed
+  // body and tampered amounts and currencies move nothing, an approval never pays another request, every BFF write is
+  // refused from another site, a name or reference shown back never runs, and injection arrives by a web page or a Room message.
+  if (i === 4) list.push(injectionExfil('web page'), injectionExfil('room message'))
+  if (i === 2) list.push(moneyTampered(), approvalReused())
+  if (i === 1) list.push(csrfEveryWrite(), xssShownBack())
   // B28.285 — the addresses Lens must never reach and the documents it must not unpack without end, once a run, each on a
   // workspace of its own: the metadata address, loopback and private addresses given as a node or the audit webhook are
   // refused or never reached, and a zip bomb or an oversized document is refused or capped with Lens still up.

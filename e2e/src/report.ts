@@ -359,35 +359,54 @@ export function renderSecondAttempts(run: ReportedRun): string[] {
   return lines
 }
 
-/** B28.292 — the weekly deep red-team pass: each red-team scenario's verdict in every round, and the item a FAIL is filed in. */
+/**
+ * B50.7 — the security scenarios: every one the deep pass's red-team chain plays (deep.ts redTeamChain; a test holds the two
+ * equal). Their FAILs are filed as SECURITY items under B50 and reported first. A list here, not the chain, so the report and
+ * held.ts load nothing a scenario needs.
+ */
+export const SECURITY_SCENARIOS: ReadonlySet<string> = new Set([
+  'ledger-moves-at-once', 'ledger-call-once', 'webhook-unsigned', 'webhook-replayed', 'agent-rules-unbypassable', 'market-abuse',
+  'pool-isolation', 'injection-exfil', 'ssrf-refused', 'file-bomb-bounded', 'csrf-refused', 'script-inert', 'keys-unlisted',
+  'keys-not-forwarded', 'rate-limits-hold', 'cross-company-test-money', 'money-tampered', 'approval-reused', 'injection-exfil-web-page',
+  'injection-exfil-room-message', 'csrf-every-write', 'xss-shown-back',
+])
+export const isSecurity = (scenario: string): boolean => SECURITY_SCENARIOS.has(scenario)
+
+/**
+ * B28.292, B50.7 — the security results, first in the report: each security scenario's verdict on the night's own run and in
+ * every round of the deep red-team pass, and the SECURITY item a FAIL is filed in.
+ */
 export function renderDeep(run: ReportedRun): string[] {
-  const deep = run.outcomes.filter((o) => o.deep !== undefined)
-  const rounds = Math.max(run.deep_rounds ?? 0, ...deep.map((o) => o.deep as number))
-  if (rounds === 0) return []
+  const security = run.outcomes.filter((o) => o.deep !== undefined || isSecurity(o.scenario))
+  const rounds = Math.max(run.deep_rounds ?? 0, ...security.map((o) => o.deep ?? 0))
+  if (rounds === 0 && security.length === 0) return []
   const each = Array.from({ length: rounds }, (_, r) => r + 1)
-  const lines = ['', '### Weekly deep red-team pass', '',
-    `${rounds} round(s), one after another, after the night's own scenarios and under the same cap: in each, an attacker created ` +
-    'for the run played every red-team scenario back to back, each on a fresh workspace of its own, against a counterparty made ' +
-    'for that round. A FAIL is filed like any other, under its scenario.', '']
-  if (deep.length === 0) return [...lines, 'Nothing was played: the run stopped before it.']
-  lines.push(`| Scenario | ${each.map((r) => `Round ${r}`).join(' | ')} | Build item |`, `|---|${each.map(() => '---|').join('')}---|`)
-  for (const [id, os] of byScenario(deep)) {
-    const verdicts = each.map((r) => os.filter((o) => o.deep === r).map((o) => o.status).join(', ') || '—')
-    lines.push(`| \`${id}\` | ${verdicts.join(' | ')} | ${os.some((o) => o.status === 'FAIL') ? run.filed?.[id] ?? 'not filed' : ''} |`)
+  const lines = ['', '### Security', '',
+    `The security scenarios on the night's own run, then ${rounds} round(s) of the deep red-team pass, one after another and under the same cap: ` +
+    'in each, an attacker created for the run played every red-team scenario back to back, each on a fresh workspace of its own, against a ' +
+    'counterparty made for that round. A FAIL is filed as a SECURITY item under B50.', '']
+  if (security.length === 0) return [...lines, 'Nothing was played: the run stopped before it.']
+  lines.push(`| Scenario | Night | ${each.map((r) => `Round ${r}`).join(' | ')}${each.length > 0 ? ' |' : ''} Build item |`,
+    `|---|---|${each.map(() => '---|').join('')}---|`)
+  const verdicts = (os: Outcome[]) => os.map((o) => o.status).join(', ') || '—'
+  for (const [id, os] of byScenario(security)) {
+    const cells = [verdicts(os.filter((o) => o.deep === undefined)), ...each.map((r) => verdicts(os.filter((o) => o.deep === r)))]
+    lines.push(`| \`${id}\` | ${cells.join(' | ')} | ${os.some((o) => o.status === 'FAIL') ? run.filed?.[id] ?? 'not filed' : ''} |`)
   }
   return lines
 }
 
-/** B28.292 — the weekly deep red-team pass in one line, on the night it ran. */
+/** B28.292, B50.7 — the security results in one line, first in TESTERS.md. */
 function deepLine(run: ReportedRun): string[] {
-  const deep = run.outcomes.filter((o) => o.deep !== undefined)
-  const rounds = Math.max(run.deep_rounds ?? 0, ...deep.map((o) => o.deep as number))
-  if (rounds === 0) return []
+  const security = run.outcomes.filter((o) => o.deep !== undefined || isSecurity(o.scenario))
+  const rounds = Math.max(run.deep_rounds ?? 0, ...security.map((o) => o.deep ?? 0))
+  if (rounds === 0 && security.length === 0) return []
   const n = { PASS: 0, FAIL: 0, ERROR: 0, SKIP: 0 }
-  for (const o of deep) n[o.status]++
-  const failing = [...byScenario(deep)].filter(([, os]) => os.some((o) => o.status === 'FAIL')).map(([id, os]) =>
-    `\`${id}\` (round ${[...new Set(os.filter((o) => o.status === 'FAIL').map((o) => o.deep))].join(', ')}${run.filed?.[id] !== undefined ? `, ${run.filed[id]}` : ''})`)
-  return [`- **Deep red-team pass**: ${rounds} round(s); ${n.PASS} of ${deep.length} verdicts passed` +
+  for (const o of security) n[o.status]++
+  const failing = [...byScenario(security)].filter(([, os]) => os.some((o) => o.status === 'FAIL')).map(([id, os]) =>
+    `\`${id}\` (${[...new Set(os.filter((o) => o.status === 'FAIL').map((o) => (o.deep === undefined ? 'night' : `round ${o.deep}`)))].join(', ')}` +
+    `${run.filed?.[id] !== undefined ? `, ${run.filed[id]}` : ''})`)
+  return [`- **Security**: the night and ${rounds} deep round(s); ${n.PASS} of ${security.length} verdicts passed` +
     `${n.ERROR > 0 ? `, ${n.ERROR} errored` : ''}${n.SKIP > 0 ? `, ${n.SKIP} skipped` : ''}; ` +
     `${failing.length === 0 ? 'no FAIL' : `FAILED: ${failing.join(', ')}`}.`]
 }
@@ -415,6 +434,7 @@ export function renderPlans(run: ReportedRun): string[] {
 export function renderRun(run: ReportedRun): string {
   const c = run.counts
   const map = run.coverage
+  const security = renderDeep(run)
   const lines = [
     `## ${runName(run)} started ${run.started_at}`,
     '',
@@ -431,6 +451,7 @@ export function renderRun(run: ReportedRun): string {
     ...((run.incidents ?? []).length === 0 ? [] : ['**Incidents** (the run went on):', '', ...(run.incidents ?? []).map((i) => `- ${cell(i)}`), '']),
     ...(map === undefined ? [] : [
       `Coverage: screens ${tallyLine(map.screens)}; BFF routes ${tallyLine(map.bff)}; ${servicesLine(map)}. The map is at the end.`, '']),
+    ...security.slice(1), ...(security.length > 0 ? [''] : []),
     '| Scenario | Pass | Fail | Error | Skip | What it checks |',
     '|---|---:|---:|---:|---:|---|',
   ]
@@ -439,7 +460,7 @@ export function renderRun(run: ReportedRun): string {
     for (const o of os) n[o.status]++
     lines.push(`| \`${id}\` | ${n.PASS} | ${n.FAIL} | ${n.ERROR} | ${n.SKIP} | ${cell(os[0].title)} |`)
   }
-  lines.push(...renderDeep(run), ...renderPlans(run), ...renderSecondAttempts(run), ...renderEnvironment(run), ...renderEdge(run.edge), ...renderCode(run.code), ...renderHostile(run.hostile),
+  lines.push(...renderPlans(run), ...renderSecondAttempts(run), ...renderEnvironment(run), ...renderEdge(run.edge), ...renderCode(run.code), ...renderHostile(run.hostile),
     ...renderB28(run.b28, run.filed), ...renderRaised(run.raised))
 
   // The features in the order the app mounts them, then any a scenario named for itself.
@@ -518,6 +539,7 @@ export function renderSummary(run: ReportedRun, report: string, newItems: string
   return [
     `## ${run.started_at} — ${run.light === true ? 'light pass, ' : ''}${run.users} users on ${run.app}`,
     '',
+    ...deepLine(run),
     `- **Coverage**: ${map === undefined ? 'no map' : `screens ${tallyLine(map.screens)}; BFF routes ${tallyLine(map.bff)}; ${servicesLine(map)}`}.`,
     `- **Tested**: ${testedText(run)}.`,
     `- **Works**: ${c.PASS} checks passed across ${passing.length} scenario(s).`,
@@ -529,7 +551,6 @@ export function renderSummary(run: ReportedRun, report: string, newItems: string
     ...raisedLine(run.raised),
     ...(run.stopped_by === undefined ? [] : [`- **STOPPED EARLY**: ${run.stopped_by}.`]),
     ...(run.incidents ?? []).map((i) => `- **Incident**: ${i}.`),
-    ...deepLine(run),
     ...environmentLine(run),
     ...edgeLine(run.edge),
     ...codeLine(run.code),

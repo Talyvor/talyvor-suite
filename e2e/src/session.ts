@@ -26,9 +26,9 @@ import { RUN_SALT } from './oracles.ts'
 import type { Scenario } from './scenarios.ts'
 
 /** apps/bff auth.go sessionCookieName. */
-const SESSION_COOKIE = '__Host-talyvor_session'
+export const SESSION_COOKIE = '__Host-talyvor_session'
 /** What every payload sets on the page if it runs. */
-const FLAG = '__b28286'
+export const FLAG = '__b28286'
 const ACTION_MS = 30_000
 const ANSWER_MS = 90_000
 /** How long a payload is given to run once it is on screen: an <img>'s onerror fires after its load has failed. */
@@ -37,7 +37,7 @@ const SETTLE_MS = 1_500
 interface Sent { status: number; text: string; location: string }
 
 /** One request as a page on `origin` sends it (undefined: no Origin), carrying the session cookie: never thrown. */
-async function send(url: string, method: string, cookie: string, origin: string | undefined, body?: unknown): Promise<Sent> {
+export async function sendAs(url: string, method: string, cookie: string, origin: string | undefined, body?: unknown): Promise<Sent> {
   const headers: Record<string, string> = { Cookie: cookie, Accept: 'application/json' }
   if (origin !== undefined) headers.Origin = origin
   if (body !== undefined) headers['Content-Type'] = 'application/json'
@@ -119,7 +119,7 @@ export function csrfRefused(): Scenario {
 
       // Over plain http the cookie reaches nothing: the app sends it on to https or refuses it.
       if (origin.startsWith('https:')) {
-        const plain = await send(`http://${new URL(origin).host}/api/context`, 'GET', cookie, undefined)
+        const plain = await sendAs(`http://${new URL(origin).host}/api/context`, 'GET', cookie, undefined)
         ctx.evidence.push({ note: `GET http://${new URL(origin).host}/api/context with the cookie: ${plain.status || plain.text} ${plain.location}` })
         if (plain.status >= 200 && plain.status < 300) wrong.push(`over plain http the session cookie was answered ${plain.status}: ${plain.text.slice(0, 120)}`)
         if (plain.status >= 300 && plain.status < 400 && !plain.location.startsWith('https://')) wrong.push(`over plain http the app redirects to ${plain.location || 'nowhere'}, not to https`)
@@ -129,7 +129,7 @@ export function csrfRefused(): Scenario {
 
       // The control: a key minted from the app's own Origin is taken.
       const keys = `${origin}/api/keys`
-      const control = await send(keys, 'POST', cookie, origin, { name: `csrf control ${RUN_SALT}`, scopes: ['proxy'] })
+      const control = await sendAs(keys, 'POST', cookie, origin, { name: `csrf control ${RUN_SALT}`, scopes: ['proxy'] })
       let controlID: string | undefined
       try {
         controlID = (JSON.parse(control.text) as { id?: string }).id
@@ -143,12 +143,12 @@ export function csrfRefused(): Scenario {
       const named = `csrf-${RUN_SALT}`
       const tried: string[] = []
       for (const [n, f] of foreignOrigins(origin).entries()) {
-        const r = await send(keys, 'POST', cookie, f.origin, { name: `${named}-${n}`, scopes: ['proxy'] })
+        const r = await sendAs(keys, 'POST', cookie, f.origin, { name: `${named}-${n}`, scopes: ['proxy'] })
         tried.push(`${f.from} ${r.status}`)
         if (r.status !== 403) wrong.push(`a key minted from ${f.from} (${f.origin ?? 'no Origin header'}) was answered ${r.status || r.text}, not 403`)
       }
       const revoke = `${keys}/${encodeURIComponent(controlID)}`
-      const foreignRevoke = await send(revoke, 'DELETE', cookie, 'https://evil.example')
+      const foreignRevoke = await sendAs(revoke, 'DELETE', cookie, 'https://evil.example')
       tried.push(`revoke from another site ${foreignRevoke.status}`)
       if (foreignRevoke.status !== 403) wrong.push(`revoking a key from another site was answered ${foreignRevoke.status || foreignRevoke.text}, not 403`)
 
@@ -173,7 +173,7 @@ export function csrfRefused(): Scenario {
       // Lens holds none of their keys, and the control's key was still there for the app's own Origin to revoke.
       const held = (await env.lens.apiKeys(app.user)).filter((k) => k.name.startsWith(named))
       if (held.length > 0) wrong.push(`Lens holds keys minted from elsewhere: ${held.map((k) => k.name).join(', ')}`)
-      const revoked = await send(revoke, 'DELETE', cookie, origin)
+      const revoked = await sendAs(revoke, 'DELETE', cookie, origin)
       ctx.evidence.push({ note: `Lens's keys named ${named}-*: ${held.length}; the control revoked from ${origin}: ${revoked.status}` })
       if (revoked.status < 200 || revoked.status >= 300) wrong.push(`the control key could not be revoked from the app's own Origin (${revoked.status} ${revoked.text.slice(0, 120)}): the revoke from another site took it`)
 
@@ -288,7 +288,7 @@ function messagePayload(): string {
 }
 
 /** Everything in `where` that runs or loads: a script, a frame, an event handler, a link or source to a javascript:, data: or vbscript: address. */
-async function runnable(where: Locator): Promise<string[]> {
+export async function runnable(where: Locator): Promise<string[]> {
   return where.evaluate((root) => {
     const found: string[] = []
     const scheme = /^(javascript|data|vbscript):/
@@ -310,7 +310,7 @@ async function runnable(where: Locator): Promise<string[]> {
 }
 
 /** What the page shows ran: the flag, in the page or any of its frames. */
-async function ran(page: Page): Promise<string[]> {
+export async function ran(page: Page): Promise<string[]> {
   const seen: string[] = []
   for (const f of page.frames()) {
     const v = await f.evaluate((flag) => (window as unknown as Record<string, unknown>)[flag], FLAG).catch(() => undefined)
