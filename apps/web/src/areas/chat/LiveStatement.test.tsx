@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
-import { LIVE_STATEMENT_AGENT_KEY, LIVE_STATEMENT_POLL_MS } from './LiveStatement'
+import { LIVE_STATEMENT_AGENT_KEY, LIVE_STATEMENT_HEDGE_MS, LIVE_STATEMENT_POLL_MS } from './LiveStatement'
 import { STATEMENT_OPEN_KEY } from './Chat'
 
 // B45.1 — a first visit keeps the statement closed; this file reads what is behind it.
@@ -19,6 +19,7 @@ function mockBff() {
     agt_2: [{ entry_id: 'ent_9', kind: 'fund', amount_ulxc: 3 * M, counterparty: 'workspace', balance_after_ulxc: 3 * M, at: '2026-10-06T05:00:00Z' }],
   }
   const reads: string[] = []
+  const slow = { reads: 0 } // the next this many statement reads never answer
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input)
@@ -34,11 +35,15 @@ function mockBff() {
     const m = /^\/api\/agents\/(agt_\d)\/statement$/.exec(url)
     if (m !== null) {
       reads.push(m[1])
+      if (slow.reads > 0) {
+        slow.reads--
+        return new Promise<Response>(() => {})
+      }
       return json({ lines: [...lines[m[1]]].reverse() })
     }
     return new Response('null', { status: 404 })
   })
-  return { lines, reads }
+  return { lines, reads, slow }
 }
 
 afterEach(() => {
@@ -78,6 +83,29 @@ describe('The live statement beside Chat (B28.351)', () => {
       expect(debit).toHaveTextContent('Balance 4.987655 LXC')
       expect(fund).not.toHaveAttribute('data-new')
       expect(within(panel).getByRole('status')).toHaveTextContent('New on Researcher’s statement: Spent on a request')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows the debit within 5 seconds when the read the poll sends never answers (B17.301)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      expect(LIVE_STATEMENT_POLL_MS + LIVE_STATEMENT_HEDGE_MS).toBeLessThan(5_000)
+      const bff = mockBff()
+      window.history.pushState({}, '', '/chat')
+      render(<App />)
+
+      const panel = await screen.findByTestId('chat-live-statement')
+      expect(await within(panel).findAllByTestId('live-statement-line')).toHaveLength(1)
+
+      const started = Date.now()
+      bff.slow.reads = 1
+      bff.lines.agt_1.push({ entry_id: 'ent_2', kind: 'spend', amount_ulxc: -12_345, counterparty: 'claude-opus-5', balance_after_ulxc: 5 * M - 12_345, at: '2026-10-06T05:01:00Z' })
+      await vi.advanceTimersByTimeAsync(LIVE_STATEMENT_POLL_MS + LIVE_STATEMENT_HEDGE_MS)
+      await waitFor(() => expect(within(panel).getAllByTestId('live-statement-line')).toHaveLength(2))
+      expect(Date.now() - started).toBeLessThan(5_000)
+      expect(within(panel).getAllByTestId('live-statement-line')[0]).toHaveAttribute('data-entry', 'ent_2')
     } finally {
       vi.useRealTimers()
     }

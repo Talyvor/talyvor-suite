@@ -24,6 +24,8 @@ import { WalletButtons } from './WalletButtons'
 
 /** How often the panel reads the statement: a new line shows within this plus one round trip, inside 5 seconds. */
 export const LIVE_STATEMENT_POLL_MS = 2_000
+/** A read still unanswered after this is sent again and the first answer is taken, so one slow read cannot hold a line back. */
+export const LIVE_STATEMENT_HEDGE_MS = 1_000
 /** The newest lines shown; the rest are on Agent Wallets. */
 export const LIVE_STATEMENT_LINES = 8
 /** Which agent the panel follows, per browser. */
@@ -43,6 +45,33 @@ function writeFollowed(id: string): void {
   } catch {
     // Storage refused: the choice lasts for this visit only.
   }
+}
+
+// B17.301 — the BFF's statement read has a long tail (p95 2.1s, max 15.3s in the 28 Oct e2e run), and a poll that lands
+// on a read still out waits for it. A second read sent after LIVE_STATEMENT_HEDGE_MS answers instead; it fails only when both do.
+// The query's signal, aborted when the panel goes, cancels the second read before it is sent.
+function hedged<T>(read: () => Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let out = 1
+    const send = () =>
+      read().then(
+        (v) => {
+          clearTimeout(again)
+          resolve(v)
+        },
+        (err: unknown) => {
+          if (--out > 0) return
+          clearTimeout(again)
+          reject(err)
+        },
+      )
+    const again = setTimeout(() => {
+      out++
+      void send()
+    }, LIVE_STATEMENT_HEDGE_MS)
+    signal.addEventListener('abort', () => clearTimeout(again), { once: true })
+    void send()
+  })
 }
 
 const lineKey = (l: StatementLine) => `${l.entry_id}-${l.kind}`
@@ -65,7 +94,7 @@ export function LiveStatement({ follow = '' }: { follow?: string }) {
 
   const st = useQuery({
     queryKey: statementKey(agent?.id ?? ''),
-    queryFn: () => agentBankApi.statement(agent!.id),
+    queryFn: ({ signal }) => hedged(() => agentBankApi.statement(agent!.id), signal),
     enabled: agent !== undefined,
     // A failed read is tried again, more slowly, so the panel comes back by itself.
     refetchInterval: (q) => (q.state.status === 'error' ? PENDING_POLL_MS : LIVE_STATEMENT_POLL_MS),
