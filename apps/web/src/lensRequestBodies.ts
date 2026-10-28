@@ -529,9 +529,9 @@ export const LENS_BODIES: LensBody[] = [
   {
     route: "POST /v1/workspaces/{wsID}/agents/approvals/{approvalID}/approve",
     file: "apps/bff/agent_bank.go",
-    kind: "map-literal",
-    anchor:
-      'json.Marshal(map[string]*passkeyAssertion{"assertion": in.Assertion})',
+    kind: "anon-struct",
+    fn: "func (a *app) handleAgentDecision(",
+    anchor: "var in struct {",
     upstreamFile: "cmd/lens/agent_accounts_handler.go",
     upstreamAnchor: "decide := func(approve bool) http.HandlerFunc {",
     subject: "lensApprovalDecisionBody",

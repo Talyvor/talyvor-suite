@@ -10,6 +10,7 @@ import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
 import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, signApproval } from './passkeys'
 import { AgentCardPanel } from './AgentCardPanel'
+import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
 import { CurrencyPicker, Lxc } from './money'
@@ -21,6 +22,7 @@ import { CashOutCard, CashOuts, Escrows, PayIntoEscrow, Portfolios, Pots } from 
 import {
   type Agent,
   type AgentApproval,
+  type PayeeAllowance,
   type AgentArchive,
   type ApprovalPayee,
   type AgentBook,
@@ -878,7 +880,7 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
     setTimezone(r.timezone)
     setFilled(t)
   }
-  const badAmount = [...LIMITS.map(([f]) => limits[f]), ...modelLimits.map(([, t]) => t), ...Object.values(payees.caps)].some(
+  const badAmount = [...LIMITS.map(([f]) => limits[f]), ...modelLimits.map(([, t]) => t), ...Object.values(payees.caps), ...Object.values(payees.monthCaps)].some(
     (t) => t.trim() !== '' && parseLXC(t) === null,
   )
   const badRate = parseRate(rate) === null
@@ -903,6 +905,9 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
         blocked_payees: payees.blocked,
         payee_daily_limits_ulxc: Object.fromEntries(
           Object.entries(payees.caps).map(([id, t]) => [id, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
+        ),
+        payee_monthly_limits_ulxc: Object.fromEntries(
+          Object.entries(payees.monthCaps).map(([id, t]) => [id, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
         ),
         active_from: from.trim(),
         active_until: until.trim(),
@@ -1048,18 +1053,23 @@ function ListingsPicker({ agent, chosen, onChange }: { agent: Agent; chosen: str
 
 /**
  * B28.27 — who an agent may pay and who it may not, as the Rules form holds them until Save rules; and (B28.28)
- * what it may pay each payee in a day, by the payee's id, as typed.
+ * what it may pay each payee in a day, by the payee's id, as typed — B41.4, and in a month. The always-allows are
+ * shown, never sent: an approval saves them (Lens B41.104), and a save without them keeps them.
  */
 interface Payees {
   allowed: string[]
   blocked: string[]
   caps: Record<string, string>
+  monthCaps: Record<string, string>
+  allowances: Record<string, PayeeAllowance>
 }
 
 const payeesOf = (r: AgentRules): Payees => ({
   allowed: r.allowed_payees ?? [],
   blocked: r.blocked_payees ?? [],
   caps: Object.fromEntries(Object.entries(r.payee_daily_limits_ulxc ?? {}).map(([id, v]) => [id, limitText(v)])),
+  monthCaps: Object.fromEntries(Object.entries(r.payee_monthly_limits_ulxc ?? {}).map(([id, v]) => [id, limitText(v)])),
+  allowances: r.payee_allowances ?? {},
 })
 
 /** What a payee the workspace's agents do not name is, read from its id. */
@@ -1081,7 +1091,7 @@ function payeeHint(id: string): string {
 function PayeesPicker({ agent, agents, payees, onChange }: { agent: Agent; agents: Agent[]; payees: Payees; onChange: (p: Payees) => void }) {
   const [typed, setTyped] = useState('')
   const ours = agents.filter((a) => a.id !== agent.id).map((a) => ({ id: a.id, title: a.name, hint: 'Your agent' }))
-  const named = [...new Set([...payees.allowed, ...payees.blocked, ...Object.keys(payees.caps)])]
+  const named = [...new Set([...payees.allowed, ...payees.blocked, ...Object.keys(payees.caps), ...Object.keys(payees.monthCaps), ...Object.keys(payees.allowances)])]
     .filter((id) => !ours.some((a) => a.id === id))
     .map((id) => ({ id, title: id, hint: payeeHint(id) }))
   const mark = (id: string, as: 'allowed' | 'blocked' | null) =>
@@ -1096,6 +1106,7 @@ function PayeesPicker({ agent, agents, payees, onChange }: { agent: Agent; agent
     setTyped('')
   }
   const cap = (payee: string, text: string) => onChange({ ...payees, caps: { ...payees.caps, [payee]: text } })
+  const monthCap = (payee: string, text: string) => onChange({ ...payees, monthCaps: { ...payees.monthCaps, [payee]: text } })
   return (
     <>
       <Row
@@ -1106,13 +1117,26 @@ function PayeesPicker({ agent, agents, payees, onChange }: { agent: Agent; agent
             : payees.blocked.length > 0
               ? 'Anyone but the payees marked Blocked.'
               : 'Anyone. Mark a payee Blocked to refuse it, or Allowed to allow only those.'
-        } The box beside a payee caps what it may be paid in a day, in LXC.`}
+        } The boxes beside a payee cap what it may be paid in a day and in a month, in LXC.`}
       />
       {[...ours, ...named].map((p) => {
         const allowed = payees.allowed.includes(p.id)
         const blocked = payees.blocked.includes(p.id)
         return (
-          <Row key={p.id} label={p.title} hint={p.hint} className="pl-8">
+          <Row
+            key={p.id}
+            label={p.title}
+            hint={
+              payees.allowances[p.id] ? (
+                <>
+                  {p.hint}. Always allowed <AllowedUpTo allow={payees.allowances[p.id]} /> without asking.
+                </>
+              ) : (
+                p.hint
+              )
+            }
+            className="pl-8"
+          >
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
@@ -1139,6 +1163,14 @@ function PayeesPicker({ agent, agents, payees, onChange }: { agent: Agent; agent
                 className="w-28 font-figure"
                 value={payees.caps[p.id] ?? ''}
                 onChange={(e) => cap(p.id, e.target.value)}
+              />
+              <Input
+                aria-label={`Monthly limit on payments to ${p.title} from ${agent.name}, in LXC`}
+                inputMode="decimal"
+                placeholder="No monthly cap"
+                className="w-32 font-figure"
+                value={payees.monthCaps[p.id] ?? ''}
+                onChange={(e) => monthCap(p.id, e.target.value)}
               />
             </div>
           </Row>
@@ -1277,9 +1309,10 @@ function ruleChanges(was: AgentRules, now: AgentRules, payeeName: (id: string) =
     }
     if (text(was[field]) !== text(now[field])) out.push({ rule, from: text(was[field]), to: text(now[field]) })
   }
-  const caps: ['model_daily_limits_ulxc' | 'payee_daily_limits_ulxc', (id: string) => string][] = [
+  const caps: ['model_daily_limits_ulxc' | 'payee_daily_limits_ulxc' | 'payee_monthly_limits_ulxc', (id: string) => string][] = [
     ['model_daily_limits_ulxc', (m) => `Daily limit on ${m}`],
     ['payee_daily_limits_ulxc', (id) => `Daily limit to ${payeeName(id)}`],
+    ['payee_monthly_limits_ulxc', (id) => `Monthly limit to ${payeeName(id)}`],
   ]
   for (const [field, rule] of caps) {
     const before = was[field] ?? {}
@@ -1287,6 +1320,13 @@ function ruleChanges(was: AgentRules, now: AgentRules, payeeName: (id: string) =
     for (const key of [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()) {
       if ((before[key] ?? 0) !== (after[key] ?? 0)) out.push({ rule: rule(key), from: amount(before[key]), to: amount(after[key]) })
     }
+  }
+  // B41.4 — an "always allow" an approval saved.
+  const allowed = (v: PayeeAllowance | undefined) => (v ? <AllowedUpTo allow={v} /> : 'none')
+  const [wasAllowed, nowAllowed] = [was.payee_allowances ?? {}, now.payee_allowances ?? {}]
+  for (const key of [...new Set([...Object.keys(wasAllowed), ...Object.keys(nowAllowed)])].sort()) {
+    const [b, n] = [wasAllowed[key], nowAllowed[key]]
+    if (b?.amount_ulxc !== n?.amount_ulxc || b?.per !== n?.per) out.push({ rule: `Always allow ${payeeName(key)}`, from: allowed(b), to: allowed(n) })
   }
   const hours: ['active_from' | 'active_until', string][] = [
     ['active_from', 'Works from'],
@@ -2146,19 +2186,26 @@ export function Approvals({
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const swipeFrom = useRef<{ id: string; x: number; y: number } | null>(null)
   const [swiping, setSwiping] = useState<{ id: string; dx: number } | null>(null)
-  const decideOne = async (a: AgentApproval, decision: 'approve' | 'deny'): Promise<React.ReactNode> => {
+  const decideOne = async (a: AgentApproval, decision: 'approve' | 'deny', allow?: PayeeAllowance): Promise<React.ReactNode> => {
     // B19.10: once the workspace has a passkey, Lens takes a decision only signed with one — Face ID
     // (or Touch ID, or the device's PIN) asks here, over a challenge naming this approval alone.
-    await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined)
+    await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined, allow)
     const p = held[a.id]
     if (decision === 'deny') return <>Denied. {nameOf(a.agent_id)}’s request will be refused.</>
-    if (!p) return <>Approved. {nameOf(a.agent_id)}’s next identical request goes through, once.</>
+    // B41.4 — the rule saved with the approval.
+    const rule = allow ? (
+      <>
+        {' '}
+        From now on {nameOf(a.agent_id)} pays {a.payee?.name || a.payee?.id} <AllowedUpTo allow={allow} /> without asking you.
+      </>
+    ) : null
+    if (!p) return <>Approved. {nameOf(a.agent_id)}’s next identical request goes through, once.{rule}</>
     // The payment this screen sent, sent again: Lens lets it through once against this approval.
     const paid = await agentBankApi.pay(p.from, p.to, p.amount, p.memo)
     onSent(a.id)
     return (
       <>
-        Approved and paid {lxc(paid.amount_ulxc)} from {nameOf(p.from)} to {nameOf(p.to)}.
+        Approved and paid {lxc(paid.amount_ulxc)} from {nameOf(p.from)} to {nameOf(p.to)}.{rule}
       </>
     )
   }
@@ -2169,7 +2216,10 @@ export function Approvals({
       qc.invalidateQueries({ queryKey: ['agent-statement'] }),
     ])
   const decide = useMutation({
-    mutationFn: async ({ a, decision }: { a: AgentApproval; decision: 'approve' | 'deny' }) => ({ ok: true, text: await decideOne(a, decision) }),
+    mutationFn: async ({ a, decision, allow }: { a: AgentApproval; decision: 'approve' | 'deny'; allow?: PayeeAllowance }) => ({
+      ok: true,
+      text: await decideOne(a, decision, allow),
+    }),
     onSuccess: setOutcome,
     onError: (err) => setOutcome({ ok: false, text: refusalText(err) }),
     onSettled: settled,
@@ -2205,7 +2255,8 @@ export function Approvals({
   // j/k or the arrows move between waiting rows; a approves, d denies, x ticks — only while focus is in the list.
   const onKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const t = e.target as HTMLElement
-    if (e.metaKey || e.ctrlKey || e.altKey || t.tagName === 'SELECT' || (t.tagName === 'INPUT' && (t as HTMLInputElement).type !== 'checkbox')) return
+    // B41.4 — nor inside a row's always-allow form, whose own buttons and fields take the keys.
+    if (e.metaKey || e.ctrlKey || e.altKey || t.tagName === 'SELECT' || (t.tagName === 'INPUT' && (t as HTMLInputElement).type !== 'checkbox') || t.closest('form')) return
     const rows = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[data-approval]'))
     const row = t.closest<HTMLElement>('[data-approval]')
     const a = pending.find((x) => x.id === row?.dataset.approval)
@@ -2310,6 +2361,7 @@ export function Approvals({
                   className={`touch-pan-y ${focusRing} ${swiping?.id === a.id ? '' : 'transition-transform duration-200'}`}
                   style={swiping?.id === a.id ? { transform: `translateX(${swiping.dx}px)` } : undefined}
                   onTouchStart={(e) => {
+                    if ((e.target as HTMLElement).closest('form')) return // B41.4: the always-allow form is not swiped
                     swipeFrom.current = { id: a.id, x: e.touches[0].clientX, y: e.touches[0].clientY }
                   }}
                   onTouchMove={(e) => {
@@ -2342,11 +2394,20 @@ export function Approvals({
                     )
                   }
                   hint={
-                    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <Pill status={DECIDED.pending.status}>{DECIDED.pending.label}</Pill>
-                      <span>
-                        {what(a)}, asked <span className="font-figure">{formatWhen(a.created_at)}</span>
+                    <span className="flex flex-col gap-2">
+                      <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <Pill status={DECIDED.pending.status}>{DECIDED.pending.label}</Pill>
+                        <span>
+                          {what(a)}, asked <span className="font-figure">{formatWhen(a.created_at)}</span>
+                        </span>
                       </span>
+                      <AlwaysAllow
+                        a={a}
+                        agentName={nameOf(a.agent_id)}
+                        signed={signed}
+                        disabled={busy}
+                        onApprove={(allow) => decide.mutate({ a, decision: 'approve', allow })}
+                      />
                     </span>
                   }
                 >

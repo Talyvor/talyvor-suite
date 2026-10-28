@@ -463,6 +463,8 @@ export interface AgentRulesRead {
   blocked_payees?: string[] | null
   /** B28.28 — what the agent may pay one payee in a day, in µLXC, by the payee's id. */
   payee_daily_limits_ulxc?: Record<string, number> | null
+  /** B41.4 — the owner's "always allow" by payee id: up to amount_ulxc a day or a month without approval (Lens B41.104). */
+  payee_allowances?: Record<string, { amount_ulxc: number; per: 'day' | 'month' }> | null
   active_from: string
   active_until: string
   timezone: string

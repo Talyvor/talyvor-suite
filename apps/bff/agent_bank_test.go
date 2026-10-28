@@ -424,6 +424,26 @@ func TestRuleSimulationReachesLens(t *testing.T) {
 	}
 }
 
+// B41.4 — "Approve and always allow this": the approval card's preview and its approval reach Lens with
+// always_allow, rebuilt, and a browser's extra fields go nowhere.
+func TestAlwaysAllowReachesLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	doJSON(a, http.MethodPost, "/api/agents/agt_1/rules/simulate",
+		`{"amount_ulxc":1000000,"payee":{"kind":"agent","id":"agt_bea"},"always_allow":{"amount_ulxc":3000000,"per":"month","x":1}}`)
+	doJSON(a, http.MethodPost, "/api/agents/approvals/apr_1/approve", `{"always_allow":{"amount_ulxc":3000000,"per":"month"},"workspace_id":"ws_other"}`)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.got) != 2 {
+		t.Fatalf("Lens got %q; want the preview and the approval", f.got)
+	}
+	if want := `"always_allow":{"amount_ulxc":3000000,"per":"month"}}`; !strings.HasSuffix(f.got[0], want) {
+		t.Fatalf("Lens got %q; want the simulation to end %s", f.got[0], want)
+	}
+	if want := `/agents/approvals/apr_1/approve {"always_allow":{"amount_ulxc":3000000,"per":"month"}}`; !strings.HasSuffix(f.got[1], want) {
+		t.Fatalf("Lens got %q; want POST …%s", f.got[1], want)
+	}
+}
+
 // B46.9 — the agent's wallet reaches Lens's money-layer wallet and answers its balance and receive details.
 func TestAgentWalletReachesLens(t *testing.T) {
 	a, f := newFakeLensAgentBank(t)
