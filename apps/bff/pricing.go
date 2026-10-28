@@ -34,6 +34,8 @@ import (
 //   - plan_gates (B32.14) is Lens's public GET /v1/public/plan-gates: what each company plan unlocks
 //     (talyvor-lens B32.12), -1 meaning unlimited. fees is its GET /v1/public/fees: every fee Talyvor
 //     charges, as lens.env sets it (B32.8). Each OMITTED when Lens will not state it.
+//   - card_payments (B51.3) is Lens's public GET /v1/pricing (talyvor-lens B51.2): whether a card can be charged,
+//     "live", "test" or "off". OMITTED for any other answer; the pages offer a card only on "live".
 func (a *app) handlePricing(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -66,6 +68,9 @@ func (a *app) handlePricing(w http.ResponseWriter, r *http.Request) {
 	}
 	if fees, ok := a.public.fees.get(func() (publicFees, bool) { return a.readFees(r) }); ok {
 		out["fees"] = fees
+	}
+	if cards, ok := a.public.cards.get(func() (string, bool) { return a.readCardPayments(r) }); ok {
+		out["card_payments"] = cards
 	}
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	writeJSON(w, http.StatusOK, out)
@@ -177,6 +182,24 @@ func (a *app) readFees(r *http.Request) (publicFees, bool) {
 	return f, true
 }
 
+// lensPricing is Lens's public GET /v1/pricing (talyvor-lens B51.2).
+type lensPricing struct {
+	CardPayments string `json:"card_payments"`
+}
+
+// readCardPayments reads Lens's public GET /v1/pricing with no credential. ok=false for anything but one of its three answers.
+func (a *app) readCardPayments(r *http.Request) (string, bool) {
+	var body lensPricing
+	if !a.readPublic(r, "/v1/pricing", &body) {
+		return "", false
+	}
+	switch body.CardPayments {
+	case "live", "test", "off":
+		return body.CardPayments, true
+	}
+	return "", false
+}
+
 // readPublic GETs one of Lens's public reads with no credential and decodes a 200 into `into`.
 func (a *app) readPublic(r *http.Request, path string, into any) bool {
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, a.cfg.lensBaseURL+path, nil)
@@ -207,6 +230,7 @@ type pricingReads struct {
 	plans publicCache[planCard]
 	gates publicCache[planGates]
 	fees  publicCache[publicFees]
+	cards publicCache[string]
 }
 
 // publicCache holds the last CONFIRMED answer to one public read. A failure is never cached, so a

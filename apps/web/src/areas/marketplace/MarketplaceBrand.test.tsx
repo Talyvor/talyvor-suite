@@ -107,6 +107,7 @@ describe('the marketplace in the brand', () => {
   it('keeps Connect with Stripe the one teal action on Selling while tax details can be saved', async () => {
     const main = await at('/marketplace/selling', {
       ...SELLING,
+      '/api/pricing': { card_payments: 'live' },
       '/api/marketplace/payouts': {
         account: null,
         in_holdback_usd_micros: 300_000,

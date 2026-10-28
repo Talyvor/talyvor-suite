@@ -37,6 +37,11 @@ import { SellerStatementsCard } from "./SellerStatements";
 import { SellerTaxCard, SellerTaxNotice } from "./SellerTax";
 import { BuyerProtection } from "./BuyerProtection";
 import {
+  CARDS_OFF,
+  cardPayments,
+  usePricing,
+} from "../marketing/pricingApi";
+import {
   type BillLine,
   type Listing,
   type MarketBill,
@@ -587,6 +592,8 @@ export function PayoutsCard({
   const qc = useQueryClient();
   const [params] = useSearchParams();
   const [country, setCountry] = useState("GB");
+  // B51.3 — no Stripe button while a card cannot be charged (talyvor-lens B51.2); earnings are then taken as credits.
+  const cards = cardPayments(usePricing());
   const payouts = useQuery({
     queryKey: PAYOUTS_KEY,
     queryFn: marketApi.payouts,
@@ -634,7 +641,16 @@ export function PayoutsCard({
           )}
         </div>
       ) : null}
-      {acct === null ? (
+      {acct === null && cards !== "live" ? (
+        cards === "off" ? (
+          <p
+            className="px-gutter py-3 text-body text-ink"
+            data-testid="payouts-cards-off"
+          >
+            {CARDS_OFF}
+          </p>
+        ) : null
+      ) : acct === null ? (
         <div
           className="flex flex-col gap-2 px-gutter py-3"
           data-testid="payouts-connect"
@@ -690,12 +706,14 @@ export function PayoutsCard({
             ) : (
               <>
                 <Pill status="held">Not verified yet</Pill>
-                <Button
-                  disabled={connect.isPending}
-                  onClick={() => connect.mutate(acct.country)}
-                >
-                  Continue with Stripe
-                </Button>
+                {cards === "live" ? (
+                  <Button
+                    disabled={connect.isPending}
+                    onClick={() => connect.mutate(acct.country)}
+                  >
+                    Continue with Stripe
+                  </Button>
+                ) : null}
               </>
             )}
           </div>
@@ -761,8 +779,8 @@ export function PayoutsCard({
       ) : null}
       <div className="flex flex-col gap-2 border-t border-rule px-gutter py-3">
         <p className="text-caption text-muted">
-          Or take what is available now as Talyvor credits, with no Stripe fees
-          and no minimum.
+          {cards === "live" ? "Or take" : "Take"} what is available now as
+          Talyvor credits, with no Stripe fees and no minimum.
         </p>
         <div>
           <Button
@@ -1237,6 +1255,7 @@ function InvoiceBill({ invoices }: { invoices: MarketInvoice[] }) {
 }
 
 function Bill() {
+  const cards = cardPayments(usePricing());
   // B28.385 — the bill is grouped by Stripe's invoices once Lens lists them (B28.140), by calendar month until then.
   const invoices = useQuery({
     queryKey: ["market-invoices"],
@@ -1252,9 +1271,10 @@ function Bill() {
       className="flex max-w-2xl flex-col gap-3"
     >
       <p className="text-body text-muted">
-        Every paid listing your workspace or its agents used, billed on your
-        card each month — never taken from your credits. The models a listing
-        calls are on your usual bill, not here.
+        Every paid listing your workspace or its agents used, billed
+        {cards === "live" ? " on your card" : ""} each month — never taken from
+        your credits.{cards === "off" ? ` ${CARDS_OFF}` : ""} The models a
+        listing calls are on your usual bill, not here.
       </p>
       {invoices.isError ? (
         <p className="text-body text-muted">

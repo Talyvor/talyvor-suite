@@ -36,6 +36,7 @@ function mockBff() {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
     }
+    if (url === '/api/pricing') return new Response(JSON.stringify({ card_payments: 'live' }), { status: 200 })
     if (url === '/api/lxc/topup-options') {
       return new Response(JSON.stringify({ allowed_usd_cents: [1000, 5000, 10000] }), {
         status: 200,

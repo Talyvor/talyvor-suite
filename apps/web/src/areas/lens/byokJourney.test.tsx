@@ -21,6 +21,7 @@ const CHECKOUT = 'https://checkout.stripe.com/c/pay/cs_test_team'
 /** The price card GET /api/pricing serves: figures for this test, never Nicolai's. */
 const GATE = { live_money: true, slack_teams_approvals: true, sso: false, audit_export: false, edge: false }
 const PRICING = {
+  card_payments: 'live',
   min_usd_cents: 1000,
   max_usd_cents: 1_000_000,
   preset_usd_cents: [1000],

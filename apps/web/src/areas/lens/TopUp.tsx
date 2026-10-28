@@ -8,6 +8,7 @@ import { InlineFailure } from '../../components/SessionExpiredBar'
 import { Region, RegionScreen } from '../../components/Region'
 import { formatUSD } from './format'
 import { YourPlan } from './Plan'
+import { CARDS_OFF, cardPayments, usePricing } from '../marketing/pricingApi'
 import {
   CheckoutError,
   dollarsToCents,
@@ -150,8 +151,10 @@ interface Step {
   cta: string | null
 }
 
-function WaysToGetCredit({ canBuy }: { canBuy: boolean }) {
-  const steps: Step[] = canBuy
+function WaysToGetCredit({ canBuy, cardsOff }: { canBuy: boolean; cardsOff: boolean }) {
+  const steps: Step[] = canBuy && cardsOff
+    ? [{ index: '01', title: CARDS_OFF, body: 'Until they are, credit arrives the other way.', to: null, cta: null }]
+    : canBuy
     ? [
         {
           index: '01',
@@ -335,6 +338,9 @@ export function TopUp({
   // Only a loaded, explicit false hides the buttons — never a loading or failed
   // read, which would wrongly tell a paying customer they cannot buy.
   const billingOff = options.data?.billing_enabled === false
+  // B51.3 — a card is offered only while Lens says one can be charged (talyvor-lens B51.2); until it answers, no button.
+  const cards = cardPayments(usePricing())
+  const cardsOff = !billingOff && cards === 'off'
   const failure = start.error instanceof CheckoutError ? start.error : null
   const empty = hasNoCredit(balance.data)
 
@@ -359,14 +365,16 @@ export function TopUp({
           LXC is the usage credit every request through Lens is billed against.{' '}
           {billingOff
             ? 'This deployment runs Lens without billing switched on, so nothing can be bought here — the balance is still live, and it can still be spent.'
-            : 'You pay by card at Stripe and the credit is applied to this workspace.'}
+            : cards === 'live'
+              ? 'You pay by card at Stripe and the credit is applied to this workspace.'
+              : null}
         </p>
         {/* ⚠ THE OPENING REGION CARRIES THE STEPS ONLY WHEN THERE IS NOTHING IN THE WORKSPACE,
             and the branch is a RENDER rather than a `hidden` class: copy about a workspace with
             no credit must not sit in the DOM of one that has some. The state a new signup
             actually meets is both of these at once — Overview's first run sends people here,
             and billing is off by default. */}
-        {empty ? <WaysToGetCredit canBuy={!billingOff} /> : null}
+        {empty ? <WaysToGetCredit canBuy={!billingOff} cardsOff={cardsOff} /> : null}
       </Region>
 
       <Region index="01" label="What you have">
@@ -426,7 +434,9 @@ export function TopUp({
               label="Add credit"
               hint="Paid by card at Stripe; the credit is applied to this workspace"
             >
-              {options.isLoading ? (
+              {cardsOff ? (
+                <p className="text-body text-ink">{CARDS_OFF}</p>
+              ) : options.isLoading || cards === 'loading' ? (
                 <span className="text-body text-muted">Loading…</span>
               ) : options.isError ? (
                 <InlineFailure error={options.error} failed="Couldn’t load the top-up amounts." />
@@ -469,6 +479,7 @@ export function TopUp({
             </Row>
           )}
           {!billingOff &&
+          cards === 'live' &&
           typeof options.data?.min_usd_cents === 'number' &&
           typeof options.data?.max_usd_cents === 'number' ? (
             <OtherAmount
@@ -507,7 +518,7 @@ export function TopUp({
       {/* The round trip, as its own idea. It is what the reader needs BEFORE clicking and it was
           a caption under the buttons; on a deployment that cannot sell there is no round trip to
           describe, so the region is not drawn at all rather than drawn empty. */}
-      {billingOff ? null : (
+      {billingOff || cards !== 'live' ? null : (
         <Region index="03" label="What happens when you pay">
           <p className="text-body text-muted">
             You’ll be sent to Stripe to pay, then returned here. The credit is applied by Stripe

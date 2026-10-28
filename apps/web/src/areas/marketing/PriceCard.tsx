@@ -150,7 +150,8 @@ export function CompanyCard({
   )
 }
 
-/** For companies: each plan Lens gates, from the smallest up. */
+/** For companies: each plan Lens gates, from the smallest up. B51.3 — no plan's button while a card cannot be charged:
+ *  the page's one action is then Create your workspace. */
 export function CompanyPlans({ pricing }: { pricing: Pricing }) {
   const gates = pricing.plan_gates
   if (!gates) {
@@ -163,7 +164,13 @@ export function CompanyPlans({ pricing }: { pricing: Pricing }) {
   return (
     <div className="grid gap-3 wide:grid-cols-4">
       {gates.order.map((id) => (
-        <CompanyCard key={id} id={id} gate={gates.plans[id]} pricing={pricing} />
+        <CompanyCard
+          key={id}
+          id={id}
+          gate={gates.plans[id]}
+          pricing={pricing}
+          action={pricing.card_payments === 'live' ? undefined : null}
+        />
       ))}
     </div>
   )
@@ -220,11 +227,13 @@ export function IndividualPlans({ pricing }: { pricing: Pricing }) {
                 </li>
               ) : null}
             </ul>
-            <div className="mt-auto pt-3">
-              <Button asChild variant="primary" className="h-10 px-5">
-                <a href="/plans">Choose {name}</a>
-              </Button>
-            </div>
+            {pricing.card_payments === 'live' ? (
+              <div className="mt-auto pt-3">
+                <Button asChild variant="primary" className="h-10 px-5">
+                  <a href="/plans">Choose {name}</a>
+                </Button>
+              </div>
+            ) : null}
           </div>
         )
       })}

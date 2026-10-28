@@ -8,7 +8,7 @@ import { PayoutsCard } from './Marketplace'
 // a Stripe account (Lens answers Stripe's onboarding link), comes back verified, sees the next payout with
 // Stripe's fees, and takes the available balance as credits — one payout row, read back in the history.
 
-function mockBff(connected: boolean) {
+function mockBff(connected: boolean, pricing: unknown = { card_payments: 'live' }) {
   const sent: Array<{ url: string; body: unknown }> = []
   const payouts = {
     account: connected ? { stripe_account_id: 'acct_1', country: 'GB', details_submitted: true, payouts_enabled: true, currently_due: [] } : null,
@@ -25,6 +25,7 @@ function mockBff(connected: boolean) {
     const url = String(input)
     if ((init?.method ?? 'GET') !== 'GET') sent.push({ url, body: JSON.parse(String(init?.body ?? 'null')) })
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
+    if (url === '/api/pricing') return json(pricing)
     if (url === '/api/marketplace/payouts') return json(payouts)
     if (url === '/api/marketplace/payouts/connect')
       return json({ url: 'https://connect.stripe.com/setup/e/acct_1/abc', account: { stripe_account_id: 'acct_1', country: 'GB' } })
@@ -85,5 +86,18 @@ describe("the seller's payouts", () => {
     expect(within(history).getByText('As credits')).toBeTruthy()
     expect(screen.getByTestId('payouts-available').textContent).toBe('$0.00')
     expect(sent).toEqual([{ url: '/api/marketplace/payouts/credits', body: {} }])
+  })
+})
+
+// B51.3 — while a card cannot be charged (talyvor-lens B51.2), Selling offers the earnings as credits and no Stripe.
+describe.each(['test', 'off', undefined])('the seller’s payouts while card_payments is %s (B51.3)', (cards) => {
+  it('says card payments are not switched on, offers the earnings as credits and no Stripe button', async () => {
+    mockBff(false, { card_payments: cards })
+    renderCard('/marketplace/selling')
+
+    expect((await screen.findByTestId('payouts-cards-off')).textContent).toBe('Card payments aren’t switched on yet.')
+    expect(screen.getByRole('button', { name: 'Take $30.00 as credits' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /stripe/i })).toBeNull()
+    expect(screen.queryByTestId('payouts-connect')).toBeNull()
   })
 })

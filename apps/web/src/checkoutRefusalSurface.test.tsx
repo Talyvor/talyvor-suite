@@ -62,7 +62,7 @@ import { PENDING_TOPUP_KEY } from './areas/lens/topupApi'
 // answer it cannot use (`'upstream'`, topupApi.ts:264): "Couldn't start the payment — nothing
 // was charged. Please try again." It is honest for a rejection by construction — this call only
 // asks Lens to create a Stripe Checkout Session, and the payment happens at Stripe AFTER the
-// redirect (TopUp.tsx:29, apps/bff/billing.go:300), so a call that never completed cannot
+// redirect (TopUp.tsx:30, apps/bff/billing.go:300), so a call that never completed cannot
 // have charged anyone.
 
 const AUTHENTICATED = {
@@ -104,6 +104,7 @@ function mockBff() {
       if (checkoutAnswer === 'reject') throw new TypeError('Failed to fetch')
       return json(checkoutAnswer.body, checkoutAnswer.status)
     }
+    if (path === '/api/pricing') return new Response(JSON.stringify({ card_payments: 'live' }), { status: 200 })
     if (path === '/api/lxc/topup-options') {
       return json({ allowed_usd_cents: [1000, 5000, 10000], billing_enabled: true })
     }
@@ -173,7 +174,7 @@ describe('/billing — a checkout that never got an answer', () => {
   // ⚠ NOT AN ASSERTION ABOUT NAVIGATION. `window.location.assign` cannot be spied in this jsdom
   // ("Cannot redefine property: assign"), and a test that throws while setting up its own spy
   // reads in the runner exactly like a caught defect. What IS observable is the marker the flow
-  // depends on — and TopUp.tsx:317 states the rule: written only once the session exists, so a
+  // depends on — and TopUp.tsx:320 states the rule: written only once the session exists, so a
   // failed checkout must not leave a pending marker behind.
   it('leaves no pending top-up marker behind when the call never completed', async () => {
     checkoutAnswer = 'reject'

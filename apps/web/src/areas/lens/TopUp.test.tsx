@@ -49,6 +49,7 @@ function mockBff(
         headers: { 'Content-Type': 'application/json' },
       })
     }
+    if (url === '/api/pricing') return new Response(JSON.stringify({ card_payments: 'live' }), { status: 200 })
     if (url === '/api/lxc/topup-options') {
       return new Response(JSON.stringify({ allowed_usd_cents: [1000, 5000, 10000] }), {
         status: 200,
@@ -106,6 +107,7 @@ describe('TopUp — the amounts come from the server', () => {
   it('renders only what the server allows when the list differs from the usual three', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input)
+      if (url === '/api/pricing') return new Response(JSON.stringify({ card_payments: 'live' }), { status: 200 })
       if (url === '/api/lxc/topup-options')
         return new Response(JSON.stringify({ allowed_usd_cents: [2500] }), { status: 200 })
       if (url === '/api/lxc/balance') return new Response(JSON.stringify(BALANCE), { status: 200 })
@@ -138,6 +140,7 @@ describe('TopUp — a deployment that cannot sell says so up front', () => {
   function mockBillingOff() {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input)
+      if (url === '/api/pricing') return new Response(JSON.stringify({ card_payments: 'live' }), { status: 200 })
       if (url === '/api/lxc/topup-options') {
         return new Response(
           JSON.stringify({ allowed_usd_cents: [1000, 5000, 10000], billing_enabled: false }),
@@ -283,7 +286,11 @@ describe('TopUp — every failure says what actually happened', () => {
   })
 
   it('surfaces a failure to load the amounts instead of guessing at them', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('boom', { status: 502 }))
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+      String(input) === '/api/pricing'
+        ? new Response(JSON.stringify({ card_payments: 'live' }), { status: 200 })
+        : new Response('boom', { status: 502 }),
+    )
     renderTopUp()
     expect(await screen.findByText(/couldn’t load the top-up amounts/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '$10' })).not.toBeInTheDocument()
@@ -366,6 +373,7 @@ describe('W1.1.4 — a workspace with nothing in it is told what to do', () => {
     // is a real destination, so it is named as one.
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input)
+      if (url === '/api/pricing') return new Response(JSON.stringify({ card_payments: 'live' }), { status: 200 })
       if (url === '/api/lxc/topup-options')
         return new Response(
           JSON.stringify({ allowed_usd_cents: [1000, 5000, 10000], billing_enabled: false }),
@@ -395,6 +403,7 @@ describe('W1.1.4 — a workspace with nothing in it is told what to do', () => {
 function mockOptions(extra: Record<string, unknown>) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input)
+    if (url === '/api/pricing') return new Response(JSON.stringify({ card_payments: 'live' }), { status: 200 })
     if (url === '/api/lxc/topup-options')
       return new Response(JSON.stringify({ allowed_usd_cents: [1000, 5000, 10000], ...extra }), {
         status: 200,
@@ -452,6 +461,7 @@ function mockBounded() {
       post(JSON.parse(init.body as string))
       return json({ url: SESSION_URL })
     }
+    if (url === '/api/pricing') return new Response(JSON.stringify({ card_payments: 'live' }), { status: 200 })
     if (url === '/api/lxc/topup-options')
       return json({
         allowed_usd_cents: [1000, 5000, 10000],
@@ -500,5 +510,26 @@ describe('TopUp — any amount (B5.1)', () => {
     expect(button).toBeDisabled()
     fireEvent.click(button)
     expect(post).not.toHaveBeenCalled()
+  })
+})
+
+// B51.3 — while a card cannot be charged (talyvor-lens B51.2), Billing shows the balance and, in place of every buy
+// button, says so.
+describe.each(['test', 'off', undefined])('Billing while card_payments is %s (B51.3)', (cardPayments) => {
+  it('shows the balance and says card payments are not switched on, with no buy button', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
+      if (url === '/api/pricing') return json({ card_payments: cardPayments })
+      if (url === '/api/lxc/topup-options')
+        return json({ allowed_usd_cents: [1000, 5000], billing_enabled: true, min_usd_cents: 1000, max_usd_cents: 1_000_000 })
+      if (url === '/api/lxc/balance') return json(BALANCE)
+      return new Response('null', { status: 404 })
+    })
+    renderTopUp()
+    expect(await screen.findByText('Card payments aren’t switched on yet.')).toBeInTheDocument()
+    expect(await screen.findByText(/≈ \$4\.20/)).toBeInTheDocument()
+    expect(screen.queryAllByRole('button').map((b) => b.textContent)).not.toContainEqual(expect.stringMatching(/\$|top up|buy/i))
+    expect(screen.queryByText(/you pay by card/i)).not.toBeInTheDocument()
   })
 })

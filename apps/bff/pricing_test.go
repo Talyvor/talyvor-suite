@@ -41,8 +41,10 @@ func pricingApp(t *testing.T, status int) (*app, *string, map[string]int) {
 			body = lensPlanGates
 		case "/v1/public/fees":
 			body = lensFees
+		case "/v1/pricing":
+			body = `{"card_payments":"live"}`
 		default:
-			t.Errorf("/api/pricing dialled %s — it may read the public peg, plans, plan gates and fees and nothing else", r.URL.Path)
+			t.Errorf("/api/pricing dialled %s — it may read the public peg, plans, plan gates, fees and card payments and nothing else", r.URL.Path)
 		}
 		hits[r.URL.Path]++
 		if auth := r.Header.Get("Authorization"); auth != "" {
@@ -179,9 +181,32 @@ func TestPricing_ServesThePriceCardLensStates(t *testing.T) {
 func TestPricing_OmitsGatesAndFeesLensWillNotState(t *testing.T) {
 	a, _, _ := pricingApp(t, http.StatusServiceUnavailable)
 	out := getPricing(t, a)
-	for _, k := range []string{"plan_gates", "fees", "company_plans", "byok_add_on_usd_cents", "enterprise_from_usd_cents"} {
+	for _, k := range []string{"plan_gates", "fees", "company_plans", "byok_add_on_usd_cents", "enterprise_from_usd_cents", "card_payments"} {
 		if _, ok := out[k]; ok {
 			t.Errorf("%s = %v from a Lens that answered 503 — want it omitted", k, out[k])
+		}
+	}
+}
+
+// B51.3 — /api/pricing says whether a card can be charged, as Lens's GET /v1/pricing states it (talyvor-lens B51.2), and
+// omits any other answer so the pages read it as off.
+func TestPricing_SaysWhetherACardCanBeCharged(t *testing.T) {
+	for _, c := range []struct{ lens, want string }{{"live", "live"}, {"test", "test"}, {"off", "off"}, {"on", ""}} {
+		a, _, _ := pricingApp(t, http.StatusOK)
+		up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/pricing" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = io.WriteString(w, `{"card_payments":"`+c.lens+`"}`)
+		}))
+		a.cfg.lensBaseURL = up.URL
+		got, ok := getPricing(t, a)["card_payments"]
+		up.Close()
+		if c.want == "" && ok {
+			t.Errorf("Lens said %q: card_payments = %v, want it omitted", c.lens, got)
+		} else if c.want != "" && got != c.want {
+			t.Errorf("Lens said %q: card_payments = %v, want %q", c.lens, got, c.want)
 		}
 	}
 }

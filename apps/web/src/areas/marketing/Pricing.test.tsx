@@ -36,6 +36,7 @@ const CHANGED_CARD = {
   ],
   byok_add_on_usd_cents: 20900,
   enterprise_from_usd_cents: 300000,
+  card_payments: 'live',
   plan_gates: {
     order: ['free', 'team', 'business', 'enterprise'],
     plans: {
@@ -60,7 +61,7 @@ const CHANGED_CARD = {
 
 describe('/pricing', () => {
   it('prints the served peg, the served range, and what each amount buys at that peg', async () => {
-    serve({ usd_per_lxc: 0.2, min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000, 5000] })
+    serve({ usd_per_lxc: 0.2, min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000, 5000], card_payments: 'live' })
     render(<Pricing />)
 
     expect(await screen.findByText('$0.20')).toBeInTheDocument()
@@ -74,7 +75,7 @@ describe('/pricing', () => {
   })
 
   it('prints no rate when the deployment will not confirm one', async () => {
-    serve({ min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000] })
+    serve({ min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000], card_payments: 'live' })
     render(<Pricing />)
 
     expect(await screen.findByText(/did not confirm its credit rate/i)).toBeInTheDocument()
@@ -182,5 +183,23 @@ describe('/pricing', () => {
       expect(section.querySelector('.text-eyebrow.text-label')).not.toBeNull()
     }
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Credit for your agents. A plan for your people.')
+  })
+
+  // B51.3: while a card cannot be charged, every price and what each plan includes, and no card line or Choose button —
+  // the page's one action is Create your workspace.
+  it.each(['test', 'off', undefined])('offers no card while card_payments is %s', async (cardPayments) => {
+    serve({ ...CHANGED_CARD, card_payments: cardPayments })
+    const { container } = render(<Pricing />)
+    await screen.findByTestId('company-plan-team')
+
+    expect(screen.getByTestId('price-team')).toHaveTextContent('$59')
+    expect(screen.getAllByTestId('pricing-plan-price')).toHaveLength(3)
+    expect(screen.getByText('buys 50 LXC')).toBeInTheDocument()
+    const text = container.textContent ?? ''
+    expect(text).not.toMatch(/top up any amount|card payments carry|disputed card|no top-up fee|card fee|on your card/i)
+    const main = container.querySelector('main')!
+    expect(within(main).getAllByRole('link', { name: /choose|start free|talk to us|create your workspace/i }).map((a) => a.textContent)).toEqual([
+      'Create your workspace',
+    ])
   })
 })
