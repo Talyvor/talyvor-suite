@@ -137,8 +137,9 @@ export function billsPayAllDue(): Scenario {
       if (company.status !== 201 || company.value === undefined) return fail(`opening the company GBP account answered ${said(company)}`)
       const salt = randomBytes(3).toString('hex')
       const due = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10)
+      // Lens reads an invoice number in capitals, as a payment reference goes out, so the invoice prints it that way.
       const bills = [['Nightly Hosting', 12_000, '120.00'], ['Nightly Studio', 30_550, '305.50'], ['Nightly Rent', 4_000, '40.00']].map(([name, minor, shown], i) => ({
-        supplier: `${name} ${salt} Ltd`, minor: minor as number, shown: shown as string, number: `INV-${salt}-${i + 1}`, account: `7${String(Date.now()).slice(-6)}${i}`, payee: '' }))
+        supplier: `${name} ${salt} Ltd`, minor: minor as number, shown: shown as string, number: `INV-${salt.toUpperCase()}-${i + 1}`, account: `7${String(Date.now()).slice(-6)}${i}`, payee: '' }))
       const total = bills.reduce((t, b) => t + b.minor, 0)
       for (const b of bills) {
         const p = await lens<{ id: string }>('POST', '/v1/money/payees', { name: b.supplier, country: 'GB', sort_code: '040004', account_number: b.account }, `the owner saves ${b.supplier}`)
