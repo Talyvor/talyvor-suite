@@ -34,11 +34,11 @@ func setSecurityHeaders(h http.Header) {
 // would render or run is a download (the upstream's own attachment filename kept).
 func relayContentType(w, upstream http.Header) {
 	ct := upstream.Get("Content-Type")
-	if ct == "" {
-		ct = "application/octet-stream"
+	mt, _, err := mime.ParseMediaType(ct)
+	if err != nil { // none, or one a browser might read differently from Go: an opaque download either way
+		ct, mt = "application/octet-stream", ""
 	}
 	w.Set("Content-Type", ct)
-	mt, _, _ := mime.ParseMediaType(ct)
 	if mt == "text/html" || strings.HasSuffix(mt, "xml") || strings.Contains(mt, "javascript") {
 		cd := upstream.Get("Content-Disposition")
 		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(cd)), "attachment") {

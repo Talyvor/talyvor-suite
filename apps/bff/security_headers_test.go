@@ -101,6 +101,7 @@ func TestRelayedBodyIsNeverAPageOnTheAppOrigin(t *testing.T) {
 		{"image/svg+xml", "", "image/svg+xml", "attachment"},
 		{"application/javascript", "", "application/javascript", "attachment"},
 		{"", "", "application/octet-stream", ""},
+		{"text/html,", `inline`, "application/octet-stream", "inline"},
 		{"text/html", `attachment; filename="runbook.html"`, "text/html", `attachment; filename="runbook.html"`},
 		{"application/pdf", `inline; filename="r.pdf"`, "application/pdf", `inline; filename="r.pdf"`},
 	} {
