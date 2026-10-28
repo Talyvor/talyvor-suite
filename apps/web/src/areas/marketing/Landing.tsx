@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Button, CaseSafe, Mark, ThemeToggle, focusRing, inlineLink } from '@talyvor/ui'
+import { Button, CaseSafe, focusRing, inlineLink } from '@talyvor/ui'
 import { useSignupProbe } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
 import { HOLDBACK_HOURS, LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
-import { CompanyLine } from '../../components/CompanyLine'
+import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
+import { COMPANY_CONTACT } from '../../company'
 import { Waitlist } from '../../components/Waitlist'
-import { CookieSettingsLink } from './MetaPixel'
-import { FOOTER_LINE, ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from '../../positioning'
+import { ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from '../../positioning'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). It must render with no
 // session, no router context, and no providers: Landing.test.tsx renders <Landing /> bare, so
@@ -17,7 +17,7 @@ import { FOOTER_LINE, ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from
 // ── DESIGN STANCE ────────────────────────────────────────────────────────────────────────────────
 //
 // The brand board's WEBSITE HERO tile (brand-v4 BRAND.md, "The marketing page"; B29.4): the drawn
-// logo lockup in the header, an eyebrow over every headline, one teal rule per section, raised
+// mark and wordmark in the site header (B51.1: every public page shares it), an eyebrow over every headline, one teal rule per section, raised
 // panels with a 1px line border instead of shadows, the four brand icons, and every money figure in
 // IBM Plex Mono with tabular figures. The hero photograph bleeds off the right edge behind a gradient
 // from the canvas; on a phone it moves under the text. The
@@ -41,16 +41,14 @@ import { FOOTER_LINE, ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from
 // This page used to hardcode hello@talyvor.com as its only call to action, under a comment saying
 // the alias did not route yet. It shipped anyway: a buyer's first action went nowhere, and no gate
 // could catch it because a comment cannot be executed. The address is now CONFIGURATION, and its
-// absence is a state the page renders rather than a warning someone has to remember. Unset ⇒ no
-// email CTA is drawn at all. Deliberately NOT defaulted: a fallback address is how the dead link
-// survived the first time.
+// absence was a state the page rendered. B51.1 (Nick, 28 Oct 2026): every public footer names the
+// company's address (company.ts), so unset now means that address, not "no inbox yet" beside it.
 //
 // ⚠ IT IS A BUILD-TIME VARIABLE. Vite inlines import.meta.env when the bundle is compiled, so
 // setting VITE_CONTACT_EMAIL on the running container does nothing at all — the value has to be
 // present in the environment of the `pnpm build` that produces the assets. See deploy/README.
-export const CONTACT_EMAIL: string = import.meta.env.VITE_CONTACT_EMAIL ?? ''
+export const CONTACT_EMAIL: string = import.meta.env.VITE_CONTACT_EMAIL || COMPANY_CONTACT
 const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}`
-const HAS_CONTACT = CONTACT_EMAIL !== ''
 
 /** A measured figure. Mono and tabular, with the unit set quieter than the value.
  *
@@ -213,8 +211,8 @@ export function Landing() {
           this page argues with structure, and motion competing with the argument is noise. Honours
           prefers-reduced-motion, because a page about trust should.
 
-          Below the motion: the board's pieces the preset has no token for — the logo lockup per
-          theme, and the hero photograph and its scrim. Colour comes only from the
+          Below the motion: the board's pieces the preset has no token for — the hero
+          photograph and its scrim. Colour comes only from the
           theme's variables. The photograph's figure carries data-theme="dark", so its scrim is
           Obsidian in both themes.
 
@@ -232,9 +230,6 @@ export function Landing() {
         @media (prefers-reduced-motion: reduce) {
           .tal-rise, .tal-stagger > * { animation: none }
         }
-        .tal-logo-light { display: none }
-        [data-theme='light'] .tal-logo-dark { display: none }
-        [data-theme='light'] .tal-logo-light { display: block }
         .tal-hero-photo { position: relative; margin: 0; aspect-ratio: 16 / 9; overflow: hidden; background: var(--canvas) }
         .tal-hero-photo {
           /* Transparent for the last 3%: on a phone that is the bottom few rows, which a light page shows any trace of the dark photo in. */
@@ -277,51 +272,7 @@ export function Landing() {
         }
       `}</style>
 
-      {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <header className="border-b border-rule bg-canvas wide:sticky wide:top-0 wide:z-20">
-        {/* `flex-wrap gap-y-3` — at 390 the actions cannot sit beside the lockup, so they wrap to
-            a second row instead of pushing the page sideways. Below 840px the two text links step
-            out (the footer carries both) so that row is the toggle and the two buttons, and the
-            header is sticky only from 840px up: on a phone a pinned two-row bar eats the screen. */}
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-gutter py-3">
-          {/* The board's lockup without the tagline, the file as drawn — one per theme, the
-              other hidden by the page's <style>. Never the name set in a font. */}
-          <a href="/marketing" className={`rounded-control ${focusRing}`}>
-            <img
-              src="/brand/svg/talyvor-logo-dark-notag.svg"
-              alt="Talyvor"
-              width={155}
-              height={26}
-              data-brand="logo"
-              className="tal-logo-dark block h-6 w-auto"
-            />
-            <img
-              src="/brand/svg/talyvor-logo-light-notag.svg"
-              alt="Talyvor"
-              width={155}
-              height={26}
-              data-brand="logo"
-              className="tal-logo-light h-6 w-auto"
-            />
-          </a>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <a href="/pricing" className={`hidden text-body text-muted wide:inline ${inlineLink}`}>
-              Pricing
-            </a>
-            <a href="/documentation" className={`hidden text-body text-muted wide:inline ${inlineLink}`}>
-              Documentation
-            </a>
-            <ThemeToggle />
-            {/* The one "Open the app" link — Landing.test.tsx pins its name and href. */}
-            <Button asChild>
-              <a href="/">Open the app</a>
-            </Button>
-            <Button asChild variant="primary">
-              <a href="/signup">Get started</a>
-            </Button>
-          </div>
-        </div>
-      </header>
+      <PublicHeader width="max-w-6xl" />
 
       <main className="flex-1">
         {/* ── 00 · The product ─────────────────────────────────────────────── */}
@@ -360,8 +311,9 @@ export function Landing() {
                       <a href="#wallets">See how it works</a>
                     </Button>
                   </div>
-                  {/* B44.1 — the visitor the ads bring can leave an email while access is by invitation. */}
-                  <Waitlist className="mt-6 max-w-xl" />
+                  {/* B44.1 — the visitor the ads bring can leave an email while access is by invitation; B51.1 — only
+                      then: while sign-up is open Get started is the way in, and while unknown neither is promised. */}
+                  {signup === 'closed' ? <Waitlist className="mt-6 max-w-xl" /> : null}
                 </div>
               </div>
               <p className="mt-4 text-caption text-faint">
@@ -558,58 +510,17 @@ export function Landing() {
               <Button asChild variant="primary" className="h-10 px-5">
                 <a href="/signup">Create your workspace</a>
               </Button>
-              {HAS_CONTACT ? (
-                <Button asChild className="h-10 px-5">
-                  <a href={CONTACT_MAILTO} className="font-mono">
-                    {CONTACT_EMAIL}
-                  </a>
-                </Button>
-              ) : null}
+              <Button asChild className="h-10 px-5">
+                <a href={CONTACT_MAILTO} className="font-mono">
+                  {CONTACT_EMAIL}
+                </a>
+              </Button>
             </div>
-            {HAS_CONTACT ? null : (
-              <p className="mt-5 max-w-xl text-caption text-faint">
-                Introductions are happening directly for now, so there is no inbox to write to yet —
-                rather than print an address that drops your first message, this page shows none
-                until the alias is wired into the build.
-              </p>
-            )}
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-rule bg-surface">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-gutter py-6">
-          <div className="flex items-center gap-2.5">
-            <Mark size={20} aria-hidden />
-            <div className="font-figure text-eyebrow uppercase text-faint">{FOOTER_LINE}</div>
-          </div>
-          <div className="text-caption text-faint">
-            <a href="/privacy" className={inlineLink}>
-              Privacy
-            </a>
-            {' · '}
-            <a href="/terms" className={inlineLink}>
-              Terms
-            </a>
-            {' · '}
-            <a href="/pricing" className={inlineLink}>
-              Pricing
-            </a>
-            {' · '}
-            <a href="/documentation" className={inlineLink}>
-              Documentation
-            </a>
-            {' · '}
-            <a href="#pooling" className={inlineLink}>
-              Repeated questions
-            </a>
-            <CookieSettingsLink />
-          </div>
-        </div>
-        <div className="mx-auto w-full max-w-6xl px-gutter pb-6">
-          <CompanyLine />
-        </div>
-      </footer>
+      <PublicFooter width="max-w-6xl" />
     </div>
   )
 }

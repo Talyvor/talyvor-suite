@@ -213,7 +213,7 @@
       "id": "pool",
       "title": "Shared answers and earnings",
       "about": "Turn answer sharing on or off (it is on for a new workspace), see what your answers earned in LENS, and remove what you stored.",
-      "screen": { "href": "/earnings", "label": "Earnings" },
+      "screen": { "href": "/statements/royalties", "label": "Royalties" },
       "routes": [
         { "method": "PUT", "path": "/v1/workspaces/{wsID}/cache-poolable", "does": "Turn serving and reusing pooled answers on or off (on for a new workspace)" },
         { "method": "PUT", "path": "/v1/workspaces/{wsID}/distill-poolable", "does": "Opt in or out of sharing converted documents" },
@@ -236,7 +236,9 @@
         { "method": "GET", "path": "/v1/workspaces/{wsID}/annotate/task", "does": "Take an annotation task" },
         { "method": "POST", "path": "/v1/workspaces/{wsID}/annotate/task/{taskID}", "does": "Answer an annotation task" },
         { "method": "GET", "path": "/v1/workspaces/{wsID}/annotate/stats", "does": "Your annotation record" },
-        { "method": "GET", "path": "/v1/workspaces/{wsID}/quality/stats", "does": "Quality signals on your answers" }
+        { "method": "GET", "path": "/v1/workspaces/{wsID}/quality/stats", "does": "Quality signals on your answers" },
+        { "method": "GET", "path": "/v1/tokens/rates", "does": "What each kind of contribution earns" },
+        { "method": "GET", "path": "/v1/economy/stats", "does": "Network-wide figures" }
       ]
     },
     {
@@ -343,8 +345,6 @@
         { "method": "GET", "path": "/readyz", "does": "Readiness check" },
         { "method": "GET", "path": "/openapi.json", "does": "The OpenAPI document for the core routes" },
         { "method": "GET", "path": "/v1/auth/jwks", "does": "Public keys that verify Lens session tokens" },
-        { "method": "GET", "path": "/v1/tokens/rates", "does": "What each kind of contribution earns" },
-        { "method": "GET", "path": "/v1/economy/stats", "does": "Network-wide figures" },
         { "method": "GET", "path": "/v1/economy/conversion-rate", "does": "The current LENS to LXC rate" },
         { "method": "GET", "path": "/v1/economy/conversion-rate/history", "does": "Past LENS to LXC rates" }
       ]

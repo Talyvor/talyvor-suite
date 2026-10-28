@@ -13,7 +13,7 @@ import {
   type Claim,
 } from './content'
 import lensRoutes from './lens-routes.json'
-import { SiteFooter, SiteHeader } from '../../components/SiteChrome'
+import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
 import { POSITIONING_LINE } from '../../positioning'
 
 // /documentation (B27.31) — what Talyvor does today, one claim per thing a person can do, each
@@ -99,15 +99,6 @@ function LensReference() {
   )
 }
 
-const HEADER_LINKS = [
-  { href: '/pricing', label: 'Pricing' },
-  { href: DOCUMENTATION_PATH, label: 'Documentation' },
-]
-const FOOTER_LINKS = [
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/terms', label: 'Terms' },
-  { href: '/pricing', label: 'Pricing' },
-]
 
 // B28.15 — the guides first, Agent Wallets leading them, then the Lens API reference.
 const CONTENTS: Array<{ id: string; label: string }> = [
@@ -121,7 +112,7 @@ export function Documentation() {
   useDocumentTitle('Documentation')
   return (
     <div className="flex min-h-full flex-col bg-canvas text-ink">
-      <SiteHeader product="Suite" links={HEADER_LINKS} current={DOCUMENTATION_PATH} />
+      <PublicHeader current={DOCUMENTATION_PATH} />
 
       <main className="flex-1">
         <section aria-labelledby="documentation-heading" className="border-b border-rule">
@@ -252,7 +243,7 @@ export function Documentation() {
         </section>
       </main>
 
-      <SiteFooter links={FOOTER_LINKS} />
+      <PublicFooter />
     </div>
   )
 }

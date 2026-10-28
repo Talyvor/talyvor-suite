@@ -1,4 +1,4 @@
-import { Button, Mark, ThemeToggle, Wordmark, focusRing, inlineLink } from '@talyvor/ui'
+import { Button, inlineLink } from '@talyvor/ui'
 import { useDocumentTitle } from '../../documentTitle'
 import { formatCents, formatLXC, lxcForCents } from '../lens/topupApi'
 import { Eyebrow, Figure, TealRule } from './Landing'
@@ -9,10 +9,8 @@ import {
   type Pricing as PricingData,
   type PricingState,
 } from './pricingApi'
-import { CompanyLine } from '../../components/CompanyLine'
-import { CookieSettingsLink } from './MetaPixel'
-import { FOOTER_LINE } from '../../positioning'
-import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, TAX_LINE } from './PriceCard'
+import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
+import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, MoneyFeatureFees, TAX_LINE } from './PriceCard'
 
 // /pricing (B5.2) — what anything costs, for a buyer who has not signed up. Public, OUTSIDE the
 // AuthGate like /marketing, and built the same way: no router context, plain anchors, Landing's
@@ -145,26 +143,7 @@ export function Pricing() {
   const state = usePricing()
   return (
     <div className="flex min-h-full flex-col bg-canvas text-ink">
-      <header className="border-b border-rule bg-canvas wide:sticky wide:top-0 wide:z-10">
-        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-y-2 px-gutter py-3">
-          <a href="/marketing" className={`flex items-center gap-2.5 ${focusRing}`}>
-            <Mark size={26} aria-hidden />
-            <div className="min-w-0">
-              <Wordmark height={12} />
-              <div className="mt-1 text-eyebrow uppercase leading-tight text-label">Suite</div>
-            </div>
-          </a>
-          <div className="flex items-center gap-3">
-            <a href="/documentation" className={`text-body text-muted ${inlineLink}`}>
-              Documentation
-            </a>
-            <ThemeToggle />
-            <Button asChild>
-              <a href="/">Open the app</a>
-            </Button>
-          </div>
-        </div>
-      </header>
+      <PublicHeader current="/pricing" />
 
       <main className="flex-1">
         <section aria-labelledby="pricing-heading" className="border-b border-rule">
@@ -265,6 +244,17 @@ export function Pricing() {
                 <div className="mt-4">
                   <FeesOnAnyPlan fees={state.pricing.fees} />
                 </div>
+                {state.pricing.fees ? (
+                  <>
+                    <h3 className="mt-12 text-head text-ink">Money features, as our money partners switch them on</h3>
+                    <div className="mt-4">
+                      <MoneyFeatureFees
+                        fees={state.pricing.fees}
+                        planIds={state.pricing.plan_gates?.order ?? []}
+                      />
+                    </div>
+                  </>
+                ) : null}
               </>
             ) : state.status === 'loading' ? (
               <p className="mt-8 text-body text-muted">Reading the price card…</p>
@@ -342,28 +332,7 @@ export function Pricing() {
         </section>
       </main>
 
-      <footer className="border-t border-rule">
-        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 px-gutter py-6">
-          <div className="font-figure text-eyebrow uppercase text-faint">{FOOTER_LINE}</div>
-          <div className="text-caption text-faint">
-            <a href="/privacy" className={inlineLink}>
-              Privacy
-            </a>
-            {' · '}
-            <a href="/terms" className={inlineLink}>
-              Terms
-            </a>
-            {' · '}
-            <a href="/documentation" className={inlineLink}>
-              Documentation
-            </a>
-            <CookieSettingsLink />
-          </div>
-        </div>
-        <div className="mx-auto w-full max-w-5xl px-gutter pb-6">
-          <CompanyLine />
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   )
 }

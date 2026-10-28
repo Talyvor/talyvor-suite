@@ -1,5 +1,8 @@
 import { inlineLink } from '@talyvor/ui'
 import { LegalPage, LawyerReview, Section } from './legalParts'
+import { useAuthMeReader } from '../lib/authMe'
+import { signupStateOf } from '../lib/signupOpen'
+import { META_DATASET_ID } from '../areas/marketing/pixel'
 import { COMPANY_CONTACT, COMPANY_NAME, COMPANY_NUMBER, REGISTERED_OFFICE } from '../company'
 import {
   KEPT_UNTIL_DELETED_FACT,
@@ -27,12 +30,17 @@ import {
 //   passkeys, pushes   areas/lens/passkeys.ts (Lens keeps the public key; pushes via /sw.js)
 //   virtual cards      areas/lens/AgentCardPanel.tsx
 //   payouts            areas/marketplace/Marketplace.tsx (Stripe asks; Talyvor never sees bank details)
+//   single-use cards   talyvor-lens internal/economy/money_cards.go (B46.10: the card partner gets merchant and cap)
+//   waitlist, cookies  /auth/me's signup_open (lib/signupOpen.ts) and META_DATASET_ID (areas/marketing/pixel.ts), B51.1
 //   deletion           areas/lens/StoredAnswers.tsx, areas/track/WorkspaceSettings.tsx
 
-/** The day these words last changed (B49.2 named virtual cards plainly). Change it with them. */
-const UPDATED = '2026-10-27'
+/** The day these words last changed (B51.1: the waitlist, cookies and what leaves). Change it with them. */
+const UPDATED = '2026-10-28'
 
 export function Privacy() {
+  // The ReturnLink's /auth/me read, so the waitlist section costs no second request.
+  const signup = signupStateOf(useAuthMeReader().data)
+  const pixel = META_DATASET_ID !== ''
   return (
     // The site's header and footer, the title block, the contents and the reading column are
     // LegalPage's, with the `main` in it.
@@ -49,7 +57,7 @@ export function Privacy() {
       <LawyerReview>
         This is an honest engineering account of what the software does, written from the code so a
         lawyer can turn it into an instrument. It is <strong>not</strong> a privacy notice in the
-        legal sense: it does not identify a data controller, name a legal basis for processing,
+        legal sense: it does not name a legal basis for processing,
         state a jurisdiction, or set out how to exercise statutory rights. Those must be added
         before this is relied on.
       </LawyerReview>
@@ -86,6 +94,16 @@ export function Privacy() {
       </Section>
 
       <Section title="The waitlist">
+        {signup === 'open' ? (
+          <p className="text-reading">
+            Before sign-up opened, people could leave an email to be told when it did. We keep those addresses only
+            for that, and delete one when you ask:{' '}
+            <a className={inlineLink} href={`mailto:${COMPANY_CONTACT}`}>
+              {COMPANY_CONTACT}
+            </a>
+            .
+          </p>
+        ) : (
         <p className="text-reading">
           If you join the waitlist we store your email address, when you joined, the page you joined
           from and the campaign tags in its link (utm_source, utm_medium, utm_campaign) — never your
@@ -96,15 +114,23 @@ export function Privacy() {
           </a>
           .
         </p>
+        )}
       </Section>
 
       <Section title="Cookies">
-        <p className="text-reading">
-          Our public pages use one advertising cookie, Meta&rsquo;s, to measure our ads, and only if
-          you accept it in the cookie banner. With it, Meta learns that one of these pages was viewed
-          or that someone joined the waitlist; never your email address or anything you type. To
-          withdraw, open Cookie settings at the foot of the page and choose Reject.
-        </p>
+        {pixel ? (
+          <p className="text-reading">
+            Our public pages use one advertising cookie, Meta&rsquo;s, to measure our ads, and only if
+            you accept it in the cookie banner. With it, Meta learns that one of these pages was viewed,
+            or that someone clicked to create a workspace or, while sign-up is closed, joined the
+            waitlist; never your email address or anything you type. To withdraw, open Cookie settings
+            at the foot of the page and choose Reject.
+          </p>
+        ) : (
+          <p className="text-reading">
+            Our public pages set no advertising or analytics cookies, and send nothing to Meta.
+          </p>
+        )}
       </Section>
 
       <Section title="What Agent Wallets stores">
@@ -139,6 +165,13 @@ export function Privacy() {
             sent to Stripe for that. We keep the card&rsquo;s last four digits and expiry, and each
             purchase: the merchant, the amount, and whether the agent&rsquo;s rules allowed it and
             why. We never see or store the full card number.
+          </li>
+          <li>
+            <strong className="text-ink">Single-use cards.</strong> For one job an agent can ask for a
+            batch of cards, one per merchant: each is single-use, locked to one merchant and capped at
+            the amount you approved, and closes after one charge or 24 hours. We keep each card&rsquo;s
+            merchant, cap and state, and the charge made on it. The card partner that issues them
+            receives the merchant and the cap, not your name or address.
           </li>
         </ul>
       </Section>
@@ -305,8 +338,21 @@ export function Privacy() {
       <Section title="What leaves this system">
         <ul className="flex list-disc flex-col gap-2 pl-5 text-reading text-muted">
           <li>
-            <strong className="text-ink">The AI provider</strong> receives your prompt. It has to —
-            that is the request. Their handling is governed by their terms, not ours.
+            <strong className="text-ink">The AI provider</strong> you or your agent chose receives your
+            prompt. It has to — that is the request. Their handling is governed by their terms, not ours.
+          </li>
+          <li>
+            <strong className="text-ink">OpenAI</strong> computes each question&rsquo;s embedding, and{' '}
+            <strong className="text-ink">Anthropic</strong> checks pairs of questions, so each receives
+            the question&rsquo;s text.
+          </li>
+          <li>
+            <strong className="text-ink">A vision model</strong> reads a document that has no text to
+            extract, as described above.
+          </li>
+          <li>
+            <strong className="text-ink">An AI assistant you connect</strong> receives the answers to
+            what it asks, and its provider with them, as described above.
           </li>
           <li>
             <strong className="text-ink">Google</strong> receives the fact that you signed in. We
@@ -316,8 +362,12 @@ export function Privacy() {
             <strong className="text-ink">Stripe</strong> handles payment. Your card details go to
             Stripe directly and never reach us — we never see or store a card number. We send
             Stripe a workspace identifier and an amount, so we can credit the right balance. Stripe
-            also issues agent cards, so it receives the cardholder details described above, and
-            pays Marketplace sellers, so it receives what a seller gives it when connecting.
+            also issues agents&rsquo; virtual cards, so it receives the cardholder details described
+            above, and pays Marketplace sellers, so it receives what a seller gives it when connecting.
+          </li>
+          <li>
+            <strong className="text-ink">The card partner</strong> that issues single-use cards
+            receives each card&rsquo;s merchant and cap, as described above.
           </li>
           <li>
             <strong className="text-ink">Your browser&rsquo;s push service</strong> — Apple, Google
@@ -329,10 +379,16 @@ export function Privacy() {
             described above, when sharing is on; the listings you publish on the Marketplace; and,
             when an agent pays another owner&rsquo;s agent, that payment.
           </li>
+          {pixel ? (
+            <li>
+              <strong className="text-ink">Meta</strong> learns, if you accept its cookie on our public
+              pages, what the Cookies section above says.
+            </li>
+          ) : null}
         </ul>
         <p className="mt-3 text-reading text-muted">
           Nothing else leaves. There is no analytics vendor, no advertising network and no session
-          recording in this application.
+          recording inside the app.
         </p>
       </Section>
 

@@ -1,5 +1,5 @@
 // B44.2 — the Meta pixel on talyvor.com's public pages, only after the visitor accepts. PageView on each public page
-// view and Lead on a waitlist sign-up; never advanced matching, never a parameter that could carry what someone typed.
+// view and Lead on a waitlist sign-up or, while sign-up is open, a click to create a workspace; never advanced matching, never a parameter that could carry what someone typed.
 
 /** Nicolai's Meta dataset ID (B44.3). Empty: no banner, no request to Meta, ever. */
 export const META_DATASET_ID: string = ''
