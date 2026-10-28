@@ -1020,7 +1020,8 @@ export function wrongAnswerStored(seed: number): Scenario {
 }
 
 /**
- * Chat's tool route takes only the read-only tools Lens offers Chat: the tools it lists are Lens's own wallet reads, a
+ * Chat's tool route takes only the read-only tools Lens offers Chat: the tools it lists are Lens's own wallet reads and
+ * its prepare tools (B45.2, which pay nothing until the person's passkey on the card), a
  * tool that moves money (wallet_send) is refused before Lens is asked, and a read Lens does not offer says so — and the
  * ledger has moved by nothing.
  */
@@ -1030,6 +1031,8 @@ export function chatToolGuard(): Scenario {
   // on the person's yes (chat-file-bug).
   const PRODUCT_READS = ['search_issues', 'list_issues', 'get_issue', 'search_docs', 'get_page']
   const ON_A_YES = ['create_issue']
+  // B45.2 — Lens's prepare tools pay nothing: they open a card in the conversation, paid only on the person's passkey.
+  const PREPARE = ['prepare_payment', 'prepare_batch']
   return {
     id: 'chat-tool-guard',
     owner: 'talyvor-suite',
@@ -1048,14 +1051,14 @@ export function chatToolGuard(): Scenario {
       for (const t of listed.tools) {
         if (ON_A_YES.includes(t.name)) {
           if (t.writes !== true) failures.push(`Chat is offered ${t.name} without saying it changes something, so it would run without the person's yes`)
-        } else if (!READ_ONLY.includes(t.name) && !PRODUCT_READS.includes(t.name)) failures.push(`Chat is offered ${t.name}, which is not a read-only tool`)
+        } else if (!READ_ONLY.includes(t.name) && !PRODUCT_READS.includes(t.name) && !PREPARE.includes(t.name)) failures.push(`Chat is offered ${t.name}, which is not a read-only tool`)
       }
       if (names.includes('create_issue')) {
         const unasked = await from(page, 'POST', '/api/chat/tools/call', { name: 'create_issue', arguments: { title: 'should never be filed' } })
         ctx.evidence.push({ note: `create_issue without the person's yes: ${unasked.status} ${unasked.text.slice(0, 200)}` })
         if (unasked.status !== 409) failures.push(`create_issue without the person's yes answered ${unasked.status} ${refusalOf(unasked.text)}, not refused`)
       }
-      for (const n of READ_ONLY) if (lensNames.includes(n) !== names.includes(n)) failures.push(`Lens ${lensNames.includes(n) ? 'offers' : 'does not offer'} ${n}, and Chat ${names.includes(n) ? 'is' : 'is not'} offered it`)
+      for (const n of [...READ_ONLY, ...PREPARE]) if (lensNames.includes(n) !== names.includes(n)) failures.push(`Lens ${lensNames.includes(n) ? 'offers' : 'does not offer'} ${n}, and Chat ${names.includes(n) ? 'is' : 'is not'} offered it`)
 
       const send = await from(page, 'POST', '/api/chat/tools/call', { name: 'wallet_send', arguments: { to: '@nobody', amount_ulxc: 1_000_000, memo: 'should never move' } })
       ctx.evidence.push({ note: `wallet_send through Chat's tool route: ${send.status} ${send.text.slice(0, 200)}` })
