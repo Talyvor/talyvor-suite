@@ -47,6 +47,21 @@ describe('payment-request-batch (B40.27)', () => {
     expect(evidence.find((e) => e.note === 'chat prepares £90 to the plumber with an iban in the arguments')?.answer).toMatch(/^refused 400: .*payee details supplied by the assistant \(iban\)/)
   })
 
+  // B17.302 — the stub refuses an account until currency_accounts' terms are accepted, as Lens does; the scenario accepts them first.
+  it("accepts the accounts terms before it opens the GBP account", async () => {
+    const { evidence } = await runAgainstStub('')
+    const notes = evidence.map((e) => e.note)
+    expect(notes.indexOf("the owner accepts currency_accounts's terms")).toBeGreaterThan(-1)
+    expect(notes.indexOf("the owner accepts currency_accounts's terms")).toBeLessThan(notes.indexOf('the owner opens a GBP account on test money'))
+    expect(evidence.find((e) => e.note === 'the owner opens a GBP account on test money')?.answer).toMatch(/^201/)
+  })
+
+  it('FAILs when an acceptance is recorded nowhere, so Lens still refuses the account', async () => {
+    const { verdict } = await runAgainstStub('terms-accept-ignored')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^opening a GBP account must answer 201; Lens answered refused 403: .*needs its terms accepted/)
+  })
+
   it('FAILs when the same key with a changed amount is accepted', async () => {
     const { verdict } = await runAgainstStub('payment-request-key-reused')
     expect(verdict).toMatchObject({ pass: false })

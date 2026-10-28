@@ -22,6 +22,8 @@ interface Account { id: string; currency: string; test_minor: number; live_minor
 const PLUMBER = { name: 'Nightly Plumbing Ltd', country: 'GB', sort_code: '040004', account_number: '24681357' }
 const STRANGER = { name: 'Nightly Stranger Consulting Ltd', country: 'GB', sort_code: '040004', account_number: '13572468' }
 const NOMATCH = { name: 'Nightly TESTNOMATCH Supplies Ltd', country: 'GB', sort_code: '040004', account_number: '97531864' }
+/** The capabilities the scenario uses, whose terms the owner accepts first (as money-layer-contract does). */
+const CAPABILITIES = ['currency_accounts', 'payments_out']
 const item = (payee: string, minor: number, reference: string) => ({ payee_id: payee, currency: 'GBP', amount_minor: minor, reference })
 
 export function paymentRequestBatch(): Scenario {
@@ -44,7 +46,13 @@ export function paymentRequestBatch(): Scenario {
       const prepare = (key: string, body: object, note: string) =>
         call<Request>('POST', '/v1/money/payment-requests', body, note, { 'Idempotency-Key': key })
 
-      // An account for money to sit in, and three saved payees.
+      // The accounts terms accepted (Lens refuses an account until they are), an account for money to sit in, and three saved payees.
+      const terms = await call<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
+      if (!terms.ok) return fail(`reading the workspace's terms answered ${said(terms)}`)
+      for (const t of (terms.value.terms ?? []).filter((x) => CAPABILITIES.includes(x.capability) && x.accepted == null)) {
+        const ok = await call('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
+        if (ok.status !== 201) return fail(`accepting ${t.capability}'s terms answered ${said(ok)}`)
+      }
       const opened = await call<Account>('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the owner opens a GBP account on test money')
       if (opened.status !== 201 || !opened.ok) return fail(`opening a GBP account must answer 201; Lens answered ${said(opened)}`)
       const ids: string[] = []
@@ -61,13 +69,13 @@ export function paymentRequestBatch(): Scenario {
       const key = softPasskey(reg.value.rp_id)
       const registered = await call('POST', '/v1/workspaces/{ws}/agents/passkeys', key.register(reg.value.challenge, 'Nightly request passkey'), 'the owner registers a P-256 passkey')
       if (registered.status !== 201) return fail(`registering a passkey must answer 201; Lens answered ${said(registered)}`)
-      const terms = await call<{ canonical: string; challenge: string }>('POST', '/v1/money/permission-mandates/prepare', {
+      const mandateTerms = await call<{ canonical: string; challenge: string }>('POST', '/v1/money/permission-mandates/prepare', {
         principal: { type: 'person', name: 'Nightly Person' }, clients: ['chat', 'voice'], scope: { payees: [plumber, nomatch], currencies: ['GBP'] },
         limits: { per_payment: { GBP: 10_000 } }, new_payee: { policy: 'confirmation_of_payee' }, expires_at: new Date(Date.now() + 24 * 3600_000).toISOString(),
       }, 'the owner prepares a mandate: the plumber and the no-match payee, £100 a payment')
-      if (!terms.ok) return fail(`preparing the mandate must answer 200; Lens answered ${said(terms)}`)
+      if (!mandateTerms.ok) return fail(`preparing the mandate must answer 200; Lens answered ${said(mandateTerms)}`)
       const signed = await call<{ id: string; status: string }>('POST', '/v1/money/permission-mandates',
-        { canonical: terms.value.canonical, assertion: key.assert(terms.value.challenge) }, 'the owner signs the mandate with the passkey')
+        { canonical: mandateTerms.value.canonical, assertion: key.assert(mandateTerms.value.challenge) }, 'the owner signs the mandate with the passkey')
       if (signed.status !== 201 || !signed.ok || signed.value.status !== 'active') return fail(`the signed mandate must answer 201 active; Lens answered ${said(signed)}`)
       const mandate = signed.value.id
 

@@ -1619,6 +1619,10 @@ export class Bank {
   /** Writes a signed-in person makes outside their workspace: a report on a listing; and wallet lookups. */
   async publicWrite(req: IncomingMessage, res: ServerResponse, path: string, viewer: string): Promise<boolean> {
     const { json } = this.d
+    // B17.302 — Lens's terms gate (lens #763): an account opens only once the workspace accepted currency_accounts' terms.
+    if (path === '/v1/money/accounts' && req.method === 'POST' && !this.terms.accepted(viewer, 'currency_accounts')) {
+      return json(res, 403, { error: 'Accounts in pounds, euros, dollars and USDC needs its terms accepted before it is used: this workspace has not accepted version 1 of them. Read them and accept them, then try again' }), true
+    }
     if (await this.payees.route(req, res, viewer, path)) return true
     if (await this.permissionMandates.route(req, res, viewer, path)) return true
     if (await this.devices.route(req, res, viewer, path)) return true
