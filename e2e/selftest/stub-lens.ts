@@ -1318,6 +1318,12 @@ createServer(async (req, res) => {
           template: 'support-bot', key: started.key, key_id: started.key_id, test_money_ulxc: Math.max(money, 0) } }) })
     }
     if (p === '/v1/economy/conversion-rate') return json(res, 200, { lens_per_lxc: 1, rate: 1, usd_per_lxc: USD_PER_LXC })
+    // B51.4 — the rest of /documentation's "No key needed", answered without a key as Lens answers them.
+    // STUB_BREAK=no-key-401: one of them asks for a key, as /v1/tokens/rates did while listed there (site-truth must FAIL).
+    if (p === '/livez') return broke('no-key-401') ? json(res, 401, { error: 'missing API key' }) : json(res, 200, { status: 'alive' })
+    if (p === '/readyz') return json(res, 200, { checks: { database: 'ok' }, status: 'ready' })
+    if (p === '/v1/auth/jwks') return json(res, 200, { keys: [] })
+    if (p === '/v1/economy/conversion-rate/history') return json(res, 200, null)
     if (WEBHOOK_SECRETS[p] !== undefined && req.method === 'POST') return await stripeWebhook(req, res, WEBHOOK_SECRETS[p])
     // B32.14 — the price card's three public reads, as Lens states them with no credential: the plans, what each company
     // plan unlocks, and every fee (lens.env.example's defaults).
