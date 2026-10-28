@@ -376,6 +376,22 @@ async function roomScreen(req: IncomingMessage, res: ServerResponse, p: string, 
   return false
 }
 
+/**
+ * B46.21 — room `id`'s payout of `amountMinor` for its owner `ws`, split as Lens rooms.Split does under an equal rule: each live
+ * member who is not a viewer and is on the current terms, in the order they joined, the minor units left over to the earliest.
+ */
+export function roomSplit(id: string, ws: string, amountMinor: number): { status: number; error: string } | { wallet: string; agreement: string; shares: { ws: string; minor: number }[] } {
+  const r = rooms.get(id)
+  if (r === undefined) return { status: 404, error: 'rooms: not found' }
+  if (r.owner_workspace_id !== ws) return { status: 403, error: "only the room's owner pays out its earnings" }
+  if (r.terms.split_rule !== 'equal') return { status: 400, error: 'rooms: invalid request: the stub splits only equally' }
+  const paid = r.members.filter((m) => m.role !== 'viewer' && m.terms_version === r.terms.version).sort((a, b) => a.joined_at.localeCompare(b.joined_at))
+  if (!Number.isInteger(amountMinor) || amountMinor <= 0 || paid.length === 0) return { status: 400, error: 'economy: invalid earnings payout: a split is of a positive amount' }
+  const each = Math.floor(amountMinor / paid.length)
+  const left = amountMinor - each * paid.length
+  return { wallet: walletID(r), agreement: `room ${r.id} terms v${r.terms.version} ${r.terms.split_rule}`, shares: paid.map((m, i) => ({ ws: m.workspace_id, minor: each + (i < left ? 1 : 0) })) }
+}
+
 /** B32.84 — a contribution's listing, or its lineage, as `ws` reads it; false when `p` names no contribution's listing. */
 export function roomListingRoute(res: ServerResponse, p: string, ws: string): boolean {
   const m = /^\/v1\/marketplace\/listings\/([^/]+)(\/lineage)?$/.exec(p)
