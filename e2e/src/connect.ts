@@ -530,3 +530,123 @@ export function connectApprove(): Scenario {
     },
   }
 }
+
+// B45.38 — "TRANSFER $500 TO MIKE THROUGH TALY", OVER MCP. One scenario, once a run, on a workspace of its own:
+//   connect-contact — on Lens's API the owner opens the company's USD account with $1,000.00 of test money, saves three
+//     payees, "Mike Jones", "Mike Smith" and "Grace Hopper", and registers this run's software passkey. An assistant
+//     connected through the consent screen asks prepare_payment_to_contact for $500 to "Mike": it answers "Which Mike?"
+//     with both Mikes and prepares nothing. For "Grace" it prepares one $500 request to Grace's payee, which the person
+//     approves with the passkey through the approval screen's own two calls. Then exactly one payment out of 50000 USD
+//     to Grace's payee posts and the company's account is down by 50000; the same approval sent again is refused 409
+//     and pays nothing.
+export function connectContact(): Scenario {
+  return {
+    id: 'connect-contact',
+    owner: 'talyvor-suite',
+    own: true,
+    items: ['B45.38'],
+    feature: 'Talyvor Connect',
+    title: 'an assistant asked to pay $500 to "Mike" with two saved Mikes asks which one and prepares nothing; to "Grace" it prepares ' +
+      "one $500 request, and the person's one passkey approval pays exactly 50000 USD to Grace's payee, a replayed approval nothing",
+    run: async (ctx) => {
+      const origin = new URL(ctx.app.page.url()).origin
+      const lensCall = async <T>(method: string, path: string, body: unknown, note: string) => {
+        const r = await call<T>(ctx, method, path, body)
+        ctx.evidence.push({ note, answer: said(r) })
+        return r
+      }
+      // 1. On Lens's API: the terms, the company's USD account with $1,000.00 of test money, three saved payees and a passkey.
+      const terms = await lensCall<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
+      for (const t of (terms.value?.terms ?? []).filter((x) => ['currency_accounts', 'payments_in', 'payments_out'].includes(x.capability) && x.accepted == null)) {
+        const ok = await lensCall('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
+        if (ok.status !== 201) return { pass: false, detail: `accepting ${t.capability}'s terms answered ${said(ok)}` }
+      }
+      const company = await lensCall<{ id: string }>('POST', '/v1/money/accounts', { currency: 'USD' }, 'the company USD account')
+      if (company.status !== 201 || company.value === undefined) return { pass: false, detail: `the company USD account answered ${said(company)}` }
+      const funded = await lensCall('POST', `/v1/money/accounts/${company.value.id}/test-money`, { amount_minor: 100000, idempotency_key: `e2e-${randomBytes(8).toString('hex')}` }, 'the owner puts $1,000.00 of test money in the company account')
+      if (funded.status !== 201) return { pass: false, detail: `putting test money in the company USD account answered ${said(funded)}` }
+      const payee: Record<string, string> = {}
+      for (const [i, name] of ['Mike Jones', 'Mike Smith', 'Grace Hopper'].entries()) {
+        const p = await lensCall<{ id: string }>('POST', '/v1/money/payees', { name, country: 'US', routing_number: '021000021', account_number: `12345678${i}` }, `the payee ${name}`)
+        if (p.status !== 201 || p.value === undefined) return { pass: false, detail: `saving ${name} answered ${said(p)}` }
+        payee[name] = p.value.id
+      }
+      const reg = await lensCall<{ challenge: string; rp_id: string }>('POST', '/v1/workspaces/{ws}/agents/passkeys/challenge', {}, 'the passkey registration challenge')
+      if (reg.value === undefined) return { pass: false, detail: `the passkey registration challenge answered ${said(reg)}` }
+      const key = softPasskey(reg.value.rp_id)
+      const registered = await lensCall('POST', '/v1/workspaces/{ws}/agents/passkeys', key.register(reg.value.challenge, 'Nightly contact passkey'), 'the passkey')
+      if (registered.status !== 201) return { pass: false, detail: `registering a passkey answered ${said(registered)}` }
+
+      interface Payment { id: string; payee_id: string; amount_minor: number; currency: string; status: string }
+      const money = async (note: string) => {
+        const accounts = await call<{ accounts: { id: string; test_minor: number }[] | null }>(ctx, 'GET', '/v1/money/accounts')
+        const payments = await call<{ payments: Payment[] | null }>(ctx, 'GET', '/v1/money/payments')
+        const pending = await call<{ requests: unknown[] | null }>(ctx, 'GET', '/v1/money/payment-requests?status=pending_approval')
+        const m = { held: (accounts.value?.accounts ?? []).find((a) => a.id === company.value?.id)?.test_minor ?? -1, payments: payments.value?.payments ?? [], pending: (pending.value?.requests ?? []).length }
+        ctx.evidence.push({ note: `${note}: the company USD account holds ${m.held} minor of test money; ${m.pending} requests pending; ${m.payments.length} payments out ${JSON.stringify(m.payments.map((p) => [p.payee_id, p.amount_minor, p.currency, p.status]))}` })
+        return m
+      }
+      const before = await money('before the assistant')
+
+      // 2. An assistant connects; "Mike" is two saved contacts, so it is asked which, and nothing is prepared.
+      const token = await connectAssistant(ctx, origin, 'e2e assistant (contact)')
+      if (typeof token !== 'string') return token
+      const { rpc, tool } = mcpTools(ctx, origin, token)
+      const wrong: string[] = []
+      const listed = (await rpc('tools/list')).tools ?? []
+      if (listed.find((t) => t.name === 'prepare_payment_to_contact')?.annotations?.destructiveHint !== true) {
+        return { pass: false, detail: `/mcp does not list prepare_payment_to_contact as destructive: ${JSON.stringify(listed.map((t) => t.name))}` }
+      }
+      const mike = await tool('prepare_payment_to_contact', { idempotency_key: `e2e-${randomBytes(8).toString('hex')}`, contact: 'Mike', currency: 'USD', amount_minor: 50000 })
+      const asked = (mike.structuredContent ?? {}) as { question?: string; contacts?: { payee_id: string }[]; id?: string }
+      const afterMike = await money('after "Mike"')
+      if (mike.isError !== false || !String(asked.question).startsWith('Which Mike?') || asked.id !== undefined ||
+        JSON.stringify((asked.contacts ?? []).map((c) => c.payee_id).sort()) !== JSON.stringify([payee['Mike Jones'], payee['Mike Smith']].sort())) {
+        wrong.push(`"Mike" did not ask which Mike with both saved Mikes: ${JSON.stringify(mike).slice(0, 400)}`)
+      }
+      if (afterMike.pending !== before.pending || afterMike.payments.length !== before.payments.length) wrong.push(`"Mike" prepared ${afterMike.pending - before.pending} requests and ${afterMike.payments.length - before.payments.length} payments`)
+
+      // 3. "Grace" is one saved contact: one $500 request to her payee, pending approval.
+      const grace = await tool('prepare_payment_to_contact', { idempotency_key: `e2e-${randomBytes(8).toString('hex')}`, contact: 'Grace', currency: 'USD', amount_minor: 50000, reference: 'Nightly transfer to Grace' })
+      const pr = (grace.structuredContent ?? {}) as { id?: string; status?: string; items?: { payee_id?: string; amount_minor?: number; currency?: string }[] }
+      const item = pr.items?.[0]
+      if (grace.isError !== false || pr.id === undefined || pr.status !== 'pending_approval' || pr.items?.length !== 1 || item?.payee_id !== payee['Grace Hopper'] || item?.amount_minor !== 50000 || item?.currency !== 'USD') {
+        wrong.push(`"Grace" did not prepare one $500 request to Grace's payee pending approval: ${JSON.stringify(grace).slice(0, 400)}`)
+        return { pass: false, detail: wrong.join('; ') }
+      }
+
+      // 4. One approval, signed with the passkey: the approval screen's own two calls.
+      const post = (path: string, body: unknown) => ctx.app.page.request.post(`${origin}/api/money/payment-requests/${pr.id}/${path}`, { headers: { Origin: origin }, data: body })
+      const prepared = await post('approval', { positions: [1] })
+      const toSign = await prepared.json() as { statement?: string; challenge?: string }
+      ctx.evidence.push({ note: `the statement to sign: ${prepared.status()} ${String(toSign.statement).slice(0, 600)}` })
+      if (prepared.status() !== 200) return { pass: false, detail: `the statement to approve answered ${prepared.status()} ${JSON.stringify(toSign).slice(0, 300)}` }
+      const approval = { statement: toSign.statement, assertion: key.assert(toSign.challenge ?? '') }
+      const approved = await post('approve', approval)
+      const paid = await approved.json() as { status?: string }
+      ctx.evidence.push({ note: `approve: ${approved.status()} ${JSON.stringify(paid).slice(0, 800)}` })
+      if (approved.status() !== 200 || paid.status !== 'approved') wrong.push(`approving answered ${approved.status()} ${JSON.stringify(paid).slice(0, 300)}`)
+
+      // 5. The money: exactly one payment out of 50000 USD, to Grace's payee, and the account down by it.
+      const after = await money('after the approval')
+      const fresh = after.payments.filter((p) => !before.payments.some((b) => b.id === p.id))
+      if (fresh.length !== 1 || fresh[0].payee_id !== payee['Grace Hopper'] || fresh[0].amount_minor !== 50000 || fresh[0].currency !== 'USD') {
+        wrong.push(`the approval posted ${JSON.stringify(fresh)}, not one payment of 50000 USD to Grace Hopper's payee ${payee['Grace Hopper']}`)
+      }
+      if (after.held !== before.held - 50000) wrong.push(`the company USD account went from ${before.held} to ${after.held} minor of test money, not down by 50000`)
+
+      // 6. The same approval again: refused, and nothing more is paid.
+      const replay = await post('approve', approval)
+      const again = await money('after the replayed approval')
+      ctx.evidence.push({ note: `the approval sent again: ${replay.status()} ${(await replay.text()).slice(0, 300)}` })
+      if (replay.status() !== 409) wrong.push(`the replayed approval answered ${replay.status()}, not 409`)
+      if (again.payments.length !== after.payments.length || again.held !== after.held) {
+        wrong.push(`the replayed approval moved money: ${after.payments.length} → ${again.payments.length} payments out, the account ${after.held} → ${again.held} minor`)
+      }
+      await ctx.app.page.goto(origin)
+
+      return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
+        : { pass: true, detail: `"Mike" asked "${asked.question}" with both Mikes and prepared nothing; "Grace" prepared request ${pr.id}, and one passkey approval paid ${fresh[0].id}: 50000 USD to Grace Hopper's payee, the account ${before.held} → ${after.held} minor; the replay answered 409 and paid nothing` }
+    },
+  }
+}

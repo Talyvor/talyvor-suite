@@ -112,7 +112,7 @@ import { poolIsolation } from './pool.ts'
 import { injectionExfil } from './injection.ts'
 import { fileBombBounded, ssrfRefused } from './ssrf.ts'
 import { csrfRefused, phoneBearer, scriptInert } from './session.ts'
-import { connectApprove, connectMCP, connectOAuth } from './connect.ts'
+import { connectApprove, connectContact, connectMCP, connectOAuth } from './connect.ts'
 import { mcpSDKAgentPay } from './mcpSDK.ts'
 import { keysNotForwarded, keysUnlisted } from './keys.ts'
 import { rateLimitsHold, workspaceLimitsRaised } from './ratelimit.ts'
@@ -5234,6 +5234,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B40.21 — an assistant prepares a two-payee batch over MCP, once a run, on a workspace of its own: one passkey approval
   // posts exactly the two payments, a replayed approval posts nothing, and raw bank details are refused.
   if (i === 8) list.push(connectApprove())
+  // B45.38 — "Transfer $500 to Mike" over MCP, once a run, on a workspace of its own: two saved Mikes ask which and prepare
+  // nothing; Grace prepares one $500 request, and one passkey approval pays exactly 50000 USD to her payee, a replay nothing.
+  if (i === 8) list.push(connectContact())
   // B40.25 — the official MCP SDK client on an agent's own key, once a run, on a workspace of its own: Lens's tools listed with
   // their annotations, agent_balance read, and agent_pay one entry of two postings, one on each agent's statement, summing to zero.
   if (i === 7) list.push(mcpSDKAgentPay(i))
