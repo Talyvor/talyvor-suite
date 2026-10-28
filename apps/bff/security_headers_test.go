@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,6 +89,42 @@ func TestPublicSitePolicyAddsOnlyMeta(t *testing.T) {
 		stripped := strings.NewReplacer(" https://connect.facebook.net", "", " https://www.facebook.com", "").Replace(got)
 		if stripped != today+"; connect-src 'self'" {
 			t.Errorf("GET %s: CSP without Meta's hosts is %q, want today's %q plus connect-src 'self'", path, stripped, today)
+		}
+	}
+}
+
+// B50.6 — a file Docs (or Lens, or Track) hands back is never a page or a script on the app's origin: one a browser
+// would render or run is a download whatever the upstream said, and a body with no type is never sniffed into HTML.
+func TestRelayedBodyIsNeverAPageOnTheAppOrigin(t *testing.T) {
+	for _, c := range []struct{ ct, cd, wantCT, wantCD string }{
+		{"text/html; charset=utf-8", `inline; filename="x.html"`, "text/html; charset=utf-8", "attachment"},
+		{"image/svg+xml", "", "image/svg+xml", "attachment"},
+		{"application/javascript", "", "application/javascript", "attachment"},
+		{"", "", "application/octet-stream", ""},
+		{"text/html,", `inline`, "application/octet-stream", "inline"},
+		{"text/html", `attachment; filename="runbook.html"`, "text/html", `attachment; filename="runbook.html"`},
+		{"application/pdf", `inline; filename="r.pdf"`, "application/pdf", `inline; filename="r.pdf"`},
+	} {
+		docs := &captureUpstream{}
+		docs.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == provisionPath {
+				serveFakeProvision(w, r)
+				return
+			}
+			w.Header()["Content-Type"] = []string{c.ct} // an empty one stays empty: nothing here may sniff
+			if c.cd != "" {
+				w.Header().Set("Content-Disposition", c.cd)
+			}
+			_, _ = w.Write([]byte(`<html><script>window.x=1</script></html>`))
+		}))
+		a, sess := productApp(t, nil, docs)
+		rec := cycleReq(t, a, sess, http.MethodGet, "/api/docs/spaces/s1/pages/p1/export?format=html", "")
+		docs.srv.Close()
+		if got := rec.Header().Get("Content-Type"); got != c.wantCT {
+			t.Errorf("upstream %q: Content-Type = %q, want %q", c.ct, got, c.wantCT)
+		}
+		if got := rec.Header().Get("Content-Disposition"); got != c.wantCD {
+			t.Errorf("upstream %q %q: Content-Disposition = %q, want %q", c.ct, c.cd, got, c.wantCD)
 		}
 	}
 }

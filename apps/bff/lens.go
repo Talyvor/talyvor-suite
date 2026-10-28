@@ -839,6 +839,11 @@ func (a *app) sameOriginWriteAllowed(r *http.Request) bool {
 			return true
 		}
 	}
+	// B50.6 — a browser also names where the request came from, and a page cannot forge it: anything but the app's
+	// own origin is refused even when the Origin matches (a proxy or extension that rewrote it). Absent on old browsers.
+	if s := r.Header.Get("Sec-Fetch-Site"); s != "" && s != "same-origin" {
+		return false
+	}
 	return r.Header.Get("Origin") == a.cfg.publicBaseURL
 }
 
@@ -1014,9 +1019,7 @@ func (a *app) forward(w http.ResponseWriter, r *http.Request, t tenant, upstream
 	}
 	defer resp.Body.Close()
 
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
+	relayContentType(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 }
@@ -1190,11 +1193,9 @@ func (a *app) forwardProductWith(w http.ResponseWriter, r *http.Request, product
 		return
 	}
 
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
+	relayContentType(w.Header(), resp.Header)
 	// A download's filename is the upstream's (Docs' page export names the file after the page).
-	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
+	if cd := resp.Header.Get("Content-Disposition"); cd != "" && w.Header().Get("Content-Disposition") == "" {
 		w.Header().Set("Content-Disposition", cd)
 	}
 	w.WriteHeader(resp.StatusCode)

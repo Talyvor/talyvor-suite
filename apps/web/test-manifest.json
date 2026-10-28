@@ -192,6 +192,7 @@
   "src/bffRequestFieldRegister.test.ts": 6,
   "src/BillingRoutes.test.tsx": 4,
   "src/buildIdentity.test.ts": 9,
+  "src/bundleScan.test.ts": 3,
   "src/CardHeaderHeading.test.tsx": 49,
   "src/caseAudit.test.tsx": 28,
   "src/caseCallSites.test.ts": 9,
@@ -280,5 +281,6 @@
   "src/typeScaleUnits.test.ts": 13,
   "src/upstreamCitations.test.ts": 8,
   "src/WalletFirstNav.test.tsx": 5,
-  "src/writeUnderDeadCredential.test.tsx": 15
+  "src/writeUnderDeadCredential.test.tsx": 15,
+  "src/xssPayloads.test.tsx": 5
 }

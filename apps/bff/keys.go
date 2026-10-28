@@ -88,9 +88,7 @@ func (a *app) handleKeyByID(w http.ResponseWriter, r *http.Request, t tenant) {
 	// this workspace's (or is already gone) — laundering that into a 200 would tell someone a
 	// credential was destroyed when it was not, which on a revoke is the dangerous direction to be
 	// wrong in.
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
+	relayContentType(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 }
@@ -154,9 +152,7 @@ func (a *app) handleMintKey(w http.ResponseWriter, r *http.Request, t tenant) {
 
 	// The one response that carries a credential: no cache layer may keep it.
 	w.Header().Set("Cache-Control", "no-store")
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
+	relayContentType(w.Header(), resp.Header)
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
 }

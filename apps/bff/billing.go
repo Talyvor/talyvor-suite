@@ -368,9 +368,7 @@ func (a *app) handleLXCCheckout(w http.ResponseWriter, r *http.Request, t tenant
 		// A Stripe session URL is a payable, workspace-bound handle: no cache
 		// layer may retain it, exactly as with the minted key.
 		w.Header().Set("Cache-Control", "no-store")
-		if ct := resp.Header.Get("Content-Type"); ct != "" {
-			w.Header().Set("Content-Type", ct)
-		}
+		relayContentType(w.Header(), resp.Header)
 		w.WriteHeader(http.StatusOK)
 		_, _ = io.Copy(w, resp.Body)
 

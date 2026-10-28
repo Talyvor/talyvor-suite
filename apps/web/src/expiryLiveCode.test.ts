@@ -147,7 +147,7 @@ const LIVE_SITES: {
     path: 'apps/web/vite.config.ts',
     // both live uses. What is left behind is the block comment at the top of the file that
     // DESCRIBES the plugin — the exact text that satisfied the old `grep -q 'stampBuild'`.
-    anchors: ['function stampBuild(): Plugin {', 'plugins: [react(), stampBuild()],'],
+    anchors: ['function stampBuild(): Plugin {', 'plugins: [react(), stampBuild(), scanBuild()],'],
     comment: '// ',
   },
   {
@@ -159,7 +159,7 @@ const LIVE_SITES: {
     // (a plugin that exists and never runs), and only this case can see it.
     label: 'the pipeline entry only, definition left live',
     path: 'apps/web/vite.config.ts',
-    anchors: ['plugins: [react(), stampBuild()],'],
+    anchors: ['plugins: [react(), stampBuild(), scanBuild()],'],
     comment: '// ',
   },
   {

@@ -103,9 +103,7 @@ func (a *app) voiceRelay(w http.ResponseWriter, r *http.Request, t tenant, path 
 		writeJSON(w, status, map[string]string{"error": refusal.Error})
 		return
 	}
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
+	relayContentType(w.Header(), resp.Header)
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, io.LimitReader(resp.Body, 32<<20))
 }
