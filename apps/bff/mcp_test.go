@@ -43,6 +43,9 @@ func (f *fakeLensForMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			`"approval_url":"https://app.talyvor.com/approve/pr-1","deep_link":"talyvor://approve/pr-1","items":[{},{}]}`)
 	case "GET /v1/money/payment-requests/pr-1":
 		_, _ = io.WriteString(w, `{"id":"pr-1","status":"pending_approval","approval_url":"https://app.talyvor.com/approve/pr-1","deep_link":"talyvor://approve/pr-1"}`)
+	case "GET /v1/money/payees":
+		_, _ = io.WriteString(w, `{"payees":[{"id":"py-mj","name":"Mike Jones"},{"id":"py-ms","name":"Mike  Smith"},{"id":"py-mk","name":"Mikel Hart"},`+
+			`{"id":"py-gh","name":"Grace Hopper"},{"id":"py-ak","name":"Alan Kay","needs_confirmation":true}]}`)
 	case "POST /v1/money/payees":
 		w.WriteHeader(http.StatusCreated)
 		_, _ = io.WriteString(w, `{"id":"py-new","name":"`+body["name"].(string)+`","check":"exact_match"}`)
@@ -170,7 +173,7 @@ func TestMCPNoToolMovesMoney(t *testing.T) {
 	})
 	args := map[string]any{"name": "Acme Ltd", "country": "GB", "iban": "GB33BUKB20201555555555", "expires_at": "2027-01-31T00:00:00Z",
 		"scope": map[string]any{"payees": []any{"py-1"}, "currencies": []any{"GBP"}}, "new_payee": map[string]any{"policy": "always_ask"},
-		"idempotency_key": "k", "payee_id": "py-1", "currency": "GBP", "amount_minor": 1, "listing_id": "l-1",
+		"idempotency_key": "k", "payee_id": "py-1", "currency": "GBP", "amount_minor": 1, "listing_id": "l-1", "contact": "Grace",
 		"request_id": "pr-1", "invoice_id": "inv-1", "items": []any{map[string]any{"payee_id": "py-1"}}}
 	allowed := map[string]bool{}
 	for _, r := range []string{"GET /v1/money/accounts", "GET /v1/workspaces/ws-ada/agents", "GET /v1/money/payees",
@@ -191,16 +194,49 @@ func TestMCPNoToolMovesMoney(t *testing.T) {
 		if tool.keeps == "payee" {
 			want = 0 // only kept, for the person to save
 		}
+		if tool.resolve != nil {
+			want = 2 // the read it resolves by, then its call
+		}
 		if len(lens.calls) != before+want {
 			t.Fatalf("%s made %d Lens calls, want %d", tool.name, len(lens.calls)-before, want)
 		}
-		if len(lens.calls) == before {
-			continue
+		for _, c := range lens.calls[before:] {
+			if f := strings.Fields(c); !allowed[f[0]+" "+f[1]] {
+				t.Fatalf("%s called %s %s, which is not one of the routes that prepare and never pay", tool.name, f[0], f[1])
+			}
 		}
-		f := strings.Fields(lens.calls[before])
-		if !allowed[f[0]+" "+f[1]] {
-			t.Fatalf("%s called %s %s, which is not one of the routes that prepare and never pay", tool.name, f[0], f[1])
+	}
+}
+
+// TestMCPPaymentToContact is B45.38's "Transfer $500 to Mike" on app.talyvor.com/mcp: two saved Mikes ask "Which Mike?"
+// and prepare nothing, nor does an unconfirmed contact or a stranger; "grace" prepares one request to Grace Hopper's
+// payee alone, whatever payee_id the assistant sent, and the contact's name never goes up as a field.
+func TestMCPPaymentToContact(t *testing.T) {
+	a, lens, _ := mcpApp(t)
+	token := seedOAuthToken(a)
+	a.oauth.grants.update("g-seed", func(g oauthGrant) oauthGrant {
+		g.Scope = strings.Join(oauthScopeNames(), " ")
+		g.Who.lensToken = "jwt-for-ws-ada"
+		return g
+	})
+	prepared := func() int { return strings.Count(strings.Join(lens.calls, "\n"), "POST /v1/money/payment-requests ") }
+	for contact, want := range map[string]string{"Mike": "Which Mike?", "alan": "Alan Kay is saved but not confirmed", "Mikel Jones": "No saved contact is called"} {
+		r := toolCall(t, a, token, "prepare_payment_to_contact", map[string]any{"idempotency_key": "k-" + contact, "contact": contact, "currency": "USD", "amount_minor": 50000})
+		q, _ := r["structuredContent"].(map[string]any)["question"].(string)
+		if r["isError"] != false || !strings.HasPrefix(q, want) || prepared() != 0 {
+			t.Fatalf("%q: %v, and %d requests prepared", contact, r, prepared())
 		}
+	}
+	if r := toolCall(t, a, token, "prepare_payment_to_contact", map[string]any{"idempotency_key": "k-mike", "contact": "Mike", "currency": "USD", "amount_minor": 50000}); len(r["structuredContent"].(map[string]any)["contacts"].([]any)) != 2 {
+		t.Fatalf("Which Mike? lists %v, want both Mikes", r["structuredContent"])
+	}
+	r := toolCall(t, a, token, "prepare_payment_to_contact", map[string]any{"idempotency_key": "k-grace", "contact": " grace ", "currency": "USD", "amount_minor": 50000, "payee_id": "py-mj"})
+	items, _ := lens.sent["POST /v1/money/payment-requests"]["items"].([]any)
+	if r["isError"] != false || r["structuredContent"].(map[string]any)["status"] != "pending_approval" || prepared() != 1 || len(items) != 1 {
+		t.Fatalf("grace: %v, %d requests prepared, items %v", r, prepared(), items)
+	}
+	if it := items[0].(map[string]any); it["payee_id"] != "py-gh" || it["amount_minor"] != float64(50000) || it["currency"] != "USD" || it["contact"] != nil {
+		t.Fatalf("grace's request went up as %v", it)
 	}
 }
 

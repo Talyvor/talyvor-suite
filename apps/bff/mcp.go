@@ -3,7 +3,8 @@ package main
 // Talyvor Connect, part 2 (B40.7): the MCP server at https://app.talyvor.com/mcp, which prepares and never pays.
 //
 // An assistant connected by part 1 (oauth.go) calls these tools as the person and workspace its token names, on that
-// person's own Lens credential. Each tool is one Lens route, and none of them moves money: the request tools prepare a
+// person's own Lens credential. Each tool is one Lens route (prepare_payment_to_contact first reads the saved payees to find
+// the one the person named), and none of them moves money: the request tools prepare a
 // payment request (Lens B40.3) that waits for the person to approve it in the app, where B40.5 pays it. Anthropic does
 // not allow software that transfers money for its users, and OpenAI bans executing money transfers, so no tool here
 // approves, pays or pays out — TestMCPNoToolMovesMoney holds every tool's route to that.
@@ -92,6 +93,8 @@ type mcpTool struct {
 	props                           map[string]any
 	required                        []string
 	call                            func(t tenant, g oauthGrant, args mcpArgs, raw json.RawMessage) (lensCall, error)
+	// resolve, when set, reads Lens first: it returns the arguments call goes up with, or an answer for the assistant and no call.
+	resolve func(a *app, ctx context.Context, t tenant, args mcpArgs) (mcpArgs, map[string]any, error)
 }
 
 var errMCPArgs = errors.New("the arguments are not the tool's")
@@ -266,6 +269,13 @@ var mcpTools = []mcpTool{
 		description: "Prepares one payment to a saved payee as a request the person approves in Talyvor. It pays nothing.",
 		props:       withIdemKey(mcpItemArgs), required: []string{"idempotency_key", "payee_id", "currency", "amount_minor"},
 		call: mcpPrepare(mcpOneItem)},
+	{name: "prepare_payment_to_contact", title: "Prepare a payment to a contact for approval", scope: "payments:prepare", kind: mcpSends,
+		description: "Prepares one payment to the person's saved, confirmed contact named contact (\"Mike\") as a request the person approves in Talyvor. " +
+			"It pays nothing, and takes no payment details: when no contact or several match, it answers with a question for the person.",
+		props: withIdemKey(map[string]any{"contact": map[string]any{"type": "string", "maxLength": 140, "description": "The contact's name as the person said it."},
+			"currency": mcpItemArgs["currency"], "amount_minor": mcpItemArgs["amount_minor"], "reference": mcpItemArgs["reference"]}),
+		required: []string{"idempotency_key", "contact", "currency", "amount_minor"},
+		resolve:  (*app).mcpContact, call: mcpPrepare(mcpOneItem)},
 	{name: "prepare_batch", title: "Prepare payments for approval", scope: "payments:prepare", kind: mcpSends,
 		description: "Prepares several payments to saved payees as one request the person approves once in Talyvor. It pays nothing.",
 		props: withIdemKey(map[string]any{"items": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{
@@ -478,6 +488,19 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 	}
 	var args mcpArgs
 	_ = json.Unmarshal(p.Arguments, &args)
+	if tool.resolve != nil {
+		next, answer, err := tool.resolve(a, ctx, t, args)
+		switch {
+		case errors.Is(err, errMCPArgs):
+			return mcpRefusal(req.ID, err.Error())
+		case err != nil:
+			log.Printf("bff: mcp %s for client %q: %v", tool.name, g.ClientName, err)
+			return mcpRefusal(req.ID, "Talyvor could not answer just now. Try again shortly.")
+		case answer != nil:
+			return mcpOK(req.ID, map[string]any{"content": []map[string]any{{"type": "text", "text": answer["question"]}}, "structuredContent": answer, "isError": false})
+		}
+		args = next
+	}
 	c, err := tool.call(t, g, args, p.Arguments)
 	if err != nil {
 		return mcpRefusal(req.ID, err.Error())
@@ -526,6 +549,62 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 		}
 	}
 	return mcpOK(req.ID, map[string]any{"content": content, "structuredContent": out, "isError": false})
+}
+
+// mcpContact is B45.14's "Transfer $500 to Mike" on this server, by Lens's own prepare_transfer_to_contact rule
+// (talyvor-lens economy.PayeesNamed): contact names a saved payee when its name holds it as whole words, in any case
+// ("mike" finds "Mike Jones", never "Mikel"). Exactly one confirmed payee goes up as the one item's payee_id; none, an
+// unconfirmed one or several answer a question and prepare nothing. Details from the chat never become a payee.
+func (a *app) mcpContact(ctx context.Context, t tenant, args mcpArgs) (mcpArgs, map[string]any, error) {
+	said := strings.Join(strings.Fields(args.str("contact")), " ")
+	if said == "" || len(said) > 140 {
+		return nil, nil, fmt.Errorf("%w: contact is required, at most 140 characters", errMCPArgs)
+	}
+	status, raw, err := a.mcpLens(ctx, t, lensCall{method: http.MethodGet, path: "/v1/money/payees"})
+	var list struct {
+		Payees []struct {
+			ID                json.RawMessage `json:"id"` // forwarded as Lens wrote it
+			Name              string          `json:"name"`
+			NeedsConfirmation bool            `json:"needs_confirmation"`
+		} `json:"payees"`
+	}
+	if err == nil && status != http.StatusOK {
+		err = fmt.Errorf("lens answered GET /v1/money/payees %d", status)
+	}
+	if err == nil {
+		err = json.Unmarshal(raw, &list)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	confirmed, unconfirmed, named, ids := []map[string]any{}, []string{}, []string{}, []json.RawMessage{}
+	q := " " + strings.ToLower(said) + " "
+	for _, p := range list.Payees {
+		var id string
+		switch {
+		case !strings.Contains(" "+strings.ToLower(strings.Join(strings.Fields(p.Name), " "))+" ", q):
+		case p.NeedsConfirmation:
+			unconfirmed = append(unconfirmed, p.Name)
+		case json.Unmarshal(p.ID, &id) == nil && id != "":
+			confirmed = append(confirmed, map[string]any{"payee_id": id, "name": p.Name})
+			named, ids = append(named, fmt.Sprintf("%s (payee_id %s)", p.Name, id)), append(ids, p.ID)
+		}
+	}
+	ask := func(question string) (mcpArgs, map[string]any, error) {
+		return nil, map[string]any{"question": question, "contacts": confirmed}, nil
+	}
+	switch {
+	case len(confirmed) > 1:
+		return ask(fmt.Sprintf("Which %s? The saved contacts called %s are %s: ask the person which they mean, then prepare_payment to that contact's payee_id.",
+			said, said, strings.Join(named, " and ")))
+	case len(confirmed) == 0 && len(unconfirmed) > 0:
+		return ask(strings.Join(unconfirmed, ", ") + " is saved but not confirmed yet: ask the person to confirm them in the app first.")
+	case len(confirmed) == 0:
+		return ask(fmt.Sprintf("No saved contact is called %q: ask the person to add them in the app. Payment details from the chat are never used.", said))
+	}
+	next := args.without("contact", "payee_id")
+	next["payee_id"] = ids[0]
+	return next, nil, nil
 }
 
 // mcpTenant is the grant's workspace and Lens credential, re-minted by provisioning near its expiry as a session's is
