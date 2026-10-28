@@ -52,6 +52,14 @@ export interface SimulatedRequest {
   model?: string
   provider?: string
   payee?: { kind: 'agent' | 'listing' | 'company' | 'merchant'; id: string }
+  /** B41.4 — judge the payment as though this allowance for its payee were saved; it is not. */
+  always_allow?: PayeeAllowance
+}
+
+/** B41.4 — Lens economy.PayeeAllowance: up to this much to one payee a day or a month, without approval. */
+export interface PayeeAllowance {
+  amount_ulxc: number
+  per: 'day' | 'month'
 }
 
 /** Lens economy.RuleSimulation (B28.306): what the agent's rules would say to it. Nothing was spent or posted. */
@@ -212,6 +220,13 @@ export interface AgentRules {
    * Lens refuses a payment that would take the day's total to that payee past its cap. A save without it keeps the caps.
    */
   payee_daily_limits_ulxc?: Record<string, number> | null
+  /** B41.4 — payee_daily_limits_ulxc over the month (Lens B41.104). A save without it keeps the caps. */
+  payee_monthly_limits_ulxc?: Record<string, number> | null
+  /**
+   * B41.4 — the owner's "always allow", by payee id: what the agent may pay that payee in a day or a month without
+   * approval (Lens B41.104). Saved from an approval; a rules save without it keeps them.
+   */
+  payee_allowances?: Record<string, PayeeAllowance> | null
   active_from: string
   active_until: string
   timezone: string
@@ -590,9 +605,10 @@ export const agentBankApi = {
   pause: (id: string, reason: string) => send<{ paused: boolean }>('POST', `/api/agents/${e(id)}/pause`, { reason }),
   resume: (id: string) => send<{ paused: boolean }>('POST', `/api/agents/${e(id)}/resume`),
   /** B19.10: once the workspace has a passkey, a decision carries an assertion over the approval's challenge. */
-  decide: (approvalID: string, decision: 'approve' | 'deny', assertion?: PasskeyAssertion) =>
+  /** B41.4 — approving with always_allow also saves that allowance for the approval's payee. */
+  decide: (approvalID: string, decision: 'approve' | 'deny', assertion?: PasskeyAssertion, alwaysAllow?: PayeeAllowance) =>
     decision === 'approve'
-      ? send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/approve`, assertion ? { assertion } : {})
+      ? send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/approve`, { ...(assertion ? { assertion } : {}), ...(alwaysAllow ? { always_allow: alwaysAllow } : {}) })
       : send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/deny`, assertion ? { assertion } : {}),
   // B19.10 — passkeys and push, kept by Lens (B19.16).
   passkeys: () => getJSON<{ passkeys: Passkey[] | null }>('/api/agents/passkeys', { passkeys: 'list' }),

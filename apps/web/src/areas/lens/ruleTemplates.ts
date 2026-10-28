@@ -26,6 +26,7 @@ const OPEN: Omit<AgentRules, 'max_per_request_ulxc' | 'daily_limit_ulxc' | 'mont
   allowed_payees: [],
   blocked_payees: [],
   payee_daily_limits_ulxc: {},
+  payee_monthly_limits_ulxc: {},
   active_from: '',
   active_until: '',
   timezone: 'UTC',

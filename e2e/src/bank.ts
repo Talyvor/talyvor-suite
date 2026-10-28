@@ -3589,6 +3589,71 @@ export function approvalsInbox(seed: number): Scenario {
   }
 }
 
+/**
+ * B41.4 — approve and make it a rule. A 1 LXC payment above a 0.5 LXC approval amount waits in Approvals; on its row
+ * "Approve and always allow this" is set to 3 LXC a month, previewed in the rule simulator, and approved. Lens must hold
+ * that allowance for the payee on the agent's rules, and the next, different 1 LXC payment to that payee is paid at once
+ * — not held — read back from the payer's own pay line and balance.
+ */
+export function approveAlwaysAllow(seed: number): Scenario {
+  return {
+    id: 'approve-always-allow',
+    owner: 'talyvor-suite',
+    items: ['B41.4'],
+    agents: 2,
+    title: 'approve and always allow: an approval saves "up to 3 LXC a month" for its payee, and the next payment to that payee under it is paid, not held',
+    run: (ctx) => withBank(ctx, async (bank) => {
+      const payer = await openAgent(ctx, bank, `Allow payer ${seed}`)
+      if (typeof payer === 'string') return fail(payer)
+      const payee = await openAgent(ctx, bank, `Allow payee ${seed}`)
+      if (typeof payee === 'string') return fail(payee)
+      let err = await bank.move(payer, 6e6, 'Fund')
+      if (err !== undefined) return fail(`funding was refused: ${err}`)
+      err = await bank.setLimit(payer, 'Ask a person above', 500_000)
+      if (err !== undefined) return fail(`the approval amount was not saved: ${err}`)
+      const held = await bank.pay(payer, payee, 1e6, `allow ${seed} first`)
+      if (!/waiting in Approvals/.test(held)) return fail(`a payment above the approval amount was not held for a person: "${held}"`)
+
+      const { page } = bank
+      await page.getByRole('navigation', { name: 'Sections' }).locator('a[href="/approvals"]').click()
+      await page.getByRole('heading', { level: 1, name: 'Approvals' }).waitFor({ timeout: ACTION_TIMEOUT_MS })
+      const row = page.locator('[data-approval]').filter({ hasText: `${payer.name} wants to pay ${payee.name} ` }).first()
+      await row.getByRole('button', { name: 'Approve and always allow this…' }).click({ timeout: ACTION_TIMEOUT_MS })
+      await row.getByLabel(`Always allow ${payer.name} to pay ${payee.name} up to, in LXC`).fill('3')
+      await row.getByLabel('Each').selectOption('month')
+      await row.getByRole('button', { name: 'Preview', exact: true }).click()
+      const preview = row.getByTestId('always-allow-preview').or(row.getByRole('alert')).first()
+      await preview.waitFor({ timeout: ACTION_TIMEOUT_MS })
+      const previewed = (await preview.innerText()).trim()
+      ctx.evidence.push({ note: `the preview of up to 3 LXC a month: ${previewed}` })
+      if (!/^With this rule, /.test(previewed)) return fail(`the simulator did not preview the rule as letting the payment through: "${previewed}"`)
+      await row.getByRole('button', { name: /^Approve and always allow( with Face ID)?$/ }).click()
+      const said = page.getByRole('status').filter({ hasText: /From now on/ }).or(page.getByRole('alert')).first()
+      await said.waitFor({ timeout: ACTION_TIMEOUT_MS })
+      const text = (await said.innerText()).trim()
+      ctx.evidence.push({ note: `Approve and always allow: ${text}` })
+      if (!/From now on/.test(text)) return fail(`approving with always allow was not confirmed: "${text}"`)
+
+      const rules = await ctx.env.lens.agentRules(ctx.app.user, payer.id)
+      const saved = rules.payee_allowances?.[payee.id]
+      ctx.evidence.push({ note: `Lens's allowance for ${payee.name}: ${JSON.stringify(saved)}` })
+      if (saved?.amount_ulxc !== 3e6 || saved.per !== 'month') return fail(`Lens holds ${JSON.stringify(saved)} for ${payee.name}, not up to 3000000 µLXC a month`)
+
+      const before = (await ctx.env.lens.agentLines(ctx.app.user, payer.id)).filter((l) => l.kind === 'pay').length
+      const paid = await bank.pay(payer, payee, 1e6, `allow ${seed} next`)
+      ctx.evidence.push({ note: `the next 1 LXC payment to ${payee.name}: ${paid}` })
+      if (!/^Paid /.test(paid)) return fail(`the next payment, under the allowance, was not paid: "${paid}"`)
+      const pending = (await ctx.env.lens.agentApprovals(ctx.app.user)).filter((x) => x.agent_id === payer.id && x.status === 'pending')
+      if (pending.length !== 0) return fail(`the next payment filed an approval: ${JSON.stringify(pending)}`)
+      const pays = (await ctx.env.lens.agentLines(ctx.app.user, payer.id)).filter((l) => l.kind === 'pay')
+      if (pays.length !== before + 1 || pays[0].amount_ulxc !== -1e6) return fail(`${payer.name} has ${pays.length - before} new pay line(s), not one of -1000000 µLXC: ${JSON.stringify(pays)}`)
+      const left = agentIn(await bookOf(ctx), payer.id)?.balance_ulxc
+      if (left !== 5e6) return fail(`${payer.name} holds ${left} µLXC after one 1 LXC payment, not 5000000`)
+      return { pass: true, detail: `approved with "up to 3 LXC a month": Lens holds {3000000, month} for ${payee.name}; the next 1 LXC payment was paid at once — one pay line of -1000000 µLXC, no approval filed, ${payer.name} holds 5000000 µLXC` }
+    }),
+  }
+}
+
 export function companyPayment(seed: number, partner: number): Scenario {
   const amount = 700_000
   return {

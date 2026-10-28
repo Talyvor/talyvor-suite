@@ -5,7 +5,8 @@ import { Link } from 'react-router-dom'
 import { Button, Pill, inlineLink } from '@talyvor/ui'
 
 import { APPROVALS_KEY, BOOK_KEY, PASSKEYS_KEY, deviceText } from '../lens/AgentBank'
-import { type AgentApproval, AgentBankError, agentBankApi, refusalText } from '../lens/agentBankApi'
+import { AllowedUpTo, AlwaysAllow } from '../lens/AlwaysAllow'
+import { type AgentApproval, AgentBankError, type PayeeAllowance, agentBankApi, refusalText } from '../lens/agentBankApi'
 import { formatWhen } from '../lens/format'
 import { Lxc, pegQuery } from '../lens/money'
 import { passkeysSupported, registerThisDevice, signApproval } from '../lens/passkeys'
@@ -56,13 +57,20 @@ export function ApprovalCards() {
   })
 
   const decide = useMutation({
-    mutationFn: async ({ a, decision }: { a: AgentApproval; decision: 'approve' | 'deny' }): Promise<Outcome> => {
-      await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined)
+    mutationFn: async ({ a, decision, allow }: { a: AgentApproval; decision: 'approve' | 'deny'; allow?: PayeeAllowance }): Promise<Outcome> => {
+      await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined, allow)
       const who = nameOf(a.agent_id)
       if (decision === 'deny') return { ok: true, text: <>Denied. {who}’s {a.payee ? 'payment' : 'request'} will be refused.</> }
+      // B41.4 — the rule saved with the approval, said once whatever happens to the payment.
+      const rule = allow ? (
+        <>
+          {' '}
+          From now on {who} pays {a.payee?.name || a.payee?.id} <AllowedUpTo allow={allow} /> without asking you.
+        </>
+      ) : null
       const payee = a.payee
       if (payee?.kind !== 'agent' || !agents.some((x) => x.id === payee.id)) {
-        return { ok: true, text: <>Approved. {who}’s next identical request goes through, once.</> }
+        return { ok: true, text: <>Approved. {who}’s next identical request goes through, once.{rule}</> }
       }
       // The payment itself, sent once: Lens lets it through against this approval and posts it.
       try {
@@ -71,7 +79,7 @@ export function ApprovalCards() {
           ok: true,
           text: (
             <>
-              Approved and paid <Lxc ulxc={paid.amount_ulxc} /> from {who} to {nameOf(paid.to_agent_id)}.{' '}
+              Approved and paid <Lxc ulxc={paid.amount_ulxc} /> from {who} to {nameOf(paid.to_agent_id)}.{rule}{' '}
               <Link className={inlineLink} to={statementLineHref({ agent_id: paid.from_agent_id, entry_id: paid.entry_id })}>
                 See it on {who}’s statement
               </Link>
@@ -80,7 +88,7 @@ export function ApprovalCards() {
         }
       } catch (err) {
         if (!(err instanceof AgentBankError)) throw err
-        return { ok: false, text: <>Approved, but the payment was refused: {refusalText(err)} It goes through when {who} sends it again.</> }
+        return { ok: false, text: <>Approved, but the payment was refused: {refusalText(err)} It goes through when {who} sends it again.{rule}</> }
       }
     },
     onSuccess: (outcome, { a }) => setDone((d) => ({ ...d, [a.id]: { a, outcome } })),
@@ -167,6 +175,15 @@ export function ApprovalCards() {
                     </span>
                   ) : null}
                 </div>
+              ) : null}
+              {open ? (
+                <AlwaysAllow
+                  a={a}
+                  agentName={nameOf(a.agent_id)}
+                  signed={signed}
+                  disabled={decide.isPending}
+                  onApprove={(allow) => decide.mutate({ a, decision: 'approve', allow })}
+                />
               ) : null}
               {open && !signed && keys.isSuccess && passkeysSupported() ? (
                 <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">

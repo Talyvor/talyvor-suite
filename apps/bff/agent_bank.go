@@ -38,7 +38,7 @@ import (
 //	POST /api/agents/{id}/card          {cardholder}   B19.24: issue it one, the cardholder's name and billing address
 //	POST /api/agents/{id}/pay           {"to_agent_id", "amount_ulxc", "memo"}   pay another of this workspace's agents
 //	GET  /api/agents/approvals                         what the agents' rules sent to a person, newest first
-//	POST /api/agents/approvals/{id}/approve, …/deny    decide one
+//	POST /api/agents/approvals/{id}/approve, …/deny    decide one; approve {"always_allow": {"amount_ulxc", "per"}} also saves it for the payee (B41.4)
 //
 // Lens decides who may move money (the workspace's owner or an admin) and judges every rule. A
 // refusal comes back with Lens's status AND its sentence — which rule, what the agent holds, which
@@ -245,9 +245,11 @@ func (a *app) handleAgentRules(w http.ResponseWriter, r *http.Request, t tenant)
 		// B28.28 — what the agent may pay one payee in a day, keyed by the payee's id as the lists above name
 		// it. Absent (null) keeps the caps Lens holds; sent, it replaces them whole, so a payee left out has no cap.
 		PayeeDailyLimitsULXC map[string]int64 `json:"payee_daily_limits_ulxc"`
-		ActiveFrom           string           `json:"active_from"`
-		ActiveUntil          string           `json:"active_until"`
-		Timezone             string           `json:"timezone"`
+		// B41.4 — the same over the month (Lens B41.104); absent keeps, sent replaces whole.
+		PayeeMonthlyLimitsULXC map[string]int64 `json:"payee_monthly_limits_ulxc"`
+		ActiveFrom             string           `json:"active_from"`
+		ActiveUntil            string           `json:"active_until"`
+		Timezone               string           `json:"timezone"`
 		// B19.6 — Lens replaces every other rule on a save, so this is carried back as it was read.
 		PauseOnUnusualSpend bool `json:"pause_on_unusual_spend"`
 	}
@@ -255,7 +257,7 @@ func (a *app) handleAgentRules(w http.ResponseWriter, r *http.Request, t tenant)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: none
+	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_licences, max_commitment_ulxc, may_subscribe, payee_allowances
 	body, _ := json.Marshal(in)
 	a.agentBankRelay(w, r, t, http.MethodPut, suffix, body)
 }
@@ -265,6 +267,13 @@ func (a *app) handleAgentRules(w http.ResponseWriter, r *http.Request, t tenant)
 type simulatedPayee struct {
 	Kind string `json:"kind"`
 	ID   string `json:"id"`
+}
+
+// payeeAllowance is Lens's economy.PayeeAllowance (B41.104): what an agent may pay one payee in a day or a month
+// without approval — the owner's "always allow" (B41.4).
+type payeeAllowance struct {
+	AmountULXC int64  `json:"amount_ulxc"`
+	Per        string `json:"per"`
 }
 
 // handleAgentRulesSimulate — POST /api/agents/{id}/rules/simulate (B28.30): would the agent's rules let this
@@ -288,12 +297,14 @@ func (a *app) handleAgentRulesSimulate(w http.ResponseWriter, r *http.Request, t
 		Provider   string          `json:"provider"`
 		Payee      *simulatedPayee `json:"payee"`
 		At         *time.Time      `json:"at"`
+		// B41.4: judged as though this allowance for the payee were saved (Lens B41.104); it is not.
+		AlwaysAllow *payeeAllowance `json:"always_allow,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentRulesSimulateBody: none
+	// UPSTREAM-BINDS-ONLY lensAgentRulesSimulateBody: licence
 	body, _ := json.Marshal(in)
 	a.agentBankRelay(w, r, t, http.MethodPost, suffix, body)
 }
@@ -650,8 +661,10 @@ func (a *app) handleAgentDecision(decision string) func(http.ResponseWriter, *ht
 		}
 		// B19.10: once the workspace has a passkey, Lens takes the decision only with an assertion over
 		// this approval's challenge. A decision without one is sent as before — Lens says whether it may.
+		// B41.4: always_allow (Lens B41.104) approves and saves an allowance for the payee; Lens judges it.
 		var in struct {
-			Assertion *passkeyAssertion `json:"assertion"`
+			Assertion   *passkeyAssertion `json:"assertion,omitempty"`
+			AlwaysAllow *payeeAllowance   `json:"always_allow,omitempty"`
 		}
 		if r.ContentLength != 0 {
 			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil && err != io.EOF {
@@ -660,9 +673,9 @@ func (a *app) handleAgentDecision(decision string) func(http.ResponseWriter, *ht
 			}
 		}
 		var body []byte
-		if in.Assertion != nil {
+		if in.Assertion != nil || in.AlwaysAllow != nil {
 			// UPSTREAM-BINDS-ONLY lensApprovalDecisionBody: none
-			body, _ = json.Marshal(map[string]*passkeyAssertion{"assertion": in.Assertion})
+			body, _ = json.Marshal(in)
 		}
 		a.agentBankRelay(w, r, t, http.MethodPost, "/agents/approvals/"+url.PathEscape(id)+"/"+decision, body)
 	}
