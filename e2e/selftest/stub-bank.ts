@@ -209,7 +209,7 @@ interface Rules {
   may_subscribe: boolean
 }
 interface Agent {
-  id: string; ws: string; name: string; owner_user_id: string; created_at: string; keys: string[]; paused_at?: string; paused_reason?: string; rules: Rules; description?: string; archived_at?: string; versions?: RulesVersion[]; boosts?: Boost[]
+  id: string; ws: string; name: string; owner_user_id: string; created_at: string; keys: string[]; paused_at?: string; paused_reason?: string; rules: Rules; description?: string; archived_at?: string; wallet_kind?: string; fiat_currency?: string; versions?: RulesVersion[]; boosts?: Boost[]
   /** B34.4 — its address besides its wallet ID, and its automatic top-up */
   handle?: string; topup?: { below_ulxc: number; to_ulxc: number }
   /** B32.85 — room for a room's wallet (Lens B32.32): one key nobody holds, and not counted toward the plan's agents. */
@@ -433,6 +433,14 @@ interface ReportRun { id: string; year: number; funding: string; format: string;
 /** B32.90 — Lens's controlled list of what a listing can do (market_capabilities, migration 0219), in its order. */
 const MARKET_CAPABILITIES = ['summarize', 'extract', 'translate', 'classify', 'code-review', 'sql', 'legal', 'finance', 'write', 'research', 'data-analysis', 'customer-support']
 
+/** B48.1 — an agent's kind and its fiat currency, as Lens allows them; and the assets of its wallets, its fiat one first. */
+const WALLET_KIND_REFUSED = "economy: an agent's wallet kind is fiat, crypto or both, its fiat currency GBP, EUR or USD"
+const walletKindOK = (kind: string, fiat: string): boolean => ['fiat', 'crypto', 'both'].includes(kind) && ['GBP', 'EUR', 'USD'].includes(fiat)
+const walletAssets = (a: { wallet_kind?: string; fiat_currency?: string }): string[] => {
+  const fiat = a.fiat_currency ?? 'EUR'
+  return a.wallet_kind === 'fiat' ? [fiat] : a.wallet_kind === 'both' ? [fiat, 'USDC'] : ['USDC']
+}
+
 export class Bank {
   private readonly d: BankDeps
   /** B32.88 — the rooms' room_* tools on an agent's key (stub-rooms.ts roomAgentTool), as stub-lens.ts sets them. */
@@ -529,6 +537,16 @@ export class Bank {
   /** B30.109 — the compliance cases screening opened, in `status` ('' for all), newest first (stub-payees.ts). */
   complianceCases(status: string): unknown[] {
     return this.payees.complianceCases(status)
+  }
+
+  /** B48.1 — `agentID`'s wallet in `asset` (the owner's for ''), as Lens answers it: the sandbox's, so no receive details and mode TEST. */
+  private walletOf(ws: string, agentID: string, asset: string): Record<string, unknown> {
+    const w = this.payees.wallet(ws, agentID, asset)
+    return { account_id: w.id, agent_id: agentID, asset, partner: 'sandbox', balance_minor: w.balance_minor, test_minor: w.test_minor, live_minor: w.live_minor, receive: { asset: '' }, mode: 'TEST' }
+  }
+
+  private walletsOf(a: Agent): Record<string, unknown> {
+    return { agent_id: a.id, wallet_kind: a.wallet_kind ?? 'crypto', fiat_currency: a.fiat_currency ?? 'EUR', wallets: walletAssets(a).map((asset) => this.walletOf(a.ws, a.id, asset)) }
   }
 
   /** B40.29 — the payment-request routes on an agent's own key, which Lens judges as the agent itself. */
@@ -2037,11 +2055,17 @@ export class Bank {
       return json(res, 200, { id: ws.id, name: this.workspaceNames.get(ws.id) ?? ws.id }), true
     }
     if (rest === '/agents' && method === 'POST') {
-      const { name = '' } = await this.body<{ name?: string }>(req)
+      const { name = '', wallet_kind = 'crypto', fiat_currency = 'EUR' } = await this.body<{ name?: string; wallet_kind?: string; fiat_currency?: string }>(req)
       if (name === '') return json(res, 400, { error: 'body must be {"name": "<agent name>"}' }), true
-      const a: Agent = { id: id('agt_'), ws: ws.id, name, owner_user_id: ws.id, created_at: now, keys: [], rules: noRules() }
+      if (!walletKindOK(wallet_kind, fiat_currency)) return json(res, 400, { error: WALLET_KIND_REFUSED }), true
+      const a: Agent = { id: id('agt_'), ws: ws.id, name, owner_user_id: ws.id, created_at: now, keys: [], rules: noRules(), wallet_kind, fiat_currency }
       this.agents.set(a.id, a)
       return json(res, 201, { ...a, rules: undefined, balance_ulxc: 0, spent_ulxc: 0 }), true
+    }
+    // B48.1 — the owner's wallet in each asset their agents' wallets are in.
+    if (rest === '/agents/owner-wallets' && method === 'GET') {
+      const assets = [...new Set([...this.agents.values()].filter((a) => a.ws === ws.id && a.archived_at === undefined).flatMap(walletAssets))].sort()
+      return json(res, 200, { wallets: assets.map((asset) => this.walletOf(ws.id, '', asset)) }), true
     }
     if (rest === '/agents/approvals') {
       return json(res, 200, { approvals: this.approvals.filter((a) => a.ws === ws.id).map(({ fingerprint: _f, ws: _w, ...a }) => a) }), true
@@ -2276,6 +2300,24 @@ export class Bank {
       // B46.4 — the agent's wallet, as the sandbox serves it: nothing to pay into, mode TEST.
       if (action === '/wallet' && method === 'GET') {
         return json(res, 200, { account_id: `macc_wallet_${a.id}`, agent_id: a.id, asset: 'USDC', partner: 'sandbox', balance_minor: 0, test_minor: 0, live_minor: 0, receive: {}, mode: 'TEST' }), true
+      }
+      // B48.1 — an agent's wallets, one of each kind it is; a kind removed closes its wallet, refused 409 while it holds money.
+      if (action === '/wallets' && method === 'GET') return json(res, 200, this.walletsOf(a)), true
+      if (action === '/wallet-kind' && method === 'PUT') {
+        const b = await this.body<{ wallet_kind?: string; fiat_currency?: string }>(req)
+        const kind = b.wallet_kind ?? ''
+        const fiat = b.fiat_currency || a.fiat_currency || 'EUR'
+        if (!walletKindOK(kind, fiat)) return json(res, 400, { error: WALLET_KIND_REFUSED }), true
+        const kept = walletAssets({ wallet_kind: kind, fiat_currency: fiat })
+        const closing = walletAssets(a).filter((asset) => !kept.includes(asset)).map((asset) => this.payees.wallet(ws.id, a.id, asset))
+        const full = closing.find((w) => w.test_minor !== 0 || w.live_minor !== 0)
+        // STUB_BREAK=wallet-kind-closes-full — the wallet of a kind removed is closed with its money in it.
+        if (full !== undefined && !this.broken('wallet-kind-closes-full')) {
+          return json(res, 409, { error: `economy: the wallet still holds money: move it to the owner's wallet first: its ${full.currency} wallet holds ${full.currency} ${(full.balance_minor / 100).toFixed(2)}` }), true
+        }
+        for (const w of closing) w.status = 'closed'
+        Object.assign(a, { wallet_kind: kind, fiat_currency: fiat })
+        return json(res, 200, this.walletsOf(a)), true
       }
       if (action === '/rules' && method === 'GET') return json(res, 200, a.rules), true
       if (action === '/rules' && method === 'PUT') {

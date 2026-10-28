@@ -78,6 +78,7 @@ import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
+import { agentWalletKinds } from './agentWalletKinds.ts'
 import { speechThroughLens } from './speech.ts'
 import { capabilityTerms } from './capabilityTerms.ts'
 import { verificationScreen } from './verificationScreen.ts'
@@ -5429,6 +5430,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B46.12 — the money layer's contract on the sandbox, once a run, on a workspace of its own: a new agent has a wallet; £20.00 over
   // its mandate waits for approval with nothing moved; approved once it is one payment out, the replay 409; a refused one half-done in nothing.
   if (i === 3) list.push(moneyLayerContract())
+  // B48.23 — agents of each kind own their wallets, once a run, on a workspace of its own: fiat GBP, crypto USDC, both EUR + USDC,
+  // each its own account; removing the kind whose wallet holds test money answers 409 and the ledger keeps it open; one owner wallet per asset.
+  if (i === 4) list.push(agentWalletKinds())
   // B32.65 — lineage and licences, once a run, on workspaces of its own: A at a 20% royalty is remixed into B at 10% and B
   // into C, each under its remix licence; C rented and used twice is one line on its buyer's bill; the paid rent splits
   // Talyvor's fee, C, B and A in the design's proportions on each author's earnings and journal, and its refund reverses all four.

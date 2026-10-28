@@ -116,6 +116,17 @@ export class PayeeDesk {
     return (this.bills.get(ws) ?? []) as unknown as ReturnType<PayeeDesk['billsOf']>
   }
 
+  /** B48.1 — `agentID`'s open wallet in `asset` (the owner's for ''), opened now if it has none: an account in the ledger like any other. */
+  wallet(ws: string, agentID: string, asset: string): Account {
+    const accounts = this.accounts.get(ws) ?? []
+    const open = accounts.find((a) => a.currency === asset && (a.agent_id ?? '') === agentID && a.purpose === (agentID === '' ? 'company' : 'agent') && a.status === 'open')
+    if (open !== undefined) return open
+    const a: Account = { id: `macc_${randomUUID()}`, workspace_id: ws, ...(agentID === '' ? {} : { agent_id: agentID }), currency: asset,
+      purpose: agentID === '' ? 'company' : 'agent', status: 'open', name: `${asset} wallet`, balance_minor: 0, test_minor: 0, live_minor: 0, created_at: new Date().toISOString() }
+    this.accounts.set(ws, [...accounts, a])
+    return a
+  }
+
   /** B30.109 — the compliance cases in `status` (every one for ''), newest first, as GET /v1/admin/screening lists them. */
   complianceCases(status: string): Case[] {
     return this.cases.filter((c) => status === '' || c.status === status).reverse()
