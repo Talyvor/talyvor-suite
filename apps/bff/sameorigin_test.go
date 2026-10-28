@@ -729,11 +729,56 @@ func TestEveryMutatingRoute_RefusesCrossOrigin(t *testing.T) {
 			rr := httptest.NewRecorder()
 			a.ServeHTTP(rr, req)
 
+			assertSecurityHeaders(t, rr.Header())
 			if rr.Code != http.StatusForbidden {
 				t.Errorf("cross-origin %s %s = %d, want 403 — every browser write must refuse "+
 					"an Origin that is not the app origin: %s", rt.method, rt.path, rr.Code, rr.Body.String())
 			}
 		})
+	}
+}
+
+// B50.6 — the browser's Sec-Fetch-Site is a second, unforgeable account of where a write came from: a sibling
+// subdomain or another site is refused on every route even when the Origin header reads as the app's own.
+func TestEveryMutatingRoute_RefusesCrossSiteFetchMetadata(t *testing.T) {
+	for _, rt := range everyMutatingRoute() {
+		if rt.exempt {
+			continue
+		}
+		for _, site := range []string{"cross-site", "same-site", "none"} {
+			t.Run(rt.method+" "+rt.path+" "+site, func(t *testing.T) {
+				a, sid := sameOriginApp(t)
+				req := httptest.NewRequest(rt.method, rt.path, strings.NewReader(rt.body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Origin", testPublicOrigin)
+				req.Header.Set("Sec-Fetch-Site", site)
+				req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sid})
+				rr := httptest.NewRecorder()
+				a.ServeHTTP(rr, req)
+				if rr.Code != http.StatusForbidden {
+					t.Errorf("Sec-Fetch-Site %s %s %s = %d, want 403: %s", site, rt.method, rt.path, rr.Code, rr.Body.String())
+				}
+				assertSecurityHeaders(t, rr.Header())
+			})
+		}
+	}
+}
+
+// assertSecurityHeaders — B50.6: every response the BFF writes, a refusal or an upstream's relayed body, carries
+// the security headers (setSecurityHeaders runs in ServeHTTP before anything else). The policy's text is only
+// required to be there: a route may tighten it (the marketplace receipt's sandbox), and X-Frame-Options still refuses
+// framing.
+func assertSecurityHeaders(t *testing.T, h http.Header) {
+	t.Helper()
+	for name, want := range map[string]string{
+		"Content-Security-Policy": "default-src ",
+		"X-Frame-Options":         "DENY",
+		"Referrer-Policy":         "same-origin",
+		"X-Content-Type-Options":  "nosniff",
+	} {
+		if got := h.Get(name); !strings.Contains(got, want) {
+			t.Errorf("%s: %q, want it to carry %q", name, got, want)
+		}
 	}
 }
 
@@ -773,9 +818,11 @@ func TestEveryMutatingRoute_AllowsSameOrigin(t *testing.T) {
 			req := httptest.NewRequest(rt.method, rt.path, strings.NewReader(rt.body))
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Origin", testPublicOrigin)
+			req.Header.Set("Sec-Fetch-Site", "same-origin") // what a browser sends with the app's own write
 			req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: sid})
 			rr := httptest.NewRecorder()
 			a.ServeHTTP(rr, req)
+			assertSecurityHeaders(t, rr.Header())
 
 			if rr.Code == http.StatusForbidden {
 				t.Errorf("same-origin %s %s was refused (%d): %s — the guard must not refuse the "+

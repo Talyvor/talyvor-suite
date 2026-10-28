@@ -134,6 +134,7 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 				reached = true
 			}
 			assertNoSecretLeak(t, f.name+" GET "+pat, f.a.cfg, rec.Body.String(), rec.Header())
+			assertSecurityHeaders(t, rec.Header()) // B50.6: on every route's answer, not only the app page
 		}
 		switch {
 		case !answered:

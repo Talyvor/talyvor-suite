@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"mime"
 	"net/http"
 	"regexp"
 	"strings"
@@ -26,6 +27,25 @@ func setSecurityHeaders(h http.Header) {
 	h.Set("Referrer-Policy", "same-origin")
 	// B42.5 — a body relayed from Lens is never sniffed into HTML: it is only ever what its Content-Type says.
 	h.Set("X-Content-Type-Options", "nosniff")
+}
+
+// relayContentType — B50.6: a body relayed from Lens, Track or Docs (an uploaded file, an export) is never a page or a
+// script on the app's origin. It keeps its upstream type, never one Go sniffs from the bytes, and a type a browser
+// would render or run is a download (the upstream's own attachment filename kept).
+func relayContentType(w, upstream http.Header) {
+	ct := upstream.Get("Content-Type")
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	w.Set("Content-Type", ct)
+	mt, _, _ := mime.ParseMediaType(ct)
+	if mt == "text/html" || strings.HasSuffix(mt, "xml") || strings.Contains(mt, "javascript") {
+		cd := upstream.Get("Content-Disposition")
+		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(cd)), "attachment") {
+			cd = "attachment"
+		}
+		w.Set("Content-Disposition", cd)
+	}
 }
 
 // inlineScript is a <script> element and its text; one with a src= is a file, which 'self' already covers.

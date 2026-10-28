@@ -1,5 +1,9 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+
+import { bundleProblems } from './src/bundleScan'
 
 import { bundleVersionPayload, COMMIT_ENV_VAR, UNSTAMPED } from './src/buildIdentity'
 
@@ -60,8 +64,26 @@ function stampBuild(): Plugin {
   }
 }
 
+// B50.6 — the finished build, every file a browser can fetch, holds no key and no source map (src/bundleScan.ts).
+function scanBuild(): Plugin {
+  return {
+    name: 'talyvor:scan-build',
+    apply: 'build',
+    writeBundle(options) {
+      const dir = options.dir ?? 'dist'
+      const files = readdirSync(dir, { recursive: true, withFileTypes: true })
+        .filter((f) => f.isFile())
+        .map((f) => join(f.parentPath, f.name))
+        .map((p) => ({ name: relative(dir, p), text: readFileSync(p, 'latin1') }))
+      const problems = bundleProblems(files)
+      if (problems.length > 0) this.error(`the build is not safe to serve:\n${problems.join('\n')}`)
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), stampBuild()],
+  plugins: [react(), stampBuild(), scanBuild()],
+  build: { sourcemap: false },
   // @talyvor/ui is consumed as workspace SOURCE (TS/TSX); don't pre-bundle it.
   optimizeDeps: { exclude: ['@talyvor/ui'] },
   // In dev, the app and its API must share an origin (no CORS). vite serves the app on

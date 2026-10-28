@@ -393,9 +393,7 @@ func (a *app) handleAIStream() http.HandlerFunc {
 		}
 		defer resp.Body.Close()
 
-		if ct := resp.Header.Get("Content-Type"); ct != "" {
-			w.Header().Set("Content-Type", ct)
-		}
+		relayContentType(w.Header(), resp.Header)
 		// Lens says `applied` when it converted an attached document before the model read it; the
 		// chat shows that on the message.
 		if resp.Header.Get(distillHeader) == "applied" {
