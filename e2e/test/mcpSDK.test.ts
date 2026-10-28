@@ -2,12 +2,13 @@ import { type ChildProcess, spawn } from 'node:child_process'
 import { createServer } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { LensClient } from '../src/lens.ts'
-import { mcpSDKAgentPay } from '../src/mcpSDK.ts'
-import type { Evidence, ScenarioCtx, Verdict } from '../src/scenarios.ts'
+import { mcpPayRetried, mcpSDKAgentPay } from '../src/mcpSDK.ts'
+import type { Evidence, Scenario, ScenarioCtx, Verdict } from '../src/scenarios.ts'
 
 // B40.25 — mcp-sdk-agent-pay against the stub Lens (selftest/stub-bank.ts agentMCP), through the real
 // @modelcontextprotocol/sdk client: it passes on a Lens whose agent_pay posts its entry to both agents' statements, and
-// FAILs when agent_pay answers an entry and posts nothing.
+// FAILs when agent_pay answers an entry and posts nothing. B50.16 — mcp-pay-retried-once passes on a Lens that pays a
+// retried agent_pay once under its idempotency_key, and FAILs on one that pays every retry.
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -24,7 +25,7 @@ afterEach(() => {
   stub = undefined
 })
 
-async function runAgainstStub(broken: string): Promise<{ verdict: Verdict; evidence: Evidence[] }> {
+async function runAgainstStub(broken: string, scenario: Scenario = mcpSDKAgentPay(7)): Promise<{ verdict: Verdict; evidence: Evidence[] }> {
   const port = await freePort()
   stub = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../selftest/stub-lens.ts', import.meta.url).pathname], {
     env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'mcp-sdk-key', STUB_BREAK: broken },
@@ -38,7 +39,7 @@ async function runAgainstStub(broken: string): Promise<{ verdict: Verdict; evide
   const [user] = await lens.createUsers(1)
   const evidence: Evidence[] = []
   const ctx = { app: { user }, env: { lens }, evidence } as unknown as ScenarioCtx
-  return { verdict: await mcpSDKAgentPay(7).run(ctx), evidence }
+  return { verdict: await scenario.run(ctx), evidence }
 }
 
 describe('mcp-sdk-agent-pay (B40.25)', () => {
@@ -52,5 +53,19 @@ describe('mcp-sdk-agent-pay (B40.25)', () => {
     const { verdict } = await runAgainstStub('agent-pay-unposted')
     expect(verdict).toMatchObject({ pass: false })
     expect(verdict.detail).toMatch(/^agent_pay's entry ent_\w+ is 0 posting\(s\) summing to 0 \(\[\]\)/)
+  })
+}, 60_000)
+
+describe('mcp-pay-retried-once (B50.16)', () => {
+  it('passes on a Lens that pays a retried agent_pay once under its idempotency_key and refuses a changed amount', async () => {
+    const { verdict } = await runAgainstStub('', mcpPayRetried())
+    expect(verdict.detail).toMatch(/^5 agent_pay calls under one idempotency_key paid once, −250000 on Retry payer \S+ statement and \+250000 on Retry payee \S+, summing to zero; the same key with 500000 µLXC was refused and moved nothing$/)
+    expect(verdict.pass).toBe(true)
+  })
+
+  it('FAILs when every retry pays again', async () => {
+    const { verdict } = await runAgainstStub('agent-pay-replay', mcpPayRetried())
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^5 calls under one idempotency_key and a changed amount left \[-250000,-250000,-250000,-250000\] on Retry payer \S+ statement and \[250000,250000,250000,250000\] on Retry payee \S+, not one −250000 and one \+250000$/)
   })
 }, 60_000)

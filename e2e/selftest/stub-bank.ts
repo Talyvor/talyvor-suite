@@ -458,6 +458,8 @@ export class Bank {
   private readonly asked = new Map<string, number[]>()
   /** B28.279 — each agent's moves in flight, for move-race. */
   private readonly moving = new Map<string, number>()
+  /** B50.16 — agent_pay's idempotency keys, by agent and key: the body first paid and its answer. */
+  private readonly agentPayKeys = new Map<string, { body: string; answer: { status: number; body: { error?: string } } }>()
   private readonly listings = new Map<string, Listing>()
   private readonly collections = new Map<string, StubCollection>()
   private readonly uses: Use[] = []
@@ -1012,7 +1014,9 @@ export class Bank {
    * listing's offers, a licence and a use, each run as the marketplace's route runs on that key, so its rules judge it;
    * a refusal is a tool result marked isError that says why. B40.25: and the official SDK's handshake (initialize, its
    * notification, ping, tools/list), agent_balance and agent_pay (talyvor-lens internal/mcp/agent_tools.go).
-   * STUB_BREAK=agent-pay-unposted answers agent_pay with an entry and posts nothing.
+   * STUB_BREAK=agent-pay-unposted answers agent_pay with an entry and posts nothing. B50.16: agent_pay's idempotency_key, as
+   * Lens B50.15 takes it: a retry of the same payment answers the first and posts nothing; another payment under the key is
+   * refused. STUB_BREAK=agent-pay-replay ignores the key, so every retry pays again.
    */
   async agentMCP(req: IncomingMessage, res: ServerResponse, key: string, path: string): Promise<boolean> {
     const who = this.agentOfKey(key)
@@ -1059,8 +1063,17 @@ export class Bank {
       if (this.broken('agent-pay-unposted')) return text({ entry_id: id('ent_'), amount_ulxc: a.amount_ulxc }), true
       const out = { status: 0, text: '' }
       const sink = { writeHead: (s: number) => { out.status = s; return sink }, setHeader: () => sink, end: (t?: string) => { out.text = t ?? '' } } as unknown as ServerResponse
+      const keyed = typeof a.idempotency_key === 'string' && a.idempotency_key !== '' && !this.broken('agent-pay-replay') ? `${who.agent.id}\0${a.idempotency_key}` : undefined
+      const body = JSON.stringify([a.to_agent_id, a.amount_ulxc, a.memo ?? ''])
+      const earlier = keyed === undefined ? undefined : this.agentPayKeys.get(keyed)
+      if (earlier !== undefined) {
+        return (earlier.body === body ? answer(earlier.answer)
+          : reply({ content: [{ type: 'text', text: 'economy: idempotency key already used for a different request' }], isError: true })), true
+      }
       this.pay(sink, who.ws, who.agent, String(a.to_agent_id ?? ''), Number(a.amount_ulxc ?? 0), String(a.memo ?? ''))
-      return answer({ status: out.status, body: JSON.parse(out.text || '{}') as { error?: string } }), true
+      const got = { status: out.status, body: JSON.parse(out.text || '{}') as { error?: string } }
+      if (keyed !== undefined && got.status < 300) this.agentPayKeys.set(keyed, { body, answer: got })
+      return answer(got), true
     }
     const listing = String(a.listing_id ?? '')
     switch (name) {

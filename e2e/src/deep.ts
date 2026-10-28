@@ -8,6 +8,7 @@
 import { ledgerCallOnce, ledgerMovesAtOnce } from './concurrency.ts'
 import { injectionExfil } from './injection.ts'
 import { keysNotForwarded, keysUnlisted } from './keys.ts'
+import { mcpPayRetried } from './mcpSDK.ts'
 import { poolIsolation } from './pool.ts'
 import { rateLimitsHold } from './ratelimit.ts'
 import { agentRulesUnbypassable } from './rules.ts'
@@ -33,7 +34,7 @@ export function redTeamChain(attacker: number, counterparty: number): Scenario[]
     keysUnlisted(), keysNotForwarded(), // B28.287
     rateLimitsHold(), // B28.288
     crossCompanyTestMoney(attacker, counterparty), // B28.290
-    moneyTampered(), approvalReused(), injectionExfil('web page'), injectionExfil('room message'), csrfEveryWrite(), xssShownBack(), // B50.7
+    moneyTampered(), mcpPayRetried(), approvalReused(), injectionExfil('web page'), injectionExfil('room message'), csrfEveryWrite(), xssShownBack(), // B50.7
   ]
 }
 
