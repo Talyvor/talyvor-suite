@@ -815,9 +815,19 @@ export interface PaymentRequest {
   summary: string
   client: string
   agent_id?: string
+  /** B45.25 — an outside agent's request carries who Talyvor takes it to be: Lens's agentsig.Result (B45.24, B45.29). */
+  agent_trust?: AgentTrust
   totals: Record<string, number>
   items: PaymentRequestItem[]
   created_at: string
+}
+
+/** Lens agentsig.Result: verified — the signing domain belongs to a business Talyvor checked; signed — only the domain is known. */
+export interface AgentTrust {
+  level: 'verified' | 'signed' | 'unverified'
+  label?: string
+  domain?: string
+  business?: string
 }
 
 export interface PaymentRequestItem {

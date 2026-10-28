@@ -11,10 +11,10 @@ const BASE = [
   { position: 3, payee_id: 'payee_3', payee_name: 'Shady Co', currency: 'GBP', amount_minor: 900, reference: 'X', decision: 'blocked', reason: "the agent's rules block this payee", rule: 'payee' },
 ]
 
-function mockBff(lie = false, ITEMS: Record<string, unknown>[] = BASE) {
+function mockBff(lie = false, ITEMS: Record<string, unknown>[] = BASE, extra: Record<string, unknown> = {}) {
   const sent: Array<{ url: string; body: Record<string, unknown> }> = []
   let request: Record<string, unknown> = { id: 'preq_1', status: 'pending_approval', summary: '3 payments for Researcher', client: 'mcp:tlv_oc_claude', agent_id: 'agt_1',
-    totals: { GBP: 17450 }, items: ITEMS, created_at: '2026-10-23T09:00:00Z' }
+    totals: { GBP: 17450 }, items: ITEMS, created_at: '2026-10-23T09:00:00Z', ...extra }
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -127,5 +127,21 @@ describe('the approval screen', () => {
 
     expect(bff.sent[0].body).toEqual({ positions: [1, 2], reason: 'The supplier re-sent a corrected invoice.' })
     expect(JSON.parse(String(bff.sent[1].body.statement))).toMatchObject({ reason: 'The supplier re-sent a corrected invoice.' })
+  })
+
+  // B45.25 — an outside agent's request says who is asking; "Verified agent of" only at the verified level, whatever Lens's label says.
+  it.each([
+    [{ level: 'verified', domain: 'agents.acme.example', business: 'Acme Inc.', label: 'Verified agent of Acme Inc.' }, 'Verified agent of Acme Inc.', /Talyvor has checked that agents\.acme\.example, which signed this request, belongs to Acme Inc\.$/],
+    [{ level: 'signed', domain: 'bot.example', label: 'Verified agent of Acme Inc.' }, 'Signed by bot.example (business not checked)', /Talyvor has not checked the business behind bot\.example\.$/],
+    [{ level: 'unverified', label: 'Unverified agent' }, 'Unverified agent', /This request was not signed, so Talyvor cannot tell who sent it/],
+  ])('shows the %o trust level in plain words', async (agent_trust, who, detail) => {
+    mockBff(false, BASE, { agent_trust })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+
+    const trust = await screen.findByTestId('approve-trust')
+    expect(within(trust).getByText(who)).toBeTruthy()
+    expect(trust.textContent).toMatch(detail)
+    if (agent_trust.level !== 'verified') expect(screen.getByTestId('approve-card').textContent).not.toContain('Verified agent of')
   })
 })
