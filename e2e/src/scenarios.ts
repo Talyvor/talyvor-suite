@@ -79,6 +79,7 @@ import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
+import { agentCards } from './agentCards.ts'
 import { agentWalletKinds } from './agentWalletKinds.ts'
 import { speechThroughLens } from './speech.ts'
 import { capabilityTerms } from './capabilityTerms.ts'
@@ -5443,6 +5444,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B46.12 — the money layer's contract on the sandbox, once a run, on a workspace of its own: a new agent has a wallet; £20.00 over
   // its mandate waits for approval with nothing moved; approved once it is one payment out, the replay 409; a refused one half-done in nothing.
   if (i === 3) list.push(moneyLayerContract())
+  // B46.20 — an agent's single-use cards on the sandbox, once a run, on a workspace of its own: its key asks for three capped cards to
+  // book a trip; one approval issues all three, locked and closing within 24 hours, with one card_hold of the total; again, nothing more.
+  if (i === 0) list.push(agentCards())
   // B48.23 — agents of each kind own their wallets, once a run, on a workspace of its own: fiat GBP, crypto USDC, both EUR + USDC,
   // each its own account; removing the kind whose wallet holds test money answers 409 and the ledger keeps it open; one owner wallet per asset.
   if (i === 4) list.push(agentWalletKinds())

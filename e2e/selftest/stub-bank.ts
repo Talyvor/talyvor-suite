@@ -556,6 +556,12 @@ export class Bank {
     return who !== undefined && this.paymentRequests.route(req, res, who.ws.id, path, who.agent.id, keyID)
   }
 
+  /** B46.20 — the card routes on an agent's own key, which Lens judges as the agent itself (stub-payees.ts). */
+  async agentCards(req: IncomingMessage, res: ServerResponse, path: string, key: string): Promise<boolean> {
+    const who = this.agentOfKey(key)
+    return who !== undefined && this.payees.cardRoute(req, res, who.ws.id, path, who.agent.id)
+  }
+
   /** The workspace and agent an agent key belongs to. */
   agentOfKey(key: string): { ws: BankWorkspace; agent: Agent } | undefined {
     const a = this.keys.get(key)

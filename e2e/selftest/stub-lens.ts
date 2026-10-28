@@ -1385,6 +1385,7 @@ createServer(async (req, res) => {
         issue_id: e.issue, cost_usd: e.cost_usd, input_tokens: 0, output_tokens: 0, ts: new Date(e.at).toISOString() })), next_cursor: '' })
     }
     if (p.startsWith('/v1/money/payment-requests') && await bank.agentPaymentRequests(req, res, p, bearer)) return
+    if (p.startsWith('/v1/money/cards') && await bank.agentCards(req, res, p, bearer)) return
     // The BFF runs a marketplace use on the session key the chat streams on (B20.3).
     // B47.3 — speech (talyvor-lens internal/proxy/speech.go). As a Lens without LENS_DEEPGRAM_API_KEY, both routes say speech
     // is not configured before reading the request; with STUB_SPEECH=on, a recording is heard as the run's clip says.

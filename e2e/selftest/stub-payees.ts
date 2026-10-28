@@ -32,6 +32,10 @@
 // B46.12 — and the Test partner's refusal: a payment whose minor units end in 13 is refused and lists failed, its hold back in
 // the account (Lens's payment_out_failed). Its defect:
 //   refused-payment-held   — the refused payment's money stays out of the account
+// B46.20 — and an agent's single-use cards (POST and GET /v1/money/cards, GET …/{id}, POST …/{id}/approve, Lens B46.10): a batch of
+// up to ten, one per merchant, each capped, waits for the owner's one approval, which holds the caps' total out of the agent's
+// account once (card_hold) and issues every card, active for 24 hours. Approved again it is answered as it stands. Its defect:
+//   card-hold-twice        — approving an issued batch again holds its total again
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -63,6 +67,10 @@ interface StubBatch { id: string; workspace_id: string; funding: string; idempot
 /** A payment out (economy.OutsidePayment). */
 interface Payment { id: string; workspace_id: string; account_id: string; payee_id: string; payee_name: string; amount_minor: number; currency: string
   funding: string; reference: string; idempotency_key: string; status: string; created_at: string }
+/** A card batch and its cards (economy.CardBatch, economy.MoneyCard). */
+interface StubCard { id: string; line: number; merchant: string; cap_minor: number; currency: string; status: string; spent_minor: number; last4?: string; expires_at?: string }
+interface StubCardBatch { id: string; workspace_id: string; agent_id: string; idempotency_key: string; purpose: string; currency: string; funding: string
+  total_minor: number; status: string; cards: StubCard[]; approved_by?: string; approved_at?: string; created_at: string }
 
 const CURRENCIES = ['GBP', 'EUR', 'USD']
 const HELD = 'screening: held — the name is close to one on a sanctions list, and waits for an operator to release it'
@@ -83,6 +91,8 @@ export class PayeeDesk {
   private readonly batches = new Map<string, StubBatch[]>()
   /** B41.1 — the bills each workspace received, each with the digest of its document. */
   private readonly bills = new Map<string, (Record<string, unknown> & { id: string; digest: string })[]>()
+  /** B46.20 — the card batches each workspace's agents asked for. */
+  private readonly cardBatches = new Map<string, StubCardBatch[]>()
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
   private readonly body: <T>(req: IncomingMessage) => Promise<T>
@@ -148,6 +158,7 @@ export class PayeeDesk {
     if (await this.mandateRoute(req, res, ws, path, list)) return true
     if (await this.payoutRoute(req, res, ws, path, list)) return true
     if (await this.billRoute(req, res, ws, path, list)) return true
+    if (await this.cardRoute(req, res, ws, path, '')) return true
     if (path === '/v1/money/payees' && req.method === 'GET') return this.json(res, 200, { payees: list }), true
     if (path === '/v1/money/payees' && req.method === 'POST') {
       const b = await this.body<Record<string, string>>(req)
@@ -185,6 +196,56 @@ export class PayeeDesk {
     this.challenges.delete(p.id)
     Object.assign(p, { needs_confirmation: false, confirmed_by: assertion?.credential_id ?? '', confirmed_at: new Date().toISOString() })
     return this.json(res, 200, p), true
+  }
+
+  /** B46.20 — the card routes, on the owner's key (`agentID` '') or on agent `agentID`'s own: true when `path` was one of them. */
+  async cardRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string, agentID: string): Promise<boolean> {
+    if (!path.startsWith('/v1/money/cards')) return false
+    const batches = this.cardBatches.get(ws) ?? []
+    const mine = batches.filter((b) => agentID === '' || b.agent_id === agentID)
+    if (path === '/v1/money/cards' && req.method === 'GET') return this.json(res, 200, { batches: [...mine].reverse() }), true
+    if (path === '/v1/money/cards' && req.method === 'POST') {
+      const b = await this.body<{ agent_id?: string; purpose?: string; currency?: string; idempotency_key?: string; cards?: { merchant?: string; cap_minor?: number }[] }>(req)
+      const key = String(req.headers['idempotency-key'] ?? b.idempotency_key ?? '').trim()
+      const agent = agentID || (b.agent_id ?? '')
+      const currency = (b.currency ?? '').toUpperCase()
+      const cards = b.cards ?? []
+      const bad = (msg: string) => (this.json(res, 400, { error: `economy: invalid card batch: ${msg}` }), true)
+      if (agent === '') return bad("cards are an agent's: name the agent (agent_id), or ask with the agent's own key")
+      if (!CURRENCIES.includes(currency)) return bad(`cards are in GBP, EUR or USD, not "${currency}"`)
+      if (key === '') return bad('a batch carries an idempotency key (the Idempotency-Key header, or idempotency_key), up to 200 characters')
+      if (cards.length === 0 || cards.length > 10) return bad(`a batch has from 1 to 10 cards, not ${cards.length}`)
+      const merchants = cards.map((c) => (c.merchant ?? '').trim().toLowerCase())
+      if (merchants.some((m) => m === '') || new Set(merchants).size !== merchants.length) return bad('one card per merchant, each named')
+      if (cards.some((c) => !Number.isInteger(c.cap_minor) || (c.cap_minor ?? 0) <= 0)) return bad("a card's cap_minor is a positive number of pence or cents")
+      const prior = batches.find((x) => x.idempotency_key === key)
+      if (prior !== undefined) return this.json(res, 201, prior), true
+      const now = new Date().toISOString()
+      const batch: StubCardBatch = { id: `mcb_${randomUUID()}`, workspace_id: ws, agent_id: agent, idempotency_key: key, purpose: (b.purpose ?? '').trim(), currency,
+        funding: 'test', total_minor: cards.reduce((n, c) => n + (c.cap_minor ?? 0), 0), status: 'awaiting_approval', created_at: now,
+        cards: cards.map((c, i) => ({ id: `mcard_${randomUUID()}`, line: i + 1, merchant: (c.merchant ?? '').trim(), cap_minor: c.cap_minor ?? 0, currency, status: 'awaiting_approval', spent_minor: 0 })) }
+      this.cardBatches.set(ws, [...batches, batch])
+      return this.json(res, 201, batch), true
+    }
+    const m = /^\/v1\/money\/cards\/([^/]+)(\/approve)?$/.exec(path)
+    const batch = m === null ? undefined : mine.find((x) => x.id === m[1])
+    if (m === null) return false
+    if (batch === undefined) return this.json(res, 404, { error: 'economy: no such card batch' }), true
+    if (m[2] === undefined) return req.method === 'GET' ? (this.json(res, 200, batch), true) : false
+    if (req.method !== 'POST') return false
+    if (agentID !== '') return this.json(res, 403, { error: "only the workspace's owner or an admin approves an agent's cards" }), true
+    if (batch.status === 'issued' && !this.broken('card-hold-twice')) return this.json(res, 200, batch), true
+    const from = (this.accounts.get(ws) ?? []).find((a) => a.purpose === 'agent' && a.agent_id === batch.agent_id && a.currency === batch.currency && a.status === 'open')
+    if (from === undefined) return this.json(res, 404, { error: `economy: no such money account: the agent has no ${batch.currency} account to pay from` }), true
+    if (from.test_minor < batch.total_minor && batch.status !== 'issued') {
+      return this.json(res, 402, { error: `economy: not enough money: the account holds ${money(from.test_minor, batch.currency)} of test money, and these cards are capped at ${money(batch.total_minor, batch.currency)} together` }), true
+    }
+    from.test_minor -= batch.total_minor // the card_hold
+    from.balance_minor -= batch.total_minor
+    const expires = new Date(Date.now() + 86_400_000).toISOString()
+    for (const c of batch.cards) Object.assign(c, { status: 'active', last4: randomBytes(2).toString('hex'), expires_at: expires })
+    Object.assign(batch, { status: 'issued', approved_by: 'owner', approved_at: new Date().toISOString() })
+    return this.json(res, 200, batch), true
   }
 
   /** B30.109 — the accounts and the payments out, each refusal as Lens words it; only compliance-live-paid moves money. */
