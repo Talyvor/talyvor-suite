@@ -7,14 +7,14 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-interface Acceptance { workspace_id: string; capability: string; version: number; person: string; accepted_at: string }
+interface Acceptance { workspace_id: string; capability: string; version: number; person: string; acceptancesat: string }
 
 const VERSION = 1
 const PUBLISHED_AT = '2026-10-09T00:00:00Z'
 const text = (capability: string): string => `# Draft — for legal review\n\n## Terms for ${capability}\n\nThese terms are between TALYVOR LTD and the workspace.\n`
 
 export class TermsDesk {
-  private readonly accepted = new Map<string, Acceptance>()
+  private readonly acceptances = new Map<string, Acceptance>()
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
   private readonly body: <T>(req: IncomingMessage) => Promise<T>
@@ -40,15 +40,20 @@ export class TermsDesk {
     const b = await this.body<{ version?: number }>(req)
     if (typeof b.version !== 'number' || b.version <= 0) return this.json(res, 400, { error: 'body must be {"version": n}, the version of the terms read' }), true
     if (b.version !== VERSION) return this.json(res, 409, { error: 'economy: a newer version of these terms is published' }), true
-    const a: Acceptance = { workspace_id: ws, capability: c.capability, version: VERSION, person: `jwt:user:${ws}`, accepted_at: now }
-    if (!this.broken('terms-accept-ignored')) this.accepted.set(`${ws} ${c.capability}`, a)
+    const a: Acceptance = { workspace_id: ws, capability: c.capability, version: VERSION, person: `jwt:user:${ws}`, acceptancesat: now }
+    if (!this.broken('terms-accept-ignored')) this.acceptances.set(`${ws} ${c.capability}`, a)
     return this.json(res, 201, { acceptance: a }), true
+  }
+
+  /** B17.302 — whether `ws` accepted `capability`'s terms, as Lens's terms gate asks before the capability is used. */
+  accepted(ws: string, capability: string): boolean {
+    return this.acceptances.has(`${ws} ${capability}`)
   }
 
   private terms(ws: string, c: { capability: string; name: string; class: string }, withBody: boolean): object {
     const planted = c.capability === 'fx' && this.broken('terms-fx-accepted')
-      ? { workspace_id: ws, capability: 'fx', version: VERSION, person: 'jwt:user:someone-earlier', accepted_at: PUBLISHED_AT } : undefined
-    const accepted = this.accepted.get(`${ws} ${c.capability}`) ?? planted
+      ? { workspace_id: ws, capability: 'fx', version: VERSION, person: 'jwt:user:someone-earlier', acceptancesat: PUBLISHED_AT } : undefined
+    const accepted = this.acceptances.get(`${ws} ${c.capability}`) ?? planted
     const body = text(c.capability)
     return { capability: c.capability, name: c.name, class: c.class, version: VERSION, text_path: `docs/terms/${c.capability}.md`, ...(withBody ? { body } : {}), body_sha256: 'stub', published_by: 'lens',
       published_at: PUBLISHED_AT, ...(accepted === undefined ? {} : { accepted }) }
