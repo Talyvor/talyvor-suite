@@ -9,7 +9,7 @@ import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
 import { BILLS_KEY, PAYEES_KEY, PAYMENTS_KEY } from './Pay'
 import { assertOver } from './passkeys'
-import { AgentBankError, type ApprovalStatement, type PaymentRequest, type PaymentRequestItem, agentBankApi, formatMinor, refusalText } from './agentBankApi'
+import { AgentBankError, type AgentTrust, type ApprovalStatement, type PaymentRequest, type PaymentRequestItem, agentBankApi, formatMinor, refusalText } from './agentBankApi'
 
 // Approve.tsx — B40.9: /approve/<id>, the page a prepared request's approval link opens (Lens B40.3) — from Chat, an
 // assistant over /mcp, or a push notification in the installed app. One card: every item with its payee (known or new,
@@ -28,6 +28,16 @@ const DECIDED: Record<string, string> = {
 /** Who prepared it, in words: Lens names the client "chat", "voice", "mcp:<client id>" or "key:<key id>" (B40.3). */
 const askedBy = (client: string) =>
   client.startsWith('mcp:') ? 'an assistant you connected' : client.startsWith('key:') ? 'an agent' : client === 'chat' ? 'Chat' : client === 'voice' ? 'a voice request' : client
+
+/** B45.25 — who an outside agent is, in plain words. Built from the level, never from Lens's label, so "Verified agent of"
+ * can only appear for the verified level. */
+function trustWords(t: AgentTrust): { who: string; detail: string } {
+  if (t.level === 'verified' && t.business && t.domain)
+    return { who: `Verified agent of ${t.business}`, detail: `Talyvor has checked that ${t.domain}, which signed this request, belongs to ${t.business.replace(/\.$/, '')}.` }
+  if ((t.level === 'verified' || t.level === 'signed') && t.domain)
+    return { who: `Signed by ${t.domain} (business not checked)`, detail: `That proves only where the request came from: Talyvor has not checked the business behind ${t.domain}.` }
+  return { who: 'Unverified agent', detail: 'This request was not signed, so Talyvor cannot tell who sent it.' }
+}
 
 /** Totals by currency, as one line: "£12.00, €3.00". */
 export const totalsOf = (items: PaymentRequestItem[]) =>
@@ -122,6 +132,7 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
   const paidBefore = new Set((payments.data?.payments ?? []).filter((p) => p.status === 'completed').map((p) => p.payee_id))
   const agent = r.agent_id ? (book.data?.agents?.find((a) => a.id === r.agent_id)?.name ?? r.agent_id) : ''
   const pending = r.status === 'pending_approval'
+  const trust = r.agent_trust ? trustWords(r.agent_trust) : null
 
   return (
     <Card>
@@ -133,6 +144,12 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
             <span className="font-figure">{formatWhen(r.created_at)}</span>
           </span>
         </p>
+        {trust ? (
+          <div className="flex flex-col gap-1" data-testid="approve-trust">
+            <p className="break-words text-body text-ink">{trust.who}</p>
+            <p className="text-caption text-muted">{trust.detail}</p>
+          </div>
+        ) : null}
         {pending ? (
           <p className="text-body text-ink" data-testid="approve-total">
             <span className="font-figure">{ticked.length}</span> of <span className="font-figure">{asked.length}</span> {asked.length === 1 ? 'payment' : 'payments'} to approve
