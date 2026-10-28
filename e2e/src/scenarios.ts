@@ -40,6 +40,7 @@ import { brandDocs, brandROI, brandVisual, companyLine, heroFade, readingPages }
 import { b30Capabilities } from './clearances.ts'
 import { moneyRails } from './moneyRails.ts'
 import { dailyReconciliation } from './reconciliation.ts'
+import { siteTruth } from './siteTruth.ts'
 import { statusTruth } from './statusTruth.ts'
 import { crossCompanyTestMoney } from './testmoney.ts'
 import { seatsFree, seatsTeam } from './seats.ts'
@@ -5126,6 +5127,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   if (i === 2) list.push(companyLine())
   // B29.13 — Documentation, Privacy, Terms and a published board as reading pages in the brand, once a run.
   if (i === 2) list.push(readingPages())
+  // B51.4 — the public pages, signed out, against the product's own answers, once a run.
+  if (i === 2) list.push(siteTruth())
   // B17.10, one in ten again. The contributor (7, 17, …) changes no setting and its partner is one of 9,
   // 19, …. The plan comes last, on a user nobody else asks as: what is asked after it is drawn from its
   // allowance, which the ledger read-back does not expect.
