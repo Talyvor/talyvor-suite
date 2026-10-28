@@ -1673,11 +1673,12 @@ export function honestPages(): Scenario {
         ['/pricing', /nothing\s+recurs|only charge is the requests you run|self-hosted/i, /a paid plan, if you choose one, is billed every month/i],
         [
           '/privacy',
-          /cheaper than going direct|no self-service data deletion/i,
+          /cheaper than going direct|no self-service data deletion|test-mode cards/i,
           /charged less than its list price/i,
           /What Agent Wallets stores/,
           /Passkeys\./,
-          /Test-mode cards\./,
+          // B49.2 — cards are named plainly, with no test-mode line (B17.300).
+          /Virtual cards\./,
           /What the Marketplace stores and shows/,
         ],
         ['/terms', /no mechanism to convert|no self-service deletion/i, /LXC can be cashed out/, /Agent Wallets/, /The Marketplace/],
