@@ -315,6 +315,10 @@ export function walletBrand(): Scenario {
           await page.waitForLoadState('networkidle', { timeout: SETTLE_TIMEOUT_MS }).catch(() => undefined)
           // B17.237 — the heading is the shell's; a screen's cards come with its first read, which can outlast the settle.
           await page.locator('main .rounded-card').first().waitFor({ timeout: HEADING_TIMEOUT_MS }).catch(() => undefined)
+          // B17.298 — and a card can come before the read: Approvals' Face ID card is drawn while its list still says "Reading…".
+          await page
+            .waitForFunction(() => !Array.from(document.querySelectorAll('main p')).some((p) => (p.textContent ?? '').trim() === 'Reading…'), undefined, { timeout: HEADING_TIMEOUT_MS })
+            .catch(() => undefined)
           // The theme first, then a pause: a Button's colour eases over 200ms, and read mid-ease it is neither theme's teal.
           await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'))
           await page.waitForTimeout(400)
@@ -352,6 +356,7 @@ export function walletBrand(): Scenario {
           const one = teal === null ? seen.teal.length === 0 : seen.teal.length === 1 && seen.teal[0].startsWith(teal)
           if (!one) wrong.push(`${screen.path} fills [${seen.teal.join(', ')}] teal; want ${teal ?? 'nothing'}${screen.path === '/approvals' ? ` (Lens has ${pending} pending)` : ''}`)
           if (seen.cards.length === 0) wrong.push(`${screen.path} shows no card${seen.unread ? ` ("${seen.unread}")` : ''}`)
+          else if (seen.unread === 'Reading…') wrong.push(`${screen.path} still says "Reading…" after ${HEADING_TIMEOUT_MS / 1000}s`)
           const flat = seen.cards.filter((c) => c !== DARK_WALLET.raised)
           if (flat.length > 0) wrong.push(`${screen.path}: ${flat.length} card(s) not on raised ${DARK_WALLET.raised}: ${flat.join(', ')}`)
           if (seen.notMono.length > 0) wrong.push(`${screen.path}: amounts off the figure face: ${seen.notMono.slice(0, 3).join('; ')}`)
