@@ -264,6 +264,20 @@ export function FeesOnAnyPlan({ fees }: { fees: Fees | undefined }) {
           </Row>
         </>
       )}
+    </dl>
+  )
+}
+
+/**
+ * B51.1 — the fees of the money features (/status.json reports them not cleared yet), apart from the two that apply
+ * today, under the plan table's own words for them. The FX margin is each plan's, as the plan cards show it.
+ */
+export function MoneyFeatureFees({ fees, planIds }: { fees: Fees; planIds: string[] }) {
+  const fx = planIds
+    .filter((id) => id !== 'free')
+    .map((id) => `${planName(id)} ${id === CONTRACTED ? 'agreed' : formatBPS(fees.fx_margin_bps[id] ?? 0)}`)
+  return (
+    <dl data-testid="fees-money-features" className="grid gap-x-12 wide:grid-cols-2">
       <Row label="Loans arranged">
         <span className="font-figure">{formatBPS(fees.lending_fee_bps)}</span>
       </Row>
@@ -281,6 +295,11 @@ export function FeesOnAnyPlan({ fees }: { fees: Fees | undefined }) {
           <span className="font-figure">{formatBPS(fees.merchant_a2a_fee_bps)}</span> from an account
         </span>
       </Row>
+      {fx.length > 0 ? (
+        <Row label="FX margin over the reference rate">
+          <span className="font-figure">{fx.join(' · ')}</span>
+        </Row>
+      ) : null}
     </dl>
   )
 }

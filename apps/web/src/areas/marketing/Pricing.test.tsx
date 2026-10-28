@@ -129,12 +129,18 @@ describe('/pricing', () => {
     expect(offers[1]).toContain('Pro$110a month')
     expect(offers[1]).toContain('6× the included usage of Plus') // 1,090 ÷ 180, computed
 
+    // B51.1: only what applies today is "Fees on any plan"; the money features sit under the plan table's words for them.
     const fees = screen.getByTestId('fees-any-plan')
     expect(fees).toHaveTextContent('Sellers earn 88%; Talyvor keeps 12%')
     expect(fees).toHaveTextContent('Services and compute4%')
-    expect(fees).toHaveTextContent('Loans arranged1.5%')
-    expect(fees).toHaveTextContent('£4, €5 or $8 plus the partner’s cost')
-    expect(fees).toHaveTextContent('Accepting payments0.8% plus card processing, or 1.1% from an account')
+    expect(fees).not.toHaveTextContent(/Loans|International|Agent cards|Accepting payments|FX margin/)
+    expect(screen.getByRole('heading', { name: 'Money features, as our money partners switch them on' })).toBeInTheDocument()
+    const money = screen.getByTestId('fees-money-features')
+    expect(money).toHaveTextContent('Loans arranged1.5%')
+    expect(money).toHaveTextContent('£4, €5 or $8 plus the partner’s cost')
+    expect(money).toHaveTextContent('Agent cardsFree to issue')
+    expect(money).toHaveTextContent('Accepting payments0.8% plus card processing, or 1.1% from an account')
+    expect(money).toHaveTextContent('FX margin over the reference rateTeam 0.6% · Business 0.3% · Enterprise agreed')
     expect(screen.getByTestId('tax-line')).toHaveTextContent(
       'Prices are in US dollars. Where Talyvor must charge VAT or sales tax, it is added at checkout and shown before you pay.',
     )

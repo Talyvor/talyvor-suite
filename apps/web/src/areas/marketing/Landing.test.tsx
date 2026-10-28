@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { CONTACT_EMAIL, Landing, POOLED_DISCOUNT_PERCENT } from './Landing'
 import { LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
 import { ON_ITS_WAY, POSITIONING_SENTENCES } from '../../positioning'
+import { COMPANY_CONTACT } from '../../company'
 
 // Area-owned test — replaces the deleted shared areas/scaffold.test.tsx (the
 // deadlock: a shared test over per-area screens; see #7). The marketing tab
@@ -29,25 +30,14 @@ describe('Landing', () => {
     expect(screen.getByRole('link', { name: /open the app/i })).toHaveAttribute('href', '/')
   })
 
-  // THE DEAD-CTA GUARD. The page used to hardcode hello@talyvor.com as its only call to
-  // action while a comment beside it said the alias did not route. A comment cannot fail a
-  // build, so it shipped. Now the address is configuration, and the page renders its absence.
-  it('draws NO mailto when no contact address is configured', () => {
-    expect(CONTACT_EMAIL).toBe('') // the default in this build — no alias yet
+  // B51.1: every public footer names the company's address, so the page offers it rather than saying there is no inbox.
+  it('offers the company address and never says there is no inbox', () => {
+    expect(CONTACT_EMAIL).toBe(COMPANY_CONTACT)
     render(<Landing />)
-    const mailtos = screen
-      .getAllByRole('link')
-      .filter((a) => a.getAttribute('href')?.startsWith('mailto:'))
-    // A dead contact link is worse than none: better to offer no inbox than one that
-    // silently drops a buyer's first message.
-    expect(mailtos).toHaveLength(0)
-    // and the page still has an action to take
-    expect(screen.getByRole('link', { name: /see how it works/i })).toBeInTheDocument()
-  })
-
-  it('says plainly that there is no inbox yet, rather than implying one', () => {
-    render(<Landing />)
-    expect(screen.getByText(/no inbox to write to yet/)).toBeInTheDocument()
+    const mailtos = screen.getAllByRole('link').filter((a) => a.getAttribute('href')?.startsWith('mailto:'))
+    expect(mailtos.length).toBeGreaterThan(0)
+    for (const a of mailtos) expect(a).toHaveAttribute('href', `mailto:${COMPANY_CONTACT}`)
+    expect(screen.queryByText(/no inbox/)).toBeNull()
   })
 
   // B28.2: ONE percentage is allowed, and it is the measured one. The pooled discount is derived in
@@ -137,13 +127,15 @@ describe('Landing', () => {
   })
 
   // B29.4: the board's WEBSITE HERO. The pieces a visitor sees, each read from the DOM: the drawn
-  // lockup files (one per theme), the hero photograph with the 1200 version for phones and the
+  // mark and wordmark (B51.1, the site header), the hero photograph with the 1200 version for phones and the
   // SAME srcset and sizes index.html preloads, and the band. The verb stack ROUTE · PROVE · REUSE ·
   // COMPOUND was retired with the tagline on 5 Oct 2026 (B32.1): no verb sits on the photograph.
-  it('draws the board: the logo lockup, the preloaded hero photo without the verbs, and the band', () => {
+  it('draws the board: the mark and wordmark, the preloaded hero photo without the verbs, and the band', () => {
     const { container } = render(<Landing />)
-    const logos = [...container.querySelectorAll('img[data-brand="logo"]')].map((i) => i.getAttribute('src'))
-    expect(logos).toEqual(['/brand/svg/talyvor-logo-dark-notag.svg', '/brand/svg/talyvor-logo-light-notag.svg'])
+    // B51.1: the site's one header, with the drawn mark and wordmark.
+    const header = container.querySelector('header')!
+    expect(header.querySelector('svg[data-brand="mark"]')).not.toBeNull()
+    expect(header.querySelector('svg[data-brand="wordmark"]')).not.toBeNull()
 
     const photo = container.querySelector('figure img')!
     expect(photo.getAttribute('src')).toBe('/brand/photos/hero.jpg')

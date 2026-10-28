@@ -1,7 +1,7 @@
 import { inlineLink } from '@talyvor/ui'
 import { useDocumentTitle } from '../../documentTitle'
 import { COMPANY_CONTACT } from '../../company'
-import { SiteFooter, SiteHeader } from '../../components/SiteChrome'
+import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
 import { ASSISTANTS } from '../lens/ConnectAI'
 import { Eyebrow, TealRule } from '../marketing/Landing'
 import { DOCUMENTATION_PATH } from './content'
@@ -19,15 +19,6 @@ const KIND: Record<string, string> = {
 
 const CLAUDE = ASSISTANTS.find((a) => a.name === 'Claude')
 
-const HEADER_LINKS = [
-  { href: '/pricing', label: 'Pricing' },
-  { href: DOCUMENTATION_PATH, label: 'Documentation' },
-]
-const FOOTER_LINKS = [
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/terms', label: 'Terms' },
-  { href: DOCUMENTATION_PATH, label: 'Documentation' },
-]
 
 function Part({ id, index, eyebrow, heading, children }: { id: string; index: string; eyebrow: string; heading: string; children: React.ReactNode }) {
   return (
@@ -48,7 +39,7 @@ export function ClaudeConnector() {
   useDocumentTitle('Talyvor for Claude')
   return (
     <div className="flex min-h-full flex-col bg-canvas text-ink">
-      <SiteHeader product="Suite" links={HEADER_LINKS} current={DOCUMENTATION_PATH} />
+      <PublicHeader current={DOCUMENTATION_PATH} />
 
       <main className="flex-1">
         <section aria-labelledby="claude-heading" className="border-b border-rule">
@@ -149,7 +140,7 @@ export function ClaudeConnector() {
         </Part>
       </main>
 
-      <SiteFooter links={FOOTER_LINKS} />
+      <PublicFooter />
     </div>
   )
 }

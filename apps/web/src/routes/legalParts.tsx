@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuthMeReader } from '../lib/authMe'
 import { useDocumentTitle } from '../documentTitle'
 import { inlineLink } from '@talyvor/ui'
-import { SiteFooter, SiteHeader } from '../components/SiteChrome'
+import { PublicFooter, PublicHeader } from '../components/SiteChrome'
 import { TealRule } from '../areas/marketing/Landing'
 
 // legalParts — the shared furniture for /privacy and /terms.
@@ -167,16 +167,6 @@ export function LawyerReview({
   )
 }
 
-const HEADER_LINKS = [
-  { href: '/pricing', label: 'Pricing' },
-  { href: '/documentation', label: 'Documentation' },
-]
-const FOOTER_LINKS = [
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/terms', label: 'Terms' },
-  ...HEADER_LINKS,
-]
-
 /**
  * LegalPage — the frame both documents sit in (B29.13): the site's logo header and footer, and
  * between them a reading column on canvas at the 15/24 reading step, left on the same edge as the
@@ -208,7 +198,7 @@ export function LegalPage({
   const first = sections.length > 0 ? kids.indexOf(sections[0]) : kids.length
   return (
     <div className="flex min-h-full flex-col bg-canvas text-ink">
-      <SiteHeader product="Suite" links={HEADER_LINKS} />
+      <PublicHeader />
       <main className="flex-1">
         <div className="mx-auto w-full max-w-5xl px-gutter pb-16 pt-10 wide:pt-14">
           <div className="max-w-lg text-reading">
@@ -220,7 +210,7 @@ export function LegalPage({
           </div>
         </div>
       </main>
-      <SiteFooter links={FOOTER_LINKS} />
+      <PublicFooter />
     </div>
   )
 }

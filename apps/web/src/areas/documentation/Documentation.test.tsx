@@ -119,7 +119,7 @@ describe('/documentation', () => {
     const { container } = render(<App />)
     await screen.findByRole('heading', { level: 1, name: /what talyvor does today/i })
     const hrefs = [...container.querySelectorAll('a[href]')].map((a) => a.getAttribute('href') ?? '')
-    const internal = hrefs.filter((h) => !/^https?:\/\//.test(h))
+    const internal = hrefs.filter((h) => !/^(https?:\/\/|mailto:)/.test(h))
     expect(internal.length).toBeGreaterThan(30)
     const broken = internal.filter((h) =>
       h.startsWith('#') ? container.querySelector(h) === null : !mounts(h.split('#')[0]),

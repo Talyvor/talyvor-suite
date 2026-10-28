@@ -6,7 +6,8 @@ import { Waitlist } from '../../components/Waitlist'
 import { CONSENT_KEY, FBEVENTS_URL } from './pixel'
 
 // B44.2 — nothing reaches Meta before Accept, after Reject, while the ID is empty, or on a signed-in page; after
-// Accept, fbevents.js loads, each public page view is one PageView, and a waitlist sign-up is one bare Lead.
+// Accept, fbevents.js loads, each public page view is one PageView, and a waitlist sign-up is one bare Lead (B51.1:
+// so is a click to /signup while sign-up is open).
 
 // The test setup has already imported the app, so the ID is swapped in on a fresh copy of the banner's modules.
 let MetaPixel: typeof import('./MetaPixel').MetaPixel
@@ -81,6 +82,31 @@ describe('MetaPixel', () => {
     act(() => fireEvent.click(screen.getByRole('button', { name: 'to /pricing' })))
     expect(calls().filter((c) => c[1] === 'PageView')).toHaveLength(2)
     expect(metaScripts()).toHaveLength(1)
+  })
+
+  // B51.1: while sign-up is open the way in is Get started (or Create your workspace), so a click on it is the Lead.
+  it.each([
+    [true, 1],
+    [false, 0],
+  ])('after Accept, with sign-up open %s, a click to /signup counts %i Lead', async (open, n) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ mode: 'oidc', authenticated: false, signup_open: open }), { status: 200 })),
+    )
+    window.history.pushState({}, '', '/pricing')
+    render(
+      <MemoryRouter initialEntries={['/pricing']}>
+        <MetaPixel />
+        <a href="/signup" className={focusRing} onClick={(e) => e.preventDefault()}>
+          <span>Create your workspace</span>
+        </a>
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/auth/me', expect.anything()))
+    await act(async () => {})
+    fireEvent.click(screen.getByText('Create your workspace'))
+    expect(calls().filter((c) => c[1] === 'Lead')).toEqual(Array(n).fill(['track', 'Lead']))
   })
 
   it('after Reject, or closing the banner, nothing', () => {

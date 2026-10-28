@@ -105,7 +105,8 @@ describe('every inline link in the product takes the one shape', () => {
   it('the front page’s inline links take it too — the shape is the site’s, not only the console’s', () => {
     // (Its contact address is an <a> dressed as a Button — a control, not a link in prose.)
     const landing = links.filter((s) => s.file.endsWith('areas/marketing/Landing.tsx'))
-    expect(landing.filter(usesInlineLink).length).toBeGreaterThanOrEqual(5)
+    // B51.1: its header and footer links are the shared SiteChrome's now, which take the shape there.
+    expect(landing.filter(usesInlineLink).length).toBeGreaterThanOrEqual(2)
     expect(landing.filter((s) => !usesInlineLink(s) && /\bunderline\b/.test(s.cls)).map((s) => s.cls)).toEqual([])
   })
 
