@@ -1728,6 +1728,12 @@ export function chatApprovalFaceID(seed: number): Scenario {
   }
 }
 
+/** The refs of a call's holds that no settle or release has closed yet: while one is open, its worst case counts as spent. */
+export function openHolds(lines: AgentLine[]): string[] {
+  const closed = new Set(lines.filter((l) => l.kind === 'settle' || l.kind === 'release').map((l) => l.ref))
+  return lines.filter((l) => l.kind === 'hold' && !closed.has(l.ref)).map((l) => l.ref ?? '')
+}
+
 /**
  * B28.6 — the first screen after sign-in is the wallet home. An agent spends once, asks again above its
  * approval amount (Lens files the approval), and is given a monthly budget of four times what it spent;
@@ -1751,6 +1757,9 @@ export function walletHome(seed: number): Scenario {
       const key = await bank.issueKey(a)
       const served = await agentAsks(ctx, key, sum(r).q, 'one request, so the month has a spend')
       if (!served.ok) return fail(`${a.name}'s first request was refused: ${served.status} ${served.error}`)
+      // B17.284 — Lens settles the call a moment after it answers; read before that, the spend is the hold's worst case.
+      // A settle of exactly the hold writes no line, so this waits a bounded while, not for ever.
+      for (let i = 0; i < 10 && openHolds(await ctx.env.lens.agentLines(ctx.app.user, a.id)).length > 0; i++) await new Promise((ok) => setTimeout(ok, 2_000))
       const spent = agentIn(await bookOf(ctx), a.id)?.spent_ulxc ?? 0
       if (spent <= 0) return fail(`served, yet Lens says ${a.name} has spent ${spent} µLXC`)
       err = await bank.setLimit(a, 'Ask a person above', 1)
