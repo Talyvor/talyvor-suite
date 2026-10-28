@@ -1,9 +1,9 @@
-// B28.292 — THE WEEKLY DEEP RED-TEAM PASS. Once a week (scripts/e2e-nightly.sh, on E2E_DEEP_DAY) the night's run goes on,
-// after its own scenarios and under the same hard cap, to `--deep-rounds` rounds: in each, a fresh attacker created for
+// B28.292 — THE DEEP RED-TEAM PASS. Every night (B50.7; scripts/e2e-nightly.sh: one round, E2E_DEEP_ROUNDS on E2E_DEEP_DAY) the
+// run goes on, after its own scenarios and under the same hard cap, to `--deep-rounds` rounds: in each, a fresh attacker created for
 // the run plays every red-team scenario (B28.279–B28.290) back to back, each on a fresh workspace of its own, against a
 // counterparty created for that round alone. Rounds run one after another, never at once: keys-not-forwarded listens on
 // the one upstream port. A FAIL is filed like any other (filing.ts, under its scenario's marker), so a hole the night's
-// own run of a scenario let through becomes a build item naming the round that found it.
+// own run of a scenario let through becomes a build item naming the round that found it — a SECURITY item under B50 (filing.ts; report.ts SECURITY_SCENARIOS names the chain).
 
 import { ledgerCallOnce, ledgerMovesAtOnce } from './concurrency.ts'
 import { injectionExfil } from './injection.ts'
@@ -14,6 +14,7 @@ import { agentRulesUnbypassable } from './rules.ts'
 import type { Scenario } from './scenarios.ts'
 import { csrfRefused, scriptInert } from './session.ts'
 import { fileBombBounded, ssrfRefused } from './ssrf.ts'
+import { approvalReused, csrfEveryWrite, moneyTampered, xssShownBack } from './security.ts'
 import { crossCompanyTestMoney } from './testmoney.ts'
 import { marketAbuse } from './trade.ts'
 import { webhookReplayed, webhookUnsigned } from './webhooks.ts'
@@ -32,6 +33,7 @@ export function redTeamChain(attacker: number, counterparty: number): Scenario[]
     keysUnlisted(), keysNotForwarded(), // B28.287
     rateLimitsHold(), // B28.288
     crossCompanyTestMoney(attacker, counterparty), // B28.290
+    moneyTampered(), approvalReused(), injectionExfil('web page'), injectionExfil('room message'), csrfEveryWrite(), xssShownBack(), // B50.7
   ]
 }
 

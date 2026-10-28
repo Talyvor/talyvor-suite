@@ -12,13 +12,14 @@
 // scenarios FAIL with the same refusal from Lens — the same LENS_ setting named, or the same sentence once
 // its numbers are taken out — they are one cause, and one item, carrying each scenario's marker.
 
-import { appendFile, readFile } from 'node:fs/promises'
+import { appendFile, readFile, writeFile } from 'node:fs/promises'
 import { type B28Report, untestedMarker } from './b28.ts'
 import { ASK_MARKER, type CodeReport } from './code.ts'
 import { type EdgeReport, edgeMarker, failedNow } from './edge.ts'
 import { type HostileReport, hostileMarker } from './hostile.ts'
+import { KEY_SHAPE } from './injection.ts'
 import { networkDrop } from './oracles.ts'
-import type { ReportedRun } from './report.ts'
+import { isSecurity, type ReportedRun } from './report.ts'
 import { scenarioOwners } from './scenarios.ts'
 
 type Outcome = ReportedRun['outcomes'][number]
@@ -55,6 +56,22 @@ export function coveredScenarios(buildMd: string): Map<string, string> {
     if (m !== null && covering && id !== '') covered.set(m[1], id)
   }
   return covered
+}
+
+/** B50.7 — the next unused number in the B50 series, where SECURITY items go. */
+export function nextB50(buildMd: string): number {
+  let max = 0
+  for (const m of buildMd.matchAll(/^## B50\.(\d+) —/gm)) max = Math.max(max, Number(m[1]))
+  return max + 1
+}
+
+/** B50.7 — `buildMd` with `items` put right under the B50 section's heading and its opening paragraphs; at the end when there is no B50. */
+export function underB50(buildMd: string, items: string): string {
+  const head = /^# B50 —.*$/m.exec(buildMd)
+  if (head === null) return buildMd + (buildMd.endsWith('\n') ? '' : '\n') + items
+  const next = buildMd.slice(head.index).search(/\n##? /)
+  const at = next === -1 ? buildMd.length : head.index + next + 1
+  return buildMd.slice(0, at) + items.replace(/^\n/, '') + '\n' + buildMd.slice(at)
 }
 
 /** The next unused number in the B17 series. */
@@ -97,6 +114,8 @@ function causeOf(fails: Outcome[]): { key: string; text: string; fails: Outcome[
 export interface Filing {
   /** Text to append to BUILD.md: one item per newly failing scenario or cause. Empty when there is none. */
   append: string
+  /** B50.7 — text to put right under the B50 heading: one SECURITY item per newly failing security scenario. */
+  security: string
   /** One entry per scenario filed; the scenarios of one cause share its id. */
   filed: { id: string; scenario: string; repo: string }[]
   covered: { scenario: string; by: string }[]
@@ -110,11 +129,11 @@ function shownOf(o: Outcome): string[] {
     .map((e) => oneLine(`asked "${e.question ?? ''}" → ${e.error !== undefined ? `refused: ${e.error}` : `"${(e.answer ?? '').slice(0, 160)}" [${e.footer ?? ''}]${e.served === undefined ? '' : ` (served: ${e.served})`}`}`))
 }
 
-/** B28.292 — the rounds of the weekly deep red-team pass that FAILed a scenario, and whether nothing else that night did. */
+/** B28.292 — the rounds of the deep red-team pass that FAILed a scenario, and whether nothing else that night did. */
 function deepNote(fails: Outcome[]): string[] {
   const rounds = [...new Set(fails.flatMap((f) => (f.deep === undefined ? [] : [f.deep])))]
   if (rounds.length === 0) return []
-  return [`The weekly deep red-team pass (B28.292) caught it, in round ${rounds.join(', ')}` +
+  return [`The deep red-team pass (B28.292, B50.7) caught it, in round ${rounds.join(', ')}` +
     (fails.every((f) => f.deep !== undefined) ? ": nothing else that night FAILED it, so it slipped through the nightly's own run." : '.')]
 }
 
@@ -131,12 +150,37 @@ export function itemsFor(buildMd: string, run: ReportedRun, reportFile: string, 
     if (o.status !== 'FAIL') continue
     failing.set(o.scenario, [...(failing.get(o.scenario) ?? []), o])
   }
-  const out: Filing = { append: '', filed: [], covered: [] }
-  const fresh = [...failing].filter(([scenario]) => {
+  const out: Filing = { append: '', security: '', filed: [], covered: [] }
+  const all = [...failing].filter(([scenario]) => {
     const by = covered.get(scenario)
     if (by !== undefined) out.covered.push({ scenario, by })
     return by === undefined
   })
+  // B50.7 — a security scenario's FAIL is its own SECURITY item under B50, never folded into one cause.
+  const fresh = all.filter(([scenario]) => !isSecurity(scenario))
+  let s50 = nextB50(buildMd)
+  for (const [scenario, fails] of all.filter(([scenario]) => isSecurity(scenario))) {
+    const first = fails[0]
+    const id = `B50.${s50++}`
+    const repo = owners.get(scenario) ?? NO_OWNER
+    // Never a key in BUILD.md: what the scenario saw is described, any key-shaped string in it taken out.
+    const said = oneLine(first.detail).replace(new RegExp(KEY_SHAPE.source, 'g'), '<a key, withheld>')
+    out.security += [
+      '',
+      `## ${id} — SECURITY: ${oneLine(first.title).slice(0, 200)}`,
+      `repo: ${repo} · deps: none · status: OPEN`,
+      `Filed by the nightly red team on ${run.started_at.slice(0, 10)} (${reportFile}): the \`${scenario}\` scenario FAILED for ${fails.length} of ` +
+        `${run.outcomes.filter((o) => o.scenario === scenario).length} synthetic user(s), on synthetic accounts only. First, user ${first.user} (${first.workspace}): ${said}`,
+      ...deepNote(fails),
+      ...lightNote(run),
+      `Reproduce: the deep pass plays it — \`E2E_DEEP_ROUNDS=1 pnpm --filter @talyvor/e2e run\` against a local stack (e2e/selftest) — and the night's report ` +
+        `holds its evidence. Fix it red-first in ${repo}; the scenario is the failing test.`,
+      `e2e-scenario: ${scenario}`,
+      `DONE = the \`${scenario}\` scenario PASSes for every user in the next nightly.`,
+      '',
+    ].join('\n')
+    out.filed.push({ id, scenario, repo })
+  }
   // One cause: the scenarios not covered yet whose FAILs mostly report the same refusal, when there are enough of them.
   const causes = new Map<string, { text: string; scenarios: { scenario: string; fails: Outcome[] }[] }>()
   for (const [scenario, fails] of fresh) {
@@ -214,6 +258,10 @@ export async function fileItems(path: string, run: ReportedRun, reportFile: stri
     return undefined
   }
   const filing = itemsFor(buildMd, run, reportFile)
+  if (filing.security !== '') {
+    // Re-read: B50 must be put in the file as it is now, not as it was read, or another session's write is lost.
+    await writeFile(path, underB50(await readFile(path, 'utf8'), filing.security))
+  }
   if (filing.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + filing.append)
   return filing
 }

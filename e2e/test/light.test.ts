@@ -73,9 +73,10 @@ describe('the light pass (B28.294)', () => {
 
   it('files a FAIL as the nightly does, saying the light pass caught it', () => {
     const f = itemsFor('# queue\n', run, 'docs/e2e/report-2026-10-08.md')
-    expect(f.filed).toEqual([{ id: 'B17.1', scenario: 'csrf-refused', repo: 'talyvor-suite' }])
-    expect(f.append).toContain('The light pass of 2026-10-08T12:30:00.000Z (B28.294), between the nightly runs, caught it.')
-    expect(f.append).toContain('\ne2e-scenario: csrf-refused\n')
+    // B50.7 — csrf-refused is a security scenario: its FAIL is a SECURITY item under B50.
+    expect(f.filed).toEqual([{ id: 'B50.1', scenario: 'csrf-refused', repo: 'talyvor-suite' }])
+    expect(f.security).toContain('The light pass of 2026-10-08T12:30:00.000Z (B28.294), between the nightly runs, caught it.')
+    expect(f.security).toContain('\ne2e-scenario: csrf-refused\n')
   })
 
   it('is named in the report and TESTERS.md, with the day\'s cap it ran under', () => {
