@@ -25,7 +25,7 @@ import {
 } from './planApi'
 import { formatCents } from './topupApi'
 import { formatULXC } from './agentBankApi'
-import { usePricing, type Pricing } from '../marketing/pricingApi'
+import { CARDS_OFF, cardPayments, usePricing, type Pricing } from '../marketing/pricingApi'
 import { CompanyCard, TAX_LINE } from '../marketing/PriceCard'
 import { COMPANY_CONTACT } from '../../company'
 
@@ -91,6 +91,13 @@ function SwitchPlan({ plan, sw }: { plan: PlanOffer; sw: PlanSwitch }) {
   )
 }
 
+/** B51.3 — what stands in place of a checkout, a plan change or the add-on while a card cannot be charged. */
+type Cards = ReturnType<typeof cardPayments>
+
+function CardsOff({ cards }: { cards: Cards }) {
+  return cards === 'off' ? <p className="text-body text-ink">{CARDS_OFF}</p> : null
+}
+
 function PlanCard({
   plan,
   usdCents,
@@ -100,6 +107,7 @@ function PlanCard({
   busy,
   onChoose,
   switching,
+  cards,
 }: {
   plan: PlanOffer
   /** The price Lens states for the plan; undefined until — or unless — Lens states it. */
@@ -112,6 +120,7 @@ function PlanCard({
   onChoose: (id: PlanId) => void
   /** Set for a subscriber's other plans: the card offers a move to it instead of a checkout. */
   switching?: PlanSwitch
+  cards: Cards
 }) {
   return (
     <li
@@ -138,6 +147,8 @@ function PlanCard({
         <div className="border-t border-rule px-gutter py-3">
           {current ? (
             <p className="text-body text-ink">Your plan</p>
+          ) : cards !== 'live' ? (
+            <CardsOff cards={cards} />
           ) : switching ? (
             <SwitchPlan plan={plan} sw={switching} />
           ) : (
@@ -182,6 +193,7 @@ function ByokAddonCard({
   byok,
   busy,
   onSet,
+  cards,
 }: {
   usdCents: number | undefined
   /** The plan the workspace is on, as the subscription names it; undefined when it has none. */
@@ -189,6 +201,7 @@ function ByokAddonCard({
   byok: boolean
   busy: boolean
   onSet: (on: boolean) => void
+  cards: Cards
 }) {
   const current = plan === 'byok' || (plan === 'team' && byok)
   return (
@@ -224,10 +237,16 @@ function ByokAddonCard({
         ) : plan === 'team' && byok ? (
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-body text-ink">On your Team plan.</p>
-            <Button disabled={busy} onClick={() => onSet(false)}>
-              {busy ? 'Removing…' : `Remove ${BYOK.name}`}
-            </Button>
+            {cards === 'live' ? (
+              <Button disabled={busy} onClick={() => onSet(false)}>
+                {busy ? 'Removing…' : `Remove ${BYOK.name}`}
+              </Button>
+            ) : (
+              <CardsOff cards={cards} />
+            )}
           </div>
+        ) : plan === 'team' && cards !== 'live' ? (
+          <CardsOff cards={cards} />
         ) : plan === 'team' ? (
           <Button disabled={busy} onClick={() => onSet(true)}>
             {busy ? 'Adding…' : `Add ${BYOK.name} to Team`}
@@ -417,6 +436,7 @@ export function Plans({
   const [movedTo, setMovedTo] = useState<PlanOffer | null>(null)
   const [confirming, setConfirming] = useState<PlanId | null>(null)
   const pricing = usePricing()
+  const cards = cardPayments(pricing)
   const served: Pricing | undefined = pricing.status === 'ok' ? pricing.pricing : undefined
   const priced = served?.plans
   const priceOf = (id: string) => priced?.find((o) => o.id === id)?.usd_cents
@@ -548,6 +568,8 @@ export function Plans({
                         <Button asChild>
                           <a href={`mailto:${COMPANY_CONTACT}`}>Talk to us</a>
                         </Button>
+                      ) : forSale && !subscribed && cards !== 'live' ? (
+                        <CardsOff cards={cards} />
                       ) : forSale && !subscribed ? (
                         <Button disabled={busy} onClick={() => start.mutate(offer.id)}>
                           {busy ? 'Opening checkout…' : `Choose ${offer.name}`}
@@ -571,6 +593,7 @@ export function Plans({
           byok={!!st?.byok}
           busy={addon.isPending}
           onSet={(on) => addon.mutate(on)}
+          cards={cards}
         />
         <h2 className="mt-10 text-head text-ink">For individuals</h2>
         <p className="mt-2 max-w-2xl text-body text-muted">
@@ -587,6 +610,7 @@ export function Plans({
               canChoose={forSale && !subscribed}
               busy={start.isPending && start.variables === p.id}
               onChoose={(id) => start.mutate(id)}
+              cards={cards}
               switching={
                 subscribed && !onBYOK && !onCompany && current?.id !== p.id
                   ? {

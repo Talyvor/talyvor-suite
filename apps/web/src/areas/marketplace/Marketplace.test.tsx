@@ -265,3 +265,26 @@ describe('the marketplace', () => {
     expect(invoicePdfHref(inv)).toBeUndefined()
   })
 })
+
+// B51.3 — the bill names the card only while one can be charged (talyvor-lens B51.2); otherwise it says so.
+describe.each([
+  ['live', true],
+  ['test', false],
+  ['off', false],
+  [undefined, false],
+])('the marketplace bill while card_payments is %s (B51.3)', (cards, live) => {
+  it(live ? 'says it is billed on your card' : 'says card payments are not switched on', async () => {
+    mockBff()
+    const rest = vi.mocked(globalThis.fetch).getMockImplementation()!
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) =>
+      String(input) === '/api/pricing'
+        ? new Response(JSON.stringify({ card_payments: cards }), { status: 200 })
+        : rest(input, init),
+    )
+    await at('/marketplace/bill')
+    await screen.findByTestId('market-bill-total')
+    const intro = screen.getByText(/Every paid listing your workspace or its agents used/)
+    await waitFor(() => expect(intro.textContent).toContain(live ? 'billed on your card each month' : 'Card payments aren’t switched on yet.'))
+    expect(intro.textContent?.includes('on your card')).toBe(live)
+  })
+})

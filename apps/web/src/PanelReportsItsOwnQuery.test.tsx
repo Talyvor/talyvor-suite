@@ -99,6 +99,7 @@ function bodyFor(url: string): unknown {
   if (url.includes('/api/bonds')) return { enabled: false }
   if (url.includes('/api/billing/allowance')) return { capability: 'subscriptions', enabled: false }
   if (url.includes('/api/lxc/topup-options')) return { allowed_usd_cents: [1000, 2500], billing_enabled: true }
+  if (url.includes('/api/pricing')) return { card_payments: 'live' }
   if (url.includes('/api/context')) return { workspace_id: 'uabcdefghijklmnopqrstuvwxy', lens_base_url: 'http://lens:8080', lens_public_base_url: 'https://lens.example' }
   if (url.includes('/api/distill')) return { distill_policy: 'disabled', converted: 0, vision_ocr: 0, days: 30 }
   // The LIST routes. ⚠ AN OBJECT HERE IS NOT A HARMLESS STAND-IN: the first draft answered
@@ -165,7 +166,7 @@ const ADDRESS_ROUTES: Record<string, string[]> = {
   '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/approvals', '/api/agents/forecast', '/api/docs/membership', '/api/docs/pins', '/api/lxc/topup-options', '/api/workspace/name'],
   '/overview': ['/api/agents/approvals', '/api/bonds', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/workspace/name'],
   '/ledger': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/lxc/history', '/api/workspace/name'],
-  '/billing': ['/api/agents/approvals', '/api/billing/allowance', '/api/docs/membership', '/api/docs/pins', '/api/lxc/balance', '/api/lxc/topup-options', '/api/workspace/name'],
+  '/billing': ['/api/agents/approvals', '/api/billing/allowance', '/api/docs/membership', '/api/docs/pins', '/api/lxc/balance', '/api/lxc/topup-options', '/api/pricing', '/api/workspace/name'],
   '/keys': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/keys', '/api/workspace/name'],
   '/setup': ['/api/agents/approvals', '/api/context', '/api/docs/membership', '/api/docs/pins', '/api/keys', '/api/workspace/name'],
   '/spend': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/lxc/history', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/workspace/name'],
@@ -182,6 +183,9 @@ const ADDRESS_ROUTES: Record<string, string[]> = {
 }
 
 const FAILURE_WORDING = /Couldn[’']t (load|check)/i
+
+/** B51.3 — public reads, answered to someone not signed in: no credential to refuse, so case A has no 401 to sweep. */
+const PUBLIC_ROUTES = new Set(['/api/pricing'])
 
 /*
  * ⚠ THE EXEMPTION THAT USED TO LIVE HERE IS CLOSED. /settings was the one gated address that
@@ -255,9 +259,9 @@ describe('the swept set', () => {
     // 38 → 48 at B27.15: the sidebar asks Docs whether the person is a member first, on every address; 48 → 49 at B27.27 (/settings reads the provider keys); 49 → 50 at B27.32 (/spend reads the measured saving).
     // 50 → 56 at B28.6: the wallet home at `/` (its book, an agent's rules, approvals, forecast, and the sidebar's two).
     // 56 → 66 at B28.7: the sidebar's Approvals badge reads the approvals on every address (`/` already did). 67 at B28.22: `/` reads the peg.
-    // 67 → 78 at B46.16: the sidebar reads the workspace's name on every address.
+    // 67 → 78 at B46.16: the sidebar reads the workspace's name on every address. 79 at B51.3: /billing reads whether a card can be charged.
     const pairs = Object.values(ADDRESS_ROUTES).reduce((n, r) => n + r.length, 0)
-    expect(pairs).toBe(78)
+    expect(pairs).toBe(79)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {
@@ -289,7 +293,7 @@ describe('with every request answered, no address reports a failure', () => {
 
 describe('a single refused credential is never reported as a genuine fault', () => {
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {
-    for (const route of routes) {
+    for (const route of routes.filter((r) => !PUBLIC_ROUTES.has(r))) {
       it(`${addr} with only ${route} refused 401`, async () => {
         mockBff([[route, 401]])
         at(addr)

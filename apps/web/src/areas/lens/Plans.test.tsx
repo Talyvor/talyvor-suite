@@ -21,6 +21,7 @@ const UNSUBSCRIBED = { ...SUBSCRIBED, allowance: null }
 
 // GET /api/pricing as the BFF passes on Lens's public plans read (talyvor-lens B28.439, at h = 0).
 const PRICING = {
+  card_payments: 'live',
   min_usd_cents: 1000,
   max_usd_cents: 1000000,
   preset_usd_cents: [1000, 5000, 10000],
@@ -34,12 +35,12 @@ const PRICING = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-function serve(allowance: unknown, { sharing = true, pooled = 9 } = {}) {
+function serve(allowance: unknown, { sharing = true, pooled = 9, pricing = PRICING as unknown } = {}) {
   const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input)
     if (url === '/api/billing/allowance') return json(allowance)
     if (url === '/api/billing/subscribe') return json({ url: 'https://checkout.stripe.com/c/pay/cs_test_plan' })
-    if (url === '/api/pricing') return json(PRICING)
+    if (url === '/api/pricing') return json(pricing)
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, cache_poolable: sharing })
     if (url.startsWith('/api/usage'))
       return json({ period_days: 30, models: [], cache: { total_requests: 40, cache_hits: pooled, misses: 31, hit_rate: 0.2, by_source: { upstream: 31, cache_hit_pooled: pooled } } })
@@ -212,5 +213,19 @@ describe('/plans reads the approved price card (B32.14)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Choose Business' }))
     await waitFor(() => expect(redirect).toHaveBeenCalledWith('https://checkout.stripe.com/c/pay/cs_test_team'))
     expect(posts).toEqual(['/api/billing/subscribe {"plan":"business"}'])
+  })
+})
+
+// B51.3 — while a card cannot be charged (talyvor-lens B51.2), Plans shows every price and, in place of each Choose,
+// says so.
+describe.each(['test', 'off', undefined])('Plans while card_payments is %s (B51.3)', (cardPayments) => {
+  it('shows the prices and says card payments are not switched on, with no Choose button', async () => {
+    serve({ capability: 'subscriptions', enabled: true, data: UNSUBSCRIBED }, { pricing: { ...PRICING, card_payments: cardPayments } })
+    renderIn(<Plans />)
+
+    expect(await screen.findAllByText('Card payments aren’t switched on yet.')).toHaveLength(3)
+    const text = screen.getByText('Plus').closest('ul')!.textContent
+    for (const price of ['$20', '$100', '$200']) expect(text).toContain(price)
+    expect(screen.queryByRole('button', { name: /choose/i })).not.toBeInTheDocument()
   })
 })

@@ -38,6 +38,7 @@ function serve() {
     // B32.14 — which plan a fee is the price of is read from the served prices, never typed in the screen.
     if (url === '/api/pricing')
       return json({
+        card_payments: 'live',
         min_usd_cents: 1000,
         max_usd_cents: 1_000_000,
         preset_usd_cents: [1000],

@@ -250,7 +250,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'error={ledger.error}',
     why: 'the CORRECT copy of the seam Spend.tsx had backwards — the whole positive control for that finding is that this line reads `ledger.error` while its guard is `ledger.isError`',
   },
-  'apps/web/src/PanelReportsItsOwnQuery.test.tsx:343|apps/web/src/areas/lens/Overview.tsx:326': {
+  'apps/web/src/PanelReportsItsOwnQuery.test.tsx:347|apps/web/src/areas/lens/Overview.tsx:326': {
     kind: 'LIVE',
     fragment: '<Failed what="the mint ledger" error={ledger.error} />',
     why: 'the same line quoted VERBATIM beside the must-stay-green control that asserts its wording, so the quote and the assertion cannot drift apart',
@@ -424,7 +424,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'ApiError, NOT a bare Error',
     why: 'the census quoting the one place the repo recorded the class, so its list of four is checkable',
   },
-  'apps/web/src/checkoutRefusalSurface.test.tsx:65|apps/web/src/areas/lens/TopUp.tsx:29': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:65|apps/web/src/areas/lens/TopUp.tsx:30': {
     kind: 'LIVE',
     fragment: 'The payment happens THERE',
     why: 'why "nothing was charged" is honest for a call that never completed — the charge happens after the redirect',
@@ -449,12 +449,12 @@ const PINS: Record<string, Pin> = {
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'its second example, pinned for the same reason',
   },
-  'apps/web/src/upstreamCitations.test.ts:62|apps/web/src/areas/lens/TopUp.tsx:29': {
+  'apps/web/src/upstreamCitations.test.ts:62|apps/web/src/areas/lens/TopUp.tsx:30': {
     kind: 'LIVE',
     fragment: 'The payment happens THERE',
     why: 'the citation that WAS pinned, named in the account of why its neighbour was not — so that account cannot rot either',
   },
-  'apps/web/src/checkoutRefusalSurface.test.tsx:176|apps/web/src/areas/lens/TopUp.tsx:317': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:177|apps/web/src/areas/lens/TopUp.tsx:320': {
     kind: 'LIVE',
     fragment: 'must not leave a pending marker behind',
     why: 'the rule the marker test asserts, quoted from the code that states it rather than restated',

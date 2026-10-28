@@ -76,6 +76,8 @@ export interface Pricing {
   enterprise_from_usd_cents?: number
   plan_gates?: PlanGates
   fees?: Fees
+  /** B51.3 — whether a card can be charged (talyvor-lens B51.2); ABSENT when Lens did not say. */
+  card_payments?: 'live' | 'test' | 'off'
 }
 
 /** The plans' names. Words, not figures: every figure about a plan is read from Lens. */
@@ -118,6 +120,16 @@ export type PricingState =
   | { status: 'loading' }
   | { status: 'failed' }
   | { status: 'ok'; pricing: Pricing }
+
+/** B51.3 — what a screen shows in place of a card button while a card cannot be charged. */
+export const CARDS_OFF = 'Card payments aren’t switched on yet.'
+
+/** B51.3 — a card button is offered only on Lens's "live"; "test", "off", no answer or an unread one are all "off".
+ *  "loading" draws neither the button nor the sentence. */
+export function cardPayments(state: PricingState): 'live' | 'off' | 'loading' {
+  if (state.status === 'loading') return 'loading'
+  return state.status === 'ok' && state.pricing.card_payments === 'live' ? 'live' : 'off'
+}
 
 export function usePricing(): PricingState {
   const [state, setState] = useState<PricingState>({ status: 'loading' })

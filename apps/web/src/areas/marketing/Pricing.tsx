@@ -4,6 +4,7 @@ import { formatCents, formatLXC, lxcForCents } from '../lens/topupApi'
 import { Eyebrow, Figure, TealRule } from './Landing'
 import {
   PRICING_PATH,
+  cardPayments,
   formatPeg,
   usePricing,
   type Pricing as PricingData,
@@ -77,7 +78,9 @@ function RateCard({ state }: { state: PricingState }) {
   )
 }
 
+/** B51.3 — while a card cannot be charged, the amounts and what they buy, and no line about topping up by card. */
 function TopUps({ pricing }: { pricing: PricingData }) {
+  const cards = pricing.card_payments === 'live'
   const { min_usd_cents: min, max_usd_cents: max, usd_per_lxc: peg } = pricing
   const amounts = [...pricing.preset_usd_cents]
   if (ANY_AMOUNT_EXAMPLE_CENTS >= min && ANY_AMOUNT_EXAMPLE_CENTS <= max && !amounts.includes(ANY_AMOUNT_EXAMPLE_CENTS)) {
@@ -86,11 +89,13 @@ function TopUps({ pricing }: { pricing: PricingData }) {
   const rows = amounts.map((cents) => ({ cents, lxc: lxcForCents(cents, peg) }))
   return (
     <div>
-      <p className="max-w-xl text-lede text-ink">
-        Top up any amount from <span className="font-figure">{formatCents(min)}</span> to{' '}
-        <span className="font-figure">{formatCents(max)}</span>.
-      </p>
-      <div className="mt-6 grid gap-px overflow-hidden rounded-card border border-rule bg-rule wide:grid-cols-4">
+      {cards ? (
+        <p className="mb-6 max-w-xl text-lede text-ink">
+          Top up any amount from <span className="font-figure">{formatCents(min)}</span> to{' '}
+          <span className="font-figure">{formatCents(max)}</span>.
+        </p>
+      ) : null}
+      <div className="grid gap-px overflow-hidden rounded-card border border-rule bg-rule wide:grid-cols-4">
         {rows.map(({ cents, lxc }) => (
           <div key={cents} className="bg-raised px-5 py-4">
             <p className="font-figure text-figure text-ink">{formatCents(cents)}</p>
@@ -100,24 +105,28 @@ function TopUps({ pricing }: { pricing: PricingData }) {
           </div>
         ))}
       </div>
-      <div className="mt-6 grid gap-x-12 gap-y-4 wide:grid-cols-2">
-        <p className="text-body text-muted">
-          <span className="text-ink">
-            Why <span className="font-figure">{formatCents(min)}</span> at the bottom.
-          </span> Card payments carry
-          a fixed fee per charge; below this it stops being a small part of what you paid.
-        </p>
-        <p className="text-body text-muted">
-          <span className="text-ink">
-            Why <span className="font-figure">{formatCents(max)}</span> at the top.
-          </span> It is the most one
-          stolen or disputed card can cost, since credit spent before a chargeback cannot be taken
-          back. A team spending more tops up more than once.
-        </p>
-      </div>
+      {cards ? (
+        <div className="mt-6 grid gap-x-12 gap-y-4 wide:grid-cols-2">
+          <p className="text-body text-muted">
+            <span className="text-ink">
+              Why <span className="font-figure">{formatCents(min)}</span> at the bottom.
+            </span> Card payments carry
+            a fixed fee per charge; below this it stops being a small part of what you paid.
+          </p>
+          <p className="text-body text-muted">
+            <span className="text-ink">
+              Why <span className="font-figure">{formatCents(max)}</span> at the top.
+            </span> It is the most one
+            stolen or disputed card can cost, since credit spent before a chargeback cannot be taken
+            back. A team spending more tops up more than once.
+          </p>
+        </div>
+      ) : null}
     </div>
   )
 }
+
+const NO_TOP_UP_FEE = 'No top-up fee.'
 
 const NOT_CHARGED: Array<{ title: string; body: string }> = [
   {
@@ -133,7 +142,7 @@ const NOT_CHARGED: Array<{ title: string; body: string }> = [
     body: 'A balance you are not using costs nothing, and nothing is due on it until you top up again. A paid plan, if you choose one, is billed every month.',
   },
   {
-    title: 'No top-up fee.',
+    title: NO_TOP_UP_FEE,
     body: 'The whole amount becomes credit — the card fee is not taken out of what you bought.',
   },
 ]
@@ -141,6 +150,7 @@ const NOT_CHARGED: Array<{ title: string; body: string }> = [
 export function Pricing() {
   useDocumentTitle('Pricing')
   const state = usePricing()
+  const cards = cardPayments(state) === 'live'
   return (
     <div className="flex min-h-full flex-col bg-canvas text-ink">
       <PublicHeader current="/pricing" />
@@ -286,7 +296,7 @@ export function Pricing() {
               <p className="text-body text-muted">
                 Agents, prompts, skills and evaluations other teams publish on the Marketplace. Each
                 use of a paid listing, by you or one of your agents, is charged the price the listing
-                shows and billed on your card once a month — never taken from your credits.
+                shows and billed {cards ? 'on your card ' : ''}once a month — never taken from your credits.
               </p>
               <p className="text-body text-muted">
                 The models a listing calls are charged like any other request, not on this bill. Every
@@ -304,7 +314,7 @@ export function Pricing() {
             </h2>
             <TealRule className="mt-5" />
             <div className="mt-8 grid gap-3 wide:grid-cols-2">
-              {NOT_CHARGED.map((n) => (
+              {NOT_CHARGED.filter((n) => cards || n.title !== NO_TOP_UP_FEE).map((n) => (
                 <div key={n.title} className="rounded-card border border-rule bg-raised p-6">
                   <p className="text-head text-ink">{n.title}</p>
                   <p className="mt-2 text-body text-muted">{n.body}</p>
