@@ -79,6 +79,7 @@ import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
+import { roomEarnings } from './roomEarnings.ts'
 import { agentCards } from './agentCards.ts'
 import { agentWalletKinds } from './agentWalletKinds.ts'
 import { speechThroughLens } from './speech.ts'
@@ -5446,6 +5447,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B46.12 — the money layer's contract on the sandbox, once a run, on a workspace of its own: a new agent has a wallet; £20.00 over
   // its mandate waits for approval with nothing moved; approved once it is one payment out, the replay 409; a refused one half-done in nothing.
   if (i === 3) list.push(moneyLayerContract())
+  // B46.21 — a Room's earnings paid out on the sandbox, once a run, on workspaces of its own: £10.00 split equally among three members
+  // is £3.34/£3.33/£3.33 in earnings_payout rows, two completed and the one without verified details held; again, nothing new.
+  if (i === 3) list.push(roomEarnings())
   // B46.20 — an agent's single-use cards on the sandbox, once a run, on a workspace of its own: its key asks for three capped cards to
   // book a trip; one approval issues all three, locked and closing within 24 hours, with one card_hold of the total; again, nothing more.
   if (i === 0) list.push(agentCards())

@@ -147,6 +147,7 @@ import { Readable } from 'node:stream'
 import { HOLD_REASON, TaxDesk } from './stub-tax.ts'
 import { VerificationDesk } from './stub-verification.ts'
 import { PayeeDesk } from './stub-payees.ts'
+import { EarningsDesk } from './stub-earnings.ts'
 import { PermissionMandateDesk } from './stub-permission-mandates.ts'
 import { DeviceKeyDesk } from './stub-device-keys.ts'
 import { PaymentRequestDesk } from './stub-payment-requests.ts'
@@ -508,6 +509,8 @@ export class Bank {
   private readonly terms: TermsDesk
   /** B30.118 — each agent's Know Your Agent credential (stub-kya.ts). */
   private readonly kya: KYADesk
+  /** B46.21 — payout details and earnings paid out, a Room's split among them (stub-earnings.ts). */
+  private readonly earningsPayouts: EarningsDesk
   /** B32.89 — reviews, the trust read and the synthetic card link (stub-trust.ts). */
   private readonly trustDesk: TrustDesk
 
@@ -527,6 +530,7 @@ export class Bank {
         : (this.passkeys.get(ws) ?? []).some((k) => k.credential_id === a?.credential_id) ? undefined : 'economy: the approval is not signed: sign its challenge with a passkey or the phone app',
       (ws, agentID, b) => this.payees.payItem(ws, agentID, b), (ws) => this.payees.billsOf(ws))
     this.devices = new DeviceKeyDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
+    this.earningsPayouts = new EarningsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agentID, asset) => this.payees.wallet(ws, agentID, asset))
     this.terms = new TermsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), B30_CAPABILITIES)
     this.kya = new KYADesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agent) => this.kyaFacts(ws, agent))
     this.trustDesk = new TrustDesk({ json: d.json, body: (req) => this.body(req), broken: (name) => this.broken(name),
@@ -1627,6 +1631,7 @@ export class Bank {
     if (await this.permissionMandates.route(req, res, viewer, path)) return true
     if (await this.devices.route(req, res, viewer, path)) return true
     if (await this.paymentRequests.route(req, res, viewer, path)) return true
+    if (await this.earningsPayouts.route(req, res, viewer, path)) return true
     if (path === '/v1/wallets/capabilities') {
       const b30 = (this.broken('b30-capability-gone') ? B30_CAPABILITIES.filter((c) => c.capability !== 'fx') : B30_CAPABILITIES)
         .map((c) => (c.capability === 'payments_out' && this.broken('level-needed-wrong') ? { ...c, level_needed: 'L0' } : c))
