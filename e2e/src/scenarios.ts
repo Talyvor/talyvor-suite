@@ -95,6 +95,7 @@ import { waitlistJoin } from './waitlist.ts'
 import { chatFirstMessage } from './chatFirstMessage.ts'
 import { chatPaymentCard } from './chatPaymentCard.ts'
 import { agentWallet } from './agentWallet.ts'
+import { oneSearch } from './oneSearch.ts'
 import { chatSidebar } from './chatSidebar.ts'
 import { voiceChatMic, voiceChatPay } from './voiceChat.ts'
 import { firstAgent } from './firstAgent.ts'
@@ -4751,7 +4752,7 @@ export function chatRichAnswer(seed: number): Scenario {
  * palette (drawn at 1440 and 390); its New chat leaves a conversation (its answer made up in the browser, so this costs
  * nothing) for an empty one with the conversation still listed; its Switch model opens the model picker; words that name
  * no command search the conversations for them; a page typed into it opens. Ctrl+/ lists the shortcuts, and each one
- * listed is pressed: Ctrl+Shift+O opens a new chat from another screen, / focuses Search conversations, Ctrl+Shift+S hides
+ * listed is pressed: Ctrl+Shift+O opens a new chat from another screen, / opens the palette's one search, Ctrl+Shift+S hides
  * and shows the conversations, Esc closes.
  */
 export function commandPalette(seed: number): Scenario {
@@ -4759,7 +4760,7 @@ export function commandPalette(seed: number): Scenario {
   const EXERCISED = [
     'Open the command palette',
     'New chat',
-    'Search conversations, when not typing',
+    'Search everything, when not typing',
     'Show or hide the conversations, in Chat',
     'Show keyboard shortcuts',
     'Close the palette or this list',
@@ -4776,7 +4777,7 @@ export function commandPalette(seed: number): Scenario {
       const question = `Palette check ${stamp}`
       const provider = env.catalog.find((m) => m.display_name === app.modelNameInUse)?.provider ?? 'anthropic'
       const palette = page.getByRole('dialog', { name: 'Command palette' })
-      const box = palette.getByRole('combobox', { name: 'Type a command or a page' })
+      const box = palette.getByRole('combobox', { name: 'Search, or type a command' })
       const search = page.getByRole('searchbox', { name: 'Search conversations' })
       const shown = (l: Locator) => l.waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS }).then(() => true, () => false)
       const gone = (l: Locator) => l.waitFor({ state: 'hidden', timeout: ACTION_TIMEOUT_MS }).then(() => true, () => false)
@@ -4880,12 +4881,13 @@ export function commandPalette(seed: number): Scenario {
       ctx.evidence.push({ note: `Ctrl+Shift+O from the Ledger: at ${new URL(page.url()).pathname} with ${reopened} question(s) on screen` })
       if (reopened > 0) return fail('Ctrl+Shift+O opened Chat on the last conversation, not a new chat')
 
-      // / focuses Search conversations.
+      // / opens the one search (B41.7): the palette, its box focused.
       await blur()
       await page.keyboard.press('Slash')
-      const slashFocused = await shown(search) && (await page.waitForFunction(() => (document.activeElement as HTMLInputElement | null)?.getAttribute('aria-label') === 'Search conversations', null, { timeout: ACTION_TIMEOUT_MS }).then(() => true, () => false))
-      ctx.evidence.push({ note: `/ pressed outside a text field: Search conversations focused=${slashFocused}` })
-      if (!slashFocused) return fail('/ did not focus Search conversations')
+      const slashFocused = (await shown(palette)) && (await focused(box))
+      ctx.evidence.push({ note: `/ pressed outside a text field: the palette's search focused=${slashFocused}` })
+      if (!slashFocused) return fail('/ did not open the palette on its search')
+      await page.keyboard.press('Escape')
 
       // Ctrl+Shift+S hides the conversations and shows them again.
       await blur()
@@ -5457,6 +5459,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.206 — the daily briefing, once a run, on a workspace of its own: quiet in one line before anything happens; after two
   // payments, one held for approval and a bill due, the next morning's lists all four with their amounts, and the two payments' postings.
   if (i === 5) list.push(dailyBriefing())
+  // B41.7 — one search box, once a run, on a workspace of its own: a supplier's name lists its payee, its payment and its bill
+  // under their headings, and each opens /money/pay on its own row.
+  if (i === 7) list.push(oneSearch())
   // B48.23 — agents of each kind own their wallets, once a run, on a workspace of its own: fiat GBP, crypto USDC, both EUR + USDC,
   // each its own account; removing the kind whose wallet holds test money answers 409 and the ledger keeps it open; one owner wallet per asset.
   if (i === 4) list.push(agentWalletKinds())

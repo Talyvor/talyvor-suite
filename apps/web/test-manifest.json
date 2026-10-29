@@ -200,7 +200,7 @@
   "src/caseCallSites.test.ts": 9,
   "src/checkoutRefusalSurface.test.tsx": 5,
   "src/ClaimsAudit.test.tsx": 38,
-  "src/CommandPalette.test.tsx": 7,
+  "src/CommandPalette.test.tsx": 8,
   "src/CompanyLine.test.tsx": 12,
   "src/components/Waitlist.test.tsx": 3,
   "src/ConsoleDeepHeading.test.tsx": 11,

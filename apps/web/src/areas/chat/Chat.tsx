@@ -2032,7 +2032,6 @@ function ChatRail({
       </Button>
       {searchable ? (
         <Input
-          aria-keyshortcuts={ariaKeys('search')}
           type="search"
           className="mt-3"
           aria-label="Search conversations"

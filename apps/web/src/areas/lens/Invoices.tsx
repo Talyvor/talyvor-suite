@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
+import { LinkedItem } from '../../components/LinkedItem'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
@@ -316,7 +317,7 @@ function InvoiceRow({ inv }: { inv: Invoice }) {
   const s = STATUS[inv.status] ?? { text: inv.status, pill: 'idle' as PillStatus }
   const busy = send.isPending || voidIt.isPending
   return (
-    <li className="flex flex-col gap-2 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`invoice-${inv.number}`}>
+    <LinkedItem id={`invoice-${inv.id}`} className="flex flex-col gap-2 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`invoice-${inv.number}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="min-w-0 text-body text-ink">
           <span className="font-figure">{inv.number}</span> · {inv.customer_name}
@@ -376,6 +377,6 @@ function InvoiceRow({ inv }: { inv: Invoice }) {
       ) : null}
       {send.isError ? <Note ok={false}>{refusalText(send.error)}</Note> : null}
       {voidIt.isError ? <Note ok={false}>{refusalText(voidIt.error)}</Note> : null}
-    </li>
+    </LinkedItem>
   )
 }

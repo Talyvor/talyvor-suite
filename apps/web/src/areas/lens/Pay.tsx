@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, focusRing, type PillStatus } from '@talyvor/ui'
 import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
+import { LinkedItem } from '../../components/LinkedItem'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
 import { APPROVALS_KEY, BOOK_KEY, PASSKEYS_KEY } from './AgentBank'
@@ -201,7 +202,7 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
             {payees.map((p) => {
               const c = status(p.check, CHECK)
               return (
-                <li key={p.id} className="flex flex-col gap-1 border-b border-rule pb-2 last:border-b-0 last:pb-0" data-testid={`payee-${p.id}`}>
+                <LinkedItem key={p.id} id={`payee-${p.id}`} className="flex flex-col gap-1 border-b border-rule pb-2 last:border-b-0 last:pb-0" data-testid={`payee-${p.id}`}>
                   <div className="flex flex-wrap items-center justify-between gap-2 text-body text-ink">
                     <span>
                       {p.name} · {p.country}
@@ -223,7 +224,7 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
                       </Button>
                     </div>
                   ) : null}
-                </li>
+                </LinkedItem>
               )
             })}
           </ul>
@@ -654,7 +655,7 @@ function Waiting({ agentName }: { agentName: (id: string) => string }) {
 function PaymentRow({ p }: { p: OutsidePayment }) {
   const s = status(p.status, PAYMENT_STATUS)
   return (
-    <li className="flex flex-col gap-1 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`payment-${p.id}`}>
+    <LinkedItem id={`payment-${p.id}`} className="flex flex-col gap-1 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`payment-${p.id}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="min-w-0 text-body text-ink">{p.payee_name}</span>
         <span className="flex items-center gap-2">
@@ -667,7 +668,7 @@ function PaymentRow({ p }: { p: OutsidePayment }) {
         <span className="font-figure">{formatWhen(p.created_at)}</span>
         {p.detail ? ` · ${p.detail}` : ''}
       </p>
-    </li>
+    </LinkedItem>
   )
 }
 
@@ -1286,7 +1287,7 @@ function BillRow({ b, payeeName, ticked, onTick }: { b: Bill; payeeName: (id: st
   const missing = (b.missing ?? []).map((m) => MISSING[m] ?? m)
   const printed = b.iban ? `${b.iban}${b.bic ? ` · ${b.bic}` : ''}` : b.routing_number ? `${b.routing_number} · ${b.account_number ?? ''}` : b.sort_code ? `${b.sort_code} · ${b.account_number ?? ''}` : ''
   return (
-    <li className="flex flex-col gap-1 rounded-card border border-rule p-3" data-testid={`bill-${b.id}`}>
+    <LinkedItem id={`bill-${b.id}`} className="flex flex-col gap-1 rounded-card border border-rule p-3" data-testid={`bill-${b.id}`}>
       <div className="flex flex-wrap items-center justify-between gap-2 text-body text-ink">
         <span className="flex min-w-0 items-center gap-2">
           {ticked !== undefined ? (
@@ -1332,6 +1333,6 @@ function BillRow({ b, payeeName, ticked, onTick }: { b: Bill; payeeName: (id: st
         <Pill status={match.pill}>{match.text(payeeName(b.payee_id))}</Pill>
       </div>
       {missing.length > 0 ? <p className="text-caption text-muted">Could not read: {missing.join(', ')}</p> : null}
-    </li>
+    </LinkedItem>
   )
 }

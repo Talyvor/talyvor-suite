@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, type PillStatus } from '@talyvor/ui'
 import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
+import { useLinked } from '../../components/LinkedItem'
 import { isSessionExpired } from '../../lib/productState'
 import { formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
@@ -1214,9 +1215,10 @@ export function Rules({ agent, agents }: { agent: Agent; agents: Agent[] }) {
   // B28.31 — the form is filled once from the rules it opened with, so a rollback starts it again from the rules
   // the rollback put back.
   const [rolledBack, setRolledBack] = useState(0)
+  useLinked('rules', rules.isSuccess) // B41.7 — a rule found by the one search opens here
   return (
     <>
-      <Card>
+      <Card id="rules">
         <CardHeader>Rules</CardHeader>
         {rules.isSuccess ? (
           <>
