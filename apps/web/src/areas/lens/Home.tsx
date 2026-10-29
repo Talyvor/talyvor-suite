@@ -28,6 +28,10 @@ import { SharingLine } from './Sharing'
 // then one row per agent — its balance, its safe to spend (Lens B41.105) and a running/paused switch that asks before
 // it changes; then Taly's input. On a 390px phone that is all that sits above the fold; the rest follows below it.
 //
+// B41.6 — above all of it, the 30-second daily briefing (Lens B41.106): one line, and behind it each item, decisions first —
+// approvals waiting, what is blocked and why, bills due this week, then what the agents spent yesterday. A quiet day is one line.
+// It opens closed, so the approvals, the total and the first agent stay above a phone's fold.
+//
 // A workspace with no agents yet opens in onboarding mode: what it holds, the one click that makes its
 // first agent ready (B46.2, Onboarding.tsx), and the one line that says whether it shares answers. Like Overview's first run, that is a MEASUREMENT — the book answered and
 // listed no agents — never a default: a read that failed is not an empty workspace.
@@ -130,6 +134,58 @@ function ApprovalsFirst({ nameOf }: { nameOf: (id: string) => string }) {
         </ul>
       )}
     </Card>
+  )
+}
+
+export const BRIEFING_KEY = ['agent-briefing'] as const
+
+/** B41.6 — this morning's briefing: Lens's one line, and its items, each Lens's own sentence with its amount. */
+function MorningBriefing() {
+  const b = useQuery({ queryKey: BRIEFING_KEY, queryFn: agentBankApi.briefing })
+  if (b.isError) return <PanelFailure error={b.error} what="this morning’s briefing" />
+  const head = (
+    <span className="flex flex-col gap-1">
+      <span className="font-figure text-eyebrow uppercase text-faint">This morning</span>
+      <span className="text-body text-ink" data-testid="home-briefing-line">
+        {b.isPending ? 'Reading…' : b.data.line}
+      </span>
+    </span>
+  )
+  const items = b.data?.items ?? []
+  const box = 'rounded-card border border-rule bg-surface'
+  if (items.length === 0) return <div className={cn(box, 'px-gutter py-3')} data-testid="home-briefing">{head}</div>
+  return (
+    <details className={box} data-testid="home-briefing">
+      <summary className={cn('flex cursor-pointer list-none items-start justify-between gap-gutter px-gutter py-3', focusRing)}>
+        {head}
+        <span className="shrink-0 text-caption text-muted">
+          {items.length} {items.length === 1 ? 'item' : 'items'}
+        </span>
+      </summary>
+      <ul data-testid="home-briefing-items">
+        {items.map((it, i) => {
+          const body = (
+            <span className="flex min-w-0 flex-col">
+              <span className="text-body text-ink">{it.text}</span>
+              <span className="text-caption text-muted">
+                {[it.kind === 'approval' ? it.name : '', it.reason ?? '', it.due_date ? `due ${it.due_date}` : ''].filter((x) => x !== '').join(' · ')}
+              </span>
+            </span>
+          )
+          return (
+            <li key={`${it.kind}-${it.id ?? i}`} className="border-t border-rule" data-kind={it.kind}>
+              {it.kind === 'approval' && it.id ? (
+                <Link to={`/approvals#approval-${it.id}`} className={cn('flex min-h-row items-center px-gutter py-2', focusRing)}>
+                  {body}
+                </Link>
+              ) : (
+                <div className="flex min-h-row items-center px-gutter py-2">{body}</div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </details>
   )
 }
 
@@ -432,6 +488,7 @@ export function Home() {
           <FirstWallet book={book.data} onStarted={() => setOnboarding(true)} onFinished={() => setOnboarding(false)} />
         ) : (
           <>
+            <MorningBriefing />
             <ApprovalsFirst nameOf={nameOf} />
             <Total book={book.data} />
             <AgentLines agents={agents} />
