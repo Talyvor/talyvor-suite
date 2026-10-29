@@ -3368,6 +3368,7 @@ export function walletOnboarding(seed: number): Scenario {
       const before = await bookOf(ctx)
       if (before.agents.length > 0) throw new CannotTest(`the workspace already has ${before.agents.length} agent(s), so Home opens no onboarding`)
       if (before.unallocated_ulxc <= 0) throw new CannotTest('the workspace has no free credit to give its first agent')
+      const name = `First ${seed}`
       const started = Date.now()
       const page = await ctx.app.tab('/')
       try {
@@ -3380,7 +3381,6 @@ export function walletOnboarding(seed: number): Scenario {
         if (atSignUp) return fail(`sign-up carries a disclaimer line: "${atSignUp[0]}"`)
         const workspace = `Workspace ${seed}`
         await page.getByLabel('Workspace name').fill(workspace)
-        const name = `First ${seed}`
         await page.getByLabel('Agent name').fill(name)
         await page.getByRole('button', { name: 'Create my first agent' }).click()
         const err = await outcome(page.getByTestId('first-agent-ready'), steps)
@@ -3419,8 +3419,24 @@ export function walletOnboarding(seed: number): Scenario {
         return { pass: true, detail: `"${workspace}" named and ${name} made ready in one click, funded the workspace's ${lxcText(before.unallocated_ulxc)} LXC, its first request (${request.kind} ${request.amount_ulxc} µLXC) served on the key shown; Home with a working agent in ${elapsed} ms; no disclaimer line on the way` }
       } finally {
         await page.close()
+        await giveBack(ctx, name)
       }
     },
+  }
+}
+
+/**
+ * B17.310 — the one-click card gives the first agent ALL the workspace's free credit; the scenarios after this one on
+ * the same user fund agents of their own, so what the first agent has left goes back to the workspace, pass or fail.
+ */
+async function giveBack(ctx: ScenarioCtx, name: string): Promise<void> {
+  try {
+    const a = (await bookOf(ctx)).agents.find((x) => x.name === name && x.archived_at === undefined)
+    if (a === undefined || a.balance_ulxc <= 0) return
+    await ctx.env.lens.withdrawAgent(ctx.app.user, a.id, a.balance_ulxc)
+    ctx.evidence.push({ note: `gave ${name}'s ${a.balance_ulxc} µLXC back; the workspace now has ${(await bookOf(ctx)).unallocated_ulxc} µLXC free` })
+  } catch (e) {
+    ctx.evidence.push({ note: `giving ${name}'s credit back to the workspace failed: ${String(e)}` })
   }
 }
 
