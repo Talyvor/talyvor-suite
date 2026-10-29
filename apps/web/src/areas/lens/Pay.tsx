@@ -9,7 +9,7 @@ import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
 import { APPROVALS_KEY, BOOK_KEY, PASSKEYS_KEY } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
-import { assertOver, signApproval, signPayee } from './passkeys'
+import { assertOver, signApproval, signPayee, signPayeeCalled } from './passkeys'
 import {
   type AgentApproval,
   type AssistantRequest,
@@ -190,6 +190,15 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
     },
   })
   const confirm = useMutation({ mutationFn: async (id: string) => agentBankApi.confirmPayee(id, await signPayee(id)), onSuccess: refresh })
+  // B41.11: the payments the cooling-off held are paid as it ends, so the payments and balances are read again too.
+  const called = useMutation({
+    mutationFn: async (id: string) => agentBankApi.confirmPayeeCalled(id, await signPayeeCalled(id)),
+    onSuccess: () => {
+      refresh()
+      void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
+      void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
+    },
+  })
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
   const complete = form.name.trim() !== '' && form.country.trim().length === 2 &&
     (kind === 'iban' ? form.iban.trim() !== '' : kind === 'us' ? form.routing_number.trim() !== '' && form.account_number.trim() !== '' : form.sort_code.trim() !== '' && form.account_number.trim() !== '')
@@ -210,6 +219,7 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
                     <span className="flex items-center gap-2">
                       <Pill status={c.pill}>{c.text}</Pill>
                       {p.needs_confirmation ? <Pill status="held">Needs confirmation</Pill> : null}
+                      {p.cooling_off_until ? <Pill status="held">New payee</Pill> : null}
                     </span>
                   </div>
                   <p className="text-caption text-muted">
@@ -224,6 +234,20 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
                       </Button>
                     </div>
                   ) : null}
+                  {p.cooling_off_until ? (
+                    <div className="flex flex-col gap-2" data-testid={`cooling-off-${p.id}`}>
+                      <p className="text-caption text-ink">
+                        A payment of more than <span className="font-figure">1,000</span> to {p.name} waits until{' '}
+                        <span className="font-figure">{formatWhen(p.cooling_off_until)}</span>. To pay it sooner, call {p.name} on a number you
+                        already had — not one from an email, an invoice or a message — and check the account details with them.
+                      </p>
+                      <div>
+                        <Button type="button" disabled={called.isPending} onClick={() => called.mutate(p.id)}>
+                          {called.isPending && called.variables === p.id ? 'Confirming…' : 'I called them — confirm with a passkey'}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
                 </LinkedItem>
               )
             })}
@@ -232,6 +256,7 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
           <p className="text-body text-muted">No payee saved yet. Save one below: its name is checked against the account before it can be paid.</p>
         )}
         {confirm.isError ? <Note ok={false}>{refusalText(confirm.error)}</Note> : null}
+        {called.isError ? <Note ok={false}>{refusalText(called.error)}</Note> : null}
         <form
           className="flex flex-col gap-3"
           data-testid="new-payee"

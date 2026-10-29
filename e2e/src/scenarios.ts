@@ -96,6 +96,7 @@ import { chatFirstMessage } from './chatFirstMessage.ts'
 import { chatPaymentCard } from './chatPaymentCard.ts'
 import { agentWallet } from './agentWallet.ts'
 import { oneSearch } from './oneSearch.ts'
+import { payeeCoolingOff } from './coolingOff.ts'
 import { chatSidebar } from './chatSidebar.ts'
 import { voiceChatMic, voiceChatPay } from './voiceChat.ts'
 import { firstAgent } from './firstAgent.ts'
@@ -5461,7 +5462,7 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   if (i === 5) list.push(dailyBriefing())
   // B41.7 — one search box, once a run, on a workspace of its own: a supplier's name lists its payee, its payment and its bill
   // under their headings, and each opens /money/pay on its own row.
-  if (i === 7) list.push(oneSearch())
+  if (i === 7) list.push(oneSearch(), payeeCoolingOff()) // B41.11: a large first payment to a new payee waits until the owner signs "I called them"
   // B48.23 — agents of each kind own their wallets, once a run, on a workspace of its own: fiat GBP, crypto USDC, both EUR + USDC,
   // each its own account; removing the kind whose wallet holds test money answers 409 and the ledger keeps it open; one owner wallet per asset.
   if (i === 4) list.push(agentWalletKinds())

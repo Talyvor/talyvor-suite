@@ -37,11 +37,16 @@
 // account once (card_hold) and issues every card, active for 24 hours. Approved again it is answered as it stands. Its defect:
 //   card-hold-twice        — approving an issued batch again holds its total again
 
+// B41.11 — and a new payee's cooling-off (Lens B41.111): a payee reads cooling_off_until 24 hours after it is saved, and until
+// then a payment of more than 1,000 to it is refused 409; POST …/{id}/called/challenge and …/{id}/called end it, only on an
+// assertion by one of the workspace's passkeys over that challenge. Its defect:
+//   cooling-off-skipped    — a payment of more than 1,000 to a payee saved moments ago is paid
+
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
 
 interface Payee { id: string; workspace_id: string; name: string; country: string; check: string; suggested_name?: string; checked_by: string
-  needs_confirmation: boolean; confirmed_by?: string; created_at: string; [k: string]: unknown }
+  needs_confirmation: boolean; confirmed_by?: string; created_at: string; cooling_off_until?: string; [k: string]: unknown }
 interface Assertion { credential_id?: string; client_data_json?: string; authenticator_data?: string; signature?: string }
 /** A compliance case as Lens's operator reads it (screening.Case). */
 interface Case { id: string; workspace_id: string; kind: string; subject_kind: string; subject_id: string; name: string; outcome: string; status: string
@@ -174,15 +179,16 @@ export class PayeeDesk {
       const check = /TESTNOMATCH/i.test(name) ? 'no_match' : /TESTCLOSE/i.test(name) ? 'close_match' : 'exact_match'
       const p: Payee = { ...b, id: `payee_${randomUUID()}`, workspace_id: ws, name, country: b.country, check, checked_by: 'test',
         ...(check === 'close_match' ? { suggested_name: name.replace(/TESTCLOSE/gi, ' ').split(/\s+/).filter(Boolean).join(' ') } : {}),
-        needs_confirmation: check !== 'exact_match', created_at: new Date().toISOString() }
+        needs_confirmation: check !== 'exact_match', created_at: new Date().toISOString(), cooling_off_until: new Date(Date.now() + 86_400_000).toISOString() }
       if (/TESTPENDING/i.test(name)) p.screening = `${HELD} (compliance case ${this.openCase(ws, p.id, name, 'held').id})`
       this.payees.set(ws, [...list, p])
       return this.json(res, 201, p), true
     }
-    const m = /^\/v1\/money\/payees\/([^/]+)\/(challenge|confirm)$/.exec(path)
+    const m = /^\/v1\/money\/payees\/([^/]+)\/(challenge|confirm|called\/challenge|called)$/.exec(path)
     if (m === null || req.method !== 'POST') return false
     const p = list.find((x) => x.id === m[1])
     if (p === undefined) return this.json(res, 404, { error: 'economy: no such payee' }), true
+    if (m[2].startsWith('called')) return this.called(req, res, ws, p, m[2] === 'called/challenge'), true
     if (!p.needs_confirmation) return this.json(res, 409, { error: 'economy: this payee needs no confirmation' }), true
     if (m[2] === 'challenge') {
       const keys = this.passkeys(ws)
@@ -322,6 +328,11 @@ export class PayeeDesk {
     if (payee.needs_confirmation) return { status: 409, error: `economy: the payee is not confirmed: ${payee.name}'s name was a ${payee.check.replace('_', ' ')} — confirm it with a passkey first` }
     const held = this.cases.find((c) => c.subject_id === payee.id && c.status === 'held')
     if (held !== undefined) return { status: 403, error: `${HELD} (compliance case ${held.id})` }
+    const cooling = payee.cooling_off_until !== undefined && Date.parse(payee.cooling_off_until) > Date.now()
+    if (cooling && amount > 100_000 && !this.broken('cooling-off-skipped')) {
+      return { status: 409, error: `economy: a payment of more than 1,000 to a payee saved less than 24 hours ago waits until ${payee.cooling_off_until}, ` +
+        `or until the owner confirms with a passkey that they called ${payee.name} on a number they already had` }
+    }
     const holds = funding === 'live' ? account.live_minor : account.test_minor
     if (holds < amount && !(funding === 'live' && this.broken('compliance-live-paid'))) {
       return { status: 409, error: `economy: insufficient funds: the account holds ${money(holds, currency)} of ${funding} money, and this payment is ${money(amount, currency)}` }
@@ -487,6 +498,25 @@ export class PayeeDesk {
   }
 
   /** Why `a` does not confirm payee `id`: undefined when it is a passkey's signature over the payee's challenge. */
+  /** B41.11 — the owner's passkey says they called payee `p` on a number they already had: its cooling-off ends. */
+  private async called(req: IncomingMessage, res: ServerResponse, ws: string, p: Payee, challenge: boolean): Promise<void> {
+    const key = `called:${p.id}`
+    if (challenge) {
+      const keys = this.passkeys(ws)
+      if (keys.length === 0) return this.json(res, 409, { error: 'economy: a payee is confirmed with one of the workspace\'s passkeys, signing its challenge — register one first' })
+      const c = randomBytes(32).toString('base64url')
+      this.challenges.set(key, c)
+      return this.json(res, 200, { challenge: c, allow_credentials: keys.map((k) => k.credential_id), user_verification: 'required' })
+    }
+    const { assertion } = await this.body<{ assertion?: Assertion }>(req)
+    const refused = this.refused(ws, key, assertion)
+    if (refused !== undefined) return this.json(res, 403, { error: refused })
+    this.challenges.delete(key)
+    delete p.cooling_off_until
+    Object.assign(p, { called_at: new Date().toISOString(), called_by: assertion?.credential_id ?? '' })
+    return this.json(res, 200, p)
+  }
+
   private refused(ws: string, id: string, a: Assertion | undefined): string | undefined {
     if (a === undefined) return 'economy: a payee is confirmed with one of the workspace\'s passkeys, signing its challenge — register one first'
     const spki = this.passkeys(ws).find((k) => k.credential_id === a.credential_id)?.public_key

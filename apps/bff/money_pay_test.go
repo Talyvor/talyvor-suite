@@ -82,3 +82,39 @@ func TestPayScreenWritesReachLensAsNamed(t *testing.T) {
 		t.Errorf("the payout batch did not go up as the CSV it came as, under its key: %q", got[2])
 	}
 }
+
+// B41.11 — the "I called them" confirmation reaches Lens on the payee's called route, its assertion rebuilt to
+// {"assertion"} alone, and the challenge it is signed over is relayed.
+func TestPayeeCalledReachesLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" "+string(raw))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"payee_1"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	if rec := doJSON(a, http.MethodPost, "/api/money/payees/payee_1/called/challenge", `{}`); rec.Code != http.StatusOK {
+		t.Fatalf("challenge = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/money/payees/payee_1/called", `{}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("unsigned = %d %s, want 400 before Lens", rec.Code, rec.Body.String())
+	}
+	signed := `{"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"},"called_at":"2026-01-01T00:00:00Z"}`
+	if rec := doJSON(a, http.MethodPost, "/api/money/payees/payee_1/called", signed); rec.Code != http.StatusOK {
+		t.Fatalf("signed = %d %s", rec.Code, rec.Body.String())
+	}
+	want := []string{
+		"POST /v1/money/payees/payee_1/called/challenge ",
+		`POST /v1/money/payees/payee_1/called {"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`,
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("Lens received %q, want %q", got, want)
+	}
+}

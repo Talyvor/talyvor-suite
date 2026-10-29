@@ -74,6 +74,11 @@ export async function signPayee(payeeID: string): Promise<PasskeyAssertion> {
   return assertOver(await agentBankApi.payeeChallenge(payeeID))
 }
 
+/** B41.11 — signs a new payee's "I called them" challenge: its 24-hour cooling-off ends (Lens B41.111). */
+export async function signPayeeCalled(payeeID: string): Promise<PasskeyAssertion> {
+  return assertOver(await agentBankApi.payeeCalledChallenge(payeeID))
+}
+
 /**
  * B41.8 — stopping is instant, restarting is signed (Lens B41.108): once the workspace has a passkey, Face ID asks
  * here before an agent starts again, over a challenge naming that agent. With none, it starts as before.

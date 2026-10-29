@@ -765,6 +765,9 @@ export const agentBankApi = {
   createPayee: (body: PayeeRequest) => send<OutsidePayee>('POST', '/api/money/payees', body),
   payeeChallenge: (id: string) => send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payees/${e(id)}/challenge`),
   confirmPayee: (id: string, assertion: PasskeyAssertion) => send<OutsidePayee>('POST', `/api/money/payees/${e(id)}/confirm`, { assertion }),
+  /** B41.11 — the owner's passkey says they called the new payee on a number they already had: its cooling-off ends. */
+  payeeCalledChallenge: (id: string) => send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payees/${e(id)}/called/challenge`),
+  confirmPayeeCalled: (id: string, assertion: PasskeyAssertion) => send<OutsidePayee>('POST', `/api/money/payees/${e(id)}/called`, { assertion }),
   payments: () => getJSON<{ payments: OutsidePayment[] | null }>('/api/money/payments', { payments: 'list' }),
   // B41.7 — one search box across agents, payees, payments, bills, invoices, rules and listings (Lens B41.107).
   search: (q: string) => getJSON<SearchResults>(`/api/money/search?q=${e(q)}`, { groups: 'list' }),
@@ -876,6 +879,9 @@ export interface OutsidePayee {
   needs_confirmation: boolean
   confirmed_at?: string
   created_at: string
+  /** B41.11 (Lens B41.111): until then a payment of more than 1,000 to this new payee waits, unless the owner confirms they called it */
+  cooling_off_until?: string
+  called_at?: string
   /** set while screening holds the payee for an operator */
   screening?: string
 }
