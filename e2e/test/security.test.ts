@@ -1,6 +1,10 @@
+import { type ChildProcess, spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
-import { ORIGIN_EXEMPT, writeRoutes } from '../src/security.ts'
+import { createServer } from 'node:net'
+import { afterEach, describe, expect, it } from 'vitest'
+import { LensClient } from '../src/lens.ts'
+import type { ScenarioCtx, Verdict } from '../src/scenarios.ts'
+import { approvalOwnRequest, type Decide, ORIGIN_EXEMPT, writeRoutes } from '../src/security.ts'
 
 // B50.7 — csrf-every-write sends one cross-site write to every write route the BFF registers.
 describe('the BFF write routes csrf-every-write attacks (B50.7)', () => {
@@ -14,3 +18,64 @@ describe('the BFF write routes csrf-every-write attacks (B50.7)', () => {
     expect(ORIGIN_EXEMPT.has('/mcp')).toBe(true)
   })
 })
+
+// B50.19 — approval-own-request against the stub Lens (selftest/stub-bank.ts), deciding through Lens's approve route where the
+// nightly taps Approvals: it passes on a Lens that approves only the request tapped, and FAILs when an approval also
+// approves its look-alike or when "always allow" lets the waiting one through.
+async function freePort(): Promise<number> {
+  return new Promise((resolve) => {
+    const s = createServer().listen(0, '127.0.0.1', () => {
+      const { port } = s.address() as { port: number }
+      s.close(() => resolve(port))
+    })
+  })
+}
+
+let stub: ChildProcess | undefined
+afterEach(() => {
+  stub?.kill()
+  stub = undefined
+})
+
+const byAPI: Decide = async (ctx, memo, allowLXC) => {
+  const a = (await ctx.env.lens.agentApprovals(ctx.app.user)).find((x) => x.memo === memo && x.status === 'pending')
+  const got = await ctx.env.lens.act(ctx.app.user, 'POST', `/v1/workspaces/{ws}/agents/approvals/${a?.id}/approve`,
+    allowLXC === undefined ? {} : { always_allow: { amount_ulxc: allowLXC * 1e6, per: 'month' } })
+  return got.ok ? 'Approved' : `refused ${got.status}`
+}
+
+async function ownRequestOn(broken: string): Promise<Verdict> {
+  const port = await freePort()
+  stub = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../selftest/stub-lens.ts', import.meta.url).pathname], {
+    env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'approval-own', STUB_BREAK: broken },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  })
+  await new Promise<void>((resolve, reject) => {
+    stub?.stdout?.on('data', (b: Buffer) => /stub lens on/.test(b.toString()) && resolve())
+    stub?.on('exit', (code) => reject(new Error(`the stub exited ${code}`)))
+  })
+  const lens = new LensClient(`http://127.0.0.1:${port}`, 'approval-own')
+  const [user] = await lens.createUsers(1)
+  const ctx = { app: { user }, env: { lens }, evidence: [] } as unknown as ScenarioCtx
+  return approvalOwnRequest(byAPI).run(ctx)
+}
+
+describe('approval-own-request (B50.19)', () => {
+  it('passes on a Lens that approves only the request tapped, before and after always allow', async () => {
+    const verdict = await ownRequestOn('')
+    expect(verdict.detail).toMatch(/^A approved on Approvals paid; .* holds 300000 twice, nothing of B's$/)
+    expect(verdict.pass).toBe(true)
+  })
+
+  it('FAILs when approving one also approves its look-alike', async () => {
+    const verdict = await ownRequestOn('approval-approves-alike')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^after A was approved, B sent again was paid: /)
+  })
+
+  it('FAILs when always allow lets the waiting one through', async () => {
+    const verdict = await ownRequestOn('allow-releases-waiting')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^after C was approved with always allow, B sent again was paid: /)
+  })
+}, 60_000)

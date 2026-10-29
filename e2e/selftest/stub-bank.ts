@@ -208,6 +208,8 @@ interface Rules {
   max_commitment_ulxc: number
   allowed_licences: string[]
   may_subscribe: boolean
+  /** B41.4 — "always allow": a payee paid without a person up to an amount a day or a month, saved by an approval. */
+  payee_allowances?: Record<string, { amount_ulxc: number; per: 'day' | 'month' }>
 }
 interface Agent {
   id: string; ws: string; name: string; owner_user_id: string; created_at: string; keys: string[]; paused_at?: string; paused_reason?: string; rules: Rules; description?: string; archived_at?: string; wallet_kind?: string; fiat_currency?: string; versions?: RulesVersion[]; boosts?: Boost[]
@@ -712,6 +714,16 @@ export class Bank {
       if (ok !== undefined) {
         ok.status = 'used'
         return undefined
+      }
+      // B50.18 — an allowance lets a payment through, but not one already waiting for its own tap.
+      // STUB_BREAK=allow-releases-waiting lets the waiting one through too.
+      const allow = req.payee === undefined ? undefined : r.payee_allowances?.[req.payee.id]
+      if (allow !== undefined) {
+        const since = new Date().toISOString().slice(0, allow.per === 'day' ? 10 : 7)
+        const paid = this.postings.filter((p) => p.account === `agent:${agent.id}` && p.kind === 'pay' && p.amount_ulxc < 0 && p.at >= since &&
+          p.counterparty === `agent:${req.payee?.id}`).reduce((s, p) => s - p.amount_ulxc, 0)
+        const waiting = this.approvals.some((a) => a.agent_id === agent.id && a.fingerprint === req.fingerprint && a.status === 'pending')
+        if (paid + amount <= allow.amount_ulxc && (!waiting || this.broken('allow-releases-waiting'))) return undefined
       }
       const a: Approval = { id: id('apr_'), ws: agent.ws, agent_id: agent.id, amount_ulxc: amount, model: req.model ?? '', status: 'pending',
         created_at: new Date().toISOString(), fingerprint: req.fingerprint,
@@ -2103,7 +2115,9 @@ export class Bank {
       if (a === undefined) return json(res, 404, { error: 'economy: no such pending approval in this workspace' }), true
       // The stub checks the assertion names one of the workspace's passkeys; Lens verifies its signature too.
       const keys = this.passkeys.get(ws.id) ?? []
-      const assertion = (await this.body<{ assertion?: { credential_id?: string; device_id?: string; challenge?: string; signature?: string } }>(req)).assertion
+      const decision = await this.body<{ assertion?: { credential_id?: string; device_id?: string; challenge?: string; signature?: string }
+        always_allow?: { amount_ulxc: number; per: 'day' | 'month' } }>(req)
+      const assertion = decision.assertion
       // B40.28 — or one of its device keys signed it, refused once that key is revoked (stub-device-keys.ts).
       if (assertion?.device_id !== undefined) {
         const refused = this.devices.refused(ws.id, assertion)
@@ -2113,6 +2127,17 @@ export class Bank {
       }
       a.status = m[2] === 'approve' ? 'approved' : 'denied'
       a.decided_at = now
+      // B41.4 — always allow saves the allowance for the approval's payee on its agent's rules.
+      const agent = this.agents.get(a.agent_id)
+      if (m[2] === 'approve' && decision.always_allow !== undefined && agent !== undefined && a.payee !== undefined) {
+        agent.rules = { ...agent.rules, payee_allowances: { ...agent.rules.payee_allowances, [a.payee.id]: decision.always_allow } }
+      }
+      // B50.18 — STUB_BREAK=approval-approves-alike approves every other request waiting from its agent to its payee for its amount.
+      if (m[2] === 'approve' && this.broken('approval-approves-alike')) {
+        for (const x of this.approvals) {
+          if (x.status === 'pending' && x.agent_id === a.agent_id && x.payee?.id === a.payee?.id && x.amount_ulxc === a.amount_ulxc) x.status = 'approved'
+        }
+      }
       // B34.4 — approval-deny-pays: a denied send is made anyway (its payee is in the fingerprint the send filed it under).
       const [what, from, to] = a.fingerprint.split('\0')
       if (m[2] === 'deny' && what === 'send' && this.broken('approval-deny-pays')) {
@@ -2382,7 +2407,7 @@ export class Bank {
           model_daily_limits_ulxc: r.model_daily_limits_ulxc == null ? a.rules.model_daily_limits_ulxc : modelCaps(r.model_daily_limits_ulxc),
           requests_per_minute: r.requests_per_minute ?? a.rules.requests_per_minute,
           max_commitment_ulxc: r.max_commitment_ulxc ?? a.rules.max_commitment_ulxc, allowed_licences: r.allowed_licences ?? a.rules.allowed_licences,
-          may_subscribe: r.may_subscribe ?? a.rules.may_subscribe,
+          may_subscribe: r.may_subscribe ?? a.rules.may_subscribe, payee_allowances: r.payee_allowances ?? a.rules.payee_allowances,
           allowed_models: r.allowed_models ?? [], allowed_providers: r.allowed_providers ?? [] }
         this.recordRules(a, ws.id, 'set')
         this.kya.revoke(a.id, 'rules changed')

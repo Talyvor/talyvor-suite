@@ -8,6 +8,8 @@
 //   approval-reused — two payment requests, A and B, each needing the owner's approval. A's signed approval presented
 //        at B, and B's own statement signed over A's challenge, are each refused; B is still pending_approval, holds no
 //        payment and no payment out exists. The control: A's own approval at A is taken.
+//   approval-own-request (B50.19) — an agent's two held payments to one payee for one amount: approving one on Approvals
+//        pays that one only, and approving a third with always allow still leaves the other waiting; the payee's statement.
 //   csrf-every-write — every write route the BFF registers (apps/bff lens.go), sent once with the session cookie from
 //        another site: each is refused 403 before any handler runs, except the machine endpoints the BFF names exempt.
 //   xss-shown-back — an agent's name, a saved payee's name and an invoice's customer and line, each carrying an event
@@ -18,17 +20,19 @@
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import type { Dialog } from 'playwright'
-import { fail } from './bank.ts'
+import { ACTION_TIMEOUT_MS, approveRow, fail } from './bank.ts'
 import { bffRoutesFrom } from './coverage.ts'
 import type { Answered } from './lens.ts'
 import { RUN_SALT } from './oracles.ts'
 import { softPasskey } from './payees.ts'
 import { said } from './routes.ts'
-import type { Scenario, ScenarioCtx, Verdict } from './scenarios.ts'
+import { CannotTest, type Scenario, type ScenarioCtx, type Verdict } from './scenarios.ts'
 import { FLAG, ran, runnable, sendAs, SESSION_COOKIE } from './session.ts'
 
 const SEED_ULXC = 50_000
 const KEYED_ULXC = 3_101
+const OWN_FUND_ULXC = 1_000_000
+const OWN_PAY_ULXC = 300_000
 
 /** The amounts a tampered funding carries, each with why it must be refused. */
 export const TAMPERED_AMOUNTS: [string, unknown][] = [
@@ -189,6 +193,107 @@ export function approvalReused(): Scenario {
       const ofB = (payments.value.payments ?? []).filter((p) => p.amount_minor === 90_000)
       if (ofB.length > 0) wrong.push(`${ofB.length} payment(s) of B's 90,000 minor exist: ${ofB.map((p) => p.id).join(', ')}`)
       return done(wrong, "A's approval refused at B before and after A used it, B's statement over A's signature refused; B pending and unpaid, no payment of B's; A's own approval taken")
+    },
+  }
+}
+
+/** How the owner decides one held payment, found by its memo: plain Approve, or "Approve and always allow" up to `allowLXC` a month. */
+export type Decide = (ctx: ScenarioCtx, memo: string, allowLXC?: number) => Promise<string>
+
+/** The nightly's way: on /approvals in a tab of its own, the row whose words carry `memo`; the line the screen then shows. */
+export const onApprovals: Decide = async (ctx, memo, allowLXC) => {
+  const page = await ctx.app.tab('/approvals')
+  try {
+    await page.getByRole('heading', { level: 1, name: 'Approvals' }).waitFor({ timeout: ACTION_TIMEOUT_MS })
+    if (allowLXC === undefined) return await approveRow(page, memo)
+    const row = page.locator('[data-approval]').filter({ hasText: memo }).first()
+    await row.getByRole('button', { name: 'Approve and always allow this…' }).click({ timeout: ACTION_TIMEOUT_MS })
+    await row.getByLabel(/^Always allow .* up to, in LXC$/).fill(String(allowLXC))
+    await row.getByLabel('Each').selectOption('month')
+    await row.getByRole('button', { name: 'Preview', exact: true }).click()
+    await row.getByTestId('always-allow-preview').or(row.getByRole('alert')).first().waitFor({ timeout: ACTION_TIMEOUT_MS })
+    await row.getByRole('button', { name: /^Approve and always allow( with Face ID)?$/ }).click()
+    const said = page.getByRole('status').filter({ hasText: /From now on/ }).or(page.getByRole('alert')).first()
+    await said.waitFor({ timeout: ACTION_TIMEOUT_MS })
+    return (await said.innerText()).trim()
+  } finally {
+    await page.close()
+  }
+}
+
+/**
+ * B50.19 — an approval approves only its own request (Lens B50.18). An agent above its approval amount pays one payee
+ * one amount twice, A and B, under different memos; the owner approves A on /approvals. The agent sends both again:
+ * A pays, B is refused and still waits. Then a third, C, is approved with "always allow" for that payee, which B would
+ * fit under; B sent again is still refused and waits for its own tap. The oracle is the payee's statement: A and C in,
+ * nothing of B's.
+ */
+export function approvalOwnRequest(decide: Decide = onApprovals): Scenario {
+  return {
+    id: 'approval-own-request',
+    owner: 'talyvor-lens',
+    own: true,
+    agents: 2,
+    feature: 'Agent Wallets',
+    items: ['B50.19'],
+    title: "two held payments to one payee for one amount: approving one on Approvals pays only that one, the other is refused on retry and " +
+      "still waits; approving a third with always allow leaves it waiting; the payee's statement holds the two approved and nothing of the other",
+    run: async (ctx) => {
+      const { lens } = ctx.env
+      const user = ctx.app.user
+      const wrong: string[] = []
+      const payer = await lens.createAgent(user, `Own approval payer ${RUN_SALT}`)
+      const payee = await lens.createAgent(user, `Own approval payee ${RUN_SALT}`)
+      const book = await lens.agentBook(user)
+      if (book.unallocated_ulxc < OWN_FUND_ULXC) throw new CannotTest(`the workspace has ${book.unallocated_ulxc} µLXC free, under the ${OWN_FUND_ULXC} µLXC its agent is funded`)
+      await lens.fundAgent(user, payer.id, OWN_FUND_ULXC)
+      const ruled = await lens.act(user, 'PUT', `/v1/workspaces/{ws}/agents/${payer.id}/rules`, { approval_above_ulxc: OWN_PAY_ULXC / 2 })
+      if (!ruled.ok) throw new Error(`setting ${payer.name}'s approval amount answered ${said(ruled)}`)
+      const k = await lens.act<{ key: string }>(user, 'POST', `/v1/workspaces/{ws}/agents/${payer.id}/keys`, { name: 'approval-own-request' })
+      if (!k.ok) throw new Error(`issuing ${payer.name} a key answered ${said(k)}`)
+      const memo = (x: string) => `own approval ${x} ${RUN_SALT}`
+      const pay = async (x: string) => {
+        const got = await lens.payAsAgent(k.value.key, user.workspaceID, payer.id, payee.id, OWN_PAY_ULXC, memo(x))
+        ctx.evidence.push({ note: `${payer.name} pays ${OWN_PAY_ULXC} µLXC, "${memo(x)}"`, answer: said(got) })
+        return got
+      }
+      const statusOf = async (x: string) => (await lens.agentApprovals(user)).find((a) => a.agent_id === payer.id && a.memo === memo(x))?.status ?? 'none'
+      const held = async (x: string) => {
+        const got = await pay(x)
+        if (got.ok || (await statusOf(x)) !== 'pending') throw new Error(`a payment above the approval amount was not held: ${said(got)}`)
+      }
+      const decided = async (x: string, allowLXC?: number) => {
+        const line = await decide(ctx, memo(x), allowLXC)
+        ctx.evidence.push({ note: `the owner ${allowLXC === undefined ? 'approves' : `approves with always allow up to ${allowLXC} LXC a month`} "${memo(x)}": ${line}` })
+        if ((await statusOf(x)) !== 'approved') throw new Error(`approving "${memo(x)}" left it ${await statusOf(x)} in Lens: "${line}"`)
+      }
+      const stillWaits = async (when: string) => {
+        const again = await pay('B')
+        if (again.ok) wrong.push(`${when}, B sent again was paid: ${said(again)}`)
+        const now = await statusOf('B')
+        if (now !== 'pending') wrong.push(`${when}, B's approval is ${now}, not pending`)
+      }
+
+      await held('A')
+      await held('B')
+      await decided('A')
+      const paidA = await pay('A')
+      if (!paidA.ok) throw new Error(`A, approved, sent again was refused: ${said(paidA)}`)
+      await stillWaits('after A was approved')
+      await held('C')
+      await decided('C', 3 * OWN_PAY_ULXC / 1e6)
+      await stillWaits('after C was approved with always allow')
+      const paidC = await pay('C')
+      if (!paidC.ok) wrong.push(`C, approved, sent again was refused: ${said(paidC)}`)
+
+      // The oracle: the payee's statement holds A and C in, nothing more.
+      const into = (await lens.agentLines(user, payee.id)).map((l) => l.amount_ulxc)
+      ctx.evidence.push({ note: `${payee.name}'s postings: ${JSON.stringify(into)}` })
+      if (into.join() !== [OWN_PAY_ULXC, OWN_PAY_ULXC].join()) {
+        wrong.push(`${payee.name}'s statement holds ${JSON.stringify(into)}, not A's and C's ${OWN_PAY_ULXC} each and nothing of B's`)
+      }
+      return done(wrong, `A approved on Approvals paid; B, the same payee and amount, refused when sent again and still pending; C approved with ` +
+        `always allow paid and B still refused and pending; ${payee.name}'s statement holds ${OWN_PAY_ULXC} twice, nothing of B's`)
     },
   }
 }
