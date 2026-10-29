@@ -1807,7 +1807,8 @@ export function pricingTruth(): Scenario {
 /** B32.14 — the company plans, smallest first, as the price card draws them. */
 const COMPANY_OFFERS = ['free', 'team', 'business', 'enterprise'] as const
 
-/** B29.5 — /pricing in the brand, at 1440 and at 390: every plan card on the raised plane with one teal button,
+/** B29.5 — /pricing in the brand, at 1440 and at 390: every plan card on the raised plane with one teal button
+ *  (B51.3: while card_payments is "live"; none otherwise),
  *  Pro and only Pro outlined in accent, every price set in IBM Plex Mono (the font loaded, not just named), an
  *  eyebrow over each section, the H1 unchanged, nothing sideways. B32.14 — the cards are the approved price card:
  *  four company plans (Start free, Choose Team, Choose Business, Talk to us) and three for individuals (Choose …). */
@@ -1822,6 +1823,10 @@ export function pricingBoard(): Scenario {
       try {
         await page.getByTestId('pricing-plan').first().waitFor({ state: 'visible' })
         await page.getByTestId('company-plan-team').waitFor({ state: 'visible' })
+        // B51.3: a plan has its button only while a card can be charged.
+        const priced = await page.request.get(new URL('/api/pricing', page.url()).href)
+        const cardPayments = ((await priced.json().catch(() => null)) as { card_payments?: string } | null)?.card_payments
+        ctx.evidence.push({ note: `/api/pricing ${priced.status()}: card_payments ${cardPayments ?? 'not served'}` })
         for (const [width, height] of [[1440, 900], [390, 844]] as const) {
           await page.setViewportSize({ width, height })
           const got = await page.evaluate(async () => {
@@ -1867,9 +1872,8 @@ export function pricingBoard(): Scenario {
           for (const c of got.cards) {
             const want = PRICE_CARDS.find((p) => p.name === c.name)
             if (!c.raised) wrong.push(`${at}: ${c.name} is not on the raised plane`)
-            if (want !== undefined && (c.buttons.length !== 1 || c.buttons[0].text !== want.button || !c.buttons[0].href.startsWith(want.href) || !c.buttons[0].teal)) {
-              wrong.push(`${at}: ${c.name}'s buttons are ${JSON.stringify(c.buttons)}, not one teal "${want.button}" to ${want.href}`)
-            }
+            const buttons = want === undefined ? '' : planButtonFault(c.name, c.buttons, want, cardPayments)
+            if (buttons !== '') wrong.push(`${at}: ${buttons}`)
             if (!c.mono) wrong.push(`${at}: ${c.name}'s price is not in IBM Plex Mono`)
           }
           const outlined = got.cards.filter((c) => c.outlined).map((c) => c.name)
@@ -1882,10 +1886,25 @@ export function pricingBoard(): Scenario {
         await page.close()
       }
       return wrong.length === 0
-        ? { pass: true, detail: 'four company and three individual plan cards, raised, one teal button each, Pro outlined, mono prices, every eyebrow, at 1440 and 390' }
+        ? { pass: true, detail: 'four company and three individual plan cards, raised, one teal button each while a card can be charged and none while it cannot, Pro outlined, mono prices, every eyebrow, at 1440 and 390' }
         : { pass: false, detail: `/pricing: ${wrong.join('; ')}` }
     },
   }
+}
+
+/** B51.3 — while card_payments is "live" a plan card carries one teal button to where it is chosen; otherwise none
+ *  (the page's one action is then Create your workspace). '' when the card is right. */
+export function planButtonFault(
+  name: string,
+  buttons: { text: string; href: string; teal: boolean }[],
+  want: { button: string; href: string },
+  cardPayments: string | undefined,
+): string {
+  if (cardPayments !== 'live') {
+    return buttons.length === 0 ? '' : `${name}'s buttons are ${JSON.stringify(buttons)} while card_payments is "${cardPayments ?? 'not served'}", not none`
+  }
+  const ok = buttons.length === 1 && buttons[0].text === want.button && buttons[0].href.startsWith(want.href) && buttons[0].teal
+  return ok ? '' : `${name}'s buttons are ${JSON.stringify(buttons)}, not one teal "${want.button}" to ${want.href}`
 }
 
 /** B32.14 — the price card's plans in the order /pricing draws them, each with its one button and where it goes. */
