@@ -4,7 +4,7 @@ import { createServer } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { LensClient } from '../src/lens.ts'
 import type { ScenarioCtx, Verdict } from '../src/scenarios.ts'
-import { approvalOwnRequest, type Decide, ORIGIN_EXEMPT, writeRoutes } from '../src/security.ts'
+import { approvalOwnRequest, type Decide, ORIGIN_EXEMPT, passkeyEnrolSigned, type Post, writeRoutes } from '../src/security.ts'
 
 // B50.7 — csrf-every-write sends one cross-site write to every write route the BFF registers.
 describe('the BFF write routes csrf-every-write attacks (B50.7)', () => {
@@ -44,7 +44,7 @@ const byAPI: Decide = async (ctx, memo, allowLXC) => {
   return got.ok ? 'Approved' : `refused ${got.status}`
 }
 
-async function ownRequestOn(broken: string): Promise<Verdict> {
+async function onStub(broken: string): Promise<ScenarioCtx> {
   const port = await freePort()
   stub = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../selftest/stub-lens.ts', import.meta.url).pathname], {
     env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'approval-own', STUB_BREAK: broken },
@@ -56,9 +56,10 @@ async function ownRequestOn(broken: string): Promise<Verdict> {
   })
   const lens = new LensClient(`http://127.0.0.1:${port}`, 'approval-own')
   const [user] = await lens.createUsers(1)
-  const ctx = { app: { user }, env: { lens }, evidence: [] } as unknown as ScenarioCtx
-  return approvalOwnRequest(byAPI).run(ctx)
+  return { app: { user }, env: { lens }, evidence: [] } as unknown as ScenarioCtx
 }
+
+const ownRequestOn = async (broken: string): Promise<Verdict> => approvalOwnRequest(byAPI).run(await onStub(broken))
 
 describe('approval-own-request (B50.19)', () => {
   it('passes on a Lens that approves only the request tapped, before and after always allow', async () => {
@@ -77,5 +78,26 @@ describe('approval-own-request (B50.19)', () => {
     const verdict = await ownRequestOn('allow-releases-waiting')
     expect(verdict).toMatchObject({ pass: false })
     expect(verdict.detail).toMatch(/^after C was approved with always allow, B sent again was paid: /)
+  })
+}, 60_000)
+
+// B50.22 — passkey-enrol-signed against the stub Lens, sending the web app's BFF calls straight to the Lens routes the BFF
+// relays them to: it passes on a Lens that wants a second passkey signed by the first, and FAILs on one that does not.
+const toLens: Post = async (ctx, path, body) => {
+  const got = await ctx.env.lens.act(ctx.app.user, 'POST', path.replace(/^\/api\/agents\//, '/v1/workspaces/{ws}/agents/'), body as object)
+  return { status: got.status, text: got.ok ? JSON.stringify(got.value) : JSON.stringify({ error: got.error }) }
+}
+
+describe('passkey-enrol-signed (B50.22)', () => {
+  it('passes on a Lens that registers a second passkey only signed by the first', async () => {
+    const verdict = await passkeyEnrolSigned(toLens).run(await onStub(''))
+    expect(verdict.detail).toMatch(/^passkey B with no signature refused and not listed; .* the payment landed once \(200000 µLXC\)$/)
+    expect(verdict.pass).toBe(true)
+  })
+
+  it('FAILs when a second passkey registers with no signature', async () => {
+    const verdict = await passkeyEnrolSigned(toLens).run(await onStub('enrol-unsigned'))
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^passkey B with no signature answered 201, not a refusal; passkey B, sent with no signature, is listed on the workspace; an approval signed by the refused passkey B answered 200/)
   })
 }, 60_000)

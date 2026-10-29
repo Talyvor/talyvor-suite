@@ -15,7 +15,7 @@ import { agentRulesUnbypassable } from './rules.ts'
 import type { Scenario } from './scenarios.ts'
 import { csrfRefused, scriptInert } from './session.ts'
 import { fileBombBounded, ssrfRefused } from './ssrf.ts'
-import { approvalOwnRequest, approvalReused, csrfEveryWrite, moneyTampered, xssShownBack } from './security.ts'
+import { approvalOwnRequest, approvalReused, csrfEveryWrite, moneyTampered, passkeyEnrolSigned, xssShownBack } from './security.ts'
 import { crossCompanyTestMoney } from './testmoney.ts'
 import { marketAbuse } from './trade.ts'
 import { webhookReplayed, webhookUnsigned } from './webhooks.ts'
@@ -34,7 +34,7 @@ export function redTeamChain(attacker: number, counterparty: number): Scenario[]
     keysUnlisted(), keysNotForwarded(), // B28.287
     rateLimitsHold(), // B28.288
     crossCompanyTestMoney(attacker, counterparty), // B28.290
-    moneyTampered(), mcpPayRetried(), approvalReused(), approvalOwnRequest(), injectionExfil('web page'), injectionExfil('room message'), csrfEveryWrite(), xssShownBack(), // B50.7
+    moneyTampered(), mcpPayRetried(), approvalReused(), approvalOwnRequest(), passkeyEnrolSigned(), injectionExfil('web page'), injectionExfil('room message'), csrfEveryWrite(), xssShownBack(), // B50.7
   ]
 }
 

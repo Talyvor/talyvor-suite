@@ -687,7 +687,7 @@ func (a *app) handleAgentDecision(decision string) func(http.ResponseWriter, *ht
 //
 //	POST   /api/agents/passkeys/challenge          a registration challenge and the RP ID
 //	GET    /api/agents/passkeys                    the workspace's passkeys
-//	POST   /api/agents/passkeys                    {credential_id, name, public_key, client_data_json, authenticator_data}
+//	POST   /api/agents/passkeys                    {credential_id, name, public_key, client_data_json, authenticator_data, assertion?}
 //	POST   /api/agents/approvals/{id}/challenge    the challenge approving or denying one approval is signed over
 //	GET    /api/agents/push/public-key             the key a browser subscribes to pushes with
 //	POST   /api/agents/push/subscriptions          {endpoint, keys: {p256dh, auth}}
@@ -727,6 +727,8 @@ func (a *app) handlePasskeys(w http.ResponseWriter, r *http.Request, t tenant) {
 			PublicKey         string `json:"public_key"`
 			ClientDataJSON    string `json:"client_data_json"`
 			AuthenticatorData string `json:"authenticator_data"`
+			// B50.22: once the workspace has a key, one of them signs this registration's challenge (Lens B50.20).
+			Assertion *passkeyAssertion `json:"assertion,omitempty"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})

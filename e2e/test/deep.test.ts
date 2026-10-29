@@ -15,7 +15,7 @@ import { journeyFor } from '../src/scenarios.ts'
 const RED_TEAM = ['ledger-moves-at-once', 'ledger-call-once', 'webhook-unsigned', 'webhook-replayed', 'agent-rules-unbypassable',
   'market-abuse', 'pool-isolation', 'injection-exfil', 'ssrf-refused', 'file-bomb-bounded', 'csrf-refused', 'script-inert',
   'keys-unlisted', 'keys-not-forwarded', 'rate-limits-hold', 'cross-company-test-money',
-  'money-tampered', 'mcp-pay-retried-once', 'approval-reused', 'approval-own-request', 'injection-exfil-web-page', 'injection-exfil-room-message', 'csrf-every-write', 'xss-shown-back']
+  'money-tampered', 'mcp-pay-retried-once', 'approval-reused', 'approval-own-request', 'passkey-enrol-signed', 'injection-exfil-web-page', 'injection-exfil-room-message', 'csrf-every-write', 'xss-shown-back']
 
 describe('the deep red-team pass (B28.292, B50.7)', () => {
   it('plays none unless told how many rounds (the nightly tells it every night)', () => {

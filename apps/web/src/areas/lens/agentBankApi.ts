@@ -674,7 +674,7 @@ export const agentBankApi = {
       : send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/deny`, assertion ? { assertion } : {}),
   // B19.10 — passkeys and push, kept by Lens (B19.16).
   passkeys: () => getJSON<{ passkeys: Passkey[] | null }>('/api/agents/passkeys', { passkeys: 'list' }),
-  passkeyChallenge: () => send<{ challenge: string; rp_id: string }>('POST', '/api/agents/passkeys/challenge'),
+  passkeyChallenge: () => send<{ challenge: string; rp_id: string; credential_ids?: string[] | null }>('POST', '/api/agents/passkeys/challenge'),
   registerPasskey: (body: PasskeyRegistration) => send<Passkey>('POST', '/api/agents/passkeys', body),
   approvalChallenge: (approvalID: string) =>
     send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/approvals/${e(approvalID)}/challenge`),
@@ -1398,6 +1398,8 @@ export interface PasskeyRegistration {
   public_key: string
   client_data_json: string
   authenticator_data: string
+  /** B50.22: an existing passkey's signature over this registration's challenge, once the workspace has one. */
+  assertion?: PasskeyAssertion
 }
 
 /** A passkey's signature over an approval's challenge — all base64url. */

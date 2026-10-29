@@ -34,7 +34,9 @@ export function pushSupported(): boolean {
 
 /** Makes a passkey on this device and registers it with Lens. */
 export async function registerThisDevice(name: string): Promise<void> {
-  const { challenge, rp_id } = await agentBankApi.passkeyChallenge()
+  const { challenge, rp_id, credential_ids } = await agentBankApi.passkeyChallenge()
+  // B50.22: once the workspace has a passkey, one of them signs the new key's own challenge first (Lens B50.20).
+  const assertion = (credential_ids ?? []).length > 0 ? await assertOver({ challenge, allow_credentials: credential_ids ?? [] }) : undefined
   const cred = (await navigator.credentials.create({
     publicKey: {
       challenge: fromB64u(challenge),
@@ -58,6 +60,7 @@ export async function registerThisDevice(name: string): Promise<void> {
     public_key: b64u(spki),
     client_data_json: b64u(res.clientDataJSON),
     authenticator_data: b64u(res.getAuthenticatorData()),
+    ...(assertion ? { assertion } : {}),
   })
 }
 
