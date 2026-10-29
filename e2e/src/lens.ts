@@ -445,6 +445,16 @@ export interface AgentRuleBoost {
 }
 
 /** Lens economy.AgentRules as its rules read answers them, in µLXC; a zero, an empty list or an empty window is no rule. */
+/** Lens economy.SafeToSpendFigure (B41.105): LXC in µLXC, GBP, EUR and USD in minor units. */
+export interface SafeToSpendFigure {
+  currency: string
+  balance: number
+  scheduled: number
+  bills_due: number
+  pending_approvals: number
+  safe_to_spend: number
+}
+
 export interface AgentRulesRead {
   max_per_request_ulxc: number
   hourly_limit_ulxc?: number
@@ -1291,9 +1301,9 @@ export class LensClient {
   }
 
   /** B45.11 — each agent's safe to spend this month, per currency (Lens B41.105); LXC in µLXC. */
-  async agentSafeToSpend(user: SyntheticUser): Promise<{ agents: { agent_id: string; figures: { currency: string; safe_to_spend: number }[] | null }[] | null }> {
+  async agentSafeToSpend(user: SyntheticUser): Promise<{ agents: { agent_id: string; figures: SafeToSpendFigure[] | null }[] | null }> {
     return (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/safe-to-spend`, this.bearer(user.token))) as {
-      agents: { agent_id: string; figures: { currency: string; safe_to_spend: number }[] | null }[] | null
+      agents: { agent_id: string; figures: SafeToSpendFigure[] | null }[] | null
     }
   }
 

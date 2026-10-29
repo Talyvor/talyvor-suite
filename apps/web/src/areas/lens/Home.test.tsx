@@ -51,7 +51,11 @@ function mockBff({ agents, newWorkspace = false }: { agents: typeof AGENTS; newW
       })
     if (url === '/api/agents/safe-to-spend')
       return json({
-        company: [{ currency: 'LXC', balance: 34 * M, scheduled: 0, bills_due: 0, pending_approvals: 0, safe_to_spend: 34 * M }],
+        // B41.5 — the company's bills are in pounds: £500.00 held, a £42.00 bill due this month.
+        company: [
+          { currency: 'LXC', balance: 34 * M, scheduled: 0, bills_due: 0, pending_approvals: 0, safe_to_spend: 34 * M },
+          { currency: 'GBP', balance: 50000, scheduled: 0, bills_due: 4200, pending_approvals: 0, safe_to_spend: 45800 },
+        ],
         // Researcher holds 6 LXC with a 2 LXC approval waiting; Buyer holds 10 with a 3 LXC schedule and 3 waiting.
         agents: [
           { agent_id: 'agt_1', name: 'Researcher', figures: [{ currency: 'LXC', balance: 6 * M, scheduled: 0, bills_due: 0, pending_approvals: 2 * M, safe_to_spend: 4 * M }] },
@@ -145,6 +149,10 @@ describe('Home — the wallet home (B28.6)', () => {
     expect(researcher).toHaveTextContent('6 LXC')
     expect(await within(researcher).findByTestId('home-safe-agt_1')).toHaveTextContent('4 LXC safe to spend')
     expect(screen.getByTestId('home-safe-agt_2')).toHaveTextContent('4 LXC safe to spend')
+    // B41.5 — the company's safe to spend, per currency, its bills due taken off.
+    const pounds = await screen.findByTestId('home-company-safe-GBP')
+    expect(pounds).toHaveTextContent('£458.00')
+    expect(document.body).toHaveTextContent('£500.00 held, less £0.00 scheduled, £42.00 in bills due and £0.00 waiting for approval')
 
     const ask = screen.getByRole('textbox', { name: 'Ask Taly' })
     const order = [approvals, total, researcher, ask]
