@@ -116,7 +116,7 @@ import { agentRulesUnbypassable } from './rules.ts'
 import { poolIsolation } from './pool.ts'
 import { injectionExfil } from './injection.ts'
 import { fileBombBounded, ssrfRefused } from './ssrf.ts'
-import { approvalReused, csrfEveryWrite, moneyTampered, xssShownBack } from './security.ts'
+import { approvalOwnRequest, approvalReused, csrfEveryWrite, moneyTampered, xssShownBack } from './security.ts'
 import { csrfRefused, phoneBearer, scriptInert } from './session.ts'
 import { connectApprove, connectContact, connectMCP, connectOAuth } from './connect.ts'
 import { mcpPayRetried, mcpSDKAgentPay } from './mcpSDK.ts'
@@ -5228,7 +5228,7 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // body and tampered amounts and currencies move nothing, an approval never pays another request, every BFF write is
   // refused from another site, a name or reference shown back never runs, and injection arrives by a web page or a Room message.
   if (i === 4) list.push(injectionExfil('web page'), injectionExfil('room message'))
-  if (i === 2) list.push(moneyTampered(), mcpPayRetried(), approvalReused()) // B50.16: an MCP payment retried under its key
+  if (i === 2) list.push(moneyTampered(), mcpPayRetried(), approvalReused(), approvalOwnRequest()) // B50.16: an MCP payment retried under its key; B50.19: an approval pays only its own request
   if (i === 1) list.push(csrfEveryWrite(), xssShownBack())
   // B28.285 — the addresses Lens must never reach and the documents it must not unpack without end, once a run, each on a
   // workspace of its own: the metadata address, loopback and private addresses given as a node or the audit webhook are

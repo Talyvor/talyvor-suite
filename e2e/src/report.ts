@@ -367,7 +367,7 @@ export function renderSecondAttempts(run: ReportedRun): string[] {
 export const SECURITY_SCENARIOS: ReadonlySet<string> = new Set([
   'ledger-moves-at-once', 'ledger-call-once', 'webhook-unsigned', 'webhook-replayed', 'agent-rules-unbypassable', 'market-abuse',
   'pool-isolation', 'injection-exfil', 'ssrf-refused', 'file-bomb-bounded', 'csrf-refused', 'script-inert', 'keys-unlisted',
-  'keys-not-forwarded', 'rate-limits-hold', 'cross-company-test-money', 'money-tampered', 'mcp-pay-retried-once', 'approval-reused', 'injection-exfil-web-page',
+  'keys-not-forwarded', 'rate-limits-hold', 'cross-company-test-money', 'money-tampered', 'mcp-pay-retried-once', 'approval-reused', 'approval-own-request', 'injection-exfil-web-page',
   'injection-exfil-room-message', 'csrf-every-write', 'xss-shown-back',
 ])
 export const isSecurity = (scenario: string): boolean => SECURITY_SCENARIOS.has(scenario)
