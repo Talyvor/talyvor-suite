@@ -160,6 +160,24 @@ export interface AgentSpendAlert {
   created_at: string
 }
 
+/**
+ * Lens economy.SafeToSpend (B41.105): per currency, the balance less what is promised out of it this month — scheduled
+ * payments, bills due and payments waiting for approval. LXC is in µLXC; GBP, EUR and USD in minor units.
+ */
+export interface SafeToSpendFigure {
+  currency: string
+  balance: number
+  scheduled: number
+  bills_due: number
+  pending_approvals: number
+  safe_to_spend: number
+}
+
+export interface SafeToSpend {
+  company: SafeToSpendFigure[] | null
+  agents: { agent_id: string; name: string; figures: SafeToSpendFigure[] | null }[] | null
+}
+
 /** Lens economy.SpendForecast (B19.6): this UTC month so far, run on to its end. */
 export interface SpendForecast {
   at: string
@@ -599,6 +617,7 @@ export const agentBankApi = {
   removeTopUp: (id: string) => send<unknown>('DELETE', `/api/agents/${e(id)}/topup`),
   // B19.20 — stop every agent or one, and what they are spending.
   alerts: () => getJSON<{ alerts: AgentSpendAlert[] | null; rule: string }>('/api/agents/alerts', { alerts: 'list' }),
+  safeToSpend: () => getJSON<SafeToSpend>('/api/agents/safe-to-spend', { agents: 'list' }),
   forecast: () => getJSON<SpendForecast>('/api/agents/forecast', { spent_ulxc: 'number', forecast_ulxc: 'number', agents: 'list' }),
   pauseAll: (reason: string) => send<{ all_paused: boolean }>('POST', '/api/agents/pause-all', { reason }),
   resumeAll: () => send<{ all_paused: boolean }>('POST', '/api/agents/resume-all'),

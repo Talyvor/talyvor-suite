@@ -531,7 +531,16 @@ export function Chat() {
   }, [scope, startWith, open, setParams])
   // B28.426 — "Use in Chat" on a skill's listing page opens a new chat attached to it, as Lens reads it to this person. The
   // listing rides the navigation's state, never the address: a link from anywhere else cannot attach a paid listing.
-  const startListing = (useLocation().state as { listing?: unknown } | null)?.listing
+  const startState = useLocation().state as { listing?: unknown; ask?: unknown } | null
+  const startListing = startState?.listing
+  // B45.11 — Taly's input on Home opens a new chat with its question typed, for the person to send.
+  const startAsk = startState?.ask
+  useEffect(() => {
+    if (scope === null || typeof startAsk !== 'string') return
+    open(undefined)
+    setDraft(startAsk)
+    setParams({}, { replace: true })
+  }, [scope, startAsk, open, setParams])
   useEffect(() => {
     if (scope === null || typeof startListing !== 'string') return
     open(undefined)

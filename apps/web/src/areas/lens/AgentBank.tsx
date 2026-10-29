@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, type PillStatus } from '@talyvor/ui'
 import { Card, pressed } from './walletBrand'
@@ -2185,6 +2185,11 @@ export function Approvals({
   const [byKind, setByKind] = useState<'' | 'payment' | 'model'>('')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const swipeFrom = useRef<{ id: string; x: number; y: number } | null>(null)
+  // B45.11 — Home links each approval to its card here, /approvals#approval-<id>: once the list is read, that card has focus.
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (list.isSuccess && hash.startsWith('#approval-')) document.getElementById(hash.slice(1))?.focus()
+  }, [list.isSuccess, hash])
   const [swiping, setSwiping] = useState<{ id: string; dx: number } | null>(null)
   const decideOne = async (a: AgentApproval, decision: 'approve' | 'deny', allow?: PayeeAllowance): Promise<React.ReactNode> => {
     // B19.10: once the workspace has a passkey, Lens takes a decision only signed with one — Face ID
@@ -2358,6 +2363,7 @@ export function Approvals({
                   stack
                   tabIndex={0}
                   data-approval={a.id}
+                  id={`approval-${a.id}`}
                   className={`touch-pan-y ${focusRing} ${swiping?.id === a.id ? '' : 'transition-transform duration-200'}`}
                   style={swiping?.id === a.id ? { transform: `translateX(${swiping.dx}px)` } : undefined}
                   onTouchStart={(e) => {

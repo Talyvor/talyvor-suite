@@ -1290,6 +1290,13 @@ export class LensClient {
     return (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/forecast`, this.bearer(user.token))) as SpendForecastRead
   }
 
+  /** B45.11 — each agent's safe to spend this month, per currency (Lens B41.105); LXC in µLXC. */
+  async agentSafeToSpend(user: SyntheticUser): Promise<{ agents: { agent_id: string; figures: { currency: string; safe_to_spend: number }[] | null }[] | null }> {
+    return (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/safe-to-spend`, this.bearer(user.token))) as {
+      agents: { agent_id: string; figures: { currency: string; safe_to_spend: number }[] | null }[] | null
+    }
+  }
+
   /** B46.16 — the workspace's name, as Lens keeps it (talyvor-lens B46.15). */
   async workspaceName(user: SyntheticUser): Promise<string> {
     return ((await this.call('GET', `/v1/workspaces/${user.workspaceID}/name`, this.bearer(user.token))) as { name: string }).name

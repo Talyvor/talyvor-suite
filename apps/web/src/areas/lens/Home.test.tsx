@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, CONSOLE_ROUTES, queryClient } from '../../App'
 import { PRODUCT_CARDS } from './Home'
@@ -17,6 +17,7 @@ const AGENTS = [
 ]
 
 function mockBff({ agents, newWorkspace = false }: { agents: typeof AGENTS; newWorkspace?: boolean }) {
+  const writes: string[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input)
@@ -48,6 +49,19 @@ function mockBff({ agents, newWorkspace = false }: { agents: typeof AGENTS; newW
           { id: 'apr_3', agent_id: 'agt_1', amount_ulxc: 1 * M, model: 'gpt-4o', status: 'approved', created_at: '2026-10-03T08:00:00Z' },
         ],
       })
+    if (url === '/api/agents/safe-to-spend')
+      return json({
+        company: [{ currency: 'LXC', balance: 34 * M, scheduled: 0, bills_due: 0, pending_approvals: 0, safe_to_spend: 34 * M }],
+        // Researcher holds 6 LXC with a 2 LXC approval waiting; Buyer holds 10 with a 3 LXC schedule and 3 waiting.
+        agents: [
+          { agent_id: 'agt_1', name: 'Researcher', figures: [{ currency: 'LXC', balance: 6 * M, scheduled: 0, bills_due: 0, pending_approvals: 2 * M, safe_to_spend: 4 * M }] },
+          { agent_id: 'agt_2', name: 'Buyer', figures: [{ currency: 'LXC', balance: 10 * M, scheduled: 3 * M, bills_due: 0, pending_approvals: 3 * M, safe_to_spend: 4 * M }] },
+        ],
+      })
+    if (/^\/api\/agents\/[^/]+\/(pause|resume)$/.test(url)) {
+      writes.push(url)
+      return json({ paused: url.endsWith('/pause') })
+    }
     if (url === '/api/agents/forecast')
       return json({
         at: '2026-10-04T12:00:00Z',
@@ -74,6 +88,7 @@ function mockBff({ agents, newWorkspace = false }: { agents: typeof AGENTS; newW
     if (url === '/api/workspace/pooling' || url.startsWith('/api/')) return json({})
     return new Response('null', { status: 404 })
   })
+  return writes
 }
 
 afterEach(() => {
@@ -93,9 +108,6 @@ describe('Home — the wallet home (B28.6)', () => {
     expect(await screen.findByText('Your agents’ wallets, at a glance.')).toBeInTheDocument()
     expect(screen.getByRole('banner')).toHaveTextContent('Home')
 
-    // Two pending, one decided: the count is the pending ones.
-    expect(await screen.findByTestId('home-approvals-waiting')).toHaveTextContent('2')
-    expect(screen.getByText(/2 requests are waiting for a person to approve/)).toBeInTheDocument()
 
     // Researcher spent 3 of its 12 LXC monthly budget: 25%. Buyer has no budget, so it is offered one.
     expect(await screen.findByTestId('home-budget-used-agt_1')).toHaveTextContent('25%')
@@ -104,11 +116,56 @@ describe('Home — the wallet home (B28.6)', () => {
     expect(within(buyer).getByText('Buyer')).toBeInTheDocument()
     expect(within(buyer).getByRole('link', { name: 'Set a budget' })).toHaveAttribute('href', '/agents')
 
-    // The rest of the home: what the workspace holds and has not given out, the forecast, and pause-all.
-    expect(screen.getByTestId('home-total-balance')).toHaveTextContent('50')
-    expect(screen.getByTestId('home-unallocated')).toHaveTextContent('34')
+    // The rest of the home: the forecast, and pause-all.
     expect(await screen.findByTestId('home-forecast')).toHaveTextContent('25 LXC')
     expect(screen.getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
+  })
+
+  // B45.11 — DONE reads: "the approvals, the total and the first agent rows are visible without scrolling; every
+  // figure matches the API". jsdom has no fold, so this pins the order and the figures; the 390px screenshot the fold.
+  it('Home in one glance: approvals first, then one total, then a row per agent, then Taly’s input', async () => {
+    const writes = mockBff({ agents: AGENTS })
+    window.history.pushState({}, '', '/')
+    render(<App />)
+
+    // Two pending, one decided: the pending two are listed, each opening its own card on Approvals.
+    expect(await screen.findByTestId('home-approvals-waiting')).toHaveTextContent('2')
+    const approvals = screen.getByTestId('home-approvals')
+    const links = within(approvals).getAllByRole('link')
+    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/approvals#approval-apr_1', '/approvals#approval-apr_2'])
+    expect(links[0]).toHaveTextContent(/Researcher.*2 LXC/)
+
+    // One total: what the agents hold together (6 + 10), and what the workspace has not given out.
+    const total = screen.getByTestId('home-total')
+    expect(total).toHaveTextContent('16 LXC')
+    expect(screen.getByTestId('home-unallocated')).toHaveTextContent('34 LXC')
+
+    // A row per agent: balance, and safe to spend as Lens reports it.
+    const researcher = screen.getByTestId('home-agent-agt_1')
+    expect(researcher).toHaveTextContent('6 LXC')
+    expect(await within(researcher).findByTestId('home-safe-agt_1')).toHaveTextContent('4 LXC safe to spend')
+    expect(screen.getByTestId('home-safe-agt_2')).toHaveTextContent('4 LXC safe to spend')
+
+    const ask = screen.getByRole('textbox', { name: 'Ask Taly' })
+    const order = [approvals, total, researcher, ask]
+    for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // …and the product cards come after all of it.
+    expect(ask.compareDocumentPosition(screen.getByRole('list', { name: 'Products' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    // The switch asks before it changes anything.
+    fireEvent.click(within(researcher).getByRole('switch', { name: 'Researcher running' }))
+    expect(writes).toEqual([])
+    fireEvent.click(within(researcher).getByRole('button', { name: 'Cancel' }))
+    expect(within(researcher).queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
+    fireEvent.click(within(researcher).getByRole('switch', { name: 'Researcher running' }))
+    fireEvent.click(within(researcher).getByRole('button', { name: 'Pause' }))
+    await waitFor(() => expect(writes).toEqual(['/api/agents/agt_1/pause']))
+
+    // Taly's input takes the question to Chat.
+    fireEvent.change(ask, { target: { value: 'Which agent spent most?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    expect(window.location.pathname).toBe('/chat')
+    expect(await screen.findByDisplayValue('Which agent spent most?')).toBeInTheDocument()
   })
 
   it('a workspace with no agents opens Home in onboarding mode', async () => {

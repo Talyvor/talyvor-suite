@@ -54,6 +54,9 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 		case strings.HasSuffix(r.URL.Path, "/transfers/xfr_given/refund"):
 			w.WriteHeader(http.StatusConflict)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "economy: this transfer was already refunded"})
+		case strings.HasSuffix(r.URL.Path, "/agents/safe-to-spend"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"agents": []map[string]any{{"agent_id": "agt_1", "name": "Researcher",
+				"figures": []map[string]any{{"currency": "LXC", "balance": 100_000_000, "safe_to_spend": 50_000_000}}}}})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/wallet"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"agent_id": "agt_1", "asset": "USDC", "balance_minor": 2_500_000, "mode": "LIVE",
 				"receive": map[string]any{"asset": "USDC", "network": "base", "address": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"}})
@@ -582,5 +585,19 @@ func TestAgentCardReachesLensWithOnlyTheCardholder(t *testing.T) {
 	if _, leaked := sent["workspace_id"]; leaked || sent["first_name"] != "Ada" || sent["postal_code"] != "N1 1AA" ||
 		sent["phone_number"] != "+447700900123" || len(sent) != 9 {
 		t.Fatalf("Lens was sent %v; want exactly the nine cardholder fields, the phone among them", sent)
+	}
+}
+
+// B45.11 — Home's safe to spend reaches Lens's safe-to-spend (B41.105) on the session's workspace and answers its figures.
+func TestSafeToSpendReachesLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	rec := doJSON(a, http.MethodGet, "/api/agents/safe-to-spend", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"safe_to_spend":50000000`) {
+		t.Fatalf("safe-to-spend = %d %s", rec.Code, rec.Body.String())
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.got) != 1 || !strings.HasPrefix(f.got[0], "GET /v1/workspaces/") || !strings.HasSuffix(f.got[0], "/agents/safe-to-spend ") {
+		t.Fatalf("Lens got %q; want GET …/agents/safe-to-spend", f.got)
 	}
 }

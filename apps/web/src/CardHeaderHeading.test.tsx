@@ -114,8 +114,8 @@ function cardHeaderTitles(root: ParentNode): Element[] {
  * merge's own CI rather than in main after the second, which is the failure W0.3 named.
  */
 const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
-  // B28.6 — `/` is the wallet home (approvals, budgets, forecast); Overview's six moved to /overview.
-  '/': 3,
+  // B28.6 — `/` is the wallet home; B45.11: waiting for you, your agents, budgets, forecast. Overview's six moved to /overview.
+  '/': 4,
   // B28.7 — Approvals (waiting, decided) and Statements (every agent, the agents, one statement).
   '/approvals': 2,
   '/statements': 3,

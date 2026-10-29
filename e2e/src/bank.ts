@@ -1740,15 +1740,19 @@ export function openHolds(lines: AgentLine[]): string[] {
  * Home must then show it 25% through its budget and the approvals Lens has waiting. Every figure the
  * screen is held to is read back from Lens: the agent's spend from the book, the pending approvals from
  * Lens's list. The budget is set after the approval is filed, so no limit can refuse the held request first.
+ *
+ * B45.11 — Home in one glance, on a 390×844 phone: the approvals first (the agent's opening its own card), then the one
+ * total across agents, then a row per agent with its safe to spend, then Taly's input; the approvals, the total and the
+ * first agent row inside the first 844px. The total and the safe to spend are Lens's, read back after the page shows them.
  */
 export function walletHome(seed: number): Scenario {
   const r = seeded(seed * 37 + 11)
   return {
     id: 'wallet-home',
     owner: 'talyvor-suite',
-    items: ['B28.6'],
+    items: ['B28.6', 'B45.11'],
     agents: 1,
-    title: 'the first screen after sign-in is Home: each agent’s budget used and the approvals waiting, as Lens has them',
+    title: 'the first screen after sign-in is Home: approvals first, one total, each agent’s safe to spend, then Taly — above a phone’s fold, as Lens has them',
     run: (ctx) => withBank(ctx, async (bank) => {
       const a = await openAgent(ctx, bank, `Home ${seed}`)
       if (typeof a === 'string') return fail(a)
@@ -1778,12 +1782,43 @@ export function walletHome(seed: number): Scenario {
         ctx.evidence.push({ note: `Home: ${a.name} ${used} through its budget, ${waiting} approval(s) waiting; Lens: spent ${spent} of ${spent * 4} µLXC, ${pending.length} pending` })
         if (used !== '25%') return fail(`${a.name} spent ${spent} µLXC of a ${spent * 4} µLXC monthly budget; Home shows ${used} used, not 25%`)
         if (waiting !== String(pending.length)) return fail(`Lens has ${pending.length} approval(s) pending; Home shows ${waiting} waiting`)
-        return { pass: true, detail: `Home shows ${a.name} 25% through its monthly budget and ${waiting} approval(s) waiting, as Lens has them` }
+        const glance = await homeGlance(ctx, page, a, pending.filter((x) => x.agent_id === a.id)[0]?.id ?? '')
+        if (glance !== undefined) return fail(glance)
+        return { pass: true, detail: `Home shows ${a.name} 25% through its monthly budget and ${waiting} approval(s) waiting, as Lens has them; ` +
+          'on a 390×844 phone the approvals, the total and the first agent row sit above the fold, the total and the safe to spend as Lens has them' }
       } finally {
         await page.close()
       }
     }),
   }
+}
+
+/** B45.11 — Home at 390×844: what is wrong with its one glance, or undefined. */
+async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: string): Promise<string | undefined> {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.evaluate(() => window.scrollTo(0, 0))
+  const row = page.getByTestId(`home-agent-${a.id}`)
+  const safeShown = (await row.getByTestId(`home-safe-${a.id}`).innerText({ timeout: ACTION_TIMEOUT_MS })).replace(/\s+/g, ' ')
+  const totalShown = (await page.getByTestId('home-total').innerText({ timeout: ACTION_TIMEOUT_MS })).replace(/\s+/g, ' ')
+  const book = await bookOf(ctx)
+  const safe = (await ctx.env.lens.agentSafeToSpend(ctx.app.user)).agents?.find((x) => x.agent_id === a.id)?.figures?.find((f) => f.currency === 'LXC')
+  ctx.evidence.push({ note: `Home at 390: total "${totalShown}", ${a.name} "${safeShown}"; Lens: ${book.allocated_ulxc} µLXC with agents, safe to spend ${safe?.safe_to_spend} µLXC` })
+  if (safe === undefined) return `Lens lists no LXC safe to spend for ${a.name}`
+  if (!totalShown.includes(shownLXC(book.allocated_ulxc))) return `Home's total reads "${totalShown}", not Lens's ${shownLXC(book.allocated_ulxc)} with agents`
+  if (!safeShown.includes(shownLXC(safe.safe_to_spend))) return `${a.name}'s safe to spend reads "${safeShown}", not Lens's ${shownLXC(safe.safe_to_spend)}`
+  const link = page.locator(`a[href="/approvals#approval-${approvalID}"]`)
+  if (approvalID === '' || (await link.count()) === 0) {
+    const listed = await page.getByTestId('home-approvals').locator('a').count()
+    if (listed < 3) return `Home lists ${listed} approval(s) and none opens ${a.name}'s card (${approvalID || 'none filed'})`
+  }
+  const box = async (l: Locator) => (await l.boundingBox()) ?? { y: Infinity, height: 0 }
+  const approvals = await box(page.getByRole('heading', { name: /^Waiting for you/ }))
+  const total = await box(page.getByTestId('home-total'))
+  const first = await box(page.locator('[data-testid^="home-agent-"]').first())
+  const ask = await box(page.getByRole('textbox', { name: 'Ask Taly' }))
+  if (!(approvals.y < total.y && total.y < first.y && first.y < ask.y)) return `Home's order at 390 is not approvals, total, agents, Taly: ${approvals.y}, ${total.y}, ${first.y}, ${ask.y}`
+  if (first.y + first.height > 844) return `at 390×844 the first agent row ends at ${Math.round(first.y + first.height)}px, below the fold`
+  return undefined
 }
 
 /** B28.271 — what Agent Wallets may not show a workspace with no agents: none of these has anything to act on yet. */
