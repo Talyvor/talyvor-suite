@@ -7,6 +7,7 @@ import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
 import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, PauseEveryAgent, rulesKey } from './AgentBank'
 import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText } from './agentBankApi'
 import { Lxc } from './money'
+import { SafeAmount, SafeBreakdown } from './SafeToSpend'
 import { FirstAgent } from './Onboarding'
 import { SharingLine } from './Sharing'
 
@@ -14,7 +15,8 @@ import { SharingLine } from './Sharing'
 //   1. What does the workspace hold, and how much of it have I not yet given to an agent?
 //   2. Is anything waiting for me? — the approvals an agent's rules filed for a person.
 //   3. How far through its budget is each agent? — this month's spend against its monthly limit.
-//   4. Where is the month heading? — Lens's forecast, the pace so far run on to the month's end.
+//   4. Where is the month heading? — Lens's forecast, the pace so far run on to the month's end, and the company's safe
+//      to spend: its balance less the month's scheduled payments, bills due and approvals waiting (B41.5).
 //   5. How do I stop it all? — the one switch that pauses every agent.
 // Every figure is Lens's, read through the same BFF routes and the same query keys as Agent Wallets,
 // so a change made on either screen is the figure the other shows.
@@ -329,11 +331,26 @@ function Budgets({ agents, forecast }: { agents: Agent[]; forecast: UseQueryResu
   )
 }
 
+/** B41.5 — the company's safe to spend this month, per currency: where its bills due are counted (Lens B41.105). */
+function CompanySafe() {
+  const safe = useQuery({ queryKey: SAFE_TO_SPEND_KEY, queryFn: agentBankApi.safeToSpend })
+  if (safe.isError) return <PanelFailure error={safe.error} what="what is safe to spend" />
+  if (safe.isPending) return <Muted>Reading what is safe to spend…</Muted>
+  return (safe.data.company ?? []).map((f) => (
+    <Row key={f.currency} label={`Safe to spend in ${f.currency}`} hint={<span className="whitespace-normal"><SafeBreakdown figure={f} /></span>}>
+      <span className="text-body text-ink" data-testid={`home-company-safe-${f.currency}`}>
+        <SafeAmount currency={f.currency} amount={f.safe_to_spend} />
+      </span>
+    </Row>
+  ))
+}
+
 /** Lens's month-end forecast for every agent together. */
 function Forecast({ forecast }: { forecast: UseQueryResult<SpendForecast> }) {
   return (
     <Card>
       <CardHeader>This month</CardHeader>
+      <CompanySafe />
       {forecast.isError ? (
         <PanelFailure error={forecast.error} what="the forecast" />
       ) : forecast.isPending ? (

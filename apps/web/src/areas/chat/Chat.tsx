@@ -72,6 +72,7 @@ import { sayAloud } from './voice'
 import { SCHEDULE_COMMAND, ScheduleCard } from './ScheduledPrompt'
 import { AskAboveCard, RuleCard, isAskAboveCommand, isRuleCommand } from './RuleCommand'
 import { ForecastCard, isRunOutQuestion } from './ForecastQuestion'
+import { SafeToSpendCard, isSafeToSpendQuestion } from './SafeToSpendQuestion'
 import { isRememberCommand, memoryInstructions, parseRemember, remember } from './memory'
 import { RememberCard, useChatMemory } from './MemoryPage'
 import { LiveStatement } from './LiveStatement'
@@ -281,6 +282,7 @@ function answeredHere(question: string): boolean {
     isRuleCommand(question) ||
     isAskAboveCommand(question) ||
     isRunOutQuestion(question) ||
+    isSafeToSpendQuestion(question) ||
     isRememberCommand(question)
   )
 }
@@ -354,6 +356,7 @@ export function Chat() {
   }, [])
   // B28.357 — each "Will Researcher run out this month?": a card that answers it from Lens's forecast.
   const [forecasts, setForecasts] = useState<{ id: number; question: string }[]>([])
+  const [safeAsks, setSafeAsks] = useState<{ id: number; question: string }[]>([])
   // B28.371 — each "Remember that …": a card that says it was remembered, or that memory is off.
   const [remembering, setRemembering] = useState<{ id: number; fact: string }[]>([])
   // B28.354 — the agent whose wallet pays for this conversation; '' is the workspace.
@@ -1071,6 +1074,11 @@ export function Chat() {
         setForecasts((l) => [...l, { id: ++launchSeq.current, question }])
         return
       }
+      if (isSafeToSpendQuestion(question)) {
+        setDraft('')
+        setSafeAsks((l) => [...l, { id: ++launchSeq.current, question }])
+        return
+      }
       // B28.371 — kept at once with memory on; with it off, nothing is kept until the card is asked to.
       const fact = parseRemember(question)
       // B28.131 — a temporary chat keeps nothing, so it remembers nothing; the words stay in the box.
@@ -1682,6 +1690,15 @@ export function Chat() {
               <section aria-label="Forecasts" className="flex flex-col gap-3 pb-6">
                 {forecasts.map((l) => (
                   <ForecastCard key={l.id} question={l.question} onClose={() => setForecasts((ls) => ls.filter((x) => x.id !== l.id))} />
+                ))}
+              </section>
+            ) : null}
+
+            {/* B41.5 — "How much can Researcher spend?", answered here from Lens's safe-to-spend figure instead of by the model. */}
+            {safeAsks.length > 0 ? (
+              <section aria-label="Safe to spend" className="flex flex-col gap-3 pb-6">
+                {safeAsks.map((l) => (
+                  <SafeToSpendCard key={l.id} question={l.question} onClose={() => setSafeAsks((ls) => ls.filter((x) => x.id !== l.id))} />
                 ))}
               </section>
             ) : null}

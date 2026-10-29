@@ -2580,6 +2580,81 @@ export function chatForecastAnswer(seed: number): Scenario {
 }
 
 /**
+ * B41.5 — "How much can <agent> spend?" asked in Chat is answered from Lens's safe-to-spend figure (B41.105). The agent
+ * holds 100 LXC, has a 20 LXC monthly transfer scheduled and a 30 LXC payment waiting for a person: Lens says 50 LXC is
+ * safe to spend (whether or not the transfer's first run has paid yet, it is 50), and Chat shows that figure without
+ * asking the model. The waiting payment is read from Lens's approvals: one pending, nothing paid.
+ */
+export function chatSafeToSpend(seed: number): Scenario {
+  const [funded, scheduled, waiting, askAbove, safe] = [100e6, 20e6, 30e6, 25e6, 50e6]
+  return {
+    id: 'chat-safe-to-spend',
+    owner: 'talyvor-suite',
+    items: ['B41.5'],
+    agents: 2,
+    title: '"How much can <agent> spend?" in Chat: 100 LXC held, a 20 LXC schedule and a 30 LXC payment waiting show 50 LXC safe to spend, as Lens has it',
+    run: (ctx) =>
+      withBank(ctx, async (bank) => {
+        const { env, app } = ctx
+        const spender = await openAgent(ctx, bank, `Safe spender ${seed}`)
+        if (typeof spender === 'string') return fail(spender)
+        const payee = await openAgent(ctx, bank, `Safe payee ${seed}`)
+        if (typeof payee === 'string') return fail(payee)
+        let err = await bank.move(spender, funded, 'Fund')
+        if (err !== undefined) return fail(`funding ${spender.name} was refused: ${err}`)
+        err = await bank.setLimit(spender, 'Ask a person above', askAbove)
+        if (err !== undefined) return fail(`setting ${spender.name}'s approval amount was refused: ${err}`)
+        const started = await bank.startRecurring(spender, payee.id, scheduled, 'month', `safe schedule ${seed}`)
+        if (!/every month/.test(started)) return fail(`starting a ${lxcText(scheduled)} LXC monthly transfer was refused: "${started}"`)
+        const sc = (await env.lens.schedules(app.user)).filter((x) => x.from_agent_id === spender.id)
+        try {
+          const held = await bank.pay(spender, payee, waiting, `safe waiting ${seed}`)
+          if (!/waiting in Approvals/.test(held)) return fail(`a ${lxcText(waiting)} LXC payment over the ${lxcText(askAbove)} LXC approval amount was not held: "${held}"`)
+          const filed = (await env.lens.agentApprovals(app.user)).filter((x) => x.agent_id === spender.id && x.status === 'pending')
+          if (filed.length !== 1 || filed[0].amount_ulxc !== waiting) return fail(`Lens has ${filed.length} pending approval(s) for ${spender.name}: ${JSON.stringify(filed)}`)
+
+          const page = await ctx.app.tab('/chat')
+          try {
+            await page.setViewportSize({ width: 1440, height: 900 })
+            const question = `How much can ${spender.name} spend?`
+            await page.locator('#chat-message').fill(question)
+            await page.locator('#chat-message').press('Enter')
+            const card = page.getByTestId('chat-safe-to-spend').filter({ hasText: question })
+            try {
+              await card.getByTestId('chat-safe-agent-LXC').waitFor({ timeout: ACTION_TIMEOUT_MS })
+            } catch {
+              return fail(`"${question}" opened no safe-to-spend answer in Chat`)
+            }
+            if ((await page.getByTestId('turn-user').filter({ hasText: question }).count()) > 0) return fail('the safe-to-spend question was sent to the model')
+            const said = (await card.getByTestId('chat-safe-answer').innerText()).trim()
+            const lens = (await env.lens.agentSafeToSpend(app.user)).agents?.find((a) => a.agent_id === spender.id)?.figures?.find((f) => f.currency === 'LXC')
+            ctx.evidence.push({ note: `Chat: "${question}" → "${said}"; Lens: ${JSON.stringify(lens)}; schedules ${JSON.stringify(sc)}` })
+            if (lens === undefined) return fail(`Lens lists no LXC safe to spend for ${spender.name}`)
+            if (lens.pending_approvals !== waiting || lens.safe_to_spend !== safe) {
+              return fail(`${spender.name} holds ${lens.balance} µLXC with ${lens.scheduled} scheduled and ${lens.pending_approvals} waiting; Lens says ${lens.safe_to_spend} is safe to spend, not ${safe}`)
+            }
+            if (!said.includes(`${shownLXC(safe)} safe to spend`)) return fail(`Chat answered "${said}", not Lens's ${shownLXC(safe)}`)
+
+            await mkdir(env.outDir, { recursive: true })
+            for (const [width, height] of [[1440, 900], [390, 844]] as const) {
+              await page.setViewportSize({ width, height })
+              await card.scrollIntoViewIfNeeded()
+              const shot = join(env.outDir, `chat-safe-to-spend-${width}px-user${ctx.app.user.index}.png`)
+              await page.screenshot({ path: shot })
+              ctx.evidence.push({ note: `the safe-to-spend answer at ${width}px: ${shot}` })
+            }
+            return { pass: true, detail: `"${question}" in Chat: ${shownLXC(safe)} safe to spend — Lens's figure for ${lxcText(funded)} LXC held, a ${lxcText(scheduled)} LXC monthly transfer and a ${lxcText(waiting)} LXC payment waiting` }
+          } finally {
+            await page.close()
+          }
+        } finally {
+          for (const x of sc) await env.lens.stopSchedule(app.user, x.id)
+        }
+      }),
+  }
+}
+
+/**
  * B28.354 (for B28.90) — an agent chosen in Chat's "Paid by" pays for the conversation. One question is asked in Chat
  * with the agent chosen: the answer says the agent paid, the request's charge is on the agent's statement and comes out
  * of its balance, and the workspace's own money — what no agent holds, and its plan's allowance — does not move.
