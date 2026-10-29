@@ -944,6 +944,17 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payees/{id}/confirm", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPayeeConfirmBody",
   },
+  // B41.11 — the owner's passkey says they called a new payee on a number they already had (Lens B41.111).
+  {
+    route: "POST /v1/money/payees/{id}/called",
+    file: "apps/bff/money_pay.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]any{"assertion": in.Assertion})',
+    upstreamFile: "cmd/lens/money_payees_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/payees/{id}/called", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPayeeCalledBody",
+  },
   {
     route: "POST /v1/money/payments",
     file: "apps/bff/money_pay.go",

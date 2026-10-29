@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Pill, focusRing } from '@talyvor/ui'
+import { Button, CardHeader, Pill, focusRing, inlineLink } from '@talyvor/ui'
 import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { formatWhen } from './format'
@@ -212,7 +212,16 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
                         : `Asks for approval: ${it.reason}.`}
                     {it.rule ? <span className="font-figure"> ({it.rule})</span> : null}
                   </p>
-                  {it.pay_status ? <p className="text-caption text-ink">Payment: {it.pay_status}</p> : null}
+                  {it.pay_status === 'held' ? (
+                    <p className="text-caption text-ink">
+                      Payment: held for 24 hours, as {it.payee_name} is a new payee.{' '}
+                      <Link className={inlineLink} to={`/money/pay#payee-${it.payee_id}`}>
+                        Called them? Pay it now
+                      </Link>
+                    </p>
+                  ) : it.pay_status ? (
+                    <p className="text-caption text-ink">Payment: {it.pay_status}</p>
+                  ) : null}
                 </div>
               </li>
             )

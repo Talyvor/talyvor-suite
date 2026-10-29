@@ -11,9 +11,8 @@ const ACCOUNTS = [
   { id: 'macc_agt', agent_id: 'agt_1', currency: 'GBP', purpose: 'agent', status: 'open', name: 'GBP account', balance_minor: 10000, test_minor: 10000, live_minor: 0 },
 ]
 
-function mockBff(asked: unknown[] = [], bills: unknown[] = []) {
+function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<string, unknown>[] = []) {
   const sent: Array<{ url: string; headers: Record<string, string>; body: unknown }> = []
-  const payees: unknown[] = []
   const payments: unknown[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -72,6 +71,12 @@ function mockBff(asked: unknown[] = [], bills: unknown[] = []) {
       return json(p, 201)
     }
     if (url === '/api/money/payees') return json({ payees })
+    if (url === '/api/money/payees/payee_new/called/challenge') return json({ challenge: 'Y2gx', allow_credentials: ['Y3JlZDE'], user_verification: 'required' })
+    if (url === '/api/money/payees/payee_new/called') {
+      sent.push({ url, headers: init?.headers as Record<string, string>, body: JSON.parse(String(init?.body)) })
+      delete payees[0].cooling_off_until
+      return json({ ...payees[0], called_at: '2026-10-29T10:00:00Z' })
+    }
     if (url === '/api/money/payments' && init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as Record<string, unknown>
       sent.push({ url, headers: init.headers as Record<string, string>, body })
@@ -99,6 +104,25 @@ afterEach(() => {
 })
 
 describe('the Pay screen', () => {
+  it('shows when a new payee’s large payments wait until, and ends the wait when the owner signs “I called them”', async () => {
+    const bff = mockBff([], [], [{ id: 'payee_new', name: 'Joinery Ltd', country: 'GB', sort_code: '040004', account_number: '12345678', check: 'exact_match',
+      checked_by: 'test', checked_at: '2026-10-29T09:00:00Z', needs_confirmation: false, created_at: '2026-10-29T09:00:00Z', cooling_off_until: '2026-10-30T09:00:00Z' }])
+    const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
+      response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+
+    const wait = await screen.findByTestId('cooling-off-payee_new')
+    expect(wait.textContent).toContain('A payment of more than 1,000 to Joinery Ltd waits until')
+    expect(wait.textContent).toContain('call Joinery Ltd on a number you already had')
+    expect(within(screen.getByTestId('payee-payee_new')).getByText('New payee')).toBeTruthy()
+    fireEvent.click(within(wait).getByRole('button', { name: 'I called them — confirm with a passkey' }))
+    await vi.waitFor(() => expect(screen.queryByTestId('cooling-off-payee_new')).toBeNull())
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(bff.sent).toEqual([expect.objectContaining({ url: '/api/money/payees/payee_new/called', body: { assertion: expect.objectContaining({ credential_id: 'AQ', signature: 'BA' }) } })])
+  })
+
   it('saves a payee, pays it from the agent’s account in minor units under one key, and the payment reads Completed', async () => {
     const bff = mockBff()
     window.history.pushState({}, '', '/money/pay')

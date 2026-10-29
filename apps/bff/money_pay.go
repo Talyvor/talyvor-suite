@@ -14,6 +14,8 @@ import (
 //	POST /api/money/payees   {name, country, sort_code, account_number, iban, bic, routing_number}   save one; Lens checks the name
 //	POST /api/money/payees/{id}/challenge           the challenge a close or no match is confirmed over
 //	POST /api/money/payees/{id}/confirm {assertion} confirm it with one of the workspace's passkeys
+//	POST /api/money/payees/{id}/called/challenge    B41.11: the challenge the owner signs to say they called a new payee
+//	POST /api/money/payees/{id}/called {assertion}  they called it on a number they already had: its cooling-off ends
 //	GET  /api/money/payments                        the payments out, newest first
 //	POST /api/money/payments {account_id, payee_id, amount_minor, currency, reference, idempotency_key}   pay a saved payee
 //	GET  /api/money/mandates                        the mandates granted and, for the owner, received
@@ -90,6 +92,37 @@ func (a *app) handleMoneyPayeeConfirm(w http.ResponseWriter, r *http.Request, t 
 	// UPSTREAM-BINDS-ONLY lensPayeeConfirmBody: none
 	body, _ := json.Marshal(map[string]*passkeyAssertion{"assertion": in.Assertion})
 	a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/payees/"+url.PathEscape(id)+"/confirm", body)
+}
+
+// handleMoneyPayeeCalled — B41.11: POST /api/money/payees/{id}/called/challenge relays the challenge, and
+// POST /api/money/payees/{id}/called {assertion} the owner's passkey saying they called the new payee on a number they
+// already had (Lens B41.111): its 24-hour cooling-off ends and the payments it held are paid.
+func (a *app) handleMoneyPayeeCalled(challenge bool) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		id, ok := pathID(w, "payee id", r.PathValue("id"))
+		if !ok {
+			return
+		}
+		path := "/v1/money/payees/" + url.PathEscape(id) + "/called"
+		if challenge {
+			a.agentBankRelayPath(w, r, t, http.MethodPost, path+"/challenge", nil)
+			return
+		}
+		var in struct {
+			Assertion *passkeyAssertion `json:"assertion"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil || in.Assertion == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "a call to a new payee is confirmed with a passkey's assertion"})
+			return
+		}
+		// UPSTREAM-BINDS-ONLY lensPayeeCalledBody: none
+		body, _ := json.Marshal(map[string]any{"assertion": in.Assertion})
+		a.agentBankRelayPath(w, r, t, http.MethodPost, path, body)
+	}
 }
 
 // handleMoneyPayments — GET /api/money/payments lists the payments out; POST pays a saved payee.
