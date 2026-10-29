@@ -2149,6 +2149,28 @@ export class Bank {
       const spent = agents.reduce((s, a) => s + a.spent_ulxc, 0)
       return json(res, 200, { at: now, month_start: start.toISOString(), month_end: end.toISOString(), spent_ulxc: spent, forecast_ulxc: runOn(spent), agents }), true
     }
+    if (rest === '/agents/briefing' && method === 'GET') {
+      // B41.206 — Lens economy.DailyBriefing (B41.106): approvals waiting, bills due within the week, then yesterday's (the UTC day
+      // before ?at's) payments between agents. briefing-no-bill — the bill due is left out.
+      const at = new Date(url.searchParams.get('at') ?? now)
+      const day = (n: number) => new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate() + n)).toISOString()
+      const name = (account: string) => this.agents.get(account.slice('agent:'.length))?.name ?? ''
+      const items = [
+        ...this.approvals.filter((a) => a.ws === ws.id && a.status === 'pending').reverse().map((a) => ({ kind: 'approval', id: a.id, agent_id: a.agent_id,
+          name: a.payee?.name ?? this.agents.get(a.agent_id)?.name ?? '', amount: a.amount_ulxc, currency: 'LXC' })),
+        ...(this.broken('briefing-no-bill') ? [] : this.payees.billsOf(ws.id)).filter((b) => b.status === 'due' && (b.due_date === '' || b.due_date < day(7).slice(0, 10)))
+          .map((b) => ({ kind: 'bill', id: b.id, name: b.supplier, amount: b.amount_minor, currency: b.currency, due_date: b.due_date })),
+        ...this.postings.filter((p) => p.ws === ws.id && p.kind === 'pay' && p.amount_ulxc < 0 && p.at >= day(-1) && p.at < day(0))
+          .map((p) => ({ kind: 'payment', id: p.entry_id, agent_id: p.account.slice('agent:'.length), name: name(p.counterparty), amount: -p.amount_ulxc, currency: 'LXC' })),
+      ]
+      const spent = items.filter((i) => i.kind === 'payment').reduce((s, i) => s + i.amount, 0)
+      const quiet = items.length === 0
+      const count = (k: string) => items.filter((i) => i.kind === k).length
+      const line = quiet ? 'A quiet day: nothing was spent yesterday, and nothing is waiting for you.'
+        : [['approval', 'approval waiting', 'approvals waiting'], ['bill', 'bill due this week', 'bills due this week'], ['payment', 'payment yesterday', 'payments yesterday']]
+          .filter(([k]) => count(k) > 0).map(([k, one, many]) => `${count(k)} ${count(k) === 1 ? one : many}`).concat(spent > 0 ? [`spent yesterday ${spent / 1e6} LXC`] : []).join(', ') + '.'
+      return json(res, 200, { at: at.toISOString(), day_start: day(-1), day_end: day(0), items, spent_yesterday: spent > 0 ? [{ currency: 'LXC', amount: spent }] : [], quiet, line }), true
+    }
     if (await this.walletRoute(req, res, ws, rest)) return true
     // B28.84 — registering a passkey and the challenge each approval is signed over (Lens B19.16).
     const challenge = () => randomBytes(32).toString('base64url')

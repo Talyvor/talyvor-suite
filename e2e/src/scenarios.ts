@@ -81,6 +81,7 @@ import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
 import { roomEarnings } from './roomEarnings.ts'
 import { agentCards } from './agentCards.ts'
+import { dailyBriefing } from './dailyBriefing.ts'
 import { agentWalletKinds } from './agentWalletKinds.ts'
 import { speechThroughLens } from './speech.ts'
 import { capabilityTerms } from './capabilityTerms.ts'
@@ -5453,6 +5454,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B46.20 — an agent's single-use cards on the sandbox, once a run, on a workspace of its own: its key asks for three capped cards to
   // book a trip; one approval issues all three, locked and closing within 24 hours, with one card_hold of the total; again, nothing more.
   if (i === 0) list.push(agentCards())
+  // B41.206 — the daily briefing, once a run, on a workspace of its own: quiet in one line before anything happens; after two
+  // payments, one held for approval and a bill due, the next morning's lists all four with their amounts, and the two payments' postings.
+  if (i === 5) list.push(dailyBriefing())
   // B48.23 — agents of each kind own their wallets, once a run, on a workspace of its own: fiat GBP, crypto USDC, both EUR + USDC,
   // each its own account; removing the kind whose wallet holds test money answers 409 and the ledger keeps it open; one owner wallet per asset.
   if (i === 4) list.push(agentWalletKinds())
