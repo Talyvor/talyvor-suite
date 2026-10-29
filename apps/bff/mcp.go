@@ -14,8 +14,6 @@ package main
 //
 // create_payee_request and draft_mandate keep what the assistant sent for the person to save or sign on the Pay screen
 // (B40.35, mcp_drafts.go): neither saves a payee nor signs a mandate.
-//
-// shortcut: no bills_due or safe_to_spend until Lens has bills (B41.101) and the figure (B41.105) (B40.36).
 
 import (
 	"bytes"
@@ -95,6 +93,8 @@ type mcpTool struct {
 	call                            func(t tenant, g oauthGrant, args mcpArgs, raw json.RawMessage) (lensCall, error)
 	// resolve, when set, reads Lens first: it returns the arguments call goes up with, or an answer for the assistant and no call.
 	resolve func(a *app, ctx context.Context, t tenant, args mcpArgs) (mcpArgs, map[string]any, error)
+	// shape, when set, is what the assistant is shown of Lens's answer.
+	shape func(raw []byte) ([]byte, error)
 }
 
 var errMCPArgs = errors.New("the arguments are not the tool's")
@@ -194,6 +194,14 @@ var mcpTools = []mcpTool{
 		description: "A prepared payment request: its status, its items and their decisions, and its approval link.",
 		props:       map[string]any{"request_id": mcpStr}, required: []string{"request_id"},
 		call: mcpByID(http.MethodGet, "/v1/money/payment-requests", "request_id", "")},
+	{name: "bills_due", title: "Bills due", scope: "wallets:read", kind: mcpReads,
+		description: "The workspace's bills that are due, soonest first: supplier, invoice number, amount, due date and whether the supplier is a saved payee, with the total per currency.",
+		call:        mcpGet("/v1/money/bills"), shape: mcpBillsDue},
+	{name: "safe_to_spend", title: "Safe to spend", scope: "wallets:read", kind: mcpReads,
+		description: "What the company and each agent can safely spend this month in each currency: the balance less the scheduled payments, the bills due and the payments waiting for approval.",
+		call: func(t tenant, _ oauthGrant, _ mcpArgs, _ json.RawMessage) (lensCall, error) {
+			return lensCall{method: http.MethodGet, path: lensWorkspacePath(t, "/agents/safe-to-spend")}, nil
+		}},
 
 	{name: "draft_invoice", title: "Draft an invoice", scope: "invoices:draft", kind: mcpWrites,
 		description: "Drafts an invoice from one of the workspace's accounts. The draft is not sent.",
@@ -527,6 +535,12 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 			return mcpRefusal(req.ID, err.Error())
 		}
 	}
+	if tool.shape != nil {
+		if raw, err = tool.shape(raw); err != nil {
+			log.Printf("bff: mcp %s for client %q: %v", tool.name, g.ClientName, err)
+			return mcpRefusal(req.ID, "Talyvor could not answer just now. Try again shortly.")
+		}
+	}
 	var out map[string]any
 	if json.Unmarshal(raw, &out) != nil {
 		out = map[string]any{"result": json.RawMessage(raw)}
@@ -549,6 +563,40 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 		}
 	}
 	return mcpOK(req.ID, map[string]any{"content": content, "structuredContent": out, "isError": false})
+}
+
+// mcpBillsDue is Lens's bills (B41.101) as its own list_bills_due shows them (talyvor-lens internal/mcp, B45.17): the due
+// ones, in Lens's order, and never the bank details printed on them — a bill is paid to its saved payee.
+func mcpBillsDue(raw []byte) ([]byte, error) {
+	type dueBill struct {
+		ID            string   `json:"id"`
+		Supplier      string   `json:"supplier"`
+		InvoiceNumber string   `json:"invoice_number,omitempty"`
+		AmountMinor   int64    `json:"amount_minor"`
+		Currency      string   `json:"currency"`
+		DueDate       string   `json:"due_date,omitempty"`
+		PayeeID       string   `json:"payee_id,omitempty"`
+		PayeeMatch    string   `json:"payee_match"`
+		Missing       []string `json:"missing"`
+		Status        string   `json:"status"`
+	}
+	var in struct {
+		Bills []dueBill `json:"bills"`
+	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return nil, err
+	}
+	out, totals := []dueBill{}, map[string]int64{}
+	for _, b := range in.Bills {
+		if b.Status != "due" {
+			continue
+		}
+		out = append(out, b)
+		if b.Currency != "" {
+			totals[b.Currency] += b.AmountMinor
+		}
+	}
+	return json.Marshal(map[string]any{"bills": out, "count": len(out), "totals": totals})
 }
 
 // mcpContact is B45.14's "Transfer $500 to Mike" on this server, by Lens's own prepare_transfer_to_contact rule

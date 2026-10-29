@@ -93,6 +93,7 @@ var builtByThisService = map[string]string{
 // suspicious and checking them would report the decoder as a defect.
 var decodedFromUpstream = map[string]string{
 	"mcpMessage":             "an assistant's JSON-RPC message POSTed to /mcp, decoded in handleMCP (B40.7)",
+	"dueBill":                "a bill in Lens's GET /v1/money/bills, decoded in mcpBillsDue and shown less its printed bank details (B40.36)",
 	"mcpPayeeDetails":        "an assistant's create_payee_request arguments, decoded wholesale in mcpCreatePayeeRequest and kept for the person to save (B40.35)",
 	"mcpReply":               "Lens's POST /mcp JSON-RPC reply, decoded in mcpCall() (B28.349)",
 	"invoiceLine":            "one line of an invoice, decoded from the screen's POST and re-encoded wholesale in handleMoneyInvoices (B30.97)",

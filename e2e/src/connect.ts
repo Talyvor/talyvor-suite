@@ -249,7 +249,9 @@ function mcpTools(ctx: ScenarioCtx, origin: string, token: string) {
 //     the person presses Save on the Pay screen, where it waits; draft_mandate reads there in plain words and is no
 //     mandate on Lens until it is signed with a passkey (this run's software passkey, through the screen's own two BFF
 //     calls). B40.9: the approval link opens one card with both payments and their total, and with the second unticked
-//     the statement the passkey would sign names only the first. The money: no payment out, every account's test money and the workspace's ledger exactly as they were
+//     the statement the passkey would sign names only the first. B40.36: with one bill on Lens (its bank details printed
+//     on it), bills_due lists that one bill and its total and never the bank details, and safe_to_spend counts it in the
+//     company's GBP bills due. The money: no payment out, every account's test money and the workspace's ledger exactly as they were
 //     before the assistant connected.
 export function connectMCP(): Scenario {
   return {
@@ -257,7 +259,7 @@ export function connectMCP(): Scenario {
     owner: 'talyvor-suite',
     own: true,
     agents: 1,
-    items: ['B40.7', 'B40.35', 'B40.9'],
+    items: ['B40.7', 'B40.35', 'B40.9', 'B40.36'],
     feature: 'Talyvor Connect',
     title: 'an assistant on /mcp lists the tools with their annotations, reads a balance, drafts an invoice and prepares a two-payee ' +
       'batch that stays pending approval; the payee and the mandate it asks for exist only once the person saves and signs them — ' +
@@ -286,6 +288,11 @@ export function connectMCP(): Scenario {
         if (p.status !== 201 || p.value === undefined) return { pass: false, detail: `saving ${name} answered ${said(p)}` }
         payees.push(p.value.id)
       }
+      const billNumber = `MCP-${randomBytes(3).toString('hex')}`
+      const bill = await ctx.env.lens.raw(ctx.app.user.token, 'POST', '/v1/money/bills?source=photo', ['From: Nightly MCP Bill Ltd', 'INVOICE',
+        `Invoice number: ${billNumber}`, `Due date: ${new Date().toISOString().slice(0, 10)}`, 'Total due: GBP 42.00', 'Sort code: 04-00-04', 'Account number: 87654321'].join('\n'), 'text/plain')
+      ctx.evidence.push({ note: 'one bill, its bank details printed on it', answer: `${bill.status} ${bill.text.slice(0, 160)}` })
+      if (bill.status !== 201) return { pass: false, detail: `adding the bill answered ${bill.status} ${bill.text.slice(0, 160)}` }
       const money = async () => {
         const accounts = await call<{ accounts: { id: string; test_minor: number }[] | null }>(ctx, 'GET', '/v1/money/accounts')
         const payments = await call<{ payments: unknown[] | null }>(ctx, 'GET', '/v1/money/payments')
@@ -323,6 +330,21 @@ export function connectMCP(): Scenario {
       }
       const status = await tool('get_request_status', { request_id: pr.id ?? '' })
       if (status.structuredContent?.status !== 'pending_approval') wrong.push(`the prepared batch then read ${JSON.stringify(status.structuredContent?.status)}, not pending_approval`)
+
+      // 3a. B40.36 — the bill due and the safe-to-spend figure.
+      const due = await tool('bills_due', {})
+      const dueBills = (due.structuredContent?.bills ?? []) as { invoice_number?: string; amount_minor?: number }[]
+      if (due.isError !== false || dueBills.length !== 1 || dueBills[0].invoice_number !== billNumber || dueBills[0].amount_minor !== 4200 ||
+        (due.structuredContent?.totals as Record<string, number> | undefined)?.GBP !== 4200) {
+        wrong.push(`bills_due does not list the one bill of GBP 42.00: ${JSON.stringify(due).slice(0, 400)}`)
+      }
+      if (/87654321|sort_code|account_number/.test(JSON.stringify(due))) wrong.push(`bills_due shows the bank details printed on the bill: ${JSON.stringify(due).slice(0, 400)}`)
+      const safe = await tool('safe_to_spend', {})
+      const companyGBP = ((safe.structuredContent?.company ?? []) as { currency: string; bills_due: number; safe_to_spend: number }[]).find((f) => f.currency === 'GBP')
+      if (safe.isError !== false || companyGBP?.bills_due !== 4200 || typeof companyGBP.safe_to_spend !== 'number') {
+        wrong.push(`safe_to_spend does not count the GBP 42.00 bill in the company's figure: ${JSON.stringify(safe).slice(0, 400)}`)
+      }
+      ctx.evidence.push({ note: `bills_due: ${dueBills.length} bill; safe_to_spend, the company's GBP: ${JSON.stringify(companyGBP)}` })
 
       // 3b. B40.35 — a payee and a mandate the assistant asks for wait for the person, on the Pay screen.
       const askedName = `Nightly MCP Asked Supplier ${randomBytes(3).toString('hex')} Ltd`
