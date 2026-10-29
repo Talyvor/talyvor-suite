@@ -39,6 +39,10 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "economy: the agent's spending rules refuse this request: the agent has spent 0 LXC of its daily limit of 5 LXC, and this payment would cost up to 6 LXC"})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/fund"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"agent_id": "agt_1", "balance_ulxc": 10_000_000})
+		case strings.HasSuffix(r.URL.Path, "/resume/challenge"), strings.HasSuffix(r.URL.Path, "/agents/resume-all/challenge"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"challenge": "ch_1", "allow_credentials": []string{"cred_1"}, "user_verification": "required"})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/resume"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"agent_id": "agt_1", "paused": false})
 		case strings.HasSuffix(r.URL.Path, "/agents/pause-all"), strings.HasSuffix(r.URL.Path, "/agents/resume-all"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"all_paused": strings.HasSuffix(r.URL.Path, "pause-all")})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/card/freeze"), strings.HasSuffix(r.URL.Path, "/agents/agt_1/card/unfreeze"):
@@ -616,5 +620,32 @@ func TestSafeToSpendReachesLens(t *testing.T) {
 	defer f.mu.Unlock()
 	if len(f.got) != 1 || !strings.HasPrefix(f.got[0], "GET /v1/workspaces/") || !strings.HasSuffix(f.got[0], "/agents/safe-to-spend ") {
 		t.Fatalf("Lens got %q; want GET …/agents/safe-to-spend", f.got)
+	}
+}
+
+// B41.8 — resuming carries the owner's passkey signature to Lens (B41.108), rebuilt to {"assertion"} alone, and the
+// challenges it is signed over are relayed on the session's workspace.
+func TestAgentResumeCarriesTheAssertion(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	signed := `{"assertion":{"credential_id":"cred_1","client_data_json":"cdj","authenticator_data":"ad","signature":"sig"},"workspace_id":"ws_other"}`
+	for _, path := range []string{"/api/agents/agt_1/resume-challenge", "/api/agents/agt_1/resume", "/api/agents/resume-all/challenge", "/api/agents/resume-all"} {
+		body := ""
+		if !strings.HasSuffix(path, "/challenge") {
+			body = signed
+		}
+		if rec := doJSON(a, http.MethodPost, path, body); rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d %s", path, rec.Code, rec.Body.String())
+		}
+	}
+	ws := strings.Split(strings.TrimPrefix(strings.Fields(f.got[0])[1], "/v1/workspaces/"), "/")[0]
+	assertion := `{"assertion":{"credential_id":"cred_1","client_data_json":"cdj","authenticator_data":"ad","signature":"sig"}}`
+	want := []string{
+		"POST /v1/workspaces/" + ws + "/agents/agt_1/resume/challenge ",
+		"POST /v1/workspaces/" + ws + "/agents/agt_1/resume " + assertion,
+		"POST /v1/workspaces/" + ws + "/agents/resume-all/challenge ",
+		"POST /v1/workspaces/" + ws + "/agents/resume-all " + assertion,
+	}
+	if ws == "" || ws == "ws_other" || strings.Join(f.got, "|") != strings.Join(want, "|") {
+		t.Fatalf("Lens received %q, want %q", f.got, want)
 	}
 }

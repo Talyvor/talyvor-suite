@@ -474,6 +474,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/resume-all", a.requireTenant(a.handleAgentsPauseAll(false)))
 	a.mux.HandleFunc("/api/agents/{id}/pause", a.requireTenant(a.handleAgentPause(true)))
 	a.mux.HandleFunc("/api/agents/{id}/resume", a.requireTenant(a.handleAgentPause(false)))
+	a.mux.HandleFunc("/api/agents/{id}/resume-challenge", a.requireTenant(a.handleResumeChallenge(false))) // B41.8
+	a.mux.HandleFunc("/api/agents/resume-all/challenge", a.requireTenant(a.handleResumeChallenge(true)))   // B41.8
 	// B19.21 — scheduled payments and automatic top-ups.
 	a.mux.HandleFunc("/api/agents/schedules", a.requireTenant(a.handleAgentSchedules))
 	a.mux.HandleFunc("/api/agents/{id}/schedules", a.requireTenant(a.handleAgentSchedule))

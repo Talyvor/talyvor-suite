@@ -6,6 +6,7 @@ import { Button, Input } from '@talyvor/ui'
 import { BOOK_KEY, statementKey } from '../lens/AgentBank'
 import { type Agent, type AgentBook, agentBankApi, newMoveKey, parseLXC, refusalText, retryMoveThroughRestart } from '../lens/agentBankApi'
 import { Lxc } from '../lens/money'
+import { resumeAgent, resumeEveryAgent } from '../lens/passkeys'
 import { Note } from '../lens/WalletMoney'
 
 // B28.87 — the wallet's buttons beside the conversation: fund or withdraw the followed agent, pause it, or pause every
@@ -29,11 +30,11 @@ function send(agent: Agent, ask: WalletAsk, key: string): Promise<unknown> {
     case 'pause':
       return agentBankApi.pause(agent.id, PAUSED_FROM_CHAT)
     case 'resume':
-      return agentBankApi.resume(agent.id)
+      return resumeAgent(agent.id)
     case 'pause-all':
       return agentBankApi.pauseAll(PAUSED_FROM_CHAT)
     case 'resume-all':
-      return agentBankApi.resumeAll()
+      return resumeEveryAgent()
   }
 }
 

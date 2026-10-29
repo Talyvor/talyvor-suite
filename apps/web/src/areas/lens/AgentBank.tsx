@@ -9,7 +9,7 @@ import { isSessionExpired } from '../../lib/productState'
 import { formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
-import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, signApproval } from './passkeys'
+import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { AgentCredentialCard } from './AgentCredential'
@@ -107,7 +107,7 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
   const qc = useQueryClient()
   const [reason, setReason] = useState('')
   const change = useMutation({
-    mutationFn: (pause: boolean) => (pause ? agentBankApi.pauseAll(reason.trim()) : agentBankApi.resumeAll()),
+    mutationFn: (pause: boolean) => (pause ? agentBankApi.pauseAll(reason.trim()) : resumeEveryAgent()),
     onSuccess: () => setReason(''),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
@@ -148,7 +148,7 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
 function PauseAgent({ agent }: { agent: Agent }) {
   const qc = useQueryClient()
   const change = useMutation({
-    mutationFn: (pause: boolean) => (pause ? agentBankApi.pause(agent.id, 'paused from Agent Wallets') : agentBankApi.resume(agent.id)),
+    mutationFn: (pause: boolean) => (pause ? agentBankApi.pause(agent.id, 'paused from Agent Wallets') : resumeAgent(agent.id)),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
   return (

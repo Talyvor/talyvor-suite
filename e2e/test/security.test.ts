@@ -4,7 +4,7 @@ import { createServer } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { LensClient } from '../src/lens.ts'
 import type { ScenarioCtx, Verdict } from '../src/scenarios.ts'
-import { approvalOwnRequest, type Decide, ORIGIN_EXEMPT, passkeyEnrolSigned, type Post, writeRoutes } from '../src/security.ts'
+import { agentResumeSigned, approvalOwnRequest, type Decide, ORIGIN_EXEMPT, passkeyEnrolSigned, type Post, writeRoutes } from '../src/security.ts'
 
 // B50.7 — csrf-every-write sends one cross-site write to every write route the BFF registers.
 describe('the BFF write routes csrf-every-write attacks (B50.7)', () => {
@@ -84,7 +84,8 @@ describe('approval-own-request (B50.19)', () => {
 // B50.22 — passkey-enrol-signed against the stub Lens, sending the web app's BFF calls straight to the Lens routes the BFF
 // relays them to: it passes on a Lens that wants a second passkey signed by the first, and FAILs on one that does not.
 const toLens: Post = async (ctx, path, body) => {
-  const got = await ctx.env.lens.act(ctx.app.user, 'POST', path.replace(/^\/api\/agents\//, '/v1/workspaces/{ws}/agents/'), body as object)
+  const lensPath = path.replace(/^\/api\/agents\//, '/v1/workspaces/{ws}/agents/').replace(/\/resume-challenge$/, '/resume/challenge') // as the BFF relays it
+  const got = await ctx.env.lens.act(ctx.app.user, 'POST', lensPath, body as object)
   return { status: got.status, text: got.ok ? JSON.stringify(got.value) : JSON.stringify({ error: got.error }) }
 }
 
@@ -99,5 +100,21 @@ describe('passkey-enrol-signed (B50.22)', () => {
     const verdict = await passkeyEnrolSigned(toLens).run(await onStub('enrol-unsigned'))
     expect(verdict).toMatchObject({ pass: false })
     expect(verdict.detail).toMatch(/^passkey B with no signature answered 201, not a refusal; passkey B, sent with no signature, is listed on the workspace; an approval signed by the refused passkey B answered 200/)
+  })
+}, 60_000)
+
+// B41.8 — agent-resume-signed against the stub Lens, the web app's BFF calls sent to the Lens routes the BFF relays them
+// to: it passes on a Lens that resumes only signed, and FAILs on one that lets an unsigned resume through.
+describe('agent-resume-signed (B41.8)', () => {
+  it('passes on a Lens that pauses unsigned and resumes only signed', async () => {
+    const verdict = await agentResumeSigned(toLens).run(await onStub(''))
+    expect(verdict.detail).toMatch(/^pausing .* took no signature; unsigned, both resumes were refused, .* the payment landed once \(150000 µLXC\)$/)
+    expect(verdict.pass).toBe(true)
+  })
+
+  it('FAILs when an unsigned resume starts the agent again', async () => {
+    const verdict = await agentResumeSigned(toLens).run(await onStub('resume-unsigned'))
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^resuming Resume payer .* with no signature answered 200, not a refusal; after an unsigned resume, the book no longer reads/)
   })
 }, 60_000)
