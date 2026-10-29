@@ -536,6 +536,17 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor: "decide := func(approve bool) http.HandlerFunc {",
     subject: "lensApprovalDecisionBody",
   },
+  // B41.8 — resuming an agent, or every agent, signed with Face ID once the workspace has a passkey (Lens B41.108).
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/resume",
+    file: "apps/bff/agent_bank.go",
+    kind: "anon-struct",
+    fn: "func resumeBody(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor: "authorizeResume := func(w http.ResponseWriter, req *http.Request, agentID string) bool {",
+    subject: "lensAgentResumeBody",
+  },
   {
     route: "POST /v1/workspaces/{wsID}/agents/push/subscriptions",
     file: "apps/bff/agent_bank.go",

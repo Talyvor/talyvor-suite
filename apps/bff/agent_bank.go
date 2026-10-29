@@ -805,6 +805,9 @@ func (a *app) handlePushSubscriptions(w http.ResponseWriter, r *http.Request, t 
 //	POST /api/agents/resume-all                  lifts it; an agent paused on its own stays paused
 //	POST /api/agents/{id}/pause  {"reason"}      one agent
 //	POST /api/agents/{id}/resume
+//	POST /api/agents/{id}/resume-challenge, /api/agents/resume-all/challenge
+//	                                             B41.8: once the workspace has a passkey or device key, resume and
+//	                                             resume-all carry {"assertion"} over this challenge (Lens B41.108)
 
 // handleAgentAlerts — GET /api/agents/alerts.
 func (a *app) handleAgentAlerts(w http.ResponseWriter, r *http.Request, t tenant) {
@@ -850,7 +853,9 @@ func (a *app) handleAgentsPauseAll(pause bool) func(http.ResponseWriter, *http.R
 			return
 		}
 		if !pause {
-			a.agentBankRelay(w, r, t, http.MethodPost, "/agents/resume-all", nil)
+			if body, ok := resumeBody(w, r); ok {
+				a.agentBankRelay(w, r, t, http.MethodPost, "/agents/resume-all", body)
+			}
 			return
 		}
 		var in struct {
@@ -884,7 +889,9 @@ func (a *app) handleAgentPause(pause bool) func(http.ResponseWriter, *http.Reque
 			return
 		}
 		if !pause {
-			a.agentBankRelay(w, r, t, http.MethodPost, suffix, nil)
+			if body, ok := resumeBody(w, r); ok {
+				a.agentBankRelay(w, r, t, http.MethodPost, suffix, body)
+			}
 			return
 		}
 		var why struct {
@@ -899,6 +906,43 @@ func (a *app) handleAgentPause(pause bool) func(http.ResponseWriter, *http.Reque
 		// UPSTREAM-BINDS-ONLY lensAgentPauseBody: none
 		body, _ := json.Marshal(map[string]string{"reason": why.Reason})
 		a.agentBankRelay(w, r, t, http.MethodPost, suffix, body)
+	}
+}
+
+// resumeBody rebuilds a resume's optional {"assertion"}: stopping is instant, restarting is signed (B41.8, Lens
+// B41.108). A resume without one is sent as before — Lens says whether the workspace's keys let it through.
+func resumeBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
+	var in struct {
+		Assertion *passkeyAssertion `json:"assertion,omitempty"`
+	}
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil && err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return nil, false
+		}
+	}
+	if in.Assertion == nil {
+		return nil, true
+	}
+	// UPSTREAM-BINDS-ONLY lensAgentResumeBody: none
+	body, _ := json.Marshal(in)
+	return body, true
+}
+
+// handleResumeChallenge — POST /api/agents/{id}/resume-challenge (Lens: …/resume/challenge), and /api/agents/resume-all/challenge when all.
+func (a *app) handleResumeChallenge(all bool) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		if all {
+			a.agentBankRelay(w, r, t, http.MethodPost, "/agents/resume-all/challenge", nil)
+			return
+		}
+		if suffix, ok := agentSuffix(w, r, "resume/challenge"); ok {
+			a.agentBankRelay(w, r, t, http.MethodPost, suffix, nil)
+		}
 	}
 }
 

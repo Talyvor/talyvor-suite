@@ -74,6 +74,21 @@ export async function signPayee(payeeID: string): Promise<PasskeyAssertion> {
   return assertOver(await agentBankApi.payeeChallenge(payeeID))
 }
 
+/**
+ * B41.8 — stopping is instant, restarting is signed (Lens B41.108): once the workspace has a passkey, Face ID asks
+ * here before an agent starts again, over a challenge naming that agent. With none, it starts as before.
+ */
+export async function resumeAgent(agentID: string): Promise<{ paused: boolean }> {
+  const c = await agentBankApi.resumeChallenge(agentID)
+  return agentBankApi.resume(agentID, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
+/** B41.8 — every agent started again, signed the same way over the resume-all challenge. */
+export async function resumeEveryAgent(): Promise<{ all_paused: boolean }> {
+  const c = await agentBankApi.resumeAllChallenge()
+  return agentBankApi.resumeAll((c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
 export async function assertOver({ challenge, allow_credentials }: { challenge: string; allow_credentials: string[] | null }): Promise<PasskeyAssertion> {
   const cred = (await navigator.credentials.get({
     publicKey: {

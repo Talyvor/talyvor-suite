@@ -663,9 +663,12 @@ export const agentBankApi = {
   briefing: () => getJSON<Briefing>('/api/agents/briefing', { items: 'list', quiet: 'boolean', line: 'string' }),
   forecast: () => getJSON<SpendForecast>('/api/agents/forecast', { spent_ulxc: 'number', forecast_ulxc: 'number', agents: 'list' }),
   pauseAll: (reason: string) => send<{ all_paused: boolean }>('POST', '/api/agents/pause-all', { reason }),
-  resumeAll: () => send<{ all_paused: boolean }>('POST', '/api/agents/resume-all'),
+  /** B41.8: once the workspace has a passkey, resuming carries an assertion over its own challenge (Lens B41.108). */
+  resumeAll: (assertion?: PasskeyAssertion) => send<{ all_paused: boolean }>('POST', '/api/agents/resume-all', assertion ? { assertion } : undefined),
+  resumeAllChallenge: () => send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/agents/resume-all/challenge'),
   pause: (id: string, reason: string) => send<{ paused: boolean }>('POST', `/api/agents/${e(id)}/pause`, { reason }),
-  resume: (id: string) => send<{ paused: boolean }>('POST', `/api/agents/${e(id)}/resume`),
+  resume: (id: string, assertion?: PasskeyAssertion) => send<{ paused: boolean }>('POST', `/api/agents/${e(id)}/resume`, assertion ? { assertion } : undefined),
+  resumeChallenge: (id: string) => send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/${e(id)}/resume-challenge`),
   /** B19.10: once the workspace has a passkey, a decision carries an assertion over the approval's challenge. */
   /** B41.4 — approving with always_allow also saves that allowance for the approval's payee. */
   decide: (approvalID: string, decision: 'approve' | 'deny', assertion?: PasskeyAssertion, alwaysAllow?: PayeeAllowance) =>

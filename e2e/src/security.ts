@@ -13,6 +13,9 @@
 //   passkey-enrol-signed (B50.22) — with passkey A registered, a passkey B sent through the web app's own calls with no
 //        signature is refused, and B's signature cannot approve an agent's held payment; signed by A, B registers and
 //        its approval pays. The approval row and the payee's statement.
+//   agent-resume-signed (B41.8) — with a passkey registered, pausing an agent and the whole fleet through the web app's own
+//        calls takes no signature; resuming either with none is refused, the agent stays paused and its payment is refused.
+//        Signed over each resume challenge, both start again and the payment lands: the book and the payee's statement.
 //   csrf-every-write — every write route the BFF registers (apps/bff lens.go), sent once with the session cookie from
 //        another site: each is refused 403 before any handler runs, except the machine endpoints the BFF names exempt.
 //   xss-shown-back — an agent's name, a saved payee's name and an invoice's customer and line, each carrying an event
@@ -518,6 +521,99 @@ export function passkeyEnrolSigned(post: Post = throughApp): Scenario {
       if (into.join() !== String(ENROL_PAY_ULXC)) wrong.push(`${payee.name}'s statement holds ${JSON.stringify(into)}, not the one approved ${ENROL_PAY_ULXC}`)
       return done(wrong, `passkey B with no signature refused and not listed; its approval refused, the row pending and ${payee.name}'s statement empty; ` +
         `signed by A, B registered, approved the row and the payment landed once (${ENROL_PAY_ULXC} µLXC)`)
+    },
+  }
+}
+
+const RESUME_PAY_ULXC = 150_000
+
+/**
+ * B41.8 — pause in one tap, resume with Face ID (Lens B41.108). Through the web app's own BFF calls: with passkey A
+ * registered, pausing an agent and pausing every agent each go through unsigned. Resuming either with no signature is
+ * refused: the book still reads paused, the agent's payment is refused and the payee's statement stays empty. Signed by
+ * A over each resume challenge, the fleet and then the agent start again, and the payment lands once.
+ */
+export function agentResumeSigned(post: Post = throughApp): Scenario {
+  return {
+    id: 'agent-resume-signed',
+    owner: 'talyvor-lens',
+    own: true,
+    agents: 2,
+    feature: 'Agent Wallets',
+    items: ['B41.8'],
+    title: 'with a passkey registered, pausing an agent and the fleet takes no signature and resuming either with none is refused, ' +
+      "the agent still paused; signed, both start again and the agent's payment lands: the book and the payee's statement",
+    run: async (ctx) => {
+      const { lens } = ctx.env
+      const user = ctx.app.user
+      const wrong: string[] = []
+      const bff = async <T>(path: string, body: unknown, note: string): Promise<{ status: number; value: T }> => {
+        const { status, text } = await post(ctx, path, body)
+        ctx.evidence.push({ note, answer: `${status} ${text.slice(0, 300)}` })
+        let value = {} as T
+        try { value = JSON.parse(text) as T } catch { /* a refusal's body is shown in the evidence */ }
+        return { status, value }
+      }
+
+      const c = await bff<{ challenge: string; rp_id: string }>('/api/agents/passkeys/challenge', {}, 'the owner asks to register a passkey')
+      if (c.status !== 200 || !c.value.challenge) throw new Error(`the passkey challenge answered ${c.status}`)
+      const a = softPasskey(c.value.rp_id)
+      const reg = await bff('/api/agents/passkeys', a.register(c.value.challenge, 'Nightly resume'), 'the owner registers passkey A')
+      if (reg.status !== 201) throw new Error(`the first passkey answered ${reg.status}`)
+
+      const payer = await lens.createAgent(user, `Resume payer ${RUN_SALT}`)
+      const payee = await lens.createAgent(user, `Resume payee ${RUN_SALT}`)
+      const book = await lens.agentBook(user)
+      if (book.unallocated_ulxc < RESUME_PAY_ULXC * 2) throw new CannotTest(`the workspace has ${book.unallocated_ulxc} µLXC free, under the ${RESUME_PAY_ULXC * 2} µLXC its agent is funded`)
+      await lens.fundAgent(user, payer.id, RESUME_PAY_ULXC * 2)
+      const k = await lens.act<{ key: string }>(user, 'POST', `/v1/workspaces/{ws}/agents/${payer.id}/keys`, { name: 'agent-resume-signed' })
+      if (!k.ok) throw new Error(`issuing ${payer.name} a key answered ${said(k)}`)
+      const memo = `resume signed ${RUN_SALT}`
+      const pay = async (note: string) => {
+        const got = await lens.payAsAgent(k.value.key, user.workspaceID, payer.id, payee.id, RESUME_PAY_ULXC, memo)
+        ctx.evidence.push({ note: `${payer.name} pays ${RESUME_PAY_ULXC} µLXC: ${note}`, answer: said(got) })
+        return got
+      }
+      const state = async () => {
+        const b = await lens.agentBook(user)
+        return { all: !!b.all_paused_at, one: !!b.agents.find((x) => x.id === payer.id)?.paused_at }
+      }
+
+      // Stopping is instant: no signature.
+      const paused = await bff(`/api/agents/${payer.id}/pause`, { reason: 'agent-resume-signed' }, `pause ${payer.name}, unsigned`)
+      if (paused.status !== 200) wrong.push(`pausing ${payer.name} with no signature answered ${paused.status}`)
+      const unsigned = await bff(`/api/agents/${payer.id}/resume`, {}, `resume ${payer.name}, unsigned`)
+      if (!refused(unsigned.status)) wrong.push(`resuming ${payer.name} with no signature answered ${unsigned.status}, not a refusal`)
+      if (!(await state()).one) wrong.push(`after an unsigned resume, the book no longer reads ${payer.name} paused`)
+      const early = await pay('after an unsigned resume')
+      if (early.ok) wrong.push(`${payer.name}'s payment after an unsigned resume was paid: ${said(early)}`)
+
+      const all = await bff('/api/agents/pause-all', { reason: 'agent-resume-signed' }, 'pause every agent, unsigned')
+      if (all.status !== 200) wrong.push(`pausing every agent with no signature answered ${all.status}`)
+      const allUnsigned = await bff('/api/agents/resume-all', {}, 'resume every agent, unsigned')
+      if (!refused(allUnsigned.status)) wrong.push(`resuming every agent with no signature answered ${allUnsigned.status}, not a refusal`)
+      if (!(await state()).all) wrong.push('after an unsigned resume-all, the book no longer reads every agent paused')
+      const before = (await lens.agentLines(user, payee.id)).map((l) => l.amount_ulxc)
+      if (before.length > 0) wrong.push(`${payee.name}'s statement holds ${JSON.stringify(before)} before any signed resume, not nothing`)
+
+      // Restarting is signed: the fleet, then the agent paused on its own.
+      const allCh = await bff<{ challenge: string }>('/api/agents/resume-all/challenge', {}, 'the resume-all challenge')
+      const allSigned = await bff('/api/agents/resume-all', { assertion: a.assert(allCh.value.challenge ?? '') }, 'resume every agent, signed by A')
+      if (allSigned.status !== 200) wrong.push(`resuming every agent signed by A answered ${allSigned.status}`)
+      const mid = await state()
+      if (mid.all) wrong.push('after a signed resume-all, the book still reads every agent paused')
+      if (!mid.one) wrong.push(`a signed resume-all started ${payer.name}, paused on its own, too`)
+      const ch = await bff<{ challenge: string }>(`/api/agents/${payer.id}/resume-challenge`, {}, `${payer.name}'s resume challenge`)
+      const signed = await bff(`/api/agents/${payer.id}/resume`, { assertion: a.assert(ch.value.challenge ?? '') }, `resume ${payer.name}, signed by A`)
+      if (signed.status !== 200) wrong.push(`resuming ${payer.name} signed by A answered ${signed.status}`)
+      if ((await state()).one) wrong.push(`after a signed resume, the book still reads ${payer.name} paused`)
+      const paid = await pay('once resumed, signed')
+      if (!paid.ok) wrong.push(`${payer.name}'s payment once resumed was refused: ${said(paid)}`)
+      const into = (await lens.agentLines(user, payee.id)).map((l) => l.amount_ulxc)
+      ctx.evidence.push({ note: `${payee.name}'s postings: ${JSON.stringify(into)}` })
+      if (into.join() !== String(RESUME_PAY_ULXC)) wrong.push(`${payee.name}'s statement holds ${JSON.stringify(into)}, not the one ${RESUME_PAY_ULXC}`)
+      return done(wrong, `pausing ${payer.name} and every agent took no signature; unsigned, both resumes were refused, ${payer.name} stayed paused and ` +
+        `its payment refused; signed, the fleet and ${payer.name} started again and the payment landed once (${RESUME_PAY_ULXC} µLXC)`)
     },
   }
 }

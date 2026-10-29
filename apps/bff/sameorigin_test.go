@@ -225,6 +225,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/agents/resume-all", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/x1/pause", body: `{"reason":"r"}`},
 		{method: http.MethodPost, path: "/api/agents/x1/resume", body: `{}`},
+		{method: http.MethodPost, path: "/api/agents/x1/resume-challenge", body: `{}`}, // B41.8
+		{method: http.MethodPost, path: "/api/agents/resume-all/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/x1/schedules", body: `{"to_agent_id":"agt_2","amount_ulxc":1,"every":"day"}`},
 		{method: http.MethodPost, path: "/api/agents/schedules/x1/stop", body: `{}`},
 		{method: http.MethodPut, path: "/api/agents/x1/topup", body: `{"below_ulxc":1,"to_ulxc":2}`},

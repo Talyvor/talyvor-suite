@@ -7,7 +7,7 @@ import { App, queryClient } from '../../App'
 // unusual-spend alert. The mock BFF keeps the pause state the way Lens B19.6/B19.7 do and answers the
 // book with all_paused_at and each agent's paused_at.
 
-function mockBff() {
+function mockBff(passkey = false) {
   const posts: Array<{ url: string; body: unknown }> = []
   let allPaused: { at: string; reason: string } | null = null
   let researcherPaused = false
@@ -27,7 +27,21 @@ function mockBff() {
         }],
       })
     if (url === '/api/agents/pause-all') { allPaused = { at: '2026-09-28T10:00:00Z', reason: 'audit' }; return json({ all_paused: true }) }
-    if (url === '/api/agents/resume-all') { allPaused = null; return json({ all_paused: false }) }
+    // B41.8 — Lens B41.108: once the workspace has a passkey, resuming takes an assertion over its own challenge.
+    if (url === '/api/agents/resume-all/challenge' || url === '/api/agents/agt_1/resume-challenge')
+      return json({ challenge: 'Y2gx', allow_credentials: passkey ? ['Y3JlZDE'] : [], user_verification: 'required' })
+    const signed = (body: unknown) => !passkey || (body as { assertion?: unknown } | null)?.assertion !== undefined
+    const refused = () => new Response(JSON.stringify({ error: 'economy: this workspace signs resuming: sign its challenge with a passkey or the phone app' }), { status: 403 })
+    if (url === '/api/agents/resume-all') {
+      if (!signed(posts.at(-1)?.body)) return refused()
+      allPaused = null
+      return json({ all_paused: false })
+    }
+    if (url === '/api/agents/agt_1/resume') {
+      if (!signed(posts.at(-1)?.body)) return refused()
+      researcherPaused = false
+      return json({ agent_id: 'agt_1', paused: false })
+    }
     if (url === '/api/agents/agt_1/pause') { researcherPaused = true; return json({ agent_id: 'agt_1', paused: true }) }
     if (url === '/api/agents/forecast')
       return json({ at: '', month_start: '', month_end: '', spent_ulxc: 1_000_000, forecast_ulxc: 3_000_000, agents: [{ agent_id: 'agt_1', name: 'Researcher', spent_ulxc: 1_000_000, forecast_ulxc: 3_000_000 }] })
@@ -72,8 +86,47 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
 
     expect(posts.map((p) => [p.url, p.body])).toEqual([
       ['/api/agents/pause-all', { reason: 'audit' }],
+      ['/api/agents/resume-all/challenge', {}],
       ['/api/agents/resume-all', {}],
       ['/api/agents/agt_1/pause', { reason: 'paused from Agent Wallets' }],
     ])
+  })
+
+  it('pauses with no passkey, and starts an agent and the fleet again only with Face ID once the workspace has one', async () => {
+    const posts = mockBff(true)
+    const ASSERTION = { rawId: new Uint8Array([1]).buffer, response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } }
+    const get = vi.fn().mockRejectedValueOnce(new DOMException('The operation was cancelled.', 'NotAllowedError')).mockResolvedValue(ASSERTION)
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
+    await screen.findByTestId('agent-paused')
+    expect(get).not.toHaveBeenCalled()
+
+    // Face ID cancelled: nothing is sent and Researcher stays paused.
+    fireEvent.click(screen.getByRole('button', { name: 'Resume Researcher' }))
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(1))
+    expect(screen.getByTestId('agent-paused')).toBeTruthy()
+    expect(posts.some((p) => p.url === '/api/agents/agt_1/resume')).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume Researcher' }))
+    await screen.findByRole('button', { name: 'Pause Researcher' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause every agent' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Start every agent again' }))
+    await screen.findByRole('button', { name: 'Pause every agent' })
+
+    const assertion = { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' }
+    expect(posts.map((p) => [p.url, p.body])).toEqual([
+      ['/api/agents/agt_1/pause', { reason: 'paused from Agent Wallets' }],
+      ['/api/agents/agt_1/resume-challenge', {}],
+      ['/api/agents/agt_1/resume-challenge', {}],
+      ['/api/agents/agt_1/resume', { assertion }],
+      ['/api/agents/pause-all', { reason: '' }],
+      ['/api/agents/resume-all/challenge', {}],
+      ['/api/agents/resume-all', { assertion }],
+    ])
+    expect(get.mock.calls[1][0].publicKey.userVerification).toBe('required')
   })
 })

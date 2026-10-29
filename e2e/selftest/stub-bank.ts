@@ -2270,6 +2270,20 @@ export class Bank {
         return json(res, 201, o), true
       }
     }
+    // B41.8 — Lens B41.108: stopping is instant, restarting is signed. Once the workspace has a passkey or device key,
+    // resume and resume-all take an assertion by one of its passkeys over the resume challenge; STUB_BREAK=resume-unsigned
+    // lets an unsigned one through. The stub checks who signed; Lens verifies the signature too.
+    if ((rest === '/agents/resume-all/challenge' || /^\/agents\/[^/]+\/resume\/challenge$/.test(rest)) && method === 'POST') {
+      return json(res, 200, { challenge: randomBytes(32).toString('base64url'), allow_credentials: (this.passkeys.get(ws.id) ?? []).map((k) => k.credential_id),
+        user_verification: 'required' }), true
+    }
+    if ((rest === '/agents/resume-all' || /^\/agents\/[^/]+\/resume$/.test(rest)) && method === 'POST') {
+      const keys = this.passkeys.get(ws.id) ?? []
+      const { assertion } = await this.body<{ assertion?: { credential_id?: string } }>(req)
+      if ((keys.length > 0 || this.devices.any(ws.id)) && !this.broken('resume-unsigned') && !keys.some((k) => k.credential_id === assertion?.credential_id)) {
+        return json(res, 403, { error: 'economy: resuming in this workspace is signed: sign its challenge with a passkey or the phone app' }), true
+      }
+    }
     if (rest === '/agents/pause-all' || rest === '/agents/resume-all') {
       if (rest === '/agents/pause-all') {
         this.allPaused.set(ws.id, { at: now, reason: (await this.body<{ reason?: string }>(req)).reason ?? '' })

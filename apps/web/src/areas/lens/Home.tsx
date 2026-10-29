@@ -7,6 +7,7 @@ import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
 import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, PauseEveryAgent, rulesKey } from './AgentBank'
 import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText } from './agentBankApi'
 import { Lxc } from './money'
+import { resumeAgent } from './passkeys'
 import { SafeAmount, SafeBreakdown } from './SafeToSpend'
 import { FirstAgent } from './Onboarding'
 import { SharingLine } from './Sharing'
@@ -212,7 +213,7 @@ function AgentLine({ agent, safe }: { agent: Agent; safe: UseQueryResult<Awaited
   const [asking, setAsking] = useState(false)
   const running = !agent.paused_at
   const change = useMutation({
-    mutationFn: () => (running ? agentBankApi.pause(agent.id, 'paused from Home') : agentBankApi.resume(agent.id)),
+    mutationFn: () => (running ? agentBankApi.pause(agent.id, 'paused from Home') : resumeAgent(agent.id)),
     onSuccess: () => setAsking(false),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
