@@ -81,6 +81,7 @@ export class PayeeDesk {
   private readonly payees = new Map<string, Payee[]>()
   private readonly challenges = new Map<string, string>()
   private readonly accounts = new Map<string, Account[]>()
+  private readonly testMoneyKeys = new Set<string>()
   private readonly payments = new Map<string, Payment[]>()
   private readonly cases: Case[] = []
   /** B30.130 — each agent account's payment reference, by account id; and every invoice issued, found by its pay token. */
@@ -154,6 +155,8 @@ export class PayeeDesk {
   async route(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
     const list = this.payees.get(ws) ?? []
     if (path === '/v1/money/accounts' || path === '/v1/money/payments') return this.money(req, res, ws, path, list), true
+    const funded = /^\/v1\/money\/accounts\/([^/]+)\/test-money$/.exec(path)
+    if (funded !== null && req.method === 'POST') return this.testMoney(req, res, ws, funded[1]), true
     if (await this.invoiceRoute(req, res, ws, path)) return true
     if (await this.mandateRoute(req, res, ws, path, list)) return true
     if (await this.payoutRoute(req, res, ws, path, list)) return true
@@ -280,6 +283,19 @@ export class PayeeDesk {
     return this.json(res, 201, p)
   }
 
+  /** B30.15 — POST /v1/money/accounts/{id}/test-money {amount_minor, idempotency_key}: test money into the account, once a key. */
+  private async testMoney(req: IncomingMessage, res: ServerResponse, ws: string, id: string): Promise<void> {
+    const b = await this.body<{ amount_minor?: number; idempotency_key?: string }>(req)
+    const account = (this.accounts.get(ws) ?? []).find((a) => a.id === id)
+    if (account === undefined) return this.json(res, 404, { error: 'economy: no such money account' })
+    if (!b.idempotency_key || !Number.isInteger(b.amount_minor) || (b.amount_minor ?? 0) <= 0) return this.json(res, 400, { error: 'economy: test money is a positive amount_minor and an idempotency_key' })
+    if (this.testMoneyKeys.has(`${ws}\n${b.idempotency_key}`)) return this.json(res, 200, account)
+    this.testMoneyKeys.add(`${ws}\n${b.idempotency_key}`)
+    account.test_minor += b.amount_minor ?? 0
+    account.balance_minor += b.amount_minor ?? 0
+    return this.json(res, 201, account)
+  }
+
   /** B40.29 — one payment out of an approved request's item, from `agentID`'s account in its currency (the company's for ''). */
   payItem(ws: string, agentID: string, b: { payee_id: string; amount_minor: number; currency: string; reference: string; idempotency_key: string }): Payment | { status: number; error: string } {
     const account = (this.accounts.get(ws) ?? []).find((a) => a.currency === b.currency && (a.agent_id ?? '') === agentID)
@@ -366,12 +382,14 @@ export class PayeeDesk {
     const shown = ({ digest: _, ...b }: (typeof list)[number]) => b
     if (path === '/v1/money/bills' && req.method === 'GET') return this.json(res, 200, { bills: list.map(shown) }), true
     if (path !== '/v1/money/bills' || req.method !== 'POST') return false
-    if (!(req.headers['content-type'] ?? '').startsWith('application/pdf')) return this.json(res, 415, { error: 'the stub reads PDF invoices only' }), true
+    // A photo arrives as its transcription, text/plain (Lens B41.101), its first line the supplier's.
+    const text = (req.headers['content-type'] ?? '').startsWith('text/plain')
+    if (!text && !(req.headers['content-type'] ?? '').startsWith('application/pdf')) return this.json(res, 415, { error: 'the stub reads PDF invoices and photo transcriptions only' }), true
     const doc = await this.read(req)
     const digest = createHash('sha256').update(doc).digest('hex')
-    const lines = [...doc.matchAll(/\((.*?)\) Tj/g)].map((m) => m[1].replace(/\\(.)/g, '$1'))
+    const lines = text ? doc.split(/\r?\n/) : [...doc.matchAll(/\((.*?)\) Tj/g)].map((m) => m[1].replace(/\\(.)/g, '$1'))
     const after = (label: RegExp) => lines.map((l) => label.exec(l)?.[1]?.trim()).find((v) => v !== undefined) ?? ''
-    const supplier = lines[0] ?? ''
+    const supplier = (lines[0] ?? '').replace(/^From:\s*/i, '')
     const number = after(/^Invoice number:\s*(\S+)$/i)
     const had = list.find((b) => b.digest === digest || (number !== '' && b.invoice_number === number && String(b.supplier).toLowerCase() === supplier.toLowerCase()))
     if (had !== undefined && !this.broken('bill-duplicated')) return this.json(res, 200, shown(had)), true

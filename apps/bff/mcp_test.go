@@ -54,6 +54,10 @@ func (f *fakeLensForMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "POST /v1/money/permission-mandates":
 		w.WriteHeader(http.StatusCreated)
 		_, _ = io.WriteString(w, `{"id":"pm-1","status":"active"}`)
+	case "POST /v1/money/bills/pay":
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"id":"pr-bills","status":"pending_approval","client":"`+body["client"].(string)+`",`+
+			`"approval_url":"https://app.talyvor.com/approve/pr-bills","deep_link":"talyvor://approve/pr-bills","items":[{"bill_id":"bill-1"}]}`)
 	case "GET /v1/money/bills":
 		_, _ = io.WriteString(w, `{"bills":[{"id":"bill-1","supplier":"Northern Power","invoice_number":"NP-881","amount_minor":16550,"currency":"GBP",`+
 			`"due_date":"2026-11-05","sort_code":"400000","account_number":"12345678","iban":"GB33BUKB20201555555555","payee_id":"py-np",`+
@@ -186,7 +190,7 @@ func TestMCPNoToolMovesMoney(t *testing.T) {
 		"GET /v1/money/permission-mandates", "GET /v1/marketplace/search", "GET /v1/marketplace/listings/l-1",
 		"GET /v1/money/payment-requests/pr-1", "POST /v1/money/invoices", "POST /v1/money/invoices/inv-1/send",
 		"POST /v1/money/payment-requests", "POST /v1/money/payment-requests/pr-1/cancel", "POST /v1/money/permission-mandates/prepare",
-		"GET /v1/money/bills", "GET /v1/workspaces/ws-ada/agents/safe-to-spend"} {
+		"GET /v1/money/bills", "GET /v1/workspaces/ws-ada/agents/safe-to-spend", "POST /v1/money/bills/pay"} {
 		allowed[r] = true
 	}
 	for _, tool := range mcpTools {
@@ -276,6 +280,41 @@ func TestMCPBillsDueAndSafeToSpend(t *testing.T) {
 	}
 	want := []string{"GET /v1/money/bills Bearer jwt-for-ws-ada ", "GET /v1/workspaces/ws-ada/agents/safe-to-spend Bearer jwt-for-ws-ada "}
 	if fmt.Sprint(lens.calls) != fmt.Sprint(want) {
+		t.Fatalf("Lens saw %q, want %q", lens.calls, want)
+	}
+}
+
+// TestMCPBillsPayment is B45.39: prepare_bills_payment with no bill_ids asks Lens for every bill due as one request, judged as
+// this assistant and under its Idempotency-Key, and answers it pending approval with its link; named bills go up as named,
+// and an empty list or no key goes nowhere.
+func TestMCPBillsPayment(t *testing.T) {
+	a, lens, _ := mcpApp(t)
+	token := seedOAuthToken(a)
+	a.oauth.grants.update("g-seed", func(g oauthGrant) oauthGrant {
+		g.Scope = strings.Join(oauthScopeNames(), " ")
+		g.Who.lensToken = "jwt-for-ws-ada"
+		return g
+	})
+	for _, args := range []map[string]any{{"bill_ids": []any{"bill-1"}}, {"idempotency_key": "k-0", "bill_ids": []any{}}} {
+		if r := toolCall(t, a, token, "prepare_bills_payment", args); r["isError"] != true || len(lens.calls) != 0 {
+			t.Fatalf("%v went up: %v, Lens saw %v", args, r, lens.calls)
+		}
+	}
+	all := toolCall(t, a, token, "prepare_bills_payment", map[string]any{"idempotency_key": "k-all"})
+	content := all["content"].([]any)
+	if all["isError"] != false || all["structuredContent"].(map[string]any)["status"] != "pending_approval" ||
+		!strings.Contains(content[0].(map[string]any)["text"].(string), "Nothing has been paid") ||
+		content[len(content)-1].(map[string]any)["uri"] != "https://app.talyvor.com/approve/pr-bills" {
+		t.Fatalf("prepare_bills_payment: %v", all)
+	}
+	if sent := lens.sent["POST /v1/money/bills/pay"]; sent["bill_ids"] != nil || !strings.HasPrefix(sent["client"].(string), "mcp:") || len(sent) != 2 {
+		t.Fatalf("every bill due went up as %v", sent)
+	}
+	toolCall(t, a, token, "prepare_bills_payment", map[string]any{"idempotency_key": "k-one", "bill_ids": []any{"bill-1"}})
+	if sent := lens.sent["POST /v1/money/bills/pay"]; fmt.Sprint(sent["bill_ids"]) != "[bill-1]" {
+		t.Fatalf("one bill went up as %v", sent)
+	}
+	if want := []string{"POST /v1/money/bills/pay Bearer jwt-for-ws-ada k-all", "POST /v1/money/bills/pay Bearer jwt-for-ws-ada k-one"}; fmt.Sprint(lens.calls) != fmt.Sprint(want) {
 		t.Fatalf("Lens saw %q, want %q", lens.calls, want)
 	}
 }
