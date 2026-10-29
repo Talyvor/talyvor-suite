@@ -1794,6 +1794,76 @@ export function walletHome(seed: number): Scenario {
 }
 
 /** B45.11 — Home at 390×844: what is wrong with its one glance, or undefined. */
+/**
+ * B41.6 — Home's morning briefing is Lens's (B41.106). An agent pays another twice under its approval amount and a third
+ * payment over it waits for a person: Home's "This morning" card lists that approval with its amount, as Lens's briefing
+ * words it, opening its card on Approvals. The held payment is read from the ledger too: no posting of it on the payer's
+ * statement. (Yesterday's payments need a day to pass; the Lens-side nightly daily-briefing proves them with ?at=.)
+ */
+export function homeDailyBriefing(seed: number): Scenario {
+  const [funded, askAbove, paid, held] = [10e6, 2e6, 1e6, 3e6]
+  return {
+    id: 'home-daily-briefing',
+    owner: 'talyvor-suite',
+    items: ['B41.6'],
+    agents: 2,
+    title: "Home's morning briefing: a payment held for approval is listed first with its amount, as Lens's briefing words it",
+    run: (ctx) =>
+      withBank(ctx, async (bank) => {
+        const { env, app } = ctx
+        const payer = await openAgent(ctx, bank, `Briefing payer ${seed}`)
+        if (typeof payer === 'string') return fail(payer)
+        const payee = await openAgent(ctx, bank, `Briefing payee ${seed}`)
+        if (typeof payee === 'string') return fail(payee)
+        let err = await bank.move(payer, funded, 'Fund')
+        if (err !== undefined) return fail(`funding ${payer.name} was refused: ${err}`)
+        err = await bank.setLimit(payer, 'Ask a person above', askAbove)
+        if (err !== undefined) return fail(`setting ${payer.name}'s approval amount was refused: ${err}`)
+        const ok = await bank.pay(payer, payee, paid, `briefing paid ${seed}`)
+        if (/waiting in Approvals/.test(ok)) return fail(`a ${lxcText(paid)} LXC payment under the ${lxcText(askAbove)} LXC approval amount was held: "${ok}"`)
+        const waits = await bank.pay(payer, payee, held, `briefing held ${seed}`)
+        if (!/waiting in Approvals/.test(waits)) return fail(`a ${lxcText(held)} LXC payment over the ${lxcText(askAbove)} LXC approval amount was not held: "${waits}"`)
+        const approval = (await env.lens.agentApprovals(app.user)).find((x) => x.agent_id === payer.id && x.status === 'pending' && x.amount_ulxc === held)
+        if (approval === undefined) return fail(`Lens filed no pending ${lxcText(held)} LXC approval for ${payer.name}`)
+        const lines = await env.lens.agentLines(app.user, payer.id)
+        if (lines.some((l) => l.kind === 'pay' && l.amount_ulxc === -held)) return fail(`the held ${lxcText(held)} LXC payment posted to ${payer.name}'s statement before anyone approved it`)
+        if (!lines.some((l) => l.kind === 'pay' && l.amount_ulxc === -paid)) return fail(`the ${lxcText(paid)} LXC payment is not on ${payer.name}'s statement`)
+
+        const lens = await env.lens.act<{ items: { kind: string; id?: string; text: string }[] | null; line: string }>(app.user, 'GET', '/v1/workspaces/{ws}/agents/briefing')
+        if (!lens.ok) return fail(`reading Lens's briefing answered ${lens.status} ${lens.error}`)
+        const want = (lens.value.items ?? []).find((i) => i.kind === 'approval' && i.id === approval.id)
+        if (want === undefined) return fail(`Lens's briefing does not list approval ${approval.id}: ${JSON.stringify(lens.value.items)}`)
+        const page = await ctx.app.tab('/')
+        try {
+          const card = page.getByTestId('home-briefing')
+          await card.locator('summary').click({ timeout: ACTION_TIMEOUT_MS })
+          const item = card.locator(`a[href="/approvals#approval-${approval.id}"]`)
+          let shown: string
+          try {
+            shown = (await item.innerText({ timeout: ACTION_TIMEOUT_MS })).replace(/\s+/g, ' ')
+          } catch {
+            return fail(`Home's briefing lists no item opening approval ${approval.id}`)
+          }
+          const line = (await card.getByTestId('home-briefing-line').innerText()).trim()
+          ctx.evidence.push({ note: `Home: "${line}"; approval item "${shown}"; Lens: "${lens.value.line}", ${JSON.stringify(want)}` })
+          if (!shown.includes(want.text)) return fail(`Home's briefing shows "${shown}", not Lens's "${want.text}"`)
+          const first = await card.locator('[data-kind]').first().getAttribute('data-kind')
+          if (first !== 'approval') return fail(`Home's briefing lists a ${first} first; decisions come first`)
+          await mkdir(env.outDir, { recursive: true })
+          for (const [width, height] of [[1440, 900], [390, 844]] as const) {
+            await page.setViewportSize({ width, height })
+            const shot = join(env.outDir, `home-daily-briefing-${width}px-user${ctx.app.user.index}.png`)
+            await page.screenshot({ path: shot })
+            ctx.evidence.push({ note: `Home's briefing at ${width}px: ${shot}` })
+          }
+          return { pass: true, detail: `Home's briefing reads "${line}" and lists "${shown}" first, opening approval ${approval.id}, as Lens has it; the held payment is not on the statement` }
+        } finally {
+          await page.close()
+        }
+      }),
+  }
+}
+
 async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: string): Promise<string | undefined> {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.evaluate(() => window.scrollTo(0, 0))

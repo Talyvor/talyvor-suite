@@ -16,7 +16,22 @@ const AGENTS = [
   { id: 'agt_2', name: 'Buyer', balance_ulxc: 10 * M, spent_ulxc: 0, keys: [], created_at: '2026-10-01T09:05:00Z' },
 ]
 
-function mockBff({ agents, newWorkspace = false }: { agents: typeof AGENTS; newWorkspace?: boolean }) {
+const QUIET = { items: [], spent_yesterday: [], quiet: true, line: 'A quiet day: nothing was spent yesterday, and nothing is waiting for you.' }
+
+// B41.6 — the morning after a day with two payments, one held approval and one bill due, as Lens's DailyBriefing writes it.
+const BUSY = {
+  items: [
+    { kind: 'approval', id: 'apr_1', agent_id: 'agt_1', name: 'Acme Hosting', amount: 30 * M, currency: 'LXC', text: '30 LXC waits for your approval' },
+    { kind: 'bill', id: 'bill_1', name: 'Northwind Supplies', amount: 4200, currency: 'GBP', due_date: '2026-10-31', text: 'A bill from Northwind Supplies for £42.00 is due' },
+    { kind: 'payment', id: 'ent_1', agent_id: 'agt_1', name: 'Writer', amount: 30_000, currency: 'LXC', text: '0.03 LXC was paid to Writer' },
+    { kind: 'payment', id: 'ent_2', agent_id: 'agt_1', name: 'Writer', amount: 45_000, currency: 'LXC', text: '0.045 LXC was paid to Writer' },
+  ],
+  spent_yesterday: [{ currency: 'LXC', amount: 75_000 }],
+  quiet: false,
+  line: '1 approval waiting, 1 bill due this week, 2 payments yesterday, spent yesterday 0.075 LXC.',
+}
+
+function mockBff({ agents, newWorkspace = false, briefing = QUIET }: { agents: typeof AGENTS; newWorkspace?: boolean; briefing?: typeof QUIET | typeof BUSY }) {
   const writes: string[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -62,6 +77,7 @@ function mockBff({ agents, newWorkspace = false }: { agents: typeof AGENTS; newW
           { agent_id: 'agt_2', name: 'Buyer', figures: [{ currency: 'LXC', balance: 10 * M, scheduled: 3 * M, bills_due: 0, pending_approvals: 3 * M, safe_to_spend: 4 * M }] },
         ],
       })
+    if (url === '/api/agents/briefing') return json(briefing)
     if (/^\/api\/agents\/[^/]+\/(pause|resume)$/.test(url)) {
       writes.push(url)
       return json({ paused: url.endsWith('/pause') })
@@ -100,6 +116,36 @@ afterEach(() => {
   queryClient.clear()
   vi.restoreAllMocks()
   window.history.pushState({}, '', '/')
+})
+
+describe('Home — the 30-second daily briefing (B41.6)', () => {
+  it('after two payments, a held approval and a bill due, the morning briefing names all four with their amounts, approval first', async () => {
+    mockBff({ agents: AGENTS, briefing: BUSY })
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByTestId('home-briefing-line')).toHaveTextContent(BUSY.line))
+    const items = within(screen.getByTestId('home-briefing-items')).getAllByRole('listitem')
+    expect(items.map((li) => li.textContent)).toEqual([
+      '30 LXC waits for your approvalAcme Hosting',
+      'A bill from Northwind Supplies for £42.00 is duedue 2026-10-31',
+      '0.03 LXC was paid to Writer',
+      '0.045 LXC was paid to Writer',
+    ])
+    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/approvals#approval-apr_1')
+    // It sits above the approvals card, the first thing on Home.
+    const waiting = screen.getByRole('heading', { name: /^Waiting for you/ })
+    expect(screen.getByTestId('home-briefing').compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('a quiet day says so in one line, with nothing to open', async () => {
+    mockBff({ agents: AGENTS })
+    render(<App />)
+
+    const card = await screen.findByTestId('home-briefing')
+    await waitFor(() => expect(card).toHaveTextContent(QUIET.line))
+    expect(card.tagName).toBe('DIV')
+    expect(screen.queryByTestId('home-briefing-items')).not.toBeInTheDocument()
+  })
 })
 
 describe('Home — the wallet home (B28.6)', () => {

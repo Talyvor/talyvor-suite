@@ -450,6 +450,17 @@ const BY_PATH: Record<string, unknown> = {
       { agent_id: 'agt_writer', name: 'Writer', figures: [{ currency: 'LXC', balance: 2_500_000, scheduled: 0, bills_due: 0, pending_approvals: 0, safe_to_spend: 2_500_000 }] },
     ],
   },
+  // B41.6 — this morning's briefing: the approval waiting below, and yesterday's two payments.
+  '/api/agents/briefing': {
+    items: [
+      { kind: 'approval', id: 'apr_1', agent_id: 'agt_research', name: 'Acme Hosting', amount: 3_000_000, currency: 'LXC', text: '3 LXC waits for your approval' },
+      { kind: 'payment', id: 'ent_1', agent_id: 'agt_research', name: 'Writer', amount: 250_000, currency: 'LXC', text: '0.25 LXC was paid to Writer' },
+      { kind: 'payment', id: 'ent_2', agent_id: 'agt_research', name: 'Writer', amount: 500_000, currency: 'LXC', text: '0.5 LXC was paid to Writer' },
+    ],
+    spent_yesterday: [{ currency: 'LXC', amount: 750_000 }],
+    quiet: false,
+    line: '1 approval waiting, 2 payments yesterday, spent yesterday 0.75 LXC.',
+  },
   '/api/agents/forecast': {
     at: '2026-09-15T00:00:00Z',
     month_start: '2026-09-01T00:00:00Z',

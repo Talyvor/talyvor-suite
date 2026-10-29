@@ -469,6 +469,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/alerts", a.requireTenant(a.handleAgentAlerts))
 	a.mux.HandleFunc("/api/agents/forecast", a.requireTenant(a.handleAgentForecast))
 	a.mux.HandleFunc("/api/agents/safe-to-spend", a.requireTenant(a.handleAgentsSafeToSpend)) // B45.11
+	a.mux.HandleFunc("/api/agents/briefing", a.requireTenant(a.handleAgentsBriefing))         // B41.6
 	a.mux.HandleFunc("/api/agents/pause-all", a.requireTenant(a.handleAgentsPauseAll(true)))
 	a.mux.HandleFunc("/api/agents/resume-all", a.requireTenant(a.handleAgentsPauseAll(false)))
 	a.mux.HandleFunc("/api/agents/{id}/pause", a.requireTenant(a.handleAgentPause(true)))

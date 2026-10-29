@@ -178,6 +178,28 @@ export interface SafeToSpend {
   agents: { agent_id: string; name: string; figures: SafeToSpendFigure[] | null }[] | null
 }
 
+/**
+ * Lens economy.Briefing (B41.106): this morning's, decisions first — approvals waiting, what is blocked and why, bills due
+ * this week, then yesterday's (UTC) payments and other spend. Each item's text is its one sentence, amount included.
+ */
+export interface BriefingItem {
+  kind: 'approval' | 'blocked' | 'bill' | 'payment' | 'agent_spend'
+  id?: string
+  agent_id?: string
+  name: string
+  amount: number
+  currency?: string
+  reason?: string
+  due_date?: string
+  text: string
+}
+
+export interface Briefing {
+  items: BriefingItem[] | null
+  quiet: boolean
+  line: string
+}
+
 /** Lens economy.SpendForecast (B19.6): this UTC month so far, run on to its end. */
 export interface SpendForecast {
   at: string
@@ -618,6 +640,7 @@ export const agentBankApi = {
   // B19.20 — stop every agent or one, and what they are spending.
   alerts: () => getJSON<{ alerts: AgentSpendAlert[] | null; rule: string }>('/api/agents/alerts', { alerts: 'list' }),
   safeToSpend: () => getJSON<SafeToSpend>('/api/agents/safe-to-spend', { agents: 'list' }),
+  briefing: () => getJSON<Briefing>('/api/agents/briefing', { items: 'list', quiet: 'boolean', line: 'string' }),
   forecast: () => getJSON<SpendForecast>('/api/agents/forecast', { spent_ulxc: 'number', forecast_ulxc: 'number', agents: 'list' }),
   pauseAll: (reason: string) => send<{ all_paused: boolean }>('POST', '/api/agents/pause-all', { reason }),
   resumeAll: () => send<{ all_paused: boolean }>('POST', '/api/agents/resume-all'),

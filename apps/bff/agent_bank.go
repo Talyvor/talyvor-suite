@@ -798,6 +798,7 @@ func (a *app) handlePushSubscriptions(w http.ResponseWriter, r *http.Request, t 
 //	GET  /api/agents/alerts                      unusual-spend alerts, newest first, and the rule that raises them
 //	GET  /api/agents/forecast                    each agent's and the workspace's month-end spend
 //	GET  /api/agents/safe-to-spend               B45.11: each agent's and the company's safe to spend this month (Lens B41.105)
+//	GET  /api/agents/briefing                    B41.6: this morning's briefing — approvals, blocked, bills due, yesterday's spend (Lens B41.106)
 //	POST /api/agents/pause-all   {"reason"}      every agent, those created later included
 //	POST /api/agents/resume-all                  lifts it; an agent paused on its own stays paused
 //	POST /api/agents/{id}/pause  {"reason"}      one agent
@@ -828,6 +829,15 @@ func (a *app) handleAgentsSafeToSpend(w http.ResponseWriter, r *http.Request, t 
 		return
 	}
 	a.agentBankRelay(w, r, t, http.MethodGet, "/agents/safe-to-spend", nil)
+}
+
+// handleAgentsBriefing — GET /api/agents/briefing, this morning's, as of now.
+func (a *app) handleAgentsBriefing(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, "/agents/briefing", nil)
 }
 
 // handleAgentsPauseAll — POST /api/agents/pause-all {"reason"} and /api/agents/resume-all.
