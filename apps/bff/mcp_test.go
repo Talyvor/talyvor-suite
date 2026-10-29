@@ -54,6 +54,12 @@ func (f *fakeLensForMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "POST /v1/money/permission-mandates":
 		w.WriteHeader(http.StatusCreated)
 		_, _ = io.WriteString(w, `{"id":"pm-1","status":"active"}`)
+	case "GET /v1/money/bills":
+		_, _ = io.WriteString(w, `{"bills":[{"id":"bill-1","supplier":"Northern Power","invoice_number":"NP-881","amount_minor":16550,"currency":"GBP",`+
+			`"due_date":"2026-11-05","sort_code":"400000","account_number":"12345678","iban":"GB33BUKB20201555555555","payee_id":"py-np",`+
+			`"payee_match":"matched","status":"due","missing":[]},{"id":"bill-0","supplier":"Old Co","amount_minor":900,"currency":"GBP","status":"paid","missing":[]}]}`)
+	case "GET /v1/workspaces/ws-ada/agents/safe-to-spend":
+		_, _ = io.WriteString(w, `{"company":[{"currency":"GBP","balance":125000,"scheduled":0,"bills_due":16550,"pending_approvals":0,"safe_to_spend":108450}],"agents":[]}`)
 	default:
 		_, _ = io.WriteString(w, `{}`)
 	}
@@ -179,7 +185,8 @@ func TestMCPNoToolMovesMoney(t *testing.T) {
 	for _, r := range []string{"GET /v1/money/accounts", "GET /v1/workspaces/ws-ada/agents", "GET /v1/money/payees",
 		"GET /v1/money/permission-mandates", "GET /v1/marketplace/search", "GET /v1/marketplace/listings/l-1",
 		"GET /v1/money/payment-requests/pr-1", "POST /v1/money/invoices", "POST /v1/money/invoices/inv-1/send",
-		"POST /v1/money/payment-requests", "POST /v1/money/payment-requests/pr-1/cancel", "POST /v1/money/permission-mandates/prepare"} {
+		"POST /v1/money/payment-requests", "POST /v1/money/payment-requests/pr-1/cancel", "POST /v1/money/permission-mandates/prepare",
+		"GET /v1/money/bills", "GET /v1/workspaces/ws-ada/agents/safe-to-spend"} {
 		allowed[r] = true
 	}
 	for _, tool := range mcpTools {
@@ -237,6 +244,39 @@ func TestMCPPaymentToContact(t *testing.T) {
 	}
 	if it := items[0].(map[string]any); it["payee_id"] != "py-gh" || it["amount_minor"] != float64(50000) || it["currency"] != "USD" || it["contact"] != nil {
 		t.Fatalf("grace's request went up as %v", it)
+	}
+}
+
+// TestMCPBillsDueAndSafeToSpend is B40.36's DONE: a read-only connection reads a workspace's one bill due — never the bank
+// details printed on it, nor a bill already paid — and its safe-to-spend figure, each from one Lens route on the person's
+// own credential.
+func TestMCPBillsDueAndSafeToSpend(t *testing.T) {
+	a, lens, _ := mcpApp(t)
+	token := seedOAuthToken(a) // wallets:read only
+	a.oauth.grants.update("g-seed", func(g oauthGrant) oauthGrant {
+		g.Who.lensToken = "jwt-for-ws-ada"
+		return g
+	})
+	bills := toolCall(t, a, token, "bills_due", nil)
+	text := bills["content"].([]any)[0].(map[string]any)["text"].(string)
+	got := bills["structuredContent"].(map[string]any)
+	list, _ := got["bills"].([]any)
+	if bills["isError"] != false || got["count"] != float64(1) || len(list) != 1 || list[0].(map[string]any)["id"] != "bill-1" ||
+		got["totals"].(map[string]any)["GBP"] != float64(16550) {
+		t.Fatalf("bills_due: %v", bills)
+	}
+	for _, printed := range []string{"GB33BUKB", "12345678", "400000", "iban", "sort_code", "account_number", "Old Co"} {
+		if strings.Contains(text, printed) {
+			t.Fatalf("bills_due shows %q: %s", printed, text)
+		}
+	}
+	safe := toolCall(t, a, token, "safe_to_spend", nil)
+	if fig := safe["structuredContent"].(map[string]any)["company"].([]any); safe["isError"] != false || fig[0].(map[string]any)["safe_to_spend"] != float64(108450) {
+		t.Fatalf("safe_to_spend: %v", safe)
+	}
+	want := []string{"GET /v1/money/bills Bearer jwt-for-ws-ada ", "GET /v1/workspaces/ws-ada/agents/safe-to-spend Bearer jwt-for-ws-ada "}
+	if fmt.Sprint(lens.calls) != fmt.Sprint(want) {
+		t.Fatalf("Lens saw %q, want %q", lens.calls, want)
 	}
 }
 

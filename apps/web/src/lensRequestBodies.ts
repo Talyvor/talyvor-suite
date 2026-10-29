@@ -1146,6 +1146,10 @@ export const NON_LENS_ANON_SITES = [
     file: "mcp_drafts.go",
     what: "keepDraft (B40.35) marshals assistantDraft, the waiting request, as the tool's answer to the assistant over /mcp — a RESPONSE, sent to no repository, so there is no key set to ask about and this site is exempt.",
   },
+  {
+    file: "mcp.go",
+    what: "mcpBillsDue (B40.36) re-marshals Lens's GET /v1/money/bills as bills_due's answer to the assistant over /mcp — the due bills less their printed bank details, with a total per currency. A RESPONSE, sent to no repository, so there is no key set to ask about and this site is exempt.",
+  },
 ] as const;
 
 const cache = new Map<string, string>();

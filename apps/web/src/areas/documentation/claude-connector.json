@@ -16,6 +16,8 @@
     { "name": "market_search", "title": "Search the marketplace", "kind": "read" },
     { "name": "market_listing", "title": "Marketplace listing", "kind": "read" },
     { "name": "get_request_status", "title": "Payment request status", "kind": "read" },
+    { "name": "bills_due", "title": "Bills due", "kind": "read" },
+    { "name": "safe_to_spend", "title": "Safe to spend", "kind": "read" },
     { "name": "draft_invoice", "title": "Draft an invoice", "kind": "write" },
     { "name": "send_invoice", "title": "Send an invoice", "kind": "send" },
     { "name": "create_payee_request", "title": "Ask to add a payee", "kind": "write" },
