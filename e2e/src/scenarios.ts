@@ -1395,29 +1395,9 @@ export function brandLogo(): Scenario {
     run: async (ctx) => {
       const seen: string[] = []
       const wrong: string[] = []
-      // B29.4: /marketing's header is the board's lockup FILE (svg/talyvor-logo-<theme>-notag.svg), one
-      // per theme — so there it is the shown file, loaded, that each theme must name.
-      const page = await ctx.app.tab('/marketing')
-      try {
-        await page.locator('img[data-brand="logo"]').first().waitFor({ state: 'attached' })
-        for (const theme of ['dark', 'light'] as const) {
-          const got = await page.evaluate(async (t) => {
-            document.documentElement.dataset.theme = t
-            const shown = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
-              .filter((i) => getComputedStyle(i).display !== 'none')
-            await Promise.all(shown.map((i) => (i.complete ? null : new Promise((r) => i.addEventListener('load', r, { once: true })))))
-            return shown.map((i) => `${new URL(i.src).pathname}${i.naturalWidth > 0 ? '' : ' (not loaded)'}`)
-          }, theme)
-          seen.push(`/marketing ${theme}: ${got.join(', ')}`)
-          if (got.length !== 1 || got[0] !== `/brand/svg/talyvor-logo-${theme}-notag.svg`)
-            wrong.push(`/marketing ${theme} lockup ${JSON.stringify(got)}`)
-        }
-      } catch (e) {
-        wrong.push(`/marketing: no lockup (${(e as Error).message.split('\n')[0]})`)
-      } finally {
-        await page.close()
-      }
-      for (const path of ['/', '/signin', '/pricing', '/documentation']) {
+      // B51.1: /marketing shares the public header with /pricing and /documentation, so it carries the
+      // same drawn mark and wordmark (it no longer shows B29.4's lockup file).
+      for (const path of ['/', '/signin', '/marketing', '/pricing', '/documentation']) {
         const page = await ctx.app.tab(path)
         try {
           await page.locator('svg[data-brand="wordmark"]').first().waitFor({ state: 'visible' })
@@ -1444,7 +1424,7 @@ export function brandLogo(): Scenario {
       }
       ctx.evidence.push({ note: seen.join('; ') })
       return wrong.length === 0
-        ? { pass: true, detail: 'drawn mark and wordmark on four screens and the lockup file on /marketing, each theme in its own colours' }
+        ? { pass: true, detail: 'drawn mark and wordmark on five screens, each theme in its own colours' }
         : { pass: false, detail: `logo wrong: ${wrong.join(', ')}` }
     },
   }
