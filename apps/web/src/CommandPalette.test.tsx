@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from './App'
 import { historyKey } from './areas/chat/history'
 import { SHORTCUTS } from './components/CommandPalette'
+import { populatedBff } from './populatedBff'
 
 // B28.135 — the command palette and the keyboard shortcuts. Drives the real <App />: the keys are pressed on the page,
 // and what is asserted is the screen a person is left on.
@@ -62,7 +63,7 @@ describe('the command palette (B28.135)', () => {
   it('opens with Ctrl+K on any screen, and a page typed and chosen with Enter opens', async () => {
     await mountAt('/settings')
     const palette = await openPalette()
-    const box = within(palette).getByRole('combobox', { name: 'Type a command or a page' })
+    const box = within(palette).getByRole('combobox', { name: 'Search, or type a command' })
     expect(box).toHaveFocus()
     fireEvent.change(box, { target: { value: 'ledger' } })
     expect(within(palette).getByRole('option', { name: 'Ledger' })).toHaveAttribute('aria-selected', 'true')
@@ -125,12 +126,36 @@ describe('the keyboard shortcuts (B28.135)', () => {
     expect(screen.queryByTestId('turn-user')).toBeNull()
   })
 
-  it('/ focuses Search conversations, but typed in the message box it is only a slash', async () => {
+  it('/ opens the one search, but typed in the message box it is only a slash', async () => {
     await mountAt('/chat')
     const message = await screen.findByLabelText('Your message')
     press('/', 'Slash', {}, message)
-    expect(screen.getByRole('searchbox', { name: 'Search conversations' })).not.toHaveFocus()
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull()
     press('/', 'Slash')
-    await waitFor(() => expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toHaveFocus())
+    const palette = await screen.findByRole('dialog', { name: 'Command palette' })
+    expect(within(palette).getByRole('combobox', { name: 'Search, or type a command' })).toHaveFocus()
+  })
+})
+
+describe('the one search box (B41.7)', () => {
+  it('a supplier’s name finds its payee, its payment and its bill, grouped, and the bill opens on its own row', async () => {
+    vi.restoreAllMocks()
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    const asked = populatedBff((impl) => vi.spyOn(globalThis, 'fetch').mockImplementation(impl))
+    await mountAt('/settings')
+    const palette = await openPalette()
+    fireEvent.change(within(palette).getByRole('combobox', { name: 'Search, or type a command' }), { target: { value: 'acme' } })
+    const bills = await within(palette).findByRole('group', { name: 'Bills' }, { timeout: 2000 })
+    expect(asked.asked).toContain('/api/money/search?q=acme')
+    expect(within(palette).getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual(['Payees', 'Payments', 'Bills', 'Conversations'])
+    expect(within(within(palette).getByRole('group', { name: 'Payees' })).getByRole('option')).toHaveTextContent('Acme Hosting Ltd · GB')
+    expect(within(within(palette).getByRole('group', { name: 'Payments' })).getByRole('option')).toHaveTextContent('Acme Hosting Ltd · October hosting')
+    const bill = within(bills).getByRole('option')
+    expect(bill).toHaveTextContent('Acme Hosting Ltd · INV-2041')
+    fireEvent.click(bill)
+    expect(window.location.pathname).toBe('/money/pay')
+    expect(window.location.hash).toBe('#bill-bill_1')
+    await waitFor(() => expect(screen.getByTestId('bill-bill_1')).toHaveAttribute('data-linked', 'true'))
+    expect(screen.getByTestId('payee-payee_1')).not.toHaveAttribute('data-linked')
   })
 })

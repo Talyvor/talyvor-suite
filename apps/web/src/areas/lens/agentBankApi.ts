@@ -200,6 +200,26 @@ export interface Briefing {
   line: string
 }
 
+/** Lens economy.SearchResults (B41.107): one search across the workspace, its groups in kind order, an empty kind left out. */
+export type SearchKind = 'agent' | 'payee' | 'payment' | 'bill' | 'invoice' | 'rule' | 'listing'
+
+export interface SearchResult {
+  kind: SearchKind
+  id: string
+  title: string
+  detail: string
+  agent_id?: string
+  amount_minor?: number
+  currency?: string
+  status?: string
+  date?: string
+}
+
+export interface SearchResults {
+  query: string
+  groups: { kind: SearchKind; results: SearchResult[] }[] | null
+}
+
 /** Lens economy.SpendForecast (B19.6): this UTC month so far, run on to its end. */
 export interface SpendForecast {
   at: string
@@ -743,6 +763,8 @@ export const agentBankApi = {
   payeeChallenge: (id: string) => send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payees/${e(id)}/challenge`),
   confirmPayee: (id: string, assertion: PasskeyAssertion) => send<OutsidePayee>('POST', `/api/money/payees/${e(id)}/confirm`, { assertion }),
   payments: () => getJSON<{ payments: OutsidePayment[] | null }>('/api/money/payments', { payments: 'list' }),
+  // B41.7 — one search box across agents, payees, payments, bills, invoices, rules and listings (Lens B41.107).
+  search: (q: string) => getJSON<SearchResults>(`/api/money/search?q=${e(q)}`, { groups: 'list' }),
   payOutside: (body: OutsidePaymentRequest) => send<OutsidePayment>('POST', '/api/money/payments', body),
   // B40.35 — payees and permission mandates an assistant asked for, saved or signed only by the person.
   assistantRequests: () => getJSON<{ requests: AssistantRequest[] | null }>('/api/money/assistant-requests', { requests: 'list' }),

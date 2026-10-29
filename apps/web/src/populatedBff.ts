@@ -95,6 +95,15 @@ const BODIES: Record<string, unknown> = {
         sort_code: '040004', account_number: '12345678', payee_match: 'new_payee', status: 'due', missing: [], created_at: '2026-10-25T09:00:00Z' },
     ],
   },
+  // B41.7 — the one search for the supplier above: its payee, its payment and its bill, as Lens groups them (B41.107).
+  '/api/money/search': {
+    query: 'acme',
+    groups: [
+      { kind: 'payee', results: [{ kind: 'payee', id: 'payee_1', title: 'Acme Hosting Ltd', detail: 'GB', status: 'confirmed' }] },
+      { kind: 'payment', results: [{ kind: 'payment', id: 'mpay_1', title: 'Acme Hosting Ltd', detail: 'October hosting', agent_id: 'agt_research', amount_minor: 2000, currency: 'GBP', status: 'completed', date: '2026-10-10T10:00:00Z' }] },
+      { kind: 'bill', results: [{ kind: 'bill', id: 'bill_1', title: 'Acme Hosting Ltd', detail: 'INV-2041', amount_minor: 12000, currency: 'GBP', status: 'due', date: '2026-11-10T00:00:00Z' }] },
+    ],
+  },
   '/api/money/payouts': {
     payouts: [
       { id: 'mpob_1', funding: 'test', status: 'approved', rows_total: 3, rows_valid: 2, rows_invalid: 1, totals_minor: { GBP: 1100 }, approved_by: 'owner', approved_at: '2026-10-10T11:00:00Z', created_at: '2026-10-10T10:30:00Z' },

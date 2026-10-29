@@ -1,15 +1,21 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { Input, cn, focusRing, useTheme } from '@talyvor/ui'
 
 import { type ChatAction, chatActionHref } from '../areas/chat/chatActions'
+import { ApiError } from '../lib/api'
+import { type SearchKind, type SearchResult, agentBankApi, formatMinor } from '../areas/lens/agentBankApi'
 
 // B28.135 — THE COMMAND PALETTE AND THE KEYBOARD SHORTCUTS, on every screen behind the gate.
 //
 // Ctrl+K (Cmd+K on a Mac) opens the palette: a new chat, a search of the conversations, the model picker, the theme,
 // this list of shortcuts, and every page of the console by its title. Typing filters them; words that match nothing
 // still search the conversations for them. Ctrl+/ opens the list of shortcuts.
+//
+// B41.7 — it is also the one search box: / opens it too, and two letters or more search the workspace's agents, payees,
+// payments, bills, invoices, rules and listings (Lens B41.107), grouped, each result opening its own screen.
 //
 // Chat's three are an address (chatActions.ts), so they work from any screen: the palette goes to Chat, and Chat does
 // what it was asked once it knows who is signed in.
@@ -33,7 +39,7 @@ export interface Shortcut {
 export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'palette', keys: ['Mod', 'K'], label: 'Open the command palette' },
   { id: 'new-chat', keys: ['Mod', 'Shift', 'O'], label: 'New chat' },
-  { id: 'search', keys: ['/'], label: 'Search conversations, when not typing' },
+  { id: 'search', keys: ['/'], label: 'Search everything, when not typing' },
   { id: 'rail', keys: ['Mod', 'Shift', 'S'], label: 'Show or hide the conversations, in Chat' },
   { id: 'shortcuts', keys: ['Mod', '/'], label: 'Show keyboard shortcuts' },
   { id: 'close', keys: ['Esc'], label: 'Close the palette or this list' },
@@ -84,10 +90,25 @@ export interface PalettePage {
   title: string
 }
 
+/** What a search found, grouped under these headings in this order, each kind opening the screen it lives on. */
+const FOUND: readonly { kind: SearchKind; group: string; href: (r: SearchResult) => string }[] = [
+  { kind: 'agent', group: 'Agents', href: (r) => `/agents?agent=${encodeURIComponent(r.id)}` },
+  { kind: 'payee', group: 'Payees', href: (r) => `/money/pay#payee-${encodeURIComponent(r.id)}` },
+  { kind: 'payment', group: 'Payments', href: (r) => `/money/pay#payment-${encodeURIComponent(r.id)}` },
+  { kind: 'bill', group: 'Bills', href: (r) => `/money/pay#bill-${encodeURIComponent(r.id)}` },
+  { kind: 'invoice', group: 'Invoices', href: (r) => `/money/invoices#invoice-${encodeURIComponent(r.id)}` },
+  { kind: 'rule', group: 'Rules', href: (r) => `/agents?agent=${encodeURIComponent(r.agent_id || r.id)}#rules` },
+  { kind: 'listing', group: 'Listings', href: (r) => `/marketplace/listings/${encodeURIComponent(r.id)}` },
+]
+const GROUPS = ['Actions', 'Pages', ...FOUND.map((f) => f.group), 'Conversations']
+
 interface Command {
   id: string
   label: string
-  group: 'Actions' | 'Pages' | 'Conversations'
+  group: string
+  /** A search result's second line and its amount. */
+  detail?: string
+  figure?: string
   /** Other words it is found by. */
   words?: string
   shortcut?: ShortcutId
@@ -120,7 +141,7 @@ export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
       if (hit.id === 'palette') setShown((s) => (s === 'palette' ? null : 'palette'))
       else if (hit.id === 'shortcuts') setShown((s) => (s === 'shortcuts' ? null : 'shortcuts'))
       else if (hit.id === 'new-chat') toChat('new')
-      else toChat('search')
+      else setShown('palette')
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -129,7 +150,7 @@ export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
   const commands = useMemo<Command[]>(
     () => [
       { id: 'new-chat', label: 'New chat', group: 'Actions', words: 'start conversation', shortcut: 'new-chat', run: () => toChat('new') },
-      { id: 'search', label: 'Search conversations', group: 'Actions', words: 'find history', shortcut: 'search', run: () => toChat('search') },
+      { id: 'search', label: 'Search conversations', group: 'Actions', words: 'find history', run: () => toChat('search') },
       { id: 'model', label: 'Switch model', group: 'Actions', words: 'change choose pick', run: () => toChat('model') },
       {
         id: 'theme',
@@ -177,7 +198,15 @@ export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
         </svg>
       </button>
       {shown === 'palette' ? (
-        <Palette commands={commands} onSearch={(q) => toChat('search', q)} onClose={close} />
+        <Palette
+          commands={commands}
+          onSearch={(q) => toChat('search', q)}
+          onOpen={(href) => {
+            setShown(null)
+            navigate(href)
+          }}
+          onClose={close}
+        />
       ) : shown === 'shortcuts' ? (
         <ShortcutList onClose={close} />
       ) : null}
@@ -215,22 +244,57 @@ function Keys({ keys }: { keys: readonly string[] }) {
   )
 }
 
-function Palette({ commands, onSearch, onClose }: { commands: readonly Command[]; onSearch: (q: string) => void; onClose: () => void }) {
+function Palette({
+  commands,
+  onSearch,
+  onOpen,
+  onClose,
+}: {
+  commands: readonly Command[]
+  onSearch: (q: string) => void
+  onOpen: (href: string) => void
+  onClose: () => void
+}) {
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const listId = useId()
+
+  // The workspace is searched once typing pauses, from two letters (Lens's own floor).
+  const [asked, setAsked] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setAsked(query.trim()), 200)
+    return () => clearTimeout(t)
+  }, [query])
+  const search = useQuery({
+    queryKey: ['money-search', asked],
+    queryFn: () => agentBankApi.search(asked),
+    enabled: [...asked].length >= 2,
+    staleTime: 30_000,
+    retry: false,
+  })
 
   const found = useMemo<Command[]>(() => {
     const q = query.trim()
     const words = q.toLowerCase().split(/\s+/).filter((w) => w !== '')
     const hits = commands.filter((c) => words.every((w) => `${c.label} ${c.words ?? ''}`.toLowerCase().includes(w)))
     if (q === '') return hits
-    return [...hits, { id: 'search-for', label: `Search conversations for “${q}”`, group: 'Conversations', run: () => onSearch(q) }]
-  }, [commands, query, onSearch])
+    const results = search.data?.query === asked ? search.data.groups ?? [] : []
+    const inWorkspace = FOUND.flatMap((f) =>
+      (results.find((g) => g.kind === f.kind)?.results ?? []).map<Command>((r) => ({
+        id: `${r.kind}:${r.id}`,
+        label: r.title,
+        group: f.group,
+        detail: r.detail || undefined,
+        figure: r.amount_minor && r.currency ? formatMinor(r.amount_minor, r.currency) : undefined,
+        run: () => onOpen(f.href(r)),
+      })),
+    )
+    return [...hits, ...inWorkspace, { id: 'search-for', label: `Search conversations for “${q}”`, group: 'Conversations', run: () => onSearch(q) }]
+  }, [commands, query, search.data, asked, onSearch, onOpen])
   const at = Math.min(active, found.length - 1)
-  const groups = (['Actions', 'Pages', 'Conversations'] as const)
-    .map((g) => ({ group: g, rows: found.filter((c) => c.group === g) }))
-    .filter((g) => g.rows.length > 0)
+  const groups = GROUPS.map((g) => ({ group: g, rows: found.filter((c) => c.group === g) })).filter((g) => g.rows.length > 0)
+  // A member who is not the owner or an admin may not search the workspace: for them the box is commands and pages only.
+  const unsearched = search.isError && !(search.error instanceof ApiError && search.error.status === 403)
   const optionId = (c: Command) => `${listId}-${c.id}`
 
   // Keep the active option in view while arrowing through the pages.
@@ -249,8 +313,8 @@ function Palette({ commands, onSearch, onClose }: { commands: readonly Command[]
           aria-autocomplete="list"
           aria-controls={listId}
           aria-activedescendant={found[at] === undefined ? undefined : optionId(found[at])}
-          aria-label="Type a command or a page"
-          placeholder="Type a command or a page"
+          aria-label="Search, or type a command"
+          placeholder="Search agents, payees, bills… or type a command"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value)
@@ -292,7 +356,11 @@ function Palette({ commands, onSearch, onClose }: { commands: readonly Command[]
                   onClick={() => c.run()}
                   className={cn('flex cursor-pointer items-center justify-between gap-3 px-3 py-1.5 text-body text-ink', i === at && 'bg-canvas')}
                 >
-                  <span className="min-w-0 truncate">{c.label}</span>
+                  <span className="min-w-0 truncate">
+                    {c.label}
+                    {c.detail !== undefined ? <span className="text-muted"> · {c.detail}</span> : null}
+                  </span>
+                  {c.figure !== undefined ? <span className="shrink-0 font-figure text-caption text-muted">{c.figure}</span> : null}
                   {shortcut !== undefined ? <Keys keys={shortcut.keys} /> : null}
                 </div>
               )
@@ -300,6 +368,7 @@ function Palette({ commands, onSearch, onClose }: { commands: readonly Command[]
           </div>
         ))}
       </div>
+      {unsearched ? <p className="border-t border-rule px-3 py-2 text-caption text-muted">The workspace could not be searched just now.</p> : null}
       <p className="border-t border-rule px-3 py-2 text-caption text-faint">Enter to choose · Esc to close</p>
     </Overlay>
   )
