@@ -163,7 +163,7 @@ function mockBff(refusals: Array<[string, number]> = []) {
  */
 const ADDRESS_ROUTES: Record<string, string[]> = {
   // B28.6 — `/` is the wallet home; Overview moved to /overview with the same reads. B28.22 — and the LXC peg, for dollars.
-  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/approvals', '/api/agents/forecast', '/api/docs/membership', '/api/docs/pins', '/api/lxc/topup-options', '/api/workspace/name'],
+  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/approvals', '/api/agents/forecast', '/api/agents/safe-to-spend', '/api/docs/membership', '/api/docs/pins', '/api/lxc/topup-options', '/api/workspace/name'],
   '/overview': ['/api/agents/approvals', '/api/bonds', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/workspace/name'],
   '/ledger': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/lxc/history', '/api/workspace/name'],
   '/billing': ['/api/agents/approvals', '/api/billing/allowance', '/api/docs/membership', '/api/docs/pins', '/api/lxc/balance', '/api/lxc/topup-options', '/api/pricing', '/api/workspace/name'],
@@ -259,9 +259,9 @@ describe('the swept set', () => {
     // 38 → 48 at B27.15: the sidebar asks Docs whether the person is a member first, on every address; 48 → 49 at B27.27 (/settings reads the provider keys); 49 → 50 at B27.32 (/spend reads the measured saving).
     // 50 → 56 at B28.6: the wallet home at `/` (its book, an agent's rules, approvals, forecast, and the sidebar's two).
     // 56 → 66 at B28.7: the sidebar's Approvals badge reads the approvals on every address (`/` already did). 67 at B28.22: `/` reads the peg.
-    // 67 → 78 at B46.16: the sidebar reads the workspace's name on every address. 79 at B51.3: /billing reads whether a card can be charged.
+    // 67 → 78 at B46.16: the sidebar reads the workspace's name on every address. 79 at B51.3: /billing reads whether a card can be charged. 80 at B45.11: `/` reads safe to spend.
     const pairs = Object.values(ADDRESS_ROUTES).reduce((n, r) => n + r.length, 0)
-    expect(pairs).toBe(79)
+    expect(pairs).toBe(80)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {

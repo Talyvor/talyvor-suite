@@ -443,6 +443,13 @@ const BY_PATH: Record<string, unknown> = {
     ],
   },
   // B19.20 — this month's forecast, and one unusual-spend alert that paused an agent.
+  '/api/agents/safe-to-spend': {
+    company: [{ currency: 'LXC', balance: 87_500_000, scheduled: 0, bills_due: 0, pending_approvals: 0, safe_to_spend: 87_500_000 }],
+    agents: [
+      { agent_id: 'agt_research', name: 'Researcher', figures: [{ currency: 'LXC', balance: 10_000_000, scheduled: 2_000_000, bills_due: 0, pending_approvals: 0, safe_to_spend: 8_000_000 }] },
+      { agent_id: 'agt_writer', name: 'Writer', figures: [{ currency: 'LXC', balance: 2_500_000, scheduled: 0, bills_due: 0, pending_approvals: 0, safe_to_spend: 2_500_000 }] },
+    ],
+  },
   '/api/agents/forecast': {
     at: '2026-09-15T00:00:00Z',
     month_start: '2026-09-01T00:00:00Z',

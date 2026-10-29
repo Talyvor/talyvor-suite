@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { type UseQueryResult, useQueries, useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { Button, Card, CardHeader, MuNumeral, NavIcon, type NavIconName, Pill, Row, cn, focusRing, inlineLink } from '@talyvor/ui'
+import { type UseQueryResult, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useNavigate } from 'react-router-dom'
+import { Button, Card, CardHeader, Input, NavIcon, type NavIconName, Pill, Row, Switch, cn, focusRing, inlineLink } from '@talyvor/ui'
 import { Region, RegionScreen } from '../../components/Region'
 import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
 import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, PauseEveryAgent, rulesKey } from './AgentBank'
-import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi } from './agentBankApi'
+import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText } from './agentBankApi'
 import { Lxc } from './money'
 import { FirstAgent } from './Onboarding'
 import { SharingLine } from './Sharing'
@@ -21,6 +21,10 @@ import { SharingLine } from './Sharing'
 //
 // B29.8 — it opens like the board's PRODUCT UI tile: "Welcome to Talyvor", then a raised card for each
 // product, each opening the route its sidebar row opens. The figures above are unchanged, one region down.
+//
+// B45.11 — Home in one glance: the approvals waiting first, each opening its card; then one total across the agents;
+// then one row per agent — its balance, its safe to spend (Lens B41.105) and a running/paused switch that asks before
+// it changes; then Taly's input. On a 390px phone that is all that sits above the fold; the rest follows below it.
 //
 // A workspace with no agents yet opens in onboarding mode: what it holds, the one click that makes its
 // first agent ready (B46.2, Onboarding.tsx), and the one line that says whether it shares answers. Like Overview's first run, that is a MEASUREMENT — the book answered and
@@ -70,62 +74,165 @@ function Muted({ children }: { children: React.ReactNode }) {
   return <p className="px-gutter py-3 text-body text-muted">{children}</p>
 }
 
-/** The workspace's money: everything it holds, and the part no agent has been given yet. */
-function Holdings({ book }: { book: AgentBook }) {
-  return (
-    <div className="grid gap-px border border-rule bg-rule wide:grid-cols-2">
-      <div className="flex flex-col gap-2 bg-surface px-gutter py-4">
-        <span className="font-figure text-eyebrow uppercase text-faint">Total balance</span>
-        <span data-testid="home-total-balance">
-          <MuNumeral micros={book.workspace_balance_ulxc} unit="lxc" />
-        </span>
-        <span className="text-caption font-normal text-muted">{lxc(book.allocated_ulxc)} of it is with agents</span>
-      </div>
-      <div className="flex flex-col gap-2 bg-surface px-gutter py-4">
-        <span className="font-figure text-eyebrow uppercase text-faint">Not yet given to agents</span>
-        <span data-testid="home-unallocated">
-          <MuNumeral micros={book.unallocated_ulxc} unit="lxc" />
-        </span>
-        <span className="text-caption font-normal text-muted">Free to fund an agent’s wallet</span>
-      </div>
-    </div>
-  )
-}
+/** At most this many approvals are listed on Home, so the total and the agents stay above a phone's fold. */
+const APPROVALS_SHOWN = 3
 
-/** What is waiting for a person: the count, and where to decide it. */
-function ApprovalsWaiting() {
+/** B45.11 — the approvals waiting for a person, first; each opens its card on Approvals. */
+function ApprovalsFirst({ nameOf }: { nameOf: (id: string) => string }) {
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
-  const pending = (list.data?.approvals ?? []).filter((a) => a.status === 'pending').length
+  const pending = (list.data?.approvals ?? []).filter((a) => a.status === 'pending')
   return (
     <Card>
-      <CardHeader>Approvals waiting</CardHeader>
+      <CardHeader>
+        Waiting for you
+        {list.isSuccess ? (
+          <>
+            {' · '}
+            <span className="font-figure" data-testid="home-approvals-waiting">
+              {pending.length}
+            </span>
+          </>
+        ) : null}
+      </CardHeader>
       {list.isError ? (
         <PanelFailure error={list.error} what="the approvals" />
       ) : list.isPending ? (
         <Muted>Reading…</Muted>
+      ) : pending.length === 0 ? (
+        <Muted>Nothing is waiting for you.</Muted>
       ) : (
-        <Row
-          stack
-          label={
-            <span className="whitespace-normal">
-              {pending === 0
-                ? 'Nothing is waiting for you.'
-                : `${pending === 1 ? 'One request is' : `${pending} requests are`} waiting for a person to approve`}
-            </span>
-          }
-          hint="A request or payment waits here when it is above an agent’s approval amount."
-        >
-          <span className="font-figure text-body text-ink" data-testid="home-approvals-waiting">
-            {pending}
-          </span>
-          {pending > 0 ? (
-            <Button asChild variant="primary">
-              <Link to="/agents">Decide</Link>
-            </Button>
+        <ul data-testid="home-approvals">
+          {pending.slice(0, APPROVALS_SHOWN).map((a) => (
+            <li key={a.id} className="border-b border-rule last:border-b-0">
+              <Link
+                to={`/approvals#approval-${a.id}`}
+                className={cn('flex min-h-row items-center justify-between gap-gutter px-gutter py-2', focusRing)}
+              >
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-body text-ink">{nameOf(a.agent_id)}</span>
+                  <span className="truncate text-caption text-muted">
+                    {a.payee ? `Pay ${a.payee.name || a.payee.id}` : a.reason || (a.model ? `A request to ${a.model}` : 'A request')}
+                  </span>
+                </span>
+                <span className="text-body text-ink">{lxc(a.amount_ulxc)}</span>
+              </Link>
+            </li>
+          ))}
+          {pending.length > APPROVALS_SHOWN ? (
+            <li className="px-gutter py-2 text-body">
+              <Link to="/approvals" className={inlineLink}>
+                {pending.length - APPROVALS_SHOWN} more waiting
+              </Link>
+            </li>
           ) : null}
-        </Row>
+        </ul>
       )}
     </Card>
+  )
+}
+
+/** B45.11 — one total: what the agents hold together, and what the workspace has not given to an agent yet. */
+function Total({ book }: { book: AgentBook }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-card border border-rule bg-surface px-gutter py-3">
+      <span className="font-figure text-eyebrow uppercase text-faint">Across your agents</span>
+      <span className="text-head text-ink" data-testid="home-total">
+        {lxc(book.allocated_ulxc)}
+      </span>
+      <span className="text-caption text-muted" data-testid="home-unallocated">
+        {lxc(book.unallocated_ulxc)} more in the workspace, not yet given to an agent
+      </span>
+    </div>
+  )
+}
+
+export const SAFE_TO_SPEND_KEY = ['agent-safe-to-spend'] as const
+
+/** One agent's line: its balance and safe to spend, and a switch between running and paused that asks first. */
+function AgentLine({ agent, safe }: { agent: Agent; safe: UseQueryResult<Awaited<ReturnType<typeof agentBankApi.safeToSpend>>> }) {
+  const qc = useQueryClient()
+  const [asking, setAsking] = useState(false)
+  const running = !agent.paused_at
+  const change = useMutation({
+    mutationFn: () => (running ? agentBankApi.pause(agent.id, 'paused from Home') : agentBankApi.resume(agent.id)),
+    onSuccess: () => setAsking(false),
+    onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
+  })
+  const figure = (safe.data?.agents ?? []).find((s) => s.agent_id === agent.id)?.figures?.find((f) => f.currency === 'LXC')
+  return (
+    <div className="border-b border-rule px-gutter py-2 last:border-b-0" data-testid={`home-agent-${agent.id}`}>
+      <div className="flex min-h-row items-center justify-between gap-gutter">
+        <span className="flex min-w-0 flex-col">
+          <span className="truncate text-body text-ink">{agent.name}</span>
+          <span className="text-caption text-muted">
+            {lxc(agent.balance_ulxc)} held ·{' '}
+            {safe.isError ? (
+              <InlineFailure error={safe.error} className="" />
+            ) : figure ? (
+              <span data-testid={`home-safe-${agent.id}`}>{lxc(figure.safe_to_spend)} safe to spend</span>
+            ) : (
+              'reading safe to spend…'
+            )}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="text-caption text-muted">{running ? 'Running' : 'Paused'}</span>
+          <Switch
+            checked={running}
+            disabled={change.isPending}
+            onCheckedChange={() => setAsking(true)}
+            aria-label={`${agent.name} running`}
+          />
+        </span>
+      </div>
+      {asking ? (
+        <div role="group" aria-label={`${running ? 'Pause' : 'Resume'} ${agent.name}?`} className="flex flex-wrap items-center gap-2 pb-1">
+          <span className="text-body text-ink">
+            {running ? `Pause ${agent.name}? Lens refuses its next request or payment.` : `Resume ${agent.name}?`}
+          </span>
+          <Button variant="primary" disabled={change.isPending} onClick={() => change.mutate()}>
+            {running ? 'Pause' : 'Resume'}
+          </Button>
+          <Button disabled={change.isPending} onClick={() => setAsking(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : null}
+      {change.isError ? <p className="pb-1 text-body text-ink">{refusalText(change.error)}</p> : null}
+    </div>
+  )
+}
+
+/** B45.11 — one row per agent. */
+function AgentLines({ agents }: { agents: Agent[] }) {
+  const safe = useQuery({ queryKey: SAFE_TO_SPEND_KEY, queryFn: agentBankApi.safeToSpend })
+  return (
+    <Card>
+      <CardHeader>Your agents</CardHeader>
+      {agents.map((a) => (
+        <AgentLine key={a.id} agent={a} safe={safe} />
+      ))}
+    </Card>
+  )
+}
+
+/** B45.11 — Taly's input: the question goes to Chat, typed and ready to send. */
+function AskTaly() {
+  const navigate = useNavigate()
+  const [ask, setAsk] = useState('')
+  return (
+    <form
+      className="flex gap-2"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (ask.trim() !== '') navigate('/chat', { state: { ask: ask.trim() } })
+      }}
+    >
+      <Input aria-label="Ask Taly" placeholder="Ask Taly about your agents" value={ask} onChange={(e) => setAsk(e.target.value)} className="flex-1" />
+      <Button type="submit" variant="primary" disabled={ask.trim() === ''}>
+        Ask
+      </Button>
+    </form>
   )
 }
 
@@ -284,6 +391,7 @@ export function Home() {
   const [onboarding, setOnboarding] = useState(false)
   // The failed read is decided first: a book that could not be read is not a workspace with no agents.
   const state = book.isError ? 'failed' : book.isPending ? 'reading' : agents.length === 0 || onboarding ? 'onboarding' : 'wallets'
+  const nameOf = (id: string) => agents.find((a) => a.id === id)?.name ?? 'An agent'
   return (
     <RegionScreen>
       <Region
@@ -291,7 +399,7 @@ export function Home() {
         label="Home"
         heading="Welcome to Talyvor"
         sectionClassName="pb-10 pt-4 wide:pb-12"
-        className="flex flex-col gap-6"
+        className="flex flex-col gap-3"
         fullWidth
       >
         {state === 'onboarding' || state === 'wallets' ? (
@@ -299,9 +407,6 @@ export function Home() {
             {state === 'onboarding' ? 'Give every agent a wallet.' : 'Your agents’ wallets, at a glance.'}
           </p>
         ) : null}
-        <ProductCards />
-      </Region>
-      <Region index="01" label="Your wallets" className="flex flex-col gap-3">
         {state === 'failed' ? (
           <PanelFailure error={book.error} what="the workspace’s wallets" />
         ) : !book.data ? (
@@ -309,21 +414,26 @@ export function Home() {
         ) : state === 'onboarding' ? (
           <FirstWallet book={book.data} onStarted={() => setOnboarding(true)} onFinished={() => setOnboarding(false)} />
         ) : (
-          <Holdings book={book.data} />
+          <>
+            <ApprovalsFirst nameOf={nameOf} />
+            <Total book={book.data} />
+            <AgentLines agents={agents} />
+            <AskTaly />
+          </>
         )}
+      </Region>
+      <Region index="01" label="Products">
+        <ProductCards />
       </Region>
       {state === 'wallets' && book.data ? (
         <>
-          <Region index="02" label="Waiting for you">
-            <ApprovalsWaiting />
-          </Region>
-          <Region index="03" label="Each agent’s budget">
+          <Region index="02" label="Each agent’s budget">
             <Budgets agents={agents} forecast={forecast} />
           </Region>
-          <Region index="04" label="Where the month is heading">
+          <Region index="03" label="Where the month is heading">
             <Forecast forecast={forecast} />
           </Region>
-          <Region index="05" label="Stop every agent" className="flex flex-col gap-3">
+          <Region index="04" label="Stop every agent" className="flex flex-col gap-3">
             <p className="text-body text-muted">
               One switch: Lens refuses each agent’s next request, payment or hold before a provider is called.
             </p>
