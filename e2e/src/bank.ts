@@ -3649,9 +3649,8 @@ async function badgeReaches(page: Page, want: number, ms: number): Promise<numbe
 
 /** Approve on the row waiting for a person whose words carry `memo`; the line the screen then shows. */
 export async function approveRow(page: Page, memo: string): Promise<string> {
-  const waiting = card(page, 'Waiting for a person')
-  const approve = page.getByRole('button', { name: 'Approve', exact: true })
-  const row = waiting.locator('div').filter({ hasText: memo }).filter({ has: approve }).last()
+  // By its row: the card's heading also carries its "?" button's label (B41.40), so card() no longer finds it.
+  const row = page.locator('[data-approval]').filter({ hasText: memo }).first()
   await row.waitFor({ timeout: ACTION_TIMEOUT_MS })
   await row.getByRole('button', { name: 'Approve', exact: true }).click()
   const said = page.getByRole('status').filter({ hasText: /^(Approved|Denied)/ }).or(page.getByRole('alert')).first()
