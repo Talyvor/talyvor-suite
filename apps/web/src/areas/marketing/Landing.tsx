@@ -232,10 +232,10 @@ export function Landing() {
         }
         .tal-hero-photo { position: relative; margin: 0; aspect-ratio: 16 / 9; overflow: hidden; background: var(--canvas) }
         .tal-hero-photo {
-          /* Transparent for the last 3%: on a phone that is the bottom few rows, which a light page shows any trace of the dark photo in. */
-          -webkit-mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.35) 6%, rgba(0,0,0,.75) 12%, #000 18%,
+          /* Transparent for the first and last 3%: on a phone those are the top and bottom few rows, which a light page shows any trace of the dark photo in. */
+          -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 3%, rgba(0,0,0,.35) 8%, rgba(0,0,0,.75) 13%, #000 18%,
             #000 76%, rgba(0,0,0,.9) 81%, rgba(0,0,0,.65) 86%, rgba(0,0,0,.35) 91%, rgba(0,0,0,.12) 95%, transparent 97%);
-          mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,.35) 6%, rgba(0,0,0,.75) 12%, #000 18%,
+          mask-image: linear-gradient(to bottom, transparent 0%, transparent 3%, rgba(0,0,0,.35) 8%, rgba(0,0,0,.75) 13%, #000 18%,
             #000 76%, rgba(0,0,0,.9) 81%, rgba(0,0,0,.65) 86%, rgba(0,0,0,.35) 91%, rgba(0,0,0,.12) 95%, transparent 97%);
         }
         .tal-hero-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 50% }
