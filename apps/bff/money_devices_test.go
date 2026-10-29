@@ -91,3 +91,55 @@ func TestPhoneDeviceKeyRegistersListsAndRevokesThroughBFF(t *testing.T) {
 		t.Errorf("an emptied push token reached Lens as %s, want it kept as \"\" (which removes it)", got)
 	}
 }
+
+// B50.22 — once a workspace has a key, a new passkey or device key registers only signed by one it has (Lens B50.20):
+// the BFF forwards that "assertion" to Lens on both registration routes, a passkey's or a device key's alike.
+func TestKeyEnrolAssertionReachesLensOnBothRegistrationRoutes(t *testing.T) {
+	var mu sync.Mutex
+	got := map[string]string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		got[r.URL.Path] = string(raw)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"k_1"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, c := range []struct{ path, body, lens, assertion string }{
+		{"/api/agents/passkeys", `{"credential_id":"bmV3","name":"Laptop","public_key":"pk","client_data_json":"cd","authenticator_data":"ad",`,
+			"/agents/passkeys", `{"credential_id":"b2xk","client_data_json":"Y2Q","authenticator_data":"YWQ","signature":"c2ln"}`},
+		{"/api/money/devices", `{"platform":"ios","name":"Work iPhone","public_key":"pk","challenge":"ch_1","signature":"sig","attestation":"att",`,
+			"/v1/money/devices", `{"device_id":"dev_9","challenge":"ch_1","signature":"c2lnLTE"}`},
+	} {
+		if rec := doJSON(a, http.MethodPost, c.path, c.body+`"assertion":`+c.assertion+`}`); rec.Code != http.StatusCreated {
+			t.Fatalf("%s = %d %s", c.path, rec.Code, rec.Body.String())
+		}
+		mu.Lock()
+		var body string
+		for p, b := range got {
+			if strings.HasSuffix(p, c.lens) {
+				body = b
+			}
+		}
+		mu.Unlock()
+		var sent struct {
+			Assertion map[string]string `json:"assertion"`
+		}
+		var want map[string]string
+		_ = json.Unmarshal([]byte(body), &sent)
+		_ = json.Unmarshal([]byte(c.assertion), &want)
+		for k, v := range want {
+			if sent.Assertion[k] != v {
+				t.Errorf("%s: Lens got %q, its assertion's %s is not %q", c.path, body, k, v)
+			}
+		}
+	}
+}

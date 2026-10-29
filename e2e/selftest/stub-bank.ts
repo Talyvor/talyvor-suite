@@ -2200,11 +2200,27 @@ export class Bank {
     // B28.84 — registering a passkey and the challenge each approval is signed over (Lens B19.16).
     const challenge = () => randomBytes(32).toString('base64url')
     if (rest === '/agents/passkeys/challenge' && method === 'POST') {
-      return json(res, 200, { challenge: challenge(), rp_id: new URL(process.env.STUB_APP_URL ?? 'http://localhost').hostname }), true
+      return json(res, 200, { challenge: challenge(), rp_id: new URL(process.env.STUB_APP_URL ?? 'http://localhost').hostname,
+        credential_ids: (this.passkeys.get(ws.id) ?? []).map((k) => k.credential_id) }), true
     }
     if (rest === '/agents/passkeys' && method === 'POST') {
-      const { credential_id = '', name = '', public_key = '' } = await this.body<{ credential_id?: string; name?: string; public_key?: string }>(req)
+      const { credential_id = '', name = '', public_key = '', client_data_json = '', assertion } = await this.body<{ credential_id?: string; name?: string
+        public_key?: string; client_data_json?: string; assertion?: { credential_id?: string; client_data_json?: string; device_id?: string; challenge?: string; signature?: string } }>(req)
       if (credential_id === '') return json(res, 400, { error: 'economy: a passkey needs its credential id' }), true
+      // B50.20 — once the workspace has a passkey or device key, a new one registers only with one of them signing its own
+      // challenge. The stub checks who signed and over what; Lens verifies the signature too. STUB_BREAK=enrol-unsigned skips it.
+      const keys = this.passkeys.get(ws.id) ?? []
+      if ((keys.length > 0 || this.devices.any(ws.id)) && !this.broken('enrol-unsigned')) {
+        const challengeOf = (cdj: string | undefined) => { try { return String((JSON.parse(Buffer.from(cdj ?? '', 'base64url').toString()) as { challenge?: unknown }).challenge ?? '') } catch { return '' } }
+        if (assertion === undefined) return json(res, 403, { error: 'economy: this workspace signs with a passkey or the phone app: sign the new key with one it has' }), true
+        const own = challengeOf(client_data_json)
+        const signedOver = assertion.device_id !== undefined ? assertion.challenge ?? '' : challengeOf(assertion.client_data_json)
+        const by = assertion.device_id !== undefined ? this.devices.refused(ws.id, assertion)
+          : keys.some((k) => k.credential_id === assertion.credential_id) ? undefined : 'passkey: invalid assertion: not a passkey of this workspace'
+        if (by !== undefined || own === '' || signedOver !== own) {
+          return json(res, 400, { error: by ?? "passkey: invalid assertion: sign the new key's own registration challenge with a key this workspace already has" }), true
+        }
+      }
       this.passkeyKeys.set(credential_id, public_key)
       const k = { credential_id, name, created_at: now }
       this.passkeys.set(ws.id, [...(this.passkeys.get(ws.id) ?? []), k])

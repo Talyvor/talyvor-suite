@@ -10,6 +10,9 @@
 //        payment and no payment out exists. The control: A's own approval at A is taken.
 //   approval-own-request (B50.19) — an agent's two held payments to one payee for one amount: approving one on Approvals
 //        pays that one only, and approving a third with always allow still leaves the other waiting; the payee's statement.
+//   passkey-enrol-signed (B50.22) — with passkey A registered, a passkey B sent through the web app's own calls with no
+//        signature is refused, and B's signature cannot approve an agent's held payment; signed by A, B registers and
+//        its approval pays. The approval row and the payee's statement.
 //   csrf-every-write — every write route the BFF registers (apps/bff lens.go), sent once with the session cookie from
 //        another site: each is refused 403 before any handler runs, except the machine endpoints the BFF names exempt.
 //   xss-shown-back — an agent's name, a saved payee's name and an invoice's customer and line, each carrying an event
@@ -400,6 +403,121 @@ export function xssShownBack(): Scenario {
         }
       }
       return done(wrong, `${shown.map((s) => s.field).join(', ') || 'no field'} shown on ${[...new Set(shown.map((s) => s.screen))].join(', ') || 'no screen'} with nothing run`)
+    },
+  }
+}
+
+const ENROL_PAY_ULXC = 200_000
+
+/** How a scenario sends the web app's own POST to the BFF: `path` under /api, as the signed-in owner. */
+export type Post = (ctx: ScenarioCtx, path: string, body: unknown) => Promise<{ status: number; text: string }>
+
+/** The nightly's way: from the owner's signed-in browser, as the page's own fetch would. */
+export const throughApp: Post = async (ctx, path, body) => {
+  const origin = new URL(ctx.app.page.url()).origin
+  const r = await ctx.app.page.request.post(`${origin}${path}`, { headers: { Origin: origin }, data: body ?? {} })
+  return { status: r.status(), text: await r.text() }
+}
+
+/**
+ * B50.22 — a second passkey is signed by one the workspace has (Lens B50.20). Through the web app's own BFF calls: the
+ * owner registers passkey A, free as the first; passkey B, sent with no signature, is refused, and B's signature over an
+ * agent's held payment is refused too — the approval row stays pending and the payee's statement empty. B signed by A
+ * over B's own challenge registers, and B then approves: the row reads approved and the payment, sent again, lands.
+ */
+export function passkeyEnrolSigned(post: Post = throughApp): Scenario {
+  return {
+    id: 'passkey-enrol-signed',
+    owner: 'talyvor-lens',
+    own: true,
+    agents: 2,
+    feature: 'Agent Wallets',
+    items: ['B50.22'],
+    title: "with a passkey registered, a second one with no signature is refused and cannot approve an agent's payment; signed by the first, " +
+      "it registers and its approval pays: the approval row and the payee's statement",
+    run: async (ctx) => {
+      const { lens } = ctx.env
+      const user = ctx.app.user
+      const wrong: string[] = []
+      const bff = async <T>(path: string, body: unknown, note: string): Promise<{ status: number; value: T }> => {
+        const { status, text } = await post(ctx, path, body)
+        ctx.evidence.push({ note, answer: `${status} ${text.slice(0, 300)}` })
+        let value = {} as T
+        try { value = JSON.parse(text) as T } catch { /* a refusal's body is shown in the evidence */ }
+        return { status, value }
+      }
+      type Challenge = { challenge: string; rp_id: string; credential_ids?: string[] | null }
+      const challenge = async (why: string) => {
+        const c = await bff<Challenge>('/api/agents/passkeys/challenge', {}, `the owner asks to register a passkey: ${why}`)
+        if (c.status !== 200 || !c.value.challenge) throw new Error(`the passkey challenge answered ${c.status}`)
+        return c.value
+      }
+      const listed = async (): Promise<{ credential_id: string }[]> => {
+        const got = await lens.act<{ passkeys: { credential_id: string }[] | null }>(user, 'GET', '/v1/workspaces/{ws}/agents/passkeys', undefined)
+        if (!got.ok) throw new Error(`listing the passkeys answered ${said(got)}`)
+        return got.value.passkeys ?? []
+      }
+
+      const c1 = await challenge('the first')
+      const a = softPasskey(c1.rp_id)
+      const b = softPasskey(c1.rp_id)
+      const first = await bff('/api/agents/passkeys', a.register(c1.challenge, 'Nightly enrol A'), 'the owner registers passkey A, the first')
+      if (first.status !== 201) throw new Error(`the first passkey, free, answered ${first.status}`)
+
+      const c2 = await challenge('a second, B')
+      if (!(c2.credential_ids ?? []).includes(a.credentialID)) wrong.push(`the challenge for a second passkey lists ${JSON.stringify(c2.credential_ids)}, not A to sign with`)
+      const unsigned = await bff('/api/agents/passkeys', b.register(c2.challenge, 'Nightly enrol B, unsigned'), 'passkey B with no signature')
+      if (!refused(unsigned.status)) wrong.push(`passkey B with no signature answered ${unsigned.status}, not a refusal`)
+      if ((await listed()).some((k) => k.credential_id === b.credentialID)) wrong.push('passkey B, sent with no signature, is listed on the workspace')
+
+      // An agent above its approval amount pays another; B tries to approve it.
+      const payer = await lens.createAgent(user, `Enrol payer ${RUN_SALT}`)
+      const payee = await lens.createAgent(user, `Enrol payee ${RUN_SALT}`)
+      const book = await lens.agentBook(user)
+      if (book.unallocated_ulxc < ENROL_PAY_ULXC * 2) throw new CannotTest(`the workspace has ${book.unallocated_ulxc} µLXC free, under the ${ENROL_PAY_ULXC * 2} µLXC its agent is funded`)
+      await lens.fundAgent(user, payer.id, ENROL_PAY_ULXC * 2)
+      const ruled = await lens.act(user, 'PUT', `/v1/workspaces/{ws}/agents/${payer.id}/rules`, { approval_above_ulxc: ENROL_PAY_ULXC / 2 })
+      if (!ruled.ok) throw new Error(`setting ${payer.name}'s approval amount answered ${said(ruled)}`)
+      const k = await lens.act<{ key: string }>(user, 'POST', `/v1/workspaces/{ws}/agents/${payer.id}/keys`, { name: 'passkey-enrol-signed' })
+      if (!k.ok) throw new Error(`issuing ${payer.name} a key answered ${said(k)}`)
+      const memo = `enrol signed ${RUN_SALT}`
+      const pay = async (note: string) => {
+        const got = await lens.payAsAgent(k.value.key, user.workspaceID, payer.id, payee.id, ENROL_PAY_ULXC, memo)
+        ctx.evidence.push({ note: `${payer.name} pays ${ENROL_PAY_ULXC} µLXC: ${note}`, answer: said(got) })
+        return got
+      }
+      await pay('held for a person')
+      const held = (await lens.agentApprovals(user)).find((x) => x.agent_id === payer.id && x.memo === memo)
+      if (held?.status !== 'pending') throw new Error(`a payment above the approval amount was not held: its approval is ${held?.status ?? 'missing'}`)
+      const row = async () => (await lens.agentApprovals(user)).find((x) => x.id === held.id)
+      const approveWith = async (key: ReturnType<typeof softPasskey>, note: string) => {
+        const ch = await bff<{ challenge: string }>(`/api/agents/approvals/${held.id}/challenge`, {}, `the approval's challenge, for ${note}`)
+        return bff(`/api/agents/approvals/${held.id}/approve`, { assertion: key.assert(ch.value.challenge ?? '') }, `approve, signed by ${note}`)
+      }
+      const byUnsigned = await approveWith(b, 'the refused passkey B')
+      if (!refused(byUnsigned.status)) wrong.push(`an approval signed by the refused passkey B answered ${byUnsigned.status}, not a refusal`)
+      const after = await row()
+      if (after?.status !== 'pending') wrong.push(`after B's signature, the approval row reads ${after?.status ?? 'missing'}, not pending`)
+      const early = await pay('sent again after B tried to approve')
+      if (early.ok) wrong.push(`the payment, sent again after B tried to approve, was paid: ${said(early)}`)
+      const before = (await lens.agentLines(user, payee.id)).map((l) => l.amount_ulxc)
+      if (before.length > 0) wrong.push(`${payee.name}'s statement holds ${JSON.stringify(before)} before any approval, not nothing`)
+
+      // The control: B signed by A over B's own challenge registers, and then approves.
+      const c3 = await challenge('B again, signed by A')
+      const signed = await bff('/api/agents/passkeys', { ...b.register(c3.challenge, 'Nightly enrol B'), assertion: a.assert(c3.challenge) }, 'passkey B signed by A')
+      if (signed.status !== 201) throw new Error(`passkey B signed by A over its own challenge answered ${signed.status}`)
+      const byB = await approveWith(b, 'passkey B, registered')
+      if (byB.status !== 200) wrong.push(`an approval signed by the registered passkey B answered ${byB.status}`)
+      const approved = await row()
+      if (approved?.status !== 'approved') wrong.push(`after B, registered, approved, the approval row reads ${approved?.status ?? 'missing'}, not approved`)
+      const paid = await pay('sent again once approved')
+      if (!paid.ok) wrong.push(`the payment, approved by B, sent again was refused: ${said(paid)}`)
+      const into = (await lens.agentLines(user, payee.id)).map((l) => l.amount_ulxc)
+      ctx.evidence.push({ note: `${payee.name}'s postings: ${JSON.stringify(into)}` })
+      if (into.join() !== String(ENROL_PAY_ULXC)) wrong.push(`${payee.name}'s statement holds ${JSON.stringify(into)}, not the one approved ${ENROL_PAY_ULXC}`)
+      return done(wrong, `passkey B with no signature refused and not listed; its approval refused, the row pending and ${payee.name}'s statement empty; ` +
+        `signed by A, B registered, approved the row and the payment landed once (${ENROL_PAY_ULXC} µLXC)`)
     },
   }
 }

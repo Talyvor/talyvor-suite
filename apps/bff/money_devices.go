@@ -11,7 +11,7 @@ import (
 //
 //	POST /api/money/devices/challenge                the one-time challenge the phone signs and binds its attestation to
 //	GET  /api/money/devices                          the workspace's device keys, revoked ones included
-//	POST /api/money/devices {platform, name, public_key, challenge, signature, attestation}   keep the phone's key
+//	POST /api/money/devices {platform, name, public_key, challenge, signature, attestation, assertion?}   keep the phone's key
 //	POST /api/money/devices/{id}/revoke              its signatures are refused from now on
 //	POST /api/money/devices/{id}/push-token {push_token}   the phone's APNs or FCM token ("" removes it)
 //
@@ -40,6 +40,8 @@ func (a *app) handleMoneyDevices(w http.ResponseWriter, r *http.Request, t tenan
 			Challenge   string `json:"challenge"`
 			Signature   string `json:"signature"`
 			Attestation string `json:"attestation"`
+			// B50.22: once the workspace has a key, one of them signs challenge (Lens B50.20).
+			Assertion *passkeyAssertion `json:"assertion,omitempty"`
 		}
 		// An App Attest object or an Android certificate chain, base64url, runs to a few kilobytes.
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
