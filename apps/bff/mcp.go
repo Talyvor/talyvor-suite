@@ -120,9 +120,9 @@ func mcpByID(method, path, arg, suffix string) func(tenant, oauthGrant, mcpArgs,
 // The items go up as the assistant sent them, so Lens refuses any bank detail among them and any field it does not know.
 func mcpPrepare(items func(mcpArgs) any) func(tenant, oauthGrant, mcpArgs, json.RawMessage) (lensCall, error) {
 	return func(_ tenant, g oauthGrant, a mcpArgs, _ json.RawMessage) (lensCall, error) {
-		key := a.str("idempotency_key")
-		if key == "" || len(key) > 128 {
-			return lensCall{}, fmt.Errorf("%w: idempotency_key is required, at most 128 characters", errMCPArgs)
+		key, err := mcpIdempotencyKey(a)
+		if err != nil {
+			return lensCall{}, err
 		}
 		// UPSTREAM-BINDS-ONLY lensPaymentRequestBody: agent_id
 		body, err := json.Marshal(map[string]any{"client": "mcp:" + g.ClientID, "items": items(a)})
@@ -130,7 +130,32 @@ func mcpPrepare(items func(mcpArgs) any) func(tenant, oauthGrant, mcpArgs, json.
 	}
 }
 
+func mcpIdempotencyKey(a mcpArgs) (string, error) {
+	key := a.str("idempotency_key")
+	if key == "" || len(key) > 128 {
+		return "", fmt.Errorf("%w: idempotency_key is required, at most 128 characters", errMCPArgs)
+	}
+	return key, nil
+}
+
 func mcpOneItem(a mcpArgs) any { return []mcpArgs{a.without("idempotency_key")} }
+
+// mcpBillsPay is B41.102's pay all due (Lens POST /v1/money/bills/pay) judged as this assistant: the named bills, or every
+// bill due when bill_ids is left out, as one payment request the person approves once. An empty list is refused rather than
+// read as every bill.
+func mcpBillsPay(_ tenant, g oauthGrant, a mcpArgs, _ json.RawMessage) (lensCall, error) {
+	key, err := mcpIdempotencyKey(a)
+	if err != nil {
+		return lensCall{}, err
+	}
+	var ids []string
+	if raw, named := a["bill_ids"]; named && (json.Unmarshal(raw, &ids) != nil || len(ids) == 0) {
+		return lensCall{}, fmt.Errorf("%w: bill_ids is a list of bill ids from bills_due; leave it out to pay every bill due", errMCPArgs)
+	}
+	// UPSTREAM-BINDS-ONLY lensBillsPayBody: none
+	body, err := json.Marshal(map[string]any{"client": "mcp:" + g.ClientID, "bill_ids": ids})
+	return lensCall{method: http.MethodPost, path: "/v1/money/bills/pay", idempotencyKey: key, body: body}, err
+}
 
 var (
 	mcpStr      = map[string]any{"type": "string"}
@@ -290,6 +315,13 @@ var mcpTools = []mcpTool{
 			"type": "object", "properties": mcpItemArgs, "required": []string{"payee_id", "currency", "amount_minor"}}}}),
 		required: []string{"idempotency_key", "items"},
 		call:     mcpPrepare(func(a mcpArgs) any { return a["items"] })},
+	{name: "prepare_bills_payment", title: "Prepare paying the bills due for approval", scope: "payments:prepare", kind: mcpSends,
+		description: "Prepares paying the bills due, each to its saved payee at its amount, as one request the person approves once in Talyvor. " +
+			"Leave bill_ids out to pay every bill due; a bill whose supplier is not a saved payee is shown but not paid. It pays nothing.",
+		props: withIdemKey(map[string]any{"bill_ids": map[string]any{"type": "array", "minItems": 1, "items": mcpStr,
+			"description": "Bills' ids, from bills_due. Left out: every bill due."}}),
+		required: []string{"idempotency_key"},
+		call:     mcpBillsPay},
 	{name: "request_marketplace_purchase", title: "Prepare a marketplace purchase for approval", scope: "payments:prepare", kind: mcpSends,
 		description: "Prepares the purchase of a marketplace listing at its price as a request the person approves in Talyvor. It pays nothing.",
 		props:       withIdemKey(map[string]any{"listing_id": mcpStr, "reference": mcpItemArgs["reference"]}),

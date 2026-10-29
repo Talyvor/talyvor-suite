@@ -25,6 +25,7 @@
     { "name": "prepare_payment", "title": "Prepare a payment for approval", "kind": "send" },
     { "name": "prepare_payment_to_contact", "title": "Prepare a payment to a contact for approval", "kind": "send" },
     { "name": "prepare_batch", "title": "Prepare payments for approval", "kind": "send" },
+    { "name": "prepare_bills_payment", "title": "Prepare paying the bills due for approval", "kind": "send" },
     { "name": "request_marketplace_purchase", "title": "Prepare a marketplace purchase for approval", "kind": "send" },
     { "name": "cancel_request", "title": "Cancel a payment request", "kind": "send" }
   ]

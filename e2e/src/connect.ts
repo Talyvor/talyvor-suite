@@ -252,18 +252,22 @@ function mcpTools(ctx: ScenarioCtx, origin: string, token: string) {
 //     the statement the passkey would sign names only the first. B40.36: with one bill on Lens (its bank details printed
 //     on it), bills_due lists that one bill and its total and never the bank details, and safe_to_spend counts it in the
 //     company's GBP bills due. The money: no payment out, every account's test money and the workspace's ledger exactly as they were
-//     before the assistant connected.
+//     before the assistant connected. B45.39: a second bill, from a saved payee, arrives; bills_due lists both, and
+//     prepare_bills_payment with no bill_ids prepares one request pending approval for both, the stranger's blocked. The
+//     person's one passkey approval then posts exactly one payment out, to that payee at the bill's amount with its invoice
+//     number, the company's account down by it; the same approval again is refused 409 and pays nothing.
 export function connectMCP(): Scenario {
   return {
     id: 'connect-mcp',
     owner: 'talyvor-suite',
     own: true,
     agents: 1,
-    items: ['B40.7', 'B40.35', 'B40.9', 'B40.36'],
+    items: ['B40.7', 'B40.35', 'B40.9', 'B40.36', 'B45.39'],
     feature: 'Talyvor Connect',
     title: 'an assistant on /mcp lists the tools with their annotations, reads a balance, drafts an invoice and prepares a two-payee ' +
       'batch that stays pending approval; the payee and the mandate it asks for exist only once the person saves and signs them — ' +
-      'no payment out, and the accounts and the ledger unchanged',
+      'no payment out, and the accounts and the ledger unchanged; then the bills due, prepared over /mcp as one request and approved once, ' +
+      'pay exactly the bill from a saved payee',
     run: async (ctx) => {
       const origin = new URL(ctx.app.page.url()).origin
       const lensCall = async <T>(method: string, path: string, body: unknown, note: string) => {
@@ -273,11 +277,14 @@ export function connectMCP(): Scenario {
       }
       // 1. On Lens's API: the terms, an agent with a GBP account, and two saved payees.
       const terms = await lensCall<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
-      for (const t of (terms.value?.terms ?? []).filter((x) => ['currency_accounts', 'payments_in'].includes(x.capability) && x.accepted == null)) {
+      for (const t of (terms.value?.terms ?? []).filter((x) => ['currency_accounts', 'payments_in', 'payments_out'].includes(x.capability) && x.accepted == null)) {
         const ok = await lensCall('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
         if (ok.status !== 201) return { pass: false, detail: `accepting ${t.capability}'s terms answered ${said(ok)}` }
       }
-      if ((await lensCall('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the company GBP account')).status !== 201) return { pass: false, detail: 'the company GBP account was not opened' }
+      const company = await lensCall<{ id: string }>('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the company GBP account')
+      if (company.status !== 201 || company.value === undefined) return { pass: false, detail: `the company GBP account answered ${said(company)}` }
+      const funded = await lensCall('POST', `/v1/money/accounts/${company.value.id}/test-money`, { amount_minor: 5000, idempotency_key: `e2e-${randomBytes(8).toString('hex')}` }, 'the owner puts GBP 50.00 of test money in the company account')
+      if (funded.status !== 201) return { pass: false, detail: `putting test money in the company GBP account answered ${said(funded)}` }
       const agent = await lensCall<{ id: string }>('POST', '/v1/workspaces/{ws}/agents', { name: `MCP agent ${randomBytes(3).toString('hex')}` }, 'an agent')
       if (agent.value?.id === undefined) return { pass: false, detail: `making an agent answered ${said(agent)}` }
       const account = await lensCall<{ id: string }>('POST', '/v1/money/accounts', { currency: 'GBP', agent_id: agent.value.id }, "the agent's GBP account")
@@ -424,10 +431,76 @@ export function connectMCP(): Scenario {
       if (after.accounts !== before.accounts || after.payments !== before.payments || after.ledger !== before.ledger) {
         wrong.push(`money moved: accounts ${before.accounts} → ${after.accounts}, payments out ${before.payments} → ${after.payments}, ledger rows ${before.ledger} → ${after.ledger}`)
       }
+
+      // 5. B45.39 — pay all due over /mcp. A bill from Supplier Two (the drafted mandate covers only Supplier One, so this
+      //    payment needs the person's approval), then one request for every bill due, approved once with the passkey.
+      const paid = await payAllDue(ctx, origin, tool, key, company.value.id, payees[1], billNumber)
+      if (!paid.pass) wrong.push(paid.detail)
       return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
-        : { pass: true, detail: `${listed.length} tools listed with their annotations, none that pays; the balance read, an invoice drafted, request ${pr.id} prepared for two payees pending approval, and the asked-for payee and mandate made only by Save and the passkey — no payment out, the accounts and ${after.ledger} ledger rows unchanged` }
+        : { pass: true, detail: `${listed.length} tools listed with their annotations, none that pays; the balance read, an invoice drafted, request ${pr.id} prepared for two payees pending approval, and the asked-for payee and mandate made only by Save and the passkey — no payment out, the accounts and ${after.ledger} ledger rows unchanged; ${paid.detail}` }
     },
   }
+}
+
+/**
+ * B45.39 — connect-mcp's pay all due: a bill from the saved payee `payee` joins the stranger's bill `strangerBill`; bills_due
+ * lists both, prepare_bills_payment with no bill_ids prepares one request for both with the stranger's blocked, and one
+ * passkey approval posts exactly one payment out, to `payee` at the bill's amount with its invoice number, the company
+ * account `accountID` down by it; a replay is refused 409. What happened, or what is wrong.
+ */
+async function payAllDue(ctx: ScenarioCtx, origin: string, tool: ReturnType<typeof mcpTools>['tool'], key: ReturnType<typeof softPasskey>,
+  accountID: string, payee: string, strangerBill: string): Promise<{ pass: boolean; detail: string }> {
+  const number = `MCP-PAY-${randomBytes(3).toString('hex').toUpperCase()}`
+  const AMOUNT = 1250
+  const added = await ctx.env.lens.raw(ctx.app.user.token, 'POST', '/v1/money/bills?source=photo', ['From: Nightly MCP Supplier Two Ltd', 'INVOICE',
+    `Invoice number: ${number}`, `Due date: ${new Date().toISOString().slice(0, 10)}`, 'Total due: GBP 12.50', 'Sort code: 04-00-04', 'Account number: 23456789'].join('\n'), 'text/plain')
+  ctx.evidence.push({ note: 'a second bill, from the saved payee Nightly MCP Supplier Two Ltd', answer: `${added.status} ${added.text.slice(0, 160)}` })
+  if (added.status !== 201) return { pass: false, detail: `adding the second bill answered ${added.status} ${added.text.slice(0, 160)}` }
+  interface Payment { id: string; payee_id: string; amount_minor: number; currency: string; reference: string }
+  const money = async (note: string) => {
+    const accounts = await call<{ accounts: { id: string; test_minor: number }[] | null }>(ctx, 'GET', '/v1/money/accounts')
+    const payments = await call<{ payments: Payment[] | null }>(ctx, 'GET', '/v1/money/payments')
+    const m = { held: (accounts.value?.accounts ?? []).find((a) => a.id === accountID)?.test_minor ?? -1, payments: payments.value?.payments ?? [] }
+    ctx.evidence.push({ note: `${note}: the company GBP account holds ${m.held} minor of test money; ${m.payments.length} payments out ${JSON.stringify(m.payments.map((p) => [p.reference, p.amount_minor]))}` })
+    return m
+  }
+  const due = await tool('bills_due', {})
+  const numbers = ((due.structuredContent?.bills ?? []) as { invoice_number?: string }[]).map((b) => b.invoice_number)
+  if (due.isError !== false || numbers.length !== 2 || !numbers.includes(number) || !numbers.includes(strangerBill)) return { pass: false, detail: `bills_due does not list both bills due: ${JSON.stringify(due).slice(0, 400)}` }
+  const before = await money('before paying the bills')
+
+  const prepared = await tool('prepare_bills_payment', { idempotency_key: `e2e-${randomBytes(8).toString('hex')}` })
+  type Item = { position: number; payee_id?: string; amount_minor?: number; reference?: string; decision?: string }
+  const pr = (prepared.structuredContent ?? {}) as { id?: string; status?: string; items?: Item[] }
+  const payable = (pr.items ?? []).filter((it) => it.decision !== 'blocked')
+  ctx.evidence.push({ note: `prepare_bills_payment: ${JSON.stringify(prepared).slice(0, 800)}` })
+  if (prepared.isError !== false || pr.id === undefined || pr.status !== 'pending_approval' || pr.items?.length !== 2 || payable.length !== 1 ||
+    payable[0].payee_id !== payee || payable[0].amount_minor !== AMOUNT || payable[0].reference !== number) {
+    return { pass: false, detail: `prepare_bills_payment did not prepare one request pending approval for both bills, only Supplier Two's payable: ${JSON.stringify(prepared).slice(0, 400)}` }
+  }
+  const prepaid = await money('after prepare_bills_payment')
+  if (prepaid.payments.length !== before.payments.length || prepaid.held !== before.held) return { pass: false, detail: 'prepare_bills_payment moved money before any approval' }
+
+  const post = (path: string, body: unknown) => ctx.app.page.request.post(`${origin}/api/money/payment-requests/${pr.id}/${path}`, { headers: { Origin: origin }, data: body })
+  const statement = await post('approval', { positions: [payable[0].position] })
+  const toSign = await statement.json() as { statement?: string; challenge?: string }
+  ctx.evidence.push({ note: `the statement to sign: ${statement.status()} ${String(toSign.statement).slice(0, 600)}` })
+  if (statement.status() !== 200) return { pass: false, detail: `the statement to approve the bill answered ${statement.status()} ${JSON.stringify(toSign).slice(0, 300)}` }
+  const approval = { statement: toSign.statement, assertion: key.assert(toSign.challenge ?? '') }
+  const approved = await post('approve', approval)
+  ctx.evidence.push({ note: `approve: ${approved.status()} ${(await approved.text()).slice(0, 800)}` })
+  const after = await money('after the approval')
+  const fresh = after.payments.filter((p) => !before.payments.some((b) => b.id === p.id))
+  if (approved.status() !== 200 || fresh.length !== 1 || fresh[0].payee_id !== payee || fresh[0].amount_minor !== AMOUNT || fresh[0].currency !== 'GBP' || fresh[0].reference !== number) {
+    return { pass: false, detail: `approving answered ${approved.status()} and posted ${JSON.stringify(fresh)}, not one payment of ${AMOUNT} GBP to ${payee} referenced ${number}` }
+  }
+  if (after.held !== before.held - AMOUNT) return { pass: false, detail: `the company GBP account went from ${before.held} to ${after.held} minor, not down by ${AMOUNT}` }
+  const replay = await post('approve', approval)
+  const again = await money('after the replayed approval')
+  if (replay.status() !== 409 || again.payments.length !== after.payments.length || again.held !== after.held) {
+    return { pass: false, detail: `the replayed approval answered ${replay.status()}: ${after.payments.length} → ${again.payments.length} payments out, the account ${after.held} → ${again.held} minor` }
+  }
+  return { pass: true, detail: `bills_due listed both bills, request ${pr.id} prepared for both with the stranger's blocked, and one approval paid ${fresh[0].id}: ${AMOUNT} GBP to Supplier Two referenced ${number}, the account ${before.held} → ${after.held} minor; the replay answered 409` }
 }
 
 // B40.21 — AN ASSISTANT PREPARES A BATCH OVER MCP, AND THE PERSON APPROVES IT ONCE. One scenario, once a run, on a workspace

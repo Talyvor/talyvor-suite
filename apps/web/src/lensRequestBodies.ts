@@ -978,6 +978,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payment-requests", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPaymentRequestBody",
   },
+  // B45.39 — pay all due over /mcp: the named bills, or every bill due, as one payment request (Lens B41.102).
+  {
+    route: "POST /v1/money/bills/pay",
+    file: "apps/bff/mcp.go",
+    kind: "map-literal",
+    anchor:
+      'json.Marshal(map[string]any{"client": "mcp:" + g.ClientID, "bill_ids": ids})',
+    upstreamFile: "cmd/lens/money_bills_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/bills/pay", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensBillsPayBody",
+  },
   // B40.35 — an assistant's drafted permission mandate, checked by Lens's prepare and signed by the person (Lens B40.2).
   {
     route: "POST /v1/money/permission-mandates/prepare",
