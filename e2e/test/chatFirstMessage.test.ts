@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { firstMessageVerdict } from '../src/chatFirstMessage.ts'
+import { firstMessageVerdict, stalled } from '../src/chatFirstMessage.ts'
 
 describe('the first chat message oracle (B45.3)', () => {
   it('passes a message sent within 10 seconds on both viewports with nothing unnamed', () => {
@@ -18,5 +18,10 @@ describe('the first chat message oracle (B45.3)', () => {
     expect(v.detail).toContain('on the desktop (1440 px), no first message was sent: locator.fill: Timeout')
     expect(v.detail).toContain('took 12000 ms from landing, over 10000')
     expect(v.detail).toContain('axe finds unnamed: button-name at #send')
+  })
+
+  it('takes a visit far past every bounded wait for a stalled machine, and a slow page for a slow page (B17.312)', () => {
+    expect(stalled(951_956)).toBe(true)
+    expect(stalled(10_400)).toBe(false)
   })
 })
