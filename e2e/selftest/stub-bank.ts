@@ -864,7 +864,8 @@ export class Bank {
     }
     const now = new Date()
     const from = day(url.searchParams.get('from'), new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)))
-    const to = day(url.searchParams.get('to'), now)
+    // A posting stamped in this same millisecond is already on the statement; the stub's clock is only that fine.
+    const to = day(url.searchParams.get('to'), new Date(now.getTime() + 1))
     if (from === undefined || to === undefined) return 'from and to must be RFC 3339 times or YYYY-MM-DD dates'
     const mine = this.postings.filter((p) => p.ws === ws && (agentID === undefined || p.account === `agent:${agentID}`))
     const before = mine.filter((p) => new Date(p.at) < from)
