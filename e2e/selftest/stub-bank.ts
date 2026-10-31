@@ -90,6 +90,10 @@
 // seller with earnings and no tax details and pays one whose details are complete. Its defect, beside stub-tax.ts's two:
 //   payout-hold-ignored — the payout run pays a seller who gave no tax details
 //
+// B46.24 pays a seller who saved payout details on the money layer instead (stub-earnings.ts payMarket). Its two:
+//   payout-run-ignores-money — the payout run pays such a seller by Stripe, as Lens's synthetic run did before talyvor-lens B46.25
+//   royalty-paid-as-sale     — a lineage royalty is paid out as a sale
+//
 // B28.426 adds a Chat question asked through a listing (X-Talyvor-Listing, talyvor-lens B28.186): one use of it, charged as a
 // marketplace use, the answer saying how (X-Talyvor-Listing-Charge). Its defect:
 //   chat-listing-unbilled — a question asked through a paid listing answers billed, and nothing goes on the buyer's bill
@@ -302,7 +306,7 @@ const LINEAGE_TOTAL_CAP_BPS = 5000
 interface EarningRow { use: Use; ws: string; kind: 'sale' | 'lineage'; depth: number; original: string; share: number }
 
 interface Payout {
-  id: string; ws: string; method: 'credits' | 'stripe'; month: string; gross_usd_micros: number; net_usd_micros: number; credits_ulxc: number; paid_at: string; created_at: string
+  id: string; ws: string; method: 'credits' | 'stripe' | 'money'; asset?: string; month: string; gross_usd_micros: number; net_usd_micros: number; credits_ulxc: number; paid_at: string; created_at: string
   /** B32.66 — a weekly payout's ISO week, and Stripe's fees taken from it */
   period?: string; vat_usd_micros?: number; account_fee_usd_micros?: number; payout_fee_usd_micros?: number
 }
@@ -1731,9 +1735,23 @@ export class Bank {
     if (available > 0 && this.tax.incomplete(ws) && !this.broken('payout-hold-ignored')) this.tax.withhold(ws, now)
     if (this.tax.withheld(ws)) return { withheld: true, hold: HOLD_REASON, payout: null }
     const period = isoWeekOf(new Date(now))
-    const mine = this.payouts.filter((p) => p.ws === ws && p.method === 'stripe')
+    const mine = this.payouts.filter((p) => p.ws === ws && p.method !== 'credits')
     if (available < PAYOUT_MINIMUM_USD_MICROS || mine.some((p) => p.period === period)) return { withheld: false, payout: null }
     const grossCents = Math.floor(available / 10_000)
+    // B46.24 — a seller with payout details on the money layer is paid there, without Stripe's fees (Lens B46.22); its royalty part is
+    // what lineage rows make of its released earnings. STUB_BREAK=payout-run-ignores-money pays by Stripe anyway, as the run did before.
+    const asset = this.broken('payout-run-ignores-money') ? undefined : this.earningsPayouts.assetOf(ws)
+    if (asset !== undefined) {
+      const rows = this.rowsFor(ws).filter((r) => r.use.released_at !== undefined && !this.reversed(r))
+      const all = rows.reduce((n, r) => n + r.share, 0)
+      const lineage = this.broken('royalty-paid-as-sale') ? 0 : rows.filter((r) => r.kind === 'lineage').reduce((n, r) => n + r.share, 0)
+      const p: Payout = { id: id('mpo_'), ws, method: 'money', asset, month: now.slice(0, 7), period, gross_usd_micros: grossCents * 10_000, vat_usd_micros: 0,
+        account_fee_usd_micros: 0, payout_fee_usd_micros: 0, net_usd_micros: grossCents * 10_000, credits_ulxc: 0, paid_at: now, created_at: now }
+      this.payouts.unshift(p)
+      this.earningsPayouts.payMarket(ws, p.id, period, grossCents, all > 0 ? Math.floor((grossCents * lineage) / all) : 0, asset)
+      const { ws: _w, ...out } = p
+      return { withheld: false, payout: out }
+    }
     const accountCents = mine.some((p) => p.month === now.slice(0, 7)) ? 0 : STRIPE_ACCOUNT_FEE_CENTS
     // B32.97 — to a seller who agreed to self-billing the payout is also a self-billed invoice, the VAT on it paid on top: none
     // while self-billing VAT is under review.

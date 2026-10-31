@@ -80,6 +80,7 @@ import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
 import { roomEarnings } from './roomEarnings.ts'
+import { marketPayouts } from './marketPayouts.ts'
 import { agentCards } from './agentCards.ts'
 import { dailyBriefing } from './dailyBriefing.ts'
 import { agentWalletKinds } from './agentWalletKinds.ts'
@@ -5453,6 +5454,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B46.21 — a Room's earnings paid out on the sandbox, once a run, on workspaces of its own: £10.00 split equally among three members
   // is £3.34/£3.33/£3.33 in earnings_payout rows, two completed and the one without verified details held; again, nothing new.
   if (i === 3) list.push(roomEarnings())
+  // B46.24 — a marketplace seller and a lineage royalty paid out on the money layer, once a run, on workspaces of their own: the weekly
+  // run pays the seller's sale and the original's royalty as USD earnings_payout rows under market:<week>, the pending seller held.
+  if (i === 4) list.push(marketPayouts())
   // B46.20 — an agent's single-use cards on the sandbox, once a run, on a workspace of its own: its key asks for three capped cards to
   // book a trip; one approval issues all three, locked and closing within 24 hours, with one card_hold of the total; again, nothing more.
   if (i === 0) list.push(agentCards())

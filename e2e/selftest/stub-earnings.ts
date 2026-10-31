@@ -7,6 +7,10 @@
 //   GET  /v1/money/earnings-payouts the payouts the workspace made or was paid, newest first
 //
 // STUB_BREAK=room-payout-twice pays the same payout again as new payouts, past what the wallet holds — a defect room-earnings-payout must FAIL on.
+//
+// B46.24 — and a marketplace seller's weekly payout paid there (Lens B46.22): stub-bank.ts's payout run asks assetOf whether the
+// seller saved payout details, and payMarket pays it from Talyvor's own workspace, its royalty part as a royalty and the rest as a
+// sale, both under market:<ISO week>.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
@@ -32,6 +36,25 @@ export class EarningsDesk {
     this.body = body
     this.broken = broken
     this.wallet = wallet
+  }
+
+  /** B46.24 — the asset `ws` is paid in on the money layer, its verified details first, then USD, GBP, EUR; undefined with none. */
+  assetOf(ws: string): string | undefined {
+    const mine = ['USD', 'GBP', 'EUR'].map((a) => this.details.get(`${ws} ${a}`)).filter((d) => d !== undefined)
+    return (mine.find((d) => d.status === 'verified') ?? mine[0])?.asset
+  }
+
+  /** B46.24 — market payout `payout` of `minor` paid to `ws` in `currency`: `royalty` of it as a royalty, the rest as a sale; held without verified details. */
+  payMarket(ws: string, payout: string, period: string, minor: number, royalty: number, currency: string): void {
+    const verified = this.details.get(`${ws} ${currency}`)?.status === 'verified'
+    const now = new Date().toISOString()
+    for (const [kind, amount] of [['sale', minor - royalty], ['royalty', royalty]] as const) {
+      if (amount === 0) continue
+      const id = `mpo_${randomUUID()}`
+      this.payouts.push({ id, workspace_id: 'ws_talyvor', agent_id: '', kind, source: `market:${period}`, agreement: `market_payouts:${payout}`, recipient_workspace_id: ws,
+        amount_minor: amount, currency, funding: 'test', status: verified ? 'completed' : 'held', partner: verified ? 'sandbox' : '', partner_ref: verified ? `sbx_${id}` : '',
+        detail: verified ? '' : `held until ${ws} has verified ${currency} payout details`, created_at: now })
+    }
   }
 
   /** The earnings routes on workspace `ws`'s key: true when `path` was one of them. */

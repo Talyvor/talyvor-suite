@@ -159,12 +159,12 @@ export function lineage(seed: number): Scenario {
   }
 }
 
-/** An author publishes a listing — C with its rent — approved if the review holds it: its id, and C's rent offer's id. */
-async function publish(ctx: ScenarioCtx, who: SyntheticUser, name: string, l: { title: string; artifact: object; parents?: object[]; rent?: boolean }):
+/** An author publishes a listing — C with its rent, at `price` µUSD when given — approved if the review holds it: its id, and C's rent offer's id. */
+export async function publish(ctx: ScenarioCtx, who: SyntheticUser, name: string, l: { title: string; artifact: object; parents?: object[]; rent?: boolean; price?: number }):
   Promise<{ id: string; rent: string } | string> {
   const { lens } = ctx.env
   const offers: MarketOffer[] = [{ kind: 'per_use', licence: 'commercial', price_usd_micros: PER_USE_USD_MICROS }]
-  if (l.rent === true) offers.push({ kind: 'rent', licence: 'commercial', price_usd_micros: RENT_USD_MICROS, period_days: RENT_DAYS })
+  if (l.rent === true) offers.push({ kind: 'rent', licence: 'commercial', price_usd_micros: l.price ?? RENT_USD_MICROS, period_days: RENT_DAYS })
   const pub = await lens.act<Listing>(who, 'POST', '/v1/workspaces/{ws}/marketplace/listings', { kind: 'prompt', title: l.title, description: '', visibility: 'public',
     artifact: l.artifact, changelog: '', offers, parents: l.parents ?? [] })
   ctx.evidence.push({ note: `${name} publishes "${l.title}"${(l.parents ?? []).length > 0 ? ', declaring its parent' : ''}`, answer: said(pub) })
@@ -182,7 +182,7 @@ async function publish(ctx: ScenarioCtx, who: SyntheticUser, name: string, l: { 
 }
 
 /** An author lets others remix its listing at a royalty of `bps`: undefined once Lens says so. */
-async function terms(ctx: ScenarioCtx, who: SyntheticUser, name: string, listing: string, bps: number): Promise<string | undefined> {
+export async function terms(ctx: ScenarioCtx, who: SyntheticUser, name: string, listing: string, bps: number): Promise<string | undefined> {
   const t = await ctx.env.lens.act<{ remix_policy: string; remix_share_bps: number }>(who, 'PUT', `/v1/workspaces/{ws}/marketplace/listings/${listing}/remix-terms`,
     { remix_policy: 'royalty', remix_share_bps: bps })
   ctx.evidence.push({ note: `${name} lets others remix it at a ${bps} bps royalty`, answer: said(t) })
@@ -190,7 +190,7 @@ async function terms(ctx: ScenarioCtx, who: SyntheticUser, name: string, listing
 }
 
 /** An author accepts the remix licence of `parent`'s version 1: undefined when its grant locks the parent's share and opens the artifact. */
-async function remix(ctx: ScenarioCtx, who: SyntheticUser, name: string, parentName: string, parent: string, bps: number): Promise<string | undefined> {
+export async function remix(ctx: ScenarioCtx, who: SyntheticUser, name: string, parentName: string, parent: string, bps: number): Promise<string | undefined> {
   const r = await ctx.env.lens.act<Remix>(who, 'POST', `/v1/workspaces/{ws}/marketplace/listings/${parent}/remix`, { version: 1 })
   ctx.evidence.push({ note: `${name} accepts ${parentName}'s remix licence`, answer: said(r) })
   return r.ok && r.value.grant?.share_bps === bps && r.value.artifact !== null && r.value.artifact !== undefined
