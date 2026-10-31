@@ -11,6 +11,11 @@ import { fail } from './bank.ts'
 import { madeUpAnswer, type Scenario, type Verdict } from './scenarios.ts'
 
 export const FIRST_MESSAGE_MS = 10_000
+/** Every wait in a visit is bounded by what is left of FIRST_MESSAGE_MS, so a visit far longer than that means the run's
+ *  own machine stalled, not the page (B17.312: on 31 Oct, swap 79% full, a 9.4 s fill returned after 951 s). Such a
+ *  visit is made once more; two say nothing about Chat, so the scenario errors rather than fails. */
+export const STALLED_MS = 4 * FIRST_MESSAGE_MS
+export const stalled = (tookMs: number): boolean => tookMs > STALLED_MS
 export const VIEWPORTS = [
   { name: 'desktop', width: 1440, height: 900, phone: false },
   { name: 'phone', width: 390, height: 844, phone: true },
@@ -57,10 +62,11 @@ export function chatFirstMessage(): Scenario {
       const { dir, link } = ctx.env.shots
       await mkdir(dir, { recursive: true })
       const landed: Landed[] = []
-      for (const v of VIEWPORTS) {
+      for (const v of VIEWPORTS) for (let visit = 1; ; visit++) {
         // The session only: no localStorage, so Chat opens as it does the first time. CSP bypassed for axe's script alone.
         const context = await browser.newContext({ viewport: { width: v.width, height: v.height }, isMobile: v.phone, hasTouch: v.phone, bypassCSP: true })
         const l: Landed = { viewport: `${v.name} (${v.width} px)`, unlabelled: [] }
+        let took = 0
         try {
           await context.addCookies(cookies)
           const page = await context.newPage()
@@ -93,6 +99,7 @@ export function chatFirstMessage(): Scenario {
           } catch (e) {
             l.why = `${(e as Error).message.split('\n')[0]} (${Date.now() - t0} ms after landing)`
           }
+          took = Date.now() - t0
           ctx.evidence.push({ note: `the ${l.viewport}: ${l.ms === undefined ? l.why : `"${message}" sent and shown ${l.ms} ms after landing on /chat`}` })
           const file = `chat-first-message-${v.width}px-user${ctx.app.user.index}.png`
           await page.screenshot({ path: join(dir, file) }).catch(() => undefined)
@@ -106,7 +113,13 @@ export function chatFirstMessage(): Scenario {
         } finally {
           await context.close().catch(() => undefined)
         }
-        landed.push(l)
+        if (!stalled(took)) {
+          landed.push(l)
+          break
+        }
+        const why = `visit ${visit} took ${took} ms though every wait in it was bounded by ${FIRST_MESSAGE_MS} ms: this machine stalled, not the page`
+        ctx.evidence.push({ note: `the ${l.viewport}: ${why}` })
+        if (visit === 2) throw new Error(`on the ${l.viewport}, ${why}, twice`)
       }
       return firstMessageVerdict(landed)
     },

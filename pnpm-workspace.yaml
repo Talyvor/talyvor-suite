@@ -44,3 +44,7 @@ auditConfig:
     - GHSA-xhq7-xmqj-769h
     - GHSA-wjr9-j795-jxcr
     - GHSA-333x-w4r6-6crp
+    # B17.312 — minimatch <11.0.1 (via eslint, lint-time only, on the repo's own globs): eslint 9 takes minimatch ^3 and
+    # ^10, and the one fix, 11.0.1 of 27 Oct 2026, is a major above both and younger than minimumReleaseAge. Drop this
+    # line once eslint takes minimatch >=11.0.1.
+    - GHSA-g3hv-75wg-m249
