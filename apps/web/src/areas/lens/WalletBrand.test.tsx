@@ -1,7 +1,7 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
-import { populatedBff, settleQueries } from '../../populatedBff'
+import { bodyFor, populatedBff, settleQueries } from '../../populatedBff'
 
 // B29.9 — Agent Wallets, Approvals, Statements, Royalties, Ledger and Spend in the brand, read off the populated
 // fixture: one teal action per screen, cards on the raised plane, every amount on the figure face, status pills.
@@ -27,6 +27,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks()
   document.body.replaceChildren()
+  queryClient.clear()
 })
 
 describe('the wallet screens in the brand', () => {
@@ -58,6 +59,22 @@ describe('the wallet screens in the brand', () => {
       }
     }
     if (['/agents', '/approvals', '/statements'].includes(address)) expect(amounts, 'no LXC amount was read').toBeGreaterThan(0)
+  })
+
+  it('fills only the first Approve teal when two requests wait, and only Approve 2 once both are picked (B17.325)', async () => {
+    const [first] = (bodyFor('/api/agents/approvals') as { approvals: Array<Record<string, unknown>> }).approvals
+    vi.restoreAllMocks()
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    populatedBff((impl) => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation(impl as never)
+    }, { '/api/agents/approvals': { approvals: [first, { ...first, id: 'apr_2', memo: 'November invoice' }] } })
+    queryClient.clear()
+    const main = await at('/approvals')
+    expect(within(main).getAllByRole('button', { name: 'Approve' })).toHaveLength(2)
+    expect(primaries(main)).toEqual(['Approve'])
+
+    fireEvent.click(within(main).getByRole('checkbox', { name: /Select all 2/ }))
+    expect(primaries(main)).toEqual(['Approve 2'])
   })
 
   it('shows each state as a pill: a waiting approval, settled statement lines, settled and held royalties', async () => {
