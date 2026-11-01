@@ -10,7 +10,7 @@ import type { Scenario } from './scenarios.ts'
 
 /** talyvor-lens internal/status contract_test.go's documentedKeys, as README.md's Status section lists them. */
 export const DOCUMENTED_KEYS = [
-  'status', 'version', 'uptime_hours', 'updated_at',
+  'status', 'version', 'uptime_hours', 'updated_at', 'card_payments',
   'components', 'components[].name', 'components[].status', 'components[].latency_ms', 'components[].measured',
   'components[].message', 'components[].checked_at',
   'providers', 'providers[].name', 'providers[].status', 'providers[].latency_ms', 'providers[].checked_at',
