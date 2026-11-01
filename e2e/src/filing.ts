@@ -17,7 +17,7 @@ import { type B28Report, untestedMarker } from './b28.ts'
 import { ASK_MARKER, type CodeReport } from './code.ts'
 import { type EdgeReport, edgeMarker, failedNow } from './edge.ts'
 import { type HostileReport, hostileMarker } from './hostile.ts'
-import { KEY_SHAPE } from './injection.ts'
+import { withheld } from './withheld.ts'
 import { networkDrop } from './oracles.ts'
 import { isSecurity, type ReportedRun } from './report.ts'
 import { scenarioOwners } from './scenarios.ts'
@@ -164,7 +164,7 @@ export function itemsFor(buildMd: string, run: ReportedRun, reportFile: string, 
     const id = `B50.${s50++}`
     const repo = owners.get(scenario) ?? NO_OWNER
     // Never a key in BUILD.md: what the scenario saw is described, any key-shaped string in it taken out.
-    const said = oneLine(first.detail).replace(new RegExp(KEY_SHAPE.source, 'g'), '<a key, withheld>')
+    const said = withheld(oneLine(first.detail))
     out.security += [
       '',
       `## ${id} — SECURITY: ${oneLine(first.title).slice(0, 200)}`,
@@ -260,9 +260,9 @@ export async function fileItems(path: string, run: ReportedRun, reportFile: stri
   const filing = itemsFor(buildMd, run, reportFile)
   if (filing.security !== '') {
     // Re-read: B50 must be put in the file as it is now, not as it was read, or another session's write is lost.
-    await writeFile(path, underB50(await readFile(path, 'utf8'), filing.security))
+    await writeFile(path, underB50(await readFile(path, 'utf8'), withheld(filing.security)))
   }
-  if (filing.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + filing.append)
+  if (filing.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + withheld(filing.append))
   return filing
 }
 
@@ -318,7 +318,7 @@ export async function fileEdgeItems(path: string, edge: EdgeReport, reportFile: 
     return undefined
   }
   const f = edgeItemsFor(buildMd, edge, reportFile)
-  if (f.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + f.append)
+  if (f.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + withheld(f.append))
   const item = new Map([...f.filed, ...f.covered.map((c) => ({ id: c.by, scenario: c.scenario }))].map((x) => [x.scenario, x.id]))
   for (const w of edge.workflows.filter(failedNow)) w.item = item.get(edgeMarker(w))
   return f
@@ -361,7 +361,7 @@ export async function fileCodeItems(path: string, code: CodeReport, reportFile: 
     return undefined
   }
   const f = codeItemsFor(buildMd, code, reportFile)
-  if (f.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + f.append)
+  if (f.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + withheld(f.append))
   code.item = f.filed[0]?.id ?? f.covered[0]?.by
   return f
 }
@@ -412,7 +412,7 @@ export async function fileHostileItems(path: string, hostile: HostileReport, rep
     return undefined
   }
   const f = hostileItemsFor(buildMd, hostile, reportFile)
-  if (f.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + f.append)
+  if (f.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + withheld(f.append))
   const item = new Map([...f.filed, ...f.covered.map((c) => ({ id: c.by, scenario: c.scenario }))].map((x) => [x.scenario, x.id]))
   for (const v of hostile.prs) v.item = item.get(hostileMarker(v))
   return f
@@ -459,7 +459,7 @@ export async function fileB28Items(path: string, b28: B28Report, reportFile: str
     return undefined
   }
   const f = b28ItemsFor(buildMd, b28, reportFile)
-  if (f.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + f.append)
+  if (f.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + withheld(f.append))
   const item = new Map([...f.filed, ...f.covered.map((c) => ({ id: c.by, scenario: c.scenario }))].map((x) => [x.scenario, x.id]))
   for (const x of b28.features.filter((y) => y.state === 'no scenario')) x.item = item.get(untestedMarker(x))
   return f
