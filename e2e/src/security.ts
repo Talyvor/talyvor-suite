@@ -370,13 +370,19 @@ export function xssShownBack(): Scenario {
       }
       const agent = await call('POST', '/v1/workspaces/{ws}/agents', { name: xssName(marker, 'agent name') }, 'an agent named with the payload')
       kept('the agent name', agent, '/agents')
+      // A GBP account needs its terms accepted first: without them the invoice was refused for its currency, not its payload.
+      const terms = await call<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
+      for (const t of (terms.ok ? terms.value.terms ?? [] : []).filter((x) => ['currency_accounts', 'payments_in', 'payments_out'].includes(x.capability) && x.accepted == null)) {
+        await call('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
+      }
       await call('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the owner opens a GBP account')
       const payee = await call('POST', '/v1/money/payees', { name: xssName(marker, 'payee name'), country: 'GB', sort_code: '040004', account_number: '35792462' },
         'a payee named with the payload')
       kept('the payee name', payee, '/money/pay')
-      const accounts = await call<{ accounts: { id: string }[] | null }>('GET', '/v1/money/accounts', undefined, 'the accounts')
+      const accounts = await call<{ accounts: { id: string; currency: string; purpose: string }[] | null }>('GET', '/v1/money/accounts', undefined, 'the accounts')
+      const gbp = (accounts.ok ? accounts.value.accounts ?? [] : []).find((a) => a.currency === 'GBP' && a.purpose !== 'agent')
       const invoice = await call('POST', '/v1/money/invoices', {
-        account_id: accounts.ok ? accounts.value.accounts?.[0]?.id : '', customer_name: xssName(marker, 'invoice customer'),
+        account_id: gbp?.id ?? '', customer_name: xssName(marker, 'invoice customer'),
         lines: [{ description: xssName(marker, 'invoice line'), quantity: 1, unit_amount_minor: 100, vat_rate_bps: 0 }],
         due_date: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
       }, 'an invoice whose customer and line carry the payload')
@@ -391,12 +397,15 @@ export function xssShownBack(): Scenario {
         })
         try {
           // A screen that never shows the field proves nothing: an ERROR, not a pass.
-          await page.getByText(marker).first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {
-            throw new Error(`${screen} never showed ${shown.filter((s) => s.screen === screen).map((s) => s.field).join(' and ')}`)
+          await page.getByText(marker).first().waitFor({ state: 'visible', timeout: 30_000 }).catch(async () => {
+            const read = (await page.locator('main').innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 300)
+            throw new Error(`${screen} never showed ${shown.filter((s) => s.screen === screen).map((s) => s.field).join(' and ')}; it read "${read}"`)
           })
           await page.waitForTimeout(1_500)
           const flags = await ran(page)
-          const live = await runnable(page.locator('main'))
+          // Only what holds the payload: the screen's own forms and buttons around it are the app's, not the payload's.
+          const live: string[] = []
+          for (const holder of await page.locator('main').getByText(marker).all()) live.push(...await runnable(holder))
           ctx.evidence.push({ note: `${screen}: flags ${flags.join(', ') || 'none'}; dialogs ${dialogs.length}; runnable ${live.join(' ') || 'none'}` })
           if (flags.length > 0) wrong.push(`${screen} ran the payload: ${flags.join(', ')}`)
           if (dialogs.length > 0) wrong.push(`${screen} opened ${dialogs.length} dialog(s)`)
