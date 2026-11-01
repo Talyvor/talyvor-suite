@@ -401,7 +401,7 @@ export class PayeeDesk {
     const lines = text ? doc.split(/\r?\n/) : [...doc.matchAll(/\((.*?)\) Tj/g)].map((m) => m[1].replace(/\\(.)/g, '$1'))
     const after = (label: RegExp) => lines.map((l) => label.exec(l)?.[1]?.trim()).find((v) => v !== undefined) ?? ''
     const supplier = (lines[0] ?? '').replace(/^From:\s*/i, '')
-    const number = after(/^Invoice number:\s*(\S+)$/i)
+    const number = after(/^Invoice number:\s*(\S+)$/i).toUpperCase() // as Lens's money_bills.go reads it
     const had = list.find((b) => b.digest === digest || (number !== '' && b.invoice_number === number && String(b.supplier).toLowerCase() === supplier.toLowerCase()))
     if (had !== undefined && !this.broken('bill-duplicated')) return this.json(res, 200, shown(had)), true
     const amount = /^(GBP|EUR|USD) ([\d,]+)\.(\d{2})$/.exec(after(/^Total due:\s*(.+)$/i))

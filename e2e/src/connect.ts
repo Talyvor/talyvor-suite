@@ -295,7 +295,7 @@ export function connectMCP(): Scenario {
         if (p.status !== 201 || p.value === undefined) return { pass: false, detail: `saving ${name} answered ${said(p)}` }
         payees.push(p.value.id)
       }
-      const billNumber = `MCP-${randomBytes(3).toString('hex')}`
+      const billNumber = `MCP-${randomBytes(3).toString('hex').toUpperCase()}` // Lens reads an invoice number upper-cased
       const bill = await ctx.env.lens.raw(ctx.app.user.token, 'POST', '/v1/money/bills?source=photo', ['From: Nightly MCP Bill Ltd', 'INVOICE',
         `Invoice number: ${billNumber}`, `Due date: ${new Date().toISOString().slice(0, 10)}`, 'Total due: GBP 42.00', 'Sort code: 04-00-04', 'Account number: 87654321'].join('\n'), 'text/plain')
       ctx.evidence.push({ note: 'one bill, its bank details printed on it', answer: `${bill.status} ${bill.text.slice(0, 160)}` })
