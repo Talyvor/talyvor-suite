@@ -14,6 +14,7 @@ import { type CodeReport, codeLine, renderCode } from './code.ts'
 import { type CoverageMap, type Row, tallyLine } from './coverage.ts'
 import { type EdgeReport, edgeLine, renderEdge } from './edge.ts'
 import { type HostileReport, hostileLine, renderHostile } from './hostile.ts'
+import { withheld } from './withheld.ts'
 import type { ExplorerSummary, Finding } from './explore.ts'
 import type { DayBudget } from './day.ts'
 import type { MemorySample } from './memory.ts'
@@ -521,7 +522,7 @@ export async function writeReport(dir: string, run: ReportedRun): Promise<string
   await mkdir(dir, { recursive: true })
   const existing = await readFile(file, 'utf8').catch(() => '')
   const head = existing === '' ? `# Talyvor end-to-end report — ${run.started_at.slice(0, 10)}\n\n` : '\n---\n\n'
-  await appendFile(file, head + renderRun(run))
+  await appendFile(file, withheld(head + renderRun(run)))
   return file
 }
 
@@ -598,7 +599,7 @@ function environmentLine(run: ReportedRun): string[] {
 async function prependTesters(path: string, entry: string): Promise<void> {
   const existing = await readFile(path, 'utf8').catch(() => '')
   const earlier = existing.startsWith(TESTERS_HEAD) ? existing.slice(TESTERS_HEAD.length) : existing
-  await writeFile(path, `${TESTERS_HEAD}\n${entry}${earlier.replace(/^\n+/, '\n')}`)
+  await writeFile(path, `${TESTERS_HEAD}\n${withheld(entry)}${earlier.replace(/^\n+/, '\n')}`)
 }
 
 /** Puts the run's summary at the top of TESTERS.md, under its heading; earlier runs stay below. */

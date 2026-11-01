@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { coveredScenarios, itemsFor } from '../src/filing.ts'
-import { type ReportedRun, renderRun } from '../src/report.ts'
+import { coveredScenarios, fileItems, itemsFor } from '../src/filing.ts'
+import { type ReportedRun, renderRun, writeReport, writeTesters } from '../src/report.ts'
 import { OWNERS, journeyFor, scenarioOwners } from '../src/scenarios.ts'
 
 const QUEUE = `# queue
@@ -145,5 +148,29 @@ describe('the report', () => {
     expect(md.split('\n').filter((l) => l.startsWith('**FAIL `try-tare`**'))).toHaveLength(2)
     expect(md).toContain('| `try-tare` | 0 | 2 | 0 | 0 | the try-tare check |')
     expect(md).toContain('  - asked: q')
+  })
+})
+
+// B50.27 — a key a screen showed never reaches the report, TESTERS.md or BUILD.md, however the scenario quoted it.
+describe('a key in a failure', () => {
+  it('is withheld from the report, TESTERS.md and the BUILD.md item', async () => {
+    const key = 'tlv_ws_' + '0f3a'.repeat(8)
+    const bearer = 'eyJhbGciOi' + 'x'.repeat(24)
+    const planted = run(['chat-launch-agent'])
+    const fail = planted.outcomes[1]
+    fail.detail = `the card never showed the call: "Its key — store it now: ${key} export OPENAI_API_KEY=\"${key}\""`
+    fail.evidence = [{ note: `sent Authorization: Bearer ${bearer}`, error: `refused ${key}` }]
+    const dir = await mkdtemp(join(tmpdir(), 'b5027-'))
+    const report = await writeReport(dir, planted)
+    await writeTesters(join(dir, 'TESTERS.md'), planted, report, [])
+    await writeFile(join(dir, 'BUILD.md'), QUEUE)
+    await fileItems(join(dir, 'BUILD.md'), planted, report)
+    for (const f of [report, join(dir, 'TESTERS.md'), join(dir, 'BUILD.md')]) {
+      const text = await readFile(f, 'utf8')
+      expect(text).not.toContain(key)
+      expect(text).not.toContain(bearer)
+    }
+    expect(await readFile(join(dir, 'BUILD.md'), 'utf8')).toContain('store it now: <key withheld>')
+    expect(await readFile(report, 'utf8')).toContain('Bearer <key withheld>')
   })
 })

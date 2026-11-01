@@ -79,7 +79,7 @@ describe('the deep red-team pass (B28.292, B50.7)', () => {
       expect(md.indexOf('## B50.14 — SECURITY: a payee name never runs')).toBe(md.indexOf(intro) + intro.length)
       expect(md.indexOf('## B50.13')).toBeGreaterThan(md.indexOf('## B50.14'))
       expect(md).not.toContain('tlv_abcdefghijklmnopqrstu')
-      expect(md).toContain('<a key, withheld>')
+      expect(md).toContain('<key withheld>')
       // Filed once: the next night's same FAIL is covered by it.
       expect(itemsFor(md, run(planted), 'docs/e2e/report.md').covered).toEqual([{ scenario: 'xss-shown-back', by: 'B50.14' }])
     } finally {
