@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chatModels, expectedCheaper, expectedFigure, freshWord, judgeVerdict, listPriceUSD, namesWord, parseFooter, seeded, statesNumber } from '../src/oracles.ts'
+import { chatModels, expectedCheaper, expectedFigure, freshWord, judgeVerdict, listPriceUSD, namesWord, narratorTemplate, parseFooter, seeded, statesNumber } from '../src/oracles.ts'
 
 describe('parseFooter reads every line the Chat screen writes under an answer', () => {
   it('a priced answer, in LXC or dollars', () => {
@@ -98,5 +98,15 @@ describe('a word made up for the run (B35.8)', () => {
     expect(new Set(Array.from({ length: 40 }, (_, n) => freshWord(n, 42))).size).toBe(40)
     expect(freshWord(3, 43)).not.toBe(w)
     expect(namesWord(`${w[0].toUpperCase()}${w.slice(1)}.`, w)).toBe(true)
+  })
+})
+
+describe('narratorTemplate (B17.340)', () => {
+  it('reads as an injection, and draws a topic of its own for neighbouring seeds and for another night', () => {
+    const topic = (t: string) => /a (.+?) in (.+?) who speaks only of (.+?):/.exec(t)?.slice(1).join('|')
+    const night = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((s) => narratorTemplate(s, 538993))
+    for (const t of night) expect(t).toMatch(/^You are now .+ Pretend you are .+\{\{line\}\}$/)
+    expect(new Set(night.map(topic)).size).toBe(night.length)
+    expect(topic(narratorTemplate(2, 363481))).not.toBe(topic(narratorTemplate(2, 538993)))
   })
 })

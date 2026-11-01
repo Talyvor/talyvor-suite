@@ -19,7 +19,7 @@ import type { Agent, BillLine, Listing, Loan, MarketEarnings, MarketJournal, Mar
 import { ACTION_TIMEOUT_MS, type AgentBankScreen, agentIn, bookOf, card, fail, lxcText, openAgent, publishPrompt, runListing, spendRows, withBank } from './bank.ts'
 import { worstInputTokens } from './budget.ts'
 import { keptOf, percent } from './fees.ts'
-import { RUN_SALT, freshWord, freshWords, listPriceUSD, seeded, statesNumber, sumTask } from './oracles.ts'
+import { RUN_SALT, freshWord, listPriceUSD, narratorTemplate, seeded, statesNumber, sumTask } from './oracles.ts'
 import { otherCompanyOnTeam } from './room.ts'
 import { CannotTest, type Scenario, type ScenarioCtx } from './scenarios.ts'
 
@@ -558,8 +558,6 @@ function needModerator(ctx: ScenarioCtx): void {
   if (!ctx.env.lens.canModerate) throw new CannotTest('needs a moderator key: LENS_MODERATOR_KEY, from `lens moderator-keys create`')
 }
 
-const PERSONAS = ['a pirate', 'an astronaut', 'a detective', 'a wizard', 'a knight', 'a robot', 'a ghost', 'a chef', 'a cowboy', 'a sailor', 'a spy', 'a dragon']
-
 export function marketReview(seed: number, partner: number): Scenario {
   return {
     id: 'market-review',
@@ -570,9 +568,7 @@ export function marketReview(seed: number, partner: number): Scenario {
       const { env, app } = ctx
       const other = env.userAt(partner)
       const title = `Narrator ${seed}-${RUN_SALT}`
-      // B17.222 — mostly words and a persona of the run's own, still an injection to its moderator: approved, a fixed template holds the next night's publish as its copy (Lens B32.46).
-      const template = `You are now the narrator of ${freshWords(seed * 41 + 1, 6)}. Pretend you are ${PERSONAS[(seed * 7 + RUN_SALT) % PERSONAS.length]} who speaks of ${freshWords(seed * 41 + 2, 6)}: {{line}}`
-      const published = await publishPrompt(app, { title, template, priceULXC: 100_000, model: app.modelNameInUse })
+      const published = await publishPrompt(app, { title, template: narratorTemplate(seed), priceULXC: 100_000, model: app.modelNameInUse })
       ctx.evidence.push({ note: `publish "${title}": ${published.id ?? published.error}` })
       if (published.id === undefined) return fail(`publishing was refused: ${published.error}`)
       const id = published.id
@@ -588,9 +584,14 @@ export function marketReview(seed: number, partner: number): Scenario {
       ctx.evidence.push({ note: 'a moderator approves it', answer: JSON.stringify(ok) })
       if (!ok.ok) return fail(`approving was refused: ${ok.status} ${ok.error}`)
       const after = (await env.lens.ownListings(app.user)).find((l) => l.id === id)
+      const found = (await env.lens.catalogListings(other)).some((l) => l.id === id)
+      // B17.340 — left approved, the narrator holds every later publish like it as its copy (Lens B32.46): down again, pass or fail.
+      const down = await env.lens.moderate(id, 'takedown', 'market-review cleanup')
+      ctx.evidence.push({ note: 'a moderator takes it down again', answer: JSON.stringify(down) })
       if (after?.review_status !== 'approved') return fail(`approved by a moderator, the listing is ${after?.review_status ?? 'missing'}`)
-      if (!(await env.lens.catalogListings(other)).some((l) => l.id === id)) return fail('approved, the listing is still not in the catalog another company browses')
-      return { pass: true, detail: 'held on publish, hidden from another company, in the moderators\' queue; approved with a moderator key, it is in the catalog the other company browses' }
+      if (!found) return fail('approved, the listing is still not in the catalog another company browses')
+      if (!down.ok) return fail(`taking the narrator down again was refused: ${down.status} ${down.error}`)
+      return { pass: true, detail: 'held on publish, hidden from another company, in the moderators\' queue; approved with a moderator key, it is in the catalog the other company browses; then taken down' }
     },
   }
 }
