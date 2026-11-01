@@ -63,7 +63,7 @@ func TestMCPClaudeDirectory(t *testing.T) {
 	var parsed mcpArgs
 	_ = json.Unmarshal(args, &parsed)
 	for i, tool := range mcpTools {
-		def := tool.definition()
+		def := tool.definition(oauthGrant{Scope: strings.Join(oauthScopeNames(), " ")})
 		ann := def["annotations"].(map[string]any)
 		ro, roOK := ann["readOnlyHint"].(bool)
 		de, deOK := ann["destructiveHint"].(bool)
@@ -84,6 +84,9 @@ func TestMCPClaudeDirectory(t *testing.T) {
 			}
 		}
 		// Separate read and write tools: a read tool only ever reads, and a write tool never just reads.
+		if tool.run != nil {
+			continue // Taly and the microphone make no one Lens request: TestMCPTalyForTheDesktopApp holds them
+		}
 		c, err := tool.call(tenant{workspaceID: "ws-1"}, oauthGrant{ClientID: "c-1"}, parsed, args)
 		if err != nil {
 			t.Errorf("%s: %v", tool.name, err)

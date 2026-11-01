@@ -190,12 +190,15 @@ func TestMCPNoToolMovesMoney(t *testing.T) {
 		"GET /v1/money/permission-mandates", "GET /v1/marketplace/search", "GET /v1/marketplace/listings/l-1",
 		"GET /v1/money/payment-requests/pr-1", "POST /v1/money/invoices", "POST /v1/money/invoices/inv-1/send",
 		"POST /v1/money/payment-requests", "POST /v1/money/payment-requests/pr-1/cancel", "POST /v1/money/permission-mandates/prepare",
-		"GET /v1/money/bills", "GET /v1/workspaces/ws-ada/agents/safe-to-spend", "POST /v1/money/bills/pay"} {
+		"GET /v1/money/bills", "GET /v1/workspaces/ws-ada/agents/safe-to-spend", "POST /v1/money/bills/pay", "GET /v1/money/payment-requests"} {
 		allowed[r] = true
 	}
 	for _, tool := range mcpTools {
 		if len(tool.name) > 64 || tool.description == "" {
 			t.Fatalf("%s: a name of at most 64 characters and a description", tool.name)
+		}
+		if tool.run != nil {
+			continue // Taly and the microphone: TestMCPTalyForTheDesktopApp holds them to routes that never pay
 		}
 		before := len(lens.calls)
 		if r := toolCall(t, a, token, tool.name, args); r["isError"] != false {
