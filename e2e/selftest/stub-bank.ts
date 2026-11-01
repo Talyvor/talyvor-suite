@@ -1644,6 +1644,10 @@ export class Bank {
     if (path === '/v1/money/accounts' && req.method === 'POST' && !this.terms.accepted(viewer, 'currency_accounts')) {
       return json(res, 403, { error: 'Accounts in pounds, euros, dollars and USDC needs its terms accepted before it is used: this workspace has not accepted version 1 of them. Read them and accept them, then try again' }), true
     }
+    // B17.315 — test money arrives as money in from outside Talyvor: Lens gates it on payments_in's terms.
+    if (/^\/v1\/money\/accounts\/[^/]+\/test-money$/.test(path) && req.method === 'POST' && !this.terms.accepted(viewer, 'payments_in')) {
+      return json(res, 403, { error: 'Receiving money from outside Talyvor needs its terms accepted before it is used: this workspace has not accepted version 1 of them. Read them and accept them, then try again' }), true
+    }
     if (await this.payees.route(req, res, viewer, path)) return true
     if (await this.permissionMandates.route(req, res, viewer, path)) return true
     if (await this.devices.route(req, res, viewer, path)) return true
