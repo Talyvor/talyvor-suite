@@ -283,7 +283,7 @@
   "src/trackWriteBodyRegister.test.ts": 18,
   "src/typeScaleUnits.test.ts": 13,
   "src/upstreamCitations.test.ts": 8,
-  "src/WalletFirstNav.test.tsx": 5,
+  "src/WalletFirstNav.test.tsx": 6,
   "src/writeUnderDeadCredential.test.tsx": 15,
   "src/xssPayloads.test.tsx": 5
 }

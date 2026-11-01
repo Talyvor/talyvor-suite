@@ -140,6 +140,34 @@ describe('the navigation is wallet-first (B28.7)', () => {
     }
   })
 
+  it('B17.322 — a read that fails mid-session keeps the badge and its polling; the next answer reaches it', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const waiting = [...APPROVALS]
+      let down = false
+      mockBff()
+      const lens = vi.mocked(globalThis.fetch).getMockImplementation()!
+      vi.mocked(globalThis.fetch).mockImplementation(async (input, init) =>
+        String(input).split('?')[0] !== '/api/agents/approvals'
+          ? lens(input, init)
+          : down
+            ? new Response('busy', { status: 503 })
+            : Response.json({ approvals: [...waiting] }),
+      )
+      const nav = await sidebarAt('/')
+      await within(nav).findByRole('link', { name: 'Approvals 2 waiting' })
+      down = true
+      await vi.advanceTimersByTimeAsync(PENDING_POLL_MS + 5_000) // the poll and its one retry both fail
+      expect(within(nav).getByRole('link', { name: 'Approvals 2 waiting' })).toBeTruthy()
+      down = false
+      waiting[0] = { ...waiting[0], status: 'approved' } // decided in another tab
+      await vi.advanceTimersByTimeAsync(PENDING_POLL_MS)
+      await within(nav).findByRole('link', { name: 'Approvals 1 waiting' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('Approvals carries the count waiting, and opens them', async () => {
     mockBff()
     const nav = await sidebarAt('/')
