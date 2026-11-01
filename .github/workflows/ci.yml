@@ -1,7 +1,11 @@
 name: ci
 
+# 1 Nov 2026 (Nick): the repos are private, so every check costs money. A newer push to a PR cancels its older run
+# (main's runs are never cancelled), and a draft PR gets only the quick checks: opening it ready, or marking it
+# ready, runs everything.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
 
@@ -10,8 +14,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # The frontend gates. `lint` runs the local/no-arbitrary-value rule, so an arbitrary
@@ -79,12 +83,15 @@ jobs:
           repository: Talyvor/talyvor-lens
           path: .lens
           persist-credentials: false
+          # talyvor-lens is private since 1 Nov 2026: read it with its read-only deploy key.
+          ssh-key: ${{ secrets.LENS_DEPLOY_KEY }}
       - run: node scripts/lens-routes.mjs .lens --check
 
   # The BFF gates. inc5 added the OIDC deps (go-oidc + x/oauth2), so there IS a
   # go.sum now — the module cache keys off it, and the Go version comes from
   # go.mod so the two can't drift.
   bff:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -167,6 +174,7 @@ jobs:
   # Landed RED on purpose, before the toolchain floor that clears it; the PR's check history is
   # the evidence. A gate nobody has watched fail is the same thing as no gate.
   vuln:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -191,6 +199,7 @@ jobs:
   # package. It reads the lockfile only, so no install. Ignores live in pnpm-workspace.yaml's
   # auditConfig, each with the reason it has no fix to take.
   audit:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
@@ -205,6 +214,7 @@ jobs:
   # B42.5 — Semgrep's managed default rules, pinned by version and digest as Docs and Track pin them. Fails on
   # ERROR severity; every WARNING it reports is fixed or carries a `nosemgrep: <rule> -- <reason>` in place.
   semgrep:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -218,6 +228,7 @@ jobs:
   # posture a cluster runs it in — OIDC, bound beyond loopback — against a stub issuer that shares
   # its network namespace, because the BFF discovers the issuer at boot and refuses to start without.
   image:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 (node24)
