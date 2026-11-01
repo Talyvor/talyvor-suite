@@ -237,7 +237,7 @@
   "src/LandmarkCoverage.test.tsx": 61,
   "src/landmarkIds.test.tsx": 11,
   "src/Legal.test.tsx": 30,
-  "src/lensRequestBodyRegister.test.ts": 513,
+  "src/lensRequestBodyRegister.test.ts": 519,
   "src/lib/awaiting.test.ts": 9,
   "src/lib/calledRoutes.test.ts": 11,
   "src/lib/productState.test.ts": 13,
