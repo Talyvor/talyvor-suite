@@ -27,6 +27,7 @@ const ANSWER = sse(
 /** `bills` is whether Lens bills the agent asked for (and says so), as it will once it can. */
 function mockBff(bills: boolean) {
   const sent: Array<string | null> = []
+  const names: Array<[string, string]> = [['agt_1', 'Writer'], ['agt_2', 'Researcher']]
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -37,7 +38,7 @@ function mockBff(bills: boolean) {
     if (url === '/api/agents/approvals') return json({ approvals: [] })
     if (url === '/api/agents') {
       const agent = (id: string, name: string) => ({ id, name, balance_ulxc: 2 * M, spent_ulxc: 0, keys: [], created_at: '2026-10-06T04:00:00Z' })
-      return json({ workspace_balance_ulxc: 100 * M, allocated_ulxc: 4 * M, unallocated_ulxc: 96 * M, spent_ulxc: 0, agents: [agent('agt_1', 'Writer'), agent('agt_2', 'Researcher')] })
+      return json({ workspace_balance_ulxc: 100 * M, allocated_ulxc: 4 * M, unallocated_ulxc: 96 * M, spent_ulxc: 0, agents: names.map(([id, name]) => agent(id, name)) })
     }
     if (/^\/api\/agents\/agt_\d\/statement$/.test(url)) return json({ lines: [] })
     if (url === '/api/ai/stream/anthropic/v1/messages') {
@@ -47,7 +48,7 @@ function mockBff(bills: boolean) {
     }
     return new Response('null', { status: 404 })
   })
-  return { sent }
+  return { sent, names }
 }
 
 async function ask(question: string) {
@@ -98,6 +99,18 @@ describe('Paid by: which wallet pays for a conversation (B28.354)', () => {
     fireEvent.click(screen.getByRole('button', { name: /^The capital of France\?/ }))
     await waitFor(() => expect(screen.getByLabelText('Paid by')).toHaveValue('agt_2'))
     expect(within(screen.getAllByTestId('turn-assistant').at(-1)!).getByTestId('turn-paid-by')).toHaveTextContent('Paid by Researcher’s wallet')
+  })
+
+  // B17.317 — an agent made on Agent Wallets in another tab can be chosen here when Chat's tab is back in front.
+  it('offers an agent created elsewhere without a reload', async () => {
+    const bff = mockBff(true)
+    window.history.pushState({}, '', '/chat')
+    render(<App />)
+    const paidBy = await screen.findByLabelText('Paid by')
+    expect(within(paidBy).getAllByRole('option').map((o) => o.textContent)).toEqual(['The workspace', 'Writer', 'Researcher'])
+    bff.names.push(['agt_3', 'Paid-by payer'])
+    window.dispatchEvent(new Event('visibilitychange'))
+    await waitFor(() => expect(within(paidBy).getByRole('option', { name: 'Paid-by payer' })).toHaveValue('agt_3'))
   })
 
   it('says the agent was not billed when Lens’s answer does not name it', async () => {
