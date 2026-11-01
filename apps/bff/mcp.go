@@ -691,7 +691,8 @@ func (a *app) mcpContact(ctx context.Context, t tenant, args mcpArgs) (mcpArgs, 
 // (refreshWorkspaceToken) — and refused if provisioning names any other workspace than the one the person consented as.
 func (a *app) mcpTenant(ctx context.Context, g oauthGrant) (tenant, bool) {
 	who := g.Who
-	if !who.synthetic && !who.lensTokenExp.IsZero() && !time.Now().Before(who.lensTokenExp.Add(-workspaceTokenSkew)) {
+	// No token at all is a grant read back from the table after a restart (oauth_store.go stores none).
+	if !who.synthetic && (who.lensToken == "" || !who.lensTokenExp.IsZero() && !time.Now().Before(who.lensTokenExp.Add(-workspaceTokenSkew))) {
 		prov, err := a.provisionForSession(ctx, provisionIdentity(a.cfg.oidcIssuer, who.sub))
 		if err != nil || prov.WorkspaceID != who.workspaceID {
 			log.Printf("bff: mcp workspace token re-mint for sub=%s failed (workspace %q): %v", who.sub, prov.WorkspaceID, err)

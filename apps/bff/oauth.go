@@ -13,9 +13,8 @@ package main
 // A grant names the person (sub, email), the workspace and the client; B40.7's tools (mcp.go) read
 // it through oauthGrantFrom.
 //
-// shortcut: grants, codes and registered clients live in this process's memory, so a BFF restart
-// signs every assistant out and it asks the person to connect again; move them to a store when the
-// BFF has one.
+// Clients, codes, grants and tokens are written through to Postgres when BFF_DATABASE_URL is set
+// (B52.1, oauth_store.go), so a restart signs nobody out; consents and drafts stay in memory.
 
 import (
 	"context"
@@ -138,6 +137,7 @@ type oauthServer struct {
 	access   *ttlMap[oauthToken]
 	refresh  *ttlMap[oauthToken]
 	drafts   *ttlMap[assistantDraft] // B40.35: payees and mandates an assistant left for the person to confirm (mcp_drafts.go)
+	db       *oauthDB                // nil: memory only (oauth_store.go)
 }
 
 func newOAuthServer() *oauthServer {
@@ -278,7 +278,13 @@ func (a *app) handleOAuthRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	id = "tlv_oc_" + id
 	now := time.Now()
-	a.oauth.clients.put(id, oauthClient{id: id, name: name, redirectURIs: req.RedirectURIs, expires: now.Add(oauthUnusedClientTTL)})
+	c := oauthClient{id: id, name: name, redirectURIs: req.RedirectURIs, expires: now.Add(oauthUnusedClientTTL)}
+	if err := a.oauth.db.saveClient(r.Context(), c); err != nil {
+		log.Printf("bff: oauth register: %v", err)
+		oauthError(w, http.StatusInternalServerError, "server_error", "the client could not be saved")
+		return
+	}
+	a.oauth.clients.put(id, c)
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"client_id":                  id,
@@ -352,7 +358,12 @@ func (a *app) oauthClientFor(ctx context.Context, id string) (oauthClient, error
 	}
 	c := oauthClient{id: id, name: name, redirectURIs: doc.RedirectURIs, expires: time.Now().Add(oauthCIMDTTL)}
 	if a.oauth.clients.size() < oauthMaxClients {
-		a.oauth.clients.put(id, c)
+		// Only a cache: a document not kept is fetched again.
+		if err := a.oauth.db.saveClient(ctx, c); err != nil {
+			log.Printf("bff: oauth cimd client not cached: %v", err)
+		} else {
+			a.oauth.clients.put(id, c)
+		}
 	}
 	return c, nil
 }
@@ -500,12 +511,22 @@ func (a *app) oauthAuthorizeAnswer(w http.ResponseWriter, r *http.Request) {
 		writeConnectPage(w, http.StatusInternalServerError, connectPage{Problem: "Something went wrong on our side. Try again."})
 		return
 	}
-	a.oauth.codes.put(tokenKey(code), oauthCode{clientID: c.client.id, clientName: c.client.name, redirectURI: c.redirectURI,
+	oc := oauthCode{clientID: c.client.id, clientName: c.client.name, redirectURI: c.redirectURI,
 		challenge: c.challenge, scope: c.sc, who: oauthWho{sub: s.sub, email: s.email, workspaceID: s.workspaceID,
 			lensToken: s.lensToken, lensTokenExp: s.lensTokenExp, synthetic: s.synthetic},
-		expires: time.Now().Add(oauthCodeTTL)})
+		expires: time.Now().Add(oauthCodeTTL)}
+	if err := a.oauth.db.saveCode(r.Context(), tokenKey(code), oc); err != nil {
+		log.Printf("bff: oauth code not saved: %v", err)
+		writeConnectPage(w, http.StatusInternalServerError, connectPage{Problem: "Something went wrong on our side. Try again."})
+		return
+	}
+	a.oauth.codes.put(tokenKey(code), oc)
 	if !isCIMDClientID(c.client.id) {
-		a.oauth.clients.update(c.client.id, func(cl oauthClient) oauthClient { cl.expires = time.Now().Add(oauthClientTTL); return cl })
+		if cl, ok := a.oauth.clients.update(c.client.id, func(cl oauthClient) oauthClient { cl.expires = time.Now().Add(oauthClientTTL); return cl }); ok {
+			if err := a.oauth.db.saveClient(r.Context(), cl); err != nil {
+				log.Printf("bff: oauth client lifetime not saved: %v", err)
+			}
+		}
 	}
 	log.Printf("bff: oauth consent given by sub=%s to client %q", s.sub, c.client.name)
 	a.redirectWith(w, r, c.redirectURI, url.Values{"code": {code}, "state": {c.state}})
@@ -542,7 +563,17 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 	}
 	switch f.Get("grant_type") {
 	case "authorization_code":
-		c, ok := a.oauth.codes.take(tokenKey(f.Get("code")))
+		key := tokenKey(f.Get("code"))
+		c, ok := a.oauth.codes.take(key)
+		if ok {
+			spent, err := a.oauth.db.takeCode(r.Context(), key)
+			if err != nil {
+				log.Printf("bff: oauth code not spent: %v", err)
+				oauthError(w, http.StatusInternalServerError, "server_error", "try again")
+				return
+			}
+			ok = spent
+		}
 		if !ok || c.clientID != clientID || c.redirectURI != f.Get("redirect_uri") {
 			oauthError(w, http.StatusBadRequest, "invalid_grant", "the code is unknown, used, expired, or was issued to another client or redirect_uri")
 			return
@@ -560,12 +591,31 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 		g := oauthGrant{ID: gid, ClientID: c.clientID, ClientName: c.clientName, Scope: c.scope, Who: c.who,
 			Created: now, LastUsed: now, expires: now.Add(oauthRefreshTTL), endsAt: now.Add(oauthGrantMaxAge)}
+		if err := a.oauth.db.insertGrant(r.Context(), g); err != nil {
+			log.Printf("bff: oauth grant not saved: %v", err)
+			oauthError(w, http.StatusInternalServerError, "server_error", "try again")
+			return
+		}
 		a.oauth.grants.put(gid, g)
-		a.issueTokens(w, g)
+		if err := a.oauth.db.sweep(r.Context()); err != nil {
+			log.Printf("bff: oauth sweep: %v", err)
+		}
+		a.issueTokens(w, r, g)
 	case "refresh_token":
 		// Read and marked used under one lock, so two refreshes at once cannot both rotate it.
 		var prev oauthToken
-		t, ok := a.oauth.refresh.update(tokenKey(f.Get("refresh_token")), func(t oauthToken) oauthToken { prev = t; t.used = true; return t })
+		key := tokenKey(f.Get("refresh_token"))
+		t, ok := a.oauth.refresh.update(key, func(t oauthToken) oauthToken { prev = t; t.used = true; return t })
+		if ok {
+			// The table's mark is the one a restart keeps, so it is set before anything is answered.
+			wasUsed, err := a.oauth.db.useRefresh(r.Context(), key)
+			if err != nil {
+				log.Printf("bff: oauth refresh not marked used: %v", err)
+				oauthError(w, http.StatusInternalServerError, "server_error", "try again")
+				return
+			}
+			prev.used = prev.used || wasUsed
+		}
 		g, live := a.oauth.grants.get(t.grantID)
 		if !ok || !live || g.ClientID != clientID {
 			oauthError(w, http.StatusBadRequest, "invalid_grant", "the refresh token is unknown, expired, revoked or another client's")
@@ -573,7 +623,10 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		}
 		if prev.used {
 			// A rotated token came back: someone holds a copy. End the grant for everyone.
-			a.oauth.grants.delete(g.ID)
+			if err := a.revokeGrant(r.Context(), g.ID); err != nil {
+				log.Printf("bff: oauth replayed grant not deleted from the table: %v", err)
+				a.oauth.grants.delete(g.ID) // ended here at least: a replay never leaves the connection usable
+			}
 			log.Printf("bff: oauth refresh token replayed for client %q (sub=%s) — the grant is revoked", g.ClientName, g.Who.sub)
 			oauthError(w, http.StatusBadRequest, "invalid_grant", "this refresh token was already used; the connection is revoked")
 			return
@@ -585,13 +638,23 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 			}
 			return g
 		})
-		a.issueTokens(w, g)
+		if kept, err := a.oauth.db.touchGrant(r.Context(), g); err != nil || !kept {
+			if err != nil {
+				log.Printf("bff: oauth grant not saved: %v", err)
+				oauthError(w, http.StatusInternalServerError, "server_error", "try again")
+				return
+			}
+			a.oauth.grants.delete(g.ID) // revoked in the table while this request ran
+			oauthError(w, http.StatusBadRequest, "invalid_grant", "the refresh token is unknown, expired, revoked or another client's")
+			return
+		}
+		a.issueTokens(w, r, g)
 	default:
 		oauthError(w, http.StatusBadRequest, "unsupported_grant_type", "grant_type must be authorization_code or refresh_token")
 	}
 }
 
-func (a *app) issueTokens(w http.ResponseWriter, g oauthGrant) {
+func (a *app) issueTokens(w http.ResponseWriter, r *http.Request, g oauthGrant) {
 	at, err1 := randomToken()
 	rt, err2 := randomToken()
 	if err1 != nil || err2 != nil {
@@ -600,8 +663,18 @@ func (a *app) issueTokens(w http.ResponseWriter, g oauthGrant) {
 	}
 	at, rt = "tlv_oat_"+at, "tlv_ort_"+rt
 	now := time.Now()
-	a.oauth.access.put(tokenKey(at), oauthToken{grantID: g.ID, expires: now.Add(oauthAccessTTL)})
-	a.oauth.refresh.put(tokenKey(rt), oauthToken{grantID: g.ID, expires: now.Add(oauthRefreshTTL)})
+	access, refresh := oauthToken{grantID: g.ID, expires: now.Add(oauthAccessTTL)}, oauthToken{grantID: g.ID, expires: now.Add(oauthRefreshTTL)}
+	err := a.oauth.db.saveToken(r.Context(), tokenKey(at), false, access)
+	if err == nil {
+		err = a.oauth.db.saveToken(r.Context(), tokenKey(rt), true, refresh)
+	}
+	if err != nil {
+		log.Printf("bff: oauth tokens not saved: %v", err)
+		oauthError(w, http.StatusInternalServerError, "server_error", "try again")
+		return
+	}
+	a.oauth.access.put(tokenKey(at), access)
+	a.oauth.refresh.put(tokenKey(rt), refresh)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -630,12 +703,25 @@ func (a *app) handleOAuthRevoke(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		// Holding a public client's token is all the proof revoking it needs.
 		if g, live := a.oauth.grants.get(t.grantID); live {
-			a.oauth.grants.delete(g.ID)
+			if err := a.revokeGrant(r.Context(), g.ID); err != nil {
+				log.Printf("bff: oauth revoke: %v", err)
+				oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "try again")
+				return
+			}
 			log.Printf("bff: oauth grant revoked by client %q (sub=%s)", g.ClientName, g.Who.sub)
 		}
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
+}
+
+// revokeGrant ends a connection in the table first, so a failure leaves it whole rather than back after a restart.
+func (a *app) revokeGrant(ctx context.Context, id string) error {
+	if err := a.oauth.db.deleteGrant(ctx, id); err != nil {
+		return err
+	}
+	a.oauth.grants.delete(id)
+	return nil
 }
 
 // oauthGrantFrom reads the request's bearer token. Refused, it has already answered 401 with the
@@ -645,7 +731,14 @@ func (a *app) oauthGrantFrom(w http.ResponseWriter, r *http.Request) (oauthGrant
 	if hasBearer {
 		if t, ok := a.oauth.access.get(tokenKey(strings.TrimSpace(raw))); ok {
 			if g, live := a.oauth.grants.update(t.grantID, func(g oauthGrant) oauthGrant { g.LastUsed = time.Now(); return g }); live {
-				return g, true
+				kept, err := a.oauth.db.touchGrant(r.Context(), g)
+				if err != nil {
+					log.Printf("bff: oauth last use not saved: %v", err) // only Settings' "last used" is behind
+				}
+				if kept || err != nil {
+					return g, true
+				}
+				a.oauth.grants.delete(g.ID) // revoked in the table while this request ran
 			}
 		}
 	}

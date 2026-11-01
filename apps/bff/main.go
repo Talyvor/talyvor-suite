@@ -509,6 +509,22 @@ func main() {
 
 	app := newApp(cfg, auth)
 
+	// B52.1: Connect's sign-ins survive a restart when there is a database to keep them in (oauth_store.go).
+	if dsn := os.Getenv("BFF_DATABASE_URL"); dsn != "" {
+		db, err := openOAuthDB(context.Background(), dsn)
+		if err == nil {
+			err = db.load(context.Background(), app.oauth)
+		}
+		if err != nil {
+			log.Fatalf("bff: BFF_DATABASE_URL: %s", redactSecret(err.Error()))
+		}
+		defer db.close()
+		app.oauth.db = db
+		log.Printf("bff: assistant sign-ins are kept in Postgres and survive a restart")
+	} else {
+		log.Printf("bff: BFF_DATABASE_URL unset — assistant sign-ins are in memory and a restart signs them out")
+	}
+
 	srv := newHTTPServer(cfg.addr, app)
 
 	// Bind explicitly (not ListenAndServe) so we control the listener and can log the
