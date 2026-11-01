@@ -5,6 +5,7 @@ import { cn, focusRing, inlineLink } from '@talyvor/ui'
 
 import { BOOK_KEY } from '../lens/AgentBank'
 import { type Agent, type AgentBook, agentBankApi } from '../lens/agentBankApi'
+import { PENDING_POLL_MS } from '../lens/WalletScreens'
 import type { AnswerPayer } from './chatApi'
 
 // B28.354 — which wallet pays for a conversation. "Paid by", under the composer, names the workspace or one of
@@ -14,7 +15,14 @@ import type { AnswerPayer } from './chatApi'
 
 /** The agents that can be chosen to pay: the workspace's, archived ones aside. Read with Agent Wallets' query. */
 export function usePayers(): { book: UseQueryResult<AgentBook>; payers: Agent[] } {
-  const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
+  // B17.317 — read again when this tab is back in front, and every PENDING_POLL_MS: an agent made on Agent Wallets
+  // in another tab never reaches this tab's cache otherwise, and could not be chosen until a reload.
+  const book = useQuery({
+    queryKey: BOOK_KEY,
+    queryFn: agentBankApi.book,
+    refetchOnWindowFocus: 'always',
+    refetchInterval: (q) => (q.state.status === 'error' ? false : PENDING_POLL_MS),
+  })
   return { book, payers: (book.data?.agents ?? []).filter((a) => a.archived_at === undefined) }
 }
 
