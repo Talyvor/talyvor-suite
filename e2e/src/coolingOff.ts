@@ -47,7 +47,7 @@ export function payeeCoolingOff(post: Post = throughApp): Scenario {
 
       // A funded company GBP account and a payee saved now.
       const terms = await step<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
-      for (const t of (terms.value?.terms ?? []).filter((x) => ['currency_accounts', 'payments_out'].includes(x.capability) && x.accepted == null)) {
+      for (const t of (terms.value?.terms ?? []).filter((x) => ['currency_accounts', 'payments_in', 'payments_out'].includes(x.capability) && x.accepted == null)) {
         const ok = await step('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
         if (ok.status !== 201) return fail(`accepting ${t.capability}'s terms answered ${said(ok)}`)
       }
