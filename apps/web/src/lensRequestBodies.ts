@@ -1184,6 +1184,18 @@ export const NON_LENS_ANON_SITES = [
     file: "mcp.go",
     what: "mcpBillsDue (B40.36) re-marshals Lens's GET /v1/money/bills as bills_due's answer to the assistant over /mcp — the due bills less their printed bank details, with a total per currency. A RESPONSE, sent to no repository, so there is no key set to ask about and this site is exempt.",
   },
+  {
+    file: "mcp.go",
+    what: "mcpCallTool (B45.41) marshals what a tool that answers itself returned (ask_taly's reply, transcribe's text) as its answer to the assistant over /mcp — a RESPONSE, sent to no repository, so there is no key set to ask about and this site is exempt.",
+  },
+  {
+    file: "mcp_taly.go",
+    what: "mcpApprovals (B45.41) re-marshals Lens's GET /v1/money/payment-requests?status=pending_approval as list_approvals's answer to the assistant over /mcp — a RESPONSE, sent to no repository, so this site is exempt.",
+  },
+  {
+    file: "mcp_taly.go",
+    what: "talyAsk (B45.41) marshals an Anthropic Messages request (model, max_tokens, system, messages, tools) for Lens's model proxy, POST /v1/proxy/anthropic/v1/messages, which relays it to the provider as it relays Chat's own (stream.go) — the provider's key set, not one Lens binds, so this site is exempt.",
+  },
 ] as const;
 
 const cache = new Map<string, string>();
