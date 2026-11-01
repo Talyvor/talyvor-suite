@@ -375,14 +375,15 @@ export function xssShownBack(): Scenario {
       for (const t of (terms.ok ? terms.value.terms ?? [] : []).filter((x) => ['currency_accounts', 'payments_in', 'payments_out'].includes(x.capability) && x.accepted == null)) {
         await call('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
       }
-      await call('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the owner opens a GBP account')
+      await call('POST', '/v1/money/accounts', { currency: 'GBP' }, "the owner opens the company's GBP account")
+      // An invoice is paid into an agent's account: the company's is refused for that, not for the payload.
+      const agentId = agent.ok ? (agent.value as { id: string }).id : ''
+      const gbp = await call<{ id: string }>('POST', '/v1/money/accounts', { currency: 'GBP', agent_id: agentId }, "the owner opens the agent's GBP account")
       const payee = await call('POST', '/v1/money/payees', { name: xssName(marker, 'payee name'), country: 'GB', sort_code: '040004', account_number: '35792462' },
         'a payee named with the payload')
       kept('the payee name', payee, '/money/pay')
-      const accounts = await call<{ accounts: { id: string; currency: string; purpose: string }[] | null }>('GET', '/v1/money/accounts', undefined, 'the accounts')
-      const gbp = (accounts.ok ? accounts.value.accounts ?? [] : []).find((a) => a.currency === 'GBP' && a.purpose !== 'agent')
       const invoice = await call('POST', '/v1/money/invoices', {
-        account_id: gbp?.id ?? '', customer_name: xssName(marker, 'invoice customer'),
+        account_id: gbp.ok ? gbp.value.id : '', customer_name: xssName(marker, 'invoice customer'),
         lines: [{ description: xssName(marker, 'invoice line'), quantity: 1, unit_amount_minor: 100, vat_rate_bps: 0 }],
         due_date: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10),
       }, 'an invoice whose customer and line carry the payload')
