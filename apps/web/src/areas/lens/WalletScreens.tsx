@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Button, CardHeader, Row, inlineLink } from '@talyvor/ui'
 import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
+import { ApiError } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
 import { APPROVALS_KEY, Approvals, BOOK_KEY, Statement, StatementDownload } from './AgentBank'
 import { agentBankApi } from './agentBankApi'
@@ -30,16 +31,20 @@ export const PENDING_POLL_MS = 10_000
  * How many approvals are waiting for a person — the sidebar's badge. Null until it is known.
  * B28.45: live. An agent files an approval, or a person decides one from a push or another device,
  * with no click on this page — so the count is read again every PENDING_POLL_MS while the tab is
- * showing, and on coming back to it. A failed read stops the polling; coming back tries once more.
+ * showing, and on coming back to it. B17.322: a read that fails keeps the last count and the polling,
+ * so a busy minute does not freeze the badge; only a 401 or 403 verdict stops it.
  */
 export function usePendingApprovals(): number | null {
   const list = useQuery({
     queryKey: APPROVALS_KEY,
     queryFn: agentBankApi.approvals,
-    refetchInterval: (q) => (q.state.status === 'error' ? false : PENDING_POLL_MS),
+    refetchInterval: (q) => {
+      const err = q.state.error
+      return err instanceof ApiError && (err.status === 401 || err.status === 403) ? false : PENDING_POLL_MS
+    },
     refetchOnWindowFocus: true,
   })
-  return list.isSuccess ? (list.data.approvals ?? []).filter((a) => a.status === 'pending').length : null
+  return list.data ? (list.data.approvals ?? []).filter((a) => a.status === 'pending').length : null
 }
 
 export function ApprovalsScreen() {
