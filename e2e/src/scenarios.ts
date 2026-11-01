@@ -4387,12 +4387,13 @@ export function chatRunCode(seed: number): Scenario {
  * chat: the model answers it, and nothing this browser holds names it. Asked again in a chat that is kept, it is asked
  * afresh — the temporary chat's answer was kept nowhere to serve — and asked once more it is the earlier answer, so the
  * cache is live and the check before it is not empty. Then, cached, it is asked in a temporary chat again: asked afresh,
- * never served the earlier answer.
+ * never served the earlier answer. The sum is salted with the run's, so an earlier night's kept answer cannot serve
+ * this night's kept chat (B17.339).
  */
 export function chatTemporary(seed: number): Scenario {
-  const r = seeded(seed * 13 + 5)
-  const a = 11 + Math.floor(r() * 80)
-  const b = 11 + Math.floor(r() * 80)
+  const r = seeded(seed * 13 + 5 + RUN_SALT)
+  const a = 100 + Math.floor(r() * 900)
+  const b = 11 + Math.floor(r() * 89)
   const word = freshWord(seed * 10 + 7, 1 + Math.floor(Math.random() * 999_999))
   const q = `What is ${a} times ${b}? ${NUMBER_ONLY} (${word})`
   return {
