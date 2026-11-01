@@ -998,7 +998,7 @@ export function editResendRerunsThread(seed: number): Scenario {
 }
 
 /** B28.367 — Regenerate keeps the earlier answer as a version: a sum answered, Regenerate pressed, and after a reload
- *  the answer still reads "2 / 2"; Previous version shows the first, "1 / 2". Both versions state the sum. */
+ *  the answer still reads "2 / 2"; Previous version shows the first, "1 / 2". Each reads as it did when answered. */
 export function answerVersionsSurviveReload(seed: number): Scenario {
   // The run's own sum, so the model is asked rather than an earlier run's answer served from the pool.
   const r = seeded(seed * 37 + 13 + RUN_SALT)
@@ -1013,7 +1013,7 @@ export function answerVersionsSurviveReload(seed: number): Scenario {
       const { page } = ctx.app
       await ctx.app.newChat()
       const first = await ask(ctx, q, 'the first version')
-      if (!statesNumber(first.answer, a + b)) return { pass: false, detail: `the first answer was wrong: ${describe(first)}` }
+      if (first.error !== undefined || first.answer === '') return { pass: false, detail: `the question got no answer: ${describe(first)}` }
       const second = record(ctx, await ctx.app.regenerate(q), 'Regenerate: the second version')
       if (second.error !== undefined) return { pass: false, detail: `Regenerate was refused: ${second.error}` }
       const label = page.locator('[data-testid="turn-assistant"]').last().getByTestId('turn-version')
@@ -1034,10 +1034,11 @@ export function answerVersionsSurviveReload(seed: number): Scenario {
       ctx.evidence.push({ note: `after the reload "${after}": "${latest}"; Previous version "${earlier}": "${oldest}"` })
       if (after !== '2 / 2') return { pass: false, detail: `after the reload the answer reads "${after}", not "2 / 2"` }
       if (earlier !== '1 / 2') return { pass: false, detail: `Previous version reads "${earlier}", not "1 / 2"` }
-      if (!statesNumber(latest, a + b) || !statesNumber(oldest, a + b)) {
-        return { pass: false, detail: `the versions read "${oldest}" and "${latest}"; both should state ${a + b}` }
+      // Each version must read after the reload as it did when it was answered; whether the model added up right is not this scenario's question.
+      if (oldest !== first.answer || latest !== second.answer) {
+        return { pass: false, detail: `after the reload the versions read "${oldest}" and "${latest}", not "${first.answer}" and "${second.answer}"` }
       }
-      return { pass: true, detail: `both versions of the answer survived the reload, each stating ${a + b}` }
+      return { pass: true, detail: `both versions of the answer survived the reload as they were answered: "${first.answer}" and "${second.answer}"` }
     },
   }
 }
