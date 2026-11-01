@@ -1187,7 +1187,7 @@ function statusJSON(): unknown {
   const rails = moneyRails(broke('rails-outage'))
   const down = rails.filter((r) => r.status === 'outage').map((r) => r.name)
   return {
-    status: 'operational', version: 'stub', uptime_hours: Math.round(process.uptime() / 36) / 100, updated_at: at,
+    status: 'operational', version: 'stub', uptime_hours: Math.round(process.uptime() / 36) / 100, updated_at: at, card_payments: 'test',
     components: ['PostgreSQL', 'Redis', 'NATS', 'Proxy'].map((name) => ({ name, status: 'operational', latency_ms: 1, measured: true, checked_at: at })),
     providers: [{ name: 'OpenAI', status: 'operational', latency_ms: 100, checked_at: at }],
     rails,
