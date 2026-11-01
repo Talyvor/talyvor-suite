@@ -2359,7 +2359,7 @@ export function Approvals({
             </p>
           ) : (
             <div role="group" aria-label="Waiting for a person" onKeyDown={onKeys}>
-              {pending.map((a) => (
+              {pending.map((a, i) => (
                 <Row
                   key={a.id}
                   stack
@@ -2421,8 +2421,9 @@ export function Approvals({
                 >
                   {/* One-handed on a phone: two full-width buttons under the sentence and the thumb; side by side on a wide screen. */}
                   <div className="flex w-full flex-col gap-2 wide:w-auto wide:flex-row wide:items-center">
+                    {/* B17.325 — one teal action per screen: the first waiting request's Approve, or Approve {n} once some are picked. */}
                     <Button
-                      variant={primary ? 'primary' : 'default'}
+                      variant={primary && i === 0 && chosen.length === 0 ? 'primary' : 'default'}
                       className="h-12 w-full wide:h-8 wide:w-auto"
                       disabled={busy}
                       onClick={() => decide.mutate({ a, decision: 'approve' })}
