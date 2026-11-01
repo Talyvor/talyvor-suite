@@ -161,16 +161,26 @@ func (d *oauthDB) takeCode(ctx context.Context, key string) (bool, error) {
 	return tag.RowsAffected() == 1, err
 }
 
-func (d *oauthDB) saveGrant(ctx context.Context, g oauthGrant) error {
+// insertGrant is the one write that creates a grant: when a code is redeemed.
+func (d *oauthDB) insertGrant(ctx context.Context, g oauthGrant) error {
 	if d == nil {
 		return nil
 	}
 	_, err := d.pool.Exec(ctx, `INSERT INTO oauth_grants (id, client_id, client_name, scope, sub, email, workspace_id, synthetic,
-		created_at, last_used_at, expires_at, ends_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		ON CONFLICT (id) DO UPDATE SET last_used_at = EXCLUDED.last_used_at, expires_at = EXCLUDED.expires_at`,
+		created_at, last_used_at, expires_at, ends_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		g.ID, g.ClientID, g.ClientName, g.Scope, g.Who.sub, g.Who.email, g.Who.workspaceID, g.Who.synthetic,
 		g.Created, g.LastUsed, g.expires, g.endsAt)
 	return err
+}
+
+// touchGrant records a use or a refresh. It only updates, so a grant revoked meanwhile is never written back;
+// false means the row is gone.
+func (d *oauthDB) touchGrant(ctx context.Context, g oauthGrant) (bool, error) {
+	if d == nil {
+		return true, nil
+	}
+	tag, err := d.pool.Exec(ctx, `UPDATE oauth_grants SET last_used_at = $2, expires_at = $3 WHERE id = $1`, g.ID, g.LastUsed, g.expires)
+	return tag.RowsAffected() == 1, err
 }
 
 func (d *oauthDB) deleteGrant(ctx context.Context, id string) error {
@@ -191,13 +201,16 @@ func (d *oauthDB) saveToken(ctx context.Context, key string, refresh bool, t oau
 }
 
 // useRefresh marks a refresh token used and reports whether it already was: the replay check, held by the table
-// so a restart between two uses still catches the second.
+// so a restart between two uses still catches the second. A replay deletes the grant in the same statement, so
+// the revocation cannot be lost between two writes.
 func (d *oauthDB) useRefresh(ctx context.Context, key string) (wasUsed bool, err error) {
 	if d == nil {
 		return false, nil
 	}
-	err = d.pool.QueryRow(ctx, `UPDATE oauth_tokens t SET used = true FROM (SELECT hash, used FROM oauth_tokens
-		WHERE hash = $1 AND refresh FOR UPDATE) old WHERE t.hash = old.hash RETURNING old.used`, key).Scan(&wasUsed)
+	err = d.pool.QueryRow(ctx, `WITH old AS (SELECT hash, used, grant_id FROM oauth_tokens WHERE hash = $1 AND refresh FOR UPDATE),
+		marked AS (UPDATE oauth_tokens t SET used = true FROM old WHERE t.hash = old.hash RETURNING old.used, old.grant_id),
+		revoked AS (DELETE FROM oauth_grants WHERE id IN (SELECT grant_id FROM marked WHERE used))
+		SELECT used FROM marked`, key).Scan(&wasUsed)
 	if err == pgx.ErrNoRows {
 		// Its row went with its grant: refuse it as a replay is refused.
 		return true, nil

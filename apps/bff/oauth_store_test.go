@@ -95,4 +95,12 @@ func TestOAuthSignInsSurviveARestart(t *testing.T) {
 	if code, _ := refresh(a, clientID, tok["refresh_token"].(string)); code != http.StatusBadRequest {
 		t.Fatalf("a revoked connection's refresh token got %d after a restart", code)
 	}
+	// A use still in flight when the revoke landed cannot write the grant back.
+	var left int
+	if kept, err := a.oauth.db.touchGrant(ctx, oauthGrant{ID: "any-revoked-id"}); kept || err != nil {
+		t.Fatalf("touching a revoked grant kept it: %v %v", kept, err)
+	}
+	if err := a.oauth.db.pool.QueryRow(ctx, `SELECT count(*) FROM oauth_grants`).Scan(&left); err != nil || left != 0 {
+		t.Fatalf("%d grants left in the table after both connections ended (%v)", left, err)
+	}
 }

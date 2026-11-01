@@ -591,7 +591,7 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 		g := oauthGrant{ID: gid, ClientID: c.clientID, ClientName: c.clientName, Scope: c.scope, Who: c.who,
 			Created: now, LastUsed: now, expires: now.Add(oauthRefreshTTL), endsAt: now.Add(oauthGrantMaxAge)}
-		if err := a.oauth.db.saveGrant(r.Context(), g); err != nil {
+		if err := a.oauth.db.insertGrant(r.Context(), g); err != nil {
 			log.Printf("bff: oauth grant not saved: %v", err)
 			oauthError(w, http.StatusInternalServerError, "server_error", "try again")
 			return
@@ -638,9 +638,14 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 			}
 			return g
 		})
-		if err := a.oauth.db.saveGrant(r.Context(), g); err != nil {
-			log.Printf("bff: oauth grant not saved: %v", err)
-			oauthError(w, http.StatusInternalServerError, "server_error", "try again")
+		if kept, err := a.oauth.db.touchGrant(r.Context(), g); err != nil || !kept {
+			if err != nil {
+				log.Printf("bff: oauth grant not saved: %v", err)
+				oauthError(w, http.StatusInternalServerError, "server_error", "try again")
+				return
+			}
+			a.oauth.grants.delete(g.ID) // revoked in the table while this request ran
+			oauthError(w, http.StatusBadRequest, "invalid_grant", "the refresh token is unknown, expired, revoked or another client's")
 			return
 		}
 		a.issueTokens(w, r, g)
@@ -726,10 +731,14 @@ func (a *app) oauthGrantFrom(w http.ResponseWriter, r *http.Request) (oauthGrant
 	if hasBearer {
 		if t, ok := a.oauth.access.get(tokenKey(strings.TrimSpace(raw))); ok {
 			if g, live := a.oauth.grants.update(t.grantID, func(g oauthGrant) oauthGrant { g.LastUsed = time.Now(); return g }); live {
-				if err := a.oauth.db.saveGrant(r.Context(), g); err != nil {
+				kept, err := a.oauth.db.touchGrant(r.Context(), g)
+				if err != nil {
 					log.Printf("bff: oauth last use not saved: %v", err) // only Settings' "last used" is behind
 				}
-				return g, true
+				if kept || err != nil {
+					return g, true
+				}
+				a.oauth.grants.delete(g.ID) // revoked in the table while this request ran
 			}
 		}
 	}
