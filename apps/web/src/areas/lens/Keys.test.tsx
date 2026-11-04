@@ -403,3 +403,50 @@ describe('W1.1.5 — a workspace with no key is told what a key is FOR', () => {
     ).toMatch(/again/i)
   })
 })
+
+// B41.15's DONE on the page: Claude's connection, a mandate, a phone and a passkey are listed together with what
+// each may do, last use and expiry; revoking Claude says so on the page, and a revoked phone reads Revoked.
+describe('B41.15 — what may act for this workspace, revoked in one tap', () => {
+  it('lists assistants, mandates, phones and passkeys and revokes them through the BFF', async () => {
+    let assistants = [
+      { id: 'g-1', name: 'Claude', scopes: ['payments:prepare'], connected_at: '2026-10-20T09:00:00Z', last_used_at: '2026-10-23T08:15:00Z' },
+    ]
+    let deviceStatus = 'active'
+    const posts: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if ((init?.method ?? 'GET').toUpperCase() === 'POST') {
+        posts.push(url)
+        if (url === '/api/connect/assistants/g-1/revoke') assistants = []
+        if (url === '/api/money/devices/dk_1/revoke') deviceStatus = 'revoked'
+        return new Response(null, { status: 204 })
+      }
+      if (url === '/api/keys') return json(EXISTING)
+      if (url === '/api/connect/assistants') return json({ assistants })
+      if (url === '/api/money/access')
+        return json({
+          items: [
+            { kind: 'mandate', id: 'pm_1', name: 'claude', may: 'prepare payments in GBP', created_at: '2026-10-20T09:00:00Z', last_used_at: null, expires_at: '2026-12-31T00:00:00Z', status: 'active', revoke: '/v1/money/permission-mandates/pm_1/revoke' },
+            { kind: 'device', id: 'dk_1', name: 'Work iPhone', may: 'sign approvals and mandates', created_at: '2026-10-01T09:00:00Z', last_used_at: '2026-10-22T09:00:00Z', expires_at: null, status: deviceStatus, revoke: '/v1/money/devices/dk_1/revoke' },
+            { kind: 'passkey', id: 'cred_1', name: 'MacBook', may: 'sign approvals and mandates', created_at: '2026-09-01T09:00:00Z', last_used_at: null, expires_at: null, status: 'active', revoke: '' },
+          ],
+        })
+      return new Response('null', { status: 404 })
+    })
+    renderKeys()
+
+    expect(await screen.findByText(/Permission · may prepare payments in GBP · .* · never used · expires Dec 31/)).toBeInTheDocument()
+    expect(screen.getByText(/Phone · may sign approvals and mandates · .* · last used Oct 22/)).toBeInTheDocument()
+    expect(screen.getByText('MacBook')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Revoke Passkey MacBook' })).toBeNull()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke Claude' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Claude is disconnected. Its next request to Talyvor is refused as not connected.')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke Phone Work iPhone' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Revoke Phone Work iPhone' })).toBeNull())
+    expect(screen.getByText('Revoked')).toBeInTheDocument()
+    expect(posts).toEqual(['/api/connect/assistants/g-1/revoke', '/api/money/devices/dk_1/revoke'])
+  })
+})

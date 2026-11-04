@@ -6,7 +6,8 @@
 //     serves), each take the person through the consent screen in the browser — the three scopes in plain words — and
 //     back to a loopback callback with the code, the state and iss; the code and its PKCE verifier buy an access token
 //     /mcp takes. The refresh token rotates, a rotated one sent again ends the connection, and a revoked token is refused.
-//     B40.8: a third client shows on Settings → Connect your AI with its last use, and its Revoke button ends it.
+//     B40.8: a third client shows on Settings → Connect your AI with its last use. B41.15: it is revoked from its row
+//     on Keys, the page says so, and its next tool call is refused as not connected.
 // A CIMD document must be at a public https address, so it is served through a Cloudflare quick tunnel; with
 // --hook-tunnel none (the self-test) a second DCR client takes its place and the evidence says so.
 
@@ -43,7 +44,7 @@ export function connectOAuth(): Scenario {
     id: 'connect-oauth',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B40.6', 'B40.8'],
+    items: ['B40.6', 'B40.8', 'B41.15'],
     feature: 'Talyvor Connect',
     title: 'an assistant signs in the way Claude does: a 401 naming resource_metadata, discovery, a client by DCR and one by CIMD, ' +
       'PKCE and the consent screen in the browser, the token and a rotating refresh — and a revoked token is refused, ' +
@@ -174,15 +175,26 @@ export function connectOAuth(): Scenario {
         ctx.evidence.push({ note: `Settings → Connect your AI: address shown ${address > 0}; row "${rowText}"` })
         if (address === 0) wrong.push(`the page does not show the address ${origin}/mcp`)
         if (!/Last used (?!never)/.test(rowText)) wrong.push(`the connected assistant's row does not show its last use: "${rowText}"`)
+        // B41.15: revoked from Keys, where everything that may act for the workspace is listed.
+        await page.goto(`${origin}/keys`)
+        const onKeys = page.locator('li').filter({ hasText: name })
+        await onKeys.waitFor({ timeout: 15_000 })
         await page.getByRole('button', { name: `Revoke ${name}` }).click()
-        await row.waitFor({ state: 'detached', timeout: 15_000 })
-        const revoked = await mcp(origin, held.access_token)
-        ctx.evidence.push({ note: `after its Revoke button: the row is gone; /mcp with its token ${revoked.status}` })
-        if (revoked.status !== 401) wrong.push(`/mcp answered ${revoked.status} to a token revoked from Settings, not 401`)
+        await onKeys.waitFor({ state: 'detached', timeout: 15_000 })
+        const shown = await page.getByRole('status').filter({ hasText: `${name} is disconnected` }).count()
+        const toolCall = await fetch(`${origin}/mcp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${held.access_token}` },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_wallets', arguments: {} } }),
+        })
+        const refusal = await toolCall.text()
+        ctx.evidence.push({ note: `Keys: revoked from its row, the page says so ${shown > 0}; its next tool call ${toolCall.status} ${refusal}` })
+        if (shown === 0) wrong.push('Keys does not show the revocation after its Revoke button')
+        if (toolCall.status !== 401 || !refusal.includes('not connected')) wrong.push(`a tool call on a token revoked from Keys answered ${toolCall.status} ${refusal}, not 401 not connected`)
         await page.goto(origin)
 
         return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
-          : { pass: true, detail: `${clients.map((c) => c.how).join(', ')} clients signed in through the consent screen; refresh rotated, replay and revocation were refused, and Settings listed and revoked one` }
+          : { pass: true, detail: `${clients.map((c) => c.how).join(', ')} clients signed in through the consent screen; refresh rotated, replay and revocation were refused, and Settings listed it and Keys revoked it` }
       } finally {
         proc?.kill()
         server.closeAllConnections()
