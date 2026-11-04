@@ -90,9 +90,10 @@
 // seller with earnings and no tax details and pays one whose details are complete. Its defect, beside stub-tax.ts's two:
 //   payout-hold-ignored — the payout run pays a seller who gave no tax details
 //
-// B46.24 pays a seller who saved payout details on the money layer instead (stub-earnings.ts payMarket). Its two:
+// B46.24 pays a seller who saved payout details on the money layer instead (stub-earnings.ts payMarket). Its three:
 //   payout-run-ignores-money — the payout run pays such a seller by Stripe, as Lens's synthetic run did before talyvor-lens B46.25
 //   royalty-paid-as-sale     — a lineage royalty is paid out as a sale
+//   no-platform-usd-account  — Talyvor's own workspace has no USD account to pay from: the run answers 500, the payout left unpaid with its error
 //
 // B28.426 adds a Chat question asked through a listing (X-Talyvor-Listing, talyvor-lens B28.186): one use of it, charged as a
 // marketplace use, the answer saying how (X-Talyvor-Listing-Charge). Its defect:
@@ -309,6 +310,8 @@ interface Payout {
   id: string; ws: string; method: 'credits' | 'stripe' | 'money'; asset?: string; month: string; gross_usd_micros: number; net_usd_micros: number; credits_ulxc: number; paid_at: string; created_at: string
   /** B32.66 — a weekly payout's ISO week, and Stripe's fees taken from it */
   period?: string; vat_usd_micros?: number; account_fee_usd_micros?: number; payout_fee_usd_micros?: number
+  /** B46.24 — why the money layer has not paid it yet */
+  last_error?: string
 }
 /** B32.66 — the payout minimum (Lens market.PayoutMinimumUSDMicros), and Stripe's fees in cents (market.PayoutFees). */
 const PAYOUT_MINIMUM_USD_MICROS = 25_000_000
@@ -1494,7 +1497,8 @@ export class Bank {
     // B32.89 — one card recorded on two test workspaces (talyvor-lens B32.102); every stub workspace is a test one.
     if (await this.trustDesk.syntheticRoute(req, res, path, (ws) => this.d.workspace(ws) !== undefined)) return true
     if ((m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/marketplace\/payouts\/run$/.exec(path)) !== null && req.method === 'POST') {
-      return json(res, 200, this.payOutWeekly(m[1], now)), true
+      const out = this.payOutWeekly(m[1], now)
+      return out === undefined ? (json(res, 500, { error: 'internal server error' }), true) : (json(res, 200, out), true)
     }
     if ((m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/marketplace\/bill\/([^/]+)\/refund$/.exec(path)) !== null) {
       const paid = this.uses.filter((u) => u.invoice === m?.[2] && u.buyer === m?.[1])
@@ -1735,7 +1739,7 @@ export class Bank {
    * once an ISO week and once it reaches the minimum, Stripe's account fee on the month's first payout and its payout fee
    * on every one.
    */
-  private payOutWeekly(ws: string, now: string): object {
+  private payOutWeekly(ws: string, now: string): object | undefined {
     const available = this.released(ws)
     if (available > 0 && this.tax.incomplete(ws) && !this.broken('payout-hold-ignored')) this.tax.withhold(ws, now)
     if (this.tax.withheld(ws)) return { withheld: true, hold: HOLD_REASON, payout: null }
@@ -1753,6 +1757,11 @@ export class Bank {
       const p: Payout = { id: id('mpo_'), ws, method: 'money', asset, month: now.slice(0, 7), period, gross_usd_micros: grossCents * 10_000, vat_usd_micros: 0,
         account_fee_usd_micros: 0, payout_fee_usd_micros: 0, net_usd_micros: grossCents * 10_000, credits_ulxc: 0, paid_at: now, created_at: now }
       this.payouts.unshift(p)
+      if (this.broken('no-platform-usd-account')) {
+        p.paid_at = ''
+        p.last_error = 'economy: no such money account: no USD account to pay from — open one at /v1/money/accounts'
+        return undefined
+      }
       this.earningsPayouts.payMarket(ws, p.id, period, grossCents, all > 0 ? Math.floor((grossCents * lineage) / all) : 0, asset)
       const { ws: _w, ...out } = p
       return { withheld: false, payout: out }
