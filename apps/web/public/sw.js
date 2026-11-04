@@ -32,6 +32,19 @@ function showApproval(d) {
   })
 }
 
+// B41.207: Lens's morning push ({type: "daily_briefing", workspace_id, line, quiet}) is a briefing, not a
+// decision, so it carries no actions and a tap opens Home.
+function showBriefing(d) {
+  return self.registration.showNotification('This morning', {
+    body: d.line || '',
+    icon: ICON,
+    badge: ICON,
+    tag: 'daily-briefing',
+    data: { url: '/' },
+    actions: [],
+  })
+}
+
 self.addEventListener('push', (event) => {
   let d = {}
   try {
@@ -39,7 +52,7 @@ self.addEventListener('push', (event) => {
   } catch {
     d = {}
   }
-  event.waitUntil(showApproval(d))
+  event.waitUntil(d.type === 'daily_briefing' ? showBriefing(d) : showApproval(d))
 })
 
 /** Opens the app at `url`, in a window already open if there is one. */
