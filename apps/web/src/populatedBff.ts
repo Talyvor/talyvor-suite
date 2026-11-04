@@ -482,6 +482,14 @@ const BY_PATH: Record<string, unknown> = {
     alerts: [{ id: 'al_1', agent_id: 'agt_research', last_hour_ulxc: 600_000, usual_per_hour_ulxc: 100_000, paused: true, created_at: '2026-09-27T12:00:00Z' }],
     rule: 'An alert is raised when an agent spends five times its usual hourly rate.',
   },
+  '/api/money/budgets/alerts': {
+    alerts: [
+      { id: 'sal_2', kind: 'agent_limit', subject: 'agt_research', agent_id: 'agt_research', period: 'daily', period_start: '2026-09-27T00:00:00Z',
+        percent: 80, spent_minor: 4_000_000, limit_minor: 5_000_000, currency: 'LXC', created_at: '2026-09-27T12:10:00Z' },
+      { id: 'sal_1', kind: 'budget', subject: 'bdg_1', category: 'ai_and_software', period: 'month', period_start: '2026-09-01T00:00:00Z',
+        percent: 50, spent_minor: 25_000, limit_minor: 50_000, currency: 'GBP', created_at: '2026-09-20T08:00:00Z' },
+    ],
+  },
   '/api/agents/approvals': {
     approvals: [
       {

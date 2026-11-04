@@ -41,6 +41,10 @@
 // then a payment of more than 1,000 to it is refused 409; POST …/{id}/called/challenge and …/{id}/called end it, only on an
 // assertion by one of the workspace's passkeys over that challenge. Its defect:
 //   cooling-off-skipped    — a payment of more than 1,000 to a payee saved moments ago is paid
+// B28.62 — and budgets with their limit-approach alerts (Lens B53.4, B28.335): PUT and GET /v1/money/budgets, spent from the
+// payments out of the month (or the week from Monday, UTC) in the budget's currency and wallet; GET /v1/money/budgets/alerts
+// raises each 50, 80 and 100% reached, once a period, and lists them newest first. Its defect:
+//   limit-alert-twice      — an alert already raised in its period is raised again on every read
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -77,6 +81,11 @@ interface StubCard { id: string; line: number; merchant: string; cap_minor: numb
 interface StubCardBatch { id: string; workspace_id: string; agent_id: string; idempotency_key: string; purpose: string; currency: string; funding: string
   total_minor: number; status: string; cards: StubCard[]; approved_by?: string; approved_at?: string; created_at: string }
 
+/** A budget and the alert it raised (economy.SpendBudget, economy.SpendAlert). */
+interface StubBudget { id: string; agent_id: string; category: string; period: string; amount_minor: number; currency: string; timezone: string }
+interface StubLimitAlert { id: string; kind: string; subject: string; agent_id?: string; category?: string; period: string; period_start: string; percent: number
+  spent_minor: number; limit_minor: number; currency: string; created_at: string }
+
 const CURRENCIES = ['GBP', 'EUR', 'USD']
 const HELD = 'screening: held — the name is close to one on a sanctions list, and waits for an operator to release it'
 /** Minor units as Lens prints them: "GBP 10.00". */
@@ -99,6 +108,9 @@ export class PayeeDesk {
   private readonly bills = new Map<string, (Record<string, unknown> & { id: string; digest: string })[]>()
   /** B46.20 — the card batches each workspace's agents asked for. */
   private readonly cardBatches = new Map<string, StubCardBatch[]>()
+  /** B28.62 — each workspace's budgets and the alerts they raised. */
+  private readonly budgets = new Map<string, StubBudget[]>()
+  private readonly limitAlerts = new Map<string, StubLimitAlert[]>()
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
   private readonly body: <T>(req: IncomingMessage) => Promise<T>
@@ -167,6 +179,7 @@ export class PayeeDesk {
     if (await this.payoutRoute(req, res, ws, path, list)) return true
     if (await this.billRoute(req, res, ws, path, list)) return true
     if (await this.cardRoute(req, res, ws, path, '')) return true
+    if (await this.budgetRoute(req, res, ws, path)) return true
     if (path === '/v1/money/payees' && req.method === 'GET') return this.json(res, 200, { payees: list }), true
     if (path === '/v1/money/payees' && req.method === 'POST') {
       const b = await this.body<Record<string, string>>(req)
@@ -255,6 +268,56 @@ export class PayeeDesk {
     for (const c of batch.cards) Object.assign(c, { status: 'active', last4: randomBytes(2).toString('hex'), expires_at: expires })
     Object.assign(batch, { status: 'issued', approved_by: 'owner', approved_at: new Date().toISOString() })
     return this.json(res, 200, batch), true
+  }
+
+  /** B28.62 — budgets (PUT and GET /v1/money/budgets) and the alerts they raise (GET /v1/money/budgets/alerts). */
+  private async budgetRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
+    const budgets = this.budgets.get(ws) ?? []
+    const progress = (b: StubBudget) => {
+      const now = new Date()
+      const start = b.period === 'week'
+        ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7)))
+        : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+      const end = b.period === 'week' ? new Date(start.getTime() + 7 * 86_400_000) : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1))
+      const accounts = this.accounts.get(ws) ?? []
+      // shortcut: every payment out reads as uncategorised, so a budget with a category spends nothing here.
+      const spent = (this.payments.get(ws) ?? []).filter((p) => p.status !== 'failed' && p.currency === b.currency && b.category === '' &&
+        (b.agent_id === 'all' || (accounts.find((a) => a.id === p.account_id)?.agent_id ?? '') === b.agent_id) &&
+        Date.parse(p.created_at) >= start.getTime() && Date.parse(p.created_at) < end.getTime()).reduce((n, p) => n + p.amount_minor, 0)
+      return { ...b, period_start: start.toISOString(), period_end: end.toISOString(), spent_minor: spent, left_minor: b.amount_minor - spent,
+        percent: Math.floor((spent * 100) / b.amount_minor) }
+    }
+    if (path === '/v1/money/budgets' && req.method === 'GET') return this.json(res, 200, { budgets: budgets.map(progress) }), true
+    if (path === '/v1/money/budgets' && req.method === 'PUT') {
+      const b = await this.body<Partial<StubBudget>>(req)
+      if (b.period !== 'week' && b.period !== 'month') return this.json(res, 400, { error: 'economy: spending: period must be week or month' }), true
+      if (!Number.isInteger(b.amount_minor) || (b.amount_minor ?? 0) <= 0) return this.json(res, 400, { error: 'economy: spending: amount_minor must be above zero' }), true
+      if (!/^[A-Z]{3}$/.test(b.currency ?? '')) return this.json(res, 400, { error: 'economy: spending: currency must be a currency code such as GBP' }), true
+      const key = { agent_id: b.agent_id ?? '', category: b.category ?? '', period: b.period, currency: b.currency ?? '' }
+      let got = budgets.find((x) => x.agent_id === key.agent_id && x.category === key.category && x.period === key.period && x.currency === key.currency)
+      if (got === undefined) {
+        got = { id: `bdg_${randomUUID()}`, ...key, amount_minor: 0, timezone: 'UTC' }
+        this.budgets.set(ws, [...budgets, got])
+      }
+      Object.assign(got, { amount_minor: b.amount_minor, timezone: b.timezone || 'UTC' })
+      return this.json(res, 200, progress(got)), true
+    }
+    if (path === '/v1/money/budgets/alerts' && req.method === 'GET') {
+      const alerts = this.limitAlerts.get(ws) ?? []
+      for (const b of budgets.map(progress)) {
+        for (const pct of [50, 80, 100]) {
+          if (b.spent_minor * 100 < b.amount_minor * pct) break
+          const raised = alerts.some((a) => a.subject === b.id && a.period_start === b.period_start && a.percent === pct)
+          if (raised && !this.broken('limit-alert-twice')) continue
+          alerts.push({ id: `sal_${randomUUID()}`, kind: 'budget', subject: b.id, ...(b.agent_id ? { agent_id: b.agent_id } : {}), ...(b.category ? { category: b.category } : {}),
+            period: b.period, period_start: b.period_start, percent: pct, spent_minor: b.spent_minor, limit_minor: b.amount_minor, currency: b.currency,
+            created_at: new Date().toISOString() })
+        }
+      }
+      this.limitAlerts.set(ws, alerts)
+      return this.json(res, 200, { alerts: [...alerts].reverse() }), true
+    }
+    return false
   }
 
   /** B30.109 — the accounts and the payments out, each refusal as Lens words it; only compliance-live-paid moves money. */

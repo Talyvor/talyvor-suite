@@ -21,3 +21,15 @@ func (a *app) handleMoneySearch(w http.ResponseWriter, r *http.Request, t tenant
 	// Shown without the query: what a person searched for is theirs, not the log's.
 	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/search?"+q.Encode(), nil, "money search")
 }
+
+// B28.62 — limit-approach alerts, on this session's own token.
+//
+//	GET /api/money/budgets/alerts   every time spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit,
+//	                                newest first, each once per period (Lens B28.335)
+func (a *app) handleMoneyBudgetAlerts(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/budgets/alerts", nil, "limit alerts")
+}

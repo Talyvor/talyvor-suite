@@ -160,6 +160,25 @@ export interface AgentSpendAlert {
   created_at: string
 }
 
+/** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
+export interface LimitAlert {
+  id: string
+  kind: 'budget' | 'card' | 'agent_limit'
+  /** the budget's id, the card's or the agent's */
+  subject: string
+  agent_id?: string
+  category?: string
+  /** week or month for a budget; hourly, daily, weekly or monthly for an agent's limit */
+  period?: string
+  period_start: string
+  percent: number
+  spent_minor: number
+  limit_minor: number
+  /** LXC for an agent's limit, counted in µLXC */
+  currency: string
+  created_at: string
+}
+
 /**
  * Lens economy.SafeToSpend (B41.105): per currency, the balance less what is promised out of it this month — scheduled
  * payments, bills due and payments waiting for approval. LXC is in µLXC; GBP, EUR and USD in minor units.
@@ -659,6 +678,7 @@ export const agentBankApi = {
   removeTopUp: (id: string) => send<unknown>('DELETE', `/api/agents/${e(id)}/topup`),
   // B19.20 — stop every agent or one, and what they are spending.
   alerts: () => getJSON<{ alerts: AgentSpendAlert[] | null; rule: string }>('/api/agents/alerts', { alerts: 'list' }),
+  limitAlerts: () => getJSON<{ alerts: LimitAlert[] | null }>('/api/money/budgets/alerts', { alerts: 'list' }),
   safeToSpend: () => getJSON<SafeToSpend>('/api/agents/safe-to-spend', { agents: 'list' }),
   briefing: () => getJSON<Briefing>('/api/agents/briefing', { items: 'list', quiet: 'boolean', line: 'string' }),
   forecast: () => getJSON<SpendForecast>('/api/agents/forecast', { spent_ulxc: 'number', forecast_ulxc: 'number', agents: 'list' }),
