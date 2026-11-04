@@ -183,7 +183,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B30.97 — the accounts, the new invoice form, and the invoices issued.
   '/money/invoices': 3,
   // B30.96 — payees, send, payments out, standing orders, mandates and bulk payouts.
-  '/money/spending': 7, // B53.8: this week, this month, budgets, unusual, payments, subscriptions and the latest notices, under the populated fixture
+  '/money/spending': 10, // B53.8: this week, this month, budgets, unusual, payments, subscriptions and the latest notices; B53.16: safe to spend, off plan and the payments due, under the populated fixture
   '/money/budgets': 1, // B41.39: the Budgets card, under the populated fixture's one budget
   '/money/subscriptions': 1, // B41.20: the Subscriptions card, under the populated fixture's two found subscriptions
   '/money/pay': 9, // B40.35: the assistant's payee requests and its drafted mandate, under the populated fixture; B41.1: the bills inbox

@@ -269,6 +269,63 @@ export interface SpendNotice {
   created_at: string
 }
 
+/** B53.16 — Lens economy.SpendIncome (B53.15): about amount_minor of currency on day payday of each month. */
+export interface SpendIncome {
+  payday: number
+  amount_minor: number
+  currency: string
+  payer?: string
+  /** false: Lens's proposal from three months of money in, for the owner to confirm */
+  confirmed: boolean
+}
+
+/** B53.16 — Lens economy.PlanPayment: one upcoming payment and whether the money now covers it. */
+export interface PlanPayment {
+  source: 'bill' | 'subscription' | 'standing_order'
+  /** the bill's, the subscription's merchant, the standing order's */
+  id: string
+  payee: string
+  agent_id?: string
+  amount_minor: number
+  currency: string
+  /** YYYY-MM-DD in the owner's time zone */
+  due: string
+  covered: boolean
+}
+
+/** B53.16 — Lens economy.PlanFinding: one way the month is off plan, with its numbers and the Coach's sentence. */
+export interface PlanFinding {
+  kind: 'plan_uncovered' | 'plan_pace_short' | 'plan_bill_larger' | 'plan_income_late'
+  urgent: boolean
+  payment?: PlanPayment
+  short_minor?: number
+  pace_per_day_minor?: number
+  keep_to_per_day_minor?: number
+  usual_minor?: number
+  expected_on?: string
+  sentence: string
+}
+
+/** B53.16 — Lens economy.SpendPlan (B53.15): the owner's month plan, from today to the day before the next income. */
+export interface SpendPlan {
+  currency: string
+  timezone: string
+  today: string
+  until: string
+  next_income?: string
+  days: number
+  income: SpendIncome | null
+  proposed_income?: SpendIncome
+  money_now_minor: number
+  upcoming_minor: number
+  budgets_left_minor: number
+  available_minor: number
+  safe_per_day_minor: number
+  pace_per_day_minor: number
+  payments: PlanPayment[]
+  findings: PlanFinding[]
+}
+
 /** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
 export interface LimitAlert {
   id: string
@@ -801,6 +858,8 @@ export const agentBankApi = {
   coach: () => getJSON<{ lines: CoachLine[] | null; review: CoachLine[] | null }>('/api/money/coach', { lines: 'list', review: 'list' }),
   notices: () => getJSON<{ settings: NoticeSettings; notices: SpendNotice[] | null }>('/api/money/notices', { notices: 'list' }),
   setNoticeSettings: (s: NoticeSettings) => send<NoticeSettings>('PUT', '/api/money/notices/settings', s),
+  plan: () => getJSON<SpendPlan>('/api/money/plan', { payments: 'list', findings: 'list', safe_per_day_minor: 'number' }),
+  setIncome: (i: Pick<SpendIncome, 'payday' | 'amount_minor' | 'currency' | 'payer'>) => send<SpendPlan>('PUT', '/api/money/plan/income', i),
   safeToSpend: () => getJSON<SafeToSpend>('/api/agents/safe-to-spend', { agents: 'list' }),
   briefing: () => getJSON<Briefing>('/api/agents/briefing', { items: 'list', quiet: 'boolean', line: 'string' }),
   forecast: () => getJSON<SpendForecast>('/api/agents/forecast', { spent_ulxc: 'number', forecast_ulxc: 'number', agents: 'list' }),

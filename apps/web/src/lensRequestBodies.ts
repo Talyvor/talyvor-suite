@@ -970,6 +970,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Put("/v1/money/notices/settings", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensSpendNoticeSettingsBody",
   },
+  // B53.16 — the payday and income, set on the Spending screen's month plan (Lens B53.15).
+  {
+    route: "PUT /v1/money/plan/income",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPlanIncome(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_plan_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/plan/income", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSpendIncomeBody",
+  },
   {
     route: "POST /v1/money/payees/{id}/confirm",
     file: "apps/bff/money_pay.go",

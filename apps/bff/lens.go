@@ -543,6 +543,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/coach", a.requireTenant(a.handleMoneyCoach))                          // B53.8, money_search.go
 	a.mux.HandleFunc("/api/money/notices", a.requireTenant(a.handleMoneyNotices))                      // B53.8, money_search.go
 	a.mux.HandleFunc("/api/money/notices/settings", a.requireTenant(a.handleMoneyNoticeSettings))      // B53.8, money_search.go
+	a.mux.HandleFunc("/api/money/plan", a.requireTenant(a.handleMoneyPlan))                            // B53.16, money_search.go
+	a.mux.HandleFunc("/api/money/plan/income", a.requireTenant(a.handleMoneyPlanIncome))               // B53.16, money_search.go
 	a.mux.HandleFunc("/api/money/mandates", a.requireTenant(a.handleMoneyMandates))
 	a.mux.HandleFunc("/api/money/mandates/{id}/revoke", a.requireTenant(a.handleMoneyMandateRevoke))
 	// B41.1 — the bills inbox: an uploaded invoice becomes a bill (Lens B41.101). See money_bills.go.

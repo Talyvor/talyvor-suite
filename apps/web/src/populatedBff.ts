@@ -514,6 +514,19 @@ const BY_PATH: Record<string, unknown> = {
       { agent_id: 'agt_research', currency: 'GBP', total_minor: 25_000, by_category: { ai_software: 25_000 }, by_tag: {} },
     ],
   },
+  // B53.16 — the month plan: payday on the 29th, two bills covered, and the rent short at the last seven days' pace.
+  '/api/money/plan': {
+    currency: 'GBP', timezone: 'Europe/London', today: '2026-09-04', until: '2026-09-28', next_income: '2026-09-29', days: 25,
+    income: { payday: 29, amount_minor: 250_000, currency: 'GBP', confirmed: true }, money_now_minor: 110_000, upcoming_minor: 73_000,
+    budgets_left_minor: 10_000, available_minor: 27_000, safe_per_day_minor: 1080, pace_per_day_minor: 5714,
+    payments: [
+      { source: 'bill', id: 'bill_phone', payee: 'Phone Co', amount_minor: 3000, currency: 'GBP', due: '2026-09-09', covered: true },
+      { source: 'bill', id: 'bill_rent', payee: 'Landlord', amount_minor: 70_000, currency: 'GBP', due: '2026-09-14', covered: true },
+    ],
+    findings: [{ kind: 'plan_pace_short', urgent: true, payment: { source: 'bill', id: 'bill_rent', payee: 'Landlord', amount_minor: 70_000, currency: 'GBP', due: '2026-09-14', covered: true },
+      short_minor: 20_140, pace_per_day_minor: 5714, keep_to_per_day_minor: 3700,
+      sentence: 'At this pace, 57.14 GBP a day, the 700.00 GBP payment to Landlord on 14 September is short by 201.40 GBP; keeping to 37.00 GBP a day until then covers it.' }],
+  },
   '/api/money/spending/unusual': {
     findings: [{ rule: 'new_merchant', entry_id: 'ent_2', merchant: 'Dishoom', category: 'eating_out', amount_minor: 4_250, currency: 'GBP', at: '2026-09-26T20:10:00Z' }],
   },
