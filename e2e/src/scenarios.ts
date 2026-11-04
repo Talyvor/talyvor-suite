@@ -1469,6 +1469,15 @@ export function walletHero(): Scenario {
   }
 }
 
+/** B17.342 — the header's drawn lockup as marketingBoard reads it: a visible mark and wordmark, no tagline. */
+export function headerLockupFaults(l: { mark: boolean; wordmark: boolean; tagline: boolean }): string[] {
+  const faults: string[] = []
+  if (!l.mark) faults.push('no drawn mark in the header')
+  if (!l.wordmark) faults.push('no drawn wordmark in the header')
+  if (l.tagline) faults.push('the retired tagline shows in the header')
+  return faults
+}
+
 /** B29.4 — /marketing in the board's design: the drawn lockup, the hero photograph (no more than
  *  350 KB as served), and the positioning band. At 1440 the photo bleeds off the right edge beside
  *  the text; at 390 it sits under the text and nothing scrolls sideways. B32.1: the verb stack
@@ -1491,11 +1500,9 @@ export function marketingBoard(): Scenario {
             const box = (el: Element | null) => (el === null ? null : el.getBoundingClientRect())
             const p = box(photo)!
             const h1 = box(document.querySelector('h1'))!
-            const logo = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]')).find((i) => getComputedStyle(i).display !== 'none')
-            // B34.1 — the logo loads like the photo; read before it has, it is "not loaded".
-            if (logo !== undefined && !logo.complete) {
-              await new Promise((r) => { logo.addEventListener('load', r, { once: true }); logo.addEventListener('error', r, { once: true }) })
-            }
+            // B51.1: the header draws the mark and wordmark inline; there is no logo file to load.
+            const header = document.querySelector('header')
+            const drawn = (b: string) => header?.querySelector(`svg[data-brand="${b}"]`)?.checkVisibility() === true
             return {
               src: photo.currentSrc,
               loaded: photo.naturalWidth > 0,
@@ -1503,19 +1510,19 @@ export function marketingBoard(): Scenario {
               h1Bottom: h1.bottom,
               stack: document.querySelector('.tal-verbs') !== null,
               verbs: document.body.innerText.match(/\b(route|prove|reuse|compound)\b/gi) ?? [],
-              logo: logo === undefined ? '' : `${new URL(logo.src).pathname}${logo.naturalWidth > 0 ? '' : ' (not loaded)'}`,
+              lockup: { mark: drawn('mark'), wordmark: drawn('wordmark'), tagline: /ai work that compounds/i.test(header?.innerText ?? '') },
               band: document.body.innerText.includes('Designed to run on your own infrastructure.'),
               scroll: document.documentElement.scrollWidth,
               client: document.documentElement.clientWidth,
             }
           })
           const bytes = (await (await page.request.get(got.src)).body()).length
-          ctx.evidence.push({ note: `${width}: photo ${new URL(got.src).pathname} ${bytes} B at ${JSON.stringify(got.photo)}; verbs ${JSON.stringify(got.verbs)}; logo ${got.logo}; scroll ${got.scroll}/${got.client}` })
+          ctx.evidence.push({ note: `${width}: photo ${new URL(got.src).pathname} ${bytes} B at ${JSON.stringify(got.photo)}; verbs ${JSON.stringify(got.verbs)}; header lockup ${JSON.stringify(got.lockup)}; scroll ${got.scroll}/${got.client}` })
           const at = `${width}px`
           if (!got.loaded) wrong.push(`${at}: the hero photo did not load`)
           if (bytes > 350_000) wrong.push(`${at}: the hero photo served ${bytes} bytes, over 350 KB`)
           if (got.stack || got.verbs.length > 0) wrong.push(`${at}: the retired verb stack shows (${got.stack ? '.tal-verbs; ' : ''}${got.verbs.join(' ')})`)
-          if (!/^\/brand\/svg\/talyvor-logo-(dark|light)-notag\.svg$/.test(got.logo)) wrong.push(`${at}: logo "${got.logo}"`)
+          wrong.push(...headerLockupFaults(got.lockup).map((f) => `${at}: ${f}`))
           if (!got.band) wrong.push(`${at}: no positioning band`)
           if (got.scroll > got.client) wrong.push(`${at}: scrolls sideways (${got.scroll} > ${got.client})`)
           if (width === 1440 && (got.photo.left < width / 2 - 1 || got.photo.right < width - 1)) wrong.push(`${at}: the photo does not bleed off the right edge (${got.photo.left}–${got.photo.right})`)
