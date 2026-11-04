@@ -1507,6 +1507,12 @@ export class Bank {
       for (const u of refunded) Object.assign(u, { refunded_at: now, kept: this.broken('bill-refund-kept') })
       return json(res, 200, { invoice_id: m[2], uses_refunded: refunded.length }), true
     }
+    // B53.14 — the issuer's charge on a single-use money card (Lens B53.18).
+    if ((m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/money\/cards\/([^/]+)\/charge$/.exec(path)) !== null && req.method === 'POST') {
+      const b = await this.body<{ merchant?: string; amount_minor?: number }>(req)
+      const [status, out] = this.payees.chargeCard(m[1], m[2], b.merchant ?? '', b.amount_minor ?? 0)
+      return json(res, status, out), true
+    }
     if ((m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/agents\/([^/]+)\/card\/authorizations$/.exec(path)) !== null && req.method === 'POST') {
       const a = this.agents.get(m[2])
       if (a === undefined || a.ws !== m[1] || !this.cards.has(a.id)) return json(res, 404, { error: 'economy: the agent has no card' }), true

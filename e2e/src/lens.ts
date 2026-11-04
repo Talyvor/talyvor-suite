@@ -1887,6 +1887,11 @@ export class LensClient {
     return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/agents/${agentID}/card/authorizations`, p)
   }
 
+  /** B53.14 — a charge at a merchant on one of the workspace's single-use money cards, made as the issuer makes it (Lens B53.18). */
+  async chargeTestCard(user: SyntheticUser, cardID: string, c: { merchant: string; amount_minor: number }): Promise<Answered<{ authorization_id: string; approved: boolean; reason: string; mcc: string; country: string }>> {
+    return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/money/cards/${cardID}/charge`, c)
+  }
+
   /** B34.8 — a test workspace put on `plan` with the synthetic key, as Lens B35.1 lets the testers do. */
   async setTestPlan(user: SyntheticUser, plan: Plan): Promise<Answered<{ plan: { plan: string } }>> {
     return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/plan`, { plan })

@@ -100,6 +100,7 @@ import { oneSearch } from './oneSearch.ts'
 import { limitAlerts } from './limitAlerts.ts'
 import { subscriptionsView } from './subscriptionsView.ts'
 import { budgetsByCategory } from './budgetsByCategory.ts'
+import { coachWeek } from './coachWeek.ts'
 import { payeeCoolingOff } from './coolingOff.ts'
 import { chatSidebar } from './chatSidebar.ts'
 import { voiceChatMic, voiceChatPay } from './voiceChat.ts'
@@ -5485,6 +5486,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.39 — budgets by category, once a run, on a workspace of its own: with a £100.00 AI and software budget, the payment that
   // crosses £80 raises one 80% alert, another category's payment counts for nothing, and Money → Budgets shows the progress.
   if (i === 7) list.push(budgetsByCategory())
+  // B53.14 — a week of spending with the Coach, once a run, on a workspace of its own: six card payments land in their categories, an
+  // eating-out budget crossing 80% alerts once, a duplicate and a new country are unusual, every Coach sentence passes its validator.
+  if (i === 5) list.push(coachWeek())
   if (i === 7) list.push(oneSearch(), payeeCoolingOff()) // B41.11: a large first payment to a new payee waits until the owner signs "I called them"
   // B48.23 — agents of each kind own their wallets, once a run, on a workspace of its own: fiat GBP, crypto USDC, both EUR + USDC,
   // each its own account; removing the kind whose wallet holds test money answers 409 and the ledger keeps it open; one owner wallet per asset.
