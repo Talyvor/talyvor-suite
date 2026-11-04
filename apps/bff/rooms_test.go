@@ -181,6 +181,12 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		{http.MethodDelete, "/api/rooms/room_1/invites/rinv_1", ""},
 		{http.MethodPost, "/api/rooms/room_1/prizes/rprz_1/award", `{"contribution_id":"c_1"}`},
 		{http.MethodPost, "/api/room-invites/rinvtok_abc/join", `{"terms_version":1}`},
+		{http.MethodPost, "/api/rooms/room_1/owner", `{"workspace_id":"ws_2"}`},
+		{http.MethodGet, "/api/rooms/room_1/takeover", ""},
+		{http.MethodPost, "/api/rooms/room_1/takeover", ""},
+		{http.MethodDelete, "/api/rooms/room_1/takeover", ""},
+		{http.MethodPut, "/api/rooms/room_1/takeover/vote", `{"candidate_workspace_id":"ws_2"}`},
+		{http.MethodPost, "/api/rooms/room_1/fork", ""},
 	} {
 		if rec := doJSON(a, c.method, c.path, c.body); rec.Code != http.StatusOK {
 			t.Fatalf("%s %s = %d %s", c.method, c.path, rec.Code, rec.Body.String())
@@ -191,6 +197,7 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 	for _, c := range []struct{ method, path, body string }{
 		{http.MethodPatch, "/api/rooms/room_1/members/ws_2", `{"may_spend":true,"workspace_id":"ws_3"}`},
 		{http.MethodPost, "/api/rooms/room_1/prizes/rprz_1/award", `{"contribution_id":"c_1","winner_workspace_id":"ws_3"}`},
+		{http.MethodPut, "/api/rooms/room_1/takeover/vote", `{"candidate_workspace_id":"ws_2","workspace_id":"ws_3"}`},
 	} {
 		if rec := doJSON(a, c.method, c.path, c.body); rec.Code != http.StatusBadRequest {
 			t.Fatalf("%s %s with %s = %d, want 400 before Lens is asked", c.method, c.path, c.body, rec.Code)
@@ -204,6 +211,12 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		`DELETE /v1/rooms/room_1/invites/rinv_1 `,
 		`POST /v1/rooms/room_1/prizes/rprz_1/award {"contribution_id":"c_1"}`,
 		`POST /v1/room-invites/rinvtok_abc/join {"terms_version":1}`,
+		`POST /v1/rooms/room_1/owner {"workspace_id":"ws_2"}`,
+		`GET /v1/rooms/room_1/takeover `,
+		`POST /v1/rooms/room_1/takeover `,
+		`DELETE /v1/rooms/room_1/takeover `,
+		`PUT /v1/rooms/room_1/takeover/vote {"candidate_workspace_id":"ws_2"}`,
+		`POST /v1/rooms/room_1/fork `,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("Lens received\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

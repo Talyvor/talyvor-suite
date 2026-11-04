@@ -21,6 +21,7 @@ import {
   upsertMessage,
   usdText,
 } from './roomsApi'
+import { RoomLead } from './RoomLead'
 import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 
 // Room.tsx — B32.54: the room screen, for a member under the room's current terms. The conversation is fed by the
@@ -29,6 +30,7 @@ import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 // marketplace listing on the room's budget or the member's own (B32.33), whose run message — what it cost and who
 // paid — reaches everyone in the room. The room wallet's spend this month against its budget sits at the top. B41.60:
 // the room's spec, a Docs page kept current in the conversation, and asking the room's AI, which reads it (RoomSpec.tsx).
+// B41.48: who leads the room, and the takeover vote when its owner is away (RoomLead.tsx).
 //
 // Lens decides everything — who may post, contribute, vote, accept and spend — and its sentence is shown on a refusal.
 
@@ -658,6 +660,7 @@ export function RoomLive({ room }: { room: RoomDetail }) {
       <Board room={room} me={me} />
       <RunPanel room={room} me={me} />
       <RoomSpec room={room} me={me} messagesKey={messagesKey(room.id)} />
+      <RoomLead room={room} />
     </>
   )
 }

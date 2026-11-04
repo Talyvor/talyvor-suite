@@ -398,7 +398,7 @@ function RoomPage() {
   // B32.54 — a member under the current terms is in the room: its conversation, contributions, runs and spec (Room.tsx).
   const inside = !asks
   const about = issueBackLink(r.description, window.location.origin)
-  const n = (i: number) => String(inside ? i + 4 : i).padStart(2, '0')
+  const n = (i: number) => String(inside ? i + 5 : i).padStart(2, '0')
   return (
     <>
       <Region
@@ -414,6 +414,14 @@ function RoomPage() {
             Opened from Track issue{' '}
             <Link className={`font-figure text-ink ${inlineLink}`} to={about.issue.path}>
               {about.issue.identifier}
+            </Link>
+          </p>
+        ) : null}
+        {r.forked_from_room_id ? (
+          <p className="text-caption text-muted">
+            Forked from{' '}
+            <Link className={`text-ink ${inlineLink}`} to={roomHref(r.forked_from_room_id)}>
+              the room it started in
             </Link>
           </p>
         ) : null}
