@@ -68,3 +68,30 @@ func TestMoneyBudgetAlertsReachLens(t *testing.T) {
 		t.Fatalf("POST = %d; want 405", rec.Code)
 	}
 }
+
+// B41.20 — the subscriptions reach Lens's GET /v1/money/spending/subscriptions with nothing of the caller's query.
+func TestMoneySubscriptionsReachLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		got = append(got, r.Method+" "+r.URL.RequestURI())
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"subscriptions":[{"merchant":"Acme Cloud","amount_minor":1200,"currency":"GBP","interval":"monthly","monthly_minor":1200}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	rec := doJSON(a, http.MethodGet, "/api/money/spending/subscriptions?workspace_id=ws_other", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"monthly_minor":1200`) {
+		t.Fatalf("subscriptions = %d %s", rec.Code, rec.Body.String())
+	}
+	if len(got) != 1 || got[0] != "GET /v1/money/spending/subscriptions" {
+		t.Fatalf("Lens got %q; want only GET /v1/money/spending/subscriptions", got)
+	}
+	if rec = doJSON(a, http.MethodPost, "/api/money/spending/subscriptions", "{}"); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST = %d; want 405", rec.Code)
+	}
+}

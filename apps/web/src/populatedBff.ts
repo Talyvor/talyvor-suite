@@ -482,6 +482,17 @@ const BY_PATH: Record<string, unknown> = {
     alerts: [{ id: 'al_1', agent_id: 'agt_research', last_hour_ulxc: 600_000, usual_per_hour_ulxc: 100_000, paused: true, created_at: '2026-09-27T12:00:00Z' }],
     rule: 'An alert is raised when an agent spends five times its usual hourly rate.',
   },
+  // B41.20 — no marketplace licence here: the Marketplace's own fixtures hold those.
+  '/api/marketplace/licences': { licences: [] },
+  // B41.20 — two subscriptions Lens found recurring: one on the owner's own card, one an agent pays out monthly.
+  '/api/money/spending/subscriptions': {
+    subscriptions: [
+      { merchant: 'Acme Cloud', category: 'ai_and_software', amount_minor: 1_200, currency: 'GBP', interval: 'monthly', charges: 3, last_at: '2026-09-20T09:00:00Z',
+        next_at: '2026-10-20T09:00:00Z', remind_on: '2026-10-17T09:00:00Z', monthly_minor: 1_200, yearly_minor: 14_400 },
+      { agent_id: 'agt_research', merchant: 'Data Feeds Ltd', category: 'ai_and_software', amount_minor: 2_500, currency: 'GBP', interval: 'weekly', charges: 4,
+        last_at: '2026-09-27T09:00:00Z', next_at: '2026-10-04T09:00:00Z', remind_on: '2026-10-01T09:00:00Z', monthly_minor: 10_833, yearly_minor: 130_000 },
+    ],
+  },
   '/api/money/budgets/alerts': {
     alerts: [
       { id: 'sal_2', kind: 'agent_limit', subject: 'agt_research', agent_id: 'agt_research', period: 'daily', period_start: '2026-09-27T00:00:00Z',

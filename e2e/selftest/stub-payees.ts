@@ -302,6 +302,8 @@ export class PayeeDesk {
       Object.assign(got, { amount_minor: b.amount_minor, timezone: b.timezone || 'UTC' })
       return this.json(res, 200, progress(got)), true
     }
+    // B41.20 — no payment here recurs three times in one run, so Lens finds no subscription; the view lists the rest.
+    if (path === '/v1/money/spending/subscriptions' && req.method === 'GET') return this.json(res, 200, { subscriptions: [] }), true
     if (path === '/v1/money/budgets/alerts' && req.method === 'GET') {
       const alerts = this.limitAlerts.get(ws) ?? []
       for (const b of budgets.map(progress)) {

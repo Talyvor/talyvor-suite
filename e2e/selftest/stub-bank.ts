@@ -2664,7 +2664,7 @@ export class Bank {
           charge: o.price_usd_micros === 0 ? 'free' : 'billed', used_at: now, payee_agent_id: '', memo: '' }
         const days = o.kind === 'buy' ? undefined : o.period_days ?? 30
         const lic: StubLicence = { id: id('lic_'), ws: ws.id, listing_id: l.id, title: l.title, offer_id: o.id, licence: o.licence, kind: o.kind, pinned_version: version || null,
-          starts_at: now, ends_at: days === undefined ? null : new Date(Date.now() + days * 86_400e3).toISOString(), auto_renew: o.kind === 'subscribe', status: 'active',
+          starts_at: now, ends_at: days === undefined ? null : new Date(Date.now() + days * 86_400e3).toISOString(), auto_renew: o.kind === 'subscribe' && !this.broken('subscribe-not-renewing'), status: 'active',
           use_id: use.id, charge: use.charge, price_ulxc: use.price_ulxc, created_at: now, key, included_uses: o.included_uses, agent_id: agent?.id }
         if (refused === undefined || this.broken('licence-refused-kept')) {
           if (!this.broken('licence-unbilled')) this.uses.push(use)
