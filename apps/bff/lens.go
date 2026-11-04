@@ -634,6 +634,11 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/rooms/{id}/invites/{iid}", a.requireTenant(a.handleRoomInvite))
 	a.mux.HandleFunc("/api/rooms/{id}/prizes", a.requireTenant(a.handleRoomPrizes))
 	a.mux.HandleFunc("/api/rooms/{id}/prizes/{pid}/award", a.requireTenant(a.handleRoomPrizeAward))
+	// B41.48 — owner hand-over, the takeover notice and vote, and forking the room. See rooms.go.
+	a.mux.HandleFunc("/api/rooms/{id}/owner", a.requireTenant(a.handleRoomOwner))
+	a.mux.HandleFunc("/api/rooms/{id}/takeover", a.requireTenant(a.handleRoomTakeover))
+	a.mux.HandleFunc("/api/rooms/{id}/takeover/vote", a.requireTenant(a.handleRoomTakeoverVote))
+	a.mux.HandleFunc("/api/rooms/{id}/fork", a.requireTenant(a.handleRoomForkRoom))
 	a.mux.HandleFunc("/api/room-invites/{token}", a.requireTenant(a.handleRoomInvitePreview))
 	a.mux.HandleFunc("/api/room-invites/{token}/join", a.requireTenant(a.handleRoomInviteJoin))
 	// B11.3 — the Try-it pages: Tare and document conversion run on the person's input through Lens's

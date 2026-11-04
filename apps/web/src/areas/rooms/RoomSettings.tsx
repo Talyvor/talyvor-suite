@@ -35,7 +35,8 @@ import { RoomBudget } from './Room'
 // RoomSettings.tsx — B32.55: a room's settings, for its owner and its editors, at /rooms/:id/settings. The members
 // with their roles and whether each may spend the room's money (Lens B32.28); invite links for a private room, made,
 // copied and revoked (B32.29); the room wallet's budget and rules through Agent Wallets' own rules editor, and its
-// approvals (B32.32); prizes posted, awarded and closed (B32.35); and the room's terms with their version.
+// approvals (B32.32); prizes posted, awarded and closed (B32.35); and the room's terms with their version. B41.48: the
+// owner hands the room to another member.
 //
 // Lens decides everything — an editor manages members and invites; only the owner funds the room, sets its budget and
 // rules, posts and awards prizes and changes the terms — and its sentence is shown on a refusal: a budget above what
@@ -118,6 +119,66 @@ function MemberRow({ room, m, me }: { room: RoomDetail; m: Member; me: string })
   )
 }
 
+/** B41.48 — the owner hands the room to a member who is not a viewer and is under its current terms, and stays as an
+ *  editor. Lens leaves the old owner's wallet behind and clears every member's may_spend, for the new owner to grant. */
+function HandOver({ room, me }: { room: RoomDetail; me: string }) {
+  const qc = useQueryClient()
+  const [to, setTo] = useState('')
+  const [sure, setSure] = useState(false)
+  const hand = useMutation({
+    mutationFn: () => roomsApi.transferOwner(room.id, to),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ROOMS_KEY }),
+  })
+  const eligible = (room.members ?? []).filter((m) => m.workspace_id !== me && m.role !== 'viewer' && m.terms_current)
+  return (
+    <Card>
+      <Row
+        stack
+        label="Hand the room to another member"
+        hint={
+          eligible.length > 0
+            ? 'They become its owner; you stay as an editor, and nobody may spend until they say so.'
+            : 'A member who is not a viewer and has accepted the current terms can take the room.'
+        }
+      >
+        <div className="flex w-full flex-col gap-2 wide:w-auto wide:flex-row wide:items-center">
+          <select
+            aria-label="New owner"
+            className={`${selectClass} mt-0 wide:w-48`}
+            value={to}
+            disabled={hand.isPending || eligible.length < 1}
+            onChange={(e) => {
+              setTo(e.target.value)
+              setSure(false)
+            }}
+          >
+            <option value="">Choose…</option>
+            {eligible.map((m) => (
+              <option key={m.workspace_id} value={m.workspace_id}>
+                {m.workspace_id}
+              </option>
+            ))}
+          </select>
+          {sure ? (
+            <Button disabled={hand.isPending} onClick={() => hand.mutate()}>
+              Yes, hand it over
+            </Button>
+          ) : (
+            <Button disabled={!to} onClick={() => setSure(true)}>
+              Hand over
+            </Button>
+          )}
+        </div>
+      </Row>
+      {hand.isError ? (
+        <div className="px-gutter pb-3">
+          <Note ok={false}>{roomRefusal(hand.error)}</Note>
+        </div>
+      ) : null}
+    </Card>
+  )
+}
+
 function Members({ room, me }: { room: RoomDetail; me: string }) {
   const members = room.members ?? []
   return (
@@ -134,6 +195,7 @@ function Members({ room, me }: { room: RoomDetail; me: string }) {
           ))}
         </ul>
       </Card>
+      {room.me?.role === 'owner' ? <HandOver room={room} me={me} /> : null}
     </Region>
   )
 }

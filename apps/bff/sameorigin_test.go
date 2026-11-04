@@ -350,6 +350,12 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/rooms/x1/prizes", body: `{"title":"t","amount_usd_micros":1}`},
 		{method: http.MethodPost, path: "/api/rooms/x1/prizes/x1/award", body: `{"contribution_id":"x1"}`},
 		{method: http.MethodPost, path: "/api/room-invites/x1/join", body: `{"terms_version":1}`},
+		// B41.48 — owner hand-over, the takeover notice, its answer, the vote for a lead and forking the room.
+		{method: http.MethodPost, path: "/api/rooms/x1/owner", body: `{"workspace_id":"x1"}`},
+		{method: http.MethodPost, path: "/api/rooms/x1/takeover"},
+		{method: http.MethodDelete, path: "/api/rooms/x1/takeover"},
+		{method: http.MethodPut, path: "/api/rooms/x1/takeover/vote", body: `{"candidate_workspace_id":"x1"}`},
+		{method: http.MethodPost, path: "/api/rooms/x1/fork"},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},

@@ -127,6 +127,17 @@
 //
 // STUB_BREAK=room-agent-over-billed refuses a run above the agent's limit per request, and bills it anyway; and
 // STUB_BREAK=room-agent-unlogged logs no refused call — defects room-agent-mcp must FAIL on.
+//
+// B41.148 — and a room's owner changing (Lens B41.148), as room-takeover makes it:
+//
+//   POST   /v1/rooms/{id}/owner           {workspace_id}: the owner hands the room to a member that is not a viewer; it
+//                                         stays as an editor, and nobody keeps may_spend
+//   GET    /v1/rooms/{id}/takeover        the owner, its last activity and when notice can be given, 60 days on
+//   POST   /v1/rooms/{id}/takeover        409 before those 60 days; DELETE, PUT …/takeover/vote and POST …/fork 409
+//                                         without an unanswered notice
+//
+// STUB_BREAK=room-owner makes the member the owner and leaves the room's owner_workspace_id the old one — a defect
+// room-takeover must FAIL on.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomBytes } from 'node:crypto'
@@ -162,6 +173,8 @@ interface Room {
   walletVersions: { version: number; rules: Record<string, unknown>; changed_by: string; change: string; created_at: string }[]
   /** B32.88 — the members' agents in it, as room_join brought them. */
   agents?: { agent_id: string; name: string; workspace_id: string; joined_at: string }[]
+  /** B41.148 — when its owner last became the owner, by a hand-over. */
+  owner_since?: string
 }
 
 interface Report { id: string; ws: string; message_id?: string; reason: string; details: string; created_at: string; resolution?: string }
@@ -510,7 +523,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
     return true
   }
   if (await settingsOutsideRoom(req, res, p, ws)) return true
-  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms)/.exec(p)
+  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork)/.exec(p)
   if (one === null) return false
   const r = rooms.get(decodeURIComponent(one[1]))
   if (r === undefined || (r.visibility === 'private' && !r.members.some((m) => m.workspace_id === ws))) {
@@ -522,6 +535,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
   if (await roomScreen(req, res, p, url, ws, r)) return true
   if (await roomPrizes(req, res, p, ws, r)) return true
   if (await roomSettings(req, res, p, ws, r)) return true
+  if (await roomTakeover(req, res, p, ws, r)) return true
   if (one[2] === undefined && req.method === 'GET') return json(res, 200, detail(r, ws)), true
   if (one[2] === '/join' && req.method === 'POST') {
     if (r.banned.includes(ws)) return json(res, 403, bannedFrom), true
@@ -659,6 +673,55 @@ async function roomSettings(req: IncomingMessage, res: ServerResponse, p: string
 }
 
 /** "$50.00" for 50,000,000 µUSD, as Lens's prize messages write an amount. */
+const DAY_MS = 86_400_000
+
+/** B41.148 — a room's owner can change: the owner hands it to a member (POST …/owner), and the takeover state (GET
+ *  …/takeover). Notice, a vote and a fork wait on 60 days of the owner's inactivity, which a stub room never reaches,
+ *  so they answer Lens's 409s; false when `p` is none of these.
+ *  shortcut: the owner's last activity is when it became the owner, not its last message — enough for rooms a run opens. */
+async function roomTakeover(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  const sub = new RegExp(`^/v1/rooms/${r.id}/(owner|takeover|takeover/vote|fork)$`).exec(p)
+  if (sub === null) return false
+  const me = r.members.find((m) => m.workspace_id === ws)
+  if (me === undefined) return json(res, 404, { error: 'rooms: not found: only the room’s members see or take part in a takeover' }), true
+  const lastActive = r.owner_since ?? r.created_at
+  const noticeFrom = new Date(Date.parse(lastActive) + 60 * DAY_MS).toISOString()
+  const voter = (x: string) => r.members.some((m) => m.workspace_id === x && m.role !== 'owner' && m.role !== 'viewer')
+  if (sub[1] === 'owner' && req.method === 'POST') {
+    if (me.role !== 'owner') return json(res, 403, { error: "rooms: not allowed: only the room's owner hands it to another member" }), true
+    const to = String((await body(req)).workspace_id ?? '').trim()
+    const them = r.members.find((m) => m.workspace_id === to)
+    if (them === undefined || to === ws || them.role === 'viewer') {
+      return json(res, 400, { error: 'rooms: invalid request: workspace_id must be another member of the room that is not a viewer' }), true
+    }
+    for (const m of r.members) {
+      m.may_spend = false
+      if (m.role === 'owner') m.role = 'editor'
+    }
+    them.role = 'owner'
+    if (BREAK !== 'room-owner') r.owner_workspace_id = to
+    r.owner_since = new Date().toISOString()
+    return json(res, 200, detail(r, ws)), true
+  }
+  if (sub[1] === 'takeover' && req.method === 'GET') {
+    return json(res, 200, {
+      owner_workspace_id: r.owner_workspace_id, owner_last_active_at: lastActive, notice_from: noticeFrom, notice: null, voting: false,
+      members: r.members.filter((m) => m.role !== 'viewer').map((m) => ({ workspace_id: m.workspace_id, role: m.role, points: 0 })),
+      total_points: 0, tally: {},
+    }), true
+  }
+  if (sub[1] === 'takeover' && req.method === 'POST') {
+    if (!voter(ws)) return json(res, 403, { error: 'rooms: not allowed: only a member that is not the owner or a viewer gives the owner notice' }), true
+    return json(res, 409, { error: `rooms: conflict: the owner was last active ${lastActive.slice(0, 10)}; notice can be given from ${noticeFrom.slice(0, 10)}` }), true
+  }
+  if (sub[1] === 'takeover' && req.method === 'DELETE') return json(res, 409, { error: 'rooms: conflict: the owner has no open notice to answer' }), true
+  if ((sub[1] === 'takeover/vote' && req.method === 'PUT') || (sub[1] === 'fork' && req.method === 'POST')) {
+    const what = sub[1] === 'fork' ? 'fork the room' : 'vote for a lead'
+    return json(res, 409, { error: `rooms: conflict: members ${what} only once the owner's notice has gone unanswered for 14 days` }), true
+  }
+  return false
+}
+
 const usd = (micros: number) => `$${(micros / 1e6).toFixed(2)}`
 /** A prize message's refs (Lens rooms.postPrizeMessage): what happened to which prize, and once awarded, its purchase. */
 const prizeRefs = (z: Prize, what: string): Record<string, unknown> => ({ prize: what, prize_id: z.id, amount_usd_micros: z.amount_usd_micros, status: z.status,
