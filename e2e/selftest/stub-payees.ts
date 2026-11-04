@@ -58,6 +58,12 @@
 // B53.8 — and payments out on those reads: GET /v1/money/spending lists them beside the card charges, each in its corrected category
 // (else transfers, as Lens reads a payment to a payee), with each wallet's totals by category. Its defect:
 //   spending-correction-ignored — a merchant's correction moves its budget but never the payment's category on /v1/money/spending
+// B53.16 — and the month plan (Lens B53.15): PUT /v1/money/plan/income sets the payday; GET /v1/money/plan runs from today (UTC) to
+// the day before it, with money now (the open accounts' test money), the bills due before then, the budgets left, the last seven
+// days' pace and safe to spend per day, and Lens's uncovered and pace-short findings with the Coach's sentence; GET /v1/money/notices
+// lists each finding once as a "plan" notice, as Lens's minute sweep raises it, and PUT /v1/money/notices/settings keeps the settings.
+// Its defect:
+//   plan-pace-ignored — the plan reads the money now against the payments due but never the pace, so a spree raises no finding
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -142,6 +148,10 @@ export class PayeeDesk {
   private readonly merchantCategories = new Map<string, Map<string, string>>()
   /** B53.14 — each workspace's card charges. */
   private readonly charges = new Map<string, StubCharge[]>()
+  /** B53.16 — each workspace's payday and income, its notice settings and the plan notices raised, by subject. */
+  private readonly incomes = new Map<string, { payday: number; amount_minor: number; currency: string; payer: string; set_at: string }>()
+  private readonly noticeSettings = new Map<string, unknown>()
+  private readonly planNotices = new Map<string, Map<string, Record<string, unknown>>>()
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
   private readonly body: <T>(req: IncomingMessage) => Promise<T>
@@ -212,6 +222,7 @@ export class PayeeDesk {
     if (await this.cardRoute(req, res, ws, path, '')) return true
     if (await this.budgetRoute(req, res, ws, path)) return true
     if (await this.coachRoute(req, res, ws, path)) return true
+    if (await this.planRoute(req, res, ws, path)) return true
     if (path === '/v1/money/payees' && req.method === 'GET') return this.json(res, 200, { payees: list }), true
     if (path === '/v1/money/payees' && req.method === 'POST') {
       const b = await this.body<Record<string, string>>(req)
@@ -302,27 +313,30 @@ export class PayeeDesk {
     return this.json(res, 200, batch), true
   }
 
+  /** B28.62 — budget `b` of `ws` and how far its period has gone. */
+  private budgetProgress(ws: string, b: StubBudget) {
+    const now = new Date()
+    const start = b.period === 'week'
+      ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7)))
+      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    const end = b.period === 'week' ? new Date(start.getTime() + 7 * 86_400_000) : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1))
+    const accounts = this.accounts.get(ws) ?? []
+    const categories = this.merchantCategories.get(ws)
+    const inCategory = (p: Payment) => b.category === '' || this.broken('budget-category-ignored') ||
+      categories?.get(p.payee_name.trim().toLowerCase()) === b.category
+    const spent = (this.payments.get(ws) ?? []).filter((p) => p.status !== 'failed' && p.currency === b.currency && inCategory(p) &&
+      (b.agent_id === 'all' || (accounts.find((a) => a.id === p.account_id)?.agent_id ?? '') === b.agent_id) &&
+      Date.parse(p.created_at) >= start.getTime() && Date.parse(p.created_at) < end.getTime()).reduce((n, p) => n + p.amount_minor, 0) +
+      this.spending(ws).filter((c) => c.kind === 'card_charge' && c.currency === b.currency && (b.category === '' || c.category === b.category) && (b.agent_id === 'all' || c.agent_id === b.agent_id) &&
+        Date.parse(c.created_at) >= start.getTime() && Date.parse(c.created_at) < end.getTime()).reduce((n, c) => n + c.amount_minor, 0)
+    return { ...b, period_start: start.toISOString(), period_end: end.toISOString(), spent_minor: spent, left_minor: b.amount_minor - spent,
+      percent: Math.floor((spent * 100) / b.amount_minor) }
+  }
+
   /** B28.62 — budgets (PUT and GET /v1/money/budgets) and the alerts they raise (GET /v1/money/budgets/alerts). */
   private async budgetRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
     const budgets = this.budgets.get(ws) ?? []
-    const progress = (b: StubBudget) => {
-      const now = new Date()
-      const start = b.period === 'week'
-        ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7)))
-        : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
-      const end = b.period === 'week' ? new Date(start.getTime() + 7 * 86_400_000) : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1))
-      const accounts = this.accounts.get(ws) ?? []
-      const categories = this.merchantCategories.get(ws)
-      const inCategory = (p: Payment) => b.category === '' || this.broken('budget-category-ignored') ||
-        categories?.get(p.payee_name.trim().toLowerCase()) === b.category
-      const spent = (this.payments.get(ws) ?? []).filter((p) => p.status !== 'failed' && p.currency === b.currency && inCategory(p) &&
-        (b.agent_id === 'all' || (accounts.find((a) => a.id === p.account_id)?.agent_id ?? '') === b.agent_id) &&
-        Date.parse(p.created_at) >= start.getTime() && Date.parse(p.created_at) < end.getTime()).reduce((n, p) => n + p.amount_minor, 0) +
-        this.spending(ws).filter((c) => c.kind === 'card_charge' && c.currency === b.currency && (b.category === '' || c.category === b.category) && (b.agent_id === 'all' || c.agent_id === b.agent_id) &&
-          Date.parse(c.created_at) >= start.getTime() && Date.parse(c.created_at) < end.getTime()).reduce((n, c) => n + c.amount_minor, 0)
-      return { ...b, period_start: start.toISOString(), period_end: end.toISOString(), spent_minor: spent, left_minor: b.amount_minor - spent,
-        percent: Math.floor((spent * 100) / b.amount_minor) }
-    }
+    const progress = (b: StubBudget) => this.budgetProgress(ws, b)
     if (path === '/v1/money/spending/merchants' && req.method === 'PUT') {
       const m = await this.body<{ merchant?: string; category?: string }>(req)
       if (!m.merchant?.trim()) return this.json(res, 400, { error: 'economy: spending: name the merchant (at most 200 characters)' }), true
@@ -473,6 +487,108 @@ export class PayeeDesk {
     const total = payments.reduce((n, p) => n + p.amount_minor, 0)
     const review = total === 0 ? [] : [line({ kind: 'week', amount: formatMinor(total, 'GBP') }, `This week ${formatMinor(total, 'GBP')} went out; look over the biggest category first.`)]
     return this.json(res, 200, { lines, review }), true
+  }
+
+  /** B53.16 — the month plan (Lens B53.15) and the notices it raises. */
+  private async planRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
+    if (path === '/v1/money/plan/income' && req.method === 'PUT') {
+      const b = await this.body<{ payday?: number; amount_minor?: number; currency?: string; payer?: string }>(req)
+      if (!Number.isInteger(b.payday) || (b.payday ?? 0) < 1 || (b.payday ?? 0) > 31) return this.json(res, 400, { error: 'economy: spending: payday must be a day of the month, 1 to 31' }), true
+      if (!Number.isInteger(b.amount_minor) || (b.amount_minor ?? 0) <= 0) return this.json(res, 400, { error: 'economy: spending: amount_minor must be above zero' }), true
+      if (!/^[A-Z]{3}$/.test(b.currency ?? '')) return this.json(res, 400, { error: 'economy: spending: currency must be a currency code such as GBP' }), true
+      this.incomes.set(ws, { payday: b.payday ?? 0, amount_minor: b.amount_minor ?? 0, currency: b.currency ?? '', payer: (b.payer ?? '').trim(), set_at: new Date().toISOString() })
+      return this.json(res, 200, this.plan(ws)), true
+    }
+    if (path === '/v1/money/plan' && req.method === 'GET') return this.json(res, 200, this.plan(ws)), true
+    if (path === '/v1/money/notices/settings' && req.method === 'PUT') {
+      const b = await this.body<Record<string, unknown>>(req)
+      this.noticeSettings.set(ws, b)
+      return this.json(res, 200, b), true
+    }
+    if (path !== '/v1/money/notices' || req.method !== 'GET') return false
+    const raised = this.planNotices.get(ws) ?? new Map<string, Record<string, unknown>>()
+    for (const f of this.plan(ws).findings) {
+      const subject = `${f.kind}/${f.payment.source}:${f.payment.id}/${f.payment.due}`
+      if (!raised.has(subject)) {
+        raised.set(subject, { id: `ntc_${randomUUID()}`, kind: 'plan', title: 'Month plan', body: f.sentence, urgent: f.urgent, data: { finding: f }, status: 'sent',
+          created_at: new Date().toISOString() })
+      }
+    }
+    this.planNotices.set(ws, raised)
+    const settings = this.noticeSettings.get(ws) ?? { timezone: 'UTC', quiet_from: '', quiet_until: '', off: [] }
+    return this.json(res, 200, { settings, notices: [...raised.values()].reverse() }), true
+  }
+
+  /** B53.16 — `ws`'s month plan today, worked out as Lens's SpendPlan works it out, in UTC. */
+  private plan(ws: string) {
+    const date = (d: Date) => d.toISOString().slice(0, 10)
+    const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' })
+    const between = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+    const now = new Date()
+    const today = date(now)
+    const inc = this.incomes.get(ws)
+    const accounts = (this.accounts.get(ws) ?? []).filter((a) => a.status === 'open' && (a.purpose === 'company' || a.purpose === 'agent'))
+    const cur = inc?.currency ?? accounts[0]?.currency ?? 'GBP'
+    const paydayIn = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, Math.min(d, new Date(Date.UTC(y, m + 1, 0)).getUTCDate())))
+    let until = date(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)))
+    let next: string | undefined
+    if (inc !== undefined) {
+      let n = paydayIn(now.getUTCFullYear(), now.getUTCMonth(), inc.payday)
+      if (date(n) <= today) n = paydayIn(now.getUTCFullYear(), now.getUTCMonth() + 1, inc.payday)
+      next = date(n)
+      until = date(new Date(n.getTime() - 86_400_000))
+    }
+    const moneyNow = accounts.filter((a) => a.currency === cur).reduce((n, a) => n + a.test_minor, 0)
+    const payments = (this.bills.get(ws) ?? []).filter((b) => b.status === 'due' && b.currency === cur && String(b.due_date) <= until)
+      .map((b) => ({ source: 'bill', id: b.id, payee: String(b.supplier), amount_minor: Number(b.amount_minor), currency: cur,
+        due: String(b.due_date) < today ? today : String(b.due_date), covered: false }))
+      .sort((a, b) => a.due.localeCompare(b.due))
+    let all = 0
+    let overall = 0
+    let categories = 0
+    for (const b of (this.budgets.get(ws) ?? []).filter((x) => x.currency === cur).map((x) => this.budgetProgress(ws, x))) {
+      const left = Math.max(b.left_minor, 0)
+      if (b.category === '' && b.agent_id === 'all') all = Math.max(all, left)
+      else if (b.category === '') overall += left
+      else categories += left
+    }
+    const budgetsLeft = all > 0 ? all : overall > 0 ? overall : categories
+    const weekFrom = Date.parse(`${today}T00:00:00Z`) - 6 * 86_400_000
+    const pace = Math.floor(this.spending(ws).filter((p) => p.currency === cur && p.category !== 'bills' && p.category !== 'subscriptions' &&
+      Date.parse(p.created_at) >= weekFrom).reduce((n, p) => n + p.amount_minor, 0) / 7)
+    const findings: { kind: string; urgent: boolean; payment: (typeof payments)[number]; short_minor: number; pace_per_day_minor?: number; keep_to_per_day_minor?: number; sentence: string }[] = []
+    let upcoming = 0
+    let uncovered = false
+    let paceShort = false
+    payments.forEach((p, i) => {
+      upcoming += p.amount_minor
+      const dayTotal = upcoming + payments.slice(i + 1).filter((q) => q.due === p.due).reduce((n, q) => n + q.amount_minor, 0)
+      p.covered = moneyNow - upcoming >= 0
+      const days = between(today, p.due)
+      const shown = { ...p }
+      const amount = formatMinor(p.amount_minor, cur)
+      if (!uncovered && !p.covered) {
+        uncovered = true
+        const short = Math.min(upcoming - moneyNow, p.amount_minor)
+        findings.push({ kind: 'plan_uncovered', urgent: true, payment: shown, short_minor: short, sentence: `The ${amount} payment to ${p.payee} on ${day(p.due)} is short by ` +
+          `${formatMinor(short, cur)} with the money you have now; add money or hold back other spending before then.` })
+      }
+      const after = moneyNow - dayTotal - (this.broken('plan-pace-ignored') ? 0 : pace) * days
+      if (!uncovered && !paceShort && after < 0) {
+        paceShort = true
+        const short = Math.min(-after, p.amount_minor)
+        const keep = Math.floor(Math.max(moneyNow - dayTotal, 0) / Math.max(days, 1))
+        findings.push({ kind: 'plan_pace_short', urgent: true, payment: shown, short_minor: short, pace_per_day_minor: pace, keep_to_per_day_minor: keep,
+          sentence: `At this pace, ${formatMinor(pace, cur)} a day, the ${amount} payment to ${p.payee} on ${day(p.due)} is short by ${formatMinor(short, cur)}; ` +
+            `keeping to ${formatMinor(keep, cur)} a day until then covers it.` })
+      }
+    })
+    const daysLeft = between(today, until) + 1
+    const available = moneyNow - upcoming - budgetsLeft
+    return { currency: cur, timezone: 'UTC', today, until, ...(next ? { next_income: next } : {}), days: daysLeft,
+      income: inc ? { payday: inc.payday, amount_minor: inc.amount_minor, currency: inc.currency, ...(inc.payer ? { payer: inc.payer } : {}), confirmed: true, set_at: inc.set_at } : null,
+      money_now_minor: moneyNow, upcoming_minor: upcoming, budgets_left_minor: budgetsLeft, available_minor: available,
+      safe_per_day_minor: Math.floor(Math.max(available, 0) / daysLeft), pace_per_day_minor: pace, payments, findings }
   }
 
   /** B30.109 — the accounts and the payments out, each refusal as Lens words it; only compliance-live-paid moves money. */

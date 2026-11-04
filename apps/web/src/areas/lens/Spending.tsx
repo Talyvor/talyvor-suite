@@ -8,12 +8,14 @@ import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
 import { BUDGETS_KEY, CATEGORIES, categoryName } from './Budgets'
 import { SUBSCRIPTIONS_KEY } from './Subscriptions'
+import { MonthPlan } from './MonthPlan'
 import { type CoachLine, type NoticeSettings, type SpendFinding, type Spending, agentBankApi, formatMinor, refusalText } from './agentBankApi'
 
 // Spending.tsx — B53.8: the owner's own spending in one place, every number from Lens (B53.3–B53.7): this week and this
 // month by category, the budgets and how far each has gone, the subscriptions with what they cost a year, what was
 // unusual with the Coach's sentence on it, every payment of the month with its category (one correction moves that
-// merchant's payments, past and future), and when and which notices arrive.
+// merchant's payments, past and future), and when and which notices arrive. B53.16 puts the month plan first: what is safe
+// to spend each day until payday, the payments due before it, and what to change when the month is off plan (MonthPlan.tsx).
 
 export const SPENDING_KEY = ['money-spending']
 const UNUSUAL_KEY = ['money-spending-unusual']
@@ -60,6 +62,7 @@ const KINDS: readonly [string, string][] = [
   ['unusual', 'Unusual payments'],
   ['tip', 'The Coach’s daily tip'],
   ['digest', 'Monday’s weekly digest'],
+  ['plan', 'When the month plan is off'],
 ]
 const select = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -142,12 +145,16 @@ export function SpendingScreen() {
         </p>
       </Region>
 
-      <Region index="01" label="By category" heading="This week and this month" className="flex max-w-2xl flex-col gap-3">
+      <Region index="01" label="Month plan" heading="Until payday" className="flex max-w-2xl flex-col gap-3">
+        <MonthPlan />
+      </Region>
+
+      <Region index="02" label="By category" heading="This week and this month" className="flex max-w-2xl flex-col gap-3">
         <Totals title="This week, from Monday" period="week" />
         <Totals title="This month" period="month" />
       </Region>
 
-      <Region index="02" label="Budgets" heading="Your budgets" className="flex max-w-2xl flex-col gap-3">
+      <Region index="03" label="Budgets" heading="Your budgets" className="flex max-w-2xl flex-col gap-3">
         {budgets.isError ? (
           <p className="text-body text-muted">{readFailure(budgets.error, 'Your budgets')}</p>
         ) : (budgets.data?.budgets ?? []).length === 0 ? (
@@ -198,7 +205,7 @@ export function SpendingScreen() {
         </p>
       </Region>
 
-      <Region index="03" label="Unusual" heading="What was unusual this month" className="flex max-w-2xl flex-col gap-3">
+      <Region index="04" label="Unusual" heading="What was unusual this month" className="flex max-w-2xl flex-col gap-3">
         {unusual.isError ? (
           <p className="text-body text-muted">{readFailure(unusual.error, 'Unusual spending')}</p>
         ) : findings.length === 0 ? (
@@ -239,7 +246,7 @@ export function SpendingScreen() {
         )}
       </Region>
 
-      <Region index="04" label="Payments" heading="This month’s payments" className="flex max-w-2xl flex-col gap-3">
+      <Region index="05" label="Payments" heading="This month’s payments" className="flex max-w-2xl flex-col gap-3">
         <p className="text-body text-muted">Change a payment’s category and every payment to that merchant, before and after, moves with it.</p>
         {correct.isError ? <Note ok={false}>{refusalText(correct.error)}</Note> : null}
         {spending.isError ? (
@@ -280,7 +287,7 @@ export function SpendingScreen() {
         )}
       </Region>
 
-      <Region index="05" label="Subscriptions" heading="What you pay again and again" className="flex max-w-2xl flex-col gap-3">
+      <Region index="06" label="Subscriptions" heading="What you pay again and again" className="flex max-w-2xl flex-col gap-3">
         {subs.isError ? (
           <p className="text-body text-muted">{readFailure(subs.error, 'Your subscriptions')}</p>
         ) : (subs.data?.subscriptions ?? []).length === 0 ? (
@@ -306,7 +313,7 @@ export function SpendingScreen() {
         )}
       </Region>
 
-      <Region index="06" label="Notices" heading="When you hear from us" className="flex max-w-2xl flex-col gap-3">
+      <Region index="07" label="Notices" heading="When you hear from us" className="flex max-w-2xl flex-col gap-3">
         {notices.isError ? (
           <p className="text-body text-muted">{readFailure(notices.error, 'Your notice settings')}</p>
         ) : settings === null ? (

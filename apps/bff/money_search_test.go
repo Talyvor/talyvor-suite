@@ -167,3 +167,33 @@ func TestMoneySpendingReachesLensWithOnlyItsFields(t *testing.T) {
 		t.Fatalf("POST = %d; want 405", rec.Code)
 	}
 }
+
+// B53.16 — the month plan's read and the payday it sets reach Lens with only their own fields.
+func TestMoneyPlanReachesLensWithOnlyItsFields(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.RequestURI()+" "+string(b))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	doJSON(a, http.MethodGet, "/api/money/plan?workspace_id=ws_other", "")
+	doJSON(a, http.MethodPut, "/api/money/plan/income", `{"payday":28,"amount_minor":250000,"currency":"GBP","payer":"Acme Ltd","workspace_id":"ws_other"}`)
+	want := []string{
+		"GET /v1/money/plan ",
+		`PUT /v1/money/plan/income {"payday":28,"amount_minor":250000,"currency":"GBP","payer":"Acme Ltd"}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("Lens got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/money/plan", "{}"); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST = %d; want 405", rec.Code)
+	}
+}

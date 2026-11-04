@@ -32,6 +32,11 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
           Ask <span className="font-mono">How much did I spend on eating out this month?</span> — or this week, or any other
           category — and the answer is your spending as Talyvor counted it, not the model’s guess.
         </p>
+        <p>
+          {/* B53.16 — PlanQuestion.tsx answers it from Lens's month plan. */}
+          Ask <span className="font-mono">How much can I spend today?</span> and the answer is your month plan’s: what is safe to
+          spend each day until payday once the payments due are covered, not the model’s guess.
+        </p>
       </>
     ),
   },

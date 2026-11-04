@@ -182,3 +182,37 @@ func (a *app) handleMoneyNoticeSettings(w http.ResponseWriter, r *http.Request, 
 	body, _ := json.Marshal(in)
 	a.lensRelay(w, r, t.token, http.MethodPut, "/v1/money/notices/settings", body, "notice settings")
 }
+
+// B53.16 — the month plan on the Spending screen and Chat's "how much can I spend today?", on this session's own token
+// (Lens B53.15).
+//
+//	GET /api/money/plan          the plan: money now, the upcoming payments, safe to spend per day until payday, and each
+//	                             off-plan finding with the Coach's sentence
+//	PUT /api/money/plan/income   {payday, amount_minor, currency, payer} — set or confirm the expected income; answers the plan
+func (a *app) handleMoneyPlan(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/plan", nil, "month plan")
+}
+
+func (a *app) handleMoneyPlanIncome(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	var in struct {
+		Payday      int    `json:"payday"`
+		AmountMinor int64  `json:"amount_minor"`
+		Currency    string `json:"currency"`
+		Payer       string `json:"payer"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	// UPSTREAM-BINDS-ONLY lensSpendIncomeBody: confirmed, set_at
+	body, _ := json.Marshal(in)
+	a.lensRelay(w, r, t.token, http.MethodPut, "/v1/money/plan/income", body, "income")
+}
