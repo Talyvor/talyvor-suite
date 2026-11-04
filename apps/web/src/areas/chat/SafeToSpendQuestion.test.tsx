@@ -22,7 +22,11 @@ function mockBff() {
     if (url === '/api/agents/approvals') return json({ approvals: [] })
     if (url === '/api/agents/safe-to-spend') {
       return json({
-        company: [{ currency: 'GBP', balance: 50000, scheduled: 0, bills_due: 3000, pending_approvals: 0, safe_to_spend: 47000 }],
+        // Every workspace holds a USDC figure too, which Lens keeps to six decimal places (B17.320).
+        company: [
+          { currency: 'GBP', balance: 50000, scheduled: 0, bills_due: 3000, pending_approvals: 0, safe_to_spend: 47000 },
+          { currency: 'USDC', balance: 2_500_000, scheduled: 0, bills_due: 0, pending_approvals: 0, safe_to_spend: 2_500_000 },
+        ],
         // 100 LXC held, a 20 LXC schedule this month and a 30 LXC payment waiting for approval: 50 LXC.
         agents: [{ agent_id: 'agt_1', name: 'Researcher', figures: [{ currency: 'LXC', balance: 100 * M, scheduled: 20 * M, bills_due: 0, pending_approvals: 30 * M, safe_to_spend: 50 * M }] }],
       })
@@ -73,6 +77,7 @@ describe('How much can an agent spend, answered in Chat from Lens’s safe to sp
     const company = await ask('What is safe to spend?')
     expect(within(company).getByTestId('chat-safe-company-GBP')).toHaveTextContent('£470.00 safe to spend this month')
     expect(company).toHaveTextContent('£30.00 in bills due')
+    expect(within(company).getByTestId('chat-safe-company-USDC')).toHaveTextContent('2.50 USDC safe to spend this month')
     expect(company).toHaveTextContent('Researcher: 50 LXC')
   })
 })
