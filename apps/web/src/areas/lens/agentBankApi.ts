@@ -160,6 +160,24 @@ export interface AgentSpendAlert {
   created_at: string
 }
 
+/** B41.20 — Lens economy.SpendSubscription (B41.120): a card payment or payment out that recurs, to one merchant for one amount. */
+export interface SpendSubscription {
+  /** absent: the owner's own wallet */
+  agent_id?: string
+  merchant: string
+  category: string
+  amount_minor: number
+  currency: string
+  interval: 'weekly' | 'monthly'
+  charges: number
+  last_at: string
+  next_at: string
+  /** three days before next_at */
+  remind_on: string
+  monthly_minor: number
+  yearly_minor: number
+}
+
 /** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
 export interface LimitAlert {
   id: string
@@ -678,6 +696,7 @@ export const agentBankApi = {
   removeTopUp: (id: string) => send<unknown>('DELETE', `/api/agents/${e(id)}/topup`),
   // B19.20 — stop every agent or one, and what they are spending.
   alerts: () => getJSON<{ alerts: AgentSpendAlert[] | null; rule: string }>('/api/agents/alerts', { alerts: 'list' }),
+  subscriptions: () => getJSON<{ subscriptions: SpendSubscription[] | null }>('/api/money/spending/subscriptions', { subscriptions: 'list' }),
   limitAlerts: () => getJSON<{ alerts: LimitAlert[] | null }>('/api/money/budgets/alerts', { alerts: 'list' }),
   safeToSpend: () => getJSON<SafeToSpend>('/api/agents/safe-to-spend', { agents: 'list' }),
   briefing: () => getJSON<Briefing>('/api/agents/briefing', { items: 'list', quiet: 'boolean', line: 'string' }),

@@ -532,8 +532,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/payees/{id}/called/challenge", a.requireTenant(a.handleMoneyPayeeCalled(true))) // B41.11
 	a.mux.HandleFunc("/api/money/payees/{id}/called", a.requireTenant(a.handleMoneyPayeeCalled(false)))
 	a.mux.HandleFunc("/api/money/payments", a.requireTenant(a.handleMoneyPayments))
-	a.mux.HandleFunc("/api/money/search", a.requireTenant(a.handleMoneySearch))               // B41.7, money_search.go
-	a.mux.HandleFunc("/api/money/budgets/alerts", a.requireTenant(a.handleMoneyBudgetAlerts)) // B28.62, money_search.go
+	a.mux.HandleFunc("/api/money/search", a.requireTenant(a.handleMoneySearch))                        // B41.7, money_search.go
+	a.mux.HandleFunc("/api/money/budgets/alerts", a.requireTenant(a.handleMoneyBudgetAlerts))          // B28.62, money_search.go
+	a.mux.HandleFunc("/api/money/spending/subscriptions", a.requireTenant(a.handleMoneySubscriptions)) // B41.20, money_search.go
 	a.mux.HandleFunc("/api/money/mandates", a.requireTenant(a.handleMoneyMandates))
 	a.mux.HandleFunc("/api/money/mandates/{id}/revoke", a.requireTenant(a.handleMoneyMandateRevoke))
 	// B41.1 — the bills inbox: an uploaded invoice becomes a bill (Lens B41.101). See money_bills.go.

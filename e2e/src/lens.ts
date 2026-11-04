@@ -236,6 +236,8 @@ export interface MarketLicence {
   status: string
   starts_at: string
   ends_at: string | null
+  /** B32.20 — a subscription renews at ends_at, and a rent asked to */
+  auto_renew: boolean
   uses_covered: number
   use_id: string
   charge: string

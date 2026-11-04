@@ -33,3 +33,15 @@ func (a *app) handleMoneyBudgetAlerts(w http.ResponseWriter, r *http.Request, t 
 	}
 	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/budgets/alerts", nil, "limit alerts")
 }
+
+// B41.20 — the payments that recur, on this session's own token.
+//
+//	GET /api/money/spending/subscriptions   each card payment or payment out that recurs weekly or monthly, with its next date,
+//	                                        the day to be reminded and its monthly and yearly cost (Lens B41.120)
+func (a *app) handleMoneySubscriptions(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/spending/subscriptions", nil, "subscriptions")
+}

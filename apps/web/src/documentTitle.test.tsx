@@ -166,6 +166,7 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/settings/connect': 'Connect your AI',
   '/money/invoices': 'Invoices',
   '/money/pay': 'Pay',
+  '/money/subscriptions': 'Subscriptions',
   '/approve/:id': 'Approve payments',
   '/features': 'Features',
   '/features/try/tare': 'Try Tare',

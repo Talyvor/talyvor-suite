@@ -69,6 +69,7 @@ import { DocsEmailBranding } from './areas/docs/DocsEmailBranding'
 import { DocsWebhooks } from './areas/docs/DocsWebhooks'
 import { InvoicesScreen } from './areas/lens/Invoices'
 import { PayScreen } from './areas/lens/Pay'
+import { SubscriptionsScreen } from './areas/lens/Subscriptions'
 import { ApproveScreen } from './areas/lens/Approve'
 import { PayInvoicePage } from './areas/pay/PayInvoice'
 import { OperatorWorkspaces } from './areas/lens/OperatorWorkspaces'
@@ -293,6 +294,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.
   { path: '/money/pay', title: 'Pay', element: <PayScreen /> },
+  // B41.20 — every recurring payment, standing order and renewing rental, with its next charge, monthly cost and reminder.
+  { path: '/money/subscriptions', title: 'Subscriptions', element: <SubscriptionsScreen /> },
   // B40.9 — the page a prepared request's approval link opens (Lens B40.3), from Chat, an assistant or a push.
   { path: '/approve/:id', title: 'Approve payments', element: <ApproveScreen /> },
   // B8.2 — every capability, what it does and costs, whether it is on, and its switch.
@@ -528,6 +531,7 @@ function Sidebar() {
       <Group label="Money" {...fold.group('Money')}>
         {item('/money/pay', 'Pay', 'coins')}
         {item('/money/invoices', 'Invoices', 'receipt')}
+        {item('/money/subscriptions', 'Subscriptions', 'cycle')}
       </Group>
       <Group label="Settings" {...fold.group('Settings')}>
         {item('/settings', 'Settings', 'settings')}
