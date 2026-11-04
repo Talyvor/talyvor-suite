@@ -15,7 +15,7 @@ export const BUDGETS_KEY = ['money-budgets']
 const LIMIT_ALERTS_KEY = ['limit-alerts']
 
 /** Lens economy.SpendCategories, in its picker order. */
-const CATEGORIES: readonly [string, string][] = [
+export const CATEGORIES: readonly [string, string][] = [
   ['ai_software', 'AI and software'],
   ['groceries', 'Groceries'],
   ['eating_out', 'Eating out'],
@@ -32,7 +32,7 @@ const CATEGORIES: readonly [string, string][] = [
   ['', 'All spending'],
 ]
 const CURRENCIES = ['GBP', 'EUR', 'USD']
-const categoryName = (c: string) => CATEGORIES.find(([v]) => v === c)?.[1] ?? c.replace(/_/g, ' ')
+export const categoryName = (c: string) => CATEGORIES.find(([v]) => v === c)?.[1] ?? c.replace(/_/g, ' ')
 const select = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 

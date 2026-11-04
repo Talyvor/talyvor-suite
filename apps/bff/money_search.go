@@ -89,3 +89,96 @@ func (a *app) handleMoneyBudget(w http.ResponseWriter, r *http.Request, t tenant
 	}
 	a.lensRelay(w, r, t.token, http.MethodDelete, "/v1/money/budgets/"+url.PathEscape(id), nil, "budget")
 }
+
+// B53.8 — the Spending screen and Chat's category totals, on this session's own token (Lens B53.3–B53.7).
+//
+//	GET /api/money/spending?from=&to=          the payments in [from, to), each with its category, and the totals by wallet,
+//	                                           currency and category
+//	GET /api/money/spending/unusual?from=&to=  what was unusual in [from, to), each finding with its numbers
+//	PUT /api/money/spending/merchants          {merchant, category} — always put this merchant's payments in category
+//	GET /api/money/coach                       the Coach's sentence for each finding and the week's review
+//	GET /api/money/notices                     the notice settings and the latest notices
+//	PUT /api/money/notices/settings            {timezone, quiet_from, quiet_until, off}
+func (a *app) handleMoneySpending(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/spending"+spendPeriod(r), nil, "spending")
+}
+
+func (a *app) handleMoneySpendingUnusual(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/spending/unusual"+spendPeriod(r), nil, "unusual spending")
+}
+
+// spendPeriod is the from and to of r's query, and nothing else of it, as Lens's own query string.
+func spendPeriod(r *http.Request) string {
+	q := url.Values{}
+	for _, k := range []string{"from", "to"} {
+		if v := r.URL.Query().Get(k); v != "" {
+			q.Set(k, v)
+		}
+	}
+	if len(q) == 0 {
+		return ""
+	}
+	return "?" + q.Encode()
+}
+
+func (a *app) handleMoneySpendingMerchants(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	var in struct {
+		Merchant string `json:"merchant"`
+		Category string `json:"category"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	// UPSTREAM-BINDS-ONLY lensSpendCategoryBody: none
+	body, _ := json.Marshal(in)
+	a.lensRelay(w, r, t.token, http.MethodPut, "/v1/money/spending/merchants", body, "spend category")
+}
+
+func (a *app) handleMoneyCoach(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/coach", nil, "coach")
+}
+
+func (a *app) handleMoneyNotices(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/notices", nil, "notices")
+}
+
+func (a *app) handleMoneyNoticeSettings(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	var in struct {
+		Timezone   string   `json:"timezone"`
+		QuietFrom  string   `json:"quiet_from"`
+		QuietUntil string   `json:"quiet_until"`
+		Off        []string `json:"off"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	// UPSTREAM-BINDS-ONLY lensSpendNoticeSettingsBody: none
+	body, _ := json.Marshal(in)
+	a.lensRelay(w, r, t.token, http.MethodPut, "/v1/money/notices/settings", body, "notice settings")
+}

@@ -946,6 +946,30 @@ export const LENS_BODIES: LensBody[] = [
       'r.Put("/v1/money/budgets", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensSpendBudgetBody",
   },
+  // B53.8 — a merchant's category, corrected on the Spending screen (Lens B53.3).
+  {
+    route: "PUT /v1/money/spending/merchants",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneySpendingMerchants(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_spending_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/spending/merchants", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSpendCategoryBody",
+  },
+  // B53.8 — the notice settings, set on the Spending screen (Lens B53.7).
+  {
+    route: "PUT /v1/money/notices/settings",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyNoticeSettings(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_notices_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/notices/settings", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSpendNoticeSettingsBody",
+  },
   {
     route: "POST /v1/money/payees/{id}/confirm",
     file: "apps/bff/money_pay.go",

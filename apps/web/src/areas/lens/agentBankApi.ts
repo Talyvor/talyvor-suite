@@ -199,6 +199,76 @@ export interface SpendBudget {
 
 export type SpendBudgetRequest = Pick<SpendBudget, 'agent_id' | 'category' | 'period' | 'amount_minor' | 'currency' | 'timezone'>
 
+/** B53.8 — Lens economy.SpendPayment (B53.3): one payment and the category it reads in, worked out on each read. */
+export interface SpendPayment {
+  entry_id: string
+  kind: string
+  merchant: string
+  /** "": the owner's own wallet */
+  agent_id?: string
+  amount_minor: number
+  currency: string
+  category: string
+  /** correction, card, merchant, payee or none */
+  category_source: string
+  created_at: string
+}
+
+/** B53.8 — Lens economy.Spending: the payments in [from, to), newest first, and each wallet's totals per currency. */
+export interface Spending {
+  from: string
+  to: string
+  categories: string[] | null
+  payments: SpendPayment[] | null
+  totals: { agent_id?: string; currency: string; total_minor: number; by_category: Record<string, number> | null }[] | null
+}
+
+/** B53.8 — Lens economy.SpendFinding (B53.5): one payment a rule found unusual, with the numbers it compared. */
+export interface SpendFinding {
+  rule: string
+  entry_id?: string
+  agent_id?: string
+  merchant?: string
+  category?: string
+  country?: string
+  amount_minor?: number
+  currency?: string
+  at: string
+}
+
+export interface CoachHelp {
+  name: string
+  url: string
+  for: string
+}
+
+/** B53.8 — Lens economy.CoachLine (B53.6): one sentence and the fact it words. */
+export interface CoachLine {
+  fact: { kind: string; merchant?: string; category?: string; amount?: string }
+  sentence: string
+  source: 'model' | 'template'
+  help?: CoachHelp[]
+  offer?: { kind: string; text: string }
+}
+
+/** B53.8 — Lens economy.SpendNoticeSettings and SpendNotice (B53.7). */
+export interface NoticeSettings {
+  timezone: string
+  quiet_from: string
+  quiet_until: string
+  off: string[] | null
+}
+
+export interface SpendNotice {
+  id: string
+  kind: string
+  title: string
+  body: string
+  status: 'waiting' | 'sent' | 'dropped'
+  held?: string
+  created_at: string
+}
+
 /** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
 export interface LimitAlert {
   id: string
@@ -722,6 +792,15 @@ export const agentBankApi = {
   budgets: () => getJSON<{ budgets: SpendBudget[] | null }>('/api/money/budgets', { budgets: 'list' }),
   setBudget: (b: SpendBudgetRequest) => send<SpendBudget>('PUT', '/api/money/budgets', b),
   deleteBudget: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/budgets/${e(id)}`),
+  spending: (from: string, to: string) =>
+    getJSON<Spending>(`/api/money/spending?${new URLSearchParams({ from, to }).toString()}`, { payments: 'list', totals: 'list' }),
+  unusual: (from: string, to: string) =>
+    getJSON<{ findings: SpendFinding[] | null }>(`/api/money/spending/unusual?${new URLSearchParams({ from, to }).toString()}`, { findings: 'list' }),
+  setSpendCategory: (merchant: string, category: string) =>
+    send<{ merchant: string; category: string }>('PUT', '/api/money/spending/merchants', { merchant, category }),
+  coach: () => getJSON<{ lines: CoachLine[] | null; review: CoachLine[] | null }>('/api/money/coach', { lines: 'list', review: 'list' }),
+  notices: () => getJSON<{ settings: NoticeSettings; notices: SpendNotice[] | null }>('/api/money/notices', { notices: 'list' }),
+  setNoticeSettings: (s: NoticeSettings) => send<NoticeSettings>('PUT', '/api/money/notices/settings', s),
   safeToSpend: () => getJSON<SafeToSpend>('/api/agents/safe-to-spend', { agents: 'list' }),
   briefing: () => getJSON<Briefing>('/api/agents/briefing', { items: 'list', quiet: 'boolean', line: 'string' }),
   forecast: () => getJSON<SpendForecast>('/api/agents/forecast', { spent_ulxc: 'number', forecast_ulxc: 'number', agents: 'list' }),

@@ -55,6 +55,9 @@
 // within 10 minutes); GET /v1/money/coach words each finding, each budget at 50% or more and the week, by template; POST
 // /v1/money/coach/ask answers a loan, product or gambling question with the free-help pointers only. Its defect:
 //   coach-validator-bypassed — the Coach's duplicate sentence says a figure that is not its fact's, and stands as the model's
+// B53.8 — and payments out on those reads: GET /v1/money/spending lists them beside the card charges, each in its corrected category
+// (else transfers, as Lens reads a payment to a payee), with each wallet's totals by category. Its defect:
+//   spending-correction-ignored — a merchant's correction moves its budget but never the payment's category on /v1/money/spending
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -315,7 +318,7 @@ export class PayeeDesk {
       const spent = (this.payments.get(ws) ?? []).filter((p) => p.status !== 'failed' && p.currency === b.currency && inCategory(p) &&
         (b.agent_id === 'all' || (accounts.find((a) => a.id === p.account_id)?.agent_id ?? '') === b.agent_id) &&
         Date.parse(p.created_at) >= start.getTime() && Date.parse(p.created_at) < end.getTime()).reduce((n, p) => n + p.amount_minor, 0) +
-        this.spending(ws).filter((c) => c.currency === b.currency && (b.category === '' || c.category === b.category) && (b.agent_id === 'all' || c.agent_id === b.agent_id) &&
+        this.spending(ws).filter((c) => c.kind === 'card_charge' && c.currency === b.currency && (b.category === '' || c.category === b.category) && (b.agent_id === 'all' || c.agent_id === b.agent_id) &&
           Date.parse(c.created_at) >= start.getTime() && Date.parse(c.created_at) < end.getTime()).reduce((n, c) => n + c.amount_minor, 0)
       return { ...b, period_start: start.toISOString(), period_end: end.toISOString(), spent_minor: spent, left_minor: b.amount_minor - spent,
         percent: Math.floor((spent * 100) / b.amount_minor) }
@@ -363,10 +366,21 @@ export class PayeeDesk {
     return false
   }
 
-  /** B53.14 — the workspace's card charges, oldest first, each in its category: the person's correction, else its MCC's. */
-  private spending(ws: string): (StubCharge & { category: string })[] {
+  /** B53.14 — the workspace's card charges and (B53.8) payments out, oldest first, each in its category: the person's correction, else
+   * its MCC's, else transfers for a payment to a payee. */
+  private spending(ws: string): (StubCharge & { kind: string; category: string; category_source: string })[] {
     const corrected = this.merchantCategories.get(ws)
-    return (this.charges.get(ws) ?? []).map((c) => ({ ...c, category: corrected?.get(c.merchant.toLowerCase()) || mccCategory(c.mcc) }))
+    const accounts = this.accounts.get(ws) ?? []
+    const out = [...(this.payments.get(ws) ?? [])].reverse().filter((p) => p.status !== 'failed').map((p) => ({ entry_id: p.id, kind: 'payment_out',
+      agent_id: accounts.find((a) => a.id === p.account_id)?.agent_id ?? '', merchant: p.payee_name, mcc: '', country: '', amount_minor: p.amount_minor,
+      currency: p.currency, created_at: p.created_at }))
+    return [...(this.charges.get(ws) ?? []).map((c) => ({ ...c, kind: 'card_charge' })), ...out]
+      .sort((x, y) => Date.parse(x.created_at) - Date.parse(y.created_at))
+      .map((c) => {
+        const fixed = c.kind === 'payment_out' && this.broken('spending-correction-ignored') ? undefined : corrected?.get(c.merchant.trim().toLowerCase())
+        if (fixed) return { ...c, category: fixed, category_source: 'correction' }
+        return c.kind === 'card_charge' ? { ...c, category: mccCategory(c.mcc), category_source: 'card' } : { ...c, category: 'transfers', category_source: 'payee' }
+      })
   }
 
   /** B53.14 — the issuer's charge at `merchant` on card `cardID` of `ws`, decided as Lens's AuthorizeCardCharge decides it. */
@@ -396,7 +410,14 @@ export class PayeeDesk {
   private async coachRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
     const payments = this.spending(ws)
     if (path === '/v1/money/spending' && req.method === 'GET') {
-      return this.json(res, 200, { payments: [...payments].reverse().map((p) => ({ ...p, kind: 'card_charge', category_source: 'card', tags: [] })) }), true
+      const totals = new Map<string, { agent_id?: string; currency: string; total_minor: number; by_category: Record<string, number>; by_tag: Record<string, number> }>()
+      for (const p of payments) {
+        const t = totals.get(`${p.agent_id}|${p.currency}`) ?? { ...(p.agent_id ? { agent_id: p.agent_id } : {}), currency: p.currency, total_minor: 0, by_category: {}, by_tag: {} }
+        t.total_minor += p.amount_minor
+        t.by_category[p.category] = (t.by_category[p.category] ?? 0) + p.amount_minor
+        totals.set(`${p.agent_id}|${p.currency}`, t)
+      }
+      return this.json(res, 200, { payments: [...payments].reverse().map((p) => ({ ...p, tags: [] })), totals: [...totals.values()] }), true
     }
     const findings = () => {
       const out: Record<string, unknown>[] = []
@@ -406,7 +427,7 @@ export class PayeeDesk {
         const finding = (rule: string, more: object = {}) => out.push({ rule, entry_id: p.entry_id, agent_id: p.agent_id, merchant: p.merchant, mcc: p.mcc,
           category: p.category, country: p.country, amount_minor: p.amount_minor, currency: p.currency, at: p.created_at, ...more })
         if (before.length > 0 && !before.some((b) => b.merchant === p.merchant)) finding('new_merchant', { threshold_minor: 0 })
-        if (before.length > 0 && !before.some((b) => b.country === p.country)) finding('new_country')
+        if (before.length > 0 && p.country !== '' && !before.some((b) => b.country === p.country)) finding('new_country')
         const twin = [...before].reverse().find((b) => b.merchant === p.merchant && b.amount_minor === p.amount_minor && b.currency === p.currency)
         if (twin !== undefined && Date.parse(p.created_at) - Date.parse(twin.created_at) <= 600_000) {
           finding('duplicate', { duplicate_of: twin.entry_id, minutes_apart: Math.floor((Date.parse(p.created_at) - Date.parse(twin.created_at)) / 60_000) })
