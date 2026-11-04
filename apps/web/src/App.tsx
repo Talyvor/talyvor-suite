@@ -71,6 +71,7 @@ import { InvoicesScreen } from './areas/lens/Invoices'
 import { PayScreen } from './areas/lens/Pay'
 import { SubscriptionsScreen } from './areas/lens/Subscriptions'
 import { BudgetsScreen } from './areas/lens/Budgets'
+import { SpendingScreen } from './areas/lens/Spending'
 import { ApproveScreen } from './areas/lens/Approve'
 import { PayInvoicePage } from './areas/pay/PayInvoice'
 import { OperatorWorkspaces } from './areas/lens/OperatorWorkspaces'
@@ -299,6 +300,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/money/subscriptions', title: 'Subscriptions', element: <SubscriptionsScreen /> },
   // B41.39 — a weekly or monthly budget per category, its progress from the postings, and its 50/80/100% alerts.
   { path: '/money/budgets', title: 'Budgets', element: <BudgetsScreen /> },
+  // B53.8 — the week's and month's spending by category, budgets, subscriptions, the unusual with the Coach's sentence, notices.
+  { path: '/money/spending', title: 'Spending', element: <SpendingScreen /> },
   // B40.9 — the page a prepared request's approval link opens (Lens B40.3), from Chat, an assistant or a push.
   { path: '/approve/:id', title: 'Approve payments', element: <ApproveScreen /> },
   // B8.2 — every capability, what it does and costs, whether it is on, and its switch.
@@ -535,6 +538,7 @@ function Sidebar() {
         {item('/money/pay', 'Pay', 'coins')}
         {item('/money/invoices', 'Invoices', 'receipt')}
         {item('/money/subscriptions', 'Subscriptions', 'cycle')}
+        {item('/money/spending', 'Spending', 'chart')}
         {item('/money/budgets', 'Budgets', 'sliders')}
       </Group>
       <Group label="Settings" {...fold.group('Settings')}>

@@ -500,6 +500,31 @@ const BY_PATH: Record<string, unknown> = {
         period_start: '2026-09-01T00:00:00Z', period_end: '2026-10-01T00:00:00Z', spent_minor: 25_000, left_minor: 25_000, percent: 50 },
     ],
   },
+  // B53.8 — the Spending screen: a month with one eating-out payment that was unusual, the Coach's sentence on it, and notices.
+  '/api/money/spending': {
+    from: '2026-09-01T00:00:00Z', to: '2026-10-01T00:00:00Z', categories: ['eating_out', 'ai_software'],
+    payments: [
+      { entry_id: 'ent_2', kind: 'card_charge', merchant: 'Dishoom', agent_id: '', amount_minor: 4_250, currency: 'GBP', category: 'eating_out',
+        category_source: 'card', tags: [], created_at: '2026-09-26T20:10:00Z' },
+      { entry_id: 'ent_1', kind: 'payment_out', merchant: 'Anthropic', agent_id: 'agt_research', amount_minor: 25_000, currency: 'GBP', category: 'ai_software',
+        category_source: 'correction', tags: [], created_at: '2026-09-12T09:00:00Z' },
+    ],
+    totals: [
+      { currency: 'GBP', total_minor: 4_250, by_category: { eating_out: 4_250 }, by_tag: {} },
+      { agent_id: 'agt_research', currency: 'GBP', total_minor: 25_000, by_category: { ai_software: 25_000 }, by_tag: {} },
+    ],
+  },
+  '/api/money/spending/unusual': {
+    findings: [{ rule: 'new_merchant', entry_id: 'ent_2', merchant: 'Dishoom', category: 'eating_out', amount_minor: 4_250, currency: 'GBP', at: '2026-09-26T20:10:00Z' }],
+  },
+  '/api/money/coach': {
+    lines: [{ fact: { kind: 'new_merchant', merchant: 'Dishoom', category: 'eating out', amount: '£42.50' }, sentence: 'You paid Dishoom £42.50, the first time you have paid them.', source: 'template' }],
+    review: [],
+  },
+  '/api/money/notices': {
+    settings: { timezone: 'Europe/London', quiet_from: '22:00', quiet_until: '07:00', off: ['tip'] },
+    notices: [{ id: 'ntc_1', kind: 'payment', title: '£42.50 at Dishoom', body: 'Eating out', urgent: false, data: {}, status: 'sent', created_at: '2026-09-26T20:11:00Z' }],
+  },
   '/api/money/budgets/alerts': {
     alerts: [
       { id: 'sal_2', kind: 'agent_limit', subject: 'agt_research', agent_id: 'agt_research', period: 'daily', period_start: '2026-09-27T00:00:00Z',

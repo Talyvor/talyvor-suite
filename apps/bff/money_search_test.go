@@ -128,3 +128,42 @@ func TestMoneyBudgetsReachLensWithOnlyTheBudget(t *testing.T) {
 		t.Fatalf("POST = %d; want 405", rec.Code)
 	}
 }
+
+// B53.8 — the Spending screen's reads and writes reach Lens with only their own fields: a period and nothing else of the
+// query, a merchant's category, and the notice settings.
+func TestMoneySpendingReachesLensWithOnlyItsFields(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.RequestURI()+" "+string(b))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	doJSON(a, http.MethodGet, "/api/money/spending?from=2026-11-01&to=2026-12-01&workspace_id=ws_other", "")
+	doJSON(a, http.MethodGet, "/api/money/spending/unusual?from=2026-11-01", "")
+	doJSON(a, http.MethodPut, "/api/money/spending/merchants", `{"merchant":"Bistro","category":"eating_out","workspace_id":"ws_other"}`)
+	doJSON(a, http.MethodGet, "/api/money/coach", "")
+	doJSON(a, http.MethodGet, "/api/money/notices", "")
+	doJSON(a, http.MethodPut, "/api/money/notices/settings", `{"timezone":"Europe/London","quiet_from":"22:00","quiet_until":"07:00","off":["tip"],"workspace_id":"ws_other"}`)
+	want := []string{
+		"GET /v1/money/spending?from=2026-11-01&to=2026-12-01 ",
+		"GET /v1/money/spending/unusual?from=2026-11-01 ",
+		`PUT /v1/money/spending/merchants {"merchant":"Bistro","category":"eating_out"}`,
+		"GET /v1/money/coach ",
+		"GET /v1/money/notices ",
+		`PUT /v1/money/notices/settings {"timezone":"Europe/London","quiet_from":"22:00","quiet_until":"07:00","off":["tip"]}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("Lens got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/money/spending", "{}"); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST = %d; want 405", rec.Code)
+	}
+}
