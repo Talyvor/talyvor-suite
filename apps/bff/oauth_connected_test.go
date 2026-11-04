@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -38,8 +39,10 @@ func TestConnectedAssistantsListAndRevoke(t *testing.T) {
 	if rec := serve(a, "POST", "/api/connect/assistants/g-seed/revoke", oauthOrigin, "", nil, ck); rec.Code != http.StatusNoContent {
 		t.Fatalf("revoke: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := mcpWith(a, tok); rec.Code != http.StatusUnauthorized {
-		t.Fatalf("a revoked assistant's token still reaches /mcp: %d", rec.Code)
+	// B41.15's DONE: the assistant's next tool call fails with "not connected".
+	call := `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_wallets","arguments":{}}}`
+	if rec := serve(a, "POST", "/mcp", "", call, map[string]string{"Authorization": "Bearer " + tok}, nil); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "not connected") {
+		t.Fatalf("a revoked assistant's token at /mcp: %d %s, want 401 not connected", rec.Code, rec.Body.String())
 	}
 	if list := jsonOf(t, serve(a, "GET", "/api/connect/assistants", "", "", nil, ck))["assistants"].([]any); len(list) != 0 {
 		t.Fatalf("still listed after revoke: %v", list)

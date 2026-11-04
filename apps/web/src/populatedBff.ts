@@ -78,6 +78,14 @@ const BODIES: Record<string, unknown> = {
     ],
     received: [],
   },
+  // B41.15 — what may act for the workspace, on Keys: a signed permission mandate, a phone and a passkey.
+  '/api/money/access': {
+    items: [
+      { kind: 'mandate', id: 'pm_1', name: 'mcp:tlv_oc_claude', may: 'prepare and pay 1 payee in GBP, up to GBP 500.00 a payment', created_at: '2026-10-23T09:10:00Z', last_used_at: '2026-10-23T10:00:00Z', expires_at: '2027-01-31T00:00:00Z', status: 'active', revoke: '/v1/money/permission-mandates/pm_1/revoke' },
+      { kind: 'device', id: 'dk_1', name: 'Work iPhone', may: 'sign approvals and mandates', created_at: '2026-10-01T09:00:00Z', last_used_at: '2026-10-22T09:00:00Z', expires_at: null, status: 'active', revoke: '/v1/money/devices/dk_1/revoke' },
+      { kind: 'passkey', id: 'cred_1', name: 'MacBook', may: 'sign approvals and mandates', created_at: '2026-09-01T09:00:00Z', last_used_at: null, expires_at: null, status: 'active', revoke: '' },
+    ],
+  },
   // B40.35 — a payee and a permission mandate an assistant asked for over /mcp, waiting for the person.
   '/api/money/assistant-requests': {
     requests: [

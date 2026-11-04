@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Card, CardHeader, Input, RevealOnce, Row, inlineLink } from '@talyvor/ui'
 import { keysApi, type MintResult, type WorkspaceAPIKey } from './keysApi'
 import { formatWhen } from './format'
-import { ApiError } from '../../lib/api'
+import { ApiError, getJSON, readable } from '../../lib/api'
+import { ConnectedList } from './ConnectAI'
 import { isSessionExpired } from '../../lib/productState'
 import { PanelFailure } from '../../components/SessionExpiredBar'
 import { Region, RegionScreen } from '../../components/Region'
@@ -149,6 +150,97 @@ function keyFacts(k: WorkspaceAPIKey): string {
   facts.push(k.last_used_at ? `last used ${formatWhen(k.last_used_at)}` : 'never used')
   if (k.expires_at) facts.push(`expires ${formatWhen(k.expires_at)}`)
   return facts.join(' · ')
+}
+
+// B41.15 — everything else allowed to act for the workspace, from Lens's GET /v1/money/access (B41.115): the
+// permission mandates its owner signed for assistants and agents, the phones' device keys and the passkeys. Each row
+// says what it may do, when it was last used and when it expires, and is revoked in one tap — no typed confirm, since
+// a mandate or a device is named in words, not by one of many look-alike identifiers.
+interface AccessItem {
+  kind: 'mandate' | 'device' | 'passkey'
+  id: string
+  name: string
+  may: string
+  created_at: string
+  last_used_at: string | null
+  expires_at: string | null
+  status: 'active' | 'not_yet_valid' | 'expired' | 'revoked'
+  revoke: string // Lens's POST, e.g. /v1/money/devices/{id}/revoke; "" when none is offered yet
+}
+
+const ACCESS_KEY = ['money-access']
+const KIND_WORD: Record<AccessItem['kind'], string> = { mandate: 'Permission', device: 'Phone', passkey: 'Passkey' }
+const STATUS_WORD: Record<AccessItem['status'], string> = {
+  active: '',
+  not_yet_valid: 'Not yet valid',
+  expired: 'Expired',
+  revoked: 'Revoked',
+}
+
+function accessFacts(it: AccessItem): string {
+  const facts = [KIND_WORD[it.kind], `may ${it.may}`, `added ${formatWhen(it.created_at)}`]
+  facts.push(it.last_used_at ? `last used ${formatWhen(it.last_used_at)}` : 'never used')
+  if (it.expires_at) facts.push(`${it.status === 'expired' ? 'expired' : 'expires'} ${formatWhen(it.expires_at)}`)
+  return facts.join(' · ')
+}
+
+/** The BFF's forward of each revoke Lens offers (apps/bff/money_access.go, money_devices.go); a passkey has none yet. */
+const REVOKE_PATH: Partial<Record<AccessItem['kind'], (id: string) => string>> = {
+  mandate: (id) => `/api/money/permission-mandates/${encodeURIComponent(id)}/revoke`,
+  device: (id) => `/api/money/devices/${encodeURIComponent(id)}/revoke`,
+}
+
+async function revokeAccess(it: AccessItem): Promise<void> {
+  const path = REVOKE_PATH[it.kind]!(it.id)
+  const res = await fetch(path, { method: 'POST', headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new ApiError(res.status, path)
+}
+
+function AccessList() {
+  const qc = useQueryClient()
+  const list = useQuery({
+    queryKey: ACCESS_KEY,
+    queryFn: async () =>
+      readable<{ items: AccessItem[] }>('/api/money/access', await getJSON<unknown>('/api/money/access'), { items: 'array' })
+        .items,
+  })
+  const cut = useMutation({ mutationFn: revokeAccess, onSettled: () => qc.invalidateQueries({ queryKey: ACCESS_KEY }) })
+
+  if (list.isPending) return <div className="px-gutter py-3 text-body text-muted">Loading…</div>
+  if (list.isError)
+    return (
+      <div className="px-gutter py-3 text-body text-muted">
+        {list.error instanceof ApiError && list.error.status === 403
+          ? 'Only the workspace’s owner or an admin sees the permissions, phones and passkeys that act for it.'
+          : 'The permissions, phones and passkeys that act for this workspace were not read. This is a fault, not an empty list.'}
+      </div>
+    )
+  if (!list.data.length)
+    return <div className="px-gutter py-3 text-body text-muted">No permission, phone or passkey acts for this workspace yet. They appear here when you sign one or add a phone.</div>
+  return (
+    <>
+      {list.data.map((it) => {
+        const label = `${KIND_WORD[it.kind]} ${it.name}`
+        const pending = cut.isPending && cut.variables?.id === it.id
+        return (
+          <Row key={`${it.kind}-${it.id}`} stack label={it.name || KIND_WORD[it.kind]} hint={accessFacts(it)}>
+            {it.status !== 'active' ? (
+              <span className="text-caption text-muted">{STATUS_WORD[it.status]}</span>
+            ) : it.revoke && REVOKE_PATH[it.kind] ? (
+              <Button variant="default" aria-label={`Revoke ${label}`} disabled={pending} onClick={() => cut.mutate(it)}>
+                {pending ? 'Revoking…' : 'Revoke'}
+              </Button>
+            ) : null}
+          </Row>
+        )
+      })}
+      {cut.isError ? (
+        <div role="alert" className="px-gutter py-3 text-body text-ink">
+          That was not revoked — nothing was changed. Try again.
+        </div>
+      ) : null}
+    </>
+  )
 }
 
 // The three headlines. Written out together so the screen's one page-scale claim is readable in
@@ -374,6 +466,25 @@ export function Keys() {
           </Card>
         </Region>
       )}
+
+      <Region index="03" label="What may act for this workspace">
+        <p className="mb-4 max-w-2xl text-body text-muted">
+          Assistants you connected, the permissions you signed for them and your agents, and the phones and passkeys
+          that approve payments. Revoking one stops it at once.
+        </p>
+        <Card raised>
+          <CardHeader>Connected assistants</CardHeader>
+          <div className="px-gutter py-3">
+            <ConnectedList />
+          </div>
+        </Card>
+        <div className="mt-gutter">
+          <Card raised>
+            <CardHeader>Permissions, phones and passkeys</CardHeader>
+            <AccessList />
+          </Card>
+        </div>
+      </Region>
     </RegionScreen>
   )
 }
