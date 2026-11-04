@@ -92,6 +92,9 @@ var builtByThisService = map[string]string{
 // reply. The BFF never fills these, so "no assignment" is correct rather than
 // suspicious and checking them would report the decoder as a defect.
 var decodedFromUpstream = map[string]string{
+	"talyAnswer":             "Lens's model proxy's Anthropic Messages answer to Taly, decoded in talyAsk (B45.41)",
+	"talyTurn":               "a turn of the desktop app's ask_taly thread, decoded in askTaly and sent on to the model (B45.41)",
+	"pendingRequest":         "a request in Lens's GET /v1/money/payment-requests?status=pending_approval, decoded in mcpApprovals (B45.41)",
 	"mcpMessage":             "an assistant's JSON-RPC message POSTed to /mcp, decoded in handleMCP (B40.7)",
 	"dueBill":                "a bill in Lens's GET /v1/money/bills, decoded in mcpBillsDue and shown less its printed bank details (B40.36)",
 	"mcpPayeeDetails":        "an assistant's create_payee_request arguments, decoded wholesale in mcpCreatePayeeRequest and kept for the person to save (B40.35)",

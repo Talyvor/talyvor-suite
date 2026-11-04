@@ -255,14 +255,15 @@ function mcpTools(ctx: ScenarioCtx, origin: string, token: string) {
 //     before the assistant connected. B45.39: a second bill, from a saved payee, arrives; bills_due lists both, and
 //     prepare_bills_payment with no bill_ids prepares one request pending approval for both, the stranger's blocked. The
 //     person's one passkey approval then posts exactly one payment out, to that payee at the bill's amount with its invoice
-//     number, the company's account down by it; the same approval again is refused 409 and pays nothing.
+//     number, the company's account down by it; the same approval again is refused 409 and pays nothing. B45.41: the batch is
+//     in list_approvals with its link and amount, and ask_taly answers a question.
 export function connectMCP(): Scenario {
   return {
     id: 'connect-mcp',
     owner: 'talyvor-suite',
     own: true,
     agents: 1,
-    items: ['B40.7', 'B40.35', 'B40.9', 'B40.36', 'B45.39'],
+    items: ['B40.7', 'B40.35', 'B40.9', 'B40.36', 'B45.39', 'B45.41'],
     feature: 'Talyvor Connect',
     title: 'an assistant on /mcp lists the tools with their annotations, reads a balance, drafts an invoice and prepares a two-payee ' +
       'batch that stays pending approval; the payee and the mandate it asks for exist only once the person saves and signs them — ' +
@@ -337,6 +338,14 @@ export function connectMCP(): Scenario {
       }
       const status = await tool('get_request_status', { request_id: pr.id ?? '' })
       if (status.structuredContent?.status !== 'pending_approval') wrong.push(`the prepared batch then read ${JSON.stringify(status.structuredContent?.status)}, not pending_approval`)
+
+      // B45.41 — what the desktop app uses: the batch is among the approvals waiting, with its link, and Taly answers
+      //    with Chat's tools (the money check below holds that nothing moved).
+      const waiting = ((await tool('list_approvals', {})).structuredContent?.approvals ?? []) as { id: string; approval_url: string; amount_minor: number }[]
+      const ours = waiting.find((w) => w.id === pr.id)
+      if (ours === undefined || ours.approval_url !== pr.approval_url || ours.amount_minor !== 3000) wrong.push(`list_approvals does not list the batch of GBP 30.00 with its link: ${JSON.stringify(waiting).slice(0, 400)}`)
+      const taly = await tool('ask_taly', { message: 'What accounts does this workspace have?', thread: [] })
+      if (taly.isError !== false || String(taly.structuredContent?.reply ?? '').trim() === '') wrong.push(`ask_taly did not answer: ${JSON.stringify(taly).slice(0, 400)}`)
 
       // 3a. B40.36 — the bill due and the safe-to-spend figure.
       const due = await tool('bills_due', {})
