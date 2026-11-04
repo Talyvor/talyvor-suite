@@ -120,6 +120,7 @@ const SIDEBAR_DESTINATIONS = [
   '/money/invoices',
   '/money/pay',
   '/money/subscriptions',
+  '/money/budgets',
   '/track',
   '/docs',
   '/privacy',

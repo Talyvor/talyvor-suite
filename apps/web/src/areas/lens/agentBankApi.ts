@@ -178,6 +178,27 @@ export interface SpendSubscription {
   yearly_minor: number
 }
 
+/** B41.39 — Lens economy.SpendBudget (B41.139): a weekly or monthly budget and how far this period has gone, from postings. */
+export interface SpendBudget {
+  id: string
+  /** "": the owner's own wallet; "all": every wallet together; else an agent's */
+  agent_id: string
+  /** "": all spending */
+  category: string
+  period: 'week' | 'month'
+  amount_minor: number
+  currency: string
+  timezone: string
+  period_start: string
+  period_end: string
+  spent_minor: number
+  /** below zero once it is over */
+  left_minor: number
+  percent: number
+}
+
+export type SpendBudgetRequest = Pick<SpendBudget, 'agent_id' | 'category' | 'period' | 'amount_minor' | 'currency' | 'timezone'>
+
 /** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
 export interface LimitAlert {
   id: string
@@ -698,6 +719,9 @@ export const agentBankApi = {
   alerts: () => getJSON<{ alerts: AgentSpendAlert[] | null; rule: string }>('/api/agents/alerts', { alerts: 'list' }),
   subscriptions: () => getJSON<{ subscriptions: SpendSubscription[] | null }>('/api/money/spending/subscriptions', { subscriptions: 'list' }),
   limitAlerts: () => getJSON<{ alerts: LimitAlert[] | null }>('/api/money/budgets/alerts', { alerts: 'list' }),
+  budgets: () => getJSON<{ budgets: SpendBudget[] | null }>('/api/money/budgets', { budgets: 'list' }),
+  setBudget: (b: SpendBudgetRequest) => send<SpendBudget>('PUT', '/api/money/budgets', b),
+  deleteBudget: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/budgets/${e(id)}`),
   safeToSpend: () => getJSON<SafeToSpend>('/api/agents/safe-to-spend', { agents: 'list' }),
   briefing: () => getJSON<Briefing>('/api/agents/briefing', { items: 'list', quiet: 'boolean', line: 'string' }),
   forecast: () => getJSON<SpendForecast>('/api/agents/forecast', { spent_ulxc: 'number', forecast_ulxc: 'number', agents: 'list' }),

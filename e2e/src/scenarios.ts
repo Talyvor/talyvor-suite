@@ -99,6 +99,7 @@ import { agentWallet } from './agentWallet.ts'
 import { oneSearch } from './oneSearch.ts'
 import { limitAlerts } from './limitAlerts.ts'
 import { subscriptionsView } from './subscriptionsView.ts'
+import { budgetsByCategory } from './budgetsByCategory.ts'
 import { payeeCoolingOff } from './coolingOff.ts'
 import { chatSidebar } from './chatSidebar.ts'
 import { voiceChatMic, voiceChatPay } from './voiceChat.ts'
@@ -5481,6 +5482,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.20 — the Subscriptions view, once a run, on a workspace of its own: a monthly standing order and a monthly listing
   // subscription each show their next charge, monthly cost and a reminder three days before.
   if (i === 7) list.push(subscriptionsView())
+  // B41.39 — budgets by category, once a run, on a workspace of its own: with a £100.00 AI and software budget, the payment that
+  // crosses £80 raises one 80% alert, another category's payment counts for nothing, and Money → Budgets shows the progress.
+  if (i === 7) list.push(budgetsByCategory())
   if (i === 7) list.push(oneSearch(), payeeCoolingOff()) // B41.11: a large first payment to a new payee waits until the owner signs "I called them"
   // B48.23 — agents of each kind own their wallets, once a run, on a workspace of its own: fiat GBP, crypto USDC, both EUR + USDC,
   // each its own account; removing the kind whose wallet holds test money answers 409 and the ledger keeps it open; one owner wallet per asset.

@@ -253,7 +253,9 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/payees", body: `{"name":"a","country":"GB","sort_code":"040004","account_number":"12345678"}`},
 		{method: http.MethodPost, path: "/api/money/payees/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/payees/x1/confirm", body: `{"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
-		{method: http.MethodPost, path: "/api/money/payees/x1/called/challenge", body: `{}`}, // B41.11
+		{method: http.MethodPost, path: "/api/money/payees/x1/called/challenge", body: `{}`},                                                            // B41.11
+		{method: http.MethodPut, path: "/api/money/budgets", body: `{"category":"ai_software","period":"month","amount_minor":10000,"currency":"GBP"}`}, // B41.39
+		{method: http.MethodDelete, path: "/api/money/budgets/x1"},                                                                                      // B41.39
 		{method: http.MethodPost, path: "/api/money/payees/x1/called", body: `{"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
 		{method: http.MethodPost, path: "/api/money/payment-requests/x1/approval", body: `{"positions":[1]}`},
 		{method: http.MethodPost, path: "/api/money/payment-requests", body: `{"voice":true,"items":[{"payee_id":"p1","currency":"GBP","amount_minor":1}]}`},
