@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -92,6 +93,38 @@ func TestMoneySubscriptionsReachLens(t *testing.T) {
 		t.Fatalf("Lens got %q; want only GET /v1/money/spending/subscriptions", got)
 	}
 	if rec = doJSON(a, http.MethodPost, "/api/money/spending/subscriptions", "{}"); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST = %d; want 405", rec.Code)
+	}
+}
+
+// B41.39 — budgets reach Lens's /v1/money/budgets with only the budget's own fields, and a budget is removed by its id.
+func TestMoneyBudgetsReachLensWithOnlyTheBudget(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" "+string(b))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"budgets":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	doJSON(a, http.MethodGet, "/api/money/budgets?workspace_id=ws_other", "")
+	doJSON(a, http.MethodPut, "/api/money/budgets", `{"agent_id":"all","category":"ai_software","period":"month","amount_minor":10000,"currency":"GBP","timezone":"Europe/London","workspace_id":"ws_other"}`)
+	doJSON(a, http.MethodDelete, "/api/money/budgets/bdg_1", "")
+	want := []string{
+		"GET /v1/money/budgets ",
+		`PUT /v1/money/budgets {"agent_id":"all","category":"ai_software","period":"month","amount_minor":10000,"currency":"GBP","timezone":"Europe/London"}`,
+		"DELETE /v1/money/budgets/bdg_1 ",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("Lens got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/money/budgets", "{}"); rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST = %d; want 405", rec.Code)
 	}
 }

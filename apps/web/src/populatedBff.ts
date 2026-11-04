@@ -493,6 +493,13 @@ const BY_PATH: Record<string, unknown> = {
         last_at: '2026-09-27T09:00:00Z', next_at: '2026-10-04T09:00:00Z', remind_on: '2026-10-01T09:00:00Z', monthly_minor: 10_833, yearly_minor: 130_000 },
     ],
   },
+  // B41.39 — the budget whose 50% alert is just below, at 50% of £500 this month.
+  '/api/money/budgets': {
+    budgets: [
+      { id: 'bdg_1', agent_id: '', category: 'ai_software', period: 'month', amount_minor: 50_000, currency: 'GBP', timezone: 'Europe/London',
+        period_start: '2026-09-01T00:00:00Z', period_end: '2026-10-01T00:00:00Z', spent_minor: 25_000, left_minor: 25_000, percent: 50 },
+    ],
+  },
   '/api/money/budgets/alerts': {
     alerts: [
       { id: 'sal_2', kind: 'agent_limit', subject: 'agt_research', agent_id: 'agt_research', period: 'daily', period_start: '2026-09-27T00:00:00Z',

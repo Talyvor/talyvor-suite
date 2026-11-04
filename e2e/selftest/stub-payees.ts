@@ -45,6 +45,9 @@
 // payments out of the month (or the week from Monday, UTC) in the budget's currency and wallet; GET /v1/money/budgets/alerts
 // raises each 50, 80 and 100% reached, once a period, and lists them newest first. Its defect:
 //   limit-alert-twice      — an alert already raised in its period is raised again on every read
+// B41.39 — and a budget by category: PUT /v1/money/spending/merchants puts a merchant (here a payee's name) in a category, and a
+// budget with a category spends only its category's payments; a payment with no correction is uncategorised. Its defect:
+//   budget-category-ignored — a budget with a category spends every payment in its currency
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -111,6 +114,8 @@ export class PayeeDesk {
   /** B28.62 — each workspace's budgets and the alerts they raised. */
   private readonly budgets = new Map<string, StubBudget[]>()
   private readonly limitAlerts = new Map<string, StubLimitAlert[]>()
+  /** B41.39 — each workspace's merchant corrections, by the merchant's lower-cased name. */
+  private readonly merchantCategories = new Map<string, Map<string, string>>()
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
   private readonly body: <T>(req: IncomingMessage) => Promise<T>
@@ -280,12 +285,22 @@ export class PayeeDesk {
         : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
       const end = b.period === 'week' ? new Date(start.getTime() + 7 * 86_400_000) : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1))
       const accounts = this.accounts.get(ws) ?? []
-      // shortcut: every payment out reads as uncategorised, so a budget with a category spends nothing here.
-      const spent = (this.payments.get(ws) ?? []).filter((p) => p.status !== 'failed' && p.currency === b.currency && b.category === '' &&
+      const categories = this.merchantCategories.get(ws)
+      const inCategory = (p: Payment) => b.category === '' || this.broken('budget-category-ignored') ||
+        categories?.get(p.payee_name.trim().toLowerCase()) === b.category
+      const spent = (this.payments.get(ws) ?? []).filter((p) => p.status !== 'failed' && p.currency === b.currency && inCategory(p) &&
         (b.agent_id === 'all' || (accounts.find((a) => a.id === p.account_id)?.agent_id ?? '') === b.agent_id) &&
         Date.parse(p.created_at) >= start.getTime() && Date.parse(p.created_at) < end.getTime()).reduce((n, p) => n + p.amount_minor, 0)
       return { ...b, period_start: start.toISOString(), period_end: end.toISOString(), spent_minor: spent, left_minor: b.amount_minor - spent,
         percent: Math.floor((spent * 100) / b.amount_minor) }
+    }
+    if (path === '/v1/money/spending/merchants' && req.method === 'PUT') {
+      const m = await this.body<{ merchant?: string; category?: string }>(req)
+      if (!m.merchant?.trim()) return this.json(res, 400, { error: 'economy: spending: name the merchant (at most 200 characters)' }), true
+      const categories = this.merchantCategories.get(ws) ?? new Map<string, string>()
+      categories.set(m.merchant.trim().toLowerCase(), m.category ?? '')
+      this.merchantCategories.set(ws, categories)
+      return this.json(res, 200, { merchant: m.merchant, category: m.category ?? '' }), true
     }
     if (path === '/v1/money/budgets' && req.method === 'GET') return this.json(res, 200, { budgets: budgets.map(progress) }), true
     if (path === '/v1/money/budgets' && req.method === 'PUT') {

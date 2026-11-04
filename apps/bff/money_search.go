@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 )
@@ -44,4 +46,46 @@ func (a *app) handleMoneySubscriptions(w http.ResponseWriter, r *http.Request, t
 		return
 	}
 	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/spending/subscriptions", nil, "subscriptions")
+}
+
+// B41.39 — budgets by category, on this session's own token (Lens B41.139).
+//
+//	GET    /api/money/budgets        every budget, with this period's spending, what is left and the percent spent
+//	PUT    /api/money/budgets        {agent_id, category, period, amount_minor, currency, timezone} — set one
+//	DELETE /api/money/budgets/{id}   remove one
+func (a *app) handleMoneyBudgets(w http.ResponseWriter, r *http.Request, t tenant) {
+	switch r.Method {
+	case http.MethodGet:
+		a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/budgets", nil, "budgets")
+	case http.MethodPut:
+		var in struct {
+			AgentID     string `json:"agent_id"`
+			Category    string `json:"category"`
+			Period      string `json:"period"`
+			AmountMinor int64  `json:"amount_minor"`
+			Currency    string `json:"currency"`
+			Timezone    string `json:"timezone"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		// UPSTREAM-BINDS-ONLY lensSpendBudgetBody: id, left_minor, percent, period_end, period_start, spent_minor
+		body, _ := json.Marshal(in)
+		a.lensRelay(w, r, t.token, http.MethodPut, "/v1/money/budgets", body, "budgets")
+	default:
+		methodNotAllowed(w, "GET, PUT")
+	}
+}
+
+func (a *app) handleMoneyBudget(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodDelete)
+		return
+	}
+	id, ok := pathID(w, "budget id", r.PathValue("id"))
+	if !ok {
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodDelete, "/v1/money/budgets/"+url.PathEscape(id), nil, "budget")
 }

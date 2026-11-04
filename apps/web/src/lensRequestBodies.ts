@@ -934,6 +934,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payees", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPayeeCreateBody",
   },
+  // B41.39 — a budget by category, set on the Budgets screen (Lens B41.139).
+  {
+    route: "PUT /v1/money/budgets",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyBudgets(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_budgets_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/budgets", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSpendBudgetBody",
+  },
   {
     route: "POST /v1/money/payees/{id}/confirm",
     file: "apps/bff/money_pay.go",
