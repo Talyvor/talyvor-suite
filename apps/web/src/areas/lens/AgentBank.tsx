@@ -33,10 +33,12 @@ import {
   type AgentRuleBoost,
   type AgentSchedule,
   type AgentTopUp as AgentTopUpValue,
+  type LimitAlert,
   type StatementLine,
   AgentBankError,
   agentBankApi,
   approvalNamedIn,
+  formatMinor,
   limitText,
   newMoveKey,
   parseLXC,
@@ -232,7 +234,57 @@ function Spending({ nameOf }: { nameOf: (id: string) => string }) {
           </p>
         )}
       </Card>
+      <LimitAlerts nameOf={nameOf} />
     </div>
+  )
+}
+
+const PERIOD_WORD: Record<string, string> = { week: 'weekly', month: 'monthly' }
+
+/** "80% of Researcher's daily limit": what an alert is about, in words. */
+function limitAlertText(a: LimitAlert, nameOf: (id: string) => string): string {
+  const whose = !a.agent_id ? 'your own' : a.agent_id === 'all' ? 'every wallet’s' : `${nameOf(a.agent_id)}’s`
+  const period = a.period ? `${PERIOD_WORD[a.period] ?? a.period} ` : ''
+  const what =
+    a.kind === 'card' ? 'card cap' : a.kind === 'agent_limit' ? `${period}limit` : `${period}${a.category ? `${a.category.replace(/_/g, ' ')} ` : ''}budget`
+  return `${a.percent}% of ${whose} ${what}`
+}
+
+/** B28.62 — each time spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit (Lens B28.335). */
+function LimitAlerts({ nameOf }: { nameOf: (id: string) => string }) {
+  const alerts = useQuery({ queryKey: ['limit-alerts'], queryFn: agentBankApi.limitAlerts })
+  const list = alerts.data?.alerts ?? []
+  const amount = (minor: number, currency: string) => (currency === 'LXC' ? lxc(minor) : formatMinor(minor, currency))
+  return (
+    <Card>
+      <CardHeader>Limit alerts</CardHeader>
+      {alerts.isError ? (
+        <p className="px-gutter py-3 text-body text-muted">{readFailure(alerts.error, 'The limit alerts')}</p>
+      ) : alerts.isPending ? (
+        <p className="px-gutter py-3 text-body text-muted">Reading…</p>
+      ) : list.length > 0 ? (
+        list.slice(0, 20).map((a) => (
+          <Row
+            key={a.id}
+            data-testid={`limit-alert-${a.id}`}
+            label={limitAlertText(a, nameOf)}
+            hint={
+              <>
+                {amount(a.spent_minor, a.currency)} of {amount(a.limit_minor, a.currency)} spent ·{' '}
+                <span className="font-figure">{formatWhen(a.created_at)}</span>
+              </>
+            }
+          >
+            <Pill status={a.percent >= 100 ? 'slashed' : a.percent >= 80 ? 'held' : 'idle'}>{a.percent >= 100 ? 'Reached' : 'Nearing'}</Pill>
+          </Row>
+        ))
+      ) : (
+        <p className="px-gutter py-3 text-body text-muted">
+          No limit reached yet. An alert appears here when spending reaches 50, 80 or 100% of a budget, a card’s cap or an
+          agent’s limit — once each period. Open an agent below to choose its limits.
+        </p>
+      )}
+    </Card>
   )
 }
 

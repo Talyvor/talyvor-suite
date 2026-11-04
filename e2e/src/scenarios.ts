@@ -97,6 +97,7 @@ import { chatFirstMessage } from './chatFirstMessage.ts'
 import { chatPaymentCard } from './chatPaymentCard.ts'
 import { agentWallet } from './agentWallet.ts'
 import { oneSearch } from './oneSearch.ts'
+import { limitAlerts } from './limitAlerts.ts'
 import { payeeCoolingOff } from './coolingOff.ts'
 import { chatSidebar } from './chatSidebar.ts'
 import { voiceChatMic, voiceChatPay } from './voiceChat.ts'
@@ -5473,6 +5474,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   if (i === 5) list.push(dailyBriefing())
   // B41.7 — one search box, once a run, on a workspace of its own: a supplier's name lists its payee, its payment and its bill
   // under their headings, and each opens /money/pay on its own row.
+  // B28.62 — limit-approach alerts, once a run, on a workspace of its own: £8.00 paid against a £10.00 monthly budget raises one
+  // 50% and one 80% alert, still one each when read again, and the Agent Bank's Limit alerts card shows the 80% one.
+  if (i === 7) list.push(limitAlerts())
   if (i === 7) list.push(oneSearch(), payeeCoolingOff()) // B41.11: a large first payment to a new payee waits until the owner signs "I called them"
   // B48.23 — agents of each kind own their wallets, once a run, on a workspace of its own: fiat GBP, crypto USDC, both EUR + USDC,
   // each its own account; removing the kind whose wallet holds test money answers 409 and the ledger keeps it open; one owner wallet per asset.
