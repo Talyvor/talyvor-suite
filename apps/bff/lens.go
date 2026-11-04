@@ -595,6 +595,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/marketplace/listings/{id}/versions", a.requireTenant(a.handleMarketVersion)) // B28.162
 	a.mux.HandleFunc("/api/marketplace/listings/{id}/reports", a.requireTenant(a.handleMarketReport))   // B20.11
 	a.mux.HandleFunc("/api/marketplace/search", a.requireTenant(a.handleMarketSearch))                  // B32.61
+	a.mux.HandleFunc("/api/marketplace/ask", a.requireTenant(a.handleMarketAsk))                        // B41.71
 	a.mux.HandleFunc("/api/marketplace/capabilities", a.requireTenant(a.handleMarketCapabilities))      // B32.61
 	a.mux.HandleFunc("/api/marketplace/collections", a.requireTenant(a.handleMarketCollections))        // B32.61
 	a.mux.HandleFunc("/api/marketplace/collections/{id}", a.requireTenant(a.handleMarketCollection))    // B32.61

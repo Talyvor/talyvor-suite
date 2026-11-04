@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type Collection, type Hit, collectionFaults, collectionPageFaults, featuredFaults, screenFaults, searchFaults, trendingFaults } from '../src/discovery.ts'
+import { type Collection, type Hit, askScreenFaults, collectionFaults, collectionPageFaults, featuredFaults, screenFaults, searchFaults, trendingFaults } from '../src/discovery.ts'
 
 const mine = { cheap: 'lst_cheap', dear: 'lst_dear', other: 'lst_other' }
 const hit = (id: string, capabilities: string[], price: number | null): Hit => ({ id, title: id, capabilities, price_per_use_usd_micros: price, distinct_buyers_7d: 0, trending_score: 0 })
@@ -36,5 +36,17 @@ describe('B32.90 market-discovery', () => {
     expect(collectionPageFaults(['b', 'a'], ['b', 'a'])).toEqual([])
     expect(collectionPageFaults(['a', 'b'], ['b', 'a'])).toEqual(['the collection\'s page shows ["a","b"], not ["b","a"] in that order'])
     expect(collectionPageFaults(['b', 'a', 'c'], ['b', 'a'])).toEqual(['the collection\'s page shows ["b","a","c"], not ["b","a"] in that order'])
+  })
+
+  it('B41.71 market-ask-screen: passes up to three listings shown with Lens\'s estimates, and fails otherwise', () => {
+    const lens = [
+      { id: 'a', estimate: { total_usd_micros: 1_000_000 } },
+      { id: 'b', estimate: { total_usd_micros: 9_000_000, display: { currency: 'EUR', amount_minor: 818 } } },
+      { id: 'c', estimate: null },
+    ]
+    expect(askScreenFaults([['a', '$1.00'], ['b', '€8.18'], ['c', 'Enterprise licence only, priced by seat']], lens)).toEqual([])
+    expect(askScreenFaults([], lens)).toEqual(['Discover asked "translate 500 product descriptions into German" shows no listing'])
+    expect(askScreenFaults([['a', '$0.002'], ['b', '€8.18'], ['c', 'Enterprise licence only, priced by seat']], lens)).toEqual([
+      'Discover shows [["a","$0.002"],["b","€8.18"],["c","Enterprise licence only, priced by seat"]], Lens answered [["a","$1.00"],["b","€8.18"],["c","Enterprise licence only, priced by seat"]]'])
   })
 })

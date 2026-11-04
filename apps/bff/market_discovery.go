@@ -9,6 +9,8 @@ import (
 //
 //	GET /api/marketplace/search?q=&capability=&kind=&licence=&max_price_per_use=&min_eval=&verified_only=&sort=&page=
 //	                                        a page of the approved public listings that match; max_price_per_use in µUSD
+//	GET /api/marketplace/ask?q=&volume=&currency=
+//	                                        B41.71: up to three listings for a job in words, each with its estimate
 //	GET /api/marketplace/capabilities       the controlled list a listing declares what it can do from
 //	GET /api/marketplace/collections        the public collections, the operator's featured ones first
 //	GET /api/marketplace/collections/{id}   one collection and its listings, in its curator's order
@@ -42,6 +44,24 @@ func (a *app) handleMarketSearch(w http.ResponseWriter, r *http.Request, t tenan
 		path += "?" + out.Encode()
 	}
 	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+}
+
+// askParams are the ask's parameters Lens reads (B41.171).
+var askParams = []string{"q", "volume", "currency"}
+
+// handleMarketAsk — GET /api/marketplace/ask: Lens reads the job, works out the volume and prices it.
+func (a *app) handleMarketAsk(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	in, out := r.URL.Query(), url.Values{}
+	for _, name := range askParams {
+		if v := in.Get(name); v != "" {
+			out.Set(name, v)
+		}
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodGet, "/v1/marketplace/ask?"+out.Encode(), nil, "")
 }
 
 // handleMarketCapabilities — GET /api/marketplace/capabilities.
