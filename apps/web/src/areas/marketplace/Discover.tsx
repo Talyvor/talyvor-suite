@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Button, Input, NavIcon, Pill, cn, focusRing, inlineLink } from '@talyvor/ui'
 import { Region } from '../../components/Region'
+import { Ask, searchFailure } from './Ask'
 import { ApiError } from '../../lib/api'
 import { formatWhen } from '../lens/format'
 import { ROOMS_KEY, type Room, roomsApi, usdText } from '../rooms/roomsApi'
@@ -12,7 +13,6 @@ import {
   type DiscoverSort,
   KINDS,
   type ListingKind,
-  MarketError,
   marketApi,
   parsePrice,
 } from './marketApi'
@@ -162,7 +162,8 @@ export function Discover() {
           and earn when others use it.
         </p>
       </Region>
-      <Region index="01" label="Discover" fullWidth className="flex flex-col gap-4">
+      <Ask />
+      <Region index="02" label="Discover" fullWidth className="flex flex-col gap-4">
         <form
           className="flex flex-col gap-3"
           role="search"
@@ -301,11 +302,6 @@ export function Discover() {
   )
 }
 
-function searchFailure(err: unknown): string {
-  // A filter Lens refuses (a capability not on its list) comes back with its sentence: that is the answer.
-  if (err instanceof MarketError && err.status === 400 && err.sentence) return err.sentence
-  return readFailure(err, 'The marketplace')
-}
 
 // ── Collections ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -352,7 +348,7 @@ function CollectionCard({ c }: { c: Collection }) {
 function Collections() {
   const list = useQuery({ queryKey: ['market-collections'], queryFn: marketApi.collections })
   return (
-    <Region index="02" label="Collections" fullWidth className="flex flex-col gap-4">
+    <Region index="03" label="Collections" fullWidth className="flex flex-col gap-4">
       <p className="max-w-2xl text-body text-muted">
         Listings other workspaces picked out and put in order. Talyvor’s featured collections come first.
       </p>
@@ -434,7 +430,7 @@ function RoomsBuildingThis({ words }: { words: string[] }) {
   const shown = roomsOnTopic(open, words).slice(0, ROOMS_SHOWN)
   const topical = words.length > 0
   return (
-    <Region index="03" label={topical ? 'Rooms building this' : 'Rooms building now'} fullWidth className="flex flex-col gap-4">
+    <Region index="04" label={topical ? 'Rooms building this' : 'Rooms building now'} fullWidth className="flex flex-col gap-4">
       <p className="max-w-2xl text-body text-muted">
         Open rooms where people and their agents are building {topical ? 'on the same topic' : 'right now'}. Join one
         and build it with them.

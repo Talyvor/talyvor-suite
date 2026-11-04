@@ -1280,6 +1280,32 @@ export class Bank {
       })
       return json(res, 200, { listings: at, sort, page, page_size: 50, total: hits.length, has_more: page * 50 < hits.length }), true
     }
+    // B41.71 — Lens's ask (B41.171): the newest three listings the words match, each priced for the first number in the
+    // words on its commercial per-use offer (free with none), and why it fits.
+    if (path === '/v1/marketplace/ask') {
+      const job = (q.get('q') ?? '').trim()
+      if (job === '') return json(res, 400, { error: 'market: invalid listing: q must describe the job, such as: translate 500 product descriptions into German' }), true
+      const n = Number(q.get('volume') || /\d+/.exec(job)?.[0] || 0)
+      const volume = n > 0 ? n : 1
+      const words = job.toLowerCase().split(/\s+/).filter((w) => w.length >= 3 && !/^\d+$/.test(w))
+      const picks = [...this.listings.values()]
+        .filter((l) => l.visibility === 'public' && l.review_status === 'approved')
+        .map((l) => ({ l, had: words.filter((w) => `${l.title} ${l.description}`.toLowerCase().includes(w)) }))
+        .filter(({ had }) => had.length > 0)
+        .sort((a, b) => b.l.created_at.localeCompare(a.l.created_at))
+        .slice(0, 3)
+        .map(({ l, had }) => {
+          const { artifact: _a, changelog: _c, ...rest } = l
+          const price = this.perUse(l)
+          const estimate = price === null ? null : (l.offers ?? []).length === 0
+            ? { volume, offer_kind: 'free', total_usd_micros: 0, basis: 'free to use' }
+            : { volume, offer_kind: 'per_use', total_usd_micros: price * volume, basis: `${volume} uses at its per-use price` }
+          return { ...rest, capabilities: l.capabilities ?? [], offers: l.offers ?? [], price_per_use_usd_micros: price, distinct_buyers_7d: 0, trending_score: 0,
+            estimate, why: [`Its title or description has ${had.join(', ')}.`] }
+        })
+      return json(res, 200, { q: job, volume, volume_from: q.get('volume') ? 'asked' : n > 0 ? 'words' : 'default', picks,
+        note: 'Each estimate is the marketplace price for the volume; the AI calls each use makes are charged as your own, beside it.' }), true
+    }
     if (path === '/v1/marketplace/collections') {
       const featured = this.broken('featured-last') ? -1 : 1
       const list = [...this.collections.values()].filter((c) => c.public)

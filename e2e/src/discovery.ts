@@ -15,6 +15,10 @@
 //        a use shows the $0.04 one and not the $0.06 one, and a curator's public collection of the $0.06 then the $0.04
 //        listing, opened from its link, shows exactly those two in that order. Lens's own reads of the search and the
 //        collection are asked too, so a fault is the screen's only where Lens answered right; where Lens did not, it SKIPs.
+//   market-ask-screen — B41.71: a seller publishes "Translate product descriptions into German" at $0.002 a use, and the
+//        buyer asks Discover "translate 500 product descriptions into German". The screen shows up to three listings,
+//        each with an estimated total, exactly those Lens's own ask answers in its order with its estimates, for 500
+//        uses; where Lens picks the run's listing, its estimate is 500 × $0.002 = $1.00.
 // Nothing is used or bought, so nothing is charged. A listing the similarity check holds (another night's of the same
 // words) is approved by the operator first, as a person would: what is tested here is how it is found.
 
@@ -287,6 +291,86 @@ export function marketDiscoverScreen(): Scenario {
       }
       return verdictOf(wrong, 'Discover filtered by capability extract and at most $0.05 a use showed the $0.04 listing and not the $0.06 one, as Lens found them; ' +
         "the collection's page showed exactly its two listings in its curator's order")
+    },
+  }
+}
+
+// ── B41.71: ask the marketplace ─────────────────────────────────────────────────────────────────────
+
+/** The job the item's DONE line asks, and the run's listing's price: 500 uses at $0.002 is $1.00. */
+export const ASK_JOB = 'translate 500 product descriptions into German'
+const ASK_VOLUME = 500
+const ASK_PRICE_USD_MICROS = 2_000
+
+/** One pick of Lens's ask (market.AskPick), as far as the screen shows it. */
+export interface AskPick {
+  id: string
+  estimate: { total_usd_micros: number; display?: { currency: string; amount_minor: number } } | null
+}
+
+/** The estimate as Discover shows it (apps/web Discover.tsx estimateText). */
+export function estimateText(e: AskPick['estimate']): string {
+  if (e === null) return 'Enterprise licence only, priced by seat'
+  if (e.total_usd_micros <= 0) return 'Free'
+  if (e.display) {
+    const f = new Intl.NumberFormat('en-GB', { style: 'currency', currency: e.display.currency })
+    return f.format(e.display.amount_minor / 10 ** (f.resolvedOptions().maximumFractionDigits ?? 2))
+  }
+  return `$${(e.total_usd_micros / 1_000_000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
+}
+
+/** What is wrong with the picks Discover showed — `shown` as [listing id, estimate text] — against Lens's own answer. */
+export function askScreenFaults(shown: readonly (readonly [string, string])[], lens: readonly AskPick[]): string[] {
+  if (shown.length === 0) return [`Discover asked "${ASK_JOB}" shows no listing`]
+  if (shown.length > 3) return [`Discover asked "${ASK_JOB}" shows ${shown.length} listings, more than three`]
+  const want = lens.map((p) => [p.id, estimateText(p.estimate)] as const)
+  const wrong = shown.filter(([, est]) => est.trim() === '').map(([id]) => `${id} is shown with no estimate`)
+  if (JSON.stringify(shown) !== JSON.stringify(want)) wrong.push(`Discover shows ${JSON.stringify(shown)}, Lens answered ${JSON.stringify(want)}`)
+  return wrong
+}
+
+export function marketAskScreen(): Scenario {
+  return {
+    id: 'market-ask-screen',
+    owner: 'talyvor-suite',
+    feature: 'Marketplace',
+    title: `asking Discover "${ASK_JOB}" shows up to three listings, each with its estimated total for 500 uses, as Lens answers them`,
+    run: async (ctx) => {
+      const { lens } = ctx.env
+      if (!lens.canModerate) throw new CannotTest('needs a moderator key to approve a listing the similarity check holds: LENS_MODERATOR_KEY, from `lens moderator-keys create`')
+      const seller = ctx.app.user
+      const mine = await publishPriced(ctx, seller, 'Translate product descriptions into German', 'Translate this product description into German: {{text}}', ASK_PRICE_USD_MICROS, ['translate'])
+      const asked = `/v1/marketplace/ask?${new URLSearchParams({ q: ASK_JOB })}`
+      const wrong: string[] = []
+      const page = await ctx.app.tab('/marketplace')
+      const shown: [string, string][] = []
+      try {
+        await page.getByLabel(/Describe a job/).fill(ASK_JOB)
+        await page.getByRole('button', { name: 'Ask', exact: true }).click()
+        const picks = page.getByTestId('ask-pick')
+        await picks.first().or(page.getByTestId('ask-empty')).waitFor({ timeout: ACTION_TIMEOUT_MS })
+        for (const card of await picks.all()) {
+          const href = (await card.getByRole('link').first().getAttribute('href')) ?? ''
+          shown.push([decodeURIComponent(href.split('/').pop() ?? ''), (await card.getByTestId('ask-estimate').innerText()).trim()])
+        }
+        const volume = shown.length > 0 ? await page.getByTestId('ask-volume').innerText() : ''
+        ctx.evidence.push({ note: `Discover asked "${ASK_JOB}": ${JSON.stringify(shown)} — ${volume}` })
+        if (shown.length > 0 && !volume.includes('500 uses')) wrong.push(`Discover says "${volume}", not estimates for 500 uses`)
+      } finally {
+        await page.close()
+      }
+      // Lens's own answer, read after the screen's: the screen is at fault only where it differs from what Lens answers.
+      const r = await lens.act<{ volume: number; picks: AskPick[] | null }>(seller, 'GET', asked)
+      if (!r.ok) throw new CannotTest(`Lens's own ask refused: ${said(r)}`)
+      const picks = r.value.picks ?? []
+      ctx.evidence.push({ note: `Lens's ask: volume ${r.value.volume}, ${JSON.stringify(picks.map((p) => [p.id, p.estimate?.total_usd_micros ?? null]))}` })
+      if (r.value.volume !== ASK_VOLUME) wrong.push(`Lens's ask priced ${r.value.volume} uses, not the ${ASK_VOLUME} in the words`)
+      const ours = picks.find((p) => p.id === mine)
+      if (ours && ours.estimate?.total_usd_micros !== ASK_VOLUME * ASK_PRICE_USD_MICROS) {
+        wrong.push(`the run's listing ${mine} is estimated at ${String(ours.estimate?.total_usd_micros)} µUSD, not ${ASK_VOLUME} × ${ASK_PRICE_USD_MICROS}`)
+      }
+      wrong.push(...askScreenFaults(shown, picks))
+      return verdictOf(wrong, `Discover asked "${ASK_JOB}" showed ${picks.length} listing(s), each with its estimated total for 500 uses, as Lens answered`)
     },
   }
 }

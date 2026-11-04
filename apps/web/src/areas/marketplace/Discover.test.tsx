@@ -79,6 +79,23 @@ function mockBff() {
         joined: null,
         invited: null,
       })
+    // B41.71 — Lens's ask (B41.171): the volume is the first number in the words, each pick priced for it.
+    if (url.pathname === '/api/marketplace/ask') {
+      const q = url.searchParams.get('q') ?? ''
+      const volume = Number(/\d+/.exec(q)?.[0] ?? 1)
+      const hit = (m: Mock) => ({ ...listing(m), price_per_use_usd_micros: m.usd, distinct_buyers_7d: 2, trending_score: 0 })
+      return json({
+        q,
+        volume,
+        volume_from: 'words',
+        picks: [
+          { ...hit(LISTINGS[0]), why: ['It declares it can Extract.', '2 buyers used it in the last seven days.'], estimate: { volume, offer_kind: 'per_use', total_usd_micros: 40_000 * volume, basis: `${volume} uses at its per-use price` } },
+          { ...hit(LISTINGS[1]), why: ['Its title or description has extract.'], estimate: { volume, offer_kind: 'subscribe', licences: 1, total_usd_micros: 9_000_000, basis: 'one 30-day subscription covers every use', display: { currency: 'EUR', amount_minor: 818, includes_tax: false, rate: '0.9091', source: 'ecb' } } },
+          { ...hit(LISTINGS[2]), why: [], estimate: null },
+        ],
+        note: 'Each estimate is the marketplace price for the volume; the AI calls each use makes are charged as your own, beside it.',
+      })
+    }
     return new Response('null', { status: 404 })
   })
   return searched
@@ -119,6 +136,26 @@ describe('Discover', () => {
     // The rooms on the same topic, and not the others.
     const rooms = await screen.findByRole('list', { name: 'Rooms' })
     expect(within(rooms).getAllByRole('link').map((a) => a.textContent)).toEqual(['Invoice extraction'])
+  })
+
+  // B41.71 — the item's DONE line: asking for a job in words returns up to three listings, each with an estimated total.
+  it('asking "translate 500 product descriptions into German" shows up to three listings, each with an estimate', async () => {
+    mockBff()
+    await at('/marketplace')
+    fireEvent.change(screen.getByLabelText(/Describe a job/), { target: { value: 'translate 500 product descriptions into German' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    const picks = await screen.findAllByTestId('ask-pick')
+    expect(picks.map((p) => within(p).getByRole('link').textContent)).toEqual(['Extract dates', 'Extract names', 'Summarise'])
+    expect(picks.map((p) => within(p).getByTestId('ask-estimate').textContent)).toEqual([
+      '$20.00',
+      '€8.18',
+      'Enterprise licence only, priced by seat',
+    ])
+    expect(within(picks[1]).getByTestId('ask-basis').textContent).toBe(
+      'one 30-day subscription covers every use · billed in US dollars: $9.00',
+    )
+    expect(within(picks[0]).getByRole('list', { name: 'Why it fits' }).textContent).toContain('It declares it can Extract.')
+    expect(screen.getByTestId('ask-volume').textContent).toBe('Estimates for 500 uses, the number in your words.')
   })
 
   // B28.139 — a filter that simply matched nothing names itself; it never says nothing is published.
