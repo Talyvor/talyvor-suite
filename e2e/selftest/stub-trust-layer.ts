@@ -2,8 +2,8 @@
 // (POST /v1/a2a/agents/{id}/payment-requests, Lens B45.29) checked under Talyvor's money profile as Lens's agentsig does —
 // the method, full URL, Content-Digest and Signature-Agent covered, at most 5 minutes, a nonce once, Ed25519 by a key in the
 // agent's directory — and the AP2 key the owner's mandates are signed with (GET /.well-known/talyvor-ap2/jwks.json, Lens
-// B45.28): an ES256 key made when the stub starts. The stub reads the directory of https://127.0.0.1:<port> over http, which
-// Lens never would: the scenario signs as that only under --hook-tunnel none. No business is checked here, so a good
+// B45.28): an ES256 key made when the stub starts. The stub reads only the directory of https://127.0.0.1:<port>, over http,
+// which Lens never would: the scenario signs as that only under --hook-tunnel none. No business is checked here, so a good
 // signature is "signed". The approver agents themselves are the Bank's (stub-bank.ts). Its defects:
 //   forged-signature-accepted — a signature is taken without checking it, so a forged one is "signed"
 //   approver-over-limit       — an approver agent approves above its own limit (stub-bank.ts)
@@ -69,7 +69,10 @@ export class TrustLayerDesk {
     const agent = unquote(String(req.headers['signature-agent'] ?? ''))
     const domain = URL.canParse(agent) ? new URL(agent).hostname : ''
     if (!agent.startsWith('https://') || domain === '') return { refused: `agent signature refused: Signature-Agent: "${agent}" is not an https URL on the default port` }
-    const dir = await fetch(`${agent.replace(/^https:/, 'http:')}/.well-known/http-message-signatures-directory`).then((r) => r.json() as Promise<{ keys?: JsonWebKey[] }>, () => ({ keys: [] }))
+    // Only the scenario's own directory on this machine: the stub reaches nowhere else (Lens reads https through safehttp).
+    const port = Number(new URL(agent).port)
+    if (domain !== '127.0.0.1' || !Number.isInteger(port) || port <= 0) return { refused: `agent signature refused: could not read ${domain}'s key directory` }
+    const dir = await fetch(`http://127.0.0.1:${port}/.well-known/http-message-signatures-directory`).then((r) => r.json() as Promise<{ keys?: JsonWebKey[] }>, () => ({ keys: [] }))
     const jwk = (dir.keys ?? []).find((k) => b64u(sha256(`{"crv":"Ed25519","kty":"OKP","x":"${k.x}"}`)) === keyID)
     if (jwk === undefined) return { refused: `agent signature refused: key ${keyID} is not in ${domain}'s directory` }
     const base = `"@method": ${req.method}\n"@target-uri": ${url}\n"content-digest": ${digest}\n"signature-agent": ${req.headers['signature-agent']}\n"@signature-params": ${raw}`
