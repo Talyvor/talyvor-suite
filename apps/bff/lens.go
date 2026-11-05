@@ -465,6 +465,11 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B28.21 — rename and describe an agent, and archive it. See agent_bank.go.
 	a.mux.HandleFunc("/api/agents/{id}", a.requireTenant(a.handleAgent))
 	a.mux.HandleFunc("/api/agents/{id}/archive", a.requireTenant(a.handleAgentArchive))
+	// B52.28 — Scan: the public track record, and Scan agents' watches and their alerts. See scan.go.
+	a.mux.HandleFunc("/api/scan/track-record", a.requireTenant(a.handleScanTrackRecord))
+	a.mux.HandleFunc("/api/scan/watches", a.requireTenant(a.handleScanWatches))
+	a.mux.HandleFunc("/api/scan/watches/{id}", a.requireTenant(a.handleScanWatchStop))
+	a.mux.HandleFunc("/api/agents/{id}/scan-watches", a.requireTenant(a.handleAgentScanWatch))
 	// B19.20 — pause every agent or one, unusual-spend alerts and the month-end forecast.
 	a.mux.HandleFunc("/api/agents/alerts", a.requireTenant(a.handleAgentAlerts))
 	a.mux.HandleFunc("/api/agents/forecast", a.requireTenant(a.handleAgentForecast))

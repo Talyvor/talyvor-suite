@@ -9,7 +9,7 @@ const DAY = 86_400_000
 const iso = (ms: number) => new Date(ms).toISOString()
 const day = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 
-function mockBff(now: number) {
+function mockBff(now: number, listingRead: Promise<void> = Promise.resolve()) {
   const agent = { id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true }
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -28,6 +28,7 @@ function mockBff(now: number) {
         rent_paid_usd_micros: 0, source: 'offer', created_at: iso(now - 10 * DAY), price_ulxc: 50_000_000 }] })
     }
     if (url === '/api/marketplace/listings/lst_1') {
+      await listingRead
       return json({ id: 'lst_1', title: 'Market brief', price_per_use_ulxc: 0, offers: [{ id: 'off_1', kind: 'rent', licence: 'commercial', price_usd_micros: 5_000_000, period_days: 30 }] })
     }
     if (url === '/api/money/spending/subscriptions') {
@@ -71,5 +72,24 @@ describe('the subscriptions view (B41.20)', () => {
     expect(card.textContent).not.toContain('Renews in')
 
     expect(screen.getByTestId('subscriptions-count').textContent).toBe('3 renew, 1 in the next 3 days')
+  })
+
+  // B17.348 — the listing is read after the licences: until it answers, the rental's period and monthly cost are not
+  // known, so the list waits for it rather than show the rental without them.
+  it('waits for the listing before it lists a rental, so its row never shows without its monthly cost', async () => {
+    const now = Date.now()
+    let answer = () => {}
+    mockBff(now, new Promise((resolve) => { answer = resolve }))
+    window.history.pushState({}, '', '/money/subscriptions')
+    render(<App />)
+
+    await screen.findByText(/Reading/)
+    await new Promise((r) => setTimeout(r, 100))
+    expect(screen.queryByTestId('subscription-lic-lic_1')).toBeNull()
+    expect(screen.getByText(/Reading/)).toBeTruthy()
+
+    answer()
+    const rental = await screen.findByTestId('subscription-lic-lic_1')
+    expect(rental.textContent).toContain('$5.00 a month')
   })
 })

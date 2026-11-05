@@ -92,6 +92,8 @@ const TRUST = {
     { listing_id: 'lst_hidden', version: 1, hidden: true, child_listing_id: 'lst_clause', child_version: 3, share_bps: 500, source: 'remix', depth: 2 },
   ],
   remixes: 4,
+  // B41.73 — Lens B41.173's 30-day figures from the use records: 100 uses, 5 failed.
+  performance: { days: 30, uses: 100, failed: 5, success_rate: 0.95, median_latency_ms: 1240, cost_per_use_usd_micros: 500_000 },
 }
 
 function mockBff() {
@@ -262,7 +264,7 @@ describe('listing page 2', () => {
     expect(screen.queryByRole('link', { name: 'Use in Chat' })).toBeNull()
   })
 
-  it('shows the trust figures and the originals with their shares, and the remix terms', async () => {
+  it('shows the trust figures, its last 30 days of uses, and the originals with their shares, and the remix terms', async () => {
     mockBff()
     await at('/marketplace/listings/lst_rent')
     const trust = await screen.findByTestId('listing-trust')
@@ -271,6 +273,8 @@ describe('listing page 2', () => {
     expect(within(trust).getByTestId('trust-eval').textContent).toBe('8 of 10 cases passed on version 2')
     expect(within(trust).getByTestId('trust-claims').textContent).toBe('1 open · 0 upheld · 0 rejected')
     expect(trust.textContent).toContain('The seller replied: Thank you!')
+    expect(within(trust).getByTestId('trust-performance').textContent).toBe('95% succeeded · 1,240 ms median · $0.50 per use')
+    expect(trust.textContent).toContain('5 of 100 uses failed.')
 
     const family = screen.getByTestId('listing-family')
     const originals = within(family).getByRole('list', { name: 'Originals' })

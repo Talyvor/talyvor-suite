@@ -946,6 +946,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Put("/v1/money/budgets", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensSpendBudgetBody",
   },
+  // B52.28 — a Scan agent's watch, set on Scan agents (Lens B52.27).
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/scan-watches",
+    file: "apps/bff/scan.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleAgentScanWatch(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/scan_watches_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/scan-watches", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensScanWatchBody",
+  },
   // B53.8 — a merchant's category, corrected on the Spending screen (Lens B53.3).
   {
     route: "PUT /v1/money/spending/merchants",
