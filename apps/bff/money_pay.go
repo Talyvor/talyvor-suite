@@ -16,6 +16,10 @@ import (
 //	POST /api/money/payees/{id}/confirm {assertion} confirm it with one of the workspace's passkeys
 //	POST /api/money/payees/{id}/called/challenge    B41.11: the challenge the owner signs to say they called a new payee
 //	POST /api/money/payees/{id}/called {assertion}  they called it on a number they already had: its cooling-off ends
+//	POST /api/money/payees/{id}/details/challenge {country, sort_code, account_number, iban, bic, routing_number, network,
+//	                          address}   B41.12: the challenge changing its bank details to these is signed over
+//	POST /api/money/payees/{id}/details {the same details, assertion}   change them with a passkey: Lens checks the name
+//	                          afresh and holds every payment to it for 24 hours (held_until), with its notice
 //	GET  /api/money/payments                        the payments out, newest first
 //	POST /api/money/payments {account_id, payee_id, amount_minor, currency, reference, idempotency_key}   pay a saved payee
 //	GET  /api/money/mandates                        the mandates granted and, for the owner, received
@@ -121,6 +125,47 @@ func (a *app) handleMoneyPayeeCalled(challenge bool) func(http.ResponseWriter, *
 		}
 		// UPSTREAM-BINDS-ONLY lensPayeeCalledBody: none
 		body, _ := json.Marshal(map[string]any{"assertion": in.Assertion})
+		a.agentBankRelayPath(w, r, t, http.MethodPost, path, body)
+	}
+}
+
+// handleMoneyPayeeDetails — B41.12: POST /api/money/payees/{id}/details/challenge relays the challenge for the new bank
+// details, and POST /api/money/payees/{id}/details {details, assertion} changes them with the owner's passkey (Lens
+// B41.112): the name is checked afresh and every payment to the payee is held for 24 hours.
+func (a *app) handleMoneyPayeeDetails(challenge bool) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		id, ok := pathID(w, "payee id", r.PathValue("id"))
+		if !ok {
+			return
+		}
+		var in struct {
+			Country       string            `json:"country"`
+			SortCode      string            `json:"sort_code"`
+			AccountNumber string            `json:"account_number"`
+			IBAN          string            `json:"iban"`
+			BIC           string            `json:"bic"`
+			RoutingNumber string            `json:"routing_number"`
+			Network       string            `json:"network"`
+			Address       string            `json:"address"`
+			Assertion     *passkeyAssertion `json:"assertion,omitempty"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		path := "/v1/money/payees/" + url.PathEscape(id) + "/details"
+		if challenge {
+			in.Assertion, path = nil, path+"/challenge"
+		} else if in.Assertion == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "a payee's bank details are changed with a passkey's assertion"})
+			return
+		}
+		// UPSTREAM-BINDS-ONLY lensPayeeDetailsBody: called_at, called_by, check, checked_at, checked_by, confirmed_at, confirmed_by, cooling_off_until, created_at, details_changed_at, held_until, id, name, needs_confirmation, notice, screening, suggested_name, workspace_id
+		body, _ := json.Marshal(in)
 		a.agentBankRelayPath(w, r, t, http.MethodPost, path, body)
 	}
 }

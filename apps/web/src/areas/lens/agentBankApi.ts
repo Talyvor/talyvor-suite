@@ -969,6 +969,11 @@ export const agentBankApi = {
   /** B41.11 — the owner's passkey says they called the new payee on a number they already had: its cooling-off ends. */
   payeeCalledChallenge: (id: string) => send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payees/${e(id)}/called/challenge`),
   confirmPayeeCalled: (id: string, assertion: PasskeyAssertion) => send<OutsidePayee>('POST', `/api/money/payees/${e(id)}/called`, { assertion }),
+  /** B41.12 — changing a payee's bank details is signed over a challenge for exactly the new details; every payment to it is then held for 24 hours. */
+  payeeDetailsChallenge: (id: string, details: PayeeDetails) =>
+    send<{ challenge: string; allow_credentials: string[] | null; notice: string }>('POST', `/api/money/payees/${e(id)}/details/challenge`, details),
+  changePayeeDetails: (id: string, details: PayeeDetails, assertion: PasskeyAssertion) =>
+    send<OutsidePayee>('POST', `/api/money/payees/${e(id)}/details`, { ...details, assertion }),
   payments: () => getJSON<{ payments: OutsidePayment[] | null }>('/api/money/payments', { payments: 'list' }),
   // B41.7 — one search box across agents, payees, payments, bills, invoices, rules and listings (Lens B41.107).
   search: (q: string) => getJSON<SearchResults>(`/api/money/search?q=${e(q)}`, { groups: 'list' }),
@@ -1083,6 +1088,10 @@ export interface OutsidePayee {
   /** B41.11 (Lens B41.111): until then a payment of more than 1,000 to this new payee waits, unless the owner confirms they called it */
   cooling_off_until?: string
   called_at?: string
+  /** B41.12 (Lens B41.112): its bank details changed, so until held_until every payment to it is held; notice says what to do meanwhile */
+  details_changed_at?: string
+  held_until?: string
+  notice?: string
   /** set while screening holds the payee for an operator */
   screening?: string
 }
@@ -1163,6 +1172,9 @@ export interface PayeeRequest {
   bic?: string
   routing_number?: string
 }
+
+/** B41.12 — a payee's new bank details: one set, as a payee is saved with. */
+export type PayeeDetails = Omit<PayeeRequest, 'name'>
 
 /** Lens economy.OutsidePayment (B30.17): money sent to a saved payee through the account partner. */
 export interface OutsidePayment {

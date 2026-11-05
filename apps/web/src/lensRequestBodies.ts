@@ -1003,6 +1003,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payees/{id}/called", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPayeeCalledBody",
   },
+  // B41.12 — the owner changes a saved payee's bank details with a passkey (Lens B41.112).
+  {
+    route: "POST /v1/money/payees/{id}/details",
+    file: "apps/bff/money_pay.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPayeeDetails(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_payees_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/payees/{id}/details", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPayeeDetailsBody",
+  },
   {
     route: "POST /v1/money/payments",
     file: "apps/bff/money_pay.go",
