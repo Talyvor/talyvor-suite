@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Input, Pill, focusRing, type PillStatus } from '@talyvor/ui'
+import { Button, CardHeader, Input, Pill, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { LinkedItem } from '../../components/LinkedItem'
@@ -82,6 +82,7 @@ export function PayScreen() {
   const asked = useQuery({ queryKey: ASSISTANT_REQUESTS_KEY, queryFn: agentBankApi.assistantRequests })
   const askedPayees = (asked.data?.requests ?? []).filter((r) => r.kind === 'payee')
   const askedMandates = (asked.data?.requests ?? []).filter((r) => r.kind === 'mandate')
+  const askedPlans = (asked.data?.requests ?? []).filter((r) => r.kind === 'plan' && r.status !== 'signed')
   const open = (accounts.data?.accounts ?? []).filter((a) => a.status === 'open')
   const agentAccounts = open.filter((a) => a.purpose === 'agent')
   const saved = payees.data?.payees ?? []
@@ -106,6 +107,15 @@ export function PayScreen() {
             <span className="font-figure">{askedMandates.length}</span> {askedMandates.length === 1 ? 'mandate' : 'mandates'} to sign, below.
           </p>
         ) : null}
+        {askedPlans.map((r) => (
+          <p key={r.id} className="text-body text-ink">
+            {r.assistant} prepared recurring payments for you to sign:{' '}
+            <Link className={inlineLink} to={`/money/plans/${r.id}`}>
+              open the plan
+            </Link>
+            .
+          </p>
+        ))}
         {payments.isSuccess ? (
           <p className="text-body text-ink" data-testid="pay-count">
             <span className="font-figure">{sent.length}</span> {sent.length === 1 ? 'payment' : 'payments'} out,{' '}

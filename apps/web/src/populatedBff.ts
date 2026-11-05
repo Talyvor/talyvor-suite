@@ -94,6 +94,16 @@ const BODIES: Record<string, unknown> = {
           limits: { per_payment: { GBP: 50000 }, per_month: { GBP: 200000 } }, requires_approval_above: { GBP: 20000 }, new_payee: { policy: 'always_ask' }, expires_at: '2027-01-31T00:00:00Z' } },
       { id: 'ar_p', kind: 'payee', assistant: 'Claude', created_at: '2026-10-23T09:00:00Z', confirm_url: '/money/pay', status: 'pending_confirmation',
         details: { name: 'Brightline Studio Ltd', country: 'GB', sort_code: '200000', account_number: '55779911' } },
+      // B45.37 — recurring payments an assistant prepared, at the address the console sweep visits (/money/plans/:id).
+      { id: ':id', kind: 'plan', assistant: 'Claude', created_at: '2026-10-23T09:10:00Z', confirm_url: '/money/plans/:id', status: 'pending_confirmation',
+        details: { id: 'rpp_1', status: 'awaiting_signature', created_at: '2026-10-23T09:10:00Z',
+          mandate: { id: 'pm_r', challenge: 'Y2gx', credential_ids: ['cred_1'], canonical: JSON.stringify({ id: 'pm_r', clients: ['schedule:rpp_1'],
+            scope: { payees: ['payee_1', 'payee_2'], currencies: ['GBP'] }, limits: { per_payment: { GBP: 120000 }, per_month: { GBP: 125000 } },
+            requires_approval_above: { GBP: 100000 }, new_payee: { policy: 'always_ask' }, expires_at: '2027-06-30T00:00:00Z' }) },
+          schedules: [
+            { id: 'sch_1', from_agent_id: '', to_agent_id: '', to_payee_id: 'payee_1', amount_minor: 120000, currency: 'GBP', amount_ulxc: 0, memo: 'Office rent', every: 'month', next_run_at: '2026-11-01T09:00:00Z', active: false, awaiting_signature: true, created_at: '2026-10-23T09:10:00Z' },
+            { id: 'sch_2', from_agent_id: '', to_agent_id: '', to_payee_id: 'payee_2', amount_minor: 1250, currency: 'GBP', amount_ulxc: 0, memo: 'Survey panel', every: 'week', next_run_at: '2026-10-27T09:00:00Z', active: false, awaiting_signature: true, created_at: '2026-10-23T09:10:00Z' },
+          ] } },
     ],
   },
   // B41.1 — an invoice read into a bill, its supplier not yet a saved payee.

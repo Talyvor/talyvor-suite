@@ -189,6 +189,8 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/money/pay': 9, // B40.35: the assistant's payee requests and its drafted mandate, under the populated fixture; B41.1: the bills inbox
   // B40.9 — one card: the prepared request.
   '/approve/:id': 1,
+  // B45.37 — one card: the plan the assistant prepared.
+  '/money/plans/:id': 1,
   '/features': 0,
   '/features/try/tare': 0,
   '/features/try/conversion': 0,
