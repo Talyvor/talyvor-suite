@@ -8,7 +8,7 @@ import { parseSpend } from '../chat/SpendQuestion'
 // spend on eating out this month?" from the same totals, every wallet together. That the figures equal Lens's own is
 // proven against Lens by the e2e scenario spending-screen.
 
-function mockBff(puts: { url: string; body: unknown }[]) {
+function mockBff(puts: { url: string; body: unknown }[], coachAnswers: Promise<void> = Promise.resolve()) {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -37,6 +37,7 @@ function mockBff(puts: { url: string; body: unknown }[]) {
       return json({ findings: [{ rule: 'new_merchant', entry_id: 'ent_1', merchant: 'Bistro', amount_minor: 2500, currency: 'GBP', at: '2026-11-03T12:00:00Z' }] })
     }
     if (url === '/api/money/coach') {
+      await coachAnswers
       return json({ lines: [{ fact: { kind: 'new_merchant', merchant: 'Bistro', amount: '£25.00' }, sentence: 'You paid Bistro £25.00, somewhere new for you.', source: 'template' }], review: [] })
     }
     if (url === '/api/money/budgets') {
@@ -74,6 +75,18 @@ describe('Spending (B53.8)', () => {
     fireEvent.change(screen.getByLabelText('Quiet until'), { target: { value: '07:00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save notice settings' }))
     await waitFor(() => expect(puts[1]).toEqual({ url: '/api/money/notices/settings', body: { timezone: 'UTC', quiet_from: '22:00', quiet_until: '07:00', off: ['tip'] } }))
+  })
+
+  it('shows an unusual payment only once the Coach has answered, so its row never reads without the sentence (B17.349)', async () => {
+    let answer = () => {}
+    mockBff([], new Promise<void>((r) => (answer = r)))
+    window.history.pushState({}, '', '/money/spending')
+    render(<App />)
+
+    await screen.findByTestId('spending-budget-bdg_1')
+    expect(screen.queryByTestId('spending-unusual-ent_1')).toBeNull()
+    answer()
+    expect((await screen.findByTestId('spending-unusual-ent_1')).textContent).toContain('You paid Bistro £25.00, somewhere new for you.')
   })
 
   it('answers a category total in Chat from Lens’s totals, never the model', async () => {
