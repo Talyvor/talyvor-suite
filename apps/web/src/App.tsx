@@ -69,6 +69,7 @@ import { DocsEmailBranding } from './areas/docs/DocsEmailBranding'
 import { DocsWebhooks } from './areas/docs/DocsWebhooks'
 import { InvoicesScreen } from './areas/lens/Invoices'
 import { PayScreen } from './areas/lens/Pay'
+import { RecurringPlanScreen } from './areas/lens/RecurringPlan'
 import { SubscriptionsScreen } from './areas/lens/Subscriptions'
 import { BudgetsScreen } from './areas/lens/Budgets'
 import { SpendingScreen } from './areas/lens/Spending'
@@ -296,6 +297,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.
   { path: '/money/pay', title: 'Pay', element: <PayScreen /> },
+  // B45.37 — the page an assistant's recurring-payments link opens: its standing orders, and one passkey signature.
+  { path: '/money/plans/:id', title: 'Recurring payments', element: <RecurringPlanScreen /> },
   // B41.20 — every recurring payment, standing order and renewing rental, with its next charge, monthly cost and reminder.
   { path: '/money/subscriptions', title: 'Subscriptions', element: <SubscriptionsScreen /> },
   // B41.39 — a weekly or monthly budget per category, its progress from the postings, and its 50/80/100% alerts.

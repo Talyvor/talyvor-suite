@@ -1158,10 +1158,22 @@ export interface ApprovalStatement {
 }
 
 /** B40.35 — what an assistant asked for that only the person may do (BFF mcp_drafts.go). */
-export type AssistantRequest = { id: string; assistant: string; created_at: string } & (
+export type AssistantRequest = { id: string; assistant: string; created_at: string; status: string } & (
   | { kind: 'payee'; details: PayeeRequest }
   | { kind: 'mandate'; details: MandateTerms }
+  | { kind: 'plan'; details: RecurringPlan }
 )
+
+/** B45.37 — Lens economy.RecurringPlan (B45.13): standing orders that run once the person signs their mandate. */
+export interface RecurringPlan {
+  id: string
+  /** awaiting_signature | signed */
+  status: string
+  schedules: (AgentSchedule & { awaiting_signature?: boolean })[]
+  /** canonical is the mandate's terms, MandateTerms as JSON: exactly what the passkey signs */
+  mandate: { id: string; canonical: string; challenge: string; credential_ids: string[] | null }
+  created_at: string
+}
 
 export interface PayeeRequest {
   name: string

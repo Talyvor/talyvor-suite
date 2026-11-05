@@ -766,3 +766,146 @@ export function connectContact(): Scenario {
     },
   }
 }
+
+// B45.37 — AN ASSISTANT PREPARES RECURRING PAYMENTS AND THE PERSON SIGNS THEM IN THE APP. One scenario, once a run, on a
+// workspace of its own:
+//   connect-recurring — on Lens's API the owner opens a GBP account with test money, saves two payees and registers a
+//     passkey. An assistant on /mcp prepares a two-line list with prepare_recurring_payments (destructive): nothing is
+//     prepared to pay before the person signs. The link opens the plan screen, which shows both orders waiting for the
+//     signature; signed with this run's software passkey (the screen's own call), the screen shows them running, and
+//     within Lens's minute tick each order's first run waits under Approvals. Each is approved with the passkey, and the
+//     money is exactly one payment out per order at its amount, the account down by both.
+export function connectRecurring(): Scenario {
+  return {
+    id: 'connect-recurring',
+    owner: 'talyvor-suite',
+    own: true,
+    items: ['B45.37'],
+    feature: 'Talyvor Connect',
+    title: 'an assistant prepares two recurring payments over /mcp; nothing runs until the person signs the plan in the app with a passkey, ' +
+      'then each order shows running, its first run waits under Approvals, and one approval each pays exactly its amount',
+    run: async (ctx) => {
+      const origin = new URL(ctx.app.page.url()).origin
+      const page = ctx.app.page
+      const lensCall = async <T>(method: string, path: string, body: unknown, note: string) => {
+        const r = await call<T>(ctx, method, path, body)
+        ctx.evidence.push({ note, answer: said(r) })
+        return r
+      }
+      // 1. On Lens's API: the terms, the company's GBP account with £1,000.00 of test money, two saved payees and a passkey.
+      const terms = await lensCall<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
+      for (const t of (terms.value?.terms ?? []).filter((x) => ['currency_accounts', 'payments_in', 'payments_out'].includes(x.capability) && x.accepted == null)) {
+        const ok = await lensCall('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
+        if (ok.status !== 201) return { pass: false, detail: `accepting ${t.capability}'s terms answered ${said(ok)}` }
+      }
+      const company = await lensCall<{ id: string }>('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the company GBP account')
+      if (company.status !== 201 || company.value === undefined) return { pass: false, detail: `the company GBP account answered ${said(company)}` }
+      const funded = await lensCall('POST', `/v1/money/accounts/${company.value.id}/test-money`, { amount_minor: 100000, idempotency_key: `e2e-${randomBytes(8).toString('hex')}` }, 'the owner puts £1,000.00 of test money in the company account')
+      if (funded.status !== 201) return { pass: false, detail: `putting test money in the company GBP account answered ${said(funded)}` }
+      const lines = [{ name: 'Nightly Recurring Rent Ltd', amount: 30000, every: 'month' }, { name: 'Nightly Recurring Fibre Ltd', amount: 1250, every: 'week' }]
+      const payee: Record<string, string> = {}
+      for (const [i, l] of lines.entries()) {
+        const p = await lensCall<{ id: string }>('POST', '/v1/money/payees', { name: l.name, country: 'GB', sort_code: '040004', account_number: `4567890${i}` }, `the payee ${l.name}`)
+        if (p.status !== 201 || p.value === undefined) return { pass: false, detail: `saving ${l.name} answered ${said(p)}` }
+        payee[l.name] = p.value.id
+      }
+      const reg = await lensCall<{ challenge: string; rp_id: string }>('POST', '/v1/workspaces/{ws}/agents/passkeys/challenge', {}, 'the passkey registration challenge')
+      if (reg.value === undefined) return { pass: false, detail: `the passkey registration challenge answered ${said(reg)}` }
+      const key = softPasskey(reg.value.rp_id)
+      const registered = await lensCall('POST', '/v1/workspaces/{ws}/agents/passkeys', key.register(reg.value.challenge, 'Nightly recurring passkey'), 'the passkey')
+      if (registered.status !== 201) return { pass: false, detail: `registering a passkey answered ${said(registered)}` }
+
+      interface Payment { id: string; payee_id: string; amount_minor: number; currency: string; status: string }
+      interface Request { id: string; client: string; status: string }
+      const money = async (note: string, planID = '') => {
+        const accounts = await call<{ accounts: { id: string; test_minor: number }[] | null }>(ctx, 'GET', '/v1/money/accounts')
+        const payments = await call<{ payments: Payment[] | null }>(ctx, 'GET', '/v1/money/payments')
+        const pending = await call<{ requests: Request[] | null }>(ctx, 'GET', '/v1/money/payment-requests?status=pending_approval')
+        const m = { held: (accounts.value?.accounts ?? []).find((a) => a.id === company.value?.id)?.test_minor ?? -1, payments: payments.value?.payments ?? [],
+          runs: (pending.value?.requests ?? []).filter((r) => planID !== '' && r.client === `schedule:${planID}`) }
+        ctx.evidence.push({ note: `${note}: the company GBP account holds ${m.held} minor of test money; ${m.runs.length} first runs waiting; ${m.payments.length} payments out ${JSON.stringify(m.payments.map((p) => [p.payee_id, p.amount_minor, p.currency, p.status]))}` })
+        return m
+      }
+      const before = await money('before the assistant')
+
+      // 2. An assistant prepares the two-line list: a plan to sign, and nothing that pays.
+      const token = await connectAssistant(ctx, origin, 'e2e assistant (recurring)')
+      if (typeof token !== 'string') return token
+      const { rpc, tool } = mcpTools(ctx, origin, token)
+      const wrong: string[] = []
+      const listed = (await rpc('tools/list')).tools ?? []
+      if (listed.find((t) => t.name === 'prepare_recurring_payments')?.annotations?.destructiveHint !== true) {
+        return { pass: false, detail: `/mcp does not list prepare_recurring_payments as destructive: ${JSON.stringify(listed.map((t) => t.name))}` }
+      }
+      const prepared = await tool('prepare_recurring_payments', { idempotency_key: `e2e-${randomBytes(8).toString('hex')}`, ask_above: { GBP: 20000 },
+        until: new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 19) + 'Z',
+        payments: lines.map((l) => ({ payee_id: payee[l.name], currency: 'GBP', amount_minor: l.amount, every: l.every, reference: `Nightly ${l.every}ly` })) })
+      const kept = (prepared.structuredContent ?? {}) as { id?: string; kind?: string; confirm_url?: string; details?: { id?: string; schedules?: { active?: boolean }[]; mandate?: { canonical?: string; challenge?: string } } }
+      const plan = kept.details ?? {}
+      if (prepared.isError !== false || kept.kind !== 'plan' || plan.id === undefined || plan.schedules?.length !== 2 || plan.schedules.some((x) => x.active) ||
+        !String(kept.confirm_url).includes(`/money/plans/${kept.id}`)) {
+        return { pass: false, detail: `prepare_recurring_payments did not keep a two-order plan to sign with its link: ${JSON.stringify(prepared).slice(0, 500)}` }
+      }
+      await new Promise((ok) => setTimeout(ok, 70_000)) // past Lens's minute tick: unsigned, nothing may run
+      const unsigned = await money('a minute after the assistant, unsigned', plan.id)
+      if (unsigned.runs.length !== 0 || unsigned.payments.length !== before.payments.length) wrong.push(`unsigned, the plan prepared ${unsigned.runs.length} runs and ${unsigned.payments.length - before.payments.length} payments`)
+
+      // 3. The link opens the plan screen; signed with the passkey (the screen's own call), its orders read Running.
+      const screenWords = async (note: string) => {
+        await page.goto(`${origin}${new URL(String(kept.confirm_url)).pathname}`)
+        const card = page.getByTestId('plan-card')
+        await card.waitFor({ timeout: 30_000 })
+        await page.getByText(lines[0].name).first().waitFor({ timeout: 30_000 })
+        const words = (await card.innerText()).replace(/\s+/g, ' ')
+        ctx.evidence.push({ note: `${note}: "${words}"` })
+        return words
+      }
+      try {
+        const words = await screenWords('the plan screen before signing')
+        for (const l of lines) if (!words.includes(l.name)) wrong.push(`the plan screen does not show ${l.name}`)
+        if (!words.includes('£300.00 every month') || !words.includes('£12.50 every week') || !words.includes('Waiting for your signature') ||
+          !words.includes('A payment above £200.00 always waits for your approval.')) wrong.push(`the plan screen reads "${words}"`)
+      } catch (err) {
+        wrong.push(`the plan screen did not open from the assistant's link: ${String(err).slice(0, 300)}`)
+      }
+      const signed = await page.request.post(`${origin}/api/money/assistant-requests/${kept.id}/sign`, { headers: { Origin: origin },
+        data: { canonical: plan.mandate?.canonical, assertion: key.assert(plan.mandate?.challenge ?? '') } })
+      ctx.evidence.push({ note: `signing the plan: ${signed.status()} ${(await signed.text()).slice(0, 300)}` })
+      if (signed.status() !== 201) return { pass: false, detail: [...wrong, `signing the plan answered ${signed.status()}`].join('; ') }
+      try {
+        const words = await screenWords('the plan screen after signing')
+        if ((words.match(/Running/g) ?? []).length !== 2 || words.includes('Sign with passkey')) wrong.push(`after signing the plan screen reads "${words}"`)
+      } catch (err) {
+        wrong.push(`the plan screen did not open after signing: ${String(err).slice(0, 300)}`)
+      }
+
+      // 4. Within Lens's minute tick each order's first run waits under Approvals; one passkey approval each pays it.
+      let runs: Request[] = []
+      for (let i = 0; i < 18 && runs.length < 2; i++) {
+        await new Promise((ok) => setTimeout(ok, 10_000))
+        runs = (await money(`${(i + 1) * 10}s after signing`, plan.id)).runs
+      }
+      if (runs.length !== 2) return { pass: false, detail: [...wrong, `three minutes after signing ${runs.length} first runs wait for approval, not 2`].join('; ') }
+      for (const r of runs) {
+        const post = (path: string, body: unknown) => page.request.post(`${origin}/api/money/payment-requests/${r.id}/${path}`, { headers: { Origin: origin }, data: body })
+        const toSign = await (await post('approval', { positions: [1] })).json() as { statement?: string; challenge?: string }
+        const approved = await post('approve', { statement: toSign.statement, assertion: key.assert(toSign.challenge ?? '') })
+        const paid = await approved.json() as { status?: string }
+        ctx.evidence.push({ note: `approving first run ${r.id}: ${approved.status()} ${JSON.stringify(paid).slice(0, 400)}` })
+        if (approved.status() !== 200 || paid.status !== 'approved') wrong.push(`approving first run ${r.id} answered ${approved.status()} ${JSON.stringify(paid).slice(0, 200)}`)
+      }
+
+      // 5. The money: exactly one payment out per order at its amount, and the account down by both.
+      const after = await money('after both approvals', plan.id)
+      const fresh = after.payments.filter((p) => !before.payments.some((b) => b.id === p.id))
+      const want = lines.map((l) => [payee[l.name], l.amount, 'GBP'].join(' ')).sort()
+      const got = fresh.map((p) => [p.payee_id, p.amount_minor, p.currency].join(' ')).sort()
+      if (JSON.stringify(got) !== JSON.stringify(want)) wrong.push(`the approvals posted ${JSON.stringify(got)}, not ${JSON.stringify(want)}`)
+      if (after.held !== before.held - 31250) wrong.push(`the company GBP account went from ${before.held} to ${after.held} minor of test money, not down by 31250`)
+      await page.goto(origin)
+
+      return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
+        : { pass: true, detail: `plan ${plan.id} waited unsigned with nothing run; signed in the app its two orders read Running, each first run waited under Approvals, and one approval each paid ${got.join(' and ')}: the account ${before.held} → ${after.held} minor` }
+    },
+  }
+}

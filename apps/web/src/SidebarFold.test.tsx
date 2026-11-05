@@ -127,8 +127,9 @@ describe('the sidebar folds to its group titles (B24.1)', () => {
       queryClient.clear()
     }
     // FLOOR: most addresses have a row of their own; an equality over empty lists proves nothing.
-    // Six have none: B40.9's /approve/:id is opened from an approval link, never from the sidebar.
-    expect(marked).toBeGreaterThanOrEqual(CONSOLE_ROUTES.length - 6)
+    // Seven have none: B40.9's /approve/:id is opened from an approval link and B45.37's /money/plans/:id from an
+    // assistant's, never from the sidebar.
+    expect(marked).toBeGreaterThanOrEqual(CONSOLE_ROUTES.length - 7)
     // Slow by nature: it renders every console address in turn, so it grows with the console.
   }, 15_000)
 

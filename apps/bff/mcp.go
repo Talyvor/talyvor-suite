@@ -316,6 +316,23 @@ var mcpTools = []mcpTool{
 		},
 		required: []string{"scope", "new_payee", "expires_at"},
 		call:     mcpDraftMandate},
+	{name: "prepare_recurring_payments", title: "Prepare recurring payments for signing", scope: "payments:prepare", kind: mcpSends, keeps: "plan",
+		description: "Saves a list of daily, weekly and monthly payments to saved payees as standing orders, and drafts one mandate for the " +
+			"person to sign in Talyvor. It pays nothing and nothing runs until they sign. Once signed, each payment's first run waits for " +
+			"their approval; later runs inside the mandate pay on their own, and any payment above ask_above still asks.",
+		props: map[string]any{
+			"idempotency_key": mcpIdemKey,
+			"until":           map[string]any{"type": "string", "description": "RFC 3339: the last day to pay; the mandate ends then."},
+			"ask_above":       mcpAmounts,
+			"payments": map[string]any{"type": "array", "minItems": 1, "maxItems": 50, "items": map[string]any{"type": "object", "properties": map[string]any{
+				"payee_id": mcpItemArgs["payee_id"], "amount_minor": mcpItemArgs["amount_minor"], "reference": mcpItemArgs["reference"],
+				"currency":     map[string]any{"type": "string", "enum": []string{"GBP", "EUR", "USD"}},
+				"every":        map[string]any{"type": "string", "enum": []string{"day", "week", "month"}},
+				"first_run_at": map[string]any{"type": "string", "description": "RFC 3339: when the first payment is due; now if left out."}},
+				"required": []string{"payee_id", "currency", "amount_minor", "every"}}},
+		},
+		required: []string{"idempotency_key", "until", "payments"},
+		run:      mcpPrepareRecurring},
 
 	{name: "prepare_payment", title: "Prepare a payment for approval", scope: "payments:prepare", kind: mcpSends,
 		description: "Prepares one payment to a saved payee as a request the person approves in Talyvor. It pays nothing.",
@@ -599,7 +616,7 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 		return mcpRefusal(req.ID, refusal.Error)
 	}
 	if tool.keeps != "" {
-		if raw, err = a.keepDraft(t, g, tool.keeps, c.body, raw); err != nil {
+		if raw, err = a.keepDraft(t, g, tool.keeps, c.body, raw, nil); err != nil {
 			return mcpRefusal(req.ID, err.Error())
 		}
 	}

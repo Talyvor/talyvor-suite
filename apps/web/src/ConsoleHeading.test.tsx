@@ -112,6 +112,7 @@ const PINNED: Readonly<Record<string, string>> = {
   '/settings/connect': 'Connect your AI',
   '/money/invoices': 'Invoices',
   '/money/pay': 'Pay',
+  '/money/plans/:id': 'Recurring payments',
   '/money/subscriptions': 'Subscriptions',
   '/money/budgets': 'Budgets',
   '/money/spending': 'Spending',
