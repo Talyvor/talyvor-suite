@@ -107,6 +107,22 @@ function answer(form: HTMLElement, urgent: 'Yes' | 'No', byMessage: 'Yes' | 'No'
   fireEvent.click(within(within(form).getByRole('radiogroup', { name: 'Did the bank details arrive by email or chat?' })).getByLabelText(byMessage))
 }
 
+// B55.2 — no passkey and the phone's key, answered over mockBff's stub; every POST from here is counted.
+function onlyThePhoneKey(extra: Record<string, unknown> = {}) {
+  const inner = vi.mocked(fetch).getMockImplementation()!
+  const posts: string[] = []
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] })
+    if (url in extra) return json(extra[url])
+    if ((init?.method ?? 'GET') !== 'GET') posts.push(url)
+    return inner(input, init)
+  })
+  return posts
+}
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
@@ -341,5 +357,20 @@ describe('the Pay screen', () => {
     const row = await screen.findByTestId('payment-mpay_9')
     expect(within(row).getByText('We could not read this payment’s status')).toBeTruthy()
     expect(row.textContent).not.toMatch(/on_review|on review/)
+  })
+})
+
+describe('an agent’s payment waiting on Pay when only the phone holds a key (B55.2)', () => {
+  it('sends no decision and says to approve on the phone', async () => {
+    mockBff()
+    const posts = onlyThePhoneKey({ '/api/agents/approvals': { approvals: [
+      { id: 'apr_9', agent_id: 'agt_1', amount_ulxc: 2_000_000, model: '', status: 'pending', created_at: '2026-10-25T06:01:00Z', payee: { kind: 'outside', id: 'payee_1', name: 'Acme Ltd' } },
+    ] } })
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+    const card = await screen.findByTestId('approval-apr_9')
+    expect(await within(card).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(posts).toEqual([])
   })
 })

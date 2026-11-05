@@ -1024,6 +1024,8 @@ export const agentBankApi = {
       : send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/deny`, assertion ? { assertion } : {}),
   // B19.10 — passkeys and push, kept by Lens (B19.16).
   passkeys: () => getJSON<{ passkeys: Passkey[] | null }>('/api/agents/passkeys', { passkeys: 'list' }),
+  // B55.2 — the phone keys Lens holds for the workspace (revoked ones included): the phone signs approvals too.
+  devices: () => getJSON<{ devices: DeviceKey[] | null }>('/api/money/devices', { devices: 'list' }),
   passkeyChallenge: () => send<{ challenge: string; rp_id: string; credential_ids?: string[] | null }>('POST', '/api/agents/passkeys/challenge'),
   registerPasskey: (body: PasskeyRegistration) => send<Passkey>('POST', '/api/agents/passkeys', body),
   approvalChallenge: (approvalID: string) =>
@@ -1769,6 +1771,14 @@ export interface Passkey {
   name: string
   created_at: string
   last_used_at?: string
+}
+
+/** B55.2 — a phone's key (Lens GET /v1/money/devices); one revoked signs nothing. */
+export interface DeviceKey {
+  id: string
+  platform: string
+  name: string
+  revoked_at?: string
 }
 
 /** A new passkey, as the browser's ceremony gives it — all base64url. */

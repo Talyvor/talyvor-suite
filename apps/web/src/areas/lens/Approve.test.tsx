@@ -48,6 +48,22 @@ function mockBff(lie = false, ITEMS: Record<string, unknown>[] = BASE, extra: Re
   return { sent, get }
 }
 
+// B55.2 — no passkey and the phone's key, answered over mockBff's stub; every POST from here is counted.
+function onlyThePhoneKey(extra: Record<string, unknown> = {}) {
+  const inner = vi.mocked(fetch).getMockImplementation()!
+  const posts: string[] = []
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] })
+    if (url in extra) return json(extra[url])
+    if ((init?.method ?? 'GET') !== 'GET') posts.push(url)
+    return inner(input, init)
+  })
+  return posts
+}
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
@@ -143,5 +159,20 @@ describe('the approval screen', () => {
     expect(within(trust).getByText(who)).toBeTruthy()
     expect(trust.textContent).toMatch(detail)
     if (agent_trust.level !== 'verified') expect(screen.getByTestId('approve-card').textContent).not.toContain('Verified agent of')
+  })
+})
+
+describe('the approval screen when only the phone holds a key (B55.2)', () => {
+  it('opens no passkey prompt, sends nothing, and says to approve on the phone', async () => {
+    const bff = mockBff()
+    const posts = onlyThePhoneKey()
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
+    const card = screen.getByTestId('approve-card')
+    expect(within(card).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
+    expect(within(card).queryByRole('checkbox')).toBeNull()
+    expect(bff.get).not.toHaveBeenCalled()
+    expect(posts).toEqual([])
   })
 })

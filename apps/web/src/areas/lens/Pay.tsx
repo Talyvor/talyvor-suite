@@ -7,7 +7,7 @@ import { Region, RegionScreen } from '../../components/Region'
 import { LinkedItem } from '../../components/LinkedItem'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
-import { APPROVALS_KEY, BOOK_KEY, PASSKEYS_KEY } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, OnThePhone, useKeys } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { assertOver, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
 import {
@@ -737,8 +737,7 @@ function SendPayment({
 function Waiting({ agentName }: { agentName: (id: string) => string }) {
   const qc = useQueryClient()
   const approvals = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
-  const keys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
-  const signed = (keys.data?.passkeys ?? []).length > 0
+  const { signed, onlyThePhone } = useKeys()
   const waiting = (approvals.data?.approvals ?? []).filter((a) => a.status === 'pending' && a.payee?.kind === 'outside')
   const decide = useMutation({
     mutationFn: async ({ a, decision }: { a: AgentApproval; decision: 'approve' | 'deny' }) =>
@@ -760,14 +759,18 @@ function Waiting({ agentName }: { agentName: (id: string) => string }) {
             <p className="text-caption text-muted">
               Asked <span className="font-figure">{formatWhen(a.created_at)}</span>. Approved, the agent’s next identical request goes through, once.
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'approve' })}>
-                Approve
-              </Button>
-              <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'deny' })}>
-                Deny
-              </Button>
-            </div>
+            {onlyThePhone ? (
+              <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'approve' })}>
+                  Approve
+                </Button>
+                <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'deny' })}>
+                  Deny
+                </Button>
+              </div>
+            )}
           </li>
         ))}
       </ul>

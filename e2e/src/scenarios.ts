@@ -80,6 +80,7 @@ import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { connectPay } from './connectPay.ts'
 import { screeningTravelRule } from './screeningTravelRule.ts'
+import { phoneKeyWeb } from './phoneKeyWeb.ts'
 import { trustLayer } from './trustLayer.ts'
 import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
@@ -5457,6 +5458,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B46.9 — an agent's wallet, once a run, on a workspace of its own: the card shows Lens's balance and, on the sandbox, nothing
   // to copy; Send waits for one-tap approval under the wallet with no payment on the ledger; Decline pays nothing.
   if (i === 2) list.push(agentWallet())
+  // B55.2 — the web with only the phone's key, once a run, on a workspace of its own: Approvals says to approve on the phone,
+  // shows no Approve or Deny, sends nothing, and the approval stays pending on Lens.
+  if (i === 2) list.push(phoneKeyWeb())
   // B47.2 — Chat's page, once a run: /chat opens with the suite sidebar hidden, Menu opens it over the chat without moving it
   // and Escape closes it, at 1440 px and on a 390 px phone; Home shows the sidebar as it did before.
   if (i === 2) list.push(chatSidebar())

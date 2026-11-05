@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 
 import { Button, Pill, inlineLink } from '@talyvor/ui'
 
-import { APPROVALS_KEY, BOOK_KEY, PASSKEYS_KEY, deviceText } from '../lens/AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, OnThePhone, PASSKEYS_KEY, deviceText, useKeys } from '../lens/AgentBank'
 import { AllowedUpTo, AlwaysAllow } from '../lens/AlwaysAllow'
 import { type AgentApproval, AgentBankError, type PayeeAllowance, agentBankApi, refusalText } from '../lens/agentBankApi'
 import { formatWhen } from '../lens/format'
@@ -38,11 +38,11 @@ export function ApprovalCards() {
     refetchOnWindowFocus: true,
   })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
-  const keys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
+  const keys = useKeys()
   // B17.139 — a card first shows once the peg's first read answers, so its amount never appears without its
   // currency and then changes under the person about to approve it. A failed read does not hold the cards back.
   const peg = useQuery(pegQuery)
-  const signed = (keys.data?.passkeys ?? []).length > 0
+  const { signed, onlyThePhone } = keys
   const agents = book.data?.agents ?? []
   const nameOf = (id: string) => agents.find((a) => a.id === id)?.name ?? 'an agent'
   // Decided here this session: the card stays, saying what happened.
@@ -152,7 +152,8 @@ export function ApprovalCards() {
                 <Term term="LXC">{TERMS.lxc}</Term>
               </div>
               {a.payee && a.reason ? <p className="text-caption text-muted">{a.reason}</p> : null}
-              {open ? (
+              {open && onlyThePhone ? <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone> : null}
+              {open && !onlyThePhone ? (
                 // One-handed on a phone: two full-width buttons under the sentence; side by side on a wide screen.
                 <div className="flex w-full flex-col gap-2 wide:flex-row wide:items-center">
                   <Button
@@ -176,7 +177,7 @@ export function ApprovalCards() {
                   ) : null}
                 </div>
               ) : null}
-              {open ? (
+              {open && !onlyThePhone ? (
                 <AlwaysAllow
                   a={a}
                   agentName={nameOf(a.agent_id)}

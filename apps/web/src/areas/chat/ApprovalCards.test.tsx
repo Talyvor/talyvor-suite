@@ -62,6 +62,21 @@ function mockBff() {
   return { decisions, pays }
 }
 
+// B55.2 — no passkey and the phone's key, answered over mockBff's stub; every POST from here is counted.
+function onlyThePhoneKey() {
+  const inner = vi.mocked(fetch).getMockImplementation()!
+  const posts: string[] = []
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] })
+    if ((init?.method ?? 'GET') !== 'GET') posts.push(url)
+    return inner(input, init)
+  })
+  return posts
+}
+
 afterEach(() => {
   cleanup()
   queryClient.clear()
@@ -106,5 +121,19 @@ describe('Chat approval cards (B28.84)', () => {
     ])
     expect(bff.pays).toEqual([{ url: '/api/agents/agt_1/pay', body: { to_agent_id: 'agt_2', amount_ulxc: 2 * M, memo: 'October drafts' } }])
     expect(within(card).queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+  })
+})
+
+describe('Chat approval cards when only the phone holds a key (B55.2)', () => {
+  it('sends no decision and says to approve on the phone', async () => {
+    mockBff()
+    const posts = onlyThePhoneKey()
+    window.history.pushState({}, '', '/chat')
+    render(<App />)
+    const card = (await screen.findAllByTestId('chat-approval'))[0]
+    expect(await within(card).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
+    expect(within(card).queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(posts).toEqual([])
   })
 })
