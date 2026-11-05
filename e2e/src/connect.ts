@@ -264,7 +264,7 @@ function mcpTools(ctx: ScenarioCtx, origin: string, token: string) {
 //     the statement the passkey would sign names only the first. B40.36: with one bill on Lens (its bank details printed
 //     on it), bills_due lists that one bill and its total and never the bank details, and safe_to_spend counts it in the
 //     company's GBP bills due. The money: no payment out, every account's test money and the workspace's ledger exactly as they were
-//     before the assistant connected. B45.39: a second bill, from a saved payee, arrives; bills_due lists both, and
+//     before the assistant connected, but for ask_taly's own model charge (its spend and platform_fee rows). B45.39: a second bill, from a saved payee, arrives; bills_due lists both, and
 //     prepare_bills_payment with no bill_ids prepares one request pending approval for both, the stranger's blocked. The
 //     person's one passkey approval then posts exactly one payment out, to that payee at the bill's amount with its invoice
 //     number, the company's account down by it; the same approval again is refused 409 and pays nothing. B45.41: the batch is
@@ -316,8 +316,13 @@ export function connectMCP(): Scenario {
       const money = async () => {
         const accounts = await call<{ accounts: { id: string; test_minor: number }[] | null }>(ctx, 'GET', '/v1/money/accounts')
         const payments = await call<{ payments: unknown[] | null }>(ctx, 'GET', '/v1/money/payments')
-        const ledger = await ctx.env.lens.ledger(ctx.app.user)
-        return { accounts: JSON.stringify((accounts.value?.accounts ?? []).map((a) => [a.id, a.test_minor])), payments: (payments.value?.payments ?? []).length, ledger: ledger.length }
+        // ask_taly is one model call, billed on the chat key like any Chat question (a spend and a platform_fee row,
+        // prepaid credits paying for Talyvor's own service); every other row must stay exactly as it was.
+        const rows = await ctx.env.lens.ledger(ctx.app.user)
+        const charge = rows.filter((r) => (r.type === 'spend' || r.type === 'platform_fee') && r.amount_ulxc <= 0)
+        const ledger = rows.filter((r) => !charge.includes(r))
+        return { accounts: JSON.stringify((accounts.value?.accounts ?? []).map((a) => [a.id, a.test_minor])), payments: (payments.value?.payments ?? []).length,
+          ledger: ledger.length, rows: JSON.stringify(ledger.map((r) => r.id).sort()), charged: charge.length }
       }
       const before = await money()
       ctx.evidence.push({ note: `before the assistant: accounts ${before.accounts}, ${before.payments} payments out, ${before.ledger} ledger rows` })
@@ -448,8 +453,8 @@ export function connectMCP(): Scenario {
 
       // 4. The money: nothing moved.
       const after = await money()
-      ctx.evidence.push({ note: `after the assistant: accounts ${after.accounts}, ${after.payments} payments out, ${after.ledger} ledger rows` })
-      if (after.accounts !== before.accounts || after.payments !== before.payments || after.ledger !== before.ledger) {
+      ctx.evidence.push({ note: `after the assistant: accounts ${after.accounts}, ${after.payments} payments out, ${after.ledger} ledger rows besides ${after.charged - before.charged} for asking Taly` })
+      if (after.accounts !== before.accounts || after.payments !== before.payments || after.rows !== before.rows) {
         wrong.push(`money moved: accounts ${before.accounts} → ${after.accounts}, payments out ${before.payments} → ${after.payments}, ledger rows ${before.ledger} → ${after.ledger}`)
       }
 
@@ -458,7 +463,7 @@ export function connectMCP(): Scenario {
       const paid = await payAllDue(ctx, origin, tool, key, company.value.id, payees[1], billNumber)
       if (!paid.pass) wrong.push(paid.detail)
       return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
-        : { pass: true, detail: `${listed.length} tools listed with their annotations, none that pays; the balance read, an invoice drafted, request ${pr.id} prepared for two payees pending approval, and the asked-for payee and mandate made only by Save and the passkey — no payment out, the accounts and ${after.ledger} ledger rows unchanged; ${paid.detail}` }
+        : { pass: true, detail: `${listed.length} tools listed with their annotations, none that pays; the balance read, an invoice drafted, request ${pr.id} prepared for two payees pending approval, and the asked-for payee and mandate made only by Save and the passkey — no payment out, the accounts and ${after.ledger} ledger rows unchanged besides asking Taly; ${paid.detail}` }
     },
   }
 }
