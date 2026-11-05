@@ -1187,7 +1187,7 @@ function statusJSON(): unknown {
   const rails = moneyRails(broke('rails-outage'))
   const down = rails.filter((r) => r.status === 'outage').map((r) => r.name)
   return {
-    status: 'operational', version: 'stub', uptime_hours: Math.round(process.uptime() / 36) / 100, updated_at: at,
+    status: 'operational', version: 'stub', uptime_hours: Math.round(process.uptime() / 36) / 100, updated_at: at, card_payments: 'test',
     components: ['PostgreSQL', 'Redis', 'NATS', 'Proxy'].map((name) => ({ name, status: 'operational', latency_ms: 1, measured: true, checked_at: at })),
     providers: [{ name: 'OpenAI', status: 'operational', latency_ms: 100, checked_at: at }],
     rails,
@@ -1202,6 +1202,8 @@ createServer(async (req, res) => {
   try {
     // B28.285 — Lens's /healthz: how long it has been up, which the testers read to tell a restart.
     if (p === '/healthz') return json(res, 200, { status: broke('status-truth') ? 'degraded' : 'healthy', uptime_seconds: Math.floor(process.uptime()), version: 'stub' })
+    // talyvor-lens B45.28, B45.29 — the AP2 key and outside agents' payment requests, on no credential (stub-trust-layer.ts).
+    if (await bank.trustLayer.route(req, res, p, BASE)) return
     // talyvor-lens B28.12 — the API reference and the two pages that say what Lens is, none behind a credential.
     if (p === '/openapi.json') return json(res, 200, lensOpenAPI(broke('openapi-wallets')))
     if (p === '/' || p === '/status') {
@@ -1361,6 +1363,7 @@ createServer(async (req, res) => {
     // B32.81 — the market_* MCP tools on an agent's own key.
     if (await bank.agentMCP(req, res, bearer, p)) return
     if (await bank.agentPay(req, res, bearer, p)) return
+    if (await bank.agentApprove(req, res, bearer, p)) return // B45.28: an approver agent, on its own key
     if (await bank.agentUse(req, res, bearer, p)) return
     if (await bank.agentTaxProfile(req, res, bearer, p)) return
     if (await bank.moderatorRoute(req, res, bearer, p)) return

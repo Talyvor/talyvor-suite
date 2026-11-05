@@ -13,7 +13,7 @@ function page(): StatusJSON & Record<string, unknown> {
     ...(service === 'screening' ? { lists_age_hours: 3 } : {}),
   }))
   return {
-    status: 'operational', version: 'b98a576', uptime_hours: 0.05, updated_at: probed,
+    status: 'operational', version: 'b98a576', uptime_hours: 0.05, updated_at: probed, card_payments: 'test',
     components: ['PostgreSQL', 'Redis', 'NATS', 'Proxy'].map((name) => ({ name, status: 'operational', latency_ms: 1, measured: true, checked_at: probed })),
     providers: [{ name: 'OpenAI', status: 'operational', latency_ms: 183, checked_at: probed }],
     rails,

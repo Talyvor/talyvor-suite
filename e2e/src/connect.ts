@@ -6,7 +6,8 @@
 //     serves), each take the person through the consent screen in the browser — the three scopes in plain words — and
 //     back to a loopback callback with the code, the state and iss; the code and its PKCE verifier buy an access token
 //     /mcp takes. The refresh token rotates, a rotated one sent again ends the connection, and a revoked token is refused.
-//     B40.8: a third client shows on Settings → Connect your AI with its last use, and its Revoke button ends it.
+//     B40.8: a third client shows on Settings → Connect your AI with its last use. B41.15: it is revoked from its row
+//     on Keys, the page says so, and its next tool call is refused as not connected.
 // A CIMD document must be at a public https address, so it is served through a Cloudflare quick tunnel; with
 // --hook-tunnel none (the self-test) a second DCR client takes its place and the evidence says so.
 
@@ -43,7 +44,7 @@ export function connectOAuth(): Scenario {
     id: 'connect-oauth',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B40.6', 'B40.8'],
+    items: ['B40.6', 'B40.8', 'B41.15'],
     feature: 'Talyvor Connect',
     title: 'an assistant signs in the way Claude does: a 401 naming resource_metadata, discovery, a client by DCR and one by CIMD, ' +
       'PKCE and the consent screen in the browser, the token and a rotating refresh — and a revoked token is refused, ' +
@@ -174,15 +175,26 @@ export function connectOAuth(): Scenario {
         ctx.evidence.push({ note: `Settings → Connect your AI: address shown ${address > 0}; row "${rowText}"` })
         if (address === 0) wrong.push(`the page does not show the address ${origin}/mcp`)
         if (!/Last used (?!never)/.test(rowText)) wrong.push(`the connected assistant's row does not show its last use: "${rowText}"`)
+        // B41.15: revoked from Keys, where everything that may act for the workspace is listed.
+        await page.goto(`${origin}/keys`)
+        const onKeys = page.locator('li').filter({ hasText: name })
+        await onKeys.waitFor({ timeout: 15_000 })
         await page.getByRole('button', { name: `Revoke ${name}` }).click()
-        await row.waitFor({ state: 'detached', timeout: 15_000 })
-        const revoked = await mcp(origin, held.access_token)
-        ctx.evidence.push({ note: `after its Revoke button: the row is gone; /mcp with its token ${revoked.status}` })
-        if (revoked.status !== 401) wrong.push(`/mcp answered ${revoked.status} to a token revoked from Settings, not 401`)
+        await onKeys.waitFor({ state: 'detached', timeout: 15_000 })
+        const shown = await page.getByRole('status').filter({ hasText: `${name} is disconnected` }).count()
+        const toolCall = await fetch(`${origin}/mcp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${held.access_token}` },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_wallets', arguments: {} } }),
+        })
+        const refusal = await toolCall.text()
+        ctx.evidence.push({ note: `Keys: revoked from its row, the page says so ${shown > 0}; its next tool call ${toolCall.status} ${refusal}` })
+        if (shown === 0) wrong.push('Keys does not show the revocation after its Revoke button')
+        if (toolCall.status !== 401 || !refusal.includes('not connected')) wrong.push(`a tool call on a token revoked from Keys answered ${toolCall.status} ${refusal}, not 401 not connected`)
         await page.goto(origin)
 
         return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
-          : { pass: true, detail: `${clients.map((c) => c.how).join(', ')} clients signed in through the consent screen; refresh rotated, replay and revocation were refused, and Settings listed and revoked one` }
+          : { pass: true, detail: `${clients.map((c) => c.how).join(', ')} clients signed in through the consent screen; refresh rotated, replay and revocation were refused, and Settings listed it and Keys revoked it` }
       } finally {
         proc?.kill()
         server.closeAllConnections()
@@ -252,17 +264,18 @@ function mcpTools(ctx: ScenarioCtx, origin: string, token: string) {
 //     the statement the passkey would sign names only the first. B40.36: with one bill on Lens (its bank details printed
 //     on it), bills_due lists that one bill and its total and never the bank details, and safe_to_spend counts it in the
 //     company's GBP bills due. The money: no payment out, every account's test money and the workspace's ledger exactly as they were
-//     before the assistant connected. B45.39: a second bill, from a saved payee, arrives; bills_due lists both, and
+//     before the assistant connected, but for ask_taly's own model charge (its spend and platform_fee rows). B45.39: a second bill, from a saved payee, arrives; bills_due lists both, and
 //     prepare_bills_payment with no bill_ids prepares one request pending approval for both, the stranger's blocked. The
 //     person's one passkey approval then posts exactly one payment out, to that payee at the bill's amount with its invoice
-//     number, the company's account down by it; the same approval again is refused 409 and pays nothing.
+//     number, the company's account down by it; the same approval again is refused 409 and pays nothing. B45.41: the batch is
+//     in list_approvals with its link and amount, and ask_taly answers a question.
 export function connectMCP(): Scenario {
   return {
     id: 'connect-mcp',
     owner: 'talyvor-suite',
     own: true,
     agents: 1,
-    items: ['B40.7', 'B40.35', 'B40.9', 'B40.36', 'B45.39'],
+    items: ['B40.7', 'B40.35', 'B40.9', 'B40.36', 'B45.39', 'B45.41'],
     feature: 'Talyvor Connect',
     title: 'an assistant on /mcp lists the tools with their annotations, reads a balance, drafts an invoice and prepares a two-payee ' +
       'batch that stays pending approval; the payee and the mandate it asks for exist only once the person saves and signs them — ' +
@@ -295,7 +308,7 @@ export function connectMCP(): Scenario {
         if (p.status !== 201 || p.value === undefined) return { pass: false, detail: `saving ${name} answered ${said(p)}` }
         payees.push(p.value.id)
       }
-      const billNumber = `MCP-${randomBytes(3).toString('hex')}`
+      const billNumber = `MCP-${randomBytes(3).toString('hex').toUpperCase()}` // Lens reads an invoice number upper-cased
       const bill = await ctx.env.lens.raw(ctx.app.user.token, 'POST', '/v1/money/bills?source=photo', ['From: Nightly MCP Bill Ltd', 'INVOICE',
         `Invoice number: ${billNumber}`, `Due date: ${new Date().toISOString().slice(0, 10)}`, 'Total due: GBP 42.00', 'Sort code: 04-00-04', 'Account number: 87654321'].join('\n'), 'text/plain')
       ctx.evidence.push({ note: 'one bill, its bank details printed on it', answer: `${bill.status} ${bill.text.slice(0, 160)}` })
@@ -303,8 +316,13 @@ export function connectMCP(): Scenario {
       const money = async () => {
         const accounts = await call<{ accounts: { id: string; test_minor: number }[] | null }>(ctx, 'GET', '/v1/money/accounts')
         const payments = await call<{ payments: unknown[] | null }>(ctx, 'GET', '/v1/money/payments')
-        const ledger = await ctx.env.lens.ledger(ctx.app.user)
-        return { accounts: JSON.stringify((accounts.value?.accounts ?? []).map((a) => [a.id, a.test_minor])), payments: (payments.value?.payments ?? []).length, ledger: ledger.length }
+        // ask_taly is one model call, billed on the chat key like any Chat question (a spend and a platform_fee row,
+        // prepaid credits paying for Talyvor's own service); every other row must stay exactly as it was.
+        const rows = await ctx.env.lens.ledger(ctx.app.user)
+        const charge = rows.filter((r) => (r.type === 'spend' || r.type === 'platform_fee') && r.amount_ulxc <= 0)
+        const ledger = rows.filter((r) => !charge.includes(r))
+        return { accounts: JSON.stringify((accounts.value?.accounts ?? []).map((a) => [a.id, a.test_minor])), payments: (payments.value?.payments ?? []).length,
+          ledger: ledger.length, rows: JSON.stringify(ledger.map((r) => r.id).sort()), charged: charge.length }
       }
       const before = await money()
       ctx.evidence.push({ note: `before the assistant: accounts ${before.accounts}, ${before.payments} payments out, ${before.ledger} ledger rows` })
@@ -337,6 +355,14 @@ export function connectMCP(): Scenario {
       }
       const status = await tool('get_request_status', { request_id: pr.id ?? '' })
       if (status.structuredContent?.status !== 'pending_approval') wrong.push(`the prepared batch then read ${JSON.stringify(status.structuredContent?.status)}, not pending_approval`)
+
+      // B45.41 — what the desktop app uses: the batch is among the approvals waiting, with its link, and Taly answers
+      //    with Chat's tools (the money check below holds that nothing moved).
+      const waiting = ((await tool('list_approvals', {})).structuredContent?.approvals ?? []) as { id: string; approval_url: string; amount_minor: number }[]
+      const ours = waiting.find((w) => w.id === pr.id)
+      if (ours === undefined || ours.approval_url !== pr.approval_url || ours.amount_minor !== 3000) wrong.push(`list_approvals does not list the batch of GBP 30.00 with its link: ${JSON.stringify(waiting).slice(0, 400)}`)
+      const taly = await tool('ask_taly', { message: 'What accounts does this workspace have?', thread: [] })
+      if (taly.isError !== false || String(taly.structuredContent?.reply ?? '').trim() === '') wrong.push(`ask_taly did not answer: ${JSON.stringify(taly).slice(0, 400)}`)
 
       // 3a. B40.36 — the bill due and the safe-to-spend figure.
       const due = await tool('bills_due', {})
@@ -427,8 +453,8 @@ export function connectMCP(): Scenario {
 
       // 4. The money: nothing moved.
       const after = await money()
-      ctx.evidence.push({ note: `after the assistant: accounts ${after.accounts}, ${after.payments} payments out, ${after.ledger} ledger rows` })
-      if (after.accounts !== before.accounts || after.payments !== before.payments || after.ledger !== before.ledger) {
+      ctx.evidence.push({ note: `after the assistant: accounts ${after.accounts}, ${after.payments} payments out, ${after.ledger} ledger rows besides ${after.charged - before.charged} for asking Taly` })
+      if (after.accounts !== before.accounts || after.payments !== before.payments || after.rows !== before.rows) {
         wrong.push(`money moved: accounts ${before.accounts} → ${after.accounts}, payments out ${before.payments} → ${after.payments}, ledger rows ${before.ledger} → ${after.ledger}`)
       }
 
@@ -437,7 +463,7 @@ export function connectMCP(): Scenario {
       const paid = await payAllDue(ctx, origin, tool, key, company.value.id, payees[1], billNumber)
       if (!paid.pass) wrong.push(paid.detail)
       return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
-        : { pass: true, detail: `${listed.length} tools listed with their annotations, none that pays; the balance read, an invoice drafted, request ${pr.id} prepared for two payees pending approval, and the asked-for payee and mandate made only by Save and the passkey — no payment out, the accounts and ${after.ledger} ledger rows unchanged; ${paid.detail}` }
+        : { pass: true, detail: `${listed.length} tools listed with their annotations, none that pays; the balance read, an invoice drafted, request ${pr.id} prepared for two payees pending approval, and the asked-for payee and mandate made only by Save and the passkey — no payment out, the accounts and ${after.ledger} ledger rows unchanged besides asking Taly; ${paid.detail}` }
     },
   }
 }
@@ -742,6 +768,149 @@ export function connectContact(): Scenario {
 
       return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
         : { pass: true, detail: `"Mike" asked "${asked.question}" with both Mikes and prepared nothing; "Grace" prepared request ${pr.id}, and one passkey approval paid ${fresh[0].id}: 50000 USD to Grace Hopper's payee, the account ${before.held} → ${after.held} minor; the replay answered 409 and paid nothing` }
+    },
+  }
+}
+
+// B45.37 — AN ASSISTANT PREPARES RECURRING PAYMENTS AND THE PERSON SIGNS THEM IN THE APP. One scenario, once a run, on a
+// workspace of its own:
+//   connect-recurring — on Lens's API the owner opens a GBP account with test money, saves two payees and registers a
+//     passkey. An assistant on /mcp prepares a two-line list with prepare_recurring_payments (destructive): nothing is
+//     prepared to pay before the person signs. The link opens the plan screen, which shows both orders waiting for the
+//     signature; signed with this run's software passkey (the screen's own call), the screen shows them running, and
+//     within Lens's minute tick each order's first run waits under Approvals. Each is approved with the passkey, and the
+//     money is exactly one payment out per order at its amount, the account down by both.
+export function connectRecurring(): Scenario {
+  return {
+    id: 'connect-recurring',
+    owner: 'talyvor-suite',
+    own: true,
+    items: ['B45.37'],
+    feature: 'Talyvor Connect',
+    title: 'an assistant prepares two recurring payments over /mcp; nothing runs until the person signs the plan in the app with a passkey, ' +
+      'then each order shows running, its first run waits under Approvals, and one approval each pays exactly its amount',
+    run: async (ctx) => {
+      const origin = new URL(ctx.app.page.url()).origin
+      const page = ctx.app.page
+      const lensCall = async <T>(method: string, path: string, body: unknown, note: string) => {
+        const r = await call<T>(ctx, method, path, body)
+        ctx.evidence.push({ note, answer: said(r) })
+        return r
+      }
+      // 1. On Lens's API: the terms, the company's GBP account with £1,000.00 of test money, two saved payees and a passkey.
+      const terms = await lensCall<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
+      for (const t of (terms.value?.terms ?? []).filter((x) => ['currency_accounts', 'payments_in', 'payments_out'].includes(x.capability) && x.accepted == null)) {
+        const ok = await lensCall('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
+        if (ok.status !== 201) return { pass: false, detail: `accepting ${t.capability}'s terms answered ${said(ok)}` }
+      }
+      const company = await lensCall<{ id: string }>('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the company GBP account')
+      if (company.status !== 201 || company.value === undefined) return { pass: false, detail: `the company GBP account answered ${said(company)}` }
+      const funded = await lensCall('POST', `/v1/money/accounts/${company.value.id}/test-money`, { amount_minor: 100000, idempotency_key: `e2e-${randomBytes(8).toString('hex')}` }, 'the owner puts £1,000.00 of test money in the company account')
+      if (funded.status !== 201) return { pass: false, detail: `putting test money in the company GBP account answered ${said(funded)}` }
+      const lines = [{ name: 'Nightly Recurring Rent Ltd', amount: 30000, every: 'month' }, { name: 'Nightly Recurring Fibre Ltd', amount: 1250, every: 'week' }]
+      const payee: Record<string, string> = {}
+      for (const [i, l] of lines.entries()) {
+        const p = await lensCall<{ id: string }>('POST', '/v1/money/payees', { name: l.name, country: 'GB', sort_code: '040004', account_number: `4567890${i}` }, `the payee ${l.name}`)
+        if (p.status !== 201 || p.value === undefined) return { pass: false, detail: `saving ${l.name} answered ${said(p)}` }
+        payee[l.name] = p.value.id
+      }
+      const reg = await lensCall<{ challenge: string; rp_id: string }>('POST', '/v1/workspaces/{ws}/agents/passkeys/challenge', {}, 'the passkey registration challenge')
+      if (reg.value === undefined) return { pass: false, detail: `the passkey registration challenge answered ${said(reg)}` }
+      const key = softPasskey(reg.value.rp_id)
+      const registered = await lensCall('POST', '/v1/workspaces/{ws}/agents/passkeys', key.register(reg.value.challenge, 'Nightly recurring passkey'), 'the passkey')
+      if (registered.status !== 201) return { pass: false, detail: `registering a passkey answered ${said(registered)}` }
+
+      interface Payment { id: string; payee_id: string; amount_minor: number; currency: string; status: string }
+      interface Request { id: string; client: string; status: string }
+      const money = async (note: string, planID = '') => {
+        const accounts = await call<{ accounts: { id: string; test_minor: number }[] | null }>(ctx, 'GET', '/v1/money/accounts')
+        const payments = await call<{ payments: Payment[] | null }>(ctx, 'GET', '/v1/money/payments')
+        const pending = await call<{ requests: Request[] | null }>(ctx, 'GET', '/v1/money/payment-requests?status=pending_approval')
+        const m = { held: (accounts.value?.accounts ?? []).find((a) => a.id === company.value?.id)?.test_minor ?? -1, payments: payments.value?.payments ?? [],
+          runs: (pending.value?.requests ?? []).filter((r) => planID !== '' && r.client === `schedule:${planID}`) }
+        ctx.evidence.push({ note: `${note}: the company GBP account holds ${m.held} minor of test money; ${m.runs.length} first runs waiting; ${m.payments.length} payments out ${JSON.stringify(m.payments.map((p) => [p.payee_id, p.amount_minor, p.currency, p.status]))}` })
+        return m
+      }
+      const before = await money('before the assistant')
+
+      // 2. An assistant prepares the two-line list: a plan to sign, and nothing that pays.
+      const token = await connectAssistant(ctx, origin, 'e2e assistant (recurring)')
+      if (typeof token !== 'string') return token
+      const { rpc, tool } = mcpTools(ctx, origin, token)
+      const wrong: string[] = []
+      const listed = (await rpc('tools/list')).tools ?? []
+      if (listed.find((t) => t.name === 'prepare_recurring_payments')?.annotations?.destructiveHint !== true) {
+        return { pass: false, detail: `/mcp does not list prepare_recurring_payments as destructive: ${JSON.stringify(listed.map((t) => t.name))}` }
+      }
+      const prepared = await tool('prepare_recurring_payments', { idempotency_key: `e2e-${randomBytes(8).toString('hex')}`, ask_above: { GBP: 20000 },
+        until: new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 19) + 'Z',
+        payments: lines.map((l) => ({ payee_id: payee[l.name], currency: 'GBP', amount_minor: l.amount, every: l.every, reference: `Nightly ${l.every}ly` })) })
+      const kept = (prepared.structuredContent ?? {}) as { id?: string; kind?: string; confirm_url?: string; details?: { id?: string; schedules?: { active?: boolean }[]; mandate?: { canonical?: string; challenge?: string } } }
+      const plan = kept.details ?? {}
+      if (prepared.isError !== false || kept.kind !== 'plan' || plan.id === undefined || plan.schedules?.length !== 2 || plan.schedules.some((x) => x.active) ||
+        !String(kept.confirm_url).includes(`/money/plans/${kept.id}`)) {
+        return { pass: false, detail: `prepare_recurring_payments did not keep a two-order plan to sign with its link: ${JSON.stringify(prepared).slice(0, 500)}` }
+      }
+      await new Promise((ok) => setTimeout(ok, 70_000)) // past Lens's minute tick: unsigned, nothing may run
+      const unsigned = await money('a minute after the assistant, unsigned', plan.id)
+      if (unsigned.runs.length !== 0 || unsigned.payments.length !== before.payments.length) wrong.push(`unsigned, the plan prepared ${unsigned.runs.length} runs and ${unsigned.payments.length - before.payments.length} payments`)
+
+      // 3. The link opens the plan screen; signed with the passkey (the screen's own call), its orders read Running.
+      const screenWords = async (note: string) => {
+        await page.goto(`${origin}${new URL(String(kept.confirm_url)).pathname}`)
+        const card = page.getByTestId('plan-card')
+        await card.waitFor({ timeout: 30_000 })
+        await page.getByText(lines[0].name).first().waitFor({ timeout: 30_000 })
+        const words = (await card.innerText()).replace(/\s+/g, ' ')
+        ctx.evidence.push({ note: `${note}: "${words}"` })
+        return words
+      }
+      try {
+        const words = await screenWords('the plan screen before signing')
+        for (const l of lines) if (!words.includes(l.name)) wrong.push(`the plan screen does not show ${l.name}`)
+        if (!words.includes('£300.00 every month') || !words.includes('£12.50 every week') || !words.includes('Waiting for your signature') ||
+          !words.includes('A payment above £200.00 always waits for your approval.')) wrong.push(`the plan screen reads "${words}"`)
+      } catch (err) {
+        wrong.push(`the plan screen did not open from the assistant's link: ${String(err).slice(0, 300)}`)
+      }
+      const signed = await page.request.post(`${origin}/api/money/assistant-requests/${kept.id}/sign`, { headers: { Origin: origin },
+        data: { canonical: plan.mandate?.canonical, assertion: key.assert(plan.mandate?.challenge ?? '') } })
+      ctx.evidence.push({ note: `signing the plan: ${signed.status()} ${(await signed.text()).slice(0, 300)}` })
+      if (signed.status() !== 201) return { pass: false, detail: [...wrong, `signing the plan answered ${signed.status()}`].join('; ') }
+      try {
+        const words = await screenWords('the plan screen after signing')
+        if ((words.match(/Running/g) ?? []).length !== 2 || words.includes('Sign with passkey')) wrong.push(`after signing the plan screen reads "${words}"`)
+      } catch (err) {
+        wrong.push(`the plan screen did not open after signing: ${String(err).slice(0, 300)}`)
+      }
+
+      // 4. Within Lens's minute tick each order's first run waits under Approvals; one passkey approval each pays it.
+      let runs: Request[] = []
+      for (let i = 0; i < 18 && runs.length < 2; i++) {
+        await new Promise((ok) => setTimeout(ok, 10_000))
+        runs = (await money(`${(i + 1) * 10}s after signing`, plan.id)).runs
+      }
+      if (runs.length !== 2) return { pass: false, detail: [...wrong, `three minutes after signing ${runs.length} first runs wait for approval, not 2`].join('; ') }
+      for (const r of runs) {
+        const post = (path: string, body: unknown) => page.request.post(`${origin}/api/money/payment-requests/${r.id}/${path}`, { headers: { Origin: origin }, data: body })
+        const toSign = await (await post('approval', { positions: [1] })).json() as { statement?: string; challenge?: string }
+        const approved = await post('approve', { statement: toSign.statement, assertion: key.assert(toSign.challenge ?? '') })
+        const paid = await approved.json() as { status?: string }
+        ctx.evidence.push({ note: `approving first run ${r.id}: ${approved.status()} ${JSON.stringify(paid).slice(0, 400)}` })
+        if (approved.status() !== 200 || paid.status !== 'approved') wrong.push(`approving first run ${r.id} answered ${approved.status()} ${JSON.stringify(paid).slice(0, 200)}`)
+      }
+
+      // 5. The money: exactly one payment out per order at its amount, and the account down by both.
+      const after = await money('after both approvals', plan.id)
+      const fresh = after.payments.filter((p) => !before.payments.some((b) => b.id === p.id))
+      const want = lines.map((l) => [payee[l.name], l.amount, 'GBP'].join(' ')).sort()
+      const got = fresh.map((p) => [p.payee_id, p.amount_minor, p.currency].join(' ')).sort()
+      if (JSON.stringify(got) !== JSON.stringify(want)) wrong.push(`the approvals posted ${JSON.stringify(got)}, not ${JSON.stringify(want)}`)
+      if (after.held !== before.held - 31250) wrong.push(`the company GBP account went from ${before.held} to ${after.held} minor of test money, not down by 31250`)
+      await page.goto(origin)
+
+      return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
+        : { pass: true, detail: `plan ${plan.id} waited unsigned with nothing run; signed in the app its two orders read Running, each first run waited under Approvals, and one approval each paid ${got.join(' and ')}: the account ${before.held} → ${after.held} minor` }
     },
   }
 }

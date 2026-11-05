@@ -236,6 +236,8 @@ export interface MarketLicence {
   status: string
   starts_at: string
   ends_at: string | null
+  /** B32.20 — a subscription renews at ends_at, and a rent asked to */
+  auto_renew: boolean
   uses_covered: number
   use_id: string
   charge: string
@@ -1883,6 +1885,11 @@ export class LensClient {
   /** A purchase on the test agent's card, decided as Stripe Issuing's authorisation request is. */
   async cardPurchase(user: SyntheticUser, agentID: string, p: { amount_minor: number; currency: string; merchant: string }): Promise<Answered<CardPurchase>> {
     return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/agents/${agentID}/card/authorizations`, p)
+  }
+
+  /** B53.14 — a charge at a merchant on one of the workspace's single-use money cards, made as the issuer makes it (Lens B53.18). */
+  async chargeTestCard(user: SyntheticUser, cardID: string, c: { merchant: string; amount_minor: number }): Promise<Answered<{ authorization_id: string; approved: boolean; reason: string; mcc: string; country: string }>> {
+    return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/money/cards/${cardID}/charge`, c)
   }
 
   /** B34.8 — a test workspace put on `plan` with the synthetic key, as Lens B35.1 lets the testers do. */

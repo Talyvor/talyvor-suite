@@ -49,6 +49,7 @@ import { gatewayAuth, gatewayKeys, gatewayMCP, gatewayProviders, gatewaySessions
 import { roomsPrivate } from './rooms.ts'
 import { roomsModeration } from './roomsModeration.ts'
 import { roomInviteLimits } from './roomInvites.ts'
+import { roomTakeover } from './roomTakeover.ts'
 import { roomMessages } from './roomMessages.ts'
 import { roomContributions } from './roomContributions.ts'
 import { roomWallet } from './roomWallet.ts'
@@ -77,6 +78,7 @@ import { outsidePayees } from './payees.ts'
 import { permissionMandate } from './permissionMandates.ts'
 import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
+import { trustLayer } from './trustLayer.ts'
 import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
 import { roomEarnings } from './roomEarnings.ts'
@@ -97,7 +99,14 @@ import { chatFirstMessage } from './chatFirstMessage.ts'
 import { chatPaymentCard } from './chatPaymentCard.ts'
 import { agentWallet } from './agentWallet.ts'
 import { oneSearch } from './oneSearch.ts'
+import { limitAlerts } from './limitAlerts.ts'
+import { subscriptionsView } from './subscriptionsView.ts'
+import { budgetsByCategory } from './budgetsByCategory.ts'
+import { coachWeek } from './coachWeek.ts'
+import { spendingScreen } from './spendingScreen.ts'
+import { monthPlan } from './monthPlan.ts'
 import { payeeCoolingOff } from './coolingOff.ts'
+import { payeeDetailsLock } from './payeeDetailsLock.ts'
 import { chatSidebar } from './chatSidebar.ts'
 import { voiceChatMic, voiceChatPay } from './voiceChat.ts'
 import { firstAgent } from './firstAgent.ts'
@@ -120,11 +129,11 @@ import { injectionExfil } from './injection.ts'
 import { fileBombBounded, ssrfRefused } from './ssrf.ts'
 import { agentResumeSigned, approvalOwnRequest, approvalReused, csrfEveryWrite, moneyTampered, passkeyEnrolSigned, xssShownBack } from './security.ts'
 import { csrfRefused, phoneBearer, scriptInert } from './session.ts'
-import { connectApprove, connectContact, connectMCP, connectOAuth } from './connect.ts'
+import { connectApprove, connectContact, connectMCP, connectOAuth, connectRecurring } from './connect.ts'
 import { mcpPayRetried, mcpSDKAgentPay } from './mcpSDK.ts'
 import { keysNotForwarded, keysUnlisted } from './keys.ts'
 import { rateLimitsHold, workspaceLimitsRaised } from './ratelimit.ts'
-import { marketDiscoverScreen, marketDiscovery } from './discovery.ts'
+import { marketAskScreen, marketCompareScreen, marketDiscoverScreen, marketDiscovery } from './discovery.ts'
 import { royaltiesNotHeadline } from './royalties.ts'
 import { statementLineKinds } from './statementKinds.ts'
 import { openapiWallets } from './openapiWallets.ts'
@@ -998,7 +1007,7 @@ export function editResendRerunsThread(seed: number): Scenario {
 }
 
 /** B28.367 — Regenerate keeps the earlier answer as a version: a sum answered, Regenerate pressed, and after a reload
- *  the answer still reads "2 / 2"; Previous version shows the first, "1 / 2". Both versions state the sum. */
+ *  the answer still reads "2 / 2"; Previous version shows the first, "1 / 2". Each reads as it did when answered. */
 export function answerVersionsSurviveReload(seed: number): Scenario {
   // The run's own sum, so the model is asked rather than an earlier run's answer served from the pool.
   const r = seeded(seed * 37 + 13 + RUN_SALT)
@@ -1013,7 +1022,7 @@ export function answerVersionsSurviveReload(seed: number): Scenario {
       const { page } = ctx.app
       await ctx.app.newChat()
       const first = await ask(ctx, q, 'the first version')
-      if (!statesNumber(first.answer, a + b)) return { pass: false, detail: `the first answer was wrong: ${describe(first)}` }
+      if (first.error !== undefined || first.answer === '') return { pass: false, detail: `the question got no answer: ${describe(first)}` }
       const second = record(ctx, await ctx.app.regenerate(q), 'Regenerate: the second version')
       if (second.error !== undefined) return { pass: false, detail: `Regenerate was refused: ${second.error}` }
       const label = page.locator('[data-testid="turn-assistant"]').last().getByTestId('turn-version')
@@ -1034,10 +1043,11 @@ export function answerVersionsSurviveReload(seed: number): Scenario {
       ctx.evidence.push({ note: `after the reload "${after}": "${latest}"; Previous version "${earlier}": "${oldest}"` })
       if (after !== '2 / 2') return { pass: false, detail: `after the reload the answer reads "${after}", not "2 / 2"` }
       if (earlier !== '1 / 2') return { pass: false, detail: `Previous version reads "${earlier}", not "1 / 2"` }
-      if (!statesNumber(latest, a + b) || !statesNumber(oldest, a + b)) {
-        return { pass: false, detail: `the versions read "${oldest}" and "${latest}"; both should state ${a + b}` }
+      // Each version must read after the reload as it did when it was answered; whether the model added up right is not this scenario's question.
+      if (oldest !== first.answer || latest !== second.answer) {
+        return { pass: false, detail: `after the reload the versions read "${oldest}" and "${latest}", not "${first.answer}" and "${second.answer}"` }
       }
-      return { pass: true, detail: `both versions of the answer survived the reload, each stating ${a + b}` }
+      return { pass: true, detail: `both versions of the answer survived the reload as they were answered: "${first.answer}" and "${second.answer}"` }
     },
   }
 }
@@ -1469,6 +1479,15 @@ export function walletHero(): Scenario {
   }
 }
 
+/** B17.342 — the header's drawn lockup as marketingBoard reads it: a visible mark and wordmark, no tagline. */
+export function headerLockupFaults(l: { mark: boolean; wordmark: boolean; tagline: boolean }): string[] {
+  const faults: string[] = []
+  if (!l.mark) faults.push('no drawn mark in the header')
+  if (!l.wordmark) faults.push('no drawn wordmark in the header')
+  if (l.tagline) faults.push('the retired tagline shows in the header')
+  return faults
+}
+
 /** B29.4 — /marketing in the board's design: the drawn lockup, the hero photograph (no more than
  *  350 KB as served), and the positioning band. At 1440 the photo bleeds off the right edge beside
  *  the text; at 390 it sits under the text and nothing scrolls sideways. B32.1: the verb stack
@@ -1491,11 +1510,9 @@ export function marketingBoard(): Scenario {
             const box = (el: Element | null) => (el === null ? null : el.getBoundingClientRect())
             const p = box(photo)!
             const h1 = box(document.querySelector('h1'))!
-            const logo = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]')).find((i) => getComputedStyle(i).display !== 'none')
-            // B34.1 — the logo loads like the photo; read before it has, it is "not loaded".
-            if (logo !== undefined && !logo.complete) {
-              await new Promise((r) => { logo.addEventListener('load', r, { once: true }); logo.addEventListener('error', r, { once: true }) })
-            }
+            // B51.1: the header draws the mark and wordmark inline; there is no logo file to load.
+            const header = document.querySelector('header')
+            const drawn = (b: string) => header?.querySelector(`svg[data-brand="${b}"]`)?.checkVisibility() === true
             return {
               src: photo.currentSrc,
               loaded: photo.naturalWidth > 0,
@@ -1503,19 +1520,19 @@ export function marketingBoard(): Scenario {
               h1Bottom: h1.bottom,
               stack: document.querySelector('.tal-verbs') !== null,
               verbs: document.body.innerText.match(/\b(route|prove|reuse|compound)\b/gi) ?? [],
-              logo: logo === undefined ? '' : `${new URL(logo.src).pathname}${logo.naturalWidth > 0 ? '' : ' (not loaded)'}`,
+              lockup: { mark: drawn('mark'), wordmark: drawn('wordmark'), tagline: /ai work that compounds/i.test(header?.innerText ?? '') },
               band: document.body.innerText.includes('Designed to run on your own infrastructure.'),
               scroll: document.documentElement.scrollWidth,
               client: document.documentElement.clientWidth,
             }
           })
           const bytes = (await (await page.request.get(got.src)).body()).length
-          ctx.evidence.push({ note: `${width}: photo ${new URL(got.src).pathname} ${bytes} B at ${JSON.stringify(got.photo)}; verbs ${JSON.stringify(got.verbs)}; logo ${got.logo}; scroll ${got.scroll}/${got.client}` })
+          ctx.evidence.push({ note: `${width}: photo ${new URL(got.src).pathname} ${bytes} B at ${JSON.stringify(got.photo)}; verbs ${JSON.stringify(got.verbs)}; header lockup ${JSON.stringify(got.lockup)}; scroll ${got.scroll}/${got.client}` })
           const at = `${width}px`
           if (!got.loaded) wrong.push(`${at}: the hero photo did not load`)
           if (bytes > 350_000) wrong.push(`${at}: the hero photo served ${bytes} bytes, over 350 KB`)
           if (got.stack || got.verbs.length > 0) wrong.push(`${at}: the retired verb stack shows (${got.stack ? '.tal-verbs; ' : ''}${got.verbs.join(' ')})`)
-          if (!/^\/brand\/svg\/talyvor-logo-(dark|light)-notag\.svg$/.test(got.logo)) wrong.push(`${at}: logo "${got.logo}"`)
+          wrong.push(...headerLockupFaults(got.lockup).map((f) => `${at}: ${f}`))
           if (!got.band) wrong.push(`${at}: no positioning band`)
           if (got.scroll > got.client) wrong.push(`${at}: scrolls sideways (${got.scroll} > ${got.client})`)
           if (width === 1440 && (got.photo.left < width / 2 - 1 || got.photo.right < width - 1)) wrong.push(`${at}: the photo does not bleed off the right edge (${got.photo.left}–${got.photo.right})`)
@@ -4387,12 +4404,13 @@ export function chatRunCode(seed: number): Scenario {
  * chat: the model answers it, and nothing this browser holds names it. Asked again in a chat that is kept, it is asked
  * afresh — the temporary chat's answer was kept nowhere to serve — and asked once more it is the earlier answer, so the
  * cache is live and the check before it is not empty. Then, cached, it is asked in a temporary chat again: asked afresh,
- * never served the earlier answer.
+ * never served the earlier answer. The sum is salted with the run's, so an earlier night's kept answer cannot serve
+ * this night's kept chat (B17.339).
  */
 export function chatTemporary(seed: number): Scenario {
-  const r = seeded(seed * 13 + 5)
-  const a = 11 + Math.floor(r() * 80)
-  const b = 11 + Math.floor(r() * 80)
+  const r = seeded(seed * 13 + 5 + RUN_SALT)
+  const a = 100 + Math.floor(r() * 900)
+  const b = 11 + Math.floor(r() * 89)
   const word = freshWord(seed * 10 + 7, 1 + Math.floor(Math.random() * 999_999))
   const q = `What is ${a} times ${b}? ${NUMBER_ONLY} (${word})`
   return {
@@ -5255,6 +5273,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B45.38 — "Transfer $500 to Mike" over MCP, once a run, on a workspace of its own: two saved Mikes ask which and prepare
   // nothing; Grace prepares one $500 request, and one passkey approval pays exactly 50000 USD to her payee, a replay nothing.
   if (i === 8) list.push(connectContact())
+  // B45.37 — recurring payments over MCP, once a run, on a workspace of its own: nothing runs until the person signs the plan in
+  // the app; then its orders read running, each first run waits under Approvals, and one approval each pays exactly its amount.
+  if (i === 8) list.push(connectRecurring())
   // B40.25 — the official MCP SDK client on an agent's own key, once a run, on a workspace of its own: Lens's tools listed with
   // their annotations, agent_balance read, and agent_pay one entry of two postings, one on each agent's statement, summing to zero.
   if (i === 7) list.push(mcpSDKAgentPay(i))
@@ -5270,6 +5291,11 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B32.61 — the same search and a collection on the app's Discover screen, once a run: filtered by capability and the most
   // a use may cost it shows only what Lens found, and a collection's page shows exactly its listings in its order.
   if (i === 5) list.push(marketDiscoverScreen())
+  // B41.71 — ask the marketplace on Discover, once a run: a job in words shows up to three listings, each with its estimated
+  // total for the volume in the words, exactly as Lens's own ask answers.
+  if (i === 5) list.push(marketAskScreen())
+  // B41.72 — three listings compared side by side, once a run: each value in the table is the one Lens's own reads give.
+  if (i === 5) list.push(marketCompareScreen())
   // B32.75 — a sale's earning released on the seller's journal, once a run, bought by a workspace of its own from a seller it
   // makes: the bill paid, the share is due or available, Lens's release job empties the holdback, and the journal reconciles.
   if (i === 5) list.push(marketJournal(i))
@@ -5302,6 +5328,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // room past the plan and a private one refused naming rooms_plan_limits, then on Team a private room joined by a link
   // whose use Lens counts, and revoked, the link 404 to a third company. The operator closes its rooms at the end.
   if (i === 4) list.push(roomInviteLimits(i))
+  // B41.48 — a room's owner changing, once a run, on a Free workspace of its own: notice to an owner active today, a vote
+  // and a fork are 409; handed to a member, Lens reads it as the owner and the old owner as an editor that may not spend.
+  if (i === 4) list.push(roomTakeover(i))
   // B32.83 — a room's messages, once a run, on a Team workspace of its own: a post reaches another member's event stream
   // within two seconds, a key in a public room is 422 naming its kind and stored nowhere, an edit and a delete read back
   // as the edit and a tombstone, a private room's messages are 404 to a stranger, and the minute's limit is 429 naming it.
@@ -5465,7 +5494,26 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   if (i === 5) list.push(dailyBriefing())
   // B41.7 — one search box, once a run, on a workspace of its own: a supplier's name lists its payee, its payment and its bill
   // under their headings, and each opens /money/pay on its own row.
+  // B28.62 — limit-approach alerts, once a run, on a workspace of its own: £8.00 paid against a £10.00 monthly budget raises one
+  // 50% and one 80% alert, still one each when read again, and the Agent Bank's Limit alerts card shows the 80% one.
+  if (i === 7) list.push(limitAlerts())
+  // B41.20 — the Subscriptions view, once a run, on a workspace of its own: a monthly standing order and a monthly listing
+  // subscription each show their next charge, monthly cost and a reminder three days before.
+  if (i === 7) list.push(subscriptionsView())
+  // B41.39 — budgets by category, once a run, on a workspace of its own: with a £100.00 AI and software budget, the payment that
+  // crosses £80 raises one 80% alert, another category's payment counts for nothing, and Money → Budgets shows the progress.
+  if (i === 7) list.push(budgetsByCategory())
+  // B53.14 — a week of spending with the Coach, once a run, on a workspace of its own: six card payments land in their categories, an
+  // eating-out budget crossing 80% alerts once, a duplicate and a new country are unusual, every Coach sentence passes its validator.
+  if (i === 5) list.push(coachWeek())
+  // B53.8 — the Spending screen and Chat's category totals, once a run, on a workspace of its own: one correction moves a payment into
+  // eating out and its budget, Lens lists it as unusual with the Coach's sentence, Money → Spending shows all three, Chat's total is Lens's.
+  if (i === 7) list.push(spendingScreen())
+  // B53.16 — the month plan and Chat's "How much can I spend today?", once a run, on a workspace of its own: a payday and two bills
+  // give safe to spend per day, a spree leaves the rent short with one notice, Money → Spending shows it with its adjustments.
+  if (i === 9) list.push(monthPlan())
   if (i === 7) list.push(oneSearch(), payeeCoolingOff()) // B41.11: a large first payment to a new payee waits until the owner signs "I called them"
+  if (i === 7) list.push(payeeDetailsLock()) // B41.12: a payee's bank details change only with a passkey, and payments to it are held 24 hours after
   // B48.23 — agents of each kind own their wallets, once a run, on a workspace of its own: fiat GBP, crypto USDC, both EUR + USDC,
   // each its own account; removing the kind whose wallet holds test money answers 409 and the ledger keeps it open; one owner wallet per asset.
   if (i === 4) list.push(agentWalletKinds())
@@ -5498,6 +5546,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // one credential that verifies with only the published JWKS and states the daily limit; a rule change lists it "rules changed"
   // on revoked.json and the next states the new limit; pausing the agent lists that one "frozen" and the route is 409.
   if (i === 9) list.push(agentCredential(i))
+  // B45.31 — the trust layer, once a run, on a workspace of its own: an outside agent's signed request lands in the owner's approvals
+  // and on the approval card as "Signed by <domain>", a forged one 401, unsigned "Unverified agent"; an approver agent approves within
+  // its limit, which pays once, and is refused 409 above it; the owner's approval verifies as an AP2 v0.2 mandate.
+  if (i === 9) list.push(trustLayer())
   // B30.124 — last, after the night's partner calls: the money rails on Lens's status page, all ten on their Test partner, none down.
   if (i % 100 === 8) list.push(moneyRails())
   // B37.7 — once a run, last: Lens's status page against its own /healthz — the same version and uptime, healthy when it reads

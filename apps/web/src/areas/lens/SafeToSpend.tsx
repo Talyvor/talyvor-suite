@@ -1,16 +1,18 @@
+import { usdcText } from './AgentMoneyWallet'
 import { type SafeToSpendFigure } from './agentBankApi'
 import { type Fiat, Lxc, fiatText } from './money'
 
 // B41.5 — Lens's safe-to-spend figure (B41.105) as a person reads it: the balance, less this month's scheduled payments,
 // bills due and payments waiting for approval. Home shows the company's; Chat answers "How much can <agent> spend?".
 
-/** One amount in its own currency: LXC in µLXC, GBP, EUR and USD in minor units. A figure may be negative. */
+/** One amount in its own currency: LXC in µLXC, USDC in millionths, GBP, EUR and USD in minor units. A figure may be negative. */
 export function SafeAmount({ currency, amount }: { currency: string; amount: number }) {
   if (currency === 'LXC') return <Lxc ulxc={amount} />
   return (
     <span className="whitespace-nowrap font-figure">
       {amount < 0 ? '-' : ''}
-      {fiatText(Math.abs(amount) / 100, currency as Fiat)}
+      {/* USDC is no ISO currency: Intl refuses it, and the whole card with it (B17.320). */}
+      {currency === 'USDC' ? usdcText(Math.abs(amount)) : fiatText(Math.abs(amount) / 100, currency as Fiat)}
     </span>
   )
 }

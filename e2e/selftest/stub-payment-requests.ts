@@ -4,6 +4,8 @@
 // (stub-permission-mandates.ts) as Lens's judgePaymentItems picks: one that allows is auto, else the closest one's reason.
 // Nothing here moves money. Its defect:
 //   payment-request-key-reused — the same Idempotency-Key with other arguments is taken as a new request
+// B45.31 — and the owner's approvals (GET …?status=pending_approval), where an outside agent's request (Lens B45.29,
+// stub-trust-layer.ts) lands with its agent_trust, each signing domain's Idempotency-Keys its own.
 // B40.29 — and one approval for a batch (Lens B40.5): an agent's own key prepares and reads its requests; the owner's POST
 // …/{id}/approval answers the statement and its challenge, POST …/{id}/approve takes it signed by a device key or a passkey and
 // pays each approved item once from the preparer's account, and GET …/{id}/record is the request's hash-chained record. Its defect:
@@ -24,7 +26,7 @@ import { createHash, randomUUID } from 'node:crypto'
 interface ItemIn { payee_id?: string; currency?: string; amount_minor?: number; reference?: string }
 type ItemOut = { payee_id: string; listing_id: string; currency: string; amount_minor: number; reference: string; bill_id?: string; blocked?: string }
 interface Item { flags?: { code: string; detail: string }[]; bill_id?: string; position: number; payee_id: string; payee_name: string; currency: string; amount_minor: number; reference: string; decision: string; reason: string; rule?: string; mandate_id?: string; payment_id?: string; pay_status?: string; pay_detail?: string }
-interface Request { id: string; kind: string; status: string; client: string; agent_id?: string; canonical: string; payload_hash: string; approval_url: string; deep_link: string; items: Item[] }
+interface Request { id: string; kind: string; status: string; client: string; agent_id?: string; agent_trust?: unknown; canonical: string; payload_hash: string; approval_url: string; deep_link: string; items: Item[] }
 interface Entry { seq: number; kind: string; body: string; prev_hash: string; hash: string }
 interface Assertion { credential_id?: string; device_id?: string; challenge?: string; signature?: string }
 type Paid = { id: string } | { status: number; error: string }
@@ -148,6 +150,11 @@ export class PaymentRequestDesk {
       const r = this.requests.get(one[1])
       return (r === undefined || !r.canonical.includes(`"workspace_id":"${ws}"`) || (agentID !== '' && r.agent_id !== agentID) ? this.json(res, 404, { error: 'economy: no such payment request' }) : this.json(res, 200, r)), true
     }
+    if (path === '/v1/money/payment-requests' && req.method === 'GET') {
+      if (!(req.url ?? '').includes('status=pending_approval')) return this.json(res, 400, { error: 'list with ?status=pending_approval' }), true
+      const mine = [...this.requests.values()].filter((r) => r.canonical.includes(`"workspace_id":"${ws}"`) && r.status === 'pending_approval' && (agentID === '' || r.agent_id === agentID))
+      return this.json(res, 200, { requests: mine }), true
+    }
     if (path !== '/v1/money/payment-requests' || req.method !== 'POST') return false
     const raw = await this.read(req)
     let body: { client?: string; items?: ItemIn[] }
@@ -165,6 +172,16 @@ export class PaymentRequestDesk {
       return this.json(res, 409, { error: 'economy: this Idempotency-Key was already used for a different request' }), true
     }
     return this.create(res, ws, key, args, client, agentID, items)
+  }
+
+  /** B45.31 — an outside agent's request to be paid (Lens B45.29): one of `ws`'s payment requests with `trust` on it, asked by `asker`. */
+  outside(ws: string, asker: string, key: string, items: unknown[], trust: unknown): { status: number; body: unknown } {
+    const out = (items as ItemIn[]).map((i) => ({ payee_id: i.payee_id ?? '', listing_id: '', currency: (i.currency ?? '').toUpperCase(), amount_minor: i.amount_minor ?? 0, reference: i.reference ?? '' }))
+    const args = JSON.stringify({ client: asker, items: out })
+    const seen = this.keys.get(`${ws}\n${asker}:${key}`)
+    if (seen !== undefined && seen.args !== args) return { status: 409, body: { error: 'economy: this Idempotency-Key was already used for a different request' } }
+    const r = seen !== undefined ? this.requests.get(seen.id) as Request : Object.assign(this.make(ws, `${asker}:${key}`, args, asker, '', out), { agent_trust: trust })
+    return { status: seen === undefined ? 201 : 200, body: { id: r.id, status: r.status, agent_trust: r.agent_trust } }
   }
 
   /** B41.2 — POST /v1/money/bills/pay: the bills named, or each bill due no live request holds, as one request of bill items. */

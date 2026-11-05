@@ -185,7 +185,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'reaches Lens never',
     why: 'the measurement that keeps generateChangelog out of the metered markers — the one Docs\' census names as its single excluded surface',
   },
-  'apps/web/src/meteredSurfacePopulation.test.ts:71|apps/web/src/areas/chat/Chat.tsx:138': {
+  'apps/web/src/meteredSurfacePopulation.test.ts:71|apps/web/src/areas/chat/Chat.tsx:140': {
     kind: 'LIVE',
     fragment: 'NOTHING HERE CLAIMS THE CONVERSATION IS BILLED',
     why: 'the measurement that keeps areas/chat out of the population entirely, so an absent area reads as decided rather than forgotten',
@@ -200,7 +200,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'text-eyebrow uppercase',
     why: 'the element that OPENS the eyebrow, quoted to show CaseSafe sits inside it rather than on it',
   },
-  'apps/web/src/placeholderAudit.ts:36|apps/web/src/areas/lens/Keys.tsx:114': {
+  'apps/web/src/placeholderAudit.ts:36|apps/web/src/areas/lens/Keys.tsx:115': {
     kind: 'LIVE',
     fragment: 'placeholder={k.key_prefix}',
     why: 'the site that passes a placeholder THROUGH a component, the whole argument for reading the DOM',
@@ -367,7 +367,7 @@ const PINS: Record<string, Pin> = {
   // the error's CLASS, and the argument is only as good as the three siblings it contrasts with.
   // Each of these three is quoted as gating on `isError`; if one of them is ever narrowed to an
   // `instanceof` the way TopUp was, that sentence stops being true and this pin says so.
-  'apps/web/src/checkoutRefusalSurface.test.tsx:22|apps/web/src/areas/lens/Keys.tsx:131': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:22|apps/web/src/areas/lens/Keys.tsx:132': {
     kind: 'LIVE',
     fragment: '.isError ?',
     why: 'the sibling with the same fallback shape — revoke gates on isError and picks its 404 words inside',
@@ -401,7 +401,7 @@ const PINS: Record<string, Pin> = {
     fragment: '!body.url',
     why: 'the reason a 200 with no url is NOT the finding — it is already converted, so the gate lets it through',
   },
-  'apps/web/src/checkoutRefusalSurface.test.tsx:59|apps/web/src/App.tsx:100': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:59|apps/web/src/App.tsx:104': {
     kind: 'LIVE',
     fragment: 'onError',
     why: 'the app\'s only global error handler, quoted to show it hangs off the QUERY cache and cannot see a mutation',
@@ -434,7 +434,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the BFF half of the same parenthesis — the sentence promises this line says the payment happens at Stripe AFTER the redirect',
   },
-  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:913': {
+  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:935': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'the first of the TWO independent clamps the page ceiling rests on, quoted verbatim by the sentence that cites it',
@@ -444,7 +444,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the example that paragraph gives of a citation checkable from here — now checked, which is what it asked for',
   },
-  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:913': {
+  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:935': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'its second example, pinned for the same reason',
@@ -501,7 +501,7 @@ const PINS: Record<string, Pin> = {
   // in THIS repository can move without touching the screen. That is exactly the rot this file
   // was written for: `billing.go:180` moved and the sentence explaining "nothing was charged"
   // ended up pointing at the one function that cannot charge.
-  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/lens.go:1163': {
+  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/lens.go:1185': {
     kind: 'LIVE',
     fragment: 'X-User-Email',
     why: 'the screen marks YOUR row by comparing /auth/me\'s email to the roster; the claim that this header is the membership join key is the whole basis for that being a join rather than a guess',
@@ -536,7 +536,7 @@ const PINS: Record<string, Pin> = {
     fragment: 's.email',
     why: 'the fixture claims to serve /auth/me "in the exact shape" — a fixture more generous than the real handler is how the docs translate probe went green in English',
   },
-  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/lens.go:1163': {
+  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/lens.go:1185': {
     kind: 'LIVE',
     fragment: 'X-User-Email',
     why: 'the case that argues the comparison must be EXACT rests on this being the key the upstream joined on',

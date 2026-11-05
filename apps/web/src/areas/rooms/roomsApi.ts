@@ -69,6 +69,34 @@ export interface RoomDetail extends Room {
   agents: { agent_id: string; name: string; workspace_id: string }[] | null
   me: Member | null
   wallet?: RoomWallet
+  /** B41.148: the room this one was forked from while its owner was away. */
+  forked_from_room_id?: string
+}
+
+/** Lens rooms.Takeover (B41.148) — GET /api/rooms/{id}/takeover, to the room's members. An owner who does nothing in
+ *  the room for 60 days can be given notice; 14 days unanswered, the voting members — not the owner, not viewers —
+ *  elect a new lead by points, or fork the room. */
+export interface Takeover {
+  owner_workspace_id: string
+  owner_last_active_at: string
+  /** 60 days after the owner's last activity. */
+  notice_from: string
+  /** The open notice, else the latest closed one; null, never any. */
+  notice: {
+    id: string
+    noticed_by_workspace_id: string
+    noticed_at: string
+    /** 14 days after the notice. */
+    voting_from: string
+    status: 'open' | 'answered' | 'elected'
+    elected_workspace_id?: string
+    closed_at?: string
+  } | null
+  voting: boolean
+  members: { workspace_id: string; role: string; points: number; voted_for?: string }[]
+  total_points: number
+  /** Candidate → the points of the members voting for it. */
+  tally: Record<string, number>
 }
 
 /** Lens rooms.Usage — what this workspace's plan lets it open, beside what it has open. -1 is unlimited. */
@@ -424,6 +452,15 @@ export const roomsApi = {
     post<Prize>(`/api/rooms/${e(id)}/prizes`, draft),
   awardPrize: (id: string, pid: string, contributionID: string) =>
     post<{ prize: Prize }>(`/api/rooms/${e(id)}/prizes/${e(pid)}/award`, { contribution_id: contributionID }),
+  // B41.48 — a room's owner can change: a hand-over, or a takeover vote once the owner has been away.
+  transferOwner: (id: string, ws: string) => post<RoomDetail>(`/api/rooms/${e(id)}/owner`, { workspace_id: ws }),
+  takeover: (id: string) =>
+    getJSON<Takeover>(`/api/rooms/${e(id)}/takeover`, { owner_workspace_id: 'string', members: 'list', tally: 'object' }),
+  giveNotice: (id: string) => post<Takeover>(`/api/rooms/${e(id)}/takeover`, {}),
+  answerNotice: (id: string) => post<Takeover>(`/api/rooms/${e(id)}/takeover`, {}, 'DELETE'),
+  voteLead: (id: string, candidate: string) =>
+    post<Takeover>(`/api/rooms/${e(id)}/takeover/vote`, { candidate_workspace_id: candidate }, 'PUT'),
+  forkRoom: (id: string) => post<RoomDetail>(`/api/rooms/${e(id)}/fork`, {}),
   previewInvite: (token: string) =>
     getJSON<InvitePreview>(`/api/room-invites/${e(token)}`, { room: 'object', terms: 'object', uses_left: 'number' }),
   joinByInvite: (token: string, termsVersion: number) =>

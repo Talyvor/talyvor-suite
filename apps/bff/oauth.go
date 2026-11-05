@@ -748,7 +748,7 @@ func (a *app) oauthGrantFrom(w http.ResponseWriter, r *http.Request) (oauthGrant
 		challenge += `, error="invalid_token", error_description="the access token is unknown, expired or revoked"`
 	}
 	w.Header().Set("WWW-Authenticate", challenge)
-	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "sign in to Talyvor from your assistant to use this"})
+	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "not connected: sign in to Talyvor from your assistant to use this"})
 	return oauthGrant{}, false
 }
 

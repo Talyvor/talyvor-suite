@@ -95,6 +95,10 @@ type mcpTool struct {
 	resolve func(a *app, ctx context.Context, t tenant, args mcpArgs) (mcpArgs, map[string]any, error)
 	// shape, when set, is what the assistant is shown of Lens's answer.
 	shape func(raw []byte) ([]byte, error)
+	// run, when set, answers the tool itself rather than making one Lens request: Taly and the microphone (mcp_taly.go).
+	run func(a *app, ctx context.Context, t tenant, g oauthGrant, args mcpArgs) (map[string]any, error)
+	// sendsOnlyWith is the scope without which this mcpSends tool only reads, and is listed as reading.
+	sendsOnlyWith string
 }
 
 var errMCPArgs = errors.New("the arguments are not the tool's")
@@ -227,6 +231,21 @@ var mcpTools = []mcpTool{
 		call: func(t tenant, _ oauthGrant, _ mcpArgs, _ json.RawMessage) (lensCall, error) {
 			return lensCall{method: http.MethodGet, path: lensWorkspacePath(t, "/agents/safe-to-spend")}, nil
 		}},
+	{name: "list_approvals", title: "Approvals waiting", scope: "wallets:read", kind: mcpReads,
+		description: "The workspace's payment requests waiting for the person to approve, newest first: each with its title, amount and approval link.",
+		call:        mcpGet("/v1/money/payment-requests?status=pending_approval"), shape: mcpApprovals},
+	{name: "transcribe", title: "Transcribe speech", scope: "wallets:read", kind: mcpReads,
+		description: "The words said in a short recording, as Talyvor Chat's microphone transcribes them.",
+		props: map[string]any{"audio_base64": map[string]any{"type": "string", "description": "The recording, base64."},
+			"mime": map[string]any{"type": "string", "description": "Its type, e.g. audio/webm."}},
+		required: []string{"audio_base64", "mime"}, run: (*app).transcribe},
+	{name: "ask_taly", title: "Ask Taly", scope: "wallets:read", kind: mcpSends, sendsOnlyWith: "payments:prepare",
+		description: "Taly, Talyvor Chat's assistant, answers about the workspace with Chat's tools. A payment Taly prepares waits for the person to approve it in Talyvor; Taly pays nothing.",
+		props: map[string]any{"message": map[string]any{"type": "string", "maxLength": talyMaxMessage},
+			"thread": map[string]any{"type": "array", "description": "The conversation so far, oldest first.", "items": map[string]any{"type": "object",
+				"properties": map[string]any{"role": map[string]any{"type": "string", "enum": []string{"user", "assistant"}}, "content": mcpStr},
+				"required":   []string{"role", "content"}}}},
+		required: []string{"message"}, run: (*app).askTaly},
 
 	{name: "draft_invoice", title: "Draft an invoice", scope: "invoices:draft", kind: mcpWrites,
 		description: "Drafts an invoice from one of the workspace's accounts. The draft is not sent.",
@@ -297,6 +316,23 @@ var mcpTools = []mcpTool{
 		},
 		required: []string{"scope", "new_payee", "expires_at"},
 		call:     mcpDraftMandate},
+	{name: "prepare_recurring_payments", title: "Prepare recurring payments for signing", scope: "payments:prepare", kind: mcpSends, keeps: "plan",
+		description: "Saves a list of daily, weekly and monthly payments to saved payees as standing orders, and drafts one mandate for the " +
+			"person to sign in Talyvor. It pays nothing and nothing runs until they sign. Once signed, each payment's first run waits for " +
+			"their approval; later runs inside the mandate pay on their own, and any payment above ask_above still asks.",
+		props: map[string]any{
+			"idempotency_key": mcpIdemKey,
+			"until":           map[string]any{"type": "string", "description": "RFC 3339: the last day to pay; the mandate ends then."},
+			"ask_above":       mcpAmounts,
+			"payments": map[string]any{"type": "array", "minItems": 1, "maxItems": 50, "items": map[string]any{"type": "object", "properties": map[string]any{
+				"payee_id": mcpItemArgs["payee_id"], "amount_minor": mcpItemArgs["amount_minor"], "reference": mcpItemArgs["reference"],
+				"currency":     map[string]any{"type": "string", "enum": []string{"GBP", "EUR", "USD"}},
+				"every":        map[string]any{"type": "string", "enum": []string{"day", "week", "month"}},
+				"first_run_at": map[string]any{"type": "string", "description": "RFC 3339: when the first payment is due; now if left out."}},
+				"required": []string{"payee_id", "currency", "amount_minor", "every"}}},
+		},
+		required: []string{"idempotency_key", "until", "payments"},
+		run:      mcpPrepareRecurring},
 
 	{name: "prepare_payment", title: "Prepare a payment for approval", scope: "payments:prepare", kind: mcpSends,
 		description: "Prepares one payment to a saved payee as a request the person approves in Talyvor. It pays nothing.",
@@ -333,7 +369,11 @@ var mcpTools = []mcpTool{
 		call: mcpByID(http.MethodPost, "/v1/money/payment-requests", "request_id", "/cancel")},
 }
 
-func (t mcpTool) definition() map[string]any {
+func (t mcpTool) definition(g oauthGrant) map[string]any {
+	kind := t.kind
+	if t.sendsOnlyWith != "" && !grantHas(g, t.sendsOnlyWith) {
+		kind = mcpReads
+	}
 	props := t.props
 	if props == nil {
 		props = map[string]any{}
@@ -343,8 +383,8 @@ func (t mcpTool) definition() map[string]any {
 		schema["required"] = t.required
 	}
 	return map[string]any{"name": t.name, "title": t.title, "description": t.description, "inputSchema": schema,
-		"annotations": map[string]any{"title": t.title, "readOnlyHint": t.kind == mcpReads, "destructiveHint": t.kind == mcpSends,
-			"idempotentHint": t.kind == mcpReads, "openWorldHint": false}}
+		"annotations": map[string]any{"title": t.title, "readOnlyHint": kind == mcpReads, "destructiveHint": kind == mcpSends,
+			"idempotentHint": kind == mcpReads && t.run == nil, "openWorldHint": false}}
 }
 
 type mcpMessage struct {
@@ -487,7 +527,7 @@ func (a *app) mcpDispatch(ctx context.Context, g oauthGrant, version string, req
 		tools := []map[string]any{}
 		for _, t := range mcpTools {
 			if grantHas(g, t.scope) {
-				tools = append(tools, t.definition())
+				tools = append(tools, t.definition(g))
 			}
 		}
 		return mcpOK(req.ID, map[string]any{"tools": tools})
@@ -541,6 +581,19 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 		}
 		args = next
 	}
+	if tool.run != nil {
+		out, err := tool.run(a, ctx, t, g, args)
+		var said mcpSaid
+		switch {
+		case errors.Is(err, errMCPArgs) || errors.As(err, &said):
+			return mcpRefusal(req.ID, err.Error())
+		case err != nil:
+			log.Printf("bff: mcp %s for client %q: %v", tool.name, g.ClientName, err)
+			return mcpRefusal(req.ID, "Talyvor could not answer just now. Try again shortly.")
+		}
+		raw, _ := json.Marshal(out)
+		return mcpAnswer(req.ID, tool, version, raw)
+	}
 	c, err := tool.call(t, g, args, p.Arguments)
 	if err != nil {
 		return mcpRefusal(req.ID, err.Error())
@@ -563,7 +616,7 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 		return mcpRefusal(req.ID, refusal.Error)
 	}
 	if tool.keeps != "" {
-		if raw, err = a.keepDraft(t, g, tool.keeps, c.body, raw); err != nil {
+		if raw, err = a.keepDraft(t, g, tool.keeps, c.body, raw, nil); err != nil {
 			return mcpRefusal(req.ID, err.Error())
 		}
 	}
@@ -573,6 +626,11 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 			return mcpRefusal(req.ID, "Talyvor could not answer just now. Try again shortly.")
 		}
 	}
+	return mcpAnswer(req.ID, tool, version, raw)
+}
+
+// mcpAnswer is a tool's answer: what it returned, with the link to approve a request it prepared or confirm a draft it kept.
+func mcpAnswer(id json.RawMessage, tool mcpTool, version string, raw []byte) mcpResponse {
 	var out map[string]any
 	if json.Unmarshal(raw, &out) != nil {
 		out = map[string]any{"result": json.RawMessage(raw)}
@@ -594,7 +652,7 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 			content = append(content, map[string]any{"type": "resource_link", "uri": link, "name": "Confirm in Talyvor", "mimeType": "text/html"})
 		}
 	}
-	return mcpOK(req.ID, map[string]any{"content": content, "structuredContent": out, "isError": false})
+	return mcpOK(id, map[string]any{"content": content, "structuredContent": out, "isError": false})
 }
 
 // mcpBillsDue is Lens's bills (B41.101) as its own list_bills_due shows them (talyvor-lens internal/mcp, B45.17): the due

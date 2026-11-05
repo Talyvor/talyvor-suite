@@ -67,3 +67,13 @@ describe('the approval push (B28.38)', () => {
     expect(sw.shown).toHaveLength(2)
   })
 })
+
+describe('the morning briefing push (B41.207)', () => {
+  it('shows "This morning" and its line, with no Approve or Deny, and a tap opens Home', async () => {
+    const sw = worker(200)
+    await sw.push({ type: 'daily_briefing', workspace_id: 'ws_1', line: 'Research spent £12.40 yesterday.', quiet: false })
+    expect(sw.shown[0]).toMatchObject({ title: 'This morning', options: { body: 'Research spent £12.40 yesterday.', tag: 'daily-briefing', actions: [] } })
+    await sw.tap('')
+    expect(sw.openWindow).toHaveBeenCalledWith('/')
+  })
+})

@@ -531,8 +531,22 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/payees/{id}/confirm", a.requireTenant(a.handleMoneyPayeeConfirm))
 	a.mux.HandleFunc("/api/money/payees/{id}/called/challenge", a.requireTenant(a.handleMoneyPayeeCalled(true))) // B41.11
 	a.mux.HandleFunc("/api/money/payees/{id}/called", a.requireTenant(a.handleMoneyPayeeCalled(false)))
+	a.mux.HandleFunc("/api/money/payees/{id}/details/challenge", a.requireTenant(a.handleMoneyPayeeDetails(true))) // B41.12
+	a.mux.HandleFunc("/api/money/payees/{id}/details", a.requireTenant(a.handleMoneyPayeeDetails(false)))
 	a.mux.HandleFunc("/api/money/payments", a.requireTenant(a.handleMoneyPayments))
-	a.mux.HandleFunc("/api/money/search", a.requireTenant(a.handleMoneySearch)) // B41.7, money_search.go
+	a.mux.HandleFunc("/api/money/search", a.requireTenant(a.handleMoneySearch))                        // B41.7, money_search.go
+	a.mux.HandleFunc("/api/money/budgets/alerts", a.requireTenant(a.handleMoneyBudgetAlerts))          // B28.62, money_search.go
+	a.mux.HandleFunc("/api/money/budgets", a.requireTenant(a.handleMoneyBudgets))                      // B41.39, money_search.go
+	a.mux.HandleFunc("/api/money/budgets/{id}", a.requireTenant(a.handleMoneyBudget))                  // B41.39, money_search.go
+	a.mux.HandleFunc("/api/money/spending/subscriptions", a.requireTenant(a.handleMoneySubscriptions)) // B41.20, money_search.go
+	a.mux.HandleFunc("/api/money/spending", a.requireTenant(a.handleMoneySpending))                    // B53.8, money_search.go
+	a.mux.HandleFunc("/api/money/spending/unusual", a.requireTenant(a.handleMoneySpendingUnusual))     // B53.8, money_search.go
+	a.mux.HandleFunc("/api/money/spending/merchants", a.requireTenant(a.handleMoneySpendingMerchants)) // B53.8, money_search.go
+	a.mux.HandleFunc("/api/money/coach", a.requireTenant(a.handleMoneyCoach))                          // B53.8, money_search.go
+	a.mux.HandleFunc("/api/money/notices", a.requireTenant(a.handleMoneyNotices))                      // B53.8, money_search.go
+	a.mux.HandleFunc("/api/money/notices/settings", a.requireTenant(a.handleMoneyNoticeSettings))      // B53.8, money_search.go
+	a.mux.HandleFunc("/api/money/plan", a.requireTenant(a.handleMoneyPlan))                            // B53.16, money_search.go
+	a.mux.HandleFunc("/api/money/plan/income", a.requireTenant(a.handleMoneyPlanIncome))               // B53.16, money_search.go
 	a.mux.HandleFunc("/api/money/mandates", a.requireTenant(a.handleMoneyMandates))
 	a.mux.HandleFunc("/api/money/mandates/{id}/revoke", a.requireTenant(a.handleMoneyMandateRevoke))
 	// B41.1 — the bills inbox: an uploaded invoice becomes a bill (Lens B41.101). See money_bills.go.
@@ -554,6 +568,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/devices", a.requireTenant(a.handleMoneyDevices))
 	a.mux.HandleFunc("/api/money/devices/{id}/revoke", a.requireTenant(a.handleMoneyDeviceRevoke))
 	a.mux.HandleFunc("/api/money/devices/{id}/push-token", a.requireTenant(a.handleMoneyDevicePushToken))
+	a.mux.HandleFunc("/api/money/access", a.requireTenant(a.handleMoneyAccess)) // B41.15, money_access.go
+	a.mux.HandleFunc("/api/money/permission-mandates/{id}/revoke", a.requireTenant(a.handleMoneyPermissionMandateRevoke))
 	a.mux.HandleFunc("/api/money/payouts", a.requireTenant(a.handleMoneyPayouts))
 	a.mux.HandleFunc("/api/money/payouts/{id}", a.requireTenant(a.handleMoneyPayout))
 	a.mux.HandleFunc("/api/money/payouts/{id}/approve", a.requireTenant(a.handleMoneyPayoutApprove))
@@ -581,6 +597,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/marketplace/listings/{id}/versions", a.requireTenant(a.handleMarketVersion)) // B28.162
 	a.mux.HandleFunc("/api/marketplace/listings/{id}/reports", a.requireTenant(a.handleMarketReport))   // B20.11
 	a.mux.HandleFunc("/api/marketplace/search", a.requireTenant(a.handleMarketSearch))                  // B32.61
+	a.mux.HandleFunc("/api/marketplace/ask", a.requireTenant(a.handleMarketAsk))                        // B41.71
 	a.mux.HandleFunc("/api/marketplace/capabilities", a.requireTenant(a.handleMarketCapabilities))      // B32.61
 	a.mux.HandleFunc("/api/marketplace/collections", a.requireTenant(a.handleMarketCollections))        // B32.61
 	a.mux.HandleFunc("/api/marketplace/collections/{id}", a.requireTenant(a.handleMarketCollection))    // B32.61
@@ -620,6 +637,11 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/rooms/{id}/invites/{iid}", a.requireTenant(a.handleRoomInvite))
 	a.mux.HandleFunc("/api/rooms/{id}/prizes", a.requireTenant(a.handleRoomPrizes))
 	a.mux.HandleFunc("/api/rooms/{id}/prizes/{pid}/award", a.requireTenant(a.handleRoomPrizeAward))
+	// B41.48 — owner hand-over, the takeover notice and vote, and forking the room. See rooms.go.
+	a.mux.HandleFunc("/api/rooms/{id}/owner", a.requireTenant(a.handleRoomOwner))
+	a.mux.HandleFunc("/api/rooms/{id}/takeover", a.requireTenant(a.handleRoomTakeover))
+	a.mux.HandleFunc("/api/rooms/{id}/takeover/vote", a.requireTenant(a.handleRoomTakeoverVote))
+	a.mux.HandleFunc("/api/rooms/{id}/fork", a.requireTenant(a.handleRoomForkRoom))
 	a.mux.HandleFunc("/api/room-invites/{token}", a.requireTenant(a.handleRoomInvitePreview))
 	a.mux.HandleFunc("/api/room-invites/{token}/join", a.requireTenant(a.handleRoomInviteJoin))
 	// B11.3 — the Try-it pages: Tare and document conversion run on the person's input through Lens's

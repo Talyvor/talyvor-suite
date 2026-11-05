@@ -253,8 +253,15 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/payees", body: `{"name":"a","country":"GB","sort_code":"040004","account_number":"12345678"}`},
 		{method: http.MethodPost, path: "/api/money/payees/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/payees/x1/confirm", body: `{"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
-		{method: http.MethodPost, path: "/api/money/payees/x1/called/challenge", body: `{}`}, // B41.11
+		{method: http.MethodPost, path: "/api/money/payees/x1/called/challenge", body: `{}`},                                                            // B41.11
+		{method: http.MethodPut, path: "/api/money/budgets", body: `{"category":"ai_software","period":"month","amount_minor":10000,"currency":"GBP"}`}, // B41.39
+		{method: http.MethodDelete, path: "/api/money/budgets/x1"},                                                                                      // B41.39
+		{method: http.MethodPut, path: "/api/money/spending/merchants", body: `{"merchant":"m","category":"eating_out"}`},                               // B53.8
+		{method: http.MethodPut, path: "/api/money/notices/settings", body: `{"timezone":"UTC","quiet_from":"","quiet_until":"","off":[]}`},             // B53.8
+		{method: http.MethodPut, path: "/api/money/plan/income", body: `{"payday":28,"amount_minor":250000,"currency":"GBP","payer":""}`},               // B53.16
 		{method: http.MethodPost, path: "/api/money/payees/x1/called", body: `{"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
+		{method: http.MethodPost, path: "/api/money/payees/x1/details/challenge", body: `{"sort_code":"400000","account_number":"12345678"}`}, // B41.12
+		{method: http.MethodPost, path: "/api/money/payees/x1/details", body: `{"sort_code":"400000","account_number":"12345678","assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
 		{method: http.MethodPost, path: "/api/money/payment-requests/x1/approval", body: `{"positions":[1]}`},
 		{method: http.MethodPost, path: "/api/money/payment-requests", body: `{"voice":true,"items":[{"payee_id":"p1","currency":"GBP","amount_minor":1}]}`},
 		{method: http.MethodPost, path: "/api/chat/voice/speech", body: `{"input":"hi"}`},
@@ -264,6 +271,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/devices/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/devices", body: `{"platform":"ios","name":"n","public_key":"p","challenge":"c","signature":"s","attestation":"a"}`},
 		{method: http.MethodPost, path: "/api/money/devices/x1/revoke", body: `{}`},
+		{method: http.MethodPost, path: "/api/money/permission-mandates/x1/revoke", body: `{}`}, // B41.15
 		{method: http.MethodPost, path: "/api/money/devices/x1/push-token", body: `{"push_token":"t"}`},
 		{method: http.MethodPost, path: "/api/money/payments", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`},
 		{method: http.MethodPost, path: "/api/money/mandates", body: `{"account_id":"x1","payee_business_id":"b","payee_id":"x1","payee_name":"n","max_per_pull_minor":1,"max_per_month_minor":1,"expires_at":"2099-01-01T00:00:00Z"}`},
@@ -344,6 +352,12 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/rooms/x1/prizes", body: `{"title":"t","amount_usd_micros":1}`},
 		{method: http.MethodPost, path: "/api/rooms/x1/prizes/x1/award", body: `{"contribution_id":"x1"}`},
 		{method: http.MethodPost, path: "/api/room-invites/x1/join", body: `{"terms_version":1}`},
+		// B41.48 — owner hand-over, the takeover notice, its answer, the vote for a lead and forking the room.
+		{method: http.MethodPost, path: "/api/rooms/x1/owner", body: `{"workspace_id":"x1"}`},
+		{method: http.MethodPost, path: "/api/rooms/x1/takeover"},
+		{method: http.MethodDelete, path: "/api/rooms/x1/takeover"},
+		{method: http.MethodPut, path: "/api/rooms/x1/takeover/vote", body: `{"candidate_workspace_id":"x1"}`},
+		{method: http.MethodPost, path: "/api/rooms/x1/fork"},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},

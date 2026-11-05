@@ -62,4 +62,10 @@ describe('market-earnings-payout (B46.24)', () => {
     await expect(run).rejects.toThrow(CannotTest)
     await expect(run).rejects.toThrow(/by stripe, not on the money layer.*talyvor-lens B46\.25/)
   })
+
+  it("names the money layer's error when the run answers 500 having left the payout unpaid", async () => {
+    const verdict = await runAgainstStub('no-platform-usd-account')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^the payout run for the seller was refused: refused 500: .*last_error "economy: no such money account: no USD account to pay from/)
+  })
 }, 60_000)

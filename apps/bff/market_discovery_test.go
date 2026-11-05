@@ -25,3 +25,15 @@ func TestMarketDiscoverySearchRelaysOnlyLensFilters(t *testing.T) {
 		t.Fatalf("Lens received %q, want the collection col_1", f.got[1])
 	}
 }
+
+// B41.71 — an ask reaches Lens with the job, the volume and the currency, and nothing else.
+func TestMarketAskRelaysTheJob(t *testing.T) {
+	a, f := newFakeLensMarket(t)
+	doJSON(a, http.MethodGet, "/api/marketplace/ask?q=translate+500+product+descriptions+into+German&volume=500&currency=EUR&workspace_id=ws_other", "")
+	if len(f.got) != 1 {
+		t.Fatalf("Lens received %d requests, want 1: %q", len(f.got), f.got)
+	}
+	if want := "GET /v1/marketplace/ask?currency=EUR&q=translate+500+product+descriptions+into+German&volume=500 "; !strings.HasPrefix(f.got[0], want) {
+		t.Fatalf("Lens received %q, want %q", f.got[0], want)
+	}
+}

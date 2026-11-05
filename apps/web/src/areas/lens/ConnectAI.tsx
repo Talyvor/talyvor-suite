@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Card, CardHeader } from '@talyvor/ui'
 
@@ -127,27 +128,46 @@ function AssistantCard({ a, url }: { a: Assistant; url: string }) {
   )
 }
 
-function ConnectedList() {
+/** The assistants this person has connected, each revoked by its own button. Also drawn on Keys (B41.15). */
+export function ConnectedList() {
   const qc = useQueryClient()
+  const [cutName, setCutName] = useState('')
   const list = useQuery({
     queryKey: KEY,
     queryFn: async () =>
       readable<{ assistants: Connected[] }>(PATH, await getJSON<unknown>(PATH), { assistants: 'array' }).assistants,
   })
-  const cut = useMutation({ mutationFn: revoke, onSettled: () => qc.invalidateQueries({ queryKey: KEY }) })
+  const cut = useMutation({
+    mutationFn: revoke,
+    onSuccess: (_, id) => setCutName(list.data?.find((c) => c.id === id)?.name ?? 'That assistant'),
+    onSettled: () => qc.invalidateQueries({ queryKey: KEY }),
+  })
+  // B41.15 — the revocation stays said after its row is gone: the assistant's next request is refused.
+  const cutDone = cutName ? (
+    <p role="status" className="mb-3 max-w-2xl text-body text-ink">
+      {cutName} is disconnected. Its next request to Talyvor is refused as not connected.
+    </p>
+  ) : null
 
   if (list.isError)
     return (
       <p className="max-w-2xl text-body text-muted">
         {list.error instanceof ApiError && list.error.status === 404
           ? 'Assistants cannot sign in to Talyvor on this server, so none are connected.'
-          : 'Couldn’t read your connected assistants. This is a fault, not an empty list.'}
+          : 'Your connected assistants could not be read. This is a fault, not an empty list.'}
       </p>
     )
   if (list.isPending) return <p className="text-body text-muted">Reading your connected assistants…</p>
   if (!list.data.length)
-    return <p className="max-w-2xl text-body text-muted">No assistant is connected yet. Add one with the steps above.</p>
+    return (
+      <>
+        {cutDone}
+        <p className="max-w-2xl text-body text-muted">No assistant is connected yet. Add one from Settings › Connect your AI.</p>
+      </>
+    )
   return (
+    <>
+    {cutDone}
     <ul className="max-w-3xl divide-y divide-rule rounded-control border border-rule">
       {list.data.map((c) => (
         <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -176,6 +196,7 @@ function ConnectedList() {
         </li>
       ) : null}
     </ul>
+    </>
   )
 }
 

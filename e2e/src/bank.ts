@@ -2703,7 +2703,8 @@ export function chatSafeToSpend(seed: number): Scenario {
             if (lens.pending_approvals !== waiting || lens.safe_to_spend !== safe) {
               return fail(`${spender.name} holds ${lens.balance} µLXC with ${lens.scheduled} scheduled and ${lens.pending_approvals} waiting; Lens says ${lens.safe_to_spend} is safe to spend, not ${safe}`)
             }
-            if (!said.includes(`${shownLXC(safe)} safe to spend`)) return fail(`Chat answered "${said}", not Lens's ${shownLXC(safe)}`)
+            // The figure carries its fiat equivalent in brackets — "50 LXC ($5.00) safe to spend" — read without it.
+            if (!said.replace(/ \([^)]*\)/g, '').includes(`${shownLXC(safe)} safe to spend`)) return fail(`Chat answered "${said}", not Lens's ${shownLXC(safe)}`)
 
             await mkdir(env.outDir, { recursive: true })
             for (const [width, height] of [[1440, 900], [390, 844]] as const) {

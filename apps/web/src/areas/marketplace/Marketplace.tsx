@@ -25,6 +25,7 @@ import { parseShare } from "../rooms/roomsApi";
 import { CollectionPage, Discover } from "./Discover";
 import { EarningsListCard } from "./EarningsList";
 import { Licences } from "./Licences";
+import { Compare } from "./Compare";
 import { ListingPage } from "./ListingPage";
 import {
   type ParentChoice,
@@ -1298,6 +1299,7 @@ export function MarketplaceArea() {
       <Routes>
         <Route index element={<Discover />} />
         <Route path="listings/:id" element={<ListingPage />} />
+        <Route path="compare" element={<Compare />} />
         <Route path="collections/:id" element={<CollectionPage />} />
         <Route path="publish" element={<Publish />} />
         <Route path="selling" element={<Selling />} />

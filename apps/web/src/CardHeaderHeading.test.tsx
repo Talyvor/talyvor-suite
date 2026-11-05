@@ -153,9 +153,9 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // and the page says there is no payment to confirm — it draws no card.
   '/billing/success': 0,
   '/billing/cancel': 0,
-  '/keys': 2,
+  '/keys': 4,
   // B19.4 — Waiting for a person, Agents, and the open agent's Money, Rules, Pay, Key and Statement.
-  '/agents': 35, // B46.9 "Wallet"; B30.103 "Know Your Agent credential"; B19.10 added "Face ID and notifications"; B19.20 "Month-end forecast" and "Unusual spend"; B19.21 "Scheduled payments" and "Automatic top-up"; B19.22 "Statement for every agent"; B19.24 "Card"; B22.10 "Address", "Send or request", "Transfers", "Recurring transfer", "Offer a loan", "Requests", "Credit line" and "Loans"; B22.12 "Pay into escrow", "Pots", "Investing, simulated", "Cash out", "Escrow" and "Cash-outs"; B28.21 "Name and description" and "Archive"; B28.30 "Would it pass?"; B28.31 "Rules history"; B28.32 "Limit boost"
+  '/agents': 36, // B46.9 "Wallet"; B30.103 "Know Your Agent credential"; B19.10 added "Face ID and notifications"; B19.20 "Month-end forecast" and "Unusual spend"; B19.21 "Scheduled payments" and "Automatic top-up"; B19.22 "Statement for every agent"; B19.24 "Card"; B22.10 "Address", "Send or request", "Transfers", "Recurring transfer", "Offer a loan", "Requests", "Credit line" and "Loans"; B22.12 "Pay into escrow", "Pots", "Investing, simulated", "Cash out", "Escrow" and "Cash-outs"; B28.21 "Name and description" and "Archive"; B28.30 "Would it pass?"; B28.31 "Rules history"; B28.32 "Limit boost"; B28.62 "Limit alerts"
   // B20.3 — the catalog's Listings card. 1 → 0 at B29.11: the listings are cards of their own, a list
   // named Listings in the Browse region, and no card header.
   '/marketplace': 0,
@@ -183,9 +183,14 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B30.97 — the accounts, the new invoice form, and the invoices issued.
   '/money/invoices': 3,
   // B30.96 — payees, send, payments out, standing orders, mandates and bulk payouts.
+  '/money/spending': 10, // B53.8: this week, this month, budgets, unusual, payments, subscriptions and the latest notices; B53.16: safe to spend, off plan and the payments due, under the populated fixture
+  '/money/budgets': 1, // B41.39: the Budgets card, under the populated fixture's one budget
+  '/money/subscriptions': 1, // B41.20: the Subscriptions card, under the populated fixture's two found subscriptions
   '/money/pay': 9, // B40.35: the assistant's payee requests and its drafted mandate, under the populated fixture; B41.1: the bills inbox
   // B40.9 — one card: the prepared request.
   '/approve/:id': 1,
+  // B45.37 — one card: the plan the assistant prepared.
+  '/money/plans/:id': 1,
   '/features': 0,
   '/features/try/tare': 0,
   '/features/try/conversion': 0,

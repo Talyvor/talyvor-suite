@@ -934,6 +934,54 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payees", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPayeeCreateBody",
   },
+  // B41.39 — a budget by category, set on the Budgets screen (Lens B41.139).
+  {
+    route: "PUT /v1/money/budgets",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyBudgets(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_budgets_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/budgets", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSpendBudgetBody",
+  },
+  // B53.8 — a merchant's category, corrected on the Spending screen (Lens B53.3).
+  {
+    route: "PUT /v1/money/spending/merchants",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneySpendingMerchants(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_spending_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/spending/merchants", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSpendCategoryBody",
+  },
+  // B53.8 — the notice settings, set on the Spending screen (Lens B53.7).
+  {
+    route: "PUT /v1/money/notices/settings",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyNoticeSettings(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_notices_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/notices/settings", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSpendNoticeSettingsBody",
+  },
+  // B53.16 — the payday and income, set on the Spending screen's month plan (Lens B53.15).
+  {
+    route: "PUT /v1/money/plan/income",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPlanIncome(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_plan_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/plan/income", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSpendIncomeBody",
+  },
   {
     route: "POST /v1/money/payees/{id}/confirm",
     file: "apps/bff/money_pay.go",
@@ -954,6 +1002,18 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor:
       'r.Post("/v1/money/payees/{id}/called", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPayeeCalledBody",
+  },
+  // B41.12 — the owner changes a saved payee's bank details with a passkey (Lens B41.112).
+  {
+    route: "POST /v1/money/payees/{id}/details",
+    file: "apps/bff/money_pay.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPayeeDetails(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_payees_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/payees/{id}/details", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPayeeDetailsBody",
   },
   {
     route: "POST /v1/money/payments",
@@ -1181,8 +1241,24 @@ export const NON_LENS_ANON_SITES = [
     what: "keepDraft (B40.35) marshals assistantDraft, the waiting request, as the tool's answer to the assistant over /mcp — a RESPONSE, sent to no repository, so there is no key set to ask about and this site is exempt.",
   },
   {
+    file: "mcp_drafts.go",
+    what: "mcpPrepareRecurring (B45.37) marshals a BARE STRING — the person's email, as prepare_recurring_payments' owner_name — into one argument of the lensMCPBody envelope, whatever the assistant sent. No key set is asserted on this line, so there is nothing for the register to ask and this site is exempt.",
+  },
+  {
     file: "mcp.go",
     what: "mcpBillsDue (B40.36) re-marshals Lens's GET /v1/money/bills as bills_due's answer to the assistant over /mcp — the due bills less their printed bank details, with a total per currency. A RESPONSE, sent to no repository, so there is no key set to ask about and this site is exempt.",
+  },
+  {
+    file: "mcp.go",
+    what: "mcpCallTool (B45.41) marshals what a tool that answers itself returned (ask_taly's reply, transcribe's text) as its answer to the assistant over /mcp — a RESPONSE, sent to no repository, so there is no key set to ask about and this site is exempt.",
+  },
+  {
+    file: "mcp_taly.go",
+    what: "mcpApprovals (B45.41) re-marshals Lens's GET /v1/money/payment-requests?status=pending_approval as list_approvals's answer to the assistant over /mcp — a RESPONSE, sent to no repository, so this site is exempt.",
+  },
+  {
+    file: "mcp_taly.go",
+    what: "talyAsk (B45.41) marshals an Anthropic Messages request (model, max_tokens, system, messages, tools) for Lens's model proxy, POST /v1/proxy/anthropic/v1/messages, which relays it to the provider as it relays Chat's own (stream.go) — the provider's key set, not one Lens binds, so this site is exempt.",
   },
 ] as const;
 

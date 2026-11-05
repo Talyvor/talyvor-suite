@@ -41,6 +41,33 @@
 // then a payment of more than 1,000 to it is refused 409; POST …/{id}/called/challenge and …/{id}/called end it, only on an
 // assertion by one of the workspace's passkeys over that challenge. Its defect:
 //   cooling-off-skipped    — a payment of more than 1,000 to a payee saved moments ago is paid
+// B41.12 — and a change of a payee's bank details (Lens B41.112): POST …/{id}/details/challenge issues a challenge for exactly
+// the new details and …/{id}/details changes them only on an assertion by one of the workspace's passkeys over it; the payee
+// then reads held_until 24 hours on and a notice, and until then every payment to it is refused 409. Its defect:
+//   details-hold-skipped   — a payment to a payee whose bank details changed moments ago is paid
+// B28.62 — and budgets with their limit-approach alerts (Lens B53.4, B28.335): PUT and GET /v1/money/budgets, spent from the
+// payments out of the month (or the week from Monday, UTC) in the budget's currency and wallet; GET /v1/money/budgets/alerts
+// raises each 50, 80 and 100% reached, once a period, and lists them newest first. Its defect:
+//   limit-alert-twice      — an alert already raised in its period is raised again on every read
+// B41.39 — and a budget by category: PUT /v1/money/spending/merchants puts a merchant (here a payee's name) in a category, and a
+// budget with a category spends only its category's payments; a payment with no correction is uncategorised. Its defect:
+//   budget-category-ignored — a budget with a category spends every payment in its currency
+// B53.14 — and a week of card spending with the Coach (Lens B53.3–B53.6, B53.18): POST /v1/synthetic/workspaces/{ws}/money/cards/{id}/charge
+// charges a card at a merchant as the issuer does, with that merchant's MCC and country, approved only at the card's merchant, up to
+// its cap and once, the rest of the cap back in the agent's account; GET /v1/money/spending lists it in the MCC's category and a
+// budget spends it; GET /v1/money/spending/unusual finds a new merchant, a new country and a duplicate (same merchant and amount
+// within 10 minutes); GET /v1/money/coach words each finding, each budget at 50% or more and the week, by template; POST
+// /v1/money/coach/ask answers a loan, product or gambling question with the free-help pointers only. Its defect:
+//   coach-validator-bypassed — the Coach's duplicate sentence says a figure that is not its fact's, and stands as the model's
+// B53.8 — and payments out on those reads: GET /v1/money/spending lists them beside the card charges, each in its corrected category
+// (else transfers, as Lens reads a payment to a payee), with each wallet's totals by category. Its defect:
+//   spending-correction-ignored — a merchant's correction moves its budget but never the payment's category on /v1/money/spending
+// B53.16 — and the month plan (Lens B53.15): PUT /v1/money/plan/income sets the payday; GET /v1/money/plan runs from today (UTC) to
+// the day before it, with money now (the open accounts' test money), the bills due before then, the budgets left, the last seven
+// days' pace and safe to spend per day, and Lens's uncovered and pace-short findings with the Coach's sentence; GET /v1/money/notices
+// lists each finding once as a "plan" notice, as Lens's minute sweep raises it, and PUT /v1/money/notices/settings keeps the settings.
+// Its defect:
+//   plan-pace-ignored — the plan reads the money now against the payments due but never the pace, so a spree raises no finding
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -77,7 +104,28 @@ interface StubCard { id: string; line: number; merchant: string; cap_minor: numb
 interface StubCardBatch { id: string; workspace_id: string; agent_id: string; idempotency_key: string; purpose: string; currency: string; funding: string
   total_minor: number; status: string; cards: StubCard[]; approved_by?: string; approved_at?: string; created_at: string }
 
+/** A budget and the alert it raised (economy.SpendBudget, economy.SpendAlert). */
+interface StubBudget { id: string; agent_id: string; category: string; period: string; amount_minor: number; currency: string; timezone: string }
+/** A card charge the issuer made and Lens approved (economy card_charge, with B53.1's details). */
+interface StubCharge { entry_id: string; agent_id: string; merchant: string; mcc: string; country: string; amount_minor: number; currency: string; created_at: string }
+interface StubLimitAlert { id: string; kind: string; subject: string; agent_id?: string; category?: string; period: string; period_start: string; percent: number
+  spent_minor: number; limit_minor: number; currency: string; created_at: string }
+
 const CURRENCIES = ['GBP', 'EUR', 'USD']
+/** B53.14 — how the issuer reports a charge at each merchant (Lens issuerfake); any other is 5999 in GB. */
+const ISSUER: Record<string, { mcc: string; country: string }> = { tesco: { mcc: '5411', country: 'GB' }, 'pret a manger': { mcc: '5814', country: 'GB' },
+  'tfl travel': { mcc: '4111', country: 'GB' }, 'marriott lisbon': { mcc: '3509', country: 'PT' }, openai: { mcc: '5734', country: 'US' } }
+/** An MCC's category (Lens economy mccCategory), for the codes ISSUER uses. */
+const mccCategory = (mcc: string): string => ({ 5411: 'groceries', 5814: 'eating_out', 4111: 'transport', 5734: 'ai_software' } as Record<string, string>)[mcc] ??
+  (mcc >= '3000' && mcc <= '3999' ? 'travel' : 'shopping')
+/** Minor units as the Coach's facts carry them (Lens economy.FormatMinor): "24.00 GBP". */
+const formatMinor = (minor: number, currency: string): string => `${(minor / 100).toFixed(2)} ${currency}`
+const DECLINE = "I explain your own spending, but I can't recommend a product, credit, a loan, an investment or insurance, or tell you what to do " +
+  'about debt. These services give free, impartial help.'
+const HELP = { MoneyHelper: 'https://www.moneyhelper.org.uk', StepChange: 'https://www.stepchange.org', 'National Debtline': 'https://nationaldebtline.org',
+  GamCare: 'https://www.gamcare.org.uk' } as Record<string, string>
+// B41.12 — Lens's PayeeDetailsNotice, word for word.
+const DETAILS_NOTICE = 'Call them on a number you already know — not one from the message that asked for the change — to check the new details are theirs.'
 const HELD = 'screening: held — the name is close to one on a sanctions list, and waits for an operator to release it'
 /** Minor units as Lens prints them: "GBP 10.00". */
 const money = (minor: number, currency: string): string => `${currency} ${(minor / 100).toFixed(2)}`
@@ -99,6 +147,17 @@ export class PayeeDesk {
   private readonly bills = new Map<string, (Record<string, unknown> & { id: string; digest: string })[]>()
   /** B46.20 — the card batches each workspace's agents asked for. */
   private readonly cardBatches = new Map<string, StubCardBatch[]>()
+  /** B28.62 — each workspace's budgets and the alerts they raised. */
+  private readonly budgets = new Map<string, StubBudget[]>()
+  private readonly limitAlerts = new Map<string, StubLimitAlert[]>()
+  /** B41.39 — each workspace's merchant corrections, by the merchant's lower-cased name. */
+  private readonly merchantCategories = new Map<string, Map<string, string>>()
+  /** B53.14 — each workspace's card charges. */
+  private readonly charges = new Map<string, StubCharge[]>()
+  /** B53.16 — each workspace's payday and income, its notice settings and the plan notices raised, by subject. */
+  private readonly incomes = new Map<string, { payday: number; amount_minor: number; currency: string; payer: string; set_at: string }>()
+  private readonly noticeSettings = new Map<string, unknown>()
+  private readonly planNotices = new Map<string, Map<string, Record<string, unknown>>>()
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
   private readonly body: <T>(req: IncomingMessage) => Promise<T>
@@ -167,6 +226,9 @@ export class PayeeDesk {
     if (await this.payoutRoute(req, res, ws, path, list)) return true
     if (await this.billRoute(req, res, ws, path, list)) return true
     if (await this.cardRoute(req, res, ws, path, '')) return true
+    if (await this.budgetRoute(req, res, ws, path)) return true
+    if (await this.coachRoute(req, res, ws, path)) return true
+    if (await this.planRoute(req, res, ws, path)) return true
     if (path === '/v1/money/payees' && req.method === 'GET') return this.json(res, 200, { payees: list }), true
     if (path === '/v1/money/payees' && req.method === 'POST') {
       const b = await this.body<Record<string, string>>(req)
@@ -184,11 +246,12 @@ export class PayeeDesk {
       this.payees.set(ws, [...list, p])
       return this.json(res, 201, p), true
     }
-    const m = /^\/v1\/money\/payees\/([^/]+)\/(challenge|confirm|called\/challenge|called)$/.exec(path)
+    const m = /^\/v1\/money\/payees\/([^/]+)\/(challenge|confirm|called\/challenge|called|details\/challenge|details)$/.exec(path)
     if (m === null || req.method !== 'POST') return false
     const p = list.find((x) => x.id === m[1])
     if (p === undefined) return this.json(res, 404, { error: 'economy: no such payee' }), true
     if (m[2].startsWith('called')) return this.called(req, res, ws, p, m[2] === 'called/challenge'), true
+    if (m[2].startsWith('details')) return this.changeDetails(req, res, ws, p, m[2] === 'details/challenge'), true
     if (!p.needs_confirmation) return this.json(res, 409, { error: 'economy: this payee needs no confirmation' }), true
     if (m[2] === 'challenge') {
       const keys = this.passkeys(ws)
@@ -255,6 +318,284 @@ export class PayeeDesk {
     for (const c of batch.cards) Object.assign(c, { status: 'active', last4: randomBytes(2).toString('hex'), expires_at: expires })
     Object.assign(batch, { status: 'issued', approved_by: 'owner', approved_at: new Date().toISOString() })
     return this.json(res, 200, batch), true
+  }
+
+  /** B28.62 — budget `b` of `ws` and how far its period has gone. */
+  private budgetProgress(ws: string, b: StubBudget) {
+    const now = new Date()
+    const start = b.period === 'week'
+      ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - ((now.getUTCDay() + 6) % 7)))
+      : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    const end = b.period === 'week' ? new Date(start.getTime() + 7 * 86_400_000) : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1))
+    const accounts = this.accounts.get(ws) ?? []
+    const categories = this.merchantCategories.get(ws)
+    const inCategory = (p: Payment) => b.category === '' || this.broken('budget-category-ignored') ||
+      categories?.get(p.payee_name.trim().toLowerCase()) === b.category
+    const spent = (this.payments.get(ws) ?? []).filter((p) => p.status !== 'failed' && p.currency === b.currency && inCategory(p) &&
+      (b.agent_id === 'all' || (accounts.find((a) => a.id === p.account_id)?.agent_id ?? '') === b.agent_id) &&
+      Date.parse(p.created_at) >= start.getTime() && Date.parse(p.created_at) < end.getTime()).reduce((n, p) => n + p.amount_minor, 0) +
+      this.spending(ws).filter((c) => c.kind === 'card_charge' && c.currency === b.currency && (b.category === '' || c.category === b.category) && (b.agent_id === 'all' || c.agent_id === b.agent_id) &&
+        Date.parse(c.created_at) >= start.getTime() && Date.parse(c.created_at) < end.getTime()).reduce((n, c) => n + c.amount_minor, 0)
+    return { ...b, period_start: start.toISOString(), period_end: end.toISOString(), spent_minor: spent, left_minor: b.amount_minor - spent,
+      percent: Math.floor((spent * 100) / b.amount_minor) }
+  }
+
+  /** B28.62 — budgets (PUT and GET /v1/money/budgets) and the alerts they raise (GET /v1/money/budgets/alerts). */
+  private async budgetRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
+    const budgets = this.budgets.get(ws) ?? []
+    const progress = (b: StubBudget) => this.budgetProgress(ws, b)
+    if (path === '/v1/money/spending/merchants' && req.method === 'PUT') {
+      const m = await this.body<{ merchant?: string; category?: string }>(req)
+      if (!m.merchant?.trim()) return this.json(res, 400, { error: 'economy: spending: name the merchant (at most 200 characters)' }), true
+      const categories = this.merchantCategories.get(ws) ?? new Map<string, string>()
+      categories.set(m.merchant.trim().toLowerCase(), m.category ?? '')
+      this.merchantCategories.set(ws, categories)
+      return this.json(res, 200, { merchant: m.merchant, category: m.category ?? '' }), true
+    }
+    if (path === '/v1/money/budgets' && req.method === 'GET') return this.json(res, 200, { budgets: budgets.map(progress) }), true
+    if (path === '/v1/money/budgets' && req.method === 'PUT') {
+      const b = await this.body<Partial<StubBudget>>(req)
+      if (b.period !== 'week' && b.period !== 'month') return this.json(res, 400, { error: 'economy: spending: period must be week or month' }), true
+      if (!Number.isInteger(b.amount_minor) || (b.amount_minor ?? 0) <= 0) return this.json(res, 400, { error: 'economy: spending: amount_minor must be above zero' }), true
+      if (!/^[A-Z]{3}$/.test(b.currency ?? '')) return this.json(res, 400, { error: 'economy: spending: currency must be a currency code such as GBP' }), true
+      const key = { agent_id: b.agent_id ?? '', category: b.category ?? '', period: b.period, currency: b.currency ?? '' }
+      let got = budgets.find((x) => x.agent_id === key.agent_id && x.category === key.category && x.period === key.period && x.currency === key.currency)
+      if (got === undefined) {
+        got = { id: `bdg_${randomUUID()}`, ...key, amount_minor: 0, timezone: 'UTC' }
+        this.budgets.set(ws, [...budgets, got])
+      }
+      Object.assign(got, { amount_minor: b.amount_minor, timezone: b.timezone || 'UTC' })
+      return this.json(res, 200, progress(got)), true
+    }
+    // B41.20 — no payment here recurs three times in one run, so Lens finds no subscription; the view lists the rest.
+    if (path === '/v1/money/spending/subscriptions' && req.method === 'GET') return this.json(res, 200, { subscriptions: [] }), true
+    if (path === '/v1/money/budgets/alerts' && req.method === 'GET') {
+      const alerts = this.limitAlerts.get(ws) ?? []
+      for (const b of budgets.map(progress)) {
+        for (const pct of [50, 80, 100]) {
+          if (b.spent_minor * 100 < b.amount_minor * pct) break
+          const raised = alerts.some((a) => a.subject === b.id && a.period_start === b.period_start && a.percent === pct)
+          if (raised && !this.broken('limit-alert-twice')) continue
+          alerts.push({ id: `sal_${randomUUID()}`, kind: 'budget', subject: b.id, ...(b.agent_id ? { agent_id: b.agent_id } : {}), ...(b.category ? { category: b.category } : {}),
+            period: b.period, period_start: b.period_start, percent: pct, spent_minor: b.spent_minor, limit_minor: b.amount_minor, currency: b.currency,
+            created_at: new Date().toISOString() })
+        }
+      }
+      this.limitAlerts.set(ws, alerts)
+      return this.json(res, 200, { alerts: [...alerts].reverse() }), true
+    }
+    return false
+  }
+
+  /** B53.14 — the workspace's card charges and (B53.8) payments out, oldest first, each in its category: the person's correction, else
+   * its MCC's, else transfers for a payment to a payee. */
+  private spending(ws: string): (StubCharge & { kind: string; category: string; category_source: string })[] {
+    const corrected = this.merchantCategories.get(ws)
+    const accounts = this.accounts.get(ws) ?? []
+    const out = [...(this.payments.get(ws) ?? [])].reverse().filter((p) => p.status !== 'failed').map((p) => ({ entry_id: p.id, kind: 'payment_out',
+      agent_id: accounts.find((a) => a.id === p.account_id)?.agent_id ?? '', merchant: p.payee_name, mcc: '', country: '', amount_minor: p.amount_minor,
+      currency: p.currency, created_at: p.created_at }))
+    return [...(this.charges.get(ws) ?? []).map((c) => ({ ...c, kind: 'card_charge' })), ...out]
+      .sort((x, y) => Date.parse(x.created_at) - Date.parse(y.created_at))
+      .map((c) => {
+        const fixed = c.kind === 'payment_out' && this.broken('spending-correction-ignored') ? undefined : corrected?.get(c.merchant.trim().toLowerCase())
+        if (fixed) return { ...c, category: fixed, category_source: 'correction' }
+        return c.kind === 'card_charge' ? { ...c, category: mccCategory(c.mcc), category_source: 'card' } : { ...c, category: 'transfers', category_source: 'payee' }
+      })
+  }
+
+  /** B53.14 — the issuer's charge at `merchant` on card `cardID` of `ws`, decided as Lens's AuthorizeCardCharge decides it. */
+  chargeCard(ws: string, cardID: string, merchant: string, amount: number): [number, unknown] {
+    const batch = (this.cardBatches.get(ws) ?? []).find((b) => b.cards.some((c) => c.id === cardID))
+    const card = batch?.cards.find((c) => c.id === cardID)
+    if (batch === undefined || card === undefined) return [404, { error: 'economy: no such card' }]
+    if (!Number.isInteger(amount) || amount <= 0 || merchant.trim() === '') return [400, { error: 'body must be {"merchant", "amount_minor"} with amount_minor above zero' }]
+    const d = ISSUER[merchant.trim().toLowerCase()] ?? { mcc: '5999', country: 'GB' }
+    const reason = card.status === 'used' ? 'the card has been used: it pays once' : card.status !== 'active' ? 'the card is not active'
+      : card.merchant.toLowerCase() !== merchant.trim().toLowerCase() ? `the card pays only ${card.merchant}`
+        : amount > card.cap_minor ? "the charge is more than the card's cap" : ''
+    const authorization = `iauth_synthetic_${randomBytes(8).toString('hex')}`
+    if (reason !== '') return [200, { authorization_id: authorization, approved: false, reason, ...d, channel: 'online', wallet: 'none' }]
+    Object.assign(card, { status: 'used', spent_minor: amount })
+    const from = (this.accounts.get(ws) ?? []).find((a) => a.purpose === 'agent' && a.agent_id === batch.agent_id && a.currency === batch.currency)
+    if (from !== undefined) {
+      from.test_minor += card.cap_minor - amount
+      from.balance_minor += card.cap_minor - amount
+    }
+    this.charges.set(ws, [...(this.charges.get(ws) ?? []), { entry_id: `me_${randomUUID()}`, agent_id: batch.agent_id, merchant: card.merchant, ...d,
+      amount_minor: amount, currency: batch.currency, created_at: new Date().toISOString() }])
+    return [200, { authorization_id: authorization, approved: true, reason: '', ...d, channel: 'online', wallet: 'none' }]
+  }
+
+  /** B53.14 — spending, what was unusual, and the Coach (Lens B53.3, B53.5, B53.6). */
+  private async coachRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
+    const payments = this.spending(ws)
+    if (path === '/v1/money/spending' && req.method === 'GET') {
+      const totals = new Map<string, { agent_id?: string; currency: string; total_minor: number; by_category: Record<string, number>; by_tag: Record<string, number> }>()
+      for (const p of payments) {
+        const t = totals.get(`${p.agent_id}|${p.currency}`) ?? { ...(p.agent_id ? { agent_id: p.agent_id } : {}), currency: p.currency, total_minor: 0, by_category: {}, by_tag: {} }
+        t.total_minor += p.amount_minor
+        t.by_category[p.category] = (t.by_category[p.category] ?? 0) + p.amount_minor
+        totals.set(`${p.agent_id}|${p.currency}`, t)
+      }
+      return this.json(res, 200, { payments: [...payments].reverse().map((p) => ({ ...p, tags: [] })), totals: [...totals.values()] }), true
+    }
+    const findings = () => {
+      const out: Record<string, unknown>[] = []
+      const seen = new Map<string, StubCharge[]>()
+      for (const p of payments) {
+        const before = seen.get(p.agent_id) ?? []
+        const finding = (rule: string, more: object = {}) => out.push({ rule, entry_id: p.entry_id, agent_id: p.agent_id, merchant: p.merchant, mcc: p.mcc,
+          category: p.category, country: p.country, amount_minor: p.amount_minor, currency: p.currency, at: p.created_at, ...more })
+        if (before.length > 0 && !before.some((b) => b.merchant === p.merchant)) finding('new_merchant', { threshold_minor: 0 })
+        if (before.length > 0 && p.country !== '' && !before.some((b) => b.country === p.country)) finding('new_country')
+        const twin = [...before].reverse().find((b) => b.merchant === p.merchant && b.amount_minor === p.amount_minor && b.currency === p.currency)
+        if (twin !== undefined && Date.parse(p.created_at) - Date.parse(twin.created_at) <= 600_000) {
+          finding('duplicate', { duplicate_of: twin.entry_id, minutes_apart: Math.floor((Date.parse(p.created_at) - Date.parse(twin.created_at)) / 60_000) })
+        }
+        seen.set(p.agent_id, [...before, p])
+      }
+      return out
+    }
+    if (path === '/v1/money/spending/unusual' && req.method === 'GET') return this.json(res, 200, { findings: [...findings()].reverse() }), true
+    if (path === '/v1/money/coach/ask' && req.method === 'POST') {
+      const q = (await this.body<{ question?: string }>(req)).question ?? ''
+      const help = (names: string[]) => names.map((name) => ({ name, url: HELP[name], for: 'free help' }))
+      if (/\b(gambl\w*|bet|betting|casinos?)\b/i.test(q)) return this.json(res, 200, { text: `${DECLINE} You can also block gambling merchants on your card.`, help: help(['GamCare', 'MoneyHelper']) }), true
+      if (/\b(debts?|loans?|borrow\w*|credit|overdraft\w*)\b/i.test(q)) return this.json(res, 200, { text: DECLINE, help: help(['StepChange', 'National Debtline', 'MoneyHelper']) }), true
+      if (/\b(savings?|isas?|invest\w*|insurance|pensions?)\b/i.test(q)) return this.json(res, 200, { text: DECLINE, help: help(['MoneyHelper']) }), true
+      return this.json(res, 200, { text: 'I explain your own spending: what you paid, how it compares with your budgets, and anything unusual.', help: [] }), true
+    }
+    if (path !== '/v1/money/coach' || req.method !== 'GET') return false
+    const words = (c: string) => c.replaceAll('_', ' ')
+    const line = (fact: Record<string, unknown>, sentence: string, source = 'template') => ({ fact, sentence, source })
+    const lines = findings().map((f) => {
+      const amount = formatMinor(f.amount_minor as number, f.currency as string)
+      const fact = { kind: f.rule, agent: f.agent_id !== '', merchant: f.merchant, category: words(f.category as string), country: f.country, amount,
+        ...(f.rule === 'duplicate' ? { minutes_apart: f.minutes_apart } : {}) }
+      if (f.rule === 'new_country') return line(fact, `One of your agents paid ${amount} at ${f.merchant} in ${f.country}, a country not paid in before; if that wasn't you, you can freeze the card.`)
+      if (f.rule !== 'duplicate') return line(fact, `One of your agents paid ${f.merchant} for the first time: ${amount}; if you don't recognise it, check it before it happens again.`)
+      if (this.broken('coach-validator-bypassed')) {
+        return line(fact, `One of your agents paid ${f.merchant} ${amount} twice, ${formatMinor(2 * (f.amount_minor as number), f.currency as string)} in all; ask the merchant to refund one.`, 'model')
+      }
+      return line(fact, `One of your agents paid ${f.merchant} ${amount} twice, ${f.minutes_apart} minutes apart; if you meant to pay once, ask the merchant to refund one.`)
+    })
+    const now = new Date()
+    for (const b of (this.budgets.get(ws) ?? [])) {
+      const spent = payments.filter((p) => p.currency === b.currency && (b.category === '' || p.category === b.category) && (b.agent_id === 'all' || p.agent_id === b.agent_id))
+        .reduce((n, p) => n + p.amount_minor, 0)
+      const percent = Math.floor((spent * 100) / b.amount_minor)
+      if (percent < 50) continue
+      const days = Math.ceil((Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1) - now.getTime()) / 86_400_000)
+      const left = formatMinor(b.amount_minor - spent, b.currency)
+      lines.push(line({ kind: 'budget', agent: b.agent_id !== '' && b.agent_id !== 'all', category: words(b.category), period: b.period, budget: formatMinor(b.amount_minor, b.currency),
+        left, percent, days_left: days }, `One of your agents is at ${percent}% of its ${words(b.category)} budget with ${days} days left; ${left} is left to spend this month.`))
+    }
+    const total = payments.reduce((n, p) => n + p.amount_minor, 0)
+    const review = total === 0 ? [] : [line({ kind: 'week', amount: formatMinor(total, 'GBP') }, `This week ${formatMinor(total, 'GBP')} went out; look over the biggest category first.`)]
+    return this.json(res, 200, { lines, review }), true
+  }
+
+  /** B53.16 — the month plan (Lens B53.15) and the notices it raises. */
+  private async planRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
+    if (path === '/v1/money/plan/income' && req.method === 'PUT') {
+      const b = await this.body<{ payday?: number; amount_minor?: number; currency?: string; payer?: string }>(req)
+      if (!Number.isInteger(b.payday) || (b.payday ?? 0) < 1 || (b.payday ?? 0) > 31) return this.json(res, 400, { error: 'economy: spending: payday must be a day of the month, 1 to 31' }), true
+      if (!Number.isInteger(b.amount_minor) || (b.amount_minor ?? 0) <= 0) return this.json(res, 400, { error: 'economy: spending: amount_minor must be above zero' }), true
+      if (!/^[A-Z]{3}$/.test(b.currency ?? '')) return this.json(res, 400, { error: 'economy: spending: currency must be a currency code such as GBP' }), true
+      this.incomes.set(ws, { payday: b.payday ?? 0, amount_minor: b.amount_minor ?? 0, currency: b.currency ?? '', payer: (b.payer ?? '').trim(), set_at: new Date().toISOString() })
+      return this.json(res, 200, this.plan(ws)), true
+    }
+    if (path === '/v1/money/plan' && req.method === 'GET') return this.json(res, 200, this.plan(ws)), true
+    if (path === '/v1/money/notices/settings' && req.method === 'PUT') {
+      const b = await this.body<Record<string, unknown>>(req)
+      this.noticeSettings.set(ws, b)
+      return this.json(res, 200, b), true
+    }
+    if (path !== '/v1/money/notices' || req.method !== 'GET') return false
+    const raised = this.planNotices.get(ws) ?? new Map<string, Record<string, unknown>>()
+    for (const f of this.plan(ws).findings) {
+      const subject = `${f.kind}/${f.payment.source}:${f.payment.id}/${f.payment.due}`
+      if (!raised.has(subject)) {
+        raised.set(subject, { id: `ntc_${randomUUID()}`, kind: 'plan', title: 'Month plan', body: f.sentence, urgent: f.urgent, data: { finding: f }, status: 'sent',
+          created_at: new Date().toISOString() })
+      }
+    }
+    this.planNotices.set(ws, raised)
+    const settings = this.noticeSettings.get(ws) ?? { timezone: 'UTC', quiet_from: '', quiet_until: '', off: [] }
+    return this.json(res, 200, { settings, notices: [...raised.values()].reverse() }), true
+  }
+
+  /** B53.16 — `ws`'s month plan today, worked out as Lens's SpendPlan works it out, in UTC. */
+  private plan(ws: string) {
+    const date = (d: Date) => d.toISOString().slice(0, 10)
+    const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' })
+    const between = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+    const now = new Date()
+    const today = date(now)
+    const inc = this.incomes.get(ws)
+    const accounts = (this.accounts.get(ws) ?? []).filter((a) => a.status === 'open' && (a.purpose === 'company' || a.purpose === 'agent'))
+    const cur = inc?.currency ?? accounts[0]?.currency ?? 'GBP'
+    const paydayIn = (y: number, m: number, d: number) => new Date(Date.UTC(y, m, Math.min(d, new Date(Date.UTC(y, m + 1, 0)).getUTCDate())))
+    let until = date(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)))
+    let next: string | undefined
+    if (inc !== undefined) {
+      let n = paydayIn(now.getUTCFullYear(), now.getUTCMonth(), inc.payday)
+      if (date(n) <= today) n = paydayIn(now.getUTCFullYear(), now.getUTCMonth() + 1, inc.payday)
+      next = date(n)
+      until = date(new Date(n.getTime() - 86_400_000))
+    }
+    const moneyNow = accounts.filter((a) => a.currency === cur).reduce((n, a) => n + a.test_minor, 0)
+    const payments = (this.bills.get(ws) ?? []).filter((b) => b.status === 'due' && b.currency === cur && String(b.due_date) <= until)
+      .map((b) => ({ source: 'bill', id: b.id, payee: String(b.supplier), amount_minor: Number(b.amount_minor), currency: cur,
+        due: String(b.due_date) < today ? today : String(b.due_date), covered: false }))
+      .sort((a, b) => a.due.localeCompare(b.due))
+    let all = 0
+    let overall = 0
+    let categories = 0
+    for (const b of (this.budgets.get(ws) ?? []).filter((x) => x.currency === cur).map((x) => this.budgetProgress(ws, x))) {
+      const left = Math.max(b.left_minor, 0)
+      if (b.category === '' && b.agent_id === 'all') all = Math.max(all, left)
+      else if (b.category === '') overall += left
+      else categories += left
+    }
+    const budgetsLeft = all > 0 ? all : overall > 0 ? overall : categories
+    const weekFrom = Date.parse(`${today}T00:00:00Z`) - 6 * 86_400_000
+    const pace = Math.floor(this.spending(ws).filter((p) => p.currency === cur && p.category !== 'bills' && p.category !== 'subscriptions' &&
+      Date.parse(p.created_at) >= weekFrom).reduce((n, p) => n + p.amount_minor, 0) / 7)
+    const findings: { kind: string; urgent: boolean; payment: (typeof payments)[number]; short_minor: number; pace_per_day_minor?: number; keep_to_per_day_minor?: number; sentence: string }[] = []
+    let upcoming = 0
+    let uncovered = false
+    let paceShort = false
+    payments.forEach((p, i) => {
+      upcoming += p.amount_minor
+      const dayTotal = upcoming + payments.slice(i + 1).filter((q) => q.due === p.due).reduce((n, q) => n + q.amount_minor, 0)
+      p.covered = moneyNow - upcoming >= 0
+      const days = between(today, p.due)
+      const shown = { ...p }
+      const amount = formatMinor(p.amount_minor, cur)
+      if (!uncovered && !p.covered) {
+        uncovered = true
+        const short = Math.min(upcoming - moneyNow, p.amount_minor)
+        findings.push({ kind: 'plan_uncovered', urgent: true, payment: shown, short_minor: short, sentence: `The ${amount} payment to ${p.payee} on ${day(p.due)} is short by ` +
+          `${formatMinor(short, cur)} with the money you have now; add money or hold back other spending before then.` })
+      }
+      const after = moneyNow - dayTotal - (this.broken('plan-pace-ignored') ? 0 : pace) * days
+      if (!uncovered && !paceShort && after < 0) {
+        paceShort = true
+        const short = Math.min(-after, p.amount_minor)
+        const keep = Math.floor(Math.max(moneyNow - dayTotal, 0) / Math.max(days, 1))
+        findings.push({ kind: 'plan_pace_short', urgent: true, payment: shown, short_minor: short, pace_per_day_minor: pace, keep_to_per_day_minor: keep,
+          sentence: `At this pace, ${formatMinor(pace, cur)} a day, the ${amount} payment to ${p.payee} on ${day(p.due)} is short by ${formatMinor(short, cur)}; ` +
+            `keeping to ${formatMinor(keep, cur)} a day until then covers it.` })
+      }
+    })
+    const daysLeft = between(today, until) + 1
+    const available = moneyNow - upcoming - budgetsLeft
+    return { currency: cur, timezone: 'UTC', today, until, ...(next ? { next_income: next } : {}), days: daysLeft,
+      income: inc ? { payday: inc.payday, amount_minor: inc.amount_minor, currency: inc.currency, ...(inc.payer ? { payer: inc.payer } : {}), confirmed: true, set_at: inc.set_at } : null,
+      money_now_minor: moneyNow, upcoming_minor: upcoming, budgets_left_minor: budgetsLeft, available_minor: available,
+      safe_per_day_minor: Math.floor(Math.max(available, 0) / daysLeft), pace_per_day_minor: pace, payments, findings }
   }
 
   /** B30.109 — the accounts and the payments out, each refusal as Lens words it; only compliance-live-paid moves money. */
@@ -333,6 +674,9 @@ export class PayeeDesk {
       return { status: 409, error: `economy: a payment of more than 1,000 to a payee saved less than 24 hours ago waits until ${payee.cooling_off_until}, ` +
         `or until the owner confirms with a passkey that they called ${payee.name} on a number they already had` }
     }
+    if (typeof payee.held_until === 'string' && Date.parse(payee.held_until) > Date.now() && !this.broken('details-hold-skipped')) {
+      return { status: 409, error: `economy: this payee's bank details changed less than 24 hours ago, so payments to it are held until ${payee.held_until}. ${DETAILS_NOTICE}` }
+    }
     const holds = funding === 'live' ? account.live_minor : account.test_minor
     if (holds < amount && !(funding === 'live' && this.broken('compliance-live-paid'))) {
       return { status: 409, error: `economy: insufficient funds: the account holds ${money(holds, currency)} of ${funding} money, and this payment is ${money(amount, currency)}` }
@@ -401,7 +745,7 @@ export class PayeeDesk {
     const lines = text ? doc.split(/\r?\n/) : [...doc.matchAll(/\((.*?)\) Tj/g)].map((m) => m[1].replace(/\\(.)/g, '$1'))
     const after = (label: RegExp) => lines.map((l) => label.exec(l)?.[1]?.trim()).find((v) => v !== undefined) ?? ''
     const supplier = (lines[0] ?? '').replace(/^From:\s*/i, '')
-    const number = after(/^Invoice number:\s*(\S+)$/i)
+    const number = after(/^Invoice number:\s*(\S+)$/i).toUpperCase() // as Lens's money_bills.go reads it
     const had = list.find((b) => b.digest === digest || (number !== '' && b.invoice_number === number && String(b.supplier).toLowerCase() === supplier.toLowerCase()))
     if (had !== undefined && !this.broken('bill-duplicated')) return this.json(res, 200, shown(had)), true
     const amount = /^(GBP|EUR|USD) ([\d,]+)\.(\d{2})$/.exec(after(/^Total due:\s*(.+)$/i))
@@ -514,6 +858,32 @@ export class PayeeDesk {
     this.challenges.delete(key)
     delete p.cooling_off_until
     Object.assign(p, { called_at: new Date().toISOString(), called_by: assertion?.credential_id ?? '' })
+    return this.json(res, 200, p)
+  }
+
+  /** B41.12 — payee `p`'s bank details changed to the body's, signed over a challenge for exactly those: every payment held 24 hours. */
+  private async changeDetails(req: IncomingMessage, res: ServerResponse, ws: string, p: Payee, challenge: boolean): Promise<void> {
+    const b = await this.body<Record<string, unknown>>(req)
+    const fields = ['sort_code', 'account_number', 'iban', 'bic', 'routing_number', 'network', 'address'] as const
+    const next: Record<string, string> = { country: typeof b.country === 'string' && b.country !== '' ? b.country : p.country }
+    for (const f of fields) next[f] = typeof b[f] === 'string' ? b[f] : ''
+    const account = (x: Record<string, unknown>) => ['country', ...fields].map((f) => String(x[f] ?? '')).join('|')
+    if (next.iban === '' && next.account_number === '' && next.address === '') return this.json(res, 400, { error: 'economy: invalid payee: a payee has one set of account details' })
+    if (account(next) === account(p)) return this.json(res, 400, { error: 'economy: invalid payee: these are the payee\'s details already' })
+    const key = `details:${p.id}:${account(next)}`
+    if (challenge) {
+      const keys = this.passkeys(ws)
+      if (keys.length === 0) return this.json(res, 409, { error: 'economy: a payee is confirmed with one of the workspace\'s passkeys, signing its challenge — register one first' })
+      const c = randomBytes(32).toString('base64url')
+      this.challenges.set(key, c)
+      return this.json(res, 200, { challenge: c, allow_credentials: keys.map((k) => k.credential_id), user_verification: 'required', notice: DETAILS_NOTICE })
+    }
+    const refused = this.refused(ws, key, b.assertion as Assertion | undefined)
+    if (refused !== undefined) return this.json(res, 403, { error: refused })
+    this.challenges.delete(key)
+    const now = Date.now()
+    Object.assign(p, next, { check: 'exact_match', checked_by: 'test', checked_at: new Date(now).toISOString(), needs_confirmation: false,
+      details_changed_at: new Date(now).toISOString(), held_until: new Date(now + 86_400_000).toISOString(), notice: DETAILS_NOTICE })
     return this.json(res, 200, p)
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { type Collection, type Hit, collectionFaults, collectionPageFaults, featuredFaults, screenFaults, searchFaults, trendingFaults } from '../src/discovery.ts'
+import { type Collection, type Hit, askScreenFaults,
+  compareScreenFaults, collectionFaults, collectionPageFaults, featuredFaults, screenFaults, searchFaults, trendingFaults } from '../src/discovery.ts'
 
 const mine = { cheap: 'lst_cheap', dear: 'lst_dear', other: 'lst_other' }
 const hit = (id: string, capabilities: string[], price: number | null): Hit => ({ id, title: id, capabilities, price_per_use_usd_micros: price, distinct_buyers_7d: 0, trending_score: 0 })
@@ -36,5 +37,37 @@ describe('B32.90 market-discovery', () => {
     expect(collectionPageFaults(['b', 'a'], ['b', 'a'])).toEqual([])
     expect(collectionPageFaults(['a', 'b'], ['b', 'a'])).toEqual(['the collection\'s page shows ["a","b"], not ["b","a"] in that order'])
     expect(collectionPageFaults(['b', 'a', 'c'], ['b', 'a'])).toEqual(['the collection\'s page shows ["b","a","c"], not ["b","a"] in that order'])
+  })
+
+  it('B41.71 market-ask-screen: passes up to three listings shown with Lens\'s estimates, and fails otherwise', () => {
+    const lens = [
+      { id: 'a', estimate: { total_usd_micros: 1_000_000 } },
+      { id: 'b', estimate: { total_usd_micros: 9_000_000, display: { currency: 'EUR', amount_minor: 818 } } },
+      { id: 'c', estimate: null },
+    ]
+    expect(askScreenFaults([['a', '$1.00'], ['b', '€8.18'], ['c', 'Enterprise licence only, priced by seat']], lens)).toEqual([])
+    expect(askScreenFaults([], lens)).toEqual(['Discover asked "translate 500 product descriptions into German" shows no listing'])
+    expect(askScreenFaults([['a', '$0.002'], ['b', '€8.18'], ['c', 'Enterprise licence only, priced by seat']], lens)).toEqual([
+      'Discover shows [["a","$0.002"],["b","€8.18"],["c","Enterprise licence only, priced by seat"]], Lens answered [["a","$1.00"],["b","€8.18"],["c","Enterprise licence only, priced by seat"]]'])
+  })
+
+  it('B41.72 market-compare-screen: passes a table that shows each listing\'s values from Lens\'s reads, and fails otherwise', () => {
+    const lens = [
+      { offers: [{ kind: 'per_use', licence: 'commercial', price_usd_micros: 10_000 }], trust: { reviews: { count: 2, average: 4 }, eval: null, performance: { success_rate: 0.95 } } },
+      { offers: [{ kind: 'per_use', licence: 'commercial', price_usd_micros: 20_000 }], trust: { reviews: { count: 0, average: 0 }, eval: { passed: 9, cases: 10 }, performance: { success_rate: null } } },
+    ]
+    const rows = {
+      'Price for 100 uses': ['$1.00 100 uses at its per-use price', '$2.00 100 uses at its per-use price'],
+      Rating: ['4.00 of 5 from 2 reviews', 'No reviews yet'],
+      'Success rate': ['95% 5 of 100 uses failed in the last 30 days', 'No uses in the last 30 days'],
+      Licence: ['Commercial', 'Commercial'],
+      Evaluation: ['Not evaluated', '9 of 10 cases passed'],
+    }
+    expect(compareScreenFaults(rows, lens, 100)).toEqual([])
+    expect(compareScreenFaults({ ...rows, Evaluation: ['Not evaluated', 'Not evaluated'] }, lens, 100)).toEqual([
+      'listing 2\'s Evaluation reads "Not evaluated", Lens\'s records say "9 of 10 cases passed"'])
+    expect(compareScreenFaults({ ...rows, 'Price for 100 uses': ['$2.00', '$1.00'] }, lens, 100)).toEqual([
+      'listing 1\'s Price for 100 uses reads "$2.00", Lens\'s records say "$1.00"',
+      'listing 2\'s Price for 100 uses reads "$1.00", Lens\'s records say "$2.00"'])
   })
 })

@@ -88,6 +88,14 @@ function mockBff() {
       Object.assign(p, { status: 'awarded', contribution_id: body.contribution_id, winner_workspace_id: OTHER, awarded_at: '2026-10-07T11:00:00Z' })
       return json({ prize: p, licence: { use_id: 'u_1' } })
     }
+    if (url === '/api/rooms/room_1/owner' && method === 'POST') {
+      // B41.48: Lens makes the member the owner, the old owner an editor, and clears every member's may_spend.
+      for (const m of members) {
+        m.may_spend = false
+        m.role = m.workspace_id === body.workspace_id ? 'owner' : m.role === 'owner' ? 'editor' : m.role
+      }
+      return json({})
+    }
     if (url === '/api/room-invites/rinvtok_abc') {
       return json({
         room: { id: 'room_1', owner_workspace_id: ME, title: 'Agent pricing', topic: 'research', description: '', visibility: 'private',
@@ -128,6 +136,19 @@ describe('room settings', () => {
     expect(await within(invites).findByText('Revoked')).toBeTruthy()
     expect(within(invites).queryByRole('button', { name: /^Revoke invite/ })).toBeNull()
     expect(bff.sent.find((s) => s.method === 'DELETE')?.url).toBe('/api/rooms/room_1/invites/rinv_1')
+  })
+
+  it('hands the room to another member, and the owner is then its editor', async () => {
+    const bff = mockBff()
+    window.history.pushState({}, '', '/rooms/room_1/settings')
+    render(<App />)
+
+    fireEvent.change(await screen.findByLabelText('New owner'), { target: { value: OTHER } })
+    fireEvent.click(screen.getByRole('button', { name: 'Hand over' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, hand it over' }))
+    expect(await screen.findByText(/you are its editor/)).toBeTruthy()
+    expect(bff.sent).toEqual([{ method: 'POST', url: '/api/rooms/room_1/owner', body: { workspace_id: OTHER } }])
+    expect(screen.queryByLabelText('New owner')).toBeNull()
   })
 
   it('sets the room’s monthly budget through the rules editor, showing Lens’s refusal above the plan’s maximum', async () => {

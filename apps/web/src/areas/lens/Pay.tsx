@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Input, Pill, focusRing, type PillStatus } from '@talyvor/ui'
+import { Button, CardHeader, Input, Pill, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { LinkedItem } from '../../components/LinkedItem'
@@ -9,7 +9,7 @@ import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
 import { APPROVALS_KEY, BOOK_KEY, PASSKEYS_KEY } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
-import { assertOver, signApproval, signPayee, signPayeeCalled } from './passkeys'
+import { assertOver, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
 import {
   type AgentApproval,
   type AssistantRequest,
@@ -19,6 +19,7 @@ import {
   type Mandate,
   type MandateTerms,
   type OutsidePayee,
+  type PayeeDetails,
   type OutsidePayment,
   type PayeeRequest,
   type PayoutBatch,
@@ -81,6 +82,7 @@ export function PayScreen() {
   const asked = useQuery({ queryKey: ASSISTANT_REQUESTS_KEY, queryFn: agentBankApi.assistantRequests })
   const askedPayees = (asked.data?.requests ?? []).filter((r) => r.kind === 'payee')
   const askedMandates = (asked.data?.requests ?? []).filter((r) => r.kind === 'mandate')
+  const askedPlans = (asked.data?.requests ?? []).filter((r) => r.kind === 'plan' && r.status !== 'signed')
   const open = (accounts.data?.accounts ?? []).filter((a) => a.status === 'open')
   const agentAccounts = open.filter((a) => a.purpose === 'agent')
   const saved = payees.data?.payees ?? []
@@ -105,6 +107,15 @@ export function PayScreen() {
             <span className="font-figure">{askedMandates.length}</span> {askedMandates.length === 1 ? 'mandate' : 'mandates'} to sign, below.
           </p>
         ) : null}
+        {askedPlans.map((r) => (
+          <p key={r.id} className="text-body text-ink">
+            {r.assistant} prepared recurring payments for you to sign:{' '}
+            <Link className={inlineLink} to={`/money/plans/${r.id}`}>
+              open the plan
+            </Link>
+            .
+          </p>
+        ))}
         {payments.isSuccess ? (
           <p className="text-body text-ink" data-testid="pay-count">
             <span className="font-figure">{sent.length}</span> {sent.length === 1 ? 'payment' : 'payments'} out,{' '}
@@ -220,6 +231,7 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
                       <Pill status={c.pill}>{c.text}</Pill>
                       {p.needs_confirmation ? <Pill status="held">Needs confirmation</Pill> : null}
                       {p.cooling_off_until ? <Pill status="held">New payee</Pill> : null}
+                      {p.held_until ? <Pill status="held">Details changed</Pill> : null}
                     </span>
                   </div>
                   <p className="text-caption text-muted">
@@ -248,6 +260,13 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
                       </div>
                     </div>
                   ) : null}
+                  {p.held_until ? (
+                    <p className="text-caption text-ink" data-testid={`details-held-${p.id}`}>
+                      {p.name}’s bank details changed, so every payment to them is held until{' '}
+                      <span className="font-figure">{formatWhen(p.held_until)}</span>. {p.notice}
+                    </p>
+                  ) : null}
+                  <ChangeDetails payee={p} onChanged={refresh} />
                 </LinkedItem>
               )
             })}
@@ -307,6 +326,88 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
         </form>
       </div>
     </Card>
+  )
+}
+
+// B41.12: the notice shown before a change is signed — Lens's PayeeDetailsNotice, the one it answers the change with.
+const CHANGE_NOTICE = 'Call them on a number you already know — not one from the message that asked for the change — to check the new details are theirs.'
+
+/** B41.12 — changing a saved payee's bank details (Lens B41.112): signed with a passkey over exactly the new details, the
+ *  name checked afresh at the new account's bank, and every payment to the payee held for 24 hours after. */
+function ChangeDetails({ payee, onChanged }: { payee: OutsidePayee; onChanged: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [kind, setKind] = useState<'uk' | 'iban' | 'us'>(payee.iban ? 'iban' : payee.routing_number ? 'us' : 'uk')
+  const [form, setForm] = useState({ sort_code: '', account_number: '', iban: '', bic: '', routing_number: '' })
+  const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
+  const details = (): PayeeDetails => {
+    const d: PayeeDetails = { country: payee.country }
+    if (kind === 'iban') return { ...d, iban: form.iban.replace(/\s/g, '').toUpperCase(), bic: form.bic.trim().toUpperCase() }
+    if (kind === 'us') return { ...d, routing_number: form.routing_number.trim(), account_number: form.account_number.trim() }
+    return { ...d, sort_code: form.sort_code.replace(/\D/g, ''), account_number: form.account_number.trim() }
+  }
+  const change = useMutation({
+    mutationFn: async (d: PayeeDetails) => agentBankApi.changePayeeDetails(payee.id, d, await signPayeeDetails(payee.id, d)),
+    onSuccess: () => {
+      setOpen(false)
+      setForm({ sort_code: '', account_number: '', iban: '', bic: '', routing_number: '' })
+      onChanged()
+    },
+  })
+  const complete = kind === 'iban' ? form.iban.trim() !== '' : kind === 'us' ? form.routing_number.trim() !== '' && form.account_number.trim() !== '' : form.sort_code.trim() !== '' && form.account_number.trim() !== ''
+  if (!open) {
+    return (
+      <div>
+        <Button type="button" onClick={() => setOpen(true)}>
+          Change bank details
+        </Button>
+      </div>
+    )
+  }
+  return (
+    <form
+      className="flex flex-col gap-2"
+      data-testid={`change-details-${payee.id}`}
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (complete && !change.isPending) change.mutate(details())
+      }}
+    >
+      <p className="text-caption text-ink">
+        Changed bank details are the most common way invoices are stolen. {CHANGE_NOTICE} The change needs your passkey, and every payment to{' '}
+        {payee.name} is held for <span className="font-figure">24</span> hours after it.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <select aria-label="New account details" className={select} value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+          <option value="uk">Sort code and account number</option>
+          <option value="iban">IBAN</option>
+          <option value="us">Routing and account number</option>
+        </select>
+        {kind === 'iban' ? (
+          <>
+            <Input aria-label="New IBAN" placeholder="IBAN" className="min-w-56 flex-1 font-figure" value={form.iban} onChange={(e) => set({ iban: e.target.value })} />
+            <Input aria-label="New BIC" placeholder="BIC (optional)" className="w-36 font-figure" value={form.bic} onChange={(e) => set({ bic: e.target.value })} />
+          </>
+        ) : (
+          <>
+            {kind === 'us' ? (
+              <Input aria-label="New routing number" placeholder="Routing number" className="w-36 font-figure" value={form.routing_number} onChange={(e) => set({ routing_number: e.target.value })} />
+            ) : (
+              <Input aria-label="New sort code" placeholder="Sort code" className="w-28 font-figure" value={form.sort_code} onChange={(e) => set({ sort_code: e.target.value })} />
+            )}
+            <Input aria-label="New account number" placeholder="Account number" className="w-40 font-figure" value={form.account_number} onChange={(e) => set({ account_number: e.target.value })} />
+          </>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={!complete || change.isPending}>
+          {change.isPending ? 'Confirming…' : 'Change with a passkey'}
+        </Button>
+        <Button type="button" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+      {change.isError ? <Note ok={false}>{refusalText(change.error)}</Note> : null}
+    </form>
   )
 }
 

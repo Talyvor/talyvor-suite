@@ -179,6 +179,37 @@ export interface DiscoverQuery {
   page: number;
 }
 
+// ── B41.71: ask the marketplace (Lens B41.171) ──────────────────────────────────────────────────────
+
+/** Lens market.AskEstimate — what a listing would cost for the volume, on its cheapest commercial offer. */
+export interface AskEstimate {
+  volume: number;
+  offer_id?: string;
+  offer_kind: "per_use" | "buy" | "rent" | "subscribe" | "free";
+  /** how many rentals or subscriptions the volume takes */
+  licences?: number;
+  total_usd_micros: number;
+  /** the total in the buyer's currency */
+  display?: PriceDisplay;
+  /** how the total is worked out, in Lens's words */
+  basis: string;
+}
+
+/** Lens market.AskPick — one listing an answer offers; estimate is null when only an enterprise offer sells it. */
+export interface AskPick extends DiscoverHit {
+  estimate: AskEstimate | null;
+  why: string[] | null;
+}
+
+/** Lens market.AskAnswer — up to three listings for a job described in words. */
+export interface AskAnswer {
+  q: string;
+  volume: number;
+  volume_from: "asked" | "words" | "default";
+  picks: AskPick[] | null;
+  note: string;
+}
+
 /** Lens market.Collection — a workspace's list of listings; `listings` only on a read of it alone, in its order. */
 export interface Collection {
   id: string;
@@ -346,6 +377,16 @@ export interface ListingTrust {
   originals: Ancestor[] | null;
   /** how many listings build on it, at any depth */
   remixes: number;
+  /** B41.173 — its last 30 days of uses; absent from a Lens before it */
+  performance?: {
+    days: number;
+    uses: number;
+    failed: number;
+    /** answered ÷ uses, 0 to 1; null with no uses */
+    success_rate: number | null;
+    median_latency_ms: number | null;
+    cost_per_use_usd_micros: number | null;
+  };
 }
 
 /** Lens market.Earning — one cleared use's share: the seller's, or an original's royalty from a remix's sale. */
@@ -781,6 +822,11 @@ export const marketApi = {
       total: "number",
       has_more: "boolean",
     });
+  },
+  /** B41.71 — a job in words; Lens takes the volume from the words when none is given. */
+  ask: async (q: string) => {
+    const path = `/api/marketplace/ask?${new URLSearchParams({ q })}`;
+    return readable<AskAnswer>(path, await read<unknown>(path), { picks: "list", volume: "number" });
   },
   capabilities: async () =>
     (

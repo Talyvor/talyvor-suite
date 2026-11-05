@@ -90,9 +90,10 @@
 // seller with earnings and no tax details and pays one whose details are complete. Its defect, beside stub-tax.ts's two:
 //   payout-hold-ignored — the payout run pays a seller who gave no tax details
 //
-// B46.24 pays a seller who saved payout details on the money layer instead (stub-earnings.ts payMarket). Its two:
+// B46.24 pays a seller who saved payout details on the money layer instead (stub-earnings.ts payMarket). Its three:
 //   payout-run-ignores-money — the payout run pays such a seller by Stripe, as Lens's synthetic run did before talyvor-lens B46.25
 //   royalty-paid-as-sale     — a lineage royalty is paid out as a sale
+//   no-platform-usd-account  — Talyvor's own workspace has no USD account to pay from: the run answers 500, the payout left unpaid with its error
 //
 // B28.426 adds a Chat question asked through a listing (X-Talyvor-Listing, talyvor-lens B28.186): one use of it, charged as a
 // marketplace use, the answer saying how (X-Talyvor-Listing-Charge). Its defect:
@@ -158,6 +159,7 @@ import { PaymentRequestDesk } from './stub-payment-requests.ts'
 import { TermsDesk } from './stub-terms.ts'
 import { type KYAFacts, KYADesk } from './stub-kya.ts'
 import { type Lineage, TrustDesk } from './stub-trust.ts'
+import { TrustLayerDesk } from './stub-trust-layer.ts'
 import type { Judge, RoomAgent } from './stub-rooms.ts'
 
 export interface BankWorkspace {
@@ -309,6 +311,8 @@ interface Payout {
   id: string; ws: string; method: 'credits' | 'stripe' | 'money'; asset?: string; month: string; gross_usd_micros: number; net_usd_micros: number; credits_ulxc: number; paid_at: string; created_at: string
   /** B32.66 — a weekly payout's ISO week, and Stripe's fees taken from it */
   period?: string; vat_usd_micros?: number; account_fee_usd_micros?: number; payout_fee_usd_micros?: number
+  /** B46.24 — why the money layer has not paid it yet */
+  last_error?: string
 }
 /** B32.66 — the payout minimum (Lens market.PayoutMinimumUSDMicros), and Stripe's fees in cents (market.PayoutFees). */
 const PAYOUT_MINIMUM_USD_MICROS = 25_000_000
@@ -519,6 +523,12 @@ export class Bank {
   private readonly earningsPayouts: EarningsDesk
   /** B32.89 — reviews, the trust read and the synthetic card link (stub-trust.ts). */
   private readonly trustDesk: TrustDesk
+  /** B45.31 — outside agents' signed payment requests and the AP2 key (stub-trust-layer.ts). */
+  readonly trustLayer: TrustLayerDesk
+  /** B45.28 — the approver agent in force for an agent's requests, by the agent's id, and its open mandate. */
+  private readonly approvers = new Map<string, { id: string; approver: string; limit: number; mandate: string }>()
+  /** B45.28 — what proves each approval: the owner's closed mandate, or the approver agent that approved it. */
+  private readonly approvalProof = new Map<string, { owner_mandate?: string; approved_by_agent_id?: string }>()
 
   constructor(d: BankDeps) {
     this.d = d
@@ -544,6 +554,39 @@ export class Bank {
       paid: (listing, buyer) => this.uses.some((u) => u.listing_id === listing && u.buyer === buyer && u.charge === 'billed' && u.refunded_at === undefined),
       payoutsEnabled: (ws) => this.accounts.get(ws)?.payouts_enabled === true,
       lineage: (id) => this.lineageOf(id) })
+    this.trustLayer = new TrustLayerDesk(d.json, d.read, (name) => this.broken(name), (agentID, asker, key, items, trust) => {
+      const a = this.agents.get(agentID)
+      if (a === undefined || a.archived_at !== undefined) return { status: 404, body: { error: 'no such agent' } }
+      return this.paymentRequests.outside(a.ws, asker, key, items, trust)
+    })
+  }
+
+  /** B45.28 — the most an agent with rules `r` approves without asking: the lower of its per-request limit and approval amount. */
+  private approverLimit(r: Rules): number {
+    const set = [r.max_per_request_ulxc, r.approval_above_ulxc].filter((v) => v > 0)
+    return set.length === 0 ? 0 : Math.min(...set)
+  }
+
+  /** B45.28 — POST /v1/workspaces/{ws}/agents/{id}/approvals/{approvalID}/approve, on the approver agent's own key only: within its
+   *  own limit it approves; above it, 409 and the request waits for the owner. STUB_BREAK=approver-over-limit approves anyway. */
+  async agentApprove(req: IncomingMessage, res: ServerResponse, key: string, path: string): Promise<boolean> {
+    const m = /^\/v1\/workspaces\/([^/]+)\/agents\/([^/]+)\/approvals\/([^/]+)\/approve$/.exec(path)
+    const who = this.agentOfKey(key)
+    if (m === null || req.method !== 'POST') return false
+    if (who === undefined || who.ws.id !== m[1] || who.agent.id !== m[2]) return this.d.json(res, 403, { error: "only the approver agent's own key may approve as it" }), true
+    const a = this.approvals.find((x) => x.id === m[3] && x.ws === m[1] && x.status === 'pending')
+    if (a === undefined) return this.d.json(res, 404, { error: 'economy: no such pending approval in this workspace' }), true
+    const set = this.approvers.get(a.agent_id)
+    if (set?.approver !== who.agent.id) return this.d.json(res, 403, { error: "economy: this agent is not the approver of that agent's requests" }), true
+    const limit = Math.min(set.limit, this.approverLimit(who.agent.rules) || set.limit)
+    if (a.amount_ulxc > limit && !this.broken('approver-over-limit')) {
+      return this.d.json(res, 409, { error: "economy: above the approver's own limits — the request waits for the workspace's owner" }), true
+    }
+    a.status = 'approved'
+    a.decided_at = new Date().toISOString()
+    this.approvalProof.set(a.id, { approved_by_agent_id: who.agent.id })
+    const { fingerprint: _f, ws: _w, ...out } = a
+    return this.d.json(res, 200, out), true
   }
 
   /** B30.109 — the compliance cases screening opened, in `status` ('' for all), newest first (stub-payees.ts). */
@@ -1277,6 +1320,32 @@ export class Bank {
       })
       return json(res, 200, { listings: at, sort, page, page_size: 50, total: hits.length, has_more: page * 50 < hits.length }), true
     }
+    // B41.71 — Lens's ask (B41.171): the newest three listings the words match, each priced for the first number in the
+    // words on its commercial per-use offer (free with none), and why it fits.
+    if (path === '/v1/marketplace/ask') {
+      const job = (q.get('q') ?? '').trim()
+      if (job === '') return json(res, 400, { error: 'market: invalid listing: q must describe the job, such as: translate 500 product descriptions into German' }), true
+      const n = Number(q.get('volume') || /\d+/.exec(job)?.[0] || 0)
+      const volume = n > 0 ? n : 1
+      const words = job.toLowerCase().split(/\s+/).filter((w) => w.length >= 3 && !/^\d+$/.test(w))
+      const picks = [...this.listings.values()]
+        .filter((l) => l.visibility === 'public' && l.review_status === 'approved')
+        .map((l) => ({ l, had: words.filter((w) => `${l.title} ${l.description}`.toLowerCase().includes(w)) }))
+        .filter(({ had }) => had.length > 0)
+        .sort((a, b) => b.l.created_at.localeCompare(a.l.created_at))
+        .slice(0, 3)
+        .map(({ l, had }) => {
+          const { artifact: _a, changelog: _c, ...rest } = l
+          const price = this.perUse(l)
+          const estimate = price === null ? null : (l.offers ?? []).length === 0
+            ? { volume, offer_kind: 'free', total_usd_micros: 0, basis: 'free to use' }
+            : { volume, offer_kind: 'per_use', total_usd_micros: price * volume, basis: `${volume} uses at its per-use price` }
+          return { ...rest, capabilities: l.capabilities ?? [], offers: l.offers ?? [], price_per_use_usd_micros: price, distinct_buyers_7d: 0, trending_score: 0,
+            estimate, why: [`Its title or description has ${had.join(', ')}.`] }
+        })
+      return json(res, 200, { q: job, volume, volume_from: q.get('volume') ? 'asked' : n > 0 ? 'words' : 'default', picks,
+        note: 'Each estimate is the marketplace price for the volume; the AI calls each use makes are charged as your own, beside it.' }), true
+    }
     if (path === '/v1/marketplace/collections') {
       const featured = this.broken('featured-last') ? -1 : 1
       const list = [...this.collections.values()].filter((c) => c.public)
@@ -1494,7 +1563,8 @@ export class Bank {
     // B32.89 — one card recorded on two test workspaces (talyvor-lens B32.102); every stub workspace is a test one.
     if (await this.trustDesk.syntheticRoute(req, res, path, (ws) => this.d.workspace(ws) !== undefined)) return true
     if ((m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/marketplace\/payouts\/run$/.exec(path)) !== null && req.method === 'POST') {
-      return json(res, 200, this.payOutWeekly(m[1], now)), true
+      const out = this.payOutWeekly(m[1], now)
+      return out === undefined ? (json(res, 500, { error: 'internal server error' }), true) : (json(res, 200, out), true)
     }
     if ((m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/marketplace\/bill\/([^/]+)\/refund$/.exec(path)) !== null) {
       const paid = this.uses.filter((u) => u.invoice === m?.[2] && u.buyer === m?.[1])
@@ -1502,6 +1572,12 @@ export class Bank {
       const refunded = paid.filter((u) => u.refunded_at === undefined)
       for (const u of refunded) Object.assign(u, { refunded_at: now, kept: this.broken('bill-refund-kept') })
       return json(res, 200, { invoice_id: m[2], uses_refunded: refunded.length }), true
+    }
+    // B53.14 — the issuer's charge on a single-use money card (Lens B53.18).
+    if ((m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/money\/cards\/([^/]+)\/charge$/.exec(path)) !== null && req.method === 'POST') {
+      const b = await this.body<{ merchant?: string; amount_minor?: number }>(req)
+      const [status, out] = this.payees.chargeCard(m[1], m[2], b.merchant ?? '', b.amount_minor ?? 0)
+      return json(res, status, out), true
     }
     if ((m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/agents\/([^/]+)\/card\/authorizations$/.exec(path)) !== null && req.method === 'POST') {
       const a = this.agents.get(m[2])
@@ -1735,7 +1811,7 @@ export class Bank {
    * once an ISO week and once it reaches the minimum, Stripe's account fee on the month's first payout and its payout fee
    * on every one.
    */
-  private payOutWeekly(ws: string, now: string): object {
+  private payOutWeekly(ws: string, now: string): object | undefined {
     const available = this.released(ws)
     if (available > 0 && this.tax.incomplete(ws) && !this.broken('payout-hold-ignored')) this.tax.withhold(ws, now)
     if (this.tax.withheld(ws)) return { withheld: true, hold: HOLD_REASON, payout: null }
@@ -1753,6 +1829,11 @@ export class Bank {
       const p: Payout = { id: id('mpo_'), ws, method: 'money', asset, month: now.slice(0, 7), period, gross_usd_micros: grossCents * 10_000, vat_usd_micros: 0,
         account_fee_usd_micros: 0, payout_fee_usd_micros: 0, net_usd_micros: grossCents * 10_000, credits_ulxc: 0, paid_at: now, created_at: now }
       this.payouts.unshift(p)
+      if (this.broken('no-platform-usd-account')) {
+        p.paid_at = ''
+        p.last_error = 'economy: no such money account: no USD account to pay from — open one at /v1/money/accounts'
+        return undefined
+      }
       this.earningsPayouts.payMarket(ws, p.id, period, grossCents, all > 0 ? Math.floor((grossCents * lineage) / all) : 0, asset)
       const { ws: _w, ...out } = p
       return { withheld: false, payout: out }
@@ -2133,6 +2214,26 @@ export class Bank {
     if (rest === '/agents/approvals') {
       return json(res, 200, { approvals: this.approvals.filter((a) => a.ws === ws.id).map(({ fingerprint: _f, ws: _w, ...a }) => a) }), true
     }
+    // B45.28 — what proves an approval, and the owner letting an approver agent approve another's requests, signed.
+    if ((m = /^\/agents\/approvals\/([^/]+)\/evidence$/.exec(rest)) !== null && method === 'GET') {
+      const a = this.approvals.find((x) => x.id === m?.[1] && x.ws === ws.id)
+      if (a === undefined) return json(res, 404, { error: 'economy: no such approval' }), true
+      return json(res, 200, { approval_id: a.id, ...this.approvalProof.get(a.id), jwks_url: '/.well-known/talyvor-ap2/jwks.json' }), true
+    }
+    if ((m = /^\/agents\/([^/]+)\/approver(\/challenge)?$/.exec(rest)) !== null && (method === 'POST' || method === 'PUT')) {
+      const agent = this.agents.get(m[1])
+      const { approver_agent_id = '', assertion } = await this.body<{ approver_agent_id?: string; assertion?: { credential_id?: string } }>(req)
+      const approver = this.agents.get(approver_agent_id)
+      if (agent === undefined || agent.ws !== ws.id || approver === undefined || approver.ws !== ws.id) return json(res, 404, { error: 'economy: no such agent' }), true
+      const limit = this.approverLimit(approver.rules)
+      if (limit === 0) return json(res, 400, { error: 'economy: invalid approver: the approver has no limit of its own (max_per_request_ulxc or approval_above_ulxc), so it may approve nothing' }), true
+      if (m[2] === '/challenge') return json(res, 200, { challenge: randomBytes(32).toString('base64url'), limit_ulxc: limit, user_verification: 'required' }), true
+      if (!(this.passkeys.get(ws.id) ?? []).some((k) => k.credential_id === assertion?.credential_id)) return json(res, 403, { error: 'economy: a passkey or device key signature is required' }), true
+      const set = { id: id('mnd_'), approver: approver.id, limit, mandate: this.trustLayer.mandate({ iss: this.d.base, iat: Math.floor(Date.now() / 1000), jti: id('mnd_'), vct: 'mandate.payment.open.1' },
+        { constraints: [{ type: 'payment.amount_range', currency: 'LXC', min: 0, max: limit }], talyvor_delegation: { approver_agent_id: approver.id, agent_id: agent.id } }) }
+      this.approvers.set(agent.id, set)
+      return json(res, 201, { id: set.id, agent_id: agent.id, approver_agent_id: approver.id, limit_ulxc: limit, mandate: set.mandate }), true
+    }
     if ((m = /^\/agents\/approvals\/([^/]+)\/(approve|deny)$/.exec(rest)) !== null && method === 'POST') {
       const a = this.approvals.find((x) => x.id === m?.[1] && x.ws === ws.id && x.status === 'pending')
       if (a === undefined) return json(res, 404, { error: 'economy: no such pending approval in this workspace' }), true
@@ -2150,6 +2251,12 @@ export class Bank {
       }
       a.status = m[2] === 'approve' ? 'approved' : 'denied'
       a.decided_at = now
+      // B45.28 — the owner's signed approval is kept as an AP2 v0.2 closed Payment Mandate.
+      if (m[2] === 'approve' && assertion !== undefined) {
+        this.approvalProof.set(a.id, { owner_mandate: this.trustLayer.mandate({ iss: this.d.base, iat: Math.floor(Date.now() / 1000), jti: id('mnd_'), vct: 'mandate.payment.1' }, {
+          transaction_id: a.id, payee: a.payee ?? {}, payment_amount: { currency: 'LXC', amount: a.amount_ulxc },
+          payment_instrument: { type: 'talyvor_agent_wallet', id: a.agent_id }, trusted_surface: { type: assertion.device_id === undefined ? 'passkey' : 'device_key', assertion } }) })
+      }
       // B41.4 — always allow saves the allowance for the approval's payee on its agent's rules.
       const agent = this.agents.get(a.agent_id)
       if (m[2] === 'approve' && decision.always_allow !== undefined && agent !== undefined && a.payee !== undefined) {
@@ -2655,7 +2762,7 @@ export class Bank {
           charge: o.price_usd_micros === 0 ? 'free' : 'billed', used_at: now, payee_agent_id: '', memo: '' }
         const days = o.kind === 'buy' ? undefined : o.period_days ?? 30
         const lic: StubLicence = { id: id('lic_'), ws: ws.id, listing_id: l.id, title: l.title, offer_id: o.id, licence: o.licence, kind: o.kind, pinned_version: version || null,
-          starts_at: now, ends_at: days === undefined ? null : new Date(Date.now() + days * 86_400e3).toISOString(), auto_renew: o.kind === 'subscribe', status: 'active',
+          starts_at: now, ends_at: days === undefined ? null : new Date(Date.now() + days * 86_400e3).toISOString(), auto_renew: o.kind === 'subscribe' && !this.broken('subscribe-not-renewing'), status: 'active',
           use_id: use.id, charge: use.charge, price_ulxc: use.price_ulxc, created_at: now, key, included_uses: o.included_uses, agent_id: agent?.id }
         if (refused === undefined || this.broken('licence-refused-kept')) {
           if (!this.broken('licence-unbilled')) this.uses.push(use)

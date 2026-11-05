@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Button, Input, NavIcon, Pill, cn, focusRing, inlineLink } from '@talyvor/ui'
 import { Region } from '../../components/Region'
+import { Ask, searchFailure } from './Ask'
+import { COMPARE_MAX, compareHref, compareIds } from './Compare'
 import { ApiError } from '../../lib/api'
 import { formatWhen } from '../lens/format'
 import { ROOMS_KEY, type Room, roomsApi, usdText } from '../rooms/roomsApi'
@@ -12,7 +14,6 @@ import {
   type DiscoverSort,
   KINDS,
   type ListingKind,
-  MarketError,
   marketApi,
   parsePrice,
 } from './marketApi'
@@ -118,6 +119,19 @@ export function Discover() {
   const maxText = params.get('max') ?? ''
   const verified = params.get('verified') === '1'
   const page = Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1)
+  // B41.72 — the listings picked to compare ride the address too, so paging and filtering keep them.
+  const picked = compareIds(params.get('compare'))
+  const togglePick = (id: string) =>
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p)
+        const ids = picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]
+        if (ids.length > 0) next.set('compare', ids.join(','))
+        else next.delete('compare')
+        return next
+      },
+      { replace: true },
+    )
   // A ceiling is US dollars as a person writes them, `0.05`; Lens takes µUSD. One that is not a price is not sent.
   const maxMicros = maxText.trim() === '' ? null : parsePrice(maxText)
   const query: DiscoverQuery = {
@@ -162,7 +176,8 @@ export function Discover() {
           and earn when others use it.
         </p>
       </Region>
-      <Region index="01" label="Discover" fullWidth className="flex flex-col gap-4">
+      <Ask />
+      <Region index="02" label="Discover" fullWidth className="flex flex-col gap-4">
         <form
           className="flex flex-col gap-3"
           role="search"
@@ -261,6 +276,19 @@ export function Discover() {
               {shownSort === 'trending' ? ' · ranked by distinct buyers this week' : ''}
             </span>
           ) : null}
+          {picked.length > 0 ? (
+            <span className="flex items-center gap-2 text-caption text-muted" data-testid="compare-picked">
+              <span className="font-figure">{picked.length}</span> of <span className="font-figure">{COMPARE_MAX}</span>{' '}
+              picked
+              {picked.length >= 2 ? (
+                <Link className={`text-body text-ink ${inlineLink}`} to={compareHref(picked)}>
+                  Compare side by side
+                </Link>
+              ) : (
+                ' · pick one more to compare'
+              )}
+            </span>
+          ) : null}
         </div>
         {results.isError ? (
           <p className="text-body text-muted">{searchFailure(results.error)}</p>
@@ -279,7 +307,22 @@ export function Discover() {
             ) : null}
           </p>
         ) : (
-          <ListingGrid listings={hits} label="Listings" usd={(h) => h.price_per_use_usd_micros} />
+          <ListingGrid
+            listings={hits}
+            label="Listings"
+            usd={(h) => h.price_per_use_usd_micros}
+            action={(h) => (
+              <Button
+                aria-pressed={picked.includes(h.id)}
+                aria-label={`Compare ${h.title}`}
+                className={pressed}
+                disabled={!picked.includes(h.id) && picked.length >= COMPARE_MAX}
+                onClick={() => togglePick(h.id)}
+              >
+                Compare
+              </Button>
+            )}
+          />
         )}
         {results.data && (page > 1 || results.data.has_more) ? (
           <nav className="flex items-center gap-3" aria-label="Pages">
@@ -301,11 +344,6 @@ export function Discover() {
   )
 }
 
-function searchFailure(err: unknown): string {
-  // A filter Lens refuses (a capability not on its list) comes back with its sentence: that is the answer.
-  if (err instanceof MarketError && err.status === 400 && err.sentence) return err.sentence
-  return readFailure(err, 'The marketplace')
-}
 
 // ── Collections ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -352,7 +390,7 @@ function CollectionCard({ c }: { c: Collection }) {
 function Collections() {
   const list = useQuery({ queryKey: ['market-collections'], queryFn: marketApi.collections })
   return (
-    <Region index="02" label="Collections" fullWidth className="flex flex-col gap-4">
+    <Region index="03" label="Collections" fullWidth className="flex flex-col gap-4">
       <p className="max-w-2xl text-body text-muted">
         Listings other workspaces picked out and put in order. Talyvor’s featured collections come first.
       </p>
@@ -434,7 +472,7 @@ function RoomsBuildingThis({ words }: { words: string[] }) {
   const shown = roomsOnTopic(open, words).slice(0, ROOMS_SHOWN)
   const topical = words.length > 0
   return (
-    <Region index="03" label={topical ? 'Rooms building this' : 'Rooms building now'} fullWidth className="flex flex-col gap-4">
+    <Region index="04" label={topical ? 'Rooms building this' : 'Rooms building now'} fullWidth className="flex flex-col gap-4">
       <p className="max-w-2xl text-body text-muted">
         Open rooms where people and their agents are building {topical ? 'on the same topic' : 'right now'}. Join one
         and build it with them.

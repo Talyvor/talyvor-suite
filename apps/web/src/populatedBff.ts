@@ -78,6 +78,14 @@ const BODIES: Record<string, unknown> = {
     ],
     received: [],
   },
+  // B41.15 — what may act for the workspace, on Keys: a signed permission mandate, a phone and a passkey.
+  '/api/money/access': {
+    items: [
+      { kind: 'mandate', id: 'pm_1', name: 'mcp:tlv_oc_claude', may: 'prepare and pay 1 payee in GBP, up to GBP 500.00 a payment', created_at: '2026-10-23T09:10:00Z', last_used_at: '2026-10-23T10:00:00Z', expires_at: '2027-01-31T00:00:00Z', status: 'active', revoke: '/v1/money/permission-mandates/pm_1/revoke' },
+      { kind: 'device', id: 'dk_1', name: 'Work iPhone', may: 'sign approvals and mandates', created_at: '2026-10-01T09:00:00Z', last_used_at: '2026-10-22T09:00:00Z', expires_at: null, status: 'active', revoke: '/v1/money/devices/dk_1/revoke' },
+      { kind: 'passkey', id: 'cred_1', name: 'MacBook', may: 'sign approvals and mandates', created_at: '2026-09-01T09:00:00Z', last_used_at: null, expires_at: null, status: 'active', revoke: '' },
+    ],
+  },
   // B40.35 — a payee and a permission mandate an assistant asked for over /mcp, waiting for the person.
   '/api/money/assistant-requests': {
     requests: [
@@ -86,6 +94,16 @@ const BODIES: Record<string, unknown> = {
           limits: { per_payment: { GBP: 50000 }, per_month: { GBP: 200000 } }, requires_approval_above: { GBP: 20000 }, new_payee: { policy: 'always_ask' }, expires_at: '2027-01-31T00:00:00Z' } },
       { id: 'ar_p', kind: 'payee', assistant: 'Claude', created_at: '2026-10-23T09:00:00Z', confirm_url: '/money/pay', status: 'pending_confirmation',
         details: { name: 'Brightline Studio Ltd', country: 'GB', sort_code: '200000', account_number: '55779911' } },
+      // B45.37 — recurring payments an assistant prepared, at the address the console sweep visits (/money/plans/:id).
+      { id: ':id', kind: 'plan', assistant: 'Claude', created_at: '2026-10-23T09:10:00Z', confirm_url: '/money/plans/:id', status: 'pending_confirmation',
+        details: { id: 'rpp_1', status: 'awaiting_signature', created_at: '2026-10-23T09:10:00Z',
+          mandate: { id: 'pm_r', challenge: 'Y2gx', credential_ids: ['cred_1'], canonical: JSON.stringify({ id: 'pm_r', clients: ['schedule:rpp_1'],
+            scope: { payees: ['payee_1', 'payee_2'], currencies: ['GBP'] }, limits: { per_payment: { GBP: 120000 }, per_month: { GBP: 125000 } },
+            requires_approval_above: { GBP: 100000 }, new_payee: { policy: 'always_ask' }, expires_at: '2027-06-30T00:00:00Z' }) },
+          schedules: [
+            { id: 'sch_1', from_agent_id: '', to_agent_id: '', to_payee_id: 'payee_1', amount_minor: 120000, currency: 'GBP', amount_ulxc: 0, memo: 'Office rent', every: 'month', next_run_at: '2026-11-01T09:00:00Z', active: false, awaiting_signature: true, created_at: '2026-10-23T09:10:00Z' },
+            { id: 'sch_2', from_agent_id: '', to_agent_id: '', to_payee_id: 'payee_2', amount_minor: 1250, currency: 'GBP', amount_ulxc: 0, memo: 'Survey panel', every: 'week', next_run_at: '2026-10-27T09:00:00Z', active: false, awaiting_signature: true, created_at: '2026-10-23T09:10:00Z' },
+          ] } },
     ],
   },
   // B41.1 — an invoice read into a bill, its supplier not yet a saved payee.
@@ -481,6 +499,70 @@ const BY_PATH: Record<string, unknown> = {
   '/api/agents/alerts': {
     alerts: [{ id: 'al_1', agent_id: 'agt_research', last_hour_ulxc: 600_000, usual_per_hour_ulxc: 100_000, paused: true, created_at: '2026-09-27T12:00:00Z' }],
     rule: 'An alert is raised when an agent spends five times its usual hourly rate.',
+  },
+  // B41.20 — no marketplace licence here: the Marketplace's own fixtures hold those.
+  '/api/marketplace/licences': { licences: [] },
+  // B41.20 — two subscriptions Lens found recurring: one on the owner's own card, one an agent pays out monthly.
+  '/api/money/spending/subscriptions': {
+    subscriptions: [
+      { merchant: 'Acme Cloud', category: 'ai_and_software', amount_minor: 1_200, currency: 'GBP', interval: 'monthly', charges: 3, last_at: '2026-09-20T09:00:00Z',
+        next_at: '2026-10-20T09:00:00Z', remind_on: '2026-10-17T09:00:00Z', monthly_minor: 1_200, yearly_minor: 14_400 },
+      { agent_id: 'agt_research', merchant: 'Data Feeds Ltd', category: 'ai_and_software', amount_minor: 2_500, currency: 'GBP', interval: 'weekly', charges: 4,
+        last_at: '2026-09-27T09:00:00Z', next_at: '2026-10-04T09:00:00Z', remind_on: '2026-10-01T09:00:00Z', monthly_minor: 10_833, yearly_minor: 130_000 },
+    ],
+  },
+  // B41.39 — the budget whose 50% alert is just below, at 50% of £500 this month.
+  '/api/money/budgets': {
+    budgets: [
+      { id: 'bdg_1', agent_id: '', category: 'ai_software', period: 'month', amount_minor: 50_000, currency: 'GBP', timezone: 'Europe/London',
+        period_start: '2026-09-01T00:00:00Z', period_end: '2026-10-01T00:00:00Z', spent_minor: 25_000, left_minor: 25_000, percent: 50 },
+    ],
+  },
+  // B53.8 — the Spending screen: a month with one eating-out payment that was unusual, the Coach's sentence on it, and notices.
+  '/api/money/spending': {
+    from: '2026-09-01T00:00:00Z', to: '2026-10-01T00:00:00Z', categories: ['eating_out', 'ai_software'],
+    payments: [
+      { entry_id: 'ent_2', kind: 'card_charge', merchant: 'Dishoom', agent_id: '', amount_minor: 4_250, currency: 'GBP', category: 'eating_out',
+        category_source: 'card', tags: [], created_at: '2026-09-26T20:10:00Z' },
+      { entry_id: 'ent_1', kind: 'payment_out', merchant: 'Anthropic', agent_id: 'agt_research', amount_minor: 25_000, currency: 'GBP', category: 'ai_software',
+        category_source: 'correction', tags: [], created_at: '2026-09-12T09:00:00Z' },
+    ],
+    totals: [
+      { currency: 'GBP', total_minor: 4_250, by_category: { eating_out: 4_250 }, by_tag: {} },
+      { agent_id: 'agt_research', currency: 'GBP', total_minor: 25_000, by_category: { ai_software: 25_000 }, by_tag: {} },
+    ],
+  },
+  // B53.16 — the month plan: payday on the 29th, two bills covered, and the rent short at the last seven days' pace.
+  '/api/money/plan': {
+    currency: 'GBP', timezone: 'Europe/London', today: '2026-09-04', until: '2026-09-28', next_income: '2026-09-29', days: 25,
+    income: { payday: 29, amount_minor: 250_000, currency: 'GBP', confirmed: true }, money_now_minor: 110_000, upcoming_minor: 73_000,
+    budgets_left_minor: 10_000, available_minor: 27_000, safe_per_day_minor: 1080, pace_per_day_minor: 5714,
+    payments: [
+      { source: 'bill', id: 'bill_phone', payee: 'Phone Co', amount_minor: 3000, currency: 'GBP', due: '2026-09-09', covered: true },
+      { source: 'bill', id: 'bill_rent', payee: 'Landlord', amount_minor: 70_000, currency: 'GBP', due: '2026-09-14', covered: true },
+    ],
+    findings: [{ kind: 'plan_pace_short', urgent: true, payment: { source: 'bill', id: 'bill_rent', payee: 'Landlord', amount_minor: 70_000, currency: 'GBP', due: '2026-09-14', covered: true },
+      short_minor: 20_140, pace_per_day_minor: 5714, keep_to_per_day_minor: 3700,
+      sentence: 'At this pace, 57.14 GBP a day, the 700.00 GBP payment to Landlord on 14 September is short by 201.40 GBP; keeping to 37.00 GBP a day until then covers it.' }],
+  },
+  '/api/money/spending/unusual': {
+    findings: [{ rule: 'new_merchant', entry_id: 'ent_2', merchant: 'Dishoom', category: 'eating_out', amount_minor: 4_250, currency: 'GBP', at: '2026-09-26T20:10:00Z' }],
+  },
+  '/api/money/coach': {
+    lines: [{ fact: { kind: 'new_merchant', merchant: 'Dishoom', category: 'eating out', amount: '£42.50' }, sentence: 'You paid Dishoom £42.50, the first time you have paid them.', source: 'template' }],
+    review: [],
+  },
+  '/api/money/notices': {
+    settings: { timezone: 'Europe/London', quiet_from: '22:00', quiet_until: '07:00', off: ['tip'] },
+    notices: [{ id: 'ntc_1', kind: 'payment', title: '£42.50 at Dishoom', body: 'Eating out', urgent: false, data: {}, status: 'sent', created_at: '2026-09-26T20:11:00Z' }],
+  },
+  '/api/money/budgets/alerts': {
+    alerts: [
+      { id: 'sal_2', kind: 'agent_limit', subject: 'agt_research', agent_id: 'agt_research', period: 'daily', period_start: '2026-09-27T00:00:00Z',
+        percent: 80, spent_minor: 4_000_000, limit_minor: 5_000_000, currency: 'LXC', created_at: '2026-09-27T12:10:00Z' },
+      { id: 'sal_1', kind: 'budget', subject: 'bdg_1', category: 'ai_and_software', period: 'month', period_start: '2026-09-01T00:00:00Z',
+        percent: 50, spent_minor: 25_000, limit_minor: 50_000, currency: 'GBP', created_at: '2026-09-20T08:00:00Z' },
+    ],
   },
   '/api/agents/approvals': {
     approvals: [

@@ -49,6 +49,12 @@ func (f *fakeLensForMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "POST /v1/money/payees":
 		w.WriteHeader(http.StatusCreated)
 		_, _ = io.WriteString(w, `{"id":"py-new","name":"`+body["name"].(string)+`","check":"exact_match"}`)
+	case "POST /mcp": // B45.37: Lens's prepare_recurring_payments; signed once a mandate was kept
+		_, signed := f.sent["POST /v1/money/permission-mandates"]
+		plan, _ := json.Marshal(map[string]any{"id": "rpp-1", "status": map[bool]string{false: "awaiting_signature", true: "signed"}[signed],
+			"schedules": []any{map[string]any{"id": "sch-1", "to_payee_id": "py-1", "amount_minor": 1500, "currency": "GBP", "every": "month", "active": signed}},
+			"mandate":   map[string]any{"id": "pm-r", "canonical": `{"id":"pm-r"}`, "challenge": "ch-r", "credential_ids": []any{"cred-1"}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": body["id"], "result": map[string]any{"content": []any{map[string]any{"type": "text", "text": string(plan)}}}})
 	case "POST /v1/money/permission-mandates/prepare":
 		_, _ = io.WriteString(w, `{"canonical":"{\"id\":\"pm-1\"}","challenge":"ch-1","allow_credentials":["cred-1"]}`)
 	case "POST /v1/money/permission-mandates":
@@ -190,12 +196,15 @@ func TestMCPNoToolMovesMoney(t *testing.T) {
 		"GET /v1/money/permission-mandates", "GET /v1/marketplace/search", "GET /v1/marketplace/listings/l-1",
 		"GET /v1/money/payment-requests/pr-1", "POST /v1/money/invoices", "POST /v1/money/invoices/inv-1/send",
 		"POST /v1/money/payment-requests", "POST /v1/money/payment-requests/pr-1/cancel", "POST /v1/money/permission-mandates/prepare",
-		"GET /v1/money/bills", "GET /v1/workspaces/ws-ada/agents/safe-to-spend", "POST /v1/money/bills/pay"} {
+		"GET /v1/money/bills", "GET /v1/workspaces/ws-ada/agents/safe-to-spend", "POST /v1/money/bills/pay", "GET /v1/money/payment-requests"} {
 		allowed[r] = true
 	}
 	for _, tool := range mcpTools {
 		if len(tool.name) > 64 || tool.description == "" {
 			t.Fatalf("%s: a name of at most 64 characters and a description", tool.name)
+		}
+		if tool.run != nil {
+			continue // Taly and the microphone: TestMCPTalyForTheDesktopApp holds them to routes that never pay
 		}
 		before := len(lens.calls)
 		if r := toolCall(t, a, token, tool.name, args); r["isError"] != false {
@@ -425,5 +434,42 @@ func TestMCPPayeeAndMandateWaitForThePerson(t *testing.T) {
 	}
 	if left := waiting(); len(left) != 0 {
 		t.Fatalf("a revoked connection's requests still wait: %v", left)
+	}
+}
+
+// TestMCPRecurringPlanWaitsForTheSignature is B45.37: prepare_recurring_payments keeps Lens's plan for the person, its link
+// opens the plan screen, the mandate speaks for the person whatever the assistant says, and only the plan's own canonical
+// terms signed with a passkey start it — once.
+func TestMCPRecurringPlanWaitsForTheSignature(t *testing.T) {
+	a, lens, ck := mcpApp(t)
+	client := jsonOf(t, serve(a, "POST", "/oauth/register", "", `{"client_name":"Claude","redirect_uris":["`+claudeReturn+`"]}`, nil, nil))
+	token := connect(t, a, ck, client["client_id"].(string))["access_token"].(string)
+	res := toolCall(t, a, token, "prepare_recurring_payments", map[string]any{"idempotency_key": "k1", "owner_name": "Evil", "until": "2027-01-31T00:00:00Z",
+		"payments": []any{map[string]any{"payee_id": "py-1", "currency": "GBP", "amount_minor": 1500, "every": "month"}}})
+	asked := lens.sent["POST /mcp"]["params"].(map[string]any)["arguments"].(map[string]any)
+	if res["isError"] != false || !strings.Contains(fmt.Sprint(res["content"]), "/money/plans/ar_") || asked["owner_name"] == "Evil" {
+		t.Fatalf("prepare_recurring_payments: %v; asked Lens %v", res, asked)
+	}
+	rec := serve(a, "GET", "/api/money/assistant-requests", "", "", nil, ck)
+	kept := jsonOf(t, rec)["requests"].([]any)[0].(map[string]any)
+	if kept["kind"] != "plan" || kept["details"].(map[string]any)["id"] != "rpp-1" {
+		t.Fatalf("the plan screen is shown %v", kept)
+	}
+	sign := func(canonical string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]any{"canonical": canonical, "assertion": map[string]any{"credential_id": "cred-1", "client_data_json": "e30", "authenticator_data": "AA", "signature": "AA"}})
+		return serve(a, "POST", "/api/money/assistant-requests/"+kept["id"].(string)+"/sign", oauthOrigin, string(body), nil, ck)
+	}
+	if rec := sign(`{"id":"pm-other"}`); rec.Code != http.StatusBadRequest || lens.sent["POST /v1/money/permission-mandates"] != nil {
+		t.Fatalf("other terms were signed for the plan: %d", rec.Code)
+	}
+	if rec := sign(`{"id":"pm-r"}`); rec.Code != http.StatusCreated {
+		t.Fatalf("sign: %d %s", rec.Code, rec.Body.String())
+	}
+	after := jsonOf(t, serve(a, "GET", "/api/money/assistant-requests", "", "", nil, ck))["requests"].([]any)[0].(map[string]any)
+	if after["status"] != "signed" || after["details"].(map[string]any)["status"] != "signed" {
+		t.Fatalf("after signing the screen is shown %v", after)
+	}
+	if rec := sign(`{"id":"pm-r"}`); rec.Code != http.StatusConflict {
+		t.Fatalf("signed twice: %d", rec.Code)
 	}
 }

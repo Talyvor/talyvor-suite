@@ -160,6 +160,191 @@ export interface AgentSpendAlert {
   created_at: string
 }
 
+/** B41.20 — Lens economy.SpendSubscription (B41.120): a card payment or payment out that recurs, to one merchant for one amount. */
+export interface SpendSubscription {
+  /** absent: the owner's own wallet */
+  agent_id?: string
+  merchant: string
+  category: string
+  amount_minor: number
+  currency: string
+  interval: 'weekly' | 'monthly'
+  charges: number
+  last_at: string
+  next_at: string
+  /** three days before next_at */
+  remind_on: string
+  monthly_minor: number
+  yearly_minor: number
+}
+
+/** B41.39 — Lens economy.SpendBudget (B41.139): a weekly or monthly budget and how far this period has gone, from postings. */
+export interface SpendBudget {
+  id: string
+  /** "": the owner's own wallet; "all": every wallet together; else an agent's */
+  agent_id: string
+  /** "": all spending */
+  category: string
+  period: 'week' | 'month'
+  amount_minor: number
+  currency: string
+  timezone: string
+  period_start: string
+  period_end: string
+  spent_minor: number
+  /** below zero once it is over */
+  left_minor: number
+  percent: number
+}
+
+export type SpendBudgetRequest = Pick<SpendBudget, 'agent_id' | 'category' | 'period' | 'amount_minor' | 'currency' | 'timezone'>
+
+/** B53.8 — Lens economy.SpendPayment (B53.3): one payment and the category it reads in, worked out on each read. */
+export interface SpendPayment {
+  entry_id: string
+  kind: string
+  merchant: string
+  /** "": the owner's own wallet */
+  agent_id?: string
+  amount_minor: number
+  currency: string
+  category: string
+  /** correction, card, merchant, payee or none */
+  category_source: string
+  created_at: string
+}
+
+/** B53.8 — Lens economy.Spending: the payments in [from, to), newest first, and each wallet's totals per currency. */
+export interface Spending {
+  from: string
+  to: string
+  categories: string[] | null
+  payments: SpendPayment[] | null
+  totals: { agent_id?: string; currency: string; total_minor: number; by_category: Record<string, number> | null }[] | null
+}
+
+/** B53.8 — Lens economy.SpendFinding (B53.5): one payment a rule found unusual, with the numbers it compared. */
+export interface SpendFinding {
+  rule: string
+  entry_id?: string
+  agent_id?: string
+  merchant?: string
+  category?: string
+  country?: string
+  amount_minor?: number
+  currency?: string
+  at: string
+}
+
+export interface CoachHelp {
+  name: string
+  url: string
+  for: string
+}
+
+/** B53.8 — Lens economy.CoachLine (B53.6): one sentence and the fact it words. */
+export interface CoachLine {
+  fact: { kind: string; merchant?: string; category?: string; amount?: string }
+  sentence: string
+  source: 'model' | 'template'
+  help?: CoachHelp[]
+  offer?: { kind: string; text: string }
+}
+
+/** B53.8 — Lens economy.SpendNoticeSettings and SpendNotice (B53.7). */
+export interface NoticeSettings {
+  timezone: string
+  quiet_from: string
+  quiet_until: string
+  off: string[] | null
+}
+
+export interface SpendNotice {
+  id: string
+  kind: string
+  title: string
+  body: string
+  status: 'waiting' | 'sent' | 'dropped'
+  held?: string
+  created_at: string
+}
+
+/** B53.16 — Lens economy.SpendIncome (B53.15): about amount_minor of currency on day payday of each month. */
+export interface SpendIncome {
+  payday: number
+  amount_minor: number
+  currency: string
+  payer?: string
+  /** false: Lens's proposal from three months of money in, for the owner to confirm */
+  confirmed: boolean
+}
+
+/** B53.16 — Lens economy.PlanPayment: one upcoming payment and whether the money now covers it. */
+export interface PlanPayment {
+  source: 'bill' | 'subscription' | 'standing_order'
+  /** the bill's, the subscription's merchant, the standing order's */
+  id: string
+  payee: string
+  agent_id?: string
+  amount_minor: number
+  currency: string
+  /** YYYY-MM-DD in the owner's time zone */
+  due: string
+  covered: boolean
+}
+
+/** B53.16 — Lens economy.PlanFinding: one way the month is off plan, with its numbers and the Coach's sentence. */
+export interface PlanFinding {
+  kind: 'plan_uncovered' | 'plan_pace_short' | 'plan_bill_larger' | 'plan_income_late'
+  urgent: boolean
+  payment?: PlanPayment
+  short_minor?: number
+  pace_per_day_minor?: number
+  keep_to_per_day_minor?: number
+  usual_minor?: number
+  expected_on?: string
+  sentence: string
+}
+
+/** B53.16 — Lens economy.SpendPlan (B53.15): the owner's month plan, from today to the day before the next income. */
+export interface SpendPlan {
+  currency: string
+  timezone: string
+  today: string
+  until: string
+  next_income?: string
+  days: number
+  income: SpendIncome | null
+  proposed_income?: SpendIncome
+  money_now_minor: number
+  upcoming_minor: number
+  budgets_left_minor: number
+  available_minor: number
+  safe_per_day_minor: number
+  pace_per_day_minor: number
+  payments: PlanPayment[]
+  findings: PlanFinding[]
+}
+
+/** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
+export interface LimitAlert {
+  id: string
+  kind: 'budget' | 'card' | 'agent_limit'
+  /** the budget's id, the card's or the agent's */
+  subject: string
+  agent_id?: string
+  category?: string
+  /** week or month for a budget; hourly, daily, weekly or monthly for an agent's limit */
+  period?: string
+  period_start: string
+  percent: number
+  spent_minor: number
+  limit_minor: number
+  /** LXC for an agent's limit, counted in µLXC */
+  currency: string
+  created_at: string
+}
+
 /**
  * Lens economy.SafeToSpend (B41.105): per currency, the balance less what is promised out of it this month — scheduled
  * payments, bills due and payments waiting for approval. LXC is in µLXC; GBP, EUR and USD in minor units.
@@ -659,6 +844,22 @@ export const agentBankApi = {
   removeTopUp: (id: string) => send<unknown>('DELETE', `/api/agents/${e(id)}/topup`),
   // B19.20 — stop every agent or one, and what they are spending.
   alerts: () => getJSON<{ alerts: AgentSpendAlert[] | null; rule: string }>('/api/agents/alerts', { alerts: 'list' }),
+  subscriptions: () => getJSON<{ subscriptions: SpendSubscription[] | null }>('/api/money/spending/subscriptions', { subscriptions: 'list' }),
+  limitAlerts: () => getJSON<{ alerts: LimitAlert[] | null }>('/api/money/budgets/alerts', { alerts: 'list' }),
+  budgets: () => getJSON<{ budgets: SpendBudget[] | null }>('/api/money/budgets', { budgets: 'list' }),
+  setBudget: (b: SpendBudgetRequest) => send<SpendBudget>('PUT', '/api/money/budgets', b),
+  deleteBudget: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/budgets/${e(id)}`),
+  spending: (from: string, to: string) =>
+    getJSON<Spending>(`/api/money/spending?${new URLSearchParams({ from, to }).toString()}`, { payments: 'list', totals: 'list' }),
+  unusual: (from: string, to: string) =>
+    getJSON<{ findings: SpendFinding[] | null }>(`/api/money/spending/unusual?${new URLSearchParams({ from, to }).toString()}`, { findings: 'list' }),
+  setSpendCategory: (merchant: string, category: string) =>
+    send<{ merchant: string; category: string }>('PUT', '/api/money/spending/merchants', { merchant, category }),
+  coach: () => getJSON<{ lines: CoachLine[] | null; review: CoachLine[] | null }>('/api/money/coach', { lines: 'list', review: 'list' }),
+  notices: () => getJSON<{ settings: NoticeSettings; notices: SpendNotice[] | null }>('/api/money/notices', { notices: 'list' }),
+  setNoticeSettings: (s: NoticeSettings) => send<NoticeSettings>('PUT', '/api/money/notices/settings', s),
+  plan: () => getJSON<SpendPlan>('/api/money/plan', { payments: 'list', findings: 'list', safe_per_day_minor: 'number' }),
+  setIncome: (i: Pick<SpendIncome, 'payday' | 'amount_minor' | 'currency' | 'payer'>) => send<SpendPlan>('PUT', '/api/money/plan/income', i),
   safeToSpend: () => getJSON<SafeToSpend>('/api/agents/safe-to-spend', { agents: 'list' }),
   briefing: () => getJSON<Briefing>('/api/agents/briefing', { items: 'list', quiet: 'boolean', line: 'string' }),
   forecast: () => getJSON<SpendForecast>('/api/agents/forecast', { spent_ulxc: 'number', forecast_ulxc: 'number', agents: 'list' }),
@@ -768,6 +969,11 @@ export const agentBankApi = {
   /** B41.11 — the owner's passkey says they called the new payee on a number they already had: its cooling-off ends. */
   payeeCalledChallenge: (id: string) => send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payees/${e(id)}/called/challenge`),
   confirmPayeeCalled: (id: string, assertion: PasskeyAssertion) => send<OutsidePayee>('POST', `/api/money/payees/${e(id)}/called`, { assertion }),
+  /** B41.12 — changing a payee's bank details is signed over a challenge for exactly the new details; every payment to it is then held for 24 hours. */
+  payeeDetailsChallenge: (id: string, details: PayeeDetails) =>
+    send<{ challenge: string; allow_credentials: string[] | null; notice: string }>('POST', `/api/money/payees/${e(id)}/details/challenge`, details),
+  changePayeeDetails: (id: string, details: PayeeDetails, assertion: PasskeyAssertion) =>
+    send<OutsidePayee>('POST', `/api/money/payees/${e(id)}/details`, { ...details, assertion }),
   payments: () => getJSON<{ payments: OutsidePayment[] | null }>('/api/money/payments', { payments: 'list' }),
   // B41.7 — one search box across agents, payees, payments, bills, invoices, rules and listings (Lens B41.107).
   search: (q: string) => getJSON<SearchResults>(`/api/money/search?q=${e(q)}`, { groups: 'list' }),
@@ -882,6 +1088,10 @@ export interface OutsidePayee {
   /** B41.11 (Lens B41.111): until then a payment of more than 1,000 to this new payee waits, unless the owner confirms they called it */
   cooling_off_until?: string
   called_at?: string
+  /** B41.12 (Lens B41.112): its bank details changed, so until held_until every payment to it is held; notice says what to do meanwhile */
+  details_changed_at?: string
+  held_until?: string
+  notice?: string
   /** set while screening holds the payee for an operator */
   screening?: string
 }
@@ -948,10 +1158,22 @@ export interface ApprovalStatement {
 }
 
 /** B40.35 — what an assistant asked for that only the person may do (BFF mcp_drafts.go). */
-export type AssistantRequest = { id: string; assistant: string; created_at: string } & (
+export type AssistantRequest = { id: string; assistant: string; created_at: string; status: string } & (
   | { kind: 'payee'; details: PayeeRequest }
   | { kind: 'mandate'; details: MandateTerms }
+  | { kind: 'plan'; details: RecurringPlan }
 )
+
+/** B45.37 — Lens economy.RecurringPlan (B45.13): standing orders that run once the person signs their mandate. */
+export interface RecurringPlan {
+  id: string
+  /** awaiting_signature | signed */
+  status: string
+  schedules: (AgentSchedule & { awaiting_signature?: boolean })[]
+  /** canonical is the mandate's terms, MandateTerms as JSON: exactly what the passkey signs */
+  mandate: { id: string; canonical: string; challenge: string; credential_ids: string[] | null }
+  created_at: string
+}
 
 export interface PayeeRequest {
   name: string
@@ -962,6 +1184,9 @@ export interface PayeeRequest {
   bic?: string
   routing_number?: string
 }
+
+/** B41.12 — a payee's new bank details: one set, as a payee is saved with. */
+export type PayeeDetails = Omit<PayeeRequest, 'name'>
 
 /** Lens economy.OutsidePayment (B30.17): money sent to a saved payee through the account partner. */
 export interface OutsidePayment {

@@ -130,7 +130,13 @@ export function marketPayouts(): Scenario {
         const run = await lens.syntheticPayoutRun(who)
         ctx.evidence.push({ note: `the payout run, brought to ${name} now`, answer: said(run) })
         if (!run.ok && (run.status === 404 || run.status === 405)) throw new CannotTest('this Lens has no synthetic payout run (POST /v1/synthetic/workspaces/{ws}/marketplace/payouts/run, talyvor-lens B32.99)')
-        if (!run.ok) return fail(`the payout run for ${name} was refused: ${said(run)}`)
+        if (!run.ok) {
+          // Lens answers a failed money-layer hand-off with a bare 500 but leaves the payout unpaid with its error: name that error.
+          const page = await call<{ payouts: (WeeklyPayout & { last_error?: string })[] | null }>(who, 'GET', '/v1/workspaces/{ws}/marketplace/payouts', undefined,
+            `${name}'s payout page after the refused run`)
+          const why = page.ok ? (page.value.payouts ?? []).map((x) => x.last_error ?? '').find((e) => e !== '') : undefined
+          return fail(`the payout run for ${name} was refused: ${said(run)}${why === undefined ? '' : `; the payout it left unpaid reads last_error "${why}"`}`)
+        }
         const p: (WeeklyPayout & { asset?: string }) | null = run.value.payout
         if (run.value.withheld || p === null) return fail(`with ${share} µUSD available and their tax details complete, the payout run should pay ${name}; it answered ${JSON.stringify(run.value)}`)
         if (p.method !== 'money') {

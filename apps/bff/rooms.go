@@ -516,6 +516,81 @@ func (a *app) handleRoomPrizeAward(w http.ResponseWriter, r *http.Request, t ten
 		"Prizes cannot be awarded on this deployment yet: it has no marketplace bill to put them on.")
 }
 
+// B41.48 — a room's owner can change (Lens B41.148), relayed the same way:
+//
+//	POST   /api/rooms/{id}/owner           {workspace_id}: the owner hands the room to a member
+//	GET    /api/rooms/{id}/takeover        the owner's last activity, the latest notice, each voting member's points and
+//	                                       vote, and the tally
+//	POST   /api/rooms/{id}/takeover        a member gives notice to an owner inactive for 60 days
+//	DELETE /api/rooms/{id}/takeover        the owner answers the notice and keeps the room
+//	PUT    /api/rooms/{id}/takeover/vote   {candidate_workspace_id}: after 14 unanswered days, a vote for a new lead
+//	POST   /api/rooms/{id}/fork            after 14 unanswered days, a new room the member owns, naming this one
+var (
+	roomOwnerKeys = map[string][]string{"workspace_id": nil}
+	roomLeadKeys  = map[string][]string{"candidate_workspace_id": nil}
+)
+
+// handleRoomOwner — POST /api/rooms/{id}/owner {workspace_id}.
+func (a *app) handleRoomOwner(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	path, ok := roomPath(w, r, "/owner", false)
+	if !ok {
+		return
+	}
+	body, ok := roomBody(w, r, 1<<10, roomOwnerKeys)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, body, "")
+}
+
+// handleRoomTakeover — GET the takeover state; POST gives notice; DELETE answers it.
+func (a *app) handleRoomTakeover(w http.ResponseWriter, r *http.Request, t tenant) {
+	path, ok := roomPath(w, r, "/takeover", false)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet, http.MethodPost, http.MethodDelete:
+		a.marketRelay(w, r, a.client, t.token, r.Method, path, nil, "")
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost+", "+http.MethodDelete)
+	}
+}
+
+// handleRoomTakeoverVote — PUT /api/rooms/{id}/takeover/vote {candidate_workspace_id}.
+func (a *app) handleRoomTakeoverVote(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	path, ok := roomPath(w, r, "/takeover/vote", false)
+	if !ok {
+		return
+	}
+	body, ok := roomBody(w, r, 1<<10, roomLeadKeys)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+}
+
+// handleRoomForkRoom — POST /api/rooms/{id}/fork.
+func (a *app) handleRoomForkRoom(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	path, ok := roomPath(w, r, "/fork", false)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, nil, "")
+}
+
 // handleRoomInvitePreview — GET /api/room-invites/{token}: what a live link opens; 404 once it is revoked, expired or
 // used up.
 func (a *app) handleRoomInvitePreview(w http.ResponseWriter, r *http.Request, t tenant) {
