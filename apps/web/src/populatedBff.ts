@@ -707,6 +707,12 @@ const BY_PATH: Record<string, unknown> = {
       { level: 'L1', subject: 'contact', method: 'test', test: true, status: 'completed', evidence_ref: 'kyc_test_31be09c5d2', started_at: '2026-10-08T09:10:00Z', checked_at: '2026-10-08T09:10:00Z' },
     ],
   },
+  // B55.28 — where the workspace is paid: euros to an IBAN, its holder being checked.
+  '/api/money/payout-details': {
+    payout_details: [
+      { workspace_id: 'ws-1', asset: 'EUR', holder: 'Fixture Ltd', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX', partner: 'test', status: 'pending', updated_at: '2026-10-10T09:00:00Z' },
+    ],
+  },
   // B30.103 — each capability's terms: fx accepted, payments_out's new version asking again, b2b_credit never accepted.
   '/api/terms': {
     terms: [

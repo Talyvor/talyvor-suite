@@ -8,6 +8,9 @@
 // /v1/money/earnings-payouts) are the oracle: £3.34 to the owner, who joined first, and £3.33 to each member, summing to £10.00,
 // every one a room_split under "room <id> terms v1 equal" — the two verified completed by the partner, the pending one held and
 // never sent — and the wallet's account down from 1000 to 0 minor. The same request again makes no new payout and moves nothing.
+//
+// B55.28 — the owner saves its payout details and pays out through the app's relays (PUT /api/money/payout-details, POST
+// /api/rooms/{id}/payouts under the same Idempotency-Key), as Payout details and Room settings do; the members stay on Lens's API.
 
 import { fail } from './bank.ts'
 import type { Answered, SyntheticUser } from './lens.ts'
@@ -26,14 +29,35 @@ const PAYOUT_MINOR = 1_000
 /** A valid UK IBAN (the standard example); the sandbox pays to any IBAN whose checks pass. */
 const IBAN = 'GB82WEST12345698765432'
 
-export function roomEarnings(fund: (ctx: ScenarioCtx, token: string) => Promise<string | undefined> = payInvoiceByCard): Scenario {
+/** One of the owner's writes, sent to the app's /api path with the signed-in session, answered as Lens's would be. */
+export type OwnerWrite = <T>(ctx: ScenarioCtx, method: string, apiPath: string, body: object, headers?: Record<string, string>) => Promise<Answered<T>>
+
+/** The owner's write through the app's BFF in the signed-in browser, which relays it to Lens on the session's token. */
+export const throughApp: OwnerWrite = async <T>(ctx: ScenarioCtx, method: string, apiPath: string, body: object, headers: Record<string, string> = {}) => {
+  const origin = new URL(ctx.app.page.url()).origin
+  const res = await ctx.app.page.request.fetch(`${origin}${apiPath}`, { method, headers: { Origin: origin, ...headers }, data: body })
+  const text = await res.text()
+  if (!res.ok()) {
+    let error = text
+    try {
+      error = (JSON.parse(text) as { error?: string }).error ?? text
+    } catch {
+      // a body that is not JSON is the error as it came
+    }
+    return { ok: false, status: res.status(), error }
+  }
+  return { ok: true, status: res.status(), value: JSON.parse(text) as T }
+}
+
+export function roomEarnings(fund: (ctx: ScenarioCtx, token: string) => Promise<string | undefined> = payInvoiceByCard,
+  ownerWrite: OwnerWrite = throughApp): Scenario {
   return {
     id: 'room-earnings-payout',
     owner: 'talyvor-lens',
     own: true,
     feature: 'Rooms',
     plan: 'team',
-    items: ['B46.21'],
+    items: ['B46.21', 'B55.28'],
     title: "a Room's £10.00 split equally among its three members is £3.34, £3.33 and £3.33 in three earnings_payout rows under the room's " +
       'terms: the two with verified payout details completed, the pending one held; the same payout again makes nothing new',
     run: async (ctx) => {
@@ -79,7 +103,10 @@ export function roomEarnings(fund: (ctx: ScenarioCtx, token: string) => Promise<
       for (const [who, holder, want] of holders) {
         const unaccepted = await acceptTerms(who)
         if (unaccepted !== undefined) return fail(unaccepted)
-        const saved = await call<Details>(who, 'PUT', '/v1/money/payout-details', { asset: 'GBP', holder, iban: IBAN, country: 'GB' }, `${who.workspaceID} saves GBP payout details for ${holder}`)
+        const details = { asset: 'GBP', holder, iban: IBAN, country: 'GB' }
+        const note = `${who.workspaceID} saves GBP payout details for ${holder}`
+        const saved = who === owner ? await ownerWrite<Details>(ctx, 'PUT', '/api/money/payout-details', details) : await call<Details>(who, 'PUT', '/v1/money/payout-details', details, note)
+        if (who === owner) ctx.evidence.push({ note: `${note}, through the app`, answer: said(saved) })
         if (!saved.ok || saved.value.status !== want) return fail(`${who.workspaceID}'s GBP payout details for ${holder} must answer 200 ${want}; Lens answered ${said(saved)}`)
       }
 
@@ -114,8 +141,12 @@ export function roomEarnings(fund: (ctx: ScenarioCtx, token: string) => Promise<
 
         // The owner pays out £10.00, split as the room's terms agree.
         const key = `e2e-room-earnings-${id}`
-        const pay = () => call<{ agreement: string; payouts: Payout[] | null }>(owner, 'POST', `${room}/payouts`, { amount_minor: PAYOUT_MINOR, currency: 'GBP' },
-          `the owner pays out ${PAYOUT_MINOR} GBP minor from the room`, { 'Idempotency-Key': key })
+        const pay = async () => {
+          const got = await ownerWrite<{ agreement: string; payouts: Payout[] | null }>(ctx, 'POST', `/api/rooms/${encodeURIComponent(id)}/payouts`,
+            { amount_minor: PAYOUT_MINOR, currency: 'GBP' }, { 'Idempotency-Key': key })
+          ctx.evidence.push({ note: `the owner pays out ${PAYOUT_MINOR} GBP minor from the room, through the app`, answer: said(got) })
+          return got
+        }
         const paid = await pay()
         if (!paid.ok) return fail(`the room's payout must answer 200; Lens answered ${said(paid)}`)
         const split = await rows('after the payout')

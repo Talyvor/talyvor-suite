@@ -174,6 +174,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/settings': 3,
   // B30.116 — your level, the next check, the checks, and one card per level the capabilities need (L0, L2, L3).
   '/settings/verification': 6,
+  '/settings/payout-details': 0,
   // B30.103 — every capability with terms, in one card.
   '/settings/terms': 1,
   '/settings/webhooks': 0,

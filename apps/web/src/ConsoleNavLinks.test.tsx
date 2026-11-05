@@ -112,6 +112,8 @@ const SIDEBAR_DESTINATIONS = [
   '/members',
   '/settings',
   '/settings/verification',
+  // B55.28 — where the workspace is paid its earnings.
+  '/settings/payout-details',
   '/settings/terms',
   '/settings/webhooks',
   '/settings/email-branding',

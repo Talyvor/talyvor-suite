@@ -655,6 +655,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/rooms/{id}/takeover", a.requireTenant(a.handleRoomTakeover))
 	a.mux.HandleFunc("/api/rooms/{id}/takeover/vote", a.requireTenant(a.handleRoomTakeoverVote))
 	a.mux.HandleFunc("/api/rooms/{id}/fork", a.requireTenant(a.handleRoomForkRoom))
+	// B55.28 — payout details, the earnings payouts and a room's payout by its terms. See money_earnings.go.
+	a.mux.HandleFunc("/api/money/payout-details", a.requireTenant(a.handleMoneyPayoutDetails))
+	a.mux.HandleFunc("/api/money/earnings-payouts", a.requireTenant(a.handleMoneyEarningsPayouts))
+	a.mux.HandleFunc("/api/rooms/{id}/payouts", a.requireTenant(a.handleRoomPayouts))
 	a.mux.HandleFunc("/api/room-invites/{token}", a.requireTenant(a.handleRoomInvitePreview))
 	a.mux.HandleFunc("/api/room-invites/{token}/join", a.requireTenant(a.handleRoomInviteJoin))
 	// B11.3 — the Try-it pages: Tare and document conversion run on the person's input through Lens's
