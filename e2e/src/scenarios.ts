@@ -78,6 +78,7 @@ import { outsidePayees } from './payees.ts'
 import { permissionMandate } from './permissionMandates.ts'
 import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
+import { trustLayer } from './trustLayer.ts'
 import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
 import { roomEarnings } from './roomEarnings.ts'
@@ -5540,6 +5541,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // one credential that verifies with only the published JWKS and states the daily limit; a rule change lists it "rules changed"
   // on revoked.json and the next states the new limit; pausing the agent lists that one "frozen" and the route is 409.
   if (i === 9) list.push(agentCredential(i))
+  // B45.31 — the trust layer, once a run, on a workspace of its own: an outside agent's signed request lands in the owner's approvals
+  // and on the approval card as "Signed by <domain>", a forged one 401, unsigned "Unverified agent"; an approver agent approves within
+  // its limit, which pays once, and is refused 409 above it; the owner's approval verifies as an AP2 v0.2 mandate.
+  if (i === 9) list.push(trustLayer())
   // B30.124 — last, after the night's partner calls: the money rails on Lens's status page, all ten on their Test partner, none down.
   if (i % 100 === 8) list.push(moneyRails())
   // B37.7 — once a run, last: Lens's status page against its own /healthz — the same version and uptime, healthy when it reads
