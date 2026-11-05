@@ -327,7 +327,7 @@ export function gatewayMCP(): Scenario {
 /**
  * The workspace's keys: one made, listed by its prefix and serving; rotated while in use (completion refused until the
  * new key has made a request, the old value refused after it); a second rotation abandoned; one rotated at once; one
- * deleted; a key of the other kind (POST /v1/api/keys) made, serving and deleted; and the shared pool of provider keys,
+ * deleted; the retired POST /v1/api/keys answering 410 and making no key; and the shared pool of provider keys,
  * which the workspace may neither add to nor take from.
  */
 export function gatewayKeys(): Scenario {
@@ -406,15 +406,14 @@ export function gatewayKeys(): Scenario {
       const after = await listed()
       if (after.ok && (after.value ?? []).some((k) => k.id === swapped.value.id)) wrong.push('the deleted key is still listed')
 
-      // 7. The other kind of key, from POST /v1/api/keys: it serves at the catalog price, and once deleted it is refused.
+      // 7. POST /v1/api/keys is retired (B50.33: its keys carried no scopes): 410 naming the workspace route, and no key made.
       const other = await lens.act<{ key: string; id: string }>(app.user, 'POST', '/v1/api/keys', { name: `api ${RUN_SALT}` })
-      ctx.evidence.push({ note: `POST /v1/api/keys: ${other.ok ? `${other.status}, id ${other.value.id}` : `refused ${other.status}: ${other.error}`}` })
-      if (!other.ok) wrong.push(`POST /v1/api/keys was refused: ${other.status} ${other.error}`)
-      else {
-        step(await serves(other.value.key, 'a key from POST /v1/api/keys'))
-        const gone = await lens.act(app.user, 'DELETE', `/v1/api/keys/${other.value.id}`)
-        if (!gone.ok) wrong.push(`DELETE /v1/api/keys/${other.value.id} was refused: ${gone.status} ${gone.error}`)
-        step(await refused(other.value.key, 'that key, once deleted'))
+      ctx.evidence.push({ note: `POST /v1/api/keys: ${other.ok ? `${other.status}, id ${other.value.id}` : `${other.status}: ${other.error}`}` })
+      if (other.ok) {
+        wrong.push(`POST /v1/api/keys made key ${other.value.id} (${other.status}), not 410`)
+        await lens.act(app.user, 'DELETE', `/v1/api/keys/${other.value.id}`)
+      } else if (other.status !== 410 || !other.error.includes('/v1/workspaces/{wsID}/api-keys')) {
+        wrong.push(`POST /v1/api/keys answered ${other.status} "${other.error}", not 410 naming POST /v1/workspaces/{wsID}/api-keys`)
       }
 
       // 8. The shared pool of provider keys is Talyvor's: the workspace may neither read it, add to it nor take from it.
@@ -440,7 +439,7 @@ export function gatewayKeys(): Scenario {
       else if (typeof pool0 === 'string' || typeof pool1 === 'string') wrong.push(`the admin key's GET /v1/api/keys/pool answered ${pool0} before and ${pool1} after`)
       else if (pool1 !== pool0) wrong.push(`the shared pool held ${pool0} entries and holds ${pool1} after the workspace was refused`)
 
-      return verdictOf(wrong, 'a key made, listed by its prefix, served at the catalog price and counted; completing a rotation refused until the new key served, the old key refused after it; an abandoned rotation\'s key never served; a key rotated at once and one deleted refused; a /v1/api/keys key served and refused once deleted; the shared pool refused the workspace its read, an add and a take')
+      return verdictOf(wrong, 'a key made, listed by its prefix, served at the catalog price and counted; completing a rotation refused until the new key served, the old key refused after it; an abandoned rotation\'s key never served; a key rotated at once and one deleted refused; the retired POST /v1/api/keys answered 410 and made no key; the shared pool refused the workspace its read, an add and a take')
     },
   }
 }
