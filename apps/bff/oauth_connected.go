@@ -61,7 +61,11 @@ func (a *app) handleConnectedAssistantRevoke(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	// Every token resolves through its grant (oauthGrantFrom), so deleting it ends them all.
-	a.oauth.grants.delete(grants[i].ID)
+	if err := a.revokeGrant(r.Context(), grants[i].ID); err != nil {
+		log.Printf("bff: oauth revoke from Settings: %v", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "that assistant could not be disconnected; try again"})
+		return
+	}
 	log.Printf("bff: oauth grant revoked from Settings: client %q (sub=%s)", grants[i].ClientName, grants[i].Who.sub)
 	w.WriteHeader(http.StatusNoContent)
 }

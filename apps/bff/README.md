@@ -76,6 +76,7 @@ without.
 | `OIDC_MOBILE_CLIENT_IDS` | (empty) | `oidc`: the phone app's client ids, comma-separated; its ID token is traded at `POST /auth/mobile/session` for a Bearer session. Empty: that route answers 404 |
 | `OIDC_ALLOWED_EMAILS` | — | `oidc`: comma-separated, or `*` for any authenticated identity |
 | `BFF_SESSION_TTL` | `12h` | absolute session lifetime; sessions are in-memory |
+| `BFF_DATABASE_URL` | (unset) | Postgres for assistant sign-ins (Talyvor Connect): clients, codes, grants and hashed tokens survive a restart; unset keeps them in memory |
 | `OPERATOR_SUBS` | — | OIDC `sub`s that may read every tenant. Unset means **nobody** |
 | `TRACK_BASE_URL` | — | optional pair with the secret below; `oidc` only |
 | `TRACK_GATEWAY_SECRET` | — | must equal Track's `GATEWAY_AUTH_SECRET` |
