@@ -1339,6 +1339,8 @@ createServer(async (req, res) => {
       return json(res, 200, { order: ['free', 'team', 'business', 'enterprise'], plans: { free: gate(3, 1, 'none', false, false, false),
         team: gate(25, 5, 'add_on', true, false, false), business: gate(-1, 25, 'included', true, true, false), enterprise: gate(-1, -1, 'included', true, true, true) } })
     }
+    // B52.28 — every published Scan report's range and outcome (stub-scan.ts).
+    if (p === '/v1/public/scan/track-record') return bank.scan.trackRecord(res)
     if (p === '/v1/public/fees') {
       return json(res, 200, { market_take_bps: 1500, services_take_bps: 500, compute_take_bps: 500, lending_fee_bps: 100,
         platform_fee_bps: { ...PLATFORM_FEE_BPS, enterprise: 100 }, fx_margin_bps: { free: 0, team: 50, business: 25, enterprise: 15 },

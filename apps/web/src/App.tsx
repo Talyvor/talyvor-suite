@@ -72,6 +72,7 @@ import { PayScreen } from './areas/lens/Pay'
 import { RecurringPlanScreen } from './areas/lens/RecurringPlan'
 import { SubscriptionsScreen } from './areas/lens/Subscriptions'
 import { BudgetsScreen } from './areas/lens/Budgets'
+import { ScanAgentsScreen, ScanTrackRecordScreen } from './areas/lens/Scan'
 import { SpendingScreen } from './areas/lens/Spending'
 import { ApproveScreen } from './areas/lens/Approve'
 import { PayInvoicePage } from './areas/pay/PayInvoice'
@@ -303,6 +304,9 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/money/subscriptions', title: 'Subscriptions', element: <SubscriptionsScreen /> },
   // B41.39 — a weekly or monthly budget per category, its progress from the postings, and its 50/80/100% alerts.
   { path: '/money/budgets', title: 'Budgets', element: <BudgetsScreen /> },
+  // B52.28 — Scan agents watch the data their owner picks and alert on what is unusual; the track record scores every report.
+  { path: '/scan/agents', title: 'Scan agents', element: <ScanAgentsScreen /> },
+  { path: '/scan/track-record', title: 'Track record', element: <ScanTrackRecordScreen /> },
   // B53.8 — the week's and month's spending by category, budgets, subscriptions, the unusual with the Coach's sentence, notices.
   { path: '/money/spending', title: 'Spending', element: <SpendingScreen /> },
   // B40.9 — the page a prepared request's approval link opens (Lens B40.3), from Chat, an assistant or a push.
@@ -544,6 +548,8 @@ function Sidebar() {
         {item('/money/subscriptions', 'Subscriptions', 'cycle')}
         {item('/money/spending', 'Spending', 'chart')}
         {item('/money/budgets', 'Budgets', 'sliders')}
+        {item('/scan/agents', 'Scan agents', 'agent')}
+        {item('/scan/track-record', 'Track record', 'prove', { indent: true })}
       </Group>
       <Group label="Settings" {...fold.group('Settings')}>
         {item('/settings', 'Settings', 'settings')}

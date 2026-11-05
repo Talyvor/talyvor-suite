@@ -102,6 +102,7 @@ import { oneSearch } from './oneSearch.ts'
 import { limitAlerts } from './limitAlerts.ts'
 import { subscriptionsView } from './subscriptionsView.ts'
 import { budgetsByCategory } from './budgetsByCategory.ts'
+import { scanAgents } from './scanAgents.ts'
 import { coachWeek } from './coachWeek.ts'
 import { spendingScreen } from './spendingScreen.ts'
 import { monthPlan } from './monthPlan.ts'
@@ -5503,6 +5504,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.39 — budgets by category, once a run, on a workspace of its own: with a £100.00 AI and software budget, the payment that
   // crosses £80 raises one 80% alert, another category's payment counts for nothing, and Money → Budgets shows the progress.
   if (i === 7) list.push(budgetsByCategory())
+  // B52.28 — Scan in the app, once a run, on a workspace of its own: a watch keeps the owner's measure of unusual and stops when
+  // told, the public track record scores a hit only inside its range, and Scan agents and Track record show both.
+  if (i === 7) list.push(scanAgents())
   // B53.14 — a week of spending with the Coach, once a run, on a workspace of its own: six card payments land in their categories, an
   // eating-out budget crossing 80% alerts once, a duplicate and a new country are unusual, every Coach sentence passes its validator.
   if (i === 5) list.push(coachWeek())
