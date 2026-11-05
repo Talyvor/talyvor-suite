@@ -157,6 +157,7 @@ import { PermissionMandateDesk } from './stub-permission-mandates.ts'
 import { DeviceKeyDesk } from './stub-device-keys.ts'
 import { PaymentRequestDesk } from './stub-payment-requests.ts'
 import { TermsDesk } from './stub-terms.ts'
+import { ScanDesk } from './stub-scan.ts'
 import { type KYAFacts, KYADesk } from './stub-kya.ts'
 import { type Lineage, TrustDesk } from './stub-trust.ts'
 import { TrustLayerDesk } from './stub-trust-layer.ts'
@@ -517,6 +518,8 @@ export class Bank {
   private readonly paymentRequests: PaymentRequestDesk
   /** B30.122 — each B30 capability's terms and the workspace's acceptances (stub-terms.ts). */
   private readonly terms: TermsDesk
+  /** B52.28 — Scan agents' watches and the public track record (stub-scan.ts). */
+  readonly scan: ScanDesk
   /** B30.118 — each agent's Know Your Agent credential (stub-kya.ts). */
   private readonly kya: KYADesk
   /** B46.21 — payout details and earnings paid out, a Room's split among them (stub-earnings.ts). */
@@ -548,6 +551,7 @@ export class Bank {
     this.devices = new DeviceKeyDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
     this.earningsPayouts = new EarningsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agentID, asset) => this.payees.wallet(ws, agentID, asset))
     this.terms = new TermsDesk(d.json, (req) => this.body(req), (name) => this.broken(name), B30_CAPABILITIES)
+    this.scan = new ScanDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agentID) => this.agents.get(agentID)?.ws === ws)
     this.kya = new KYADesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, agent) => this.kyaFacts(ws, agent))
     this.trustDesk = new TrustDesk({ json: d.json, body: (req) => this.body(req), broken: (name) => this.broken(name),
       listing: (id, viewer) => { const l = this.listings.get(id); return l !== undefined && this.visible(l, viewer) ? l : undefined },
@@ -2474,6 +2478,8 @@ export class Bank {
       const reason = refused === undefined ? '' : refused.error.replace(/^(economy: )?the agent's spending rules refuse this request: /, '')
       return json(res, 200, { verdict, reason, amount_ulxc: n, at: now, balance_ulxc: this.balance(`agent:${a.id}`) }), true
     }
+    // B52.28 — Scan agents' watches (stub-scan.ts), before the agent routes below catch …/scan-watches.
+    if (await this.scan.route(req, res, ws.id, rest, now)) return true
     if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/[a-z-]+)?$/.exec(rest)) !== null) {
       const a = this.agents.get(m[1])
       if (a === undefined || a.ws !== ws.id) return json(res, 404, { error: 'economy: no such agent in this workspace' }), true

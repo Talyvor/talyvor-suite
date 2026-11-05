@@ -326,6 +326,76 @@ export interface SpendPlan {
   findings: PlanFinding[]
 }
 
+/** B52.28 — Lens scan.Finding (B52.24): a series' latest point against its normal, and the outlook range. */
+export interface ScanFinding {
+  at: string
+  value: number
+  unit: string
+  normal_low: number
+  normal_high: number
+  /** the anomaly, in standard deviations */
+  z: number
+  outlook_at: string
+  outlook_low: number
+  outlook_high: number
+}
+
+/** B52.28 — Lens scan.Alert (B52.27): one alert a watch sent, with what the agent's wallet paid for it. */
+export interface ScanAlert {
+  id: number
+  series: string
+  observed_at: string
+  body: string
+  finding: ScanFinding
+  attribution: string[] | null
+  charged_ulxc: number
+  created_at: string
+}
+
+/** B52.28 — Lens scan.Watch (B52.27): what a Scan agent watches and its own idea of unusual. */
+export interface ScanWatch {
+  id: string
+  agent_id: string
+  series: string[]
+  /** range: outside the five-year range; z: more than z standard deviations from the normal */
+  rule: 'range' | 'z'
+  z?: number
+  active: boolean
+  last_run_at?: string
+  /** why the last run sent nothing: the agent was paused, or its wallet could not pay */
+  last_refusal?: string
+  created_at: string
+  alerts: ScanAlert[] | null
+}
+
+/** B52.28 — Lens scan.TrackEntry (B52.26): a published report's range and, once known, its outcome. */
+export interface ScanTrackEntry {
+  report_id: number
+  series: string
+  title: string
+  sources: string[] | null
+  published_at: string
+  observed_at: string
+  value: number
+  unit: string
+  normal_low: number
+  normal_high: number
+  outlook_at: string
+  outlook_low: number
+  outlook_high: number
+  outcome?: number
+  outcome_at?: string
+  /** absent until scored */
+  hit?: boolean
+}
+
+export interface ScanTrackRecord {
+  records: ScanTrackEntry[] | null
+  hits: number
+  misses: number
+  waiting: number
+}
+
 /** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
 export interface LimitAlert {
   id: string
@@ -849,6 +919,11 @@ export const agentBankApi = {
   budgets: () => getJSON<{ budgets: SpendBudget[] | null }>('/api/money/budgets', { budgets: 'list' }),
   setBudget: (b: SpendBudgetRequest) => send<SpendBudget>('PUT', '/api/money/budgets', b),
   deleteBudget: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/budgets/${e(id)}`),
+  scanTrackRecord: () => getJSON<ScanTrackRecord>('/api/scan/track-record', { records: 'list', hits: 'number', misses: 'number', waiting: 'number' }),
+  scanWatches: () => getJSON<{ watches: ScanWatch[] | null }>('/api/scan/watches', { watches: 'list' }),
+  scanWatch: (agentID: string, w: { series: string[]; rule: ScanWatch['rule']; z?: number }) =>
+    send<ScanWatch>('POST', `/api/agents/${e(agentID)}/scan-watches`, w),
+  stopScanWatch: (id: string) => send<{ id: string; active: boolean }>('DELETE', `/api/scan/watches/${e(id)}`),
   spending: (from: string, to: string) =>
     getJSON<Spending>(`/api/money/spending?${new URLSearchParams({ from, to }).toString()}`, { payments: 'list', totals: 'list' }),
   unusual: (from: string, to: string) =>

@@ -511,6 +511,24 @@ const BY_PATH: Record<string, unknown> = {
         last_at: '2026-09-27T09:00:00Z', next_at: '2026-10-04T09:00:00Z', remind_on: '2026-10-01T09:00:00Z', monthly_minor: 10_833, yearly_minor: 130_000 },
     ],
   },
+  // B52.28 — a Scan agent watching Cushing's crude stocks, with the one alert it sent, and a scored report.
+  '/api/scan/watches': {
+    watches: [
+      { id: 'swt_1', agent_id: 'agt_research', series: ['eia.stocks.cushing-crude'], rule: 'range', active: true, created_at: '2026-09-20T09:00:00Z',
+        alerts: [{ id: 1, series: 'eia.stocks.cushing-crude', observed_at: '2026-09-26T00:00:00Z', body: 'Crude at Cushing read 21,000 thousand barrels, below its five-year range.',
+          finding: { at: '2026-09-26T00:00:00Z', value: 21_000, unit: 'thousand barrels', normal_low: 24_000, normal_high: 30_000, z: -2.4,
+            outlook_at: '2026-10-24T00:00:00Z', outlook_low: 20_000, outlook_high: 25_000 },
+          attribution: ['U.S. Energy Information Administration'], charged_ulxc: 50_000, created_at: '2026-09-26T10:00:00Z' }] },
+    ],
+  },
+  '/api/scan/track-record': {
+    hits: 1, misses: 0, waiting: 0,
+    records: [
+      { report_id: 1, series: 'eia.stocks.cushing-crude', title: 'Cushing crude stocks fall below their five-year range', sources: ['U.S. Energy Information Administration'],
+        published_at: '2026-09-27T09:00:00Z', observed_at: '2026-09-26T00:00:00Z', value: 21_000, unit: 'thousand barrels', normal_low: 24_000, normal_high: 30_000,
+        outlook_at: '2026-10-24T00:00:00Z', outlook_low: 20_000, outlook_high: 25_000, outcome: 22_400, outcome_at: '2026-10-24T00:00:00Z', hit: true },
+    ],
+  },
   // B41.39 — the budget whose 50% alert is just below, at 50% of £500 this month.
   '/api/money/budgets': {
     budgets: [
