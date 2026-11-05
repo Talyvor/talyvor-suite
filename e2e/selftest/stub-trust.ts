@@ -10,6 +10,7 @@
 //   linked-billed       — a buyer sharing a card with the seller is billed for a use, not charged linked (Bank's use route)
 //   trust-mcp-unreplied — market_listing's trust leaves the seller's replies out
 //   card-link-missing   — no synthetic card link, as on a Lens without B32.102: 404, which market-trust FAILs
+//   performance-linked-counted — B41.73: the 30-day performance counts a linked buyer's use, as it must not
 
 import { randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -32,6 +33,8 @@ export interface TrustDeps {
   paid: (listingID: string, buyer: string) => boolean
   payoutsEnabled: (ws: string) => boolean
   lineage: (listingID: string) => Lineage
+  /** B41.73 — the listing's uses, every one answered (the stand-in records no failed use). */
+  uses: (listingID: string) => { buyer: string; charge: string; price_ulxc: number }[]
 }
 
 const MAX_TEXT = 4000
@@ -72,12 +75,17 @@ export class TrustDesk {
     const sum = counted.reduce((s, r) => s + r.rating, 0)
     const recent = [...counted].sort((a, b) => b.updated_at.localeCompare(a.updated_at) || a.id.localeCompare(b.id)).slice(0, 20)
     const lineage = this.d.lineage(l.id)
+    // B41.173: the last 30 days of uses by buyers other than the seller and those linked to it; a stand-in use takes 40 ms.
+    const ran = this.d.uses(l.id).filter((u) => u.buyer !== l.workspace_id && (!this.linked(l.workspace_id, u.buyer) || this.d.broken('performance-linked-counted')))
+    const billed = ran.filter((u) => u.charge === 'billed')
+    const performance = { days: 30, uses: ran.length, failed: 0, success_rate: ran.length === 0 ? null : 1, median_latency_ms: ran.length === 0 ? null : 40,
+      cost_per_use_usd_micros: billed.length === 0 ? null : Math.round(billed.reduce((s, u) => s + u.price_ulxc, 0) / billed.length) / 10 }
     return {
       listing_id: l.id, version: l.latest_version,
       publisher: { workspace_id: l.workspace_id, verified: payouts, payouts_enabled: payouts, upheld_claims_12_months: 0, ...(payouts ? {} : { not_verified_because: ['payouts are not enabled'] }) },
       reviews: { count: counted.length, average: counted.length === 0 ? 0 : Math.round((sum / counted.length) * 100) / 100, stars,
         recent: recent.map((r) => this.out(r, !(mcp && this.d.broken('trust-mcp-unreplied')))) },
-      eval: null, claims: { open: 0, upheld: 0, attributed: 0, rejected: 0 }, originals: lineage.ancestors, remixes: lineage.descendants,
+      eval: null, claims: { open: 0, upheld: 0, attributed: 0, rejected: 0 }, originals: lineage.ancestors, remixes: lineage.descendants, performance,
     }
   }
 

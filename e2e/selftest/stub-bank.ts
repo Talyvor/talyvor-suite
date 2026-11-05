@@ -557,7 +557,8 @@ export class Bank {
       listing: (id, viewer) => { const l = this.listings.get(id); return l !== undefined && this.visible(l, viewer) ? l : undefined },
       paid: (listing, buyer) => this.uses.some((u) => u.listing_id === listing && u.buyer === buyer && u.charge === 'billed' && u.refunded_at === undefined),
       payoutsEnabled: (ws) => this.accounts.get(ws)?.payouts_enabled === true,
-      lineage: (id) => this.lineageOf(id) })
+      lineage: (id) => this.lineageOf(id),
+      uses: (id) => this.uses.filter((u) => u.listing_id === id) })
     this.trustLayer = new TrustLayerDesk(d.json, d.read, (name) => this.broken(name), (agentID, asker, key, items, trust) => {
       const a = this.agents.get(agentID)
       if (a === undefined || a.archived_at !== undefined) return { status: 404, body: { error: 'no such agent' } }
