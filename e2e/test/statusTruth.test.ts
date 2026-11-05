@@ -27,6 +27,15 @@ describe('the status-truth oracle (B37.7)', () => {
     expect(statusTruthVerdict(page(), health(), NOW)).toEqual({ pass: true, detail: expect.stringContaining('all 10 money rails') })
   })
 
+  it("passes Scan's data collectors as production sends them, one off with its note and one on (B17.353)", () => {
+    const p = page()
+    p.collectors = [
+      { source: 'eia', name: 'US EIA open data (weekly petroleum stocks)', on: false, note: 'off: needs its API key in the server setting LENS_SCAN_EIA_KEY', last_retrieved: null, failing: false },
+      { source: 'entsog', name: 'ENTSOG transparency platform (gas flows)', on: true, last_retrieved: '2026-11-04T17:04:47.883791Z', failing: false },
+    ]
+    expect(statusTruthVerdict(p, health(), NOW)).toEqual({ pass: true, detail: expect.stringContaining('all 10 money rails') })
+  })
+
   it('names a rail that is down and one never called', () => {
     const p = page()
     p.rails![5] = { ...p.rails![5], status: 'outage', last_failure: probed }
