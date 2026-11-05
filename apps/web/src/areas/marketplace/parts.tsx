@@ -78,11 +78,14 @@ export function ListingCard({
   own,
   preview = false,
   usd,
+  action,
 }: {
   l: Listing
   own?: boolean
   preview?: boolean
   usd?: number | null
+  /** B41.72 — a control on the card, above its stretched link (Discover's Compare) */
+  action?: React.ReactNode
 }) {
   const workspace = useWorkspaceID()
   const mine = own ?? l.workspace_id === workspace
@@ -148,6 +151,7 @@ export function ListingCard({
           </span>
         </span>
       </span>
+      {action ? <span className="relative z-10">{action}</span> : null}
     </li>
   )
 }
@@ -176,17 +180,19 @@ export function ListingGrid<L extends Listing>({
   own,
   label,
   usd,
+  action,
 }: {
   listings: L[]
   own?: boolean
   label: string
   /** B32.61 — what one use of each is billed in µUSD, where a search said it */
   usd?: (l: L) => number | null
+  action?: (l: L) => React.ReactNode
 }) {
   return (
     <ul className="grid gap-3 wide:grid-cols-2 xl:grid-cols-3" aria-label={label}>
       {listings.map((l) => (
-        <ListingCard key={l.id} l={l} own={own} usd={usd?.(l)} />
+        <ListingCard key={l.id} l={l} own={own} usd={usd?.(l)} action={action?.(l)} />
       ))}
     </ul>
   )

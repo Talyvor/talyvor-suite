@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Button, Input, NavIcon, Pill, cn, focusRing, inlineLink } from '@talyvor/ui'
 import { Region } from '../../components/Region'
 import { Ask, searchFailure } from './Ask'
+import { COMPARE_MAX, compareHref, compareIds } from './Compare'
 import { ApiError } from '../../lib/api'
 import { formatWhen } from '../lens/format'
 import { ROOMS_KEY, type Room, roomsApi, usdText } from '../rooms/roomsApi'
@@ -118,6 +119,19 @@ export function Discover() {
   const maxText = params.get('max') ?? ''
   const verified = params.get('verified') === '1'
   const page = Math.max(1, Number.parseInt(params.get('page') ?? '1', 10) || 1)
+  // B41.72 — the listings picked to compare ride the address too, so paging and filtering keep them.
+  const picked = compareIds(params.get('compare'))
+  const togglePick = (id: string) =>
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p)
+        const ids = picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id]
+        if (ids.length > 0) next.set('compare', ids.join(','))
+        else next.delete('compare')
+        return next
+      },
+      { replace: true },
+    )
   // A ceiling is US dollars as a person writes them, `0.05`; Lens takes µUSD. One that is not a price is not sent.
   const maxMicros = maxText.trim() === '' ? null : parsePrice(maxText)
   const query: DiscoverQuery = {
@@ -262,6 +276,19 @@ export function Discover() {
               {shownSort === 'trending' ? ' · ranked by distinct buyers this week' : ''}
             </span>
           ) : null}
+          {picked.length > 0 ? (
+            <span className="flex items-center gap-2 text-caption text-muted" data-testid="compare-picked">
+              <span className="font-figure">{picked.length}</span> of <span className="font-figure">{COMPARE_MAX}</span>{' '}
+              picked
+              {picked.length >= 2 ? (
+                <Link className={`text-body text-ink ${inlineLink}`} to={compareHref(picked)}>
+                  Compare side by side
+                </Link>
+              ) : (
+                ' · pick one more to compare'
+              )}
+            </span>
+          ) : null}
         </div>
         {results.isError ? (
           <p className="text-body text-muted">{searchFailure(results.error)}</p>
@@ -280,7 +307,22 @@ export function Discover() {
             ) : null}
           </p>
         ) : (
-          <ListingGrid listings={hits} label="Listings" usd={(h) => h.price_per_use_usd_micros} />
+          <ListingGrid
+            listings={hits}
+            label="Listings"
+            usd={(h) => h.price_per_use_usd_micros}
+            action={(h) => (
+              <Button
+                aria-pressed={picked.includes(h.id)}
+                aria-label={`Compare ${h.title}`}
+                className={pressed}
+                disabled={!picked.includes(h.id) && picked.length >= COMPARE_MAX}
+                onClick={() => togglePick(h.id)}
+              >
+                Compare
+              </Button>
+            )}
+          />
         )}
         {results.data && (page > 1 || results.data.has_more) ? (
           <nav className="flex items-center gap-3" aria-label="Pages">

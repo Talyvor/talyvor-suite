@@ -377,6 +377,16 @@ export interface ListingTrust {
   originals: Ancestor[] | null;
   /** how many listings build on it, at any depth */
   remixes: number;
+  /** B41.173 — its last 30 days of uses; absent from a Lens before it */
+  performance?: {
+    days: number;
+    uses: number;
+    failed: number;
+    /** answered ÷ uses, 0 to 1; null with no uses */
+    success_rate: number | null;
+    median_latency_ms: number | null;
+    cost_per_use_usd_micros: number | null;
+  };
 }
 
 /** Lens market.Earning — one cleared use's share: the seller's, or an original's royalty from a remix's sale. */

@@ -133,7 +133,7 @@ import { connectApprove, connectContact, connectMCP, connectOAuth, connectRecurr
 import { mcpPayRetried, mcpSDKAgentPay } from './mcpSDK.ts'
 import { keysNotForwarded, keysUnlisted } from './keys.ts'
 import { rateLimitsHold, workspaceLimitsRaised } from './ratelimit.ts'
-import { marketAskScreen, marketDiscoverScreen, marketDiscovery } from './discovery.ts'
+import { marketAskScreen, marketCompareScreen, marketDiscoverScreen, marketDiscovery } from './discovery.ts'
 import { royaltiesNotHeadline } from './royalties.ts'
 import { statementLineKinds } from './statementKinds.ts'
 import { openapiWallets } from './openapiWallets.ts'
@@ -5294,6 +5294,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.71 — ask the marketplace on Discover, once a run: a job in words shows up to three listings, each with its estimated
   // total for the volume in the words, exactly as Lens's own ask answers.
   if (i === 5) list.push(marketAskScreen())
+  // B41.72 — three listings compared side by side, once a run: each value in the table is the one Lens's own reads give.
+  if (i === 5) list.push(marketCompareScreen())
   // B32.75 — a sale's earning released on the seller's journal, once a run, bought by a workspace of its own from a seller it
   // makes: the bill paid, the share is due or available, Lens's release job empties the holdback, and the journal reconciles.
   if (i === 5) list.push(marketJournal(i))
