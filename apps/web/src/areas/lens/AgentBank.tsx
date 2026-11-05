@@ -2147,7 +2147,10 @@ const DECIDED: Record<AgentApproval['status'], { status: PillStatus; label: stri
   approved: { status: 'settled', label: 'Approved' },
   used: { status: 'settled', label: 'Approved and used' },
   denied: { status: 'slashed', label: 'Denied' },
+  expired: { status: 'parked', label: 'Expired' },
 }
+// B55.7 — a status Lens adds before this screen knows it reads Closed instead of blanking the screen.
+const CLOSED = { status: 'parked' as const, label: 'Closed' }
 
 /** How far a waiting row is swiped right before it is approved (B41.33). */
 const SWIPE_PX = 96
@@ -2490,12 +2493,16 @@ export function Approvals({
               ))}
             </div>
           )}
-          {decided.map((a) => (
-            <Row key={a.id} label={asks(a)} hint={what(a)}
-            >
-              <Pill status={DECIDED[a.status].status}>{DECIDED[a.status].label}</Pill>
-            </Row>
-          ))}
+          {decided.map((a) => {
+            const d = DECIDED[a.status] ?? CLOSED
+            const hint =
+              a.status !== 'expired' ? what(a) : a.decided_at ? 'Approved, but not used within 24 hours' : 'Not answered within 24 hours'
+            return (
+              <Row key={a.id} label={asks(a)} hint={hint}>
+                <Pill status={d.status}>{d.label}</Pill>
+              </Row>
+            )
+          })}
         </Card>
       )}
     </div>
