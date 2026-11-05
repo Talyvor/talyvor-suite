@@ -646,18 +646,19 @@ export async function publishPrompt(app: AppUser, l: { title: string; template: 
   }
 }
 
-/** A listing's page: fills its variables and presses Use it; what it answered, or the refusal. */
-export async function runListing(app: AppUser, id: string, variables: Record<string, string>): Promise<{ shown?: string; error?: string }> {
+/** A listing's page: fills its variables and presses Use it; what it answered, or the refusal, and what the page said before. */
+export async function runListing(app: AppUser, id: string, variables: Record<string, string>): Promise<{ shown?: string; error?: string; page?: string }> {
   const page = await app.tab(`/marketplace/listings/${encodeURIComponent(id)}`)
   try {
     const use = page.getByRole('button', { name: /^Use it/ })
     await use.waitFor({ timeout: ACTION_TIMEOUT_MS })
+    const said = (await page.locator('body').innerText()).trim()
     for (const [name, value] of Object.entries(variables)) await page.getByLabel(name, { exact: true }).fill(value)
     await use.click()
     const result = page.getByTestId('market-use-result')
     const refused = page.locator('form').getByRole('alert')
     await result.or(refused).first().waitFor({ timeout: 120_000 })
-    return (await result.isVisible()) ? { shown: (await result.innerText()).trim() } : { error: (await refused.first().innerText()).trim() }
+    return (await result.isVisible()) ? { shown: (await result.innerText()).trim(), page: said } : { error: (await refused.first().innerText()).trim(), page: said }
   } finally {
     await page.close()
   }
@@ -3965,6 +3966,9 @@ export function marketplaceSale(seed: number, partner: number): Scenario {
       if (fresh.length !== 1 || fresh[0].listing_id !== published.id || fresh[0].price_ulxc !== price) {
         return fail(`one use of a ${price} µLXC listing put ${fresh.length} line(s) on the buyer's bill`)
       }
+      // B55.36 — the price goes on the monthly marketplace bill, and neither the listing nor the bill says it is on a card.
+      if (!(used.page ?? '').includes('on your monthly marketplace bill')) return fail(`the listing page does not say a use goes on the monthly marketplace bill: "${(used.page ?? '').slice(0, 300)}"`)
+      if (/on your card/i.test(`${used.page ?? ''}\n${await billShown(app)}`)) return fail('the listing page or Your bill says "on your card"')
       const earned = await env.lens.marketEarnings(seller.user)
       ctx.evidence.push({ note: `seller earnings before ${JSON.stringify(earned0)}, after ${JSON.stringify(earned)}` })
       // B32.9: the seller earns the price less Talyvor's take, rounded down to the µUSD (B32.8); B35.7 — the take Lens states.

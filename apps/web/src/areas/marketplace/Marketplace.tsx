@@ -1160,7 +1160,7 @@ function MonthBill() {
           heading={monthName(bill.data.month || month)}
           totalHint={
             (bill.data.lines ?? []).length > 0
-              ? "Billed on your card for this month, tax included"
+              ? "On this month’s marketplace bill, tax included"
               : "No paid listing was used this month"
           }
         />
@@ -1272,9 +1272,8 @@ function Bill() {
       className="flex max-w-2xl flex-col gap-3"
     >
       <p className="text-body text-muted">
-        Every paid listing your workspace or its agents used, billed
-        {cards === "live" ? " on your card" : ""} each month — never taken from
-        your credits.{cards === "off" ? ` ${CARDS_OFF}` : ""} The models a
+        Every paid listing your workspace or its agents used, billed each
+        month — never taken from your credits.{cards === "off" ? ` ${CARDS_OFF}` : ""} The models a
         listing calls are on your usual bill, not here.
       </p>
       {invoices.isError ? (

@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, focusRing } from '@talyvor/ui'
 import { formatULXC } from '../lens/agentBankApi'
 import { formatUSD } from '../lens/format'
+import { Lxc } from '../lens/money'
 import {
   type Listing,
   type ListingUse,
@@ -146,14 +147,14 @@ export function UseListing({ listing, own, held }: { listing: Listing; own: bool
           </>
         ) : trying ? (
           <>
-            Your first <span className="font-figure">{trialUses}</span> uses of it are free trials, not billed. Once they are used, each use costs{' '}
-            <span className="font-figure">{formatULXC(listing.price_per_use_ulxc)}</span>, billed monthly on your card. The
-            models it calls are billed to you as usual.
+            Your first <span className="font-figure">{trialUses}</span> uses of it are free trials, not billed. After them, each use costs{' '}
+            <Lxc ulxc={listing.price_per_use_ulxc} />, on your monthly marketplace bill. The models it calls are billed to you as
+            usual.
           </>
         ) : paid ? (
           <>
-            Each use costs <span className="font-figure">{formatULXC(listing.price_per_use_ulxc)}</span>, billed monthly
-            on your card — not taken from your credits. The models it calls are billed to you as usual.
+            Each use costs <Lxc ulxc={listing.price_per_use_ulxc} />, on your monthly marketplace bill, not taken from your
+            credits. The models it calls are billed to you as usual.
           </>
         ) : (
           'Free to use. The models it calls are billed to you as usual.'
