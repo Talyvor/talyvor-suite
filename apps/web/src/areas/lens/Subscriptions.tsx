@@ -113,7 +113,8 @@ export function SubscriptionsScreen() {
   const now = Date.now()
   const dueSoon = rows.filter((r) => r.remind.getTime() <= now)
   const failed = [found, schedules, licences].find((q) => q.isError)
-  const pending = found.isPending || schedules.isPending || licences.isPending
+  // A rental's row waits for its listing: without the offer it would show no period and no monthly cost (B17.348).
+  const pending = found.isPending || schedules.isPending || licences.isPending || listings.some((q) => q.isPending)
   return (
     <RegionScreen>
       <Region
