@@ -5,7 +5,7 @@
 // on every approve or deny is signed with it over a challenge Lens issues for that one approval.
 // Pushes arrive through /sw.js, subscribed with the key Lens serves.
 
-import { agentBankApi, type PasskeyAssertion } from './agentBankApi'
+import { agentBankApi, type PasskeyAssertion, type PayeeDetails } from './agentBankApi'
 
 export function b64u(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
@@ -77,6 +77,11 @@ export async function signPayee(payeeID: string): Promise<PasskeyAssertion> {
 /** B41.11 — signs a new payee's "I called them" challenge: its 24-hour cooling-off ends (Lens B41.111). */
 export async function signPayeeCalled(payeeID: string): Promise<PasskeyAssertion> {
   return assertOver(await agentBankApi.payeeCalledChallenge(payeeID))
+}
+
+/** B41.12 — signs the challenge for changing a payee's bank details to exactly `details` (Lens B41.112). */
+export async function signPayeeDetails(payeeID: string, details: PayeeDetails): Promise<PasskeyAssertion> {
+  return assertOver(await agentBankApi.payeeDetailsChallenge(payeeID, details))
 }
 
 /**

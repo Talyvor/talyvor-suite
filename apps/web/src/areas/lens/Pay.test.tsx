@@ -77,6 +77,17 @@ function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<st
       delete payees[0].cooling_off_until
       return json({ ...payees[0], called_at: '2026-10-29T10:00:00Z' })
     }
+    if (url === '/api/money/payees/payee_new/details/challenge') {
+      sent.push({ url, headers: init?.headers as Record<string, string>, body: JSON.parse(String(init?.body)) })
+      return json({ challenge: 'Y2gy', allow_credentials: ['Y3JlZDE'], user_verification: 'required', notice: 'Call them on a number you already know.' })
+    }
+    if (url === '/api/money/payees/payee_new/details') {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      sent.push({ url, headers: init?.headers as Record<string, string>, body })
+      Object.assign(payees[0], { sort_code: '400000', account_number: '87654321', details_changed_at: '2026-10-29T10:00:00Z', held_until: '2026-10-30T10:00:00Z',
+        notice: 'Call them on a number you already know — not one from the message that asked for the change — to check the new details are theirs.' })
+      return json(payees[0])
+    }
     if (url === '/api/money/payments' && init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as Record<string, unknown>
       sent.push({ url, headers: init.headers as Record<string, string>, body })
@@ -121,6 +132,35 @@ describe('the Pay screen', () => {
     await vi.waitFor(() => expect(screen.queryByTestId('cooling-off-payee_new')).toBeNull())
     expect(get).toHaveBeenCalledTimes(1)
     expect(bff.sent).toEqual([expect.objectContaining({ url: '/api/money/payees/payee_new/called', body: { assertion: expect.objectContaining({ credential_id: 'AQ', signature: 'BA' }) } })])
+  })
+
+  it('changes a payee’s bank details only with a passkey over the new details, and shows every payment to it held for 24 hours', async () => {
+    const bff = mockBff([], [], [{ id: 'payee_new', name: 'Joinery Ltd', country: 'GB', sort_code: '040004', account_number: '12345678', check: 'exact_match',
+      checked_by: 'test', checked_at: '2026-10-28T09:00:00Z', needs_confirmation: false, created_at: '2026-10-28T09:00:00Z' }])
+    const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
+      response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+
+    const row = await screen.findByTestId('payee-payee_new')
+    fireEvent.click(within(row).getByRole('button', { name: 'Change bank details' }))
+    const form = screen.getByTestId('change-details-payee_new')
+    expect(form.textContent).toContain('Call them on a number you already know')
+    fireEvent.change(within(form).getByLabelText('New sort code'), { target: { value: '40-00-00' } })
+    fireEvent.change(within(form).getByLabelText('New account number'), { target: { value: '87654321' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Change with a passkey' }))
+
+    const held = await screen.findByTestId('details-held-payee_new')
+    expect(held.textContent).toContain('Joinery Ltd’s bank details changed, so every payment to them is held until')
+    expect(held.textContent).toContain('a number you already know')
+    expect(within(screen.getByTestId('payee-payee_new')).getByText('Details changed')).toBeTruthy()
+    expect(get).toHaveBeenCalledTimes(1)
+    const details = { country: 'GB', sort_code: '400000', account_number: '87654321' }
+    expect(bff.sent).toEqual([
+      expect.objectContaining({ url: '/api/money/payees/payee_new/details/challenge', body: details }),
+      expect.objectContaining({ url: '/api/money/payees/payee_new/details', body: { ...details, assertion: expect.objectContaining({ credential_id: 'AQ', signature: 'BA' }) } }),
+    ])
   })
 
   it('saves a payee, pays it from the agent’s account in minor units under one key, and the payment reads Completed', async () => {

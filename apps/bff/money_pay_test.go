@@ -118,3 +118,41 @@ func TestPayeeCalledReachesLens(t *testing.T) {
 		t.Fatalf("Lens received %q, want %q", got, want)
 	}
 }
+
+// B41.12 — changing a payee's bank details reaches Lens on its details route: the challenge with the new details alone,
+// the change with them and the assertion; a change with no assertion is refused before Lens.
+func TestPayeeDetailsChangeReachesLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" "+string(raw))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"payee_1"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	details := `{"sort_code":"400000","account_number":"12345678"`
+	if rec := doJSON(a, http.MethodPost, "/api/money/payees/payee_1/details/challenge", details+`,"assertion":{"credential_id":"c"}}`); rec.Code != http.StatusOK {
+		t.Fatalf("challenge = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/money/payees/payee_1/details", details+`}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("unsigned = %d %s, want 400 before Lens", rec.Code, rec.Body.String())
+	}
+	signed := details + `,"name":"Mallory","assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`
+	if rec := doJSON(a, http.MethodPost, "/api/money/payees/payee_1/details", signed); rec.Code != http.StatusOK {
+		t.Fatalf("signed = %d %s", rec.Code, rec.Body.String())
+	}
+	sent := `"country":"","sort_code":"400000","account_number":"12345678","iban":"","bic":"","routing_number":"","network":"","address":""`
+	want := []string{
+		"POST /v1/money/payees/payee_1/details/challenge {" + sent + "}",
+		"POST /v1/money/payees/payee_1/details {" + sent + `,"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`,
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("Lens received %q, want %q", got, want)
+	}
+}

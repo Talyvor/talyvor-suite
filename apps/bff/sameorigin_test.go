@@ -260,6 +260,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPut, path: "/api/money/notices/settings", body: `{"timezone":"UTC","quiet_from":"","quiet_until":"","off":[]}`},             // B53.8
 		{method: http.MethodPut, path: "/api/money/plan/income", body: `{"payday":28,"amount_minor":250000,"currency":"GBP","payer":""}`},               // B53.16
 		{method: http.MethodPost, path: "/api/money/payees/x1/called", body: `{"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
+		{method: http.MethodPost, path: "/api/money/payees/x1/details/challenge", body: `{"sort_code":"400000","account_number":"12345678"}`}, // B41.12
+		{method: http.MethodPost, path: "/api/money/payees/x1/details", body: `{"sort_code":"400000","account_number":"12345678","assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
 		{method: http.MethodPost, path: "/api/money/payment-requests/x1/approval", body: `{"positions":[1]}`},
 		{method: http.MethodPost, path: "/api/money/payment-requests", body: `{"voice":true,"items":[{"payee_id":"p1","currency":"GBP","amount_minor":1}]}`},
 		{method: http.MethodPost, path: "/api/chat/voice/speech", body: `{"input":"hi"}`},

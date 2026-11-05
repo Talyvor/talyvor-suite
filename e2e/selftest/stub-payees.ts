@@ -41,6 +41,10 @@
 // then a payment of more than 1,000 to it is refused 409; POST …/{id}/called/challenge and …/{id}/called end it, only on an
 // assertion by one of the workspace's passkeys over that challenge. Its defect:
 //   cooling-off-skipped    — a payment of more than 1,000 to a payee saved moments ago is paid
+// B41.12 — and a change of a payee's bank details (Lens B41.112): POST …/{id}/details/challenge issues a challenge for exactly
+// the new details and …/{id}/details changes them only on an assertion by one of the workspace's passkeys over it; the payee
+// then reads held_until 24 hours on and a notice, and until then every payment to it is refused 409. Its defect:
+//   details-hold-skipped   — a payment to a payee whose bank details changed moments ago is paid
 // B28.62 — and budgets with their limit-approach alerts (Lens B53.4, B28.335): PUT and GET /v1/money/budgets, spent from the
 // payments out of the month (or the week from Monday, UTC) in the budget's currency and wallet; GET /v1/money/budgets/alerts
 // raises each 50, 80 and 100% reached, once a period, and lists them newest first. Its defect:
@@ -120,6 +124,8 @@ const DECLINE = "I explain your own spending, but I can't recommend a product, c
   'about debt. These services give free, impartial help.'
 const HELP = { MoneyHelper: 'https://www.moneyhelper.org.uk', StepChange: 'https://www.stepchange.org', 'National Debtline': 'https://nationaldebtline.org',
   GamCare: 'https://www.gamcare.org.uk' } as Record<string, string>
+// B41.12 — Lens's PayeeDetailsNotice, word for word.
+const DETAILS_NOTICE = 'Call them on a number you already know — not one from the message that asked for the change — to check the new details are theirs.'
 const HELD = 'screening: held — the name is close to one on a sanctions list, and waits for an operator to release it'
 /** Minor units as Lens prints them: "GBP 10.00". */
 const money = (minor: number, currency: string): string => `${currency} ${(minor / 100).toFixed(2)}`
@@ -240,11 +246,12 @@ export class PayeeDesk {
       this.payees.set(ws, [...list, p])
       return this.json(res, 201, p), true
     }
-    const m = /^\/v1\/money\/payees\/([^/]+)\/(challenge|confirm|called\/challenge|called)$/.exec(path)
+    const m = /^\/v1\/money\/payees\/([^/]+)\/(challenge|confirm|called\/challenge|called|details\/challenge|details)$/.exec(path)
     if (m === null || req.method !== 'POST') return false
     const p = list.find((x) => x.id === m[1])
     if (p === undefined) return this.json(res, 404, { error: 'economy: no such payee' }), true
     if (m[2].startsWith('called')) return this.called(req, res, ws, p, m[2] === 'called/challenge'), true
+    if (m[2].startsWith('details')) return this.changeDetails(req, res, ws, p, m[2] === 'details/challenge'), true
     if (!p.needs_confirmation) return this.json(res, 409, { error: 'economy: this payee needs no confirmation' }), true
     if (m[2] === 'challenge') {
       const keys = this.passkeys(ws)
@@ -667,6 +674,9 @@ export class PayeeDesk {
       return { status: 409, error: `economy: a payment of more than 1,000 to a payee saved less than 24 hours ago waits until ${payee.cooling_off_until}, ` +
         `or until the owner confirms with a passkey that they called ${payee.name} on a number they already had` }
     }
+    if (typeof payee.held_until === 'string' && Date.parse(payee.held_until) > Date.now() && !this.broken('details-hold-skipped')) {
+      return { status: 409, error: `economy: this payee's bank details changed less than 24 hours ago, so payments to it are held until ${payee.held_until}. ${DETAILS_NOTICE}` }
+    }
     const holds = funding === 'live' ? account.live_minor : account.test_minor
     if (holds < amount && !(funding === 'live' && this.broken('compliance-live-paid'))) {
       return { status: 409, error: `economy: insufficient funds: the account holds ${money(holds, currency)} of ${funding} money, and this payment is ${money(amount, currency)}` }
@@ -848,6 +858,32 @@ export class PayeeDesk {
     this.challenges.delete(key)
     delete p.cooling_off_until
     Object.assign(p, { called_at: new Date().toISOString(), called_by: assertion?.credential_id ?? '' })
+    return this.json(res, 200, p)
+  }
+
+  /** B41.12 — payee `p`'s bank details changed to the body's, signed over a challenge for exactly those: every payment held 24 hours. */
+  private async changeDetails(req: IncomingMessage, res: ServerResponse, ws: string, p: Payee, challenge: boolean): Promise<void> {
+    const b = await this.body<Record<string, unknown>>(req)
+    const fields = ['sort_code', 'account_number', 'iban', 'bic', 'routing_number', 'network', 'address'] as const
+    const next: Record<string, string> = { country: typeof b.country === 'string' && b.country !== '' ? b.country : p.country }
+    for (const f of fields) next[f] = typeof b[f] === 'string' ? b[f] : ''
+    const account = (x: Record<string, unknown>) => ['country', ...fields].map((f) => String(x[f] ?? '')).join('|')
+    if (next.iban === '' && next.account_number === '' && next.address === '') return this.json(res, 400, { error: 'economy: invalid payee: a payee has one set of account details' })
+    if (account(next) === account(p)) return this.json(res, 400, { error: 'economy: invalid payee: these are the payee\'s details already' })
+    const key = `details:${p.id}:${account(next)}`
+    if (challenge) {
+      const keys = this.passkeys(ws)
+      if (keys.length === 0) return this.json(res, 409, { error: 'economy: a payee is confirmed with one of the workspace\'s passkeys, signing its challenge — register one first' })
+      const c = randomBytes(32).toString('base64url')
+      this.challenges.set(key, c)
+      return this.json(res, 200, { challenge: c, allow_credentials: keys.map((k) => k.credential_id), user_verification: 'required', notice: DETAILS_NOTICE })
+    }
+    const refused = this.refused(ws, key, b.assertion as Assertion | undefined)
+    if (refused !== undefined) return this.json(res, 403, { error: refused })
+    this.challenges.delete(key)
+    const now = Date.now()
+    Object.assign(p, next, { check: 'exact_match', checked_by: 'test', checked_at: new Date(now).toISOString(), needs_confirmation: false,
+      details_changed_at: new Date(now).toISOString(), held_until: new Date(now + 86_400_000).toISOString(), notice: DETAILS_NOTICE })
     return this.json(res, 200, p)
   }
 
