@@ -111,7 +111,7 @@ func TestConnectAuditTrail(t *testing.T) {
 	a, ck := oauthApp(t)
 	a.oauth.db = db
 	at := seedOAuthToken(a)
-	if g, _ := a.oauth.grants.get("g-seed"); db.insertGrant(ctx, g) != nil {
+	if g, _ := a.oauth.grants.get("g-seed"); func() error { _, err := db.insertGrant(ctx, g, time.Now()); return err }() != nil {
 		t.Fatal("the seeded connection could not be saved")
 	}
 	call := func(body string) {

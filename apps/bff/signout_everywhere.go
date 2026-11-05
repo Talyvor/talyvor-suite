@@ -26,6 +26,12 @@ func (a *app) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required — sign in at /auth/login"})
 		return
 	}
+	if a.oauth.db == nil {
+		// A sealed session would come back at the next restart, so without the table to keep the moment this
+		// would report a sign-out it cannot keep.
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "signing out everywhere is not available on this server yet"})
+		return
+	}
 	at := time.Now()
 	if err := a.oauth.db.endPerson(r.Context(), s.sub, at); err != nil {
 		log.Printf("bff: sign out everywhere: %v", err)

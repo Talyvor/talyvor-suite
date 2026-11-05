@@ -20,6 +20,10 @@ func TestSignOutEverywhereEndsEveryAssistant(t *testing.T) {
 		}
 		t.Skip("BFF_TEST_DATABASE_URL unset")
 	}
+	// Without the table a restart would undo it, so it is refused rather than half done.
+	if noDB, ck := oauthApp(t); serve(noDB, "POST", "/auth/logout-everywhere", oauthOrigin, "", nil, ck).Code != http.StatusServiceUnavailable {
+		t.Fatal("signing out everywhere without a database was not refused")
+	}
 	ctx := context.Background()
 	first, err := openOAuthDB(ctx, dsn)
 	if err != nil {
@@ -58,9 +62,9 @@ func TestSignOutEverywhereEndsEveryAssistant(t *testing.T) {
 	claude, chatgpt := connect(t, a, ada, clientID), connect(t, a, ada, clientID)
 	// Bob's assistant, written to the table as a redeemed code writes it; the restart below loads it.
 	until := time.Now().Add(time.Hour)
-	if err := a.oauth.db.insertGrant(ctx, oauthGrant{ID: "g-bob", ClientID: clientID, ClientName: "Claude", Scope: "wallets:read",
+	if _, err := a.oauth.db.insertGrant(ctx, oauthGrant{ID: "g-bob", ClientID: clientID, ClientName: "Claude", Scope: "wallets:read",
 		Who: oauthWho{sub: "sub-bob", email: "bob@example.com", workspaceID: "ws-bob"}, Created: time.Now(), LastUsed: time.Now(),
-		expires: until, endsAt: until}); err != nil {
+		expires: until, endsAt: until}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.oauth.db.saveToken(ctx, tokenKey("tlv_oat_bob"), false, oauthToken{grantID: "g-bob", expires: until}); err != nil {
@@ -77,6 +81,13 @@ func TestSignOutEverywhereEndsEveryAssistant(t *testing.T) {
 	}
 	if rec := serve(a, "POST", "/auth/logout-everywhere", oauthOrigin, "", nil, ada); rec.Code != http.StatusNoContent {
 		t.Fatalf("sign out everywhere: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// A code Ada allowed before signing out everywhere, redeemed after it, makes no connection.
+	if kept, err := a.oauth.db.insertGrant(ctx, oauthGrant{ID: "g-late", ClientID: clientID, Scope: "wallets:read",
+		Who: oauthWho{sub: "sub-ada", workspaceID: "ws-ada"}, Created: time.Now(), LastUsed: time.Now(), expires: until, endsAt: until},
+		time.Now().Add(-time.Minute)); kept || err != nil {
+		t.Fatalf("a consent from before signing out everywhere became a connection: %v %v", kept, err)
 	}
 
 	for i := 0; i < 2; i++ { // once in this process, once after a restart

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -162,15 +163,30 @@ func (d *oauthDB) takeCode(ctx context.Context, key string) (bool, error) {
 	return tag.RowsAffected() == 1, err
 }
 
-// insertGrant is the one write that creates a grant: when a code is redeemed.
-func (d *oauthDB) insertGrant(ctx context.Context, g oauthGrant) error {
+// insertGrant is the one write that creates a grant: when a code is redeemed. It reports false, and writes
+// nothing, when the person signed out everywhere since consenting (B52.9); the person's lock (lockPerson) makes
+// that check and endPerson's delete take turns, so a redeem in flight cannot outlive a sign-out.
+func (d *oauthDB) insertGrant(ctx context.Context, g oauthGrant, consented time.Time) (bool, error) {
 	if d == nil {
-		return nil
+		return true, nil
 	}
-	_, err := d.pool.Exec(ctx, `INSERT INTO oauth_grants (id, client_id, client_name, scope, sub, email, workspace_id, synthetic,
-		created_at, last_used_at, expires_at, ends_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		g.ID, g.ClientID, g.ClientName, g.Scope, g.Who.sub, g.Who.email, g.Who.workspaceID, g.Who.synthetic,
-		g.Created, g.LastUsed, g.expires, g.endsAt)
+	var tag pgconn.CommandTag
+	err := pgx.BeginFunc(ctx, d.pool, func(tx pgx.Tx) (err error) {
+		if err = lockPerson(ctx, tx, g.Who.sub); err == nil {
+			tag, err = tx.Exec(ctx, `INSERT INTO oauth_grants (id, client_id, client_name, scope, sub, email, workspace_id, synthetic,
+				created_at, last_used_at, expires_at, ends_at) SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+				WHERE NOT EXISTS (SELECT 1 FROM signed_out_everywhere WHERE sub = $5 AND at >= $13)`,
+				g.ID, g.ClientID, g.ClientName, g.Scope, g.Who.sub, g.Who.email, g.Who.workspaceID, g.Who.synthetic,
+				g.Created, g.LastUsed, g.expires, g.endsAt, consented)
+		}
+		return err
+	})
+	return tag.RowsAffected() == 1, err
+}
+
+// lockPerson holds sub's lock until tx ends: a grant is created, or a person signed out everywhere, one at a time.
+func lockPerson(ctx context.Context, tx pgx.Tx, sub string) error {
+	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('oauth person ' || $1, 0))`, sub)
 	return err
 }
 
@@ -248,15 +264,20 @@ func (d *oauthDB) toolCallsOf(ctx context.Context, sub string, perGrant int) (ma
 	return out, err
 }
 
-// endPerson is B52.9's sign out everywhere in the table, in one statement: every connection of sub goes (its
+// endPerson is B52.9's sign out everywhere in the table, in one statement under the person's lock: every connection of sub goes (its
 // tokens with it, ON DELETE CASCADE), every code not yet redeemed goes, and the moment is kept.
 func (d *oauthDB) endPerson(ctx context.Context, sub string, at time.Time) error {
 	if d == nil {
 		return nil
 	}
-	_, err := d.pool.Exec(ctx, `WITH g AS (DELETE FROM oauth_grants WHERE sub = $1), c AS (DELETE FROM oauth_codes WHERE sub = $1)
-		INSERT INTO signed_out_everywhere (sub, at) VALUES ($1, $2) ON CONFLICT (sub) DO UPDATE SET at = EXCLUDED.at`, sub, at)
-	return err
+	return pgx.BeginFunc(ctx, d.pool, func(tx pgx.Tx) error {
+		if err := lockPerson(ctx, tx, sub); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `WITH g AS (DELETE FROM oauth_grants WHERE sub = $1), c AS (DELETE FROM oauth_codes WHERE sub = $1)
+			INSERT INTO signed_out_everywhere (sub, at) VALUES ($1, $2) ON CONFLICT (sub) DO UPDATE SET at = EXCLUDED.at`, sub, at)
+		return err
+	})
 }
 
 // signedOutEverywhere is every person's latest sign out everywhere.
