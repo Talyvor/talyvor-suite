@@ -19,6 +19,8 @@
 //        buyer asks Discover "translate 500 product descriptions into German". The screen shows up to three listings,
 //        each with an estimated total, exactly those Lens's own ask answers in its order with its estimates, for 500
 //        uses; where Lens picks the run's listing, its estimate is 500 × $0.002 = $1.00.
+//   market-compare-screen — B41.72: three listings at $0.01, $0.02 and $0.03 a use, compared for 100 uses: each column's
+//        price, licence, rating, success rate and evaluation is what Lens's own listing and trust reads of it give.
 // Nothing is used or bought, so nothing is charged. A listing the similarity check holds (another night's of the same
 // words) is approved by the operator first, as a person would: what is tested here is how it is found.
 
@@ -371,6 +373,85 @@ export function marketAskScreen(): Scenario {
       }
       wrong.push(...askScreenFaults(shown, picks))
       return verdictOf(wrong, `Discover asked "${ASK_JOB}" showed ${picks.length} listing(s), each with its estimated total for 500 uses, as Lens answered`)
+    },
+  }
+}
+
+// ── B41.72: compare listings side by side ───────────────────────────────────────────────────────────
+
+/** The volume the comparison is priced for, and the run's three listings' prices: 100 uses at $0.01, $0.02 and $0.03. */
+const COMPARE_VOLUME = 100
+const COMPARE_PRICES_USD_MICROS = [10_000, 20_000, 30_000] as const
+
+/** Lens's own reads of one compared listing: its offers (GET …/listings/{id}) and its trust panel (GET …/trust). */
+export interface Compared {
+  offers: { kind: string; licence: string; price_usd_micros: number }[] | null
+  trust: {
+    reviews: { count: number; average: number }
+    eval: { passed: number; cases: number } | null
+    performance?: { success_rate: number | null }
+  }
+}
+
+const usd = (micros: number) => `$${(micros / 1_000_000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`
+
+/** What is wrong with the compare table — `rows` maps a row's label to its cells, one per listing — against Lens's reads. */
+export function compareScreenFaults(rows: Record<string, string[]>, lens: readonly Compared[], volume: number): string[] {
+  const wrong: string[] = []
+  const price = `Price for ${volume.toLocaleString('en-US')} uses`
+  lens.forEach((c, i) => {
+    const cell = (row: string) => (rows[row] ?? [])[i] ?? ''
+    const check = (row: string, want: string, ok = cell(row).includes(want)) => {
+      if (!ok) wrong.push(`listing ${i + 1}'s ${row} reads "${cell(row)}", Lens's records say "${want}"`)
+    }
+    const perUse = (c.offers ?? []).find((o) => o.kind === 'per_use' && o.licence === 'commercial')
+    if (perUse) check(price, usd(perUse.price_usd_micros * volume))
+    check('Licence', 'Commercial', cell('Licence') === 'Commercial')
+    check('Rating', c.trust.reviews.count > 0 ? c.trust.reviews.average.toFixed(2) : 'No reviews yet')
+    const rate = c.trust.performance?.success_rate
+    check('Success rate', rate == null ? 'No uses' : `${Number((rate * 100).toFixed(2))}%`)
+    const ev = c.trust.eval
+    check('Evaluation', ev ? `${ev.passed} of ${ev.cases} cases passed` : 'Not evaluated', cell('Evaluation') === (ev ? `${ev.passed} of ${ev.cases} cases passed` : 'Not evaluated'))
+  })
+  for (const [row, cells] of Object.entries(rows)) if (cells.length !== lens.length) wrong.push(`the ${row} row has ${cells.length} cells for ${lens.length} listings`)
+  return wrong
+}
+
+export function marketCompareScreen(): Scenario {
+  return {
+    id: 'market-compare-screen',
+    owner: 'talyvor-suite',
+    feature: 'Marketplace',
+    title: `three listings compared side by side show, for ${COMPARE_VOLUME} uses, each one's price, rating, success rate, licence and evaluation as Lens's own reads of them give it`,
+    run: async (ctx) => {
+      const { lens } = ctx.env
+      if (!lens.canModerate) throw new CannotTest('needs a moderator key to approve a listing the similarity check holds: LENS_MODERATOR_KEY, from `lens moderator-keys create`')
+      const seller = ctx.app.user
+      const ids: string[] = []
+      for (const [n, p] of COMPARE_PRICES_USD_MICROS.entries()) {
+        ids.push(await publishPriced(ctx, seller, `Compare me ${n + 1}`, `Rewrite this sentence ${n + 1} ways: {{text}}`, p))
+      }
+      const rows: Record<string, string[]> = {}
+      const page = await ctx.app.tab(`/marketplace/compare?ids=${ids.join(',')}&volume=${COMPARE_VOLUME}`)
+      try {
+        await page.getByTestId('compare-table').waitFor({ timeout: ACTION_TIMEOUT_MS })
+        for (const row of await page.getByTestId('compare-table').locator('tbody tr').all()) {
+          const label = (await row.locator('th').innerText()).trim()
+          rows[label] = (await row.locator('td').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim())
+        }
+        ctx.evidence.push({ note: `the compare table: ${JSON.stringify(rows)}` })
+      } finally {
+        await page.close()
+      }
+      const reads: Compared[] = []
+      for (const id of ids) {
+        const l = await lens.act<{ offers: Compared['offers'] }>(seller, 'GET', `/v1/marketplace/listings/${id}`)
+        const t = await lens.act<Compared['trust']>(seller, 'GET', `/v1/marketplace/listings/${id}/trust`)
+        if (!l.ok || !t.ok) throw new CannotTest(`Lens's own read of ${id} refused: ${said(l)} · ${said(t)}`)
+        reads.push({ offers: l.value.offers, trust: t.value })
+      }
+      ctx.evidence.push({ note: `Lens's reads: ${JSON.stringify(reads)}` })
+      return verdictOf(compareScreenFaults(rows, reads, COMPARE_VOLUME), `the three listings compared show, for ${COMPARE_VOLUME} uses, each value from Lens's own reads of them`)
     },
   }
 }

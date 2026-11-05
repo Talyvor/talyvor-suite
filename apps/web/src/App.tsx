@@ -485,7 +485,8 @@ function Sidebar() {
           active:
             pathname === '/marketplace' ||
             pathname.startsWith('/marketplace/listings') ||
-            pathname.startsWith('/marketplace/collections'),
+            pathname.startsWith('/marketplace/collections') ||
+            pathname.startsWith('/marketplace/compare'),
         })}
         {item('/marketplace/publish', 'Publish', 'upload')}
         {item('/marketplace/selling', 'Your listings & earnings', 'tag')}
