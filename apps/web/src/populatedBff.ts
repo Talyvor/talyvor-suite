@@ -309,6 +309,26 @@ const BODIES: Record<string, unknown> = {
 }
 
 /** Bodies for endpoints whose URL carries a query string — matched on pathname. */
+const SCAN_REPORT = {
+    id: 1, series: 'eia.stocks.cushing-crude', family: 'oil', published_at: '2026-09-27T09:00:00Z', title: 'US oil stocks: crude at Cushing',
+    what_changed: 'US oil stocks: crude at Cushing read 21,000 thousand barrels on 26 Sep 2026, against a normal of 24,000 to 30,000 thousand barrels for the same weeks of past years: 2.4 standard deviations below it.',
+    why_it_matters: "A gap to the normal like this one tends to carry on: the model's likely range for 24 Oct 2026 is 20,000 to 25,000 thousand barrels.",
+    confidence: 'Tested on 120 past outlooks from its own history, the model put the outcome on the right side of the normal 71% of the time, missed by 1,450 thousand barrels on average against 2,900 for the normal alone, and its likely range took in 82% of outcomes.',
+    what_would_change: 'The view would change if the coming readings moved back towards the normal, or if the model failed its next daily backtest: a model that fails is no longer used.',
+    figures: [
+      { name: 'unit', text: 'thousand barrels', value: 21_000, unit: 'thousand barrels', at: '2026-09-26T00:00:00Z' },
+      { name: 'value', text: '21,000', value: 21_000, unit: 'thousand barrels', at: '2026-09-26T00:00:00Z' },
+      { name: 'at', text: '26 Sep 2026', value: 21_000, unit: 'thousand barrels', at: '2026-09-26T00:00:00Z' },
+      { name: 'normal_low', text: '24,000', value: 24_000 }, { name: 'normal_high', text: '30,000', value: 30_000 },
+      { name: 'outlook_at', text: '24 Oct 2026', value: 20_000 }, { name: 'outlook_low', text: '20,000', value: 20_000 }, { name: 'outlook_high', text: '25,000', value: 25_000 },
+    ],
+    sources: ['U.S. Energy Information Administration'],
+    box: { made_by: "Talyvor's agents wrote this report from Talyvor Scan's figures, and a person checked it before it was published.",
+      data: ['U.S. Energy Information Administration (public domain)'], method: 'Normal: the same weeks of the past five years; outlook: the gap to the normal carried forward, from its own history.',
+      backtest: 'Backtested on 26 Sep 2026 on this series\' own history from 26 Sep 2021 to 19 Sep 2026: passed.', conflicts: 'Talyvor holds no position in what this report covers.',
+      track_record: '/v1/public/scan/track-record' },
+  }
+
 const BY_PATH: Record<string, unknown> = {
   // B32.61 — Discover's search: the catalog's two listings, as Lens's search finds them.
   '/api/marketplace/search': {
@@ -527,6 +547,9 @@ const BY_PATH: Record<string, unknown> = {
           attribution: ['U.S. Energy Information Administration'], charged_ulxc: 50_000, created_at: '2026-09-26T10:00:00Z' }] },
     ],
   },
+  // B52.28 — one published report, in the library and at the address the console sweep visits (/scan/reports/:id).
+  '/api/scan/reports': { reports: [SCAN_REPORT] },
+  '/api/scan/reports/%3Aid': { report: SCAN_REPORT },
   '/api/scan/track-record': {
     hits: 1, misses: 0, waiting: 0,
     records: [

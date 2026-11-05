@@ -1345,6 +1345,10 @@ createServer(async (req, res) => {
     }
     // B52.28 — every published Scan report's range and outcome (stub-scan.ts).
     if (p === '/v1/public/scan/track-record') return bank.scan.trackRecord(res)
+    // B52.28 — the published Scan reports, one or by family (stub-scan.ts).
+    if (p === '/v1/public/scan/reports') return bank.scan.reports(res, url.searchParams.get('family') ?? '')
+    const scanReport = /^\/v1\/public\/scan\/reports\/([^/]+)$/.exec(p)
+    if (scanReport !== null) return bank.scan.report(res, scanReport[1])
     if (p === '/v1/public/fees') {
       return json(res, 200, { market_take_bps: 1500, services_take_bps: 500, compute_take_bps: 500, lending_fee_bps: 100,
         platform_fee_bps: { ...PLATFORM_FEE_BPS, enterprise: 100 }, fx_margin_bps: { free: 0, team: 50, business: 25, enterprise: 15 },

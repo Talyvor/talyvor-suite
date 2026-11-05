@@ -72,7 +72,8 @@ import { PayScreen } from './areas/lens/Pay'
 import { RecurringPlanScreen } from './areas/lens/RecurringPlan'
 import { SubscriptionsScreen } from './areas/lens/Subscriptions'
 import { BudgetsScreen } from './areas/lens/Budgets'
-import { ScanAgentsScreen, ScanTrackRecordScreen } from './areas/lens/Scan'
+import { ScanAgentsScreen, ScanReportsScreen, ScanTrackRecordScreen } from './areas/lens/Scan'
+import { ScanReportScreen } from './areas/lens/ScanReport'
 import { SpendingScreen } from './areas/lens/Spending'
 import { PhysicalCardScreen } from './areas/lens/PhysicalCard'
 import { ApproveScreen } from './areas/lens/Approve'
@@ -305,7 +306,9 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/money/subscriptions', title: 'Subscriptions', element: <SubscriptionsScreen /> },
   // B41.39 — a weekly or monthly budget per category, its progress from the postings, and its 50/80/100% alerts.
   { path: '/money/budgets', title: 'Budgets', element: <BudgetsScreen /> },
-  // B52.28 — Scan agents watch the data their owner picks and alert on what is unusual; the track record scores every report.
+  // B52.28 — the published Scan reports, each with its chart, sources and how it was made; Scan agents watch the data their owner picks and alert on what is unusual; the track record scores every report.
+  { path: '/scan/reports', title: 'Scan reports', element: <ScanReportsScreen /> },
+  { path: '/scan/reports/:id', title: 'Scan report', element: <ScanReportScreen /> },
   { path: '/scan/agents', title: 'Scan agents', element: <ScanAgentsScreen /> },
   { path: '/scan/track-record', title: 'Track record', element: <ScanTrackRecordScreen /> },
   // B53.8 — the week's and month's spending by category, budgets, subscriptions, the unusual with the Coach's sentence, notices.
@@ -551,6 +554,7 @@ function Sidebar() {
         {item('/money/subscriptions', 'Subscriptions', 'cycle')}
         {item('/money/spending', 'Spending', 'chart')}
         {item('/money/budgets', 'Budgets', 'sliders')}
+        {item('/scan/reports', 'Scan reports', 'page', { wildcard: true })}
         {item('/scan/agents', 'Scan agents', 'agent')}
         {item('/scan/track-record', 'Track record', 'prove', { indent: true })}
       </Group>

@@ -168,6 +168,8 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/money/pay': 'Pay',
   '/money/subscriptions': 'Subscriptions',
   '/money/budgets': 'Budgets',
+  '/scan/reports': 'Scan reports',
+  '/scan/reports/:id': 'Scan report',
   '/scan/agents': 'Scan agents',
   '/scan/track-record': 'Track record',
   '/money/spending': 'Spending',

@@ -1,10 +1,12 @@
 // B52.28 SELF-TEST — the stand-in Lens's Scan (Lens B52.26 and B52.27), as scan-agents reads and writes it:
 // POST …/agents/{id}/scan-watches {series, rule, z} (201 with the watch; 400 for a series Scan does not model, a rule that is
 // neither range nor z, or a z rule without a z above 0), GET …/scan-watches (newest first, each with its alerts),
-// DELETE …/scan-watches/{id} ({id, active: false}), and the public GET /v1/public/scan/track-record (one report scored inside
-// its range, one waiting). Its defects:
+// DELETE …/scan-watches/{id} ({id, active: false}), the public GET /v1/public/scan/track-record (one report scored inside
+// its range, one waiting), and the public GET /v1/public/scan/reports[?family=] and …/reports/{id} (two approved reports; a pending
+// one, id 3, is never listed and answers 404). Its defects:
 //   scan-watch-z-dropped   — a z watch is stored as a range watch, so the owner's own measure of unusual is lost
 //   scan-track-hit-outside — the scored report's outcome lies outside its range and still reads as a hit
+//   scan-report-box-hollow — a published report's "How this report was made" box comes back without its method
 
 import { randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -57,6 +59,39 @@ export class ScanDesk {
     this.watches.push(w)
     const { ws: _w, ...out } = w
     return this.json(res, 201, { ...out, alerts: [] }), true
+  }
+
+  /** The approved reports, newest first: what GET /v1/public/scan/reports answers. */
+  private published(): unknown[] {
+    const box = (source: string) => ({ made_by: "Talyvor's agents wrote this report from Talyvor Scan's figures, and a person checked it before it was published.",
+      data: [source], method: this.broken('scan-report-box-hollow') ? '' : 'Normal: the same weeks of the past five years.', backtest: 'Backtested on 3 Nov 2026: passed.',
+      conflicts: 'Talyvor holds no position in what this report covers.', track_record: '/v1/public/scan/track-record' })
+    const report = (id: number, series: string, family: string, title: string, source: string, value: number, unit: string, nl: number, nh: number, ol: number, oh: number) => ({
+      id, series, family, published_at: `2026-11-0${5 - id}T09:00:00Z`, title,
+      what_changed: `${title} read ${value} ${unit}, against a normal of ${nl} to ${nh} ${unit} for the same weeks of past years.`,
+      why_it_matters: `A gap to the normal like this one tends to carry on: the model's likely range is ${ol} to ${oh} ${unit}.`,
+      confidence: 'Tested on 120 past outlooks from its own history, the model put the outcome on the right side of the normal 71% of the time.',
+      what_would_change: 'The view would change if the coming readings moved back towards the normal.',
+      figures: [['value', value], ['normal_low', nl], ['normal_high', nh], ['outlook_low', ol], ['outlook_high', oh]].map(([name, v]) => ({ name, text: String(v), value: v, unit })),
+      sources: [source], box: box(`${source} (licence on file)`),
+    })
+    return [
+      report(2, 'gie.agsi.de.full', 'energy', 'EU gas storage: Germany', 'GIE AGSI+', 71, '%', 85, 93, 66, 74),
+      report(1, 'eia.stocks.cushing-crude', 'oil', 'US oil stocks: crude at Cushing', 'U.S. Energy Information Administration', 21_000, 'thousand barrels', 24_000, 30_000, 20_000, 25_000),
+    ]
+  }
+
+  /** GET /v1/public/scan/reports?family=. */
+  reports(res: ServerResponse, family: string): void {
+    if (!['', 'energy', 'oil', 'crops', 'filings'].includes(family)) return this.json(res, 400, { error: 'family is energy, oil, crops or filings' })
+    this.json(res, 200, { reports: this.published().filter((r) => family === '' || (r as { family: string }).family === family) })
+  }
+
+  /** GET /v1/public/scan/reports/{id}: 404 for any report not approved. */
+  report(res: ServerResponse, id: string): void {
+    const r = this.published().find((x) => String((x as { id: number }).id) === id)
+    if (r === undefined) return this.json(res, 404, { error: 'scan: no such report' })
+    this.json(res, 200, { report: r })
   }
 
   /** GET /v1/public/scan/track-record. */
