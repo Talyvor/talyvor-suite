@@ -14,6 +14,10 @@
 // hidden from every read whatever was written, so its refusal is its 403 and the count. MCP market_listing, called with
 // an agent's own key, must answer the same trust.
 //
+// B41.73 — its last 30 days of uses (Lens B41.173, market_use_outcomes): the three billed uses by workspaces not linked to
+// the seller, every one answered, so the performance must read 3 uses, 0 failed, success 1, a median latency, and
+// 100,000 µUSD a use; the linked buyer's wash trade is left out of it as it is of the reviews.
+//
 // The linked buyer is made by Lens's synthetic card link (B32.102, merged): a Lens without it FAILs, it no longer SKIPs.
 
 import { isDeepStrictEqual } from 'node:util'
@@ -39,6 +43,8 @@ interface Trust {
   publisher: { workspace_id: string; verified: boolean }
   reviews: { count: number; average: number; stars: number[]; recent: Review[] | null }
   claims: Record<string, number>
+  /** B41.173 — its last 30 days of use outcomes */
+  performance?: { days: number; uses: number; failed: number; success_rate: number | null; median_latency_ms: number | null; cost_per_use_usd_micros: number | null }
 }
 /** Lens market.Use as the use route answers it. */
 interface Use { id: string; listing_id: string; charge: string; price_ulxc: number }
@@ -51,7 +57,7 @@ export function marketTrust(seed: number): Scenario {
     feature: 'Marketplace',
     title: "a listing's trust panel counts only paying buyers not linked to its seller: two buyers who paid for a use review it 5 and 3 and are counted, " +
       'average 4, with the seller\'s reply; a workspace that never paid and one sharing a card with the seller are refused and never counted; ' +
-      "MCP market_listing's trust equals the read",
+      "its last 30 days read 3 uses, 0 failed, 100% succeeded at the offer's price; MCP market_listing's trust equals the read",
     run: async (ctx) => {
       const { lens } = ctx.env
       const [seller, first, second, stranger, linked] = await lens.createUsers(5)
@@ -140,6 +146,10 @@ export function marketTrust(seed: number): Scenario {
       if (byID.get(written[1].id)?.reply !== replyText || (byID.get(written[0].id)?.reply ?? '') !== '') {
         return fail(`the seller replied "${replyText}" to ${written[1].id} alone; the trust read shows ${shown}`)
       }
+      const pf = t.performance
+      if (!pf || pf.days !== 30 || pf.uses !== 3 || pf.failed !== 0 || pf.success_rate !== 1 || pf.median_latency_ms === null || pf.cost_per_use_usd_micros !== PER_USE_USD_MICROS) {
+        return fail(`three billed uses by workspaces not linked to the seller, all answered: the performance must read 30 days, 3 uses, 0 failed, success 1, a median latency and ${PER_USE_USD_MICROS} µUSD a use; it reads ${JSON.stringify(pf)}`)
+      }
       const mcp = await marketListingTrust(ctx, stranger, id)
       if (typeof mcp === 'string') return fail(mcp)
       if (!isDeepStrictEqual(mcp, t)) return fail(`MCP market_listing's trust differs from the trust read: ${JSON.stringify(mcp)} against ${JSON.stringify(t)}`)
@@ -147,6 +157,7 @@ export function marketTrust(seed: number): Scenario {
       return { pass: true, detail: `${written.length} paying buyers' billed uses on their bills, reviews ${written.map((w, n) => `${w.id} ${RATINGS[n]}`).join(' and ')} counted: ` +
         `count 2, average ${AVERAGE}, stars ${JSON.stringify(STARS)}, the seller's reply on the ${RATINGS[1]}; a workspace that never paid was refused 403 and, ` +
         `once it paid (${late.id}), still nothing of its counted; a buyer sharing a card with the seller used it as a wash trade, charged linked at 0 µLXC with nothing on its bill, and was refused 403; ` +
+        `its last 30 days: 3 uses, 0 failed, 100% succeeded, ${pf.median_latency_ms} ms median, ${PER_USE_USD_MICROS} µUSD a use; ` +
         "MCP market_listing's trust equals the read" }
     },
   }

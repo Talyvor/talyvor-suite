@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button, CardHeader, Pill, Row, inlineLink } from '@talyvor/ui'
+import { usdText } from '../rooms/roomsApi'
 import { day } from './Licences'
 import type { Ancestor, Listing, ListingTrust } from './marketApi'
 import { Card } from './parts'
@@ -12,13 +13,14 @@ import { AcceptRemix, percent, remixPrefill } from './Remix'
 // would run, and the IP claims against it. The family tree: the originals it builds on with the share of each sale
 // each one is given, how many remixes build on it, and — when its seller allows it — Remix this, with the terms a
 // remix is made under. B32.58: accepting them opens Publish on its artifact, with it as the parent (Remix.tsx).
+// B41.73: its last 30 days of uses (Lens B41.173) — success rate, median latency and cost per use.
 
 function Figure({ children }: { children: React.ReactNode }) {
   return <span className="font-figure">{children}</span>
 }
 
 export function TrustPanel({ trust }: { trust: ListingTrust }) {
-  const { publisher: p, reviews: r, eval: ev, claims: c } = trust
+  const { publisher: p, reviews: r, eval: ev, claims: c, performance: pf } = trust
   const recent = (r.recent ?? []).slice(0, 3)
   return (
     <Card data-testid="listing-trust">
@@ -53,6 +55,40 @@ export function TrustPanel({ trust }: { trust: ListingTrust }) {
           </span>
         ) : null}
       </Row>
+      {pf ? (
+        <Row
+          stack
+          label={`Last ${pf.days} days`}
+          hint={
+            pf.success_rate === null ? (
+              `No one has used it in the last ${pf.days} days.`
+            ) : (
+              <>
+                <Figure>{pf.failed}</Figure> of <Figure>{pf.uses}</Figure> {pf.uses === 1 ? 'use' : 'uses'} failed. Uses by its
+                seller and by buyers linked to the seller are left out.
+              </>
+            )
+          }
+        >
+          {pf.success_rate !== null ? (
+            <span className="text-body text-ink" data-testid="trust-performance">
+              <Figure>{`${Number((pf.success_rate * 100).toFixed(2))}%`}</Figure> succeeded
+              {pf.median_latency_ms !== null ? (
+                <>
+                  {' '}
+                  · <Figure>{pf.median_latency_ms.toLocaleString('en-US')} ms</Figure> median
+                </>
+              ) : null}
+              {pf.cost_per_use_usd_micros !== null ? (
+                <>
+                  {' '}
+                  · <span className="font-figure">{usdText(pf.cost_per_use_usd_micros)}</span> per use
+                </>
+              ) : null}
+            </span>
+          ) : null}
+        </Row>
+      ) : null}
       <Row stack label="IP claims" hint="Claims that it copies someone else’s work, and how Talyvor decided them.">
         <span className="text-body text-ink" data-testid="trust-claims">
           {c.open + c.upheld + c.attributed + c.rejected === 0 ? (
