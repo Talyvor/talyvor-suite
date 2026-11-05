@@ -93,6 +93,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/auth/login", a.handleLogin)
 	a.mux.HandleFunc("/auth/callback", a.handleCallback)
 	a.mux.HandleFunc("/auth/logout", a.handleLogout)
+	a.mux.HandleFunc("/auth/logout-everywhere", a.handleLogoutEverywhere) // B52.9 — signout_everywhere.go
 	a.mux.HandleFunc("/auth/me", a.handleMe)
 	a.mux.HandleFunc("/auth/mobile/session", a.handleMobileSession)
 	// B17.2 — a synthetic test user signs in with the operator key; 404 unless LENS_SYNTHETIC_KEY

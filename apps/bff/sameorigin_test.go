@@ -514,6 +514,8 @@ var notSweptWrite = map[string]string{
 	"/mcp":                 "B40.6 — exempt (oauthMachinePath): an assistant's bearer token, never the cookie, is what it accepts",
 	"/auth/logout": "a browser POST the app issues at itself; it is swept by TestLogout_RefusesCrossOrigin, " +
 		"which drives it directly rather than through this table because it has no JSON body and no upstream.",
+	"/auth/logout-everywhere": "B52.9 — Origin-GATED, but it answers in the BFF and writes nothing upstream; " +
+		"TestSignOutEverywhereEndsEveryAssistant posts it from another site and asserts the 403 and that nothing ended",
 	"/api/admin/billing/purchases":   "operator read surface, adminNotWired — see the note above",
 	"/api/admin/economy/flags":       "operator read surface, adminNotWired — see the note above",
 	"/api/admin/keel/findings":       "operator read surface, adminNotWired — see the note above",

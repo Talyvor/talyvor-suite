@@ -59,3 +59,10 @@ CREATE TABLE IF NOT EXISTS oauth_tool_calls (
     at          timestamptz NOT NULL
 );
 CREATE INDEX IF NOT EXISTS oauth_tool_calls_sub ON oauth_tool_calls (sub, at DESC);
+
+-- B52.9: when a person last signed out everywhere (signout_everywhere.go). A session sealed before it is never
+-- restored from its seal, so a restart cannot undo the sign-out. One row per person, overwritten.
+CREATE TABLE IF NOT EXISTS signed_out_everywhere (
+    sub text PRIMARY KEY,
+    at  timestamptz NOT NULL
+);

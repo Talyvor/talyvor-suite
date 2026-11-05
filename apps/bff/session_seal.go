@@ -55,6 +55,8 @@ type sessionSealer struct {
 
 	mu    sync.Mutex
 	ended map[string]time.Time
+	// signedOut is when each person last signed out everywhere (B52.9): no seal of theirs issued by then opens.
+	signedOut map[string]time.Time
 }
 
 // newSessionSealer returns nil when there is no secret to derive a key from; sessions are then
@@ -76,7 +78,7 @@ func newSessionSealer(secret string, maxLife time.Duration) *sessionSealer {
 	if err != nil {
 		return nil
 	}
-	return &sessionSealer{aead: aead, bootedAt: time.Now(), maxLife: maxLife, ended: map[string]time.Time{}}
+	return &sessionSealer{aead: aead, bootedAt: time.Now(), maxLife: maxLife, ended: map[string]time.Time{}, signedOut: map[string]time.Time{}}
 }
 
 // sealedSession is what the cookie carries.
@@ -137,8 +139,9 @@ func (z *sessionSealer) open(sid string) (session, bool) {
 	}
 	z.mu.Lock()
 	_, ended := z.ended[sid]
+	cut, signedOut := z.signedOut[p.Sub]
 	z.mu.Unlock()
-	if ended {
+	if ended || (signedOut && !issued.After(cut)) {
 		return session{}, false
 	}
 	s := session{
@@ -166,4 +169,13 @@ func (z *sessionSealer) end(sid string) {
 		}
 	}
 	z.ended[sid] = now.Add(z.maxLife)
+}
+
+// endPerson refuses every seal of sub issued until at: B52.9's sign out everywhere.
+func (z *sessionSealer) endPerson(sub string, at time.Time) {
+	z.mu.Lock()
+	defer z.mu.Unlock()
+	if at.After(z.signedOut[sub]) {
+		z.signedOut[sub] = at
+	}
 }

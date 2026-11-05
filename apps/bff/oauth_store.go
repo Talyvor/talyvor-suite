@@ -14,6 +14,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -242,6 +243,30 @@ func (d *oauthDB) toolCallsOf(ctx context.Context, sub string, perGrant int) (ma
 	var c assistantCall
 	_, err := pgx.ForEachRow(rows, []any{&grant, &c.Tool, &c.ArgsSHA256, &c.Result, &c.At}, func() error {
 		out[grant] = append(out[grant], c)
+		return nil
+	})
+	return out, err
+}
+
+// endPerson is B52.9's sign out everywhere in the table, in one statement: every connection of sub goes (its
+// tokens with it, ON DELETE CASCADE), every code not yet redeemed goes, and the moment is kept.
+func (d *oauthDB) endPerson(ctx context.Context, sub string, at time.Time) error {
+	if d == nil {
+		return nil
+	}
+	_, err := d.pool.Exec(ctx, `WITH g AS (DELETE FROM oauth_grants WHERE sub = $1), c AS (DELETE FROM oauth_codes WHERE sub = $1)
+		INSERT INTO signed_out_everywhere (sub, at) VALUES ($1, $2) ON CONFLICT (sub) DO UPDATE SET at = EXCLUDED.at`, sub, at)
+	return err
+}
+
+// signedOutEverywhere is every person's latest sign out everywhere.
+func (d *oauthDB) signedOutEverywhere(ctx context.Context) (map[string]time.Time, error) {
+	rows, _ := d.pool.Query(ctx, `SELECT sub, at FROM signed_out_everywhere`)
+	out := map[string]time.Time{}
+	var sub string
+	var at time.Time
+	_, err := pgx.ForEachRow(rows, []any{&sub, &at}, func() error {
+		out[sub] = at
 		return nil
 	})
 	return out, err
