@@ -18,11 +18,16 @@ export const DOCUMENTED_KEYS = [
   'rails[].last_failure', 'rails[].capabilities', 'rails[].capabilities[].key', 'rails[].capabilities[].cleared',
   'rails[].lists_age_hours',
   'rails_summary', 'rails_summary.up', 'rails_summary.down', 'rails_summary.idle', 'rails_summary.down_names',
+  'collectors', 'collectors[].source', 'collectors[].name', 'collectors[].on', 'collectors[].note',
+  'collectors[].last_retrieved', 'collectors[].failing',
 ] as const
 
 /** Lens sends a component's message only when it has one (omitempty), so a page with every component quiet has none; the
- * screening rail's lists_age_hours is held by name in the rail loop instead. */
-const OPTIONAL_KEYS = new Set(['components[].message', 'rails[].lists_age_hours'])
+ * screening rail's lists_age_hours is held by name in the rail loop instead. Scan's collectors are absent when Scan has none,
+ * and a collector's note only when it is off for a reason (talyvor-lens B17.351). */
+const OPTIONAL_KEYS = new Set(['components[].message', 'rails[].lists_age_hours',
+  'collectors', 'collectors[].source', 'collectors[].name', 'collectors[].on', 'collectors[].note',
+  'collectors[].last_retrieved', 'collectors[].failing'])
 
 /** Lens's own components, by the names the status page gives them. */
 export const OWN_COMPONENTS = ['PostgreSQL', 'Redis', 'NATS', 'Proxy'] as const
