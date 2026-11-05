@@ -16,7 +16,7 @@ import { type AssistantRequest, type MandateTerms, type RecurringPlan, agentBank
 const EVERY: Record<string, string> = { day: 'every day', week: 'every week', month: 'every month' }
 
 /** The plan's mandate in plain words: what the passkey signs. */
-export function planInWords(t: MandateTerms): string[] {
+export function planInWords(t: MandateTerms, payeeName: (id: string) => string): string[] {
   const money = (m: Record<string, number> | null | undefined) =>
     Object.entries(m ?? {})
       .map(([cur, minor]) => formatMinor(minor, cur))
@@ -29,7 +29,8 @@ export function planInWords(t: MandateTerms): string[] {
     ...(perPayment ? [`No payment is more than ${perPayment}.`] : []),
     ...(perMonth ? [`At most ${perMonth} a month in all.`] : []),
     ...(askAbove ? [`A payment above ${askAbove} always waits for your approval.`] : []),
-    'Only these payees are paid. A new payee always needs your approval.',
+    `Paid only to ${(t.scope.payees ?? []).map(payeeName).join(', ')}, in ${[...new Set(t.scope.currencies ?? [])].join(', ')}.`,
+    t.new_payee.policy === 'always_ask' ? 'A new payee always needs your approval.' : `New payees: ${t.new_payee.policy}.`,
     `Until ${formatWhen(t.expires_at)}. You can revoke it at any time.`,
   ]
 }
@@ -95,7 +96,7 @@ function PlanCard({ request, plan }: { request: AssistantRequest; plan: Recurrin
           ))}
         </ul>
         <ul className="flex list-disc flex-col gap-1 pl-5 text-body text-ink" data-testid="plan-terms">
-          {planInWords(terms).map((line) => (
+          {planInWords(terms, payeeName).map((line) => (
             <li key={line}>{line}</li>
           ))}
         </ul>

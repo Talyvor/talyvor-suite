@@ -276,9 +276,14 @@ func (a *app) handleAssistantMandateSign(w http.ResponseWriter, r *http.Request,
 		if err != nil {
 			log.Printf("bff: reading plan %s back after signing: %v", d.ID, err)
 		}
+		var was, now struct {
+			ID string `json:"id"`
+		}
+		_ = json.Unmarshal(d.Details, &was)
+		_ = json.Unmarshal(fresh, &now)
 		a.oauth.drafts.update(d.ID, func(d assistantDraft) assistantDraft {
 			d.Status = "signed"
-			if err == nil {
+			if err == nil && now.ID == was.ID { // only this plan, read back, replaces what the person signed
 				d.Details = fresh
 			}
 			return d

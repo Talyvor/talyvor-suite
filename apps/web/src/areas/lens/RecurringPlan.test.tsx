@@ -56,6 +56,7 @@ it('shows a prepared plan in plain words and signs exactly its mandate with a pa
   expect(terms).toContain('No payment is more than £1,200.00.')
   expect(terms).toContain('At most £1,250.00 a month in all.')
   expect(terms).toContain('A payment above £1,000.00 always waits for your approval.')
+  expect(terms).toContain('Paid only to Northside Lettings, Fibre Co, in GBP.')
   expect(sent).toHaveLength(0)
 
   fireEvent.click(screen.getByRole('button', { name: 'Sign with passkey' }))
