@@ -994,6 +994,40 @@ export const LENS_BODIES: LensBody[] = [
       'r.Put("/v1/money/plan/income", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensSpendIncomeBody",
   },
+  // B53.12 — the physical card's order, activation and replacement (for Lens B53.19, unbuilt when these were added).
+  {
+    route: "POST /v1/money/physical-cards",
+    file: "apps/bff/physical_card.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handlePhysicalCards(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_physical_cards_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/physical-cards", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPhysicalCardOrderBody",
+  },
+  {
+    route: "POST /v1/money/physical-cards/{id}/activate",
+    file: "apps/bff/physical_card.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handlePhysicalCardActivate(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_physical_cards_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/physical-cards/{id}/activate", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPhysicalCardActivateBody",
+  },
+  {
+    route: "POST /v1/money/physical-cards/{id}/replace",
+    file: "apps/bff/physical_card.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handlePhysicalCardReplace(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_physical_cards_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/physical-cards/{id}/replace", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPhysicalCardReplaceBody",
+  },
   {
     route: "POST /v1/money/payees/{id}/confirm",
     file: "apps/bff/money_pay.go",

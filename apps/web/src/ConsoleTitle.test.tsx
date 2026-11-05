@@ -53,6 +53,9 @@ function mockBff() {
         headers: { 'Content-Type': 'application/json' },
       })
     }
+    // B53.12 — /money/card sends the person to Spending while Lens's physical-card switch is off (404), so its title is
+    // read with the switch on.
+    if (url === '/api/money/physical-cards') return new Response(JSON.stringify({ cards: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     return new Response('null', { status: 404 })
   })
 }
@@ -142,6 +145,7 @@ const PINNED: Readonly<Record<string, string>> = {
   '/scan/agents': 'Scan agents',
   '/scan/track-record': 'Track record',
   '/money/spending': 'Spending',
+  '/money/card': 'Talyvor Card',
   '/approve/:id': 'Approve payments',
   '/money/plans/:id': 'Recurring payments',
   '/features': 'Features',

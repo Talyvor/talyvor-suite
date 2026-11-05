@@ -256,11 +256,14 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/payees/x1/called/challenge", body: `{}`},                                                            // B41.11
 		{method: http.MethodPut, path: "/api/money/budgets", body: `{"category":"ai_software","period":"month","amount_minor":10000,"currency":"GBP"}`}, // B41.39
 		{method: http.MethodDelete, path: "/api/money/budgets/x1"},
-		{method: http.MethodPost, path: "/api/agents/x1/scan-watches", body: `{"series":["eia.stocks.cushing-crude"],"rule":"range"}`},      // B52.28
-		{method: http.MethodDelete, path: "/api/scan/watches/x1"},                                                                           // B52.28                                                                                      // B41.39
-		{method: http.MethodPut, path: "/api/money/spending/merchants", body: `{"merchant":"m","category":"eating_out"}`},                   // B53.8
-		{method: http.MethodPut, path: "/api/money/notices/settings", body: `{"timezone":"UTC","quiet_from":"","quiet_until":"","off":[]}`}, // B53.8
-		{method: http.MethodPut, path: "/api/money/plan/income", body: `{"payday":28,"amount_minor":250000,"currency":"GBP","payer":""}`},   // B53.16
+		{method: http.MethodPost, path: "/api/agents/x1/scan-watches", body: `{"series":["eia.stocks.cushing-crude"],"rule":"range"}`},                                   // B52.28
+		{method: http.MethodDelete, path: "/api/scan/watches/x1"},                                                                                                        // B52.28                                                                                      // B41.39
+		{method: http.MethodPut, path: "/api/money/spending/merchants", body: `{"merchant":"m","category":"eating_out"}`},                                                // B53.8
+		{method: http.MethodPut, path: "/api/money/notices/settings", body: `{"timezone":"UTC","quiet_from":"","quiet_until":"","off":[]}`},                              // B53.8
+		{method: http.MethodPut, path: "/api/money/plan/income", body: `{"payday":28,"amount_minor":250000,"currency":"GBP","payer":""}`},                                // B53.16
+		{method: http.MethodPost, path: "/api/money/physical-cards", body: `{"name_on_card":"A","address":{"line1":"1","city":"L","postcode":"N1 9GU","country":"GB"}}`}, // B53.12
+		{method: http.MethodPost, path: "/api/money/physical-cards/x1/activate", body: `{"last4":"4242"}`},                                                               // B53.12
+		{method: http.MethodPost, path: "/api/money/physical-cards/x1/replace", body: `{"reason":"lost"}`},                                                               // B53.12
 		{method: http.MethodPost, path: "/api/money/payees/x1/called", body: `{"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
 		{method: http.MethodPost, path: "/api/money/payees/x1/details/challenge", body: `{"sort_code":"400000","account_number":"12345678"}`}, // B41.12
 		{method: http.MethodPost, path: "/api/money/payees/x1/details", body: `{"sort_code":"400000","account_number":"12345678","assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},

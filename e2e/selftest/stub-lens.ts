@@ -111,6 +111,7 @@ import { Bank, SIM_QUOTES } from './stub-bank.ts'
 import { DOC_CAP, auditWebhook, docxDocument, nodesAvailable, nodesRoute } from './stub-guards.ts'
 import { roomAgentTool, roomListingRoute, roomsModeratorRoute, roomsRoute, setRoomWallets } from './stub-rooms.ts'
 import { lensOpenAPI, lensPage } from './stub-openapi.ts'
+import { PhysicalCardDesk } from './stub-physical-cards.ts'
 
 const PORT = Number(process.env.STUB_PORT ?? 9911)
 const BASE = `http://127.0.0.1:${PORT}`
@@ -636,6 +637,8 @@ const bank = new Bank({ brk: BREAK, workspace: (id) => workspaces.get(id), runMo
     if (ws !== undefined) book(ws, ulxc, type, description, metadata)
   } })
 setInterval(() => bank.tick(), 2000)
+// B53.12 — the physical card, behind STUB_PHYSICAL_CARDS as Lens's is behind LENS_PHYSICAL_CARDS (stub-physical-cards.ts).
+const physicalCards = new PhysicalCardDesk(json, read, broke)
 // B32.85 — a room's wallet is an agent of its owner's in the Bank: funded, listed and posted as any agent (stub-rooms.ts).
 setRoomWallets({ open: (ws, agentID, name) => bank.openRoomWallet(ws, agentID, name), balance: (agentID) => bank.agentBalance(agentID),
   use: (u) => bank.roomUse(u), billed: (agentID) => bank.agentBilledThisMonth(agentID), prize: (u) => bank.prizeUse(u) })
@@ -1275,6 +1278,7 @@ createServer(async (req, res) => {
         return json(res, 200, { reset: chosen.length })
       }
       if (await bank.syntheticRoute(req, res, p)) return
+      if (await physicalCards.synthetic(req, res, p)) return
       // Lens B35.1 — a test workspace put on a plan with the synthetic key.
       const onPlan = /^\/v1\/synthetic\/workspaces\/([^/]+)\/plan$/.exec(p)
       if (onPlan !== null && req.method === 'POST') {
@@ -1419,6 +1423,7 @@ createServer(async (req, res) => {
     const ws = byToken.get(bearer) ?? byKey.get(bearer)
     if (ws === undefined) return json(res, 401, { error: 'unauthorized' })
     if (p === '/v1/catalog/models') return json(res, 200, CATALOG)
+    if (await physicalCards.route(req, res, ws.id, p)) return
     // B28.349 — Lens's MCP JSON-RPC route, on the workspace's own token: Chat's read-only wallet tool.
     if (p === '/mcp' && req.method === 'POST') {
       const rpc = JSON.parse((await read(req)) || '{}') as Parameters<Bank['mcp']>[1] & { params?: { arguments?: Record<string, unknown> } }

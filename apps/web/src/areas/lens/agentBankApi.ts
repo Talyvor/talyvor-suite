@@ -326,6 +326,31 @@ export interface SpendPlan {
   findings: PlanFinding[]
 }
 
+/** B53.12 — where a physical card is posted; Lens checks it (B53.19). */
+export interface CardAddress {
+  line1: string
+  line2: string
+  city: string
+  postcode: string
+  country: string
+}
+
+/** B53.12 — Lens money.PhysicalCard (B53.19): the owner's physical card at the card partner. Never its number. */
+export interface PhysicalCard {
+  id: string
+  last4: string
+  state: 'inactive' | 'active' | 'frozen' | 'closed'
+  design: string
+  name_on_card: string
+  address: CardAddress
+  delivery: { status: 'ordered' | 'shipped' | 'delivered'; updated_at: string }
+  /** the partner's own screen for setting or viewing the PIN; "" when it gives none */
+  pin_url: string
+  replaces: string
+  replaced_by: string
+  created_at: string
+}
+
 /** B52.28 — Lens scan.Finding (B52.24): a series' latest point against its normal, and the outlook range. */
 export interface ScanFinding {
   at: string
@@ -935,6 +960,19 @@ export const agentBankApi = {
   setNoticeSettings: (s: NoticeSettings) => send<NoticeSettings>('PUT', '/api/money/notices/settings', s),
   plan: () => getJSON<SpendPlan>('/api/money/plan', { payments: 'list', findings: 'list', safe_per_day_minor: 'number' }),
   setIncome: (i: Pick<SpendIncome, 'payday' | 'amount_minor' | 'currency' | 'payer'>) => send<SpendPlan>('PUT', '/api/money/plan/income', i),
+  /** B53.12 — the owner's physical cards; null while Lens's switch is off (it answers 404), so nothing shows. */
+  physicalCards: async (): Promise<PhysicalCard[] | null> => {
+    try {
+      return (await getJSON<{ cards: PhysicalCard[] | null }>('/api/money/physical-cards', { cards: 'list' })).cards ?? []
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) return null
+      throw err
+    }
+  },
+  orderPhysicalCard: (o: { name_on_card: string; address: CardAddress }) => send<PhysicalCard>('POST', '/api/money/physical-cards', o),
+  activatePhysicalCard: (id: string, last4: string) => send<PhysicalCard>('POST', `/api/money/physical-cards/${e(id)}/activate`, { last4 }),
+  replacePhysicalCard: (id: string, reason: 'lost' | 'stolen' | 'damaged') =>
+    send<{ old: PhysicalCard; card: PhysicalCard }>('POST', `/api/money/physical-cards/${e(id)}/replace`, { reason }),
   safeToSpend: () => getJSON<SafeToSpend>('/api/agents/safe-to-spend', { agents: 'list' }),
   briefing: () => getJSON<Briefing>('/api/agents/briefing', { items: 'list', quiet: 'boolean', line: 'string' }),
   forecast: () => getJSON<SpendForecast>('/api/agents/forecast', { spent_ulxc: 'number', forecast_ulxc: 'number', agents: 'list' }),
