@@ -8,7 +8,16 @@ import { formatWhen } from './format'
 import { CopyBlock } from './Setup'
 
 // B40.8 — Settings › Connect your AI: the address of Talyvor's MCP server (B40.7), how to add it to each assistant,
-// and the assistants this person has connected (B40.6 grants), each with its last use and a revoke button.
+// and the assistants this person has connected (B40.6 grants), each with its last use, what it did (B52.3) and a
+// revoke button.
+
+/** One tool call, as the BFF's audit trail keeps it: the arguments by SHA-256 only. */
+interface Call {
+  tool: string
+  args_sha256: string
+  result: 'done' | 'refused' | 'failed'
+  at: string
+}
 
 interface Connected {
   id: string
@@ -16,6 +25,36 @@ interface Connected {
   scopes: string[]
   connected_at: string
   last_used_at: string
+  /** Newest first, the latest 20; null where the server keeps no record. */
+  calls?: Call[] | null
+}
+
+const RESULT_WORDS: Record<Call['result'], string> = {
+  done: 'Done',
+  refused: 'Refused',
+  failed: 'Not understood',
+}
+
+/** What one connected assistant did, newest first. */
+function CallList({ calls }: { calls: Call[] | null | undefined }) {
+  if (!calls) return <p className="text-caption text-muted">This server keeps no record of what assistants did.</p>
+  if (!calls.length) return <p className="text-caption text-muted">It has not used a tool yet.</p>
+  return (
+    <details>
+      <summary className="cursor-pointer text-caption text-ink">
+        What it did · latest {calls.length === 1 ? 'call' : <span className="font-figure">{calls.length} calls</span>}
+      </summary>
+      <ul className="mt-2 space-y-1 text-caption" aria-label="Its latest tool calls">
+        {calls.map((c, i) => (
+          <li key={`${c.at}-${i}`} className="flex flex-wrap gap-x-3">
+            <span className="font-figure text-ink">{c.tool}</span>
+            <span className={c.result === 'done' ? 'text-ink' : 'text-muted'}>{RESULT_WORDS[c.result] ?? c.result}</span>
+            <span className="font-figure text-muted">{formatWhen(c.at)}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
 }
 
 const KEY = ['connected-assistants']
@@ -179,6 +218,7 @@ export function ConnectedList() {
               · connected <span className="font-figure">{formatWhen(c.connected_at)}</span>
             </p>
             <p className="text-caption text-muted">{c.scopes.map((s) => SCOPE_WORDS[s] ?? s).join(' · ')}</p>
+            <CallList calls={c.calls} />
           </div>
           <Button
             variant="default"

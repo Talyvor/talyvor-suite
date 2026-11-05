@@ -4,6 +4,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -102,6 +103,31 @@ var defaultProbes = map[string]defaultProbe{
 	}},
 	"WEB_DIST": {canon: identityCanon, observe: func(t *testing.T) string {
 		return bootWithUnset(t, "WEB_DIST", minimalDisabled()).webDist
+	}},
+	// B52.3: Connect's rate limits are read per request (connect_limits.go), so each probe reads the limit itself.
+	"BFF_CONNECT_REGISTER_PER_IP_HOUR": {canon: identityCanon, observe: func(t *testing.T) string {
+		bootWithUnset(t, "BFF_CONNECT_REGISTER_PER_IP_HOUR", minimalDisabled())
+		return strconv.Itoa(limitRegisterIP.max())
+	}},
+	"BFF_CONNECT_AUTHORIZE_PER_IP_MINUTE": {canon: identityCanon, observe: func(t *testing.T) string {
+		bootWithUnset(t, "BFF_CONNECT_AUTHORIZE_PER_IP_MINUTE", minimalDisabled())
+		return strconv.Itoa(limitAuthorizeIP.max())
+	}},
+	"BFF_CONNECT_TOKEN_PER_IP_MINUTE": {canon: identityCanon, observe: func(t *testing.T) string {
+		bootWithUnset(t, "BFF_CONNECT_TOKEN_PER_IP_MINUTE", minimalDisabled())
+		return strconv.Itoa(limitTokenIP.max())
+	}},
+	"BFF_CONNECT_TOKEN_PER_CONNECTION_MINUTE": {canon: identityCanon, observe: func(t *testing.T) string {
+		bootWithUnset(t, "BFF_CONNECT_TOKEN_PER_CONNECTION_MINUTE", minimalDisabled())
+		return strconv.Itoa(limitTokenGrant.max())
+	}},
+	"BFF_CONNECT_MCP_PER_IP_MINUTE": {canon: identityCanon, observe: func(t *testing.T) string {
+		bootWithUnset(t, "BFF_CONNECT_MCP_PER_IP_MINUTE", minimalDisabled())
+		return strconv.Itoa(limitMCPIP.max())
+	}},
+	"BFF_CONNECT_MCP_PER_CONNECTION_MINUTE": {canon: identityCanon, observe: func(t *testing.T) string {
+		bootWithUnset(t, "BFF_CONNECT_MCP_PER_CONNECTION_MINUTE", minimalDisabled())
+		return strconv.Itoa(limitMCPGrant.max())
 	}},
 	// The session TTL is parsed in oidc mode only, so this probe boots the mode that reads it.
 	"BFF_SESSION_TTL": {canon: durationCanon, observe: func(t *testing.T) string {

@@ -217,3 +217,32 @@ func (d *oauthDB) useRefresh(ctx context.Context, key string) (wasUsed bool, err
 	}
 	return wasUsed, err
 }
+
+// recordToolCall is one row of B52.3's audit trail.
+func (d *oauthDB) recordToolCall(ctx context.Context, g oauthGrant, c assistantCall) error {
+	if d == nil {
+		return nil
+	}
+	_, err := d.pool.Exec(ctx, `INSERT INTO oauth_tool_calls (grant_id, sub, client_name, tool, args_sha256, result, at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`, g.ID, g.Who.sub, g.ClientName, c.Tool, c.ArgsSHA256, c.Result, c.At)
+	return err
+}
+
+// toolCallsOf is a person's latest calls, at most perGrant for each connection, newest first. Without a database
+// there is no trail: nil, not an empty one.
+func (d *oauthDB) toolCallsOf(ctx context.Context, sub string, perGrant int) (map[string][]assistantCall, error) {
+	if d == nil {
+		return nil, nil
+	}
+	rows, _ := d.pool.Query(ctx, `SELECT grant_id, tool, args_sha256, result, at FROM (
+		SELECT *, row_number() OVER (PARTITION BY grant_id ORDER BY at DESC, id DESC) AS n FROM oauth_tool_calls WHERE sub = $1) c
+		WHERE n <= $2 ORDER BY at DESC, id DESC`, sub, perGrant)
+	out := map[string][]assistantCall{}
+	var grant string
+	var c assistantCall
+	_, err := pgx.ForEachRow(rows, []any{&grant, &c.Tool, &c.ArgsSHA256, &c.Result, &c.At}, func() error {
+		out[grant] = append(out[grant], c)
+		return nil
+	})
+	return out, err
+}

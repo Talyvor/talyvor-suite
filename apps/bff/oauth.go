@@ -138,6 +138,7 @@ type oauthServer struct {
 	refresh  *ttlMap[oauthToken]
 	drafts   *ttlMap[assistantDraft] // B40.35: payees and mandates an assistant left for the person to confirm (mcp_drafts.go)
 	db       *oauthDB                // nil: memory only (oauth_store.go)
+	hits     connectHits             // B52.3's rate limits (connect_limits.go)
 }
 
 func newOAuthServer() *oauthServer {
@@ -279,6 +280,10 @@ func (a *app) handleOAuthRegister(w http.ResponseWriter, r *http.Request) {
 	id = "tlv_oc_" + id
 	now := time.Now()
 	c := oauthClient{id: id, name: name, redirectURIs: req.RedirectURIs, expires: now.Add(oauthUnusedClientTTL)}
+	// B52.3: registrations that never completed a sign-in leave the table too, not only the process's memory.
+	if err := a.oauth.db.sweep(r.Context()); err != nil {
+		log.Printf("bff: oauth register: sweep: %v", err)
+	}
 	if err := a.oauth.db.saveClient(r.Context(), c); err != nil {
 		log.Printf("bff: oauth register: %v", err)
 		oauthError(w, http.StatusInternalServerError, "server_error", "the client could not be saved")
@@ -605,6 +610,10 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		// Read and marked used under one lock, so two refreshes at once cannot both rotate it.
 		var prev oauthToken
 		key := tokenKey(f.Get("refresh_token"))
+		// B52.3: per connection, not per client_id, which every Claude user shares; checked before the token is spent.
+		if seen, known := a.oauth.refresh.get(key); known && !a.allow(w, limitTokenGrant, seen.grantID) {
+			return
+		}
 		t, ok := a.oauth.refresh.update(key, func(t oauthToken) oauthToken { prev = t; t.used = true; return t })
 		if ok {
 			// The table's mark is the one a restart keeps, so it is set before anything is answered.

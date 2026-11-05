@@ -79,11 +79,11 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/.well-known/oauth-protected-resource", a.oauthOn(a.handleProtectedResourceMetadata))
 	a.mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", a.oauthOn(a.handleProtectedResourceMetadata))
 	a.mux.HandleFunc("/.well-known/oauth-authorization-server", a.oauthOn(a.handleAuthServerMetadata))
-	a.mux.HandleFunc("/oauth/register", a.oauthOn(a.handleOAuthRegister))
-	a.mux.HandleFunc("/oauth/authorize", a.oauthOn(a.handleOAuthAuthorize))
-	a.mux.HandleFunc("/oauth/token", a.oauthOn(a.handleOAuthToken))
+	a.mux.HandleFunc("/oauth/register", a.oauthOn(a.perIP(limitRegisterIP, a.handleOAuthRegister))) // B52.3 — connect_limits.go
+	a.mux.HandleFunc("/oauth/authorize", a.oauthOn(a.perIP(limitAuthorizeIP, a.handleOAuthAuthorize)))
+	a.mux.HandleFunc("/oauth/token", a.oauthOn(a.perIP(limitTokenIP, a.handleOAuthToken)))
 	a.mux.HandleFunc("/oauth/revoke", a.oauthOn(a.handleOAuthRevoke))
-	a.mux.HandleFunc("/mcp", a.oauthOn(a.handleMCP))
+	a.mux.HandleFunc("/mcp", a.oauthOn(a.perIP(limitMCPIP, a.handleMCP)))
 	a.mux.HandleFunc("/api/connect/assistants", a.oauthOn(a.requireSession(a.handleConnectedAssistants))) // B40.8 — oauth_connected.go
 	a.mux.HandleFunc("/api/connect/assistants/{id}/revoke", a.oauthOn(a.requireSession(a.handleConnectedAssistantRevoke)))
 
