@@ -159,6 +159,7 @@ import { PaymentRequestDesk } from './stub-payment-requests.ts'
 import { TermsDesk } from './stub-terms.ts'
 import { type KYAFacts, KYADesk } from './stub-kya.ts'
 import { type Lineage, TrustDesk } from './stub-trust.ts'
+import { TrustLayerDesk } from './stub-trust-layer.ts'
 import type { Judge, RoomAgent } from './stub-rooms.ts'
 
 export interface BankWorkspace {
@@ -522,6 +523,12 @@ export class Bank {
   private readonly earningsPayouts: EarningsDesk
   /** B32.89 — reviews, the trust read and the synthetic card link (stub-trust.ts). */
   private readonly trustDesk: TrustDesk
+  /** B45.31 — outside agents' signed payment requests and the AP2 key (stub-trust-layer.ts). */
+  readonly trustLayer: TrustLayerDesk
+  /** B45.28 — the approver agent in force for an agent's requests, by the agent's id, and its open mandate. */
+  private readonly approvers = new Map<string, { id: string; approver: string; limit: number; mandate: string }>()
+  /** B45.28 — what proves each approval: the owner's closed mandate, or the approver agent that approved it. */
+  private readonly approvalProof = new Map<string, { owner_mandate?: string; approved_by_agent_id?: string }>()
 
   constructor(d: BankDeps) {
     this.d = d
@@ -547,6 +554,39 @@ export class Bank {
       paid: (listing, buyer) => this.uses.some((u) => u.listing_id === listing && u.buyer === buyer && u.charge === 'billed' && u.refunded_at === undefined),
       payoutsEnabled: (ws) => this.accounts.get(ws)?.payouts_enabled === true,
       lineage: (id) => this.lineageOf(id) })
+    this.trustLayer = new TrustLayerDesk(d.json, d.read, (name) => this.broken(name), (agentID, asker, key, items, trust) => {
+      const a = this.agents.get(agentID)
+      if (a === undefined || a.archived_at !== undefined) return { status: 404, body: { error: 'no such agent' } }
+      return this.paymentRequests.outside(a.ws, asker, key, items, trust)
+    })
+  }
+
+  /** B45.28 — the most an agent with rules `r` approves without asking: the lower of its per-request limit and approval amount. */
+  private approverLimit(r: Rules): number {
+    const set = [r.max_per_request_ulxc, r.approval_above_ulxc].filter((v) => v > 0)
+    return set.length === 0 ? 0 : Math.min(...set)
+  }
+
+  /** B45.28 — POST /v1/workspaces/{ws}/agents/{id}/approvals/{approvalID}/approve, on the approver agent's own key only: within its
+   *  own limit it approves; above it, 409 and the request waits for the owner. STUB_BREAK=approver-over-limit approves anyway. */
+  async agentApprove(req: IncomingMessage, res: ServerResponse, key: string, path: string): Promise<boolean> {
+    const m = /^\/v1\/workspaces\/([^/]+)\/agents\/([^/]+)\/approvals\/([^/]+)\/approve$/.exec(path)
+    const who = this.agentOfKey(key)
+    if (m === null || req.method !== 'POST') return false
+    if (who === undefined || who.ws.id !== m[1] || who.agent.id !== m[2]) return this.d.json(res, 403, { error: "only the approver agent's own key may approve as it" }), true
+    const a = this.approvals.find((x) => x.id === m[3] && x.ws === m[1] && x.status === 'pending')
+    if (a === undefined) return this.d.json(res, 404, { error: 'economy: no such pending approval in this workspace' }), true
+    const set = this.approvers.get(a.agent_id)
+    if (set?.approver !== who.agent.id) return this.d.json(res, 403, { error: "economy: this agent is not the approver of that agent's requests" }), true
+    const limit = Math.min(set.limit, this.approverLimit(who.agent.rules) || set.limit)
+    if (a.amount_ulxc > limit && !this.broken('approver-over-limit')) {
+      return this.d.json(res, 409, { error: "economy: above the approver's own limits — the request waits for the workspace's owner" }), true
+    }
+    a.status = 'approved'
+    a.decided_at = new Date().toISOString()
+    this.approvalProof.set(a.id, { approved_by_agent_id: who.agent.id })
+    const { fingerprint: _f, ws: _w, ...out } = a
+    return this.d.json(res, 200, out), true
   }
 
   /** B30.109 — the compliance cases screening opened, in `status` ('' for all), newest first (stub-payees.ts). */
@@ -2174,6 +2214,26 @@ export class Bank {
     if (rest === '/agents/approvals') {
       return json(res, 200, { approvals: this.approvals.filter((a) => a.ws === ws.id).map(({ fingerprint: _f, ws: _w, ...a }) => a) }), true
     }
+    // B45.28 — what proves an approval, and the owner letting an approver agent approve another's requests, signed.
+    if ((m = /^\/agents\/approvals\/([^/]+)\/evidence$/.exec(rest)) !== null && method === 'GET') {
+      const a = this.approvals.find((x) => x.id === m?.[1] && x.ws === ws.id)
+      if (a === undefined) return json(res, 404, { error: 'economy: no such approval' }), true
+      return json(res, 200, { approval_id: a.id, ...this.approvalProof.get(a.id), jwks_url: '/.well-known/talyvor-ap2/jwks.json' }), true
+    }
+    if ((m = /^\/agents\/([^/]+)\/approver(\/challenge)?$/.exec(rest)) !== null && (method === 'POST' || method === 'PUT')) {
+      const agent = this.agents.get(m[1])
+      const { approver_agent_id = '', assertion } = await this.body<{ approver_agent_id?: string; assertion?: { credential_id?: string } }>(req)
+      const approver = this.agents.get(approver_agent_id)
+      if (agent === undefined || agent.ws !== ws.id || approver === undefined || approver.ws !== ws.id) return json(res, 404, { error: 'economy: no such agent' }), true
+      const limit = this.approverLimit(approver.rules)
+      if (limit === 0) return json(res, 400, { error: 'economy: invalid approver: the approver has no limit of its own (max_per_request_ulxc or approval_above_ulxc), so it may approve nothing' }), true
+      if (m[2] === '/challenge') return json(res, 200, { challenge: randomBytes(32).toString('base64url'), limit_ulxc: limit, user_verification: 'required' }), true
+      if (!(this.passkeys.get(ws.id) ?? []).some((k) => k.credential_id === assertion?.credential_id)) return json(res, 403, { error: 'economy: a passkey or device key signature is required' }), true
+      const set = { id: id('mnd_'), approver: approver.id, limit, mandate: this.trustLayer.mandate({ iss: this.d.base, iat: Math.floor(Date.now() / 1000), jti: id('mnd_'), vct: 'mandate.payment.open.1' },
+        { constraints: [{ type: 'payment.amount_range', currency: 'LXC', min: 0, max: limit }], talyvor_delegation: { approver_agent_id: approver.id, agent_id: agent.id } }) }
+      this.approvers.set(agent.id, set)
+      return json(res, 201, { id: set.id, agent_id: agent.id, approver_agent_id: approver.id, limit_ulxc: limit, mandate: set.mandate }), true
+    }
     if ((m = /^\/agents\/approvals\/([^/]+)\/(approve|deny)$/.exec(rest)) !== null && method === 'POST') {
       const a = this.approvals.find((x) => x.id === m?.[1] && x.ws === ws.id && x.status === 'pending')
       if (a === undefined) return json(res, 404, { error: 'economy: no such pending approval in this workspace' }), true
@@ -2191,6 +2251,12 @@ export class Bank {
       }
       a.status = m[2] === 'approve' ? 'approved' : 'denied'
       a.decided_at = now
+      // B45.28 — the owner's signed approval is kept as an AP2 v0.2 closed Payment Mandate.
+      if (m[2] === 'approve' && assertion !== undefined) {
+        this.approvalProof.set(a.id, { owner_mandate: this.trustLayer.mandate({ iss: this.d.base, iat: Math.floor(Date.now() / 1000), jti: id('mnd_'), vct: 'mandate.payment.1' }, {
+          transaction_id: a.id, payee: a.payee ?? {}, payment_amount: { currency: 'LXC', amount: a.amount_ulxc },
+          payment_instrument: { type: 'talyvor_agent_wallet', id: a.agent_id }, trusted_surface: { type: assertion.device_id === undefined ? 'passkey' : 'device_key', assertion } }) })
+      }
       // B41.4 — always allow saves the allowance for the approval's payee on its agent's rules.
       const agent = this.agents.get(a.agent_id)
       if (m[2] === 'approve' && decision.always_allow !== undefined && agent !== undefined && a.payee !== undefined) {
