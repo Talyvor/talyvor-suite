@@ -141,6 +141,18 @@ describe('Agent Bank', () => {
     expect(screen.getByRole('region', { name: 'Spending' })).toBeInTheDocument()
   })
 
+  // B55.7 — an approval nobody answered within its 24 hours reads Expired on the agent's screen too.
+  it('shows an expired approval as Expired', async () => {
+    const bff = mockBff()
+    bff.agents.push({ id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-09-28T06:00:00Z' })
+    bff.approvals.push({ id: 'apr_1', agent_id: 'agt_1', amount_ulxc: M, model: 'gpt-5', status: 'expired', created_at: '2026-09-27T06:00:00Z', fp: '' })
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+    const approvals = await screen.findByRole('region', { name: 'Approvals' })
+    expect(await within(approvals).findByText('Expired')).toBeInTheDocument()
+    expect(within(approvals).getByText('Not answered within 24 hours')).toBeInTheDocument()
+  })
+
   // B17.26 — a Take back that meets a deploy's restart (a 502, then no answer) is sent again under one
   // Idempotency-Key and lands, instead of "Nothing changed. You can try again."
   it('takes LXC back through a restart, sending the same key until it is answered', async () => {

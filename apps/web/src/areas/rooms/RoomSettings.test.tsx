@@ -68,7 +68,8 @@ function mockBff() {
       }
       return json(rules)
     }
-    if (url === '/api/agents/approvals') return json({ approvals: [] })
+    if (url === '/api/agents/approvals')
+      return json({ approvals: [{ id: 'apr_1', agent_id: 'ag_room', amount_ulxc: 1_000_000, model: 'gpt-5', status: 'expired', created_at: '2026-10-06T09:00:00Z' }] })
     if (url === '/api/rooms/room_1/invites') return json({ invites })
     const invite = /^\/api\/rooms\/room_1\/invites\/([^/]+)$/.exec(url)
     if (invite && method === 'DELETE') {
@@ -136,6 +137,15 @@ describe('room settings', () => {
     expect(await within(invites).findByText('Revoked')).toBeTruthy()
     expect(within(invites).queryByRole('button', { name: /^Revoke invite/ })).toBeNull()
     expect(bff.sent.find((s) => s.method === 'DELETE')?.url).toBe('/api/rooms/room_1/invites/rinv_1')
+  })
+
+  // B55.7 — the room's approvals list an expired one as Expired, and the settings still draw.
+  it('shows the room’s expired approval as Expired', async () => {
+    mockBff()
+    window.history.pushState({}, '', '/rooms/room_1/settings')
+    render(<App />)
+    expect(await screen.findByText('Expired')).toBeInTheDocument()
+    expect(screen.getByText('Not answered within 24 hours')).toBeInTheDocument()
   })
 
   it('hands the room to another member, and the owner is then its editor', async () => {

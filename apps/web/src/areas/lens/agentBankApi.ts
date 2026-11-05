@@ -620,9 +620,11 @@ export interface AgentApproval {
   payee?: ApprovalPayee
   /** The payment's memo. */
   memo?: string
-  status: 'pending' | 'approved' | 'denied' | 'used'
+  /** expired: not used within its 24 hours (Lens agentApprovalColumns). */
+  status: 'pending' | 'approved' | 'denied' | 'used' | 'expired'
   created_at: string
   decided_at?: string
+  expires_at?: string
 }
 
 /** Every kind of agent_postings row Lens writes on an agent's account. */

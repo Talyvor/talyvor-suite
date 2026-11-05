@@ -7,13 +7,14 @@ import { App, queryClient } from '../../App'
 
 const M = 1_000_000
 
-function mockBff() {
-  const approvals = [
+function mockBff(decided: Array<Record<string, unknown> & { id: string; status: string }> = []) {
+  const approvals: Array<Record<string, unknown> & { id: string; status: string }> = [
     { id: 'apr_1', agent_id: 'agt_1', amount_ulxc: 3 * M, model: '', status: 'pending', created_at: '2026-10-25T06:01:00Z', payee: { kind: 'company', id: 'ws_a', name: 'Acme Hosting' } },
     { id: 'apr_2', agent_id: 'agt_1', amount_ulxc: 2 * M, model: 'gpt-5', status: 'pending', created_at: '2026-10-25T06:02:00Z' },
     { id: 'apr_3', agent_id: 'agt_2', amount_ulxc: 4 * M, model: '', status: 'pending', created_at: '2026-10-25T06:03:00Z', payee: { kind: 'company', id: 'ws_b', name: 'Bolt Cloud' } },
     { id: 'apr_4', agent_id: 'agt_2', amount_ulxc: 1 * M, model: '', status: 'pending', created_at: '2026-10-25T06:04:00Z', payee: { kind: 'company', id: 'ws_c', name: 'Copy Desk' } },
     { id: 'apr_5', agent_id: 'agt_2', amount_ulxc: 5 * M, model: 'claude', status: 'pending', created_at: '2026-10-25T06:05:00Z' },
+    ...decided,
   ]
   const decisions: Array<{ id: string; decision: string }> = []
   const challenges: string[] = []
@@ -112,5 +113,21 @@ describe('the approvals inbox (B41.33)', () => {
     fireEvent.touchMove(row, { touches: [{ clientX: 90, clientY: 12 }] })
     fireEvent.touchEnd(row, { changedTouches: [{ clientX: 140, clientY: 14 }] })
     await waitFor(() => expect(bff.decisions).toEqual([{ id: 'apr_3', decision: 'approve' }]))
+  })
+
+  // B55.7 — Lens reads an approval nobody used within its 24 hours as expired: the row says so, and a status
+  // this screen does not know yet reads Closed, instead of the whole screen failing to draw.
+  it('shows an expired approval as Expired, and a status it does not know as Closed', async () => {
+    mockBff([
+      { id: 'apr_6', agent_id: 'agt_1', amount_ulxc: M, model: 'gpt-5', status: 'expired', created_at: '2026-10-24T06:00:00Z', expires_at: '2026-10-25T06:00:00Z' },
+      { id: 'apr_7', agent_id: 'agt_2', amount_ulxc: M, model: 'claude', status: 'expired', created_at: '2026-10-24T06:01:00Z', decided_at: '2026-10-24T07:00:00Z', expires_at: '2026-10-25T06:01:00Z' },
+      { id: 'apr_8', agent_id: 'agt_2', amount_ulxc: M, model: 'claude', status: 'withdrawn', created_at: '2026-10-24T06:02:00Z' },
+    ])
+    await inbox()
+    expect(screen.getAllByText('Expired')).toHaveLength(2)
+    expect(screen.getByText('Not answered within 24 hours')).toBeInTheDocument()
+    expect(screen.getByText('Approved, but not used within 24 hours')).toBeInTheDocument()
+    expect(screen.getByText('Closed')).toBeInTheDocument()
+    expect(screen.queryByText('This screen couldn’t be read.')).toBeNull()
   })
 })
