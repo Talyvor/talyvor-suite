@@ -103,6 +103,7 @@ import { limitAlerts } from './limitAlerts.ts'
 import { subscriptionsView } from './subscriptionsView.ts'
 import { budgetsByCategory } from './budgetsByCategory.ts'
 import { scanAgents } from './scanAgents.ts'
+import { scanReport } from './scanReport.ts'
 import { coachWeek } from './coachWeek.ts'
 import { spendingScreen } from './spendingScreen.ts'
 import { monthPlan } from './monthPlan.ts'
@@ -5509,6 +5510,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B52.28 — Scan in the app, once a run, on a workspace of its own: a watch keeps the owner's measure of unusual and stops when
   // told, the public track record scores a hit only inside its range, and Scan agents and Track record show both.
   if (i === 7) list.push(scanAgents())
+  // B52.32 — a Scan report end to end, once a run, on a workspace of its own: drafted from recorded data, a planted "buy" line refused,
+  // published only on a test reviewer's approval, and scored a hit when the planted outcome arrives inside its range.
+  if (i === 7) list.push(scanReport())
   // B53.14 — a week of spending with the Coach, once a run, on a workspace of its own: six card payments land in their categories, an
   // eating-out budget crossing 80% alerts once, a duplicate and a new country are unusual, every Coach sentence passes its validator.
   if (i === 5) list.push(coachWeek())

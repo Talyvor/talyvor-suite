@@ -52,6 +52,15 @@ export function servedBy(h: Headers): string {
 }
 
 /** B17.6 — an answer Lens may refuse: what it answered, or its status and sentence. */
+/** B52.32 — a Scan report as Lens's review queue holds it (internal/scan QueuedReport). */
+export interface ScanRehearsal { id: number; series: string; status: string; refusal?: string; reviewed_by?: string
+  report: { title: string; what_changed: string; why_it_matters: string; confidence: string; what_would_change: string; sources: string[] | null
+    box: { made_by: string; data: string[] | null; method: string; backtest: string; conflicts: string; track_record: string } } }
+
+/** Scan's track record (internal/scan TrackRecord): a hit is set once the outcome is scored. */
+export interface ScanTrackRecord { hits: number; misses: number; waiting: number
+  records: { report_id: number; outlook_low: number; outlook_high: number; outcome?: number; hit?: boolean }[] | null }
+
 export type Answered<T> = { ok: true; status: number; value: T } | { ok: false; status: number; error: string }
 
 /** B28.288 — one request of a burst as Lens answered it: its status, the limiter's two headers (null when absent) and the body. */
@@ -1890,6 +1899,26 @@ export class LensClient {
   /** B53.14 — a charge at a merchant on one of the workspace's single-use money cards, made as the issuer makes it (Lens B53.18). */
   async chargeTestCard(user: SyntheticUser, cardID: string, c: { merchant: string; amount_minor: number }): Promise<Answered<{ authorization_id: string; approved: boolean; reason: string; mcc: string; country: string }>> {
     return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/money/cards/${cardID}/charge`, c)
+  }
+
+  /** B52.32 — Scan's writer run on its recorded data for `series` on a test workspace, `plant` a line added before the code rules (Lens B52.40). */
+  async rehearseScanReport(user: SyntheticUser, series: string, plant = ''): Promise<Answered<{ report: ScanRehearsal }>> {
+    return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/scan/reports`, { series, plant })
+  }
+
+  /** The test reviewer approves (publishes) a rehearsed report: 409 unless it is waiting for review. */
+  async approveScanRehearsal(user: SyntheticUser, id: number): Promise<Answered<{ report: ScanRehearsal }>> {
+    return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/scan/reports/${id}/approve`, { note: 'e2e: checked against the recorded data' })
+  }
+
+  /** The planted outcome of a published rehearsed report, recorded at its outlook date and scored. */
+  async plantScanOutcome(user: SyntheticUser, id: number, value: number): Promise<Answered<{ scored: number }>> {
+    return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/scan/reports/${id}/outcome`, { value })
+  }
+
+  /** The test workspace's own track record: its published rehearsed reports only. */
+  async scanRehearsalTrackRecord(user: SyntheticUser): Promise<Answered<ScanTrackRecord>> {
+    return this.synthetic('GET', `/v1/synthetic/workspaces/${user.workspaceID}/scan/track-record`)
   }
 
   /** B53.12 — plays the card partner's delivery event on a test workspace's physical card (Lens B53.19). */
