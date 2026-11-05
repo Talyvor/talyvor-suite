@@ -77,6 +77,12 @@ without.
 | `OIDC_ALLOWED_EMAILS` | — | `oidc`: comma-separated, or `*` for any authenticated identity |
 | `BFF_SESSION_TTL` | `12h` | absolute session lifetime; sessions are in-memory |
 | `BFF_DATABASE_URL` | (unset) | Postgres for assistant sign-ins (Talyvor Connect): clients, codes, grants and hashed tokens survive a restart; unset keeps them in memory |
+| `BFF_CONNECT_REGISTER_PER_IP_HOUR` | `10` | Talyvor Connect (B52.3): client registrations per IP per hour, which also caps the unused clients one address holds; over it is 429 with Retry-After |
+| `BFF_CONNECT_AUTHORIZE_PER_IP_MINUTE` | `60` | Connect: `/oauth/authorize` requests per IP per minute |
+| `BFF_CONNECT_TOKEN_PER_IP_MINUTE` | `60` | Connect: `/oauth/token` requests per IP per minute |
+| `BFF_CONNECT_TOKEN_PER_CONNECTION_MINUTE` | `10` | Connect: refreshes per connection per minute |
+| `BFF_CONNECT_MCP_PER_IP_MINUTE` | `600` | Connect: `/mcp` requests per IP per minute |
+| `BFF_CONNECT_MCP_PER_CONNECTION_MINUTE` | `120` | Connect: `/mcp` requests per connection per minute |
 | `OPERATOR_SUBS` | — | OIDC `sub`s that may read every tenant. Unset means **nobody** |
 | `TRACK_BASE_URL` | — | optional pair with the secret below; `oidc` only |
 | `TRACK_GATEWAY_SECRET` | — | must equal Track's `GATEWAY_AUTH_SECRET` |

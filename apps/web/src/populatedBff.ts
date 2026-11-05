@@ -181,6 +181,12 @@ const BODIES: Record<string, unknown> = {
         scopes: ['wallets:read', 'invoices:draft', 'payments:prepare'],
         connected_at: '2026-10-20T09:00:00Z',
         last_used_at: '2026-10-23T08:15:00Z',
+        // B52.3 — the connection's audit trail, newest first.
+        calls: [
+          { tool: 'prepare_payment', args_sha256: 'a'.repeat(64), result: 'done', at: '2026-10-23T08:15:00Z' },
+          { tool: 'get_balances', args_sha256: 'b'.repeat(64), result: 'done', at: '2026-10-23T08:14:20Z' },
+          { tool: 'list_payees', args_sha256: 'c'.repeat(64), result: 'refused', at: '2026-10-22T17:02:00Z' },
+        ],
       },
     ],
   },

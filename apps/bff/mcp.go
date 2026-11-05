@@ -451,7 +451,7 @@ func (a *app) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g, ok := a.oauthGrantFrom(w, r)
-	if !ok {
+	if !ok || !a.allow(w, limitMCPGrant, g.ID) {
 		return
 	}
 	status := http.StatusOK
@@ -532,7 +532,9 @@ func (a *app) mcpDispatch(ctx context.Context, g oauthGrant, version string, req
 		}
 		return mcpOK(req.ID, map[string]any{"tools": tools})
 	case "tools/call":
-		return a.mcpCallTool(ctx, g, version, req)
+		resp := a.mcpCallTool(ctx, g, version, req)
+		a.auditToolCall(ctx, g, req, resp)
+		return resp
 	}
 	return mcpErr(req.ID, mcpErrMethodNotFnd, "method not found: "+req.Method)
 }

@@ -36,6 +36,7 @@ describe('Connect your AI', () => {
         scopes: ['wallets:read'],
         connected_at: '2026-10-20T09:00:00Z',
         last_used_at: '2026-10-23T08:15:00Z',
+        calls: [{ tool: 'get_balances', args_sha256: 'e'.repeat(64), result: 'refused', at: '2026-10-23T08:15:00Z' }],
       },
     ]
     const calls: string[] = []
@@ -51,6 +52,10 @@ describe('Connect your AI', () => {
     const row = (await screen.findByText('Test client')).closest('li')!
     expect(within(row).getByText(/Last used/)).toHaveTextContent(/Oct 23/)
     expect(within(row).getByText('See your wallets and bills')).toBeInTheDocument()
+    // B52.3 — what the assistant did, from the audit trail.
+    const trail = within(row).getByRole('list', { name: 'Its latest tool calls' })
+    expect(within(trail).getByText('get_balances')).toBeInTheDocument()
+    expect(within(trail).getByText('Refused')).toBeInTheDocument()
     fireEvent.click(within(row).getByRole('button', { name: 'Revoke Test client' }))
     await waitFor(() => expect(screen.queryByText('Test client')).not.toBeInTheDocument())
     expect(calls).toContain('POST /api/connect/assistants/g-1/revoke')

@@ -45,3 +45,17 @@ CREATE TABLE IF NOT EXISTS oauth_tokens (
     expires_at timestamptz NOT NULL
 );
 CREATE INDEX IF NOT EXISTS oauth_tokens_grant ON oauth_tokens (grant_id);
+
+-- B52.3: every tool call an assistant makes on /mcp (connect_limits.go). No foreign key: the trail outlives a
+-- revoked connection. The arguments are kept by SHA-256 only.
+CREATE TABLE IF NOT EXISTS oauth_tool_calls (
+    id          bigserial PRIMARY KEY,
+    grant_id    text NOT NULL,
+    sub         text NOT NULL,
+    client_name text NOT NULL,
+    tool        text NOT NULL,
+    args_sha256 text NOT NULL,
+    result      text NOT NULL,
+    at          timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS oauth_tool_calls_sub ON oauth_tool_calls (sub, at DESC);

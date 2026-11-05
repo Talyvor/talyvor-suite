@@ -7,7 +7,8 @@
 //     back to a loopback callback with the code, the state and iss; the code and its PKCE verifier buy an access token
 //     /mcp takes. The refresh token rotates, a rotated one sent again ends the connection, and a revoked token is refused.
 //     B40.8: a third client shows on Settings → Connect your AI with its last use. B41.15: it is revoked from its row
-//     on Keys, the page says so, and its next tool call is refused as not connected.
+//     on Keys, the page says so, and its next tool call is refused as not connected. B52.3: before that, a tool call it
+//     makes is listed under its row on Settings, from the BFF's audit trail.
 // A CIMD document must be at a public https address, so it is served through a Cloudflare quick tunnel; with
 // --hook-tunnel none (the self-test) a second DCR client takes its place and the evidence says so.
 
@@ -44,7 +45,7 @@ export function connectOAuth(): Scenario {
     id: 'connect-oauth',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B40.6', 'B40.8', 'B41.15'],
+    items: ['B40.6', 'B40.8', 'B41.15', 'B52.3'],
     feature: 'Talyvor Connect',
     title: 'an assistant signs in the way Claude does: a 401 naming resource_metadata, discovery, a client by DCR and one by CIMD, ' +
       'PKCE and the consent screen in the browser, the token and a rotating refresh — and a revoked token is refused, ' +
@@ -167,10 +168,21 @@ export function connectOAuth(): Scenario {
         const name = 'e2e assistant (Settings)'
         const held = tokens.Settings
         if (held === undefined) return { pass: false, detail: 'no Settings token to revoke from the page' }
+        // B52.3: a tool call is written to the connection's audit trail, which the row shows.
+        const audited = await fetch(`${origin}/mcp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${held.access_token}` },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'get_balances', arguments: {} } }),
+        })
         await page.goto(`${origin}/settings/connect`)
         const row = page.locator('li').filter({ hasText: name })
         await row.waitFor({ timeout: 15_000 })
         const rowText = (await row.innerText()).replace(/\s+/g, ' ')
+        const trail = row.getByRole('list', { name: 'Its latest tool calls' })
+        if (await row.getByText(/What it did/).count() > 0) await row.getByText(/What it did/).click()
+        const trailText = (await trail.count()) > 0 ? (await trail.innerText()).replace(/\s+/g, ' ') : ''
+        ctx.evidence.push({ note: `B52.3: get_balances answered ${audited.status}; the row's audit trail reads "${trailText}"` })
+        if (!trailText.includes('get_balances')) wrong.push(`Settings does not list the get_balances call in the connection's audit trail: "${rowText}"`)
         const address = await page.getByText(`${origin}/mcp`, { exact: true }).count()
         ctx.evidence.push({ note: `Settings → Connect your AI: address shown ${address > 0}; row "${rowText}"` })
         if (address === 0) wrong.push(`the page does not show the address ${origin}/mcp`)
