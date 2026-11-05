@@ -1892,6 +1892,11 @@ export class LensClient {
     return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/money/cards/${cardID}/charge`, c)
   }
 
+  /** B53.12 — plays the card partner's delivery event on a test workspace's physical card (Lens B53.19). */
+  async deliverTestCard(user: SyntheticUser, cardID: string, status: 'shipped' | 'delivered'): Promise<Answered<{ id: string; delivery: { status: string } }>> {
+    return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/money/physical-cards/${cardID}/delivery`, { status })
+  }
+
   /** B34.8 — a test workspace put on `plan` with the synthetic key, as Lens B35.1 lets the testers do. */
   async setTestPlan(user: SyntheticUser, plan: Plan): Promise<Answered<{ plan: { plan: string } }>> {
     return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/plan`, { plan })

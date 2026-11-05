@@ -551,6 +551,12 @@ const BY_PATH: Record<string, unknown> = {
     ],
   },
   // B53.16 — the month plan: payday on the 29th, two bills covered, and the rent short at the last seven days' pace.
+  // B53.12 — one active physical card, delivered, with the partner's own PIN screen.
+  '/api/money/physical-cards': {
+    cards: [{ id: 'pc_1', last4: '4242', state: 'active', design: 'standard', name_on_card: 'Ada Owner',
+      address: { line1: '1 High St', line2: '', city: 'London', postcode: 'N1 9GU', country: 'GB' },
+      delivery: { status: 'delivered', updated_at: '2026-09-03T09:00:00Z' }, pin_url: 'https://partner.example/pin', replaces: '', replaced_by: '', created_at: '2026-09-01T09:00:00Z' }],
+  },
   '/api/money/plan': {
     currency: 'GBP', timezone: 'Europe/London', today: '2026-09-04', until: '2026-09-28', next_income: '2026-09-29', days: 25,
     income: { payday: 29, amount_minor: 250_000, currency: 'GBP', confirmed: true }, money_now_minor: 110_000, upcoming_minor: 73_000,

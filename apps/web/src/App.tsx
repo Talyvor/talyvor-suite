@@ -74,6 +74,7 @@ import { SubscriptionsScreen } from './areas/lens/Subscriptions'
 import { BudgetsScreen } from './areas/lens/Budgets'
 import { ScanAgentsScreen, ScanTrackRecordScreen } from './areas/lens/Scan'
 import { SpendingScreen } from './areas/lens/Spending'
+import { PhysicalCardScreen } from './areas/lens/PhysicalCard'
 import { ApproveScreen } from './areas/lens/Approve'
 import { PayInvoicePage } from './areas/pay/PayInvoice'
 import { OperatorWorkspaces } from './areas/lens/OperatorWorkspaces'
@@ -309,6 +310,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/scan/track-record', title: 'Track record', element: <ScanTrackRecordScreen /> },
   // B53.8 — the week's and month's spending by category, budgets, subscriptions, the unusual with the Coach's sentence, notices.
   { path: '/money/spending', title: 'Spending', element: <SpendingScreen /> },
+  // B53.12 — order, activate and replace the physical card; while Lens's switch is off it sends the person to Spending.
+  { path: '/money/card', title: 'Talyvor Card', element: <PhysicalCardScreen /> },
   // B40.9 — the page a prepared request's approval link opens (Lens B40.3), from Chat, an assistant or a push.
   { path: '/approve/:id', title: 'Approve payments', element: <ApproveScreen /> },
   // B8.2 — every capability, what it does and costs, whether it is on, and its switch.

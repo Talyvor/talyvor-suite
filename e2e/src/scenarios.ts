@@ -106,6 +106,7 @@ import { scanAgents } from './scanAgents.ts'
 import { coachWeek } from './coachWeek.ts'
 import { spendingScreen } from './spendingScreen.ts'
 import { monthPlan } from './monthPlan.ts'
+import { physicalCard } from './physicalCard.ts'
 import { payeeCoolingOff } from './coolingOff.ts'
 import { payeeDetailsLock } from './payeeDetailsLock.ts'
 import { chatSidebar } from './chatSidebar.ts'
@@ -5516,6 +5517,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B53.16 — the month plan and Chat's "How much can I spend today?", once a run, on a workspace of its own: a payday and two bills
   // give safe to spend per day, a spree leaves the rent short with one notice, Money → Spending shows it with its adjustments.
   if (i === 9) list.push(monthPlan())
+  // B53.12 — the physical card, once a run, on a workspace of its own: nothing shows while Lens's switch is off; on, order (address
+  // checked), ship, activate on the printed digits, and a lost card frozen at once with its replacement on the way.
+  if (i === 9) list.push(physicalCard())
   if (i === 7) list.push(oneSearch(), payeeCoolingOff()) // B41.11: a large first payment to a new payee waits until the owner signs "I called them"
   if (i === 7) list.push(payeeDetailsLock()) // B41.12: a payee's bank details change only with a passkey, and payments to it are held 24 hours after
   // B48.23 — agents of each kind own their wallets, once a run, on a workspace of its own: fiat GBP, crypto USDC, both EUR + USDC,

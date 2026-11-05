@@ -171,6 +171,7 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/scan/agents': 'Scan agents',
   '/scan/track-record': 'Track record',
   '/money/spending': 'Spending',
+  '/money/card': 'Talyvor Card',
   '/approve/:id': 'Approve payments',
   '/money/plans/:id': 'Recurring payments',
   '/features': 'Features',
