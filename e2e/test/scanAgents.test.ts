@@ -6,7 +6,8 @@ import { LensClient } from '../src/lens.ts'
 import type { ScenarioCtx, Verdict } from '../src/scenarios.ts'
 
 // B52.28 — scan-agents against the stub Lens (selftest/stub-scan.ts), the app's half left out: it passes on a Lens that keeps a
-// watch's measure and scores a hit only inside its range, and FAILs on one that drops the z or calls an outcome outside a hit.
+// watch's measure and scores a hit only inside its range, and FAILs on one that drops the z, calls an outcome outside a hit, or
+// publishes a report whose box has lost its method.
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -41,7 +42,7 @@ async function runOnStub(broken: string): Promise<Verdict> {
 describe('scan-agents (B52.28)', () => {
   it('passes on a Lens that keeps the measure and scores by the range', async () => {
     const verdict = await runOnStub('')
-    expect(verdict.detail).toBe('a watch on gie.agsi.de.full past 2.5 standard deviations read back as set and stopped; 2 track-record reports, 1 hits and 0 misses, each scored by its range')
+    expect(verdict.detail).toBe('a watch on gie.agsi.de.full past 2.5 standard deviations read back as set and stopped; 2 track-record reports, 1 hits and 0 misses, each scored by its range; 2 published reports, each with its sources and box')
     expect(verdict.pass).toBe(true)
   })
 
@@ -55,5 +56,11 @@ describe('scan-agents (B52.28)', () => {
     const verdict = await runOnStub('scan-track-hit-outside')
     expect(verdict).toMatchObject({ pass: false })
     expect(verdict.detail).toMatch(/report 1 reads a hit with outcome 26100 against its range 20000–25000/)
+  })
+
+  it('FAILs when a published report\'s box comes back without its method', async () => {
+    const verdict = await runOnStub('scan-report-box-hollow')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/report 2 must open with its sources and the whole "How this report was made" box/)
   })
 }, 60_000)

@@ -1,19 +1,22 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Input, Row, focusRing } from '@talyvor/ui'
+import { Button, CardHeader, Input, Row, focusRing, inlineLink } from '@talyvor/ui'
 import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
 import { type ScanFinding, type ScanWatch, agentBankApi, formatULXC, parseLXC, refusalText } from './agentBankApi'
 
-// Scan.tsx — B52.28: Scan in the app. Scan agents watch the series their owner picks, with the owner's own idea of
+// Scan.tsx — B52.28: Scan in the app. The report library lists every published Scan report by family, and each report
+// opens on its own page (ScanReport.tsx) with its chart, sources and how it was made (Lens B52.33). Scan agents watch the series their owner picks, with the owner's own idea of
 // unusual, and send a short factual alert when one crosses it, paid from the agent's wallet (Lens B52.27). The track
 // record shows every published Scan report's range and, once the reading arrives, whether it held (Lens B52.26).
 // Facts about the data, never advice: nothing here buys, sells or links to a trade.
 
 export const SCAN_WATCHES_KEY = ['scan-watches']
 const TRACK_KEY = ['scan-track-record']
+export const REPORTS_KEY = ['scan-reports']
 
 // shortcut: mirrors the series Lens's collectors write that have a model (internal/scan Families); a Lens read of the
 // modelled series would replace it once Lens serves one.
@@ -74,7 +77,7 @@ export function seriesName(series: string): string {
 }
 
 const select = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
-const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+export const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 const fig = (v: number) => v.toLocaleString('en-GB', { maximumFractionDigits: 1 })
 const ruleText = (w: Pick<ScanWatch, 'rule' | 'z'>) =>
   w.rule === 'range' ? 'outside its five-year range' : `more than ${w.z} standard deviations from its normal`
@@ -300,6 +303,65 @@ export function ScanTrackRecordScreen() {
                     )}
                     <br />
                     Sources: {(r.sources ?? []).join('; ') || 'none named'}
+                  </>
+                }
+              />
+            ))}
+          </Card>
+        )}
+      </Region>
+    </RegionScreen>
+  )
+}
+
+const FAMILIES: readonly [string, string][] = [['', 'All'], ['energy', 'Energy'], ['oil', 'Oil'], ['crops', 'Crops'], ['filings', 'Filings']]
+export const familyName = (f: string) => FAMILIES.find(([id]) => id === f)?.[1] ?? f
+
+export function ScanReportsScreen() {
+  const [family, setFamily] = useState('')
+  const reports = useQuery({ queryKey: [...REPORTS_KEY, family], queryFn: () => agentBankApi.scanReports(family) })
+  const list = reports.data?.reports ?? []
+  return (
+    <RegionScreen>
+      <Region index="00" label="Scan" heading="Scan reports" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-2xl flex-col gap-3">
+        <p className="text-body text-muted">
+          Brief reports on what energy, oil, crop and company-filing data did, each read against its normal, with its sources
+          and how it was made. A person checks every report before it is published. They describe the data, never what to do
+          about it.
+        </p>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Family">
+          {FAMILIES.map(([id, name]) => (
+            <Button key={id} aria-pressed={family === id} variant={family === id ? 'primary' : 'default'} onClick={() => setFamily(id)}>
+              {name}
+            </Button>
+          ))}
+        </div>
+      </Region>
+      <Region index="01" label="Library" heading="Published reports" className="flex max-w-2xl flex-col gap-3">
+        {reports.isError ? (
+          <p className="text-body text-muted">{readFailure(reports.error, 'The reports')}</p>
+        ) : reports.isPending ? (
+          <p className="text-body text-muted">Reading…</p>
+        ) : list.length === 0 ? (
+          <p className="text-body text-muted">
+            No {family ? `${familyName(family).toLowerCase()} ` : ''}report has been published yet. Each one appears here when a person approves it.
+          </p>
+        ) : (
+          <Card>
+            <CardHeader>{family ? familyName(family) : 'Every family'}</CardHeader>
+            {list.map((r) => (
+              <Row
+                key={r.id}
+                stack
+                data-testid={`scan-report-${r.id}`}
+                label={
+                  <Link to={`/scan/reports/${r.id}`} className={`text-ink ${inlineLink}`}>
+                    {r.title}
+                  </Link>
+                }
+                hint={
+                  <>
+                    {familyName(r.family)} · published <span className="font-figure">{day(r.published_at)}</span> · {(r.sources ?? []).join('; ') || 'no source named'}
                   </>
                 }
               />

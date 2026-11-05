@@ -4,10 +4,32 @@ import { App, queryClient } from '../../App'
 
 // B52.28 — Scan in the app: New Scan agent creates the agent, sets its limits, funds it and gives it a watch; the
 // watch's simulated alert shows with its finding, sources and what it paid; the track record shows a scored report;
-// neither page carries buy or sell wording.
+// the report library filters by family and opens a report with its chart, sources and "How this report was made" box;
+// no page carries buy or sell wording.
 
 const RULES = { max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 0, approval_above_ulxc: 0, allowed_models: null,
   allowed_providers: null, active_from: '', active_until: '', timezone: '' }
+
+const REPORT = {
+  id: 1, series: 'eia.stocks.cushing-crude', family: 'oil', published_at: '2026-10-01T09:00:00Z', title: 'US oil stocks: crude at Cushing',
+  what_changed: 'US oil stocks: crude at Cushing read 21,000 thousand barrels on 26 Sep 2026, against a normal of 24,000 to 30,000 thousand barrels for the same weeks of past years: 2.4 standard deviations below it.',
+  why_it_matters: 'A gap to the normal like this one tends to carry on: the model\'s likely range for 24 Oct 2026 is 20,000 to 25,000 thousand barrels.',
+  confidence: 'Tested on 120 past outlooks from its own history, the model put the outcome on the right side of the normal 71% of the time.',
+  what_would_change: 'The view would change if the coming readings moved back towards the normal.',
+  figures: [
+    { name: 'unit', text: 'thousand barrels', value: 21_000, unit: 'thousand barrels', at: '2026-09-26T00:00:00Z' },
+    { name: 'value', text: '21,000', value: 21_000, unit: 'thousand barrels', at: '2026-09-26T00:00:00Z' },
+    { name: 'at', text: '26 Sep 2026', value: 21_000, unit: 'thousand barrels', at: '2026-09-26T00:00:00Z' },
+    { name: 'normal_low', text: '24,000', value: 24_000 }, { name: 'normal_high', text: '30,000', value: 30_000 },
+    { name: 'outlook_at', text: '24 Oct 2026', value: 20_000 },
+    { name: 'outlook_low', text: '20,000', value: 20_000 }, { name: 'outlook_high', text: '25,000', value: 25_000 },
+    { name: 'tested', text: '120' },
+  ],
+  sources: ['U.S. Energy Information Administration'],
+  box: { made_by: "Talyvor's agents wrote this report from Talyvor Scan's figures, and a person checked it before it was published.",
+    data: ['U.S. Energy Information Administration (public domain)'], method: 'The same weeks of the past five years.', backtest: 'Backtested on 4 Nov 2026: passed.',
+    conflicts: 'Talyvor holds no position in what this report covers.', track_record: '/v1/public/scan/track-record' },
+}
 
 function mockBff(calls: string[]) {
   let watched = false
@@ -43,6 +65,9 @@ function mockBff(calls: string[]) {
           outlook_at: '2026-11-18T00:00:00Z', outlook_low: 66, outlook_high: 74 },
       ] })
     }
+    if (url === '/api/scan/reports?family=oil') return json({ reports: [REPORT] })
+    if (url === '/api/scan/reports') return json({ reports: [REPORT, { ...REPORT, id: 2, series: 'gie.agsi.de.full', family: 'energy', title: 'EU gas storage: Germany' }] })
+    if (url === '/api/scan/reports/1') return json({ report: REPORT })
     return new Response('null', { status: 404 })
   })
 }
@@ -95,6 +120,27 @@ describe('Scan in the app (B52.28)', () => {
     expect(hit.textContent).toContain('Outcome 22,400 thousand barrels: inside the range.')
     expect(hit.textContent).toContain('Sources: U.S. Energy Information Administration')
     expect(screen.getByTestId('scan-track-2').textContent).toContain('Waiting for the reading.')
+    noTradeWording()
+  })
+
+  it('lists the published reports by family and opens one with its chart, sources and how it was made', async () => {
+    mockBff([])
+    window.history.pushState({}, '', '/scan/reports')
+    render(<App />)
+
+    await screen.findByTestId('scan-report-2')
+    fireEvent.click(screen.getByRole('button', { name: 'Oil' }))
+    await vi.waitFor(() => expect(screen.queryByTestId('scan-report-2')).toBeNull())
+    fireEvent.click(await screen.findByRole('link', { name: 'US oil stocks: crude at Cushing' }))
+
+    const box = await screen.findByTestId('scan-report-box')
+    expect(screen.getByTestId('scan-report').textContent).toContain('read 21,000 thousand barrels on 26 Sep 2026')
+    expect(screen.getByRole('img', { name: /^Reading/ }).getAttribute('aria-label')).toBe(
+      'Reading 21,000 thousand barrels on 26 Sep 2026; normal 24,000 to 30,000; likely 20,000 to 25,000 by 24 Oct 2026')
+    expect(screen.getByTestId('scan-report-sources').textContent).toBe('U.S. Energy Information Administration')
+    expect(box.textContent).toContain('a person checked it before it was published')
+    expect(box.textContent).toContain('U.S. Energy Information Administration (public domain)')
+    expect(box.textContent).toContain('Talyvor holds no position')
     noTradeWording()
   })
 })
