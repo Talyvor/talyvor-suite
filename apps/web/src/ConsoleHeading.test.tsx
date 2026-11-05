@@ -115,6 +115,8 @@ const PINNED: Readonly<Record<string, string>> = {
   '/money/plans/:id': 'Recurring payments',
   '/money/subscriptions': 'Subscriptions',
   '/money/budgets': 'Budgets',
+  '/scan/reports': 'Scan reports',
+  '/scan/reports/:id': 'Scan report',
   '/scan/agents': 'Scan agents',
   '/scan/track-record': 'Track record',
   '/money/spending': 'Spending',

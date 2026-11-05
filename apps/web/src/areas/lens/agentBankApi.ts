@@ -414,6 +414,32 @@ export interface ScanTrackEntry {
   hit?: boolean
 }
 
+/** B52.28 — Lens scan.PublishedFigure (B52.33): one number a report prints; value, unit and at come from its stored point. */
+export interface ScanFigure {
+  name: string
+  text: string
+  value?: number
+  unit?: string
+  at?: string
+}
+
+/** B52.28 — Lens scan.PublishedReport (B52.33): an approved Scan report as a reader sees it. */
+export interface ScanReport {
+  id: number
+  series: string
+  family: string
+  published_at: string
+  title: string
+  what_changed: string
+  why_it_matters: string
+  confidence: string
+  what_would_change: string
+  figures: ScanFigure[] | null
+  sources: string[] | null
+  /** the "How this report was made" box */
+  box: { made_by: string; data: string[] | null; method: string; backtest: string; conflicts: string; track_record: string }
+}
+
 export interface ScanTrackRecord {
   records: ScanTrackEntry[] | null
   hits: number
@@ -944,6 +970,9 @@ export const agentBankApi = {
   budgets: () => getJSON<{ budgets: SpendBudget[] | null }>('/api/money/budgets', { budgets: 'list' }),
   setBudget: (b: SpendBudgetRequest) => send<SpendBudget>('PUT', '/api/money/budgets', b),
   deleteBudget: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/budgets/${e(id)}`),
+  scanReports: (family: string) =>
+    getJSON<{ reports: ScanReport[] | null }>(`/api/scan/reports${family ? `?family=${e(family)}` : ''}`, { reports: 'list' }),
+  scanReport: (id: string) => getJSON<{ report: ScanReport }>(`/api/scan/reports/${e(id)}`, { report: 'object' }),
   scanTrackRecord: () => getJSON<ScanTrackRecord>('/api/scan/track-record', { records: 'list', hits: 'number', misses: 'number', waiting: 'number' }),
   scanWatches: () => getJSON<{ watches: ScanWatch[] | null }>('/api/scan/watches', { watches: 'list' }),
   scanWatch: (agentID: string, w: { series: string[]; rule: ScanWatch['rule']; z?: number }) =>

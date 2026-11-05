@@ -122,6 +122,7 @@ const SIDEBAR_DESTINATIONS = [
   '/money/subscriptions',
   '/money/spending',
   '/money/budgets',
+  '/scan/reports',
   '/scan/agents',
   '/scan/track-record',
   '/track',

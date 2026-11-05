@@ -465,7 +465,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B28.21 — rename and describe an agent, and archive it. See agent_bank.go.
 	a.mux.HandleFunc("/api/agents/{id}", a.requireTenant(a.handleAgent))
 	a.mux.HandleFunc("/api/agents/{id}/archive", a.requireTenant(a.handleAgentArchive))
-	// B52.28 — Scan: the public track record, and Scan agents' watches and their alerts. See scan.go.
+	// B52.28 — Scan: the published reports, the public track record, and Scan agents' watches and their alerts. See scan.go.
+	a.mux.HandleFunc("/api/scan/reports", a.requireTenant(a.handleScanReports))
+	a.mux.HandleFunc("/api/scan/reports/{id}", a.requireTenant(a.handleScanReport))
 	a.mux.HandleFunc("/api/scan/track-record", a.requireTenant(a.handleScanTrackRecord))
 	a.mux.HandleFunc("/api/scan/watches", a.requireTenant(a.handleScanWatches))
 	a.mux.HandleFunc("/api/scan/watches/{id}", a.requireTenant(a.handleScanWatchStop))

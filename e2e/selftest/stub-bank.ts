@@ -1578,6 +1578,8 @@ export class Bank {
       for (const u of refunded) Object.assign(u, { refunded_at: now, kept: this.broken('bill-refund-kept') })
       return json(res, 200, { invoice_id: m[2], uses_refunded: refunded.length }), true
     }
+    // B52.32 — a Scan report rehearsed on a test workspace (Lens B52.40, stub-scan.ts).
+    if (await this.scan.synthetic(req, res, path, now)) return true
     // B53.14 — the issuer's charge on a single-use money card (Lens B53.18).
     if ((m = /^\/v1\/synthetic\/workspaces\/([^/]+)\/money\/cards\/([^/]+)\/charge$/.exec(path)) !== null && req.method === 'POST') {
       const b = await this.body<{ merchant?: string; amount_minor?: number }>(req)
