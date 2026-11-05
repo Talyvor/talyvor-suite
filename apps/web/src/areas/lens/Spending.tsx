@@ -208,8 +208,9 @@ export function SpendingScreen() {
       <Region index="04" label="Unusual" heading="What was unusual this month" className="flex max-w-2xl flex-col gap-3">
         {unusual.isError ? (
           <p className="text-body text-muted">{readFailure(unusual.error, 'Unusual spending')}</p>
-        ) : findings.length === 0 ? (
-          <p className="text-body text-muted">{unusual.isPending ? 'Reading…' : 'Nothing unusual this month.'}</p>
+        ) : findings.length === 0 || coach.isPending ? (
+          // The Coach asks a model, so it answers after the findings; a row waits for its sentence rather than showing without it.
+          <p className="text-body text-muted">{unusual.isPending || coach.isPending ? 'Reading…' : 'Nothing unusual this month.'}</p>
         ) : (
           <Card>
             <CardHeader>Unusual payments</CardHeader>
