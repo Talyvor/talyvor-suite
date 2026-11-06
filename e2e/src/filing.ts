@@ -21,6 +21,7 @@ import { withheld } from './withheld.ts'
 import { networkDrop } from './oracles.ts'
 import { isSecurity, type ReportedRun } from './report.ts'
 import { scenarioOwners } from './scenarios.ts'
+import { POCKET, type PocketRow, isPocket } from './pocketProblems/problems.ts'
 
 type Outcome = ReportedRun['outcomes'][number]
 
@@ -66,8 +67,8 @@ export function nextB50(buildMd: string): number {
 }
 
 /** B50.7 — `buildMd` with `items` put right under the B50 section's heading and its opening paragraphs; at the end when there is no B50. */
-export function underB50(buildMd: string, items: string): string {
-  const head = /^# B50 —.*$/m.exec(buildMd)
+export function underB50(buildMd: string, items: string, heading = /^# B50 —.*$/m): string {
+  const head = heading.exec(buildMd)
   if (head === null) return buildMd + (buildMd.endsWith('\n') ? '' : '\n') + items
   const next = buildMd.slice(head.index).search(/\n##? /)
   const at = next === -1 ? buildMd.length : head.index + next + 1
@@ -147,7 +148,8 @@ export function itemsFor(buildMd: string, run: ReportedRun, reportFile: string, 
   const covered = coveredScenarios(buildMd)
   const failing = new Map<string, Outcome[]>()
   for (const o of run.outcomes) {
-    if (o.status !== 'FAIL') continue
+    // B55.44 — a Pocket problem's FAIL is filed by its own rule (pocketItemsFor).
+    if (o.status !== 'FAIL' || isPocket(o.scenario)) continue
     failing.set(o.scenario, [...(failing.get(o.scenario) ?? []), o])
   }
   const out: Filing = { append: '', security: '', filed: [], covered: [] }
@@ -264,6 +266,61 @@ export async function fileItems(path: string, run: ReportedRun, reportFile: stri
   }
   if (filing.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + withheld(filing.append))
   return filing
+}
+
+// B55.44 — a Pocket problem that is back: it FAILed with every item that fixed it DONE. One item at the top of B55, naming
+// them, once (its `e2e-scenario: pocket-NN` marker); a FAIL while an item is still being built is reported only.
+
+/** The next unused number in the B55 series. */
+export function nextB55(buildMd: string): number {
+  let max = 0
+  for (const m of buildMd.matchAll(/^## B55\.(\d+) —/gm)) max = Math.max(max, Number(m[1]))
+  return max + 1
+}
+
+/** The items the run's back problems call for, against BUILD.md as it stands; each back row gets its item. Pure but for `rows`. */
+export function pocketItemsFor(buildMd: string, rows: PocketRow[], date: string, reportFile: string): EdgeFiling {
+  const covered = coveredScenarios(buildMd)
+  const out: EdgeFiling = { append: '', filed: [], covered: [] }
+  let n = nextB55(buildMd)
+  for (const r of rows.filter((x) => x.state === 'back')) {
+    const by = covered.get(r.scenario)
+    if (by !== undefined) {
+      out.covered.push({ scenario: r.scenario, by })
+      r.filed = by
+      continue
+    }
+    const p = POCKET.find((x) => x.n === r.n) as (typeof POCKET)[number]
+    const id = `B55.${n++}`
+    out.append += [
+      '',
+      `## ${id} — Pocket problem ${r.n} is back: ${r.problem}`,
+      `repo: ${p.repo} · deps: none · status: OPEN`,
+      `Filed by the Pocket problems pass of ${date} (${reportFile}, B55.44): every item that fixed it is DONE (${p.items.join(', ')}) and ` +
+        `\`${r.scenario}\` FAILED: ${oneLine(r.detail)}`,
+      `Passing means: ${p.passing}. ${p.repo} is where it is looked for first; the items above say where each part was fixed.`,
+      `e2e-scenario: ${r.scenario}`,
+      `DONE = \`${r.scenario}\` PASSes in the next Pocket problems pass against the live app.`,
+      '',
+    ].join('\n')
+    out.filed.push({ id, scenario: r.scenario })
+    r.filed = id
+  }
+  return out
+}
+
+/** Puts the run's back problems at the top of B55 in BUILD.md at `path`. A missing BUILD.md files nothing. */
+export async function filePocketItems(path: string, rows: PocketRow[], date: string, reportFile: string): Promise<EdgeFiling | undefined> {
+  let buildMd: string
+  try {
+    buildMd = await readFile(path, 'utf8')
+  } catch {
+    return undefined
+  }
+  const f = pocketItemsFor(buildMd, rows, date, reportFile)
+  // Re-read, as for B50: another session's write since is kept.
+  if (f.append !== '') await writeFile(path, underB50(await readFile(path, 'utf8'), withheld(f.append), /^# B55 —.*$/m))
+  return f
 }
 
 // B34.3 — Talyvor Edge: a failed phase or workflow of edge-infra's nightly runs files one item for edge-infra, once.

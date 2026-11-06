@@ -208,6 +208,12 @@ run_once() {
     pnpm install --frozen-lockfile >>"$state/nightly.log" 2>&1 || { log "pnpm install failed — skipped"; exit 2; }
     pnpm --filter @talyvor/e2e exec playwright install chromium >>"$state/nightly.log" 2>&1
     [ "$light" = 1 ] && log "light pass starting at $(git rev-parse --short HEAD): the core money and auth paths, under what is left of the day's \$$E2E_DAY_CAP_USD cap"
+    # B55.44 — Pocket's 25 app problems first, before the nightly run; its verdicts never change the night's exit code.
+    if [ "$light" != 1 ]; then
+      log "Pocket problems pass starting at $(git rev-parse --short HEAD): 25 users, one problem each"
+      E2E_POCKET=1 node --experimental-strip-types --no-warnings e2e/src/run.ts >>"$state/nightly.log" 2>&1
+      log "Pocket problems pass finished: exit $?"
+    fi
     [ "$light" = 1 ] || log "run starting at $(git rev-parse --short HEAD): ${E2E_USERS:-100} users, $E2E_EXPLORERS explorers, cap \$${E2E_CAP_USD:-5}$([ "$E2E_DEEP_ROUNDS" != 0 ] && echo ", the deep red-team pass: $E2E_DEEP_ROUNDS round(s)")"
     node --experimental-strip-types --no-warnings e2e/src/run.ts >>"$state/nightly.log" 2>&1
   )

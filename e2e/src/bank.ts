@@ -3727,7 +3727,7 @@ export function walletFirstNav(): Scenario {
 }
 
 /** The number on the sidebar's Approvals link once it reads `want`, or the last it read within `ms`. */
-async function badgeReaches(page: Page, want: number, ms: number): Promise<number> {
+export async function badgeReaches(page: Page, want: number, ms: number): Promise<number> {
   const link = page.getByRole('navigation', { name: 'Sections' }).locator('a[href="/approvals"]')
   let seen = -1
   for (const end = Date.now() + ms; Date.now() < end; await page.waitForTimeout(250)) {

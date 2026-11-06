@@ -177,6 +177,23 @@ Self-test: `E2E_LIGHT=1 E2E_DAY_CAP_USD=1 STUB_BREAK=send-one-side`, with a `run
 runs 21 verdicts in under a minute under the $0.40 left. It FAILs `wallet-send-refund` and `cross-company-test-money`,
 and files both. Without the defect all 21 PASS. With `E2E_DAY_CAP_USD=0.6` it runs nothing.
 
+## Pocket's 25 app problems, every night (B55.44)
+
+The Pocket review found 25 problems in the live app; B55, B56 and B57 fix them. `e2e/src/pocketProblems/` presses each one
+in the app as a person would, one user each, at 1440x900 and 390x844 with a shot of every screen, and asserts the fixed
+behaviour (`problems.ts` lists what passing means and the items that fix each). `scripts/e2e-nightly.sh` plays it every
+night before the nightly run; on demand:
+
+```sh
+LENS_SYNTHETIC_KEY=… pnpm --filter @talyvor/e2e pocket --app https://app.talyvor.com --lens https://lens.talyvor.com
+```
+
+The report gets a **Pocket problems** section: 25 rows, pass or fail, with each fix item's status. While any of a problem's
+items is not DONE, its FAIL is reported only. Once all are DONE, a FAIL means the problem is **back**: it files one item
+right under the B55 heading, next free B55 number, naming them (`e2e-scenario: pocket-NN`, once while it is open).
+Problems only the phone can press (2, 15, 16, and the phone's legs of 1, 4 and 22) say so until B57.86's phone session is
+in the harness; a Lens that refuses test device keys (production) cannot hold a phone's key, so 4 and 22 say that too.
+
 ## Every B28 feature with its own test (B28.293)
 
 **A scenario names the build items whose feature it exercises end to end**: `items: ['B28.24', 'B28.300']` beside its
