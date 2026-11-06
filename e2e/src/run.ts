@@ -23,10 +23,12 @@ import { type CoverageMap, type Inventory, Matcher, Recorder, type Tag, buildMap
 import { type CodeReport, codeSkipped, runCode } from './code.ts'
 import { type EdgeReport, readEdge } from './edge.ts'
 import { type ExplorerSummary, type Finding, Notebook, explore } from './explore.ts'
-import { fileB28Items, fileCodeItems, fileEdgeItems, fileHostileItems, fileItems } from './filing.ts'
+import { fileB28Items, fileCodeItems, fileEdgeItems, fileHostileItems, fileItems, filePocketItems } from './filing.ts'
 import { type HostileReport, type Repo, runHostile } from './hostile.ts'
 import { LensClient, type SyntheticUser, describe } from './lens.ts'
 import { lightJourneys } from './light.ts'
+import { pocketJourneys } from './pocketProblems/index.ts'
+import { type PocketRow, pocketRows } from './pocketProblems/problems.ts'
 import { type Raised, raiseFailing } from './streak.ts'
 import { type MemorySample, SAMPLE_EVERY_MS, nextWidth, readMemory } from './memory.ts'
 import { networkDrop } from './oracles.ts'
@@ -113,6 +115,8 @@ export interface RunResult {
   deep_rounds?: number
   /** B28.294 — this run was the light pass between the nightly runs (light.ts). */
   light?: true
+  /** B55.44 — the Pocket problems pass's 25 rows (pocketProblems/). */
+  pocket?: PocketRow[]
   /** B28.294 — the day's one cap and what the day's earlier runs had spent of it; the run's own cap_usd is what they left. */
   day?: DayBudget
   /** B34.2 — what was tested: the harness, Lens's main at lens-src, and production's versions at the start. */
@@ -323,7 +327,8 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     stage = 'creating the synthetic users'
     // B28.292 — on the weekly night, the deep pass's attackers and counterparties after them, created fresh with them.
     // B28.294 — the light pass plays its own few journeys instead.
-    const journeys = cfg.light ? lightJourneys()
+    // B55.44 — the Pocket problems pass plays one user for each of the 25 problems.
+    const journeys = cfg.pocket ? pocketJourneys() : cfg.light ? lightJourneys()
       : [...Array.from({ length: cfg.users }, (_, i) => journeyFor(i, cfg.users, STREAMABLE)), ...deepJourneys(cfg.users, cfg.deepRounds)]
     const seated = await seat(lens, cast(journeys))
     users = seated.users
@@ -726,7 +731,7 @@ async function main(): Promise<number> {
     console.log(`hostile pull requests: ${result.hostile.prs.map((v) => `${v.id} ${v.state}`).join(', ')}`)
   }
   // B28.293 — every DONE B28 feature in the queue, the scenarios that name it and their verdicts this run.
-  if (cfg.buildMd !== 'none' && !cfg.light) {
+  if (cfg.buildMd !== 'none' && !cfg.light && !cfg.pocket) {
     try {
       result.b28 = b28Report(await readFile(cfg.buildMd, 'utf8'), scenarioItems(), result.outcomes)
       const f = result.b28.features
@@ -779,6 +784,22 @@ async function main(): Promise<number> {
         (f.filed.map((x) => `${x.id} (${x.scenario}, ${x.repo})`).join(', ') || 'none new') +
         (f.covered.length > 0 ? `; already open: ${f.covered.map((x) => `${x.scenario} → ${x.by}`).join(', ')}` : ''))
     })
+  }
+  // B55.44 — the Pocket problems pass's 25 rows, and an item at the top of B55 for each problem that is back.
+  if (cfg.pocket) {
+    let queue: string | undefined
+    if (cfg.buildMd !== 'none') queue = await readFile(cfg.buildMd, 'utf8').catch(() => undefined)
+    result.pocket = pocketRows(queue, result.outcomes)
+    if (cfg.buildMd !== 'none') {
+      const rows = result.pocket
+      await attempt(`the Pocket problems that are back to ${cfg.buildMd}`, async () => {
+        const f = await filePocketItems(cfg.buildMd, rows, result.started_at.slice(0, 10), shown)
+        if (f === undefined) return
+        for (const x of f.filed) newItems.push(x.id)
+        for (const x of [...f.filed.map((y) => ({ scenario: y.scenario, by: y.id })), ...f.covered]) filed[x.scenario] = x.by
+      })
+    }
+    console.log(`Pocket problems: ${result.pocket.map((r) => `${r.n} ${r.state}${r.filed === undefined ? '' : ` (${r.filed})`}`).join(', ')}`)
   }
   // B28.296 — then every scenario FAILing three runs running has its item moved to the top of the queue.
   if (cfg.buildMd !== 'none') {

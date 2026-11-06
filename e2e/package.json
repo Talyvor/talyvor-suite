@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "run": "node --experimental-strip-types --no-warnings src/run.ts",
+    "pocket": "node --experimental-strip-types --no-warnings src/run.ts --pocket",
     "selftest": "sh selftest/selftest.sh",
     "seed:review": "node --experimental-strip-types --no-warnings src/reviewWorkspace.ts"
   },
