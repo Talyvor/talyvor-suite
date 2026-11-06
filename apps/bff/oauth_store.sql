@@ -59,3 +59,10 @@ CREATE TABLE IF NOT EXISTS oauth_tool_calls (
     at          timestamptz NOT NULL
 );
 CREATE INDEX IF NOT EXISTS oauth_tool_calls_sub ON oauth_tool_calls (sub, at DESC);
+
+-- B52.2: how a CIMD client may authenticate at the token endpoint, and the resource a code's and a grant's tokens
+-- are bound to ('' on a row written before B52.2, when /mcp was the only resource).
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS auth_methods text[] NOT NULL DEFAULT '{}';
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS jwks_uri text NOT NULL DEFAULT '';
+ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS resource text NOT NULL DEFAULT '';
+ALTER TABLE oauth_grants ADD COLUMN IF NOT EXISTS resource text NOT NULL DEFAULT '';

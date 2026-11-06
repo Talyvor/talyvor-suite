@@ -1371,6 +1371,7 @@ createServer(async (req, res) => {
     // B30.130 — an invoice's pay page, read with no credential (stub-payees.ts).
     if (await bank.invoicePayPage(req, res, p)) return
     // B32.81 — the market_* MCP tools on an agent's own key.
+    if (await bank.connect(req, res, bearer, p)) return // B52.34: Connect tokens and their mint
     if (await bank.agentMCP(req, res, bearer, p)) return
     if (await bank.agentPay(req, res, bearer, p)) return
     if (await bank.agentApprove(req, res, bearer, p)) return // B45.28: an approver agent, on its own key
@@ -1399,6 +1400,7 @@ createServer(async (req, res) => {
     }
     if (p.startsWith('/v1/money/payment-requests') && await bank.agentPaymentRequests(req, res, p, bearer)) return
     if (p.startsWith('/v1/money/cards') && await bank.agentCards(req, res, p, bearer)) return
+    if (await bank.agentPayments(req, res, p, bearer)) return // B48.27: an agent's USDC payment to an address
     // The BFF runs a marketplace use on the session key the chat streams on (B20.3).
     // B47.3 — speech (talyvor-lens internal/proxy/speech.go). As a Lens without LENS_DEEPGRAM_API_KEY, both routes say speech
     // is not configured before reading the request; with STUB_SPEECH=on, a recording is heard as the run's clip says.

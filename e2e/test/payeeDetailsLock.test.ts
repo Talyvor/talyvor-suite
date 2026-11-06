@@ -31,7 +31,7 @@ const toLens: Post = async (ctx, path, body) => {
   return { status: got.status, text: got.ok ? JSON.stringify(got.value) : JSON.stringify({ error: got.error }) }
 }
 
-async function runOnStub(broken: string): Promise<Verdict> {
+async function runOnStub(broken: string, post: Post = toLens): Promise<Verdict> {
   const port = await freePort()
   stub = spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../selftest/stub-lens.ts', import.meta.url).pathname], {
     env: { ...process.env, STUB_PORT: String(port), LENS_SYNTHETIC_KEY: 'details-lock', STUB_BREAK: broken },
@@ -43,13 +43,27 @@ async function runOnStub(broken: string): Promise<Verdict> {
   })
   const lens = new LensClient(`http://127.0.0.1:${port}`, 'details-lock')
   const [user] = await lens.createUsers(1)
-  return payeeDetailsLock(toLens).run({ app: { user }, env: { lens }, evidence: [] } as unknown as ScenarioCtx)
+  return payeeDetailsLock(post).run({ app: { user }, env: { lens }, evidence: [] } as unknown as ScenarioCtx)
 }
 
 describe('payee-details-lock (B41.12)', () => {
   it('passes on a Lens that changes the details only with a passkey and holds the next payment', async () => {
     const verdict = await runOnStub('')
     expect(verdict.detail).toMatch(/^Nightly Details Joinery .*'s account number change was refused unsigned \(403\) and signed for other details \(403\); signed, it changed and a payment within 24 hours was held \(409\) and nothing moved, the account 250000 minor$/)
+    expect(verdict.pass).toBe(true)
+  })
+
+  // B17.355 — production's clock ran ahead of the runner's, so held_until read a little more than 24 hours on.
+  it('passes when Lens\'s clock is a second ahead of the runner\'s', async () => {
+    const ahead: Post = async (ctx, path, body) => {
+      const got = await toLens(ctx, path, body)
+      if (!/\/details$/.test(path) || got.status !== 200) return got
+      const p = JSON.parse(got.text) as Record<string, string>
+      for (const k of ['checked_at', 'details_changed_at', 'held_until']) p[k] = new Date(Date.parse(p[k]) + 1000).toISOString()
+      return { status: got.status, text: JSON.stringify(p) }
+    }
+    const verdict = await runOnStub('', ahead)
+    expect(verdict.detail).toMatch(/signed, it changed and a payment within 24 hours was held \(409\)/)
     expect(verdict.pass).toBe(true)
   })
 

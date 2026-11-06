@@ -8,7 +8,9 @@
 //     /mcp takes. The refresh token rotates, a rotated one sent again ends the connection, and a revoked token is refused.
 //     B40.8: a third client shows on Settings → Connect your AI with its last use. B41.15: it is revoked from its row
 //     on Keys, the page says so, and its next tool call is refused as not connected. B52.3: before that, a tool call it
-//     makes is listed under its row on Settings, from the BFF's audit trail.
+//     makes is listed under its row on Settings, from the BFF's audit trail. B52.2: Claude Code's own published
+//     client document (claude.ai's, which registers port-less loopback callbacks) signs in back to this run's random
+//     port, and its connection is then revoked.
 // A CIMD document must be at a public https address, so it is served through a Cloudflare quick tunnel; with
 // --hook-tunnel none (the self-test) a second DCR client takes its place and the evidence says so.
 
@@ -20,6 +22,9 @@ import type { Scenario, ScenarioCtx } from './scenarios.ts'
 import { softPasskey } from './payees.ts'
 import { call, said } from './settings.ts'
 import { tunnel } from './trackWebhooks.ts'
+
+// B52.2: the document Claude Code names as its client_id; it registers http://localhost/callback and http://127.0.0.1/callback.
+const CLAUDE_CODE = 'https://claude.ai/oauth/claude-code-client-metadata'
 
 const SCOPE_WORDS = ['See your wallets and bills', 'Draft invoices and payees', 'Prepare payments for you to approve']
 
@@ -45,7 +50,7 @@ export function connectOAuth(): Scenario {
     id: 'connect-oauth',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B40.6', 'B40.8', 'B41.15', 'B52.3'],
+    items: ['B40.6', 'B40.8', 'B41.15', 'B52.2', 'B52.3'],
     feature: 'Talyvor Connect',
     title: 'an assistant signs in the way Claude does: a 401 naming resource_metadata, discovery, a client by DCR and one by CIMD, ' +
       'PKCE and the consent screen in the browser, the token and a rotating refresh — and a revoked token is refused, ' +
@@ -109,6 +114,7 @@ export function connectOAuth(): Scenario {
         const fromSettings = await register('Settings')
         if (typeof fromSettings === 'string') return { pass: false, detail: fromSettings }
         clients.push(fromSettings)
+        clients.push({ how: 'Claude Code', id: CLAUDE_CODE })
 
         // 3. Each client through the browser's consent screen to its token.
         const tokens: Record<string, Tokens> = {}
@@ -162,6 +168,8 @@ export function connectOAuth(): Scenario {
         ctx.evidence.push({ note: `${other.how}: /mcp before revoking ${live.status}, revoke ${rev.status}, /mcp after ${dead.status} ${dead.headers.get('www-authenticate')}` })
         if (live.status === 401) wrong.push(`the ${other.how} access token was refused before it was revoked`)
         if (rev.status !== 200 || dead.status !== 401) wrong.push(`revoking answered ${rev.status} and /mcp then answered ${dead.status}, not 200 and 401`)
+        const cc = tokens['Claude Code']
+        if (cc !== undefined) await form(String(asm.revocation_endpoint), { token: cc.refresh_token, client_id: CLAUDE_CODE })
 
         // 6. B40.8: the third connection is on Settings → Connect your AI with its last use, and its button revokes it.
         const page = ctx.app.page
@@ -877,10 +885,12 @@ export function connectRecurring(): Scenario {
         ctx.evidence.push({ note: `${note}: "${words}"` })
         return words
       }
+      // B17.356 — a Pill draws its words in capitals, so innerText reads RUNNING; count the pills by their own words instead.
+      const pills = (status: string) => page.getByTestId('plan-card').getByText(status, { exact: true }).count()
       try {
         const words = await screenWords('the plan screen before signing')
         for (const l of lines) if (!words.includes(l.name)) wrong.push(`the plan screen does not show ${l.name}`)
-        if (!words.includes('£300.00 every month') || !words.includes('£12.50 every week') || !words.includes('Waiting for your signature') ||
+        if (!words.includes('£300.00 every month') || !words.includes('£12.50 every week') || await pills('Waiting for your signature') !== 2 ||
           !words.includes('A payment above £200.00 always waits for your approval.')) wrong.push(`the plan screen reads "${words}"`)
       } catch (err) {
         wrong.push(`the plan screen did not open from the assistant's link: ${String(err).slice(0, 300)}`)
@@ -891,7 +901,7 @@ export function connectRecurring(): Scenario {
       if (signed.status() !== 201) return { pass: false, detail: [...wrong, `signing the plan answered ${signed.status()}`].join('; ') }
       try {
         const words = await screenWords('the plan screen after signing')
-        if ((words.match(/Running/g) ?? []).length !== 2 || words.includes('Sign with passkey')) wrong.push(`after signing the plan screen reads "${words}"`)
+        if (await pills('Running') !== 2 || words.includes('Sign with passkey')) wrong.push(`after signing the plan screen reads "${words}"`)
       } catch (err) {
         wrong.push(`the plan screen did not open after signing: ${String(err).slice(0, 300)}`)
       }

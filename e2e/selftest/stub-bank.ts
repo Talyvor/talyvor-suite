@@ -461,6 +461,8 @@ export class Bank {
   /** B46.16 — each workspace's name, as Lens B46.15 keeps it. */
   private readonly workspaceNames = new Map<string, string>()
   private readonly keys = new Map<string, Agent>()
+  /** B52.34 — each Connect token (talyvor-lens B52.4), to the one agent it may pay from. */
+  private readonly connectTokens = new Map<string, Agent>()
   /** B28.359 — each agent key's id, to its key: Lens revokes an agent's key on the workspace's key route. */
   private readonly keyByID = new Map<string, string>()
   private readonly postings: Posting[] = []
@@ -614,6 +616,13 @@ export class Bank {
     const who = this.agentOfKey(key)
     const keyID = [...this.keyByID].find(([, k]) => k === key)?.[0] ?? ''
     return who !== undefined && this.paymentRequests.route(req, res, who.ws.id, path, who.agent.id, keyID)
+  }
+
+  /** B48.27 — a payment out on an agent's own key, from its wallet in the currency (stub-payees.ts). */
+  async agentPayments(req: IncomingMessage, res: ServerResponse, path: string, key: string): Promise<boolean> {
+    const who = this.agentOfKey(key)
+    if (who === undefined || path !== '/v1/money/payments' || req.method !== 'POST') return false
+    return await this.payees.agentPay(req, res, who.ws.id, who.agent.id), true
   }
 
   /** B46.20 — the card routes on an agent's own key, which Lens judges as the agent itself (stub-payees.ts). */
@@ -970,13 +979,17 @@ export class Bank {
     return JSON.parse((await this.d.read(req)) || '{}') as T
   }
 
-  private pay(res: ServerResponse, ws: BankWorkspace, from: Agent, to: string, amount: number, memo: string): void {
+  private pay(res: ServerResponse, ws: BankWorkspace, from: Agent, to: string, amount: number, memo: string, connect = false): void {
     const { json } = this.d
     if (!(amount > 0)) return json(res, 400, { error: 'body must be {"to_agent_id": "<agent>", "amount_ulxc": <positive µLXC>, "memo": "<optional>"}' })
     const payee = this.agents.get(to)
     if (payee === undefined) return json(res, 404, { error: 'economy: no such agent in this workspace' })
     if (payee.id === from.id) return json(res, 400, { error: 'economy: an agent cannot pay itself' })
     const refused = this.judge(from, amount, { payment: true, payee, memo, fingerprint: `pay\0${from.id}\0${to}\0${amount}\0${memo}` })
+    // B52.4 — an assistant on a Connect token is told it waits for the owner, and which approval it is.
+    if (refused?.approval_id !== undefined && connect) {
+      return json(res, 202, { status: 'pending_approval', approval_id: refused.approval_id, amount_ulxc: amount, message: refused.error })
+    }
     if (refused !== undefined) return json(res, refused.status, { error: refused.error })
     if (payee.ws !== ws.id) {
       // B19.15: another company's agent, through the marketplace: one billed use on the payer's bill.
@@ -1027,6 +1040,41 @@ export class Bank {
     }).filter((a) => a.lines.length > 0)
     const total = agents.reduce((s, a) => s + a.spent_ulxc, 0)
     return reply({ content: [{ type: 'text', text: JSON.stringify({ from, to, total_ulxc: total, agents }) }] })
+  }
+
+  /**
+   * B52.34 — Lens's Connect tokens (talyvor-lens B52.4): POST /v1/auth/connect-token on STUB_CONNECT_MINT_KEY mints one for an
+   * agent its person owns, scope payments:send only; it pays from that agent alone (202 with the pending approval above its
+   * approval amount), and every other route refuses it 403. STUB_BREAK=connect-approves lets it approve as the owner does.
+   */
+  async connect(req: IncomingMessage, res: ServerResponse, bearer: string, path: string): Promise<boolean> {
+    const { json } = this.d
+    if (path === '/v1/auth/connect-token' && req.method === 'POST' && bearer !== '' && bearer === process.env.STUB_CONNECT_MINT_KEY) {
+      const b = await this.body<{ workspace_id?: string; user_id?: string; client_id?: string; agent_id?: string; scopes?: string[] }>(req)
+      const scopes = b.scopes ?? []
+      if ((b.client_id ?? '') === '' || scopes.length === 0 || scopes.some((s) => s !== 'payments:send')) {
+        return json(res, 400, { error: 'auth: a Connect token names its workspace, client, agent and at least one scope' }), true
+      }
+      const a = this.agents.get(b.agent_id ?? '')
+      if (a === undefined || a.ws !== b.workspace_id || a.owner_user_id !== b.user_id) {
+        return json(res, 403, { error: "the agent is not one of this workspace's that the person owns" }), true
+      }
+      const token = `connect_${randomBytes(16).toString('hex')}`
+      this.connectTokens.set(token, a)
+      return json(res, 201, { token, expires_at: new Date(Date.now() + 15 * 60_000).toISOString() }), true
+    }
+    const a = this.connectTokens.get(bearer)
+    const ws = a === undefined ? undefined : this.d.workspace(a.ws)
+    if (a === undefined || ws === undefined) return false
+    if (req.method === 'POST' && path === `/v1/workspaces/${a.ws}/agents/${a.id}/pay`) {
+      const b = await this.body<{ to_agent_id?: string; amount_ulxc?: number; memo?: string }>(req)
+      return this.pay(res, ws, a, b.to_agent_id ?? '', b.amount_ulxc ?? 0, b.memo ?? '', true), true
+    }
+    const approve = /^\/v1\/workspaces\/([^/]+)(\/agents\/approvals\/[^/]+\/approve)$/.exec(path)
+    if (approve !== null && approve[1] === a.ws && req.method === 'POST' && this.broken('connect-approves')) {
+      return this.workspaceRoute(req, res, ws, approve[2], new URL(path, this.d.base))
+    }
+    return json(res, 403, { error: 'auth: a Connect token may only pay from its own agent' }), true
   }
 
   async agentPay(req: IncomingMessage, res: ServerResponse, key: string, path: string): Promise<boolean> {
@@ -2483,7 +2531,7 @@ export class Bank {
     }
     // B52.28 — Scan agents' watches (stub-scan.ts), before the agent routes below catch …/scan-watches.
     if (await this.scan.route(req, res, ws.id, rest, now)) return true
-    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/[a-z-]+)?$/.exec(rest)) !== null) {
+    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/wallet\/activity|\/[a-z-]+)?$/.exec(rest)) !== null) {
       const a = this.agents.get(m[1])
       if (a === undefined || a.ws !== ws.id) return json(res, 404, { error: 'economy: no such agent in this workspace' }), true
       const action = m[2] ?? ''
@@ -2547,6 +2595,8 @@ export class Bank {
       }
       // B48.1 — an agent's wallets, one of each kind it is; a kind removed closes its wallet, refused 409 while it holds money.
       if (action === '/wallets' && method === 'GET') return json(res, 200, this.walletsOf(a)), true
+      // B48.27 — the wallet's ledger lines, newest first.
+      if (action === '/wallet/activity' && method === 'GET') return json(res, 200, this.payees.walletActivity(ws.id, a.id)), true
       if (action === '/wallet-kind' && method === 'PUT') {
         const b = await this.body<{ wallet_kind?: string; fiat_currency?: string }>(req)
         const kind = b.wallet_kind ?? ''

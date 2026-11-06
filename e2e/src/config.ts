@@ -36,6 +36,11 @@ export interface RunConfig {
    */
   provisionSecret: string
   /**
+   * B52.34 — LENS_CONNECT_MINT_KEY: the BFF's credential for minting Connect tokens, the same value Lens boots with, so the run can
+   * mint one as the BFF does for an assistant; '' leaves connect-pay a SKIP
+   */
+  connectMintKey: string
+  /**
    * B28.287 — the port the synthetic upstream listens on, where the Lens under test sends its vLLM traffic
    * (LENS_VLLM_BASE_URL); 0 leaves keys-not-forwarded a SKIP
    */
@@ -182,6 +187,7 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     webhookSecret: env.LENS_STRIPE_TEST_WEBHOOK_SECRET ?? '',
     operatorReadKey: env.LENS_OPERATOR_READ_KEY ?? '',
     provisionSecret: env.LENS_PROVISION_SECRET ?? '',
+    connectMintKey: env.LENS_CONNECT_MINT_KEY ?? '',
     upstreamPort: Math.floor(num('upstream-port', 'E2E_UPSTREAM_PORT', 0, true)),
     hookTunnel: pick('hook-tunnel', 'E2E_HOOK_TUNNEL') ?? 'cloudflared',
     users: pocket ? POCKET_USERS : light ? LIGHT_USERS : Math.floor(num('users', 'E2E_USERS', DEFAULTS.users)),
