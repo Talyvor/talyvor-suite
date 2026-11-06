@@ -819,16 +819,19 @@ export function connectContact(): Scenario {
 //     prepared to pay before the person signs. The link opens the plan screen, which shows both orders waiting for the
 //     signature; signed with this run's software passkey (the screen's own call), the screen shows them running, and
 //     within Lens's minute tick each order's first run waits under Approvals. Each is approved with the passkey, and the
-//     money is exactly one payment out per order at its amount, the account down by both.
+//     money is exactly one payment out per order at its amount, the account down by both. B45.43: then each order is
+//     brought due again (Lens B45.42) and runs once more: the order at or under ask_above pays on its own, and the order
+//     above it waits under Approvals and pays nothing.
 export function connectRecurring(): Scenario {
   return {
     id: 'connect-recurring',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B45.37'],
+    items: ['B45.37', 'B45.43'],
     feature: 'Talyvor Connect',
     title: 'an assistant prepares two recurring payments over /mcp; nothing runs until the person signs the plan in the app with a passkey, ' +
-      'then each order shows running, its first run waits under Approvals, and one approval each pays exactly its amount',
+      'then each order shows running, its first run waits under Approvals, and one approval each pays exactly its amount; ' +
+      'run again, the order under ask_above pays on its own and the one above it waits',
     run: async (ctx) => {
       const origin = new URL(ctx.app.page.url()).origin
       const page = ctx.app.page
@@ -885,7 +888,7 @@ export function connectRecurring(): Scenario {
       const prepared = await tool('prepare_recurring_payments', { idempotency_key: `e2e-${randomBytes(8).toString('hex')}`, ask_above: { GBP: 20000 },
         until: new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 19) + 'Z',
         payments: lines.map((l) => ({ payee_id: payee[l.name], currency: 'GBP', amount_minor: l.amount, every: l.every, reference: `Nightly ${l.every}ly` })) })
-      const kept = (prepared.structuredContent ?? {}) as { id?: string; kind?: string; confirm_url?: string; details?: { id?: string; schedules?: { active?: boolean }[]; mandate?: { canonical?: string; challenge?: string } } }
+      const kept = (prepared.structuredContent ?? {}) as { id?: string; kind?: string; confirm_url?: string; details?: { id?: string; schedules?: { id?: string; active?: boolean }[]; mandate?: { canonical?: string; challenge?: string } } }
       const plan = kept.details ?? {}
       if (prepared.isError !== false || kept.kind !== 'plan' || plan.id === undefined || plan.schedules?.length !== 2 || plan.schedules.some((x) => x.active) ||
         !String(kept.confirm_url).includes(`/money/plans/${kept.id}`)) {
@@ -951,8 +954,27 @@ export function connectRecurring(): Scenario {
       if (after.held !== before.held - 31250) wrong.push(`the company GBP account went from ${before.held} to ${after.held} minor of test money, not down by 31250`)
       await page.goto(origin)
 
+      // 6. B45.43 — run again: both orders brought due now (Lens B45.42). Fibre (£12.50, at or under ask_above's £200.00)
+      // pays on its own; Rent (£300.00, above it) waits under Approvals and pays nothing.
+      for (const s of plan.schedules) {
+        const due = await ctx.env.lens.bringScheduleDue(ctx.app.user, String(s.id))
+        ctx.evidence.push({ note: `order ${s.id} brought due now (B45.42)`, answer: JSON.stringify(due).slice(0, 400) })
+        if (!due.ok) return { pass: false, detail: [...wrong, `bringing order ${s.id} due again answered ${due.status} ${due.error}`].join('; ') }
+      }
+      let again = after
+      for (let i = 0; i < 18 && (again.runs.length === 0 || again.payments.length === after.payments.length); i++) {
+        await new Promise((ok) => setTimeout(ok, 10_000))
+        again = await money(`${(i + 1) * 10}s after both orders were brought due again`, plan.id)
+      }
+      const fibre = [payee[lines[1].name], lines[1].amount, 'GBP'].join(' ')
+      const second = again.payments.filter((p) => !after.payments.some((b) => b.id === p.id)).map((p) => [p.payee_id, p.amount_minor, p.currency].join(' '))
+      if (JSON.stringify(second) !== JSON.stringify([fibre])) wrong.push(`run again, the orders paid ${JSON.stringify(second)} on their own, not only ${fibre}`)
+      if (again.held !== after.held - lines[1].amount) wrong.push(`run again, the company GBP account went from ${after.held} to ${again.held} minor of test money, not down by ${lines[1].amount}`)
+      if (again.runs.length !== 1) wrong.push(`run again, ${again.runs.length} runs of plan ${plan.id} wait under Approvals, not the one above ask_above`)
+
       return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
-        : { pass: true, detail: `plan ${plan.id} waited unsigned with nothing run; signed in the app its two orders read Running, each first run waited under Approvals, and one approval each paid ${got.join(' and ')}: the account ${before.held} → ${after.held} minor` }
+        : { pass: true, detail: `plan ${plan.id} waited unsigned with nothing run; signed in the app its two orders read Running, each first run waited under Approvals, and one approval each paid ${got.join(' and ')}: the account ${before.held} → ${after.held} minor; ` +
+          `run again, ${second[0]} paid on its own (the account → ${again.held} minor) and request ${again.runs[0].id} for the order above ask_above waits under Approvals` }
     },
   }
 }
