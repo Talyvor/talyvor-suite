@@ -45,6 +45,35 @@ function showBriefing(d) {
   })
 }
 
+// B55.43: a spending notice ({type: "spend_notice", kind, notice_id, workspace_id, title, body}) shows Lens's own words
+// and opens Spending; a payment or unusual notice opens that notice there, as the phone opens /notices/{id}.
+function showSpendNotice(d) {
+  const id = d.notice_id || ''
+  const url = id && (d.kind === 'payment' || d.kind === 'unusual') ? `/money/spending#notice-${id}` : '/money/spending'
+  return self.registration.showNotification(d.title || 'Talyvor', {
+    body: d.body || '',
+    icon: ICON,
+    badge: ICON,
+    tag: `spend-notice-${id}`,
+    data: { url },
+    actions: [],
+  })
+}
+
+// A push of a type this browser does not know is never read as an approval: it says Talyvor and opens Home.
+function showOther() {
+  return self.registration.showNotification('Talyvor', {
+    body: 'Open Talyvor to see it.',
+    icon: ICON,
+    badge: ICON,
+    tag: 'talyvor',
+    data: { url: '/' },
+    actions: [],
+  })
+}
+
+const SHOW = { agent_approval: showApproval, daily_briefing: showBriefing, spend_notice: showSpendNotice }
+
 self.addEventListener('push', (event) => {
   let d = {}
   try {
@@ -52,7 +81,7 @@ self.addEventListener('push', (event) => {
   } catch {
     d = {}
   }
-  event.waitUntil(d.type === 'daily_briefing' ? showBriefing(d) : showApproval(d))
+  event.waitUntil((Object.hasOwn(SHOW, d.type) ? SHOW[d.type] : showOther)(d))
 })
 
 /** Opens the app at `url`, in a window already open if there is one. */

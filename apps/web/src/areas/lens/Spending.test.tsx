@@ -8,7 +8,7 @@ import { parseSpend } from '../chat/SpendQuestion'
 // spend on eating out this month?" from the same totals, every wallet together. That the figures equal Lens's own is
 // proven against Lens by the e2e scenario spending-screen.
 
-function mockBff(puts: { url: string; body: unknown }[], coachAnswers: Promise<void> = Promise.resolve()) {
+function mockBff(puts: { url: string; body: unknown }[], coachAnswers: Promise<void> = Promise.resolve(), notices: unknown[] = []) {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -45,7 +45,7 @@ function mockBff(puts: { url: string; body: unknown }[], coachAnswers: Promise<v
         period_start: '2026-11-01T00:00:00Z', period_end: '2026-12-01T00:00:00Z', spent_minor: 3500, left_minor: 6500, percent: 35 }] })
     }
     if (url === '/api/money/spending/subscriptions') return json({ subscriptions: [] })
-    if (url === '/api/money/notices') return json({ settings: { timezone: 'UTC', quiet_from: '', quiet_until: '', off: [] }, notices: [] })
+    if (url === '/api/money/notices') return json({ settings: { timezone: 'UTC', quiet_from: '', quiet_until: '', off: [] }, notices })
     return new Response('null', { status: 404 })
   })
 }
@@ -87,6 +87,21 @@ describe('Spending (B53.8)', () => {
     expect(screen.queryByTestId('spending-unusual-ent_1')).toBeNull()
     answer()
     expect((await screen.findByTestId('spending-unusual-ent_1')).textContent).toContain('You paid Bistro £25.00, somewhere new for you.')
+  })
+
+  it('a push for a payment notice opens Spending on that notice (B55.43)', async () => {
+    const scrolled: string[] = []
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.id)
+    }
+    mockBff([], Promise.resolve(), [
+      { id: 'ntc_4', kind: 'payment', title: 'You paid Bistro £25.00', body: 'Researcher paid it.', status: 'sent', created_at: '2026-11-03T12:00:00Z' },
+    ])
+    window.history.pushState({}, '', '/money/spending#notice-ntc_4')
+    render(<App />)
+
+    expect((await screen.findByText('You paid Bistro £25.00')).closest('#notice-ntc_4')).not.toBeNull()
+    await waitFor(() => expect(scrolled).toContain('notice-ntc_4'))
   })
 
   it('answers a category total in Chat from Lens’s totals, never the model', async () => {
