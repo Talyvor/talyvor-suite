@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -31,7 +32,8 @@ import (
 // and no cookie. It needs no Origin (lens.go's originExemptPath): the key is the proof.
 //
 // Unset LENS_SYNTHETIC_KEY (the default) and the route answers 404. The key is compared in constant
-// time; every attempt is logged, never with the key or the token.
+// time; every attempt on either door is logged once, with its outcome and its door, never with the
+// key or the token (B54.32).
 
 const (
 	// syntheticKeyHeader is the header Lens's synthetic routes read (cmd/lens/synthetic_handler.go).
@@ -52,10 +54,11 @@ func (a *app) handleSyntheticSignIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.startSession(w, r, s, int(time.Until(s.expires).Seconds())); err != nil {
+		logSyntheticAttempt(r, "store-failed", s.workspaceID, "")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
 		return
 	}
-	log.Printf("bff: synthetic session created for workspace %s", s.workspaceID)
+	logSyntheticAttempt(r, "created", s.workspaceID, "")
 	writeJSON(w, http.StatusOK, map[string]any{"workspace_id": s.workspaceID, "synthetic": true,
 		"expires_at": s.expires.UTC().Format(time.RFC3339)})
 }
@@ -69,10 +72,11 @@ func (a *app) handleSyntheticMobileSignIn(w http.ResponseWriter, r *http.Request
 	}
 	sid, err := a.auth.storeSession(s)
 	if err != nil {
+		logSyntheticAttempt(r, "store-failed", s.workspaceID, "")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
 		return
 	}
-	log.Printf("bff: synthetic phone session created for workspace %s", s.workspaceID)
+	logSyntheticAttempt(r, "created", s.workspaceID, "")
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]string{"token": sid, "expires_at": s.expires.UTC().Format(time.RFC3339)})
 }
@@ -80,15 +84,17 @@ func (a *app) handleSyntheticMobileSignIn(w http.ResponseWriter, r *http.Request
 // syntheticSession checks a synthetic sign-in and builds its session; on a refusal it has answered w.
 func (a *app) syntheticSession(w http.ResponseWriter, r *http.Request) (session, bool) {
 	if a.cfg.syntheticKey == "" || a.auth == nil {
+		logSyntheticAttempt(r, "not-enabled", "", "")
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "synthetic sign-in is not enabled on this BFF"})
 		return session{}, false
 	}
 	if r.Method != http.MethodPost {
+		logSyntheticAttempt(r, "wrong-method", "", "")
 		methodNotAllowed(w, http.MethodPost)
 		return session{}, false
 	}
 	if subtle.ConstantTimeCompare([]byte(r.Header.Get(syntheticKeyHeader)), []byte(a.cfg.syntheticKey)) != 1 {
-		log.Printf("bff: synthetic sign-in REFUSED from %s: wrong or missing %s", r.RemoteAddr, syntheticKeyHeader)
+		logSyntheticAttempt(r, "bad-key", "", "")
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "the synthetic operator key is required"})
 		return session{}, false
 	}
@@ -99,6 +105,7 @@ func (a *app) syntheticSession(w http.ResponseWriter, r *http.Request) (session,
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 16<<10)).Decode(&in); err != nil ||
 		!syntheticWorkspaceIDShape.MatchString(in.WorkspaceID) || in.Token == "" {
+		logSyntheticAttempt(r, "bad-body", "", "")
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": `send {"workspace_id","token"} — one workspace from Lens's POST /v1/synthetic/workspaces`})
 		return session{}, false
@@ -107,8 +114,8 @@ func (a *app) syntheticSession(w http.ResponseWriter, r *http.Request) (session,
 	t := tenant{workspaceID: in.WorkspaceID, token: in.Token}
 	ws, status := a.lensWorkspace(r, t)
 	if status != http.StatusOK || ws.ID != in.WorkspaceID || !ws.Synthetic || !ws.Active {
-		log.Printf("bff: synthetic sign-in REFUSED for workspace %s: lens %d, synthetic=%t active=%t",
-			in.WorkspaceID, status, ws.Synthetic, ws.Active)
+		logSyntheticAttempt(r, "refused-by-lens", in.WorkspaceID,
+			fmt.Sprintf(" lens=%d synthetic=%t active=%t", status, ws.Synthetic, ws.Active))
 		writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": "only a synthetic workspace can sign in this way, and Lens does not vouch for this one"})
 		return session{}, false
@@ -120,6 +127,7 @@ func (a *app) syntheticSession(w http.ResponseWriter, r *http.Request) (session,
 		expires = tokenExp
 	}
 	if !time.Now().Before(expires) {
+		logSyntheticAttempt(r, "expired", ws.ID, "")
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "that synthetic token has expired — create new workspaces"})
 		return session{}, false
 	}
@@ -134,6 +142,16 @@ func (a *app) syntheticSession(w http.ResponseWriter, r *http.Request) (session,
 		cachePoolable: ws.CachePoolable,
 		synthetic:     true,
 	}, true
+}
+
+// logSyntheticAttempt writes the one line a synthetic sign-in attempt gets. workspaceID is "" until it
+// has passed syntheticWorkspaceIDShape, so a caller's bytes never reach the log unchecked.
+func logSyntheticAttempt(r *http.Request, outcome, workspaceID, detail string) {
+	door := "browser"
+	if r.URL.Path == syntheticMobilePath {
+		door = "phone"
+	}
+	log.Printf("bff: synthetic sign-in %s door=%s from=%s workspace=%q%s", outcome, door, r.RemoteAddr, workspaceID, detail)
 }
 
 // lensWorkspaceRecord is the part of Lens's GET /v1/workspaces/{id} this file reads.
