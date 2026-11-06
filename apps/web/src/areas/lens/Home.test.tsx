@@ -31,10 +31,20 @@ const BUSY = {
   line: '1 approval waiting, 1 bill due this week, 2 payments yesterday, spent yesterday 0.075 LXC.',
 }
 
-function mockBff({ agents, newWorkspace = false, briefing = QUIET }: { agents: typeof AGENTS; newWorkspace?: boolean; briefing?: typeof QUIET | typeof BUSY }) {
+function mockBff({
+  agents,
+  newWorkspace = false,
+  briefing = QUIET,
+  workspaceName = 'Acme',
+}: {
+  agents: typeof AGENTS
+  newWorkspace?: boolean
+  briefing?: typeof QUIET | typeof BUSY
+  workspaceName?: string
+}) {
   const writes: string[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
     const json = (v: unknown, status = 200) =>
       new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
@@ -78,6 +88,11 @@ function mockBff({ agents, newWorkspace = false, briefing = QUIET }: { agents: t
         ],
       })
     if (url === '/api/agents/briefing') return json(briefing)
+    if (url === '/api/workspace/name' && init?.method === 'PUT') {
+      workspaceName = JSON.parse(String(init.body)).name
+      writes.push(`PUT ${url} ${init.body}`)
+    }
+    if (url === '/api/workspace/name') return json({ id: 'ws_1', name: workspaceName })
     if (/^\/api\/agents\/[^/]+\/(pause|resume)$/.test(url)) {
       writes.push(url)
       return json({ paused: url.endsWith('/pause') })
@@ -231,6 +246,43 @@ describe('Home — the wallet home (B28.6)', () => {
     expect(screen.getByTestId('home-onboarding')).toHaveTextContent('your first agent is one click away')
     expect(screen.getByRole('button', { name: 'Create my first agent' })).toBeEnabled()
     expect(screen.queryByTestId('home-approvals-waiting')).not.toBeInTheDocument()
+  })
+})
+
+// B55.39 — Lens names a new workspace by its id and makes "My first agent" at sign-up, so the book is never
+// empty and the onboarding card, which names the workspace, never shows. Home asks first instead.
+describe('Home — a new workspace is asked its name (B55.39)', () => {
+  const FIRST = [{ id: 'agt_first', name: 'My first agent', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-11-06T09:00:00Z' }]
+
+  it('while the name is the id, Home asks for it first, Save name PUTs it, and the sidebar then shows it', async () => {
+    const writes = mockBff({ agents: FIRST, workspaceName: 'ws_1' })
+    render(<App />)
+
+    const card = await screen.findByTestId('name-workspace')
+    expect(card).toHaveTextContent('Name your workspace')
+    expect(card).toHaveTextContent('It shows under the logo and on your invoices.')
+    expect(screen.getByTestId('sidebar-workspace-name')).toHaveTextContent('Your workspace')
+    expect(screen.queryByText('ws_1')).not.toBeInTheDocument()
+    // It comes before the briefing, the first thing Home shows a workspace with agents.
+    await screen.findByTestId('home-briefing')
+    expect(card.compareDocumentPosition(screen.getByTestId('home-briefing')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    fireEvent.change(within(card).getByLabelText('Workspace name'), { target: { value: 'Acme Labs' } })
+    fireEvent.click(within(card).getByRole('button', { name: 'Save name' }))
+
+    expect(await screen.findByText('Saved. Your workspace has a name now.')).toBeInTheDocument()
+    expect(screen.queryByTestId('name-workspace')).not.toBeInTheDocument()
+    expect(writes).toEqual(['PUT /api/workspace/name {"name":"Acme Labs"}'])
+    await waitFor(() => expect(screen.getByTestId('sidebar-workspace-name')).toHaveTextContent('Acme Labs'))
+  })
+
+  it('a workspace with a real name is not asked', async () => {
+    mockBff({ agents: FIRST })
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByTestId('sidebar-workspace-name')).toHaveTextContent('Acme'))
+    await screen.findByTestId('home-briefing')
+    expect(screen.queryByTestId('name-workspace')).not.toBeInTheDocument()
   })
 })
 

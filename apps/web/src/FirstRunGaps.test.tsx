@@ -15,7 +15,7 @@ import { queryClient } from './App'
 //     was routed to — the instructions for using the product, behind a nav item.
 //  3. /specimen DOES NOT RESOLVE. The internal component gallery was unlinked but routable.
 
-function mockBff(opts: { needsChoice?: boolean; signupOpen?: boolean } = {}) {
+function mockBff(opts: { needsChoice?: boolean; signupOpen?: boolean; agents?: object[] } = {}) {
   // The choice is asked once: after the pooling write, /auth/me stops asking, as the BFF does.
   let chosen = false
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -48,9 +48,16 @@ function mockBff(opts: { needsChoice?: boolean; signupOpen?: boolean } = {}) {
     if (url === '/api/agents') {
       // A workspace this login just created: nothing in it, no agents (Lens economy.AgentBook).
       return new Response(
-        JSON.stringify({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [] }),
+        JSON.stringify({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: opts.agents ?? [] }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
+    }
+    if (url === '/api/workspace/name') {
+      // Lens names a workspace by its id until someone names it (B55.39).
+      return new Response(JSON.stringify({ id: 'uabcdefghijklmnopqrstuvwxy', name: 'uabcdefghijklmnopqrstuvwxy' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
     }
     return new Response('null', { status: 404 })
   })
@@ -158,6 +165,15 @@ describe('first run opens Home in onboarding mode', () => {
     expect(nav.getByRole('link', { name: /^home$/i })).toBeInTheDocument()
     expect(nav.getByRole('link', { name: /^statements$/i })).toBeInTheDocument()
     expect(nav.getByRole('link', { name: /^api keys$/i })).toBeInTheDocument()
+  })
+
+  it('a new workspace that Lens gave "My first agent" is asked its name, and the sidebar never shows its id', async () => {
+    // B55.39 — Lens makes the first agent at sign-up, so the book is not empty and the onboarding card never shows.
+    mockBff({ needsChoice: true, agents: [{ id: 'agt_first', name: 'My first agent', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-11-06T09:00:00Z' }] })
+    at('/')
+    expect(await screen.findByText('Name your workspace')).toBeInTheDocument()
+    expect(await screen.findByTestId('sidebar-workspace-name')).toHaveTextContent('Your workspace')
+    expect(screen.queryByText('uabcdefghijklmnopqrstuvwxy')).not.toBeInTheDocument()
   })
 
   it('a returning user is not sent to Setup again', async () => {

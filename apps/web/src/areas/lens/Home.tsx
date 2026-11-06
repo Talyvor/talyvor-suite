@@ -9,7 +9,7 @@ import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentB
 import { Lxc } from './money'
 import { resumeAgent } from './passkeys'
 import { SafeAmount, SafeBreakdown } from './SafeToSpend'
-import { FirstAgent } from './Onboarding'
+import { FirstAgent, NameWorkspace } from './Onboarding'
 import { SharingLine } from './Sharing'
 
 // Home.tsx — B28.6: the first screen after sign-in is the wallet home. It answers, in order:
@@ -489,6 +489,7 @@ export function Home() {
           <FirstWallet book={book.data} onStarted={() => setOnboarding(true)} onFinished={() => setOnboarding(false)} />
         ) : (
           <>
+            <NameWorkspace />
             <MorningBriefing />
             <ApprovalsFirst nameOf={nameOf} />
             <Total book={book.data} />

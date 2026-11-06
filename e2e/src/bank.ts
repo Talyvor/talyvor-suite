@@ -3492,6 +3492,35 @@ export function chatWalletAlerts(seed: number): Scenario {
   }
 }
 
+/**
+ * B55.39 — Lens names a new workspace by its id; until someone names it, the sidebar reads "Your workspace" and never
+ * shows the id. Runs first on its user, before wallet-onboarding names the workspace; it makes no agent, so the
+ * scenarios after it still find an empty book.
+ */
+export function sidebarUnnamedWorkspace(): Scenario {
+  return {
+    id: 'sidebar-unnamed-workspace',
+    owner: 'talyvor-suite',
+    items: ['B55.39'],
+    title: 'a workspace Lens still names by its id reads "Your workspace" in the sidebar, never the id',
+    run: async (ctx) => {
+      const name = await ctx.env.lens.workspaceName(ctx.app.user)
+      if (name !== ctx.app.user.workspaceID) throw new CannotTest(`the workspace is already named "${name}"`)
+      const page = await ctx.app.tab('/')
+      try {
+        const label = page.getByTestId('sidebar-workspace-name')
+        await label.waitFor({ timeout: ACTION_TIMEOUT_MS })
+        const shown = (await label.innerText()).trim()
+        if (shown !== 'Your workspace') return fail(`the sidebar shows "${shown}" for a workspace Lens still names by its id`)
+        if ((await page.locator('body').innerText()).includes(name)) return fail('the workspace’s raw id is on the screen')
+        return { pass: true, detail: 'Lens names the workspace by its id, and the sidebar reads "Your workspace" with the id nowhere on screen' }
+      } finally {
+        await page.close()
+      }
+    },
+  }
+}
+
 /** B46.2 — sign-up to Home with a working first agent takes under two minutes (B45.8). */
 export const FIRST_AGENT_WITHIN_MS = 120_000
 /** B46.14 — sign-up and Home carry no disclaimer line (Nick, 24 Oct 2026); B49.2 — nor any money screen or the pay page (Nick, 27 Oct 2026). */
