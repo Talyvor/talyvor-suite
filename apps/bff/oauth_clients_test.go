@@ -195,7 +195,7 @@ func TestOAuthTokenIsBoundToTheResource(t *testing.T) {
 // ageClient moves a stored client's clock back by d, as if it had been fetched d ago.
 func ageClient(a *app, id string, d time.Duration) {
 	a.oauth.clients.update(id, func(c oauthClient) oauthClient {
-		c.expires = c.expires.Add(-d)
+		c.expires, c.refetch = c.expires.Add(-d), c.refetch.Add(-d)
 		return c
 	})
 }
