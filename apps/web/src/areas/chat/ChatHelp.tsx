@@ -2,10 +2,15 @@ import { Link } from 'react-router-dom'
 
 import { inlineLink } from '@talyvor/ui'
 
+import { PROVIDER_LABEL, STREAMABLE_PROVIDERS } from './chatApi'
+
 // B10.3 — "How to use Talyvor Chat". The chat screen carries no instructions; this page is where
 // the explanations live, linked from the chat's rail. Every sentence here is a statement about the
 // shipped screen or the deployment behind it, so each is kept next to the code it describes:
 // Chat.tsx (keyboard, history, price), chatApi.ts (which providers stream), history.ts (storage).
+
+const streamableLabels = STREAMABLE_PROVIDERS.map((p) => PROVIDER_LABEL[p] ?? p)
+const STREAMABLE_NAMES = `${streamableLabels.slice(0, -1).join(', ')} and ${streamableLabels.at(-1)}`
 
 const SECTIONS: { heading: string; body: React.ReactNode }[] = [
   {
@@ -165,9 +170,10 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
           own. A new conversation starts on the newest flagship model.
         </p>
         <p>
-          Chat reads two streaming formats, OpenAI&rsquo;s and Anthropic&rsquo;s, so models from other
-          providers are listed but can&rsquo;t be chosen yet. The catalog gives no release dates, so
-          &ldquo;newest&rdquo; is read from the generation number in each model&rsquo;s name.
+          {/* B55.37 — built from the lists the picker uses, so the two cannot disagree. */}
+          Chat can use models from {STREAMABLE_NAMES}. A provider this deployment has no key for is not
+          listed. The catalog gives no release dates, so &ldquo;newest&rdquo; is read from the generation
+          number in each model&rsquo;s name.
         </p>
       </>
     ),
