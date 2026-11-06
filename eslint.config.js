@@ -97,7 +97,7 @@ const noArbitraryValue = {
 }
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', 'packages/ui/fixtures/**'] },
+  { ignores: ['**/dist/**', '**/node_modules/**', 'packages/ui/fixtures/**', 'apps/web/.pocket-story/**'] },
   ...tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],

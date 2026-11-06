@@ -1,0 +1,6 @@
+[
+  { "route": "/", "screen": "w-home" },
+  { "route": "/", "screen": "w-home+sheet-A", "steps": ["Review"] },
+  { "route": "/", "screen": "p-home" },
+  { "route": "/__pocket-story/" }
+]

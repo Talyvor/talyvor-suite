@@ -39,3 +39,6 @@ __pycache__/
 
 # B17.3 harness results (run-<time>.json); the kept report is docs/e2e (B17.4).
 e2e/out/
+
+# B57.1 — pocket-shots builds the component story page here, outside dist, so the app never serves it.
+apps/web/.pocket-story/
