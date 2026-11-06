@@ -77,3 +77,37 @@ describe('the morning briefing push (B41.207)', () => {
     expect(sw.openWindow).toHaveBeenCalledWith('/')
   })
 })
+
+describe('a spending notice push (B55.43)', () => {
+  const NOTICE = { type: 'spend_notice', kind: 'budget', notice_id: 'ntc_4', workspace_id: 'ws_1', title: 'Food is at 80%', body: '£160 of £200 spent this month.' }
+
+  it('shows Lens’s own title and body, with no Approve or Deny, and a tap opens Spending', async () => {
+    const sw = worker(200)
+    await sw.push(NOTICE)
+    expect(sw.shown[0]).toMatchObject({ title: 'Food is at 80%', options: { body: '£160 of £200 spent this month.', tag: 'spend-notice-ntc_4', actions: [] } })
+    await sw.tap('')
+    expect(sw.openWindow).toHaveBeenCalledWith('/money/spending')
+  })
+
+  it('a payment or unusual notice opens that notice on Spending', async () => {
+    for (const kind of ['payment', 'unusual']) {
+      const sw = worker(200)
+      await sw.push({ ...NOTICE, kind })
+      await sw.tap('')
+      expect(sw.openWindow).toHaveBeenCalledWith('/money/spending#notice-ntc_4')
+    }
+  })
+})
+
+describe('a push of a type this browser does not know (B55.43)', () => {
+  it('shows Talyvor with a neutral line, no actions, and a tap opens Home, never an approval', async () => {
+    for (const payload of [{ type: 'something_new', approval_id: 'apr_9', title: 'x' }, {}]) {
+      const sw = worker(200)
+      await sw.push(payload)
+      expect(sw.shown[0]).toMatchObject({ title: 'Talyvor', options: { body: 'Open Talyvor to see it.', actions: [] } })
+      await sw.tap('approve')
+      expect(sw.fetch).not.toHaveBeenCalled()
+      expect(sw.openWindow).toHaveBeenCalledWith('/')
+    }
+  })
+})

@@ -1308,6 +1308,65 @@ export function agentRulesRollback(seed: number): Scenario {
 }
 
 /**
+ * B55.43 — a spending notice in the browser says what it is, never "approve a payment". The push Lens sends for a due
+ * spending notice (talyvor-lens economy/spend_notices.go pushSpendNotice) is delivered to the app's service worker: it
+ * must show Lens's own title and body, carry no Approve or Deny, and open Spending on that notice. A push of a type the
+ * app does not know must read "Talyvor", carry no actions and open Home.
+ */
+export function spendNoticePush(seed: number): Scenario {
+  return {
+    id: 'spend-notice-push',
+    owner: 'talyvor-suite',
+    items: ['B55.43'],
+    title: 'a spending notice push reads as itself with no Approve or Deny and opens Spending; an unknown push never reads as an approval',
+    run: (ctx) => withBank(ctx, async (bank) => {
+      const { page } = bank
+      const origin = new URL(page.url()).origin
+      await ctx.app.context.grantPermissions(['notifications'], { origin })
+      const cdp = await ctx.app.context.newCDPSession(page)
+      const registered = new Promise<string>((ok) => cdp.on('ServiceWorker.workerRegistrationUpdated', ({ registrations }) => {
+        const r = registrations.find((x) => x.scopeURL === `${origin}/` && !x.isDeleted)
+        if (r !== undefined) ok(r.registrationId)
+      }))
+      await cdp.send('ServiceWorker.enable')
+      await page.evaluate(async () => {
+        await navigator.serviceWorker.register('/sw.js')
+        await navigator.serviceWorker.ready
+      })
+      const registrationId = await registered
+      const sw = ctx.app.context.serviceWorkers().find((w) => new URL(w.url()).pathname === '/sw.js')
+      if (sw === undefined) return fail('/sw.js registered, but no service worker runs it')
+      const shownFor = (tag: string) => sw.evaluate(async ({ tag, ms }) => {
+        const w = globalThis as unknown as ApprovalWorker
+        for (let waited = 0; waited < ms; waited += 100) {
+          const [n] = await w.registration.getNotifications({ tag })
+          if (n !== undefined) return { title: n.title, body: n.body, url: (n.data as { url?: string } | null)?.url, actions: (n as Notification & { actions: { action: string }[] }).actions.map((a) => a.action) }
+          await new Promise((ok) => setTimeout(ok, 100))
+        }
+        return { shown: (await w.registration.getNotifications()).map((n) => n.tag) }
+      }, { tag, ms: ACTION_TIMEOUT_MS })
+
+      const id = `ntc_e2e_${seed}`
+      const notice = { type: 'spend_notice', kind: 'payment', notice_id: id, workspace_id: 'ws_e2e', title: `You paid Bistro £25.00 (${seed})`, body: 'Paid from your own account.' }
+      await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify(notice) })
+      const n = await shownFor(`spend-notice-${id}`)
+      if (n.actions === undefined) return fail(`the spending notice push showed no notification tagged spend-notice-${id}; showing ${JSON.stringify(n.shown)}`)
+      ctx.evidence.push({ note: `the spending notice: "${n.title}", "${n.body}", ${n.actions.join(', ') || 'no actions'}, opens ${n.url}` })
+      if (n.title !== notice.title || n.body !== notice.body) return fail(`the spending notice does not read as Lens wrote it: ${JSON.stringify(n)}`)
+      if (n.actions.length !== 0) return fail(`the spending notice carries ${n.actions.join(', ')}`)
+      if (n.url !== `/money/spending#notice-${id}`) return fail(`a tap on the payment notice opens ${n.url}, not its notice on Spending`)
+
+      await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify({ type: `not_yet_${seed}`, approval_id: `apr_e2e_${seed}` }) })
+      const other = await shownFor('talyvor')
+      if (other.actions === undefined) return fail(`a push of an unknown type showed no "Talyvor" notification; showing ${JSON.stringify(other.shown)}`)
+      ctx.evidence.push({ note: `an unknown push: "${other.title}", "${other.body}", ${other.actions.join(', ') || 'no actions'}, opens ${other.url}` })
+      if (other.title !== 'Talyvor' || other.actions.length !== 0 || other.url !== '/') return fail(`an unknown push does not read as Talyvor with no actions opening Home: ${JSON.stringify(other)}`)
+      return { pass: true, detail: `the spending notice read "${n.title}" with no actions and opens /money/spending#notice-${id}; an unknown push read "Talyvor" with no actions and opens Home` }
+    }),
+  }
+}
+
+/**
  * B28.32 — the DONE line: after expiry a hold at the boosted size writes nothing. An agent funded 1 LXC with a daily
  * limit of 0.000001 LXC has it raised on Limit boost to 1 LXC until a whole minute one to two minutes away. Before that
  * time its question is served — one hold posting and one spend row. From that time on Lens lists no boost, its rules
