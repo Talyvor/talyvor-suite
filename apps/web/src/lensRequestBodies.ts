@@ -349,6 +349,68 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/pause", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensAgentPauseBody",
   },
+  // B52.6 — Talyvor Connect: an assistant pays from an agent on a Connect token Lens binds to it, and creates, describes,
+  // limits and pauses agents on the person's own credential (apps/bff/mcp_agents.go).
+  {
+    route: "POST /v1/auth/connect-token",
+    file: "apps/bff/mcp_agents.go",
+    kind: "map-literal",
+    anchor:
+      'json.Marshal(map[string]any{"workspace_id": t.workspaceID, "user_id": t.workspaceID, "client_id": g.ClientID, "agent_id": agentID, "scopes": []string{"payments:send"}})',
+    upstreamFile: "cmd/lens/connect_token_handler.go",
+    upstreamAnchor: "func newConnectTokenMintHandler(authManager *auth.Manager, agents connectAgents) http.HandlerFunc {",
+    subject: "lensConnectTokenBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/pay",
+    file: "apps/bff/mcp_agents.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]any{"to_agent_id": to, "amount_ulxc": amount, "memo": memo})',
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/pay", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAgentPayBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/agents",
+    file: "apps/bff/mcp_agents.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"name": name})',
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAgentCreateBody",
+  },
+  {
+    route: "PATCH /v1/workspaces/{wsID}/agents/{agentID}",
+    file: "apps/bff/mcp_agents.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"description": purpose})',
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Patch("/v1/workspaces/{wsID}/agents/{agentID}", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAgentUpdateBody",
+  },
+  {
+    route: "PUT /v1/workspaces/{wsID}/agents/{agentID}/rules",
+    file: "apps/bff/mcp_agents.go",
+    kind: "anon-struct",
+    fn: "func (a *app) putAgentLimits(",
+    anchor: "var rules struct {",
+    upstreamFile: "internal/economy/agent_rules.go",
+    upstreamAnchor: "type AgentRules struct {",
+    subject: "lensAgentRulesBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/pause",
+    file: "apps/bff/mcp_agents.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"reason": reason})',
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/pause", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAgentPauseBody",
+  },
   // B19.21 — a scheduled payment, and an automatic top-up.
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/schedules",

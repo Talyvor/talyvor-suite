@@ -172,6 +172,8 @@ const BODIES: Record<string, unknown> = {
   '/api/workspace/name': { id: 'ws_1', name: 'Acme' },
   // B39.34 — Settings → Email branding, as a workspace that branded its Docs email.
   '/api/docs/email-branding': { from_name: 'Acme Robotics', header_color: '#1E40AF', logo_url: '' },
+  // B52.6 — the most an assistant may give a new agent: 0.5 LXC a payment, 5 a day, 50 a month.
+  '/api/connect/agent-ceiling': { max_per_request_ulxc: 500_000, daily_limit_ulxc: 5_000_000, monthly_limit_ulxc: 50_000_000 },
   // B40.8 — Settings → Connect your AI, with Claude connected and used.
   '/api/connect/assistants': {
     assistants: [
