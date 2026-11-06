@@ -7,8 +7,9 @@ package main
 // authorization spec asks of the server side: RFC 8414 metadata, RFC 9728 protected-resource
 // metadata, clients by Client ID Metadata Document (CIMD, preferred) or by RFC 7591 dynamic
 // registration (the fallback), PKCE S256 only, the RFC 9207 iss parameter, short-lived access
-// tokens with rotating refresh tokens, and RFC 7009 revocation. Every client is public: PKCE is
-// the proof of possession, so no client secret is issued or accepted.
+// tokens with rotating refresh tokens, and RFC 7009 revocation. No client secret is issued or accepted:
+// PKCE is the proof of possession, and a CIMD client whose document says so may also sign its token
+// requests with its own key (private_key_jwt, RFC 7523: ChatGPT's preference, B52.2).
 //
 // A grant names the person (sub, email), the workspace and the client; B40.7's tools (mcp.go) read
 // it through oauthGrantFrom.
@@ -72,7 +73,18 @@ type oauthClient struct {
 	id           string
 	name         string
 	redirectURIs []string
-	expires      time.Time
+	// authMethods are the token-endpoint auth methods its CIMD document allows, of none and private_key_jwt;
+	// empty means none (every DCR client). jwksURI holds the keys a private_key_jwt assertion is checked against.
+	authMethods []string
+	jwksURI     string
+	expires     time.Time
+}
+
+func (c oauthClient) allows(method string) bool {
+	if len(c.authMethods) == 0 {
+		return method == "none"
+	}
+	return slices.Contains(c.authMethods, method)
 }
 
 func (c oauthClient) expiresAt() time.Time { return c.expires }
@@ -97,6 +109,7 @@ func (c oauthConsent) expiresAt() time.Time { return c.expires }
 
 type oauthCode struct {
 	clientID, clientName, redirectURI, challenge, scope string
+	resource                                            string // the audience its tokens are bound to
 	who                                                 oauthWho
 	expires                                             time.Time
 }
@@ -110,6 +123,7 @@ type oauthGrant struct {
 	ClientID   string
 	ClientName string
 	Scope      string
+	Resource   string // the token's audience: /mcp answers only a grant issued for it
 	Who        oauthWho
 	Created    time.Time
 	LastUsed   time.Time
@@ -137,6 +151,7 @@ type oauthServer struct {
 	grants   *ttlMap[oauthGrant]
 	access   *ttlMap[oauthToken]
 	refresh  *ttlMap[oauthToken]
+	jtis     *ttlMap[oauthToken]     // client assertions already used, until they expire (RFC 7523 §3)
 	drafts   *ttlMap[assistantDraft] // B40.35: payees and mandates an assistant left for the person to confirm (mcp_drafts.go)
 	db       *oauthDB                // nil: memory only (oauth_store.go)
 	hits     connectHits             // B52.3's rate limits (connect_limits.go)
@@ -145,7 +160,7 @@ type oauthServer struct {
 func newOAuthServer() *oauthServer {
 	return &oauthServer{clients: newTTLMap[oauthClient](), consents: newTTLMap[oauthConsent](),
 		codes: newTTLMap[oauthCode](), grants: newTTLMap[oauthGrant](),
-		access: newTTLMap[oauthToken](), refresh: newTTLMap[oauthToken](), drafts: newTTLMap[assistantDraft]()}
+		access: newTTLMap[oauthToken](), refresh: newTTLMap[oauthToken](), jtis: newTTLMap[oauthToken](), drafts: newTTLMap[assistantDraft]()}
 }
 
 func tokenKey(tok string) string {
@@ -197,19 +212,20 @@ func (a *app) handleAuthServerMetadata(w http.ResponseWriter, r *http.Request) {
 	}
 	base := a.cfg.publicBaseURL
 	writeJSON(w, http.StatusOK, map[string]any{
-		"issuer":                                         base,
-		"authorization_endpoint":                         base + "/oauth/authorize",
-		"token_endpoint":                                 base + "/oauth/token",
-		"registration_endpoint":                          base + "/oauth/register",
-		"revocation_endpoint":                            base + "/oauth/revoke",
-		"scopes_supported":                               oauthScopeNames(),
-		"response_types_supported":                       []string{"code"},
-		"grant_types_supported":                          []string{"authorization_code", "refresh_token"},
-		"code_challenge_methods_supported":               []string{"S256"},
-		"token_endpoint_auth_methods_supported":          []string{"none"},
-		"revocation_endpoint_auth_methods_supported":     []string{"none"},
-		"authorization_response_iss_parameter_supported": true,
-		"client_id_metadata_document_supported":          true,
+		"issuer":                                           base,
+		"authorization_endpoint":                           base + "/oauth/authorize",
+		"token_endpoint":                                   base + "/oauth/token",
+		"registration_endpoint":                            base + "/oauth/register",
+		"revocation_endpoint":                              base + "/oauth/revoke",
+		"scopes_supported":                                 oauthScopeNames(),
+		"response_types_supported":                         []string{"code"},
+		"grant_types_supported":                            []string{"authorization_code", "refresh_token"},
+		"code_challenge_methods_supported":                 []string{"S256"},
+		"token_endpoint_auth_methods_supported":            []string{"none", "private_key_jwt"},
+		"token_endpoint_auth_signing_alg_values_supported": oauthAssertionAlgs,
+		"revocation_endpoint_auth_methods_supported":       []string{"none"},
+		"authorization_response_iss_parameter_supported":   true,
+		"client_id_metadata_document_supported":            true,
 	})
 }
 
@@ -229,6 +245,26 @@ func validRedirectURI(raw string) bool {
 		return false
 	}
 	return true
+}
+
+// redirectRegistered is the redirect_uri check: exact, except that a registered http loopback address on
+// 127.0.0.1 or localhost matches the same address on any port (RFC 8252 §7.3), as Claude Code's is.
+func redirectRegistered(registered []string, raw string) bool {
+	if slices.Contains(registered, raw) {
+		return true
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "http" || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") {
+		return false
+	}
+	for _, reg := range registered {
+		r, err := url.Parse(reg)
+		if err == nil && r.Scheme == "http" && r.Hostname() == u.Hostname() && r.User == nil &&
+			r.EscapedPath() == u.EscapedPath() && r.RawQuery == u.RawQuery && r.Fragment == "" {
+			return true
+		}
+	}
+	return false
 }
 
 func oauthError(w http.ResponseWriter, status int, code, desc string) {
@@ -345,6 +381,8 @@ func (a *app) oauthClientFor(ctx context.Context, id string) (oauthClient, error
 		ClientName   string   `json:"client_name"`
 		RedirectURIs []string `json:"redirect_uris"`
 		AuthMethod   string   `json:"token_endpoint_auth_method"`
+		AuthMethods  []string `json:"token_endpoint_auth_methods_supported"`
+		JWKSURI      string   `json:"jwks_uri"`
 	}
 	if err := json.NewDecoder(io.LimitReader(res.Body, oauthMaxBody)).Decode(&doc); err != nil {
 		return oauthClient{}, errors.New("the client's metadata document is not JSON")
@@ -352,8 +390,19 @@ func (a *app) oauthClientFor(ctx context.Context, id string) (oauthClient, error
 	if doc.ClientID != id {
 		return oauthClient{}, errors.New("the client's metadata document names a different client_id")
 	}
-	if doc.AuthMethod != "" && doc.AuthMethod != "none" {
-		return oauthClient{}, fmt.Errorf("token_endpoint_auth_method %q is not supported; only public clients (none)", doc.AuthMethod)
+	// The preferred method and the full list both count: ChatGPT prefers private_key_jwt and also lists none.
+	// shortcut: keys only by jwks_uri, never an inline jwks; add it when a client publishes one.
+	var methods []string
+	for _, m := range append([]string{doc.AuthMethod}, doc.AuthMethods...) {
+		if m == "" && len(doc.AuthMethods) == 0 {
+			m = "none"
+		}
+		if (m == "none" || m == "private_key_jwt" && isCIMDClientID(doc.JWKSURI)) && !slices.Contains(methods, m) {
+			methods = append(methods, m)
+		}
+	}
+	if len(methods) == 0 {
+		return oauthClient{}, errors.New("the client's metadata document allows neither none nor private_key_jwt (with an https jwks_uri) at the token endpoint")
 	}
 	if len(doc.RedirectURIs) == 0 || len(doc.RedirectURIs) > 10 || !allSatisfy(doc.RedirectURIs, validRedirectURI) {
 		return oauthClient{}, errors.New("the client's metadata document has no usable redirect_uris")
@@ -362,7 +411,7 @@ func (a *app) oauthClientFor(ctx context.Context, id string) (oauthClient, error
 	if name == "" || len(name) > 100 {
 		name = req.URL.Host
 	}
-	c := oauthClient{id: id, name: name, redirectURIs: doc.RedirectURIs, expires: time.Now().Add(oauthCIMDTTL)}
+	c := oauthClient{id: id, name: name, redirectURIs: doc.RedirectURIs, authMethods: methods, jwksURI: doc.JWKSURI, expires: time.Now().Add(oauthCIMDTTL)}
 	if a.oauth.clients.size() < oauthMaxClients {
 		// Only a cache: a document not kept is fetched again.
 		if err := a.oauth.db.saveClient(ctx, c); err != nil {
@@ -416,7 +465,7 @@ func (a *app) oauthAuthorizeAsk(w http.ResponseWriter, r *http.Request) {
 	if redirectURI == "" && len(client.redirectURIs) == 1 {
 		redirectURI = client.redirectURIs[0]
 	}
-	if !slices.Contains(client.redirectURIs, redirectURI) {
+	if !redirectRegistered(client.redirectURIs, redirectURI) {
 		writeConnectPage(w, http.StatusBadRequest, connectPage{Problem: "This assistant asked to return to an address it did not register."})
 		return
 	}
@@ -518,7 +567,7 @@ func (a *app) oauthAuthorizeAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	oc := oauthCode{clientID: c.client.id, clientName: c.client.name, redirectURI: c.redirectURI,
-		challenge: c.challenge, scope: c.sc, who: oauthWho{sub: s.sub, email: s.email, workspaceID: s.workspaceID,
+		challenge: c.challenge, scope: c.sc, resource: a.mcpResource(), who: oauthWho{sub: s.sub, email: s.email, workspaceID: s.workspaceID,
 			lensToken: s.lensToken, lensTokenExp: s.lensTokenExp, synthetic: s.synthetic},
 		expires: time.Now().Add(oauthCodeTTL)}
 	if err := a.oauth.db.saveCode(r.Context(), tokenKey(code), oc); err != nil {
@@ -562,9 +611,13 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := r.PostForm
-	clientID := oauthClientID(r)
 	if res := f.Get("resource"); res != "" && res != a.mcpResource() {
 		oauthError(w, http.StatusBadRequest, "invalid_target", "the only resource here is "+a.mcpResource())
+		return
+	}
+	clientID, err := a.oauthClientAuth(r.Context(), f, oauthClientID(r))
+	if err != nil {
+		oauthError(w, http.StatusUnauthorized, "invalid_client", err.Error())
 		return
 	}
 	switch f.Get("grant_type") {
@@ -580,7 +633,7 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 			}
 			ok = spent
 		}
-		if !ok || c.clientID != clientID || c.redirectURI != f.Get("redirect_uri") {
+		if !ok || c.clientID != clientID || c.redirectURI != f.Get("redirect_uri") || c.resource != a.mcpResource() {
 			oauthError(w, http.StatusBadRequest, "invalid_grant", "the code is unknown, used, expired, or was issued to another client or redirect_uri")
 			return
 		}
@@ -595,7 +648,7 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		now := time.Now()
-		g := oauthGrant{ID: gid, ClientID: c.clientID, ClientName: c.clientName, Scope: c.scope, Who: c.who,
+		g := oauthGrant{ID: gid, ClientID: c.clientID, ClientName: c.clientName, Scope: c.scope, Resource: c.resource, Who: c.who,
 			Created: now, LastUsed: now, expires: now.Add(oauthRefreshTTL), endsAt: now.Add(oauthGrantMaxAge)}
 		if err := a.oauth.db.insertGrant(r.Context(), g); err != nil {
 			log.Printf("bff: oauth grant not saved: %v", err)
@@ -740,7 +793,9 @@ func (a *app) oauthGrantFrom(w http.ResponseWriter, r *http.Request) (oauthGrant
 	raw, hasBearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if hasBearer {
 		if t, ok := a.oauth.access.get(tokenKey(strings.TrimSpace(raw))); ok {
-			if g, live := a.oauth.grants.update(t.grantID, func(g oauthGrant) oauthGrant { g.LastUsed = time.Now(); return g }); live {
+			// A grant written before B52.2 has no resource: it was issued here, when /mcp was the only one.
+			if g, live := a.oauth.grants.update(t.grantID, func(g oauthGrant) oauthGrant { g.LastUsed = time.Now(); return g }); live &&
+				(g.Resource == a.mcpResource() || g.Resource == "") {
 				kept, err := a.oauth.db.touchGrant(r.Context(), g)
 				if err != nil {
 					log.Printf("bff: oauth last use not saved: %v", err) // only Settings' "last used" is behind
