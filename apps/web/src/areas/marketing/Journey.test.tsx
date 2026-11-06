@@ -57,7 +57,7 @@ describe('a signed-out visitor arrives from talyvor.com and can act', () => {
     // The claim the page exists to make. If this heading goes, the page has lost its argument.
     expect(await screen.findByRole('heading', { level: 1, name: /the financial ecosystem for the ai agent economy/i })).toBeInTheDocument()
     // And what Talyvor is for, in Nicolai's two sentences.
-    expect(screen.getByText(/all within limits the owner sets, with anything outside waiting for one tap/i)).toBeInTheDocument()
+    expect(screen.getByText(/all within limits the owner sets, with any payment above the amount they choose waiting for one tap/i)).toBeInTheDocument()
   })
 
   it('reaches signup — the address it publishes resolves to the real signup screen', async () => {
