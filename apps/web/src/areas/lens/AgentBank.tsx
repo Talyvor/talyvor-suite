@@ -11,6 +11,7 @@ import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
 import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
 import { AgentCardPanel } from './AgentCardPanel'
+import { categoryWords } from './Budgets'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
@@ -246,7 +247,7 @@ function limitAlertText(a: LimitAlert, nameOf: (id: string) => string): string {
   const whose = !a.agent_id ? 'your own' : a.agent_id === 'all' ? 'every wallet’s' : `${nameOf(a.agent_id)}’s`
   const period = a.period ? `${PERIOD_WORD[a.period] ?? a.period} ` : ''
   const what =
-    a.kind === 'card' ? 'card cap' : a.kind === 'agent_limit' ? `${period}limit` : `${period}${a.category ? `${a.category.replace(/_/g, ' ')} ` : ''}budget`
+    a.kind === 'card' ? 'card cap' : a.kind === 'agent_limit' ? `${period}limit` : `${period}${a.category ? `${categoryWords(a.category)} ` : ''}budget`
   return `${a.percent}% of ${whose} ${what}`
 }
 

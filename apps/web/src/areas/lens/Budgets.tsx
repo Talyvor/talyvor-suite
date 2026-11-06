@@ -5,7 +5,7 @@ import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
-import { type SpendBudget, agentBankApi, formatMinor, minorOf, refusalText } from './agentBankApi'
+import { AgentBankError, type SpendBudget, agentBankApi, formatMinor, minorOf, refusalText } from './agentBankApi'
 
 // Budgets.tsx — B41.39: a weekly or monthly budget per category (AI and software, travel …) for your own wallet, one
 // agent's or every wallet together, each with a progress bar worked out by Lens from the postings (B41.139), and the
@@ -33,6 +33,16 @@ export const CATEGORIES: readonly [string, string][] = [
 ]
 const CURRENCIES = ['GBP', 'EUR', 'USD']
 export const categoryName = (c: string) => CATEGORIES.find(([v]) => v === c)?.[1] ?? c.replace(/_/g, ' ')
+/** A category's name inside a sentence: "eating out", but "AI and software". */
+export const categoryWords = (c: string) => categoryName(c).replace(/^(?!AI\b)./, (f) => f.toLowerCase())
+
+/** B55.42 — Lens's budget refusals list every category id and its own limits; these say what to do instead. */
+function budgetRefusal(err: unknown): string {
+  const s = err instanceof AgentBankError ? (err.sentence ?? '') : ''
+  if (s.includes('category must be')) return 'Choose a category from the list.'
+  const most = /at most (\d+) budgets/.exec(s)
+  return most ? `A workspace can have at most ${most[1]} budgets.` : refusalText(err)
+}
 const select = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 
@@ -208,7 +218,7 @@ export function BudgetsScreen() {
               {save.isPending ? 'Saving…' : 'Save budget'}
             </Button>
           </div>
-          {save.isError ? <Note ok={false}>{refusalText(save.error)}</Note> : null}
+          {save.isError ? <Note ok={false}>{budgetRefusal(save.error)}</Note> : null}
           {save.isSuccess ? <Note ok>Saved. Its progress is above.</Note> : null}
         </form>
       </Region>

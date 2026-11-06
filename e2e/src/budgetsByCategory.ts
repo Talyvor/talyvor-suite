@@ -3,7 +3,7 @@
 // monthly AI and software budget across every wallet. £30.00 to the other payee is not software and counts for nothing; £70.00
 // to the software one reaches 50% and raises no 80% alert; the next £15.00 crosses £80 and raises exactly one 80% alert, still
 // one when read again, and the budget reads £85.00 spent, 85%. In the app, Money → Budgets shows the category's progress and
-// the alerts at 50% and 80%.
+// the alerts at 50% and 80%, and Agent Wallets' Limit alerts name the category in words (B55.42).
 
 import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
@@ -25,7 +25,7 @@ export function budgetsByCategory({ screen = true }: { screen?: boolean } = {}):
     id: 'budgets-by-category',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B41.39', 'B41.139'],
+    items: ['B41.39', 'B41.139', 'B55.42'],
     feature: 'Agent wallets',
     title: 'budgets by category: with a £100.00 AI and software budget, the payment that crosses £80 raises one 80% alert, another ' +
       "category's payment counts for nothing, and Money → Budgets shows the category's progress",
@@ -128,7 +128,17 @@ export function budgetsByCategory({ screen = true }: { screen?: boolean } = {}):
           ctx.evidence.push({ note: `Money → Budgets at ${width}px: ${path}` })
         }
         if (viewport !== null) await page.setViewportSize(viewport)
-        return { pass: true, detail: `${detail}; Money → Budgets shows "${shown.slice(0, 160)}"` }
+
+        // 5. B55.42: Agent Wallets' Limit alerts name the category, never its id.
+        const wallets = await ctx.app.tab('/agents')
+        const alert = wallets.locator(`[data-testid="limit-alert-${eighty.id}"]`)
+        const alertSaid = await alert.waitFor({ timeout: TIMEOUT_MS }).then(async () => ((await alert.textContent()) ?? '').replace(/\s+/g, ' '), () => '')
+        await wallets.close()
+        ctx.evidence.push({ note: 'the 80% alert on Agent Wallets', answer: alertSaid })
+        if (!alertSaid.includes('80% of every wallet’s monthly AI and software budget') || alertSaid.includes('_')) {
+          return fail(`Agent Wallets must name the 80% alert's category "AI and software"; it reads "${alertSaid.slice(0, 300)}"`)
+        }
+        return { pass: true, detail: `${detail}; Money → Budgets shows "${shown.slice(0, 160)}"; Agent Wallets reads "${alertSaid.slice(0, 80)}"` }
       } finally {
         await page.close()
       }

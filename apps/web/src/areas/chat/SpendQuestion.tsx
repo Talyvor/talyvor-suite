@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 
 import { Button, focusRing, inlineLink } from '@talyvor/ui'
 
-import { CATEGORIES, categoryName } from '../lens/Budgets'
+import { CATEGORIES, categoryWords } from '../lens/Budgets'
 import { SPENDING_KEY, amounts, byCategory, spendPeriod } from '../lens/Spending'
 import { agentBankApi } from '../lens/agentBankApi'
 import { Card } from '../lens/walletBrand'
@@ -86,10 +86,10 @@ export function SpendCard({ question, onClose }: { question: string; onClose: ()
             <>
               <p role="status" className="text-body text-ink" data-testid="chat-spend-answer">
                 {spent === undefined ? (
-                  <>Nothing on {categoryName(category).toLowerCase()} {when}.</>
+                  <>Nothing on {categoryWords(category)} {when}.</>
                 ) : (
                   <>
-                    You spent <span className="font-figure">{amounts(spent)}</span> on {categoryName(category).toLowerCase()} {when}.
+                    You spent <span className="font-figure">{amounts(spent)}</span> on {categoryWords(category)} {when}.
                   </>
                 )}
               </p>
