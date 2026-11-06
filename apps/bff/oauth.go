@@ -379,8 +379,11 @@ func (a *app) oauthClientFor(ctx context.Context, id string) (oauthClient, error
 		return oauthClient{}, fmt.Errorf("%w: %w", errCIMDUnreadable, err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500 {
 		return oauthClient{}, fmt.Errorf("%w: it answered %d", errCIMDUnreadable, res.StatusCode)
+	}
+	if res.StatusCode != http.StatusOK {
+		return oauthClient{}, fmt.Errorf("the client's metadata document answered %d", res.StatusCode)
 	}
 	var doc struct {
 		ClientID     string   `json:"client_id"`

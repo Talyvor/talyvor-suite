@@ -221,6 +221,15 @@ func TestOAuthRefreshOutlivesTheClientsDocument(t *testing.T) {
 	}
 	rt = jsonOf(t, rec)["refresh_token"].(string)
 
+	// A document that is gone (404) is the client's own answer, not an outage: refused.
+	ageClient(a, claudeCode, 11*time.Minute)
+	a.connectorOut = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{}, Request: r}, nil
+	})
+	if rec := refresh(); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "invalid_client") {
+		t.Fatalf("a refresh after the document was withdrawn: %d %s", rec.Code, rec.Body.String())
+	}
+
 	// The document comes back allowing only private_key_jwt: the next refresh that reads it is refused.
 	ageClient(a, claudeCode, 11*time.Minute)
 	a.connectorOut = roundTripFunc(func(r *http.Request) (*http.Response, error) {

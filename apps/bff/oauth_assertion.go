@@ -112,14 +112,15 @@ func (a *app) oauthClientAuth(ctx context.Context, f url.Values, clientID string
 }
 
 // oauthTokenClient is the client a token request is judged by: its document when that can be read, else the row
-// stored when it last was, so a slow or unreachable document host never signs an assistant out. A document that is
+// stored when it last was (unreachable, slow, 429, 5xx or not JSON; any other answer is the client's own refusal), so a slow or unreachable document host never signs an assistant out. A document that is
 // read always wins, so one that has become stricter is refused at once.
 func (a *app) oauthTokenClient(ctx context.Context, id string) (oauthClient, error) {
 	c, err := a.oauthClientFor(ctx, id)
-	if !errors.Is(err, errCIMDUnreadable) {
+	if !errors.Is(err, errCIMDUnreadable) || ctx.Err() != nil {
 		return c, err
 	}
-	stored, ok := a.oauth.clients.update(id, func(c oauthClient) oauthClient { c.refetch = time.Now().Add(oauthCIMDTTL); return c })
+	// refetch stays where it is, so the next request reads the document again and /oauth/authorize never sees this row.
+	stored, ok := a.oauth.clients.get(id)
 	if !ok {
 		return c, err
 	}
