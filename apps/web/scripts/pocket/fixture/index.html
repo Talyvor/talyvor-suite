@@ -1,0 +1,32 @@
+<!doctype html>
+<!-- B57.1 — a small stand-in for the Pocket reference, for CI: the words of w-home and how the prototype opens a screen
+     (#proto .phold and window.__proto). The real reference is ~/talyvor-queue/design/pocket/index.html. -->
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>Pocket fixture</title></head>
+  <body>
+    <div id="proto">
+      <div class="phold">
+        <div class="pk app">
+          <section class="main">
+            <div class="top">
+              <button class="btn outline sm">Pause every agent</button>
+              <button class="me" aria-label="Nick: settings and sign out">N</button>
+            </div>
+            <h1 class="h-page">Good morning, Nick</h1>
+            <p class="muted">2 things are waiting for you.</p>
+            <h2 class="h2">Waiting for you</h2>
+            <span class="chip wait">2 waiting</span>
+            <p>Research wants to pay Acme Hosting <span class="money">$340.00 (3,400&nbsp;LXC)</span></p>
+            <button class="btn primary sm">Review</button>
+            <h2 class="h2">Your agents</h2>
+            <span class="label eyebrow">In your workspace</span>
+            <span class="chip" hidden>Every agent is paused</span>
+          </section>
+        </div>
+      </div>
+    </div>
+    <script>
+      window.__proto = { open: function () {}, current: function () { return 'w-home' } }
+    </script>
+  </body>
+</html>
