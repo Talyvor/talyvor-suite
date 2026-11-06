@@ -6,7 +6,7 @@ import { HOLDBACK_HOURS, LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
 import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
 import { COMPANY_CONTACT } from '../../company'
 import { Waitlist } from '../../components/Waitlist'
-import { ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from '../../positioning'
+import { HEY_TALY, ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from '../../positioning'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). It must render with no
 // session, no router context, and no providers: Landing.test.tsx renders <Landing /> bare, so
@@ -114,7 +114,7 @@ const HERO_SIZES = '(min-width: 840px) 50vw, 100vw'
 const WALLET: Array<{ title: string; body: string }> = [
   {
     title: 'A budget of its own',
-    body: 'Fund each agent from the workspace balance. It spends its own money, and when the money runs out the next call is refused rather than billed to you.',
+    body: 'Fund each agent from the workspace balance. It spends its own money, and when the money runs out the next call is refused rather than billed to you, unless your company has a Talyvor credit line, which covers it and bills you once a month.',
   },
   {
     title: 'Spending rules',
@@ -122,7 +122,7 @@ const WALLET: Array<{ title: string; body: string }> = [
   },
   {
     title: 'Approvals',
-    body: 'A payment above the line you set waits for a person. Nothing moves until someone approves it.',
+    body: 'A payment above the line you set waits for a person, unless you always allow that payee or a mandate covers it.',
   },
   {
     title: 'A live statement',
@@ -289,7 +289,8 @@ export function Landing() {
                 </h1>
                 <p className="mt-7 text-lede text-muted">{POSITIONING_SENTENCES[0]}</p>
                 <p className="mt-4 text-body text-muted">{POSITIONING_SENTENCES[1]}</p>
-                {/* Said as on its way, never as live and never as a label (Landing.test.tsx pins it). */}
+                {/* B56.1: what works, then what is on its way, never as live (Landing.test.tsx pins both). */}
+                <p className="mt-4 text-body text-muted">{HEY_TALY}</p>
                 <p className="mt-4 text-body text-muted">{ON_ITS_WAY}</p>
                 {/* ⚠ THE PRIMARY ACTION POINTS AT /signup, NOT /auth/login, AND NOT AT A MAILTO.
                     Preserved from the previous version because the reasoning is easy to "simplify"
