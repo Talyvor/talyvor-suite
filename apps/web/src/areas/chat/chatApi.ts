@@ -546,7 +546,7 @@ export async function fetchUnconfiguredProviders(): Promise<string[]> {
 }
 
 /** How a provider is named in the picker. Presentation only — which providers exist is the catalog's. */
-const PROVIDER_LABEL: Record<string, string> = {
+export const PROVIDER_LABEL: Record<string, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic',
   google: 'Google',
