@@ -10,14 +10,14 @@ const ACCOUNTS = [
   { id: 'macc_agt', agent_id: 'agt_1', currency: 'GBP', purpose: 'agent', status: 'open', name: 'GBP account', balance_minor: 0, test_minor: 0, live_minor: 0 },
 ]
 
-function mockBff(invoices: Array<Record<string, unknown>> = []) {
+function mockBff(invoices: Array<Record<string, unknown>> = [], accounts: Array<Record<string, unknown>> = ACCOUNTS) {
   const sent: Array<{ url: string; body: unknown }> = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
-    if (url === '/api/money/accounts') return json({ accounts: ACCOUNTS })
+    if (url === '/api/money/accounts') return json({ accounts })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [{ id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-10T09:00:00Z' }] })
     if (url === '/api/wallets/capabilities') return json({ capabilities: [{ capability: 'payments_in', name: 'Money in', class: 'RED', real_money: false, level_needed: 'L2' }] })
     if (url === '/api/money/invoices' && init?.method === 'POST') {
@@ -98,5 +98,16 @@ describe('the Invoices screen', () => {
     await waitFor(() => expect(bff.sent.map((s) => s.url)).toEqual(['/api/money/invoices/inv_9/void']))
     await waitFor(() => expect(within(screen.getByTestId('invoice-INV-000009')).queryByRole('button', { name: 'Void' })).toBeNull())
     expect(bff.sent).toHaveLength(1)
+  })
+
+  // B54.31 — Lens's balance_minor is test plus live, so only live_minor is the account's balance.
+  it('shows each account’s live balance, never its test figure', async () => {
+    mockBff([], [{ ...ACCOUNTS[0], balance_minor: 150, test_minor: 150, live_minor: 0 }])
+    window.history.pushState({}, '', '/money/invoices')
+    render(<App />)
+
+    const list = await screen.findByRole('list', { name: 'Currency accounts' })
+    expect(list.textContent).toContain('£0.00')
+    expect(list.textContent).not.toContain('1.50')
   })
 })
