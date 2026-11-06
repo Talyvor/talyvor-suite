@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, Row, inlineLink } from '@talyvor/ui'
 import { Card } from './walletBrand'
 import { Note, readFailure } from './WalletMoney'
-import { BUDGETS_KEY, categoryName } from './Budgets'
+import { BUDGETS_KEY, categoryWords } from './Budgets'
 import { SCHEDULES_KEY } from './Pay'
 import { type PlanFinding, type SpendBudget, type SpendPlan, agentBankApi, formatMinor, minorOf, refusalText } from './agentBankApi'
 
@@ -61,7 +61,7 @@ function Adjustments({ plan, finding, budgets }: { plan: SpendPlan; finding: Pla
         return (
           <li key={b.id} className={adjust} data-testid={`plan-adjust-budget-${b.id}`}>
             <span>
-              Move <span className="font-figure">{formatMinor(take, b.currency)}</span> out of the {(b.category ? categoryName(b.category) : 'overall').toLowerCase()} budget.
+              Move <span className="font-figure">{formatMinor(take, b.currency)}</span> out of the {b.category ? categoryWords(b.category) : 'overall'} budget.
             </span>
             <Button type="button" disabled={lower.isPending} onClick={() => lower.mutate({ b, take })}>
               Move it

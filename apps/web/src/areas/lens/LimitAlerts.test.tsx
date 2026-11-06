@@ -31,14 +31,14 @@ describe('limit alerts on the Agent Bank (B28.62)', () => {
     mockBff([
       { id: 'sal_2', kind: 'agent_limit', subject: 'agt_1', agent_id: 'agt_1', period: 'daily', period_start: '2026-11-04T00:00:00Z', percent: 100,
         spent_minor: 5_000_000, limit_minor: 5_000_000, currency: 'LXC', created_at: '2026-11-04T10:00:00Z' },
-      { id: 'sal_1', kind: 'budget', subject: 'bdg_1', category: 'eating_out', period: 'month', period_start: '2026-11-01T00:00:00Z', percent: 80,
+      { id: 'sal_1', kind: 'budget', subject: 'bdg_1', category: 'ai_software', period: 'month', period_start: '2026-11-01T00:00:00Z', percent: 80,
         spent_minor: 800, limit_minor: 1000, currency: 'GBP', created_at: '2026-11-04T09:00:00Z' },
     ])
     window.history.pushState({}, '', '/agents')
     render(<App />)
 
     const budget = await screen.findByTestId('limit-alert-sal_1')
-    expect(budget.textContent).toContain('80% of your own monthly eating out budget')
+    expect(budget.textContent).toContain('80% of your own monthly AI and software budget')
     expect(budget.textContent).toContain('£8.00 of £10.00 spent')
     expect(budget.textContent).toContain('Nearing')
     const limit = screen.getByTestId('limit-alert-sal_2')

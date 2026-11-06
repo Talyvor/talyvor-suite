@@ -1823,7 +1823,7 @@ export function approvalNamedIn(err: unknown): string | null {
 export function refusalText(err: unknown): string {
   if (isSessionExpired(err)) return 'Nothing changed — sign in again.'
   if (err instanceof AgentBankError && err.status < 500 && err.sentence) {
-    const s = err.sentence.replace(/^economy: /, '')
+    const s = err.sentence.replace(/^economy: (spending: )?/, '')
     return `${s.charAt(0).toUpperCase()}${s.slice(1)}${s.endsWith('.') ? '' : '.'}`
   }
   return 'Nothing changed. You can try again.'
