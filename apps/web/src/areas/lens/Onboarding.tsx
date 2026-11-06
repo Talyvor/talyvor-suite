@@ -44,6 +44,54 @@ export const nameFromEmail = (email: string | undefined): string => {
   return !label || WEBMAIL.has(label) ? '' : label[0].toUpperCase() + label.slice(1)
 }
 
+/**
+ * B55.39 — Lens names a new workspace by its id and makes its first agent at sign-up, so Home's onboarding
+ * card (the other place a workspace is named) never shows. While the name is still the id, Home asks first.
+ */
+export function NameWorkspace() {
+  const qc = useQueryClient()
+  const email = useAuthMeReader().data?.user?.email
+  const current = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
+  const [typed, setTyped] = useState<string | null>(null)
+  const name = typed ?? nameFromEmail(email)
+  const save = useMutation({
+    mutationFn: () => agentBankApi.setWorkspaceName(name.trim()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: WORKSPACE_NAME_KEY }),
+  })
+  if (save.isSuccess)
+    return (
+      <p role="status" className="text-body text-ink" data-testid="workspace-named">
+        Saved. Your workspace has a name now.
+      </p>
+    )
+  if (!current.data || current.data.name !== current.data.id) return null
+  return (
+    <form
+      className="flex flex-col items-start gap-3 border border-rule bg-surface px-gutter py-5"
+      data-testid="name-workspace"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (name.trim() && !save.isPending) save.mutate()
+      }}
+    >
+      <p className="text-head text-ink">Name your workspace</p>
+      <p className="text-body text-muted">It shows under the logo and on your invoices.</p>
+      <label className="flex w-full flex-col gap-1 text-caption text-ink">
+        Workspace name
+        <Input value={name} maxLength={80} onChange={(e) => setTyped(e.target.value)} />
+      </label>
+      <Button type="submit" variant="primary" disabled={!name.trim() || save.isPending}>
+        Save name
+      </Button>
+      {save.isError ? (
+        <p role="alert" className="text-caption text-ink">
+          {refusalText(save.error)}
+        </p>
+      ) : null}
+    </form>
+  )
+}
+
 interface Ready {
   agent: Agent
   key: AgentKey
