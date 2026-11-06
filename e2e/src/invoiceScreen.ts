@@ -9,7 +9,8 @@
 // link reading "Paid — thank you". Then Lens's own record (GET /v1/money/invoices on the owner's token, not through the
 // screen) must hold the invoice paid, with one card payment of the total, and the agent's GBP account (GET /v1/money/accounts)
 // must hold the total more than before: the posting is what makes it paid. The screen must read Paid as well.
-// Screenshots of both screens at 1440 and 390.
+// Screenshots of both screens at 1440 and 390. Then a second invoice is voided on the screen (B55.41): Void must ask first, Keep
+// it must leave it sent in Lens's record, and Void it must leave it void there.
 
 
 import { DISCLAIMER, fail } from './bank.ts'
@@ -53,7 +54,7 @@ export function invoicesScreen(): Scenario {
     owner: 'talyvor-suite',
     own: true,
     agents: 1,
-    items: ['B30.97'],
+    items: ['B30.97', 'B55.41'],
     title: 'the Invoices screen issues and sends an invoice from an agent’s GBP account; its public pay page, opened signed out, carries ' +
       'no disclaimer line, takes the test card and reads paid; Lens records the invoice paid by one card payment of the ' +
       'total and the agent’s account holds the total more; the screen reads Paid',
@@ -184,11 +185,45 @@ export function invoicesScreen(): Scenario {
       } finally {
         await again.close()
       }
+
+      // B55.41 — voiding asks first: Keep it leaves the invoice sent in Lens's record, Void it voids it.
+      const due = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
+      const second = await call<Invoice>(ctx, 'POST', '/v1/money/invoices', { account_id: account.id, customer_name: `Void Customer ${RUN_SALT} Ltd`,
+        lines: [{ description: 'Delivery', quantity: 1, unit_amount_minor: 750, vat_rate_bps: 0 }], due_date: due, send: true })
+      ctx.evidence.push({ note: 'the owner sends a second invoice, to void', answer: said(second) })
+      if (second.status !== 201 || second.value === undefined) return fail(`sending a second invoice answered ${said(second)}`)
+      const toVoid = second.value
+      const statusOf = async (note: string): Promise<string> => {
+        const r = await call<{ invoices: Invoice[] | null }>(ctx, 'GET', '/v1/money/invoices')
+        ctx.evidence.push({ note, answer: said(r) })
+        return (r.value?.invoices ?? []).find((i) => i.id === toVoid.id)?.status ?? `not listed (${said(r)})`
+      }
+      const voiding = await ctx.app.tab('/money/invoices')
+      try {
+        const row = voiding.getByTestId(`invoice-${toVoid.number}`)
+        await row.waitFor({ timeout: TIMEOUT_MS })
+        const question = `Void invoice ${toVoid.number}? Void Customer ${RUN_SALT} Ltd can no longer pay it, and this cannot be undone.`
+        await row.getByRole('button', { name: 'Void', exact: true }).click()
+        await row.getByText(question).waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
+        if (!(await row.getByText(question).isVisible())) return fail(`Void on ${toVoid.number} did not ask "${question}"`)
+        ctx.evidence.push({ note: `the Invoices screen, asking before voiding, ${await screenshots(ctx, voiding, 'invoices-void-ask')}` })
+        await row.getByRole('button', { name: 'Keep it' }).click()
+        const kept = await statusOf(`Lens’s record of ${toVoid.number} after Keep it`)
+        if (kept !== 'sent') return fail(`after Keep it Lens records ${toVoid.number} as ${kept}, not sent`)
+        await row.getByRole('button', { name: 'Void', exact: true }).click()
+        await row.getByRole('button', { name: 'Void it' }).click()
+        await row.getByRole('button', { name: 'Void it' }).waitFor({ state: 'detached', timeout: TIMEOUT_MS }).catch(() => undefined)
+        const voided = await statusOf(`Lens’s record of ${toVoid.number} after Void it`)
+        if (voided !== 'void') return fail(`after Void it Lens records ${toVoid.number} as ${voided}, not void`)
+      } finally {
+        await voiding.close()
+      }
       return {
         pass: true,
         detail: `${number} for ${TOTAL_TEXT} issued and sent on the screen; its pay page, signed out, carried no disclaimer line, took the test ` +
           `card and read Paid — thank you; Lens records it paid by one card payment of ${TOTAL_MINOR} minor, the agent’s GBP account ` +
-          `${before.test_minor} → ${after.test_minor}; the screen reads Paid`,
+          `${before.test_minor} → ${after.test_minor}; the screen reads Paid; ${toVoid.number} asked before voiding, stayed sent on Keep it ` +
+          'and was void on Void it',
       }
     },
   }

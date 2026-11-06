@@ -133,11 +133,11 @@ describe('the Ledger screen — a reservation is a bound, not a lifecycle', () =
     mockBothLedgers()
     renderLedger()
     await screen.findByText('reservation hold (pre-serve)')
-    // ⚠ Asserted in the DOM STRING, lower case. The cell carries Tailwind `uppercase`, and
+    // ⚠ Asserted in the DOM STRING, as written. The cell carries Tailwind `uppercase`, and
     // text-transform never touches the text a query can see — the browser paints
-    // "RESERVATION HOLD" over a DOM that says "reservation hold".
-    expect(screen.getByText('reservation hold')).toBeInTheDocument()
-    expect(screen.getByText('reservation release')).toBeInTheDocument()
+    // "HELD FOR A REQUEST" over a DOM that says "Held for a request".
+    expect(screen.getByText('Held for a request')).toBeInTheDocument()
+    expect(screen.getByText('Released')).toBeInTheDocument()
   })
 
   it('MUST STAY GREEN — the mint ledger still wears its pills on the same screen', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatUSD, formatWhen, humanizeType, ledgerStatus } from './format'
+import { formatDecided, formatUSD, formatWhen, humanizeType, ledgerStatus } from './format'
 
 // These assertions pin the honest type→status mapping (report §Pill). They encode the
 // two gaps deliberately: no ledger type is ever 'idle', and account movements get no pill.
@@ -58,8 +58,8 @@ describe('formatters', () => {
     expect(formatUSD(0)).toBe('$0.00')
   })
 
-  it('humanizeType strips underscores', () => {
-    expect(humanizeType('pattern_mine_held')).toBe('pattern mine held')
+  it('humanizeType reads a ledger type in plain words (B55.41)', () => {
+    expect(humanizeType('pattern_mine_held')).toBe('Held: earned for a pattern')
   })
 
   // ⚠ THE RENDERED CLOCK IS ASSERTED IN src/renderedClock.test.ts, NOT HERE. This case used to
@@ -70,5 +70,41 @@ describe('formatters', () => {
   // What survives here is the branch that has no clock in it at all.
   it('echoes an unparseable timestamp unchanged rather than inventing one', () => {
     expect(formatWhen('not-a-date')).toBe('not-a-date')
+  })
+})
+
+// B55.41 — every type Lens writes into lxc_ledger and lens_token_ledger, read from talyvor-lens@0daede08 (the
+// Type*/LXCType* constants and the literal types its ledger writers pass). CI cannot read talyvor-lens, so a type
+// Lens adds later reaches this list by hand: add it here and the test below fails until it has words.
+const LENS_LEDGER_TYPES = [
+  'admin_grant', 'agent_card', 'agent_cash_out', 'agent_escrow', 'agent_transfer', 'annotation_mine', 'annotation_stake', 'annotation_unstake',
+  'burn', 'cache_mine', 'cache_mine_held', 'compute_mine', 'compute_mine_held', 'convert_from_lens', 'convert_to_lxc', 'credit_line_draw',
+  'embedding_mine', 'embedding_mine_held', 'eval_confidential_compute', 'eval_confidential_compute_held', 'eval_confidential_compute_revoked',
+  'eval_contribution', 'eval_contribution_held', 'eval_contribution_revoked', 'eval_latency_locality', 'eval_latency_locality_held',
+  'eval_latency_locality_revoked', 'eval_routing_prediction', 'eval_routing_prediction_held', 'eval_routing_prediction_revoked',
+  'marketplace_buy', 'marketplace_fee', 'marketplace_unsold_refund', 'pattern_mine', 'pattern_mine_held', 'platform_fee', 'pool_royalty',
+  'pool_royalty_held', 'pool_royalty_revoked', 'povi_stake_lock', 'povi_stake_release', 'povi_stake_slash', 'purchase', 'receipt_mine_provisional',
+  'reservation_hold', 'reservation_release', 'spend', 'stake', 'stake_yield', 'starter_test_money', 'test_crossing_reversal', 'traffic_mint_revoked',
+  'transfer', 'transfer_in', 'transfer_out', 'unstake',
+]
+
+describe('humanizeType gives every ledger type Lens writes plain words (B55.41)', () => {
+  it.each(LENS_LEDGER_TYPES)('%s has words of its own', (t) => {
+    const words = humanizeType(t)
+    expect(words).not.toBe('Other')
+    expect(words).not.toMatch(/_/)
+  })
+
+  it('reads a type it does not know as Other, never the raw type', () => {
+    expect(humanizeType('a_brand_new_kind')).toBe('Other')
+  })
+})
+
+describe('formatDecided (B55.41)', () => {
+  const now = new Date(2026, 9, 25, 18, 0)
+  it('says today at the time, yesterday, or the day and month', () => {
+    expect(formatDecided(new Date(2026, 9, 25, 9, 12).toISOString(), now)).toBe('today at 09:12')
+    expect(formatDecided(new Date(2026, 9, 24, 23, 59).toISOString(), now)).toBe('yesterday')
+    expect(formatDecided(new Date(2026, 9, 14, 9, 12).toISOString(), now)).toBe('14 Oct')
   })
 })

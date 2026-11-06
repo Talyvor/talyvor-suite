@@ -11,9 +11,8 @@ const ACCOUNTS = [
   { id: 'macc_agt', agent_id: 'agt_1', currency: 'GBP', purpose: 'agent', status: 'open', name: 'GBP account', balance_minor: 10000, test_minor: 10000, live_minor: 0 },
 ]
 
-function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<string, unknown>[] = []) {
+function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<string, unknown>[] = [], payments: unknown[] = []) {
   const sent: Array<{ url: string; headers: Record<string, string>; body: unknown }> = []
-  const payments: unknown[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -331,5 +330,16 @@ describe('the Pay screen', () => {
     expect(get).toHaveBeenCalledTimes(1)
     expect(bff.sent.slice(2).map((x) => x.url)).toEqual(['/api/money/assistant-requests/ar_m/prepare', '/api/money/assistant-requests/ar_m/sign'])
     expect(bff.sent[3].body).toMatchObject({ canonical: '{"id":"pm-1"}', assertion: { credential_id: 'AQ', signature: 'BA' } })
+  })
+
+  // B55.41 — a payment status this screen has no words for never shows Lens's own word.
+  it('reads a payment status it does not know as a sentence, never Lens’s word', async () => {
+    mockBff([], [], [], [{ id: 'mpay_9', account_id: 'macc_co', payee_id: 'mpe_1', payee_name: 'Acme Ltd', amount_minor: 500, currency: 'GBP', funding: 'test',
+      reference: 'R9', idempotency_key: 'k9', status: 'on_review', created_at: '2026-10-11T09:00:00Z', updated_at: '2026-10-11T09:00:01Z' }])
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+    const row = await screen.findByTestId('payment-mpay_9')
+    expect(within(row).getByText('We could not read this payment’s status')).toBeTruthy()
+    expect(row.textContent).not.toMatch(/on_review|on review/)
   })
 })
