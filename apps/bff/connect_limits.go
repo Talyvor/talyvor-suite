@@ -137,6 +137,13 @@ func (a *app) auditToolCall(ctx context.Context, g oauthGrant, req mcpMessage, r
 	} else if m, ok := resp.Result.(map[string]any); ok && m["isError"] == true {
 		c.Result = "refused"
 	}
+	if a.oauth.db == nil {
+		a.oauth.grants.update(g.ID, func(g oauthGrant) oauthGrant {
+			g.calls = append([]assistantCall{c}, g.calls[:min(len(g.calls), connectedCallsShown-1)]...)
+			return g
+		})
+		return
+	}
 	if err := a.oauth.db.recordToolCall(context.WithoutCancel(ctx), g, c); err != nil {
 		log.Printf("bff: mcp audit of %s for client %q: %v", c.Tool, g.ClientName, err)
 	}

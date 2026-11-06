@@ -160,3 +160,30 @@ func TestConnectAuditTrail(t *testing.T) {
 		t.Fatalf("an expired unused client is still in the table (%d, %v)", n, err)
 	}
 }
+
+// TestConnectAuditTrailInMemory is B17.357: a BFF with no database keeps each connection's latest calls in memory, as
+// it keeps the connection itself, so Settings still lists what an assistant did.
+func TestConnectAuditTrailInMemory(t *testing.T) {
+	a, ck := oauthApp(t)
+	at := seedOAuthToken(a)
+	call := func(body string) {
+		t.Helper()
+		if rec := serve(a, "POST", "/mcp", "", body, map[string]string{"Authorization": "Bearer " + at}, nil); rec.Code != http.StatusOK {
+			t.Fatalf("tools/call: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	for i := 0; i <= connectedCallsShown; i++ {
+		call(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"no_such_tool"}}`)
+	}
+	call(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_balances","arguments":{}}}`)
+
+	list := serve(a, "GET", "/api/connect/assistants", "", "", nil, ck)
+	got := jsonOf(t, list)["assistants"].([]any)
+	if list.Code != http.StatusOK || len(got) != 1 {
+		t.Fatalf("Settings: %d %s", list.Code, list.Body.String())
+	}
+	calls, _ := got[0].(map[string]any)["calls"].([]any)
+	if len(calls) != connectedCallsShown || calls[0].(map[string]any)["tool"] != "get_balances" {
+		t.Fatalf("Settings lists %d calls, want the latest %d newest first: %s", len(calls), connectedCallsShown, list.Body.String())
+	}
+}
