@@ -14,14 +14,14 @@ const APPROVALS_URL = '/approvals'
 // B29.14: every notification carries the Talyvor app icon, as its picture and as its status-bar badge.
 const ICON = '/icon-192.png'
 
-/** Whether the workspace signs its decisions: any passkey or phone key not revoked. A read that fails counts as yes. */
+/** Whether the workspace signs its decisions: any passkey or phone key, revoked ones too as Lens counts them. A read that fails counts as yes. */
 async function workspaceSigns() {
   try {
     const read = (path) => fetch(path, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
     const [p, d] = await Promise.all([read('/api/agents/passkeys'), read('/api/money/devices')])
     if (!p.ok || !d.ok) return true
     const passkeys = (await p.json()).passkeys || []
-    const devices = ((await d.json()).devices || []).filter((k) => !k.revoked_at)
+    const devices = (await d.json()).devices || []
     return passkeys.length > 0 || devices.length > 0
   } catch {
     return true

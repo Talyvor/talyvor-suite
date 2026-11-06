@@ -737,7 +737,7 @@ function SendPayment({
 function Waiting({ agentName }: { agentName: (id: string) => string }) {
   const qc = useQueryClient()
   const approvals = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
-  const { signed, onlyThePhone } = useKeys()
+  const { signed, onlyThePhone, hold } = useKeys()
   const waiting = (approvals.data?.approvals ?? []).filter((a) => a.status === 'pending' && a.payee?.kind === 'outside')
   const decide = useMutation({
     mutationFn: async ({ a, decision }: { a: AgentApproval; decision: 'approve' | 'deny' }) =>
@@ -761,7 +761,7 @@ function Waiting({ agentName }: { agentName: (id: string) => string }) {
             </p>
             {onlyThePhone ? (
               <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
-            ) : (
+            ) : hold ? null : (
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'approve' })}>
                   Approve

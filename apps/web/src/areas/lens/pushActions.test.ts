@@ -91,10 +91,10 @@ describe('the approval push in a workspace that signs (B55.2)', () => {
     expect(sw.shown[0].options.actions).toEqual([])
   })
 
-  it('a revoked phone key signs nothing: Approve and Deny stay', async () => {
+  it('a revoked phone key still counts, as Lens counts it: no actions', async () => {
     const sw = worker(200, { passkeys: [], devices: [{ revoked_at: '2026-10-30T09:00:00Z' }] })
     await sw.push(LENS_PUSH)
-    expect(sw.shown[0].options.actions?.map((a) => a.action)).toEqual(['approve', 'deny'])
+    expect(sw.shown[0].options.actions).toEqual([])
   })
 })
 

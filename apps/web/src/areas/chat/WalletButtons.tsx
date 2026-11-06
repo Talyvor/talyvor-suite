@@ -71,7 +71,7 @@ function question(agent: Agent, ask: WalletAsk): { said: React.ReactNode; yes: s
 
 export function WalletButtons({ agent, book }: { agent: Agent; book: AgentBook }) {
   const qc = useQueryClient()
-  const { onlyThePhone } = useKeys()
+  const { hold, onlyThePhone } = useKeys()
   const [amount, setAmount] = useState('')
   const [asked, setAsked] = useState<{ ask: WalletAsk; key: string } | null>(null)
   const ask = asked?.ask ?? null
@@ -126,7 +126,7 @@ export function WalletButtons({ agent, book }: { agent: Agent; book: AgentBook }
         </Button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {agent.paused_at && onlyThePhone ? null : agent.paused_at ? (
+        {agent.paused_at && hold ? null : agent.paused_at ? (
           <Button disabled={done.isPending} onClick={() => open({ kind: 'resume' })}>
             Resume {agent.name}
           </Button>
@@ -135,7 +135,7 @@ export function WalletButtons({ agent, book }: { agent: Agent; book: AgentBook }
             Pause {agent.name}
           </Button>
         )}
-        {book.all_paused_at && onlyThePhone ? null : book.all_paused_at ? (
+        {book.all_paused_at && hold ? null : book.all_paused_at ? (
           <Button disabled={done.isPending} onClick={() => open({ kind: 'resume-all' })}>
             Start all again
           </Button>

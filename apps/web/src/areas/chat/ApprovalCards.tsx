@@ -42,7 +42,7 @@ export function ApprovalCards() {
   // B17.139 — a card first shows once the peg's first read answers, so its amount never appears without its
   // currency and then changes under the person about to approve it. A failed read does not hold the cards back.
   const peg = useQuery(pegQuery)
-  const { signed, onlyThePhone } = keys
+  const { signed, onlyThePhone, hold } = keys
   const agents = book.data?.agents ?? []
   const nameOf = (id: string) => agents.find((a) => a.id === id)?.name ?? 'an agent'
   // Decided here this session: the card stays, saying what happened.
@@ -153,7 +153,7 @@ export function ApprovalCards() {
               </div>
               {a.payee && a.reason ? <p className="text-caption text-muted">{a.reason}</p> : null}
               {open && onlyThePhone ? <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone> : null}
-              {open && !onlyThePhone ? (
+              {open && !hold ? (
                 // One-handed on a phone: two full-width buttons under the sentence; side by side on a wide screen.
                 <div className="flex w-full flex-col gap-2 wide:flex-row wide:items-center">
                   <Button
@@ -177,7 +177,7 @@ export function ApprovalCards() {
                   ) : null}
                 </div>
               ) : null}
-              {open && !onlyThePhone ? (
+              {open && !hold ? (
                 <AlwaysAllow
                   a={a}
                   agentName={nameOf(a.agent_id)}

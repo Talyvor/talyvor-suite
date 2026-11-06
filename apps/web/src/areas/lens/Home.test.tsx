@@ -37,7 +37,7 @@ function mockBff({
   briefing = QUIET,
   workspaceName = 'Acme',
 }: {
-  agents: typeof AGENTS
+  agents: Array<(typeof AGENTS)[number] & { paused_at?: string }>
   newWorkspace?: boolean
   briefing?: typeof QUIET | typeof BUSY
   workspaceName?: string
@@ -235,6 +235,25 @@ describe('Home — the wallet home (B28.6)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
     expect(window.location.pathname).toBe('/chat')
     expect(await screen.findByDisplayValue('Which agent spent most?')).toBeInTheDocument()
+  })
+
+  // B55.2 — with only the phone's key Lens refuses an unsigned resume, so Home sends none and says where to do it.
+  it('with only the phone’s key, the switch on a paused agent sends nothing and says to resume it on the phone', async () => {
+    const writes = mockBff({ agents: [{ ...AGENTS[0], paused_at: '2026-10-04T09:00:00Z' }, AGENTS[1]] })
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    const keys: Record<string, unknown> = { '/api/agents/passkeys': { passkeys: [] }, '/api/money/devices': { devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] } }
+    vi.mocked(fetch).mockImplementation(async (input, init) =>
+      String(input) in keys ? new Response(JSON.stringify(keys[String(input)]), { status: 200, headers: { 'Content-Type': 'application/json' } }) : inner(input, init),
+    )
+    window.history.pushState({}, '', '/')
+    render(<App />)
+    const researcher = await screen.findByTestId('home-agent-agt_1')
+    await waitFor(() => expect(queryClient.getQueryState(['money-devices'])?.status).toBe('success'))
+    fireEvent.click(within(researcher).getByRole('switch', { name: 'Researcher running' }))
+    expect(within(researcher).getByTestId('on-the-phone')).toHaveTextContent('Resume Researcher on your phone with Face ID.')
+    expect(within(researcher).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
+    expect(within(researcher).queryByRole('button', { name: 'Resume' })).toBeNull()
+    expect(writes).toEqual([])
   })
 
   it('a workspace with no agents opens Home in onboarding mode', async () => {

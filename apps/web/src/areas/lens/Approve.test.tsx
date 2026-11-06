@@ -20,6 +20,8 @@ function mockBff(lie = false, ITEMS: Record<string, unknown>[] = BASE, extra: Re
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [{ id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-10T09:00:00Z' }] })
     if (url === '/api/money/payees') return json({ payees: [
       { id: 'payee_1', name: 'Acme Ltd', country: 'GB', check: 'exact_match', checked_by: 't', checked_at: '2026-10-01T09:00:00Z', needs_confirmation: false, created_at: '2026-10-01T09:00:00Z' },
@@ -109,8 +111,7 @@ describe('the approval screen', () => {
     window.history.pushState({}, '', '/approve/preq_1')
     render(<App />)
 
-    await screen.findByTestId('approve-card')
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Approve £45.50 to Brightline Studio' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Approve £45.50 to Brightline Studio' }))
     fireEvent.click(screen.getByRole('button', { name: 'Approve 1 payment with a passkey' }))
     await screen.findByText('What you were asked to sign is not what is shown here, so nothing was signed. Reload the page.')
     expect(bff.get).not.toHaveBeenCalled()

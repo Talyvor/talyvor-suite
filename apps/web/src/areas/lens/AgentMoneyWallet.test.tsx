@@ -24,6 +24,8 @@ function mockBff(wallet: unknown) {
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/api/agents/agt_1/wallet') return json(wallet)
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/money/payees')
       return json({ payees: [{ id: 'payee_1', name: 'Acme Ltd', country: 'GB', check: 'exact_match', checked_by: 't', checked_at: '2026-10-01T09:00:00Z', needs_confirmation: false }] })
     if (url === '/api/money/payment-requests' && init?.method === 'POST') {

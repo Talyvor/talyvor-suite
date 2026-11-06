@@ -212,7 +212,7 @@ function AgentLine({ agent, safe }: { agent: Agent; safe: UseQueryResult<Awaited
   const qc = useQueryClient()
   const [asking, setAsking] = useState(false)
   const running = !agent.paused_at
-  const { onlyThePhone } = useKeys()
+  const { hold, onlyThePhone } = useKeys()
   const change = useMutation({
     mutationFn: () => (running ? agentBankApi.pause(agent.id, 'paused from Home') : resumeAgent(agent.id)),
     onSuccess: () => setAsking(false),
@@ -249,7 +249,7 @@ function AgentLine({ agent, safe }: { agent: Agent; safe: UseQueryResult<Awaited
         <div className="pb-1">
           <OnThePhone>Resume {agent.name} on your phone with Face ID.</OnThePhone>
         </div>
-      ) : asking ? (
+      ) : asking && (running || !hold) ? (
         <div role="group" aria-label={`${running ? 'Pause' : 'Resume'} ${agent.name}?`} className="flex flex-wrap items-center gap-2 pb-1">
           <span className="text-body text-ink">
             {running ? `Pause ${agent.name}? Lens refuses its next request or payment.` : `Resume ${agent.name}?`}

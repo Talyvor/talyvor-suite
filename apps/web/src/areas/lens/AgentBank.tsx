@@ -108,7 +108,7 @@ function Totals({ book }: { book: AgentBook }) {
  */
 export function PauseEveryAgent({ book }: { book: AgentBook }) {
   const qc = useQueryClient()
-  const { onlyThePhone } = useKeys()
+  const { hold, onlyThePhone } = useKeys()
   const [reason, setReason] = useState('')
   const change = useMutation({
     mutationFn: (pause: boolean) => (pause ? agentBankApi.pauseAll(reason.trim()) : resumeEveryAgent()),
@@ -125,7 +125,7 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
           </p>
           {onlyThePhone ? (
             <OnThePhone>Start your agents again on your phone with Face ID.</OnThePhone>
-          ) : (
+          ) : hold ? null : (
             <div>
               <Button disabled={change.isPending} onClick={() => change.mutate(false)}>
                 Start every agent again
@@ -155,7 +155,7 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
 /** B19.20 — pausing one agent (Lens B19.6): its every movement is refused until it is resumed. */
 function PauseAgent({ agent }: { agent: Agent }) {
   const qc = useQueryClient()
-  const { onlyThePhone } = useKeys()
+  const { hold, onlyThePhone } = useKeys()
   const change = useMutation({
     mutationFn: (pause: boolean) => (pause ? agentBankApi.pause(agent.id, 'paused from Agent Wallets') : resumeAgent(agent.id)),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
@@ -170,7 +170,7 @@ function PauseAgent({ agent }: { agent: Agent }) {
             </p>
             {onlyThePhone ? (
               <OnThePhone>Resume {agent.name} on your phone with Face ID.</OnThePhone>
-            ) : (
+            ) : hold ? null : (
               <Button disabled={change.isPending} onClick={() => change.mutate(false)}>
                 Resume {agent.name}
               </Button>
@@ -2171,27 +2171,34 @@ export const PASSKEYS_KEY = ['agent-passkeys']
 export const DEVICES_KEY = ['money-devices']
 
 /**
- * B55.2 — what signs for this workspace. Lens wants a signature once it has any passkey or phone key, but only a
- * passkey signs in this browser, so with the phone's key alone nothing that needs one is sent from here. A read that
- * fails counts as no key: Lens still refuses an unsigned decision it would not take.
+ * B55.2 — what signs for this workspace. Lens wants a signature once it has any passkey or phone key, revoked keys
+ * included (until B55.15), but only a passkey signs in this browser, so with the phone's key alone nothing that needs
+ * one is sent from here. hold is true until both reads succeed, so a read that is loading or failed sends nothing
+ * either; Lens lets only an owner or admin read the phone keys, and only they decide or resume.
  */
 export function useKeys() {
   const passkeys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
   const devices = useQuery({ queryKey: DEVICES_KEY, queryFn: agentBankApi.devices })
   const passkeyCount = (passkeys.data?.passkeys ?? []).length
   const thisBrowserSigns = passkeyCount > 0
-  const signed = thisBrowserSigns || (devices.data?.devices ?? []).some((d) => !d.revoked_at)
-  return { signed, thisBrowserSigns, onlyThePhone: signed && !thisBrowserSigns, passkeyCount, isSuccess: passkeys.isSuccess && devices.isSuccess }
+  const signed = thisBrowserSigns || (devices.data?.devices ?? []).length > 0
+  const isSuccess = passkeys.isSuccess && devices.isSuccess
+  const onlyThePhone = isSuccess && signed && !thisBrowserSigns
+  return { signed, thisBrowserSigns, onlyThePhone, hold: !isSuccess || onlyThePhone, passkeyCount, isSuccess }
 }
 
 /** B55.2 — said in place of a button this browser cannot sign for: where to do it, and how to sign here too (B55.3). */
 export function OnThePhone({ children }: { children: React.ReactNode }) {
+  // On Approvals itself the link would lead back to the same page.
+  const here = useLocation().pathname === '/approvals'
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-ink" data-testid="on-the-phone">
       <span>{children}</span>
-      <Link className={inlineLink} to="/approvals">
-        Add this browser
-      </Link>
+      {here ? null : (
+        <Link className={inlineLink} to="/approvals">
+          Add this browser
+        </Link>
+      )}
     </p>
   )
 }
@@ -2208,7 +2215,7 @@ export function deviceText(err: unknown, fallback: string): string {
  * B19.10 — the phone half: a passkey made here signs every approval from now on, and this device can
  * be told when one is filed. Lens keeps both (B19.16); nothing is kept in the browser but the passkey.
  */
-function FaceID({ signed, passkeyCount }: { signed: boolean; passkeyCount: number }) {
+function FaceID({ signed, hold, passkeyCount }: { signed: boolean; hold: boolean; passkeyCount: number }) {
   const qc = useQueryClient()
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
   const register = useMutation({
@@ -2235,12 +2242,13 @@ function FaceID({ signed, passkeyCount }: { signed: boolean; passkeyCount: numbe
         </p>
         {said ? <Note ok={said.ok}>{said.text}</Note> : null}
         <div className="flex flex-col gap-2 wide:flex-row">
-          {passkeysSupported() ? (
+          {/* B55.2 — with only the phone's key Lens refuses a passkey made here unsigned; adding this browser is B55.3. */}
+          {!passkeysSupported() ? (
+            <p className="text-caption text-muted">This browser cannot make a passkey.</p>
+          ) : hold ? null : (
             <Button className="h-12 wide:h-8" disabled={register.isPending} onClick={() => register.mutate()}>
               {signed ? 'Add this device' : 'Approve with Face ID from now on'}
             </Button>
-          ) : (
-            <p className="text-caption text-muted">This browser cannot make a passkey.</p>
           )}
           {pushSupported() ? (
             <Button className="h-12 wide:h-8" disabled={notify.isPending} onClick={() => notify.mutate()}>
@@ -2275,7 +2283,9 @@ export function Approvals({
   const qc = useQueryClient()
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
   const keys = useKeys()
-  const { signed, onlyThePhone } = keys
+  const { signed, onlyThePhone, hold } = keys
+  // Ticking several is for a workspace that signs nothing (bulk, below), once both key reads are in.
+  const pickable = !signed && !hold
   const [outcome, setOutcome] = useState<{ ok: boolean; text: React.ReactNode } | null>(null)
   // B41.33 — the inbox: narrowed by agent and kind, several decided together, worked from the keyboard or by a swipe.
   const [byAgent, setByAgent] = useState('')
@@ -2365,9 +2375,9 @@ export function Approvals({
     const at = row ? rows.indexOf(row) : -1
     if (e.key === 'j' || e.key === 'ArrowDown') rows[Math.min(at + 1, rows.length - 1)]?.focus()
     else if (e.key === 'k' || e.key === 'ArrowUp') rows[Math.max(at - 1, 0)]?.focus()
-    else if (a && !busy && !onlyThePhone && e.key === 'a') decide.mutate({ a, decision: 'approve' })
-    else if (a && !busy && !onlyThePhone && e.key === 'd') decide.mutate({ a, decision: 'deny' })
-    else if (a && !signed && e.key === 'x') toggle(a.id)
+    else if (a && !busy && !hold && e.key === 'a') decide.mutate({ a, decision: 'approve' })
+    else if (a && !busy && !hold && e.key === 'd') decide.mutate({ a, decision: 'deny' })
+    else if (a && pickable && e.key === 'x') toggle(a.id)
     else return
     e.preventDefault()
   }
@@ -2389,7 +2399,7 @@ export function Approvals({
     )
   return (
     <div className="flex flex-col gap-3">
-      <FaceID signed={signed} passkeyCount={keys.passkeyCount} />
+      <FaceID signed={signed} hold={hold} passkeyCount={keys.passkeyCount} />
       {outcome ? <Note ok={outcome.ok}>{outcome.text}</Note> : null}
       {list.isError ? (
         <p className="text-body text-muted">{readFailure(list.error, 'The approvals')}</p>
@@ -2420,7 +2430,7 @@ export function Approvals({
                   <option value="payment">Payments</option>
                   <option value="model">Requests to a model</option>
                 </select>
-                {!signed && pending.length > 0 ? (
+                {pickable && pending.length > 0 ? (
                   <label className="inline-flex items-center gap-2 text-body text-ink">
                     <input
                       type="checkbox"
@@ -2432,7 +2442,7 @@ export function Approvals({
                   </label>
                 ) : null}
               </div>
-              {chosen.length > 0 ? (
+              {pickable && chosen.length > 0 ? (
                 <div className="flex flex-col gap-2 wide:flex-row">
                   <Button variant={primary ? 'primary' : 'default'} className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'approve' })}>
                     Approve {chosen.length}
@@ -2442,7 +2452,7 @@ export function Approvals({
                   </Button>
                 </div>
               ) : null}
-              {onlyThePhone ? null : (
+              {hold ? null : (
                 <>
                   <p className="hidden text-caption text-muted wide:block">Keys: j and k move, a approves, d denies{signed ? '' : ', x selects'}.</p>
                   <p className="text-caption text-muted wide:hidden">Swipe a request right to approve it.</p>
@@ -2482,10 +2492,10 @@ export function Approvals({
                     setSwiping(null)
                     const dx = e.changedTouches[0].clientX - (s?.x ?? 0)
                     // Right only: a swipe approves (with Face ID once the workspace signs), never denies by accident.
-                    if (s?.id === a.id && !busy && !onlyThePhone && dx >= SWIPE_PX && dx > Math.abs(e.changedTouches[0].clientY - s.y)) decide.mutate({ a, decision: 'approve' })
+                    if (s?.id === a.id && !busy && !hold && dx >= SWIPE_PX && dx > Math.abs(e.changedTouches[0].clientY - s.y)) decide.mutate({ a, decision: 'approve' })
                   }}
                   label={
-                    !signed ? (
+                    pickable ? (
                       <span className="inline-flex items-start gap-2">
                         <input
                           type="checkbox"
@@ -2508,7 +2518,7 @@ export function Approvals({
                           {what(a)}, asked <span className="font-figure">{formatWhen(a.created_at)}</span>
                         </span>
                       </span>
-                      {onlyThePhone ? null : (
+                      {hold ? null : (
                         <AlwaysAllow
                           a={a}
                           agentName={nameOf(a.agent_id)}
@@ -2523,7 +2533,7 @@ export function Approvals({
                   {/* One-handed on a phone: two full-width buttons under the sentence and the thumb; side by side on a wide screen. */}
                   {onlyThePhone ? (
                     <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
-                  ) : (
+                  ) : hold ? null : (
                   <div className="flex w-full flex-col gap-2 wide:w-auto wide:flex-row wide:items-center">
                     {/* B17.325 — one teal action per screen: the first waiting request's Approve, or Approve {n} once some are picked. */}
                     <Button
