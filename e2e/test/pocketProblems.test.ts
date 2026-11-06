@@ -65,6 +65,8 @@ describe('the Pocket problems pass (B55.44)', () => {
     expect(section.filter((l) => /^\| \d+ \|/.test(l))).toHaveLength(25)
     expect(section.join('\n')).toContain('| 21 | Spending notice reads as an approval | **BACK** — every item is DONE and it failed again | B55.43 DONE |')
     expect(section.join('\n')).toContain('| 19 | Chat\'s help names two providers | pass | B55.37 not in the queue |')
+    // What a screen said can hold a pipe or a backslash; neither breaks the table.
+    expect(renderPocket(pocketRows(undefined, [{ scenario: 'pocket-08', status: 'FAIL', detail: 'a\\|b' }])).find((l) => l.startsWith('| 8 |'))).toContain('a\\\\\\|b')
     const run: ReportedRun = {
       started_at: '2026-11-07T01:00:00.000Z', finished_at: '2026-11-07T01:20:00.000Z', app: 'https://app', lens: 'https://lens', users: 25,
       model: 'Claude Haiku 4.5', cap_usd: 5, spent_usd: 0, stopped_at_cap: false, counts: { PASS: 1, FAIL: 1, SKIP: 0, ERROR: 0 }, outcomes: [], pocket: rows,

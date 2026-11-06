@@ -88,7 +88,7 @@ export function pocketRows(buildMd: string | undefined, outcomes: readonly { sce
   })
 }
 
-const cell = (s: string): string => s.replace(/\s+/g, ' ').replace(/\|/g, '\\|').trim()
+const cell = (s: string): string => s.replace(/\s+/g, ' ').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').trim()
 
 const STATE: Record<PocketRow['state'], string> = {
   passes: 'pass',
