@@ -10,7 +10,8 @@
 //     on Keys, the page says so, and its next tool call is refused as not connected. B52.3: before that, a tool call it
 //     makes is listed under its row on Settings, from the BFF's audit trail. B52.2: Claude Code's own published
 //     client document (claude.ai's, which registers port-less loopback callbacks) signs in back to this run's random
-//     port, and its connection is then revoked.
+//     port, and its connection is then revoked. B52.5: the Settings client is granted wallets:read alone; it still lists
+//     prepare_payment with the scope it needs, and calling it answers 403 insufficient_scope asking for that scope.
 // A CIMD document must be at a public https address, so it is served through a Cloudflare quick tunnel; with
 // --hook-tunnel none (the self-test) a second DCR client takes its place and the evidence says so.
 
@@ -50,7 +51,7 @@ export function connectOAuth(): Scenario {
     id: 'connect-oauth',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B40.6', 'B40.8', 'B41.15', 'B52.2', 'B52.3'],
+    items: ['B40.6', 'B40.8', 'B41.15', 'B52.2', 'B52.3', 'B52.5'],
     feature: 'Talyvor Connect',
     title: 'an assistant signs in the way Claude does: a 401 naming resource_metadata, discovery, a client by DCR and one by CIMD, ' +
       'PKCE and the consent screen in the browser, the token and a rotating refresh — and a revoked token is refused, ' +
@@ -119,16 +120,17 @@ export function connectOAuth(): Scenario {
         // 3. Each client through the browser's consent screen to its token.
         const tokens: Record<string, Tokens> = {}
         for (const c of clients) {
+          const readOnly = c.how === 'Settings' // B52.5: the one connection given less than every scope
           const verifier = randomBytes(32).toString('base64url')
           const state = randomBytes(8).toString('hex')
           const q = new URLSearchParams({ response_type: 'code', client_id: c.id, redirect_uri: callback, state,
             code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
-            scope: 'wallets:read invoices:draft payments:prepare', resource: `${origin}/mcp` })
+            scope: readOnly ? 'wallets:read' : 'wallets:read invoices:draft payments:prepare', resource: `${origin}/mcp` })
           const page = ctx.app.page
           await page.goto(`${String(asm.authorization_endpoint)}?${q}`)
           const text = await page.locator('main').innerText()
           ctx.evidence.push({ note: `${c.how} consent screen: ${text.replace(/\s+/g, ' ').slice(0, 400)}` })
-          const missing = SCOPE_WORDS.filter((w) => !text.includes(w))
+          const missing = (readOnly ? SCOPE_WORDS.slice(0, 1) : SCOPE_WORDS).filter((w) => !text.includes(w))
           if (missing.length > 0) { wrong.push(`${c.how}: the consent screen does not say ${missing.join(', ')}`); continue }
           await Promise.all([page.waitForURL((u) => u.href.startsWith(callback), { timeout: 30_000 }), page.getByRole('button', { name: 'Allow' }).click()])
           const back = new URL(page.url())
@@ -182,6 +184,24 @@ export function connectOAuth(): Scenario {
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${held.access_token}` },
           body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'get_balances', arguments: {} } }),
         })
+        // B52.5: the tool it was not given is listed with its scope, and answers 403 asking for it.
+        const call = (method: string, params: unknown): Promise<Response> => fetch(`${origin}/mcp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${held.access_token}` },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 4, method, params }),
+        })
+        const list = await (await call('tools/list', {})).json() as { result?: { tools?: { name: string; securitySchemes?: { type: string; scopes: string[] }[] }[] } }
+        const scheme = list.result?.tools?.find((t) => t.name === 'prepare_payment')?.securitySchemes
+        const schemes = JSON.stringify(scheme)
+        const up = await call('tools/call', { name: 'prepare_payment', arguments: { idempotency_key: `e2e-${probe}`, payee_id: 'none', currency: 'GBP', amount_minor: 100 } })
+        const upChallenge = up.headers.get('www-authenticate') ?? ''
+        const upBody = await up.json() as { result?: { isError?: boolean; _meta?: Record<string, unknown> } }
+        ctx.evidence.push({ note: `B52.5: prepare_payment on a wallets:read connection is listed with ${schemes} and answered ${up.status} "${upChallenge}", _meta ${JSON.stringify(upBody.result?._meta)}` })
+        if (scheme?.length !== 1 || scheme[0].type !== 'oauth2' || scheme[0].scopes.join() !== 'payments:prepare') wrong.push(`prepare_payment is listed to a read-only connection with securitySchemes ${schemes}`)
+        if (up.status !== 403 || !upChallenge.includes('error="insufficient_scope"') || !upChallenge.includes('payments:prepare') ||
+          upBody.result?.isError !== true || JSON.stringify(upBody.result?._meta?.['mcp/www_authenticate']) !== JSON.stringify([upChallenge])) {
+          wrong.push(`prepare_payment on a read-only connection answered ${up.status} "${upChallenge}", not 403 insufficient_scope with the same challenge in _meta`)
+        }
         await page.goto(`${origin}/settings/connect`)
         const row = page.locator('li').filter({ hasText: name })
         await row.waitFor({ timeout: 15_000 })
