@@ -78,6 +78,7 @@ import { outsidePayees } from './payees.ts'
 import { permissionMandate } from './permissionMandates.ts'
 import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
+import { connectPay } from './connectPay.ts'
 import { trustLayer } from './trustLayer.ts'
 import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
@@ -193,6 +194,8 @@ export interface RunEnv {
   operatorReadKey: string
   /** B45.36 — the BFF's provisioning secret (LENS_PROVISION_SECRET), for a fresh identity's first sign-in; '' when not given. */
   provisionSecret: string
+  /** B52.34 — the BFF's Connect mint credential (LENS_CONNECT_MINT_KEY), for an assistant's Connect token; '' when not given. */
+  connectMintKey: string
   /** B28.287 — the port the synthetic upstream listens on, where the Lens under test sends its vLLM traffic (E2E_UPSTREAM_PORT); 0 when not given. */
   upstreamPort: number
   /** B39.23 — 'cloudflared' or 'none': how track-webhook-signed's and docs-webhook-signed's receivers are reached (E2E_HOOK_TUNNEL). */
@@ -5480,6 +5483,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B40.28 — a phone's device key, once a run, on a workspace of its own: it signs an agent's approval, which is approved;
   // revoked, its signature on a new approval is refused, an unsigned decision too, and that approval stays pending.
   if (i === 6) list.push(deviceKeyApproval())
+  // B52.34 — an assistant's Connect token, once a run, on a workspace of its own: a payment inside its agent's rules lands once on
+  // both statements; one above the approval amount answers 202 pending with nothing moved; approve, rules, keys and card refuse it.
+  if (i === 6) list.push(connectPay())
   // B40.29 — one approval for an agent's two-item batch, once a run, on a workspace of its own: signed with the phone's device
   // key it pays exactly two payments out from the agent's card-funded account; replayed, 409 and nothing moves; the record verifies.
   if (i === 6) list.push(batchApproval())
