@@ -21,7 +21,9 @@ import (
 //	POST /api/money/payees/{id}/details {the same details, assertion}   change them with a passkey: Lens checks the name
 //	                          afresh and holds every payment to it for 24 hours (held_until), with its notice
 //	GET  /api/money/payments                        the payments out, newest first
-//	POST /api/money/payments {account_id, payee_id, amount_minor, currency, reference, idempotency_key}   pay a saved payee
+//	POST /api/money/payments {account_id, payee_id, amount_minor, currency, reference, idempotency_key, assertion}   pay a
+//	                          saved payee; B54.35: "assertion" is the passkey's or the phone's signature over the challenge
+//	POST /api/money/payments/challenge {the payment, as it will be sent}   B54.35: the challenge it is signed over
 //	GET  /api/money/mandates                        the mandates granted and, for the owner, received
 //	POST /api/money/mandates {account_id, payee_workspace_id | payee_business_id + payee_id, payee_name, max_per_pull_minor,
 //	                          max_per_month_minor, expires_at}   grant one from an agent's account
@@ -170,29 +172,41 @@ func (a *app) handleMoneyPayeeDetails(challenge bool) func(http.ResponseWriter, 
 	}
 }
 
-// handleMoneyPayments — GET /api/money/payments lists the payments out; POST pays a saved payee.
-func (a *app) handleMoneyPayments(w http.ResponseWriter, r *http.Request, t tenant) {
-	switch r.Method {
-	case http.MethodGet:
-		a.agentBankRelayPath(w, r, t, http.MethodGet, "/v1/money/payments", nil)
-	case http.MethodPost:
-		var in struct {
-			AccountID      string `json:"account_id"`
-			PayeeID        string `json:"payee_id"`
-			AmountMinor    int64  `json:"amount_minor"`
-			Currency       string `json:"currency"`
-			Reference      string `json:"reference"`
-			IdempotencyKey string `json:"idempotency_key"`
+// handleMoneyPayments — GET /api/money/payments lists the payments out; POST pays a saved payee. B54.35: once the
+// workspace has a passkey or a device key, Lens pays a person's payment only with "assertion", that key's signature over
+// the payment's own challenge (Lens B54.33), so it goes up exactly as sent, a passkey's or the phone's; and
+// POST /api/money/payments/challenge relays the payment as it will be sent for that challenge.
+func (a *app) handleMoneyPayments(challenge bool) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		switch {
+		case r.Method == http.MethodGet && !challenge:
+			a.agentBankRelayPath(w, r, t, http.MethodGet, "/v1/money/payments", nil)
+		case r.Method == http.MethodPost:
+			var in struct {
+				AccountID      string          `json:"account_id"`
+				PayeeID        string          `json:"payee_id"`
+				AmountMinor    int64           `json:"amount_minor"`
+				Currency       string          `json:"currency"`
+				Reference      string          `json:"reference"`
+				IdempotencyKey string          `json:"idempotency_key"`
+				Assertion      json.RawMessage `json:"assertion,omitempty"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+				return
+			}
+			path := "/v1/money/payments"
+			if challenge {
+				in.Assertion, path = nil, path+"/challenge"
+			}
+			// UPSTREAM-BINDS-ONLY lensMoneyPaymentBody: agent_id, created_at, detail, funding, id, partner, partner_ref, payee_name, status, updated_at, value_ulxc, workspace_id
+			body, _ := json.Marshal(in)
+			a.agentBankRelayPath(w, r, t, http.MethodPost, path, body)
+		case challenge:
+			methodNotAllowed(w, http.MethodPost)
+		default:
+			methodNotAllowed(w, "GET, POST")
 		}
-		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
-			return
-		}
-		// UPSTREAM-BINDS-ONLY lensMoneyPaymentBody: agent_id, created_at, detail, funding, id, partner, partner_ref, payee_name, status, updated_at, value_ulxc, workspace_id
-		body, _ := json.Marshal(in)
-		a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/payments", body)
-	default:
-		methodNotAllowed(w, "GET, POST")
 	}
 }
 

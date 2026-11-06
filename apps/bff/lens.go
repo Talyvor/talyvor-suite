@@ -542,7 +542,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/payees/{id}/called", a.requireTenant(a.handleMoneyPayeeCalled(false)))
 	a.mux.HandleFunc("/api/money/payees/{id}/details/challenge", a.requireTenant(a.handleMoneyPayeeDetails(true))) // B41.12
 	a.mux.HandleFunc("/api/money/payees/{id}/details", a.requireTenant(a.handleMoneyPayeeDetails(false)))
-	a.mux.HandleFunc("/api/money/payments", a.requireTenant(a.handleMoneyPayments))
+	a.mux.HandleFunc("/api/money/payments", a.requireTenant(a.handleMoneyPayments(false)))
+	a.mux.HandleFunc("/api/money/payments/challenge", a.requireTenant(a.handleMoneyPayments(true)))    // B54.35
 	a.mux.HandleFunc("/api/money/search", a.requireTenant(a.handleMoneySearch))                        // B41.7, money_search.go
 	a.mux.HandleFunc("/api/money/budgets/alerts", a.requireTenant(a.handleMoneyBudgetAlerts))          // B28.62, money_search.go
 	a.mux.HandleFunc("/api/money/budgets", a.requireTenant(a.handleMoneyBudgets))                      // B41.39, money_search.go

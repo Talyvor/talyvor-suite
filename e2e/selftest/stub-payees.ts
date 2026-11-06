@@ -45,6 +45,10 @@
 // the new details and …/{id}/details changes them only on an assertion by one of the workspace's passkeys over it; the payee
 // then reads held_until 24 hours on and a notice, and until then every payment to it is refused 409. Its defect:
 //   details-hold-skipped   — a payment to a payee whose bank details changed moments ago is paid
+// B54.35 — and a person's payment is signed (Lens B54.33): once the workspace has a passkey, the owner's POST /v1/money/payments
+// pays only with an assertion by one of them over POST /v1/money/payments/challenge's challenge for exactly that payment;
+// unsigned or signed for another it is refused 403 and nothing moves. Its defect:
+//   payment-unsigned-paid  — the owner's payment with no signature is paid in a workspace with a passkey
 // B28.62 — and budgets with their limit-approach alerts (Lens B53.4, B28.335): PUT and GET /v1/money/budgets, spent from the
 // payments out of the month (or the week from Monday, UTC) in the budget's currency and wallet; GET /v1/money/budgets/alerts
 // raises each 50, 80 and 100% reached, once a period, and lists them newest first. Its defect:
@@ -136,6 +140,12 @@ const HELP = { MoneyHelper: 'https://www.moneyhelper.org.uk', StepChange: 'https
 // B41.12 — Lens's PayeeDetailsNotice, word for word.
 const DETAILS_NOTICE = 'Call them on a number you already know — not one from the message that asked for the change — to check the new details are theirs.'
 const HELD = 'screening: held — the name is close to one on a sanctions list, and waits for an operator to release it'
+const PAYMENT_UNSIGNED = 'economy: this workspace signs its payments with a passkey or the phone app — sign this payment\'s challenge (POST /v1/money/payments/challenge)'
+
+type OwnerPayment = { payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string }
+
+/** B54.35 — the challenge's key: every field of the payment as asked (Lens's paymentPurpose), so a signature for it pays no other. */
+const paymentKey = (b: OwnerPayment) => `payment:${[b.account_id, b.payee_id, b.amount_minor, b.currency, b.funding, b.reference, b.idempotency_key].map((x) => x ?? '').join('\0')}`
 /** Minor units as Lens prints them: "GBP 10.00". */
 const money = (minor: number, currency: string): string => `${currency} ${(minor / 100).toFixed(2)}`
 
@@ -231,6 +241,7 @@ export class PayeeDesk {
   async route(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
     const list = this.payees.get(ws) ?? []
     if (path === '/v1/money/accounts' || path === '/v1/money/payments') return this.money(req, res, ws, path, list), true
+    if (path === '/v1/money/payments/challenge' && req.method === 'POST') return this.paymentChallenge(req, res, ws), true
     const funded = /^\/v1\/money\/accounts\/([^/]+)\/test-money$/.exec(path)
     if (funded !== null && req.method === 'POST') return this.testMoney(req, res, ws, funded[1]), true
     if (await this.invoiceRoute(req, res, ws, path)) return true
@@ -643,10 +654,22 @@ export class PayeeDesk {
     }
     const payments = this.payments.get(ws) ?? []
     if (req.method !== 'POST') return this.json(res, 200, { payments })
-    const b = await this.body<{ payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string }>(req)
+    const b = await this.body<OwnerPayment & { assertion?: Assertion }>(req)
+    if (this.passkeys(ws).length > 0 && !this.broken('payment-unsigned-paid')) {
+      const refused = this.refused(ws, paymentKey(b), b.assertion)
+      if (refused !== undefined) return this.json(res, 403, { error: b.assertion === undefined ? PAYMENT_UNSIGNED : refused })
+    }
     const p = this.pay(ws, payees, b)
     if ('error' in p) return this.json(res, p.status, { error: p.error })
     return this.json(res, 201, p)
+  }
+
+  /** B54.35 — the challenge the owner's payment `b` is signed over, naming exactly it, and the passkeys that may sign it. */
+  private async paymentChallenge(req: IncomingMessage, res: ServerResponse, ws: string): Promise<void> {
+    const b = await this.body<OwnerPayment>(req)
+    const c = randomBytes(32).toString('base64url')
+    this.challenges.set(paymentKey(b), c)
+    return this.json(res, 200, { challenge: c, allow_credentials: this.passkeys(ws).map((k) => k.credential_id), user_verification: 'required' })
   }
 
   /** B30.15 — POST /v1/money/accounts/{id}/test-money {amount_minor, idempotency_key}: test money into the account, once a key. */

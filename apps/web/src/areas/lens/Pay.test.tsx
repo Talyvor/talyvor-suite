@@ -11,7 +11,7 @@ const ACCOUNTS = [
   { id: 'macc_agt', agent_id: 'agt_1', currency: 'GBP', purpose: 'agent', status: 'open', name: 'GBP account', balance_minor: 10000, test_minor: 10000, live_minor: 0 },
 ]
 
-function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<string, unknown>[] = [], payments: unknown[] = []) {
+function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<string, unknown>[] = [], payments: unknown[] = [], passkeys: string[] = []) {
   const sent: Array<{ url: string; headers: Record<string, string>; body: unknown }> = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -86,6 +86,10 @@ function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<st
       Object.assign(payees[0], { sort_code: '400000', account_number: '87654321', details_changed_at: '2026-10-29T10:00:00Z', held_until: '2026-10-30T10:00:00Z',
         notice: 'Call them on a number you already know — not one from the message that asked for the change — to check the new details are theirs.' })
       return json(payees[0])
+    }
+    if (url === '/api/money/payments/challenge') {
+      sent.push({ url, headers: init?.headers as Record<string, string>, body: JSON.parse(String(init?.body)) })
+      return json({ challenge: 'Y2gz', allow_credentials: passkeys, user_verification: 'required' })
     }
     if (url === '/api/money/payments' && init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as Record<string, unknown>
@@ -187,11 +191,44 @@ describe('the Pay screen', () => {
     expect(within(form).queryByTestId('scam-warning')).toBeNull()
     fireEvent.click(within(form).getByRole('button', { name: 'Send' }))
     const row = await screen.findByTestId('payment-mpay_1')
-    expect(bff.sent[1].body).toMatchObject({ account_id: 'macc_agt', payee_id: 'payee_1', amount_minor: 2000, currency: 'GBP', reference: 'Rent' })
-    expect(String((bff.sent[1].body as { idempotency_key: string }).idempotency_key).length).toBeGreaterThan(8)
+    expect(bff.sent[1]).toEqual(expect.objectContaining({ url: '/api/money/payments/challenge', body: bff.sent[2].body }))
+    expect(bff.sent[2].body).toMatchObject({ account_id: 'macc_agt', payee_id: 'payee_1', amount_minor: 2000, currency: 'GBP', reference: 'Rent' })
+    expect(bff.sent[2].body).not.toHaveProperty('assertion') // no passkey in this workspace, so nothing is signed
+    expect(String((bff.sent[2].body as { idempotency_key: string }).idempotency_key).length).toBeGreaterThan(8)
     expect(within(row).getByText('£20.00')).toBeTruthy()
     expect(within(row).getByText('Completed')).toBeTruthy()
     expect(screen.getByTestId('pay-count').textContent).toBe('1 payment out, 1 completed')
+  })
+
+  it('pays only once the workspace’s passkey signs the payment’s own challenge: cancelled, nothing is sent to pay', async () => {
+    const bff = mockBff([], [], [{ id: 'payee_1', name: 'Acme Ltd', country: 'GB', sort_code: '040004', account_number: '12345678', check: 'exact_match',
+      checked_by: 'test', checked_at: '2026-10-28T09:00:00Z', needs_confirmation: false, created_at: '2026-10-28T09:00:00Z' }], [{ id: 'mpay_0', payee_id: 'payee_1',
+      payee_name: 'Acme Ltd', amount_minor: 100, currency: 'GBP', funding: 'test', reference: '', status: 'completed', created_at: '2026-10-28T09:00:00Z' }], ['Y3JlZDE'])
+    const get = vi.fn().mockResolvedValueOnce(null).mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
+      response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+
+    await screen.findByTestId('payee-payee_1')
+    const form = screen.getByTestId('send-payment')
+    fireEvent.change(within(form).getByLabelText('From'), { target: { value: 'macc_agt' } })
+    fireEvent.change(within(form).getByLabelText('To'), { target: { value: 'payee_1' } })
+    fireEvent.change(within(form).getByLabelText('Amount in GBP'), { target: { value: '20.00' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Send' }))
+    await within(form).findByText('Nothing changed. You can try again.')
+    expect(bff.sent.map((c) => c.url)).toEqual(['/api/money/payments/challenge'])
+
+    fireEvent.click(within(form).getByRole('button', { name: 'Send' }))
+    await screen.findByTestId('payment-mpay_1')
+    expect(get).toHaveBeenCalledTimes(2)
+    const payment = { account_id: 'macc_agt', payee_id: 'payee_1', amount_minor: 2000, currency: 'GBP', reference: '', idempotency_key: expect.any(String) }
+    expect(bff.sent).toEqual([
+      expect.objectContaining({ url: '/api/money/payments/challenge', body: payment }),
+      expect.objectContaining({ url: '/api/money/payments/challenge', body: payment }),
+      expect.objectContaining({ url: '/api/money/payments', body: { ...payment, assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } } }),
+    ])
+    expect(bff.sent[2].body).toEqual({ ...(bff.sent[1].body as object), assertion: expect.anything() }) // signed over exactly what it pays
   })
 
   it('asks two scam questions before a first payment: a yes warns and needs a second confirmation, and a second payment asks nothing', async () => {
@@ -218,7 +255,7 @@ describe('the Pay screen', () => {
     expect(send.disabled).toBe(false)
     fireEvent.click(send)
     await screen.findByTestId('payment-mpay_1')
-    expect(bff.sent).toHaveLength(2)
+    expect(bff.sent).toHaveLength(3)
 
     fireEvent.change(within(form).getByLabelText('To'), { target: { value: 'payee_1' } })
     fireEvent.change(within(form).getByLabelText('Amount in GBP'), { target: { value: '5.00' } })

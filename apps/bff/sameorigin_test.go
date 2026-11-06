@@ -279,6 +279,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/permission-mandates/x1/revoke", body: `{}`}, // B41.15
 		{method: http.MethodPost, path: "/api/money/devices/x1/push-token", body: `{"push_token":"t"}`},
 		{method: http.MethodPost, path: "/api/money/payments", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`},
+		{method: http.MethodPost, path: "/api/money/payments/challenge", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`}, // B54.35
 		{method: http.MethodPost, path: "/api/money/mandates", body: `{"account_id":"x1","payee_business_id":"b","payee_id":"x1","payee_name":"n","max_per_pull_minor":1,"max_per_month_minor":1,"expires_at":"2099-01-01T00:00:00Z"}`},
 		{method: http.MethodPost, path: "/api/money/mandates/x1/revoke", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/payouts", body: `{}`},
