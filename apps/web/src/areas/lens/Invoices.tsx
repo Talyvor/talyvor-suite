@@ -311,6 +311,7 @@ function NewInvoice({ accounts }: { accounts: CurrencyAccount[] }) {
 function InvoiceRow({ inv }: { inv: Invoice }) {
   const qc = useQueryClient()
   const [copied, setCopied] = useState(false)
+  const [asking, setAsking] = useState(false)
   const refresh = () => void qc.invalidateQueries({ queryKey: INVOICES_KEY })
   const send = useMutation({ mutationFn: () => agentBankApi.sendInvoice(inv.id), onSuccess: refresh })
   const voidIt = useMutation({ mutationFn: () => agentBankApi.voidInvoice(inv.id), onSuccess: refresh })
@@ -370,9 +371,27 @@ function InvoiceRow({ inv }: { inv: Invoice }) {
               {send.isPending ? 'Sending…' : 'Send'}
             </Button>
           ) : null}
-          <Button type="button" disabled={busy} onClick={() => voidIt.mutate()}>
-            {voidIt.isPending ? 'Voiding…' : 'Void'}
-          </Button>
+          {asking ? null : (
+            <Button type="button" disabled={busy} onClick={() => setAsking(true)}>
+              Void
+            </Button>
+          )}
+        </div>
+      ) : null}
+      {/* B55.41 — voiding cannot be undone, so it asks first. */}
+      {asking && inv.status !== 'void' ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-body text-ink">
+            Void invoice {inv.number}? {inv.customer_name} can no longer pay it, and this cannot be undone.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" disabled={busy} onClick={() => voidIt.mutate()}>
+              {voidIt.isPending ? 'Voiding…' : 'Void it'}
+            </Button>
+            <Button type="button" disabled={busy} onClick={() => setAsking(false)}>
+              Keep it
+            </Button>
+          </div>
         </div>
       ) : null}
       {send.isError ? <Note ok={false}>{refusalText(send.error)}</Note> : null}

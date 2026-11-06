@@ -60,9 +60,76 @@ export function ledgerStatus(type: string, token: Token): PillStatus | null {
   return 'settled'
 }
 
-/** A short, readable form of a raw ledger type, e.g. "pattern_mine_held" → "pattern mine held". */
+// B55.41 — what each mined kind of LENS was earned for; a kind is written as earned, held (_held) or taken back (_revoked).
+const MINED: Record<string, string> = {
+  cache_mine: 'a stored answer',
+  compute_mine: 'computing work',
+  embedding_mine: 'embeddings',
+  annotation_mine: 'an annotation',
+  pattern_mine: 'a pattern',
+  pool_royalty: 'a royalty',
+  eval_contribution: 'an evaluation',
+  eval_routing_prediction: 'a routing prediction',
+  eval_latency_locality: 'serving nearby',
+  eval_confidential_compute: 'confidential computing',
+}
+
+/** Plain words for every type Lens writes into lxc_ledger and lens_token_ledger (B55.41). */
+const LEDGER_WORDS: Record<string, string> = {
+  ...Object.fromEntries(
+    Object.entries(MINED).flatMap(([t, what]) => [
+      [t, `Earned for ${what}`],
+      [`${t}_held`, `Held: earned for ${what}`],
+      [`${t}_revoked`, `Taken back: earned for ${what}`],
+    ]),
+  ),
+  receipt_mine_provisional: 'Held: earned for a receipt',
+  traffic_mint_revoked: 'Taken back: earned for traffic',
+  spend: 'Spent',
+  purchase: 'Credits bought',
+  admin_grant: 'Credits given',
+  starter_test_money: 'Starting credits',
+  convert_from_lens: 'Converted from LENS',
+  convert_to_lxc: 'Converted to LXC',
+  agent_card: 'Card payment',
+  agent_cash_out: 'Cash-out',
+  agent_escrow: 'Escrow',
+  agent_transfer: 'Transfer between agents',
+  credit_line_draw: 'Credit line',
+  platform_fee: 'Talyvor fee',
+  test_crossing_reversal: 'Payment reversed',
+  reservation_hold: 'Held for a request',
+  reservation_release: 'Released',
+  burn: 'Burned',
+  stake: 'Staked',
+  unstake: 'Stake returned',
+  stake_yield: 'Staking reward',
+  povi_stake_lock: 'Stake locked',
+  povi_stake_release: 'Stake released',
+  povi_stake_slash: 'Stake forfeited',
+  annotation_stake: 'Staked on an annotation',
+  annotation_unstake: 'Annotation stake returned',
+  transfer: 'Transfer',
+  transfer_in: 'Transfer in',
+  transfer_out: 'Transfer out',
+  marketplace_buy: 'Marketplace purchase',
+  marketplace_fee: 'Marketplace fee',
+  marketplace_unsold_refund: 'Refund: not sold',
+}
+
+/** A ledger type in plain words, e.g. "pattern_mine_held" → "Held: earned for a pattern"; one it does not know is "Other". */
 export function humanizeType(type: string): string {
-  return type.replace(/_/g, ' ')
+  return Object.hasOwn(LEDGER_WORDS, type) ? LEDGER_WORDS[type] : 'Other'
+}
+
+/** When an approval was decided: "today at 09:12", "yesterday", or "14 Oct". */
+export function formatDecided(iso: string, now = new Date()): string {
+  const d = new Date(iso)
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const ago = Math.round((day(now) - day(d)) / 86_400_000)
+  if (ago === 0) return `today at ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })}`
+  if (ago === 1) return 'yesterday'
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
 /** Compact absolute timestamp for a ledger row, e.g. "Jul 19, 14:52". */

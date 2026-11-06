@@ -53,6 +53,8 @@ const PAYMENT_STATUS: Record<string, { text: string; pill: PillStatus }> = {
   failed: { text: 'Failed', pill: 'slashed' },
   returned: { text: 'Returned', pill: 'slashed' },
 }
+// B55.41 — a status Lens adds later is never shown as Lens's own word.
+const paymentStatus = (s: string) => PAYMENT_STATUS[s] ?? { text: 'We could not read this payment’s status', pill: 'held' as PillStatus }
 const CHECK: Record<string, { text: string; pill: PillStatus }> = {
   exact_match: { text: 'Exact match', pill: 'settled' },
   close_match: { text: 'Close match', pill: 'held' },
@@ -722,7 +724,7 @@ function SendPayment({
         {pay.isError ? <Note ok={false}>{refusalText(pay.error)}</Note> : null}
         {made !== null ? (
           <Note ok>
-            <span className="font-figure">{formatMinor(made.amount_minor, made.currency)}</span> to {made.payee_name}: {status(made.status, PAYMENT_STATUS).text.toLowerCase()}
+            <span className="font-figure">{formatMinor(made.amount_minor, made.currency)}</span> to {made.payee_name}: {paymentStatus(made.status).text.toLowerCase()}
             {made.detail ? ` — ${made.detail}` : ''}.
           </Note>
         ) : null}
@@ -779,7 +781,7 @@ function Waiting({ agentName }: { agentName: (id: string) => string }) {
 }
 
 function PaymentRow({ p }: { p: OutsidePayment }) {
-  const s = status(p.status, PAYMENT_STATUS)
+  const s = paymentStatus(p.status)
   return (
     <LinkedItem id={`payment-${p.id}`} className="flex flex-col gap-1 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`payment-${p.id}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">

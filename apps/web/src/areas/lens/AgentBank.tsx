@@ -6,7 +6,7 @@ import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { useLinked } from '../../components/LinkedItem'
 import { isSessionExpired } from '../../lib/productState'
-import { formatWhen } from './format'
+import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
 import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
@@ -2497,8 +2497,24 @@ export function Approvals({
             const d = DECIDED[a.status] ?? CLOSED
             const hint =
               a.status !== 'expired' ? what(a) : a.decided_at ? 'Approved, but not used within 24 hours' : 'Not answered within 24 hours'
+            // B55.41 — when it was decided, or when it ran out unanswered, and by which agent if another agent approved it.
+            const when = a.decided_at ?? (a.status === 'expired' ? a.expires_at : undefined)
             return (
-              <Row key={a.id} label={asks(a)} hint={hint}>
+              <Row
+                key={a.id}
+                label={asks(a)}
+                hint={
+                  <>
+                    {hint}
+                    {when ? (
+                      <>
+                        , <span className="font-figure">{formatDecided(when)}</span>
+                      </>
+                    ) : null}
+                    {a.approved_by_agent_id ? ` by ${nameOf(a.approved_by_agent_id)}` : null}
+                  </>
+                }
+              >
                 <Pill status={d.status}>{d.label}</Pill>
               </Row>
             )

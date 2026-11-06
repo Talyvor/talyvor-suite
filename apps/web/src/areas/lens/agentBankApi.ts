@@ -625,6 +625,8 @@ export interface AgentApproval {
   created_at: string
   decided_at?: string
   expires_at?: string
+  /** The approver agent that approved it within its own limits (Lens B45.28); none when a person decided. */
+  approved_by_agent_id?: string
 }
 
 /** Every kind of agent_postings row Lens writes on an agent's account. */

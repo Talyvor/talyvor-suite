@@ -125,9 +125,21 @@ describe('the approvals inbox (B41.33)', () => {
     ])
     await inbox()
     expect(screen.getAllByText('Expired')).toHaveLength(2)
-    expect(screen.getByText('Not answered within 24 hours')).toBeInTheDocument()
-    expect(screen.getByText('Approved, but not used within 24 hours')).toBeInTheDocument()
+    expect(screen.getByText(/^Not answered within 24 hours,$/)).toBeInTheDocument()
+    expect(screen.getByText(/^Approved, but not used within 24 hours,$/)).toBeInTheDocument()
     expect(screen.getByText('Closed')).toBeInTheDocument()
     expect(screen.queryByText('This screen couldn’t be read.')).toBeNull()
+  })
+
+  // B55.41 — each decided row says when it was decided, and by which agent when another agent approved it.
+  it('says when each decided approval was decided, and by which agent', async () => {
+    mockBff([
+      { id: 'apr_6', agent_id: 'agt_1', amount_ulxc: M, model: 'gpt-5', status: 'denied', created_at: '2026-10-14T08:00:00Z', decided_at: '2026-10-14T09:12:00Z' },
+      { id: 'apr_7', agent_id: 'agt_1', amount_ulxc: M, model: '', status: 'approved', created_at: '2026-10-13T08:00:00Z', decided_at: '2026-10-13T09:00:00Z',
+        approved_by_agent_id: 'agt_2', payee: { kind: 'company', id: 'ws_d', name: 'Dock Labs' } },
+    ])
+    await inbox()
+    expect(document.body.textContent).toMatch(/, 14 Oct(?! by)/)
+    expect(document.body.textContent).toMatch(/, 13 Oct by Buyer/)
   })
 })

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -10,9 +10,8 @@ const ACCOUNTS = [
   { id: 'macc_agt', agent_id: 'agt_1', currency: 'GBP', purpose: 'agent', status: 'open', name: 'GBP account', balance_minor: 0, test_minor: 0, live_minor: 0 },
 ]
 
-function mockBff() {
+function mockBff(invoices: Array<Record<string, unknown>> = []) {
   const sent: Array<{ url: string; body: unknown }> = []
-  const invoices: unknown[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -31,6 +30,13 @@ function mockBff() {
         due_date: '2026-12-31', remind_days_before: 0, status: body.send ? 'sent' : 'draft', created_at: '2026-10-11T09:00:00Z' }
       invoices.unshift(inv)
       return json(inv, 201)
+    }
+    const voided = /^\/api\/money\/invoices\/([^/]+)\/void$/.exec(url)
+    if (voided && init?.method === 'POST') {
+      sent.push({ url, body: null })
+      const inv = invoices.find((i) => i.id === voided[1])!
+      inv.status = 'void'
+      return json(inv)
     }
     if (url === '/api/money/invoices') return json({ invoices })
     return json({ error: 'not found' }, 404)
@@ -71,5 +77,26 @@ describe('the Invoices screen', () => {
     expect(within(row).getByText('£120.00')).toBeTruthy()
     expect((within(row).getByTestId('pay-link') as HTMLInputElement).value).toBe('https://app.talyvor.com/pay/0123456789abcdef0123456789abcdef0123456789abcdef')
     expect(screen.getByTestId('invoices-count').textContent).toBe('1 invoice, 0 paid')
+  })
+
+  // B55.41 — voiding cannot be undone, so the Void button asks first: Keep it voids nothing, Void it voids once.
+  it('asks before voiding an invoice, and voids it once only on Void it', async () => {
+    const bff = mockBff([{ id: 'inv_9', issuer: 'Fixture Ltd', number: 'INV-000009', reference: 'ref9', currency: 'GBP', customer_name: 'Acme', lines: [],
+      subtotal_minor: 1000, vat_minor: 0, total_minor: 1000, paid_minor: 0, due_minor: 1000, due_date: '2026-12-31', remind_days_before: 0, status: 'sent', created_at: '2026-10-11T09:00:00Z' }])
+    window.history.pushState({}, '', '/money/invoices')
+    render(<App />)
+    const row = await screen.findByTestId('invoice-INV-000009')
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Void' }))
+    expect(within(row).getByText('Void invoice INV-000009? Acme can no longer pay it, and this cannot be undone.')).toBeTruthy()
+    fireEvent.click(within(row).getByRole('button', { name: 'Keep it' }))
+    expect(within(row).queryByText(/cannot be undone/)).toBeNull()
+    expect(bff.sent).toHaveLength(0)
+
+    fireEvent.click(within(row).getByRole('button', { name: 'Void' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Void it' }))
+    await waitFor(() => expect(bff.sent.map((s) => s.url)).toEqual(['/api/money/invoices/inv_9/void']))
+    await waitFor(() => expect(within(screen.getByTestId('invoice-INV-000009')).queryByRole('button', { name: 'Void' })).toBeNull())
+    expect(bff.sent).toHaveLength(1)
   })
 })

@@ -177,6 +177,8 @@ const FORMATTERS: Record<string, true | string> = {
   // `formatWhen` a figure classifies both. Track's copy is stated below rather than left to be
   // inferred.
   'apps/web/src/areas/lens/format.ts#formatWhen': true,
+  // B55.41 — `formatDecided` returns "today at 09:12" or "14 Oct": a clock or a numeric day, rendered in font-figure.
+  'apps/web/src/areas/lens/format.ts#formatDecided': true,
   // The money formatter that sat outside the old three-file list entirely: it prints the price
   // on /billing's buy buttons, the one numeral a stranger reads before spending money.
   'apps/web/src/areas/lens/topupApi.ts#formatCents': true,
