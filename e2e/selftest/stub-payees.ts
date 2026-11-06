@@ -68,9 +68,18 @@
 // lists each finding once as a "plan" notice, as Lens's minute sweep raises it, and PUT /v1/money/notices/settings keeps the settings.
 // Its defect:
 //   plan-pace-ignored — the plan reads the money now against the payments due but never the pace, so a spree raises no finding
+// B48.27 — and screening and the Travel Rule on an agent's USDC payments to addresses (Lens B48.7, with B48.31's test contract): a
+// payee saved at an address (network base) reads check address and is confirmed with a passkey; test money goes into an agent's
+// wallet; the agent's own key pays from its wallet in USDC (POST /v1/money/payments); the address the Test screening provider flags
+// is refused 403, the one its Travel Rule provider names carries travel_rule sent, and more than 1,000 USDC in all to any other
+// address answers 409 until POST …/{id}/address-proof carries the address's personal_sign of Lens's proof message. Each payment
+// holds its amount on the wallet's ledger (payment_out_hold), read on GET /v1/workspaces/{ws}/agents/{id}/wallet/activity. Its defects:
+//   address-unscreened     — a payment to the flagged address is paid
+//   self-hosted-unproved   — more than 1,000 USDC to a self-hosted address is paid without the owner's proof
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
+import { FLAGGED_ADDRESS, VASP_ADDRESS, proofMessage, signerOf } from '../src/screeningTravelRule.ts'
 
 interface Payee { id: string; workspace_id: string; name: string; country: string; check: string; suggested_name?: string; checked_by: string
   needs_confirmation: boolean; confirmed_by?: string; created_at: string; cooling_off_until?: string; [k: string]: unknown }
@@ -98,7 +107,7 @@ interface StubBatch { id: string; workspace_id: string; funding: string; idempot
   rows_invalid: number; totals_minor: Record<string, number>; approved_by?: string; approved_at?: string; created_at: string; updated_at: string }
 /** A payment out (economy.OutsidePayment). */
 interface Payment { id: string; workspace_id: string; account_id: string; payee_id: string; payee_name: string; amount_minor: number; currency: string
-  funding: string; reference: string; idempotency_key: string; status: string; created_at: string }
+  funding: string; reference: string; idempotency_key: string; status: string; created_at: string; address?: string; travel_rule?: Record<string, string> }
 /** A card batch and its cards (economy.CardBatch, economy.MoneyCard). */
 interface StubCard { id: string; line: number; merchant: string; cap_minor: number; currency: string; status: string; spent_minor: number; last4?: string; expires_at?: string }
 interface StubCardBatch { id: string; workspace_id: string; agent_id: string; idempotency_key: string; purpose: string; currency: string; funding: string
@@ -136,6 +145,9 @@ export class PayeeDesk {
   private readonly accounts = new Map<string, Account[]>()
   private readonly testMoneyKeys = new Set<string>()
   private readonly payments = new Map<string, Payment[]>()
+  /** B48.27 — each workspace's wallet ledger lines, newest first, and the addresses its owner proved they hold. */
+  private readonly lines = new Map<string, { account_id: string; agent_id?: string; currency: string; kind: string; amount_minor: number; at: string }[]>()
+  private readonly proved = new Set<string>()
   private readonly cases: Case[] = []
   /** B30.130 — each agent account's payment reference, by account id; and every invoice issued, found by its pay token. */
   private readonly references = new Map<string, string>()
@@ -238,7 +250,7 @@ export class PayeeDesk {
         const c = this.openCase(ws, `payee_${randomUUID()}`, name, 'blocked')
         return this.json(res, 403, { error: `screening: refused — the name is on a sanctions list (compliance case ${c.id})` }), true
       }
-      const check = /TESTNOMATCH/i.test(name) ? 'no_match' : /TESTCLOSE/i.test(name) ? 'close_match' : 'exact_match'
+      const check = (b.address ?? '') !== '' ? 'address' : /TESTNOMATCH/i.test(name) ? 'no_match' : /TESTCLOSE/i.test(name) ? 'close_match' : 'exact_match'
       const p: Payee = { ...b, id: `payee_${randomUUID()}`, workspace_id: ws, name, country: b.country, check, checked_by: 'test',
         ...(check === 'close_match' ? { suggested_name: name.replace(/TESTCLOSE/gi, ' ').split(/\s+/).filter(Boolean).join(' ') } : {}),
         needs_confirmation: check !== 'exact_match', created_at: new Date().toISOString(), cooling_off_until: new Date(Date.now() + 86_400_000).toISOString() }
@@ -246,6 +258,13 @@ export class PayeeDesk {
       this.payees.set(ws, [...list, p])
       return this.json(res, 201, p), true
     }
+    const one = /^\/v1\/money\/payments\/([^/]+)$/.exec(path)
+    if (one !== null && req.method === 'GET') {
+      const p = (this.payments.get(ws) ?? []).find((x) => x.id === one[1])
+      return p === undefined ? this.json(res, 404, { error: 'economy: no such payment' }) : this.json(res, 200, p), true
+    }
+    const proof = /^\/v1\/money\/payees\/([^/]+)\/address-proof$/.exec(path)
+    if (proof !== null && req.method === 'POST') return this.addressProof(req, res, ws, list.find((x) => x.id === proof[1])), true
     const m = /^\/v1\/money\/payees\/([^/]+)\/(challenge|confirm|called\/challenge|called|details\/challenge|details)$/.exec(path)
     if (m === null || req.method !== 'POST') return false
     const p = list.find((x) => x.id === m[1])
@@ -640,7 +659,39 @@ export class PayeeDesk {
     this.testMoneyKeys.add(`${ws}\n${b.idempotency_key}`)
     account.test_minor += b.amount_minor ?? 0
     account.balance_minor += b.amount_minor ?? 0
+    this.line(ws, account, 'payment_in', b.amount_minor ?? 0)
     return this.json(res, 201, account)
+  }
+
+  /** B48.27 — a line on `account`'s wallet ledger, as Lens's wallet activity reads its postings. */
+  private line(ws: string, account: Account, kind: string, amount: number): void {
+    this.lines.set(ws, [{ account_id: account.id, ...(account.agent_id === undefined ? {} : { agent_id: account.agent_id }), currency: account.currency, kind,
+      amount_minor: amount, at: new Date().toISOString() }, ...(this.lines.get(ws) ?? [])])
+  }
+
+  /** B48.27 — GET …/agents/{id}/wallet/activity: `agentID`'s wallet lines, newest first. */
+  walletActivity(ws: string, agentID: string): { lines: unknown[] } {
+    return { lines: (this.lines.get(ws) ?? []).filter((l) => l.agent_id === agentID) }
+  }
+
+  /** B48.27 — POST /v1/money/payees/{id}/address-proof {signature}: the owner proves, once, that they hold the payee address's key. */
+  private async addressProof(req: IncomingMessage, res: ServerResponse, ws: string, payee: Payee | undefined): Promise<void> {
+    if (payee === undefined) return this.json(res, 404, { error: 'economy: no such payee' })
+    const address = typeof payee.address === 'string' ? payee.address.toLowerCase() : ''
+    if (address === '') return this.json(res, 400, { error: `economy: invalid payee: ${payee.name} is paid at a bank, not at an address` })
+    const { signature } = await this.body<{ signature?: string }>(req)
+    const msg = proofMessage(ws, address)
+    if (signerOf(msg, signature ?? '') !== address) return this.json(res, 403, { error: `economy: the signature is not the payee's address signing its proof message: sign "${msg}"` })
+    this.proved.add(`${ws}\n${address}`)
+    return this.json(res, 200, { proved: true })
+  }
+
+  /** B48.27 — POST /v1/money/payments on agent `agentID`'s own key: paid from its wallet in the currency. */
+  async agentPay(req: IncomingMessage, res: ServerResponse, ws: string, agentID: string): Promise<void> {
+    const b = await this.body<{ payee_id?: string; amount_minor?: number; currency?: string; reference?: string; idempotency_key?: string }>(req)
+    const key = String(req.headers['idempotency-key'] ?? b.idempotency_key ?? '')
+    const p = this.pay(ws, this.payees.get(ws) ?? [], { ...b, idempotency_key: key, account_id: this.wallet(ws, agentID, (b.currency ?? '').toUpperCase()).id })
+    return 'error' in p ? this.json(res, p.status, { error: p.error }) : this.json(res, 201, p)
   }
 
   /** B40.29 — one payment out of an approved request's item, from `agentID`'s account in its currency (the company's for ''). */
@@ -656,7 +707,7 @@ export class PayeeDesk {
     const currency = (b.currency ?? '').toUpperCase()
     const funding = b.funding === 'live' ? 'live' : 'test'
     const amount = b.amount_minor ?? 0
-    if (!b.payee_id || !b.idempotency_key || amount <= 0 || !CURRENCIES.includes(currency)) {
+    if (!b.payee_id || !b.idempotency_key || amount <= 0 || ![...CURRENCIES, 'USDC'].includes(currency)) {
       return { status: 400, error: 'economy: invalid payment: a payment names its payee, a positive amount_minor in GBP, EUR or USD and an idempotency key' }
     }
     const again = payments.find((p) => p.idempotency_key === b.idempotency_key)
@@ -666,6 +717,8 @@ export class PayeeDesk {
     if (account === undefined || account.currency !== currency) return { status: 404, error: `economy: no such money account: no ${currency} account to pay from — open one at /v1/money/accounts` }
     const payee = payees.find((x) => x.id === b.payee_id)
     if (payee === undefined) return { status: 404, error: 'economy: no such payee' }
+    const address = typeof payee.address === 'string' ? payee.address.toLowerCase() : ''
+    if ((currency === 'USDC') !== (address !== '')) return { status: 400, error: 'economy: invalid payment: USDC is paid to an address, and an address only in USDC' }
     if (payee.needs_confirmation) return { status: 409, error: `economy: the payee is not confirmed: ${payee.name}'s name was a ${payee.check.replace('_', ' ')} — confirm it with a passkey first` }
     const held = this.cases.find((c) => c.subject_id === payee.id && c.status === 'held')
     if (held !== undefined) return { status: 403, error: `${HELD} (compliance case ${held.id})` }
@@ -677,6 +730,17 @@ export class PayeeDesk {
     if (typeof payee.held_until === 'string' && Date.parse(payee.held_until) > Date.now() && !this.broken('details-hold-skipped')) {
       return { status: 409, error: `economy: this payee's bank details changed less than 24 hours ago, so payments to it are held until ${payee.held_until}. ${DETAILS_NOTICE}` }
     }
+    let travelRule: Record<string, string> | undefined
+    if (address !== '') {
+      if (address === FLAGGED_ADDRESS && !this.broken('address-unscreened')) return { status: 403, error: `screening: refused — ${address} is flagged: mixer` }
+      const paid = payments.filter((x) => x.address === address && x.status !== 'failed').reduce((n, x) => n + x.amount_minor, 0)
+      if (address === VASP_ADDRESS) travelRule = { status: 'sent', vasp: 'Test Exchange', provider_ref: `trt_${randomUUID()}` }
+      else if (paid + amount > 1_000_000000 && !this.proved.has(`${ws}\n${address}`) && !this.broken('self-hosted-unproved')) {
+        const msg = proofMessage(ws, address)
+        return { status: 409, error: `economy: more than 1,000 USDC in all to a self-hosted address waits until the owner proves, once, that they hold its key: ` +
+          `sign "${msg}" with ${address}'s key (personal_sign) and POST the signature to /v1/money/payees/${payee.id}/address-proof` }
+      } else travelRule = { status: 'self_hosted' }
+    }
     const holds = funding === 'live' ? account.live_minor : account.test_minor
     if (holds < amount && !(funding === 'live' && this.broken('compliance-live-paid'))) {
       return { status: 409, error: `economy: insufficient funds: the account holds ${money(holds, currency)} of ${funding} money, and this payment is ${money(amount, currency)}` }
@@ -685,9 +749,11 @@ export class PayeeDesk {
     if (!refused || this.broken('refused-payment-held')) {
       account[funding === 'live' ? 'live_minor' : 'test_minor'] -= amount
       account.balance_minor -= amount
+      this.line(ws, account, 'payment_out_hold', -amount)
     }
     const p: Payment = { id: `mpay_${randomUUID()}`, workspace_id: ws, account_id: account.id, payee_id: payee.id, payee_name: payee.name, amount_minor: amount, currency,
-      funding, reference: b.reference ?? '', idempotency_key: b.idempotency_key, status: refused ? 'failed' : 'completed', created_at: new Date().toISOString() }
+      funding, reference: b.reference ?? '', idempotency_key: b.idempotency_key, status: refused ? 'failed' : 'completed', created_at: new Date().toISOString(),
+      ...(address === '' ? {} : { address, travel_rule: travelRule }) }
     this.payments.set(ws, [p, ...payments])
     return p
   }

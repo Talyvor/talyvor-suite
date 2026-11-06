@@ -618,6 +618,13 @@ export class Bank {
     return who !== undefined && this.paymentRequests.route(req, res, who.ws.id, path, who.agent.id, keyID)
   }
 
+  /** B48.27 — a payment out on an agent's own key, from its wallet in the currency (stub-payees.ts). */
+  async agentPayments(req: IncomingMessage, res: ServerResponse, path: string, key: string): Promise<boolean> {
+    const who = this.agentOfKey(key)
+    if (who === undefined || path !== '/v1/money/payments' || req.method !== 'POST') return false
+    return await this.payees.agentPay(req, res, who.ws.id, who.agent.id), true
+  }
+
   /** B46.20 — the card routes on an agent's own key, which Lens judges as the agent itself (stub-payees.ts). */
   async agentCards(req: IncomingMessage, res: ServerResponse, path: string, key: string): Promise<boolean> {
     const who = this.agentOfKey(key)
@@ -2524,7 +2531,7 @@ export class Bank {
     }
     // B52.28 — Scan agents' watches (stub-scan.ts), before the agent routes below catch …/scan-watches.
     if (await this.scan.route(req, res, ws.id, rest, now)) return true
-    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/[a-z-]+)?$/.exec(rest)) !== null) {
+    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/wallet\/activity|\/[a-z-]+)?$/.exec(rest)) !== null) {
       const a = this.agents.get(m[1])
       if (a === undefined || a.ws !== ws.id) return json(res, 404, { error: 'economy: no such agent in this workspace' }), true
       const action = m[2] ?? ''
@@ -2588,6 +2595,8 @@ export class Bank {
       }
       // B48.1 — an agent's wallets, one of each kind it is; a kind removed closes its wallet, refused 409 while it holds money.
       if (action === '/wallets' && method === 'GET') return json(res, 200, this.walletsOf(a)), true
+      // B48.27 — the wallet's ledger lines, newest first.
+      if (action === '/wallet/activity' && method === 'GET') return json(res, 200, this.payees.walletActivity(ws.id, a.id)), true
       if (action === '/wallet-kind' && method === 'PUT') {
         const b = await this.body<{ wallet_kind?: string; fiat_currency?: string }>(req)
         const kind = b.wallet_kind ?? ''
