@@ -35,6 +35,24 @@ describe('B28.134 — code, formulas and diagrams in a reply', () => {
     expect(code.textContent).toBe('def area(r):\n    return "circle"  # done')
   })
 
+  it('draws a formula only once KaTeX’s own face has loaded, never in a fallback font first', async () => {
+    let loaded = () => {}
+    const faces = new Promise<FontFace[]>((resolve) => (loaded = () => resolve([])))
+    const load = vi.fn(() => faces)
+    Object.defineProperty(document, 'fonts', { value: { load }, configurable: true })
+    try {
+      const { container } = render(<Markdown source={'Energy is $E = mc^2$.'} />)
+      await waitFor(() => expect(load).toHaveBeenCalledWith('1em KaTeX_Main'))
+      await new Promise((r) => setTimeout(r, 50))
+      expect(container.querySelector('.katex')).toBeNull()
+      expect(screen.getByTestId('math').textContent).toBe('$E = mc^2$')
+      loaded()
+      await waitFor(() => expect(container.querySelector('.katex')).not.toBeNull())
+    } finally {
+      delete (document as { fonts?: unknown }).fonts
+    }
+  })
+
   it('draws LaTeX inline and on its own line, and leaves prices as text', async () => {
     const { container } = render(<Markdown source={'Energy is $E = mc^2$, and \\(a^2\\) too.\n\n$$\n\\int_0^1 x\\,dx\n$$\n\nIt costs $5 and $10, or $5-$10.'} />)
     await waitFor(() => expect(container.querySelectorAll('.katex')).toHaveLength(3))

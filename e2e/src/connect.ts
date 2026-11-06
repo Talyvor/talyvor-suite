@@ -885,10 +885,12 @@ export function connectRecurring(): Scenario {
         ctx.evidence.push({ note: `${note}: "${words}"` })
         return words
       }
+      // B17.356 — a Pill draws its words in capitals, so innerText reads RUNNING; count the pills by their own words instead.
+      const pills = (status: string) => page.getByTestId('plan-card').getByText(status, { exact: true }).count()
       try {
         const words = await screenWords('the plan screen before signing')
         for (const l of lines) if (!words.includes(l.name)) wrong.push(`the plan screen does not show ${l.name}`)
-        if (!words.includes('£300.00 every month') || !words.includes('£12.50 every week') || !words.includes('Waiting for your signature') ||
+        if (!words.includes('£300.00 every month') || !words.includes('£12.50 every week') || await pills('Waiting for your signature') !== 2 ||
           !words.includes('A payment above £200.00 always waits for your approval.')) wrong.push(`the plan screen reads "${words}"`)
       } catch (err) {
         wrong.push(`the plan screen did not open from the assistant's link: ${String(err).slice(0, 300)}`)
@@ -899,7 +901,7 @@ export function connectRecurring(): Scenario {
       if (signed.status() !== 201) return { pass: false, detail: [...wrong, `signing the plan answered ${signed.status()}`].join('; ') }
       try {
         const words = await screenWords('the plan screen after signing')
-        if ((words.match(/Running/g) ?? []).length !== 2 || words.includes('Sign with passkey')) wrong.push(`after signing the plan screen reads "${words}"`)
+        if (await pills('Running') !== 2 || words.includes('Sign with passkey')) wrong.push(`after signing the plan screen reads "${words}"`)
       } catch (err) {
         wrong.push(`the plan screen did not open after signing: ${String(err).slice(0, 300)}`)
       }

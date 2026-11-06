@@ -128,7 +128,8 @@ type oauthGrant struct {
 	Created    time.Time
 	LastUsed   time.Time
 	expires    time.Time
-	endsAt     time.Time // Created + oauthGrantMaxAge, whatever refreshes happen
+	endsAt     time.Time       // Created + oauthGrantMaxAge, whatever refreshes happen
+	calls      []assistantCall // B17.357: the audit trail without a database, newest first, the latest connectedCallsShown
 }
 
 func (g oauthGrant) expiresAt() time.Time { return g.expires }
