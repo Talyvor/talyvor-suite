@@ -1928,8 +1928,16 @@ export interface PayPage {
   }
 }
 
-/** 12345 GBP → "£123.45": minor units in the currency's own figures. */
+/** The currencies a company or agent account holds and a bank payee or invoice takes; an agent's USDC wallet is not one. */
+export const FIATS: readonly string[] = ['GBP', 'EUR', 'USD']
+
+/**
+ * 12345 GBP → "£123.45", 1500000 USDC → "1.50 USDC": minor units in the currency's own figures. Lens keeps USDC to six
+ * decimals and Intl refuses its code (B55.26); a code it does not know reads "12.50 XYZ" and never throws.
+ */
 export function formatMinor(minor: number, currency: string): string {
+  if (currency === 'USDC') return `${(minor / 1e6).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`
+  if (!FIATS.includes(currency)) return `${(minor / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(minor / 100)
 }
 

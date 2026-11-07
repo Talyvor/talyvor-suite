@@ -31,6 +31,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -247,6 +248,36 @@ func validRedirectURI(raw string) bool {
 	return true
 }
 
+// defaultRedirectOrigins are the assistants open registration serves until BFF_CONNECT_REDIRECT_ORIGINS
+// names others: Claude's and ChatGPT's callbacks.
+const defaultRedirectOrigins = "https://claude.ai,https://chatgpt.com"
+
+func redirectOrigins() string {
+	if list := os.Getenv("BFF_CONNECT_REDIRECT_ORIGINS"); strings.TrimSpace(list) != "" {
+		return list
+	}
+	return defaultRedirectOrigins
+}
+
+// redirectAllowListed is B54.11's check at registration: loopback, or a scheme://host on the list. Anyone can
+// register, so a client returning anywhere else must be added to the list first.
+func redirectAllowListed(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(u.Scheme, "http") && isLoopbackHost(u.Hostname()) {
+		return true
+	}
+	origin := strings.ToLower(u.Scheme + "://" + u.Host)
+	for _, o := range strings.Split(redirectOrigins(), ",") {
+		if strings.ToLower(strings.TrimSpace(o)) == origin {
+			return true
+		}
+	}
+	return false
+}
+
 // redirectRegistered is the redirect_uri check: exact, except that a registered http loopback address on
 // 127.0.0.1 or localhost matches the same address on any port (RFC 8252 §7.3), as Claude Code's is.
 func redirectRegistered(registered []string, raw string) bool {
@@ -295,6 +326,10 @@ func (a *app) handleOAuthRegister(w http.ResponseWriter, r *http.Request) {
 	for _, u := range req.RedirectURIs {
 		if !validRedirectURI(u) {
 			oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", fmt.Sprintf("%q is not https, a loopback http address or an app's own scheme", u))
+			return
+		}
+		if !redirectAllowListed(u) {
+			oauthError(w, http.StatusBadRequest, "invalid_redirect_uri", fmt.Sprintf("%q is not a loopback address or one of the assistants Talyvor knows", u))
 			return
 		}
 	}
