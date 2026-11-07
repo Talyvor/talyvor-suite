@@ -18,7 +18,7 @@ const FUND_MINOR = 300_000
 const PAY_MINOR = 50_000
 const DAY_MS = 86_400_000
 
-interface Payee { id: string; name: string; account_number?: string; held_until?: string; notice?: string; cooling_off_until?: string }
+interface Payee { id: string; name: string; account_number?: string; details_changed_at?: string; held_until?: string; notice?: string; cooling_off_until?: string }
 interface Account { id: string; test_minor: number }
 interface Payment { id: string; payee_id: string; amount_minor: number; status: string }
 
@@ -101,8 +101,11 @@ export function payeeDetailsLock(post: Post = throughApp): Scenario {
         return fail(`the details challenge must answer 200 with the notice to call them on a number you already know; it answered ${ch.status} ${ch.text.slice(0, 200)}`)
       }
       const changed = await bff<Payee>(`/api/money/payees/${payee.id}/details`, { ...details, assertion: pk.assert(ch.value.challenge) }, `${supplier}'s new account number, signed`)
-      const heldFor = Date.parse(changed.value.held_until ?? '') - Date.now()
-      if (changed.status !== 200 || changed.value.account_number !== '86429753' || !(heldFor > DAY_MS - 3_600_000 && heldFor <= DAY_MS) || !/a number you already know/.test(changed.value.notice ?? '')) {
+      // Timed by Lens's own clock: production's runs ahead of the runner's, so held_until reads a little over 24 hours on (B17.355).
+      const changedAt = Date.parse(changed.value.details_changed_at ?? '')
+      const heldFor = Date.parse(changed.value.held_until ?? '') - changedAt
+      if (changed.status !== 200 || changed.value.account_number !== '86429753' || heldFor !== DAY_MS || !(Math.abs(changedAt - Date.now()) < 3_600_000) ||
+        !/a number you already know/.test(changed.value.notice ?? '')) {
         return fail(`the change signed with the passkey must answer 200 with the new account, held_until 24 hours on and the notice; it answered ${changed.status} ${changed.text.slice(0, 300)}`)
       }
 

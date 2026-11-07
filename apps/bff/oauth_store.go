@@ -66,9 +66,9 @@ func (d *oauthDB) load(ctx context.Context, o *oauthServer) error {
 	if d == nil {
 		return nil
 	}
-	rows, _ := d.pool.Query(ctx, `SELECT id, name, redirect_uris, expires_at FROM oauth_clients WHERE expires_at > now()`)
+	rows, _ := d.pool.Query(ctx, `SELECT id, name, redirect_uris, auth_methods, jwks_uri, expires_at FROM oauth_clients WHERE expires_at > now()`)
 	clients, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (c oauthClient, err error) {
-		return c, r.Scan(&c.id, &c.name, &c.redirectURIs, &c.expires)
+		return c, r.Scan(&c.id, &c.name, &c.redirectURIs, &c.authMethods, &c.jwksURI, &c.expires)
 	})
 	if err != nil {
 		return fmt.Errorf("load oauth clients: %w", err)
@@ -78,7 +78,7 @@ func (d *oauthDB) load(ctx context.Context, o *oauthServer) error {
 	}
 
 	rows, _ = d.pool.Query(ctx, `SELECT hash, client_id, client_name, redirect_uri, challenge, scope, sub, email, workspace_id,
-		synthetic, expires_at FROM oauth_codes WHERE expires_at > now()`)
+		synthetic, resource, expires_at FROM oauth_codes WHERE expires_at > now()`)
 	type keyed struct {
 		key  string
 		code oauthCode
@@ -86,7 +86,7 @@ func (d *oauthDB) load(ctx context.Context, o *oauthServer) error {
 	codes, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (k keyed, err error) {
 		c := &k.code
 		return k, r.Scan(&k.key, &c.clientID, &c.clientName, &c.redirectURI, &c.challenge, &c.scope,
-			&c.who.sub, &c.who.email, &c.who.workspaceID, &c.who.synthetic, &c.expires)
+			&c.who.sub, &c.who.email, &c.who.workspaceID, &c.who.synthetic, &c.resource, &c.expires)
 	})
 	if err != nil {
 		return fmt.Errorf("load oauth codes: %w", err)
@@ -96,10 +96,10 @@ func (d *oauthDB) load(ctx context.Context, o *oauthServer) error {
 	}
 
 	rows, _ = d.pool.Query(ctx, `SELECT id, client_id, client_name, scope, sub, email, workspace_id, synthetic,
-		created_at, last_used_at, expires_at, ends_at FROM oauth_grants WHERE expires_at > now()`)
+		created_at, last_used_at, expires_at, ends_at, resource FROM oauth_grants WHERE expires_at > now()`)
 	grants, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (g oauthGrant, err error) {
 		return g, r.Scan(&g.ID, &g.ClientID, &g.ClientName, &g.Scope, &g.Who.sub, &g.Who.email, &g.Who.workspaceID,
-			&g.Who.synthetic, &g.Created, &g.LastUsed, &g.expires, &g.endsAt)
+			&g.Who.synthetic, &g.Created, &g.LastUsed, &g.expires, &g.endsAt, &g.Resource)
 	})
 	if err != nil {
 		return fmt.Errorf("load oauth grants: %w", err)
@@ -134,9 +134,10 @@ func (d *oauthDB) saveClient(ctx context.Context, c oauthClient) error {
 	if d == nil {
 		return nil
 	}
-	_, err := d.pool.Exec(ctx, `INSERT INTO oauth_clients (id, name, redirect_uris, expires_at) VALUES ($1, $2, $3, $4)
-		ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, redirect_uris = EXCLUDED.redirect_uris, expires_at = EXCLUDED.expires_at`,
-		c.id, c.name, c.redirectURIs, c.expires)
+	_, err := d.pool.Exec(ctx, `INSERT INTO oauth_clients (id, name, redirect_uris, auth_methods, jwks_uri, expires_at) VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, redirect_uris = EXCLUDED.redirect_uris, auth_methods = EXCLUDED.auth_methods,
+		jwks_uri = EXCLUDED.jwks_uri, expires_at = EXCLUDED.expires_at`,
+		c.id, c.name, c.redirectURIs, append([]string{}, c.authMethods...), c.jwksURI, c.expires)
 	return err
 }
 
@@ -145,9 +146,9 @@ func (d *oauthDB) saveCode(ctx context.Context, key string, c oauthCode) error {
 		return nil
 	}
 	_, err := d.pool.Exec(ctx, `INSERT INTO oauth_codes (hash, client_id, client_name, redirect_uri, challenge, scope, sub, email,
-		workspace_id, synthetic, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		workspace_id, synthetic, resource, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
 		key, c.clientID, c.clientName, c.redirectURI, c.challenge, c.scope, c.who.sub, c.who.email, c.who.workspaceID,
-		c.who.synthetic, c.expires)
+		c.who.synthetic, c.resource, c.expires)
 	return err
 }
 
@@ -167,9 +168,9 @@ func (d *oauthDB) insertGrant(ctx context.Context, g oauthGrant) error {
 		return nil
 	}
 	_, err := d.pool.Exec(ctx, `INSERT INTO oauth_grants (id, client_id, client_name, scope, sub, email, workspace_id, synthetic,
-		created_at, last_used_at, expires_at, ends_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		created_at, last_used_at, expires_at, ends_at, resource) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		g.ID, g.ClientID, g.ClientName, g.Scope, g.Who.sub, g.Who.email, g.Who.workspaceID, g.Who.synthetic,
-		g.Created, g.LastUsed, g.expires, g.endsAt)
+		g.Created, g.LastUsed, g.expires, g.endsAt, g.Resource)
 	return err
 }
 
@@ -229,7 +230,7 @@ func (d *oauthDB) recordToolCall(ctx context.Context, g oauthGrant, c assistantC
 }
 
 // toolCallsOf is a person's latest calls, at most perGrant for each connection, newest first. Without a database
-// there is no trail: nil, not an empty one.
+// the trail is on each grant in memory (auditToolCall): nil here.
 func (d *oauthDB) toolCallsOf(ctx context.Context, sub string, perGrant int) (map[string][]assistantCall, error) {
 	if d == nil {
 		return nil, nil
