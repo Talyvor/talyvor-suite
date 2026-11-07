@@ -26,6 +26,10 @@ import (
 // is refused. The session is marked synthetic and is never re-provisioned (tenant.go), so it cannot
 // turn into, or create, a real account either.
 //
+// POST /auth/synthetic/mobile (B57.86) takes the same header and body and makes the same checks, and
+// answers as /auth/mobile/session does: {"token","expires_at"}, a Bearer session the phone app sends,
+// and no cookie. It needs no Origin (lens.go's originExemptPath): the key is the proof.
+//
 // Unset LENS_SYNTHETIC_KEY (the default) and the route answers 404. The key is compared in constant
 // time; every attempt is logged, never with the key or the token.
 
@@ -34,6 +38,8 @@ const (
 	syntheticKeyHeader = "X-Talyvor-Synthetic-Key"
 	// syntheticEmailDomain is reserved (.invalid, RFC 2606): the address can never reach anyone.
 	syntheticEmailDomain = "@synthetic.talyvor.invalid"
+	// syntheticMobilePath is the phone's door (B57.86): the same check, a Bearer session instead of a cookie.
+	syntheticMobilePath = "/auth/synthetic/mobile"
 )
 
 // syntheticWorkspaceIDShape bounds the id before it becomes a path segment. It is not the proof of
@@ -41,18 +47,50 @@ const (
 var syntheticWorkspaceIDShape = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
 func (a *app) handleSyntheticSignIn(w http.ResponseWriter, r *http.Request) {
+	s, ok := a.syntheticSession(w, r)
+	if !ok {
+		return
+	}
+	if err := a.startSession(w, r, s, int(time.Until(s.expires).Seconds())); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
+		return
+	}
+	log.Printf("bff: synthetic session created for workspace %s", s.workspaceID)
+	writeJSON(w, http.StatusOK, map[string]any{"workspace_id": s.workspaceID, "synthetic": true,
+		"expires_at": s.expires.UTC().Format(time.RFC3339)})
+}
+
+// handleSyntheticMobileSignIn is B57.86: the same request and the same refusals as /auth/synthetic,
+// answered as /auth/mobile/session answers the phone — a Bearer session in the body, no cookie.
+func (a *app) handleSyntheticMobileSignIn(w http.ResponseWriter, r *http.Request) {
+	s, ok := a.syntheticSession(w, r)
+	if !ok {
+		return
+	}
+	sid, err := a.auth.storeSession(s)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
+		return
+	}
+	log.Printf("bff: synthetic phone session created for workspace %s", s.workspaceID)
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]string{"token": sid, "expires_at": s.expires.UTC().Format(time.RFC3339)})
+}
+
+// syntheticSession checks a synthetic sign-in and builds its session; on a refusal it has answered w.
+func (a *app) syntheticSession(w http.ResponseWriter, r *http.Request) (session, bool) {
 	if a.cfg.syntheticKey == "" || a.auth == nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "synthetic sign-in is not enabled on this BFF"})
-		return
+		return session{}, false
 	}
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
-		return
+		return session{}, false
 	}
 	if subtle.ConstantTimeCompare([]byte(r.Header.Get(syntheticKeyHeader)), []byte(a.cfg.syntheticKey)) != 1 {
 		log.Printf("bff: synthetic sign-in REFUSED from %s: wrong or missing %s", r.RemoteAddr, syntheticKeyHeader)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "the synthetic operator key is required"})
-		return
+		return session{}, false
 	}
 	var in struct {
 		WorkspaceID string `json:"workspace_id"`
@@ -63,7 +101,7 @@ func (a *app) handleSyntheticSignIn(w http.ResponseWriter, r *http.Request) {
 		!syntheticWorkspaceIDShape.MatchString(in.WorkspaceID) || in.Token == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
 			"error": `send {"workspace_id","token"} — one workspace from Lens's POST /v1/synthetic/workspaces`})
-		return
+		return session{}, false
 	}
 
 	t := tenant{workspaceID: in.WorkspaceID, token: in.Token}
@@ -73,7 +111,7 @@ func (a *app) handleSyntheticSignIn(w http.ResponseWriter, r *http.Request) {
 			in.WorkspaceID, status, ws.Synthetic, ws.Active)
 		writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": "only a synthetic workspace can sign in this way, and Lens does not vouch for this one"})
-		return
+		return session{}, false
 	}
 
 	expires := time.Now().Add(a.cfg.sessionTTL)
@@ -83,9 +121,9 @@ func (a *app) handleSyntheticSignIn(w http.ResponseWriter, r *http.Request) {
 	}
 	if !time.Now().Before(expires) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "that synthetic token has expired — create new workspaces"})
-		return
+		return session{}, false
 	}
-	if err := a.startSession(w, r, session{
+	return session{
 		sub:          "synthetic:" + ws.ID,
 		email:        ws.ID + syntheticEmailDomain,
 		expires:      expires,
@@ -95,13 +133,7 @@ func (a *app) handleSyntheticSignIn(w http.ResponseWriter, r *http.Request) {
 		// Lens turned pooling on when it created the workspace; there is no question to ask.
 		cachePoolable: ws.CachePoolable,
 		synthetic:     true,
-	}, int(time.Until(expires).Seconds())); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
-		return
-	}
-	log.Printf("bff: synthetic session created for workspace %s", ws.ID)
-	writeJSON(w, http.StatusOK, map[string]any{"workspace_id": ws.ID, "synthetic": true,
-		"expires_at": expires.UTC().Format(time.RFC3339)})
+	}, true
 }
 
 // lensWorkspaceRecord is the part of Lens's GET /v1/workspaces/{id} this file reads.

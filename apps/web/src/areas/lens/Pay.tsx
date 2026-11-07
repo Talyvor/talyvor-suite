@@ -23,6 +23,7 @@ import {
   type OutsidePayment,
   type PayeeRequest,
   type PayoutBatch,
+  FIATS,
   agentBankApi,
   formatMinor,
   formatULXC,
@@ -85,7 +86,8 @@ export function PayScreen() {
   const askedPayees = (asked.data?.requests ?? []).filter((r) => r.kind === 'payee')
   const askedMandates = (asked.data?.requests ?? []).filter((r) => r.kind === 'mandate')
   const askedPlans = (asked.data?.requests ?? []).filter((r) => r.kind === 'plan' && r.status !== 'signed')
-  const open = (accounts.data?.accounts ?? []).filter((a) => a.status === 'open')
+  // A USDC wallet cannot pay a bank payee (B55.26): only pounds, euros and dollars send, repeat or take a mandate.
+  const open = (accounts.data?.accounts ?? []).filter((a) => a.status === 'open' && FIATS.includes(a.currency))
   const agentAccounts = open.filter((a) => a.purpose === 'agent')
   const saved = payees.data?.payees ?? []
   const sent = payments.data?.payments ?? []

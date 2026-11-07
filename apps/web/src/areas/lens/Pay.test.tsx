@@ -6,7 +6,7 @@ import { App, queryClient } from '../../App'
 // to it from the agent's account goes to the BFF in minor units with the account, the payee and one idempotency key, and the
 // row then reads Completed; a payouts CSV goes up as text/csv and the batch reads its rows' results.
 
-const ACCOUNTS = [
+let ACCOUNTS: Record<string, unknown>[] = [
   { id: 'macc_co', agent_id: '', currency: 'GBP', purpose: 'company', status: 'open', name: 'GBP account', balance_minor: 0, test_minor: 0, live_minor: 0 },
   { id: 'macc_agt', agent_id: 'agt_1', currency: 'GBP', purpose: 'agent', status: 'open', name: 'GBP account', balance_minor: 10000, test_minor: 10000, live_minor: 0 },
 ]
@@ -177,6 +177,28 @@ describe('the Pay screen', () => {
       expect.objectContaining({ url: '/api/money/payees/payee_new/details/challenge', body: details }),
       expect.objectContaining({ url: '/api/money/payees/payee_new/details', body: { ...details, assertion: expect.objectContaining({ credential_id: 'AQ', signature: 'BA' }) } }),
     ])
+  })
+
+  // B55.26 — a USDC wallet cannot pay a bank payee, and Intl refused its code and the whole screen with it.
+  it('never offers an agent’s USDC wallet as From, and with only the wallet draws its no-account line', async () => {
+    const before = ACCOUNTS
+    const wallet = { id: 'macc_usdc', agent_id: 'agt_1', currency: 'USDC', purpose: 'agent', status: 'open', name: 'USDC wallet', balance_minor: 1500000, test_minor: 1500000, live_minor: 0 }
+    try {
+      ACCOUNTS = [{ id: 'macc_co', agent_id: '', currency: 'USD', purpose: 'company', status: 'open', name: 'USD account', balance_minor: 0, test_minor: 0, live_minor: 0 }, wallet]
+      mockBff()
+      window.history.pushState({}, '', '/money/pay')
+      render(<App />)
+      const from = within(await screen.findByTestId('send-payment')).getByLabelText('From') as HTMLSelectElement
+      expect([...from.options].map((o) => o.value)).toEqual(['macc_co'])
+      cleanup()
+      queryClient.clear()
+
+      ACCOUNTS = [wallet]
+      render(<App />)
+      expect(await screen.findByTestId('pay-no-account')).toBeTruthy()
+    } finally {
+      ACCOUNTS = before
+    }
   })
 
   it('saves a payee, pays it from the agent’s account in minor units under one key, and the payment reads Completed', async () => {

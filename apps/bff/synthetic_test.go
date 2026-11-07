@@ -162,6 +162,59 @@ func TestSyntheticUserSignsInAndChatsThroughTheApp(t *testing.T) {
 	}
 }
 
+// syntheticPhoneSignIn POSTs to /auth/synthetic/mobile the way the phone harness does: no Origin, no
+// cookie jar, the operator key in its header. It returns the Bearer token, "" when none was issued.
+func syntheticPhoneSignIn(t *testing.T, ts *httptest.Server, key, wsID, token, expiresAt string) (*http.Response, string) {
+	t.Helper()
+	body := fmt.Sprintf(`{"workspace_id":%q,"token":%q,"expires_at":%q}`, wsID, token, expiresAt)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+syntheticMobilePath, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	if key != "" {
+		req.Header.Set(syntheticKeyHeader, key)
+	}
+	resp, err := (&http.Client{Transport: ts.Client().Transport}).Do(req)
+	if err != nil {
+		t.Fatalf("phone sign in: %v", err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Token string `json:"token"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp, out.Token
+}
+
+// B57.86 — a synthetic user signs the phone app in: a Bearer session, no cookie, that /api/agents
+// accepts and that runs on the synthetic workspace's own token.
+func TestSyntheticPhoneSignInGetsABearerSessionAgentsAccepts(t *testing.T) {
+	lens := newSyntheticLens(t)
+	a := syntheticApp(t, lens, testSyntheticKey)
+	ts := httptest.NewServer(a)
+	defer ts.Close()
+
+	resp, tok := syntheticPhoneSignIn(t, ts, testSyntheticKey, testSyntheticWS, "jwt-synthetic", "")
+	if resp.StatusCode != http.StatusOK || tok == "" {
+		t.Fatalf("synthetic phone sign-in: status %d, token %q", resp.StatusCode, tok)
+	}
+	if c := resp.Header.Values("Set-Cookie"); len(c) != 0 {
+		t.Errorf("a phone sign-in set cookies %v; it must set none", c)
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/agents", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	agents, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agents.Body.Close()
+	if agents.StatusCode != http.StatusOK || lens.gotReadAuth != "Bearer jwt-synthetic" {
+		t.Fatalf("GET /api/agents with the Bearer token: status %d with %q, want 200 with the synthetic token",
+			agents.StatusCode, lens.gotReadAuth)
+	}
+	if lens.provisionCalls != 0 {
+		t.Fatalf("a synthetic phone session called /v1/provision %d time(s) — that creates a real workspace", lens.provisionCalls)
+	}
+}
+
 func TestSyntheticSignInRefusesRealAccountsAndRequestsWithoutTheKey(t *testing.T) {
 	cases := []struct {
 		name, bffKey, sentKey, wsID, token string
@@ -176,26 +229,39 @@ func TestSyntheticSignInRefusesRealAccountsAndRequestsWithoutTheKey(t *testing.T
 		{"a token Lens does not know", testSyntheticKey, testSyntheticKey, testSyntheticWS, "jwt-forged", http.StatusForbidden},
 		{"a path in the workspace id", testSyntheticKey, testSyntheticKey, testSyntheticWS + "/../" + testRealWS, "jwt-real", http.StatusBadRequest},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			lens := newSyntheticLens(t)
-			a := syntheticApp(t, lens, tc.bffKey)
-			ts := httptest.NewServer(a)
-			defer ts.Close()
-			resp, sess := syntheticSignIn(t, ts, tc.sentKey, tc.wsID, tc.token, "")
-			if resp.StatusCode != tc.want {
-				t.Errorf("status = %d, want %d", resp.StatusCode, tc.want)
-			}
-			if sess != nil {
-				t.Errorf("a session cookie was set: %v", sess)
-			}
-			a.auth.sessions.mu.Lock()
-			n := len(a.auth.sessions.m)
-			a.auth.sessions.mu.Unlock()
-			if n != 0 {
-				t.Errorf("%d session(s) stored — a refused sign-in must store none", n)
-			}
-		})
+	// Both doors: the browser's cookie and the phone's Bearer token (B57.86) refuse alike.
+	for _, phone := range []bool{false, true} {
+		for _, tc := range cases {
+			t.Run(fmt.Sprintf("%s/phone=%t", tc.name, phone), func(t *testing.T) {
+				lens := newSyntheticLens(t)
+				a := syntheticApp(t, lens, tc.bffKey)
+				ts := httptest.NewServer(a)
+				defer ts.Close()
+				var resp *http.Response
+				if phone {
+					var tok string
+					resp, tok = syntheticPhoneSignIn(t, ts, tc.sentKey, tc.wsID, tc.token, "")
+					if tok != "" {
+						t.Errorf("a Bearer token was issued")
+					}
+				} else {
+					var sess *http.Cookie
+					resp, sess = syntheticSignIn(t, ts, tc.sentKey, tc.wsID, tc.token, "")
+					if sess != nil {
+						t.Errorf("a session cookie was set: %v", sess)
+					}
+				}
+				if resp.StatusCode != tc.want {
+					t.Errorf("status = %d, want %d", resp.StatusCode, tc.want)
+				}
+				a.auth.sessions.mu.Lock()
+				n := len(a.auth.sessions.m)
+				a.auth.sessions.mu.Unlock()
+				if n != 0 {
+					t.Errorf("%d session(s) stored — a refused sign-in must store none", n)
+				}
+			})
+		}
 	}
 }
 

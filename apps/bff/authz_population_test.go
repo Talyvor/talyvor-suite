@@ -120,6 +120,9 @@ var publicReadRoutes = map[string]string{
 	"/auth/synthetic": "B17.2 — the synthetic sign-in, which by definition runs before any session " +
 		"exists. It needs the operator key instead (401 without it) and answers 404 while " +
 		"LENS_SYNTHETIC_KEY is unset, as here; synthetic_test.go owns both refusals",
+	"/auth/synthetic/mobile": "B57.86 — the phone's synthetic sign-in, the same check as /auth/synthetic answered " +
+		"with a Bearer session; the same 401 without the key and 404 while LENS_SYNTHETIC_KEY is unset — " +
+		"synthetic_test.go runs every /auth/synthetic refusal against it too",
 	"/api/public/boards/{token}": "B27.30 — the read-only issue board a workspace owner published as a " +
 		"link; a stranger opens it signed out. The token is the credential, checked for shape before " +
 		"any dial, and Track is called with no gateway secret — track_boards_test.go owns both",
@@ -291,6 +294,9 @@ var publicWriteRoutes = map[string]string{
 	"/auth/synthetic": "B17.2 — the synthetic sign-in, which by definition runs before any session " +
 		"exists. It needs the operator key instead (401 without it) and answers 404 while " +
 		"LENS_SYNTHETIC_KEY is unset, as here; synthetic_test.go owns both refusals",
+	"/auth/synthetic/mobile": "B57.86 — the phone's synthetic sign-in, the same check as /auth/synthetic answered " +
+		"with a Bearer session; the same 401 without the key and 404 while LENS_SYNTHETIC_KEY is unset — " +
+		"synthetic_test.go runs every /auth/synthetic refusal against it too",
 	"/auth/logout": "session teardown, which cannot require the session it is tearing down. " +
 		"503 here only because this fixture configures no IdP (a.auth is nil); " +
 		"logout_test.go owns what it does when one exists",
