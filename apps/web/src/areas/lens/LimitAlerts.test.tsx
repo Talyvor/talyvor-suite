@@ -5,14 +5,14 @@ import { App, queryClient } from '../../App'
 // B28.62 — limit-approach alerts on the Agent Bank: each alert Lens raised at 50, 80 or 100% of a budget, a card's cap or an
 // agent's limit (Lens B28.335) reads as what it is about and the amounts, from GET /api/money/budgets/alerts.
 
-function mockBff(alerts: unknown[]) {
+function mockBff(alerts: unknown[], withAgent = true) {
   const agent = { id: 'agt_1', name: 'Researcher', balance_ulxc: 5_000_000, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true }
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
-    if (url === '/api/agents') return json({ workspace_balance_ulxc: 20_000_000, allocated_ulxc: 5_000_000, unallocated_ulxc: 15_000_000, spent_ulxc: 0, agents: [agent] })
+    if (url === '/api/agents') return json({ workspace_balance_ulxc: 20_000_000, allocated_ulxc: 5_000_000, unallocated_ulxc: 15_000_000, spent_ulxc: 0, agents: withAgent ? [agent] : [] })
     if (url === '/api/money/budgets/alerts') return json({ alerts })
     if (url === '/api/agents/forecast') return json({ at: '', month_start: '', month_end: '', spent_ulxc: 0, forecast_ulxc: 0, agents: [] })
     if (url === '/api/agents/alerts') return json({ alerts: [], rule: 'the rule' })
@@ -51,5 +51,19 @@ describe('limit alerts on the Agent Bank (B28.62)', () => {
     window.history.pushState({}, '', '/agents')
     render(<App />)
     expect(await screen.findByText(/No limit reached yet/)).toBeTruthy()
+  })
+
+  // B17.364 — a budget on a company account raises alerts before any agent exists: they still show, named in words.
+  it('shows an alert before the first agent exists', async () => {
+    mockBff(
+      [{ id: 'sal_3', kind: 'budget', subject: 'bdg_2', agent_id: 'all', category: 'ai_software', period: 'month', period_start: '2026-11-01T00:00:00Z',
+        percent: 80, spent_minor: 8500, limit_minor: 10000, currency: 'GBP', created_at: '2026-11-07T01:00:00Z' }],
+      false,
+    )
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+    const alert = await screen.findByTestId('limit-alert-sal_3')
+    expect(alert.textContent).toContain('80% of every wallet’s monthly AI and software budget')
+    expect(alert.textContent).toContain('£85.00 of £100.00 spent')
   })
 })
