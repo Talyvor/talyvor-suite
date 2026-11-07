@@ -112,6 +112,13 @@ type config struct {
 	// Lens's cross-tenant admin reads and nothing else. Set, the operator screen's
 	// /api/admin/workspaces reaches Lens; unset, it answers 501 (operator_workspaces.go).
 	operatorReadKey string
+
+	// lensConnectMintKey is Lens's LENS_CONNECT_MINT_KEY, the same value under the same name: POST /v1/auth/connect-token
+	// and nothing else (B52.4). Set, send_payment pays from an agent inside its limits; unset, it pays nothing (mcp_agents.go).
+	lensConnectMintKey string
+	// connectPrepareOnly (BFF_CONNECT_PREPARE_ONLY=true) is the connector a public plugin directory lists: send_payment
+	// pays nothing on it.
+	connectPrepareOnly bool
 }
 
 func loadConfig() (config, error) {
@@ -126,6 +133,9 @@ func loadConfig() (config, error) {
 		syntheticKey:      os.Getenv("LENS_SYNTHETIC_KEY"),
 		moderatorKey:      os.Getenv("LENS_MODERATOR_KEY"),
 		operatorReadKey:   os.Getenv("LENS_OPERATOR_READ_KEY"),
+
+		lensConnectMintKey: os.Getenv("LENS_CONNECT_MINT_KEY"),
+		connectPrepareOnly: os.Getenv("BFF_CONNECT_PREPARE_ONLY") == "true",
 	}
 	// Per-tenant provisioning replaces the single shared workspace key. Refuse to start without
 	// it: silently falling back to one shared workspace is exactly the state this replaced.

@@ -254,7 +254,8 @@ interface RPCResult {
 }
 
 /** An assistant registered by DCR and allowed through the consent screen in the browser: its access token, or the failure. */
-async function connectAssistant(ctx: ScenarioCtx, origin: string, name: string): Promise<string | { pass: false; detail: string }> {
+export async function connectAssistant(ctx: ScenarioCtx, origin: string, name: string,
+  scope = 'wallets:read invoices:draft payments:prepare'): Promise<string | { pass: false; detail: string }> {
   const server = createServer((_req, res) => res.writeHead(200, { 'Content-Type': 'text/plain' }).end('back at the assistant'))
   await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok))
   const callback = `http://127.0.0.1:${(server.address() as AddressInfo).port}/callback`
@@ -265,7 +266,7 @@ async function connectAssistant(ctx: ScenarioCtx, origin: string, name: string):
     const verifier = randomBytes(32).toString('base64url')
     const q = new URLSearchParams({ response_type: 'code', client_id: reg.client_id, redirect_uri: callback, state: 's',
       code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
-      scope: 'wallets:read invoices:draft payments:prepare', resource: `${origin}/mcp` })
+      scope, resource: `${origin}/mcp` })
     await ctx.app.page.goto(`${origin}/oauth/authorize?${q}`)
     await Promise.all([ctx.app.page.waitForURL((u) => u.href.startsWith(callback), { timeout: 30_000 }), ctx.app.page.getByRole('button', { name: 'Allow' }).click()])
     const code = new URL(ctx.app.page.url()).searchParams.get('code') ?? ''

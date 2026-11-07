@@ -33,7 +33,7 @@ var mcpInstructs = regexp.MustCompile(`(?i)\b(ignore|disregard|system prompt|you
 
 // mcpOpenWorld is every tool whose answer carries text a third party wrote: sellers' listings, suppliers' bills, what a
 // payee's bank said of its name, and Taly, who reads them.
-var mcpOpenWorld = []string{"list_payees", "market_search", "market_listing", "bills_due", "ask_taly"}
+var mcpOpenWorld = []string{"list_payees", "market_search", "market_listing", "bills_due", "ask_taly", "list_incoming_requests"}
 
 var mcpToolName = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
 
@@ -64,7 +64,7 @@ func TestMCPClaudeDirectory(t *testing.T) {
 	args, _ := json.Marshal(map[string]any{"name": "Acme Ltd", "country": "GB", "iban": "GB33BUKB20201555555555", "expires_at": "2027-01-31T00:00:00Z",
 		"scope": map[string]any{"currencies": []any{"GBP"}}, "new_payee": map[string]any{"policy": "always_ask"}, "idempotency_key": "k",
 		"payee_id": "py-1", "currency": "GBP", "amount_minor": 1, "listing_id": "l-1", "request_id": "pr-1", "invoice_id": "inv-1",
-		"account_id": "acc-1", "customer_name": "Acme Ltd", "due_date": "2026-11-30", "items": []any{map[string]any{"payee_id": "py-1"}}})
+		"account_id": "acc-1", "agent_id": "agt-1", "customer_name": "Acme Ltd", "due_date": "2026-11-30", "items": []any{map[string]any{"payee_id": "py-1"}}})
 	var parsed mcpArgs
 	_ = json.Unmarshal(args, &parsed)
 	for i, tool := range mcpTools {

@@ -78,6 +78,7 @@ import { outsidePayees } from './payees.ts'
 import { permissionMandate } from './permissionMandates.ts'
 import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
+import { connectChat } from './connectChat.ts'
 import { connectPay } from './connectPay.ts'
 import { screeningTravelRule } from './screeningTravelRule.ts'
 import { trustLayer } from './trustLayer.ts'
@@ -5277,6 +5278,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B40.7 — an assistant on /mcp, once a run, on a workspace of its own: it reads a balance, drafts an invoice and prepares a
   // two-payee batch that stays pending approval, and no money moves.
   if (i === 9) list.push(connectMCP())
+  // B52.6 — an assistant on the MCP SDK pays from an agent inside its limits once, waits for approval above them, creates an agent
+  // under the limit set on Settings, cannot raise a limit from the chat, and hands over the top-up link.
+  if (i === 9) list.push(connectChat())
   // B40.21 — an assistant prepares a two-payee batch over MCP, once a run, on a workspace of its own: one passkey approval
   // posts exactly the two payments, a replayed approval posts nothing, and raw bank details are refused.
   if (i === 8) list.push(connectApprove())

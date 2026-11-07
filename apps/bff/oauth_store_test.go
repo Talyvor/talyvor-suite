@@ -23,7 +23,7 @@ func TestOAuthSignInsSurviveARestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := first.pool.Exec(ctx, `TRUNCATE oauth_clients, oauth_codes, oauth_grants, oauth_tokens`); err != nil {
+	if _, err := first.pool.Exec(ctx, `TRUNCATE oauth_clients, oauth_codes, oauth_grants, oauth_tokens, connect_agent_ceilings`); err != nil {
 		t.Fatal(err)
 	}
 	first.close()
@@ -107,5 +107,18 @@ func TestOAuthSignInsSurviveARestart(t *testing.T) {
 	}
 	if err := a.oauth.db.pool.QueryRow(ctx, `SELECT count(*) FROM oauth_grants`).Scan(&left); err != nil || left != 0 {
 		t.Fatalf("%d grants left in the table after both connections ended (%v)", left, err)
+	}
+
+	// B52.6: the limit for new agents survives a restart, and a second save replaces the first.
+	a, ck = boot()
+	for _, body := range []string{`{"max_per_request_ulxc":1,"daily_limit_ulxc":2,"monthly_limit_ulxc":3}`, `{"max_per_request_ulxc":4,"daily_limit_ulxc":5,"monthly_limit_ulxc":6}`} {
+		if rec := serve(a, "PUT", "/api/connect/agent-ceiling", oauthOrigin, body, nil, ck); rec.Code != http.StatusOK {
+			t.Fatalf("saving the agent ceiling: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	a, ck = boot()
+	if got := jsonOf(t, serve(a, "GET", "/api/connect/agent-ceiling", "", "", nil, ck)); got["max_per_request_ulxc"] != float64(4) ||
+		got["daily_limit_ulxc"] != float64(5) || got["monthly_limit_ulxc"] != float64(6) {
+		t.Fatalf("after a restart the agent ceiling reads %v", got)
 	}
 }

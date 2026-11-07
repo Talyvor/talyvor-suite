@@ -349,6 +349,60 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/pause", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensAgentPauseBody",
   },
+  // B52.6 — Talyvor Connect: an assistant pays from an agent on a Connect token Lens binds to it, and creates, describes,
+  // limits and pauses agents on the person's own credential (apps/bff/mcp_agents.go).
+  {
+    route: "POST /v1/auth/connect-token",
+    file: "apps/bff/mcp_agents.go",
+    kind: "map-literal",
+    anchor:
+      'json.Marshal(map[string]any{"workspace_id": t.workspaceID, "user_id": t.workspaceID, "client_id": g.ClientID, "agent_id": agentID, "scopes": []string{"payments:send"}})',
+    upstreamFile: "cmd/lens/connect_token_handler.go",
+    upstreamAnchor: "func newConnectTokenMintHandler(authManager *auth.Manager, agents connectAgents) http.HandlerFunc {",
+    subject: "lensConnectTokenBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/pay",
+    file: "apps/bff/mcp_agents.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]any{"to_agent_id": to, "amount_ulxc": amount, "memo": memo})',
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/pay", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAgentPayBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/agents",
+    file: "apps/bff/mcp_agents.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"name": name})',
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAgentCreateBody",
+  },
+  {
+    route: "PATCH /v1/workspaces/{wsID}/agents/{agentID}",
+    file: "apps/bff/mcp_agents.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"description": purpose})',
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Patch("/v1/workspaces/{wsID}/agents/{agentID}", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAgentUpdateBody",
+  },
+  // putAgentLimits's PUT …/rules is not a row: it sends back the rules Lens just read, every key as Lens wrote it, so
+  // it names no key set of its own (Lens's PUT refuses an unknown key 400).
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/pause",
+    file: "apps/bff/mcp_agents.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"reason": reason})',
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/pause", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAgentPauseBody",
+  },
   // B19.21 — a scheduled payment, and an automatic top-up.
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/schedules",
@@ -1269,6 +1323,10 @@ export const NON_LENS_ANON_SITES = [
   {
     file: "features.go",
     what: "handleFeatureGuardrails (B18.22) re-marshals talyvor-lens’s OWN guardrail policy, read from GET /v1/workspaces/{ws}/guardrails, with one flag changed — because Lens’s POST replaces the whole policy. The key set is whatever Lens answered, echoed back, so there is no key set of this repo’s to ask about and this site is exempt; the two flag names it sets, enable_injection and enable_pii, are the ones readFeatures already reads off the same policy.",
+  },
+  {
+    file: "mcp_agents.go",
+    what: "putAgentLimits (B52.6) re-marshals talyvor-lens’s OWN agent rules, read from GET /v1/workspaces/{ws}/agents/{agent}/rules, with only the limits it lowers changed — because Lens’s PUT replaces the whole rule set and refuses an unknown key. The key set is whatever Lens answered, echoed back raw, so there is no key set of this repo’s to ask about and this site is exempt; the three limit names it sets are agentLimits, the ones agent_bank.go’s lensAgentRulesBody row already asks about.",
   },
   {
     file: "agent_task.go",
