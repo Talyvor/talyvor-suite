@@ -31,7 +31,7 @@ export function subscriptionsView({ screen = true }: { screen?: boolean } = {}):
     id: 'subscriptions-view',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B41.20', 'B41.120'],
+    items: ['B41.20', 'B41.120', 'B41.76'],
     feature: 'Agent wallets',
     title: 'the Subscriptions view: a £12.00 monthly standing order and a $5.00 monthly listing subscription each show their next charge, ' +
       'monthly cost and a reminder three days before',
@@ -91,6 +91,8 @@ export function subscriptionsView({ screen = true }: { screen?: boolean } = {}):
       if (lic === undefined || lic.status !== 'active' || !lic.auto_renew || lic.ends_at === null) {
         return fail(`the monthly subscription must read active and renewing, with a date it renews; Lens lists ${JSON.stringify(lic ?? null)}`)
       }
+      // B41.76 — the licences screen alerts on an idle one; a subscription taken today is not idle until 30 days pass unused.
+      if (lic.idle !== false) return fail(`a subscription taken today must not read idle; Lens lists idle ${JSON.stringify(lic.idle ?? null)}`)
       const renews = Date.parse(lic.ends_at)
       if (Math.abs(renews - Date.parse(lic.starts_at) - 30 * DAY_MS) > 60_000) return fail(`a 30-day subscription must renew 30 days after it starts; it runs ${lic.starts_at} to ${lic.ends_at}`)
       const lines = ((await env.lens.marketBill(ctx.app.user)).lines ?? []).filter((l) => l.listing_id === pub.value.id)

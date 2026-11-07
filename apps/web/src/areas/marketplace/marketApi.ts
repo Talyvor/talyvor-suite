@@ -690,6 +690,8 @@ export interface MarketLicence {
   source: "offer" | "rent_to_own";
   created_at: string;
   price_ulxc: number;
+  /** B41.176 — it renews but its listing has not been used for 30 days: worth cancelling */
+  idle?: boolean;
 }
 
 /** Lens market.ReceiptSummary (B32.40) — Talyvor's receipt for one paid marketplace bill. */
