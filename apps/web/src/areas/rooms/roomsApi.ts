@@ -212,6 +212,29 @@ export interface Reviews {
   reviews: Review[]
 }
 
+/** Lens rooms.Signature (B41.150): a workspace's e-signature of the contributor agreement, kept as evidence with the
+ *  version and the hash of the exact text signed. */
+export interface AgreementSignature {
+  workspace_id: string
+  user_id: string
+  signed_name: string
+  version: string
+  text_sha256: string
+  signed_at: string
+}
+
+/** Lens rooms.Agreement (B41.150) — GET /api/rooms/{id}/agreement, behind the same room_equity gate as the points ledger.
+ *  A draft carries what it is marked with; signature is null until this workspace signs, and its points count only then. */
+export interface RoomAgreement {
+  room_id: string
+  version: string
+  draft: boolean
+  marked?: string
+  text: string
+  text_sha256: string
+  signature: AgreementSignature | null
+}
+
 /** Lens rooms.Usage — what this workspace's plan lets it open, beside what it has open. -1 is unlimited. */
 export interface RoomLimits {
   plan: string
@@ -599,6 +622,11 @@ export const roomsApi = {
   gate: (id: string) => getJSON<RoomGate>(`/api/rooms/${e(id)}/gate`, { thresholds: 'object', used: 'object', notice: 'string' }),
   setGateThresholds: (id: string, t: Omit<GateThresholds, 'used_window_weeks' | 'updated_at'>) =>
     post<GateThresholds>(`/api/rooms/${e(id)}/gate-thresholds`, t, 'PUT'),
+  // B41.50 — the contributor agreement, signed before points count.
+  agreement: (id: string) =>
+    getJSON<RoomAgreement>(`/api/rooms/${e(id)}/agreement`, { version: 'string', text: 'string', text_sha256: 'string' }),
+  signAgreement: (id: string, version: string, signedName: string) =>
+    post<RoomAgreement>(`/api/rooms/${e(id)}/agreement`, { version, signed_name: signedName }),
   // B41.44 — two reviewers Lens draws at random score a contribution's quality.
   reviews: (id: string, cid: string) =>
     getJSON<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/reviews`, { quality_bps: 'number', reviews: 'list' }),

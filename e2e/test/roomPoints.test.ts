@@ -7,7 +7,7 @@ import type { Evidence, ScenarioCtx, Verdict } from '../src/scenarios.ts'
 
 // B41.43 — room-points against the stub Lens (selftest/stub-rooms.ts): it passes on a Lens that writes an accepted row of
 // size × quality, credits a fork's original the remix share and withdraws on a later rejection; it FAILs when a fork
-// credits its original nothing.
+// credits its original nothing, and (B41.50) when work accepted before its author signs the contributor agreement earns.
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -46,6 +46,12 @@ describe('room-points (B41.43)', () => {
     const { verdict, evidence } = await runAgainstStub('')
     expect(verdict.pass).toBe(true)
     expect(evidence.map((e) => e.note).join('\n')).toMatch(/the ledger after: .*"reason":"withdrawn"/)
+  })
+
+  it('FAILs when work accepted before its author signs the contributor agreement earns points (B41.50)', async () => {
+    const { verdict } = await runAgainstStub('room-agreement-unsigned')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^work accepted before its author signed the contributor agreement earned /)
   })
 
   it('FAILs when a fork credits its original nothing', async () => {

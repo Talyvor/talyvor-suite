@@ -184,9 +184,18 @@
 //                                                     both scored, quality_bps is their median
 //
 // STUB_BREAK=room-review-pick seats the workspace the body names — a defect room-reviews must FAIL on.
+//
+// B41.150 — and the contributor agreement, as room-points reads it, behind the same gate:
+//
+//   GET  /v1/rooms/{id}/agreement   to a member: {room_id, version, draft, marked, text, text_sha256, signature}
+//   POST /v1/rooms/{id}/agreement   {version, signed_name}: 201, or 200 with the signature already kept; 409 for any other
+//                                   version, 400 for a blank name
+//
+// A workspace that has not signed earns no points row; withdrawals still take points back. STUB_BREAK=room-agreement-unsigned
+// counts its points anyway — a defect room-points must FAIL on.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 
 const BREAK = process.env.STUB_BREAK ?? ''
 
@@ -299,6 +308,13 @@ const contributions = new Map<string, Contribution[]>()
 interface PointsRow { id: string; contribution_id: string; workspace_id: string; reason: string; size_points: number; received_usd_micros: number
   quality_bps: number; survival_bps: number; remix_share_bps: number; points: number; created_at: string }
 const pointsLedger = new Map<string, PointsRow[]>()
+
+/** B41.150 — each room's contributor agreement signatures, by workspace; only ever added to. */
+const AGREEMENT_VERSION = 'draft-1'
+const AGREEMENT_TEXT = 'Contributor agreement\n\n1. A stub draft: your contributions are assigned to the company formed to own this room\'s work, with a licence back.'
+const AGREEMENT_SHA = createHash('sha256').update(AGREEMENT_TEXT).digest('hex')
+const signatures = new Map<string, Map<string, { workspace_id: string; user_id: string; signed_name: string; version: string; text_sha256: string; signed_at: string }>>()
+const signed = (r: Room, ws: string) => BREAK === 'room-agreement-unsigned' || (signatures.get(r.id)?.has(ws) ?? false)
 const gateThresholds = new Map<string, Record<string, number>>()
 /** B41.144 — each contribution's reviewer seats, in the order they were drawn. */
 const reviewSeats = new Map<string, { ws: string; score: number | null }[]>()
@@ -584,7 +600,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
     return true
   }
   if (await settingsOutsideRoom(req, res, p, ws)) return true
-  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points|leaderboard|gate)/.exec(p)
+  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points|leaderboard|gate|agreement)/.exec(p)
   if (one === null) return false
   const r = rooms.get(decodeURIComponent(one[1]))
   if (r === undefined || (r.visibility === 'private' && !r.members.some((m) => m.workspace_id === ws))) {
@@ -603,6 +619,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
   if (roomLeaderboard(req, res, p, ws, r)) return true
   if (await roomGate(req, res, p, ws, r)) return true
   if (await roomReviews(req, res, p, ws, r)) return true
+  if (await roomAgreement(req, res, p, ws, r)) return true
   if (one[2] === undefined && req.method === 'GET') return json(res, 200, detail(r, ws)), true
   if (one[2] === '/join' && req.method === 'POST') {
     if (r.banned.includes(ws)) return json(res, 403, bannedFrom), true
@@ -822,14 +839,35 @@ function recordPoints(r: Room, c: Contribution, was: string, status: string) {
     const bps = from === undefined || BREAK === 'room-points-remix' ? 0 : r.terms.remix_share_bps
     const share = Math.floor((size * bps) / 10_000)
     const row = { size_points: size, survival_bps: 10_000, remix_share_bps: bps }
-    if (from !== undefined && share > 0) add(from.author_workspace_id, 'remix_share', share, row)
-    add(c.author_workspace_id, 'accepted', size - share, row)
+    if (from !== undefined && share > 0 && signed(r, from.author_workspace_id)) add(from.author_workspace_id, 'remix_share', share, row)
+    if (signed(r, c.author_workspace_id)) add(c.author_workspace_id, 'accepted', size - share, row)
   } else if (was === 'accepted') {
     const held = new Map<string, number>()
     for (const x of rows) if (x.contribution_id === c.id) held.set(x.workspace_id, (held.get(x.workspace_id) ?? 0) + x.points)
     for (const [w, n] of [...held].sort()) if (n !== 0) add(w, 'withdrawn', -n)
   }
   pointsLedger.set(r.id, rows)
+}
+
+/** B41.150 — GET a room's contributor agreement with the caller's signature, or POST to sign it; false when `p` is not it. */
+async function roomAgreement(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  if (p !== `/v1/rooms/${r.id}/agreement`) return false
+  if (!r.members.some((m) => m.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const kept = signatures.get(r.id) ?? new Map()
+  signatures.set(r.id, kept)
+  const read = () => ({ room_id: r.id, version: AGREEMENT_VERSION, draft: true, marked: 'Test rooms only', text: AGREEMENT_TEXT,
+    text_sha256: AGREEMENT_SHA, signature: kept.get(ws) ?? null })
+  if (req.method === 'GET') return json(res, 200, read()), true
+  if (req.method !== 'POST') return false
+  const d = await body(req)
+  const name = typeof d.signed_name === 'string' ? d.signed_name.trim() : ''
+  if (name === '') return json(res, 400, { error: "rooms: invalid request: signed_name is the signer's full name, 1–200 characters" }), true
+  if (d.version !== AGREEMENT_VERSION) {
+    return json(res, 409, { error: `rooms: conflict: the contributor agreement is at version ${AGREEMENT_VERSION}: read it and sign that version` }), true
+  }
+  if (kept.has(ws)) return json(res, 200, read()), true
+  kept.set(ws, { workspace_id: ws, user_id: `user_${ws}`, signed_name: name, version: AGREEMENT_VERSION, text_sha256: AGREEMENT_SHA, signed_at: new Date().toISOString() })
+  return json(res, 201, read()), true
 }
 
 /** B41.143 — GET a room's points ledger; false when `p` is not it. */
