@@ -95,7 +95,9 @@ func (f *fakeLensForMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, `{"id":"agt-new","name":"`+body["name"].(string)+`"}`)
 	case "GET /v1/workspaces/ws-ada/agents/agt-1/rules":
 		_, _ = io.WriteString(w, `{"max_per_request_ulxc":500,"hourly_limit_ulxc":0,"daily_limit_ulxc":2000,"weekly_limit_ulxc":0,"monthly_limit_ulxc":0,`+
-			`"approval_above_ulxc":300,"allowed_models":["gpt-4o"]}`)
+			`"approval_above_ulxc":300,"allowed_models":["gpt-4o"],`+rulesTheBFFDoesNotName+`}`)
+	case "GET /v1/workspaces/ws-ada/agents/agt-new/rules":
+		_, _ = io.WriteString(w, `{"max_per_request_ulxc":0,"daily_limit_ulxc":0,"monthly_limit_ulxc":0,`+rulesTheBFFDoesNotName+`}`)
 	case "GET /v1/workspaces/ws-ada/agents/agt-1/statement":
 		_, _ = io.WriteString(w, `{"agent_id":"agt-1","lines":[{"kind":"pay","amount_ulxc":-400}]}`)
 	case "GET /v1/workspaces/ws-ada/money-requests":

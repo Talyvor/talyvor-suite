@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -167,6 +169,35 @@ func TestConnectSetAgentLimits(t *testing.T) {
 	before := lens.count("PUT ")
 	if r = toolCall(t, a, token, "set_agent_limits", map[string]any{"agent_id": "agt-1", "daily_limit_ulxc": 0}); r["isError"] != false || lens.count("PUT ") != before {
 		t.Fatalf("removing a limit is a raise and saves nothing: %v", r)
+	}
+}
+
+// rulesTheBFFDoesNotName are rules Lens keeps that no limit tool names, and one it may add later.
+const rulesTheBFFDoesNotName = `"payee_allowances":{"agt-2":{"daily_ulxc":50}},"max_commitment_ulxc":7000,` +
+	`"allowed_licences":["cc-by"],"may_subscribe":true,"rule_from_tomorrow":{"x":[1]}`
+
+// TestConnectLimitsKeepEveryOtherRule: lowering a limit from the chat, or giving a new agent its first ones, sends every
+// rule the BFF does not name back to Lens as it read it, so no commitment cap, licence or always-allowed payee is erased.
+func TestConnectLimitsKeepEveryOtherRule(t *testing.T) {
+	var want map[string]any
+	if err := json.Unmarshal([]byte("{"+rulesTheBFFDoesNotName+"}"), &want); err != nil {
+		t.Fatal(err)
+	}
+	a, lens, token := agentsApp(t)
+	a.oauth.ceilings.Store("ws-ada", connectCeiling{MaxPerRequestULXC: 1000, DailyLimitULXC: 5000, MonthlyLimitULXC: 10000})
+	if r := toolCall(t, a, token, "set_agent_limits", map[string]any{"agent_id": "agt-1", "daily_limit_ulxc": 1500}); r["isError"] != false {
+		t.Fatalf("set_agent_limits: %v", r)
+	}
+	if r := toolCall(t, a, token, "create_agent", map[string]any{"name": "Buyer", "purpose": "Buys", "max_per_request_ulxc": 100,
+		"daily_limit_ulxc": 200, "monthly_limit_ulxc": 300}); r["isError"] != false {
+		t.Fatalf("create_agent: %v", r)
+	}
+	for _, put := range []string{"PUT /v1/workspaces/ws-ada/agents/agt-1/rules", "PUT /v1/workspaces/ws-ada/agents/agt-new/rules"} {
+		for k, v := range want {
+			if got := lens.sent[put][k]; !reflect.DeepEqual(got, v) {
+				t.Errorf("%s: %s sent as %v, Lens holds %v", put, k, got, v)
+			}
+		}
 	}
 }
 
