@@ -98,6 +98,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B17.2 — a synthetic test user signs in with the operator key; 404 unless LENS_SYNTHETIC_KEY
 	// is set. See synthetic.go.
 	a.mux.HandleFunc("/auth/synthetic", a.handleSyntheticSignIn)
+	// B57.86 — the same, for the phone app: a Bearer session instead of a cookie.
+	a.mux.HandleFunc("/auth/synthetic/mobile", a.handleSyntheticMobileSignIn)
 
 	// /api/version is one of the TWO /api/ routes with no session gate. It reports which commit this
 	// binary was built from and which bundle it is serving, and it is deliberately readable
@@ -845,7 +847,9 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Anything added here goes in WITH a reason, and it must carry its own authentication — an
 // Origin exemption is not a pass on authenticating the caller.
 func originExemptPath(path string) bool {
-	return oauthMachinePath(path) || path == mobileSessionPath // the phone app; the ID token is its proof
+	return oauthMachinePath(path) ||
+		path == mobileSessionPath || // the phone app; the ID token is its proof
+		path == syntheticMobilePath // the phone harness; the operator key is its proof, and no cookie is read or set
 }
 
 // sameOriginWriteAllowed is the SINGLE decider. Reads are never gated: applying this to GET

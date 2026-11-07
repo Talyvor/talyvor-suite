@@ -21,7 +21,7 @@ type connectedAssistant struct {
 	Scopes    []string  `json:"scopes"`
 	Connected time.Time `json:"connected_at"`
 	LastUsed  time.Time `json:"last_used_at"` // zero until the assistant first calls /mcp
-	// Calls is B52.3's audit trail for this connection, newest first; null where the BFF keeps no database.
+	// Calls is B52.3's audit trail for this connection, newest first; in memory where the BFF keeps no database.
 	Calls []assistantCall `json:"calls"`
 }
 
@@ -56,7 +56,10 @@ func (a *app) handleConnectedAssistants(w http.ResponseWriter, r *http.Request) 
 	for _, g := range grants {
 		c := connectedAssistant{ID: g.ID, Name: cmp.Or(g.ClientName, "An assistant"),
 			Scopes: strings.Fields(g.Scope), Connected: g.Created, LastUsed: g.LastUsed, Calls: calls[g.ID]}
-		if calls != nil && c.Calls == nil {
+		if a.oauth.db == nil {
+			c.Calls = g.calls
+		}
+		if c.Calls == nil {
 			c.Calls = []assistantCall{} // kept, and none yet: [] rather than null
 		}
 		out = append(out, c)

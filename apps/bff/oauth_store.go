@@ -230,7 +230,7 @@ func (d *oauthDB) recordToolCall(ctx context.Context, g oauthGrant, c assistantC
 }
 
 // toolCallsOf is a person's latest calls, at most perGrant for each connection, newest first. Without a database
-// there is no trail: nil, not an empty one.
+// the trail is on each grant in memory (auditToolCall): nil here.
 func (d *oauthDB) toolCallsOf(ctx context.Context, sub string, perGrant int) (map[string][]assistantCall, error) {
 	if d == nil {
 		return nil, nil
