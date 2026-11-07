@@ -875,7 +875,9 @@ func (a *app) sameOriginWriteAllowed(r *http.Request) bool {
 	if a.cfg.authMode == authModeDisabled {
 		return true
 	}
-	if originExemptPath(r.URL.Path) {
+	// B50.36 — the phone harness sends no Origin; a page on another site always does, and then the door is gated like any write.
+	origin := r.Header.Get("Origin")
+	if originExemptPath(r.URL.Path) && (r.URL.Path != syntheticMobilePath || origin == "") {
 		return true
 	}
 	// A Bearer session is the phone app's, and it is then the request's only identity
@@ -890,7 +892,7 @@ func (a *app) sameOriginWriteAllowed(r *http.Request) bool {
 	if s := r.Header.Get("Sec-Fetch-Site"); s != "" && s != "same-origin" {
 		return false
 	}
-	return r.Header.Get("Origin") == a.cfg.publicBaseURL
+	return origin == a.cfg.publicBaseURL
 }
 
 // writeJSON emits a small JSON object. Used only for BFF-originated responses (context,

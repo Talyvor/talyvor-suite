@@ -511,7 +511,7 @@ var notSweptWrite = map[string]string{
 	"/oauth/token":           "B40.6 — exempt (oauthMachinePath): an assistant's server calls it with the PKCE verifier or refresh token as its credential",
 	"/oauth/revoke":          "B40.6 — exempt (oauthMachinePath): the token being revoked is its own credential",
 	"/auth/mobile/session":   "B40.24 — exempt (originExemptPath): the phone app sends no Origin, and its ID token is the credential",
-	"/auth/synthetic/mobile": "B57.86 — exempt (originExemptPath): the phone harness sends no Origin, and the operator key is the credential",
+	"/auth/synthetic/mobile": "B57.86 — exempt (originExemptPath) only with no Origin: the phone harness sends none, and the operator key is the credential; another site's Origin is refused (B50.36, TestSyntheticPhoneSignInRefusesAnotherSite)",
 	"/mcp":                   "B40.6 — exempt (oauthMachinePath): an assistant's bearer token, never the cookie, is what it accepts",
 	"/auth/logout": "a browser POST the app issues at itself; it is swept by TestLogout_RefusesCrossOrigin, " +
 		"which drives it directly rather than through this table because it has no JSON body and no upstream.",
