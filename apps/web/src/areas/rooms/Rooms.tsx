@@ -398,7 +398,7 @@ function RoomPage() {
   // B32.54 — a member under the current terms is in the room: its conversation, contributions, runs and spec (Room.tsx).
   const inside = !asks
   const about = issueBackLink(r.description, window.location.origin)
-  const n = (i: number) => String(inside ? i + 5 : i).padStart(2, '0')
+  const n = (i: number) => String(inside ? i + 8 : i).padStart(2, '0')
   return (
     <>
       <Region

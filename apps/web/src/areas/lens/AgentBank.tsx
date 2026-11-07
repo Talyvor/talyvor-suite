@@ -299,6 +299,17 @@ function LimitAlerts({ nameOf }: { nameOf: (id: string) => string }) {
   )
 }
 
+/** B17.364 — a budget on a company account raises alerts before any agent exists: they show then, and nothing else does. */
+function AlertsBeforeAgents({ nameOf }: { nameOf: (id: string) => string }) {
+  const alerts = useQuery({ queryKey: ['limit-alerts'], queryFn: agentBankApi.limitAlerts })
+  if (!alerts.data?.alerts?.length) return null
+  return (
+    <Region index="02" label="Limit alerts">
+      <LimitAlerts nameOf={nameOf} />
+    </Region>
+  )
+}
+
 const SCHEDULES_KEY = ['agent-schedules']
 const scheduleSelect = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 const EVERY: readonly [AgentSchedule['every'], string][] = [
@@ -2668,6 +2679,8 @@ export function AgentBank() {
         <Region index="03" label="Spending">
           <Spending nameOf={nameOf} />
         </Region>
+      ) : first ? (
+        <AlertsBeforeAgents nameOf={nameOf} />
       ) : null}
 
       {agent && book.data ? (

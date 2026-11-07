@@ -253,6 +253,8 @@ export interface MarketLicence {
   price_ulxc: number
   /** B32.87 — how it was got: offer, rent_to_own, or prize (won as a room's prize) */
   source?: string
+  /** B41.176 — it renews but has not been used for 30 days */
+  idle?: boolean
 }
 
 /** B25.8 — one payout (market.Payout): money through Stripe, or the balance taken as credits. */

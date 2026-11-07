@@ -187,6 +187,20 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		{http.MethodDelete, "/api/rooms/room_1/takeover", ""},
 		{http.MethodPut, "/api/rooms/room_1/takeover/vote", `{"candidate_workspace_id":"ws_2"}`},
 		{http.MethodPost, "/api/rooms/room_1/fork", ""},
+		{http.MethodGet, "/api/rooms/room_1/shared-ownership", ""},
+		{http.MethodPut, "/api/rooms/room_1/shared-ownership", `{"enabled":true,"pool_bps":2500}`},
+		{http.MethodGet, "/api/rooms/room_1/rate-card", ""},
+		{http.MethodPut, "/api/rooms/room_1/rate-card", `{"pool_points":10000,"sizes":[{"size":"M","hours":4,"points_per_hour":100}]}`},
+		{http.MethodPut, "/api/rooms/room_1/contributions/c_1/size", `{"size":"M"}`},
+		{http.MethodGet, "/api/rooms/room_1/points", ""},
+		{http.MethodPost, "/api/rooms/room_1/contributions/c_1/reviewers", ""},
+		{http.MethodPut, "/api/rooms/room_1/contributions/c_1/review", `{"score_bps":12000}`},
+		{http.MethodGet, "/api/rooms/room_1/contributions/c_1/reviews", ""},
+		{http.MethodGet, "/api/rooms/room_1/leaderboard", ""},
+		{http.MethodGet, "/api/rooms/room_1/gate", ""},
+		{http.MethodPut, "/api/rooms/room_1/gate-thresholds", `{"used_people":150}`},
+		{http.MethodGet, "/api/rooms/room_1/agreement", ""},
+		{http.MethodPost, "/api/rooms/room_1/agreement", `{"version":"draft-1","signed_name":"Ada Lovelace"}`},
 	} {
 		if rec := doJSON(a, c.method, c.path, c.body); rec.Code != http.StatusOK {
 			t.Fatalf("%s %s = %d %s", c.method, c.path, rec.Code, rec.Body.String())
@@ -198,6 +212,11 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		{http.MethodPatch, "/api/rooms/room_1/members/ws_2", `{"may_spend":true,"workspace_id":"ws_3"}`},
 		{http.MethodPost, "/api/rooms/room_1/prizes/rprz_1/award", `{"contribution_id":"c_1","winner_workspace_id":"ws_3"}`},
 		{http.MethodPut, "/api/rooms/room_1/takeover/vote", `{"candidate_workspace_id":"ws_2","workspace_id":"ws_3"}`},
+		{http.MethodPut, "/api/rooms/room_1/shared-ownership", `{"enabled":true,"room_id":"room_2"}`},
+		{http.MethodPut, "/api/rooms/room_1/rate-card", `{"pool_points":10000,"room_id":"room_2"}`},
+		{http.MethodPut, "/api/rooms/room_1/contributions/c_1/size", `{"size":"M","points":100000}`},
+		{http.MethodPut, "/api/rooms/room_1/contributions/c_1/review", `{"score_bps":12000,"reviewer_workspace_id":"ws_3"}`},
+		{http.MethodPost, "/api/rooms/room_1/agreement", `{"version":"draft-1","signed_name":"Ada Lovelace","user_id":"u_2"}`},
 	} {
 		if rec := doJSON(a, c.method, c.path, c.body); rec.Code != http.StatusBadRequest {
 			t.Fatalf("%s %s with %s = %d, want 400 before Lens is asked", c.method, c.path, c.body, rec.Code)
@@ -217,6 +236,20 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		`DELETE /v1/rooms/room_1/takeover `,
 		`PUT /v1/rooms/room_1/takeover/vote {"candidate_workspace_id":"ws_2"}`,
 		`POST /v1/rooms/room_1/fork `,
+		`GET /v1/rooms/room_1/shared-ownership `,
+		`PUT /v1/rooms/room_1/shared-ownership {"enabled":true,"pool_bps":2500}`,
+		`GET /v1/rooms/room_1/rate-card `,
+		`PUT /v1/rooms/room_1/rate-card {"pool_points":10000,"sizes":[{"size":"M","hours":4,"points_per_hour":100}]}`,
+		`PUT /v1/rooms/room_1/contributions/c_1/size {"size":"M"}`,
+		`GET /v1/rooms/room_1/points `,
+		`POST /v1/rooms/room_1/contributions/c_1/reviewers `,
+		`PUT /v1/rooms/room_1/contributions/c_1/review {"score_bps":12000}`,
+		`GET /v1/rooms/room_1/contributions/c_1/reviews `,
+		`GET /v1/rooms/room_1/leaderboard `,
+		`GET /v1/rooms/room_1/gate `,
+		`PUT /v1/rooms/room_1/gate-thresholds {"used_people":150}`,
+		`GET /v1/rooms/room_1/agreement `,
+		`POST /v1/rooms/room_1/agreement {"version":"draft-1","signed_name":"Ada Lovelace"}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("Lens received\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

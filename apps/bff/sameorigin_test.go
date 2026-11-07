@@ -363,6 +363,18 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodDelete, path: "/api/rooms/x1/takeover"},
 		{method: http.MethodPut, path: "/api/rooms/x1/takeover/vote", body: `{"candidate_workspace_id":"x1"}`},
 		{method: http.MethodPost, path: "/api/rooms/x1/fork"},
+		// B41.41 — the owner sets shared ownership.
+		{method: http.MethodPut, path: "/api/rooms/x1/shared-ownership", body: `{"enabled":true}`},
+		// B41.42 — the owner publishes the rate card; a contribution claims a size.
+		{method: http.MethodPut, path: "/api/rooms/x1/rate-card", body: `{"pool_points":1}`},
+		{method: http.MethodPut, path: "/api/rooms/x1/contributions/x1/size", body: `{"size":"M"}`},
+		// B41.44 — a contribution's reviewers are drawn, and a drawn reviewer scores it.
+		{method: http.MethodPost, path: "/api/rooms/x1/contributions/x1/reviewers"},
+		{method: http.MethodPut, path: "/api/rooms/x1/contributions/x1/review", body: `{"score_bps":10000}`},
+		// B41.46 — the owner raises the room's Gate thresholds.
+		{method: http.MethodPut, path: "/api/rooms/x1/gate-thresholds", body: `{"used_people":150}`},
+		// B41.50 — a member signs the contributor agreement.
+		{method: http.MethodPost, path: "/api/rooms/x1/agreement", body: `{"version":"draft-1","signed_name":"A"}`},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},
@@ -511,7 +523,7 @@ var notSweptWrite = map[string]string{
 	"/oauth/token":           "B40.6 — exempt (oauthMachinePath): an assistant's server calls it with the PKCE verifier or refresh token as its credential",
 	"/oauth/revoke":          "B40.6 — exempt (oauthMachinePath): the token being revoked is its own credential",
 	"/auth/mobile/session":   "B40.24 — exempt (originExemptPath): the phone app sends no Origin, and its ID token is the credential",
-	"/auth/synthetic/mobile": "B57.86 — exempt (originExemptPath): the phone harness sends no Origin, and the operator key is the credential",
+	"/auth/synthetic/mobile": "B57.86 — exempt (originExemptPath) only with no Origin: the phone harness sends none, and the operator key is the credential; another site's Origin is refused (B50.36, TestSyntheticPhoneSignInRefusesAnotherSite)",
 	"/mcp":                   "B40.6 — exempt (oauthMachinePath): an assistant's bearer token, never the cookie, is what it accepts",
 	"/auth/logout": "a browser POST the app issues at itself; it is swept by TestLogout_RefusesCrossOrigin, " +
 		"which drives it directly rather than through this table because it has no JSON body and no upstream.",

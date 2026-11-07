@@ -50,4 +50,10 @@ describe('subscriptions-view (B41.20)', () => {
     expect(verdict).toMatchObject({ pass: false })
     expect(verdict.detail).toMatch(/must read active and renewing/)
   })
+
+  it('FAILs when a subscription taken today reads idle (B41.76)', async () => {
+    const verdict = await runOnStub('fresh-licence-idle')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/must not read idle/)
+  })
 }, 60_000)
