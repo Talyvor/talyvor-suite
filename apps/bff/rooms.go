@@ -680,6 +680,21 @@ func (a *app) handleRoomPoints(w http.ResponseWriter, r *http.Request, t tenant)
 	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
 }
 
+// handleRoomLeaderboard — GET /api/rooms/{id}/leaderboard: the room's provisional leaderboard (Lens B41.145), behind the
+// same room_equity gate: {enabled, pool_bps, total_points, rows: [{workspace_id, workspace_name, points, identity_checked,
+// share_bps}], note, notice}.
+func (a *app) handleRoomLeaderboard(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	path, ok := roomPath(w, r, "/leaderboard", false)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+}
+
 // B41.44 — a contribution's quality, scored by two reviewers Lens draws at random (Lens B41.144), behind the same
 // room_equity gate as the points ledger:
 //

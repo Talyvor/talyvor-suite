@@ -7,7 +7,9 @@
 // 20%. The owner then rejects the original: a withdrawn row takes its points back, and the rows already written stay as
 // they were. Lens's own read of GET /v1/rooms/{id}/points is the oracle. Quality is whatever Lens scored (1.0 until
 // B41.144's reviewers), so each row's points are checked against its own size × quality; Lens's real-Postgres test
-// proves 1.2 × M. The operator closes the room at the end, so a nightly run leaves nothing in the directory people read.
+// proves 1.2 × M. B41.45: with both companies holding points, the member's GET /v1/rooms/{id}/leaderboard lists every holder
+// on the ledger with the same points, the identity-checked holders' shares of the pool add up to exactly 10,000 bps, a
+// holder not yet identity-checked has none, and it carries the note that nothing is final until the Gate. The operator closes the room at the end, so a nightly run leaves nothing in the directory people read.
 
 import { fail } from './bank.ts'
 import { RUN_SALT } from './oracles.ts'
@@ -23,6 +25,7 @@ interface Entry {
   remix_share_bps: number; points: number
 }
 interface Ledger { holders: { workspace_id: string; points: number }[]; entries: Entry[] }
+interface Board { rows: { workspace_id: string; points: number; identity_checked: boolean; share_bps: number }[]; note: string }
 
 export function roomPoints(i: number): Scenario {
   return {
@@ -104,6 +107,20 @@ export function roomPoints(i: number): Scenario {
           return fail(`the fork's accepted row reads ${JSON.stringify(forkRow)}, not its author earning ${forkPoints} less the ${share} passed to the original`)
         }
 
+        const board = await lens.act<Board>(member, 'GET', `${room}/leaderboard`)
+        ctx.evidence.push({ note: `the leaderboard with both holding points: ${board.ok ? JSON.stringify(board.value).slice(0, 900) : said(board)}` })
+        if (!board.ok) return fail(`the member reading the room's leaderboard was refused: ${said(board)}`)
+        const listed = (l: { workspace_id: string; points: number }[]) => JSON.stringify(l.map((h) => [h.workspace_id, h.points]).sort())
+        if (listed(board.value.rows) !== listed(before.value.holders)) {
+          return fail(`the leaderboard lists ${listed(board.value.rows)}, not the ledger's holders ${listed(before.value.holders)}`)
+        }
+        const checked = board.value.rows.filter((r) => r.identity_checked && r.points > 0)
+        const shares = checked.reduce((a, r) => a + r.share_bps, 0)
+        if ((checked.length > 0 && shares !== 10_000) || board.value.rows.some((r) => !r.identity_checked && r.share_bps !== 0)) {
+          return fail(`the leaderboard's shares read ${JSON.stringify(board.value.rows)}: identity-checked holders' add up to ${shares} bps, not 10000, or an unchecked holder has one`)
+        }
+        if (board.value.note !== 'Nothing is final until the Gate.') return fail(`the leaderboard's note reads ${JSON.stringify(board.value.note)}`)
+
         const rejected = await lens.act(owner, 'PATCH', one(original), { status: 'rejected' })
         ctx.evidence.push({ note: `the owner rejects the original after accepting it: ${said(rejected)}` })
         if (!rejected.ok) return fail(`rejecting the accepted original was refused: ${said(rejected)}`)
@@ -121,7 +138,7 @@ export function roomPoints(i: number): Scenario {
         return {
           pass: true,
           detail: `room ${id}: the M-size original earned its author ${earned.points} (400 × quality ${earned.quality_bps} bps), the fork passed ${share} of its ` +
-            `${forkPoints} to it, and rejecting the original wrote a withdrawn row of ${withdrawn.points} without changing the earlier rows`,
+            `${forkPoints} to it, the leaderboard listed both holders with shares adding up to 100% of the pool, and rejecting the original wrote a withdrawn row of ${withdrawn.points} without changing the earlier rows`,
         }
       } finally {
         if (opened !== undefined) await lens.moderateRoom(opened, 'close', 'a nightly test room, closed by the testers').catch(() => undefined)

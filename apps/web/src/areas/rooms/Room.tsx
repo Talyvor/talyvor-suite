@@ -22,6 +22,7 @@ import {
   usdText,
 } from './roomsApi'
 import { RoomLead } from './RoomLead'
+import { RoomLeaderboard } from './RoomLeaderboard'
 import { RoomPoints, pointsKey } from './RoomPoints'
 import { ContributionSize, RoomRateCard } from './RoomRateCard'
 import { ContributionReviews } from './RoomReviews'
@@ -38,7 +39,8 @@ import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 // intent only — the owner sets the pool for contributors (RoomSharedOwnership.tsx). B41.42: the rate card, points for
 // each size of work, and a contribution's size, fixed before the work (RoomRateCard.tsx). B41.43: the points ledger, what
 // each accepted contribution earned (RoomPoints.tsx). B41.44: two reviewers drawn at random score a contribution's quality
-// (RoomReviews.tsx).
+// (RoomReviews.tsx). B41.45: the provisional leaderboard, each holder's points and estimated share of the pool
+// (RoomLeaderboard.tsx).
 //
 // Lens decides everything — who may post, contribute, vote, accept and spend — and its sentence is shown on a refusal.
 
@@ -679,6 +681,7 @@ export function RoomLive({ room }: { room: RoomDetail }) {
       <RoomSharedOwnership room={room} />
       <RoomRateCard room={room} />
       <RoomPoints room={room} />
+      <RoomLeaderboard room={room} />
     </>
   )
 }
