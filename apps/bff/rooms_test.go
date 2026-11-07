@@ -192,6 +192,7 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		{http.MethodGet, "/api/rooms/room_1/rate-card", ""},
 		{http.MethodPut, "/api/rooms/room_1/rate-card", `{"pool_points":10000,"sizes":[{"size":"M","hours":4,"points_per_hour":100}]}`},
 		{http.MethodPut, "/api/rooms/room_1/contributions/c_1/size", `{"size":"M"}`},
+		{http.MethodGet, "/api/rooms/room_1/points", ""},
 	} {
 		if rec := doJSON(a, c.method, c.path, c.body); rec.Code != http.StatusOK {
 			t.Fatalf("%s %s = %d %s", c.method, c.path, rec.Code, rec.Body.String())
@@ -230,6 +231,7 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		`GET /v1/rooms/room_1/rate-card `,
 		`PUT /v1/rooms/room_1/rate-card {"pool_points":10000,"sizes":[{"size":"M","hours":4,"points_per_hour":100}]}`,
 		`PUT /v1/rooms/room_1/contributions/c_1/size {"size":"M"}`,
+		`GET /v1/rooms/room_1/points `,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("Lens received\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

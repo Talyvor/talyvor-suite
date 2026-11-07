@@ -22,6 +22,7 @@ import {
   usdText,
 } from './roomsApi'
 import { RoomLead } from './RoomLead'
+import { RoomPoints, pointsKey } from './RoomPoints'
 import { ContributionSize, RoomRateCard } from './RoomRateCard'
 import { RoomSharedOwnership } from './RoomSharedOwnership'
 import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
@@ -34,7 +35,8 @@ import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 // the room's spec, a Docs page kept current in the conversation, and asking the room's AI, which reads it (RoomSpec.tsx).
 // B41.48: who leads the room, and the takeover vote when its owner is away (RoomLead.tsx). B41.41: shared ownership,
 // intent only — the owner sets the pool for contributors (RoomSharedOwnership.tsx). B41.42: the rate card, points for
-// each size of work, and a contribution's size, fixed before the work (RoomRateCard.tsx).
+// each size of work, and a contribution's size, fixed before the work (RoomRateCard.tsx). B41.43: the points ledger, what
+// each accepted contribution earned (RoomPoints.tsx).
 //
 // Lens decides everything — who may post, contribute, vote, accept and spend — and its sentence is shown on a refusal.
 
@@ -185,7 +187,10 @@ function Conversation({ room, me }: { room: RoomDetail; me: string }) {
       (ev) => {
         if (!ev.message) return
         upsert(ev.message)
-        if (ev.message.kind === 'contribution') void qc.invalidateQueries({ queryKey: contributionsKey(id) })
+        if (ev.message.kind === 'contribution') {
+          void qc.invalidateQueries({ queryKey: contributionsKey(id) })
+          void qc.invalidateQueries({ queryKey: pointsKey(id) })
+        }
         if (isRun(ev.message) && ev.message.refs.pay === 'room')
           void qc.invalidateQueries({ queryKey: [...ROOMS_KEY, 'room', id] })
       },
@@ -481,8 +486,10 @@ function Board({ room, me }: { room: RoomDetail; me: string }) {
   const id = room.id
   const list = useQuery({ queryKey: contributionsKey(id), queryFn: () => roomsApi.contributions(id) })
   const [proposing, setProposing] = useState(false)
-  const update = (c: Contribution) =>
+  const update = (c: Contribution) => {
     qc.setQueryData<Contribution[]>(contributionsKey(id), (l) => (l ?? []).map((x) => (x.id === c.id ? c : x)))
+    void qc.invalidateQueries({ queryKey: pointsKey(id) })
+  }
   const propose = useMutation({
     mutationFn: (d: { kind: ListingKind; title: string; text: string; micros: number | undefined }) =>
       roomsApi.propose(id, {
@@ -668,6 +675,7 @@ export function RoomLive({ room }: { room: RoomDetail }) {
       <RoomLead room={room} />
       <RoomSharedOwnership room={room} />
       <RoomRateCard room={room} />
+      <RoomPoints room={room} />
     </>
   )
 }

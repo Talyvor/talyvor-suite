@@ -130,6 +130,32 @@ export interface RateCard {
   updated_at?: string
 }
 
+/** Lens rooms.PointsEntry (B41.143): one append-only row of a room's points ledger. An accepted row earns size × quality ×
+ *  survival, less the remix share a fork passes to its original's author in a remix_share row; a withdrawn row takes
+ *  back what a contribution rejected after it was accepted had earned. Basis points: 10,000 is 1.0 or 100%. */
+export interface PointsEntry {
+  id: string
+  contribution_id: string
+  workspace_id: string
+  reason: 'accepted' | 'remix_share' | 'withdrawn'
+  size_points: number
+  received_usd_micros: number
+  quality_bps: number
+  survival_bps: number
+  remix_share_bps: number
+  points: number
+  created_at: string
+}
+
+/** Lens rooms.Points (B41.143) — GET /api/rooms/{id}/points, to members under the current terms, behind the same
+ *  room_equity gate as the rate card. total_points counts only holders whose owner is identity-checked at L2. */
+export interface RoomPoints {
+  room_id: string
+  total_points: number
+  holders: { workspace_id: string; workspace_name: string; points: number; identity_checked: boolean }[]
+  entries: PointsEntry[]
+}
+
 /** Lens rooms.Usage — what this workspace's plan lets it open, beside what it has open. -1 is unlimited. */
 export interface RoomLimits {
   plan: string
@@ -507,6 +533,9 @@ export const roomsApi = {
     post<RateCard>(`/api/rooms/${e(id)}/rate-card`, { pool_points: poolPoints, sizes }, 'PUT'),
   claimSize: (id: string, cid: string, size: string) =>
     post<Contribution>(`/api/rooms/${e(id)}/contributions/${e(cid)}/size`, { size }, 'PUT'),
+  // B41.43 — the points ledger.
+  points: (id: string) =>
+    getJSON<RoomPoints>(`/api/rooms/${e(id)}/points`, { total_points: 'number', holders: 'list', entries: 'list' }),
   previewInvite: (token: string) =>
     getJSON<InvitePreview>(`/api/room-invites/${e(token)}`, { room: 'object', terms: 'object', uses_left: 'number' }),
   joinByInvite: (token: string, termsVersion: number) =>

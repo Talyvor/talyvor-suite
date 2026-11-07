@@ -666,6 +666,20 @@ func (a *app) handleRoomContributionSize(w http.ResponseWriter, r *http.Request,
 	a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
 }
 
+// handleRoomPoints — GET /api/rooms/{id}/points: the room's points ledger (Lens B41.143), behind the same room_equity gate:
+// {room_id, total_points, holders: [{workspace_id, workspace_name, points, identity_checked}], entries: [...]}.
+func (a *app) handleRoomPoints(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	path, ok := roomPath(w, r, "/points", false)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+}
+
 // handleRoomInvitePreview — GET /api/room-invites/{token}: what a live link opens; 404 once it is revoked, expired or
 // used up.
 func (a *app) handleRoomInvitePreview(w http.ResponseWriter, r *http.Request, t tenant) {
