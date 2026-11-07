@@ -440,17 +440,22 @@ func TestAlwaysAllowReachesLens(t *testing.T) {
 	a, f := newFakeLensAgentBank(t)
 	doJSON(a, http.MethodPost, "/api/agents/agt_1/rules/simulate",
 		`{"amount_ulxc":1000000,"payee":{"kind":"agent","id":"agt_bea"},"always_allow":{"amount_ulxc":3000000,"per":"month","x":1}}`)
+	// B54.34: Lens signs the allowance too (B54.29), so the challenge is asked for with the one the approval saves.
+	doJSON(a, http.MethodPost, "/api/agents/approvals/apr_1/challenge", `{"always_allow":{"amount_ulxc":3000000,"per":"month","x":1},"workspace_id":"ws_other"}`)
 	doJSON(a, http.MethodPost, "/api/agents/approvals/apr_1/approve", `{"always_allow":{"amount_ulxc":3000000,"per":"month"},"workspace_id":"ws_other"}`)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if len(f.got) != 2 {
-		t.Fatalf("Lens got %q; want the preview and the approval", f.got)
+	if len(f.got) != 3 {
+		t.Fatalf("Lens got %q; want the preview, the challenge and the approval", f.got)
 	}
 	if want := `"always_allow":{"amount_ulxc":3000000,"per":"month"}}`; !strings.HasSuffix(f.got[0], want) {
 		t.Fatalf("Lens got %q; want the simulation to end %s", f.got[0], want)
 	}
-	if want := `/agents/approvals/apr_1/approve {"always_allow":{"amount_ulxc":3000000,"per":"month"}}`; !strings.HasSuffix(f.got[1], want) {
+	if want := `/agents/approvals/apr_1/challenge {"always_allow":{"amount_ulxc":3000000,"per":"month"}}`; !strings.HasSuffix(f.got[1], want) || strings.Contains(f.got[1], "ws_other") {
 		t.Fatalf("Lens got %q; want POST …%s", f.got[1], want)
+	}
+	if want := `/agents/approvals/apr_1/approve {"always_allow":{"amount_ulxc":3000000,"per":"month"}}`; !strings.HasSuffix(f.got[2], want) {
+		t.Fatalf("Lens got %q; want POST …%s", f.got[2], want)
 	}
 }
 

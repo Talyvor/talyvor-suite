@@ -58,7 +58,7 @@ export function ApprovalCards() {
 
   const decide = useMutation({
     mutationFn: async ({ a, decision, allow }: { a: AgentApproval; decision: 'approve' | 'deny'; allow?: PayeeAllowance }): Promise<Outcome> => {
-      await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined, allow)
+      await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id, allow) : undefined, allow)
       const who = nameOf(a.agent_id)
       if (decision === 'deny') return { ok: true, text: <>Denied. {who}’s {a.payee ? 'payment' : 'request'} will be refused.</> }
       // B41.4 — the rule saved with the approval, said once whatever happens to the payment.
