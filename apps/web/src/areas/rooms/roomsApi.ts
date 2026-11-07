@@ -156,6 +156,19 @@ export interface RoomPoints {
   entries: PointsEntry[]
 }
 
+/** Lens rooms.Leaderboard (B41.145) — GET /api/rooms/{id}/leaderboard, behind the same room_equity gate as the points
+ *  ledger. Rows are most points first; the identity-checked holders' share_bps of the contributor pool add up to 10,000,
+ *  and a holder waiting for its owner's identity check has 0. */
+export interface RoomLeaderboard {
+  room_id: string
+  enabled: boolean
+  pool_bps: number
+  total_points: number
+  rows: { workspace_id: string; workspace_name: string; points: number; identity_checked: boolean; share_bps: number }[]
+  note: string
+  notice: string
+}
+
 /** Lens rooms.Review (B41.144): one reviewer's seat on a contribution. score_bps is 5,000–15,000 (0.5–1.5), null until it
  *  scores; ring means it and the author scored each other's work, so its score counts as 1.0 and earns nothing. */
 export interface Review {
@@ -555,6 +568,9 @@ export const roomsApi = {
   // B41.43 — the points ledger.
   points: (id: string) =>
     getJSON<RoomPoints>(`/api/rooms/${e(id)}/points`, { total_points: 'number', holders: 'list', entries: 'list' }),
+  // B41.45 — the provisional leaderboard.
+  leaderboard: (id: string) =>
+    getJSON<RoomLeaderboard>(`/api/rooms/${e(id)}/leaderboard`, { pool_bps: 'number', rows: 'list', note: 'string' }),
   // B41.44 — two reviewers Lens draws at random score a contribution's quality.
   reviews: (id: string, cid: string) =>
     getJSON<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/reviews`, { quality_bps: 'number', reviews: 'list' }),

@@ -661,6 +661,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/rooms/{id}/rate-card", a.requireTenant(a.handleRoomRateCard))                        // B41.42
 	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/size", a.requireTenant(a.handleRoomContributionSize)) // B41.42
 	a.mux.HandleFunc("/api/rooms/{id}/points", a.requireTenant(a.handleRoomPoints))                             // B41.43
+	a.mux.HandleFunc("/api/rooms/{id}/leaderboard", a.requireTenant(a.handleRoomLeaderboard))                   // B41.45
 	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/reviews", a.requireTenant(a.handleRoomReviews))       // B41.44
 	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/reviewers", a.requireTenant(a.handleRoomReviewers))   // B41.44
 	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/review", a.requireTenant(a.handleRoomReview))         // B41.44

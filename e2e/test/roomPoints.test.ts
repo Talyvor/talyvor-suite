@@ -53,4 +53,10 @@ describe('room-points (B41.43)', () => {
     expect(verdict).toMatchObject({ pass: false })
     expect(verdict.detail).toMatch(/^the fork's remix_share row reads undefined/)
   })
+
+  it('FAILs when the leaderboard leaves a holder off (B41.45)', async () => {
+    const { verdict } = await runAgainstStub('room-leaderboard-holder')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^the leaderboard lists /)
+  })
 }, 60_000)

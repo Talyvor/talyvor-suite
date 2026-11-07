@@ -161,10 +161,12 @@
 // B41.143 — and the points ledger, as room-points reads it, behind the same gate:
 //
 //   GET /v1/rooms/{id}/points   to a member: {room_id, total_points, holders, entries}, newest first; 404 to anyone else
+//   GET /v1/rooms/{id}/leaderboard   B41.145, to a member: {enabled, pool_bps, total_points, rows, note, notice}
 //
 // Accepting a sized contribution writes its author an accepted row of size × quality (1.0 here) × survival 100%; a fork
 // passes the room's remix share of it to its original's author; rejecting it once accepted writes a withdrawn row.
-// STUB_BREAK=room-points-remix credits a fork's original nothing — a defect room-points must FAIL on.
+// STUB_BREAK=room-points-remix credits a fork's original nothing — a defect room-points must FAIL on;
+// room-leaderboard-holder leaves the leaderboard's last holder off — another.
 //
 // B41.144 — and a contribution's two reviewers, as room-reviews reads them, behind the same gate:
 //
@@ -574,7 +576,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
     return true
   }
   if (await settingsOutsideRoom(req, res, p, ws)) return true
-  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points)/.exec(p)
+  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points|leaderboard)/.exec(p)
   if (one === null) return false
   const r = rooms.get(decodeURIComponent(one[1]))
   if (r === undefined || (r.visibility === 'private' && !r.members.some((m) => m.workspace_id === ws))) {
@@ -590,6 +592,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
   if (await roomSharedOwnership(req, res, p, ws, r)) return true
   if (await roomRateCard(req, res, p, ws, r)) return true
   if (roomPointsLedger(req, res, p, ws, r)) return true
+  if (roomLeaderboard(req, res, p, ws, r)) return true
   if (await roomReviews(req, res, p, ws, r)) return true
   if (one[2] === undefined && req.method === 'GET') return json(res, 200, detail(r, ws)), true
   if (one[2] === '/join' && req.method === 'POST') {
@@ -830,6 +833,19 @@ function roomPointsLedger(req: IncomingMessage, res: ServerResponse, p: string, 
   const holders = [...held].map(([workspace_id, points]) => ({ workspace_id, workspace_name: workspace_id, points, identity_checked: false }))
     .sort((a, b) => b.points - a.points || a.workspace_id.localeCompare(b.workspace_id))
   return json(res, 200, { room_id: r.id, total_points: 0, holders, entries: [...rows].reverse() }), true
+}
+
+/** B41.145 — GET a room's provisional leaderboard; false when `p` is not it. The stub's holders are never identity-checked,
+ *  so every share is 0. */
+function roomLeaderboard(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): boolean {
+  if (p !== `/v1/rooms/${r.id}/leaderboard` || req.method !== 'GET') return false
+  if (!r.members.some((m) => m.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const held = new Map<string, number>()
+  for (const x of pointsLedger.get(r.id) ?? []) held.set(x.workspace_id, (held.get(x.workspace_id) ?? 0) + x.points)
+  const rows = [...held].map(([workspace_id, points]) => ({ workspace_id, workspace_name: workspace_id, points, identity_checked: false, share_bps: 0 }))
+    .sort((a, b) => b.points - a.points || a.workspace_id.localeCompare(b.workspace_id))
+  if (BREAK === 'room-leaderboard-holder') rows.pop()
+  return json(res, 200, { room_id: r.id, enabled: true, pool_bps: 2500, total_points: 0, rows, note: 'Nothing is final until the Gate.', notice: '' }), true
 }
 
 /** B41.144 — a contribution's reviewers: reading them, drawing them and scoring it; false when `p` is none of these. */
