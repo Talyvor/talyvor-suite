@@ -157,6 +157,14 @@
 //                                                it, and a raise once it is decided is 409
 //
 // STUB_BREAK=room-rate-raise lets a decided contribution's points be raised — a defect room-rate-card must FAIL on.
+//
+// B41.143 — and the points ledger, as room-points reads it, behind the same gate:
+//
+//   GET /v1/rooms/{id}/points   to a member: {room_id, total_points, holders, entries}, newest first; 404 to anyone else
+//
+// Accepting a sized contribution writes its author an accepted row of size × quality (1.0 here) × survival 100%; a fork
+// passes the room's remix share of it to its original's author; rejecting it once accepted writes a withdrawn row.
+// STUB_BREAK=room-points-remix credits a fork's original nothing — a defect room-points must FAIL on.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomBytes } from 'node:crypto'
@@ -268,6 +276,10 @@ interface Contribution {
 const messages = new Map<string, Msg[]>()
 const events = new Map<string, { cursor: number; kind: string; ref: string; at: string; message: Msg }[]>()
 const contributions = new Map<string, Contribution[]>()
+/** B41.143 — each room's points ledger, oldest first; only ever appended to. */
+interface PointsRow { id: string; contribution_id: string; workspace_id: string; reason: string; size_points: number; received_usd_micros: number
+  quality_bps: number; survival_bps: number; remix_share_bps: number; points: number; created_at: string }
+const pointsLedger = new Map<string, PointsRow[]>()
 let cursor = 0
 
 function post(roomID: string, ws: string, body: string, kind = 'text', refs: Record<string, unknown> = {}, agent?: RoomAgent): Msg {
@@ -408,7 +420,9 @@ async function roomScreen(req: IncomingMessage, res: ServerResponse, p: string, 
     if (role !== 'owner' && role !== 'editor') return json(res, 403, { error: 'rooms: not allowed: only the room’s owner or an editor decides a contribution' }), true
     const status = String((await body(req)).status ?? '')
     if (status !== 'accepted' && status !== 'rejected') return json(res, 400, { error: 'rooms: invalid request: status must be accepted or rejected' }), true
+    const was = c.status
     if (BREAK !== 'room-decide') Object.assign(c, { status, decided_by: ws })
+    if (BREAK !== 'room-decide') recordPoints(r, c, was, status)
     return json(res, 200, { ...contributionView(c, ws), status }), true
   }
   return false
@@ -548,7 +562,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
     return true
   }
   if (await settingsOutsideRoom(req, res, p, ws)) return true
-  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card)/.exec(p)
+  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points)/.exec(p)
   if (one === null) return false
   const r = rooms.get(decodeURIComponent(one[1]))
   if (r === undefined || (r.visibility === 'private' && !r.members.some((m) => m.workspace_id === ws))) {
@@ -563,6 +577,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
   if (await roomTakeover(req, res, p, ws, r)) return true
   if (await roomSharedOwnership(req, res, p, ws, r)) return true
   if (await roomRateCard(req, res, p, ws, r)) return true
+  if (roomPointsLedger(req, res, p, ws, r)) return true
   if (one[2] === undefined && req.method === 'GET') return json(res, 200, detail(r, ws)), true
   if (one[2] === '/join' && req.method === 'POST') {
     if (r.banned.includes(ws)) return json(res, 403, bannedFrom), true
@@ -768,6 +783,40 @@ async function roomSharedOwnership(req: IncomingMessage, res: ServerResponse, p:
   if (me.role !== 'owner' && BREAK !== 'room-ownership') return json(res, 403, { error: "rooms: not allowed: only the room's owner sets its shared ownership" }), true
   r.ownership = { enabled: d.enabled === true, pool_bps: pool }
   return json(res, 200, read()), true
+}
+
+/** B41.143 — the rows Lens rooms.recordPoints writes when c moves from `was` to `status`. */
+function recordPoints(r: Room, c: Contribution, was: string, status: string) {
+  const rows = pointsLedger.get(r.id) ?? []
+  const add = (workspace_id: string, reason: string, points: number, more: Partial<PointsRow> = {}) => rows.push({ id: 'rpts_' + randomBytes(8).toString('hex'),
+    contribution_id: c.id, workspace_id, reason, size_points: 0, received_usd_micros: 0, quality_bps: 10_000, survival_bps: 0, remix_share_bps: 0, points,
+    created_at: new Date().toISOString(), ...more })
+  if (status === 'accepted' && (c.points ?? 0) > 0) {
+    const size = c.points ?? 0
+    const from = (contributions.get(r.id) ?? []).find((x) => x.id === c.forked_from)
+    const bps = from === undefined || BREAK === 'room-points-remix' ? 0 : r.terms.remix_share_bps
+    const share = Math.floor((size * bps) / 10_000)
+    const row = { size_points: size, survival_bps: 10_000, remix_share_bps: bps }
+    if (from !== undefined && share > 0) add(from.author_workspace_id, 'remix_share', share, row)
+    add(c.author_workspace_id, 'accepted', size - share, row)
+  } else if (was === 'accepted') {
+    const held = new Map<string, number>()
+    for (const x of rows) if (x.contribution_id === c.id) held.set(x.workspace_id, (held.get(x.workspace_id) ?? 0) + x.points)
+    for (const [w, n] of [...held].sort()) if (n !== 0) add(w, 'withdrawn', -n)
+  }
+  pointsLedger.set(r.id, rows)
+}
+
+/** B41.143 — GET a room's points ledger; false when `p` is not it. */
+function roomPointsLedger(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): boolean {
+  if (p !== `/v1/rooms/${r.id}/points` || req.method !== 'GET') return false
+  if (!r.members.some((m) => m.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const rows = pointsLedger.get(r.id) ?? []
+  const held = new Map<string, number>()
+  for (const x of rows) held.set(x.workspace_id, (held.get(x.workspace_id) ?? 0) + x.points)
+  const holders = [...held].map(([workspace_id, points]) => ({ workspace_id, workspace_name: workspace_id, points, identity_checked: false }))
+    .sort((a, b) => b.points - a.points || a.workspace_id.localeCompare(b.workspace_id))
+  return json(res, 200, { room_id: r.id, total_points: 0, holders, entries: [...rows].reverse() }), true
 }
 
 /** B41.142 — a room's rate card and a contribution's size on it; false when `p` is neither. */
