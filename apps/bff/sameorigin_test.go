@@ -371,6 +371,8 @@ func everyMutatingRoute() []mutatingRoute {
 		// B41.44 — a contribution's reviewers are drawn, and a drawn reviewer scores it.
 		{method: http.MethodPost, path: "/api/rooms/x1/contributions/x1/reviewers"},
 		{method: http.MethodPut, path: "/api/rooms/x1/contributions/x1/review", body: `{"score_bps":10000}`},
+		// B41.46 — the owner raises the room's Gate thresholds.
+		{method: http.MethodPut, path: "/api/rooms/x1/gate-thresholds", body: `{"used_people":150}`},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},

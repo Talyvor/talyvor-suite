@@ -9,7 +9,11 @@
 // B41.144's reviewers), so each row's points are checked against its own size × quality; Lens's real-Postgres test
 // proves 1.2 × M. B41.45: with both companies holding points, the member's GET /v1/rooms/{id}/leaderboard lists every holder
 // on the ledger with the same points, the identity-checked holders' shares of the pool add up to exactly 10,000 bps, a
-// holder not yet identity-checked has none, and it carries the note that nothing is final until the Gate. The operator closes the room at the end, so a nightly run leaves nothing in the directory people read.
+// holder not yet identity-checked has none, and it carries the note that nothing is final until the Gate. B41.46: the member's
+// GET /v1/rooms/{id}/gate reads Talyvor's thresholds, nobody counted as Used (no one has been active in a room opened
+// tonight for 6 of the last 8 weeks; Lens's real-Postgres test proves the count), and Shipped and Paid waiting on a
+// published build; the owner lowering a threshold is refused with 409 and changes nothing, and raising one is kept.
+// The operator closes the room at the end, so a nightly run leaves nothing in the directory people read.
 
 import { fail } from './bank.ts'
 import { RUN_SALT } from './oracles.ts'
@@ -25,6 +29,9 @@ interface Entry {
   remix_share_bps: number; points: number
 }
 interface Ledger { holders: { workspace_id: string; points: number }[]; entries: Entry[] }
+interface Thresholds { shipped_weeks: number; used_people: number; used_active_weeks: number; paid_usd_micros: number; paid_payers: number }
+interface Gate { thresholds: Thresholds; shipped: { status: string }; used: { status: string; people: number }; paid: { status: string } }
+const GATE_FLOOR: Thresholds = { shipped_weeks: 8, used_people: 100, used_active_weeks: 6, paid_usd_micros: 1_000_000_000, paid_payers: 10 }
 interface Board { rows: { workspace_id: string; points: number; identity_checked: boolean; share_bps: number }[]; note: string }
 
 export function roomPoints(i: number): Scenario {
@@ -121,6 +128,27 @@ export function roomPoints(i: number): Scenario {
         }
         if (board.value.note !== 'Nothing is final until the Gate.') return fail(`the leaderboard's note reads ${JSON.stringify(board.value.note)}`)
 
+        const gate = await lens.act<Gate>(member, 'GET', `${room}/gate`)
+        ctx.evidence.push({ note: `the Gate tracker: ${gate.ok ? JSON.stringify(gate.value).slice(0, 900) : said(gate)}` })
+        if (!gate.ok) return fail(`the member reading the room's Gate tracker was refused: ${said(gate)}`)
+        const floor = (t: Thresholds) => JSON.stringify(Object.keys(GATE_FLOOR).map((k) => t[k as keyof Thresholds]))
+        if (floor(gate.value.thresholds) !== floor(GATE_FLOOR)) {
+          return fail(`a new room's Gate thresholds read ${JSON.stringify(gate.value.thresholds)}, not Talyvor's ${JSON.stringify(GATE_FLOOR)}`)
+        }
+        if (gate.value.used.people !== 0 || gate.value.shipped.status !== 'needs_published_build' || gate.value.paid.status !== 'needs_published_build') {
+          return fail(`a room opened tonight reads Used ${gate.value.used.people} people, Shipped ${gate.value.shipped.status}, Paid ${gate.value.paid.status}`)
+        }
+        const lowered = await lens.act(owner, 'PUT', `${room}/gate-thresholds`, { used_people: GATE_FLOOR.used_people - 1 })
+        ctx.evidence.push({ note: `the owner lowers Used to ${GATE_FLOOR.used_people - 1} people: ${said(lowered)}` })
+        if (lowered.status !== 409) return fail(`lowering a Gate threshold must answer 409; Lens answered ${said(lowered)}`)
+        const unlowered = await lens.act<Gate>(member, 'GET', `${room}/gate`)
+        if (!unlowered.ok || unlowered.value.thresholds.used_people !== GATE_FLOOR.used_people) {
+          return fail(`after the refused lowering the member reads Used ${unlowered.ok ? unlowered.value.thresholds.used_people : said(unlowered)}, not ${GATE_FLOOR.used_people}`)
+        }
+        const raised = await lens.act<Thresholds>(owner, 'PUT', `${room}/gate-thresholds`, { used_people: 150 })
+        ctx.evidence.push({ note: `the owner raises Used to 150 people: ${raised.ok ? JSON.stringify(raised.value) : said(raised)}` })
+        if (!raised.ok || raised.value.used_people !== 150) return fail(`raising a Gate threshold to 150 people answered ${raised.ok ? JSON.stringify(raised.value) : said(raised)}`)
+
         const rejected = await lens.act(owner, 'PATCH', one(original), { status: 'rejected' })
         ctx.evidence.push({ note: `the owner rejects the original after accepting it: ${said(rejected)}` })
         if (!rejected.ok) return fail(`rejecting the accepted original was refused: ${said(rejected)}`)
@@ -138,7 +166,7 @@ export function roomPoints(i: number): Scenario {
         return {
           pass: true,
           detail: `room ${id}: the M-size original earned its author ${earned.points} (400 × quality ${earned.quality_bps} bps), the fork passed ${share} of its ` +
-            `${forkPoints} to it, the leaderboard listed both holders with shares adding up to 100% of the pool, and rejecting the original wrote a withdrawn row of ${withdrawn.points} without changing the earlier rows`,
+            `${forkPoints} to it, the leaderboard listed both holders with shares adding up to 100% of the pool, the Gate refused a lower threshold and kept a higher one, and rejecting the original wrote a withdrawn row of ${withdrawn.points} without changing the earlier rows`,
         }
       } finally {
         if (opened !== undefined) await lens.moderateRoom(opened, 'close', 'a nightly test room, closed by the testers').catch(() => undefined)

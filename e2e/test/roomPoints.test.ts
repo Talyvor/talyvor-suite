@@ -59,4 +59,10 @@ describe('room-points (B41.43)', () => {
     expect(verdict).toMatchObject({ pass: false })
     expect(verdict.detail).toMatch(/^the leaderboard lists /)
   })
+
+  it('FAILs when Lens saves a lower Gate threshold (B41.46)', async () => {
+    const { verdict } = await runAgainstStub('room-gate-lower')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^lowering a Gate threshold must answer 409/)
+  })
 }, 60_000)

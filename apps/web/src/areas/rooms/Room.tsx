@@ -21,6 +21,7 @@ import {
   upsertMessage,
   usdText,
 } from './roomsApi'
+import { RoomGate } from './RoomGate'
 import { RoomLead } from './RoomLead'
 import { RoomLeaderboard } from './RoomLeaderboard'
 import { RoomPoints, pointsKey } from './RoomPoints'
@@ -40,7 +41,7 @@ import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 // each size of work, and a contribution's size, fixed before the work (RoomRateCard.tsx). B41.43: the points ledger, what
 // each accepted contribution earned (RoomPoints.tsx). B41.44: two reviewers drawn at random score a contribution's quality
 // (RoomReviews.tsx). B41.45: the provisional leaderboard, each holder's points and estimated share of the pool
-// (RoomLeaderboard.tsx).
+// (RoomLeaderboard.tsx). B41.46: the Gate tracker, shipped, used and paid, with thresholds that only rise (RoomGate.tsx).
 //
 // Lens decides everything — who may post, contribute, vote, accept and spend — and its sentence is shown on a refusal.
 
@@ -682,6 +683,7 @@ export function RoomLive({ room }: { room: RoomDetail }) {
       <RoomRateCard room={room} />
       <RoomPoints room={room} />
       <RoomLeaderboard room={room} />
+      <RoomGate room={room} />
     </>
   )
 }
