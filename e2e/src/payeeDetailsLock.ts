@@ -79,11 +79,15 @@ export function payeeDetailsLock(post: Post = throughApp): Scenario {
         return { holds: (a.value?.accounts ?? []).find((x) => x.id === acct)?.test_minor, paid: (p.value?.payments ?? []).filter((x) => x.payee_id === payee.id),
           payee: (y.value?.payees ?? []).find((x) => x.id === payee.id) }
       }
-      const pay = (note: string) => step<Payment>('POST', '/v1/money/payments', { account_id: acct, payee_id: payee.id, amount_minor: PAY_MINOR, currency: 'GBP',
-        reference: `Details ${RUN_SALT}`, idempotency_key: key() }, note)
+      // B54.35: the workspace has a passkey, so the owner's payment is signed over its own challenge, as web Pay sends it.
+      const pay = async (note: string) => {
+        const body = { account_id: acct, payee_id: payee.id, amount_minor: PAY_MINOR, currency: 'GBP', reference: `Details ${RUN_SALT}`, idempotency_key: key() }
+        const ch = await bff<{ challenge: string }>('/api/money/payments/challenge', body, `${note}: its challenge`)
+        return bff<Payment & { error?: string }>('/api/money/payments', { ...body, assertion: pk.assert(ch.value.challenge ?? '') }, note)
+      }
 
       const before = await pay(`GBP 500.00 to ${supplier}, before any change`)
-      if (before.status !== 201) return fail(`GBP 500.00 to ${supplier} before any change answered ${said(before)}`)
+      if (before.status !== 201) return fail(`GBP 500.00 to ${supplier} before any change answered ${before.status} "${before.value.error ?? ''}"`)
 
       // The change: unsigned, refused; signed for other details, refused; signed for these, made and held.
       const details = { country: 'GB', sort_code: '400000', account_number: '86429753' }
@@ -111,7 +115,9 @@ export function payeeDetailsLock(post: Post = throughApp): Scenario {
 
       // A payment within 24 hours of the change: held, and nothing moves.
       const during = await pay(`GBP 500.00 to ${supplier}, moments after its details changed`)
-      if (during.status !== 409 || !/24 hours/.test(during.error)) return fail(`a payment to ${supplier} moments after its bank details changed must be refused 409 for the hold; Lens answered ${said(during)}`)
+      if (during.status !== 409 || !/24 hours/.test(during.value.error ?? '')) {
+        return fail(`a payment to ${supplier} moments after its bank details changed must be refused 409 for the hold; Lens answered ${during.status} "${during.value.error ?? ''}"`)
+      }
       const after = await ledger('after the held payment')
       if (after.holds !== FUND_MINOR - PAY_MINOR || after.paid.length !== 1) {
         return fail(`after the held payment the account holds ${after.holds} minor and ${after.paid.length} payments to ${supplier} are listed, not ${FUND_MINOR - PAY_MINOR} and one`)
