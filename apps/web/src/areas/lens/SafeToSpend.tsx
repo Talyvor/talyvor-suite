@@ -1,5 +1,4 @@
-import { usdcText } from './AgentMoneyWallet'
-import { type SafeToSpendFigure } from './agentBankApi'
+import { type SafeToSpendFigure, FIATS, formatMinor } from './agentBankApi'
 import { type Fiat, Lxc, fiatText } from './money'
 
 // B41.5 — Lens's safe-to-spend figure (B41.105) as a person reads it: the balance, less this month's scheduled payments,
@@ -12,7 +11,7 @@ export function SafeAmount({ currency, amount }: { currency: string; amount: num
     <span className="whitespace-nowrap font-figure">
       {amount < 0 ? '-' : ''}
       {/* USDC is no ISO currency: Intl refuses it, and the whole card with it (B17.320). */}
-      {currency === 'USDC' ? usdcText(Math.abs(amount)) : fiatText(Math.abs(amount) / 100, currency as Fiat)}
+      {FIATS.includes(currency) ? fiatText(Math.abs(amount) / 100, currency as Fiat) : formatMinor(Math.abs(amount), currency)}
     </span>
   )
 }
