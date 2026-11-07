@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -112,7 +113,8 @@ func TestOAuthSignInAsClaudeClaudeCodeAndChatGPT(t *testing.T) {
 	const claudeCode = "https://claude.ai/oauth/claude-code-client-metadata"
 	works("Claude Code on localhost", signInAs(t, a, ck, claudeCode, "http://localhost:53682/callback", nil))
 	works("Claude Code on 127.0.0.1", signInAs(t, a, ck, claudeCode, "http://127.0.0.1:41999/callback", nil))
-	for _, bad := range []string{"http://localhost:53682/elsewhere", "http://127.0.0.1.evil.example:53682/callback", "http://evil.example/callback", "https://localhost:53682/callback"} {
+	for _, bad := range []string{"http://localhost:53682/elsewhere", "http://127.0.0.1.evil.example:53682/callback", "http://evil.example/callback", "https://localhost:53682/callback",
+		"http://someone@localhost:53682/callback", "http://127.0.0.1:41999/callback#elsewhere"} {
 		q := url.Values{"response_type": {"code"}, "client_id": {claudeCode}, "redirect_uri": {bad}, "code_challenge_method": {"S256"},
 			"code_challenge": {strings.Repeat("a", 43)}}
 		if rec := serve(a, "GET", "/oauth/authorize?"+q.Encode(), "", "", nil, ck); rec.Code != http.StatusBadRequest || rec.Header().Get("Location") != "" {
@@ -187,5 +189,64 @@ func TestOAuthTokenIsBoundToTheResource(t *testing.T) {
 	a.cfg.publicBaseURL = "https://app.talyvor.example" // the resource this server is now is not the one the token was issued for
 	if m := mcpWith(a, at); m.Code != http.StatusUnauthorized || !strings.Contains(m.Header().Get("WWW-Authenticate"), `error="invalid_token"`) {
 		t.Fatalf("a token used at a resource it was not issued for: %d", m.Code)
+	}
+}
+
+// ageClient moves a stored client's clock back by d, as if it had been fetched d ago.
+func ageClient(a *app, id string, d time.Duration) {
+	a.oauth.clients.update(id, func(c oauthClient) oauthClient {
+		c.expires, c.refetch = c.expires.Add(-d), c.refetch.Add(-d)
+		return c
+	})
+}
+
+// B54.24: a refresh after the document's cache has lapsed is judged by the stored client when the document can't be
+// fetched, so a slow or unreachable claude.ai never signs an assistant out; a document that can be read still wins.
+func TestOAuthRefreshOutlivesTheClientsDocument(t *testing.T) {
+	a, ck := oauthApp(t)
+	published := publishedClients(t, nil)
+	a.connectorOut = published
+	const claudeCode = "https://claude.ai/oauth/claude-code-client-metadata"
+	rt := jsonOf(t, signInAs(t, a, ck, claudeCode, "http://127.0.0.1:41999/callback", nil))["refresh_token"].(string)
+	refresh := func() *httptest.ResponseRecorder {
+		form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {rt}, "client_id": {claudeCode}}
+		return serve(a, "POST", "/oauth/token", "", form.Encode(), nil, nil)
+	}
+
+	ageClient(a, claudeCode, 11*time.Minute)
+	a.connectorOut = roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("claude.ai is down") })
+	rec := refresh()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("a refresh 11 minutes after sign-in with claude.ai down: %d %s", rec.Code, rec.Body.String())
+	}
+	rt = jsonOf(t, rec)["refresh_token"].(string)
+
+	// A document that is gone (404) is the client's own answer, not an outage: refused.
+	ageClient(a, claudeCode, 11*time.Minute)
+	a.connectorOut = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(strings.NewReader("")), Header: http.Header{}, Request: r}, nil
+	})
+	if rec := refresh(); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "invalid_client") {
+		t.Fatalf("a refresh after the document was withdrawn: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// The document comes back allowing only private_key_jwt: the next refresh that reads it is refused.
+	ageClient(a, claudeCode, 11*time.Minute)
+	a.connectorOut = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		res, err := published.RoundTrip(r)
+		if err != nil || r.URL.String() != claudeCode {
+			return res, err
+		}
+		var doc map[string]any
+		if err := json.NewDecoder(res.Body).Decode(&doc); err != nil {
+			return nil, err
+		}
+		doc["token_endpoint_auth_method"], doc["jwks_uri"] = "private_key_jwt", "https://claude.ai/oauth/jwks.json"
+		b, _ := json.Marshal(doc)
+		res.Body = io.NopCloser(bytes.NewReader(b))
+		return res, nil
+	})
+	if rec := refresh(); rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "invalid_client") {
+		t.Fatalf("a refresh after the document became stricter: %d %s", rec.Code, rec.Body.String())
 	}
 }
