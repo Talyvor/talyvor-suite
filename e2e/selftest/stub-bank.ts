@@ -492,6 +492,8 @@ export class Bank {
   private readonly passkeys = new Map<string, { credential_id: string; name: string; created_at: string }[]>()
   /** B30.126 — each passkey's public key (SPKI, base64url), by credential id, which a payee's confirmation is verified with. */
   private readonly passkeyKeys = new Map<string, string>()
+  /** B50.38 — Lens B55.1: an unsigned second passkey waits here, signing nothing, until a key the workspace has lets it in. */
+  private readonly enrolments = new Map<string, { id: string; ws: string; kind: string; name: string; code: string; status: string; created_at: string; expires_at: string }>()
   private readonly reports: Report[] = []
   private readonly accounts = new Map<string, ConnectAccount>()
   private readonly payouts: Payout[] = []
@@ -2397,7 +2399,14 @@ export class Bank {
       const keys = this.passkeys.get(ws.id) ?? []
       if ((keys.length > 0 || this.devices.any(ws.id)) && !this.broken('enrol-unsigned')) {
         const challengeOf = (cdj: string | undefined) => { try { return String((JSON.parse(Buffer.from(cdj ?? '', 'base64url').toString()) as { challenge?: unknown }).challenge ?? '') } catch { return '' } }
-        if (assertion === undefined) return json(res, 403, { error: 'economy: this workspace signs with a passkey or the phone app: sign the new key with one it has' }), true
+        if (assertion === undefined) {
+          const waiting = [...this.enrolments.values()].filter((e) => e.ws === ws.id && e.status === 'waiting')
+          if (waiting.length >= 3) return json(res, 409, { error: 'economy: three new keys already wait to join this workspace — approve or decline one first' }), true
+          const e = { id: `enr_${randomBytes(8).toString('hex')}`, ws: ws.id, kind: 'passkey', name, code: randomBytes(3).toString('hex').toUpperCase(), status: 'waiting',
+            created_at: now, expires_at: new Date(Date.now() + 10 * 60_000).toISOString() }
+          this.enrolments.set(e.id, e)
+          return json(res, 202, { enrolment: { id: e.id, code: e.code, expires_at: e.expires_at } }), true
+        }
         const own = challengeOf(client_data_json)
         const signedOver = assertion.device_id !== undefined ? assertion.challenge ?? '' : challengeOf(assertion.client_data_json)
         const by = assertion.device_id !== undefined ? this.devices.refused(ws.id, assertion)
@@ -2415,6 +2424,13 @@ export class Bank {
       return json(res, 200, { challenge: challenge(), allow_credentials: (this.passkeys.get(ws.id) ?? []).map((k) => k.credential_id) }), true
     }
     if (rest === '/agents/passkeys') return json(res, 200, { passkeys: this.passkeys.get(ws.id) ?? [] }), true
+    if ((m = /^\/agents\/keys\/enrolments\/([^/]+)(\/decline)?$/.exec(rest)) !== null && (method === 'GET' || (m[2] !== undefined && method === 'POST'))) {
+      const e = this.enrolments.get(m[1] ?? '')
+      if (e?.ws !== ws.id || (m[2] !== undefined && e.status !== 'waiting')) return json(res, 404, { error: 'economy: no such key waiting to join this workspace' }), true
+      if (m[2] !== undefined) e.status = 'declined'
+      const { ws: _, ...shown } = e
+      return json(res, 200, shown), true
+    }
     if (rest === '/agents/push/public-key') return json(res, 404, { error: 'economy: web push is not configured' }), true
     if (rest === '/agents/push/subscriptions' && (method === 'POST' || method === 'DELETE')) return json(res, 404, { error: 'economy: web push is not configured' }), true
     // B34.4 — Lens's rule templates, and one applied over an agent's rules whole.
