@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
-import { FINISH_HORIZON_MS, Reveal, STREAM_HORIZON_MS, useRevealedText } from './reveal'
+import { FINISH_HORIZON_MS, MAX_FRAME_MS, Reveal, STREAM_HORIZON_MS, useRevealedText } from './reveal'
 
 const FRAME = 16
 
@@ -36,6 +36,16 @@ describe('Reveal — the pace an answer grows at', () => {
     expect(gains.length * FRAME).toBeLessThanOrEqual(FINISH_HORIZON_MS + FRAME)
     expect(r.finished).toBe(true)
   })
+
+  it('B17.365 — a late frame on a busy page still shows a short answer over several frames, not in one piece', () => {
+    const r = new Reveal()
+    r.arrive(134, true)
+    // A quarter of a second between frames: before B17.365 the first one showed all 134 characters.
+    const first = r.step(250)
+    expect(first).toBeGreaterThan(0)
+    expect(first).toBeLessThan(134)
+    expect(first).toBeLessThanOrEqual(Math.ceil(MAX_FRAME_MS * 0.6))
+  })
 })
 
 describe('useRevealedText', () => {
@@ -60,10 +70,12 @@ describe('useRevealedText', () => {
       const answer = '1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30'
       const hook = renderHook(({ text, live }) => useRevealedText(text, live), { initialProps: { text: '', live: true } })
       hook.rerender({ text: answer, live: false })
-      // One frame five seconds late: everything that was left is shown in it, and the answer is still revealing.
-      act(() => queued.shift()?.(performance.now() + 5_000))
+      // Frames five seconds apart (B17.365 counts each as MAX_FRAME_MS): the frame that shows the last of the answer
+      // leaves it revealing, and only the next one settles it.
+      let at = performance.now()
+      for (let i = 0; i < 20 && hook.result.current.text !== answer; i++) act(() => queued.shift()?.((at += 5_000)))
       expect(hook.result.current).toEqual({ text: answer, revealing: true })
-      act(() => queued.shift()?.(performance.now() + 5_016))
+      act(() => queued.shift()?.((at += 5_000)))
       expect(hook.result.current).toEqual({ text: answer, revealing: false })
     } finally {
       vi.unstubAllGlobals()
