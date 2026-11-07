@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import type { Browser } from 'playwright'
 import { describe, expect, it } from 'vitest'
-import { AppUser, ChargeBook, Pace, bookAnswer, chargeULXC, noAnswer, readAnswered, whileUp } from '../src/app.ts'
+import { AppUser, ChargeBook, Pace, bookAnswer, chargeULXC, noAnswer, readAnswered, timeStream, whileUp } from '../src/app.ts'
 import { listPriceUSD } from '../src/oracles.ts'
 
 describe('noAnswer (B26.20)', () => {
@@ -85,5 +85,24 @@ describe('chargeULXC rounds up only a real fraction (B17.294)', () => {
     expect(chargeULXC(listPriceUSD(mini, 817, 6), 0.1)).toBe(3364)
     expect(chargeULXC(listPriceUSD(mini, 817, 7), 0.1)).toBe(3380)
     expect(chargeULXC(0.00000001, 0.1)).toBe(1)
+  })
+})
+
+describe('a compared stream whose page closes (B54.40)', () => {
+  it('ends the stream where the page closed and leaves no rejection nothing waits for', async () => {
+    const stray: unknown[] = []
+    const note = (e: unknown) => stray.push(e)
+    process.on('unhandledRejection', note)
+    try {
+      const streams: { started: number; ended?: number }[] = []
+      const closed = Promise.reject(new Error('response.finished: Target page, context or browser has been closed'))
+      timeStream({ response: async () => ({ finished: () => closed }) } as never, streams)
+      await new Promise((r) => setTimeout(r, 50))
+      expect(stray).toEqual([])
+      expect(streams).toHaveLength(1)
+      expect(streams[0].ended).toBeGreaterThanOrEqual(streams[0].started)
+    } finally {
+      process.off('unhandledRejection', note)
+    }
   })
 })

@@ -60,6 +60,13 @@ CREATE TABLE IF NOT EXISTS oauth_tool_calls (
 );
 CREATE INDEX IF NOT EXISTS oauth_tool_calls_sub ON oauth_tool_calls (sub, at DESC);
 
+-- B52.2: how a CIMD client may authenticate at the token endpoint, and the resource a code's and a grant's tokens
+-- are bound to ('' on a row written before B52.2, when /mcp was the only resource).
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS auth_methods text[] NOT NULL DEFAULT '{}';
+ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS jwks_uri text NOT NULL DEFAULT '';
+ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS resource text NOT NULL DEFAULT '';
+ALTER TABLE oauth_grants ADD COLUMN IF NOT EXISTS resource text NOT NULL DEFAULT '';
+
 -- B52.9: when a person last signed out everywhere (signout_everywhere.go). A session sealed before it is never
 -- restored from its seal, so a restart cannot undo the sign-out. One row per person, overwritten.
 CREATE TABLE IF NOT EXISTS signed_out_everywhere (

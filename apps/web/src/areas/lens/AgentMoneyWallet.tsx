@@ -17,8 +17,7 @@ import { type Agent, type AgentMoneyWallet, type OutsidePayee, agentBankApi, for
 export const walletKey = (id: string) => ['agent-money-wallet', id]
 
 /** Lens keeps USDC to six decimal places. */
-export const usdcText = (minor: number) =>
-  `${(minor / 1e6).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`
+export const usdcText = (minor: number) => formatMinor(minor, 'USDC')
 
 const NETWORKS: Record<string, string> = { base: 'Base' }
 
