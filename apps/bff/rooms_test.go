@@ -199,6 +199,8 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		{http.MethodGet, "/api/rooms/room_1/leaderboard", ""},
 		{http.MethodGet, "/api/rooms/room_1/gate", ""},
 		{http.MethodPut, "/api/rooms/room_1/gate-thresholds", `{"used_people":150}`},
+		{http.MethodGet, "/api/rooms/room_1/agreement", ""},
+		{http.MethodPost, "/api/rooms/room_1/agreement", `{"version":"draft-1","signed_name":"Ada Lovelace"}`},
 	} {
 		if rec := doJSON(a, c.method, c.path, c.body); rec.Code != http.StatusOK {
 			t.Fatalf("%s %s = %d %s", c.method, c.path, rec.Code, rec.Body.String())
@@ -214,6 +216,7 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		{http.MethodPut, "/api/rooms/room_1/rate-card", `{"pool_points":10000,"room_id":"room_2"}`},
 		{http.MethodPut, "/api/rooms/room_1/contributions/c_1/size", `{"size":"M","points":100000}`},
 		{http.MethodPut, "/api/rooms/room_1/contributions/c_1/review", `{"score_bps":12000,"reviewer_workspace_id":"ws_3"}`},
+		{http.MethodPost, "/api/rooms/room_1/agreement", `{"version":"draft-1","signed_name":"Ada Lovelace","user_id":"u_2"}`},
 	} {
 		if rec := doJSON(a, c.method, c.path, c.body); rec.Code != http.StatusBadRequest {
 			t.Fatalf("%s %s with %s = %d, want 400 before Lens is asked", c.method, c.path, c.body, rec.Code)
@@ -245,6 +248,8 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		`GET /v1/rooms/room_1/leaderboard `,
 		`GET /v1/rooms/room_1/gate `,
 		`PUT /v1/rooms/room_1/gate-thresholds {"used_people":150}`,
+		`GET /v1/rooms/room_1/agreement `,
+		`POST /v1/rooms/room_1/agreement {"version":"draft-1","signed_name":"Ada Lovelace"}`,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("Lens received\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

@@ -13,6 +13,9 @@
 // GET /v1/rooms/{id}/gate reads Talyvor's thresholds, nobody counted as Used (no one has been active in a room opened
 // tonight for 6 of the last 8 weeks; Lens's real-Postgres test proves the count), and Shipped and Paid waiting on a
 // published build; the owner lowering a threshold is refused with 409 and changes nothing, and raising one is kept.
+// B41.50: before the member signs the contributor agreement (Lens B41.150), its first accepted M contribution writes no
+// points row; then the member and the owner each sign the version they read, and Lens keeps the signature with that
+// version and the hash of its text, so every accepted contribution after it earns as above.
 // The operator closes the room at the end, so a nightly run leaves nothing in the directory people read.
 
 import { fail } from './bank.ts'
@@ -32,6 +35,7 @@ interface Ledger { holders: { workspace_id: string; points: number }[]; entries:
 interface Thresholds { shipped_weeks: number; used_people: number; used_active_weeks: number; paid_usd_micros: number; paid_payers: number }
 interface Gate { thresholds: Thresholds; shipped: { status: string }; used: { status: string; people: number }; paid: { status: string } }
 const GATE_FLOOR: Thresholds = { shipped_weeks: 8, used_people: 100, used_active_weeks: 6, paid_usd_micros: 1_000_000_000, paid_payers: 10 }
+interface Agreement { version: string; draft: boolean; marked?: string; text_sha256: string; signature: { version: string; text_sha256: string; signed_name: string } | null }
 interface Board { rows: { workspace_id: string; points: number; identity_checked: boolean; share_bps: number }[]; note: string }
 
 export function roomPoints(i: number): Scenario {
@@ -40,7 +44,7 @@ export function roomPoints(i: number): Scenario {
     owner: 'talyvor-lens',
     feature: 'Rooms',
     own: true,
-    title: "an accepted M-size contribution earns M's points × its quality in an append-only row, a fork credits its original the room's " +
+    title: "work accepted before its author signs the contributor agreement earns no points; after signing, an accepted M-size contribution earns M's points × its quality in an append-only row, a fork credits its original the room's " +
       `${REMIX_SHARE_BPS} bps remix share, and rejecting the original afterwards adds a withdrawn row without changing the rows before it`,
     run: async (ctx): Promise<Verdict> => {
       const { lens } = ctx.env
@@ -66,6 +70,29 @@ export function roomPoints(i: number): Scenario {
         if (!card.ok) return fail(`publishing the rate card was refused: ${said(card)}`)
 
         const one = (c: Work) => `${room}/contributions/${encodeURIComponent(c.id)}`
+        const agreement = await lens.act<Agreement>(member, 'GET', `${room}/agreement`)
+        ctx.evidence.push({ note: `the member reads the contributor agreement: ${agreement.ok ? JSON.stringify({ ...agreement.value, text: undefined }) : said(agreement)}` })
+        if (!agreement.ok) return fail(`the member reading the contributor agreement was refused: ${said(agreement)}`)
+        if (agreement.value.signature !== null) return fail(`a member that has just joined reads a signature already: ${JSON.stringify(agreement.value.signature)}`)
+        const early = await lens.act<Work>(member, 'POST', `${room}/contributions`,
+          { kind: 'prompt', title: `Launch checks ${RUN_SALT}`, artifact: { template: `List three launch checks for {{product}}. (points check ${RUN_SALT})`, model: ctx.env.judgeModel } },
+          { 'Idempotency-Key': `e2e-room-points-unsigned-${id}` })
+        const earlyClaimed = early.ok ? await lens.act<Work>(member, 'PUT', `${one(early.value)}/size`, { size: 'M' }) : early
+        const earlyAccepted = earlyClaimed.ok && early.ok ? await lens.act<Work>(owner, 'PATCH', one(early.value), { status: 'accepted' }) : earlyClaimed
+        ctx.evidence.push({ note: `before signing, the member proposes a prompt, claims M and the owner accepts it: ${said(earlyAccepted)}` })
+        if (!early.ok || !earlyAccepted.ok) return fail(`the member's contribution before signing was refused: ${said(earlyAccepted)}`)
+        const unsigned = await lens.act<Ledger>(member, 'GET', `${room}/points`)
+        if (!unsigned.ok) return fail(`the member reading the room's points before signing was refused: ${said(unsigned)}`)
+        const unsignedRows = unsigned.value.entries.filter((e) => e.contribution_id === early.value.id)
+        if (unsignedRows.length > 0) return fail(`work accepted before its author signed the contributor agreement earned ${JSON.stringify(unsignedRows)}`)
+        for (const [who, u] of [['member', member], ['owner', owner]] as const) {
+          const sig = await lens.act<Agreement>(u, 'POST', `${room}/agreement`, { version: agreement.value.version, signed_name: `E2E ${who} ${RUN_SALT}` })
+          ctx.evidence.push({ note: `the ${who} signs version ${agreement.value.version}: ${sig.ok ? `${sig.status} ${JSON.stringify(sig.value.signature)}` : said(sig)}` })
+          const s = sig.ok ? sig.value.signature : null
+          if (sig.status !== 201 || s === null || s.version !== agreement.value.version || s.text_sha256 !== agreement.value.text_sha256) {
+            return fail(`the ${who} signing the contributor agreement answered ${sig.ok ? `${sig.status} ${JSON.stringify(s)}` : said(sig)}, not 201 with the version and text hash it read`)
+          }
+        }
         const proposed = await lens.act<Work>(member, 'POST', `${room}/contributions`,
           { kind: 'prompt', title: `Launch risks ${RUN_SALT}`, artifact: { template: `List three launch risks for {{product}}. (points check ${RUN_SALT})`, model: ctx.env.judgeModel } },
           { 'Idempotency-Key': `e2e-room-points-contribute-${id}` })
@@ -165,7 +192,7 @@ export function roomPoints(i: number): Scenario {
         if (holds !== share) return fail(`after the rejection the member holds ${holds} points, not the ${share} its fork's remix share earned`)
         return {
           pass: true,
-          detail: `room ${id}: the M-size original earned its author ${earned.points} (400 × quality ${earned.quality_bps} bps), the fork passed ${share} of its ` +
+          detail: `room ${id}: work accepted before its author signed the contributor agreement earned nothing, then the M-size original earned its author ${earned.points} (400 × quality ${earned.quality_bps} bps), the fork passed ${share} of its ` +
             `${forkPoints} to it, the leaderboard listed both holders with shares adding up to 100% of the pool, the Gate refused a lower threshold and kept a higher one, and rejecting the original wrote a withdrawn row of ${withdrawn.points} without changing the earlier rows`,
         }
       } finally {

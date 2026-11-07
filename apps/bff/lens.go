@@ -667,6 +667,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/reviews", a.requireTenant(a.handleRoomReviews))       // B41.44
 	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/reviewers", a.requireTenant(a.handleRoomReviewers))   // B41.44
 	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/review", a.requireTenant(a.handleRoomReview))         // B41.44
+	a.mux.HandleFunc("/api/rooms/{id}/agreement", a.requireTenant(a.handleRoomAgreement))                       // B41.50
 	a.mux.HandleFunc("/api/room-invites/{token}", a.requireTenant(a.handleRoomInvitePreview))
 	a.mux.HandleFunc("/api/room-invites/{token}/join", a.requireTenant(a.handleRoomInviteJoin))
 	// B11.3 — the Try-it pages: Tare and document conversion run on the person's input through Lens's
