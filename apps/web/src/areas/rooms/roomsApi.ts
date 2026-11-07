@@ -137,7 +137,7 @@ export interface PointsEntry {
   id: string
   contribution_id: string
   workspace_id: string
-  reason: 'accepted' | 'remix_share' | 'withdrawn'
+  reason: 'accepted' | 'remix_share' | 'withdrawn' | 'review'
   size_points: number
   received_usd_micros: number
   quality_bps: number
@@ -154,6 +154,25 @@ export interface RoomPoints {
   total_points: number
   holders: { workspace_id: string; workspace_name: string; points: number; identity_checked: boolean }[]
   entries: PointsEntry[]
+}
+
+/** Lens rooms.Review (B41.144): one reviewer's seat on a contribution. score_bps is 5,000–15,000 (0.5–1.5), null until it
+ *  scores; ring means it and the author scored each other's work, so its score counts as 1.0 and earns nothing. */
+export interface Review {
+  reviewer_workspace_id: string
+  reviewer_workspace_name: string
+  score_bps: number | null
+  ring: boolean
+  drawn_at: string
+  scored_at?: string
+}
+
+/** Lens rooms.Reviews (B41.144) — GET /api/rooms/{id}/contributions/{cid}/reviews, behind the same room_equity gate as
+ *  the points ledger. quality_bps is the median of both counted scores, 10,000 until both are in. */
+export interface Reviews {
+  contribution_id: string
+  quality_bps: number
+  reviews: Review[]
 }
 
 /** Lens rooms.Usage — what this workspace's plan lets it open, beside what it has open. -1 is unlimited. */
@@ -536,6 +555,12 @@ export const roomsApi = {
   // B41.43 — the points ledger.
   points: (id: string) =>
     getJSON<RoomPoints>(`/api/rooms/${e(id)}/points`, { total_points: 'number', holders: 'list', entries: 'list' }),
+  // B41.44 — two reviewers Lens draws at random score a contribution's quality.
+  reviews: (id: string, cid: string) =>
+    getJSON<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/reviews`, { quality_bps: 'number', reviews: 'list' }),
+  drawReviewers: (id: string, cid: string) => post<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/reviewers`, {}),
+  review: (id: string, cid: string, scoreBps: number) =>
+    post<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/review`, { score_bps: scoreBps }, 'PUT'),
   previewInvite: (token: string) =>
     getJSON<InvitePreview>(`/api/room-invites/${e(token)}`, { room: 'object', terms: 'object', uses_left: 'number' }),
   joinByInvite: (token: string, termsVersion: number) =>

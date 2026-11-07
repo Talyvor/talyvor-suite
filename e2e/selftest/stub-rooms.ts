@@ -165,6 +165,16 @@
 // Accepting a sized contribution writes its author an accepted row of size × quality (1.0 here) × survival 100%; a fork
 // passes the room's remix share of it to its original's author; rejecting it once accepted writes a withdrawn row.
 // STUB_BREAK=room-points-remix credits a fork's original nothing — a defect room-points must FAIL on.
+//
+// B41.144 — and a contribution's two reviewers, as room-reviews reads them, behind the same gate:
+//
+//   GET  /v1/rooms/{id}/contributions/{c}/reviews     to a member: {contribution_id, quality_bps, reviews}
+//   POST /v1/rooms/{id}/contributions/{c}/reviewers   any member: fills the empty seats at random with plain members, never
+//                                                     the author; whatever the body says
+//   PUT  /v1/rooms/{id}/contributions/{c}/review      {score_bps}: a seated reviewer, 5000–15000; 403 to anyone else; once
+//                                                     both scored, quality_bps is their median
+//
+// STUB_BREAK=room-review-pick seats the workspace the body names — a defect room-reviews must FAIL on.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomBytes } from 'node:crypto'
@@ -280,6 +290,8 @@ const contributions = new Map<string, Contribution[]>()
 interface PointsRow { id: string; contribution_id: string; workspace_id: string; reason: string; size_points: number; received_usd_micros: number
   quality_bps: number; survival_bps: number; remix_share_bps: number; points: number; created_at: string }
 const pointsLedger = new Map<string, PointsRow[]>()
+/** B41.144 — each contribution's reviewer seats, in the order they were drawn. */
+const reviewSeats = new Map<string, { ws: string; score: number | null }[]>()
 let cursor = 0
 
 function post(roomID: string, ws: string, body: string, kind = 'text', refs: Record<string, unknown> = {}, agent?: RoomAgent): Msg {
@@ -578,6 +590,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
   if (await roomSharedOwnership(req, res, p, ws, r)) return true
   if (await roomRateCard(req, res, p, ws, r)) return true
   if (roomPointsLedger(req, res, p, ws, r)) return true
+  if (await roomReviews(req, res, p, ws, r)) return true
   if (one[2] === undefined && req.method === 'GET') return json(res, 200, detail(r, ws)), true
   if (one[2] === '/join' && req.method === 'POST') {
     if (r.banned.includes(ws)) return json(res, 403, bannedFrom), true
@@ -817,6 +830,39 @@ function roomPointsLedger(req: IncomingMessage, res: ServerResponse, p: string, 
   const holders = [...held].map(([workspace_id, points]) => ({ workspace_id, workspace_name: workspace_id, points, identity_checked: false }))
     .sort((a, b) => b.points - a.points || a.workspace_id.localeCompare(b.workspace_id))
   return json(res, 200, { room_id: r.id, total_points: 0, holders, entries: [...rows].reverse() }), true
+}
+
+/** B41.144 — a contribution's reviewers: reading them, drawing them and scoring it; false when `p` is none of these. */
+async function roomReviews(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  const m = new RegExp(`^/v1/rooms/${r.id}/contributions/([^/]+)/(reviews|reviewers|review)$`).exec(p)
+  if (m === null) return false
+  const c = (contributions.get(r.id) ?? []).find((x) => x.id === decodeURIComponent(m[1]))
+  if (c === undefined || !r.members.some((x) => x.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const seats = reviewSeats.get(c.id) ?? []
+  reviewSeats.set(c.id, seats)
+  const read = () => {
+    const scores = seats.map((v) => v.score)
+    const quality = scores.length === 2 && scores.every((x) => x !== null) ? Math.floor(((scores[0] as number) + (scores[1] as number)) / 2) : 10_000
+    return { contribution_id: c.id, quality_bps: quality, reviews: seats.map((v) => ({
+      reviewer_workspace_id: v.ws, reviewer_workspace_name: v.ws, score_bps: v.score, ring: false, drawn_at: c.created_at })) }
+  }
+  if (m[2] === 'reviews' && req.method === 'GET') return json(res, 200, read()), true
+  if (m[2] === 'reviewers' && req.method === 'POST') {
+    const named = (await body(req)).reviewer_workspace_id
+    const pool = BREAK === 'room-review-pick' && typeof named === 'string' ? [named]
+      : r.members.filter((x) => x.role === 'member' && x.workspace_id !== c.author_workspace_id).map((x) => x.workspace_id).sort(() => Math.random() - 0.5)
+    for (const w of pool) if (seats.length < 2 && !seats.some((v) => v.ws === w)) seats.push({ ws: w, score: null })
+    return json(res, 200, read()), true
+  }
+  if (m[2] === 'review' && req.method === 'PUT') {
+    const score = Number((await body(req)).score_bps)
+    if (!(score >= 5000 && score <= 15_000)) return json(res, 400, { error: 'rooms: invalid request: score_bps is between 5000 (0.5) and 15000 (1.5)' }), true
+    const mine = seats.find((v) => v.ws === ws)
+    if (mine === undefined) return json(res, 403, { error: 'rooms: not allowed: only the members Lens drew to review the contribution score it' }), true
+    mine.score = score
+    return json(res, 200, read()), true
+  }
+  return false
 }
 
 /** B41.142 — a room's rate card and a contribution's size on it; false when `p` is neither. */

@@ -368,6 +368,9 @@ func everyMutatingRoute() []mutatingRoute {
 		// B41.42 — the owner publishes the rate card; a contribution claims a size.
 		{method: http.MethodPut, path: "/api/rooms/x1/rate-card", body: `{"pool_points":1}`},
 		{method: http.MethodPut, path: "/api/rooms/x1/contributions/x1/size", body: `{"size":"M"}`},
+		// B41.44 — a contribution's reviewers are drawn, and a drawn reviewer scores it.
+		{method: http.MethodPost, path: "/api/rooms/x1/contributions/x1/reviewers"},
+		{method: http.MethodPut, path: "/api/rooms/x1/contributions/x1/review", body: `{"score_bps":10000}`},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},

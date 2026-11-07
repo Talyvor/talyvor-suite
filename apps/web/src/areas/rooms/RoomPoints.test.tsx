@@ -4,7 +4,7 @@ import { App, queryClient } from '../../App'
 
 // B41.43 — the points ledger. The mock BFF plays Lens's B41.143: accepting a contribution claimed at M (400 points) with
 // quality 1.2 writes its author an accepted row of 480, a fork passes the room's 20% remix share of its points to the
-// original's author, and a workspace that is not synthetic gets 404 until room_equity is cleared.
+// original's author, a reviewer whose score agreed earns its review points (B41.144), and a workspace that is not synthetic gets 404 until room_equity is cleared.
 
 const OWNER = 'ws_owner'
 const ME = 'ws_me'
@@ -52,7 +52,8 @@ function mockBff({ me, gated = false }: { me: string; gated?: boolean }) {
     }
     if (url === '/api/rooms/room_1/contributions/rc_1' && method === 'PATCH') {
       status = 'accepted'
-      entries.push(row({}))
+      // B41.144: the reviewer whose ×1.2 agreed with the acceptance earns its review points too.
+      entries.push(row({}), row({ workspace_id: 'ws_reviewer', reason: 'review', size_points: 0, points: 25 }))
       return json(work('rc_1', 'Pricing prompt', status))
     }
     if (url === '/api/rooms/room_1/contributions') {
@@ -96,8 +97,11 @@ describe('the points ledger', () => {
     await waitFor(() => expect(screen.getAllByTestId('room-points-entry')).toHaveLength(2))
     const card = (await screen.findAllByTestId('contribution-card')).find((c) => within(c).queryByText('Pricing prompt'))!
     fireEvent.click(within(card).getByRole('button', { name: 'Accept' }))
-    await waitFor(() => expect(screen.getAllByTestId('room-points-entry')).toHaveLength(3))
-    expect(entries()[0]).toBe('Pricing prompt · Northwind400 × quality 1.2 × survival 100%480')
+    await waitFor(() => expect(screen.getAllByTestId('room-points-entry')).toHaveLength(4))
+    expect(entries().slice(0, 2)).toEqual([
+      'Pricing prompt · ws_reviewerReviewed it: the score, 1.2, agreed with the decision25',
+      'Pricing prompt · Northwind400 × quality 1.2 × survival 100%480',
+    ])
   })
 
   it('a workspace that is not synthetic, before room_equity is cleared, sees no points', async () => {
