@@ -591,6 +591,33 @@ func (a *app) handleRoomForkRoom(w http.ResponseWriter, r *http.Request, t tenan
 	a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, nil, "")
 }
 
+// B41.41 — shared ownership, intent only (Lens B41.141), relayed the same way. Lens answers 404 to everyone in a
+// workspace that is not synthetic until room_equity is cleared, and to anyone who is not a member:
+//
+//	GET /api/rooms/{id}/shared-ownership   {room_id, enabled, pool_bps, notice, updated_at}
+//	PUT /api/rooms/{id}/shared-ownership   {enabled, pool_bps}: the owner only; pool_bps 1000–5000, 2500 left out
+var roomOwnershipKeys = map[string][]string{"enabled": nil, "pool_bps": nil}
+
+// handleRoomSharedOwnership — GET the setting; PUT {enabled, pool_bps} changes it.
+func (a *app) handleRoomSharedOwnership(w http.ResponseWriter, r *http.Request, t tenant) {
+	path, ok := roomPath(w, r, "/shared-ownership", false)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+	case http.MethodPut:
+		body, ok := roomBody(w, r, 1<<10, roomOwnershipKeys)
+		if !ok {
+			return
+		}
+		a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPut)
+	}
+}
+
 // handleRoomInvitePreview — GET /api/room-invites/{token}: what a live link opens; 404 once it is revoked, expired or
 // used up.
 func (a *app) handleRoomInvitePreview(w http.ResponseWriter, r *http.Request, t tenant) {
