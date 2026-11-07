@@ -169,6 +169,30 @@ export interface RoomLeaderboard {
   notice: string
 }
 
+/** Lens rooms.GateThresholds (B41.146): Talyvor's are the floor, and the owner may raise them, never lower them. */
+export interface GateThresholds {
+  shipped_weeks: number
+  used_people: number
+  used_active_weeks: number
+  used_window_weeks: number
+  paid_usd_micros: number
+  paid_payers: number
+  updated_at?: string
+}
+
+/** Lens rooms.GateTracker (B41.146) — GET /api/rooms/{id}/gate, behind the same room_equity gate as the points ledger.
+ *  Each test's status is met, in_progress or needs_published_build; Shipped and Paid carry Lens's note while the room
+ *  cannot publish a build. */
+export interface RoomGate {
+  room_id: string
+  thresholds: GateThresholds
+  shipped: { status: string; note?: string; weeks: number }
+  used: { status: string; people: number }
+  paid: { status: string; note?: string; usd_micros: number; payers: number }
+  met: boolean
+  notice: string
+}
+
 /** Lens rooms.Review (B41.144): one reviewer's seat on a contribution. score_bps is 5,000–15,000 (0.5–1.5), null until it
  *  scores; ring means it and the author scored each other's work, so its score counts as 1.0 and earns nothing. */
 export interface Review {
@@ -571,6 +595,10 @@ export const roomsApi = {
   // B41.45 — the provisional leaderboard.
   leaderboard: (id: string) =>
     getJSON<RoomLeaderboard>(`/api/rooms/${e(id)}/leaderboard`, { pool_bps: 'number', rows: 'list', note: 'string' }),
+  // B41.46 — the Gate tracker, and the owner raising its thresholds.
+  gate: (id: string) => getJSON<RoomGate>(`/api/rooms/${e(id)}/gate`, { thresholds: 'object', used: 'object', notice: 'string' }),
+  setGateThresholds: (id: string, t: Omit<GateThresholds, 'used_window_weeks' | 'updated_at'>) =>
+    post<GateThresholds>(`/api/rooms/${e(id)}/gate-thresholds`, t, 'PUT'),
   // B41.44 — two reviewers Lens draws at random score a contribution's quality.
   reviews: (id: string, cid: string) =>
     getJSON<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/reviews`, { quality_bps: 'number', reviews: 'list' }),

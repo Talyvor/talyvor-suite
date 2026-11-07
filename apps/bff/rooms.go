@@ -695,6 +695,45 @@ func (a *app) handleRoomLeaderboard(w http.ResponseWriter, r *http.Request, t te
 	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
 }
 
+// B41.46 — the room's Gate tracker (Lens B41.146), behind the same room_equity gate:
+//
+//	GET /api/rooms/{id}/gate               {room_id, thresholds, shipped: {status, note, weeks}, used: {status, people},
+//	                                       paid: {status, note, usd_micros, payers}, met, notice}
+//	PUT /api/rooms/{id}/gate-thresholds    {shipped_weeks, used_people, used_active_weeks, paid_usd_micros, paid_payers}:
+//	                                       the owner only; Lens answers 409 to any value below the current one
+var roomGateThresholdsKeys = map[string][]string{"shipped_weeks": nil, "used_people": nil, "used_active_weeks": nil,
+	"paid_usd_micros": nil, "paid_payers": nil}
+
+// handleRoomGate — GET /api/rooms/{id}/gate.
+func (a *app) handleRoomGate(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	path, ok := roomPath(w, r, "/gate", false)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+}
+
+// handleRoomGateThresholds — PUT /api/rooms/{id}/gate-thresholds raises the room's thresholds.
+func (a *app) handleRoomGateThresholds(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	path, ok := roomPath(w, r, "/gate-thresholds", false)
+	if !ok {
+		return
+	}
+	body, ok := roomBody(w, r, 1<<10, roomGateThresholdsKeys)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+}
+
 // B41.44 — a contribution's quality, scored by two reviewers Lens draws at random (Lens B41.144), behind the same
 // room_equity gate as the points ledger:
 //

@@ -168,6 +168,13 @@
 // STUB_BREAK=room-points-remix credits a fork's original nothing — a defect room-points must FAIL on;
 // room-leaderboard-holder leaves the leaderboard's last holder off — another.
 //
+// B41.146 — and the Gate tracker, behind the same gate:
+//
+//   GET /v1/rooms/{id}/gate               to a member: {thresholds, shipped, used, paid, met, notice}; nobody in a stub room
+//                                         has been active 6 weeks, and Shipped and Paid need a published build
+//   PUT /v1/rooms/{id}/gate-thresholds    the owner raises a threshold; 409 to a lower one. STUB_BREAK=room-gate-lower
+//                                         saves the lower one — a defect room-points must FAIL on.
+//
 // B41.144 — and a contribution's two reviewers, as room-reviews reads them, behind the same gate:
 //
 //   GET  /v1/rooms/{id}/contributions/{c}/reviews     to a member: {contribution_id, quality_bps, reviews}
@@ -292,6 +299,7 @@ const contributions = new Map<string, Contribution[]>()
 interface PointsRow { id: string; contribution_id: string; workspace_id: string; reason: string; size_points: number; received_usd_micros: number
   quality_bps: number; survival_bps: number; remix_share_bps: number; points: number; created_at: string }
 const pointsLedger = new Map<string, PointsRow[]>()
+const gateThresholds = new Map<string, Record<string, number>>()
 /** B41.144 — each contribution's reviewer seats, in the order they were drawn. */
 const reviewSeats = new Map<string, { ws: string; score: number | null }[]>()
 let cursor = 0
@@ -576,7 +584,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
     return true
   }
   if (await settingsOutsideRoom(req, res, p, ws)) return true
-  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points|leaderboard)/.exec(p)
+  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points|leaderboard|gate)/.exec(p)
   if (one === null) return false
   const r = rooms.get(decodeURIComponent(one[1]))
   if (r === undefined || (r.visibility === 'private' && !r.members.some((m) => m.workspace_id === ws))) {
@@ -593,6 +601,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
   if (await roomRateCard(req, res, p, ws, r)) return true
   if (roomPointsLedger(req, res, p, ws, r)) return true
   if (roomLeaderboard(req, res, p, ws, r)) return true
+  if (await roomGate(req, res, p, ws, r)) return true
   if (await roomReviews(req, res, p, ws, r)) return true
   if (one[2] === undefined && req.method === 'GET') return json(res, 200, detail(r, ws)), true
   if (one[2] === '/join' && req.method === 'POST') {
@@ -846,6 +855,30 @@ function roomLeaderboard(req: IncomingMessage, res: ServerResponse, p: string, w
     .sort((a, b) => b.points - a.points || a.workspace_id.localeCompare(b.workspace_id))
   if (BREAK === 'room-leaderboard-holder') rows.pop()
   return json(res, 200, { room_id: r.id, enabled: true, pool_bps: 2500, total_points: 0, rows, note: 'Nothing is final until the Gate.', notice: '' }), true
+}
+
+/** B41.146 — GET a room's Gate tracker, or PUT its thresholds; false when `p` is neither. */
+async function roomGate(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  if (p !== `/v1/rooms/${r.id}/gate` && p !== `/v1/rooms/${r.id}/gate-thresholds`) return false
+  if (!r.members.some((m) => m.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const t = gateThresholds.get(r.id) ?? { shipped_weeks: 8, used_people: 100, used_active_weeks: 6, used_window_weeks: 8, paid_usd_micros: 1_000_000_000, paid_payers: 10 }
+  if (p.endsWith('/gate') && req.method === 'GET') {
+    const build = { status: 'needs_published_build', note: 'needs a published build' }
+    return json(res, 200, {
+      room_id: r.id, thresholds: t, shipped: { ...build, weeks: 0 }, used: { status: 'in_progress', people: 0 }, paid: { ...build, usd_micros: 0, payers: 0 },
+      met: false, notice: 'No shares, options or rights arise unless and until a company is formed, a regulated partner adopts a Contributor Plan, and the Gate is met',
+    }), true
+  }
+  if (!p.endsWith('/gate-thresholds') || req.method !== 'PUT') return false
+  if (r.owner_workspace_id !== ws) return json(res, 403, { error: "rooms: not allowed: only the room's owner sets its Gate thresholds" }), true
+  const next = { ...t, ...(await body(req)) } as Record<string, number>
+  for (const k of Object.keys(t)) {
+    if (next[k] < t[k] && BREAK !== 'room-gate-lower') {
+      return json(res, 409, { error: `rooms: conflict: a Gate threshold may be raised, never lowered: ${k} is ${t[k]}` }), true
+    }
+  }
+  gateThresholds.set(r.id, next)
+  return json(res, 200, next), true
 }
 
 /** B41.144 — a contribution's reviewers: reading them, drawing them and scoring it; false when `p` is none of these. */
