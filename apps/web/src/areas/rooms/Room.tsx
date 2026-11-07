@@ -22,6 +22,7 @@ import {
   usdText,
 } from './roomsApi'
 import { RoomLead } from './RoomLead'
+import { ContributionSize, RoomRateCard } from './RoomRateCard'
 import { RoomSharedOwnership } from './RoomSharedOwnership'
 import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 
@@ -32,7 +33,8 @@ import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 // paid — reaches everyone in the room. The room wallet's spend this month against its budget sits at the top. B41.60:
 // the room's spec, a Docs page kept current in the conversation, and asking the room's AI, which reads it (RoomSpec.tsx).
 // B41.48: who leads the room, and the takeover vote when its owner is away (RoomLead.tsx). B41.41: shared ownership,
-// intent only — the owner sets the pool for contributors (RoomSharedOwnership.tsx).
+// intent only — the owner sets the pool for contributors (RoomSharedOwnership.tsx). B41.42: the rate card, points for
+// each size of work, and a contribution's size, fixed before the work (RoomRateCard.tsx).
 //
 // Lens decides everything — who may post, contribute, vote, accept and spend — and its sentence is shown on a refusal.
 
@@ -417,6 +419,7 @@ function ContributionCard({
             </span>
           ) : null}
         </span>
+        <ContributionSize room={room} c={c} me={me} update={update} />
         <span className="flex flex-wrap items-center gap-2 border-t border-rule pt-3">
           <Button
             aria-pressed={c.my_vote === 1}
@@ -664,6 +667,7 @@ export function RoomLive({ room }: { room: RoomDetail }) {
       <RoomSpec room={room} me={me} messagesKey={messagesKey(room.id)} />
       <RoomLead room={room} />
       <RoomSharedOwnership room={room} />
+      <RoomRateCard room={room} />
     </>
   )
 }

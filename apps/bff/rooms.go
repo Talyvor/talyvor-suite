@@ -618,6 +618,54 @@ func (a *app) handleRoomSharedOwnership(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// B41.42 — the room's rate card (Lens B41.142), relayed the same way and behind the same room_equity gate:
+//
+//	GET /api/rooms/{id}/rate-card                    {room_id, pool_points, item_cap_points, sizes: [{size, hours, points_per_hour, points}]}
+//	PUT /api/rooms/{id}/rate-card                    {pool_points, sizes: [{size, hours, points_per_hour}]}: the owner only;
+//	                                                 Lens refuses a size worth more than 5% of pool_points
+//	PUT /api/rooms/{id}/contributions/{cid}/size     {size}: fixes that size's points on it; 409 for a raise once decided
+var (
+	roomRateCardKeys = map[string][]string{"pool_points": nil, "sizes": nil}
+	roomSizeKeys     = map[string][]string{"size": nil}
+)
+
+// handleRoomRateCard — GET the rate card; PUT {pool_points, sizes} publishes it.
+func (a *app) handleRoomRateCard(w http.ResponseWriter, r *http.Request, t tenant) {
+	path, ok := roomPath(w, r, "/rate-card", false)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+	case http.MethodPut:
+		body, ok := roomBody(w, r, 8<<10, roomRateCardKeys)
+		if !ok {
+			return
+		}
+		a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPut)
+	}
+}
+
+// handleRoomContributionSize — PUT /api/rooms/{id}/contributions/{cid}/size {size}.
+func (a *app) handleRoomContributionSize(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	path, ok := roomPath(w, r, "/size", true)
+	if !ok {
+		return
+	}
+	body, ok := roomBody(w, r, 1<<10, roomSizeKeys)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+}
+
 // handleRoomInvitePreview — GET /api/room-invites/{token}: what a live link opens; 404 once it is revoked, expired or
 // used up.
 func (a *app) handleRoomInvitePreview(w http.ResponseWriter, r *http.Request, t tenant) {
