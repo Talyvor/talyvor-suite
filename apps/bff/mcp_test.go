@@ -328,18 +328,34 @@ func TestMCPBillsPayment(t *testing.T) {
 	}
 }
 
-// TestMCPToolsFollowTheGrantsScopes: a connection allowed only to read lists only the read tools and is refused the rest.
+// TestMCPToolsFollowTheGrantsScopes (B52.5): a connection allowed only to read still lists every tool, each naming the
+// scope it needs, and a tool it was not given answers 403 insufficient_scope, so the assistant can ask the person again.
 func TestMCPToolsFollowTheGrantsScopes(t *testing.T) {
 	a, lens, _ := mcpApp(t)
 	token := seedOAuthToken(a) // wallets:read only
-	for _, tl := range rpc(t, a, token, "tools/list", nil)["tools"].([]any) {
-		if tl.(map[string]any)["annotations"].(map[string]any)["readOnlyHint"] != true {
-			t.Fatalf("a read-only connection lists %v", tl)
+	listed := rpc(t, a, token, "tools/list", nil)["tools"].([]any)
+	if len(listed) != len(mcpTools) {
+		t.Fatalf("a read-only connection lists %d tools, want all %d", len(listed), len(mcpTools))
+	}
+	for i, tl := range listed {
+		schemes, _ := json.Marshal(tl.(map[string]any)["securitySchemes"])
+		if want := `[{"scopes":["` + mcpTools[i].scope + `"],"type":"oauth2"}]`; string(schemes) != want {
+			t.Fatalf("%s declares securitySchemes %s, want %s", mcpTools[i].name, schemes, want)
 		}
 	}
-	r := toolCall(t, a, token, "prepare_payment", map[string]any{"idempotency_key": "k", "payee_id": "py-1", "currency": "GBP", "amount_minor": 100})
-	if r["isError"] != true || !strings.Contains(r["content"].([]any)[0].(map[string]any)["text"].(string), "payments:prepare") || len(lens.calls) != 0 {
-		t.Fatalf("prepare_payment on a read-only connection: %v, Lens saw %v", r, lens.calls)
+
+	body, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": map[string]any{"name": "prepare_payment",
+		"arguments": map[string]any{"idempotency_key": "k", "payee_id": "py-1", "currency": "GBP", "amount_minor": 100}}})
+	rec := serve(a, "POST", "/mcp", "", string(body), map[string]string{"Authorization": "Bearer " + token, "MCP-Protocol-Version": "2025-06-18"}, nil)
+	challenge := rec.Header().Get("WWW-Authenticate")
+	if rec.Code != http.StatusForbidden || !strings.Contains(challenge, `error="insufficient_scope"`) ||
+		!strings.Contains(challenge, `scope="wallets:read payments:prepare"`) ||
+		!strings.Contains(challenge, `resource_metadata="`+a.cfg.publicBaseURL+`/.well-known/oauth-protected-resource/mcp"`) {
+		t.Fatalf("prepare_payment on a read-only connection: %d %q", rec.Code, challenge)
+	}
+	r := jsonOf(t, rec)["result"].(map[string]any)
+	if meta := fmt.Sprint(r["_meta"].(map[string]any)["mcp/www_authenticate"]); r["isError"] != true || meta != "["+challenge+"]" || len(lens.calls) != 0 {
+		t.Fatalf("prepare_payment on a read-only connection: %v (challenge %q), Lens saw %v", r, challenge, lens.calls)
 	}
 	if e := toolCall(t, a, token, "pay_now", nil); e["code"] != float64(mcpErrInvalidParam) {
 		t.Fatalf("an unknown tool: %v", e)
