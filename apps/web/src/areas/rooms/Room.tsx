@@ -24,6 +24,7 @@ import {
 import { RoomLead } from './RoomLead'
 import { RoomPoints, pointsKey } from './RoomPoints'
 import { ContributionSize, RoomRateCard } from './RoomRateCard'
+import { ContributionReviews } from './RoomReviews'
 import { RoomSharedOwnership } from './RoomSharedOwnership'
 import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 
@@ -36,7 +37,8 @@ import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 // B41.48: who leads the room, and the takeover vote when its owner is away (RoomLead.tsx). B41.41: shared ownership,
 // intent only — the owner sets the pool for contributors (RoomSharedOwnership.tsx). B41.42: the rate card, points for
 // each size of work, and a contribution's size, fixed before the work (RoomRateCard.tsx). B41.43: the points ledger, what
-// each accepted contribution earned (RoomPoints.tsx).
+// each accepted contribution earned (RoomPoints.tsx). B41.44: two reviewers drawn at random score a contribution's quality
+// (RoomReviews.tsx).
 //
 // Lens decides everything — who may post, contribute, vote, accept and spend — and its sentence is shown on a refusal.
 
@@ -425,6 +427,7 @@ function ContributionCard({
           ) : null}
         </span>
         <ContributionSize room={room} c={c} me={me} update={update} />
+        <ContributionReviews room={room} c={c} me={me} />
         <span className="flex flex-wrap items-center gap-2 border-t border-rule pt-3">
           <Button
             aria-pressed={c.my_vote === 1}

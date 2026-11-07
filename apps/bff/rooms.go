@@ -680,6 +680,58 @@ func (a *app) handleRoomPoints(w http.ResponseWriter, r *http.Request, t tenant)
 	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
 }
 
+// B41.44 — a contribution's quality, scored by two reviewers Lens draws at random (Lens B41.144), behind the same
+// room_equity gate as the points ledger:
+//
+//	GET  /api/rooms/{id}/contributions/{cid}/reviews     {contribution_id, quality_bps, reviews: [{reviewer_workspace_id,
+//	                                                     reviewer_workspace_name, score_bps, ring, drawn_at, scored_at}]}
+//	POST /api/rooms/{id}/contributions/{cid}/reviewers   any member asks; Lens fills the empty seats, so nobody picks them
+//	PUT  /api/rooms/{id}/contributions/{cid}/review      {score_bps}: a drawn reviewer, 5000–15000 while it is proposed
+var roomReviewKeys = map[string][]string{"score_bps": nil}
+
+// handleRoomReviews — GET /api/rooms/{id}/contributions/{cid}/reviews.
+func (a *app) handleRoomReviews(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	path, ok := roomPath(w, r, "/reviews", true)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+}
+
+// handleRoomReviewers — POST /api/rooms/{id}/contributions/{cid}/reviewers: no body, so nobody names a reviewer.
+func (a *app) handleRoomReviewers(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	path, ok := roomPath(w, r, "/reviewers", true)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, nil, "")
+}
+
+// handleRoomReview — PUT /api/rooms/{id}/contributions/{cid}/review {score_bps}.
+func (a *app) handleRoomReview(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	path, ok := roomPath(w, r, "/review", true)
+	if !ok {
+		return
+	}
+	body, ok := roomBody(w, r, 1<<10, roomReviewKeys)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+}
+
 // handleRoomInvitePreview — GET /api/room-invites/{token}: what a live link opens; 404 once it is revoked, expired or
 // used up.
 func (a *app) handleRoomInvitePreview(w http.ResponseWriter, r *http.Request, t tenant) {

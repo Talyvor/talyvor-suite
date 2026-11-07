@@ -25,6 +25,8 @@ function working(e: PointsEntry): string {
       return `${percent(e.remix_share_bps)} of a fork’s ${points(earned)} points`
     case 'withdrawn':
       return 'Taken back: rejected after it was accepted'
+    case 'review':
+      return `Reviewed it: the score, ${times(e.quality_bps)}, agreed with the decision`
   }
   const passed = e.remix_share_bps > 0 ? `, less ${percent(e.remix_share_bps)} to the original` : ''
   return `${points(e.size_points)} × quality ${times(e.quality_bps)} × survival ${percent(e.survival_bps)}${less}${passed}`
