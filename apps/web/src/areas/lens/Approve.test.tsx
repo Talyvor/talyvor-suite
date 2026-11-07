@@ -20,6 +20,8 @@ function mockBff(lie = false, ITEMS: Record<string, unknown>[] = BASE, extra: Re
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [{ id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-10T09:00:00Z' }] })
     if (url === '/api/money/payees') return json({ payees: [
       { id: 'payee_1', name: 'Acme Ltd', country: 'GB', check: 'exact_match', checked_by: 't', checked_at: '2026-10-01T09:00:00Z', needs_confirmation: false, created_at: '2026-10-01T09:00:00Z' },
@@ -46,6 +48,22 @@ function mockBff(lie = false, ITEMS: Record<string, unknown>[] = BASE, extra: Re
     response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
   Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
   return { sent, get }
+}
+
+// B55.2 — no passkey and the phone's key, answered over mockBff's stub; every POST from here is counted.
+function onlyThePhoneKey(extra: Record<string, unknown> = {}) {
+  const inner = vi.mocked(fetch).getMockImplementation()!
+  const posts: string[] = []
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] })
+    if (url in extra) return json(extra[url])
+    if ((init?.method ?? 'GET') !== 'GET') posts.push(url)
+    return inner(input, init)
+  })
+  return posts
 }
 
 afterEach(() => {
@@ -93,8 +111,7 @@ describe('the approval screen', () => {
     window.history.pushState({}, '', '/approve/preq_1')
     render(<App />)
 
-    await screen.findByTestId('approve-card')
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Approve £45.50 to Brightline Studio' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Approve £45.50 to Brightline Studio' }))
     fireEvent.click(screen.getByRole('button', { name: 'Approve 1 payment with a passkey' }))
     await screen.findByText('What you were asked to sign is not what is shown here, so nothing was signed. Reload the page.')
     expect(bff.get).not.toHaveBeenCalled()
@@ -143,5 +160,20 @@ describe('the approval screen', () => {
     expect(within(trust).getByText(who)).toBeTruthy()
     expect(trust.textContent).toMatch(detail)
     if (agent_trust.level !== 'verified') expect(screen.getByTestId('approve-card').textContent).not.toContain('Verified agent of')
+  })
+})
+
+describe('the approval screen when only the phone holds a key (B55.2)', () => {
+  it('opens no passkey prompt, sends nothing, and says to approve on the phone', async () => {
+    const bff = mockBff()
+    const posts = onlyThePhoneKey()
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
+    const card = screen.getByTestId('approve-card')
+    expect(within(card).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
+    expect(within(card).queryByRole('checkbox')).toBeNull()
+    expect(bff.get).not.toHaveBeenCalled()
+    expect(posts).toEqual([])
   })
 })
