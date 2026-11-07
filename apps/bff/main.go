@@ -513,13 +513,12 @@ func main() {
 	if dsn := os.Getenv("BFF_DATABASE_URL"); dsn != "" {
 		db, err := openOAuthDB(context.Background(), dsn)
 		if err == nil {
-			err = db.load(context.Background(), app.oauth)
+			err = app.useOAuthDB(context.Background(), db)
 		}
 		if err != nil {
 			log.Fatalf("bff: BFF_DATABASE_URL: %s", redactSecret(err.Error()))
 		}
 		defer db.close()
-		app.oauth.db = db
 		log.Printf("bff: assistant sign-ins are kept in Postgres and survive a restart")
 	} else {
 		log.Printf("bff: BFF_DATABASE_URL unset — assistant sign-ins are in memory and a restart signs them out")

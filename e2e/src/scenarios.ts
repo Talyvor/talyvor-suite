@@ -135,7 +135,7 @@ import { injectionExfil } from './injection.ts'
 import { fileBombBounded, ssrfRefused } from './ssrf.ts'
 import { agentResumeSigned, approvalOwnRequest, approvalReused, csrfEveryWrite, moneyTampered, passkeyEnrolSigned, xssShownBack } from './security.ts'
 import { csrfRefused, phoneBearer, scriptInert } from './session.ts'
-import { connectApprove, connectContact, connectMCP, connectOAuth, connectRecurring } from './connect.ts'
+import { connectApprove, connectContact, connectMCP, connectOAuth, connectRecurring, connectSignOutEverywhere } from './connect.ts'
 import { mcpPayRetried, mcpSDKAgentPay } from './mcpSDK.ts'
 import { keysNotForwarded, keysUnlisted } from './keys.ts'
 import { rateLimitsHold, workspaceLimitsRaised } from './ratelimit.ts'
@@ -5286,6 +5286,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B45.37 — recurring payments over MCP, once a run, on a workspace of its own: nothing runs until the person signs the plan in
   // the app; then its orders read running, each first run waits under Approvals, and one approval each pays exactly its amount.
   if (i === 8) list.push(connectRecurring())
+  // B52.9 — sign out everywhere, once a run, on a workspace of its own: two connected assistants, then Sign out everywhere on
+  // Settings → Connect your AI; this browser is signed out and /mcp refuses both tokens.
+  if (i === 8) list.push(connectSignOutEverywhere())
   // B40.25 — the official MCP SDK client on an agent's own key, once a run, on a workspace of its own: Lens's tools listed with
   // their annotations, agent_balance read, and agent_pay one entry of two postings, one on each agent's statement, summing to zero.
   if (i === 7) list.push(mcpSDKAgentPay(i))

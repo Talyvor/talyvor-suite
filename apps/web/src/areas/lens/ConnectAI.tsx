@@ -9,7 +9,7 @@ import { CopyBlock } from './Setup'
 
 // B40.8 — Settings › Connect your AI: the address of Talyvor's MCP server (B40.7), how to add it to each assistant,
 // and the assistants this person has connected (B40.6 grants), each with its last use, what it did (B52.3) and a
-// revoke button.
+// revoke button; and sign out everywhere (B52.9), which ends every assistant with every other sign-in.
 
 /** One tool call, as the BFF's audit trail keeps it: the arguments by SHA-256 only. */
 interface Call {
@@ -240,6 +240,47 @@ export function ConnectedList() {
   )
 }
 
+/** B52.9 — ends every sign-in of this person: browsers, phones and every connected assistant. Asks once first. */
+function SignOutEverywhere() {
+  const qc = useQueryClient()
+  const [asking, setAsking] = useState(false)
+  const out = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/auth/logout-everywhere', { method: 'POST', headers: { Accept: 'application/json' } })
+      if (!res.ok) throw new ApiError(res.status, '/auth/logout-everywhere')
+    },
+    // This browser is signed out too; re-probe so the sign-in page takes over.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['auth-me'] }),
+  })
+  return (
+    <div className="mt-4 max-w-2xl space-y-3">
+      <p className="text-body text-muted">
+        Signs you out of Talyvor in every browser and on every phone, and disconnects every assistant above. Each one
+        has to sign in again.
+      </p>
+      {asking ? (
+        <div className="flex flex-wrap gap-3">
+          <Button variant="danger" disabled={out.isPending} onClick={() => out.mutate()}>
+            {out.isPending ? 'Signing out…' : 'Yes, sign out everywhere'}
+          </Button>
+          <Button variant="default" disabled={out.isPending} onClick={() => setAsking(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <Button variant="default" onClick={() => setAsking(true)}>
+          Sign out everywhere
+        </Button>
+      )}
+      {out.isError ? (
+        <p role="alert" className="text-caption text-ink">
+          You were not signed out anywhere. Try again.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export function ConnectAI() {
   const url = `${window.location.origin}/mcp`
   return (
@@ -266,6 +307,10 @@ export function ConnectAI() {
         <div className="mt-4">
           <ConnectedList />
         </div>
+      </Region>
+
+      <Region index="03" label="Sign out everywhere">
+        <SignOutEverywhere />
       </Region>
     </RegionScreen>
   )

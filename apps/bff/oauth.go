@@ -685,9 +685,14 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 		g := oauthGrant{ID: gid, ClientID: c.clientID, ClientName: c.clientName, Scope: c.scope, Resource: c.resource, Who: c.who,
 			Created: now, LastUsed: now, expires: now.Add(oauthRefreshTTL), endsAt: now.Add(oauthGrantMaxAge)}
-		if err := a.oauth.db.insertGrant(r.Context(), g); err != nil {
+		kept, err := a.oauth.db.insertGrant(r.Context(), g, c.expires.Add(-oauthCodeTTL))
+		if err != nil {
 			log.Printf("bff: oauth grant not saved: %v", err)
 			oauthError(w, http.StatusInternalServerError, "server_error", "try again")
+			return
+		}
+		if !kept {
+			oauthError(w, http.StatusBadRequest, "invalid_grant", "the person signed out everywhere after allowing this; ask them to allow it again")
 			return
 		}
 		a.oauth.grants.put(gid, g)
