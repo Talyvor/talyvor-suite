@@ -138,6 +138,15 @@
 //
 // STUB_BREAK=room-owner makes the member the owner and leaves the room's owner_workspace_id the old one — a defect
 // room-takeover must FAIL on.
+//
+// B41.141 — and shared ownership, intent only, as room-shared-ownership reads it:
+//
+//   GET /v1/rooms/{id}/shared-ownership   to a member: {room_id, enabled, pool_bps, notice}; 404 to anyone else
+//   PUT /v1/rooms/{id}/shared-ownership   {enabled, pool_bps}: the owner only, 403 to another member; pool_bps
+//                                         1000–5000, 2500 left out
+//
+// Every stub workspace is synthetic, so room_equity's gate is always open here. STUB_BREAK=room-ownership lets any
+// member set it — a defect room-shared-ownership must FAIL on.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomBytes } from 'node:crypto'
@@ -175,6 +184,8 @@ interface Room {
   agents?: { agent_id: string; name: string; workspace_id: string; joined_at: string }[]
   /** B41.148 — when its owner last became the owner, by a hand-over. */
   owner_since?: string
+  /** B41.141 — its shared ownership, once the owner has set it. */
+  ownership?: { enabled: boolean; pool_bps: number }
 }
 
 interface Report { id: string; ws: string; message_id?: string; reason: string; details: string; created_at: string; resolution?: string }
@@ -523,7 +534,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
     return true
   }
   if (await settingsOutsideRoom(req, res, p, ws)) return true
-  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork)/.exec(p)
+  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership)/.exec(p)
   if (one === null) return false
   const r = rooms.get(decodeURIComponent(one[1]))
   if (r === undefined || (r.visibility === 'private' && !r.members.some((m) => m.workspace_id === ws))) {
@@ -536,6 +547,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
   if (await roomPrizes(req, res, p, ws, r)) return true
   if (await roomSettings(req, res, p, ws, r)) return true
   if (await roomTakeover(req, res, p, ws, r)) return true
+  if (await roomSharedOwnership(req, res, p, ws, r)) return true
   if (one[2] === undefined && req.method === 'GET') return json(res, 200, detail(r, ws)), true
   if (one[2] === '/join' && req.method === 'POST') {
     if (r.banned.includes(ws)) return json(res, 403, bannedFrom), true
@@ -720,6 +732,27 @@ async function roomTakeover(req: IncomingMessage, res: ServerResponse, p: string
     return json(res, 409, { error: `rooms: conflict: members ${what} only once the owner's notice has gone unanswered for 14 days` }), true
   }
   return false
+}
+
+const OWNERSHIP_NOTICE =
+  'No shares, options or rights arise unless and until a company is formed, a regulated partner adopts a Contributor Plan, and the Gate is met'
+
+/** B41.141 — a room's shared ownership, intent only: members read it, the owner sets it; false when `p` is not it. */
+async function roomSharedOwnership(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  if (p !== `/v1/rooms/${r.id}/shared-ownership`) return false
+  const me = r.members.find((m) => m.workspace_id === ws)
+  if (me === undefined) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const read = () => ({ room_id: r.id, enabled: false, pool_bps: 2500, ...r.ownership, notice: OWNERSHIP_NOTICE })
+  if (req.method === 'GET') return json(res, 200, read()), true
+  if (req.method !== 'PUT') return false
+  const d = await body(req)
+  const pool = d.pool_bps === undefined ? 2500 : Number(d.pool_bps)
+  if (!Number.isInteger(pool) || pool < 1000 || pool > 5000) {
+    return json(res, 400, { error: 'rooms: invalid request: the contributor pool is between 1000 and 5000 basis points (10%–50%)' }), true
+  }
+  if (me.role !== 'owner' && BREAK !== 'room-ownership') return json(res, 403, { error: "rooms: not allowed: only the room's owner sets its shared ownership" }), true
+  r.ownership = { enabled: d.enabled === true, pool_bps: pool }
+  return json(res, 200, read()), true
 }
 
 const usd = (micros: number) => `$${(micros / 1e6).toFixed(2)}`

@@ -99,6 +99,18 @@ export interface Takeover {
   tally: Record<string, number>
 }
 
+/** Lens rooms.SharedOwnership (B41.141) — GET /api/rooms/{id}/shared-ownership, to members under the current terms.
+ *  Intent only: the share of the room's future value its owner means for contributors, with the notice Lens words.
+ *  404 in a workspace that is not synthetic until room_equity is cleared. */
+export interface SharedOwnership {
+  room_id: string
+  enabled: boolean
+  /** 1,000–5,000 basis points; 2,500 until the owner sets it. */
+  pool_bps: number
+  notice: string
+  updated_at?: string
+}
+
 /** Lens rooms.Usage — what this workspace's plan lets it open, beside what it has open. -1 is unlimited. */
 export interface RoomLimits {
   plan: string
@@ -461,6 +473,11 @@ export const roomsApi = {
   voteLead: (id: string, candidate: string) =>
     post<Takeover>(`/api/rooms/${e(id)}/takeover/vote`, { candidate_workspace_id: candidate }, 'PUT'),
   forkRoom: (id: string) => post<RoomDetail>(`/api/rooms/${e(id)}/fork`, {}),
+  // B41.41 — shared ownership, intent only.
+  sharedOwnership: (id: string) =>
+    getJSON<SharedOwnership>(`/api/rooms/${e(id)}/shared-ownership`, { enabled: 'boolean', pool_bps: 'number', notice: 'string' }),
+  setSharedOwnership: (id: string, enabled: boolean, poolBps: number) =>
+    post<SharedOwnership>(`/api/rooms/${e(id)}/shared-ownership`, { enabled, pool_bps: poolBps }, 'PUT'),
   previewInvite: (token: string) =>
     getJSON<InvitePreview>(`/api/room-invites/${e(token)}`, { room: 'object', terms: 'object', uses_left: 'number' }),
   joinByInvite: (token: string, termsVersion: number) =>
