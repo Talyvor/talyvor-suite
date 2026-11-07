@@ -559,6 +559,18 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor: "decide := func(approve bool) http.HandlerFunc {",
     subject: "lensApprovalDecisionBody",
   },
+  // B54.34 — approving with always allow asks for a challenge over that allowance too (Lens B54.29).
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/approvals/{approvalID}/challenge",
+    file: "apps/bff/agent_bank.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleApprovalChallenge(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/approvals/{approvalID}/challenge", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensApprovalChallengeBody",
+  },
   // B41.8 — resuming an agent, or every agent, signed with Face ID once the workspace has a passkey (Lens B41.108).
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/resume",

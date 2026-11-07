@@ -718,6 +718,7 @@ func (a *app) handleAgentDecision(decision string) func(http.ResponseWriter, *ht
 //	GET    /api/agents/passkeys                    the workspace's passkeys
 //	POST   /api/agents/passkeys                    {credential_id, name, public_key, client_data_json, authenticator_data, assertion?}
 //	POST   /api/agents/approvals/{id}/challenge    the challenge approving or denying one approval is signed over
+//	                                               {"always_allow"?}: approving with always allow signs it too (B54.34)
 //	GET    /api/agents/push/public-key             the key a browser subscribes to pushes with
 //	POST   /api/agents/push/subscriptions          {endpoint, keys: {p256dh, auth}}
 //	DELETE /api/agents/push/subscriptions          {endpoint}
@@ -781,7 +782,22 @@ func (a *app) handleApprovalChallenge(w http.ResponseWriter, r *http.Request, t 
 	if !ok {
 		return
 	}
-	a.agentBankRelay(w, r, t, http.MethodPost, "/agents/approvals/"+url.PathEscape(id)+"/challenge", nil)
+	// B54.34: approving with always_allow signs that allowance too (Lens B54.29), so its challenge is asked for with it.
+	var in struct {
+		AlwaysAllow *payeeAllowance `json:"always_allow,omitempty"`
+	}
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil && err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+	}
+	var body []byte
+	if in.AlwaysAllow != nil {
+		// UPSTREAM-BINDS-ONLY lensApprovalChallengeBody: none
+		body, _ = json.Marshal(in)
+	}
+	a.agentBankRelay(w, r, t, http.MethodPost, "/agents/approvals/"+url.PathEscape(id)+"/challenge", body)
 }
 
 // handlePushPublicKey — GET /api/agents/push/public-key.

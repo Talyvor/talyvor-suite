@@ -2420,7 +2420,7 @@ export function Approvals({
   const decideOne = async (a: AgentApproval, decision: 'approve' | 'deny', allow?: PayeeAllowance): Promise<React.ReactNode> => {
     // B19.10: once the workspace has a passkey, Lens takes a decision only signed with one — Face ID
     // (or Touch ID, or the device's PIN) asks here, over a challenge naming this approval alone.
-    await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined, allow)
+    await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id, allow) : undefined, allow)
     const p = held[a.id]
     if (decision === 'deny') return <>Denied. {nameOf(a.agent_id)}’s request will be refused.</>
     // B41.4 — the rule saved with the approval.
