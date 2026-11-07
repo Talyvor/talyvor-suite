@@ -1287,7 +1287,8 @@ export class Bank {
   /** B32.78 — a licence as Lens answers it: its uses covered, never the key that bought it. */
   private licenceOut(x: StubLicence): object {
     const { key: _k, ...out } = x
-    return { ...out, terms: LICENCE_TERMS[x.licence], uses_covered: this.uses.filter((u) => u.licence_id === x.id).length }
+    // B41.176 — idle needs 30 days unused, so no licence the stub holds is; fresh-licence-idle marks every one idle.
+    return { ...out, terms: LICENCE_TERMS[x.licence], uses_covered: this.uses.filter((u) => u.licence_id === x.id).length, idle: this.broken('fresh-licence-idle') }
   }
 
   private listingOut(l: Listing, viewer: string): object {
