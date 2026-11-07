@@ -391,16 +391,8 @@ export const LENS_BODIES: LensBody[] = [
       'r.Patch("/v1/workspaces/{wsID}/agents/{agentID}", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensAgentUpdateBody",
   },
-  {
-    route: "PUT /v1/workspaces/{wsID}/agents/{agentID}/rules",
-    file: "apps/bff/mcp_agents.go",
-    kind: "anon-struct",
-    fn: "func (a *app) putAgentLimits(",
-    anchor: "var rules struct {",
-    upstreamFile: "internal/economy/agent_rules.go",
-    upstreamAnchor: "type AgentRules struct {",
-    subject: "lensAgentRulesBody",
-  },
+  // putAgentLimits's PUT …/rules is not a row: it sends back the rules Lens just read, every key as Lens wrote it, so
+  // it names no key set of its own (Lens's PUT refuses an unknown key 400).
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/pause",
     file: "apps/bff/mcp_agents.go",
@@ -1331,6 +1323,10 @@ export const NON_LENS_ANON_SITES = [
   {
     file: "features.go",
     what: "handleFeatureGuardrails (B18.22) re-marshals talyvor-lens’s OWN guardrail policy, read from GET /v1/workspaces/{ws}/guardrails, with one flag changed — because Lens’s POST replaces the whole policy. The key set is whatever Lens answered, echoed back, so there is no key set of this repo’s to ask about and this site is exempt; the two flag names it sets, enable_injection and enable_pii, are the ones readFeatures already reads off the same policy.",
+  },
+  {
+    file: "mcp_agents.go",
+    what: "putAgentLimits (B52.6) re-marshals talyvor-lens’s OWN agent rules, read from GET /v1/workspaces/{ws}/agents/{agent}/rules, with only the limits it lowers changed — because Lens’s PUT replaces the whole rule set and refuses an unknown key. The key set is whatever Lens answered, echoed back raw, so there is no key set of this repo’s to ask about and this site is exempt; the three limit names it sets are agentLimits, the ones agent_bank.go’s lensAgentRulesBody row already asks about.",
   },
   {
     file: "agent_task.go",

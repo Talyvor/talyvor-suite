@@ -24,6 +24,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -188,7 +189,8 @@ func (a *app) mcpSendPayment(ctx context.Context, t tenant, g oauthGrant, args m
 		return nil, mcpSaid("Nothing has been paid: Talyvor cannot pay through an assistant just now. The person can pay from the agent in Talyvor.")
 	}
 	// The token pays from this one agent, for this assistant, and Lens refuses it everywhere else (B52.4).
-	// A person's Lens user id is their workspace's (Lens's provision mints their token with both the same).
+	// user_id is the person's own Lens user id, which is their workspace's: Lens's provision mints their token with both
+	// the same, the agents they make are owned by it, and Lens mints only for an agent that user owns (B54.13).
 	// UPSTREAM-BINDS-ONLY lensConnectTokenBody: none
 	mintBody, _ := json.Marshal(map[string]any{"workspace_id": t.workspaceID, "user_id": t.workspaceID, "client_id": g.ClientID, "agent_id": agentID, "scopes": []string{"payments:send"}})
 	raw, err := a.lensOK(ctx, tenant{workspaceID: t.workspaceID, token: a.cfg.lensConnectMintKey},
@@ -313,46 +315,33 @@ func (a *app) mcpSetAgentLimits(ctx context.Context, t tenant, _ oauthGrant, arg
 // putAgentLimits reads the agent's rules and saves them with each asked limit that is lower than the one it has: zero is
 // no limit, so any limit is lower than none. A higher one, or none, is left as it is and returned as waiting.
 func (a *app) putAgentLimits(ctx context.Context, t tenant, agentID string, asked map[string]int64) (applied, waiting map[string]int64, err error) {
-	// Lens's economy.AgentRules as agent_bank.go's handleAgentRules sends it: read back and sent again whole, so every rule
-	// but the lowered limits is kept. A nil map or list is absent, which Lens reads as "keep what it holds".
-	var rules struct {
-		MaxPerRequestULXC      int64            `json:"max_per_request_ulxc"`
-		DailyLimitULXC         int64            `json:"daily_limit_ulxc"`
-		MonthlyLimitULXC       int64            `json:"monthly_limit_ulxc"`
-		HourlyLimitULXC        *int64           `json:"hourly_limit_ulxc"`
-		WeeklyLimitULXC        *int64           `json:"weekly_limit_ulxc"`
-		ModelDailyLimitsULXC   map[string]int64 `json:"model_daily_limits_ulxc"`
-		RequestsPerMinute      *int64           `json:"requests_per_minute"`
-		ApprovalAboveULXC      int64            `json:"approval_above_ulxc"`
-		AllowedModels          []string         `json:"allowed_models"`
-		AllowedProviders       []string         `json:"allowed_providers"`
-		AllowedListings        []string         `json:"allowed_listings"`
-		AllowedPayees          []string         `json:"allowed_payees"`
-		BlockedPayees          []string         `json:"blocked_payees"`
-		PayeeDailyLimitsULXC   map[string]int64 `json:"payee_daily_limits_ulxc"`
-		PayeeMonthlyLimitsULXC map[string]int64 `json:"payee_monthly_limits_ulxc"`
-		ActiveFrom             string           `json:"active_from"`
-		ActiveUntil            string           `json:"active_until"`
-		Timezone               string           `json:"timezone"`
-		PauseOnUnusualSpend    bool             `json:"pause_on_unusual_spend"`
-	}
+	// Lens's economy.AgentRules as Lens sent them, kept raw: every rule but the lowered limits goes back byte for byte,
+	// including any this BFF does not know, so a limit set from the chat never erases another rule.
+	var rules map[string]json.RawMessage
 	path := lensWorkspacePath(t, "/agents/"+url.PathEscape(agentID)+"/rules")
 	raw, err := a.lensOK(ctx, t, lensCall{method: http.MethodGet, path: path})
 	if err == nil {
 		err = json.Unmarshal(raw, &rules)
 	}
+	if err == nil && rules == nil {
+		err = fmt.Errorf("lens answered no rules for agent %s", agentID)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
-	limit := map[string]*int64{"max_per_request_ulxc": &rules.MaxPerRequestULXC, "daily_limit_ulxc": &rules.DailyLimitULXC,
-		"monthly_limit_ulxc": &rules.MonthlyLimitULXC}
 	applied, waiting = map[string]int64{}, map[string]int64{}
 	for _, k := range agentLimits {
+		var cur int64 // absent or null is no limit
+		if v, ok := rules[k]; ok {
+			if err := json.Unmarshal(v, &cur); err != nil {
+				return nil, nil, fmt.Errorf("lens answered %s as %s: %w", k, v, err)
+			}
+		}
 		n, named := asked[k]
-		switch cur := limit[k]; {
-		case !named || n == *cur:
-		case n > 0 && (*cur == 0 || n < *cur):
-			applied[k], *cur = n, n
+		switch {
+		case !named || n == cur:
+		case n > 0 && (cur == 0 || n < cur):
+			applied[k], rules[k] = n, json.RawMessage(strconv.FormatInt(n, 10))
 		default:
 			waiting[k] = n
 		}
@@ -360,7 +349,6 @@ func (a *app) putAgentLimits(ctx context.Context, t tenant, agentID string, aske
 	if len(applied) == 0 {
 		return applied, waiting, nil
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_licences, max_commitment_ulxc, may_subscribe, payee_allowances
 	body, _ := json.Marshal(rules)
 	_, err = a.lensOK(ctx, t, lensCall{method: http.MethodPut, path: path, body: body})
 	return applied, waiting, err
