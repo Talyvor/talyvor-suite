@@ -1901,6 +1901,11 @@ export class LensClient {
     return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/money/cards/${cardID}/charge`, c)
   }
 
+  /** B45.43 — a signed test plan's standing order's next tick due now, for the minute tick to run it once (Lens B45.42). */
+  async bringScheduleDue(user: SyntheticUser, scheduleID: string): Promise<Answered<{ id: string; next_run_at: string }>> {
+    return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/money/schedules/${scheduleID}/due`)
+  }
+
   /** B52.32 — Scan's writer run on its recorded data for `series` on a test workspace, `plant` a line added before the code rules (Lens B52.40). */
   async rehearseScanReport(user: SyntheticUser, series: string, plant = ''): Promise<Answered<{ report: ScanRehearsal }>> {
     return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/scan/reports`, { series, plant })

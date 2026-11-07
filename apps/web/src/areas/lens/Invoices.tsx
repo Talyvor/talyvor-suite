@@ -7,7 +7,7 @@ import { LinkedItem } from '../../components/LinkedItem'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
-import { type CurrencyAccount, type Invoice, type InvoiceRequest, agentBankApi, formatMinor, minorOf, refusalText } from './agentBankApi'
+import { type CurrencyAccount, type Invoice, type InvoiceRequest, FIATS, agentBankApi, formatMinor, minorOf, refusalText } from './agentBankApi'
 
 // Invoices.tsx — B30.97: invoices and their pay links (Lens B30.20). An agent's currency account issues an invoice —
 // lines with optional VAT, a due date, a reminder — and sends a public pay link that takes a card, a transfer quoting the
@@ -38,7 +38,7 @@ export function InvoicesScreen() {
   const invoices = useQuery({ queryKey: INVOICES_KEY, queryFn: agentBankApi.invoices })
   const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
   const list = invoices.data?.invoices ?? []
-  const agentAccounts = (accounts.data?.accounts ?? []).filter((a) => a.purpose === 'agent' && a.status === 'open')
+  const agentAccounts = (accounts.data?.accounts ?? []).filter((a) => a.purpose === 'agent' && a.status === 'open' && FIATS.includes(a.currency))
   return (
     <RegionScreen>
       <Region

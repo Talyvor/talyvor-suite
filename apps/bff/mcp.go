@@ -99,6 +99,8 @@ type mcpTool struct {
 	run func(a *app, ctx context.Context, t tenant, g oauthGrant, args mcpArgs) (map[string]any, error)
 	// sendsOnlyWith is the scope without which this mcpSends tool only reads, and is listed as reading.
 	sendsOnlyWith string
+	// openWorld: its answer carries text a third party wrote (openWorldHint).
+	openWorld bool
 }
 
 var errMCPArgs = errors.New("the arguments are not the tool's")
@@ -192,13 +194,13 @@ var mcpTools = []mcpTool{
 		call: func(t tenant, _ oauthGrant, _ mcpArgs, _ json.RawMessage) (lensCall, error) {
 			return lensCall{method: http.MethodGet, path: lensWorkspacePath(t, "/agents")}, nil
 		}},
-	{name: "list_payees", title: "Saved payees", scope: "wallets:read", kind: mcpReads,
+	{name: "list_payees", title: "Saved payees", scope: "wallets:read", kind: mcpReads, openWorld: true,
 		description: "The saved payees outside Talyvor, each with what its bank said of the name and whether the person still has to confirm it.",
 		call:        mcpGet("/v1/money/payees")},
 	{name: "list_mandates", title: "Permission mandates", scope: "wallets:read", kind: mcpReads,
 		description: "The permission mandates the person has signed: which assistants and agents may prepare payments, to whom, and up to what limits.",
 		call:        mcpGet("/v1/money/permission-mandates")},
-	{name: "market_search", title: "Search the marketplace", scope: "wallets:read", kind: mcpReads,
+	{name: "market_search", title: "Search the marketplace", scope: "wallets:read", kind: mcpReads, openWorld: true,
 		description: "Marketplace listings matching a search, with their prices.",
 		props: map[string]any{"q": mcpStr, "kind": map[string]any{"type": "string", "enum": []string{"agent", "prompt", "skill", "evaluation", "pipeline"}},
 			"page": map[string]any{"type": "integer", "minimum": 1}},
@@ -215,7 +217,7 @@ var mcpTools = []mcpTool{
 			}
 			return lensCall{method: http.MethodGet, path: "/v1/marketplace/search?" + q.Encode()}, nil
 		}},
-	{name: "market_listing", title: "Marketplace listing", scope: "wallets:read", kind: mcpReads,
+	{name: "market_listing", title: "Marketplace listing", scope: "wallets:read", kind: mcpReads, openWorld: true,
 		description: "One marketplace listing: what it does, its seller, its price and its terms.",
 		props:       map[string]any{"listing_id": mcpStr}, required: []string{"listing_id"},
 		call: mcpByID(http.MethodGet, "/v1/marketplace/listings", "listing_id", "")},
@@ -223,7 +225,7 @@ var mcpTools = []mcpTool{
 		description: "A prepared payment request: its status, its items and their decisions, and its approval link.",
 		props:       map[string]any{"request_id": mcpStr}, required: []string{"request_id"},
 		call: mcpByID(http.MethodGet, "/v1/money/payment-requests", "request_id", "")},
-	{name: "bills_due", title: "Bills due", scope: "wallets:read", kind: mcpReads,
+	{name: "bills_due", title: "Bills due", scope: "wallets:read", kind: mcpReads, openWorld: true,
 		description: "The workspace's bills that are due, soonest first: supplier, invoice number, amount, due date and whether the supplier is a saved payee, with the total per currency.",
 		call:        mcpGet("/v1/money/bills"), shape: mcpBillsDue},
 	{name: "safe_to_spend", title: "Safe to spend", scope: "wallets:read", kind: mcpReads,
@@ -239,7 +241,7 @@ var mcpTools = []mcpTool{
 		props: map[string]any{"audio_base64": map[string]any{"type": "string", "description": "The recording, base64."},
 			"mime": map[string]any{"type": "string", "description": "Its type, e.g. audio/webm."}},
 		required: []string{"audio_base64", "mime"}, run: (*app).transcribe},
-	{name: "ask_taly", title: "Ask Taly", scope: "wallets:read", kind: mcpSends, sendsOnlyWith: "payments:prepare",
+	{name: "ask_taly", title: "Ask Taly", scope: "wallets:read", kind: mcpSends, sendsOnlyWith: "payments:prepare", openWorld: true,
 		description: "Taly, Talyvor Chat's assistant, answers about the workspace with Chat's tools. A payment Taly prepares waits for the person to approve it in Talyvor; Taly pays nothing.",
 		props: map[string]any{"message": map[string]any{"type": "string", "maxLength": talyMaxMessage},
 			"thread": map[string]any{"type": "array", "description": "The conversation so far, oldest first.", "items": map[string]any{"type": "object",
@@ -382,9 +384,12 @@ func (t mcpTool) definition(g oauthGrant) map[string]any {
 	if len(t.required) > 0 {
 		schema["required"] = t.required
 	}
+	// securitySchemes is the scope the tool needs, also under _meta where ChatGPT reads it.
+	schemes := []map[string]any{{"type": "oauth2", "scopes": []string{t.scope}}}
 	return map[string]any{"name": t.name, "title": t.title, "description": t.description, "inputSchema": schema,
+		"securitySchemes": schemes, "_meta": map[string]any{"securitySchemes": schemes},
 		"annotations": map[string]any{"title": t.title, "readOnlyHint": kind == mcpReads, "destructiveHint": kind == mcpSends,
-			"idempotentHint": kind == mcpReads && t.run == nil, "openWorldHint": false}}
+			"idempotentHint": kind == mcpReads && t.run == nil, "openWorldHint": t.openWorld}}
 }
 
 type mcpMessage struct {
@@ -479,6 +484,10 @@ func (a *app) handleMCP(w http.ResponseWriter, r *http.Request) {
 		if modern != "" {
 			status = mcpStateless(&resp, req.Method)
 		}
+		if challenge := mcpStepUp(resp); challenge != "" {
+			status = http.StatusForbidden
+			w.Header().Set("WWW-Authenticate", challenge)
+		}
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, status, resp)
@@ -486,6 +495,17 @@ func (a *app) handleMCP(w http.ResponseWriter, r *http.Request) {
 
 func mcpServerInfo() map[string]any {
 	return map[string]any{"name": "talyvor", "title": "Talyvor", "version": bffVersion}
+}
+
+// mcpStepUp is the challenge a tool refused for want of a scope answers with (mcpInsufficientScope); "" for any other answer.
+func mcpStepUp(resp mcpResponse) string {
+	m, _ := resp.Result.(map[string]any)
+	meta, _ := m["_meta"].(map[string]any)
+	c, _ := meta["mcp/www_authenticate"].([]string)
+	if len(c) == 0 {
+		return ""
+	}
+	return c[0]
 }
 
 // mcpStateless finishes a 2026-07-28 answer: every result says it is complete and who answered, a list says how long it
@@ -499,7 +519,12 @@ func mcpStateless(resp *mcpResponse, method string) int {
 	}
 	if m, ok := resp.Result.(map[string]any); ok {
 		m["resultType"] = "complete"
-		m["_meta"] = map[string]any{"io.modelcontextprotocol/serverInfo": mcpServerInfo()}
+		meta, _ := m["_meta"].(map[string]any)
+		if meta == nil {
+			meta = map[string]any{}
+		}
+		meta["io.modelcontextprotocol/serverInfo"] = mcpServerInfo()
+		m["_meta"] = meta
 		if method == "tools/list" || method == "server/discover" {
 			m["ttlMs"], m["cacheScope"] = 300_000, "private"
 		}
@@ -524,11 +549,10 @@ func (a *app) mcpDispatch(ctx context.Context, g oauthGrant, version string, req
 	case "ping":
 		return mcpOK(req.ID, map[string]any{})
 	case "tools/list":
+		// Every tool, granted or not: one the connection was not given answers 403 with the scope to ask the person for.
 		tools := []map[string]any{}
 		for _, t := range mcpTools {
-			if grantHas(g, t.scope) {
-				tools = append(tools, t.definition(g))
-			}
+			tools = append(tools, t.definition(g))
 		}
 		return mcpOK(req.ID, map[string]any{"tools": tools})
 	case "tools/call":
@@ -548,6 +572,17 @@ func mcpRefusal(id json.RawMessage, sentence string) mcpResponse {
 	return mcpOK(id, map[string]any{"content": []map[string]any{{"type": "text", "text": sentence}}, "isError": true})
 }
 
+// mcpInsufficientScope refuses a tool the connection was not given. handleMCP answers it 403 with the challenge, which asks
+// for the scopes the connection has and the tool's, so the assistant can send the person through consent again.
+func (a *app) mcpInsufficientScope(id json.RawMessage, g oauthGrant, tool mcpTool) mcpResponse {
+	challenge := fmt.Sprintf(`Bearer error="insufficient_scope", scope="%s", resource_metadata="%s/.well-known/oauth-protected-resource/mcp", `+
+		`error_description="%s needs the permission %s"`, strings.Join(append(strings.Fields(g.Scope), tool.scope), " "), a.cfg.publicBaseURL,
+		tool.name, tool.scope)
+	resp := mcpRefusal(id, fmt.Sprintf("%s needs the permission %q, which this connection was not given.", tool.name, tool.scope))
+	resp.Result.(map[string]any)["_meta"] = map[string]any{"mcp/www_authenticate": []string{challenge}}
+	return resp
+}
+
 func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req mcpMessage) mcpResponse {
 	var p struct {
 		Name      string          `json:"name"`
@@ -562,7 +597,7 @@ func (a *app) mcpCallTool(ctx context.Context, g oauthGrant, version string, req
 	}
 	tool := mcpTools[i]
 	if !grantHas(g, tool.scope) {
-		return mcpRefusal(req.ID, fmt.Sprintf("%s needs the permission %q, which this connection was not given.", tool.name, tool.scope))
+		return a.mcpInsufficientScope(req.ID, g, tool)
 	}
 	t, ok := a.mcpTenant(ctx, g)
 	if !ok {

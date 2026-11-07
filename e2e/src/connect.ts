@@ -8,7 +8,10 @@
 //     /mcp takes. The refresh token rotates, a rotated one sent again ends the connection, and a revoked token is refused.
 //     B40.8: a third client shows on Settings → Connect your AI with its last use. B41.15: it is revoked from its row
 //     on Keys, the page says so, and its next tool call is refused as not connected. B52.3: before that, a tool call it
-//     makes is listed under its row on Settings, from the BFF's audit trail.
+//     makes is listed under its row on Settings, from the BFF's audit trail. B52.2: Claude Code's own published
+//     client document (claude.ai's, which registers port-less loopback callbacks) signs in back to this run's random
+//     port, and its connection is then revoked. B52.5: the Settings client is granted wallets:read alone; it still lists
+//     prepare_payment with the scope it needs, and calling it answers 403 insufficient_scope asking for that scope.
 // A CIMD document must be at a public https address, so it is served through a Cloudflare quick tunnel; with
 // --hook-tunnel none (the self-test) a second DCR client takes its place and the evidence says so.
 
@@ -20,6 +23,9 @@ import type { Scenario, ScenarioCtx } from './scenarios.ts'
 import { softPasskey } from './payees.ts'
 import { call, said } from './settings.ts'
 import { tunnel } from './trackWebhooks.ts'
+
+// B52.2: the document Claude Code names as its client_id; it registers http://localhost/callback and http://127.0.0.1/callback.
+const CLAUDE_CODE = 'https://claude.ai/oauth/claude-code-client-metadata'
 
 const SCOPE_WORDS = ['See your wallets and bills', 'Draft invoices and payees', 'Prepare payments for you to approve']
 
@@ -45,7 +51,7 @@ export function connectOAuth(): Scenario {
     id: 'connect-oauth',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B40.6', 'B40.8', 'B41.15', 'B52.3'],
+    items: ['B40.6', 'B40.8', 'B41.15', 'B52.2', 'B52.3', 'B52.5'],
     feature: 'Talyvor Connect',
     title: 'an assistant signs in the way Claude does: a 401 naming resource_metadata, discovery, a client by DCR and one by CIMD, ' +
       'PKCE and the consent screen in the browser, the token and a rotating refresh — and a revoked token is refused, ' +
@@ -109,20 +115,22 @@ export function connectOAuth(): Scenario {
         const fromSettings = await register('Settings')
         if (typeof fromSettings === 'string') return { pass: false, detail: fromSettings }
         clients.push(fromSettings)
+        clients.push({ how: 'Claude Code', id: CLAUDE_CODE })
 
         // 3. Each client through the browser's consent screen to its token.
         const tokens: Record<string, Tokens> = {}
         for (const c of clients) {
+          const readOnly = c.how === 'Settings' // B52.5: the one connection given less than every scope
           const verifier = randomBytes(32).toString('base64url')
           const state = randomBytes(8).toString('hex')
           const q = new URLSearchParams({ response_type: 'code', client_id: c.id, redirect_uri: callback, state,
             code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
-            scope: 'wallets:read invoices:draft payments:prepare', resource: `${origin}/mcp` })
+            scope: readOnly ? 'wallets:read' : 'wallets:read invoices:draft payments:prepare', resource: `${origin}/mcp` })
           const page = ctx.app.page
           await page.goto(`${String(asm.authorization_endpoint)}?${q}`)
           const text = await page.locator('main').innerText()
           ctx.evidence.push({ note: `${c.how} consent screen: ${text.replace(/\s+/g, ' ').slice(0, 400)}` })
-          const missing = SCOPE_WORDS.filter((w) => !text.includes(w))
+          const missing = (readOnly ? SCOPE_WORDS.slice(0, 1) : SCOPE_WORDS).filter((w) => !text.includes(w))
           if (missing.length > 0) { wrong.push(`${c.how}: the consent screen does not say ${missing.join(', ')}`); continue }
           await Promise.all([page.waitForURL((u) => u.href.startsWith(callback), { timeout: 30_000 }), page.getByRole('button', { name: 'Allow' }).click()])
           const back = new URL(page.url())
@@ -162,6 +170,8 @@ export function connectOAuth(): Scenario {
         ctx.evidence.push({ note: `${other.how}: /mcp before revoking ${live.status}, revoke ${rev.status}, /mcp after ${dead.status} ${dead.headers.get('www-authenticate')}` })
         if (live.status === 401) wrong.push(`the ${other.how} access token was refused before it was revoked`)
         if (rev.status !== 200 || dead.status !== 401) wrong.push(`revoking answered ${rev.status} and /mcp then answered ${dead.status}, not 200 and 401`)
+        const cc = tokens['Claude Code']
+        if (cc !== undefined) await form(String(asm.revocation_endpoint), { token: cc.refresh_token, client_id: CLAUDE_CODE })
 
         // 6. B40.8: the third connection is on Settings → Connect your AI with its last use, and its button revokes it.
         const page = ctx.app.page
@@ -174,6 +184,24 @@ export function connectOAuth(): Scenario {
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${held.access_token}` },
           body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'get_balances', arguments: {} } }),
         })
+        // B52.5: the tool it was not given is listed with its scope, and answers 403 asking for it.
+        const call = (method: string, params: unknown): Promise<Response> => fetch(`${origin}/mcp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${held.access_token}` },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 4, method, params }),
+        })
+        const list = await (await call('tools/list', {})).json() as { result?: { tools?: { name: string; securitySchemes?: { type: string; scopes: string[] }[] }[] } }
+        const scheme = list.result?.tools?.find((t) => t.name === 'prepare_payment')?.securitySchemes
+        const schemes = JSON.stringify(scheme)
+        const up = await call('tools/call', { name: 'prepare_payment', arguments: { idempotency_key: `e2e-${probe}`, payee_id: 'none', currency: 'GBP', amount_minor: 100 } })
+        const upChallenge = up.headers.get('www-authenticate') ?? ''
+        const upBody = await up.json() as { result?: { isError?: boolean; _meta?: Record<string, unknown> } }
+        ctx.evidence.push({ note: `B52.5: prepare_payment on a wallets:read connection is listed with ${schemes} and answered ${up.status} "${upChallenge}", _meta ${JSON.stringify(upBody.result?._meta)}` })
+        if (scheme?.length !== 1 || scheme[0].type !== 'oauth2' || scheme[0].scopes.join() !== 'payments:prepare') wrong.push(`prepare_payment is listed to a read-only connection with securitySchemes ${schemes}`)
+        if (up.status !== 403 || !upChallenge.includes('error="insufficient_scope"') || !upChallenge.includes('payments:prepare') ||
+          upBody.result?.isError !== true || JSON.stringify(upBody.result?._meta?.['mcp/www_authenticate']) !== JSON.stringify([upChallenge])) {
+          wrong.push(`prepare_payment on a read-only connection answered ${up.status} "${upChallenge}", not 403 insufficient_scope with the same challenge in _meta`)
+        }
         await page.goto(`${origin}/settings/connect`)
         const row = page.locator('li').filter({ hasText: name })
         await row.waitFor({ timeout: 15_000 })
@@ -791,16 +819,19 @@ export function connectContact(): Scenario {
 //     prepared to pay before the person signs. The link opens the plan screen, which shows both orders waiting for the
 //     signature; signed with this run's software passkey (the screen's own call), the screen shows them running, and
 //     within Lens's minute tick each order's first run waits under Approvals. Each is approved with the passkey, and the
-//     money is exactly one payment out per order at its amount, the account down by both.
+//     money is exactly one payment out per order at its amount, the account down by both. B45.43: then each order is
+//     brought due again (Lens B45.42) and runs once more: the order at or under ask_above pays on its own, and the order
+//     above it waits under Approvals and pays nothing.
 export function connectRecurring(): Scenario {
   return {
     id: 'connect-recurring',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B45.37'],
+    items: ['B45.37', 'B45.43'],
     feature: 'Talyvor Connect',
     title: 'an assistant prepares two recurring payments over /mcp; nothing runs until the person signs the plan in the app with a passkey, ' +
-      'then each order shows running, its first run waits under Approvals, and one approval each pays exactly its amount',
+      'then each order shows running, its first run waits under Approvals, and one approval each pays exactly its amount; ' +
+      'run again, the order under ask_above pays on its own and the one above it waits',
     run: async (ctx) => {
       const origin = new URL(ctx.app.page.url()).origin
       const page = ctx.app.page
@@ -857,7 +888,7 @@ export function connectRecurring(): Scenario {
       const prepared = await tool('prepare_recurring_payments', { idempotency_key: `e2e-${randomBytes(8).toString('hex')}`, ask_above: { GBP: 20000 },
         until: new Date(Date.now() + 90 * 86_400_000).toISOString().slice(0, 19) + 'Z',
         payments: lines.map((l) => ({ payee_id: payee[l.name], currency: 'GBP', amount_minor: l.amount, every: l.every, reference: `Nightly ${l.every}ly` })) })
-      const kept = (prepared.structuredContent ?? {}) as { id?: string; kind?: string; confirm_url?: string; details?: { id?: string; schedules?: { active?: boolean }[]; mandate?: { canonical?: string; challenge?: string } } }
+      const kept = (prepared.structuredContent ?? {}) as { id?: string; kind?: string; confirm_url?: string; details?: { id?: string; schedules?: { id?: string; active?: boolean }[]; mandate?: { canonical?: string; challenge?: string } } }
       const plan = kept.details ?? {}
       if (prepared.isError !== false || kept.kind !== 'plan' || plan.id === undefined || plan.schedules?.length !== 2 || plan.schedules.some((x) => x.active) ||
         !String(kept.confirm_url).includes(`/money/plans/${kept.id}`)) {
@@ -923,8 +954,27 @@ export function connectRecurring(): Scenario {
       if (after.held !== before.held - 31250) wrong.push(`the company GBP account went from ${before.held} to ${after.held} minor of test money, not down by 31250`)
       await page.goto(origin)
 
+      // 6. B45.43 — run again: both orders brought due now (Lens B45.42). Fibre (£12.50, at or under ask_above's £200.00)
+      // pays on its own; Rent (£300.00, above it) waits under Approvals and pays nothing.
+      for (const s of plan.schedules) {
+        const due = await ctx.env.lens.bringScheduleDue(ctx.app.user, String(s.id))
+        ctx.evidence.push({ note: `order ${s.id} brought due now (B45.42)`, answer: JSON.stringify(due).slice(0, 400) })
+        if (!due.ok) return { pass: false, detail: [...wrong, `bringing order ${s.id} due again answered ${due.status} ${due.error}`].join('; ') }
+      }
+      let again = after
+      for (let i = 0; i < 18 && (again.runs.length === 0 || again.payments.length === after.payments.length); i++) {
+        await new Promise((ok) => setTimeout(ok, 10_000))
+        again = await money(`${(i + 1) * 10}s after both orders were brought due again`, plan.id)
+      }
+      const fibre = [payee[lines[1].name], lines[1].amount, 'GBP'].join(' ')
+      const second = again.payments.filter((p) => !after.payments.some((b) => b.id === p.id)).map((p) => [p.payee_id, p.amount_minor, p.currency].join(' '))
+      if (JSON.stringify(second) !== JSON.stringify([fibre])) wrong.push(`run again, the orders paid ${JSON.stringify(second)} on their own, not only ${fibre}`)
+      if (again.held !== after.held - lines[1].amount) wrong.push(`run again, the company GBP account went from ${after.held} to ${again.held} minor of test money, not down by ${lines[1].amount}`)
+      if (again.runs.length !== 1) wrong.push(`run again, ${again.runs.length} runs of plan ${plan.id} wait under Approvals, not the one above ask_above`)
+
       return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
-        : { pass: true, detail: `plan ${plan.id} waited unsigned with nothing run; signed in the app its two orders read Running, each first run waited under Approvals, and one approval each paid ${got.join(' and ')}: the account ${before.held} → ${after.held} minor` }
+        : { pass: true, detail: `plan ${plan.id} waited unsigned with nothing run; signed in the app its two orders read Running, each first run waited under Approvals, and one approval each paid ${got.join(' and ')}: the account ${before.held} → ${after.held} minor; ` +
+          `run again, ${second[0]} paid on its own (the account → ${again.held} minor) and request ${again.runs[0].id} for the order above ask_above waits under Approvals` }
     },
   }
 }

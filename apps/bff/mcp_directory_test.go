@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"regexp"
@@ -29,6 +30,10 @@ type claudeConnectorListing struct {
 // a description that reads as a prompt injection.
 var mcpInstructs = regexp.MustCompile(`(?i)\b(ignore|disregard|system prompt|you must|you should|always|do not tell|don't tell|` +
 	`instead of|before (calling|using|answering)|important|assistant must|the model)\b|<[a-z/!]`)
+
+// mcpOpenWorld is every tool whose answer carries text a third party wrote: sellers' listings, suppliers' bills, what a
+// payee's bank said of its name, and Taly, who reads them.
+var mcpOpenWorld = []string{"list_payees", "market_search", "market_listing", "bills_due", "ask_taly"}
 
 var mcpToolName = regexp.MustCompile(`^[a-z0-9_]{1,64}$`)
 
@@ -75,6 +80,10 @@ func TestMCPClaudeDirectory(t *testing.T) {
 			t.Errorf("%s: a title, in the tool and its annotations", tool.name)
 		case !roOK || !deOK || ro && de:
 			t.Errorf("%s: readOnlyHint and destructiveHint both stated, and not both true; it has %v", tool.name, ann)
+		case ann["openWorldHint"] != slices.Contains(mcpOpenWorld, tool.name):
+			t.Errorf("%s: openWorldHint is %v; it is true exactly where third-party text appears (%v)", tool.name, ann["openWorldHint"], mcpOpenWorld)
+		case fmt.Sprint(def["securitySchemes"]) != "[map[scopes:["+tool.scope+"] type:oauth2]]":
+			t.Errorf("%s: securitySchemes %v, want oauth2 with %s", tool.name, def["securitySchemes"], tool.scope)
 		case l.Tools[i].Name != tool.name || l.Tools[i].Title != tool.title || l.Tools[i].Kind != kind:
 			t.Errorf("the listing's tool %d is %+v; the server serves %s %q (%s)", i, l.Tools[i], tool.name, tool.title, kind)
 		}
