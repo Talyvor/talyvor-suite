@@ -147,6 +147,16 @@
 //
 // Every stub workspace is synthetic, so room_equity's gate is always open here. STUB_BREAK=room-ownership lets any
 // member set it — a defect room-shared-ownership must FAIL on.
+//
+// B41.142 — and the rate card, as room-rate-card reads it, behind the same gate:
+//
+//   GET /v1/rooms/{id}/rate-card                 to a member: {room_id, pool_points, item_cap_points, sizes}; 404 to anyone else
+//   PUT /v1/rooms/{id}/rate-card                 {pool_points, sizes: [{size, hours, points_per_hour}]}: the owner only; a size
+//                                                worth more than 5% of the pool is 400
+//   PUT /v1/rooms/{id}/contributions/{c}/size    {size}: its author once, or the owner or an editor; fixes the size's points on
+//                                                it, and a raise once it is decided is 409
+//
+// STUB_BREAK=room-rate-raise lets a decided contribution's points be raised — a defect room-rate-card must FAIL on.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { randomBytes } from 'node:crypto'
@@ -186,6 +196,8 @@ interface Room {
   owner_since?: string
   /** B41.141 — its shared ownership, once the owner has set it. */
   ownership?: { enabled: boolean; pool_bps: number }
+  /** B41.142 — its rate card, once the owner has published one. */
+  rateCard?: { pool_points: number; sizes: { size: string; hours: number; points_per_hour: number; points: number }[] }
 }
 
 interface Report { id: string; ws: string; message_id?: string; reason: string; details: string; created_at: string; resolution?: string }
@@ -249,6 +261,8 @@ interface Contribution {
   template: string
   /** B32.84 — its listing's artifact, its per_use price in µUSD, and who accepted or rejected it. */
   artifact: Record<string, unknown>; price: number; decided_by?: string
+  /** B41.142 — the size claimed on the rate card, and its points, fixed then. */
+  size?: string; points?: number
 }
 
 const messages = new Map<string, Msg[]>()
@@ -276,7 +290,7 @@ const contributionView = (c: Contribution, ws: string) => {
     id: c.id, room_id: c.room_id, listing_id: c.listing_id, version: c.version, kind: c.kind, title: c.title, author_workspace_id: c.author_workspace_id,
     ...(c.forked_from ? { forked_from: c.forked_from } : {}), status: c.status, ...(c.decided_by ? { decided_by_workspace_id: c.decided_by } : {}),
     message_id: c.message_id, tally: votes.reduce((a, b) => a + b, 0), up: votes.filter((v) => v > 0).length, down: votes.filter((v) => v < 0).length,
-    my_vote: c.votes.get(ws) ?? 0, created_at: c.created_at,
+    my_vote: c.votes.get(ws) ?? 0, ...(c.size ? { size: c.size } : {}), points: c.points ?? 0, created_at: c.created_at,
   }
 }
 
@@ -534,7 +548,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
     return true
   }
   if (await settingsOutsideRoom(req, res, p, ws)) return true
-  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership)/.exec(p)
+  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card)/.exec(p)
   if (one === null) return false
   const r = rooms.get(decodeURIComponent(one[1]))
   if (r === undefined || (r.visibility === 'private' && !r.members.some((m) => m.workspace_id === ws))) {
@@ -548,6 +562,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
   if (await roomSettings(req, res, p, ws, r)) return true
   if (await roomTakeover(req, res, p, ws, r)) return true
   if (await roomSharedOwnership(req, res, p, ws, r)) return true
+  if (await roomRateCard(req, res, p, ws, r)) return true
   if (one[2] === undefined && req.method === 'GET') return json(res, 200, detail(r, ws)), true
   if (one[2] === '/join' && req.method === 'POST') {
     if (r.banned.includes(ws)) return json(res, 403, bannedFrom), true
@@ -753,6 +768,43 @@ async function roomSharedOwnership(req: IncomingMessage, res: ServerResponse, p:
   if (me.role !== 'owner' && BREAK !== 'room-ownership') return json(res, 403, { error: "rooms: not allowed: only the room's owner sets its shared ownership" }), true
   r.ownership = { enabled: d.enabled === true, pool_bps: pool }
   return json(res, 200, read()), true
+}
+
+/** B41.142 — a room's rate card and a contribution's size on it; false when `p` is neither. */
+async function roomRateCard(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  const sized = new RegExp(`^/v1/rooms/${r.id}/contributions/([^/]+)/size$`).exec(p)
+  if (p !== `/v1/rooms/${r.id}/rate-card` && sized === null) return false
+  const me = r.members.find((m) => m.workspace_id === ws)
+  if (me === undefined) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const card = r.rateCard ?? { pool_points: 0, sizes: [] }
+  const read = () => ({ room_id: r.id, ...card, item_cap_points: Math.floor(card.pool_points * 500 / 10_000) })
+  if (sized === null && req.method === 'GET') return json(res, 200, read()), true
+  if (req.method !== 'PUT') return false
+  const d = await body(req)
+  const decides = me.role === 'owner' || me.role === 'editor'
+  if (sized === null) {
+    if (me.role !== 'owner') return json(res, 403, { error: "rooms: not allowed: only the room's owner publishes its rate card" }), true
+    const pool = Number(d.pool_points)
+    const cap = Math.floor(pool * 500 / 10_000)
+    const sizes = (Array.isArray(d.sizes) ? d.sizes : []).map((z: Record<string, unknown>) => ({
+      size: String(z.size ?? '').trim(), hours: Number(z.hours), points_per_hour: Number(z.points_per_hour), points: Number(z.hours) * Number(z.points_per_hour) }))
+    const big = sizes.find((z) => z.points > cap)
+    if (!Number.isInteger(pool) || pool < 1 || sizes.length === 0) return json(res, 400, { error: 'rooms: invalid request: a rate card has a pool and 1 to 12 sizes' }), true
+    if (big !== undefined) return json(res, 400, { error: `rooms: invalid request: size "${big.size}" is worth ${big.points} points, more than 5% of the pool (${cap})` }), true
+    r.rateCard = { pool_points: pool, sizes }
+    return json(res, 200, read()), true
+  }
+  const c = (contributions.get(r.id) ?? []).find((x) => x.id === decodeURIComponent(sized[1]))
+  if (c === undefined) return json(res, 404, { error: 'rooms: not found: no such contribution in this room' }), true
+  if (c.author_workspace_id !== ws && !decides) return json(res, 403, { error: "rooms: not allowed: only the contribution's author or the room's owner or an editor sets its size" }), true
+  if (!decides && c.size) return json(res, 409, { error: `rooms: conflict: the contribution is claimed at size ${c.size}: the room's owner or an editor changes it` }), true
+  const z = card.sizes.find((x) => x.size === d.size)
+  if (z === undefined) return json(res, 400, { error: `rooms: invalid request: size "${String(d.size)}" is not on the room's rate card` }), true
+  if (c.status !== 'proposed' && z.points > (c.points ?? 0) && BREAK !== 'room-rate-raise') {
+    return json(res, 409, { error: `rooms: conflict: the contribution was decided at ${c.points ?? 0} points, and points are never raised after delivery` }), true
+  }
+  Object.assign(c, { size: z.size, points: z.points })
+  return json(res, 200, contributionView(c, ws)), true
 }
 
 const usd = (micros: number) => `$${(micros / 1e6).toFixed(2)}`

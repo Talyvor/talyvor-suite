@@ -365,6 +365,9 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/rooms/x1/fork"},
 		// B41.41 — the owner sets shared ownership.
 		{method: http.MethodPut, path: "/api/rooms/x1/shared-ownership", body: `{"enabled":true}`},
+		// B41.42 — the owner publishes the rate card; a contribution claims a size.
+		{method: http.MethodPut, path: "/api/rooms/x1/rate-card", body: `{"pool_points":1}`},
+		{method: http.MethodPut, path: "/api/rooms/x1/contributions/x1/size", body: `{"size":"M"}`},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},

@@ -49,6 +49,7 @@ import { gatewayAuth, gatewayKeys, gatewayMCP, gatewayProviders, gatewaySessions
 import { roomsPrivate } from './rooms.ts'
 import { roomsModeration } from './roomsModeration.ts'
 import { roomInviteLimits } from './roomInvites.ts'
+import { roomRateCard } from './roomRateCard.ts'
 import { roomSharedOwnership } from './roomSharedOwnership.ts'
 import { roomTakeover } from './roomTakeover.ts'
 import { roomMessages } from './roomMessages.ts'
@@ -5346,6 +5347,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // default 25% pool and a member reads it with Lens's notice word for word; a member setting it is 403, a 60% pool 400,
   // and a stranger and a caller with no key read nothing.
   if (i === 4) list.push(roomSharedOwnership(i))
+  // B41.42 — the rate card, once a run, on a Free workspace of its own: a contribution claimed at size M earns M's points
+  // when accepted, a size over 5% of the pool is 400, and raising its points after it is accepted is 409.
+  if (i === 4) list.push(roomRateCard(i))
   // B32.83 — a room's messages, once a run, on a Team workspace of its own: a post reaches another member's event stream
   // within two seconds, a key in a public room is 422 naming its kind and stored nowhere, an edit and a delete read back
   // as the edit and a tombstone, a private room's messages are 404 to a stranger, and the minute's limit is 429 naming it.

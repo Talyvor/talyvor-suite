@@ -111,6 +111,25 @@ export interface SharedOwnership {
   updated_at?: string
 }
 
+/** Lens rooms.RateSize (B41.142): one size of work; it earns hours × points per hour, worked out by Lens. */
+export interface RateSize {
+  size: string
+  hours: number
+  points_per_hour: number
+  points: number
+}
+
+/** Lens rooms.RateCard (B41.142) — GET /api/rooms/{id}/rate-card, to members under the current terms, behind the same
+ *  room_equity gate as shared ownership. pool_points is 0 until the owner publishes one; no size is worth more than
+ *  item_cap_points, 5% of the pool. */
+export interface RateCard {
+  room_id: string
+  pool_points: number
+  item_cap_points: number
+  sizes: RateSize[]
+  updated_at?: string
+}
+
 /** Lens rooms.Usage — what this workspace's plan lets it open, beside what it has open. -1 is unlimited. */
 export interface RoomLimits {
   plan: string
@@ -263,6 +282,9 @@ export interface Contribution {
   author_workspace_id: string
   forked_from?: string
   status: 'proposed' | 'accepted' | 'rejected'
+  /** B41.142 — the size claimed on the room's rate card, and that size's points, fixed when it was claimed. */
+  size?: string
+  points?: number
   tally: number
   up: number
   down: number
@@ -478,6 +500,13 @@ export const roomsApi = {
     getJSON<SharedOwnership>(`/api/rooms/${e(id)}/shared-ownership`, { enabled: 'boolean', pool_bps: 'number', notice: 'string' }),
   setSharedOwnership: (id: string, enabled: boolean, poolBps: number) =>
     post<SharedOwnership>(`/api/rooms/${e(id)}/shared-ownership`, { enabled, pool_bps: poolBps }, 'PUT'),
+  // B41.42 — the rate card, and a contribution's size on it.
+  rateCard: (id: string) =>
+    getJSON<RateCard>(`/api/rooms/${e(id)}/rate-card`, { pool_points: 'number', item_cap_points: 'number', sizes: 'list' }),
+  setRateCard: (id: string, poolPoints: number, sizes: Omit<RateSize, 'points'>[]) =>
+    post<RateCard>(`/api/rooms/${e(id)}/rate-card`, { pool_points: poolPoints, sizes }, 'PUT'),
+  claimSize: (id: string, cid: string, size: string) =>
+    post<Contribution>(`/api/rooms/${e(id)}/contributions/${e(cid)}/size`, { size }, 'PUT'),
   previewInvite: (token: string) =>
     getJSON<InvitePreview>(`/api/room-invites/${e(token)}`, { room: 'object', terms: 'object', uses_left: 'number' }),
   joinByInvite: (token: string, termsVersion: number) =>
