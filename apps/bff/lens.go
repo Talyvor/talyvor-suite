@@ -632,6 +632,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B32.60 — the seller's tax details and their weekly statements. See marketplace.go.
 	a.mux.HandleFunc("/api/marketplace/seller-tax", a.requireTenant(a.handleMarketSellerTax))
 	a.mux.HandleFunc("/api/marketplace/statements", a.requireTenant(a.handleMarketStatements))
+	// B41.85 — content labels and age ratings: the seller's, and the workspace's filter and blocks. See marketplace.go.
+	a.mux.HandleFunc("/api/marketplace/listings/{id}/content-labels", a.requireTenant(a.handleMarketContentLabels))
+	a.mux.HandleFunc("/api/marketplace/content-filter", a.requireTenant(a.handleMarketContentFilter))
+	a.mux.HandleFunc("/api/marketplace/blocked-listings/{id}", a.requireTenant(a.handleMarketBlockedListing))
 	// B32.53 — rooms: the open chats Chat lists, opening one and joining one. See rooms.go.
 	a.mux.HandleFunc("/api/rooms", a.requireTenant(a.handleRooms))
 	a.mux.HandleFunc("/api/rooms/{id}", a.requireTenant(a.handleRoom))

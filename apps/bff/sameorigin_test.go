@@ -338,6 +338,11 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/marketplace/listings/x1/versions", body: `{"artifact":{"template":"x"},"changelog":"x"}`}, // B28.162
 		// B32.60 — saving the seller's tax details.
 		{method: http.MethodPut, path: "/api/marketplace/seller-tax", body: `{"seller_type":"individual"}`},
+		// B41.85 — a seller's relabel, the workspace's content filter, and a block and its undo.
+		{method: http.MethodPut, path: "/api/marketplace/listings/x1/content-labels", body: `{"age_rating":"all"}`},
+		{method: http.MethodPut, path: "/api/marketplace/content-filter", body: `{"max_age_rating":"all"}`},
+		{method: http.MethodPut, path: "/api/marketplace/blocked-listings/x1"},
+		{method: http.MethodDelete, path: "/api/marketplace/blocked-listings/x1"},
 		// B32.53 — opening a room and joining one.
 		{method: http.MethodPost, path: "/api/rooms", body: `{"title":"t","visibility":"public"}`},
 		{method: http.MethodPost, path: "/api/rooms/x1/join", body: `{"terms_version":1}`},

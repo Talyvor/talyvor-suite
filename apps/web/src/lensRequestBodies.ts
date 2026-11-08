@@ -467,6 +467,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/marketplace/listings/{listingID}/versions", marketOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensMarketVersionBody",
   },
+  // B41.85 — a seller rates and labels their listing, and a workspace saves its content filter.
+  {
+    route: "PUT /v1/workspaces/{wsID}/marketplace/listings/{listingID}/content-labels",
+    file: "apps/bff/marketplace.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMarketContentLabels(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/market_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/workspaces/{wsID}/marketplace/listings/{listingID}/content-labels", marketOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensMarketContentLabelsBody",
+  },
+  {
+    route: "PUT /v1/workspaces/{wsID}/marketplace/content-filter",
+    file: "apps/bff/marketplace.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMarketContentFilter(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/market_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/workspaces/{wsID}/marketplace/content-filter", marketOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensMarketContentFilterBody",
+  },
   // B32.60 — a seller saves their tax details.
   {
     route: "PUT /v1/workspaces/{wsID}/marketplace/seller-tax",

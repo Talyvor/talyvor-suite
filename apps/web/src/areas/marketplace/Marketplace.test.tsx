@@ -134,6 +134,9 @@ describe('the marketplace', () => {
     expect(screen.getByText('Whoever uses it fills in: text.')).toBeTruthy()
     await screen.findByRole('option', { name: 'GPT-4o' })
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'gpt-4o' } })
+    // B41.85 — no listing publishes until its seller chooses its age rating.
+    expect(screen.getByRole('button', { name: 'Publish' })).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByRole('button', { name: 'Everyone' }))
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
     expect(await screen.findByRole('heading', { name: 'Translate to French' })).toBeTruthy()
 
@@ -187,6 +190,7 @@ describe('the marketplace', () => {
     await at('/marketplace/publish')
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Leaky' } })
     fireEvent.change(screen.getByLabelText(/^Template/), { target: { value: 'use sk-live-123 for {{text}}' } })
+    fireEvent.click(screen.getByRole('button', { name: '18 and over' }))
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
     expect((await screen.findByRole('alert')).textContent).toBe(
       'The listing cannot be published: it carries a secret (an API key).',
