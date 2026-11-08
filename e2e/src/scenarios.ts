@@ -49,6 +49,7 @@ import { gatewayAuth, gatewayKeys, gatewayMCP, gatewayProviders, gatewaySessions
 import { roomsPrivate } from './rooms.ts'
 import { roomsModeration } from './roomsModeration.ts'
 import { roomInviteLimits } from './roomInvites.ts'
+import { roomContributionRecord } from './roomContributionRecord.ts'
 import { roomPoints } from './roomPoints.ts'
 import { roomReviews } from './roomReviews.ts'
 import { roomRateCard } from './roomRateCard.ts'
@@ -5368,6 +5369,11 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.52 — the open tasks board, once a run, on a Free workspace of its own: a task naming an assignee or a due date is
   // 400, one member's claim is what another reads and its own claim is 409, and once let go the other claims it.
   if (i === 4) list.push(roomTasks(i))
+  // B40.23 — a room's contribution record, once a run, on a Free workspace of its own: with shared ownership on, three
+  // identity-checked members sign the contributor agreement, claim sized tasks, are reviewed by two drawn members and
+  // accepted; the ledger reads size × quality, the leaderboard's shares add up to 100%, a caller with no key reads none of
+  // it, and room_equity is still RED.
+  if (i === 4) list.push(roomContributionRecord(i))
   // B32.83 — a room's messages, once a run, on a Team workspace of its own: a post reaches another member's event stream
   // within two seconds, a key in a public room is 422 naming its kind and stored nowhere, an edit and a delete read back
   // as the edit and a tombstone, a private room's messages are 404 to a stranger, and the minute's limit is 429 naming it.

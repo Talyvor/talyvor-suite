@@ -642,7 +642,7 @@ const physicalCards = new PhysicalCardDesk(json, read, broke)
 // B32.85 — a room's wallet is an agent of its owner's in the Bank: funded, listed and posted as any agent (stub-rooms.ts).
 setRoomWallets({ open: (ws, agentID, name) => bank.openRoomWallet(ws, agentID, name), balance: (agentID) => bank.agentBalance(agentID),
   use: (u) => bank.roomUse(u), billed: (agentID) => bank.agentBilledThisMonth(agentID), prize: (u) => bank.prizeUse(u),
-  linked: (a, b) => bank.cardLinked(a, b) })
+  linked: (a, b) => bank.cardLinked(a, b), identityChecked: (ws) => bank.identityChecked(ws) })
 // B32.88 — and an agent's room_* tools over /mcp, on its own key.
 bank.roomTool = roomAgentTool
 

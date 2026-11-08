@@ -163,10 +163,13 @@
 //   GET /v1/rooms/{id}/points   to a member: {room_id, total_points, holders, entries}, newest first; 404 to anyone else
 //   GET /v1/rooms/{id}/leaderboard   B41.145, to a member: {enabled, pool_bps, total_points, rows, note, notice}
 //
-// Accepting a sized contribution writes its author an accepted row of size × quality (1.0 here) × survival 100%; a fork
-// passes the room's remix share of it to its original's author; rejecting it once accepted writes a withdrawn row.
+// Accepting a sized contribution writes its author an accepted row of size × quality (its reviewers' median, B40.23; 1.0
+// before both score) × survival 100%; a fork passes the room's remix share of it to its original's author; rejecting it
+// once accepted writes a withdrawn row. The leaderboard splits 10,000 bps between the identity-checked holders by largest
+// remainder, as Lens poolShares does.
 // STUB_BREAK=room-points-remix credits a fork's original nothing — a defect room-points must FAIL on;
-// room-leaderboard-holder leaves the leaderboard's last holder off — another.
+// room-leaderboard-holder leaves the leaderboard's last holder off — another; room-points-quality writes 1.0 whatever the
+// reviewers scored — a defect room-contribution-record must FAIL on.
 //
 // B41.146 — and the Gate tracker, behind the same gate:
 //
@@ -293,6 +296,8 @@ interface RoomWallets {
   prize(u: { listing_id: string; version: number; seller: string; buyer: string; agent_id: string; price_ulxc: number; title: string }): { use: RoomUse; licence: { id: string } }
   /** B41.147 — whether two workspaces share a card, as the trust desk recorded it. */
   linked?(a: string, b: string): boolean
+  /** B40.23 — whether a workspace's owner passed the identity check (L2), so its points share the pool. */
+  identityChecked?(ws: string): boolean
 }
 const noBank = (): never => { throw new Error('stub rooms: no Bank to bill a run or a prize on') }
 let wallets: RoomWallets = { open: () => undefined, balance: () => 0, use: noBank, billed: () => 0, prize: noBank }
@@ -871,11 +876,12 @@ function recordPoints(r: Room, c: Contribution, was: string, status: string) {
     contribution_id: c.id, workspace_id, reason, size_points: 0, received_usd_micros: 0, quality_bps: 10_000, survival_bps: 0, remix_share_bps: 0, points,
     created_at: new Date().toISOString(), ...more })
   if (status === 'accepted' && (c.points ?? 0) > 0) {
-    const size = c.points ?? 0
+    const quality = BREAK === 'room-points-quality' ? 10_000 : qualityOf(c.id)
+    const size = Math.floor(((c.points ?? 0) * quality) / 10_000)
     const from = (contributions.get(r.id) ?? []).find((x) => x.id === c.forked_from)
     const bps = from === undefined || BREAK === 'room-points-remix' ? 0 : r.terms.remix_share_bps
     const share = Math.floor((size * bps) / 10_000)
-    const row = { size_points: size, survival_bps: 10_000, remix_share_bps: bps }
+    const row = { size_points: c.points ?? 0, quality_bps: quality, survival_bps: 10_000, remix_share_bps: bps }
     if (from !== undefined && share > 0 && signed(r, from.author_workspace_id)) add(from.author_workspace_id, 'remix_share', share, row)
     if (signed(r, c.author_workspace_id)) add(c.author_workspace_id, 'accepted', size - share, row)
   } else if (was === 'accepted') {
@@ -914,20 +920,26 @@ function roomPointsLedger(req: IncomingMessage, res: ServerResponse, p: string, 
   const rows = pointsLedger.get(r.id) ?? []
   const held = new Map<string, number>()
   for (const x of rows) held.set(x.workspace_id, (held.get(x.workspace_id) ?? 0) + x.points)
-  const holders = [...held].map(([workspace_id, points]) => ({ workspace_id, workspace_name: workspace_id, points, identity_checked: false }))
+  const holders = [...held].map(([workspace_id, points]) => ({ workspace_id, workspace_name: workspace_id, points, identity_checked: wallets.identityChecked?.(workspace_id) ?? false }))
     .sort((a, b) => b.points - a.points || a.workspace_id.localeCompare(b.workspace_id))
   return json(res, 200, { room_id: r.id, total_points: 0, holders, entries: [...rows].reverse() }), true
 }
 
-/** B41.145 — GET a room's provisional leaderboard; false when `p` is not it. The stub's holders are never identity-checked,
- *  so every share is 0. */
+/** B41.145 — GET a room's provisional leaderboard; false when `p` is not it. B40.23: the identity-checked holders with points
+ *  share 10,000 bps by largest remainder (Lens poolShares); the rest have none. */
 function roomLeaderboard(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): boolean {
   if (p !== `/v1/rooms/${r.id}/leaderboard` || req.method !== 'GET') return false
   if (!r.members.some((m) => m.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
   const held = new Map<string, number>()
   for (const x of pointsLedger.get(r.id) ?? []) held.set(x.workspace_id, (held.get(x.workspace_id) ?? 0) + x.points)
-  const rows = [...held].map(([workspace_id, points]) => ({ workspace_id, workspace_name: workspace_id, points, identity_checked: false, share_bps: 0 }))
+  const rows = [...held].map(([workspace_id, points]) => ({ workspace_id, workspace_name: workspace_id, points,
+    identity_checked: wallets.identityChecked?.(workspace_id) ?? false, share_bps: 0 }))
     .sort((a, b) => b.points - a.points || a.workspace_id.localeCompare(b.workspace_id))
+  const sharing = rows.filter((x) => x.identity_checked && x.points > 0)
+  const total = sharing.reduce((n, x) => n + x.points, 0)
+  for (const x of sharing) x.share_bps = Math.floor((x.points * 10_000) / total)
+  const left = 10_000 - sharing.reduce((n, x) => n + x.share_bps, 0)
+  if (total > 0) for (const x of [...sharing].sort((a, b) => ((b.points * 10_000) % total) - ((a.points * 10_000) % total)).slice(0, left)) x.share_bps++
   if (BREAK === 'room-leaderboard-holder') rows.pop()
   const f = freezes.get(r.id)
   return json(res, 200, { room_id: r.id, enabled: true, pool_bps: 2500, total_points: 0, rows, frozen_at: f?.frozen_at ?? null,
@@ -1072,6 +1084,12 @@ async function roomGate(req: IncomingMessage, res: ServerResponse, p: string, ws
   return json(res, 200, next), true
 }
 
+/** B41.144 — a contribution's quality: the median of its two reviewers' scores, 1.0 until both have scored. */
+function qualityOf(contributionID: string): number {
+  const scores = (reviewSeats.get(contributionID) ?? []).map((v) => v.score)
+  return scores.length === 2 && scores.every((x) => x !== null) ? Math.floor(((scores[0] as number) + (scores[1] as number)) / 2) : 10_000
+}
+
 /** B41.144 — a contribution's reviewers: reading them, drawing them and scoring it; false when `p` is none of these. */
 async function roomReviews(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
   const m = new RegExp(`^/v1/rooms/${r.id}/contributions/([^/]+)/(reviews|reviewers|review)$`).exec(p)
@@ -1081,8 +1099,7 @@ async function roomReviews(req: IncomingMessage, res: ServerResponse, p: string,
   const seats = reviewSeats.get(c.id) ?? []
   reviewSeats.set(c.id, seats)
   const read = () => {
-    const scores = seats.map((v) => v.score)
-    const quality = scores.length === 2 && scores.every((x) => x !== null) ? Math.floor(((scores[0] as number) + (scores[1] as number)) / 2) : 10_000
+    const quality = qualityOf(c.id)
     return { contribution_id: c.id, quality_bps: quality, reviews: seats.map((v) => ({
       reviewer_workspace_id: v.ws, reviewer_workspace_name: v.ws, score_bps: v.score, ring: false, drawn_at: c.created_at })) }
   }
