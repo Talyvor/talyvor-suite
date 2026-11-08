@@ -145,7 +145,7 @@ describe('the reading-pages oracle (B29.13)', () => {
       'no eyebrow over the title',
       'no teal rule under the title',
       'lines of 89 characters, not near 65',
-      'no footer with the mark and the company line',
+      'no footer with the logo and the company line',
     ])
   })
 })

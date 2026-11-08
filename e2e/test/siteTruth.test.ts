@@ -98,8 +98,8 @@ describe('the site-truth oracle (B51.4)', () => {
 
   it('catches a public page without the shared header or footer', () => {
     expect(planted((r) => { at(r, '/terms').header = ['/marketing', '/']; at(r, '/privacy').footer = [] })).toEqual([
-      '/privacy lacks the shared footer (no link to /privacy, /terms, /pricing, /documentation, mailto:)',
-      '/terms lacks the shared header (no link to /pricing, /documentation, /signup)',
+      '/privacy lacks the shared footer (no link to /pricing, /documentation, /privacy, /terms, mailto:)',
+      '/terms lacks the shared header (no link to /pricing, /documentation)',
     ])
   })
 

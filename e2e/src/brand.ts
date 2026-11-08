@@ -211,7 +211,7 @@ export function brandVisual(): Scenario {
 
 /** B29.13 — what a reading page shows around its text, as the browser computed it. */
 export interface ReadingLook {
-  /** The drawn mark and wordmark on screen in the page's site header. */
+  /** The kit's logo on screen in the page's site header. */
   headerLogo: boolean
   /** The spaced-caps label right before the h1, if any. */
   eyebrow: string
@@ -219,7 +219,7 @@ export interface ReadingLook {
   rule: boolean
   /** Median characters on a full line of the page's prose; 0 when no paragraph runs past one line. */
   measure: number
-  /** The site footer carries the mark and the company line. */
+  /** The site footer carries the logo and the company line. */
   footer: boolean
 }
 
@@ -231,7 +231,7 @@ export function readingFaults(l: ReadingLook, wide: boolean): string[] {
   if (l.eyebrow === '') faults.push('no eyebrow over the title')
   if (!l.rule) faults.push('no teal rule under the title')
   if (wide && l.measure > 0 && (l.measure < 55 || l.measure > 75)) faults.push(`lines of ${l.measure} characters, not near 65`)
-  if (!l.footer) faults.push('no footer with the mark and the company line')
+  if (!l.footer) faults.push('no footer with the logo and the company line')
   return faults
 }
 
@@ -243,9 +243,8 @@ function readingInPage(companyLine: string): ReadingLook {
   }
   const site = (tag: string): Element | undefined => Array.from(document.querySelectorAll(tag)).find((el) => el.closest('main') === null)
   const header = site('header')
-  const headerLogo = header !== undefined &&
-    Array.from(header.querySelectorAll('svg[data-brand="mark"]')).some(onScreen) &&
-    Array.from(header.querySelectorAll('svg[data-brand="wordmark"]')).some(onScreen)
+  // B57.59: the kit's logo, one of its two drawings on screen for the page's theme.
+  const headerLogo = header !== undefined && Array.from(header.querySelectorAll('[data-brand="lockup"] img')).some(onScreen)
 
   const h1 = document.querySelector('main h1')
   const block = h1?.parentElement
@@ -292,7 +291,7 @@ function readingInPage(companyLine: string): ReadingLook {
     eyebrow,
     rule,
     measure: full.length === 0 ? 0 : full[Math.floor(full.length / 2)],
-    footer: footer !== undefined && footer.querySelector('svg[data-brand="mark"]') !== null &&
+    footer: footer !== undefined && footer.querySelector('[data-brand="lockup"] img') !== null &&
       (footer as HTMLElement).innerText.includes(companyLine),
   }
 }
