@@ -37,9 +37,10 @@ export interface Terms {
   created_at: string
 }
 
-/** Lens rooms.Member. */
+/** Lens rooms.Member. workspace_name is its workspace's name, or "A workspace not named yet" (B55.34). */
 export interface Member {
   workspace_id: string
+  workspace_name: string
   role: string
   may_spend: boolean
   terms_version: number
@@ -340,6 +341,7 @@ export interface RoomMessage {
   cursor: number
   room_id: string
   author_workspace_id: string
+  author_workspace_name: string
   author_agent_id?: string
   kind: 'text' | 'contribution' | 'run' | 'prize' | 'system'
   body: string
@@ -385,6 +387,7 @@ export interface Contribution {
   kind: ListingKind
   title: string
   author_workspace_id: string
+  author_workspace_name: string
   forked_from?: string
   status: 'proposed' | 'accepted' | 'rejected'
   /** B41.142 — the size claimed on the room's rate card, and that size's points, fixed when it was claimed. */
@@ -505,6 +508,8 @@ export interface Invite {
   room_id: string
   kind: 'link' | 'named'
   workspace_id?: string
+  /** B55.34 — set once the named workspace has been a member of the room. */
+  workspace_name?: string
   token?: string
   max_uses: number
   uses: number

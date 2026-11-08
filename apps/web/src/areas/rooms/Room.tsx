@@ -51,13 +51,11 @@ const messagesKey = (id: string) => [...ROOMS_KEY, 'messages', id]
 const contributionsKey = (id: string) => [...ROOMS_KEY, 'contributions', id]
 
 /** Who wrote something, as this member reads it: "You", or the workspace by its id. */
-function Author({ ws, me }: { ws: string; me: string }) {
+function Author({ ws, name, me }: { ws: string; name: string; me: string }) {
   return ws === me ? (
     <span className="text-ink">You</span>
   ) : (
-    <span className="inline-block max-w-xs truncate align-bottom font-figure text-ink" title={ws}>
-      {ws}
-    </span>
+    <span className="inline-block max-w-xs truncate align-bottom text-ink">{name}</span>
   )
 }
 
@@ -106,7 +104,7 @@ export function RoomBudget({ wallet }: { wallet: RoomWallet }) {
 // ── The conversation ───────────────────────────────────────────────────────────────────────────────
 
 /** What a run cost and who paid, from its message's refs. */
-export function RunCost({ refs, me }: { refs: RunRefs; me: string }) {
+export function RunCost({ refs, payer, me }: { refs: RunRefs; payer: string; me: string }) {
   const cost =
     refs.run === 'ask'
       ? 'Model calls'
@@ -132,7 +130,7 @@ export function RunCost({ refs, me }: { refs: RunRefs; me: string }) {
           'Paid by you'
         ) : (
           <>
-            Paid by <Author ws={refs.payer_workspace_id} me={me} />
+            Paid by <Author ws={refs.payer_workspace_id} name={payer} me={me} />
           </>
         )}
       </span>
@@ -150,7 +148,7 @@ function MessageItem({ m, me, room }: { m: RoomMessage; me: string; room?: RoomD
   return (
     <li className={cn('flex flex-col gap-1', run && 'rounded-card border border-rule bg-raised p-3')} data-testid="room-message">
       <span className="flex items-baseline gap-2 text-caption text-muted">
-        <Author ws={m.author_workspace_id} me={me} />
+        <Author ws={m.author_workspace_id} name={m.author_workspace_name} me={me} />
         {run ? <span className="font-figure text-eyebrow uppercase text-label">Run</span> : null}
         {m.kind === 'contribution' ? <span className="font-figure text-eyebrow uppercase text-label">Contribution</span> : null}
         {spec ? <span className="font-figure text-eyebrow uppercase text-label">Spec</span> : null}
@@ -164,7 +162,7 @@ function MessageItem({ m, me, room }: { m: RoomMessage; me: string; room?: RoomD
       ) : (
         <span className="whitespace-pre-wrap break-words text-body text-ink">{m.body}</span>
       )}
-      {run ? <RunCost refs={m.refs} me={me} /> : null}
+      {run ? <RunCost refs={m.refs} payer={m.author_workspace_name} me={me} /> : null}
     </li>
   )
 }
@@ -417,7 +415,7 @@ function ContributionCard({
         <span className="flex flex-col gap-1">
           <span className="text-head text-ink">{c.title}</span>
           <span className="text-caption text-muted">
-            by <Author ws={c.author_workspace_id} me={me} /> · <span className="font-figure">{formatWhen(c.created_at)}</span>
+            by <Author ws={c.author_workspace_id} name={c.author_workspace_name} me={me} /> · <span className="font-figure">{formatWhen(c.created_at)}</span>
           </span>
           {c.forked_from ? (
             <span className="text-caption text-muted" data-testid="contribution-original">
@@ -425,7 +423,7 @@ function ContributionCard({
               {original ? (
                 <>
                   {' '}
-                  by <Author ws={original.author_workspace_id} me={me} />
+                  by <Author ws={original.author_workspace_id} name={original.author_workspace_name} me={me} />
                 </>
               ) : null}
             </span>
