@@ -1,4 +1,5 @@
-import { fireEvent, render as renderBare, screen } from '@testing-library/react'
+import { act, fireEvent, render as renderBare, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   Bar,
@@ -7,20 +8,27 @@ import {
   Chip,
   CodeBox,
   Crumb,
+  Dialog,
   EmptyState,
   Eyebrow,
   Facts,
   Field,
   Input,
   KindTile,
+  Layer,
   PageHeading,
   RoomBadge,
   Row,
   Select,
+  SheetFrame,
+  Snack,
+  SnackHost,
   Steps,
   Switch,
   Tabs,
   chipFor,
+  showSnack,
+  showToast,
 } from '../pocket'
 
 // B57.4 — Pocket's components (design/pocket/pocket.css and the reference's #system section), rendered on a page
@@ -298,5 +306,212 @@ describe('the page pieces', () => {
     render(<Steps steps={[{ title: 'Make a key' }, { title: 'Add it to Claude', line: 'One command' }]} />)
     const items = screen.getAllByRole('listitem')
     expect(items.map((li) => li.textContent)).toEqual(['1Make a key', '2Add it to ClaudeOne command'])
+  })
+})
+
+// B57.5 — Pocket's dialogs, the sheet's frame and the confirmations after an action (pocket.css .dialog, .sheet,
+// .snack; the reference's dlg-move-research, dlg-void-inv, dlg-sheet-A and its toast).
+describe('Dialog', () => {
+  function VoidInvoice({ onVoid = () => {} }: { onVoid?: () => void }) {
+    const [open, setOpen] = useState(false)
+    return (
+      <>
+        <Button variant="secondary" onClick={() => setOpen(true)}>
+          Void
+        </Button>
+        <Dialog
+          open={open}
+          onClose={() => setOpen(false)}
+          title="Void invoice INV-000002?"
+          actions={
+            <>
+              <Button variant="secondary" onClick={() => setOpen(false)}>
+                Keep it
+              </Button>
+              <Button variant="danger" onClick={() => (onVoid(), setOpen(false))}>
+                Void it
+              </Button>
+            </>
+          }
+        >
+          Orbit Studio can no longer pay it, and this cannot be undone.
+        </Dialog>
+      </>
+    )
+  }
+  const open = () => {
+    const opener = screen.getByRole('button', { name: 'Void' })
+    opener.focus()
+    fireEvent.click(opener)
+    return opener
+  }
+
+  it('opens over the page, named by its heading, with focus inside it', () => {
+    render(<VoidInvoice />)
+    open()
+    const dialog = screen.getByRole('dialog', { name: 'Void invoice INV-000002?' })
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+    expect(dialog).toContainElement(document.activeElement as HTMLElement)
+    expect(screen.getByRole('heading', { level: 2, name: 'Void invoice INV-000002?' })).toBeInTheDocument()
+    expect(screen.getByText('Orbit Studio can no longer pay it, and this cannot be undone.')).toBeInTheDocument()
+    // The page it opened over is still there behind the scrim, and cannot be pressed until it closes.
+    expect(screen.getByRole('button', { name: 'Void', hidden: true }).closest('[inert]')).not.toBeNull()
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    expect(screen.getByRole('button', { name: 'Void' }).closest('[inert]')).toBeNull()
+  })
+
+  it('holds Tab inside: past the last control it comes back to the first, and Shift+Tab the other way', () => {
+    render(<VoidInvoice />)
+    open()
+    const close = screen.getByRole('button', { name: 'Close' })
+    const act = screen.getByRole('button', { name: 'Void it' })
+    act.focus()
+    fireEvent.keyDown(act, { key: 'Tab' })
+    expect(close).toHaveFocus()
+    fireEvent.keyDown(close, { key: 'Tab', shiftKey: true })
+    expect(act).toHaveFocus()
+  })
+
+  it('gives focus back to the control that opened it, by the close x, Esc, the scrim, cancel and act', () => {
+    const onVoid = vi.fn()
+    render(<VoidInvoice onVoid={onVoid} />)
+    const ways: [string, () => void][] = [
+      ['the close x', () => fireEvent.click(screen.getByRole('button', { name: 'Close' }))],
+      ['Esc', () => fireEvent.keyDown(document.activeElement!, { key: 'Escape' })],
+      ['the scrim', () => fireEvent.click(document.querySelector('[data-scrim]')!)],
+      ['cancel', () => fireEvent.click(screen.getByRole('button', { name: 'Keep it' }))],
+      ['act', () => fireEvent.click(screen.getByRole('button', { name: 'Void it' }))],
+    ]
+    for (const [how, shut] of ways) {
+      const opener = open()
+      shut()
+      expect(screen.queryByRole('dialog'), how).toBeNull()
+      expect(opener, how).toHaveFocus()
+    }
+    expect(onVoid).toHaveBeenCalledTimes(1)
+  })
+
+  it('is 480 wide and centred, and a bottom sheet below 840', () => {
+    render(<VoidInvoice />)
+    open()
+    const card = screen.getByRole('dialog').firstElementChild!
+    expect(classes(card)).toEqual(expect.arrayContaining(['wide:w-120', 'w-full', 'rounded-t-sheet', 'wide:rounded-card', 'bg-page', 'shadow-pocket-lg']))
+    expect(classes(document.querySelector('[data-layer]')!)).toEqual(expect.arrayContaining(['items-end', 'wide:items-center']))
+  })
+
+  it('takes the reference’s other places: top for ⌘K, the corner for Taly', () => {
+    const { rerender } = render(
+      <Layer label="Search, or type a command" position="top" onClose={() => {}}>
+        <p>bar</p>
+      </Layer>,
+    )
+    expect(classes(document.querySelector('[data-layer]')!)).toEqual(expect.arrayContaining(['items-start']))
+    rerender(
+      <Layer label="Taly" position="corner" onClose={() => {}}>
+        <p>panel</p>
+      </Layer>,
+    )
+    expect(classes(document.querySelector('[data-layer]')!)).toEqual(expect.arrayContaining(['items-end', 'justify-end']))
+    expect(screen.getByRole('dialog', { name: 'Taly' })).toBeInTheDocument()
+  })
+})
+
+describe('SheetFrame', () => {
+  it('draws the approval sheet’s frame: 28 round, the tangerine top edge, the amount, facts on cloud, the only line, actions', () => {
+    const onClose = vi.fn()
+    render(
+      <SheetFrame
+        head={<b>Research wants to pay</b>}
+        amount="$340.00"
+        to={<>to Acme Hosting</>}
+        facts={[{ label: 'Expires', value: 'Tomorrow at 09:17' }]}
+        only="This approves this payment only. Approving or declining asks for your passkey."
+        actions={<Button>Approve with your passkey</Button>}
+        onClose={onClose}
+      />,
+    )
+    const frame = document.querySelector('[data-sheet]')!
+    expect(classes(frame)).toEqual(expect.arrayContaining(['rounded-t-sheet', 'wide:rounded-sheet', 'bg-page', 'shadow-pocket-lg']))
+    expect(classes(frame.querySelector('[data-edge]')!)).toEqual(expect.arrayContaining(['h-1.75', 'bg-tangerine']))
+    expect(classes(screen.getByText('$340.00'))).toEqual(expect.arrayContaining(['font-display', 'text-pocket-amount']))
+    expect(screen.getByText('Tomorrow at 09:17').closest('dl')).toHaveClass('bg-cloud')
+    expect(screen.getByText('This approves this payment only. Approving or declining asks for your passkey.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Snack and Toast', () => {
+  function Act({ view }: { view: string }) {
+    return (
+      <>
+        <Button variant="secondary" onClick={() => showSnack({ title: 'INV-000002 is void', line: 'Its pay link no longer works.' })}>
+          Void it
+        </Button>
+        <SnackHost view={view} />
+      </>
+    )
+  }
+
+  it('shows one snack per action on the next view, and never twice', () => {
+    const { rerender } = render(<Act view="/invoices" />)
+    expect(screen.queryByRole('status')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Void it' }))
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(screen.getByRole('status')).toHaveTextContent('INV-000002 is void')
+    expect(screen.getByRole('status')).toHaveTextContent('Its pay link no longer works.')
+    rerender(<Act view="/invoices" />)
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    // The next view after the one it was shown on: gone, and it does not come back.
+    rerender(<Act view="/agents" />)
+    expect(screen.queryByRole('status')).toBeNull()
+    rerender(<Act view="/invoices" />)
+    expect(screen.queryByRole('status')).toBeNull()
+    // A second action is a second snack, once.
+    fireEvent.click(screen.getByRole('button', { name: 'Void it' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Void it' }))
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+  })
+
+  it('survives the move an action makes, and shows on the page it lands on', () => {
+    function Moves() {
+      const [view, setView] = useState('/invoices/2')
+      return (
+        <>
+          <Button variant="secondary" onClick={() => (showSnack({ title: 'INV-000002 is void' }), setView('/invoices'))}>
+            Void it
+          </Button>
+          <Button variant="secondary" onClick={() => setView('/agents')}>
+            Agents
+          </Button>
+          <SnackHost view={view} />
+        </>
+      )
+    }
+    render(<Moves />)
+    fireEvent.click(screen.getByRole('button', { name: 'Void it' }))
+    expect(screen.getByRole('status')).toHaveTextContent('INV-000002 is void')
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }))
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('a toast says its short message and goes', () => {
+    vi.useFakeTimers()
+    try {
+      render(<SnackHost view="/" />)
+      act(() => showToast('You type the amount here, in dollars'))
+      expect(screen.getByRole('status')).toHaveTextContent('You type the amount here, in dollars')
+      act(() => vi.advanceTimersByTime(3000))
+      expect(screen.queryByRole('status')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('draws the snack ink on page, with its tick, title, line and label', () => {
+    render(<Snack title="Approved: Acme Hosting, $340.00" line="It goes through the next time Research sends it." label={<span>Sandbox</span>} />)
+    const snack = screen.getByRole('status')
+    expect(classes(snack)).toEqual(expect.arrayContaining(['bg-primary', 'text-on-primary', 'rounded-inset', 'shadow-pocket-lg']))
+    expect(snack).toHaveTextContent('Sandbox')
   })
 })

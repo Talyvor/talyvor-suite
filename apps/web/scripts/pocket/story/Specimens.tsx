@@ -9,19 +9,25 @@ import {
   Chip,
   CodeBox,
   Crumb,
+  Dialog,
   EmptyState,
   Eyebrow,
   Facts,
   Field,
   Input,
   KindTile,
+  Layer,
   PageHeading,
   RoomBadge,
   Row,
   Select,
+  SheetFrame,
+  SnackHost,
   Steps,
   Switch,
   Tabs,
+  showSnack,
+  showToast,
 } from '@talyvor/ui/pocket'
 
 const ico = 'h-5 w-5 fill-none stroke-current'
@@ -170,11 +176,135 @@ function Specimens({ theme }: { theme: 'light' | 'dark' }) {
   )
 }
 
+// B57.5 — the reference's dialogs (dlg-move-research, dlg-void-inv), the approval sheet's frame (dlg-sheet-A) and the
+// confirmation each action leaves, in its words. They open over this page, once, in the light theme.
+function Frames() {
+  const [open, setOpen] = useState<'move' | 'void' | 'sheet' | null>(null)
+  const close = () => setOpen(null)
+  return (
+    <section data-theme="light" data-design="pocket" aria-label="Dialogs" className="grid content-start gap-6 bg-page p-6 text-ink wide:col-span-2">
+      <PageHeading line="They open over the page you are on, which stays behind the scrim.">Dialogs</PageHeading>
+      <div className="flex flex-wrap items-start gap-3">
+        <Button variant="secondary" onClick={() => setOpen('move')}>
+          Move LXC
+        </Button>
+        <Button variant="danger" onClick={() => setOpen('void')}>
+          Void
+        </Button>
+        <Button onClick={() => setOpen('sheet')}>Approving Acme Hosting</Button>
+      </div>
+
+      <Dialog
+        open={open === 'move'}
+        onClose={close}
+        title="Move LXC: Research"
+        actions={
+          <>
+            <Button variant="secondary" onClick={close}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                showSnack({ title: 'Research now holds $1,750.00 (17,500 LXC)', line: '$100.00 (1,000 LXC) moved in from the workspace.' })
+                close()
+              }}
+            >
+              Fund Research with $100.00
+            </Button>
+          </>
+        }
+      >
+        <p>
+          Research holds <span className="font-figure">$1,650.00 (16,500 LXC)</span>. The workspace has{' '}
+          <span className="font-figure">$9,090.00 (90,900 LXC)</span> free to fund it.
+        </p>
+        <Field label="Amount">
+          <Input defaultValue="100.00" unit="USD" inputMode="decimal" onFocus={() => showToast('You type the amount here, in dollars')} />
+        </Field>
+        <p className="text-body text-ink-3">
+          Moving needs no approval: it is not spending. It shows on Research’s statement as “Funded by the workspace” or “Taken back by the
+          workspace”.
+        </p>
+      </Dialog>
+
+      <Dialog
+        open={open === 'void'}
+        onClose={close}
+        title="Void invoice INV-000002?"
+        actions={
+          <>
+            <Button variant="secondary" onClick={close}>
+              Keep it
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                showSnack({ title: 'INV-000002 is void', line: 'Its pay link no longer works.' })
+                close()
+              }}
+            >
+              Void it
+            </Button>
+          </>
+        }
+      >
+        <p>Orbit Studio can no longer pay it, and this cannot be undone.</p>
+      </Dialog>
+
+      {open === 'sheet' ? (
+        <Layer label="Approving Acme Hosting" onClose={close}>
+          <SheetFrame
+            onClose={close}
+            head={
+              <div>
+                <div className="font-bold">Research wants to pay</div>
+                <div className="text-body text-ink-3">October hosting invoice</div>
+              </div>
+            }
+            amount="$340.00"
+            to={
+              <>
+                to <b className="text-ink">Acme Hosting</b>
+              </>
+            }
+            facts={[
+              { label: 'Why it’s asking', value: 'It asks you above $250.00 (2,500 LXC)' },
+              { label: 'Paid from', value: 'Research’s US dollar account (holds $400.00)' },
+              { label: 'Budget left after', value: '$420.00 of $2,000.00 (4,200 of 20,000 LXC)' },
+              { label: 'Expires', value: 'Tomorrow at 09:17' },
+            ]}
+            only="This approves this payment only. Approving or declining asks for your passkey."
+            actions={
+              <>
+                <Button
+                  size="lg"
+                  className="w-full"
+                  onClick={() => {
+                    showSnack({ title: 'Approved: Acme Hosting, $340.00', line: 'It goes through the next time Research sends it, once, within 24 hours.' })
+                    close()
+                  }}
+                >
+                  Approve with your passkey
+                </Button>
+                <Button size="lg" variant="secondary" className="w-full" onClick={close}>
+                  Decline
+                </Button>
+              </>
+            }
+          />
+        </Layer>
+      ) : null}
+      <SnackHost view="/__pocket-story/" />
+    </section>
+  )
+}
+
 export function Story() {
   return (
     <main className="grid wide:grid-cols-2">
       <Specimens theme="light" />
       <Specimens theme="dark" />
+      <Frames />
     </main>
   )
 }

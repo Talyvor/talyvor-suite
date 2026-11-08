@@ -176,6 +176,10 @@ const preset = {
         eyebrow: ['0.6875rem', { lineHeight: '1.2', letterSpacing: '0.24em', fontWeight: '400' }], // 11px
         // B57.3 — Pocket's eyebrow (pocket.css .eyebrow): 12px Figtree at .04em, uppercase at the call site.
         'pocket-eyebrow': ['0.75rem', { lineHeight: '1.3', letterSpacing: '0.04em', fontWeight: '600' }],
+        // B57.5 — a dialog's heading (pocket.css .dialog h2, 22px) and the approval sheet's amount (.sheet .amount, 56px),
+        // both in the display face at the call site.
+        'pocket-dialog': ['1.375rem', { lineHeight: '1.2', fontWeight: '750' }],
+        'pocket-amount': ['3.5rem', { lineHeight: '1', letterSpacing: '-0.03em', fontWeight: '750' }],
 
         // ── DISPLAY: the marketing scale ──────────────────────────────────────────────────────
         //
@@ -253,6 +257,8 @@ const preset = {
       spacing: {
         gutter: '16px', row: '38px',
         0.75: '0.1875rem', 5.25: '1.3125rem', 6.5: '1.625rem', 8.5: '2.125rem', 9.5: '2.375rem', 11.5: '2.875rem', 13.5: '3.375rem',
+        // B57.5 — the sheet's 7px tangerine edge (1.75) and its 22px foot (5.5), the sheet 420 wide (105), a dialog 480 (120).
+        1.75: '0.4375rem', 5.5: '1.375rem', 105: '26.25rem', 120: '30rem',
       },
       // Pocket's focus ring is 3px of tangerine (B57.4).
       outlineWidth: { 3: '3px' },

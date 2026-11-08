@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { createElement } from 'react'
 import { expect, it, vi } from 'vitest'
 
@@ -19,4 +19,22 @@ it('every control on the story page does something', async () => {
   expect(report.dead).toEqual([])
   // Two of each per theme at least: the buttons, the tabs, the switch, the links and the copy.
   expect(report.pressed).toBeGreaterThanOrEqual(26)
+})
+
+// B57.5 — and with each of the reference's dialogs open over it: its close x, cancel or decline, the act and the scrim.
+it.each([
+  ['Move LXC', ['Close', 'Cancel', 'Fund Research with $100.00']],
+  ['Void', ['Close', 'Keep it', 'Void it']],
+  ['Approving Acme Hosting', ['Close', 'Approve with your passkey', 'Decline']],
+])('every control in the dialog %s opens does something', async (opener, inside) => {
+  const report = await pressAll(
+    async () => {
+      window.history.pushState({}, '', '/__pocket-story/')
+      render(createElement(Story))
+      fireEvent.click(screen.getByRole('button', { name: opener }))
+      for (const name of inside) expect(within(screen.getByRole('dialog')).getByRole('button', { name })).toBeInTheDocument()
+    },
+    () => 0,
+  )
+  expect(report.dead).toEqual([])
 })
