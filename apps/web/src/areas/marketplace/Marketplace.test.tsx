@@ -266,25 +266,30 @@ describe('the marketplace', () => {
   })
 })
 
-// B51.3 — the bill names the card only while one can be charged (talyvor-lens B51.2); otherwise it says so.
+// B51.3 — the bill says card payments are off while no card can be charged (talyvor-lens B51.2). B55.36 — it never
+// says "on your card": the bill and its total are the monthly marketplace bill, whatever card payments are.
 describe.each([
   ['live', true],
   ['test', false],
   ['off', false],
   [undefined, false],
 ])('the marketplace bill while card_payments is %s (B51.3)', (cards, live) => {
-  it(live ? 'says it is billed on your card' : 'says card payments are not switched on', async () => {
+  it(live ? 'says it is billed each month' : 'says card payments are not switched on', async () => {
     mockBff()
     const rest = vi.mocked(globalThis.fetch).getMockImplementation()!
+    const line = { use_id: 'use_1', listing_id: 'lst_1', title: 'Translate to French', price_ulxc: 500_000, used_at: '2026-09-28T10:00:00Z' }
     vi.mocked(globalThis.fetch).mockImplementation(async (input, init) =>
       String(input) === '/api/pricing'
         ? new Response(JSON.stringify({ card_payments: cards }), { status: 200 })
-        : rest(input, init),
+        : String(input).startsWith('/api/marketplace/bill?month=')
+          ? new Response(JSON.stringify({ month: '2026-09', total_ulxc: 500_000, total_usd_micros: 50_000, lines: [line] }), { status: 200 })
+          : rest(input, init),
     )
     await at('/marketplace/bill')
     await screen.findByTestId('market-bill-total')
     const intro = screen.getByText(/Every paid listing your workspace or its agents used/)
-    await waitFor(() => expect(intro.textContent).toContain(live ? 'billed on your card each month' : 'Card payments aren’t switched on yet.'))
-    expect(intro.textContent?.includes('on your card')).toBe(live)
+    await waitFor(() => expect(intro.textContent).toContain(live ? 'billed each month' : 'Card payments aren’t switched on yet.'))
+    expect(screen.getByText('On this month’s marketplace bill, tax included')).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/on your card/i)
   })
 })

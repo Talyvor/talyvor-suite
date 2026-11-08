@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Row, focusRing, inlineLink } from '@talyvor/ui'
 import { Card } from './walletBrand'
@@ -110,6 +110,11 @@ export function SpendingScreen() {
   const budgets = useQuery({ queryKey: BUDGETS_KEY, queryFn: agentBankApi.budgets })
   const subs = useQuery({ queryKey: SUBSCRIPTIONS_KEY, queryFn: agentBankApi.subscriptions })
   const notices = useQuery({ queryKey: NOTICES_KEY, queryFn: agentBankApi.notices })
+  // B55.43: a payment or unusual notice's push opens /money/spending#notice-{id}; once the notices are read, go to it.
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (hash.startsWith('#notice-') && notices.data !== undefined) document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'center' })
+  }, [hash, notices.data])
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const whose = (id: string | undefined) =>
     !id ? 'Your own wallet' : id === 'all' ? 'Every wallet' : (book.data?.agents.find((a) => a.id === id)?.name ?? 'An agent')
@@ -379,6 +384,7 @@ export function SpendingScreen() {
             {(notices.data?.notices ?? []).slice(0, 10).map((n) => (
               <Row
                 key={n.id}
+                id={`notice-${n.id}`}
                 stack
                 label={n.title}
                 hint={

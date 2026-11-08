@@ -646,18 +646,19 @@ export async function publishPrompt(app: AppUser, l: { title: string; template: 
   }
 }
 
-/** A listing's page: fills its variables and presses Use it; what it answered, or the refusal. */
-export async function runListing(app: AppUser, id: string, variables: Record<string, string>): Promise<{ shown?: string; error?: string }> {
+/** A listing's page: fills its variables and presses Use it; what it answered, or the refusal, and what the page said before. */
+export async function runListing(app: AppUser, id: string, variables: Record<string, string>): Promise<{ shown?: string; error?: string; page?: string }> {
   const page = await app.tab(`/marketplace/listings/${encodeURIComponent(id)}`)
   try {
     const use = page.getByRole('button', { name: /^Use it/ })
     await use.waitFor({ timeout: ACTION_TIMEOUT_MS })
+    const said = (await page.locator('body').innerText()).trim()
     for (const [name, value] of Object.entries(variables)) await page.getByLabel(name, { exact: true }).fill(value)
     await use.click()
     const result = page.getByTestId('market-use-result')
     const refused = page.locator('form').getByRole('alert')
     await result.or(refused).first().waitFor({ timeout: 120_000 })
-    return (await result.isVisible()) ? { shown: (await result.innerText()).trim() } : { error: (await refused.first().innerText()).trim() }
+    return (await result.isVisible()) ? { shown: (await result.innerText()).trim(), page: said } : { error: (await refused.first().innerText()).trim(), page: said }
   } finally {
     await page.close()
   }
@@ -1307,6 +1308,65 @@ export function agentRulesRollback(seed: number): Scenario {
 }
 
 /**
+ * B55.43 — a spending notice in the browser says what it is, never "approve a payment". The push Lens sends for a due
+ * spending notice (talyvor-lens economy/spend_notices.go pushSpendNotice) is delivered to the app's service worker: it
+ * must show Lens's own title and body, carry no Approve or Deny, and open Spending on that notice. A push of a type the
+ * app does not know must read "Talyvor", carry no actions and open Home.
+ */
+export function spendNoticePush(seed: number): Scenario {
+  return {
+    id: 'spend-notice-push',
+    owner: 'talyvor-suite',
+    items: ['B55.43'],
+    title: 'a spending notice push reads as itself with no Approve or Deny and opens Spending; an unknown push never reads as an approval',
+    run: (ctx) => withBank(ctx, async (bank) => {
+      const { page } = bank
+      const origin = new URL(page.url()).origin
+      await ctx.app.context.grantPermissions(['notifications'], { origin })
+      const cdp = await ctx.app.context.newCDPSession(page)
+      const registered = new Promise<string>((ok) => cdp.on('ServiceWorker.workerRegistrationUpdated', ({ registrations }) => {
+        const r = registrations.find((x) => x.scopeURL === `${origin}/` && !x.isDeleted)
+        if (r !== undefined) ok(r.registrationId)
+      }))
+      await cdp.send('ServiceWorker.enable')
+      await page.evaluate(async () => {
+        await navigator.serviceWorker.register('/sw.js')
+        await navigator.serviceWorker.ready
+      })
+      const registrationId = await registered
+      const sw = ctx.app.context.serviceWorkers().find((w) => new URL(w.url()).pathname === '/sw.js')
+      if (sw === undefined) return fail('/sw.js registered, but no service worker runs it')
+      const shownFor = (tag: string) => sw.evaluate(async ({ tag, ms }) => {
+        const w = globalThis as unknown as ApprovalWorker
+        for (let waited = 0; waited < ms; waited += 100) {
+          const [n] = await w.registration.getNotifications({ tag })
+          if (n !== undefined) return { title: n.title, body: n.body, url: (n.data as { url?: string } | null)?.url, actions: (n as Notification & { actions: { action: string }[] }).actions.map((a) => a.action) }
+          await new Promise((ok) => setTimeout(ok, 100))
+        }
+        return { shown: (await w.registration.getNotifications()).map((n) => n.tag) }
+      }, { tag, ms: ACTION_TIMEOUT_MS })
+
+      const id = `ntc_e2e_${seed}`
+      const notice = { type: 'spend_notice', kind: 'payment', notice_id: id, workspace_id: 'ws_e2e', title: `You paid Bistro £25.00 (${seed})`, body: 'Paid from your own account.' }
+      await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify(notice) })
+      const n = await shownFor(`spend-notice-${id}`)
+      if (n.actions === undefined) return fail(`the spending notice push showed no notification tagged spend-notice-${id}; showing ${JSON.stringify(n.shown)}`)
+      ctx.evidence.push({ note: `the spending notice: "${n.title}", "${n.body}", ${n.actions.join(', ') || 'no actions'}, opens ${n.url}` })
+      if (n.title !== notice.title || n.body !== notice.body) return fail(`the spending notice does not read as Lens wrote it: ${JSON.stringify(n)}`)
+      if (n.actions.length !== 0) return fail(`the spending notice carries ${n.actions.join(', ')}`)
+      if (n.url !== `/money/spending#notice-${id}`) return fail(`a tap on the payment notice opens ${n.url}, not its notice on Spending`)
+
+      await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify({ type: `not_yet_${seed}`, approval_id: `apr_e2e_${seed}` }) })
+      const other = await shownFor('talyvor')
+      if (other.actions === undefined) return fail(`a push of an unknown type showed no "Talyvor" notification; showing ${JSON.stringify(other.shown)}`)
+      ctx.evidence.push({ note: `an unknown push: "${other.title}", "${other.body}", ${other.actions.join(', ') || 'no actions'}, opens ${other.url}` })
+      if (other.title !== 'Talyvor' || other.actions.length !== 0 || other.url !== '/') return fail(`an unknown push does not read as Talyvor with no actions opening Home: ${JSON.stringify(other)}`)
+      return { pass: true, detail: `the spending notice read "${n.title}" with no actions and opens /money/spending#notice-${id}; an unknown push read "Talyvor" with no actions and opens Home` }
+    }),
+  }
+}
+
+/**
  * B28.32 — the DONE line: after expiry a hold at the boosted size writes nothing. An agent funded 1 LXC with a daily
  * limit of 0.000001 LXC has it raised on Limit boost to 1 LXC until a whole minute one to two minutes away. Before that
  * time its question is served — one hold posting and one spend row. From that time on Lens lists no boost, its rules
@@ -1550,13 +1610,13 @@ interface ApprovalWorker {
  * push Lens sends for it is delivered to the app's service worker, which must show it with Approve and
  * Deny, and (B29.14) with the app icon as its icon and badge. Approve, run in the service worker on that
  * notification, must move Lens's approval row to approved with no page opened or moved and no money moved;
- * the payment sent again is then paid once.
+ * the payment sent again is then paid once. B55.49: the notification reads Lens's sentence, "$0.10 (1 LXC)".
  */
 export function agentApprovalPush(seed: number): Scenario {
   return {
     id: 'agent-approval-push',
     owner: 'talyvor-suite',
-    items: ['B28.38'],
+    items: ['B28.38', 'B55.49'],
     agents: 2,
     title: 'Approve on the approval push decides it from the service worker: Lens’s row is approved without opening the app',
     run: (ctx) => withBank(ctx, async (bank) => {
@@ -1594,7 +1654,9 @@ export function agentApprovalPush(seed: number): Scenario {
       if (sw === undefined) return fail('/sw.js registered, but no service worker runs it')
 
       // The push Lens sends for a waiting approval (talyvor-lens economy/agent_approval_auth.go), delivered as a push.
-      const push = { type: 'agent_approval', approval_id: id, agent_name: payer.name, amount_ulxc: 1e6, amount_lxc: '1', reason: memo }
+      // B55.49: body is Lens's sentence, dollars beside the LXC at the $0.10 peg (B55.30).
+      const sentence = `${payer.name} wants to pay ${payee.name} $0.10 (1 LXC)`
+      const push = { type: 'agent_approval', approval_id: id, agent_name: payer.name, amount_ulxc: 1e6, amount_lxc: '1', reason: memo, body: sentence }
       await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify(push) })
       const shown = await sw.evaluate(async ({ tag, ms }) => {
         const w = globalThis as unknown as ApprovalWorker
@@ -1608,6 +1670,7 @@ export function agentApprovalPush(seed: number): Scenario {
       if (shown.actions === undefined) return fail(`the push for approval ${id} showed no notification (notifications ${shown.permission}; showing ${JSON.stringify(shown.shown)})`)
       ctx.evidence.push({ note: `the push: "${shown.title}" with ${shown.actions.join(', ') || 'no actions'}` })
       if (shown.actions.join() !== 'approve,deny') return fail(`the push for approval ${id} does not carry Approve and Deny: ${JSON.stringify(shown)}`)
+      if (shown.title !== sentence) return fail(`the push for approval ${id} reads "${shown.title}", not Lens's sentence "${sentence}"`)
       // B29.14: the push carries the Talyvor app icon, as its picture and its badge.
       if (shown.icon !== `${origin}/icon-192.png` || shown.badge !== `${origin}/icon-192.png`) return fail(`the push for approval ${id} does not carry the app icon as icon and badge: ${JSON.stringify(shown)}`)
 
@@ -1631,7 +1694,7 @@ export function agentApprovalPush(seed: number): Scenario {
       if (pays.length !== 1 || pays[0].amount_ulxc !== -1e6) return fail(`${payer.name}'s account has ${pays.length} payment line(s): ${JSON.stringify(pays)}`)
       const used = (await ctx.env.lens.agentApprovals(ctx.app.user)).find((x) => x.id === id)?.status
       if (used !== 'used') return fail(`the payment was sent again and the approval is ${used ?? 'gone'}, not used`)
-      return { pass: true, detail: `the push showed Approve and Deny and the app icon; Approve in the service worker approved ${id} with no page opened; sent again, paid once (one pay line, the approval used)` }
+      return { pass: true, detail: `the push read "${sentence}" with Approve and Deny and the app icon; Approve in the service worker approved ${id} with no page opened; sent again, paid once (one pay line, the approval used)` }
     }),
   }
 }
@@ -3491,6 +3554,35 @@ export function chatWalletAlerts(seed: number): Scenario {
   }
 }
 
+/**
+ * B55.39 — Lens names a new workspace by its id; until someone names it, the sidebar reads "Your workspace" and never
+ * shows the id. Runs first on its user, before wallet-onboarding names the workspace; it makes no agent, so the
+ * scenarios after it still find an empty book.
+ */
+export function sidebarUnnamedWorkspace(): Scenario {
+  return {
+    id: 'sidebar-unnamed-workspace',
+    owner: 'talyvor-suite',
+    items: ['B55.39'],
+    title: 'a workspace Lens still names by its id reads "Your workspace" in the sidebar, never the id',
+    run: async (ctx) => {
+      const name = await ctx.env.lens.workspaceName(ctx.app.user)
+      if (name !== ctx.app.user.workspaceID) throw new CannotTest(`the workspace is already named "${name}"`)
+      const page = await ctx.app.tab('/')
+      try {
+        const label = page.getByTestId('sidebar-workspace-name')
+        await label.waitFor({ timeout: ACTION_TIMEOUT_MS })
+        const shown = (await label.innerText()).trim()
+        if (shown !== 'Your workspace') return fail(`the sidebar shows "${shown}" for a workspace Lens still names by its id`)
+        if ((await page.locator('body').innerText()).includes(name)) return fail('the workspace’s raw id is on the screen')
+        return { pass: true, detail: 'Lens names the workspace by its id, and the sidebar reads "Your workspace" with the id nowhere on screen' }
+      } finally {
+        await page.close()
+      }
+    },
+  }
+}
+
 /** B46.2 — sign-up to Home with a working first agent takes under two minutes (B45.8). */
 export const FIRST_AGENT_WITHIN_MS = 120_000
 /** B46.14 — sign-up and Home carry no disclaimer line (Nick, 24 Oct 2026); B49.2 — nor any money screen or the pay page (Nick, 27 Oct 2026). */
@@ -3638,7 +3730,7 @@ export function walletFirstNav(): Scenario {
 }
 
 /** The number on the sidebar's Approvals link once it reads `want`, or the last it read within `ms`. */
-async function badgeReaches(page: Page, want: number, ms: number): Promise<number> {
+export async function badgeReaches(page: Page, want: number, ms: number): Promise<number> {
   const link = page.getByRole('navigation', { name: 'Sections' }).locator('a[href="/approvals"]')
   let seen = -1
   for (const end = Date.now() + ms; Date.now() < end; await page.waitForTimeout(250)) {
@@ -3965,6 +4057,9 @@ export function marketplaceSale(seed: number, partner: number): Scenario {
       if (fresh.length !== 1 || fresh[0].listing_id !== published.id || fresh[0].price_ulxc !== price) {
         return fail(`one use of a ${price} µLXC listing put ${fresh.length} line(s) on the buyer's bill`)
       }
+      // B55.36 — the price goes on the monthly marketplace bill, and neither the listing nor the bill says it is on a card.
+      if (!(used.page ?? '').includes('on your monthly marketplace bill')) return fail(`the listing page does not say a use goes on the monthly marketplace bill: "${(used.page ?? '').slice(0, 300)}"`)
+      if (/on your card/i.test(`${used.page ?? ''}\n${await billShown(app)}`)) return fail('the listing page or Your bill says "on your card"')
       const earned = await env.lens.marketEarnings(seller.user)
       ctx.evidence.push({ note: `seller earnings before ${JSON.stringify(earned0)}, after ${JSON.stringify(earned)}` })
       // B32.9: the seller earns the price less Talyvor's take, rounded down to the µUSD (B32.8); B35.7 — the take Lens states.

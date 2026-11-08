@@ -28,7 +28,7 @@ import {
   statesNumber,
 } from './oracles.ts'
 import { BillingPlanCard, DocsPage, FeaturesScreen, type LoggingPolicy, TrackScreen, subscribeWithTestCard, tryConversion, tryTare } from './screens.ts'
-import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, approvalsBadge, approvalsInbox, approveAlwaysAllow, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, chatSafeToSpend, homeDailyBriefing, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, walletHome, walletOnboarding } from './bank.ts'
+import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, spendNoticePush, approvalsBadge, approvalsInbox, approveAlwaysAllow, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, chatSafeToSpend, homeDailyBriefing, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, sidebarUnnamedWorkspace, walletHome, walletOnboarding } from './bank.ts'
 import { chatMoneyRequests, marketAbuse, marketAgentCommitment, marketAgentMCP, marketBillRefund, marketJournal, marketOffers, marketPayout, marketRent, marketTrial, marketPayoutConnect, marketHeldSeller, marketReview, marketTakedown, walletCard, walletCardPurchase, walletCashOut, walletEscrow, walletLoan, walletLoanDefault, walletLoanRepay, walletPots, walletGiveBack, walletRecurring, walletRequest, walletSendRefund } from './trade.ts'
 import type { Inventory } from './coverage.ts'
 import { apiKeyRevoke, byokAddon, chatConnectors, chatDocsPage, chatExportImport, chatFileBug, chatShareLink, chatToolGuard, chatTrackIssue, docsShareCollab, docsTeamGrant, docsTools, lensConvert, patternMiningSwitch, planChange, providerKeys, sessionSignOut, trackProject, trackSearchCycleBoard, trackWorkspaceRestore, walletFX, wrongAnswerStored } from './surface.ts'
@@ -49,6 +49,10 @@ import { gatewayAuth, gatewayKeys, gatewayMCP, gatewayProviders, gatewaySessions
 import { roomsPrivate } from './rooms.ts'
 import { roomsModeration } from './roomsModeration.ts'
 import { roomInviteLimits } from './roomInvites.ts'
+import { roomPoints } from './roomPoints.ts'
+import { roomReviews } from './roomReviews.ts'
+import { roomRateCard } from './roomRateCard.ts'
+import { roomSharedOwnership } from './roomSharedOwnership.ts'
 import { roomTakeover } from './roomTakeover.ts'
 import { roomMessages } from './roomMessages.ts'
 import { roomContributions } from './roomContributions.ts'
@@ -78,6 +82,9 @@ import { outsidePayees } from './payees.ts'
 import { permissionMandate } from './permissionMandates.ts'
 import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
+import { connectPay } from './connectPay.ts'
+import { screeningTravelRule } from './screeningTravelRule.ts'
+import { phoneKeyWeb } from './phoneKeyWeb.ts'
 import { trustLayer } from './trustLayer.ts'
 import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
@@ -193,6 +200,8 @@ export interface RunEnv {
   operatorReadKey: string
   /** B45.36 — the BFF's provisioning secret (LENS_PROVISION_SECRET), for a fresh identity's first sign-in; '' when not given. */
   provisionSecret: string
+  /** B52.34 — the BFF's Connect mint credential (LENS_CONNECT_MINT_KEY), for an assistant's Connect token; '' when not given. */
+  connectMintKey: string
   /** B28.287 — the port the synthetic upstream listens on, where the Lens under test sends its vLLM traffic (E2E_UPSTREAM_PORT); 0 when not given. */
   upstreamPort: number
   /** B39.23 — 'cloudflared' or 'none': how track-webhook-signed's and docs-webhook-signed's receivers are reached (E2E_HOOK_TUNNEL). */
@@ -5041,7 +5050,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     // B28.45 — then the Approvals badge, live: one approved here and one in another tab, no reload.
     // B41.33 — then the inbox: five held payments narrowed to their agent and approved together, each once.
     // B41.4 — then one approved with "always allow up to 3 LXC a month": the next payment to that payee is paid, not held.
-    case 3: list.push(agentApproval(i), agentArchive(i), agentRuleTemplate(i), agentApprovalPush(i), approvalsBadge(i), approvalsInbox(i), approveAlwaysAllow(i)); break
+    // B55.43 — then a spending notice push: it reads as itself, with no Approve or Deny, and opens Spending.
+    case 3: list.push(agentApproval(i), agentArchive(i), agentRuleTemplate(i), agentApprovalPush(i), spendNoticePush(i), approvalsBadge(i), approvalsInbox(i), approveAlwaysAllow(i)); break
     // B28.26 — first, 61 requests in a minute under a 60-a-minute rule: the 61st writes no hold.
     case 4:
       list.push(agentRequestRate(i))
@@ -5078,11 +5088,12 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     // nothing is asked before that time, the answer appears in Chat at it, and what it cost is the agent's new statement
     // line, the workspace's own balance unmoved.
     case 6: list.push(statementReconciles(i), ledgerReadsCorrectly(), spendPlainWords(), spendPlatformFee(), agentBalanceStored(i), agentSpendQuestion(i), chatBrand(), chatHelpInFull(), chatLaunchAgent(i), chatPlainRule(i), chatAskAbove(i), chatForecastAnswer(i), chatSafeToSpend(i), chatPaidBy(i), chatAgentTask(i), chatCardFreeze(i), chatStatement(i), chatWalletAlerts(i), chatLiveStatement(i), chatRecentCalls(i), chatApprovalFaceID(i), chatWalletButtons(i), chatScheduledPrompt(i)); break
-    // B28.271 — first, while the workspace has no agent: Agent Wallets is only the card that creates one.
+    // B55.39 — first, while Lens still names the workspace by its id: the sidebar reads "Your workspace", never the id.
+    // B28.271 — then, while the workspace has no agent: Agent Wallets is only the card that creates one.
     // B28.8 — then, still with no agent: Home's three onboarding steps.
     // B29.12 — then Features, Track, Docs, Developers, Billing and Settings in the brand, each photographed.
     // B28.270 — then the two Stripe return pages opened with no checkout coming back: neither claims a payment.
-    case 7: list.push(agentWalletsEmpty(), walletOnboarding(i), everyScreen(), screensBrand(), billingReturnPages()); break
+    case 7: list.push(sidebarUnnamedWorkspace(), agentWalletsEmpty(), walletOnboarding(i), everyScreen(), screensBrand(), billingReturnPages()); break
     // B28.6 — Home, the first screen after sign-in: an agent's budget used and the approvals waiting.
     // B28.7 — then the wallet-first sidebar, whose Approvals badge counts the approval Home just filed.
     // B29.2 — then the board's dark planes: the canvas Obsidian, the sidebar Surface.
@@ -5335,6 +5346,19 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.48 — a room's owner changing, once a run, on a Free workspace of its own: notice to an owner active today, a vote
   // and a fork are 409; handed to a member, Lens reads it as the owner and the old owner as an editor that may not spend.
   if (i === 4) list.push(roomTakeover(i))
+  // B41.41 — shared ownership, intent only, once a run, on a Free workspace of its own: the owner switches it on at the
+  // default 25% pool and a member reads it with Lens's notice word for word; a member setting it is 403, a 60% pool 400,
+  // and a stranger and a caller with no key read nothing.
+  if (i === 4) list.push(roomSharedOwnership(i))
+  // B41.42 — the rate card, once a run, on a Free workspace of its own: a contribution claimed at size M earns M's points
+  // when accepted, a size over 5% of the pool is 400, and raising its points after it is accepted is 409.
+  if (i === 4) list.push(roomRateCard(i))
+  // B41.43 — the points ledger, once a run, on a Free workspace of its own: an accepted M-size contribution earns M's points ×
+  // its quality in an append-only row, a fork credits its original the remix share, and a later rejection adds a withdrawn row.
+  if (i === 4) list.push(roomPoints(i))
+  // B41.44 — a contribution's reviewers, once a run, on a Free workspace of its own: Lens seats two plain members, never the
+  // author even when it names itself, the author's own score is refused, and quality is the median of the two scores.
+  if (i === 4) list.push(roomReviews(i))
   // B32.83 — a room's messages, once a run, on a Team workspace of its own: a post reaches another member's event stream
   // within two seconds, a key in a public room is 422 naming its kind and stored nowhere, an edit and a delete read back
   // as the edit and a tombstone, a private room's messages are 404 to a stranger, and the minute's limit is 429 naming it.
@@ -5451,6 +5475,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B46.9 — an agent's wallet, once a run, on a workspace of its own: the card shows Lens's balance and, on the sandbox, nothing
   // to copy; Send waits for one-tap approval under the wallet with no payment on the ledger; Decline pays nothing.
   if (i === 2) list.push(agentWallet())
+  // B55.2 — the web with only the phone's key, once a run, on a workspace of its own: Approvals says to approve on the phone,
+  // shows no Approve or Deny, sends nothing, and the approval stays pending on Lens.
+  if (i === 2) list.push(phoneKeyWeb())
   // B47.2 — Chat's page, once a run: /chat opens with the suite sidebar hidden, Menu opens it over the chat without moving it
   // and Escape closes it, at 1440 px and on a 390 px phone; Home shows the sidebar as it did before.
   if (i === 2) list.push(chatSidebar())
@@ -5478,6 +5505,12 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B40.28 — a phone's device key, once a run, on a workspace of its own: it signs an agent's approval, which is approved;
   // revoked, its signature on a new approval is refused, an unsigned decision too, and that approval stays pending.
   if (i === 6) list.push(deviceKeyApproval())
+  // B52.34 — an assistant's Connect token, once a run, on a workspace of its own: a payment inside its agent's rules lands once on
+  // both statements; one above the approval amount answers 202 pending with nothing moved; approve, rules, keys and card refuse it.
+  if (i === 6) list.push(connectPay())
+  // B48.27 — an agent's USDC payments, once a run, on a workspace of its own: a flagged address refused with nothing held; a regulated
+  // provider's address with its Travel Rule record; more than 1,000 USDC to a self-hosted address held only once the owner proves its key.
+  if (i === 6) list.push(screeningTravelRule())
   // B40.29 — one approval for an agent's two-item batch, once a run, on a workspace of its own: signed with the phone's device
   // key it pays exactly two payments out from the agent's card-funded account; replayed, 409 and nothing moves; the record verifies.
   if (i === 6) list.push(batchApproval())

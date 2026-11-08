@@ -99,6 +99,142 @@ export interface Takeover {
   tally: Record<string, number>
 }
 
+/** Lens rooms.SharedOwnership (B41.141) — GET /api/rooms/{id}/shared-ownership, to members under the current terms.
+ *  Intent only: the share of the room's future value its owner means for contributors, with the notice Lens words.
+ *  404 in a workspace that is not synthetic until room_equity is cleared. */
+export interface SharedOwnership {
+  room_id: string
+  enabled: boolean
+  /** 1,000–5,000 basis points; 2,500 until the owner sets it. */
+  pool_bps: number
+  notice: string
+  updated_at?: string
+}
+
+/** Lens rooms.RateSize (B41.142): one size of work; it earns hours × points per hour, worked out by Lens. */
+export interface RateSize {
+  size: string
+  hours: number
+  points_per_hour: number
+  points: number
+}
+
+/** Lens rooms.RateCard (B41.142) — GET /api/rooms/{id}/rate-card, to members under the current terms, behind the same
+ *  room_equity gate as shared ownership. pool_points is 0 until the owner publishes one; no size is worth more than
+ *  item_cap_points, 5% of the pool. */
+export interface RateCard {
+  room_id: string
+  pool_points: number
+  item_cap_points: number
+  sizes: RateSize[]
+  updated_at?: string
+}
+
+/** Lens rooms.PointsEntry (B41.143): one append-only row of a room's points ledger. An accepted row earns size × quality ×
+ *  survival, less the remix share a fork passes to its original's author in a remix_share row; a withdrawn row takes
+ *  back what a contribution rejected after it was accepted had earned. Basis points: 10,000 is 1.0 or 100%. */
+export interface PointsEntry {
+  id: string
+  contribution_id: string
+  workspace_id: string
+  reason: 'accepted' | 'remix_share' | 'withdrawn' | 'review'
+  size_points: number
+  received_usd_micros: number
+  quality_bps: number
+  survival_bps: number
+  remix_share_bps: number
+  points: number
+  created_at: string
+}
+
+/** Lens rooms.Points (B41.143) — GET /api/rooms/{id}/points, to members under the current terms, behind the same
+ *  room_equity gate as the rate card. total_points counts only holders whose owner is identity-checked at L2. */
+export interface RoomPoints {
+  room_id: string
+  total_points: number
+  holders: { workspace_id: string; workspace_name: string; points: number; identity_checked: boolean }[]
+  entries: PointsEntry[]
+}
+
+/** Lens rooms.Leaderboard (B41.145) — GET /api/rooms/{id}/leaderboard, behind the same room_equity gate as the points
+ *  ledger. Rows are most points first; the identity-checked holders' share_bps of the contributor pool add up to 10,000,
+ *  and a holder waiting for its owner's identity check has 0. */
+export interface RoomLeaderboard {
+  room_id: string
+  enabled: boolean
+  pool_bps: number
+  total_points: number
+  rows: { workspace_id: string; workspace_name: string; points: number; identity_checked: boolean; share_bps: number }[]
+  note: string
+  notice: string
+}
+
+/** Lens rooms.GateThresholds (B41.146): Talyvor's are the floor, and the owner may raise them, never lower them. */
+export interface GateThresholds {
+  shipped_weeks: number
+  used_people: number
+  used_active_weeks: number
+  used_window_weeks: number
+  paid_usd_micros: number
+  paid_payers: number
+  updated_at?: string
+}
+
+/** Lens rooms.GateTracker (B41.146) — GET /api/rooms/{id}/gate, behind the same room_equity gate as the points ledger.
+ *  Each test's status is met, in_progress or needs_published_build; Shipped and Paid carry Lens's note while the room
+ *  cannot publish a build. */
+export interface RoomGate {
+  room_id: string
+  thresholds: GateThresholds
+  shipped: { status: string; note?: string; weeks: number }
+  used: { status: string; people: number }
+  paid: { status: string; note?: string; usd_micros: number; payers: number }
+  met: boolean
+  notice: string
+}
+
+/** Lens rooms.Review (B41.144): one reviewer's seat on a contribution. score_bps is 5,000–15,000 (0.5–1.5), null until it
+ *  scores; ring means it and the author scored each other's work, so its score counts as 1.0 and earns nothing. */
+export interface Review {
+  reviewer_workspace_id: string
+  reviewer_workspace_name: string
+  score_bps: number | null
+  ring: boolean
+  drawn_at: string
+  scored_at?: string
+}
+
+/** Lens rooms.Reviews (B41.144) — GET /api/rooms/{id}/contributions/{cid}/reviews, behind the same room_equity gate as
+ *  the points ledger. quality_bps is the median of both counted scores, 10,000 until both are in. */
+export interface Reviews {
+  contribution_id: string
+  quality_bps: number
+  reviews: Review[]
+}
+
+/** Lens rooms.Signature (B41.150): a workspace's e-signature of the contributor agreement, kept as evidence with the
+ *  version and the hash of the exact text signed. */
+export interface AgreementSignature {
+  workspace_id: string
+  user_id: string
+  signed_name: string
+  version: string
+  text_sha256: string
+  signed_at: string
+}
+
+/** Lens rooms.Agreement (B41.150) — GET /api/rooms/{id}/agreement, behind the same room_equity gate as the points ledger.
+ *  A draft carries what it is marked with; signature is null until this workspace signs, and its points count only then. */
+export interface RoomAgreement {
+  room_id: string
+  version: string
+  draft: boolean
+  marked?: string
+  text: string
+  text_sha256: string
+  signature: AgreementSignature | null
+}
+
 /** Lens rooms.Usage — what this workspace's plan lets it open, beside what it has open. -1 is unlimited. */
 export interface RoomLimits {
   plan: string
@@ -251,6 +387,9 @@ export interface Contribution {
   author_workspace_id: string
   forked_from?: string
   status: 'proposed' | 'accepted' | 'rejected'
+  /** B41.142 — the size claimed on the room's rate card, and that size's points, fixed when it was claimed. */
+  size?: string
+  points?: number
   tally: number
   up: number
   down: number
@@ -461,6 +600,39 @@ export const roomsApi = {
   voteLead: (id: string, candidate: string) =>
     post<Takeover>(`/api/rooms/${e(id)}/takeover/vote`, { candidate_workspace_id: candidate }, 'PUT'),
   forkRoom: (id: string) => post<RoomDetail>(`/api/rooms/${e(id)}/fork`, {}),
+  // B41.41 — shared ownership, intent only.
+  sharedOwnership: (id: string) =>
+    getJSON<SharedOwnership>(`/api/rooms/${e(id)}/shared-ownership`, { enabled: 'boolean', pool_bps: 'number', notice: 'string' }),
+  setSharedOwnership: (id: string, enabled: boolean, poolBps: number) =>
+    post<SharedOwnership>(`/api/rooms/${e(id)}/shared-ownership`, { enabled, pool_bps: poolBps }, 'PUT'),
+  // B41.42 — the rate card, and a contribution's size on it.
+  rateCard: (id: string) =>
+    getJSON<RateCard>(`/api/rooms/${e(id)}/rate-card`, { pool_points: 'number', item_cap_points: 'number', sizes: 'list' }),
+  setRateCard: (id: string, poolPoints: number, sizes: Omit<RateSize, 'points'>[]) =>
+    post<RateCard>(`/api/rooms/${e(id)}/rate-card`, { pool_points: poolPoints, sizes }, 'PUT'),
+  claimSize: (id: string, cid: string, size: string) =>
+    post<Contribution>(`/api/rooms/${e(id)}/contributions/${e(cid)}/size`, { size }, 'PUT'),
+  // B41.43 — the points ledger.
+  points: (id: string) =>
+    getJSON<RoomPoints>(`/api/rooms/${e(id)}/points`, { total_points: 'number', holders: 'list', entries: 'list' }),
+  // B41.45 — the provisional leaderboard.
+  leaderboard: (id: string) =>
+    getJSON<RoomLeaderboard>(`/api/rooms/${e(id)}/leaderboard`, { pool_bps: 'number', rows: 'list', note: 'string' }),
+  // B41.46 — the Gate tracker, and the owner raising its thresholds.
+  gate: (id: string) => getJSON<RoomGate>(`/api/rooms/${e(id)}/gate`, { thresholds: 'object', used: 'object', notice: 'string' }),
+  setGateThresholds: (id: string, t: Omit<GateThresholds, 'used_window_weeks' | 'updated_at'>) =>
+    post<GateThresholds>(`/api/rooms/${e(id)}/gate-thresholds`, t, 'PUT'),
+  // B41.50 — the contributor agreement, signed before points count.
+  agreement: (id: string) =>
+    getJSON<RoomAgreement>(`/api/rooms/${e(id)}/agreement`, { version: 'string', text: 'string', text_sha256: 'string' }),
+  signAgreement: (id: string, version: string, signedName: string) =>
+    post<RoomAgreement>(`/api/rooms/${e(id)}/agreement`, { version, signed_name: signedName }),
+  // B41.44 — two reviewers Lens draws at random score a contribution's quality.
+  reviews: (id: string, cid: string) =>
+    getJSON<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/reviews`, { quality_bps: 'number', reviews: 'list' }),
+  drawReviewers: (id: string, cid: string) => post<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/reviewers`, {}),
+  review: (id: string, cid: string, scoreBps: number) =>
+    post<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/review`, { score_bps: scoreBps }, 'PUT'),
   previewInvite: (token: string) =>
     getJSON<InvitePreview>(`/api/room-invites/${e(token)}`, { room: 'object', terms: 'object', uses_left: 'number' }),
   joinByInvite: (token: string, termsVersion: number) =>

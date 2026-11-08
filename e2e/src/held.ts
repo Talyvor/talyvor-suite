@@ -4,13 +4,15 @@
 //
 //   node --experimental-strip-types e2e/src/held.ts --why "<why>" --would-test "<main's head>" [run flags]
 //
+// B55.52 — with --pocket it writes "Pocket problems: not run, <why>" instead, for a Pocket problems pass that could not report.
+//
 // Its settings are the run's (config.ts); it exits 2 when it cannot read them.
 
 import { realpathSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseConfig } from './config.ts'
-import { writeHeld } from './report.ts'
+import { writeHeld, writePocketNotRun } from './report.ts'
 import { readVersions } from './versions.ts'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
@@ -20,7 +22,8 @@ async function main(): Promise<number> {
   const own = new Map<string, string>()
   const argv = process.argv.slice(2)
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--why' || argv[i] === '--would-test') own.set(argv[i], argv[++i] ?? '')
+    if (argv[i] === '--pocket') own.set('--pocket', '')
+    else if (argv[i] === '--why' || argv[i] === '--would-test') own.set(argv[i], argv[++i] ?? '')
     else rest.push(argv[i])
   }
   const why = own.get('--why') ?? ''
@@ -34,6 +37,13 @@ async function main(): Promise<number> {
   } catch (e) {
     console.error(`e2e held: ${e instanceof Error ? e.message : String(e)}`)
     return 2
+  }
+  if (own.has('--pocket')) {
+    if (cfg.testersMd !== 'none') {
+      await writePocketNotRun(cfg.testersMd, new Date().toISOString(), why)
+      console.log(`Pocket problems: not run, ${why}; the entry is at the top of ${cfg.testersMd}`)
+    }
+    return 0
   }
   const held = {
     at: new Date().toISOString(),

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // B41.15 — the Keys page reads what may act for the workspace and revokes a mandate through the BFF, on the session's
@@ -47,5 +49,33 @@ func TestMoneyAccessListsAndRevokesAMandateThroughBFF(t *testing.T) {
 	}
 	if rec := doJSON(a, http.MethodGet, "/api/money/access", ``); !strings.Contains(rec.Body.String(), `"status":"revoked"`) {
 		t.Fatalf("after revoke the list reads %s", rec.Body.String())
+	}
+}
+
+// B55.42 — Lens names a mandate by its clients joined, "mcp:<client id>"; Keys shows the assistant's own name, and a
+// mandate whose assistant is not known here reads as a permission the person signed.
+func TestMoneyAccessNamesAMandateByItsAssistant(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"kind":"mandate","id":"pm_1","name":"mcp:tlv_oc_claude","status":"active"},` +
+			`{"kind":"mandate","id":"pm_2","name":"mcp:tlv_oc_gone","status":"active"},{"kind":"device","id":"dk_1","name":"Ada's phone","status":"active"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+	a.oauth.grants.put("g-1", oauthGrant{ID: "g-1", ClientID: "tlv_oc_claude", ClientName: "Claude", expires: time.Now().Add(time.Hour)})
+
+	rec := doJSON(a, http.MethodGet, "/api/money/access", ``)
+	var got struct {
+		Items []struct{ ID, Name, Status string } `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); rec.Code != http.StatusOK || err != nil || len(got.Items) != 3 {
+		t.Fatalf("access = %d %s", rec.Code, rec.Body.String())
+	}
+	if got.Items[0].Name != "Claude" || got.Items[1].Name != "A permission you signed" || got.Items[2].Name != "Ada's phone" || got.Items[0].Status != "active" {
+		t.Fatalf("names = %+v", got.Items)
 	}
 }

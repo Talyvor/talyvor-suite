@@ -253,6 +253,8 @@ export interface MarketLicence {
   price_ulxc: number
   /** B32.87 — how it was got: offer, rent_to_own, or prize (won as a room's prize) */
   source?: string
+  /** B41.176 — it renews but has not been used for 30 days */
+  idle?: boolean
 }
 
 /** B25.8 — one payout (market.Payout): money through Stripe, or the balance taken as credits. */
@@ -1899,6 +1901,11 @@ export class LensClient {
   /** B53.14 — a charge at a merchant on one of the workspace's single-use money cards, made as the issuer makes it (Lens B53.18). */
   async chargeTestCard(user: SyntheticUser, cardID: string, c: { merchant: string; amount_minor: number }): Promise<Answered<{ authorization_id: string; approved: boolean; reason: string; mcc: string; country: string }>> {
     return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/money/cards/${cardID}/charge`, c)
+  }
+
+  /** B45.43 — a signed test plan's standing order's next tick due now, for the minute tick to run it once (Lens B45.42). */
+  async bringScheduleDue(user: SyntheticUser, scheduleID: string): Promise<Answered<{ id: string; next_run_at: string }>> {
+    return this.synthetic('POST', `/v1/synthetic/workspaces/${user.workspaceID}/money/schedules/${scheduleID}/due`)
   }
 
   /** B52.32 — Scan's writer run on its recorded data for `series` on a test workspace, `plant` a line added before the code rules (Lens B52.40). */

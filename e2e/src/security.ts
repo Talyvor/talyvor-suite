@@ -434,9 +434,10 @@ export const throughApp: Post = async (ctx, path, body) => {
 
 /**
  * B50.22 — a second passkey is signed by one the workspace has (Lens B50.20). Through the web app's own BFF calls: the
- * owner registers passkey A, free as the first; passkey B, sent with no signature, is refused, and B's signature over an
- * agent's held payment is refused too — the approval row stays pending and the payee's statement empty. B signed by A
- * over B's own challenge registers, and B then approves: the row reads approved and the payment, sent again, lands.
+ * owner registers passkey A, free as the first; passkey B, sent with no signature, is refused or kept waiting (B55.1) and
+ * declined, and B's signature over an agent's held payment is refused too — the approval row stays pending and the
+ * payee's statement empty. B signed by A over B's own challenge registers, and B then approves: the row reads approved
+ * and the payment, sent again, lands.
  */
 export function passkeyEnrolSigned(post: Post = throughApp): Scenario {
   return {
@@ -479,8 +480,20 @@ export function passkeyEnrolSigned(post: Post = throughApp): Scenario {
 
       const c2 = await challenge('a second, B')
       if (!(c2.credential_ids ?? []).includes(a.credentialID)) wrong.push(`the challenge for a second passkey lists ${JSON.stringify(c2.credential_ids)}, not A to sign with`)
-      const unsigned = await bff('/api/agents/passkeys', b.register(c2.challenge, 'Nightly enrol B, unsigned'), 'passkey B with no signature')
-      if (!refused(unsigned.status)) wrong.push(`passkey B with no signature answered ${unsigned.status}, not a refusal`)
+      const unsigned = await bff<{ enrolment?: { id?: string } }>('/api/agents/passkeys', b.register(c2.challenge, 'Nightly enrol B, unsigned'),
+        'passkey B with no signature')
+      // Since B55.1 an unsigned second passkey may wait (202) for a key the workspace has to let it in; it signs nothing meanwhile.
+      const waitingID = unsigned.status === 202 ? unsigned.value.enrolment?.id : undefined
+      if (waitingID) {
+        const path = `/v1/workspaces/{ws}/agents/keys/enrolments/${waitingID}`
+        const got = await lens.act<{ status: string }>(user, 'GET', path, undefined)
+        ctx.evidence.push({ note: 'passkey B, kept waiting', answer: said(got) })
+        if (!got.ok || got.value.status !== 'waiting') wrong.push(`passkey B with no signature was kept as enrolment ${waitingID}, which reads ${said(got)}, not waiting`)
+        // Declined, so it does not count toward the three keys that may wait at once.
+        const declined = await lens.act<{ status: string }>(user, 'POST', `${path}/decline`, {})
+        ctx.evidence.push({ note: 'the owner declines passkey B', answer: said(declined) })
+        if (!declined.ok || declined.value.status !== 'declined') wrong.push(`declining passkey B's enrolment answered ${said(declined)}`)
+      } else if (!refused(unsigned.status)) wrong.push(`passkey B with no signature answered ${unsigned.status}, neither a refusal nor kept waiting`)
       if ((await listed()).some((k) => k.credential_id === b.credentialID)) wrong.push('passkey B, sent with no signature, is listed on the workspace')
 
       // An agent above its approval amount pays another; B tries to approve it.
@@ -529,7 +542,7 @@ export function passkeyEnrolSigned(post: Post = throughApp): Scenario {
       const into = (await lens.agentLines(user, payee.id)).map((l) => l.amount_ulxc)
       ctx.evidence.push({ note: `${payee.name}'s postings: ${JSON.stringify(into)}` })
       if (into.join() !== String(ENROL_PAY_ULXC)) wrong.push(`${payee.name}'s statement holds ${JSON.stringify(into)}, not the one approved ${ENROL_PAY_ULXC}`)
-      return done(wrong, `passkey B with no signature refused and not listed; its approval refused, the row pending and ${payee.name}'s statement empty; ` +
+      return done(wrong, `passkey B with no signature refused or kept waiting, and not listed; its approval refused, the row pending and ${payee.name}'s statement empty; ` +
         `signed by A, B registered, approved the row and the payment landed once (${ENROL_PAY_ULXC} µLXC)`)
     },
   }

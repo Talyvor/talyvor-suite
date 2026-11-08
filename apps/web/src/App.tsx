@@ -411,6 +411,8 @@ function Sidebar() {
   const pending = usePendingApprovals()
   // B46.16 — the name sign-up gave the workspace, under the brand.
   const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
+  // B55.39 — Lens names a new workspace by its id; the sidebar never shows it.
+  const workspaceLabel = workspace.data?.name === workspace.data?.id ? 'Your workspace' : workspace.data?.name
   const item = (
     to: string,
     label: string,
@@ -476,8 +478,8 @@ function Sidebar() {
         </button>
       </div>
       {workspace.data?.name ? (
-        <div className="-mt-4 truncate px-3 text-caption text-ink" title={workspace.data.name} data-testid="sidebar-workspace-name">
-          {workspace.data.name}
+        <div className="-mt-4 truncate px-3 text-caption text-ink" title={workspaceLabel} data-testid="sidebar-workspace-name">
+          {workspaceLabel}
         </div>
       ) : null}
       {/* B28.7 — WALLET-FIRST. The product is agent wallets, so the wallet's own screens lead and never

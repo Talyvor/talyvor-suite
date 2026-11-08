@@ -138,9 +138,64 @@
 //
 // STUB_BREAK=room-owner makes the member the owner and leaves the room's owner_workspace_id the old one — a defect
 // room-takeover must FAIL on.
+//
+// B41.141 — and shared ownership, intent only, as room-shared-ownership reads it:
+//
+//   GET /v1/rooms/{id}/shared-ownership   to a member: {room_id, enabled, pool_bps, notice}; 404 to anyone else
+//   PUT /v1/rooms/{id}/shared-ownership   {enabled, pool_bps}: the owner only, 403 to another member; pool_bps
+//                                         1000–5000, 2500 left out
+//
+// Every stub workspace is synthetic, so room_equity's gate is always open here. STUB_BREAK=room-ownership lets any
+// member set it — a defect room-shared-ownership must FAIL on.
+//
+// B41.142 — and the rate card, as room-rate-card reads it, behind the same gate:
+//
+//   GET /v1/rooms/{id}/rate-card                 to a member: {room_id, pool_points, item_cap_points, sizes}; 404 to anyone else
+//   PUT /v1/rooms/{id}/rate-card                 {pool_points, sizes: [{size, hours, points_per_hour}]}: the owner only; a size
+//                                                worth more than 5% of the pool is 400
+//   PUT /v1/rooms/{id}/contributions/{c}/size    {size}: its author once, or the owner or an editor; fixes the size's points on
+//                                                it, and a raise once it is decided is 409
+//
+// STUB_BREAK=room-rate-raise lets a decided contribution's points be raised — a defect room-rate-card must FAIL on.
+//
+// B41.143 — and the points ledger, as room-points reads it, behind the same gate:
+//
+//   GET /v1/rooms/{id}/points   to a member: {room_id, total_points, holders, entries}, newest first; 404 to anyone else
+//   GET /v1/rooms/{id}/leaderboard   B41.145, to a member: {enabled, pool_bps, total_points, rows, note, notice}
+//
+// Accepting a sized contribution writes its author an accepted row of size × quality (1.0 here) × survival 100%; a fork
+// passes the room's remix share of it to its original's author; rejecting it once accepted writes a withdrawn row.
+// STUB_BREAK=room-points-remix credits a fork's original nothing — a defect room-points must FAIL on;
+// room-leaderboard-holder leaves the leaderboard's last holder off — another.
+//
+// B41.146 — and the Gate tracker, behind the same gate:
+//
+//   GET /v1/rooms/{id}/gate               to a member: {thresholds, shipped, used, paid, met, notice}; nobody in a stub room
+//                                         has been active 6 weeks, and Shipped and Paid need a published build
+//   PUT /v1/rooms/{id}/gate-thresholds    the owner raises a threshold; 409 to a lower one. STUB_BREAK=room-gate-lower
+//                                         saves the lower one — a defect room-points must FAIL on.
+//
+// B41.144 — and a contribution's two reviewers, as room-reviews reads them, behind the same gate:
+//
+//   GET  /v1/rooms/{id}/contributions/{c}/reviews     to a member: {contribution_id, quality_bps, reviews}
+//   POST /v1/rooms/{id}/contributions/{c}/reviewers   any member: fills the empty seats at random with plain members, never
+//                                                     the author; whatever the body says
+//   PUT  /v1/rooms/{id}/contributions/{c}/review      {score_bps}: a seated reviewer, 5000–15000; 403 to anyone else; once
+//                                                     both scored, quality_bps is their median
+//
+// STUB_BREAK=room-review-pick seats the workspace the body names — a defect room-reviews must FAIL on.
+//
+// B41.150 — and the contributor agreement, as room-points reads it, behind the same gate:
+//
+//   GET  /v1/rooms/{id}/agreement   to a member: {room_id, version, draft, marked, text, text_sha256, signature}
+//   POST /v1/rooms/{id}/agreement   {version, signed_name}: 201, or 200 with the signature already kept; 409 for any other
+//                                   version, 400 for a blank name
+//
+// A workspace that has not signed earns no points row; withdrawals still take points back. STUB_BREAK=room-agreement-unsigned
+// counts its points anyway — a defect room-points must FAIL on.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 
 const BREAK = process.env.STUB_BREAK ?? ''
 
@@ -175,6 +230,10 @@ interface Room {
   agents?: { agent_id: string; name: string; workspace_id: string; joined_at: string }[]
   /** B41.148 — when its owner last became the owner, by a hand-over. */
   owner_since?: string
+  /** B41.141 — its shared ownership, once the owner has set it. */
+  ownership?: { enabled: boolean; pool_bps: number }
+  /** B41.142 — its rate card, once the owner has published one. */
+  rateCard?: { pool_points: number; sizes: { size: string; hours: number; points_per_hour: number; points: number }[] }
 }
 
 interface Report { id: string; ws: string; message_id?: string; reason: string; details: string; created_at: string; resolution?: string }
@@ -238,11 +297,27 @@ interface Contribution {
   template: string
   /** B32.84 — its listing's artifact, its per_use price in µUSD, and who accepted or rejected it. */
   artifact: Record<string, unknown>; price: number; decided_by?: string
+  /** B41.142 — the size claimed on the rate card, and its points, fixed then. */
+  size?: string; points?: number
 }
 
 const messages = new Map<string, Msg[]>()
 const events = new Map<string, { cursor: number; kind: string; ref: string; at: string; message: Msg }[]>()
 const contributions = new Map<string, Contribution[]>()
+/** B41.143 — each room's points ledger, oldest first; only ever appended to. */
+interface PointsRow { id: string; contribution_id: string; workspace_id: string; reason: string; size_points: number; received_usd_micros: number
+  quality_bps: number; survival_bps: number; remix_share_bps: number; points: number; created_at: string }
+const pointsLedger = new Map<string, PointsRow[]>()
+
+/** B41.150 — each room's contributor agreement signatures, by workspace; only ever added to. */
+const AGREEMENT_VERSION = 'draft-1'
+const AGREEMENT_TEXT = 'Contributor agreement\n\n1. A stub draft: your contributions are assigned to the company formed to own this room\'s work, with a licence back.'
+const AGREEMENT_SHA = createHash('sha256').update(AGREEMENT_TEXT).digest('hex')
+const signatures = new Map<string, Map<string, { workspace_id: string; user_id: string; signed_name: string; version: string; text_sha256: string; signed_at: string }>>()
+const signed = (r: Room, ws: string) => BREAK === 'room-agreement-unsigned' || (signatures.get(r.id)?.has(ws) ?? false)
+const gateThresholds = new Map<string, Record<string, number>>()
+/** B41.144 — each contribution's reviewer seats, in the order they were drawn. */
+const reviewSeats = new Map<string, { ws: string; score: number | null }[]>()
 let cursor = 0
 
 function post(roomID: string, ws: string, body: string, kind = 'text', refs: Record<string, unknown> = {}, agent?: RoomAgent): Msg {
@@ -265,7 +340,7 @@ const contributionView = (c: Contribution, ws: string) => {
     id: c.id, room_id: c.room_id, listing_id: c.listing_id, version: c.version, kind: c.kind, title: c.title, author_workspace_id: c.author_workspace_id,
     ...(c.forked_from ? { forked_from: c.forked_from } : {}), status: c.status, ...(c.decided_by ? { decided_by_workspace_id: c.decided_by } : {}),
     message_id: c.message_id, tally: votes.reduce((a, b) => a + b, 0), up: votes.filter((v) => v > 0).length, down: votes.filter((v) => v < 0).length,
-    my_vote: c.votes.get(ws) ?? 0, created_at: c.created_at,
+    my_vote: c.votes.get(ws) ?? 0, ...(c.size ? { size: c.size } : {}), points: c.points ?? 0, created_at: c.created_at,
   }
 }
 
@@ -383,7 +458,9 @@ async function roomScreen(req: IncomingMessage, res: ServerResponse, p: string, 
     if (role !== 'owner' && role !== 'editor') return json(res, 403, { error: 'rooms: not allowed: only the room’s owner or an editor decides a contribution' }), true
     const status = String((await body(req)).status ?? '')
     if (status !== 'accepted' && status !== 'rejected') return json(res, 400, { error: 'rooms: invalid request: status must be accepted or rejected' }), true
+    const was = c.status
     if (BREAK !== 'room-decide') Object.assign(c, { status, decided_by: ws })
+    if (BREAK !== 'room-decide') recordPoints(r, c, was, status)
     return json(res, 200, { ...contributionView(c, ws), status }), true
   }
   return false
@@ -523,7 +600,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
     return true
   }
   if (await settingsOutsideRoom(req, res, p, ws)) return true
-  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork)/.exec(p)
+  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points|leaderboard|gate|agreement)/.exec(p)
   if (one === null) return false
   const r = rooms.get(decodeURIComponent(one[1]))
   if (r === undefined || (r.visibility === 'private' && !r.members.some((m) => m.workspace_id === ws))) {
@@ -536,6 +613,13 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
   if (await roomPrizes(req, res, p, ws, r)) return true
   if (await roomSettings(req, res, p, ws, r)) return true
   if (await roomTakeover(req, res, p, ws, r)) return true
+  if (await roomSharedOwnership(req, res, p, ws, r)) return true
+  if (await roomRateCard(req, res, p, ws, r)) return true
+  if (roomPointsLedger(req, res, p, ws, r)) return true
+  if (roomLeaderboard(req, res, p, ws, r)) return true
+  if (await roomGate(req, res, p, ws, r)) return true
+  if (await roomReviews(req, res, p, ws, r)) return true
+  if (await roomAgreement(req, res, p, ws, r)) return true
   if (one[2] === undefined && req.method === 'GET') return json(res, 200, detail(r, ws)), true
   if (one[2] === '/join' && req.method === 'POST') {
     if (r.banned.includes(ws)) return json(res, 403, bannedFrom), true
@@ -720,6 +804,189 @@ async function roomTakeover(req: IncomingMessage, res: ServerResponse, p: string
     return json(res, 409, { error: `rooms: conflict: members ${what} only once the owner's notice has gone unanswered for 14 days` }), true
   }
   return false
+}
+
+const OWNERSHIP_NOTICE =
+  'No shares, options or rights arise unless and until a company is formed, a regulated partner adopts a Contributor Plan, and the Gate is met'
+
+/** B41.141 — a room's shared ownership, intent only: members read it, the owner sets it; false when `p` is not it. */
+async function roomSharedOwnership(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  if (p !== `/v1/rooms/${r.id}/shared-ownership`) return false
+  const me = r.members.find((m) => m.workspace_id === ws)
+  if (me === undefined) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const read = () => ({ room_id: r.id, enabled: false, pool_bps: 2500, ...r.ownership, notice: OWNERSHIP_NOTICE })
+  if (req.method === 'GET') return json(res, 200, read()), true
+  if (req.method !== 'PUT') return false
+  const d = await body(req)
+  const pool = d.pool_bps === undefined ? 2500 : Number(d.pool_bps)
+  if (!Number.isInteger(pool) || pool < 1000 || pool > 5000) {
+    return json(res, 400, { error: 'rooms: invalid request: the contributor pool is between 1000 and 5000 basis points (10%–50%)' }), true
+  }
+  if (me.role !== 'owner' && BREAK !== 'room-ownership') return json(res, 403, { error: "rooms: not allowed: only the room's owner sets its shared ownership" }), true
+  r.ownership = { enabled: d.enabled === true, pool_bps: pool }
+  return json(res, 200, read()), true
+}
+
+/** B41.143 — the rows Lens rooms.recordPoints writes when c moves from `was` to `status`. */
+function recordPoints(r: Room, c: Contribution, was: string, status: string) {
+  const rows = pointsLedger.get(r.id) ?? []
+  const add = (workspace_id: string, reason: string, points: number, more: Partial<PointsRow> = {}) => rows.push({ id: 'rpts_' + randomBytes(8).toString('hex'),
+    contribution_id: c.id, workspace_id, reason, size_points: 0, received_usd_micros: 0, quality_bps: 10_000, survival_bps: 0, remix_share_bps: 0, points,
+    created_at: new Date().toISOString(), ...more })
+  if (status === 'accepted' && (c.points ?? 0) > 0) {
+    const size = c.points ?? 0
+    const from = (contributions.get(r.id) ?? []).find((x) => x.id === c.forked_from)
+    const bps = from === undefined || BREAK === 'room-points-remix' ? 0 : r.terms.remix_share_bps
+    const share = Math.floor((size * bps) / 10_000)
+    const row = { size_points: size, survival_bps: 10_000, remix_share_bps: bps }
+    if (from !== undefined && share > 0 && signed(r, from.author_workspace_id)) add(from.author_workspace_id, 'remix_share', share, row)
+    if (signed(r, c.author_workspace_id)) add(c.author_workspace_id, 'accepted', size - share, row)
+  } else if (was === 'accepted') {
+    const held = new Map<string, number>()
+    for (const x of rows) if (x.contribution_id === c.id) held.set(x.workspace_id, (held.get(x.workspace_id) ?? 0) + x.points)
+    for (const [w, n] of [...held].sort()) if (n !== 0) add(w, 'withdrawn', -n)
+  }
+  pointsLedger.set(r.id, rows)
+}
+
+/** B41.150 — GET a room's contributor agreement with the caller's signature, or POST to sign it; false when `p` is not it. */
+async function roomAgreement(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  if (p !== `/v1/rooms/${r.id}/agreement`) return false
+  if (!r.members.some((m) => m.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const kept = signatures.get(r.id) ?? new Map()
+  signatures.set(r.id, kept)
+  const read = () => ({ room_id: r.id, version: AGREEMENT_VERSION, draft: true, marked: 'Test rooms only', text: AGREEMENT_TEXT,
+    text_sha256: AGREEMENT_SHA, signature: kept.get(ws) ?? null })
+  if (req.method === 'GET') return json(res, 200, read()), true
+  if (req.method !== 'POST') return false
+  const d = await body(req)
+  const name = typeof d.signed_name === 'string' ? d.signed_name.trim() : ''
+  if (name === '') return json(res, 400, { error: "rooms: invalid request: signed_name is the signer's full name, 1–200 characters" }), true
+  if (d.version !== AGREEMENT_VERSION) {
+    return json(res, 409, { error: `rooms: conflict: the contributor agreement is at version ${AGREEMENT_VERSION}: read it and sign that version` }), true
+  }
+  if (kept.has(ws)) return json(res, 200, read()), true
+  kept.set(ws, { workspace_id: ws, user_id: `user_${ws}`, signed_name: name, version: AGREEMENT_VERSION, text_sha256: AGREEMENT_SHA, signed_at: new Date().toISOString() })
+  return json(res, 201, read()), true
+}
+
+/** B41.143 — GET a room's points ledger; false when `p` is not it. */
+function roomPointsLedger(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): boolean {
+  if (p !== `/v1/rooms/${r.id}/points` || req.method !== 'GET') return false
+  if (!r.members.some((m) => m.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const rows = pointsLedger.get(r.id) ?? []
+  const held = new Map<string, number>()
+  for (const x of rows) held.set(x.workspace_id, (held.get(x.workspace_id) ?? 0) + x.points)
+  const holders = [...held].map(([workspace_id, points]) => ({ workspace_id, workspace_name: workspace_id, points, identity_checked: false }))
+    .sort((a, b) => b.points - a.points || a.workspace_id.localeCompare(b.workspace_id))
+  return json(res, 200, { room_id: r.id, total_points: 0, holders, entries: [...rows].reverse() }), true
+}
+
+/** B41.145 — GET a room's provisional leaderboard; false when `p` is not it. The stub's holders are never identity-checked,
+ *  so every share is 0. */
+function roomLeaderboard(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): boolean {
+  if (p !== `/v1/rooms/${r.id}/leaderboard` || req.method !== 'GET') return false
+  if (!r.members.some((m) => m.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const held = new Map<string, number>()
+  for (const x of pointsLedger.get(r.id) ?? []) held.set(x.workspace_id, (held.get(x.workspace_id) ?? 0) + x.points)
+  const rows = [...held].map(([workspace_id, points]) => ({ workspace_id, workspace_name: workspace_id, points, identity_checked: false, share_bps: 0 }))
+    .sort((a, b) => b.points - a.points || a.workspace_id.localeCompare(b.workspace_id))
+  if (BREAK === 'room-leaderboard-holder') rows.pop()
+  return json(res, 200, { room_id: r.id, enabled: true, pool_bps: 2500, total_points: 0, rows, note: 'Nothing is final until the Gate.', notice: '' }), true
+}
+
+/** B41.146 — GET a room's Gate tracker, or PUT its thresholds; false when `p` is neither. */
+async function roomGate(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  if (p !== `/v1/rooms/${r.id}/gate` && p !== `/v1/rooms/${r.id}/gate-thresholds`) return false
+  if (!r.members.some((m) => m.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const t = gateThresholds.get(r.id) ?? { shipped_weeks: 8, used_people: 100, used_active_weeks: 6, used_window_weeks: 8, paid_usd_micros: 1_000_000_000, paid_payers: 10 }
+  if (p.endsWith('/gate') && req.method === 'GET') {
+    const build = { status: 'needs_published_build', note: 'needs a published build' }
+    return json(res, 200, {
+      room_id: r.id, thresholds: t, shipped: { ...build, weeks: 0 }, used: { status: 'in_progress', people: 0 }, paid: { ...build, usd_micros: 0, payers: 0 },
+      met: false, notice: 'No shares, options or rights arise unless and until a company is formed, a regulated partner adopts a Contributor Plan, and the Gate is met',
+    }), true
+  }
+  if (!p.endsWith('/gate-thresholds') || req.method !== 'PUT') return false
+  if (r.owner_workspace_id !== ws) return json(res, 403, { error: "rooms: not allowed: only the room's owner sets its Gate thresholds" }), true
+  const next = { ...t, ...(await body(req)) } as Record<string, number>
+  for (const k of Object.keys(t)) {
+    if (next[k] < t[k] && BREAK !== 'room-gate-lower') {
+      return json(res, 409, { error: `rooms: conflict: a Gate threshold may be raised, never lowered: ${k} is ${t[k]}` }), true
+    }
+  }
+  gateThresholds.set(r.id, next)
+  return json(res, 200, next), true
+}
+
+/** B41.144 — a contribution's reviewers: reading them, drawing them and scoring it; false when `p` is none of these. */
+async function roomReviews(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  const m = new RegExp(`^/v1/rooms/${r.id}/contributions/([^/]+)/(reviews|reviewers|review)$`).exec(p)
+  if (m === null) return false
+  const c = (contributions.get(r.id) ?? []).find((x) => x.id === decodeURIComponent(m[1]))
+  if (c === undefined || !r.members.some((x) => x.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const seats = reviewSeats.get(c.id) ?? []
+  reviewSeats.set(c.id, seats)
+  const read = () => {
+    const scores = seats.map((v) => v.score)
+    const quality = scores.length === 2 && scores.every((x) => x !== null) ? Math.floor(((scores[0] as number) + (scores[1] as number)) / 2) : 10_000
+    return { contribution_id: c.id, quality_bps: quality, reviews: seats.map((v) => ({
+      reviewer_workspace_id: v.ws, reviewer_workspace_name: v.ws, score_bps: v.score, ring: false, drawn_at: c.created_at })) }
+  }
+  if (m[2] === 'reviews' && req.method === 'GET') return json(res, 200, read()), true
+  if (m[2] === 'reviewers' && req.method === 'POST') {
+    const named = (await body(req)).reviewer_workspace_id
+    const pool = BREAK === 'room-review-pick' && typeof named === 'string' ? [named]
+      : r.members.filter((x) => x.role === 'member' && x.workspace_id !== c.author_workspace_id).map((x) => x.workspace_id).sort(() => Math.random() - 0.5)
+    for (const w of pool) if (seats.length < 2 && !seats.some((v) => v.ws === w)) seats.push({ ws: w, score: null })
+    return json(res, 200, read()), true
+  }
+  if (m[2] === 'review' && req.method === 'PUT') {
+    const score = Number((await body(req)).score_bps)
+    if (!(score >= 5000 && score <= 15_000)) return json(res, 400, { error: 'rooms: invalid request: score_bps is between 5000 (0.5) and 15000 (1.5)' }), true
+    const mine = seats.find((v) => v.ws === ws)
+    if (mine === undefined) return json(res, 403, { error: 'rooms: not allowed: only the members Lens drew to review the contribution score it' }), true
+    mine.score = score
+    return json(res, 200, read()), true
+  }
+  return false
+}
+
+/** B41.142 — a room's rate card and a contribution's size on it; false when `p` is neither. */
+async function roomRateCard(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  const sized = new RegExp(`^/v1/rooms/${r.id}/contributions/([^/]+)/size$`).exec(p)
+  if (p !== `/v1/rooms/${r.id}/rate-card` && sized === null) return false
+  const me = r.members.find((m) => m.workspace_id === ws)
+  if (me === undefined) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const card = r.rateCard ?? { pool_points: 0, sizes: [] }
+  const read = () => ({ room_id: r.id, ...card, item_cap_points: Math.floor(card.pool_points * 500 / 10_000) })
+  if (sized === null && req.method === 'GET') return json(res, 200, read()), true
+  if (req.method !== 'PUT') return false
+  const d = await body(req)
+  const decides = me.role === 'owner' || me.role === 'editor'
+  if (sized === null) {
+    if (me.role !== 'owner') return json(res, 403, { error: "rooms: not allowed: only the room's owner publishes its rate card" }), true
+    const pool = Number(d.pool_points)
+    const cap = Math.floor(pool * 500 / 10_000)
+    const sizes = (Array.isArray(d.sizes) ? d.sizes : []).map((z: Record<string, unknown>) => ({
+      size: String(z.size ?? '').trim(), hours: Number(z.hours), points_per_hour: Number(z.points_per_hour), points: Number(z.hours) * Number(z.points_per_hour) }))
+    const big = sizes.find((z) => z.points > cap)
+    if (!Number.isInteger(pool) || pool < 1 || sizes.length === 0) return json(res, 400, { error: 'rooms: invalid request: a rate card has a pool and 1 to 12 sizes' }), true
+    if (big !== undefined) return json(res, 400, { error: `rooms: invalid request: size "${big.size}" is worth ${big.points} points, more than 5% of the pool (${cap})` }), true
+    r.rateCard = { pool_points: pool, sizes }
+    return json(res, 200, read()), true
+  }
+  const c = (contributions.get(r.id) ?? []).find((x) => x.id === decodeURIComponent(sized[1]))
+  if (c === undefined) return json(res, 404, { error: 'rooms: not found: no such contribution in this room' }), true
+  if (c.author_workspace_id !== ws && !decides) return json(res, 403, { error: "rooms: not allowed: only the contribution's author or the room's owner or an editor sets its size" }), true
+  if (!decides && c.size) return json(res, 409, { error: `rooms: conflict: the contribution is claimed at size ${c.size}: the room's owner or an editor changes it` }), true
+  const z = card.sizes.find((x) => x.size === d.size)
+  if (z === undefined) return json(res, 400, { error: `rooms: invalid request: size "${String(d.size)}" is not on the room's rate card` }), true
+  if (c.status !== 'proposed' && z.points > (c.points ?? 0) && BREAK !== 'room-rate-raise') {
+    return json(res, 409, { error: `rooms: conflict: the contribution was decided at ${c.points ?? 0} points, and points are never raised after delivery` }), true
+  }
+  Object.assign(c, { size: z.size, points: z.points })
+  return json(res, 200, contributionView(c, ws)), true
 }
 
 const usd = (micros: number) => `$${(micros / 1e6).toFixed(2)}`

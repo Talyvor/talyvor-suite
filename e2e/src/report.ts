@@ -15,6 +15,7 @@ import { type CoverageMap, type Row, tallyLine } from './coverage.ts'
 import { type EdgeReport, edgeLine, renderEdge } from './edge.ts'
 import { type HostileReport, hostileLine, renderHostile } from './hostile.ts'
 import { withheld } from './withheld.ts'
+import { type PocketRow, pocketLine, renderPocket } from './pocketProblems/problems.ts'
 import type { ExplorerSummary, Finding } from './explore.ts'
 import type { DayBudget } from './day.ts'
 import type { MemorySample } from './memory.ts'
@@ -83,6 +84,8 @@ export interface ReportedRun {
   deep_rounds?: number
   /** B28.294 — the run was the light pass between the nightly runs (light.ts). */
   light?: true
+  /** B55.44 — the run was the Pocket problems pass: its 25 rows (pocketProblems/). */
+  pocket?: PocketRow[]
   /** B28.294 — the day's one cap and what the day's earlier runs had spent of it (run.ts). */
   day?: DayBudget
   /** B28.296 — the scenarios FAILing three runs running or more, and their items, moved to the top of the queue (streak.ts). */
@@ -94,7 +97,7 @@ const dayText = (run: ReportedRun): string => run.day === undefined ? ''
   : `, what was left of the day's $${run.day.cap_usd.toFixed(2)} cap after $${run.day.spent_before_usd.toFixed(2)} spent by ${run.day.runs_before} earlier run(s) since ${run.day.since}`
 
 /** B28.294 — what a run is called: the light pass is named. */
-const runName = (run: ReportedRun): string => (run.light === true ? 'Light pass' : 'Run')
+const runName = (run: ReportedRun): string => (run.light === true ? 'Light pass' : run.pocket !== undefined ? 'Pocket problems pass' : 'Run')
 
 type Outcome = ReportedRun['outcomes'][number]
 
@@ -462,7 +465,7 @@ export function renderRun(run: ReportedRun): string {
     lines.push(`| \`${id}\` | ${n.PASS} | ${n.FAIL} | ${n.ERROR} | ${n.SKIP} | ${cell(os[0].title)} |`)
   }
   lines.push(...renderPlans(run), ...renderSecondAttempts(run), ...renderEnvironment(run), ...renderEdge(run.edge), ...renderCode(run.code), ...renderHostile(run.hostile),
-    ...renderB28(run.b28, run.filed), ...renderRaised(run.raised))
+    ...renderB28(run.b28, run.filed), ...renderRaised(run.raised), ...renderPocket(run.pocket))
 
   // The features in the order the app mounts them, then any a scenario named for itself.
   const features = [...new Set([...(map?.screens.map((r) => r.feature) ?? []), ...run.outcomes.flatMap(featuresOf),
@@ -538,7 +541,7 @@ export function renderSummary(run: ReportedRun, report: string, newItems: string
   const passing = [...byScenario(run.outcomes)].filter(([, os]) => os.some((o) => o.status === 'PASS'))
   const findings = run.findings ?? []
   return [
-    `## ${run.started_at} — ${run.light === true ? 'light pass, ' : ''}${run.users} users on ${run.app}`,
+    `## ${run.started_at} — ${run.light === true ? 'light pass, ' : run.pocket !== undefined ? 'Pocket problems pass, ' : ''}${run.users} users on ${run.app}`,
     '',
     ...deepLine(run),
     `- **Coverage**: ${map === undefined ? 'no map' : `screens ${tallyLine(map.screens)}; BFF routes ${tallyLine(map.bff)}; ${servicesLine(map)}`}.`,
@@ -557,6 +560,7 @@ export function renderSummary(run: ReportedRun, report: string, newItems: string
     ...codeLine(run.code),
     ...hostileLine(run.hostile),
     ...b28Line(run.b28),
+    ...pocketLine(run.pocket),
     `- **Cost**: $${run.spent_usd.toFixed(2)} of the $${run.cap_usd.toFixed(2)} cap${dayText(run)}${run.stopped_at_cap ? ' — stopped at the cap' : ''}` +
       `${run.stopped_by === undefined ? '' : ', spent before it stopped'}.`,
     `- **Report**: ${report}`,
@@ -623,6 +627,7 @@ export function renderHeld(h: HeldNight): string {
     `- **Why**: ${h.why}.`,
     `- **Would have tested**: ${h.wouldTest}.`,
     `- **Checkout**: ${versionsLine(h.versions)}.`,
+    '- **Pocket problems**: not run, the night was held.',
     '- **Next**: the next night tries again; it runs once the checkout can be brought to main.',
     '',
   ].join('\n')
@@ -630,4 +635,9 @@ export function renderHeld(h: HeldNight): string {
 
 export async function writeHeld(path: string, h: HeldNight): Promise<void> {
   await prependTesters(path, renderHeld(h))
+}
+
+/** B55.52 — a Pocket problems pass that could not write its section says why, instead of nothing. */
+export async function writePocketNotRun(path: string, at: string, why: string): Promise<void> {
+  await prependTesters(path, [`## ${at} — Pocket problems pass: not run`, '', `- **Pocket problems**: not run, ${why}.`, ''].join('\n'))
 }

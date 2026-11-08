@@ -7,7 +7,7 @@ import { Region, RegionScreen } from '../../components/Region'
 import { LinkedItem } from '../../components/LinkedItem'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
-import { APPROVALS_KEY, BOOK_KEY, PASSKEYS_KEY } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, OnThePhone, useKeys } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { assertOver, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
 import {
@@ -23,6 +23,7 @@ import {
   type OutsidePayment,
   type PayeeRequest,
   type PayoutBatch,
+  FIATS,
   agentBankApi,
   formatMinor,
   formatULXC,
@@ -53,6 +54,8 @@ const PAYMENT_STATUS: Record<string, { text: string; pill: PillStatus }> = {
   failed: { text: 'Failed', pill: 'slashed' },
   returned: { text: 'Returned', pill: 'slashed' },
 }
+// B55.41 — a status Lens adds later is never shown as Lens's own word.
+const paymentStatus = (s: string) => PAYMENT_STATUS[s] ?? { text: 'We could not read this payment’s status', pill: 'held' as PillStatus }
 const CHECK: Record<string, { text: string; pill: PillStatus }> = {
   exact_match: { text: 'Exact match', pill: 'settled' },
   close_match: { text: 'Close match', pill: 'held' },
@@ -83,7 +86,8 @@ export function PayScreen() {
   const askedPayees = (asked.data?.requests ?? []).filter((r) => r.kind === 'payee')
   const askedMandates = (asked.data?.requests ?? []).filter((r) => r.kind === 'mandate')
   const askedPlans = (asked.data?.requests ?? []).filter((r) => r.kind === 'plan' && r.status !== 'signed')
-  const open = (accounts.data?.accounts ?? []).filter((a) => a.status === 'open')
+  // A USDC wallet cannot pay a bank payee (B55.26): only pounds, euros and dollars send, repeat or take a mandate.
+  const open = (accounts.data?.accounts ?? []).filter((a) => a.status === 'open' && FIATS.includes(a.currency))
   const agentAccounts = open.filter((a) => a.purpose === 'agent')
   const saved = payees.data?.payees ?? []
   const sent = payments.data?.payments ?? []
@@ -722,7 +726,7 @@ function SendPayment({
         {pay.isError ? <Note ok={false}>{refusalText(pay.error)}</Note> : null}
         {made !== null ? (
           <Note ok>
-            <span className="font-figure">{formatMinor(made.amount_minor, made.currency)}</span> to {made.payee_name}: {status(made.status, PAYMENT_STATUS).text.toLowerCase()}
+            <span className="font-figure">{formatMinor(made.amount_minor, made.currency)}</span> to {made.payee_name}: {paymentStatus(made.status).text.toLowerCase()}
             {made.detail ? ` — ${made.detail}` : ''}.
           </Note>
         ) : null}
@@ -735,8 +739,7 @@ function SendPayment({
 function Waiting({ agentName }: { agentName: (id: string) => string }) {
   const qc = useQueryClient()
   const approvals = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
-  const keys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
-  const signed = (keys.data?.passkeys ?? []).length > 0
+  const { signed, onlyThePhone, hold } = useKeys()
   const waiting = (approvals.data?.approvals ?? []).filter((a) => a.status === 'pending' && a.payee?.kind === 'outside')
   const decide = useMutation({
     mutationFn: async ({ a, decision }: { a: AgentApproval; decision: 'approve' | 'deny' }) =>
@@ -758,14 +761,18 @@ function Waiting({ agentName }: { agentName: (id: string) => string }) {
             <p className="text-caption text-muted">
               Asked <span className="font-figure">{formatWhen(a.created_at)}</span>. Approved, the agent’s next identical request goes through, once.
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'approve' })}>
-                Approve
-              </Button>
-              <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'deny' })}>
-                Deny
-              </Button>
-            </div>
+            {onlyThePhone ? (
+              <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
+            ) : hold ? null : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'approve' })}>
+                  Approve
+                </Button>
+                <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'deny' })}>
+                  Deny
+                </Button>
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -779,7 +786,7 @@ function Waiting({ agentName }: { agentName: (id: string) => string }) {
 }
 
 function PaymentRow({ p }: { p: OutsidePayment }) {
-  const s = status(p.status, PAYMENT_STATUS)
+  const s = paymentStatus(p.status)
   return (
     <LinkedItem id={`payment-${p.id}`} className="flex flex-col gap-1 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`payment-${p.id}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">

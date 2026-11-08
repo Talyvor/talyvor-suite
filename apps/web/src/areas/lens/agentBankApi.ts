@@ -625,6 +625,8 @@ export interface AgentApproval {
   created_at: string
   decided_at?: string
   expires_at?: string
+  /** The approver agent that approved it within its own limits (Lens B45.28); none when a person decided. */
+  approved_by_agent_id?: string
 }
 
 /** Every kind of agent_postings row Lens writes on an agent's account. */
@@ -1022,6 +1024,8 @@ export const agentBankApi = {
       : send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/deny`, assertion ? { assertion } : {}),
   // B19.10 — passkeys and push, kept by Lens (B19.16).
   passkeys: () => getJSON<{ passkeys: Passkey[] | null }>('/api/agents/passkeys', { passkeys: 'list' }),
+  // B55.2 — the phone keys Lens holds for the workspace (revoked ones included): the phone signs approvals too.
+  devices: () => getJSON<{ devices: DeviceKey[] | null }>('/api/money/devices', { devices: 'list' }),
   passkeyChallenge: () => send<{ challenge: string; rp_id: string; credential_ids?: string[] | null }>('POST', '/api/agents/passkeys/challenge'),
   registerPasskey: (body: PasskeyRegistration) => send<Passkey>('POST', '/api/agents/passkeys', body),
   approvalChallenge: (approvalID: string) =>
@@ -1814,6 +1818,14 @@ export interface Passkey {
   last_used_at?: string
 }
 
+/** B55.2 — a phone's key (Lens GET /v1/money/devices); one revoked signs nothing. */
+export interface DeviceKey {
+  id: string
+  platform: string
+  name: string
+  revoked_at?: string
+}
+
 /** A new passkey, as the browser's ceremony gives it — all base64url. */
 export interface PasskeyRegistration {
   credential_id: string
@@ -1866,7 +1878,7 @@ export function approvalNamedIn(err: unknown): string | null {
 export function refusalText(err: unknown): string {
   if (isSessionExpired(err)) return 'Nothing changed — sign in again.'
   if (err instanceof AgentBankError && err.status < 500 && err.sentence) {
-    const s = err.sentence.replace(/^economy: /, '')
+    const s = err.sentence.replace(/^economy: (spending: )?/, '')
     return `${s.charAt(0).toUpperCase()}${s.slice(1)}${s.endsWith('.') ? '' : '.'}`
   }
   return 'Nothing changed. You can try again.'
@@ -1967,8 +1979,16 @@ export interface PayPage {
   }
 }
 
-/** 12345 GBP → "£123.45": minor units in the currency's own figures. */
+/** The currencies a company or agent account holds and a bank payee or invoice takes; an agent's USDC wallet is not one. */
+export const FIATS: readonly string[] = ['GBP', 'EUR', 'USD']
+
+/**
+ * 12345 GBP → "£123.45", 1500000 USDC → "1.50 USDC": minor units in the currency's own figures. Lens keeps USDC to six
+ * decimals and Intl refuses its code (B55.26); a code it does not know reads "12.50 XYZ" and never throws.
+ */
 export function formatMinor(minor: number, currency: string): string {
+  if (currency === 'USDC') return `${(minor / 1e6).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`
+  if (!FIATS.includes(currency)) return `${(minor / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(minor / 100)
 }
 

@@ -49,9 +49,9 @@ describe('Ledger renders both real token ledgers', () => {
     // workspace has LXC rows from its first request, LENS mint rows never.
     expect(await screen.findByText('closed-test bootstrap grant (manual admin act, no fiat)')).toBeInTheDocument()
     expect(screen.getByText('trial top-up via admin grant')).toBeInTheDocument()
-    expect(screen.getByText('purchase')).toBeInTheDocument()
-    expect(screen.getByText('admin grant')).toBeInTheDocument()
-    expect(screen.getByText('spend')).toBeInTheDocument()
+    expect(screen.getByText('Credits bought')).toBeInTheDocument()
+    expect(screen.getByText('Credits given')).toBeInTheDocument()
+    expect(screen.getByText('Spent')).toBeInTheDocument()
     expect(screen.getByText('-0.000064')).toBeInTheDocument() // the debit in LXC, like its balance (B28.268)
 
     // movements carry NO economic pill …

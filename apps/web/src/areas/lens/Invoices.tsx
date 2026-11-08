@@ -7,7 +7,7 @@ import { LinkedItem } from '../../components/LinkedItem'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
-import { type CurrencyAccount, type Invoice, type InvoiceRequest, agentBankApi, formatMinor, minorOf, refusalText } from './agentBankApi'
+import { type CurrencyAccount, type Invoice, type InvoiceRequest, FIATS, agentBankApi, formatMinor, minorOf, refusalText } from './agentBankApi'
 
 // Invoices.tsx — B30.97: invoices and their pay links (Lens B30.20). An agent's currency account issues an invoice —
 // lines with optional VAT, a due date, a reminder — and sends a public pay link that takes a card, a transfer quoting the
@@ -38,7 +38,7 @@ export function InvoicesScreen() {
   const invoices = useQuery({ queryKey: INVOICES_KEY, queryFn: agentBankApi.invoices })
   const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
   const list = invoices.data?.invoices ?? []
-  const agentAccounts = (accounts.data?.accounts ?? []).filter((a) => a.purpose === 'agent' && a.status === 'open')
+  const agentAccounts = (accounts.data?.accounts ?? []).filter((a) => a.purpose === 'agent' && a.status === 'open' && FIATS.includes(a.currency))
   return (
     <RegionScreen>
       <Region
@@ -122,7 +122,7 @@ function OpenAccount({ accounts }: { accounts: CurrencyAccount[] }) {
                 <span>
                   {a.purpose === 'agent' ? (agents.find((x) => x.id === a.agent_id)?.name ?? a.name) : 'The company'} · {a.currency}
                 </span>
-                <span className="font-figure">{formatMinor(a.test_minor, a.currency)} test</span>
+                <span className="font-figure">{formatMinor(a.test_minor, a.currency)}</span>
               </li>
             ))}
           </ul>
@@ -311,6 +311,7 @@ function NewInvoice({ accounts }: { accounts: CurrencyAccount[] }) {
 function InvoiceRow({ inv }: { inv: Invoice }) {
   const qc = useQueryClient()
   const [copied, setCopied] = useState(false)
+  const [asking, setAsking] = useState(false)
   const refresh = () => void qc.invalidateQueries({ queryKey: INVOICES_KEY })
   const send = useMutation({ mutationFn: () => agentBankApi.sendInvoice(inv.id), onSuccess: refresh })
   const voidIt = useMutation({ mutationFn: () => agentBankApi.voidInvoice(inv.id), onSuccess: refresh })
@@ -370,9 +371,27 @@ function InvoiceRow({ inv }: { inv: Invoice }) {
               {send.isPending ? 'Sending…' : 'Send'}
             </Button>
           ) : null}
-          <Button type="button" disabled={busy} onClick={() => voidIt.mutate()}>
-            {voidIt.isPending ? 'Voiding…' : 'Void'}
-          </Button>
+          {asking ? null : (
+            <Button type="button" disabled={busy} onClick={() => setAsking(true)}>
+              Void
+            </Button>
+          )}
+        </div>
+      ) : null}
+      {/* B55.41 — voiding cannot be undone, so it asks first. */}
+      {asking && inv.status !== 'void' ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-body text-ink">
+            Void invoice {inv.number}? {inv.customer_name} can no longer pay it, and this cannot be undone.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" disabled={busy} onClick={() => voidIt.mutate()}>
+              {voidIt.isPending ? 'Voiding…' : 'Void it'}
+            </Button>
+            <Button type="button" disabled={busy} onClick={() => setAsking(false)}>
+              Keep it
+            </Button>
+          </div>
         </div>
       ) : null}
       {send.isError ? <Note ok={false}>{refusalText(send.error)}</Note> : null}

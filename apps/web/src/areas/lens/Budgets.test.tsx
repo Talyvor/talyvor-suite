@@ -5,7 +5,7 @@ import { App, queryClient } from '../../App'
 // B41.39 — /money/budgets: a £100 monthly AI and software budget across every wallet, £80.50 spent, shows its progress and
 // the one alert Lens raised at 80% this period (last period's does not count); saving a budget sends only its fields.
 
-function mockBff(puts: unknown[]) {
+function mockBff(puts: unknown[], refusals: string[] = []) {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -14,7 +14,8 @@ function mockBff(puts: unknown[]) {
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [] })
     if (url === '/api/money/budgets' && init?.method === 'PUT') {
       puts.push(JSON.parse(String(init.body)))
-      return json({})
+      const refusal = refusals.shift()
+      return refusal ? new Response(JSON.stringify({ error: refusal }), { status: 400 }) : json({})
     }
     if (url === '/api/money/budgets') {
       return json({ budgets: [{ id: 'bdg_1', agent_id: 'all', category: 'ai_software', period: 'month', amount_minor: 10_000, currency: 'GBP',
@@ -59,5 +60,24 @@ describe('budgets by category (B41.39)', () => {
     await waitFor(() => expect(puts).toHaveLength(1))
     expect(puts[0]).toEqual({ agent_id: 'all', category: 'travel', period: 'week', amount_minor: 25_000, currency: 'GBP',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
+  })
+
+  // B55.42 — Lens's own sentence names its error prefix and every category id; the screen says what to do instead.
+  it('says a refused budget in words, never Lens’s prefix or a category id', async () => {
+    mockBff([], [
+      'economy: spending: category must be empty (all spending) or one of ai_software, groceries, eating_out',
+      'economy: spending: at most 100 budgets in a workspace',
+      'economy: spending: period must be week or month',
+    ])
+    window.history.pushState({}, '', '/money/budgets')
+    render(<App />)
+    await screen.findByTestId('budget-bdg_1')
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '250' } })
+
+    for (const said of ['Choose a category from the list.', 'A workspace can have at most 100 budgets.', 'Period must be week or month.']) {
+      fireEvent.click(screen.getByRole('button', { name: 'Save budget' }))
+      expect(await screen.findByText(said)).toBeTruthy()
+    }
+    expect(document.body.textContent).not.toMatch(/Spending:|_/)
   })
 })

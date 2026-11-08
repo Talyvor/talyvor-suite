@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CONTACT_EMAIL, Landing, POOLED_DISCOUNT_PERCENT } from './Landing'
 import { LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
-import { ON_ITS_WAY, POSITIONING_SENTENCES } from '../../positioning'
+import { HEY_TALY, ON_ITS_WAY, POSITIONING_SENTENCES } from '../../positioning'
 import { COMPANY_CONTACT } from '../../company'
 
 // Area-owned test — replaces the deleted shared areas/scaffold.test.tsx (the
@@ -121,9 +121,32 @@ describe('Landing', () => {
     const text = container.textContent ?? ''
     for (const s of POSITIONING_SENTENCES) expect(text).toContain(s)
     expect(text).toContain(ON_ITS_WAY)
+    expect(text).toContain(HEY_TALY)
     expect(text).toMatch(/Rooms/)
     expect(text).not.toMatch(/Accounts, cards|accounts in currencies|loans between companies/i)
     expect(text).not.toMatch(/with credit and trading through licensed partners/i)
+  })
+
+  // B56.1: every line on the page is true today (Nick, 1 Nov 2026). Outside a limit Lens refuses, so only a payment
+  // above the approval amount waits; Hey Taly works in Chat on a computer; a company's credit line covers an empty
+  // wallet; Always allow and a mandate move money with no approval.
+  it('says the four true lines and none of the old ones', () => {
+    const { container } = render(<Landing />)
+    const text = container.textContent ?? ''
+    expect(text).toContain('all within limits the owner sets, with any payment above the amount they choose waiting for one tap.')
+    expect(text).toContain(HEY_TALY)
+    expect(HEY_TALY).toBe('Say Hey Taly to talk to Taly while Chat is open on your computer.')
+    expect(ON_ITS_WAY).toBe('Next we’re building payments for everyone, not only businesses.')
+    expect(text).toContain(
+      'refused rather than billed to you, unless your company has a Talyvor credit line, which covers it and bills you once a month.',
+    )
+    expect(text).toContain('A payment above the line you set waits for a person, unless you always allow that payee or a mandate covers it.')
+    expect(text).not.toMatch(/anything outside waiting|Next we.re building Hey Taly|Nothing moves until someone approves it/)
+  })
+
+  it('writes positioning.ts with no em or en dash', () => {
+    const src = readFileSync(resolve(__dirname, '../../positioning.ts'), 'utf8')
+    expect(src).not.toMatch(/[\u2013\u2014]/)
   })
 
   // B29.4: the board's WEBSITE HERO. The pieces a visitor sees, each read from the DOM: the drawn

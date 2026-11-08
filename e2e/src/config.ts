@@ -36,6 +36,11 @@ export interface RunConfig {
    */
   provisionSecret: string
   /**
+   * B52.34 — LENS_CONNECT_MINT_KEY: the BFF's credential for minting Connect tokens, the same value Lens boots with, so the run can
+   * mint one as the BFF does for an assistant; '' leaves connect-pay a SKIP
+   */
+  connectMintKey: string
+  /**
    * B28.287 — the port the synthetic upstream listens on, where the Lens under test sends its vLLM traffic
    * (LENS_VLLM_BASE_URL); 0 leaves keys-not-forwarded a SKIP
    */
@@ -99,6 +104,8 @@ export interface RunConfig {
    * paths, with no explorers, deep pass, hostile pull requests, Talyvor Code or Talyvor Edge.
    */
   light: boolean
+  /** B55.44 — the Pocket problems pass (pocketProblems/): one user for each of the 25 problems, and nothing else the light pass leaves out. */
+  pocket: boolean
   /**
    * B28.294 — the testers' one cap for the day, shared by the nightly and the light passes: a run may spend only what the
    * day's earlier runs in `outDir` left of it (light.ts); undefined leaves the run its own cap alone.
@@ -111,6 +118,9 @@ export interface RunConfig {
 
 /** B28.294 — the light pass's users, one for each of light.ts's journeys (test/light.test.ts holds them equal). */
 export const LIGHT_USERS = 6
+
+/** B55.44 — the Pocket pass's users, one for each of the 25 problems (test/pocketProblems.test.ts holds them equal). */
+export const POCKET_USERS = 25
 
 export const DEFAULTS = {
   users: 100,
@@ -133,7 +143,7 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     const a = argv[i]
     if (!a.startsWith('--')) throw new Error(`unexpected argument ${a}`)
     const [k, inline] = a.slice(2).split('=', 2)
-    if (k === 'headed' || k === 'light') {
+    if (k === 'headed' || k === 'light' || k === 'pocket') {
       flags.set(k, 'true')
       continue
     }
@@ -159,8 +169,11 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     syntheticKey === '' ? 'LENS_SYNTHETIC_KEY in the environment' : '',
   ].filter((m) => m !== '')
   if (missing.length > 0) throw new Error(`missing ${missing.join(', ')}`)
-  const light = flags.get('light') === 'true' || env.E2E_LIGHT === '1'
-  const codeRepo = light ? 'none' : pick('code-repo', 'E2E_CODE_REPO') ?? CODE_REPO
+  const pocket = flags.get('pocket') === 'true' || env.E2E_POCKET === '1'
+  const light = !pocket && (flags.get('light') === 'true' || env.E2E_LIGHT === '1')
+  // B55.44 — the Pocket pass leaves out what the light pass does.
+  const lean = light || pocket
+  const codeRepo = lean ? 'none' : pick('code-repo', 'E2E_CODE_REPO') ?? CODE_REPO
   const dayCap = pick('day-cap-usd', 'E2E_DAY_CAP_USD')
   const nightlyAt = env.E2E_NIGHTLY_AT ?? '03:00'
   dayStart(new Date(), nightlyAt) // an hour that is not HH:MM stops the run here, before anything is spent
@@ -174,9 +187,10 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     webhookSecret: env.LENS_STRIPE_TEST_WEBHOOK_SECRET ?? '',
     operatorReadKey: env.LENS_OPERATOR_READ_KEY ?? '',
     provisionSecret: env.LENS_PROVISION_SECRET ?? '',
+    connectMintKey: env.LENS_CONNECT_MINT_KEY ?? '',
     upstreamPort: Math.floor(num('upstream-port', 'E2E_UPSTREAM_PORT', 0, true)),
     hookTunnel: pick('hook-tunnel', 'E2E_HOOK_TUNNEL') ?? 'cloudflared',
-    users: light ? LIGHT_USERS : Math.floor(num('users', 'E2E_USERS', DEFAULTS.users)),
+    users: pocket ? POCKET_USERS : light ? LIGHT_USERS : Math.floor(num('users', 'E2E_USERS', DEFAULTS.users)),
     concurrency: Math.floor(num('concurrency', 'E2E_CONCURRENCY', DEFAULTS.concurrency)),
     capUSD: num('cap-usd', 'E2E_CAP_USD', DEFAULTS.capUSD),
     model: pick('model', 'E2E_MODEL') ?? DEFAULTS.model,
@@ -185,7 +199,7 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     outDir: pick('out', 'E2E_OUT') ?? DEFAULTS.outDir,
     reportDir: pick('report-dir', 'E2E_REPORT_DIR'),
     buildMd: pick('build-md', 'E2E_BUILD_MD') ?? `${env.HOME ?? ''}/talyvor-queue/BUILD.md`,
-    explorers: light ? 0 : Math.min(10, Math.floor(num('explorers', 'E2E_EXPLORERS', 0, true))),
+    explorers: lean ? 0 : Math.min(10, Math.floor(num('explorers', 'E2E_EXPLORERS', 0, true))),
     exploreMinutes: num('explore-minutes', 'E2E_EXPLORE_MINUTES', DEFAULTS.exploreMinutes),
     explorerModel: pick('explorer-model', 'E2E_EXPLORER_MODEL') ?? DEFAULTS.explorerModel,
     // Unless told where one is, the run keeps its own checkout of Lens, up to its main (coverage.ts).
@@ -197,13 +211,14 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     docsSrc: pick('docs-src', 'E2E_DOCS_SRC') ?? `${pick('out', 'E2E_OUT') ?? DEFAULTS.outDir}/docs-src`,
     docsRepo: pick('docs-src', 'E2E_DOCS_SRC') !== undefined ? undefined : env.E2E_DOCS_REPO ?? DEFAULTS.docsRepo,
     testersMd: pick('testers-md', 'E2E_TESTERS_MD') ?? `${env.HOME ?? ''}/talyvor-queue/TESTERS.md`,
-    edgeRepo: light ? 'none' : pick('edge-repo', 'E2E_EDGE_REPO') ?? EDGE_REPO,
+    edgeRepo: lean ? 'none' : pick('edge-repo', 'E2E_EDGE_REPO') ?? EDGE_REPO,
     codeRepo,
     codeSrc: pick('code-src', 'E2E_CODE_SRC') ?? `${pick('out', 'E2E_OUT') ?? DEFAULTS.outDir}/code-src`,
     codeClone: pick('code-src', 'E2E_CODE_SRC') !== undefined ? undefined : `https://github.com/${codeRepo}.git`,
-    hostilePRs: !light && pick('hostile-prs', 'E2E_HOSTILE_PRS') !== 'none',
-    deepRounds: light ? 0 : Math.floor(num('deep-rounds', 'E2E_DEEP_ROUNDS', 0, true)),
+    hostilePRs: !lean && pick('hostile-prs', 'E2E_HOSTILE_PRS') !== 'none',
+    deepRounds: lean ? 0 : Math.floor(num('deep-rounds', 'E2E_DEEP_ROUNDS', 0, true)),
     light,
+    pocket,
     dayCapUSD: dayCap === undefined ? undefined : num('day-cap-usd', 'E2E_DAY_CAP_USD', 0),
     nightlyAt,
     headed: flags.get('headed') === 'true',

@@ -4,12 +4,12 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Button, Card, CardHeader, Input, NavIcon, type NavIconName, Pill, Row, Switch, cn, focusRing, inlineLink } from '@talyvor/ui'
 import { Region, RegionScreen } from '../../components/Region'
 import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
-import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, PauseEveryAgent, rulesKey } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, PauseEveryAgent, rulesKey, useKeys } from './AgentBank'
 import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText } from './agentBankApi'
 import { Lxc } from './money'
 import { resumeAgent } from './passkeys'
 import { SafeAmount, SafeBreakdown } from './SafeToSpend'
-import { FirstAgent } from './Onboarding'
+import { FirstAgent, NameWorkspace } from './Onboarding'
 import { SharingLine } from './Sharing'
 
 // Home.tsx — B28.6: the first screen after sign-in is the wallet home. It answers, in order:
@@ -212,6 +212,7 @@ function AgentLine({ agent, safe }: { agent: Agent; safe: UseQueryResult<Awaited
   const qc = useQueryClient()
   const [asking, setAsking] = useState(false)
   const running = !agent.paused_at
+  const { hold, onlyThePhone } = useKeys()
   const change = useMutation({
     mutationFn: () => (running ? agentBankApi.pause(agent.id, 'paused from Home') : resumeAgent(agent.id)),
     onSuccess: () => setAsking(false),
@@ -244,7 +245,11 @@ function AgentLine({ agent, safe }: { agent: Agent; safe: UseQueryResult<Awaited
           />
         </span>
       </div>
-      {asking ? (
+      {asking && !running && onlyThePhone ? (
+        <div className="pb-1">
+          <OnThePhone>Resume {agent.name} on your phone with Face ID.</OnThePhone>
+        </div>
+      ) : asking && (running || !hold) ? (
         <div role="group" aria-label={`${running ? 'Pause' : 'Resume'} ${agent.name}?`} className="flex flex-wrap items-center gap-2 pb-1">
           <span className="text-body text-ink">
             {running ? `Pause ${agent.name}? Lens refuses its next request or payment.` : `Resume ${agent.name}?`}
@@ -489,6 +494,7 @@ export function Home() {
           <FirstWallet book={book.data} onStarted={() => setOnboarding(true)} onFinished={() => setOnboarding(false)} />
         ) : (
           <>
+            <NameWorkspace />
             <MorningBriefing />
             <ApprovalsFirst nameOf={nameOf} />
             <Total book={book.data} />

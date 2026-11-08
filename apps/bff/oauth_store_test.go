@@ -67,6 +67,11 @@ func TestOAuthSignInsSurviveARestart(t *testing.T) {
 	if rec := mcpWith(a, at); rec.Code != http.StatusOK {
 		t.Fatalf("after a restart the access token got %d: %s", rec.Code, rec.Body.String())
 	}
+	for _, g := range a.oauth.grants.m {
+		if g.Resource != oauthOrigin+"/mcp" { // B52.2: the audience is read back, not left to the pre-B52.2 fallback
+			t.Fatalf("after a restart the grant is bound to %q", g.Resource)
+		}
+	}
 	if list := serve(a, "GET", "/api/connect/assistants", "", "", nil, ck); list.Code != http.StatusOK || len(jsonOf(t, list)["assistants"].([]any)) != 1 {
 		t.Fatalf("after a restart Settings lists: %d %s", list.Code, list.Body.String())
 	}

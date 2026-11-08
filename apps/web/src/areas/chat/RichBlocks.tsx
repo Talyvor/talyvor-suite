@@ -42,7 +42,14 @@ function lazy<T>(load: () => Promise<T>): () => T | undefined {
 }
 
 const useLowlight = lazy(() => import('lowlight').then(({ common, createLowlight }) => createLowlight(common)))
-const useKatex = lazy(() => import('./katex').then((m) => m.default))
+// A formula waits for KaTeX's own faces as well, so it is never drawn first in a fallback font. A face
+// that fails to load does not hold it back: the formula is then drawn as the browser can.
+const useKatex = lazy(() =>
+  import('./katex').then(async (m) => {
+    await Promise.all(['1em KaTeX_Main', 'italic 1em KaTeX_Math'].map((face) => document.fonts?.load(face))).catch(() => undefined)
+    return m.default
+  }),
+)
 
 /** The few hast shapes lowlight returns. */
 interface Hast {

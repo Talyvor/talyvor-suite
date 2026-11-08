@@ -98,6 +98,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B17.2 — a synthetic test user signs in with the operator key; 404 unless LENS_SYNTHETIC_KEY
 	// is set. See synthetic.go.
 	a.mux.HandleFunc("/auth/synthetic", a.handleSyntheticSignIn)
+	// B57.86 — the same, for the phone app: a Bearer session instead of a cookie.
+	a.mux.HandleFunc("/auth/synthetic/mobile", a.handleSyntheticMobileSignIn)
 
 	// /api/version is one of the TWO /api/ routes with no session gate. It reports which commit this
 	// binary was built from and which bundle it is serving, and it is deliberately readable
@@ -655,6 +657,17 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/rooms/{id}/takeover", a.requireTenant(a.handleRoomTakeover))
 	a.mux.HandleFunc("/api/rooms/{id}/takeover/vote", a.requireTenant(a.handleRoomTakeoverVote))
 	a.mux.HandleFunc("/api/rooms/{id}/fork", a.requireTenant(a.handleRoomForkRoom))
+	a.mux.HandleFunc("/api/rooms/{id}/shared-ownership", a.requireTenant(a.handleRoomSharedOwnership))          // B41.41
+	a.mux.HandleFunc("/api/rooms/{id}/rate-card", a.requireTenant(a.handleRoomRateCard))                        // B41.42
+	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/size", a.requireTenant(a.handleRoomContributionSize)) // B41.42
+	a.mux.HandleFunc("/api/rooms/{id}/points", a.requireTenant(a.handleRoomPoints))                             // B41.43
+	a.mux.HandleFunc("/api/rooms/{id}/leaderboard", a.requireTenant(a.handleRoomLeaderboard))                   // B41.45
+	a.mux.HandleFunc("/api/rooms/{id}/gate", a.requireTenant(a.handleRoomGate))                                 // B41.46
+	a.mux.HandleFunc("/api/rooms/{id}/gate-thresholds", a.requireTenant(a.handleRoomGateThresholds))            // B41.46
+	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/reviews", a.requireTenant(a.handleRoomReviews))       // B41.44
+	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/reviewers", a.requireTenant(a.handleRoomReviewers))   // B41.44
+	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/review", a.requireTenant(a.handleRoomReview))         // B41.44
+	a.mux.HandleFunc("/api/rooms/{id}/agreement", a.requireTenant(a.handleRoomAgreement))                       // B41.50
 	// B55.28 — payout details, the earnings payouts and a room's payout by its terms. See money_earnings.go.
 	a.mux.HandleFunc("/api/money/payout-details", a.requireTenant(a.handleMoneyPayoutDetails))
 	a.mux.HandleFunc("/api/money/earnings-payouts", a.requireTenant(a.handleMoneyEarningsPayouts))
@@ -849,7 +862,9 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Anything added here goes in WITH a reason, and it must carry its own authentication — an
 // Origin exemption is not a pass on authenticating the caller.
 func originExemptPath(path string) bool {
-	return oauthMachinePath(path) || path == mobileSessionPath // the phone app; the ID token is its proof
+	return oauthMachinePath(path) ||
+		path == mobileSessionPath || // the phone app; the ID token is its proof
+		path == syntheticMobilePath // the phone harness; the operator key is its proof, and no cookie is read or set
 }
 
 // sameOriginWriteAllowed is the SINGLE decider. Reads are never gated: applying this to GET
@@ -875,7 +890,9 @@ func (a *app) sameOriginWriteAllowed(r *http.Request) bool {
 	if a.cfg.authMode == authModeDisabled {
 		return true
 	}
-	if originExemptPath(r.URL.Path) {
+	// B50.36 — the phone harness sends no Origin; a page on another site always does, and then the door is gated like any write.
+	origin := r.Header.Get("Origin")
+	if originExemptPath(r.URL.Path) && (r.URL.Path != syntheticMobilePath || origin == "") {
 		return true
 	}
 	// A Bearer session is the phone app's, and it is then the request's only identity
@@ -890,7 +907,7 @@ func (a *app) sameOriginWriteAllowed(r *http.Request) bool {
 	if s := r.Header.Get("Sec-Fetch-Site"); s != "" && s != "same-origin" {
 		return false
 	}
-	return r.Header.Get("Origin") == a.cfg.publicBaseURL
+	return origin == a.cfg.publicBaseURL
 }
 
 // writeJSON emits a small JSON object. Used only for BFF-originated responses (context,
