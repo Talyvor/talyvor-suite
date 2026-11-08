@@ -375,6 +375,10 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPut, path: "/api/rooms/x1/gate-thresholds", body: `{"used_people":150}`},
 		// B41.50 — a member signs the contributor agreement.
 		{method: http.MethodPost, path: "/api/rooms/x1/agreement", body: `{"version":"draft-1","signed_name":"A"}`},
+		// B41.47 — the owner freezes the leaderboard, a member objects, a panelist votes.
+		{method: http.MethodPost, path: "/api/rooms/x1/leaderboard/freeze"},
+		{method: http.MethodPost, path: "/api/rooms/x1/objections", body: `{"contribution_id":"x1","points":-1,"reason":"r"}`},
+		{method: http.MethodPut, path: "/api/rooms/x1/objections/x1/vote", body: `{"uphold":true}`},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},

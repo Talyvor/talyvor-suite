@@ -138,7 +138,7 @@ export interface PointsEntry {
   id: string
   contribution_id: string
   workspace_id: string
-  reason: 'accepted' | 'remix_share' | 'withdrawn' | 'review'
+  reason: 'accepted' | 'remix_share' | 'withdrawn' | 'review' | 'objection'
   size_points: number
   received_usd_micros: number
   quality_bps: number
@@ -234,6 +234,33 @@ export interface RoomAgreement {
   text: string
   text_sha256: string
   signature: AgreementSignature | null
+}
+
+/** Lens rooms.Objection (B41.147): an objection to the points one accepted contribution earned its author. points is the
+ *  change proposed, signed; the panel is the three members Lens drew, each uphold null until it votes. Two votes the same
+ *  way decide it; lapsed is an open one its panel did not decide by decide_by, so the points stand. */
+export interface Objection {
+  id: string
+  contribution_id: string
+  holder_workspace_id: string
+  objector_workspace_id: string
+  points: number
+  reason: string
+  status: 'open' | 'upheld' | 'dismissed' | 'lapsed'
+  raised_at: string
+  decide_by: string
+  decided_at?: string
+  panel: { workspace_id: string; workspace_name: string; uphold: boolean | null; voted_at?: string }[]
+}
+
+/** Lens rooms.Objections (B41.147) — GET /api/rooms/{id}/objections, behind the same room_equity gate as the points ledger.
+ *  frozen_at and objections_close_at are null until the owner freezes the leaderboard; rules are Lens's published rules. */
+export interface RoomObjections {
+  room_id: string
+  frozen_at: string | null
+  objections_close_at: string | null
+  rules: string
+  objections: Objection[]
 }
 
 /** Lens rooms.Usage — what this workspace's plan lets it open, beside what it has open. -1 is unlimited. */
@@ -632,6 +659,14 @@ export const roomsApi = {
     getJSON<RoomAgreement>(`/api/rooms/${e(id)}/agreement`, { version: 'string', text: 'string', text_sha256: 'string' }),
   signAgreement: (id: string, version: string, signedName: string) =>
     post<RoomAgreement>(`/api/rooms/${e(id)}/agreement`, { version, signed_name: signedName }),
+  // B41.47 — objections to the frozen leaderboard, decided by three members Lens draws at random.
+  objections: (id: string) =>
+    getJSON<RoomObjections>(`/api/rooms/${e(id)}/objections`, { rules: 'string', objections: 'list' }),
+  freezeLeaderboard: (id: string) => post<RoomObjections>(`/api/rooms/${e(id)}/leaderboard/freeze`, {}),
+  raiseObjection: (id: string, contributionID: string, points: number, reason: string) =>
+    post<Objection>(`/api/rooms/${e(id)}/objections`, { contribution_id: contributionID, points, reason }),
+  voteObjection: (id: string, oid: string, uphold: boolean) =>
+    post<Objection>(`/api/rooms/${e(id)}/objections/${e(oid)}/vote`, { uphold }, 'PUT'),
   // B41.44 — two reviewers Lens draws at random score a contribution's quality.
   reviews: (id: string, cid: string) =>
     getJSON<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/reviews`, { quality_bps: 'number', reviews: 'list' }),

@@ -54,6 +54,7 @@ import { roomReviews } from './roomReviews.ts'
 import { roomRateCard } from './roomRateCard.ts'
 import { roomSharedOwnership } from './roomSharedOwnership.ts'
 import { roomTakeover } from './roomTakeover.ts'
+import { roomObjections } from './roomObjections.ts'
 import { roomMessages } from './roomMessages.ts'
 import { roomContributions } from './roomContributions.ts'
 import { roomWallet } from './roomWallet.ts'
@@ -5359,6 +5360,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.44 — a contribution's reviewers, once a run, on a Free workspace of its own: Lens seats two plain members, never the
   // author even when it names itself, the author's own score is refused, and quality is the median of the two scores.
   if (i === 4) list.push(roomReviews(i))
+  // B41.47 — objections to the frozen leaderboard, once a run, on a Free workspace of its own: an objection is 409 before
+  // the freeze and while Lens cannot seat three members linked to neither side, then its panel is exactly the three plain
+  // members, never one sharing the author's card, and two votes to uphold write an objection row changing the author's points.
+  if (i === 4) list.push(roomObjections(i))
   // B32.83 — a room's messages, once a run, on a Team workspace of its own: a post reaches another member's event stream
   // within two seconds, a key in a public room is 422 naming its kind and stored nowhere, an edit and a delete read back
   // as the edit and a tombstone, a private room's messages are 404 to a stranger, and the minute's limit is 429 naming it.

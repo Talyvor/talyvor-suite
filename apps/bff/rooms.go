@@ -814,6 +814,68 @@ func (a *app) handleRoomAgreement(w http.ResponseWriter, r *http.Request, t tena
 	}
 }
 
+// B41.47 — objections to the room's frozen leaderboard (Lens B41.147), behind the same room_equity gate as the points ledger:
+//
+//	POST /api/rooms/{id}/leaderboard/freeze        the owner, once: opens the 14-day objection window
+//	GET  /api/rooms/{id}/objections                {frozen_at, objections_close_at, rules, objections: [{..., panel}]}
+//	POST /api/rooms/{id}/objections                {contribution_id, points, reason}: any member, in the window; Lens draws
+//	                                               three members linked to neither side, 409 if it cannot
+//	PUT  /api/rooms/{id}/objections/{oid}/vote     {uphold}: a drawn panelist; two votes the same way decide it
+var (
+	roomObjectionKeys = map[string][]string{"contribution_id": nil, "points": nil, "reason": nil}
+	roomUpholdKeys    = map[string][]string{"uphold": nil}
+)
+
+// handleRoomLeaderboardFreeze — POST /api/rooms/{id}/leaderboard/freeze.
+func (a *app) handleRoomLeaderboardFreeze(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	path, ok := roomPath(w, r, "/leaderboard/freeze", false)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, nil, "")
+}
+
+// handleRoomObjections — GET the objections; POST {contribution_id, points, reason} raises one.
+func (a *app) handleRoomObjections(w http.ResponseWriter, r *http.Request, t tenant) {
+	path, ok := roomPath(w, r, "/objections", false)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+	case http.MethodPost:
+		body, ok := roomBody(w, r, 4<<10, roomObjectionKeys)
+		if !ok {
+			return
+		}
+		a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, body, "")
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
+	}
+}
+
+// handleRoomObjectionVote — PUT /api/rooms/{id}/objections/{oid}/vote {uphold}.
+func (a *app) handleRoomObjectionVote(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	path, ok := roomSub(w, r, "objections", "oid", "objection id", "/vote")
+	if !ok {
+		return
+	}
+	body, ok := roomBody(w, r, 1<<10, roomUpholdKeys)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+}
+
 // handleRoomInvitePreview — GET /api/room-invites/{token}: what a live link opens; 404 once it is revoked, expired or
 // used up.
 func (a *app) handleRoomInvitePreview(w http.ResponseWriter, r *http.Request, t tenant) {

@@ -193,6 +193,20 @@
 //
 // A workspace that has not signed earns no points row; withdrawals still take points back. STUB_BREAK=room-agreement-unsigned
 // counts its points anyway — a defect room-points must FAIL on.
+//
+// B41.147 — and objections to the frozen leaderboard, as room-objections makes them, behind the same gate:
+//
+//   POST /v1/rooms/{id}/leaderboard/freeze        the owner, once: a 14-day objection window
+//   GET  /v1/rooms/{id}/objections                to a member: {frozen_at, objections_close_at, rules, objections}
+//   POST /v1/rooms/{id}/objections                {contribution_id, points, reason}: in the window, once each, never the
+//                                                 author or one linked to it; three plain members linked neither to the
+//                                                 objector, the author nor each other (a shared card, from the Bank's trust
+//                                                 desk) are drawn at random, or 409
+//   PUT  /v1/rooms/{id}/objections/{o}/vote       {uphold}: a panelist; two votes the same way decide it, and upheld it
+//                                                 writes an objection row
+//
+// STUB_BREAK=room-objection-linked draws the panel ignoring shared cards; room-objection-unwritten upholds an objection
+// without writing its row — defects room-objections must FAIL on.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, randomBytes } from 'node:crypto'
@@ -267,6 +281,8 @@ interface RoomWallets {
   open(ws: string, agentID: string, name: string): void; balance(agentID: string): number
   use(u: { listing_id: string; seller: string; buyer: string; agent_id: string; price_ulxc: number }): RoomUse; billed(agentID: string): number
   prize(u: { listing_id: string; version: number; seller: string; buyer: string; agent_id: string; price_ulxc: number; title: string }): { use: RoomUse; licence: { id: string } }
+  /** B41.147 — whether two workspaces share a card, as the trust desk recorded it. */
+  linked?(a: string, b: string): boolean
 }
 const noBank = (): never => { throw new Error('stub rooms: no Bank to bill a run or a prize on') }
 let wallets: RoomWallets = { open: () => undefined, balance: () => 0, use: noBank, billed: () => 0, prize: noBank }
@@ -318,6 +334,11 @@ const signed = (r: Room, ws: string) => BREAK === 'room-agreement-unsigned' || (
 const gateThresholds = new Map<string, Record<string, number>>()
 /** B41.144 — each contribution's reviewer seats, in the order they were drawn. */
 const reviewSeats = new Map<string, { ws: string; score: number | null }[]>()
+/** B41.147 — each room's leaderboard freeze, and its objections, oldest first. */
+const freezes = new Map<string, { frozen_at: string; objections_close_at: string }>()
+interface StubObjection { id: string; contribution_id: string; holder_workspace_id: string; objector_workspace_id: string; points: number; reason: string
+  status: string; raised_at: string; decide_by: string; decided_at?: string; panel: { workspace_id: string; workspace_name: string; uphold: boolean | null }[] }
+const objectionsOf = new Map<string, StubObjection[]>()
 let cursor = 0
 
 function post(roomID: string, ws: string, body: string, kind = 'text', refs: Record<string, unknown> = {}, agent?: RoomAgent): Msg {
@@ -600,7 +621,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
     return true
   }
   if (await settingsOutsideRoom(req, res, p, ws)) return true
-  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points|leaderboard|gate|agreement)/.exec(p)
+  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points|leaderboard|gate|agreement|objections)/.exec(p)
   if (one === null) return false
   const r = rooms.get(decodeURIComponent(one[1]))
   if (r === undefined || (r.visibility === 'private' && !r.members.some((m) => m.workspace_id === ws))) {
@@ -620,6 +641,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
   if (await roomGate(req, res, p, ws, r)) return true
   if (await roomReviews(req, res, p, ws, r)) return true
   if (await roomAgreement(req, res, p, ws, r)) return true
+  if (await roomObjections(req, res, p, ws, r)) return true
   if (one[2] === undefined && req.method === 'GET') return json(res, 200, detail(r, ws)), true
   if (one[2] === '/join' && req.method === 'POST') {
     if (r.banned.includes(ws)) return json(res, 403, bannedFrom), true
@@ -892,7 +914,77 @@ function roomLeaderboard(req: IncomingMessage, res: ServerResponse, p: string, w
   const rows = [...held].map(([workspace_id, points]) => ({ workspace_id, workspace_name: workspace_id, points, identity_checked: false, share_bps: 0 }))
     .sort((a, b) => b.points - a.points || a.workspace_id.localeCompare(b.workspace_id))
   if (BREAK === 'room-leaderboard-holder') rows.pop()
-  return json(res, 200, { room_id: r.id, enabled: true, pool_bps: 2500, total_points: 0, rows, note: 'Nothing is final until the Gate.', notice: '' }), true
+  const f = freezes.get(r.id)
+  return json(res, 200, { room_id: r.id, enabled: true, pool_bps: 2500, total_points: 0, rows, frozen_at: f?.frozen_at ?? null,
+    objections_close_at: f?.objections_close_at ?? null, note: 'Nothing is final until the Gate.', notice: '' }), true
+}
+
+/** B41.147 — freezing a room's leaderboard, its objections, raising one and voting on it; false when `p` is none of these. */
+async function roomObjections(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  const m = new RegExp(`^/v1/rooms/${r.id}/(?:(leaderboard/freeze)|objections(?:/([^/]+)/vote)?)$`).exec(p)
+  if (m === null) return false
+  if (!r.members.some((x) => x.workspace_id === ws)) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const list = objectionsOf.get(r.id) ?? []
+  objectionsOf.set(r.id, list)
+  const read = () => ({ room_id: r.id, frozen_at: freezes.get(r.id)?.frozen_at ?? null, objections_close_at: freezes.get(r.id)?.objections_close_at ?? null,
+    rules: 'Objections are raised within 14 days of the leaderboard freezing. Two votes the same way decide it.', objections: list })
+  const linked = (a: string, b: string) => a === b || (wallets.linked?.(a, b) ?? false)
+  if (m[1] !== undefined && req.method === 'POST') {
+    if (r.owner_workspace_id !== ws) return json(res, 403, { error: "rooms: not allowed: only the room's owner freezes its leaderboard" }), true
+    if (freezes.has(r.id)) return json(res, 409, { error: 'rooms: conflict: the leaderboard is already frozen' }), true
+    const now = Date.now()
+    freezes.set(r.id, { frozen_at: new Date(now).toISOString(), objections_close_at: new Date(now + 14 * 86_400_000).toISOString() })
+    return json(res, 200, read()), true
+  }
+  if (m[1] === undefined && m[2] === undefined && req.method === 'GET') return json(res, 200, read()), true
+  if (m[1] === undefined && m[2] === undefined && req.method === 'POST') {
+    const d = await body(req)
+    const f = freezes.get(r.id)
+    if (f === undefined || Date.parse(f.objections_close_at) <= Date.now()) {
+      return json(res, 409, { error: 'rooms: conflict: objections are raised in the 14 days after the leaderboard freezes' }), true
+    }
+    const c = (contributions.get(r.id) ?? []).find((x) => x.id === d.contribution_id)
+    if (c === undefined || c.status !== 'accepted') return json(res, 409, { error: 'rooms: conflict: objections are about the points accepted contributions earned' }), true
+    const parties = [c.author_workspace_id, ...list.filter((o) => o.contribution_id === c.id).map((o) => o.objector_workspace_id)]
+    if (parties.some((x) => linked(x, ws))) {
+      return json(res, 409, { error: 'rooms: conflict: objections come from members linked neither to the author nor to anyone who already objected to these points' }), true
+    }
+    const change = Number(d.points)
+    const held = (pointsLedger.get(r.id) ?? []).filter((x) => x.contribution_id === c.id && x.workspace_id === c.author_workspace_id).reduce((a, x) => a + x.points, 0)
+    if (!Number.isInteger(change) || change === 0 || held + change < 0 || held + change > Math.floor(((c.points ?? 0) * 15_000) / 10_000)) {
+      return json(res, 400, { error: `rooms: invalid request: the change leaves the author between 0 and ${Math.floor(((c.points ?? 0) * 15_000) / 10_000)} points for this contribution; it holds ${held}` }), true
+    }
+    const apart = [ws, c.author_workspace_id]
+    for (const x of r.members.filter((x) => x.role === 'member').map((x) => x.workspace_id).sort(() => Math.random() - 0.5)) {
+      if (apart.length < 5 && !apart.some((a) => BREAK === 'room-objection-linked' ? a === x : linked(a, x))) apart.push(x)
+    }
+    if (apart.length < 5) return json(res, 409, { error: 'rooms: conflict: the room needs 3 members linked neither to you, the author nor each other to hear an objection' }), true
+    const o: StubObjection = { id: 'robj_' + randomBytes(8).toString('hex'), contribution_id: c.id, holder_workspace_id: c.author_workspace_id,
+      objector_workspace_id: ws, points: change, reason: String(d.reason ?? '').trim(), status: 'open', raised_at: new Date().toISOString(),
+      decide_by: new Date(Date.now() + 14 * 86_400_000).toISOString(), panel: apart.slice(2).map((x) => ({ workspace_id: x, workspace_name: x, uphold: null })) }
+    list.push(o)
+    return json(res, 201, o), true
+  }
+  if (m[2] !== undefined && req.method === 'PUT') {
+    const o = list.find((x) => x.id === decodeURIComponent(m[2]))
+    if (o === undefined) return json(res, 404, { error: 'rooms: not found: no such objection' }), true
+    if (o.status !== 'open') return json(res, 409, { error: `rooms: conflict: the objection is ${o.status}` }), true
+    const seat = o.panel.find((x) => x.workspace_id === ws)
+    if (seat === undefined) return json(res, 403, { error: 'rooms: not allowed: only the members Lens drew to decide the objection vote on it' }), true
+    seat.uphold = (await body(req)).uphold === true
+    const votes = (v: boolean) => o.panel.filter((x) => x.uphold === v).length
+    if (votes(true) >= 2 || votes(false) >= 2) {
+      o.status = votes(true) >= 2 ? 'upheld' : 'dismissed'
+      o.decided_at = new Date().toISOString()
+      if (o.status === 'upheld' && BREAK !== 'room-objection-unwritten') {
+        pointsLedger.get(r.id)?.push({ id: 'rpts_' + randomBytes(8).toString('hex'), contribution_id: o.contribution_id, workspace_id: o.holder_workspace_id,
+          reason: 'objection', size_points: 0, received_usd_micros: 0, quality_bps: 10_000, survival_bps: 10_000, remix_share_bps: 0, points: o.points,
+          created_at: o.decided_at })
+      }
+    }
+    return json(res, 200, o), true
+  }
+  return false
 }
 
 /** B41.146 — GET a room's Gate tracker, or PUT its thresholds; false when `p` is neither. */

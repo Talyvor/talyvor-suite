@@ -25,6 +25,7 @@ import { RoomAgreement } from './RoomAgreement'
 import { RoomGate } from './RoomGate'
 import { RoomLead } from './RoomLead'
 import { RoomLeaderboard } from './RoomLeaderboard'
+import { RoomObjections } from './RoomObjections'
 import { RoomPoints, pointsKey } from './RoomPoints'
 import { ContributionSize, RoomRateCard } from './RoomRateCard'
 import { ContributionReviews } from './RoomReviews'
@@ -43,7 +44,8 @@ import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 // each accepted contribution earned (RoomPoints.tsx). B41.44: two reviewers drawn at random score a contribution's quality
 // (RoomReviews.tsx). B41.45: the provisional leaderboard, each holder's points and estimated share of the pool
 // (RoomLeaderboard.tsx). B41.46: the Gate tracker, shipped, used and paid, with thresholds that only rise (RoomGate.tsx).
-// B41.50: the contributor agreement, e-signed before the member's points count (RoomAgreement.tsx).
+// B41.50: the contributor agreement, e-signed before the member's points count (RoomAgreement.tsx). B41.47: objections to
+// the frozen leaderboard, decided by three members Lens draws at random (RoomObjections.tsx).
 //
 // Lens decides everything — who may post, contribute, vote, accept and spend — and its sentence is shown on a refusal.
 
@@ -685,6 +687,7 @@ export function RoomLive({ room }: { room: RoomDetail }) {
       <RoomLeaderboard room={room} />
       <RoomGate room={room} />
       <RoomAgreement room={room} />
+      <RoomObjections room={room} />
     </>
   )
 }

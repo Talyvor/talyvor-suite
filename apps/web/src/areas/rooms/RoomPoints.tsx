@@ -25,6 +25,8 @@ function working(e: PointsEntry): string {
       return `${percent(e.remix_share_bps)} of a fork’s ${points(earned)} points`
     case 'withdrawn':
       return 'Taken back: rejected after it was accepted'
+    case 'objection':
+      return 'Changed by an upheld objection'
     case 'review':
       return `Reviewed it: the score, ${times(e.quality_bps)}, agreed with the decision`
   }
