@@ -26,10 +26,6 @@ function mockBff() {
   const invites = [
     { id: 'rinv_1', room_id: 'room_1', kind: 'link', max_uses: 10, uses: 2, expires_at: '2026-10-14T09:00:00Z', live: true,
       created_by_workspace_id: ME, created_at: '2026-10-07T09:00:00Z' } as Record<string, unknown>,
-    { id: 'rinv_2', room_id: 'room_1', kind: 'named', workspace_id: OTHER, workspace_name: NAMES[OTHER], max_uses: 1, uses: 0, live: true,
-      created_by_workspace_id: ME, created_at: '2026-10-07T09:00:00Z' } as Record<string, unknown>,
-    { id: 'rinv_3', room_id: 'room_1', kind: 'named', workspace_id: 'ws_new', max_uses: 1, uses: 0, live: true,
-      created_by_workspace_id: ME, created_at: '2026-10-07T09:00:00Z' } as Record<string, unknown>,
   ]
   const prizes = [
     { id: 'rprz_1', room_id: 'room_1', poster_workspace_id: ME, title: 'Best pricing prompt', criteria: 'Wins the most deals',
@@ -116,7 +112,7 @@ function mockBff() {
     }
     return new Response('null', { status: 404 })
   })
-  return { sent }
+  return { sent, invites }
 }
 
 afterEach(() => {
@@ -222,7 +218,11 @@ describe('room settings', () => {
 
   // B55.35 — members and named invites read by their workspace's name, never its id.
   it('shows members and invites by name', async () => {
-    mockBff()
+    const named = { room_id: 'room_1', kind: 'named', max_uses: 1, uses: 0, live: true, created_by_workspace_id: ME, created_at: '2026-10-07T09:00:00Z' }
+    mockBff().invites.push(
+      { ...named, id: 'rinv_2', workspace_id: OTHER, workspace_name: NAMES[OTHER] },
+      { ...named, id: 'rinv_3', workspace_id: 'ws_new' }, // never a member: Lens does not name it
+    )
     window.history.pushState({}, '', '/rooms/room_1/settings')
     render(<App />)
     const invites = await screen.findByRole('list', { name: 'Invites' })

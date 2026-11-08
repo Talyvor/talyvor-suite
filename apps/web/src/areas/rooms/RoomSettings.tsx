@@ -48,13 +48,11 @@ const prizesKey = (id: string) => [...ROOMS_KEY, 'prizes', id]
 
 const roomHref = (id: string) => `/rooms/${encodeURIComponent(id)}`
 
-function Who({ ws, me }: { ws: string; me: string }) {
-  return ws === me ? (
+function Who({ m, me }: { m: Member; me: string }) {
+  return m.workspace_id === me ? (
     <span className="text-ink">You</span>
   ) : (
-    <span className="inline-block max-w-xs truncate align-bottom font-figure text-ink" title={ws}>
-      {ws}
-    </span>
+    <span className="inline-block max-w-xs truncate align-bottom text-ink">{m.workspace_name}</span>
   )
 }
 
@@ -66,12 +64,12 @@ function MemberRow({ room, m, me }: { room: RoomDetail; m: Member; me: string })
     mutationFn: (c: MemberChange) => roomsApi.changeMember(room.id, m.workspace_id, c),
     onSuccess: () => qc.invalidateQueries({ queryKey: roomKey(room.id) }),
   })
-  const name = m.workspace_id === me ? 'you' : m.workspace_id
+  const name = m.workspace_id === me ? 'you' : m.workspace_name
   return (
     <li>
       <Row
         stack
-        label={<Who ws={m.workspace_id} me={me} />}
+        label={<Who m={m} me={me} />}
         hint={
           m.role === 'owner'
             ? 'Owner — opened the room and spends its money'
@@ -96,7 +94,7 @@ function MemberRow({ room, m, me }: { room: RoomDetail; m: Member; me: string })
               ))}
             </select>
             <Button
-              aria-label={`${m.workspace_id === me ? 'You' : m.workspace_id} may spend the room’s money`}
+              aria-label={`${m.workspace_id === me ? 'You' : m.workspace_name} may spend the room’s money`}
               aria-pressed={m.may_spend}
               className={pressed}
               disabled={change.isPending}
@@ -155,7 +153,7 @@ function HandOver({ room, me }: { room: RoomDetail; me: string }) {
             <option value="">Choose…</option>
             {eligible.map((m) => (
               <option key={m.workspace_id} value={m.workspace_id}>
-                {m.workspace_id}
+                {m.workspace_name}
               </option>
             ))}
           </select>
@@ -229,7 +227,7 @@ function InviteRow({ room, i }: { room: RoomDetail; i: Invite }) {
         label={
           i.kind === 'named' ? (
             <>
-              For <span className="font-figure">{i.workspace_id}</span>
+              For {i.workspace_name ?? 'a workspace that has not joined yet'}
             </>
           ) : (
             <>
