@@ -174,7 +174,8 @@ CONTROLS = [
         [("apps/web/src/glyphAudit.ts", "  'Bricolage Grotesque': 'display',\n", "  'Bricolage Grotesque': 'sans',\n", 1)],
         web_test("src/glyphAudit.test.tsx", "src/figureAudit.test.tsx"),
         r"Pocket’s characters",
-        r"✓ src/figureAudit\.test\.tsx",
+        # vitest prints no ✓ line per passing file any more; the summary says the companion held.
+        r"Test Files\s+1 failed \| 1 passed",
     ),
     Control(
         "P2-pocket-command-key-served",
@@ -183,7 +184,8 @@ CONTROLS = [
           "  if (cp === 0x2318) return 'served'\n  if (declaring.length === 0) return 'undeclared'\n", 1)],
         web_test("src/glyphAudit.test.tsx", "src/figureAudit.test.tsx"),
         r"U\+2318|served by neither",
-        r"✓ src/figureAudit\.test\.tsx",
+        # vitest prints no ✓ line per passing file any more; the summary says the companion held.
+        r"Test Files\s+1 failed \| 1 passed",
     ),
 ]
 
