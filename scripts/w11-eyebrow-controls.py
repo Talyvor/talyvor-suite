@@ -203,6 +203,32 @@ CONTROLS = [
                 'report is silent either way. Recorded as a documented gap; the source rule is '
                 'the backstop that still speaks if a real defect lands.',
     ),
+    # ── B57.3: THE SAME DEFECTS, PLANTED IN POCKET'S RULE ──────────────────────────────────────
+    # Run them alone with `python3 scripts/w11-eyebrow-controls.py P`.
+    Control(
+        'P1 Pocket: today\'s 11px eyebrow is let onto a Pocket page',
+        'apps/web/src/eyebrowAudit.ts',
+        "    if ((el.getAttribute('class') ?? '').split(/\\s+/).includes(EYEBROW_CLASS)) return 'shape'\n",
+        '',
+        red='eyebrow-test', green='resting',
+        predict='CAUGHT by the Pocket fixtures in eyebrowAudit.test.tsx',
+    ),
+    Control(
+        'P2 Pocket: an eyebrow off Figtree passes',
+        'apps/web/src/eyebrowAudit.ts',
+        "    return onFigtree(el) ? null : 'face'",
+        '    return null',
+        red='eyebrow-test', green='resting',
+        predict='CAUGHT by the mono and display fixtures',
+    ),
+    Control(
+        'P3 Pocket: a Pocket eyebrow without uppercase passes',
+        'apps/web/src/eyebrowAudit.ts',
+        "    if (transform !== 'uppercase') return 'transform'\n",
+        '',
+        red='eyebrow-test', green='resting',
+        predict='CAUGHT: the same defect as C1, in Pocket\'s rule',
+    ),
 ]
 
 

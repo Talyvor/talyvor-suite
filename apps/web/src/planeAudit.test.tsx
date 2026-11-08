@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { AA_BODY, NavItem, ROLES_ON_PLANE, TEXT_PLANES, TEXT_ROLES, ratio, worstRatio } from '@talyvor/ui'
+import { AA_BODY, NavItem, POCKET_ROLES_ON_PLANE, ROLES_ON_PLANE, TEXT_PLANES, TEXT_ROLES, ratio, worstRatio } from '@talyvor/ui'
 import {
   DEFAULT_PLANE,
   DEFAULT_ROLE,
@@ -50,6 +50,13 @@ describe('the instrument, before it measures anything', () => {
     expect(DEFAULT_PLANE).toBe('canvas')
   })
 })
+
+// Built detached: the running audit watches `document`, and these fixtures are offenders on purpose.
+function dom(html: string): HTMLElement {
+  const el = document.createElement('div')
+  el.innerHTML = html
+  return el
+}
 
 describe('judge — the predicate, both directions', () => {
   it('passes a permitted pair that clears the floor', () => {
@@ -196,5 +203,60 @@ describe('the classification is a closed set', () => {
       expect(roles.length, `${plane} permits nothing`).toBeGreaterThan(0)
       for (const r of roles) expect(TEXT_ROLES).toContain(r)
     }
+  })
+})
+
+// B57.3 — on a page held to Pocket's rules, text is scored on Pocket's planes with Pocket's roles
+// (today's names resolve to the Pocket value they alias), and a card is cloud on the page, or
+// white with its shadow, as pocket.css draws them (.card, .card.white).
+describe('Pocket: text on Pocket’s planes, and a card is cloud on the page or white with its shadow', () => {
+  const pocket = (html: string) => dom(`<div data-design="pocket">${html}</div>`)
+  const reasons = (html: string) => planeOffendersIn(pocket(html)).map((o) => o.reason)
+
+  it('every pair Pocket permits clears AA body in both themes', () => {
+    for (const [plane, roles] of Object.entries(POCKET_ROLES_ON_PLANE)) {
+      for (const role of roles) expect(worstRatio(role, plane as never), `${role} on ${plane}`).toBeGreaterThanOrEqual(AA_BODY)
+    }
+  })
+
+  it('a cloud card on the page is clean', () => {
+    expect(reasons('<section class="rounded-card bg-cloud p-5"><p class="text-ink-2">Safe to spend</p></section>')).toEqual([])
+  })
+
+  it('a white card with its shadow is clean', () => {
+    expect(reasons('<section class="rounded-card bg-page shadow-pocket p-5"><p class="text-ink">Research</p></section>')).toEqual([])
+  })
+
+  it('a white card without its shadow is an offender', () => {
+    expect(reasons('<section class="rounded-card bg-page p-5"><p>Research</p></section>')).toEqual(['card'])
+  })
+
+  it('today’s raised card is a white card without its shadow, so it is an offender', () => {
+    expect(reasons('<section class="rounded-card bg-raised p-5"><p>Research</p></section>')).toEqual(['card'])
+  })
+
+  it('a cloud card on a cloud card is an offender: cloud sits on the page', () => {
+    expect(reasons('<div class="bg-cloud"><section class="rounded-card-tight bg-cloud"><p>Research</p></section></div>')).toEqual(['card'])
+  })
+
+  it('a card with no plane of its own is an offender', () => {
+    expect(reasons('<section class="rounded-card p-5"><p>Research</p></section>')).toEqual(['card'])
+  })
+
+  it('a role Pocket does not permit on the plane is refused: the primary fill carries only on-primary', () => {
+    expect(reasons('<button class="bg-primary text-ink-3">Approve</button>')).toEqual(['refused'])
+    expect(reasons('<button class="bg-primary text-on-primary">Approve</button>')).toEqual([])
+  })
+
+  it('tangerine is never text, so it is no role at all', () => {
+    expect(reasons('<p class="text-tangerine">Your move</p>')).toEqual(['refused'])
+  })
+
+  it('today’s names are scored as the Pocket value they alias', () => {
+    expect(reasons('<p class="bg-sidebar text-muted">Agents</p>')).toEqual([])
+  })
+
+  it('outside a Pocket page today’s raised card is still clean', () => {
+    expect(planeOffendersIn(dom('<section class="rounded-card bg-raised p-5"><p>Research</p></section>'))).toEqual([])
   })
 })

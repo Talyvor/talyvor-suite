@@ -174,6 +174,8 @@ const preset = {
         // µ (U+00B5) to Greek capital Mu, and µLENS/µLXC sit inside these labels. It is applied
         // at the call site, where MuNumeral can keep its µ in a `normal-case` span.
         eyebrow: ['0.6875rem', { lineHeight: '1.2', letterSpacing: '0.24em', fontWeight: '400' }], // 11px
+        // B57.3 — Pocket's eyebrow (pocket.css .eyebrow): 12px Figtree at .04em, uppercase at the call site.
+        'pocket-eyebrow': ['0.75rem', { lineHeight: '1.3', letterSpacing: '0.04em', fontWeight: '600' }],
 
         // ── DISPLAY: the marketing scale ──────────────────────────────────────────────────────
         //
@@ -238,7 +240,8 @@ const preset = {
       borderColor: { DEFAULT: 'var(--rule)' },
       // Pocket's: cards 24 and 18, inputs 14 (control), the sheet 28, pills for buttons and chips.
       borderRadius: { card: '24px', 'card-tight': '18px', control: '14px', sheet: '28px', pill: '9999px' },
-      boxShadow: { pocket: 'var(--shadow)', 'pocket-lg': 'var(--shadow-lg)' },
+      // `edge` is Pocket's 1.5px control edge on every field (pocket.css .input), 3:1 on the page.
+      boxShadow: { pocket: 'var(--shadow)', 'pocket-lg': 'var(--shadow-lg)', edge: 'inset 0 0 0 1.5px var(--control)' },
       spacing: { gutter: '16px', row: '38px' },
       // `below-header` — the viewport under the console's sticky header (`top-12`, a 32px control +
       // py-2). B10.3's chat fills exactly that, so its composer sits at the bottom of the screen.

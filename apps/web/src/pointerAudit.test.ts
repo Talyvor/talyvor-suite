@@ -205,7 +205,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'placeholder={k.key_prefix}',
     why: 'the site that passes a placeholder THROUGH a component, the whole argument for reading the DOM',
   },
-  'apps/web/src/motion.test.tsx:154|packages/ui/src/preset.ts:223': {
+  'apps/web/src/motion.test.tsx:154|packages/ui/src/preset.ts:225': {
     kind: 'LIVE',
     fragment: 'active:scale-[0.98]',
     why: 'the comment that writes the press one way, half of the pair the motion lock exists to keep apart',
@@ -265,7 +265,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'font-figure text-eyebrow uppercase text-label',
     why: 'the uppercase label whose µ arrives as a prop from 130 lines away — the reason the rule cannot be a source rule',
   },
-  'apps/web/src/test-setup.ts:208|packages/ui/src/components/CaseSafe.tsx:85': {
+  'apps/web/src/test-setup.ts:209|packages/ui/src/components/CaseSafe.tsx:85': {
     kind: 'LIVE',
     fragment: 'normal-case',
     why: 'a DEVELOPER-FACING FAILURE MESSAGE naming the shape to copy — read exactly when somebody is already confused',
@@ -401,7 +401,7 @@ const PINS: Record<string, Pin> = {
     fragment: '!body.url',
     why: 'the reason a 200 with no url is NOT the finding — it is already converted, so the gate lets it through',
   },
-  'apps/web/src/checkoutRefusalSurface.test.tsx:59|apps/web/src/App.tsx:107': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:59|apps/web/src/App.tsx:108': {
     kind: 'LIVE',
     fragment: 'onError',
     why: 'the app\'s only global error handler, quoted to show it hangs off the QUERY cache and cannot see a mutation',

@@ -1,9 +1,12 @@
 import {
   AA_BODY,
+  POCKET_ROLES_ON_PLANE,
   ROLES_ON_PLANE,
   isTextPlane,
   isTextRole,
   permits,
+  pocketName,
+  pocketPermits,
   ratio,
   worstRatio,
   type TextPlane,
@@ -12,6 +15,7 @@ import {
 
 import { ownText } from './figureAudit'
 import { onCommit } from './auditScope'
+import { inPocket } from './pocketPending'
 
 /**
  * EVERY LINE OF TEXT IS SCORED AGAINST THE PLANE IT ACTUALLY LANDS ON, on every surface.
@@ -66,7 +70,7 @@ export interface PlaneOffender {
   role: string
   plane: string
   /** 'unclassified' | 'refused' | 'below-floor' */
-  reason: 'unclassified' | 'refused' | 'below-floor'
+  reason: 'unclassified' | 'refused' | 'below-floor' | 'card'
   light: number | null
   dark: number | null
   text: string
@@ -89,12 +93,14 @@ function bareUtilities(el: Element): string[] {
 }
 
 /** The nearest ancestor-or-self declaration of `prefix-<token>`, unprefixed by any variant. */
-function nearestToken(el: Element | null, prefix: 'text' | 'bg'): { token: string; from: Element } | null {
+function nearestToken(el: Element | null, prefix: 'text' | 'bg', pocket = false): { token: string; from: Element } | null {
   for (let e: Element | null = el; e; e = e.parentElement) {
     for (const c of bareUtilities(e)) {
       if (!c.startsWith(`${prefix}-`)) continue
       const token = c.slice(prefix.length + 1)
-      if (prefix === 'text' ? isTextRole(token) : isTextPlane(token) || token in ROLES_ON_PLANE) {
+      // B57.3 — on a Pocket page Pocket's names are roles too (ink-2, ink-3, tangerine, on-primary…).
+      const role = isTextRole(token) || (pocket && pocketName(token) !== null)
+      if (prefix === 'text' ? role : isTextPlane(token) || token in ROLES_ON_PLANE) {
         return { token, from: e }
       }
       // A `bg-` utility naming something that is NOT a classified plane still ENDS the walk: it is
@@ -109,7 +115,7 @@ function nearestToken(el: Element | null, prefix: 'text' | 'bg'): { token: strin
 }
 
 export function roleOf(el: Element): { token: string; from: Element | null } {
-  const found = nearestToken(el, 'text')
+  const found = nearestToken(el, 'text', inPocket(el))
   return found ?? { token: DEFAULT_ROLE, from: null }
 }
 
@@ -139,14 +145,67 @@ export function judge(role: string, plane: string): Omit<PlaneOffender, 'text' |
 }
 
 /** Every element under `root` whose text does not clear its plane. */
+/**
+ * B57.3 — THE SAME QUESTION ON A PAGE HELD TO POCKET'S RULES (pocketPending.ts), asked of Pocket's
+ * table: today's names are scored as the Pocket value they alias, so a screen keeps its classes
+ * until it is redrawn and is still measured honestly.
+ */
+export function judgePocket(role: string, plane: string): Omit<PlaneOffender, 'text' | 'tag' | 'className' | 'planeFrom'> | null {
+  const r = pocketName(role)
+  const p = pocketName(plane)
+  if (!p || !(p in POCKET_ROLES_ON_PLANE)) return { role, plane, reason: 'unclassified', light: null, dark: null }
+  const light = r ? ratio('light', r, p) : null
+  const dark = r ? ratio('dark', r, p) : null
+  if (!r || !pocketPermits(p, r)) return { role, plane, reason: 'refused', light, dark }
+  if (worstRatio(r, p) < AA_BODY) return { role, plane, reason: 'below-floor', light, dark }
+  return null
+}
+
+/**
+ * B57.3 — A CARD IS CLOUD ON THE PAGE, OR WHITE WITH ITS SHADOW, as pocket.css draws .card and
+ * .card.white. A card is what wears Pocket's card corners (`rounded-card`, `rounded-card-tight`).
+ * Today's `bg-raised` is the page without the shadow, so it is not one.
+ */
+export function isPocketCard(el: Element): boolean {
+  const own = bareUtilities(el).find((c) => c.startsWith('bg-'))?.slice(3)
+  const plane = own ? pocketName(own) : null
+  if (plane === 'cloud') return pocketName(el.parentElement ? planeOf(el.parentElement).token : DEFAULT_PLANE) === 'page'
+  if (plane === 'page') return bareUtilities(el).includes('shadow-pocket')
+  return false
+}
+
+function isCard(el: Element): boolean {
+  const cls = bareUtilities(el)
+  return cls.includes('rounded-card') || cls.includes('rounded-card-tight')
+}
+
+/** The card offender for `el`, or null. Only asked on a Pocket page. */
+function cardVerdict(el: Element): PlaneOffender | null {
+  if (!isCard(el) || isPocketCard(el)) return null
+  return {
+    role: '(a card)',
+    plane: bareUtilities(el).find((c) => c.startsWith('bg-'))?.slice(3) ?? '(none of its own)',
+    reason: 'card',
+    light: null,
+    dark: null,
+    text: ownText(el).trim(),
+    tag: el.tagName.toLowerCase(),
+    className: el.getAttribute('class') ?? '',
+    planeFrom: (el.parentElement && planeOf(el.parentElement).from?.getAttribute('class')) || '(body)',
+  }
+}
+
 export function planeOffendersIn(root: ParentNode): PlaneOffender[] {
   const out: PlaneOffender[] = []
   for (const el of Array.from(root.querySelectorAll('*'))) {
+    const pocket = inPocket(el)
+    const card = pocket ? cardVerdict(el) : null
+    if (card) out.push(card)
     const text = ownText(el).trim()
     if (text === '') continue
     const role = roleOf(el)
     const plane = planeOf(el)
-    const verdict = judge(role.token, plane.token)
+    const verdict = (pocket ? judgePocket : judge)(role.token, plane.token)
     if (!verdict) continue
     out.push({
       ...verdict,
@@ -175,6 +234,15 @@ let currentFile = ''
 
 function scan(scope: ParentNode): void {
   for (const el of Array.from(scope.querySelectorAll('*'))) {
+    const pocket = inPocket(el)
+    const card = pocket ? cardVerdict(el) : null
+    if (card) {
+      const key = `${currentFile}|card|${el.tagName}|${card.className}|${card.text}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        offenders.push(card)
+      }
+    }
     const text = ownText(el).trim()
     if (text === '') continue
     const role = roleOf(el)
@@ -183,7 +251,7 @@ function scan(scope: ParentNode): void {
     if (plane.from) {
       explicitPlaneByFile.set(currentFile, (explicitPlaneByFile.get(currentFile) ?? 0) + 1)
     }
-    const verdict = judge(role.token, plane.token)
+    const verdict = (pocket ? judgePocket : judge)(role.token, plane.token)
     if (!verdict) continue
     const key = `${currentFile}|${role.token}|${plane.token}|${el.tagName}|${el.getAttribute('class') ?? ''}|${text}`
     if (seen.has(key)) continue

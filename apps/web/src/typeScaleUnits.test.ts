@@ -92,6 +92,8 @@ const CONSOLE_STEPS_PX: Record<string, number> = {
   caption: 12,
   micro: 12.5,
   eyebrow: 11,
+  // B57.3 — Pocket's eyebrow, new at 12px (pocket.css .eyebrow); rem from the start.
+  'pocket-eyebrow': 12,
 }
 
 /**

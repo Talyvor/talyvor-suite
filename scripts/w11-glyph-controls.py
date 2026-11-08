@@ -167,6 +167,24 @@ CONTROLS = [
         r"arriving from data|borrows an exemption",
         r"✓ [^\n]*the two tables name different characters",
     ),
+    # ── B57.3: THE SAME DEFECT, ASKED OF POCKET'S FACES. Run alone: `w11-glyph-controls.py pocket`.
+    Control(
+        "P1-pocket-display-face-unread",
+        "Bricolage Grotesque read as the sans: the display face's cmap is never asked, so a glyph it lacks would pass",
+        [("apps/web/src/glyphAudit.ts", "  'Bricolage Grotesque': 'display',\n", "  'Bricolage Grotesque': 'sans',\n", 1)],
+        web_test("src/glyphAudit.test.tsx", "src/figureAudit.test.tsx"),
+        r"Pocket’s characters",
+        r"✓ src/figureAudit\.test\.tsx",
+    ),
+    Control(
+        "P2-pocket-command-key-served",
+        "⌘ treated as served by every face: a ⌘K hint in text would pass with no glyph to draw it",
+        [("apps/web/src/glyphAudit.ts", "  if (declaring.length === 0) return 'undeclared'\n",
+          "  if (cp === 0x2318) return 'served'\n  if (declaring.length === 0) return 'undeclared'\n", 1)],
+        web_test("src/glyphAudit.test.tsx", "src/figureAudit.test.tsx"),
+        r"U\+2318|served by neither",
+        r"✓ src/figureAudit\.test\.tsx",
+    ),
 ]
 
 

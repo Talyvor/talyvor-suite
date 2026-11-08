@@ -1,5 +1,5 @@
 import { contrastRatio } from './lib/contrast'
-import { tokens, type TokenName } from './tokens'
+import { aliases, pocket, tokens, type PocketName, type TokenName } from './tokens'
 
 /**
  * THE PLANES TEXT LANDS ON, AND WHICH ROLES MAY LAND ON EACH.
@@ -102,6 +102,35 @@ export const ROLES_ON_PLANE = {
 } as const satisfies Record<string, readonly TextRole[]>
 
 export type TextPlane = keyof typeof ROLES_ON_PLANE
+
+/**
+ * B57.3 — Pocket's planes and the roles permitted on each, for pages held to Pocket's rules
+ * (apps/web/src/pocketPending.ts). Text is ink, ink-2 or ink-3; tangerine-ink is the one orange
+ * that carries words; success and danger are status words; on-primary is the label on the ink
+ * fill. Tangerine and the agent colours are never text, so they are no role. Every pair clears AA
+ * body in both themes (planeAudit.test.tsx). Today's names are scored as the value they alias.
+ */
+export const POCKET_ROLES_ON_PLANE = {
+  page: ['ink', 'ink-2', 'ink-3', 'tangerine-ink', 'success', 'danger'],
+  cloud: ['ink', 'ink-2', 'ink-3', 'tangerine-ink', 'success', 'danger'],
+  'cloud-2': ['ink', 'ink-2', 'ink-3', 'tangerine-ink', 'success', 'danger'],
+  'tangerine-50': ['ink', 'ink-2', 'tangerine-ink'],
+  'success-50': ['ink', 'success'],
+  'danger-50': ['ink', 'danger'],
+  primary: ['on-primary'],
+} as const satisfies Partial<Record<PocketName, readonly PocketName[]>>
+
+export type PocketPlane = keyof typeof POCKET_ROLES_ON_PLANE
+
+/** A Pocket name for a token: itself, or the Pocket value today's name aliases. */
+export function pocketName(name: string): PocketName | null {
+  if (name in pocket.light) return name as PocketName
+  return (aliases as Record<string, PocketName>)[name] ?? null
+}
+
+export function pocketPermits(plane: string, role: string): boolean {
+  return ((POCKET_ROLES_ON_PLANE as Record<string, readonly string[]>)[plane] ?? []).includes(role)
+}
 
 export const TEXT_PLANES = Object.keys(ROLES_ON_PLANE) as TextPlane[]
 

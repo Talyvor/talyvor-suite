@@ -455,3 +455,27 @@ describe('the classification is honest in both directions', () => {
     expect(stripComments('// never write → here').includes('→')).toBe(false)
   })
 })
+
+// B57.3 — Pocket's characters, asked of the woff2 files Pocket ships (Figtree for the UI,
+// Bricolage Grotesque for headings and large money), read from their own cmaps. ⌘ is in no
+// served face, so a ⌘K hint drawn in text is still reported: a missing glyph still fails.
+describe('Pocket’s characters, from the new faces’ cmaps', () => {
+  it.each(['·', '›', '−', '…'])('%s is served by Figtree and Bricolage Grotesque', (ch) => {
+    expect(coverage('sans', ch.codePointAt(0)!)).toBe('served')
+    expect(coverage('display', ch.codePointAt(0)!)).toBe('served')
+  })
+
+  it('⌘ is served by neither, and the audit reports it where it is drawn', () => {
+    expect(coverage('sans', 0x2318)).toBe('undeclared')
+    expect(coverage('display', 0x2318)).toBe('undeclared')
+    const host = document.createElement('div')
+    host.innerHTML = '<span class="text-ink-3">⌘K</span>'
+    expect(unservedGlyphsIn(host).map((g) => g.codePoint)).toEqual(['U+2318'])
+  })
+
+  it('the faces read are Pocket’s: Figtree is the sans and Bricolage Grotesque the display', () => {
+    const declared = (family: string) => [...new Set(servedFaces().filter((f) => f.family === family).map((f) => f.declared))]
+    expect(declared('sans')).toEqual(['Figtree'])
+    expect(declared('display')).toEqual(['Bricolage Grotesque'])
+  })
+})
