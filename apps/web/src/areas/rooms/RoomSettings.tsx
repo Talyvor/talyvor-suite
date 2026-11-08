@@ -48,11 +48,17 @@ const prizesKey = (id: string) => [...ROOMS_KEY, 'prizes', id]
 
 const roomHref = (id: string) => `/rooms/${encodeURIComponent(id)}`
 
-function Who({ m, me }: { m: Member; me: string }) {
-  return m.workspace_id === me ? (
+/** A member's name. A name is its workspace's own choice, so one two members share carries the end of each id. */
+function memberName(m: Member, members: Member[]): string {
+  const shared = members.some((o) => o.workspace_id !== m.workspace_id && o.workspace_name === m.workspace_name)
+  return shared ? `${m.workspace_name} · ${m.workspace_id.replace(/^ws_/, '').slice(-8)}` : m.workspace_name
+}
+
+function Who({ ws, name, me }: { ws: string; name: string; me: string }) {
+  return ws === me ? (
     <span className="text-ink">You</span>
   ) : (
-    <span className="inline-block max-w-xs truncate align-bottom text-ink">{m.workspace_name}</span>
+    <span className="inline-block max-w-xs truncate align-bottom text-ink">{name}</span>
   )
 }
 
@@ -64,12 +70,13 @@ function MemberRow({ room, m, me }: { room: RoomDetail; m: Member; me: string })
     mutationFn: (c: MemberChange) => roomsApi.changeMember(room.id, m.workspace_id, c),
     onSuccess: () => qc.invalidateQueries({ queryKey: roomKey(room.id) }),
   })
-  const name = m.workspace_id === me ? 'you' : m.workspace_name
+  const named = memberName(m, room.members ?? [])
+  const name = m.workspace_id === me ? 'you' : named
   return (
     <li>
       <Row
         stack
-        label={<Who m={m} me={me} />}
+        label={<Who ws={m.workspace_id} name={named} me={me} />}
         hint={
           m.role === 'owner'
             ? 'Owner — opened the room and spends its money'
@@ -94,7 +101,7 @@ function MemberRow({ room, m, me }: { room: RoomDetail; m: Member; me: string })
               ))}
             </select>
             <Button
-              aria-label={`${m.workspace_id === me ? 'You' : m.workspace_name} may spend the room’s money`}
+              aria-label={`${m.workspace_id === me ? 'You' : named} may spend the room’s money`}
               aria-pressed={m.may_spend}
               className={pressed}
               disabled={change.isPending}
@@ -153,7 +160,7 @@ function HandOver({ room, me }: { room: RoomDetail; me: string }) {
             <option value="">Choose…</option>
             {eligible.map((m) => (
               <option key={m.workspace_id} value={m.workspace_id}>
-                {m.workspace_name}
+                {memberName(m, room.members ?? [])}
               </option>
             ))}
           </select>

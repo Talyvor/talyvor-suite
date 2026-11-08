@@ -112,7 +112,7 @@ function mockBff() {
     }
     return new Response('null', { status: 404 })
   })
-  return { sent, invites }
+  return { sent, invites, members }
 }
 
 afterEach(() => {
@@ -233,5 +233,17 @@ describe('room settings', () => {
     expect(within(members).getByText('Ana’s studio')).toBeTruthy()
     expect(within(screen.getByLabelText('New owner')).getByRole('option', { name: 'Ana’s studio' })).toBeTruthy()
     expect(document.body.textContent).not.toMatch(/ws_other|ws_new/)
+  })
+
+  // B55.35 — a name is the workspace's own choice, so two members of one name are told apart where the owner hands over
+  // the room or lets a member spend.
+  it('tells two members of the same name apart', async () => {
+    const bff = mockBff()
+    bff.members.push({ workspace_id: 'ws_copycat', workspace_name: NAMES[OTHER], role: 'member', may_spend: false, terms_version: 1, terms_current: true, joined_at: '2026-10-03T09:00:00Z' })
+    window.history.pushState({}, '', '/rooms/room_1/settings')
+    render(<App />)
+    const owner = await screen.findByLabelText('New owner')
+    expect(within(owner).getAllByRole('option').map((o) => o.textContent)).toEqual(['Choose…', 'Ana’s studio · other', 'Ana’s studio · copycat'])
+    expect(screen.getByRole('button', { name: 'Ana’s studio · copycat may spend the room’s money' })).toBeTruthy()
   })
 })
