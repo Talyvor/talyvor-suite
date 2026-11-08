@@ -77,6 +77,16 @@ export interface ListingVersion {
   artifact?: Record<string, unknown>;
   scan?: ListingScan;
   parents?: ListingParent[] | null;
+  /** B41.193 — every model it calls (a pipeline's steps' too), the tools it uses and the data it keeps. */
+  privacy?: ListingPrivacy;
+}
+
+/** Lens market.Privacy — a version's privacy label, read from its own artifact. */
+export interface ListingPrivacy {
+  models: string[];
+  tools: string[];
+  keeps: string[];
+  keeps_nothing: boolean;
 }
 
 /** Lens market.Listing. */

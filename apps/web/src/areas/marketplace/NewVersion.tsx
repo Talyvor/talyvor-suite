@@ -7,16 +7,18 @@ import { CATALOG_KEY, Card, MINE_KEY, Note } from './parts'
 
 // NewVersion.tsx — B28.162: the seller uploads a new version of their listing, with a changelog saying what changed.
 // Lens adds it as the next version and keeps every earlier one as it was, so a use or a licence pinned to an earlier
-// version still runs that one. It opens on the latest version's artifact; the model and the parents carry over.
+// version still runs that one. It opens on the latest version's artifact; the model and the parents carry over, and so
+// do the tools it uses and the data it keeps, which its privacy label reads (B41.93).
 
 export function NewVersion({ listing, latest }: { listing: Listing; latest: ListingVersion }) {
   const qc = useQueryClient()
   const artifact = latest.artifact ?? {}
   const model = typeof artifact.model === 'string' ? artifact.model : ''
+  const label = Object.fromEntries((['tools', 'keeps'] as const).flatMap((f) => (f in artifact ? [[f, artifact[f]]] : [])))
   const [body, setBody] = useState(() => bodyOf(listing.kind, artifact))
   const [changelog, setChangelog] = useState('')
   const publish = useMutation({
-    mutationFn: () => marketApi.publishVersion(listing.id, artifactOf(listing.kind, body, model), changelog.trim()),
+    mutationFn: () => marketApi.publishVersion(listing.id, { ...artifactOf(listing.kind, body, model), ...label }, changelog.trim()),
     onSuccess: () => {
       setChangelog('')
       void qc.invalidateQueries({ queryKey: ['market-listing', listing.id] })
