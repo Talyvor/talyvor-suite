@@ -877,6 +877,11 @@ export class Bank {
   }
 
   /** B32.85 — what one agent holds, as its postings sum. */
+  /** B41.147 — whether two workspaces share a card, as the trust desk recorded it (a room's objection panel is drawn apart). */
+  cardLinked(a: string, b: string): boolean {
+    return this.trustDesk.linked(a, b)
+  }
+
   agentBalance(agentID: string): number {
     return this.balance(`agent:${agentID}`)
   }
