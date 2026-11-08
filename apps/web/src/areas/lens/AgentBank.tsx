@@ -9,7 +9,7 @@ import { isSessionExpired } from '../../lib/productState'
 import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
-import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
+import { letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
 import { AgentAnalytics } from './AgentAnalytics'
 import { AlertChannels } from './AlertChannels'
 import { AgentCardPanel } from './AgentCardPanel'
@@ -33,6 +33,7 @@ import {
   type ApprovalPayee,
   type AgentBook,
   type AgentKey,
+  type KeyEnrolment,
   type AgentRules,
   type AgentRulesVersion,
   type AgentRuleBoost,
@@ -2336,16 +2337,47 @@ export function deviceText(err: unknown, fallback: string): string {
 /**
  * B19.10 — the phone half: a passkey made here signs every approval from now on, and this device can
  * be told when one is filed. Lens keeps both (B19.16); nothing is kept in the browser but the passkey.
+ * B55.3: with only the phone's key, a passkey made here waits until the phone lets it in (Lens B55.1).
  */
-function FaceID({ signed, hold, passkeyCount }: { signed: boolean; hold: boolean; passkeyCount: number }) {
+function FaceID({ signed, ready, passkeyCount }: { signed: boolean; ready: boolean; passkeyCount: number }) {
   const qc = useQueryClient()
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
+  const [waiting, setWaiting] = useState<{ id: string; code: string } | null>(null)
   const register = useMutation({
     mutationFn: () => registerThisDevice(navigator.userAgent.includes('iPhone') ? 'iPhone' : 'This device'),
-    onSuccess: () => setSaid({ ok: true, text: 'This device now signs approvals. Face ID asks each time you approve or deny.' }),
+    onSuccess: (enrolment) => {
+      if (enrolment) {
+        setSaid(null)
+        setWaiting(enrolment)
+      } else setSaid({ ok: true, text: 'This device now signs approvals. Face ID asks each time you approve or deny.' })
+    },
     onError: (err) => setSaid({ ok: false, text: deviceText(err, 'No passkey was made.') }),
     onSettled: () => qc.invalidateQueries({ queryKey: PASSKEYS_KEY }),
   })
+  // Asked every 3 seconds while the phone decides; Lens expires the enrolment after 10 minutes, and so does this.
+  const poll = useQuery({
+    queryKey: ['key-enrolment', waiting?.id],
+    queryFn: () => agentBankApi.enrolment(waiting!.id),
+    enabled: waiting !== null,
+    refetchInterval: 3000,
+  })
+  const status = waiting ? poll.data?.status : undefined
+  useEffect(() => {
+    if (!waiting) return
+    const end = (added: boolean) => {
+      setWaiting(null)
+      setSaid(
+        added
+          ? { ok: true, text: 'This browser now signs approvals. Face ID, Touch ID or this device’s PIN asks each time you approve or decline.' }
+          : { ok: false, text: 'This browser was not added. Nothing changed.' },
+      )
+      if (added) qc.invalidateQueries({ queryKey: PASSKEYS_KEY })
+    }
+    if (status === 'approved') return end(true)
+    if (status === 'declined' || status === 'expired') return end(false)
+    const timer = setTimeout(() => end(false), 10 * 60_000)
+    return () => clearTimeout(timer)
+  }, [waiting, status, qc])
   const notify = useMutation({
     mutationFn: notifyThisDevice,
     onSuccess: () => setSaid({ ok: true, text: 'This device is told when an agent asks for approval.' }),
@@ -2362,13 +2394,17 @@ function FaceID({ signed, hold, passkeyCount }: { signed: boolean; hold: boolean
             ? `Approvals are signed with a passkey (${passkeyCount} registered). Nothing is approved without one.`
             : 'Approvals are not signed yet. Make a passkey on your phone and every approval asks for Face ID.'}
         </p>
-        {said ? <Note ok={said.ok}>{said.text}</Note> : null}
+        {waiting ? (
+          <Note ok>Waiting for your phone. Open Talyvor on your phone and let this browser in. The code there should be <span className="font-figure">{waiting.code}</span>.</Note>
+        ) : said ? (
+          <Note ok={said.ok}>{said.text}</Note>
+        ) : null}
+        {passkeyCount > 0 ? <WaitingPhones /> : null}
         <div className="flex flex-col gap-2 wide:flex-row">
-          {/* B55.2 — with only the phone's key Lens refuses a passkey made here unsigned; adding this browser is B55.3. */}
           {!passkeysSupported() ? (
             <p className="text-caption text-muted">This browser cannot make a passkey.</p>
-          ) : hold ? null : (
-            <Button className="h-12 wide:h-8" disabled={register.isPending} onClick={() => register.mutate()}>
+          ) : !ready ? null : (
+            <Button className="h-12 wide:h-8" disabled={register.isPending || waiting !== null} onClick={() => register.mutate()}>
               {signed ? 'Add this device' : 'Approve with Face ID from now on'}
             </Button>
           )}
@@ -2428,6 +2464,50 @@ function PreparedRow({ r, nameOf }: { r: PaymentRequest; nameOf: (id: string) =>
         <Link to={`/approve/${encodeURIComponent(r.id)}`}>Review</Link>
       </Button>
     </Row>
+  )
+}
+
+const ENROLMENTS_KEY = ['key-enrolments']
+
+/**
+ * B55.3 — a phone waiting to approve payments too (Lens B55.1), let in by this browser's passkey signing its enrolment
+ * challenge. Lens lets only an owner or admin read them, so for anyone else the list fails and nothing shows.
+ */
+function WaitingPhones() {
+  const qc = useQueryClient()
+  const list = useQuery({ queryKey: ENROLMENTS_KEY, queryFn: agentBankApi.enrolments, refetchInterval: 3000 })
+  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
+  const decide = useMutation({
+    mutationFn: async ({ en, letIn }: { en: KeyEnrolment; letIn: boolean }) => {
+      await (letIn ? letInKey(en.id) : agentBankApi.declineEnrolment(en.id))
+    },
+    onSuccess: (_, { en, letIn }) => setSaid({ ok: true, text: letIn ? `${en.name} can approve now.` : `${en.name} was not added. Nothing changed.` }),
+    onError: (err, { en }) => setSaid({ ok: false, text: deviceText(err, `${en.name} was not added. Nothing changed.`) }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ENROLMENTS_KEY })
+      qc.invalidateQueries({ queryKey: DEVICES_KEY })
+    },
+  })
+  const phones = (list.data?.enrolments ?? []).filter((en) => en.kind === 'device' && en.status === 'waiting')
+  return (
+    <>
+      {said ? <Note ok={said.ok}>{said.text}</Note> : null}
+      {phones.map((en) => (
+        <div key={en.id} className="flex flex-col gap-2">
+          <p className="text-body text-ink">
+            Your {en.name} asks to approve payments too. Let it in only if you are adding it now and its code is <span className="font-figure">{en.code}</span>.
+          </p>
+          <div className="flex flex-col gap-2 wide:flex-row">
+            <Button variant="primary" className="h-12 wide:h-8" disabled={decide.isPending} onClick={() => decide.mutate({ en, letIn: true })}>
+              Let it approve
+            </Button>
+            <Button className="h-12 wide:h-8" disabled={decide.isPending} onClick={() => decide.mutate({ en, letIn: false })}>
+              Not this one
+            </Button>
+          </div>
+        </div>
+      ))}
+    </>
   )
 }
 
@@ -2569,7 +2649,7 @@ export function Approvals({
     )
   return (
     <div className="flex flex-col gap-3">
-      <FaceID signed={signed} hold={hold} passkeyCount={keys.passkeyCount} />
+      <FaceID signed={signed} ready={keys.isSuccess} passkeyCount={keys.passkeyCount} />
       {outcome ? <Note ok={outcome.ok}>{outcome.text}</Note> : null}
       {list.isError ? (
         <p className="text-body text-muted">{readFailure(list.error, 'The approvals')}</p>

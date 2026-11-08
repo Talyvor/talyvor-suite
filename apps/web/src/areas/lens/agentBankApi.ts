@@ -1133,7 +1133,14 @@ export const agentBankApi = {
   // B55.2 — the phone keys Lens holds for the workspace (revoked ones included): the phone signs approvals too.
   devices: () => getJSON<{ devices: DeviceKey[] | null }>('/api/money/devices', { devices: 'list' }),
   passkeyChallenge: () => send<{ challenge: string; rp_id: string; credential_ids?: string[] | null }>('POST', '/api/agents/passkeys/challenge'),
-  registerPasskey: (body: PasskeyRegistration) => send<Passkey>('POST', '/api/agents/passkeys', body),
+  // B55.3: with a key on the phone alone, Lens keeps an unsigned passkey waiting (202) until the phone lets it in (Lens B55.1).
+  registerPasskey: (body: PasskeyRegistration) => send<Passkey | { enrolment: EnrolmentWaiting }>('POST', '/api/agents/passkeys', body),
+  enrolments: () => getJSON<{ enrolments: KeyEnrolment[] | null }>('/api/agents/keys/enrolments', { enrolments: 'list' }),
+  enrolment: (id: string) => getJSON<KeyEnrolment>(`/api/agents/keys/enrolments/${e(id)}`, { status: 'string' }),
+  enrolmentChallenge: (id: string) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/keys/enrolments/${e(id)}/challenge`),
+  approveEnrolment: (id: string, assertion: PasskeyAssertion) => send<KeyEnrolment>('POST', `/api/agents/keys/enrolments/${e(id)}/approve`, { assertion }),
+  declineEnrolment: (id: string) => send<KeyEnrolment>('POST', `/api/agents/keys/enrolments/${e(id)}/decline`),
   /** B54.34 — approving with always_allow signs that allowance too, so the challenge is asked for with it (Lens B54.29). */
   approvalChallenge: (approvalID: string, alwaysAllow?: PayeeAllowance) =>
     send<{ challenge: string; allow_credentials: string[] | null }>(
@@ -1899,6 +1906,21 @@ export interface DeviceKey {
   platform: string
   name: string
   revoked_at?: string
+}
+
+/** B55.3 — a key registered on one device, waiting for a key on the other to let it in (Lens B55.1). */
+export interface EnrolmentWaiting {
+  id: string
+  code: string
+  expires_at: string
+}
+
+export interface KeyEnrolment extends EnrolmentWaiting {
+  kind: 'passkey' | 'device'
+  name: string
+  platform?: string
+  status: 'waiting' | 'approved' | 'declined' | 'expired'
+  created_at: string
 }
 
 /** A new passkey, as the browser's ceremony gives it — all base64url. */

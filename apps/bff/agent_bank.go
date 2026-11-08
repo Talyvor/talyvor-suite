@@ -800,6 +800,62 @@ func (a *app) handleApprovalChallenge(w http.ResponseWriter, r *http.Request, t 
 	a.agentBankRelay(w, r, t, http.MethodPost, "/agents/approvals/"+url.PathEscape(id)+"/challenge", body)
 }
 
+// B55.3 — a key let in from another device (Lens B55.1). A passkey or phone key registered with no assertion in a workspace
+// that has a key answers 202 {"enrolment": {"id", "code", "expires_at"}} and waits for a key the workspace has to let it in.
+//
+//	GET  /api/agents/keys/enrolments                the keys waiting
+//	GET  /api/agents/keys/enrolments/{id}           one, whatever its status
+//	POST /api/agents/keys/enrolments/{id}/challenge the challenge letting it in is signed over
+//	POST /api/agents/keys/enrolments/{id}/approve   {assertion} by a passkey or phone key the workspace has
+//	POST /api/agents/keys/enrolments/{id}/decline   it can never be let in after
+
+// handleKeyEnrolments — GET /api/agents/keys/enrolments.
+func (a *app) handleKeyEnrolments(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, "/agents/keys/enrolments", nil)
+}
+
+// handleKeyEnrolment — GET /api/agents/keys/enrolments/{id}.
+func (a *app) handleKeyEnrolment(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	if id, ok := pathID(w, "enrolment id", r.PathValue("id")); ok {
+		a.agentBankRelay(w, r, t, http.MethodGet, "/agents/keys/enrolments/"+url.PathEscape(id), nil)
+	}
+}
+
+// handleKeyEnrolmentAction — POST /api/agents/keys/enrolments/{id}/challenge, …/approve and …/decline.
+func (a *app) handleKeyEnrolmentAction(action string) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		id, ok := pathID(w, "enrolment id", r.PathValue("id"))
+		if !ok {
+			return
+		}
+		var body []byte
+		if action == "approve" {
+			var in struct {
+				Assertion *passkeyAssertion `json:"assertion"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil || in.Assertion == nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "letting a key in needs a key the workspace has to sign it"})
+				return
+			}
+			// UPSTREAM-BINDS-ONLY lensKeyEnrolmentApproveBody: none
+			body, _ = json.Marshal(in)
+		}
+		a.agentBankRelay(w, r, t, http.MethodPost, "/agents/keys/enrolments/"+url.PathEscape(id)+"/"+action, body)
+	}
+}
+
 // handlePushPublicKey — GET /api/agents/push/public-key.
 func (a *app) handlePushPublicKey(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodGet {

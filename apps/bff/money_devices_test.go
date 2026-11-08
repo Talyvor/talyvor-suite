@@ -143,3 +143,65 @@ func TestKeyEnrolAssertionReachesLensOnBothRegistrationRoutes(t *testing.T) {
 		}
 	}
 }
+
+// B55.3 — a key waiting to be let in from another device (Lens B55.1): each enrolment route reaches Lens's under the
+// session's workspace, and approve carries the assertion and nothing else; approve with no assertion never reaches Lens.
+func TestKeyEnrolmentRoutesRelayToLens(t *testing.T) {
+	var mu sync.Mutex
+	got := map[string]string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		got[r.Method+" "+r.URL.Path] = string(raw)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"enr_1","status":"waiting"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	assertion := `{"credential_id":"Y3JlZA","client_data_json":"Y2Q","authenticator_data":"YWQ","signature":"c2ln"}`
+	for _, c := range []struct{ method, path, body, lens, sent string }{
+		{http.MethodGet, "/api/agents/keys/enrolments", "", "GET /agents/keys/enrolments", ""},
+		{http.MethodGet, "/api/agents/keys/enrolments/enr_1", "", "GET /agents/keys/enrolments/enr_1", ""},
+		{http.MethodPost, "/api/agents/keys/enrolments/enr_1/challenge", `{}`, "POST /agents/keys/enrolments/enr_1/challenge", ""},
+		{http.MethodPost, "/api/agents/keys/enrolments/enr_1/approve", `{"assertion":` + assertion + `,"extra":"x"}`, "POST /agents/keys/enrolments/enr_1/approve", `{"assertion":` + assertion + `}`},
+		{http.MethodPost, "/api/agents/keys/enrolments/enr_1/decline", `{}`, "POST /agents/keys/enrolments/enr_1/decline", ""},
+	} {
+		if rec := doJSON(a, c.method, c.path, c.body); rec.Code != http.StatusOK {
+			t.Fatalf("%s %s = %d %s", c.method, c.path, rec.Code, rec.Body.String())
+		}
+		mu.Lock()
+		body, found := "", false
+		for p, b := range got {
+			if strings.HasPrefix(c.lens, strings.Fields(p)[0]+" ") && strings.HasSuffix(p, strings.Fields(c.lens)[1]) {
+				body, found = b, true
+			}
+		}
+		mu.Unlock()
+		if !found {
+			t.Fatalf("%s %s never reached Lens's %s; Lens saw %v", c.method, c.path, c.lens, got)
+		}
+		if body != c.sent {
+			t.Errorf("%s %s sent Lens %q, want %q", c.method, c.path, body, c.sent)
+		}
+	}
+
+	mu.Lock()
+	clear(got)
+	mu.Unlock()
+	if rec := doJSON(a, http.MethodPost, "/api/agents/keys/enrolments/enr_1/approve", `{}`); rec.Code != http.StatusBadRequest {
+		t.Errorf("approve with no assertion = %d, want 400", rec.Code)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for p := range got {
+		if p != "POST "+provisionPath {
+			t.Errorf("approve with no assertion reached Lens at %s", p)
+		}
+	}
+}

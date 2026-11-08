@@ -393,6 +393,10 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodDelete, path: "/api/rooms/x1/tasks/x1/claim"},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
+		// B55.3 — a key waiting from another device is let in or turned away.
+		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/challenge", body: `{}`},
+		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/approve", body: `{"assertion":{"credential_id":"c","client_data_json":"j","authenticator_data":"a","signature":"s"}}`},
+		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/decline", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},
 		{method: http.MethodPost, path: "/api/agents/push/subscriptions", body: `{"endpoint":"https://fcm.googleapis.com/fcm/send/x","keys":{"p256dh":"p","auth":"a"}}`},
 		{method: http.MethodDelete, path: "/api/agents/push/subscriptions", body: `{"endpoint":"https://fcm.googleapis.com/fcm/send/x"}`},

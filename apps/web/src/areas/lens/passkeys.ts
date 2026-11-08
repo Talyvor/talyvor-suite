@@ -5,7 +5,7 @@
 // on every approve or deny is signed with it over a challenge Lens issues for that one approval.
 // Pushes arrive through /sw.js, subscribed with the key Lens serves.
 
-import { agentBankApi, type OutsidePayment, type OutsidePaymentRequest, type PasskeyAssertion, type PayeeAllowance, type PayeeDetails } from './agentBankApi'
+import { agentBankApi, type EnrolmentWaiting, type OutsidePayment, type OutsidePaymentRequest, type PasskeyAssertion, type PayeeAllowance, type PayeeDetails } from './agentBankApi'
 
 export function b64u(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
@@ -32,8 +32,11 @@ export function pushSupported(): boolean {
   return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window
 }
 
-/** Makes a passkey on this device and registers it with Lens. */
-export async function registerThisDevice(name: string): Promise<void> {
+/**
+ * Makes a passkey on this device and registers it with Lens. B55.3: when only the phone holds a key nothing here can sign,
+ * so Lens keeps it waiting for the phone to let it in, and that enrolment is returned; null once it is registered.
+ */
+export async function registerThisDevice(name: string): Promise<EnrolmentWaiting | null> {
   const { challenge, rp_id, credential_ids } = await agentBankApi.passkeyChallenge()
   // B50.22: once the workspace has a passkey, one of them signs the new key's own challenge first (Lens B50.20).
   const assertion = (credential_ids ?? []).length > 0 ? await assertOver({ challenge, allow_credentials: credential_ids ?? [] }) : undefined
@@ -54,7 +57,7 @@ export async function registerThisDevice(name: string): Promise<void> {
   if (!spki || res.getPublicKeyAlgorithm() !== -7) {
     throw new Error('This device made a passkey Lens cannot check (it needs ES256).')
   }
-  await agentBankApi.registerPasskey({
+  const registered = await agentBankApi.registerPasskey({
     credential_id: b64u(cred.rawId),
     name,
     public_key: b64u(spki),
@@ -62,6 +65,12 @@ export async function registerThisDevice(name: string): Promise<void> {
     authenticator_data: b64u(res.getAuthenticatorData()),
     ...(assertion ? { assertion } : {}),
   })
+  return 'enrolment' in registered ? registered.enrolment : null
+}
+
+/** B55.3 — lets in a key waiting on another device: a passkey of this workspace signs its enrolment challenge here. */
+export async function letInKey(enrolmentID: string): Promise<void> {
+  await agentBankApi.approveEnrolment(enrolmentID, await assertOver(await agentBankApi.enrolmentChallenge(enrolmentID)))
 }
 
 /** Signs one approval's challenge with a passkey of this workspace — Face ID asks here. With always allow, over that allowance too. */
