@@ -34,7 +34,7 @@ afterEach(() => {
 
 describe('the wallet screens in the brand', () => {
   const SCREENS: Array<[string, string[]]> = [
-    ['/agents', ['Fund']],
+    ['/agents', ['Move LXC']],
     ['/approvals', ['Approve']],
     // B57.24 — Statements' two downloads are Pocket's secondary buttons, as w-stmt-research draws them.
     ['/statements', []],

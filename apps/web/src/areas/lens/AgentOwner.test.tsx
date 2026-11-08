@@ -55,13 +55,16 @@ describe("an agent's owner and verified badge on the Agent Bank", () => {
     render(<App />)
 
     expect((await screen.findByTestId('agent-ownerless')).textContent).toContain('Researcher has no owner, so it cannot be funded')
-    expect(screen.queryByLabelText('Amount in LXC for Researcher')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Move LXC' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Claim Researcher' }))
 
     expect(await screen.findByText('You own Researcher now. Fund it here.')).toBeTruthy()
     expect(within(screen.getByTestId('agent-ownership')).getByText('Verified')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Amount in LXC for Researcher'), { target: { value: '5' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Fund' }))
+    // B57.16 — funding happens in Move LXC.
+    fireEvent.click(screen.getByRole('button', { name: 'Move LXC' }))
+    const move = await screen.findByRole('dialog', { name: 'Move LXC: Researcher' })
+    fireEvent.change(within(move).getByLabelText('Amount in LXC'), { target: { value: '5' } })
+    fireEvent.click(within(move).getByRole('button', { name: 'Fund Researcher' }))
 
     expect(await screen.findByText(/Researcher now holds/)).toBeTruthy()
     expect(sent).toEqual([

@@ -127,6 +127,14 @@ async function createAgent(name: string) {
   await waitFor(() => expect(screen.getByTestId('agent-open')).toHaveTextContent(name))
 }
 
+/** B57.16 — the open agent's Move LXC: the amount typed, then Fund <agent> or Take back. */
+async function moveLxc(name: string, amount: string, press: string) {
+  fireEvent.click(screen.getByRole('button', { name: 'Move LXC' }))
+  const dialog = await screen.findByRole('dialog', { name: `Move LXC: ${name}` })
+  fireEvent.change(within(dialog).getByLabelText('Amount in LXC'), { target: { value: amount } })
+  fireEvent.click(within(dialog).getByRole('button', { name: press }))
+}
+
 describe('Agent Bank', () => {
   // B28.271 — with no agents the screen is one card that creates the first: nothing to pause, forecast,
   // approve, lend or hold shows until the agent exists, and then all of it does.
@@ -172,15 +180,13 @@ describe('Agent Bank', () => {
       render(<App />)
       await screen.findByTestId('agent-first')
       await createAgent('South')
-      fireEvent.change(screen.getByLabelText('Amount in LXC for South'), { target: { value: '1' } })
-      fireEvent.click(screen.getByRole('button', { name: 'Fund' }))
+      await moveLxc('South', '1', 'Fund South')
       await waitFor(() => expect(screen.getByTestId('agent-balance-agt_1')).toHaveTextContent('1 LXC'))
 
       bff.blips.push(502, 'drop')
-      fireEvent.change(screen.getByLabelText('Amount in LXC for South'), { target: { value: '0.25' } })
-      fireEvent.click(screen.getByRole('button', { name: 'Take back' }))
-      await vi.advanceTimersByTimeAsync(4_000) // the card's two retry delays, without waiting them out
-      await waitFor(() => expect(screen.getByText(/South now holds/)).toHaveTextContent('South now holds 0.75 LXC.'))
+      await moveLxc('South', '0.25', 'Take back')
+      await vi.advanceTimersByTimeAsync(4_000) // the dialog's two retry delays, without waiting them out
+      await waitFor(() => expect(screen.getByText(/South now holds/)).toHaveTextContent('South now holds 0.75 LXC'))
       expect(screen.queryByRole('alert')).toBeNull()
       expect(bff.moveKeys).toHaveLength(3)
       expect(bff.moveKeys[0]).not.toBe('')
@@ -199,8 +205,7 @@ describe('Agent Bank', () => {
     await createAgent('Writer')
     await createAgent('Researcher')
 
-    fireEvent.change(screen.getByLabelText('Amount in LXC for Researcher'), { target: { value: '10' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Fund' }))
+    await moveLxc('Researcher', '10', 'Fund Researcher')
     await waitFor(() => expect(screen.getByTestId('agent-balance-agt_2')).toHaveTextContent('10 LXC'))
     expect(screen.getByTestId('agent-bank-totals')).toHaveTextContent('10 LXC with its agents and 90 LXC free to fund them')
 

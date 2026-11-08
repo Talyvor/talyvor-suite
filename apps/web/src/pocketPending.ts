@@ -44,6 +44,9 @@ export const POCKET_PENDING: readonly string[] = [
   '/billing/success',
   '/billing/cancel',
   '/agents',
+  // B57.16 — today's agent view with that agent open, until B57.20 and B57.23 draw the agent's page and its rules.
+  '/agents/:id',
+  '/agents/:id/rules',
   '/marketplace/*',
   '/spend',
   '/members',
