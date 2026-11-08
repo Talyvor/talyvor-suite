@@ -42,7 +42,7 @@ const CHANGED_CARD = {
     plans: {
       free: { agents: 3, seats: 1, own_provider_keys: 'none', live_money: false, slack_teams_approvals: false, sso: false, audit_export: false, edge: false },
       team: { agents: 40, seats: 6, own_provider_keys: 'add_on', live_money: true, slack_teams_approvals: true, sso: false, audit_export: false, edge: false },
-      business: { agents: -1, seats: 30, own_provider_keys: 'included', live_money: true, slack_teams_approvals: true, sso: true, audit_export: true, edge: false },
+      business: { agents: -1, seats: 30, own_provider_keys: 'included', live_money: true, slack_teams_approvals: true, sso: true, audit_export: false, edge: false },
       enterprise: { agents: -1, seats: -1, own_provider_keys: 'included', live_money: true, slack_teams_approvals: true, sso: true, audit_export: true, edge: true },
     },
   },
@@ -108,7 +108,13 @@ describe('/pricing', () => {
     expect(team).toHaveTextContent('Money featuresIncluded as our money partners switch on')
     expect(team).toHaveTextContent('FX margin over the reference rate0.6%')
     expect(team).toHaveTextContent('Slack and Teams approvalsIncluded')
-    expect(team).toHaveTextContent('SSO and audit export—')
+    expect(team).toHaveTextContent('Single sign-on—')
+    expect(team).toHaveTextContent('Audit export—')
+    // B56.2: each gate on its own row, from its own flag. Business serves sign-on without audit export.
+    const business = screen.getByTestId('company-plan-business')
+    expect(business).toHaveTextContent('Single sign-onIncluded')
+    expect(business).toHaveTextContent('Audit export—')
+    expect(screen.queryByText(/SSO and audit export/)).not.toBeInTheDocument()
 
     const free = screen.getByTestId('company-plan-free')
     expect(within(free).getByTestId('price-free')).toHaveTextContent('$0')
@@ -133,7 +139,10 @@ describe('/pricing', () => {
     // B51.1: only what applies today is "Fees on any plan"; the money features sit under the plan table's words for them.
     const fees = screen.getByTestId('fees-any-plan')
     expect(fees).toHaveTextContent('Sellers earn 88%; Talyvor keeps 12%')
-    expect(fees).toHaveTextContent('Services and compute4%')
+    // B56.2: Services and Compute are two rows even when equal, and Services says what it is taken on.
+    expect(fees).toHaveTextContent('Services4% of a payment to another company’s agent')
+    expect(fees).toHaveTextContent('Compute4%')
+    expect(fees).not.toHaveTextContent(/Services and compute/i)
     expect(fees).not.toHaveTextContent(/Loans|International|Agent cards|Accepting payments|FX margin/)
     expect(screen.getByRole('heading', { name: 'Money features, as our money partners switch them on' })).toBeInTheDocument()
     const money = screen.getByTestId('fees-money-features')
@@ -148,12 +157,32 @@ describe('/pricing', () => {
     expect(screen.getAllByRole('heading', { name: /one bill a month/i })).toHaveLength(1)
   })
 
+  // B56.2: a request pays the model's list price plus the plan's platform fee, each plan's rate as served.
+  it('says what a request costs with each plan’s served platform fee on its own line', async () => {
+    serve(CHANGED_CARD)
+    render(<Pricing />)
+    const line = await screen.findByTestId('platform-fee-line')
+    expect(line).toHaveTextContent('Free 6% · Team 3.25% · Business 1.5% · Enterprise agreed')
+    expect(line).toHaveTextContent(/platform fee/i)
+    expect(screen.getByText(/at the list price of the model it calls/)).toHaveTextContent(/plus your plan’s platform fee/)
+  })
+
+  it('says a company’s credit line covers an empty wallet', async () => {
+    serve(CHANGED_CARD)
+    render(<Pricing />)
+    await screen.findByTestId('company-plan-team')
+    expect(screen.getByText(/its next call is refused/)).toHaveTextContent(
+      'when its wallet is empty, its next call is refused rather than billed to you, unless your company has a Talyvor credit line, which covers it and bills you once a month.',
+    )
+  })
+
   it('prints no plan price, gate or fee the server did not state', async () => {
     serve({ min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000] })
     render(<Pricing />)
     expect(await screen.findByText(/what each plan includes could not be read/i)).toBeInTheDocument()
     expect(screen.getByText(/did not state its plans for individuals/i)).toBeInTheDocument()
     expect(screen.getByText(/the fees could not be read/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('platform-fee-line')).not.toBeInTheDocument()
     expect(screen.queryByTestId('pricing-plan-price')).not.toBeInTheDocument()
   })
 
