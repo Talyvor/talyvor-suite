@@ -695,16 +695,20 @@ func mcpAnswer(id json.RawMessage, tool mcpTool, version string, raw []byte) mcp
 // prepared (B55.21), so a paid one is never described as waiting (B55.22). A request Lens does not describe waits.
 func preparedLine(out map[string]any, link, deep string) string {
 	items, _ := out["items"].([]any)
-	paid, waiting := 0, 0
+	paid, waiting, blocked := 0, 0, 0
 	for _, it := range items {
 		switch d, _ := it.(map[string]any); d["decision"] {
 		case "auto":
 			paid++
 		case "needs_approval":
 			waiting++
+		case "blocked":
+			blocked++
 		}
 	}
 	switch {
+	case out["status"] == "auto" && blocked > 0:
+		return fmt.Sprintf("%d paid inside a permission the person signed. %d were blocked: each item says why. See it in Talyvor at %s.", paid, blocked, link)
 	case out["status"] == "auto":
 		return "Paid without asking the person: each payment is inside a permission they signed. See it in Talyvor at " + link + "."
 	case out["status"] == "blocked":
