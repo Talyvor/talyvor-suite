@@ -1,4 +1,5 @@
 import { onCommit } from './auditScope'
+import { inPocket } from './pocketPending'
 
 /**
  * THE RENDERED-FIGURE AUDIT — what the user actually sees, not what the code called it.
@@ -144,6 +145,39 @@ export function onFigureFace(el: Element | null): boolean {
   return false
 }
 
+/**
+ * B57.3 — Pocket's sizes for large money: 28px and larger at every width. `display-2` is 25px on a
+ * phone, so it is not one.
+ */
+export const POCKET_LARGE_MONEY = ['text-figure', 'text-display-1']
+
+/**
+ * POCKET'S FACE, on pages held to Pocket's rules (pocketPending.ts): every numeral is tabular in
+ * Pocket's faces — Figtree (`font-figure`, or the sans with `tabular-nums`), or Bricolage
+ * Grotesque (`font-display`, or a heading) for money drawn 28px and larger with `tabular-nums`.
+ * IBM Plex Mono is not one. Unlike today's rule, the NEAREST face wins, as the cascade does: a
+ * `font-mono` span under a `font-figure` card is drawn in mono.
+ */
+export function onPocketFace(el: Element, kind: FigureKind): boolean {
+  let face: 'figure' | 'sans' | 'display' | 'mono' | null = null
+  let tabular = false
+  let large = false
+  for (let e: Element | null = el; e; e = e.parentElement) {
+    const cls = (e.getAttribute('class') ?? '').split(/\s+/)
+    if (cls.includes('tabular-nums')) tabular = true
+    if (cls.some((c) => POCKET_LARGE_MONEY.includes(c))) large = true
+    if (face) continue
+    if (cls.includes('font-mono')) face = 'mono'
+    else if (cls.includes('font-figure')) face = 'figure'
+    else if (cls.includes('font-display') || /^H[1-4]$/.test(e.tagName)) face = 'display'
+    else if (cls.includes('font-sans')) face = 'sans'
+  }
+  if (face === 'figure') return true
+  if (face === 'mono') return false
+  if (face === 'display') return kind === 'currency' && tabular && large
+  return tabular
+}
+
 /** Every figure rendered under `root`, and whether it landed on the face. */
 export function figuresIn(root: ParentNode): RenderedFigure[] {
   const out: RenderedFigure[] = []
@@ -157,7 +191,7 @@ export function figuresIn(root: ParentNode): RenderedFigure[] {
       text: text.trim(),
       className: el.getAttribute('class') ?? '',
       tag: el.tagName.toLowerCase(),
-      onFace: onFigureFace(el),
+      onFace: inPocket(el) ? onPocketFace(el, kind) : onFigureFace(el),
       kind,
     })
   }

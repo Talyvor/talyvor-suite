@@ -262,12 +262,19 @@ describe('numerals are set in the figure face', () => {
     expect(codeOnly("const s = 'tabular-nums' /* gone */")).toContain('tabular-nums')
   })
 
-  it('no `tabular-nums` survives in code anywhere — the face carries the figures now', () => {
+  // B57.3 — Pocket draws large money in Bricolage Grotesque with tabular figures, so `tabular-nums`
+  // comes back for exactly that: on a line that also sets `font-display`. Anywhere else a figure is
+  // on `font-figure`. figureAudit.ts names the class because it is the rule that recognises it.
+  const TABULAR_RULE = 'apps/web/src/figureAudit.ts'
+  const strayTabular = (code: string) => code.split('\n').some((l) => /\btabular-nums\b/.test(l) && !/\bfont-display\b/.test(l))
+
+  it('no `tabular-nums` survives in code except beside Pocket’s display face — the face carries the figures', () => {
     // ⚠ THE POPULATION IS `productionSources()` AND IT IS GUARDED, which the case below is not a
     // substitute for: that one proves the PREDICATE still matches, this one is only as wide as the
     // walk. See THE TWO CODE SWEEPS' OTHER INPUT at the top of this file.
     const offenders = productionSources()
-      .filter((p) => /\btabular-nums\b/.test(codeOnly(readFileSync(p, 'utf8'))))
+      .filter((p) => !p.endsWith(TABULAR_RULE))
+      .filter((p) => strayTabular(codeOnly(readFileSync(p, 'utf8'))))
       .map((p) => p.slice(p.indexOf('/src/') + 1))
     expect(offenders, `still setting numerals in the old face: ${offenders.join(', ')}`).toEqual([])
   })
@@ -277,6 +284,8 @@ describe('numerals are set in the figure face', () => {
     // does carry the class in code. If this ever stops failing, the sweep above is
     // reporting "clean" for a reason that has nothing to do with the codebase.
     expect(/\btabular-nums\b/.test(codeOnly('<span className="tabular-nums" />'))).toBe(true)
+    expect(strayTabular('<span className="tabular-nums" />')).toBe(true)
+    expect(strayTabular('<span className="font-display text-figure tabular-nums" />')).toBe(false)
   })
 })
 

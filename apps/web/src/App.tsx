@@ -94,6 +94,7 @@ import { ScreenBoundary } from './components/ScreenBoundary'
 import { type DocRef, pageHref, useDocsNav } from './areas/docs/docsNav'
 import { useAuthMeReader } from './lib/authMe'
 import { useSidebarFold } from './sidebarFold'
+import { designOf } from './pocketPending'
 
 // App.tsx is a SHARED file (see README §Directory ownership): it owns routing
 // and the nav for every area. Area work happens inside src/areas/<area>/ —
@@ -717,6 +718,31 @@ function AppShell() {
 }
 
 /**
+ * B57.3 — the public pages' paths, exactly as the `<Route path>`s in App() below declare them
+ * (pocketPending.test.tsx reads that block and fails if the two differ).
+ */
+const PUBLIC_PATHS = [
+  '/marketing/*', '/pricing', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms', '/signup', '/signin',
+  '/board/:token', '/share/:token', '/pay/:token', '/docs/s/:token',
+]
+
+/** Every path the app routes, public and console, and the retired /earnings address. */
+export const ROUTE_PATHS: readonly string[] = [...PUBLIC_PATHS, ...CONSOLE_ROUTES.map((r) => r.path), '/earnings']
+
+/**
+ * B57.3 — every page says which design it is held to, `data-design="pocket"` or "today", from
+ * pocketPending.ts. The audits read it. `display: contents`, so it draws nothing.
+ */
+function DesignScope({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation()
+  return (
+    <div className="contents" data-design={designOf(pathname, ROUTE_PATHS)}>
+      {children}
+    </div>
+  )
+}
+
+/**
  * ⚠ THE ONE THING A REAL NAVIGATION DID FOR FREE, AND CLIENT-SIDE ROUTING DOES NOT.
  *
  * A browser puts a newly loaded document at the top. Replacing page loads with in-app
@@ -763,47 +789,49 @@ export function App() {
         <ScrollToTopOnPush />
         {/* B44.2 — the cookie banner and Meta pixel; it renders nothing off the public pages. */}
         <MetaPixel />
-        <Routes>
-          {/* Public marketing landing — OUTSIDE the AuthGate by design. */}
-          <Route path="/marketing/*" element={<Landing />} />
-          {/* B5.2 — the price list, public for the same reason: a buyer reads it before signing up. */}
-          <Route path="/pricing" element={<Pricing />} />
-          {/* B27.31 — what the product does, each claim linked to its screen. Public for the same
-              reason as the price list. Not /docs: that is the Docs product, behind the gate. */}
-          <Route path={DOCUMENTATION_PATH} element={<Documentation />} />
-          {/* B40.20 — the Claude connector's page, which Claude's directory links to. Public for the same reason. */}
-          <Route path={CLAUDE_CONNECTOR_PATH} element={<ClaudeConnector />} />
-          {/* Legal pages are public for the same reason: someone deciding whether to sign up must
-              be able to read what the service does with their data BEFORE creating an account.
-              Putting these behind the gate would mean you had to agree in order to read. */}
-          <Route path="/privacy" element={<Privacy />} />
-          <Route path="/terms" element={<Terms />} />
-          {/* The two front doors, also OUTSIDE the gate — a signup page you must already be
-              signed in to read is not a signup page. Same mechanism (/auth/login), different
-              words: see areas/auth/Entry.tsx. */}
-          <Route path="/signup" element={<SignUp />} />
-          <Route path="/signin" element={<SignIn />} />
-          {/* B27.30 — a Track board its workspace published as a link, read by anyone holding it.
-              Outside the gate: the reader has no account. Read-only — see areas/board/PublicBoard.tsx. */}
-          <Route path="/board/:token" element={<PublicBoard />} />
-          {/* B28.127 — a chat its person shared as a link, read by anyone holding it until it is turned off.
-              Outside the gate for the same reason. Read-only — see areas/share/SharedChat.tsx. */}
-          <Route path="/share/:token" element={<SharedChat />} />
-          {/* B30.97 — an invoice's pay page, opened by whoever holds its link. Outside the gate: the payer has no
-              account here. See areas/pay/PayInvoice.tsx. */}
-          <Route path="/pay/:token" element={<PayInvoicePage />} />
-          {/* B28.447 — a Docs page its admin shared as a link, read by anyone holding it. Outside the gate for the same
-              reason. Read-only — see areas/share/SharedDocsPage.tsx. */}
-          <Route path="/docs/s/:token" element={<SharedDocsPage />} />
-          <Route
-            path="/*"
-            element={
-              <AuthGate>
-                <AppShell />
-              </AuthGate>
-            }
-          />
-        </Routes>
+        <DesignScope>
+          <Routes>
+            {/* Public marketing landing — OUTSIDE the AuthGate by design. */}
+            <Route path="/marketing/*" element={<Landing />} />
+            {/* B5.2 — the price list, public for the same reason: a buyer reads it before signing up. */}
+            <Route path="/pricing" element={<Pricing />} />
+            {/* B27.31 — what the product does, each claim linked to its screen. Public for the same
+                reason as the price list. Not /docs: that is the Docs product, behind the gate. */}
+            <Route path={DOCUMENTATION_PATH} element={<Documentation />} />
+            {/* B40.20 — the Claude connector's page, which Claude's directory links to. Public for the same reason. */}
+            <Route path={CLAUDE_CONNECTOR_PATH} element={<ClaudeConnector />} />
+            {/* Legal pages are public for the same reason: someone deciding whether to sign up must
+                be able to read what the service does with their data BEFORE creating an account.
+                Putting these behind the gate would mean you had to agree in order to read. */}
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
+            {/* The two front doors, also OUTSIDE the gate — a signup page you must already be
+                signed in to read is not a signup page. Same mechanism (/auth/login), different
+                words: see areas/auth/Entry.tsx. */}
+            <Route path="/signup" element={<SignUp />} />
+            <Route path="/signin" element={<SignIn />} />
+            {/* B27.30 — a Track board its workspace published as a link, read by anyone holding it.
+                Outside the gate: the reader has no account. Read-only — see areas/board/PublicBoard.tsx. */}
+            <Route path="/board/:token" element={<PublicBoard />} />
+            {/* B28.127 — a chat its person shared as a link, read by anyone holding it until it is turned off.
+                Outside the gate for the same reason. Read-only — see areas/share/SharedChat.tsx. */}
+            <Route path="/share/:token" element={<SharedChat />} />
+            {/* B30.97 — an invoice's pay page, opened by whoever holds its link. Outside the gate: the payer has no
+                account here. See areas/pay/PayInvoice.tsx. */}
+            <Route path="/pay/:token" element={<PayInvoicePage />} />
+            {/* B28.447 — a Docs page its admin shared as a link, read by anyone holding it. Outside the gate for the same
+                reason. Read-only — see areas/share/SharedDocsPage.tsx. */}
+            <Route path="/docs/s/:token" element={<SharedDocsPage />} />
+            <Route
+              path="/*"
+              element={
+                <AuthGate>
+                  <AppShell />
+                </AuthGate>
+              }
+            />
+          </Routes>
+        </DesignScope>
       </BrowserRouter>
     </QueryClientProvider>
   )

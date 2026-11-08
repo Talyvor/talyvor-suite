@@ -99,7 +99,8 @@ import { onCommit } from './auditScope'
  */
 
 /** The classes and the walk are figureAudit's. One face, one predicate, one set of controls. */
-import { onFigureFace } from './figureAudit'
+import { onFigureFace, onPocketFace } from './figureAudit'
+import { inPocket } from './pocketPending'
 
 /**
  * Input types that paint no text, so no typeface applies. See the exemption note above.
@@ -156,14 +157,34 @@ export function declaresNumeric(el: Element): boolean {
 }
 
 /** Every field under `root` that declares itself numeric and is not on the figure face. */
+/**
+ * B57.3 — fields that paint no box of their own, so Pocket's control edge has nothing to go on.
+ * A checkbox or radio is drawn by its own component (pocket.css .checkbox, the Switch).
+ */
+const PAINTS_NO_BOX = new Set(['hidden', 'range', 'checkbox', 'radio', 'file', 'submit', 'button', 'reset', 'image', 'color'])
+
+/**
+ * POCKET'S EDGE, on pages held to Pocket's rules (pocketPending.ts): every field a person types
+ * into or picks from carries the 1.5px control edge (`shadow-edge`, pocket.css .input), on the
+ * element itself because a box-shadow does not inherit. The control colour clears 3:1 on the page
+ * in both themes; contrast.test.ts measures it.
+ */
+function lacksEdge(el: Element): boolean {
+  if (el.tagName === 'INPUT' && PAINTS_NO_BOX.has((el.getAttribute('type') ?? 'text').toLowerCase())) return false
+  return !(el.getAttribute('class') ?? '').split(/\s+/).includes('shadow-edge')
+}
+
 export function unfacedFieldsIn(root: ParentNode): UnfacedField[] {
   const out: UnfacedField[] = []
-  for (const el of Array.from(root.querySelectorAll('input'))) {
-    if (!declaresNumeric(el)) continue
-    if (onFigureFace(el)) continue
+  for (const el of Array.from(root.querySelectorAll('input, select, textarea'))) {
+    const pocket = inPocket(el)
+    const numeric = declaresNumeric(el)
+    const edgeless = pocket && lacksEdge(el)
+    const offFace = numeric && !(pocket ? onPocketFace(el, 'quantity') : onFigureFace(el))
+    if (!edgeless && !offFace) continue
     const type = (el.getAttribute('type') ?? 'text').toLowerCase()
     out.push({
-      declaredBy: type === 'number' ? 'type="number"' : `inputmode="${el.getAttribute('inputmode')}"`,
+      declaredBy: edgeless ? 'no control edge' : type === 'number' ? 'type="number"' : `inputmode="${el.getAttribute('inputmode')}"`,
       value: (el as HTMLInputElement).value ?? '',
       className: el.getAttribute('class') ?? '',
       label: el.getAttribute('aria-label') ?? '',

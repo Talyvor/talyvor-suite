@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { populatedBff, settleQueries } from '../../populatedBff'
+import { cardOnItsPlane, primaryActions, statusWithoutWords, tangerineOffenders } from '../../pocketRules'
 
 // B29.11 — the marketplace in the brand, read off the populated fixture: listings are raised cards with
 // their kind's icon, their seller and their price in IBM Plex Mono; the publish form picks a kind by its
@@ -35,7 +36,12 @@ async function at(address: string, overrides: Record<string, unknown> = {}): Pro
   return document.querySelector('main') as HTMLElement
 }
 
-const primaries = (main: HTMLElement) => Array.from(main.querySelectorAll('button.bg-accent, a.bg-accent')).map((b) => b.textContent?.trim())
+// B57.3 — the primary (ink) actions, by Pocket's name and today's; and Pocket's rules on every view.
+const primaries = (main: HTMLElement) => {
+  expect(tangerineOffenders(main).map((e) => e.outerHTML), 'tangerine is only the brand and your move').toEqual([])
+  expect(statusWithoutWords(main).map((e) => e.outerHTML), 'a status colour without words').toEqual([])
+  return primaryActions(main)
+}
 
 beforeEach(() => {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -52,7 +58,7 @@ describe('the marketplace in the brand', () => {
     const cards = within(main).getAllByTestId('listing-card')
     expect(cards).toHaveLength(2)
     const [translate, review] = cards
-    for (const c of cards) expect(c.className).toContain('bg-raised')
+    for (const c of cards) expect(cardOnItsPlane(c), c.className).toBe(true)
     expect(translate.querySelector('svg[data-icon]')?.getAttribute('data-icon')).toBe('prompt')
     expect(review.querySelector('svg[data-icon]')?.getAttribute('data-icon')).toBe('agent')
     expect(within(translate).getByText('ws-seller').className).toContain('font-figure')
@@ -78,14 +84,14 @@ describe('the marketplace in the brand', () => {
     expect(within(preview).getByText('Arithmetic check')).toBeTruthy()
     expect(within(preview).getByText('You')).toBeTruthy()
     expect(within(preview).getByTestId('listing-price').textContent).toBe('1.25 LXC')
-    expect(main.querySelector('form')?.closest('.rounded-card')?.className).toContain('bg-raised')
+    expect(cardOnItsPlane(main.querySelector('form')!.closest('.rounded-card')!)).toBe(true)
     expect(primaries(main)).toEqual(['Publish'])
   })
 
   it("shows a seller's earnings as figure tiles and their own listings as cards sold by them", async () => {
     const main = await at('/marketplace/selling', SELLING)
     const tiles = within(main).getByTestId('market-earnings')
-    expect(tiles.closest('.rounded-card')?.className).toContain('bg-raised')
+    expect(cardOnItsPlane(tiles.closest('.rounded-card')!)).toBe(true)
     expect(screen.getByTestId('market-pending').textContent).toBe('$0.05')
     for (const [label, figure] of [
       ['Earned', '$1.20'],

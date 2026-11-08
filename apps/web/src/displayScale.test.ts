@@ -94,6 +94,7 @@ const CONSOLE_STEPS: Record<string, string> = {
   caption: 'the small label beside a value',
   micro: 'the µ-tail under a money figure',
   eyebrow: 'the one small uppercase label in the system',
+  'pocket-eyebrow': 'Pocket’s small uppercase label, 12px Figtree at .04em (B57.3)',
 }
 
 /**
