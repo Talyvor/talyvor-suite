@@ -75,6 +75,32 @@ describe('the approval push (B28.38)', () => {
   })
 })
 
+describe('the approval push reads Lens’s sentence (B55.49)', () => {
+  const BODY = 'Research wants to pay Acme Hosting $340.00 (3,400 LXC)'
+
+  it('a push with body shows that sentence, and the decision repeats its amount, never bare LXC', async () => {
+    const sw = worker(200)
+    await sw.push({ ...LENS_PUSH, agent_name: 'Research', amount_lxc: '3400', body: BODY })
+    expect(sw.shown[0].title).toBe(BODY)
+    await sw.tap('approve')
+    expect(sw.shown[1].title).toBe('Approved: Research, $340.00 (3,400 LXC)')
+    for (const n of sw.shown) expect(n.title).not.toMatch(/(^|[^,\d])3400 LXC/)
+  })
+
+  it('the amount follows Lens’s order when the LXC comes first', async () => {
+    const sw = worker(200)
+    await sw.push({ ...LENS_PUSH, agent_name: 'Research', body: 'Research wants to spend 3,400 LXC ($340.00)' })
+    await sw.tap('deny')
+    expect(sw.shown[1].title).toBe('Denied: Research, 3,400 LXC ($340.00)')
+  })
+
+  it('a push from an older Lens, with no body, reads as before', async () => {
+    const sw = worker(200)
+    await sw.push(LENS_PUSH)
+    expect(sw.shown[0].title).toBe('Researcher asks you to approve 2 LXC')
+  })
+})
+
 describe('the approval push in a workspace that signs (B55.2)', () => {
   it('carries no actions when only the phone holds a key, and a tap opens the approval', async () => {
     const sw = worker(200, { passkeys: [], devices: [{}] })
