@@ -300,6 +300,7 @@
   "src/taly/TalyButton.test.tsx": 4,
   "src/test/pressEverything.test.ts": 2,
   "src/test/shots.test.ts": 5,
+  "src/test/storyPress.test.tsx": 1,
   "src/timerCleanup.test.tsx": 5,
   "src/tokenDoor.test.ts": 10,
   "src/topUpMirrorRegister.test.ts": 11,

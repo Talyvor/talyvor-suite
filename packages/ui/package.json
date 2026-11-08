@@ -6,6 +6,7 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./pocket": "./src/pocket/index.ts",
     "./preset": "./src/preset.ts",
     "./theme.css": "./src/theme.css"
   },

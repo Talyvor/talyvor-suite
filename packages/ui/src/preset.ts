@@ -238,11 +238,24 @@ const preset = {
        */
       scale: { 98: '0.98' },
       borderColor: { DEFAULT: 'var(--rule)' },
-      // Pocket's: cards 24 and 18, inputs 14 (control), the sheet 28, pills for buttons and chips.
-      borderRadius: { card: '24px', 'card-tight': '18px', control: '14px', sheet: '28px', pill: '9999px' },
+      // Pocket's: cards 24 and 18, inputs 14 (control), the sheet 28, pills for buttons and chips; B57.4's icon tiles 12
+      // (pocket.css .kindico, .roomico) and the facts inset in a card or sheet 16 (.facts2).
+      borderRadius: { card: '24px', 'card-tight': '18px', control: '14px', sheet: '28px', pill: '9999px', tile: '12px', inset: '16px' },
       // `edge` is Pocket's 1.5px control edge on every field (pocket.css .input), 3:1 on the page.
-      boxShadow: { pocket: 'var(--shadow)', 'pocket-lg': 'var(--shadow-lg)', edge: 'inset 0 0 0 1.5px var(--control)' },
-      spacing: { gutter: '16px', row: '38px' },
+      // `edge-current` is the danger button's ring (pocket.css .btn.danger): the same 1.5px in the button's own ink.
+      boxShadow: {
+        pocket: 'var(--shadow)', 'pocket-lg': 'var(--shadow-lg)', edge: 'inset 0 0 0 1.5px var(--control)',
+        'edge-current': 'inset 0 0 0 1.5px currentColor',
+      },
+      // B57.4 — Pocket's control sizes, as half steps of Tailwind's own quarter-rem scale (h-11 is 44 already):
+      // 0.75 the switch's 3px inset, 5.25 its thumb's travel, 6.5 the switch and chip (26), 8.5 the small button (34),
+      // 9.5 the kind tile (38), 11.5 the field (46), 13.5 the large button (54).
+      spacing: {
+        gutter: '16px', row: '38px',
+        0.75: '0.1875rem', 5.25: '1.3125rem', 6.5: '1.625rem', 8.5: '2.125rem', 9.5: '2.375rem', 11.5: '2.875rem', 13.5: '3.375rem',
+      },
+      // Pocket's focus ring is 3px of tangerine (B57.4).
+      outlineWidth: { 3: '3px' },
       // `below-header` — the viewport under the console's sticky header (`top-12`, a 32px control +
       // py-2). B10.3's chat fills exactly that, so its composer sits at the bottom of the screen.
       height: { row: '38px', 'below-header': 'calc(100dvh - 3rem)' },
