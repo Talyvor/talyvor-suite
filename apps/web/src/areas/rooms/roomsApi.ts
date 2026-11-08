@@ -1,4 +1,4 @@
-import { getJSON } from '../../lib/api'
+import { getJSON, getJSONArray } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
 import { type ListingKind, MarketError } from '../marketplace/marketApi'
 
@@ -261,6 +261,23 @@ export interface RoomObjections {
   objections_close_at: string | null
   rules: string
   objections: Objection[]
+}
+
+/** Lens rooms.Task (B41.152): one task on the room's open board, at a size on the rate card whose points were fixed on it
+ *  when it was posted. It has no assignee and no deadline: claimant_workspace_id is empty while it is open, and only a
+ *  member claims a task, for itself. */
+export interface RoomTask {
+  id: string
+  room_id: string
+  poster_workspace_id: string
+  title: string
+  description: string
+  size: string
+  points: number
+  claimant_workspace_id?: string
+  claimant_workspace_name?: string
+  claimed_at?: string
+  created_at: string
 }
 
 /** Lens rooms.Usage — what this workspace's plan lets it open, beside what it has open. -1 is unlimited. */
@@ -667,6 +684,12 @@ export const roomsApi = {
     post<Objection>(`/api/rooms/${e(id)}/objections`, { contribution_id: contributionID, points, reason }),
   voteObjection: (id: string, oid: string, uphold: boolean) =>
     post<Objection>(`/api/rooms/${e(id)}/objections/${e(oid)}/vote`, { uphold }, 'PUT'),
+  // B41.52 — the open tasks board: tasks sized from the rate card that any member may claim, for itself.
+  tasks: (id: string) => getJSONArray<RoomTask>(`/api/rooms/${e(id)}/tasks`),
+  postTask: (id: string, title: string, description: string, size: string) =>
+    post<RoomTask>(`/api/rooms/${e(id)}/tasks`, { title, description, size }),
+  claimTask: (id: string, tid: string) => post<RoomTask>(`/api/rooms/${e(id)}/tasks/${e(tid)}/claim`, {}),
+  releaseTask: (id: string, tid: string) => post<RoomTask>(`/api/rooms/${e(id)}/tasks/${e(tid)}/claim`, {}, 'DELETE'),
   // B41.44 — two reviewers Lens draws at random score a contribution's quality.
   reviews: (id: string, cid: string) =>
     getJSON<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/reviews`, { quality_bps: 'number', reviews: 'list' }),

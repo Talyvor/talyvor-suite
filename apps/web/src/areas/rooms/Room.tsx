@@ -31,6 +31,7 @@ import { ContributionSize, RoomRateCard } from './RoomRateCard'
 import { ContributionReviews } from './RoomReviews'
 import { RoomSharedOwnership } from './RoomSharedOwnership'
 import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
+import { RoomTasks } from './RoomTasks'
 
 // Room.tsx — B32.54: the room screen, for a member under the room's current terms. The conversation is fed by the
 // room's event stream (Lens B32.30 through apps/bff/rooms.go), so another member's message appears as it is posted;
@@ -45,7 +46,8 @@ import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 // (RoomReviews.tsx). B41.45: the provisional leaderboard, each holder's points and estimated share of the pool
 // (RoomLeaderboard.tsx). B41.46: the Gate tracker, shipped, used and paid, with thresholds that only rise (RoomGate.tsx).
 // B41.50: the contributor agreement, e-signed before the member's points count (RoomAgreement.tsx). B41.47: objections to
-// the frozen leaderboard, decided by three members Lens draws at random (RoomObjections.tsx).
+// the frozen leaderboard, decided by three members Lens draws at random (RoomObjections.tsx). B41.52: the open tasks board,
+// tasks sized from the rate card that any member claims for itself (RoomTasks.tsx).
 //
 // Lens decides everything — who may post, contribute, vote, accept and spend — and its sentence is shown on a refusal.
 
@@ -688,6 +690,7 @@ export function RoomLive({ room }: { room: RoomDetail }) {
       <RoomGate room={room} />
       <RoomAgreement room={room} />
       <RoomObjections room={room} />
+      <RoomTasks room={room} />
     </>
   )
 }

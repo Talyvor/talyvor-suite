@@ -379,6 +379,10 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/rooms/x1/leaderboard/freeze"},
 		{method: http.MethodPost, path: "/api/rooms/x1/objections", body: `{"contribution_id":"x1","points":-1,"reason":"r"}`},
 		{method: http.MethodPut, path: "/api/rooms/x1/objections/x1/vote", body: `{"uphold":true}`},
+		// B41.52 — the owner posts a task, a member claims it and lets it go.
+		{method: http.MethodPost, path: "/api/rooms/x1/tasks", body: `{"title":"t","description":"","size":"M"}`},
+		{method: http.MethodPost, path: "/api/rooms/x1/tasks/x1/claim"},
+		{method: http.MethodDelete, path: "/api/rooms/x1/tasks/x1/claim"},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},
