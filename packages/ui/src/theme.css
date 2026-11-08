@@ -207,25 +207,17 @@
   --slashed: var(--danger);
 }
 
-/* The logo's own colours, not palette tokens: the fills of brand-v4 svg/talyvor-mark-flat-{light,dark}.svg
-   and svg/talyvor-wordmark-{obsidian,white}.svg, path for path, read only by Mark.tsx and Wordmark.tsx.
-   No component may paint with them, so they sit outside the two token blocks above and tokens.ts.
-   Same selectors, so the logo follows the nearest data-theme exactly as the tokens do. */
+/* B57.6 — which version of the kit's logo shows: Logo and LogoSymbol put both files in the page and read these,
+   so the logo follows the nearest data-theme exactly as the tokens do. Not colours: nothing may paint with them. */
 :root,
 [data-theme='light'] {
-  --mark-upper: #060A12;
-  --mark-lower: #2E4A5A;
-  --mark-base: #0F3440;
-  --mark-tip: #3AD6C0;
-  --wordmark: #060A12;
+  --logo-on-light: block;
+  --logo-on-dark: none;
 }
 
 [data-theme='dark'] {
-  --mark-upper: #E6EEF7;
-  --mark-lower: #BCCBDA;
-  --mark-base: #3AD6C0;
-  --mark-tip: #3AD6C0;
-  --wordmark: #FAFBFC;
+  --logo-on-light: none;
+  --logo-on-dark: block;
 }
 
 html, body { height: 100%; }
