@@ -876,6 +876,47 @@ func (a *app) handleRoomObjectionVote(w http.ResponseWriter, r *http.Request, t 
 	a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
 }
 
+// B41.52 — the room's open tasks board (Lens B41.152), behind the same room_equity gate as the rate card:
+//
+//	GET    /api/rooms/{id}/tasks                 the board, open tasks first
+//	POST   /api/rooms/{id}/tasks                 {title, description, size}: the owner or an editor; no assignee, no deadline
+//	POST   /api/rooms/{id}/tasks/{tid}/claim     any member, for itself; 409 when another member holds it
+//	DELETE /api/rooms/{id}/tasks/{tid}/claim     its claimant lets it go
+var roomTaskKeys = map[string][]string{"title": nil, "description": nil, "size": nil}
+
+// handleRoomTasks — GET the board; POST {title, description, size} posts a task.
+func (a *app) handleRoomTasks(w http.ResponseWriter, r *http.Request, t tenant) {
+	path, ok := roomPath(w, r, "/tasks", false)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+	case http.MethodPost:
+		body, ok := roomBody(w, r, 8<<10, roomTaskKeys)
+		if !ok {
+			return
+		}
+		a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, body, "")
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
+	}
+}
+
+// handleRoomTaskClaim — POST claims a task for the caller itself; DELETE lets it go.
+func (a *app) handleRoomTaskClaim(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodPost+", "+http.MethodDelete)
+		return
+	}
+	path, ok := roomSub(w, r, "tasks", "tid", "task id", "/claim")
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, r.Method, path, nil, "")
+}
+
 // handleRoomInvitePreview — GET /api/room-invites/{token}: what a live link opens; 404 once it is revoked, expired or
 // used up.
 func (a *app) handleRoomInvitePreview(w http.ResponseWriter, r *http.Request, t tenant) {

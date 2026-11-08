@@ -207,6 +207,16 @@
 //
 // STUB_BREAK=room-objection-linked draws the panel ignoring shared cards; room-objection-unwritten upholds an objection
 // without writing its row — defects room-objections must FAIL on.
+//
+// B41.152 — and the open tasks board, as room-tasks uses it, behind the same gate:
+//
+//   GET    /v1/rooms/{id}/tasks                to a member: the board, open tasks first
+//   POST   /v1/rooms/{id}/tasks                {title, description, size}: the owner or an editor; any other field is 400
+//   POST   /v1/rooms/{id}/tasks/{t}/claim      a member, for itself; 409 when another holds it
+//   DELETE /v1/rooms/{id}/tasks/{t}/claim      its claimant lets it go
+//
+// STUB_BREAK=room-task-assign takes a task body's assignee and makes it the claimant; room-task-steal lets a member claim a
+// task another holds — defects room-tasks must FAIL on.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, randomBytes } from 'node:crypto'
@@ -339,6 +349,10 @@ const freezes = new Map<string, { frozen_at: string; objections_close_at: string
 interface StubObjection { id: string; contribution_id: string; holder_workspace_id: string; objector_workspace_id: string; points: number; reason: string
   status: string; raised_at: string; decide_by: string; decided_at?: string; panel: { workspace_id: string; workspace_name: string; uphold: boolean | null }[] }
 const objectionsOf = new Map<string, StubObjection[]>()
+/** B41.152 — each room's tasks board, oldest first. */
+interface StubTask { id: string; room_id: string; poster_workspace_id: string; title: string; description: string; size: string; points: number
+  claimant_workspace_id?: string; claimant_workspace_name?: string; claimed_at?: string; created_at: string }
+const tasksOf = new Map<string, StubTask[]>()
 let cursor = 0
 
 function post(roomID: string, ws: string, body: string, kind = 'text', refs: Record<string, unknown> = {}, agent?: RoomAgent): Msg {
@@ -621,7 +635,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
     return true
   }
   if (await settingsOutsideRoom(req, res, p, ws)) return true
-  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points|leaderboard|gate|agreement|objections)/.exec(p)
+  const one = /^\/v1\/rooms\/([^/]+)(\/join)?$/.exec(p) ?? /^\/v1\/rooms\/([^/]+)()\/(?:messages|events|contributions|members|invites|prizes|reports|runs|ask|terms|owner|takeover|fork|shared-ownership|rate-card|points|leaderboard|gate|agreement|objections|tasks)/.exec(p)
   if (one === null) return false
   const r = rooms.get(decodeURIComponent(one[1]))
   if (r === undefined || (r.visibility === 'private' && !r.members.some((m) => m.workspace_id === ws))) {
@@ -642,6 +656,7 @@ export async function roomsRoute(req: IncomingMessage, res: ServerResponse, p: s
   if (await roomReviews(req, res, p, ws, r)) return true
   if (await roomAgreement(req, res, p, ws, r)) return true
   if (await roomObjections(req, res, p, ws, r)) return true
+  if (await roomTasks(req, res, p, ws, r)) return true
   if (one[2] === undefined && req.method === 'GET') return json(res, 200, detail(r, ws)), true
   if (one[2] === '/join' && req.method === 'POST') {
     if (r.banned.includes(ws)) return json(res, 403, bannedFrom), true
@@ -983,6 +998,52 @@ async function roomObjections(req: IncomingMessage, res: ServerResponse, p: stri
       }
     }
     return json(res, 200, o), true
+  }
+  return false
+}
+
+/** B41.152 — a room's tasks board, posting a task, and claiming one or letting it go; false when `p` is none of these. */
+async function roomTasks(req: IncomingMessage, res: ServerResponse, p: string, ws: string, r: Room): Promise<boolean> {
+  const m = new RegExp(`^/v1/rooms/${r.id}/tasks(?:/([^/]+)/claim)?$`).exec(p)
+  if (m === null) return false
+  const me = r.members.find((x) => x.workspace_id === ws)
+  if (me === undefined) return json(res, 404, { error: 'rooms: not found: no such room' }), true
+  const list = tasksOf.get(r.id) ?? []
+  tasksOf.set(r.id, list)
+  if (m[1] === undefined && req.method === 'GET') {
+    return json(res, 200, [...list].sort((a, b) => Number(Boolean(a.claimant_workspace_id)) - Number(Boolean(b.claimant_workspace_id)))), true
+  }
+  if (m[1] === undefined && req.method === 'POST') {
+    const d = await body(req)
+    const extra = Object.keys(d).filter((k) => !['title', 'description', 'size'].includes(k))
+    if (extra.length > 0 && BREAK !== 'room-task-assign') {
+      return json(res, 400, { error: `body must be {"title", "description", "size"}: json: unknown field "${extra[0]}"` }), true
+    }
+    if (me.role !== 'owner' && me.role !== 'editor') return json(res, 403, { error: "rooms: not allowed: only the room's owner or an editor posts a task" }), true
+    const z = r.rateCard?.sizes.find((x) => x.size === String(d.size ?? '').trim())
+    if (z === undefined) return json(res, 400, { error: `rooms: invalid request: size "${String(d.size)}" is not on the room's rate card` }), true
+    const t: StubTask = { id: 'rtsk_' + randomBytes(8).toString('hex'), room_id: r.id, poster_workspace_id: ws, title: String(d.title ?? '').trim(),
+      description: String(d.description ?? '').trim(), size: z.size, points: z.points, created_at: new Date().toISOString() }
+    if (typeof d.assignee_workspace_id === 'string') Object.assign(t, { claimant_workspace_id: d.assignee_workspace_id, claimed_at: t.created_at })
+    list.push(t)
+    return json(res, 201, t), true
+  }
+  if (m[1] === undefined) return false
+  const t = list.find((x) => x.id === decodeURIComponent(m[1]))
+  if (t === undefined) return json(res, 404, { error: 'rooms: not found: no such task in this room' }), true
+  if (req.method === 'POST') {
+    if (t.claimant_workspace_id && t.claimant_workspace_id !== ws && BREAK !== 'room-task-steal') {
+      return json(res, 409, { error: `rooms: conflict: ${t.claimant_workspace_name ?? t.claimant_workspace_id} has claimed the task` }), true
+    }
+    Object.assign(t, { claimant_workspace_id: ws, claimant_workspace_name: ws, claimed_at: new Date().toISOString() })
+    return json(res, 200, t), true
+  }
+  if (req.method === 'DELETE') {
+    if (t.claimant_workspace_id !== ws) return json(res, 403, { error: 'rooms: not allowed: only the member that claimed a task lets it go' }), true
+    delete t.claimant_workspace_id
+    delete t.claimant_workspace_name
+    delete t.claimed_at
+    return json(res, 200, t), true
   }
   return false
 }

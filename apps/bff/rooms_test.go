@@ -205,6 +205,10 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		{http.MethodGet, "/api/rooms/room_1/objections", ""},
 		{http.MethodPost, "/api/rooms/room_1/objections", `{"contribution_id":"c_1","points":-200,"reason":"r"}`},
 		{http.MethodPut, "/api/rooms/room_1/objections/robj_1/vote", `{"uphold":true}`},
+		{http.MethodGet, "/api/rooms/room_1/tasks", ""},
+		{http.MethodPost, "/api/rooms/room_1/tasks", `{"title":"FAQ","description":"","size":"M"}`},
+		{http.MethodPost, "/api/rooms/room_1/tasks/rtsk_1/claim", ""},
+		{http.MethodDelete, "/api/rooms/room_1/tasks/rtsk_1/claim", ""},
 	} {
 		if rec := doJSON(a, c.method, c.path, c.body); rec.Code != http.StatusOK {
 			t.Fatalf("%s %s = %d %s", c.method, c.path, rec.Code, rec.Body.String())
@@ -223,6 +227,8 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		{http.MethodPost, "/api/rooms/room_1/agreement", `{"version":"draft-1","signed_name":"Ada Lovelace","user_id":"u_2"}`},
 		{http.MethodPost, "/api/rooms/room_1/objections", `{"contribution_id":"c_1","points":-200,"reason":"r","objector_workspace_id":"ws_3"}`},
 		{http.MethodPut, "/api/rooms/room_1/objections/robj_1/vote", `{"uphold":true,"workspace_id":"ws_3"}`},
+		{http.MethodPost, "/api/rooms/room_1/tasks", `{"title":"FAQ","size":"M","assignee_workspace_id":"ws_3"}`},
+		{http.MethodPost, "/api/rooms/room_1/tasks", `{"title":"FAQ","size":"M","due_at":"2026-12-01T00:00:00Z"}`},
 	} {
 		if rec := doJSON(a, c.method, c.path, c.body); rec.Code != http.StatusBadRequest {
 			t.Fatalf("%s %s with %s = %d, want 400 before Lens is asked", c.method, c.path, c.body, rec.Code)
@@ -260,6 +266,10 @@ func TestRoomSettingsRelayToLens(t *testing.T) {
 		`GET /v1/rooms/room_1/objections `,
 		`POST /v1/rooms/room_1/objections {"contribution_id":"c_1","points":-200,"reason":"r"}`,
 		`PUT /v1/rooms/room_1/objections/robj_1/vote {"uphold":true}`,
+		`GET /v1/rooms/room_1/tasks `,
+		`POST /v1/rooms/room_1/tasks {"title":"FAQ","description":"","size":"M"}`,
+		`POST /v1/rooms/room_1/tasks/rtsk_1/claim `,
+		`DELETE /v1/rooms/room_1/tasks/rtsk_1/claim `,
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("Lens received\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
