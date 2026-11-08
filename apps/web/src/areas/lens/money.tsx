@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react'
 import { queryOptions, useQuery } from '@tanstack/react-query'
 import { focusRing } from '@talyvor/ui'
+import { type MoneyFigures, MoneyProvider } from '@talyvor/ui/pocket'
 import { ApiError, UnreadableError, readable } from '../../lib/api'
 import { MONEY_ORDER } from '../../moneyOrder'
-import { formatULXC } from './agentBankApi'
+import { formatMinor, formatULXC } from './agentBankApi'
 import { topupApi } from './topupApi'
 
 // B28.22 — every LXC amount on the wallet screens also reads in the person's own currency: dollars from
@@ -129,6 +130,21 @@ export function useMoney(): (ulxc: number) => string | null {
     const v = convertULXC(ulxc, peg.data?.usd_per_lxc, fiat === 'USD' ? undefined : fx.data, fiat)
     return v === null ? null : fiatText(v.amount, v.fiat)
   }
+}
+
+/** B57.7 — the figures packages/ui's <Money> draws: this formatter's, at the rate the screen's <Lxc> figures use. */
+export function useMoneyFigures(): MoneyFigures {
+  const money = useMoney()
+  return { ulxc: (ulxc) => ({ cash: money(ulxc), lxc: formatULXC(ulxc) }), minor: formatMinor }
+}
+
+/** B57.7 — every <Money> in the app draws in MONEY_ORDER's order, so that one line flips them all. */
+export function AppMoney({ children }: { children: React.ReactNode }) {
+  return (
+    <MoneyProvider order={MONEY_ORDER} useFigures={useMoneyFigures}>
+      {children}
+    </MoneyProvider>
+  )
 }
 
 /**

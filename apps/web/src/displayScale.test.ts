@@ -97,6 +97,8 @@ const CONSOLE_STEPS: Record<string, string> = {
   'pocket-eyebrow': 'Pocket’s small uppercase label, 12px Figtree at .04em (B57.3)',
   'pocket-dialog': 'a Pocket dialog’s heading, 22px (B57.5)',
   'pocket-amount': 'the approval sheet’s amount, 56px, large money in the display face (B57.5)',
+  'pocket-balance': 'a balance card’s amount, 44px, large money in the display face (B57.7)',
+  'pocket-balance-sm': 'a balance card’s amount beside others, 40px, large money in the display face (B57.7)',
 }
 
 /**

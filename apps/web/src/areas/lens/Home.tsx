@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { type UseQueryResult, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button, Card, CardHeader, Input, NavIcon, type NavIconName, Pill, Row, Switch, cn, focusRing, inlineLink } from '@talyvor/ui'
+import { Money } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
 import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, PauseEveryAgent, rulesKey, useKeys } from './AgentBank'
@@ -191,13 +192,14 @@ function MorningBriefing() {
   )
 }
 
-/** B45.11 — one total: what the agents hold together, and what the workspace has not given to an agent yet. */
+/** B45.11 — one total: what the agents hold together, and what the workspace has not given to an agent yet. B57.7: the
+ * total is a balance card's <Money>, dollars large and LXC small. */
 function Total({ book }: { book: AgentBook }) {
   return (
     <div className="flex flex-col gap-1 rounded-card border border-rule bg-surface px-gutter py-3">
       <span className="font-figure text-eyebrow uppercase text-faint">Across your agents</span>
-      <span className="text-head text-ink" data-testid="home-total">
-        {lxc(book.allocated_ulxc)}
+      <span data-testid="home-total">
+        <Money ulxc={book.allocated_ulxc} size="card" />
       </span>
       <span className="text-caption text-muted" data-testid="home-unallocated">
         {lxc(book.unallocated_ulxc)} more in the workspace, not yet given to an agent
