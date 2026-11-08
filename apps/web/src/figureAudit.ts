@@ -147,9 +147,9 @@ export function onFigureFace(el: Element | null): boolean {
 
 /**
  * B57.3 — Pocket's sizes for large money: 28px and larger at every width. `display-2` is 25px on a
- * phone, so it is not one.
+ * phone, so it is not one. B57.5 adds the approval sheet's 56px amount.
  */
-export const POCKET_LARGE_MONEY = ['text-figure', 'text-display-1']
+export const POCKET_LARGE_MONEY = ['text-figure', 'text-display-1', 'text-pocket-amount']
 
 /**
  * POCKET'S FACE, on pages held to Pocket's rules (pocketPending.ts): every numeral is tabular in

@@ -23,6 +23,7 @@ import {
   inlineLink,
   type NavIconName,
 } from '@talyvor/ui'
+import { Button as PocketButton, EmptyState, SnackHost } from '@talyvor/ui/pocket'
 import { AuthGate, SessionChip } from './components/AuthGate'
 import { TalyButton } from './taly/TalyButton'
 import { useDocumentTitle } from './documentTitle'
@@ -701,11 +702,23 @@ function AppShell() {
           <Route
             path="*"
             element={
-              <div className="mx-auto max-w-3xl px-gutter py-4 text-body text-muted">
-                Nothing at this address — pick a section from the sidebar.{' '}
-                <Link className={`text-ink ${inlineLink}`} to="/">
-                  Go to Home
-                </Link>
+              // B57.5 — drawn in Pocket: its empty state, and the one way on.
+              <div data-design="pocket" className="mx-auto max-w-3xl px-gutter py-4">
+                <EmptyState
+                  icon={
+                    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current" strokeWidth={1.9} strokeLinecap="round">
+                      <circle cx="11" cy="11" r="6" />
+                      <path d="m20 20-4.5-4.5" />
+                    </svg>
+                  }
+                  title="Nothing at this address"
+                  line="There is no page here: pick a section from the sidebar."
+                  action={
+                    <PocketButton asChild size="sm" variant="secondary">
+                      <Link to="/">Go to Home</Link>
+                    </PocketButton>
+                  }
+                />
               </div>
             }
           />
@@ -713,6 +726,8 @@ function AppShell() {
       </ScreenBoundary>
       {/* B45.6 — Taly, on every signed-in page, told which page it is on. */}
       <TalyButton page={page} path={pathname} />
+      {/* B57.5 — the confirmation after an action, shown once on the next view, and the short messages. */}
+      <SnackHost view={pathname} />
     </Shell>
   )
 }
