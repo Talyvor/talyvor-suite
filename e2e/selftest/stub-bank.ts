@@ -391,6 +391,8 @@ const CAPABILITIES = [
 ].map(([capability, name]) => ({ capability, name, class: 'AMBER', real_money: false, level_needed: LEVEL_NEEDED[capability] ?? 'L2' }))
 /** B28.360 — an agent's card, RED in Lens (economy.CapabilityAgentCard): the card freeze in Chat carries no test-money label (B46.2). */
 const CARD_CAPABILITY = { capability: 'agent_card', name: 'Cards', class: 'RED', real_money: false, level_needed: 'L2' }
+/** B40.23 — a room's shared ownership, RED and uncleared in Lens (economy.CapabilityRoomEquity): synthetic rooms only. */
+const ROOM_EQUITY_CAPABILITY = { capability: 'room_equity', name: 'Shared ownership in rooms (intent only)', class: 'RED', real_money: false, level_needed: 'L0' }
 /** B30.115 — and the money-and-markets ones B30.1 added, in Lens's classes; `b30-capability-gone` drops fx. B30.117: each with
  * the level its live money needs, as LEVEL_NEEDED gives it (else L2); `level-needed-wrong` lists payments_out at L0. */
 const B30_CAPABILITIES = [
@@ -880,6 +882,11 @@ export class Bank {
   /** B41.147 — whether two workspaces share a card, as the trust desk recorded it (a room's objection panel is drawn apart). */
   cardLinked(a: string, b: string): boolean {
     return this.trustDesk.linked(a, b)
+  }
+
+  /** B40.23 — whether a workspace's owner passed the identity check (L2), as Lens economy.IdentityChecked reads a synthetic one. */
+  identityChecked(ws: string): boolean {
+    return this.verification.levels(ws).level >= 'L2'
   }
 
   agentBalance(agentID: string): number {
@@ -1795,7 +1802,7 @@ export class Bank {
     if (path === '/v1/wallets/capabilities') {
       const b30 = (this.broken('b30-capability-gone') ? B30_CAPABILITIES.filter((c) => c.capability !== 'fx') : B30_CAPABILITIES)
         .map((c) => (c.capability === 'payments_out' && this.broken('level-needed-wrong') ? { ...c, level_needed: 'L0' } : c))
-      return json(res, 200, { capabilities: [...CAPABILITIES, CARD_CAPABILITY, ...b30] }), true
+      return json(res, 200, { capabilities: [...CAPABILITIES, CARD_CAPABILITY, ROOM_EQUITY_CAPABILITY, ...b30] }), true
     }
     let m = /^\/v1\/wallets\/([^/]+)$/.exec(path)
     if (m !== null) {
