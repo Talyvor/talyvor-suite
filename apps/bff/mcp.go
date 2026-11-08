@@ -675,8 +675,7 @@ func mcpAnswer(id json.RawMessage, tool mcpTool, version string, raw []byte) mcp
 	content := []map[string]any{{"type": "text", "text": string(raw)}}
 	if link, _ := out["approval_url"].(string); link != "" && tool.kind == mcpSends {
 		deep, _ := out["deep_link"].(string)
-		content = append([]map[string]any{{"type": "text", "text": "Nothing has been paid. The request waits for the person to approve it in Talyvor at " +
-			link + " (on their phone: " + deep + ")."}}, content...)
+		content = append([]map[string]any{{"type": "text", "text": preparedLine(out, link, deep)}}, content...)
 		// A link the client can show as one; resource_link arrived with 2025-06-18, so older clients are not sent it.
 		if version >= "2025-06-18" {
 			content = append(content, map[string]any{"type": "resource_link", "uri": link, "name": "Approve in Talyvor", "mimeType": "text/html"})
@@ -690,6 +689,31 @@ func mcpAnswer(id json.RawMessage, tool mcpTool, version string, raw []byte) mcp
 		}
 	}
 	return mcpOK(id, map[string]any{"content": content, "structuredContent": out, "isError": false})
+}
+
+// preparedLine is the first thing the assistant reads about a request it prepared: Lens pays a covered item when it is
+// prepared (B55.21), so a paid one is never described as waiting (B55.22). A request Lens does not describe waits.
+func preparedLine(out map[string]any, link, deep string) string {
+	items, _ := out["items"].([]any)
+	paid, waiting := 0, 0
+	for _, it := range items {
+		switch d, _ := it.(map[string]any); d["decision"] {
+		case "auto":
+			paid++
+		case "needs_approval":
+			waiting++
+		}
+	}
+	switch {
+	case out["status"] == "auto":
+		return "Paid without asking the person: each payment is inside a permission they signed. See it in Talyvor at " + link + "."
+	case out["status"] == "blocked":
+		return "Nothing was paid: every payment was blocked. Each item says why."
+	case paid > 0 && waiting > 0:
+		return fmt.Sprintf("%d paid inside a permission the person signed. %d wait for the person to approve them in Talyvor at %s (on their phone: %s).",
+			paid, waiting, link, deep)
+	}
+	return "Nothing has been paid. The request waits for the person to approve it in Talyvor at " + link + " (on their phone: " + deep + ")."
 }
 
 // mcpBillsDue is Lens's bills (B41.101) as its own list_bills_due shows them (talyvor-lens internal/mcp, B45.17): the due
