@@ -504,6 +504,7 @@ function Sidebar() {
         {item('/marketplace/selling', 'Your listings & earnings', 'tag')}
         {item('/marketplace/licences', 'Your licences', 'key')}
         {item('/marketplace/bill', 'Your bill', 'receipt')}
+        {item('/marketplace/content-filter', 'Content filter', 'sliders')}
         {/* B20.12 — offered only to someone the BFF's operator gate will admit. */}
         {me.data?.operator ? item('/marketplace/review', 'Review queue', 'prove') : null}
       </Group>

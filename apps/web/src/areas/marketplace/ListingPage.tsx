@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { CardHeader, Row, inlineLink } from '@talyvor/ui'
 import { Region } from '../../components/Region'
 import { ApiError } from '../../lib/api'
+import { BlockListing, ContentLine, Relabel } from './ContentLabels'
 import { formatWhen } from '../lens/format'
 import { LICENCES_KEY } from './Licences'
 import { ListingOffers } from './ListingOffers'
@@ -82,6 +83,7 @@ export function ListingPage() {
           published <span className="font-figure">{formatWhen(l.created_at)}</span>
           {own ? ` · yours, ${l.visibility}` : null}
         </p>
+        <ContentLine listing={l} />
         {l.description ? <p className="whitespace-pre-wrap text-body text-ink">{l.description}</p> : null}
         {/* B20.11 — only the seller sees a listing that is not approved, so only the seller reads why. */}
         {similar && latest ? (
@@ -101,7 +103,14 @@ export function ListingPage() {
             Taken down by Talyvor{l.review_reason ? `: ${l.review_reason}` : ''}. Nobody can find or use it.
           </p>
         ) : null}
-        {own ? null : <ReportListing key={l.id} listing={l} />}
+        {/* B41.85 — the seller changes who it is for; anyone else may block it from their marketplace. */}
+        {own ? <Relabel key={l.id} listing={l} /> : null}
+        {own ? null : (
+          <div className="flex flex-wrap items-start gap-2">
+            <ReportListing key={l.id} listing={l} />
+            <BlockListing key={`block-${l.id}`} listing={l} />
+          </div>
+        )}
       </Region>
       {(l.offers ?? []).length > 0 ? (
         <Region index="01" label="Offers">

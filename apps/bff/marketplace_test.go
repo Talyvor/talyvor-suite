@@ -92,6 +92,12 @@ func newFakeLensMarket(t *testing.T) (*app, *fakeLensMarket) {
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "sellertax: seller tax details cannot be stored here yet: LENS_PROVIDER_SECRET_KEK is not set"})
 		case strings.HasSuffix(r.URL.Path, "/marketplace/seller-tax"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"seller_type": "individual", "tins": []any{map[string]any{"jurisdiction": "GB", "number": "••••4567"}}, "complete": true})
+		case strings.Contains(r.URL.Path, "/marketplace/blocked-listings/"):
+			w.WriteHeader(http.StatusNoContent)
+		case strings.HasSuffix(r.URL.Path, "/marketplace/content-filter"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"max_age_rating": "all", "blocked_labels": []string{}, "blocked_listings": []string{"lst_9"}})
+		case strings.HasSuffix(r.URL.Path, "/listings/lst_1/content-labels"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "lst_1", "age_rating": "13+", "content_labels": []string{"medical_advice"}})
 		case strings.HasSuffix(r.URL.Path, "/marketplace/statements"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"period": r.URL.Query().Get("period"), "net_usd_micros": 34000000})
 		case strings.HasSuffix(r.URL.Path, "/marketplace/receipts/rcp_1") && r.URL.Query().Get("format") == "html":
@@ -135,7 +141,7 @@ func TestMarketplacePublishesOnTheSessionsWorkspaceAndRelaysTheRefusal(t *testin
 	if ws == "" || ws == "ws_other" || publish[1] != "/v1/workspaces/"+ws+"/marketplace/listings" {
 		t.Fatalf("the publish reached %q, want the session's workspace", publish[1])
 	}
-	if want := `{"kind":"prompt","title":"Translate","description":"","price_per_use_ulxc":500000,"visibility":"","artifact":{"template":"sk-live {{text}}"},"changelog":"","remix_policy":"","remix_share_bps":0,"parents":null}`; !strings.HasSuffix(f.got[0], " "+want) {
+	if want := `{"kind":"prompt","title":"Translate","description":"","price_per_use_ulxc":500000,"visibility":"","artifact":{"template":"sk-live {{text}}"},"changelog":"","remix_policy":"","remix_share_bps":0,"parents":null,"age_rating":"","content_labels":null}`; !strings.HasSuffix(f.got[0], " "+want) {
 		t.Fatalf("Lens received %q, want the body %s", f.got[0], want)
 	}
 	if !strings.HasPrefix(f.got[1], "GET /v1/marketplace/listings?kind=prompt ") {
@@ -257,6 +263,44 @@ func TestMarketplaceNewVersionReachesLensOnTheSessionsWorkspace(t *testing.T) {
 		!strings.Contains(f.got[0], "/marketplace/listings/lst_1/versions Bearer ") ||
 		!strings.HasSuffix(f.got[0], ` {"artifact":{"template":"Summarise {{text}} briefly"},"changelog":"Shorter answers","parents":[]}`) {
 		t.Fatalf("Lens received %q, want one new version on the session's workspace", f.got)
+	}
+}
+
+// B41.85 — a seller's relabel, the workspace's content filter and its blocks reach Lens on the session's workspace with only
+// the fields Lens reads, and a block's 204 is answered 204 rather than as a failure.
+func TestMarketplaceContentLabelsFilterAndBlocksReachLensOnTheSessionsWorkspace(t *testing.T) {
+	a, f := newFakeLensMarket(t)
+	if rec := doJSON(a, http.MethodPut, "/api/marketplace/listings/lst_1/content-labels",
+		`{"age_rating":"13+","content_labels":["medical_advice"],"workspace_id":"ws_other"}`); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"age_rating":"13+"`) {
+		t.Fatalf("relabel = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPut, "/api/marketplace/content-filter", `{"max_age_rating":"all","blocked_labels":[]}`); rec.Code != http.StatusOK {
+		t.Fatalf("set filter = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodGet, "/api/marketplace/content-filter", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"lst_9"`) {
+		t.Fatalf("read filter = %d %s", rec.Code, rec.Body.String())
+	}
+	for _, m := range []string{http.MethodPut, http.MethodDelete} {
+		if rec := doJSON(a, m, "/api/marketplace/blocked-listings/lst_9", ""); rec.Code != http.StatusNoContent {
+			t.Fatalf("%s block = %d %s, want 204", m, rec.Code, rec.Body.String())
+		}
+	}
+	want := []string{
+		`PUT /marketplace/listings/lst_1/content-labels {"age_rating":"13+","content_labels":["medical_advice"]}`,
+		`PUT /marketplace/content-filter {"max_age_rating":"all","blocked_labels":[]}`,
+		`GET /marketplace/content-filter `,
+		`PUT /marketplace/blocked-listings/lst_9 `,
+		`DELETE /marketplace/blocked-listings/lst_9 `,
+	}
+	if len(f.got) != len(want) {
+		t.Fatalf("Lens received %q", f.got)
+	}
+	for i, g := range f.got {
+		fields := strings.SplitN(g, " ", 5) // method, path, "Bearer", token, body
+		ws := strings.Split(strings.TrimPrefix(fields[1], "/v1/workspaces/"), "/")[0]
+		if ws == "" || ws == "ws_other" || fields[0]+" "+strings.TrimPrefix(fields[1], "/v1/workspaces/"+ws)+" "+fields[4] != want[i] {
+			t.Fatalf("Lens received %q, want %q on the session's workspace", g, want[i])
+		}
 	}
 }
 

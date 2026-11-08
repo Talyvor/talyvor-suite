@@ -38,6 +38,7 @@ import { ReviewQueue } from "./Review";
 import { SellerStatementsCard } from "./SellerStatements";
 import { SellerTaxCard, SellerTaxNotice } from "./SellerTax";
 import { BuyerProtection } from "./BuyerProtection";
+import { ContentFilterPage, ContentPicker, contentReady } from "./ContentLabels";
 import {
   CARDS_OFF,
   cardPayments,
@@ -45,7 +46,9 @@ import {
   usePricing,
 } from "../marketing/pricingApi";
 import {
+  type AgeRating,
   type BillLine,
+  type ContentLabel,
   type Listing,
   type MarketBill,
   type MarketInvoice,
@@ -216,6 +219,9 @@ function Publish() {
   const [parents, setParents] = useState<ParentChoice[]>(
     prefill?.parents ?? [],
   );
+  // B41.85 — no listing publishes without the seller choosing its age rating.
+  const [rating, setRating] = useState<AgeRating | null>(null);
+  const [labels, setLabels] = useState<ContentLabel[]>([]);
   // B32.46 — a publish Lens held as a near-copy of a listing it does not declare: shown here, with the way on.
   const [held, setHeld] = useState<{
     listing: Listing;
@@ -236,6 +242,8 @@ function Publish() {
         remix_policy: remixPolicy,
         remix_share_bps: shareBPS ?? 0,
         parents: ps.map(({ listing_id, version }) => ({ listing_id, version })),
+        age_rating: rating ?? "18+",
+        content_labels: labels,
       }),
     onSuccess: (l) => {
       void qc.invalidateQueries({ queryKey: MINE_KEY });
@@ -261,7 +269,8 @@ function Publish() {
     body.trim() !== "" &&
     micros !== null &&
     shareBPS !== null &&
-    (remixPolicy !== "royalty" || shareBPS > 0);
+    (remixPolicy !== "royalty" || shareBPS > 0) &&
+    contentReady(rating, labels);
   const kindLabelID = useId();
   return (
     <Region
@@ -437,6 +446,14 @@ function Publish() {
             )
           ) : null}
           <ParentsPicker parents={parents} onChange={setParents} />
+          <div className="border-t border-rule pt-4">
+            <ContentPicker
+              rating={rating}
+              labels={labels}
+              onRating={setRating}
+              onLabels={setLabels}
+            />
+          </div>
           <div className="flex flex-col gap-1.5 border-t border-rule pt-4">
             <span className="font-figure text-eyebrow uppercase text-label">
               How it shows in the marketplace
@@ -1317,6 +1334,7 @@ export function MarketplaceArea() {
         <Route path="bill" element={<Bill />} />
         <Route path="licences" element={<Licences />} />
         <Route path="review" element={<ReviewQueue />} />
+        <Route path="content-filter" element={<ContentFilterPage />} />
         {/* Anything else under /marketplace/* lands on Discover rather than a dead end. */}
         <Route path="*" element={<Discover />} />
       </Routes>
