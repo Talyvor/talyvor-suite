@@ -105,8 +105,8 @@ export function Terms() {
           can take one down for good, which refunds every use of it still inside the 14-day holdback.
         </p>
         <p className="mt-3 text-reading text-muted">
-          Only a workspace&rsquo;s owner or an admin can publish. A seller earns 85% of every use,
-          rental and purchase whose bill was paid; Talyvor keeps 15%. Earnings are held for 14 days for refunds, then paid once a week to a
+          Only a workspace&rsquo;s owner or an admin can publish. Sellers earn 85% of every paid use,
+          rental and purchase, from the first sale; Talyvor keeps 15%. Earnings are held for 14 days for refunds, then paid once a week to a
           Stripe account the seller connects, less Stripe&rsquo;s fees at cost — or taken at once as
           Talyvor credits, with no fees and no minimum. Each weekly payout has a statement of its sales,
           fees, royalties and refunds. A seller gives Talyvor their tax details before they are paid;

@@ -47,7 +47,7 @@ const CHANGED_CARD = {
     },
   },
   fees: {
-    market_take_bps: 1200,
+    market_take_bps: 1500,
     services_take_bps: 400,
     compute_take_bps: 400,
     lending_fee_bps: 150,
@@ -138,7 +138,8 @@ describe('/pricing', () => {
 
     // B51.1: only what applies today is "Fees on any plan"; the money features sit under the plan table's words for them.
     const fees = screen.getByTestId('fees-any-plan')
-    expect(fees).toHaveTextContent('Sellers earn 88%; Talyvor keeps 12%')
+    // B56.4: one sentence, from the first sale, with the served take.
+    expect(fees).toHaveTextContent('Sellers earn 85% of every paid use, rental and purchase, from the first sale; Talyvor keeps 15%.')
     // B56.2: Services and Compute are two rows even when equal, and Services says what it is taken on.
     expect(fees).toHaveTextContent('Services4% of a payment to another company’s agent')
     expect(fees).toHaveTextContent('Compute4%')

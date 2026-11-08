@@ -256,8 +256,8 @@ export function FeesOnAnyPlan({ fees }: { fees: Fees | undefined }) {
     <dl data-testid="fees-any-plan" className="grid gap-x-12 wide:grid-cols-2">
       <Row label="Selling on the Marketplace">
         <span>
-          Sellers earn <span className="font-figure">{formatBPS(10_000 - take)}</span>; Talyvor keeps{' '}
-          <span className="font-figure">{formatBPS(take)}</span>
+          Sellers earn <span className="font-figure">{formatBPS(10_000 - take)}</span> of every paid use, rental and
+          purchase, from the first sale; Talyvor keeps <span className="font-figure">{formatBPS(take)}</span>.
         </span>
       </Row>
       {/* B56.2: two rows even when equal. Lens takes the services fee only on a payment to another company's agent. */}
