@@ -28,13 +28,18 @@ async function workspaceSigns() {
   }
 }
 
-/** Shows the notification for one push from Lens: {approval_id, agent_name, amount_lxc, reason}. */
+// B55.49: the amount at the end of Lens's sentence, in either order LENS_MONEY_ORDER names: "$340.00 (3,400 LXC)" or "3,400 LXC ($340.00)".
+const LENS_AMOUNT = /(-?\$[\d,.]+ \(-?[\d,.]+ LXC\)|-?[\d,.]+ LXC \(-?\$[\d,.]+\))$/
+
+/** Shows the notification for one push from Lens: {approval_id, agent_name, amount_lxc, reason, body}. */
 async function showApproval(d) {
   const who = d.agent_name || 'An agent'
-  const amount = d.amount_lxc ? `${d.amount_lxc} LXC` : 'a payment'
+  // B55.49: from B55.30 Lens sends body, the sentence the phones show, with dollars beside the LXC; an older Lens does not.
+  const said = typeof d.body === 'string' ? d.body.match(LENS_AMOUNT) : null
+  const amount = said ? said[1] : d.amount_lxc ? `${d.amount_lxc} LXC` : 'a payment'
   const id = d.approval_id || ''
   const signs = id ? await workspaceSigns() : false
-  return self.registration.showNotification(`${who} asks you to approve ${amount}`, {
+  return self.registration.showNotification(said ? d.body : `${who} asks you to approve ${amount}`, {
     body: signs ? 'Open Talyvor to approve or decline it with your passkey or your phone.' : d.reason || 'Open Agent Wallets to approve or deny it.',
     icon: ICON,
     badge: ICON,

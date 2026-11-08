@@ -1610,13 +1610,13 @@ interface ApprovalWorker {
  * push Lens sends for it is delivered to the app's service worker, which must show it with Approve and
  * Deny, and (B29.14) with the app icon as its icon and badge. Approve, run in the service worker on that
  * notification, must move Lens's approval row to approved with no page opened or moved and no money moved;
- * the payment sent again is then paid once.
+ * the payment sent again is then paid once. B55.49: the notification reads Lens's sentence, "$0.10 (1 LXC)".
  */
 export function agentApprovalPush(seed: number): Scenario {
   return {
     id: 'agent-approval-push',
     owner: 'talyvor-suite',
-    items: ['B28.38'],
+    items: ['B28.38', 'B55.49'],
     agents: 2,
     title: 'Approve on the approval push decides it from the service worker: Lens’s row is approved without opening the app',
     run: (ctx) => withBank(ctx, async (bank) => {
@@ -1654,7 +1654,9 @@ export function agentApprovalPush(seed: number): Scenario {
       if (sw === undefined) return fail('/sw.js registered, but no service worker runs it')
 
       // The push Lens sends for a waiting approval (talyvor-lens economy/agent_approval_auth.go), delivered as a push.
-      const push = { type: 'agent_approval', approval_id: id, agent_name: payer.name, amount_ulxc: 1e6, amount_lxc: '1', reason: memo }
+      // B55.49: body is Lens's sentence, dollars beside the LXC at the $0.10 peg (B55.30).
+      const sentence = `${payer.name} wants to pay ${payee.name} $0.10 (1 LXC)`
+      const push = { type: 'agent_approval', approval_id: id, agent_name: payer.name, amount_ulxc: 1e6, amount_lxc: '1', reason: memo, body: sentence }
       await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify(push) })
       const shown = await sw.evaluate(async ({ tag, ms }) => {
         const w = globalThis as unknown as ApprovalWorker
@@ -1668,6 +1670,7 @@ export function agentApprovalPush(seed: number): Scenario {
       if (shown.actions === undefined) return fail(`the push for approval ${id} showed no notification (notifications ${shown.permission}; showing ${JSON.stringify(shown.shown)})`)
       ctx.evidence.push({ note: `the push: "${shown.title}" with ${shown.actions.join(', ') || 'no actions'}` })
       if (shown.actions.join() !== 'approve,deny') return fail(`the push for approval ${id} does not carry Approve and Deny: ${JSON.stringify(shown)}`)
+      if (shown.title !== sentence) return fail(`the push for approval ${id} reads "${shown.title}", not Lens's sentence "${sentence}"`)
       // B29.14: the push carries the Talyvor app icon, as its picture and its badge.
       if (shown.icon !== `${origin}/icon-192.png` || shown.badge !== `${origin}/icon-192.png`) return fail(`the push for approval ${id} does not carry the app icon as icon and badge: ${JSON.stringify(shown)}`)
 
@@ -1691,7 +1694,7 @@ export function agentApprovalPush(seed: number): Scenario {
       if (pays.length !== 1 || pays[0].amount_ulxc !== -1e6) return fail(`${payer.name}'s account has ${pays.length} payment line(s): ${JSON.stringify(pays)}`)
       const used = (await ctx.env.lens.agentApprovals(ctx.app.user)).find((x) => x.id === id)?.status
       if (used !== 'used') return fail(`the payment was sent again and the approval is ${used ?? 'gone'}, not used`)
-      return { pass: true, detail: `the push showed Approve and Deny and the app icon; Approve in the service worker approved ${id} with no page opened; sent again, paid once (one pay line, the approval used)` }
+      return { pass: true, detail: `the push read "${sentence}" with Approve and Deny and the app icon; Approve in the service worker approved ${id} with no page opened; sent again, paid once (one pay line, the approval used)` }
     }),
   }
 }
