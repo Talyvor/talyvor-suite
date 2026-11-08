@@ -187,7 +187,7 @@ describe('/privacy says what the code does', () => {
     expect(document.body.textContent).toContain(`${COMPANY_NAME} (company number`)
     expect(document.body.textContent).not.toMatch(/does not identify a data controller/)
     expect(screen.getAllByText(/legal review/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('28 October 2026').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('8 November 2026').length).toBeGreaterThan(0)
   })
 
   it('the waitlist: past tense while sign-up is open, the current words while closed', async () => {

@@ -139,4 +139,21 @@ describe('/documentation', () => {
       expect(within(region).getByRole('link', { name: 'Documentation' })).toHaveAttribute('href', DOCUMENTATION_PATH)
     }
   })
+
+  // B56.3 — it says only what the code does: past a limit is refused, above the approval amount
+  // waits; and investing, which is not offered, is on no public page, the route list included.
+  it('says what a spending rule does, and puts no investing on the page', async () => {
+    mockSignedOut()
+    window.history.pushState({}, '', DOCUMENTATION_PATH)
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { level: 1, name: /what talyvor does today/i })
+    expect(
+      screen.getByText(
+        'Set its spending rules: a payment past a limit is refused, and one above the approval amount waits in your approvals inbox, approved with a passkey once you have one.',
+      ),
+    ).toBeInTheDocument()
+    expect(container.querySelector('main')).not.toHaveTextContent(
+      /investing is simulated|simulated portfolio|simulated order|no order reaches a market/i,
+    )
+  })
 })
