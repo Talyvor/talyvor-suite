@@ -29,6 +29,7 @@ import { useDocumentTitle } from './documentTitle'
 import { ApiError, UnreadableError } from './lib/api'
 import { Overview } from './areas/lens/Overview'
 import { Home } from './areas/lens/Home'
+import { AppMoney } from './areas/lens/money'
 import { WORKSPACE_NAME_KEY, agentBankApi } from './areas/lens/agentBankApi'
 import { Ledger } from './areas/lens/Ledger'
 import { Earnings, EarningsMoved, ROYALTIES_PATH } from './areas/lens/Earnings'
@@ -793,6 +794,7 @@ function ScrollToTopOnPush() {
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <AppMoney>
       <BrowserRouter>
         {/* ABOVE `<Routes>`, NOT INSIDE THE CONSOLE'S SHELL. The legal pages, the two front
             doors and the marketing landing are siblings of the gate, not children of it — a
@@ -845,6 +847,7 @@ export function App() {
           </Routes>
         </DesignScope>
       </BrowserRouter>
+      </AppMoney>
     </QueryClientProvider>
   )
 }

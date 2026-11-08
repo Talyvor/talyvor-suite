@@ -180,6 +180,9 @@ const preset = {
         // both in the display face at the call site.
         'pocket-dialog': ['1.375rem', { lineHeight: '1.2', fontWeight: '750' }],
         'pocket-amount': ['3.5rem', { lineHeight: '1', letterSpacing: '-0.03em', fontWeight: '750' }],
+        // B57.7 — a balance card's amount (the reference's 44px, and 40px where cards sit side by side).
+        'pocket-balance': ['2.75rem', { lineHeight: '1', letterSpacing: '-0.03em', fontWeight: '750' }],
+        'pocket-balance-sm': ['2.5rem', { lineHeight: '1', letterSpacing: '-0.03em', fontWeight: '750' }],
 
         // ── DISPLAY: the marketing scale ──────────────────────────────────────────────────────
         //

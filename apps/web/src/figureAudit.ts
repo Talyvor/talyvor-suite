@@ -147,9 +147,9 @@ export function onFigureFace(el: Element | null): boolean {
 
 /**
  * B57.3 — Pocket's sizes for large money: 28px and larger at every width. `display-2` is 25px on a
- * phone, so it is not one. B57.5 adds the approval sheet's 56px amount.
+ * phone, so it is not one. B57.5 adds the approval sheet's 56px amount; B57.7 a balance card's 44px and 40px.
  */
-export const POCKET_LARGE_MONEY = ['text-figure', 'text-display-1', 'text-pocket-amount']
+export const POCKET_LARGE_MONEY = ['text-figure', 'text-display-1', 'text-pocket-amount', 'text-pocket-balance', 'text-pocket-balance-sm']
 
 /**
  * POCKET'S FACE, on pages held to Pocket's rules (pocketPending.ts): every numeral is tabular in
@@ -174,7 +174,8 @@ export function onPocketFace(el: Element, kind: FigureKind): boolean {
   }
   if (face === 'figure') return true
   if (face === 'mono') return false
-  if (face === 'display') return kind === 'currency' && tabular && large
+  // B57.7 — <Money> (data-money) draws its cents, and LXC when it leads, in the display face beside the dollars.
+  if (face === 'display') return (kind === 'currency' || el.closest('[data-money]') !== null) && tabular && large
   return tabular
 }
 
