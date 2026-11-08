@@ -41,6 +41,7 @@ import { BuyerProtection } from "./BuyerProtection";
 import {
   CARDS_OFF,
   cardPayments,
+  formatBPS,
   usePricing,
 } from "../marketing/pricingApi";
 import {
@@ -863,6 +864,10 @@ export function PayoutsCard({
 
 function Selling() {
   const mine = useQuery({ queryKey: MINE_KEY, queryFn: marketApi.mine });
+  // B56.4: the split as Lens serves it; none stated, none printed.
+  const pricing = usePricing();
+  const take =
+    pricing.status === "ok" ? pricing.pricing.fees?.market_take_bps : undefined;
   return (
     <>
       <Region
@@ -872,10 +877,16 @@ function Selling() {
         sectionClassName="pb-10 pt-4 wide:pb-12"
         className="flex max-w-2xl flex-col gap-3"
       >
-        <p className="text-body text-muted">
-          A buyer’s use, rental or purchase of your listing earns you 85% of its
-          price once their bill is paid; Talyvor keeps 15%. Your own uses, and
-          uses by a workspace linked to yours, earn nothing.
+        <p data-testid="selling-split" className="text-body text-muted">
+          {take !== undefined && (
+            <>
+              Sellers earn{" "}
+              <span className="font-figure">{formatBPS(10_000 - take)}</span> of
+              every paid use, rental and purchase, from the first sale; Talyvor
+              keeps <span className="font-figure">{formatBPS(take)}</span>.{" "}
+            </>
+          )}
+          Your own uses, and uses by a workspace linked to yours, earn nothing.
         </p>
         <SellerTaxNotice />
         <EarningsCard />

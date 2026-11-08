@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { itemsFor } from '../src/filing.ts'
 import type { ReportedRun } from '../src/report.ts'
-import { FOOTER_LINKS, HEADER_LINKS, PRIVACY_RECORDS, PUBLIC_PAGES, type PageRead, type SiteRead, siteFaults } from '../src/siteTruth.ts'
+import { FOOTER_LINKS, HEADER_LINKS, PRIVACY_RECORDS, PUBLIC_PAGES, type PageRead, type SiteRead, siteFaults, splitSentence } from '../src/siteTruth.ts'
 
 const NONE = 'Cookies\nOur public pages set no advertising or analytics cookies, and send nothing to Meta.'
 const BANNER = "Cookies\nOur public pages use one advertising cookie, Meta's, to measure our ads, and only if you accept it in the cookie banner."
@@ -40,6 +40,18 @@ describe('the site-truth oracle (B51.4)', () => {
       "/pricing does not say team's platform fee is 3.25%, as /api/pricing serves it",
       '/pricing still shows one "Services and compute" row',
       '/pricing still shows one "SSO and audit export" row',
+    ])
+  })
+
+  // B56.4: /pricing and /terms say the served split from the first sale, and no page offers a first-million tier.
+  it('catches a split without "from the first sale" and a first-million tier', () => {
+    const SPLIT = 'Sellers earn 85% of every paid use, rental and purchase, from the first sale; Talyvor keeps 15%.'
+    expect(splitSentence(1500)).toBe(SPLIT)
+    const served = (r: SiteRead) => { r.marketTakeBps = 1500 }
+    expect(planted((r) => { served(r); at(r, '/pricing').text += ` ${SPLIT}`; at(r, '/terms').text += ` Sellers earn 85% of every paid use,\nrental and purchase, from the first sale; Talyvor keeps 15%.` })).toEqual([])
+    expect(planted((r) => { served(r); at(r, '/pricing').text += ' Sellers earn 85%; Talyvor keeps 15%'; at(r, '/terms').text += ` ${SPLIT} 100% of a seller’s first $1M` })).toEqual([
+      `/pricing does not say "${SPLIT}"`,
+      '/terms offers a first-million tier',
     ])
   })
 
