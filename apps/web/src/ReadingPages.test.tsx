@@ -53,7 +53,7 @@ describe.each([
     expect(main.querySelector('.max-w-lg.text-reading')).not.toBeNull()
 
     const footer = screen.getByRole('contentinfo')
-    expect(footer.querySelector('img[data-brand="app-icon"]')).not.toBeNull()
+    expect(footer.querySelector('[data-brand="lockup"] img[src="/brand/logo/talyvor-logo-small-on-light.svg"]')).not.toBeNull() // B57.59: Pocket's footer opens with the logo
     expect(within(footer).getByText(new RegExp(COMPANY_NAME))).toBeInTheDocument()
     expect(within(footer).getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy')
   })

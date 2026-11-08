@@ -22,9 +22,9 @@ import { CannotTest } from './scenarios.ts'
 
 export const PUBLIC_PAGES = ['/marketing', '/pricing', '/documentation', '/documentation/claude', '/privacy', '/terms'] as const
 
-/** B51.1's one header and one footer: the addresses each must link to. */
-export const HEADER_LINKS = ['/marketing', '/pricing', '/documentation', '/', '/signup']
-export const FOOTER_LINKS = ['/privacy', '/terms', '/pricing', '/documentation', 'mailto:']
+/** B51.1's one header and one footer, as B57.59 draws them in Pocket: the addresses each must link to. */
+export const HEADER_LINKS = ['/marketing', '/pricing', '/documentation', '/']
+export const FOOTER_LINKS = ['/pricing', '/documentation', '/privacy', '/terms', 'mailto:']
 
 /** The app's catch-all for an address it has no page at (apps/web App.tsx). */
 export const NOT_FOUND = 'Nothing at this address'
