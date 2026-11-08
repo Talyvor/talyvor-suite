@@ -261,6 +261,7 @@
   "src/lib/awaiting.test.ts": 9,
   "src/lib/calledRoutes.test.ts": 11,
   "src/lib/productState.test.ts": 13,
+  "src/logoSwap.test.ts": 3,
   "src/meteredFaultClaim.test.tsx": 12,
   "src/meteredSurfacePopulation.test.ts": 8,
   "src/mirrorSubsetRegister.test.ts": 83,

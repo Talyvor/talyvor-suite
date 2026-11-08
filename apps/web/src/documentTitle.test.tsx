@@ -282,7 +282,7 @@ describe('the format, and the brand it ends in', () => {
       'icon-192.png': '16ff82ff519b67223c00f44777c8e1ee6328ac303d880155a378091206b7726d',
       'icon-512.png': '33a4271eaaa09e5e45808bc84aa28ea19c27784b4ad91ae4770e9533b92f2a36',
       'icon-maskable-512.png': '9f71d049ea20787f7f6cbadc74d2835c5bf2ee240a8d9e962f503aa01cc40637',
-      'og-image.png': 'af6fa97f8c6dafd105cdee58eef8629a6a4b491206a5c7dfbd660776579c4d7e',
+      'og-image.png': 'ef798c828a44b8bebbb13edafb6f33f2be5984533b97a52e4d8aa4e26f09b5dd', // B57.79: the dark share image
     }
     for (const [name, sha] of Object.entries(kit)) {
       const bytes = readFileSync(resolve(__dirname, '../public', name))
