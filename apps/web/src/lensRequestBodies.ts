@@ -300,11 +300,34 @@ export const LENS_BODIES: LensBody[] = [
     route: "PUT /v1/workspaces/{wsID}/agents/{agentID}/rules",
     file: "apps/bff/agent_bank.go",
     kind: "anon-struct",
-    fn: "func (a *app) handleAgentRules(",
+    fn: "func agentRulesFields(",
     anchor: "var in struct {",
     upstreamFile: "internal/economy/agent_rules.go",
     upstreamAnchor: "type AgentRules struct {",
     subject: "lensAgentRulesBody",
+  },
+  // B55.14 — a looser save carries its assertion beside the rules (Lens B55.13).
+  {
+    route: "PUT /v1/workspaces/{wsID}/agents/{agentID}/rules",
+    file: "apps/bff/agent_bank.go",
+    kind: "map-literal",
+    anchor:
+      'json.Marshal(map[string]any{"rules": json.RawMessage(rules), "assertion": signed.Assertion})',
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/workspaces/{wsID}/agents/{agentID}/rules", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAgentRulesSignedBody",
+  },
+  // B55.14 — what a change would do to an agent's rules, and the challenge a looser one is signed over.
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/rules/challenge",
+    file: "apps/bff/agent_bank.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleAgentRulesChallenge(",
+    anchor: "var in struct {",
+    upstreamFile: "internal/economy/agent_rules_loosen.go",
+    upstreamAnchor: "type RulesProposal struct {",
+    subject: "lensAgentRulesChallengeBody",
   },
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/pay",

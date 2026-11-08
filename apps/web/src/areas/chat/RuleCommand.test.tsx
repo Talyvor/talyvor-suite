@@ -6,11 +6,14 @@ import { parseAskAbove, parseRule } from './RuleCommand'
 // B28.352 — an agent's rule set in plain words in Chat: the sentence opens a card, read as typed, and Save puts the
 // agent's rules back with that one limit changed. The BFF is mocked at the wire; that Lens then refuses an over-limit
 // call is proven against Lens by the e2e scenario chat-plain-rule.
+// B55.14 — both raise a limit, which loosens the rules (Lens B55.13): once the workspace has a passkey the card says so
+// and saves only with it; Lens refuses the save unsigned, as here.
 
 const M = 1_000_000
 
-function mockBff() {
+function mockBff(passkey = false) {
   const saved: Array<Record<string, unknown>> = []
+  const challenged: unknown[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -45,13 +48,22 @@ function mockBff() {
         timezone: 'UTC',
       })
     }
+    if (url === '/api/agents/passkeys') return json({ passkeys: passkey ? [{ credential_id: 'Y3JlZDE', name: 'iPhone', created_at: '2026-10-06T04:00:00Z' }] : [] })
+    if (url === '/api/money/devices') return json({ devices: [] })
+    if (url === '/api/agents/agt_1/rules-challenge') {
+      challenged.push(body)
+      return json({ looser: true, changes: ['Claude Opus 5 daily limit: was 2 LXC, now 5 LXC'], challenge: 'Y2gx', allow_credentials: passkey ? ['Y3JlZDE'] : [] })
+    }
     if (url === '/api/agents/agt_1/rules' && method === 'PUT') {
+      if (passkey && body.assertion === undefined) {
+        return json({ error: "loosening an agent's rules is signed with your passkey or your phone: sign this change's challenge" }, 403)
+      }
       saved.push(body)
-      return json(body)
+      return json(body.rules ?? body)
     }
     return new Response('null', { status: 404 })
   })
-  return { saved }
+  return { saved, challenged }
 }
 
 afterEach(() => {
@@ -107,6 +119,37 @@ describe('Set an agent’s rule in plain words from Chat (B28.352)', () => {
         timezone: 'UTC',
       },
     ])
+  })
+
+  it('a raise says what it loosens and saves only with the passkey', async () => {
+    const bff = mockBff(true)
+    const ASSERTION = { rawId: new Uint8Array([1]).buffer, response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } }
+    const get = vi.fn().mockResolvedValue(ASSERTION)
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/chat')
+    render(<App />)
+
+    const box = await screen.findByRole('textbox', { name: /message/i })
+    await waitFor(() => expect(box).not.toBeDisabled())
+    fireEvent.change(box, { target: { value: 'Cap agent researcher at 5 LXC a day on Opus' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    const card = await screen.findByTestId('chat-rule')
+    await waitFor(() => expect(within(card).getByLabelText('On which model')).toHaveValue('claude-opus-5'))
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save the rule' }))
+    expect((await within(card).findByTestId('rules-loosen')).textContent).toBe(
+      'This loosens Researcher’s rules:Claude Opus 5 daily limit: was 2 LXC, now 5 LXCIt needs your passkey. Tightening is saved at once.',
+    )
+    expect(get).not.toHaveBeenCalled()
+    expect(bff.saved).toEqual([])
+
+    fireEvent.click(within(card).getByRole('button', { name: 'Save with your passkey' }))
+    await within(card).findByTestId('chat-rule-saved')
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(bff.challenged).toHaveLength(2)
+    expect(bff.saved).toHaveLength(1)
+    expect(bff.saved[0].assertion).toEqual({ credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' })
+    expect((bff.saved[0].rules as Record<string, unknown>).model_daily_limits_ulxc).toEqual({ 'claude-haiku-4-5': M, 'claude-opus-5': 5 * M })
   })
 })
 

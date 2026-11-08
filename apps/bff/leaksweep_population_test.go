@@ -608,9 +608,12 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	// and /api/agents/keys/recovery-code make a new recovery code, shown once and never read back; /api/agents/keys/recover/
 	// start, .../cancel and .../complete start, cancel and end a recovery, read back through GET /api/agents/keys/recover,
 	// in the sweep's reach.
-	if len(methodOnly) > 178 {
+	//
+	// THE HUNDRED-AND-SEVENTY-NINTH IS B55.14'S, POST only: /api/agents/{id}/rules-challenge relays what a change would do
+	// to the rules and a one-time challenge, and saves nothing; the rules are read back through GET /api/agents/{id}/rules.
+	if len(methodOnly) > 179 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 178 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 179 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}

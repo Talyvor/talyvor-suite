@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 
 import { Button, Input, focusRing, inlineLink } from '@talyvor/ui'
 
-import { BOOK_KEY, rulesKey } from '../lens/AgentBank'
+import { BOOK_KEY, RulesLoosen, rulesKey, useRulesChange } from '../lens/AgentBank'
 import { type AgentRules, agentBankApi, parseLXC, refusalText } from '../lens/agentBankApi'
 import { Lxc } from '../lens/money'
 import { modelCapKey, useRuleChoices } from '../lens/rulePickers'
@@ -14,7 +14,8 @@ import { Card } from '../lens/walletBrand'
 // not sent to the model: it opens a card in the conversation with the agent, the amount, how often and the model read
 // from the sentence, each changeable, and what the rule is now beside what it will be. Save reads the agent's rules from
 // Lens afresh and puts them back with that one limit changed, through the BFF's existing /api/agents routes, as Agent
-// Wallets does; Lens then refuses a call that would take the agent past it.
+// Wallets does; Lens then refuses a call that would take the agent past it. B55.14: a raise loosens the rules, so it
+// is saved as Agent Wallets saves one, with the passkey once the workspace has one (Lens B55.13).
 
 export type RulePeriod = 'hour' | 'day' | 'week' | 'month'
 
@@ -101,15 +102,20 @@ export function RuleCard({ command, onClose }: { command: string; onClose: () =>
   const byDay = chosenModel === '' || period === 'day'
   const ready = agent !== undefined && chosenModel !== null && ulxc !== null && ulxc > 0 && byDay
 
+  const change = useRulesChange(chosenAgent)
+  const { reset } = change
+  // A pending loosening is for the card as it was: any field changed asks Lens again.
+  useEffect(reset, [chosenAgent, amount, period, model]) // eslint-disable-line react-hooks/exhaustive-deps
   const save = useMutation({
     mutationFn: async () => {
       // Read afresh, so a rule changed elsewhere since the card opened is kept, not put back as it was.
-      const current = await agentBankApi.rules(chosenAgent)
-      return agentBankApi.setRules(chosenAgent, withRule(current, period, chosenModel ?? '', ulxc ?? 0))
+      const next = withRule(await agentBankApi.rules(chosenAgent), period, chosenModel ?? '', ulxc ?? 0)
+      return change.run({ rules: next }, (assertion) => agentBankApi.setRules(chosenAgent, next, assertion))
     },
-    onSuccess: (saved) => qc.setQueryData(rulesKey(chosenAgent), saved),
+    onSuccess: (saved) => saved !== null && qc.setQueryData(rulesKey(chosenAgent), saved),
   })
-  const saved = save.data
+  const judged = change.judged
+  const saved = save.data ?? undefined
 
   const modelName = (id: string) => options.find((o) => o.value === id)?.label ?? id
   const what = (
@@ -217,7 +223,7 @@ export function RuleCard({ command, onClose }: { command: string; onClose: () =>
               {/* One-handed on a phone: full-width buttons; side by side on a wide screen. Send stays the view's one primary. */}
               <div className="flex w-full flex-col gap-2 wide:flex-row wide:items-center">
                 <Button type="submit" className="h-12 w-full wide:h-8 wide:w-auto" disabled={!ready || save.isPending}>
-                  {save.isPending ? 'Saving…' : 'Save the rule'}
+                  {save.isPending ? 'Saving…' : judged?.signs ? 'Save with your passkey' : 'Save the rule'}
                 </Button>
                 {!save.isPending ? (
                   <Button type="button" className="h-12 w-full wide:h-8 wide:w-auto" onClick={onClose}>
@@ -225,6 +231,7 @@ export function RuleCard({ command, onClose }: { command: string; onClose: () =>
                   </Button>
                 ) : null}
               </div>
+              <RulesLoosen agent={agent?.name ?? ''} judged={judged} />
               {save.isError ? (
                 <p role="alert" className="text-caption text-ink">
                   The rule was not saved: {refusalText(save.error)}
@@ -283,15 +290,19 @@ export function AskAboveCard({ command, onClose }: { command: string; onClose: (
   const ulxc = parseLXC(amount)
   const ready = agent !== undefined && ulxc !== null && ulxc > 0
 
+  const change = useRulesChange(chosenAgent)
+  const { reset } = change
+  useEffect(reset, [chosenAgent, amount]) // eslint-disable-line react-hooks/exhaustive-deps
   const save = useMutation({
     mutationFn: async () => {
       // Read afresh, so a rule changed elsewhere since the card opened is kept, not put back as it was.
-      const current = await agentBankApi.rules(chosenAgent)
-      return agentBankApi.setRules(chosenAgent, { ...current, approval_above_ulxc: ulxc ?? 0 })
+      const next = { ...(await agentBankApi.rules(chosenAgent)), approval_above_ulxc: ulxc ?? 0 }
+      return change.run({ rules: next }, (assertion) => agentBankApi.setRules(chosenAgent, next, assertion))
     },
-    onSuccess: (saved) => qc.setQueryData(rulesKey(chosenAgent), saved),
+    onSuccess: (saved) => saved !== null && qc.setQueryData(rulesKey(chosenAgent), saved),
   })
-  const saved = save.data
+  const judged = change.judged
+  const saved = save.data ?? undefined
   const now = rules.data?.approval_above_ulxc ?? null
 
   const top = useRef<HTMLDivElement | null>(null)
@@ -366,7 +377,7 @@ export function AskAboveCard({ command, onClose }: { command: string; onClose: (
               ) : null}
               <div className="flex w-full flex-col gap-2 wide:flex-row wide:items-center">
                 <Button type="submit" className="h-12 w-full wide:h-8 wide:w-auto" disabled={!ready || save.isPending}>
-                  {save.isPending ? 'Saving…' : 'Save the rule'}
+                  {save.isPending ? 'Saving…' : judged?.signs ? 'Save with your passkey' : 'Save the rule'}
                 </Button>
                 {!save.isPending ? (
                   <Button type="button" className="h-12 w-full wide:h-8 wide:w-auto" onClick={onClose}>
@@ -374,6 +385,7 @@ export function AskAboveCard({ command, onClose }: { command: string; onClose: (
                   </Button>
                 ) : null}
               </div>
+              <RulesLoosen agent={agent?.name ?? ''} judged={judged} />
               {save.isError ? (
                 <p role="alert" className="text-caption text-ink">
                   The rule was not saved: {refusalText(save.error)}

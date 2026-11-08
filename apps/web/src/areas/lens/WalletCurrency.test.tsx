@@ -19,6 +19,8 @@ function mockBff() {
     const url = String(input)
     const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    // B55.14: Lens judges a change to an agent's rules first; these do not loosen them.
+    if (url.endsWith('/rules-challenge')) return json({ looser: false, changes: [], allow_credentials: [] })
     if (url === '/api/agents')
       return json({
         workspace_balance_ulxc: 100 * M, allocated_ulxc: 12.5 * M, unallocated_ulxc: 87.5 * M, spent_ulxc: 0,

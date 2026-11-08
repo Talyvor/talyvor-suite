@@ -11,7 +11,7 @@ import { IfArea } from '../../lib/workspaceAreas'
 import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
-import { letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
+import { assertOver, letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
 import { GetAKeyBack, NoLiveKey, RecoveryCodeRow } from './KeyRecovery'
 import { AgentAnalytics } from './AgentAnalytics'
 import { AlertChannels } from './AlertChannels'
@@ -44,8 +44,10 @@ import {
   type AgentSchedule,
   type AgentTopUp as AgentTopUpValue,
   type LimitAlert,
+  type PasskeyAssertion,
   type PaymentRequest,
   type PostingKind,
+  type RulesChange,
   type StatementFormat,
   type StatementLine,
   AgentBankError,
@@ -1012,36 +1014,39 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
   )
   const badRate = parseRate(rate) === null
   const bad = badAmount || badRate
+  const proposed: AgentRules = {
+    max_per_request_ulxc: parseLXC(limits.max_per_request_ulxc) ?? 0,
+    hourly_limit_ulxc: parseLXC(limits.hourly_limit_ulxc) ?? 0,
+    daily_limit_ulxc: parseLXC(limits.daily_limit_ulxc) ?? 0,
+    weekly_limit_ulxc: parseLXC(limits.weekly_limit_ulxc) ?? 0,
+    monthly_limit_ulxc: parseLXC(limits.monthly_limit_ulxc) ?? 0,
+    approval_above_ulxc: parseLXC(limits.approval_above_ulxc) ?? 0,
+    requests_per_minute: parseRate(rate) ?? 0,
+    model_daily_limits_ulxc: Object.fromEntries(
+      modelLimits.map(([m, t]) => [m, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
+    ),
+    allowed_models: models,
+    allowed_providers: providers,
+    allowed_listings: listings,
+    allowed_payees: payees.allowed,
+    blocked_payees: payees.blocked,
+    payee_daily_limits_ulxc: Object.fromEntries(
+      Object.entries(payees.caps).map(([id, t]) => [id, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
+    ),
+    payee_monthly_limits_ulxc: Object.fromEntries(
+      Object.entries(payees.monthCaps).map(([id, t]) => [id, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
+    ),
+    active_from: from.trim(),
+    active_until: until.trim(),
+    timezone: timezone.trim(),
+    pause_on_unusual_spend: pauseOnUnusual,
+  }
+  const change = useRulesChange(agent.id)
+  const judged = change.judgedFor({ rules: proposed })
   const save = useMutation({
-    mutationFn: () =>
-      agentBankApi.setRules(agent.id, {
-        max_per_request_ulxc: parseLXC(limits.max_per_request_ulxc) ?? 0,
-        hourly_limit_ulxc: parseLXC(limits.hourly_limit_ulxc) ?? 0,
-        daily_limit_ulxc: parseLXC(limits.daily_limit_ulxc) ?? 0,
-        weekly_limit_ulxc: parseLXC(limits.weekly_limit_ulxc) ?? 0,
-        monthly_limit_ulxc: parseLXC(limits.monthly_limit_ulxc) ?? 0,
-        approval_above_ulxc: parseLXC(limits.approval_above_ulxc) ?? 0,
-        requests_per_minute: parseRate(rate) ?? 0,
-        model_daily_limits_ulxc: Object.fromEntries(
-          modelLimits.map(([m, t]) => [m, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
-        ),
-        allowed_models: models,
-        allowed_providers: providers,
-        allowed_listings: listings,
-        allowed_payees: payees.allowed,
-        blocked_payees: payees.blocked,
-        payee_daily_limits_ulxc: Object.fromEntries(
-          Object.entries(payees.caps).map(([id, t]) => [id, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
-        ),
-        payee_monthly_limits_ulxc: Object.fromEntries(
-          Object.entries(payees.monthCaps).map(([id, t]) => [id, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
-        ),
-        active_from: from.trim(),
-        active_until: until.trim(),
-        timezone: timezone.trim(),
-        pause_on_unusual_spend: pauseOnUnusual,
-      }),
+    mutationFn: () => change.run({ rules: proposed }, (assertion) => agentBankApi.setRules(agent.id, proposed, assertion)),
     onSuccess: (saved) => {
+      if (saved === null) return
       qc.setQueryData(rulesKey(agent.id), saved)
       void qc.invalidateQueries({ queryKey: rulesHistoryKey(agent.id) })
     },
@@ -1124,12 +1129,13 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
       <div className="flex flex-col gap-2 px-gutter py-3">
         <div>
           <Button type="submit" disabled={bad || save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save rules'}
+            {save.isPending ? 'Saving…' : judged?.signs ? 'Save with your passkey' : 'Save rules'}
           </Button>
         </div>
+        <RulesLoosen agent={agent.name} judged={judged} />
         {badAmount ? <Note ok={false}>A limit is an amount of LXC with at most six decimals, or empty.</Note> : null}
         {badRate ? <Note ok={false}>Requests per minute is a whole number, or empty.</Note> : null}
-        {save.isSuccess ? <Note ok>Saved. Lens applies these rules to the next request or payment.</Note> : null}
+        {save.isSuccess && save.data !== null ? <Note ok>Saved. Lens applies these rules to the next request or payment.</Note> : null}
         {save.isError ? <Note ok={false}>{refusalText(save.error)}</Note> : null}
       </div>
     </form>
@@ -1479,13 +1485,25 @@ function ruleChanges(was: AgentRules, now: AgentRules, payeeName: (id: string) =
 function RulesHistory({ agent, agents, onRolledBack }: { agent: Agent; agents: Agent[]; onRolledBack: (rules: AgentRules) => void }) {
   const qc = useQueryClient()
   const history = useQuery({ queryKey: rulesHistoryKey(agent.id), queryFn: () => agentBankApi.rulesHistory(agent.id) })
+  // B55.14 — a rollback asks first, with what it changes; one that loosens the rules is signed (Lens B55.13).
+  const change = useRulesChange(agent.id)
+  const [asking, setAsking] = useState<number | null>(null)
+  const ask = useMutation({
+    mutationFn: (version: number) => change.judge({ rollback_to: version }),
+    onMutate: (version) => {
+      setAsking(version)
+      rollback.reset()
+    },
+  })
   const rollback = useMutation({
-    mutationFn: (version: number) => agentBankApi.rollbackRules(agent.id, version),
+    mutationFn: (version: number) => change.commit({ rollback_to: version }, (assertion) => agentBankApi.rollbackRules(agent.id, version, assertion)),
     onSuccess: (back) => {
+      setAsking(null)
       onRolledBack(back)
       void qc.invalidateQueries({ queryKey: rulesHistoryKey(agent.id) })
     },
   })
+  const judged = asking === null ? null : change.judgedFor({ rollback_to: asking })
   const versions: AgentRulesVersion[] = history.data?.versions ?? []
   const payeeName = (id: string) => agents.find((a) => a.id === id)?.name ?? id
   return (
@@ -1516,9 +1534,9 @@ function RulesHistory({ agent, agents, onRolledBack }: { agent: Agent; agents: A
                   {i > 0 ? (
                     <Button
                       className="ml-auto"
-                      disabled={rollback.isPending}
+                      disabled={rollback.isPending || ask.isPending}
                       aria-label={`Roll ${agent.name}’s rules back to version ${v.version}`}
-                      onClick={() => rollback.mutate(v.version)}
+                      onClick={() => ask.mutate(v.version)}
                     >
                       Roll back to this
                     </Button>
@@ -1542,6 +1560,41 @@ function RulesHistory({ agent, agents, onRolledBack }: { agent: Agent; agents: A
           })}
         </ol>
       )}
+      {asking !== null && judged !== null ? (
+        <div className="flex flex-col gap-2 px-gutter pb-3" data-testid="rules-rollback-ask">
+          <p className="text-body text-ink">
+            Roll {agent.name}’s rules back to version <span className="font-figure">{asking}</span>?
+          </p>
+          <ul className="flex list-disc flex-col gap-0.5 pl-6 text-caption text-ink">
+            {judged.changes.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+          {judged.phone ? <RulesLoosen agent={agent.name} judged={judged} /> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {judged.phone ? null : (
+              <Button disabled={rollback.isPending} onClick={() => rollback.mutate(asking)}>
+                {rollback.isPending ? 'Rolling back…' : judged.signs ? 'Roll back with your passkey' : 'Roll back'}
+              </Button>
+            )}
+            <Button
+              disabled={rollback.isPending}
+              onClick={() => {
+                setAsking(null)
+                change.reset()
+                rollback.reset()
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {ask.isError ? (
+        <div className="px-gutter pb-3">
+          <Note ok={false}>{refusalText(ask.error)}</Note>
+        </div>
+      ) : null}
       {rollback.isSuccess || rollback.isError ? (
         <div className="px-gutter pb-3">
           {rollback.isSuccess ? (
@@ -1605,9 +1658,13 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
   const rate = rule?.[0] === 'requests_per_minute'
   const raisedTo = rate ? (/^\s*\d+\s*$/.test(value) && Number(value) > 0 ? Number(value) : null) : parseLXC(value)
   const at = new Date(until)
+  // B55.14 — a boost always loosens the rules, so once the workspace has a passkey it is signed (Lens B55.13).
+  const asked = rule !== undefined && raisedTo !== null && !Number.isNaN(at.getTime()) ? { rule: rule[0], value: raisedTo, until: at.toISOString() } : null
+  const change = useRulesChange(agent.id)
+  const judged = change.judgedFor(asked && { boost: asked })
   const raise = useMutation({
-    mutationFn: () => agentBankApi.boost(agent.id, { rule: rule?.[0] ?? '', value: raisedTo ?? 0, until: at.toISOString() }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: boostsKey(agent.id) }),
+    mutationFn: (b: { rule: string; value: number; until: string }) => change.run({ boost: b }, (assertion) => agentBankApi.boost(agent.id, b, assertion)),
+    onSuccess: (b) => b !== null && void qc.invalidateQueries({ queryKey: boostsKey(agent.id) }),
   })
   const end = useMutation({
     mutationFn: (r: string) => agentBankApi.endBoost(agent.id, r),
@@ -1618,7 +1675,7 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
   })
   const label = (r: string) => BOOSTABLE.find(([field]) => field === r)?.[1] ?? r
   const inForce: AgentRuleBoost[] = boosts.data?.boosts ?? []
-  const ready = rule !== undefined && raisedTo !== null && !Number.isNaN(at.getTime()) && !raise.isPending
+  const ready = asked !== null && !raise.isPending
   return (
     <Card>
       <CardHeader>Limit boost</CardHeader>
@@ -1659,7 +1716,7 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
           className="flex flex-col gap-2 px-gutter py-3"
           onSubmit={(e) => {
             e.preventDefault()
-            if (ready) raise.mutate()
+            if (ready && asked !== null) raise.mutate(asked)
           }}
         >
           <p className="text-body text-muted">
@@ -1700,10 +1757,11 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
               onChange={(e) => setUntil(e.target.value)}
             />
             <Button type="submit" disabled={!ready}>
-              {raise.isPending ? 'Raising…' : 'Raise until then'}
+              {raise.isPending ? 'Raising…' : judged?.signs ? 'Raise with your passkey' : 'Raise until then'}
             </Button>
           </div>
-          {raise.isSuccess ? (
+          <RulesLoosen agent={agent.name} judged={judged} />
+          {raise.isSuccess && raise.data !== null ? (
             <Note ok>
               {agent.name}’s {label(raise.data.rule).toLowerCase()} is {boostFigure(raise.data.rule, raise.data.value)} until{' '}
               <span className="font-figure">{formatWhen(raise.data.until)}</span>, then{' '}
@@ -2334,6 +2392,71 @@ export function useKeys() {
   const signed = passkeyCount > 0 || (devices.data?.devices ?? []).length > 0
   const onlyThePhone = isSuccess && signed && !thisBrowserSigns
   return { signed, thisBrowserSigns, onlyThePhone, noLiveKey, hold: !isSuccess || onlyThePhone, passkeyCount, isSuccess }
+}
+
+/** B55.14 — what Lens said a change to an agent's rules does, for the change it was asked about. */
+interface RulesJudged {
+  change: string
+  changes: string[]
+  /** looser, and this browser's passkey signs it */
+  signs: boolean
+  /** looser, and only the phone's key could sign it */
+  phone: boolean
+}
+
+/**
+ * B55.14 — loosening an agent's rules is signed, as resuming it is; tightening is saved at once (Lens B55.13). judge asks
+ * Lens what a change does; commit saves it, signed over a fresh challenge for exactly that change when it loosens the
+ * rules and the workspace has a passkey. A form's save (run) judges first: tighter, or a workspace with no key, saves
+ * there and then; looser shows what it loosens and waits for the person to save again. With only the phone's key
+ * nothing is sent from here.
+ */
+export function useRulesChange(agentID: string) {
+  const { onlyThePhone } = useKeys()
+  const [judged, setJudged] = useState<RulesJudged | null>(null)
+  const judge = async (change: RulesChange): Promise<RulesJudged> => {
+    const j = await agentBankApi.rulesChallenge(agentID, change)
+    const signs = j.looser && (j.allow_credentials ?? []).length > 0
+    const next = { change: JSON.stringify(change), changes: j.changes ?? [], signs, phone: j.looser && !signs && onlyThePhone }
+    setJudged(next)
+    return next
+  }
+  async function commit<T>(change: RulesChange, save: (assertion?: PasskeyAssertion) => Promise<T>, known = judged): Promise<T> {
+    let assertion: PasskeyAssertion | undefined
+    if (known?.change !== JSON.stringify(change) || known.signs) {
+      // A fresh challenge: the one judged may have run out, and Lens signs over exactly this change.
+      const j = await agentBankApi.rulesChallenge(agentID, change)
+      if (j.looser && j.challenge && (j.allow_credentials ?? []).length > 0) assertion = await assertOver({ challenge: j.challenge, allow_credentials: j.allow_credentials })
+    }
+    const saved = await save(assertion)
+    setJudged(null)
+    return saved
+  }
+  async function run<T>(change: RulesChange, save: (assertion?: PasskeyAssertion) => Promise<T>): Promise<T | null> {
+    if (judged?.change === JSON.stringify(change) && judged.signs) return commit(change, save)
+    const j = await judge(change)
+    return j.signs || j.phone ? null : commit(change, save, j)
+  }
+  /** What Lens said this change does, while it is the change last asked about. */
+  const judgedFor = (change: RulesChange | null) => (change !== null && judged?.change === JSON.stringify(change) ? judged : null)
+  return { judge, commit, run, judged, judgedFor, reset: () => setJudged(null) }
+}
+
+/** B55.14 — said before a looser change is saved: what it loosens and that it needs the passkey, or where to add one. */
+export function RulesLoosen({ agent, judged }: { agent: string; judged: RulesJudged | null }) {
+  if (judged === null || (!judged.signs && !judged.phone)) return null
+  if (judged.phone) return <OnThePhone>Loosen {agent}’s rules with a passkey on this browser: add this browser first.</OnThePhone>
+  return (
+    <div className="flex flex-col gap-1 text-body text-ink" data-testid="rules-loosen">
+      <p>This loosens {agent}’s rules:</p>
+      <ul className="flex list-disc flex-col gap-0.5 pl-6 text-caption">
+        {judged.changes.map((c) => (
+          <li key={c}>{c}</li>
+        ))}
+      </ul>
+      <p>It needs your passkey. Tightening is saved at once.</p>
+    </div>
+  )
 }
 
 /** B55.2 — said in place of a button this browser cannot sign for: where to do it, and how to sign here too (B55.3). */

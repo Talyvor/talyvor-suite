@@ -2,6 +2,8 @@
 // a phone key as platform "test" (as device-key-approval does) and an agent files an approval. Approvals in the app must say to
 // approve it on the phone, show no Approve or Deny for it, and send nothing when its row is pressed "a"; Lens still holds the
 // approval pending. A Lens without LENS_DEVICE_TEST_ATTESTATION=true refuses the "test" platform: a SKIP, never a pass.
+// B55.14 — first the agent's Rules card: raising its daily limit must say to add this browser and send nothing, so Lens keeps
+// the limit, and lowering it must save at once, so Lens holds the lower one.
 // B55.3 — then, on a page with a virtual Face ID, Add this device waits for the phone with the code Lens holds; the phone key
 // lets it in over its enrolment challenge and the page says this browser signs. A second phone registered unsigned then waits,
 // and the page lets it in with this browser's new passkey: Lens holds that enrolment approved.
@@ -15,8 +17,13 @@ import { CannotTest, type Scenario, type ScenarioCtx, type Verdict } from './sce
 
 const FUND_ULXC = 300_000
 const APPROVAL_ABOVE_ULXC = 100_000
+const DAILY_ULXC = 1_000_000
+const RAISED_LXC = '2'
+const LOWERED_LXC = '0.5'
+const LOWERED_ULXC = 500_000
 const TIMEOUT_MS = 30_000
 export const PHONE_LINE = 'Approve this on your phone: it is waiting in Talyvor there.'
+export const loosenLine = (agent: string) => `Loosen ${agent}’s rules with a passkey on this browser: add this browser first.`
 
 /** What Approvals showed for the approval, what the page sent, and what Lens holds after. */
 export interface PhoneSeen {
@@ -28,6 +35,12 @@ export interface PhoneSeen {
   posts: string[]
   /** the approval's status on Lens afterwards */
   status: string
+  /** B55.14 — the Rules card said to add this browser when the daily limit was raised */
+  loosenLine: boolean
+  /** the daily limits the page sent in a rules save */
+  rulesSaved: number[]
+  /** the agent's daily limit on Lens afterwards */
+  daily: number
 }
 
 export function phoneKeyWebVerdict(seen: PhoneSeen): Verdict {
@@ -37,8 +50,14 @@ export function phoneKeyWebVerdict(seen: PhoneSeen): Verdict {
   if (seen.buttons !== 0) wrong.push(`the approval's row shows ${seen.buttons} Approve or Deny button(s) no key here can sign`)
   if (seen.posts.length > 0) wrong.push(`the page sent ${seen.posts.join(', ')}, which Lens must refuse unsigned`)
   if (seen.status !== 'pending') wrong.push(`the approval is ${seen.status || 'missing'} on Lens, not pending`)
+  if (!seen.loosenLine) wrong.push(`raising the daily limit did not say "${loosenLine('…')}"`)
+  if (seen.rulesSaved.join() !== String(LOWERED_ULXC)) wrong.push(`the page saved daily limits [${seen.rulesSaved.join(', ')}], not only the lowered ${LOWERED_ULXC} µLXC`)
+  if (seen.daily !== LOWERED_ULXC) wrong.push(`the daily limit on Lens is ${seen.daily} µLXC, not the lowered ${LOWERED_ULXC}`)
   if (wrong.length > 0) return fail(wrong.join('; '))
-  return { pass: true, detail: 'with only the phone key, Approvals said to approve on the phone, showed no button, sent nothing, and the approval stayed pending' }
+  return {
+    pass: true,
+    detail: 'with only the phone key, Approvals said to approve on the phone, showed no button, sent nothing, and the approval stayed pending; a raised daily limit was not sent and a lowered one saved at once',
+  }
 }
 
 export const WAITING_LINE = /^Waiting for your phone\. Open Talyvor on your phone and let this browser in\. The code there should be (\d{6})\.$/
@@ -136,9 +155,9 @@ export function phoneKeyWeb(): Scenario {
     own: true,
     agents: 2,
     feature: 'Agent Wallets',
-    items: ['B55.2', 'B55.3'],
+    items: ['B55.2', 'B55.14', 'B55.3'],
     title: 'with only a phone key, Approvals says to approve on the phone, shows no Approve or Deny, sends nothing, and the approval stays pending; ' +
-      'then the phone lets this browser in with the code both show, and this browser lets a second phone in',
+      'a raised limit is not sent and a lowered one saves at once; then the phone lets this browser in with the code both show, and this browser lets a second phone in',
     run: async (ctx) => {
       const { lens } = ctx.env
       const user = ctx.app.user
@@ -159,13 +178,13 @@ export function phoneKeyWeb(): Scenario {
       await lens.fundAgent(user, payer.id, FUND_ULXC)
       const k = await lens.act<{ key: string }>(user, 'POST', `/v1/workspaces/{ws}/agents/${payer.id}/keys`, { name: 'phone-key-web' })
       if (!k.ok) return fail(`issuing ${payer.name} a key was refused: ${k.status} ${k.error}`)
-      const rules = await lens.act(user, 'PUT', `/v1/workspaces/{ws}/agents/${payer.id}/rules`, { ...await lens.agentRules(user, payer.id), approval_above_ulxc: APPROVAL_ABOVE_ULXC })
+      const rules = await lens.act(user, 'PUT', `/v1/workspaces/{ws}/agents/${payer.id}/rules`, { ...await lens.agentRules(user, payer.id), approval_above_ulxc: APPROVAL_ABOVE_ULXC, daily_limit_ulxc: DAILY_ULXC })
       if (!rules.ok) return fail(`saving ${payer.name}'s approval amount was refused: ${rules.status} ${rules.error}`)
       const paid = await lens.payAsAgent(k.value.key, user.workspaceID, payer.id, payee.id, 200_000, `phone ${RUN_SALT}`)
       const id = (await lens.agentApprovals(user)).find((a) => a.agent_id === payer.id && a.status === 'pending')?.id
       if (paid.ok || id === undefined) return fail(`a payment above the approval amount must be refused and file a pending approval; Lens answered ${paid.ok ? 'paid' : `${paid.status} ${paid.error}`}`)
 
-      const seen: PhoneSeen = { line: false, buttons: -1, posts: [], status: '' }
+      const seen: PhoneSeen = { line: false, buttons: -1, posts: [], status: '', loosenLine: false, rulesSaved: [], daily: -1 }
       const page = await ctx.app.tab('/approvals')
       page.on('request', (q) => {
         const path = new URL(q.url()).pathname
@@ -184,7 +203,28 @@ export function phoneKeyWeb(): Scenario {
         await page.close()
       }
       seen.status = (await lens.agentApprovals(user)).find((a) => a.id === id)?.status ?? ''
-      ctx.evidence.push({ note: 'Approvals with only the phone key', answer: JSON.stringify(seen) })
+
+      const rulesPage = await ctx.app.tab(`/agents?agent=${encodeURIComponent(payer.id)}`)
+      rulesPage.on('request', (q) => {
+        if (q.method() !== 'PUT' || new URL(q.url()).pathname !== `/api/agents/${payer.id}/rules`) return
+        const body = q.postDataJSON() as { daily_limit_ulxc?: number; rules?: { daily_limit_ulxc?: number } }
+        seen.rulesSaved.push(body.rules?.daily_limit_ulxc ?? body.daily_limit_ulxc ?? -1)
+      })
+      try {
+        const daily = rulesPage.getByLabel(`Daily limit for ${payer.name}, in LXC`)
+        await daily.fill(RAISED_LXC, { timeout: TIMEOUT_MS })
+        await rulesPage.getByRole('button', { name: 'Save rules' }).click()
+        seen.loosenLine = await rulesPage.getByText(loosenLine(payer.name)).waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false)
+        await daily.fill(LOWERED_LXC)
+        await rulesPage.getByRole('button', { name: 'Save rules' }).click()
+        await rulesPage.getByText('Saved. Lens applies these rules to the next request or payment.').waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
+      } catch (e) {
+        seen.why ??= (e as Error).message.split('\n')[0]
+      } finally {
+        await rulesPage.close()
+      }
+      seen.daily = (await lens.agentRules(user, payer.id)).daily_limit_ulxc
+      ctx.evidence.push({ note: 'Approvals and the Rules card with only the phone key', answer: JSON.stringify(seen) })
       const shown = phoneKeyWebVerdict(seen)
       const enrol = shown.pass ? await addBrowserThenPhone(ctx, phone, reg.value.id) : undefined
       if (enrol) ctx.evidence.push({ note: 'a key let in from the other device, each way', answer: JSON.stringify(enrol) })

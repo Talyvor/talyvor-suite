@@ -27,6 +27,8 @@ function mockBff({ hold = 'sentence' }: { hold?: 'sentence' | 'accepted' } = {})
       new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     const allocated = () => agents.reduce((s, a) => s + a.balance_ulxc, 0)
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    // B55.14: Lens judges a change to an agent's rules first; these do not loosen them.
+    if (url.endsWith('/rules-challenge')) return json({ looser: false, changes: [], allow_credentials: [] })
     if (url === '/api/agents/passkeys') return json({ passkeys: [] })
     if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents' && method === 'GET')
