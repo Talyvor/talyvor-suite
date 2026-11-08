@@ -1,14 +1,21 @@
+import { execFileSync, spawnSync } from 'node:child_process'
+import { chmodSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { POCKET_USERS, parseConfig } from '../src/config.ts'
 import { itemsFor, pocketItemsFor } from '../src/filing.ts'
 import { pocketJourneys } from '../src/pocketProblems/index.ts'
-import { POCKET, pocketRows, renderPocket } from '../src/pocketProblems/problems.ts'
+import { POCKET, pocketLine, pocketRows, renderPocket, unlistedFixes } from '../src/pocketProblems/problems.ts'
 import { type ReportedRun, renderRun, renderSummary } from '../src/report.ts'
 
 // B55.44 — Pocket's 25 app problems, each pressed in the real app every night: one scenario each, named by its fix
 // items; a FAIL while an item is not DONE is reported only, and with every item DONE it is back and files one item at the
 // top of B55, once.
 
+const REPO = join(dirname(fileURLToPath(import.meta.url)), '../..')
+const who = { GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' }
 const env = { LENS_SYNTHETIC_KEY: 'k', E2E_APP_URL: 'http://app', E2E_LENS_URL: 'http://lens' }
 
 /** A queue with B55's heading and problem 21's item in `status21`, every other item of problem 21 absent. */
@@ -74,5 +81,63 @@ describe('the Pocket problems pass (B55.44)', () => {
     expect(renderRun(run)).toContain('## Pocket problems pass started 2026-11-07T01:00:00.000Z')
     expect(renderRun(run)).toContain('### Pocket problems (B55.44)')
     expect(renderSummary(run, 'r.md', [])).toContain('- **Pocket problems**: 1 of 25 pass; BACK: 21.')
+  })
+
+  // B55.52 — a problem whose fix was split later names every item, so it never reads back while one is still open.
+  it('names every item that fixes a problem, the ones split off later too', () => {
+    const later = [1, 8, 11, 15, 20, 23, 24].map((n) => POCKET.find((p) => p.n === n)?.items.filter((i) => i === 'B55.6' || Number(i.slice(4)) >= 45))
+    expect(later).toEqual([['B55.6', 'B55.50'], ['B55.46', 'B55.50', 'B55.51'], ['B55.6', 'B55.48'], ['B55.47'], ['B55.49'], ['B55.45'], ['B55.46']])
+    const q = `## B55.12 — Lens: lock-screen Approve\nrepo: talyvor-lens · deps: none · status: DONE abc\n\n` +
+      '## B55.47 — Phone: the lock-screen Approve button\nrepo: talyvor-mobile · deps: B55.12 · status: OPEN\n'
+    const fail15 = { scenario: 'pocket-15', status: 'FAIL' as const, detail: 'no Approve on the lock screen' }
+    expect(pocketRows(q, [fail15]).find((r) => r.n === 15)?.state).toBe('fixing')
+  })
+
+  it('catches an open B55 item whose FOUND line names a problem problems.ts does not list it under, and keeps that problem fixing', () => {
+    const later = '\n## B55.60 — A later fix\nrepo: talyvor-suite · deps: none · status: OPEN\nFOUND (audit): found while verifying problems 21 and 3.\n'
+    expect(unlistedFixes(queue('DONE abc', later))).toEqual([{ id: 'B55.60', n: 21 }, { id: 'B55.60', n: 3 }])
+    const rows = pocketRows(queue('DONE abc', later), [fail21])
+    expect(rows.find((r) => r.n === 21)?.state).toBe('fixing')
+    expect(pocketLine(rows)[0]).toContain('; problems.ts does not list: B55.60 for 3, 21')
+    // Listed, DONE, or the pass's own item: nothing to catch.
+    expect(unlistedFixes(queue('DONE abc', later.replace('status: OPEN', 'status: DONE x')))).toEqual([])
+    expect(unlistedFixes(queue('DONE abc', '\n## B55.52 — The pass\nrepo: talyvor-suite · deps: none · status: OPEN\nFOUND: problem 15 names B55.12.\n'))).toEqual([])
+    expect(unlistedFixes(queue('OPEN', '\nFOUND: problem 21.\n'))).toEqual([])
+  })
+
+  it('runs on a light night, and a pass that cannot report says so in TESTERS.md', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'e2e-pocket-'))
+    const git = (cwd: string, ...args: string[]): string => execFileSync('git', args, { cwd, env: { ...process.env, ...who }, encoding: 'utf8' }).trim()
+    try {
+      git(dir, 'init', '-q', '--bare', '-b', 'main', 'origin.git')
+      const seed = join(dir, 'seed')
+      mkdirSync(join(seed, 'scripts'), { recursive: true })
+      cpSync(join(REPO, 'scripts/e2e-nightly.sh'), join(seed, 'scripts/e2e-nightly.sh'))
+      cpSync(join(REPO, 'e2e/src'), join(seed, 'e2e/src'), { recursive: true })
+      // A run that throws before it can write anything.
+      writeFileSync(join(seed, 'e2e/src/run.ts'), "throw new Error('the Pocket pass broke')\n")
+      git(seed, 'init', '-q', '-b', 'main')
+      git(seed, 'add', '.')
+      git(seed, 'commit', '-qm', 'the harness')
+      git(seed, 'push', '-q', join(dir, 'origin.git'), 'main')
+      git(dir, 'clone', '-q', join(dir, 'origin.git'), 'testers')
+      const bin = join(dir, 'bin')
+      mkdirSync(bin)
+      writeFileSync(join(bin, 'pnpm'), '#!/bin/sh\nexit 0\n')
+      chmodSync(join(bin, 'pnpm'), 0o755)
+      const testersMd = join(dir, 'TESTERS.md')
+      writeFileSync(join(dir, 'e2e.env'), ['LENS_SYNTHETIC_KEY=k', 'E2E_APP_URL=http://127.0.0.1:9', 'E2E_LENS_URL=http://127.0.0.1:9',
+        'E2E_LENS_SRC=none', `E2E_TESTERS_MD=${testersMd}`, 'E2E_BUILD_MD=none'].join('\n') + '\n')
+      const r = spawnSync('bash', [join(dir, 'testers/scripts/e2e-nightly.sh'), '--light'],
+        { env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, E2E_ENV_FILE: join(dir, 'e2e.env') }, encoding: 'utf8', timeout: 60_000 })
+
+      expect(r.status).toBe(1)
+      const log = readFileSync(join(dir, 'testers/e2e/out/nightly.log'), 'utf8')
+      expect(log).toMatch(/light pass starting[^\n]*\n(?:.*\n)*?.*Pocket problems pass starting/)
+      expect(readFileSync(testersMd, 'utf8')).toMatch(
+        /\n## \S+ — Pocket problems pass: not run\n\n- \*\*Pocket problems\*\*: not run, the pass exited 1 without writing its section: Error: the Pocket pass broke\.\n/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
