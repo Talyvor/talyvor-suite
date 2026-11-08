@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Button } from '@talyvor/ui'
 import { COMPANY_CONTACT } from '../../company'
-import { formatULXC } from '../lens/agentBankApi'
+import { fiatText, lxcText } from '../lens/money'
 import { formatCents } from '../lens/topupApi'
 import { formatBPS, formatLimit, formatMinor, planName, type Fees, type PlanGate, type Pricing } from './pricingApi'
 
@@ -217,7 +217,7 @@ export function IndividualPlans({ pricing }: { pricing: Pricing }) {
               <li>Every model from every provider</li>
               <li>
                 <span className="font-figure text-ink" data-testid={`pricing-included-${p.id}`}>
-                  {formatULXC(p.included_ulxc)}
+                  {lxcText(p.included_ulxc, pricing.usd_per_lxc ? fiatText((p.included_ulxc / 1_000_000) * pricing.usd_per_lxc, 'USD') : null)}
                 </span>{' '}
                 of usage included this month
               </li>

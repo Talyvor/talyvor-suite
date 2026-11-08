@@ -126,7 +126,7 @@ describe('/pricing', () => {
     const offers = screen.getAllByTestId('pricing-plan').map((card) => card.textContent)
     expect(offers).toHaveLength(3)
     expect(offers[0]).toContain('Plus$21a month')
-    expect(offers[0]).toContain('180 LXC of usage included')
+    expect(offers[0]).toContain('$36.00 (180 LXC) of usage included') // B55.38: dollars first, at the served peg
     expect(offers[1]).toContain('Pro$110a month')
     expect(offers[1]).toContain('6× the included usage of Plus') // 1,090 ÷ 180, computed
 

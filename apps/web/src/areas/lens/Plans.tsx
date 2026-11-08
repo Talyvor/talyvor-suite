@@ -24,7 +24,7 @@ import {
   type PlanSummary,
 } from './planApi'
 import { formatCents } from './topupApi'
-import { formatULXC } from './agentBankApi'
+import { Lxc } from './money'
 import { CARDS_OFF, cardPayments, usePricing, type Pricing } from '../marketing/pricingApi'
 import { CompanyCard, TAX_LINE } from '../marketing/PriceCard'
 import { COMPANY_CONTACT } from '../../company'
@@ -135,7 +135,7 @@ function PlanCard({
           {includedULXC !== undefined ? (
             <li>
               <span className="font-figure text-ink" data-testid={`plan-included-${plan.id}`}>
-                {formatULXC(includedULXC)}
+                <Lxc ulxc={includedULXC} />
               </span>{' '}
               of usage included this month
             </li>

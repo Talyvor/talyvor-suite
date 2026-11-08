@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { cn, focusRing, inlineLink } from '@talyvor/ui'
 
-import { formatULXC } from '../lens/agentBankApi'
+import { Lxc } from '../lens/money'
 import { marketApi } from '../marketplace/marketApi'
 import type { AnswerListing, ChatListing } from './chatApi'
 
@@ -30,7 +30,7 @@ export function ListingChip({ listing, onRemove, disabled }: { listing: ChatList
       <span>
         {price > 0 ? (
           <>
-            · <span className="font-figure">{formatULXC(price)}</span> a question, on your marketplace bill
+            · <span className="font-figure"><Lxc ulxc={price} /></span> a question, on your marketplace bill
           </>
         ) : (
           '· free to use'

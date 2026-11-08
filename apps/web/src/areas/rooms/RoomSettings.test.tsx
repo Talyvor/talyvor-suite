@@ -169,7 +169,7 @@ describe('room settings', () => {
     render(<App />)
 
     const budget = await screen.findByTestId('room-budget')
-    expect(within(budget).getByText('200 LXC')).toBeTruthy()
+    expect(budget.textContent).toContain('200 LXC')
     const limit = await screen.findByLabelText('Monthly limit for Room: Agent pricing, in LXC')
     fireEvent.change(limit, { target: { value: '2000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
@@ -177,11 +177,11 @@ describe('room settings', () => {
     expect(refusal.textContent).toBe(
       'A monthly limit of 2,000 LXC is above the room’s budget: rooms_plan_limits (LENS_ROOMS_PLAN_LIMITS): your free plan allows a room a budget of at most $100 (1,000 LXC) a month — the team plan allows $5000.',
     )
-    expect(within(budget).getByText('200 LXC')).toBeTruthy()
+    expect(budget.textContent).toContain('200 LXC')
 
     fireEvent.change(limit, { target: { value: '500' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-    await waitFor(() => expect(within(screen.getByTestId('room-budget')).getByText('500 LXC')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('room-budget').textContent).toContain('500 LXC'))
     expect(bff.sent.filter((s) => s.url === '/api/agents/ag_room/rules').map((s) => s.body.monthly_limit_ulxc)).toEqual([2_000_000_000, 500_000_000])
   })
 
