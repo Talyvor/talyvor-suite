@@ -79,7 +79,7 @@ describe('the operator screen (B18.25)', () => {
     const row = await screen.findByTestId('parked-use')
     expect(row.textContent).toContain("resource_missing: No such customer: 'cus_gone'")
     expect(within(row).getByText('5 times')).toBeTruthy()
-    expect(within(row).getByText('0.5 LXC')).toBeTruthy()
+    expect(row.textContent).toContain('0.5 LXC')
     fireEvent.click(within(row).getByRole('button', { name: 'Retry use_9' }))
     expect((await screen.findByTestId('parked-retried')).textContent).toBe('use_9 will be tried again on the next metering run.')
     expect(await screen.findByText(/No use is parked/)).toBeTruthy()

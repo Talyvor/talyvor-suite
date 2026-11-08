@@ -1,10 +1,13 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from './App'
+import { cardOnItsPlane, primaryActions, statusWithoutWords, tangerineOffenders } from './pocketRules'
 import { populatedBff, settleQueries } from './populatedBff'
 
 // B29.12 — Features, Track, Docs, Developers, Billing, Settings and Operator in the brand, read off the populated
 // fixture: at most one teal action per view, every card on the raised plane, and an eyebrow over each section.
+// B57.3 — and Pocket's rules: one primary (ink) action, tangerine only for the brand and "your move", status
+// colours always with words; a card is Pocket's once its route leaves pocketPending.ts.
 
 async function at(address: string): Promise<HTMLElement> {
   window.history.pushState({}, '', address)
@@ -14,8 +17,8 @@ async function at(address: string): Promise<HTMLElement> {
   return document.querySelector('main') as HTMLElement
 }
 
-/** The teal-filled actions: the primary Button, as a button or a link. */
-const primaries = (main: HTMLElement) => Array.from(main.querySelectorAll('button.bg-accent, a.bg-accent')).map((b) => b.textContent?.trim())
+/** The primary (ink) actions, by Pocket's name and today's. */
+const primaries = primaryActions
 
 beforeEach(() => {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -53,7 +56,9 @@ describe('the remaining signed-in screens in the brand', () => {
     // A grid of tiles is one card whose hairlines are its gaps: the tiles carry the plane.
     const cards = Array.from(main.querySelectorAll('.rounded-card:not(.bg-rule), .rounded-card.bg-rule > *'))
     expect(cards.length, `no card rendered on ${address}`).toBeGreaterThan(0)
-    for (const c of cards) expect(c.className, `a card on ${address} is not on the raised plane: ${c.textContent?.slice(0, 80)}`).toContain('bg-raised')
+    for (const c of cards) expect(cardOnItsPlane(c), `a card on ${address} is not on its plane: ${c.className} ${c.textContent?.slice(0, 80)}`).toBe(true)
+    expect(tangerineOffenders(main).map((e) => e.outerHTML), `tangerine on ${address} is only the brand and your move`).toEqual([])
+    expect(statusWithoutWords(main).map((e) => e.outerHTML), `a status colour on ${address} without words`).toEqual([])
 
     expect(within(main).queryAllByTestId('region-label').length, `${address} has no eyebrow`).toBeGreaterThan(0)
   })

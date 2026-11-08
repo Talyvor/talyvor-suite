@@ -4,7 +4,8 @@ import { Button, CardHeader, Input, Pill } from '@talyvor/ui'
 import { Card } from './walletBrand'
 import { isSessionExpired } from '../../lib/productState'
 import { formatWhen } from './format'
-import { type Agent, type AgentCard, type CardAuthorization, type Cardholder, agentBankApi, formatULXC, refusalText } from './agentBankApi'
+import { type Agent, type AgentCard, type CardAuthorization, type Cardholder, agentBankApi, refusalText } from './agentBankApi'
+import { Lxc } from './money'
 
 // AgentCardPanel.tsx — B19.24: an agent's card on Agent Wallets. Lens (B19.12) issues an agent a virtual
 // card through Stripe Issuing, in TEST MODE ONLY — cards are class RED, test money until a licensed partner
@@ -68,7 +69,7 @@ function Purchases({ auths }: { auths: CardAuthorization[] }) {
               </td>
               <td className="py-2 text-right font-figure">{moneyText(a.amount_minor, a.currency)}</td>
               <td className="px-gutter py-2 text-right font-figure">
-                {a.approved && a.amount_ulxc ? `−${formatULXC(a.amount_ulxc)}` : '—'}
+                {a.approved && a.amount_ulxc ? <Lxc ulxc={a.amount_ulxc} sign="−" /> : '—'}
               </td>
             </tr>
           )

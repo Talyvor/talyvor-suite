@@ -100,8 +100,13 @@ export function physicalCard({ screen = true }: { screen?: boolean } = {}): Scen
         const oldRow = await shown(card.id)
         const newRow = await shown(next.id)
         ctx.evidence.push({ note: 'Money → Talyvor Card', answer: `old "${oldRow}"; new "${newRow}"` })
-        if (!oldRow.startsWith(`Card ending ${card.last4} · Frozen`)) return fail(`Money → Talyvor Card must show card ending ${card.last4} frozen; it reads "${oldRow}"`)
-        if (!newRow.startsWith(`Card ending ${next.last4} · Not yet active`)) return fail(`Money → Talyvor Card must show card ending ${next.last4} on its way; it reads "${newRow}"`)
+        // B57.97 — the Pocket rows: the old card frozen and replaced, the new one on its way to the same address.
+        if (!oldRow.startsWith(`Card ending ${card.last4}`) || !oldRow.includes('Frozen and replaced.') || !oldRow.includes('Replaced')) {
+          return fail(`Money → Talyvor Card must show card ending ${card.last4} frozen and replaced; it reads "${oldRow}"`)
+        }
+        if (!newRow.startsWith(`Card ending ${next.last4}`) || !newRow.includes('On its way to the same address.') || !newRow.includes('Not yet active')) {
+          return fail(`Money → Talyvor Card must show card ending ${next.last4} on its way; it reads "${newRow}"`)
+        }
         await mkdir(ctx.env.outDir, { recursive: true })
         const viewport = page.viewportSize()
         for (const width of [1440, 390]) {

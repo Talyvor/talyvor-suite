@@ -36,11 +36,11 @@ const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 export const figureText = (text: string): string => text.replace(/\s+/g, ' ').trim()
 export const lxcText = (ulxc: number): string => String(ulxc / 1e6)
 
-/** B28.22 — what the wallet screens show beside an LXC amount, in dollars at the peg: "($1.25)" (apps/web money.tsx). */
-export function usdShown(ulxc: number, usdPerLXC: number): string {
+/** B55.38 — an LXC amount as the wallet screens show it, dollars at the peg first: "$1.25 (12.5 LXC)" (apps/web money.tsx). */
+export function usdShown(lxc: string, ulxc: number, usdPerLXC: number): string {
   const usd = (ulxc / 1e6) * usdPerLXC
   const fmt = (v: number) => v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return `(${usd > 0 && usd < 0.005 ? `<${fmt(0.01)}` : fmt(usd)})`
+  return `${usd > 0 && usd < 0.005 ? `<${fmt(0.01)}` : fmt(usd)} (${lxc})`
 }
 
 /** The card under an `h2` heading (packages/ui CardHeader). */
@@ -1584,7 +1584,7 @@ export function agentApproval(seed: number): Scenario {
       if (phone !== undefined) return fail(`on a 390px phone, ${phone}`)
       const { row, said: approved } = await bank.approve(payer, payee)
       ctx.evidence.push({ note: `Waiting for a person: ${row}` }, { note: `Approve: ${approved}` })
-      const asked = `1 LXC ${usdShown(1e6, ctx.env.usdPerLXC)} — ${memo}`
+      const asked = `${usdShown('1 LXC', 1e6, ctx.env.usdPerLXC)} — ${memo}`
       if (!row.endsWith(` ${asked}`)) return fail(`the row waiting for a person does not say ${asked}: "${row}"`)
       if (!/^Approved and paid/.test(approved)) return fail(`approving did not pay: "${approved}"`)
       const after = await bookOf(ctx)
@@ -1752,7 +1752,7 @@ export function chatApprovalFaceID(seed: number): Scenario {
         return fail(`no card in Chat reads "${asks}…"; it shows: ${(await page.getByTestId('chat-approval').allInnerTexts()).join(' | ') || 'no approval card'}`)
       }
       const row = (await approval.getByTestId('chat-approval-asks').innerText()).trim()
-      const wanted = `${asks}1 LXC ${usdShown(1e6, ctx.env.usdPerLXC)} — ${memo}`
+      const wanted = `${asks}${usdShown('1 LXC', 1e6, ctx.env.usdPerLXC)} — ${memo}`
       if (row !== wanted) return fail(`the card reads "${row}", not "${wanted}"`)
       await mkdir(ctx.env.outDir, { recursive: true })
       for (const [width, height] of [[1440, 900], [390, 844]] as const) {
@@ -1938,6 +1938,9 @@ async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: st
   ctx.evidence.push({ note: `Home at 390: total "${totalShown}", ${a.name} "${safeShown}"; Lens: ${book.allocated_ulxc} µLXC with agents, safe to spend ${safe?.safe_to_spend} µLXC` })
   if (safe === undefined) return `Lens lists no LXC safe to spend for ${a.name}`
   if (!totalShown.includes(shownLXC(book.allocated_ulxc))) return `Home's total reads "${totalShown}", not Lens's ${shownLXC(book.allocated_ulxc)} with agents`
+  // B57.7 — the total is a balance card's <Money>: dollars large first, LXC small after them.
+  const dollars = usdShown(shownLXC(book.allocated_ulxc), book.allocated_ulxc, ctx.env.usdPerLXC).split(' (')[0]
+  if (!totalShown.startsWith(`${dollars} `)) return `Home's total reads "${totalShown}", not ${dollars} first and its LXC after`
   if (!safeShown.includes(shownLXC(safe.safe_to_spend))) return `${a.name}'s safe to spend reads "${safeShown}", not Lens's ${shownLXC(safe.safe_to_spend)}`
   const link = page.locator(`a[href="/approvals#approval-${approvalID}"]`)
   if (approvalID === '' || (await link.count()) === 0) {
@@ -4412,7 +4415,7 @@ export function agentBalanceStored(seed: number): Scenario {
         return fail(`the book does not add up: ${after.workspace_balance_ulxc} ≠ ${after.allocated_ulxc} + ${after.unallocated_ulxc}`)
       }
       const shown = await bank.balanceShown(a)
-      const want = `${shownLXC(total)} ${usdShown(total, ctx.env.usdPerLXC)}`
+      const want = usdShown(shownLXC(total), total, ctx.env.usdPerLXC)
       if (shown !== want) return fail(`Agent Wallets shows ${a.name} holding "${shown}"; its postings sum to ${want}`)
       return { pass: true, detail: `${MANY_FUNDINGS} fundings at once, ${lxcText(total)} LXC: ${a.name}'s stored balance = its ${posted.length} postings = the screen's ${shown}, and the workspace's agents hold that much more` }
     }),
@@ -4420,7 +4423,7 @@ export function agentBalanceStored(seed: number): Scenario {
 }
 
 /**
- * B28.22 — an agent funded 12.5 LXC on Agent Wallets shows "12.5 LXC ($1.25)" — its dollar value at the
+ * B28.22 — an agent funded 12.5 LXC on Agent Wallets shows "$1.25 (12.5 LXC)" — its dollar value at the
  * peg beside it — and its allowed models are picked from the catalog, not typed: the Rules card's model
  * field is a select, the model picked is the one Lens stores, and the card says so in a sentence.
  */
@@ -4440,7 +4443,7 @@ export function walletCurrency(seed: number): Scenario {
       const held = agentIn(await bookOf(ctx), a.id)?.balance_ulxc
       if (held !== amount) return fail(`funded ${amount} µLXC; Lens's book has ${a.name} holding ${held}`)
       const shown = await bank.balanceShown(a)
-      const want = `12.5 LXC ${usdShown(amount, ctx.env.usdPerLXC)}`
+      const want = usdShown('12.5 LXC', amount, ctx.env.usdPerLXC)
       ctx.evidence.push({ note: `Agent Wallets shows ${a.name} holding "${shown}"` })
       if (shown !== want) return fail(`Agent Wallets shows ${a.name} holding "${shown}"; at $${ctx.env.usdPerLXC} per LXC it should read "${want}"`)
       const model = ctx.env.judgeModel

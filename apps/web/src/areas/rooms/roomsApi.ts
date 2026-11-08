@@ -1,4 +1,4 @@
-import { getJSON } from '../../lib/api'
+import { getJSON, getJSONArray } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
 import { type ListingKind, MarketError } from '../marketplace/marketApi'
 
@@ -37,9 +37,10 @@ export interface Terms {
   created_at: string
 }
 
-/** Lens rooms.Member. */
+/** Lens rooms.Member. workspace_name is its workspace's name, or "A workspace not named yet" (B55.34). */
 export interface Member {
   workspace_id: string
+  workspace_name: string
   role: string
   may_spend: boolean
   terms_version: number
@@ -137,7 +138,7 @@ export interface PointsEntry {
   id: string
   contribution_id: string
   workspace_id: string
-  reason: 'accepted' | 'remix_share' | 'withdrawn' | 'review'
+  reason: 'accepted' | 'remix_share' | 'withdrawn' | 'review' | 'objection'
   size_points: number
   received_usd_micros: number
   quality_bps: number
@@ -233,6 +234,50 @@ export interface RoomAgreement {
   text: string
   text_sha256: string
   signature: AgreementSignature | null
+}
+
+/** Lens rooms.Objection (B41.147): an objection to the points one accepted contribution earned its author. points is the
+ *  change proposed, signed; the panel is the three members Lens drew, each uphold null until it votes. Two votes the same
+ *  way decide it; lapsed is an open one its panel did not decide by decide_by, so the points stand. */
+export interface Objection {
+  id: string
+  contribution_id: string
+  holder_workspace_id: string
+  objector_workspace_id: string
+  points: number
+  reason: string
+  status: 'open' | 'upheld' | 'dismissed' | 'lapsed'
+  raised_at: string
+  decide_by: string
+  decided_at?: string
+  panel: { workspace_id: string; workspace_name: string; uphold: boolean | null; voted_at?: string }[]
+}
+
+/** Lens rooms.Objections (B41.147) — GET /api/rooms/{id}/objections, behind the same room_equity gate as the points ledger.
+ *  frozen_at and objections_close_at are null until the owner freezes the leaderboard; rules are Lens's published rules. */
+export interface RoomObjections {
+  room_id: string
+  frozen_at: string | null
+  objections_close_at: string | null
+  rules: string
+  objections: Objection[]
+}
+
+/** Lens rooms.Task (B41.152): one task on the room's open board, at a size on the rate card whose points were fixed on it
+ *  when it was posted. It has no assignee and no deadline: claimant_workspace_id is empty while it is open, and only a
+ *  member claims a task, for itself. */
+export interface RoomTask {
+  id: string
+  room_id: string
+  poster_workspace_id: string
+  title: string
+  description: string
+  size: string
+  points: number
+  claimant_workspace_id?: string
+  claimant_workspace_name?: string
+  claimed_at?: string
+  created_at: string
 }
 
 /** Lens rooms.Usage — what this workspace's plan lets it open, beside what it has open. -1 is unlimited. */
@@ -340,6 +385,7 @@ export interface RoomMessage {
   cursor: number
   room_id: string
   author_workspace_id: string
+  author_workspace_name: string
   author_agent_id?: string
   kind: 'text' | 'contribution' | 'run' | 'prize' | 'system'
   body: string
@@ -385,6 +431,7 @@ export interface Contribution {
   kind: ListingKind
   title: string
   author_workspace_id: string
+  author_workspace_name: string
   forked_from?: string
   status: 'proposed' | 'accepted' | 'rejected'
   /** B41.142 — the size claimed on the room's rate card, and that size's points, fixed when it was claimed. */
@@ -505,6 +552,8 @@ export interface Invite {
   room_id: string
   kind: 'link' | 'named'
   workspace_id?: string
+  /** B55.34 — set once the named workspace has been a member of the room. */
+  workspace_name?: string
   token?: string
   max_uses: number
   uses: number
@@ -627,6 +676,20 @@ export const roomsApi = {
     getJSON<RoomAgreement>(`/api/rooms/${e(id)}/agreement`, { version: 'string', text: 'string', text_sha256: 'string' }),
   signAgreement: (id: string, version: string, signedName: string) =>
     post<RoomAgreement>(`/api/rooms/${e(id)}/agreement`, { version, signed_name: signedName }),
+  // B41.47 — objections to the frozen leaderboard, decided by three members Lens draws at random.
+  objections: (id: string) =>
+    getJSON<RoomObjections>(`/api/rooms/${e(id)}/objections`, { rules: 'string', objections: 'list' }),
+  freezeLeaderboard: (id: string) => post<RoomObjections>(`/api/rooms/${e(id)}/leaderboard/freeze`, {}),
+  raiseObjection: (id: string, contributionID: string, points: number, reason: string) =>
+    post<Objection>(`/api/rooms/${e(id)}/objections`, { contribution_id: contributionID, points, reason }),
+  voteObjection: (id: string, oid: string, uphold: boolean) =>
+    post<Objection>(`/api/rooms/${e(id)}/objections/${e(oid)}/vote`, { uphold }, 'PUT'),
+  // B41.52 — the open tasks board: tasks sized from the rate card that any member may claim, for itself.
+  tasks: (id: string) => getJSONArray<RoomTask>(`/api/rooms/${e(id)}/tasks`),
+  postTask: (id: string, title: string, description: string, size: string) =>
+    post<RoomTask>(`/api/rooms/${e(id)}/tasks`, { title, description, size }),
+  claimTask: (id: string, tid: string) => post<RoomTask>(`/api/rooms/${e(id)}/tasks/${e(tid)}/claim`, {}),
+  releaseTask: (id: string, tid: string) => post<RoomTask>(`/api/rooms/${e(id)}/tasks/${e(tid)}/claim`, {}, 'DELETE'),
   // B41.44 — two reviewers Lens draws at random score a contribution's quality.
   reviews: (id: string, cid: string) =>
     getJSON<Reviews>(`/api/rooms/${e(id)}/contributions/${e(cid)}/reviews`, { quality_bps: 'number', reviews: 'list' }),

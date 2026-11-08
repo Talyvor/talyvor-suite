@@ -4,14 +4,13 @@ import { Button, CardHeader, Input, Pill, Row, type PillStatus } from '@talyvor/
 import { Card, pressed } from './walletBrand'
 import { isSessionExpired } from '../../lib/productState'
 import { formatWhen } from './format'
-import { Lxc } from './money'
+import { Lxc, useLxcText } from './money'
 import {
   type Agent,
   type AgentTransfer,
   type Loan,
   type LoanOffer,
   agentBankApi,
-  formatULXC,
   parseLXC,
   refusalText,
 } from './agentBankApi'
@@ -427,13 +426,13 @@ const LOAN_STATUS: Record<Loan['status'], [string, PillStatus]> = {
   repaid: ['Repaid', 'settled'],
 }
 
-function eventText(e: Loan['events'][number], l: Loan): string {
+function eventText(e: Loan['events'][number], l: Loan, lxc: (ulxc: number) => string): string {
   switch (e.kind) {
     case 'payout':
       return 'Paid out to the borrower'
     case 'instalment':
-      return `Instalment ${e.instalment} of ${l.instalments} repaid: ${formatULXC(e.principal_ulxc ?? 0)} + ${formatULXC(e.interest_ulxc ?? 0)} interest${
-        e.late_fee_ulxc ? ` + ${formatULXC(e.late_fee_ulxc)} late fee` : ''
+      return `Instalment ${e.instalment} of ${l.instalments} repaid: ${lxc(e.principal_ulxc ?? 0)} + ${lxc(e.interest_ulxc ?? 0)} interest${
+        e.late_fee_ulxc ? ` + ${lxc(e.late_fee_ulxc)} late fee` : ''
       }`
     case 'missed':
       return `Instalment ${e.instalment} missed${e.detail ? ` — ${e.detail.replace(/^economy: /, '')}` : ''}`
@@ -447,6 +446,7 @@ function eventText(e: Loan['events'][number], l: Loan): string {
 /** One loan, as either side sees it. */
 function LoanRow({ loan, agents }: { loan: Loan; agents: Agent[] }) {
   const qc = useQueryClient()
+  const lxc = useLxcText()
   const mine = new Set(agents.map((a) => a.id))
   const lending = mine.has(loan.lender_agent_id)
   const act = useMutation({
@@ -484,7 +484,7 @@ function LoanRow({ loan, agents }: { loan: Loan; agents: Agent[] }) {
       </p>
       {loan.events.map((e, i) => (
         <p key={i} className="text-caption text-ink">
-          <span className="font-figure">{formatWhen(e.at)}</span> {eventText(e, loan)}
+          <span className="font-figure">{formatWhen(e.at)}</span> {eventText(e, loan, lxc)}
         </p>
       ))}
       {loan.status === 'offered' ? (

@@ -9,6 +9,8 @@ import { App, queryClient } from '../../App'
 
 const ME = 'ws_me'
 const OTHER = 'ws_other'
+// B55.34 — Lens names every member and author by its workspace.
+const NAMES: Record<string, string> = { [ME]: 'Ana’s studio', [OTHER]: 'Ben’s lab' }
 
 type C = Record<string, unknown> & { id: string; title: string; my_vote: number; tally: number }
 
@@ -24,6 +26,7 @@ function mockBff() {
     cursor: ++cursor,
     room_id: 'room_1',
     author_workspace_id: ws,
+    author_workspace_name: NAMES[ws],
     kind,
     body,
     refs,
@@ -41,12 +44,12 @@ function mockBff() {
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, user: { sub: 'u1', email: 'u1@example.com' } })
     if (url === '/api/rooms') return json({ rooms: [], joined: [], invited: null })
     if (url === '/api/rooms/room_1') {
-      const me = { workspace_id: ME, role: 'owner', may_spend: true, terms_version: 1, terms_current: true, joined_at: '' }
+      const me = { workspace_id: ME, workspace_name: NAMES[ME], role: 'owner', may_spend: true, terms_version: 1, terms_current: true, joined_at: '' }
       return json({
         id: 'room_1', owner_workspace_id: ME, title: 'Agent pricing', topic: 'research', description: '', visibility: 'public',
         status: 'open', terms_version: 1, member_count: 2, created_at: '', last_activity_at: '2026-10-07T10:00:00Z',
         terms: { version: 1, split_rule: 'equal', remix_share_bps: 1000, default_price_usd_micros: 100_000, spend_policy: 'owner_only', created_at: '' },
-        members: [me, { ...me, workspace_id: OTHER, role: 'member', may_spend: false }],
+        members: [me, { ...me, workspace_id: OTHER, workspace_name: NAMES[OTHER], role: 'member', may_spend: false }],
         agents: null,
         me,
         wallet: {
@@ -76,7 +79,7 @@ function mockBff() {
     if (url === '/api/rooms/room_1/contributions') {
       if (method === 'POST') {
         const c: C = { id: `c_${contributions.length + 1}`, room_id: 'room_1', listing_id: 'l_1', version: 1, kind: body.kind, title: String(body.title),
-          author_workspace_id: ME, status: 'proposed', tally: 0, up: 0, down: 0, my_vote: 0, created_at: '2026-10-07T10:01:00Z', artifact: body.artifact }
+          author_workspace_id: ME, author_workspace_name: NAMES[ME], status: 'proposed', tally: 0, up: 0, down: 0, my_vote: 0, created_at: '2026-10-07T10:01:00Z', artifact: body.artifact }
         contributions.unshift(c)
         return json(c, 201)
       }
@@ -85,7 +88,7 @@ function mockBff() {
     const fork = /^\/api\/rooms\/room_1\/contributions\/([^/]+)\/fork$/.exec(url)
     if (fork) {
       const src = contributions.find((x) => x.id === fork[1])!
-      const c: C = { ...src, id: `c_${contributions.length + 1}`, title: String(body.title), author_workspace_id: ME, forked_from: src.id, tally: 0, up: 0, down: 0, my_vote: 0 }
+      const c: C = { ...src, id: `c_${contributions.length + 1}`, title: String(body.title), author_workspace_id: ME, author_workspace_name: NAMES[ME], forked_from: src.id, tally: 0, up: 0, down: 0, my_vote: 0 }
       contributions.unshift(c)
       return json(c, 201)
     }
@@ -107,7 +110,7 @@ function mockBff() {
     if (url.startsWith('/api/marketplace/listings')) return json({ listings: [] })
     return new Response('null', { status: 404 })
   })
-  return { sent, stream, message, cursor: () => cursor }
+  return { sent, stream, message, contributions, cursor: () => cursor }
 }
 
 afterEach(() => {
@@ -180,5 +183,25 @@ describe('the room screen', () => {
     // The run message is in the conversation too, and the room's budget now counts it.
     expect(within(screen.getByRole('list', { name: 'Messages' })).getAllByTestId('run-cost')[0].textContent).toBe('Cost$0.10Paid by the room')
     await waitFor(() => expect(screen.getByTestId('room-budget-spent').textContent).toBe('1 LXC'))
+  })
+
+  // B55.35 — another member's message, contribution and self-paid run read by their workspace's name, never its id.
+  it('shows another member’s messages, contributions and runs by name', async () => {
+    const bff = mockBff()
+    bff.contributions.push({ id: 'c_9', room_id: 'room_1', listing_id: 'l_9', version: 1, kind: 'prompt', title: 'Ben’s prompt',
+      author_workspace_id: OTHER, author_workspace_name: NAMES[OTHER], status: 'proposed', tally: 0, up: 0, down: 0, my_vote: 0, created_at: '2026-10-07T10:01:00Z' })
+    window.history.pushState({}, '', '/rooms/room_1')
+    render(<App />)
+    const list = await screen.findByRole('list', { name: 'Messages' })
+    await waitFor(() => expect(bff.stream.push).toBeDefined())
+    const run = bff.message(OTHER, 'ran a prompt “Ben’s prompt” on their own account', 'run', {
+      run: 'use', use_id: 'u_9', listing_id: 'l_9', version: 1, charge: 'billed', price_usd_micros: 100_000, pay: 'self', payer_workspace_id: OTHER,
+    })
+    bff.stream.push!(`id: ${run.cursor}\ndata: ${JSON.stringify({ cursor: run.cursor, kind: 'message.posted', ref: run.id, at: '', message: run })}\n\n`)
+    expect((await within(list).findByTestId('run-cost')).textContent).toBe('Cost$0.10Paid by Ben’s lab')
+    expect(within(list).getAllByText('Ben’s lab').length).toBeGreaterThan(1)
+    const board = await screen.findByRole('list', { name: 'Contributions' })
+    expect(within(board).getByText('Ben’s lab')).toBeTruthy()
+    expect(document.body.textContent).not.toContain(OTHER)
   })
 })

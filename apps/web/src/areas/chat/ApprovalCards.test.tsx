@@ -105,11 +105,11 @@ describe('Chat approval cards (B28.84)', () => {
 
     // Read the moment the card first appears: its amount already carries its currency (B17.139).
     const card = (await screen.findAllByTestId('chat-approval'))[0]
-    expect(within(card).getByTestId('chat-approval-asks')).toHaveTextContent(/^Researcher wants to pay Writer 2 LXC \(\$0\.20\) — October drafts$/)
+    expect(within(card).getByTestId('chat-approval-asks')).toHaveTextContent(/^Researcher wants to pay Writer \$0\.20 \(2 LXC\) — October drafts$/)
     fireEvent.click(await within(card).findByRole('button', { name: 'Approve with Face ID' }))
 
     const said = await within(card).findByRole('status')
-    expect(said).toHaveTextContent(/^Approved and paid 2 LXC \(\$0\.20\) from Researcher to Writer\. See it on Researcher’s statement$/)
+    expect(said).toHaveTextContent(/^Approved and paid \$0\.20 \(2 LXC\) from Researcher to Writer\. See it on Researcher’s statement$/)
     expect(within(said).getByRole('link')).toHaveAttribute('href', '/agents?agent=agt_1&entry=ent_9')
     expect(new TextDecoder().decode(get.mock.calls[0][0].publicKey!.challenge as Uint8Array)).toBe('challenge-apr_1')
     expect(bff.decisions).toEqual([

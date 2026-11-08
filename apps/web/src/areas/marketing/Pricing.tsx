@@ -11,7 +11,7 @@ import {
   type PricingState,
 } from './pricingApi'
 import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
-import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, MoneyFeatureFees, TAX_LINE } from './PriceCard'
+import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, MoneyFeatureFees, TAX_LINE, platformFees } from './PriceCard'
 
 // /pricing (B5.2) — what anything costs, for a buyer who has not signed up. Public, OUTSIDE the
 // AuthGate like /marketing, and built the same way: no router context, plain anchors, Landing's
@@ -23,6 +23,7 @@ import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, MoneyFeatureFees, TAX_LIN
 // talyvor-lens:
 //   request charge   internal/proxy/agent_allocator.go settleReservationBasis:
 //                    ceil(delivered USD / peg × 1e6) µLXC — the model's catalog rate, rounded UP
+//   platform fee     internal/economy/platform_fee.go: the plan's platform_fee_bps, its own row (B56.2)
 //   no top-up fee    internal/billing/billing.go lxcForCents: usdCents × ulxcPerCent, exact
 //   the floor/cap    internal/billing/billing.go minTopUpCents / maxTopUpCents and their reasons
 //   no seats         internal/billing has no seat or per-member charge anywhere
@@ -164,7 +165,7 @@ export function Pricing() {
             </h1>
             <p className="mt-6 max-w-2xl text-lede text-muted">
               Each agent spends prepaid credit from its own wallet, at the list price of the model it
-              calls. A company’s plan sets how many agents and seats it has; a person who chats can add a
+              calls plus your plan’s platform fee. A company’s plan sets how many agents and seats it has; a person who chats can add a
               monthly plan with usage included. Paid Marketplace listings come on one bill a month.
             </p>
             <TealRule className="mt-8" />
@@ -184,7 +185,8 @@ export function Pricing() {
             <p className="mt-6 max-w-2xl text-body text-muted">
               Credit is bought by the workspace and handed to each agent from its balance. An agent
               spends only what it was given: when its wallet is empty, its next call is refused rather
-              than billed to you.
+              than billed to you, unless your company has a Talyvor credit line, which covers it and bills
+              you once a month.
             </p>
             <div className="mt-8">
               {state.status === 'ok' ? (
@@ -205,7 +207,7 @@ export function Pricing() {
           <div className="mx-auto w-full max-w-5xl px-gutter py-16">
             <Eyebrow index="02">What a request costs</Eyebrow>
             <h2 id="request-heading" className="mt-6 max-w-2xl text-display-3 text-ink">
-              The model’s list price, converted to credits.
+              The model’s list price, plus your plan’s platform fee.
             </h2>
             <TealRule className="mt-5" />
             <p className="mt-6 max-w-2xl text-body text-muted">
@@ -213,6 +215,15 @@ export function Pricing() {
               per million tokens, converted at the rate above — rounded up to the millionth of a
               credit, never down. Each model’s rate is shown beside it when you pick it in the app.
             </p>
+            {state.status === 'ok' && state.pricing.fees ? (
+              <p data-testid="platform-fee-line" className="mt-4 max-w-2xl text-body text-muted">
+                Your plan’s platform fee on that price is charged on its own line:{' '}
+                <span className="font-figure text-ink">
+                  {platformFees(state.pricing.fees, state.pricing.plan_gates?.order ?? [])}
+                </span>
+                .
+              </p>
+            ) : null}
             <ul className="mt-4 max-w-2xl list-disc pl-5 text-body text-muted">
               <li>
                 One saving: an answer served from the shared pool costs less than list, because nobody

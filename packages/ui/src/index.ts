@@ -11,14 +11,17 @@ export { tokens } from './tokens'
 export type { TokenName } from './tokens'
 export {
   AA_BODY,
+  POCKET_ROLES_ON_PLANE,
   ROLES_ON_PLANE,
   TEXT_PLANES,
   TEXT_ROLES,
   isTextPlane,
   isTextRole,
   permits,
+  pocketName,
+  pocketPermits,
   ratio,
   worstRatio,
 } from './planes'
-export type { TextPlane, TextRole } from './planes'
+export type { PocketPlane, TextPlane, TextRole } from './planes'
 export { default as preset } from './preset'

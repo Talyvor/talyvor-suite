@@ -501,9 +501,7 @@ function RoomPage() {
               {members.map((m) => (
                 <li key={m.workspace_id}>
                   <Row label={m.role}>
-                    <span className="truncate font-figure text-body text-ink" title={m.workspace_id}>
-                      {m.workspace_id}
-                    </span>
+                    <span className="truncate text-body text-ink">{m.workspace_id === r.me?.workspace_id ? 'You' : m.workspace_name}</span>
                   </Row>
                 </li>
               ))}

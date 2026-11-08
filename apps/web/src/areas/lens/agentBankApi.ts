@@ -1,5 +1,6 @@
 import { ApiError, getJSON } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
+import { currencyText } from './money'
 
 // agentBankApi.ts — B19.4: the Agent Bank screen's reads and writes, through the BFF's /api/agents
 // routes (apps/bff/agent_bank.go) to Lens's agent accounts (B19.1), rules and approvals (B19.2) and
@@ -1946,7 +1947,7 @@ export const FIATS: readonly string[] = ['GBP', 'EUR', 'USD']
 export function formatMinor(minor: number, currency: string): string {
   if (currency === 'USDC') return `${(minor / 1e6).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`
   if (!FIATS.includes(currency)) return `${(minor / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(minor / 100)
+  return currencyText(minor / 100, currency)
 }
 
 /** "12.50" → 1250: an amount typed in the currency's major units, to the minor unit; null when it is not a positive amount. */

@@ -4,9 +4,9 @@ import { type CardProps, NavIcon, type NavIconName, Pill, Card as UiCard, cn, fo
 import { api } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
 import { fetchModels } from '../chat/chatApi'
-import { formatULXC } from '../lens/agentBankApi'
+import { Lxc } from '../lens/money'
 import { usdText } from '../rooms/roomsApi'
-import { type Listing, type ListingKind, kindLabel, priceText } from './marketApi'
+import { type Listing, type ListingKind, kindLabel } from './marketApi'
 
 // parts.tsx — B20.3: what the marketplace's screens share.
 //
@@ -34,7 +34,7 @@ export function readFailure(err: unknown, what: string): string {
 }
 
 export function Price({ micros }: { micros: number }) {
-  return micros > 0 ? <span className="font-figure">{priceText(micros)}</span> : <span>Free</span>
+  return micros > 0 ? <span className="font-figure"><Lxc ulxc={micros} /> per use</span> : <span>Free</span>
 }
 
 /** Models a listing can run on: Lens runs a use through its OpenAI or Anthropic proxy lane by the model's name. */
@@ -143,7 +143,7 @@ export function ListingCard({
           <span className="font-figure text-body text-ink" data-testid="listing-price">
             {usd === undefined
               ? l.price_per_use_ulxc > 0
-                ? formatULXC(l.price_per_use_ulxc)
+                ? <Lxc ulxc={l.price_per_use_ulxc} />
                 : 'Free'
               : usd === null
                 ? 'Rent or buy'

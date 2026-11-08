@@ -62,11 +62,6 @@ function Body({ token }: { token: string }) {
   )
 }
 
-const FOOTER_LINKS = [
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/terms', label: 'Terms' },
-]
-
 export function SharedDocsPage() {
   useDocumentTitle('Shared page')
   const { token = '' } = useParams()
@@ -80,7 +75,7 @@ export function SharedDocsPage() {
         </div>
       </main>
 
-      <SiteFooter links={FOOTER_LINKS} />
+      <SiteFooter />
     </div>
   )
 }

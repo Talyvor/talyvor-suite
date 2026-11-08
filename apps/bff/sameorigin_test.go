@@ -338,6 +338,11 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/marketplace/listings/x1/versions", body: `{"artifact":{"template":"x"},"changelog":"x"}`}, // B28.162
 		// B32.60 — saving the seller's tax details.
 		{method: http.MethodPut, path: "/api/marketplace/seller-tax", body: `{"seller_type":"individual"}`},
+		// B41.85 — a seller's relabel, the workspace's content filter, and a block and its undo.
+		{method: http.MethodPut, path: "/api/marketplace/listings/x1/content-labels", body: `{"age_rating":"all"}`},
+		{method: http.MethodPut, path: "/api/marketplace/content-filter", body: `{"max_age_rating":"all"}`},
+		{method: http.MethodPut, path: "/api/marketplace/blocked-listings/x1"},
+		{method: http.MethodDelete, path: "/api/marketplace/blocked-listings/x1"},
 		// B32.53 — opening a room and joining one.
 		{method: http.MethodPost, path: "/api/rooms", body: `{"title":"t","visibility":"public"}`},
 		{method: http.MethodPost, path: "/api/rooms/x1/join", body: `{"terms_version":1}`},
@@ -375,6 +380,14 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPut, path: "/api/rooms/x1/gate-thresholds", body: `{"used_people":150}`},
 		// B41.50 — a member signs the contributor agreement.
 		{method: http.MethodPost, path: "/api/rooms/x1/agreement", body: `{"version":"draft-1","signed_name":"A"}`},
+		// B41.47 — the owner freezes the leaderboard, a member objects, a panelist votes.
+		{method: http.MethodPost, path: "/api/rooms/x1/leaderboard/freeze"},
+		{method: http.MethodPost, path: "/api/rooms/x1/objections", body: `{"contribution_id":"x1","points":-1,"reason":"r"}`},
+		{method: http.MethodPut, path: "/api/rooms/x1/objections/x1/vote", body: `{"uphold":true}`},
+		// B41.52 — the owner posts a task, a member claims it and lets it go.
+		{method: http.MethodPost, path: "/api/rooms/x1/tasks", body: `{"title":"t","description":"","size":"M"}`},
+		{method: http.MethodPost, path: "/api/rooms/x1/tasks/x1/claim"},
+		{method: http.MethodDelete, path: "/api/rooms/x1/tasks/x1/claim"},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},

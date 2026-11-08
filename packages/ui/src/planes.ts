@@ -1,5 +1,5 @@
 import { contrastRatio } from './lib/contrast'
-import { tokens, type TokenName } from './tokens'
+import { aliases, pocket, tokens, type PocketName, type TokenName } from './tokens'
 
 /**
  * THE PLANES TEXT LANDS ON, AND WHICH ROLES MAY LAND ON EACH.
@@ -87,26 +87,50 @@ export type TextRole = (typeof TEXT_ROLES)[number]
  * `bg-accent text-accent-ink` and its hover/press step is `bg-accent-hover`, so both carry a
  * label and both are scored here rather than only as the accent's states.
  *
- * ⚠ `accent-tint` PERMITS THREE ROLES, and the two it refuses are refused BY MEASUREMENT (3.97 and
- * 3.95, both under 4.5). The product's own fix for the one place that declared a refused pair is
- * in NavItem.tsx — see its icon. `label` is refused there too: 4.05 light. `accent-strong` is the
- * selected row's label (B29.7): 5.71 light, 8.24 dark.
- *
- * ⚠ `raised` REFUSES `faint`, BY MEASUREMENT: 4.25 dark. The card plane is lighter than the
- * surface it sits on, which eats the margin `faint` was lifted to clear on canvas and surface.
- * A figure's µ-tail on a card wears `muted`.
+ * B57.2: on Pocket's values every role clears AA on `accent-tint` (cloud-2: ink-3 4.60 light,
+ * 4.93 dark) and `faint` clears it on `raised` (page: 5.34 light), so neither refusal is a fact
+ * any more and both are permitted. contrast.test.ts holds the numbers.
  */
 export const ROLES_ON_PLANE = {
   canvas: ['ink', 'muted', 'faint', 'label', 'accent', 'accent-strong'],
   surface: ['ink', 'muted', 'faint', 'label', 'accent', 'accent-strong'],
-  raised: ['ink', 'muted', 'label', 'accent', 'accent-strong'],
+  raised: ['ink', 'muted', 'faint', 'label', 'accent', 'accent-strong'],
   sidebar: ['ink', 'muted', 'faint', 'label', 'accent', 'accent-strong'],
-  'accent-tint': ['ink', 'muted', 'accent-strong'],
+  'accent-tint': ['ink', 'muted', 'faint', 'label', 'accent', 'accent-strong'],
   accent: ['accent-ink'],
   'accent-hover': ['accent-ink'],
 } as const satisfies Record<string, readonly TextRole[]>
 
 export type TextPlane = keyof typeof ROLES_ON_PLANE
+
+/**
+ * B57.3 — Pocket's planes and the roles permitted on each, for pages held to Pocket's rules
+ * (apps/web/src/pocketPending.ts). Text is ink, ink-2 or ink-3; tangerine-ink is the one orange
+ * that carries words; success and danger are status words; on-primary is the label on the ink
+ * fill. Tangerine and the agent colours are never text, so they are no role. Every pair clears AA
+ * body in both themes (planeAudit.test.tsx). Today's names are scored as the value they alias.
+ */
+export const POCKET_ROLES_ON_PLANE = {
+  page: ['ink', 'ink-2', 'ink-3', 'tangerine-ink', 'success', 'danger'],
+  cloud: ['ink', 'ink-2', 'ink-3', 'tangerine-ink', 'success', 'danger'],
+  'cloud-2': ['ink', 'ink-2', 'ink-3', 'tangerine-ink', 'success', 'danger'],
+  'tangerine-50': ['ink', 'ink-2', 'tangerine-ink'],
+  'success-50': ['ink', 'success'],
+  'danger-50': ['ink', 'danger'],
+  primary: ['on-primary'],
+} as const satisfies Partial<Record<PocketName, readonly PocketName[]>>
+
+export type PocketPlane = keyof typeof POCKET_ROLES_ON_PLANE
+
+/** A Pocket name for a token: itself, or the Pocket value today's name aliases. */
+export function pocketName(name: string): PocketName | null {
+  if (name in pocket.light) return name as PocketName
+  return (aliases as Record<string, PocketName>)[name] ?? null
+}
+
+export function pocketPermits(plane: string, role: string): boolean {
+  return ((POCKET_ROLES_ON_PLANE as Record<string, readonly string[]>)[plane] ?? []).includes(role)
+}
 
 export const TEXT_PLANES = Object.keys(ROLES_ON_PLANE) as TextPlane[]
 

@@ -1,0 +1,5 @@
+[
+  { "route": "/", "screen": "w-home" },
+  { "route": "/", "screen": "w-home", "dark": true },
+  { "route": "/", "screen": "w-home+sheet-A", "steps": ["Review"], "dark": true }
+]
