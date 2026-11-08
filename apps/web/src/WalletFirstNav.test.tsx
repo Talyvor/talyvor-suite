@@ -40,6 +40,7 @@ function mockBff() {
     const url = String(input).split('?')[0]
     const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, user: { sub: 's1', email: 'ng@example.com' }, operator: true })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents/approvals') return json({ approvals: APPROVALS })
     if (url === '/api/agents/passkeys') return json({ passkeys: [] })
     if (url === '/api/agents')

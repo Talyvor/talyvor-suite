@@ -27,6 +27,8 @@ function mockBff() {
       new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     const allocated = () => agents.reduce((s, a) => s + a.balance_ulxc, 0)
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents' && method === 'GET')
       return json({
         workspace_balance_ulxc: workspace,
