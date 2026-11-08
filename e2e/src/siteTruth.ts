@@ -3,6 +3,8 @@
 // (once Lens serves it, B51.2) and Lens's /status.json rails. It fails on any disagreement:
 //   /marketing shows an email box or "place opens" while sign-up is open;
 //   /pricing shows "Top up any amount" or a Choose button while card_payments is there and not "live";
+//   /pricing leaves out a plan's platform fee as /api/pricing serves it, or merges Services with Compute or sign-on with
+//     audit export in one row (B56.2);
 //   a route under "No key needed" on /documentation answers 401 to a caller with no key;
 //   Privacy's Cookies section disagrees with the pages: a cookie banner or a request to connect.facebook.net while it says
 //     there are none, or no banner on any page while it describes one;
@@ -41,6 +43,8 @@ export interface SiteRead {
   signup: 'open' | 'closed' | 'unknown'
   /** /api/pricing's card_payments; undefined while Lens does not serve it. */
   cardPayments: string | undefined
+  /** /api/pricing's fees.platform_fee_bps by plan; undefined while it serves no fees. */
+  platformFeeBps?: Record<string, number>
   pages: PageRead[]
   /** The text of Privacy's Cookies section; '' when there is none. */
   privacyCookies: string
@@ -78,6 +82,18 @@ export function siteFaults(r: SiteRead): string[] {
   if (pricing !== undefined && r.cardPayments !== undefined && r.cardPayments !== 'live') {
     if (/Top up any amount/i.test(pricing.text)) wrong.push(`/pricing shows "Top up any amount" while card_payments is "${r.cardPayments}"`)
     if (pricing.chooseButtons.length > 0) wrong.push(`/pricing shows ${pricing.chooseButtons.join(', ')} while card_payments is "${r.cardPayments}"`)
+  }
+
+  if (pricing !== undefined) {
+    // Enterprise's fee is agreed per contract, so the page says "agreed" in place of its served figure.
+    for (const [id, bps] of Object.entries(r.platformFeeBps ?? {})) {
+      if (id === 'enterprise') continue
+      const rate = `${(bps / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`
+      if (!new RegExp(`\\b${id}\\s+${rate.replace('.', '\\.')}`, 'i').test(pricing.text)) wrong.push(`/pricing does not say ${id}'s platform fee is ${rate}, as /api/pricing serves it`)
+    }
+    for (const merged of ['Services and compute', 'SSO and audit export']) {
+      if (pricing.text.toLowerCase().includes(merged.toLowerCase())) wrong.push(`/pricing still shows one "${merged}" row`)
+    }
   }
 
   for (const n of r.noKey) if (n.status === 401) wrong.push(`${n.path}, under "No key needed" on /documentation, answers 401 without a key`)
@@ -138,8 +154,8 @@ export function siteTruth(): Scenario {
     id: 'site-truth',
     owner: 'talyvor-suite',
     feature: 'Public site',
-    items: ['B51.1', 'B51.4'],
-    title: 'the public pages, read signed out, agree with the product: no waitlist while sign-up is open, no top-up or Choose while card payments are not live, ' +
+    items: ['B51.1', 'B51.4', 'B56.2'],
+    title: 'the public pages, read signed out, agree with the product: no waitlist while sign-up is open, no top-up or Choose while card payments are not live, each plan\'s served platform fee on /pricing, ' +
       '"No key needed" routes answer without a key, Privacy\'s Cookies section matches the pages, the shared header and footer, and no link to a 404 or the not-found page',
     run: async (ctx) => {
       const browser = ctx.app.context.browser()
@@ -154,7 +170,9 @@ export function siteTruth(): Scenario {
         const meBody = (await me.json().catch(() => null)) as { signup_open?: boolean | null } | null
         const signup = typeof meBody?.signup_open === 'boolean' ? (meBody.signup_open ? 'open' : 'closed') : 'unknown'
         const priced = await stranger.request.get(`${origin}/api/pricing`)
-        const cardPayments = ((await priced.json().catch(() => null)) as { card_payments?: string } | null)?.card_payments
+        const served = (await priced.json().catch(() => null)) as { card_payments?: string; fees?: { platform_fee_bps?: Record<string, number> } } | null
+        const cardPayments = served?.card_payments
+        const platformFeeBps = served?.fees?.platform_fee_bps
         ctx.evidence.push({ note: `/auth/me ${me.status()}: sign-up ${signup}; /api/pricing ${priced.status()}: card_payments ${cardPayments ?? 'not served yet (B51.2)'}` })
 
         const page = await stranger.newPage()
@@ -204,7 +222,7 @@ export function siteTruth(): Scenario {
         const unreached = links.filter((l) => l.status === 0).map((l) => l.href)
         ctx.evidence.push({ note: `${links.length} links followed${unreached.length > 0 ? `; no answer from ${unreached.join(', ')}` : ''}` })
 
-        const wrong = siteFaults({ signup, cardPayments, pages, privacyCookies, facebook: [...facebook], noKey, links })
+        const wrong = siteFaults({ signup, cardPayments, platformFeeBps, pages, privacyCookies, facebook: [...facebook], noKey, links })
         return wrong.length === 0
           ? { pass: true, detail: `${PUBLIC_PAGES.length} public pages agree with the product (sign-up ${signup}, card_payments ${cardPayments ?? 'not served'}); ` +
               `${noKey.length} "No key needed" routes answer without a key; ${links.length} links land` }

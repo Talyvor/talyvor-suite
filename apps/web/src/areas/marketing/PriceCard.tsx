@@ -143,7 +143,8 @@ export function CompanyCard({
           </Row>
         ) : null}
         <Row label="Slack and Teams approvals">{included(gate.slack_teams_approvals)}</Row>
-        <Row label="SSO and audit export">{included(gate.sso && gate.audit_export)}</Row>
+        <Row label="Single sign-on">{included(gate.sso)}</Row>
+        <Row label="Audit export">{included(gate.audit_export)}</Row>
         <Row label="Talyvor Edge">{included(gate.edge)}</Row>
       </dl>
     </div>
@@ -259,22 +260,25 @@ export function FeesOnAnyPlan({ fees }: { fees: Fees | undefined }) {
           <span className="font-figure">{formatBPS(take)}</span>
         </span>
       </Row>
-      {fees.services_take_bps === fees.compute_take_bps ? (
-        <Row label="Services and compute">
-          <span className="font-figure">{formatBPS(fees.services_take_bps)}</span>
-        </Row>
-      ) : (
-        <>
-          <Row label="Services">
-            <span className="font-figure">{formatBPS(fees.services_take_bps)}</span>
-          </Row>
-          <Row label="Compute">
-            <span className="font-figure">{formatBPS(fees.compute_take_bps)}</span>
-          </Row>
-        </>
-      )}
+      {/* B56.2: two rows even when equal. Lens takes the services fee only on a payment to another company's agent. */}
+      <Row label="Services">
+        <span>
+          <span className="font-figure">{formatBPS(fees.services_take_bps)}</span> of a payment to another company’s agent
+        </span>
+      </Row>
+      <Row label="Compute">
+        <span className="font-figure">{formatBPS(fees.compute_take_bps)}</span>
+      </Row>
     </dl>
   )
+}
+
+/** B56.2 — each plan's platform fee on AI spend, as served: "Free 5.5% · Team 3% · Enterprise agreed". */
+export function platformFees(fees: Fees, planIds: string[]): string {
+  const ids = planIds.length > 0 ? planIds : Object.keys(fees.platform_fee_bps)
+  return ids
+    .map((id) => `${planName(id)} ${id === CONTRACTED ? 'agreed' : formatBPS(fees.platform_fee_bps[id] ?? 0)}`)
+    .join(' · ')
 }
 
 /**
