@@ -500,6 +500,8 @@ func TestMCPPreparedSaysWhatWasPaid(t *testing.T) {
 			"Paid without asking the person: each payment is inside a permission they signed. See it in Talyvor at https://app.talyvor.com/approve/pr-1."},
 		{`{"status":"pending_approval",` + links + `,"items":[{"decision":"auto"},{"decision":"needs_approval"},{"decision":"needs_approval"},{"decision":"blocked"}]}`,
 			"1 paid inside a permission the person signed. 2 wait for the person to approve them in Talyvor at https://app.talyvor.com/approve/pr-1 (on their phone: talyvor://approve/pr-1)."},
+		{`{"status":"auto",` + links + `,"items":[{"decision":"auto"},{"decision":"blocked"},{"decision":"blocked"}]}`,
+			"1 paid inside a permission the person signed. 2 were blocked: each item says why. See it in Talyvor at https://app.talyvor.com/approve/pr-1."},
 		{`{"status":"blocked",` + links + `,"items":[{"decision":"blocked"}]}`,
 			"Nothing was paid: every payment was blocked. Each item says why."},
 		{`{"status":"pending_approval",` + links + `,"items":[{"decision":"needs_approval"}]}`,
