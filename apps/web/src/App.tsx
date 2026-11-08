@@ -12,12 +12,11 @@ import {
   useNavigationType,
 } from 'react-router-dom'
 import {
-  Mark,
+  Logo,
   NavIcon,
   NavItem,
   Shell,
   ThemeToggle,
-  Wordmark,
   cn,
   focusRing,
   inlineLink,
@@ -452,13 +451,11 @@ function Sidebar() {
   )
   return (
     <nav className="flex flex-col gap-5 pb-2" aria-label="Sections">
-      {/* The corner carries the brand-v4 mark and wordmark, both drawn SVG and themed by
-          tokens. The mark is decorative beside the wordmark, which names the product once;
+      {/* B57.6 — the corner carries the kit's logo, its small drawing at 144 px as Pocket's sidebar does;
           the product label under it stays text, as an eyebrow. */}
       <div className="flex items-center gap-2.5 px-3 pb-2 pt-3">
-        <Mark size={28} aria-hidden />
         <div className="shrink-0">
-          <Wordmark height={13} />
+          <Logo width={144} />
           <div className="mt-1 text-eyebrow uppercase leading-tight text-label">Suite</div>
         </div>
         {/* An icon beside the wordmark, so the corner holds the board's mark and name without the two

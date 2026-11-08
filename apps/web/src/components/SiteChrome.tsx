@@ -1,4 +1,4 @@
-import { Button, Mark, ThemeToggle, Wordmark, focusRing, inlineLink } from '@talyvor/ui'
+import { AppIcon, Button, Logo, ThemeToggle, focusRing, inlineLink } from '@talyvor/ui'
 import { CompanyLine } from './CompanyLine'
 import { CookieSettingsLink } from '../areas/marketing/MetaPixel'
 import { FOOTER_LINE } from '../positioning'
@@ -42,9 +42,8 @@ export function SiteHeader({
     <header className="border-b border-rule bg-canvas wide:sticky wide:top-0 wide:z-20">
       <div className={`mx-auto flex w-full ${width} flex-wrap items-center justify-between gap-y-2 px-gutter py-3`}>
         <a href="/marketing" className={`flex items-center gap-2.5 ${focusRing}`}>
-          <Mark size={26} aria-hidden />
           <div className="min-w-0">
-            <Wordmark height={12} />
+            <Logo width={144} />
             {product ? <div className="mt-1 text-eyebrow uppercase leading-tight text-label">{product}</div> : null}
           </div>
         </a>
@@ -88,7 +87,7 @@ export function SiteFooter({
     <footer className="border-t border-rule bg-surface">
       <div className={`mx-auto flex w-full ${width} flex-wrap items-center justify-between gap-3 px-gutter py-6`}>
         <div className="flex items-center gap-2.5">
-          <Mark size={20} aria-hidden />
+          <AppIcon size={20} aria-hidden />
           <div className="font-figure text-eyebrow uppercase text-faint">{FOOTER_LINE}</div>
         </div>
         <div className="text-caption text-faint">

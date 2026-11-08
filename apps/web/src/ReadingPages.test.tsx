@@ -43,8 +43,7 @@ describe.each([
     // The site's header comes first; testing-library also counts the legal pages' title <header> in
     // main as a banner, which a browser does not.
     const header = screen.getAllByRole('banner')[0]
-    expect(header.querySelector('svg[data-brand="mark"]')).not.toBeNull()
-    expect(header.querySelector('svg[data-brand="wordmark"]')).not.toBeNull()
+    expect(header.querySelector('[data-brand="lockup"] img[src="/brand/logo/talyvor-logo-small-on-light.svg"]')).not.toBeNull()
     expect(within(header).getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
 
     const main = screen.getByRole('main')
@@ -54,7 +53,7 @@ describe.each([
     expect(main.querySelector('.max-w-lg.text-reading')).not.toBeNull()
 
     const footer = screen.getByRole('contentinfo')
-    expect(footer.querySelector('svg[data-brand="mark"]')).not.toBeNull()
+    expect(footer.querySelector('img[data-brand="app-icon"]')).not.toBeNull()
     expect(within(footer).getByText(new RegExp(COMPANY_NAME))).toBeInTheDocument()
     expect(within(footer).getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy')
   })

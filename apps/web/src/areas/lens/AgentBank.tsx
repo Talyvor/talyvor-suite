@@ -11,6 +11,7 @@ import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
 import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
 import { AgentCardPanel } from './AgentCardPanel'
+import { AgentFace } from './AgentFace'
 import { categoryWords } from './Budgets'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { AgentCredentialCard } from './AgentCredential'
@@ -641,7 +642,12 @@ function AgentList({ agents, selected, onSelect }: { agents: Agent[]; selected: 
       {agents.map((a) => (
         <Row
           key={a.id}
-          label={a.name}
+          label={
+            <span className="flex items-center gap-2.5">
+              <AgentFace agent={a} />
+              {a.name}
+            </span>
+          }
           hint={
             <>
               Spent {lxc(a.spent_ulxc)} · <span className="font-figure">{a.keys.length}</span>{' '}
@@ -2686,9 +2692,12 @@ export function AgentBank() {
 
       {agent && book.data ? (
         <Region index="04" label="Agent" className="flex flex-col gap-gutter">
-          <p className="text-head text-ink" data-testid="agent-open">
-            {agent.name}
-          </p>
+          <div className="flex items-center gap-4">
+            <AgentFace agent={agent} size={60} />
+            <p className="text-head text-ink" data-testid="agent-open">
+              {agent.name}
+            </p>
+          </div>
           {agent.description ? (
             <p className="text-body text-muted" data-testid="agent-description">
               {agent.description}
