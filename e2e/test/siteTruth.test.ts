@@ -32,6 +32,17 @@ describe('the site-truth oracle (B51.4)', () => {
     expect(siteFaults(clean())).toEqual([])
   })
 
+  // B56.2: the page prints each plan's served platform fee, and no merged fee or gate row.
+  it('catches a platform fee /pricing leaves out and a merged Services or sign-on row', () => {
+    const served = (r: SiteRead) => { r.platformFeeBps = { free: 600, team: 325, enterprise: 100 } }
+    expect(planted((r) => { served(r); at(r, '/pricing').text += ' Free 6% · Team 3.25% · Enterprise agreed' })).toEqual([])
+    expect(planted((r) => { served(r); at(r, '/pricing').text += ' Free 6% · Team 3% · Services and compute 4% · SSO and audit export' })).toEqual([
+      "/pricing does not say team's platform fee is 3.25%, as /api/pricing serves it",
+      '/pricing still shows one "Services and compute" row',
+      '/pricing still shows one "SSO and audit export" row',
+    ])
+  })
+
   it('catches the waitlist on /marketing while sign-up is open, and only then', () => {
     expect(planted((r) => { at(r, '/marketing').emailBox = true; at(r, '/marketing').text += ' Your place opens soon' })).toEqual([
       '/marketing shows an email box while the BFF reports sign-up open',
