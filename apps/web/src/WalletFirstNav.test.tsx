@@ -185,7 +185,7 @@ describe('the navigation is wallet-first (B28.7)', () => {
     fireEvent.click(link)
     expect(window.location.pathname).toBe('/approvals')
     const main = within(screen.getByRole('main'))
-    await waitFor(() => expect(main.getAllByRole('button', { name: 'Deny' })).toHaveLength(2))
+    await waitFor(() => expect(main.getAllByRole('button', { name: 'Decline' })).toHaveLength(2))
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Approvals')
   })
 })

@@ -106,7 +106,8 @@ describe('Agent Bank approvals with Face ID', () => {
       } },
     })
 
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Deny' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Decline' }))[0])
+    fireEvent.submit(screen.getByLabelText('Why (optional, the agent sees it)').closest('form')!)
     await waitFor(() => expect(bff.decisions).toHaveLength(2))
     expect(bff.decisions[1].id).toBe('apr_2')
     expect(bff.decisions[1].decision).toBe('deny')

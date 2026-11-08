@@ -6,6 +6,7 @@ import { Button, Pill, inlineLink } from '@talyvor/ui'
 
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, PASSKEYS_KEY, deviceText, useKeys } from '../lens/AgentBank'
 import { AllowedUpTo, AlwaysAllow } from '../lens/AlwaysAllow'
+import { DeclineForm, declinedText } from '../lens/Decline'
 import { type AgentApproval, AgentBankError, type PayeeAllowance, agentBankApi, refusalText } from '../lens/agentBankApi'
 import { formatWhen } from '../lens/format'
 import { Lxc, pegQuery } from '../lens/money'
@@ -49,19 +50,21 @@ export function ApprovalCards() {
   // Decided here this session: the card stays, saying what happened.
   const [done, setDone] = useState<Record<string, { a: AgentApproval; outcome: Outcome }>>({})
   const [device, setDevice] = useState<Outcome | null>(null)
+  // B55.19 — the card whose Decline form is open.
+  const [declining, setDeclining] = useState<string | null>(null)
 
   const register = useMutation({
     mutationFn: () => registerThisDevice(navigator.userAgent.includes('iPhone') ? 'iPhone' : 'This device'),
-    onSuccess: () => setDevice({ ok: true, text: 'This device now signs approvals. Face ID asks each time you approve or deny.' }),
+    onSuccess: () => setDevice({ ok: true, text: 'This device now signs approvals. Face ID asks each time you approve or decline.' }),
     onError: (err) => setDevice({ ok: false, text: deviceText(err, 'No passkey was made.') }),
     onSettled: () => qc.invalidateQueries({ queryKey: PASSKEYS_KEY }),
   })
 
   const decide = useMutation({
-    mutationFn: async ({ a, decision, allow }: { a: AgentApproval; decision: 'approve' | 'deny'; allow?: PayeeAllowance }): Promise<Outcome> => {
-      await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id, allow) : undefined, allow)
+    mutationFn: async ({ a, decision, allow, reason }: { a: AgentApproval; decision: 'approve' | 'deny'; allow?: PayeeAllowance; reason?: string }): Promise<Outcome> => {
+      await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id, allow) : undefined, allow, reason)
       const who = nameOf(a.agent_id)
-      if (decision === 'deny') return { ok: true, text: <>Denied. {who}’s {a.payee ? 'payment' : 'request'} will be refused.</> }
+      if (decision === 'deny') return { ok: true, text: declinedText(who, a) }
       // B41.4 — the rule saved with the approval, said once whatever happens to the payment.
       const rule = allow ? (
         <>
@@ -155,7 +158,13 @@ export function ApprovalCards() {
               </div>
               {a.payee && a.reason ? <p className="text-caption text-muted">{a.reason}</p> : null}
               {open && onlyThePhone ? <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone> : null}
-              {open && !hold ? (
+              {open && !hold && declining === a.id ? (
+                <DeclineForm
+                  disabled={decide.isPending}
+                  onDecline={(reason) => decide.mutate({ a, decision: 'deny', reason })}
+                  onCancel={() => setDeclining(null)}
+                />
+              ) : open && !hold ? (
                 // One-handed on a phone: two full-width buttons under the sentence; side by side on a wide screen.
                 <div className="flex w-full flex-col gap-2 wide:flex-row wide:items-center">
                   <Button
@@ -168,9 +177,9 @@ export function ApprovalCards() {
                   <Button
                     className="h-12 w-full wide:h-8 wide:w-auto"
                     disabled={decide.isPending}
-                    onClick={() => decide.mutate({ a, decision: 'deny' })}
+                    onClick={() => setDeclining(a.id)}
                   >
-                    Deny
+                    Decline
                   </Button>
                   {signed ? (
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">

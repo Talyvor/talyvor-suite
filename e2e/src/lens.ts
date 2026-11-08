@@ -421,6 +421,8 @@ export interface AgentApproval {
   payee?: { kind: string; id: string; name: string }
   memo?: string
   status: 'pending' | 'approved' | 'denied' | 'used'
+  /** what the owner wrote when declining (Lens B55.18) */
+  deny_reason?: string
 }
 
 /** Lens economy.AgentStatementLine: one posting on an agent's account. */

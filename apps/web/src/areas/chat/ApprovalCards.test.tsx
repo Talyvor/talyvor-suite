@@ -121,7 +121,7 @@ describe('Chat approval cards (B28.84)', () => {
       } } },
     ])
     expect(bff.pays).toEqual([{ url: '/api/agents/agt_1/pay', body: { to_agent_id: 'agt_2', amount_ulxc: 2 * M, memo: 'October drafts' } }])
-    expect(within(card).queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(within(card).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
   })
 })
 
@@ -168,7 +168,7 @@ describe('Chat approval cards when only the phone holds a key (B55.2)', () => {
     const card = (await screen.findAllByTestId('chat-approval'))[0]
     expect(await within(card).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
     expect(within(card).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
-    expect(within(card).queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(within(card).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
     expect(posts).toEqual([])
   })
 })

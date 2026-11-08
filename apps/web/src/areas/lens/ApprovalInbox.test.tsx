@@ -125,7 +125,7 @@ describe('the approvals inbox (B41.33)', () => {
     // d opens the decline form on that row, its reason field focused; Decline sends it.
     expect(document.activeElement).toBe(screen.getByLabelText('Why (optional, the agent sees it)'))
     expect(bff.decisions).toHaveLength(1)
-    fireEvent.click(screen.getByRole('button', { name: 'Decline' }))
+    fireEvent.click(within(first).getByRole('button', { name: 'Decline' }))
     await waitFor(() => expect(bff.decisions).toEqual([{ id: 'apr_2', decision: 'approve' }, { id: 'apr_1', decision: 'deny' }]))
   })
 
@@ -251,7 +251,7 @@ describe('the approvals inbox when only the phone holds a key (B55.2)', () => {
     const posts = onlyThePhoneKey()
     const list = await inbox()
     expect(await list.findAllByText('Approve this on your phone: it is waiting in Talyvor there.')).toHaveLength(5)
-    expect(list.queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(list.queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
     expect(list.queryByRole('checkbox')).toBeNull()
     const row = document.querySelector<HTMLElement>('[data-approval="apr_1"]')!
     fireEvent.keyDown(row, { key: 'a' })
@@ -271,7 +271,7 @@ describe('the approvals inbox when only the phone holds a key (B55.2)', () => {
     const posts = onlyThePhoneKey([{ id: 'dk_1', platform: 'ios', name: 'Old iPhone', revoked_at: '2026-10-30T09:00:00Z' }])
     const list = await inbox()
     expect(await list.findAllByText('Every key of this workspace was removed, so nothing can approve.')).toHaveLength(5)
-    expect(list.queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(list.queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
     fireEvent.keyDown(document.querySelector<HTMLElement>('[data-approval="apr_1"]')!, { key: 'a' })
     expect(bff.decisions).toEqual([])
     expect(posts).toEqual([])
@@ -282,7 +282,7 @@ describe('the approvals inbox when only the phone holds a key (B55.2)', () => {
     const posts = onlyThePhoneKey(null)
     const list = await inbox()
     await waitFor(() => expect(queryClient.getQueryState(['money-devices'])?.status).toBe('error'))
-    expect(list.queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(list.queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
     expect(list.queryByRole('checkbox')).toBeNull()
     expect(screen.queryByRole('button', { name: /Add this device|Approve with Face ID from now on/ })).toBeNull()
     fireEvent.keyDown(document.querySelector<HTMLElement>('[data-approval="apr_1"]')!, { key: 'a' })

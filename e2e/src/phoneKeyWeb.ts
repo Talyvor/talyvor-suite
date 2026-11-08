@@ -29,7 +29,7 @@ export const loosenLine = (agent: string) => `Loosen ${agent}’s rules with a p
 export interface PhoneSeen {
   why?: string
   line: boolean
-  /** Approve or Deny buttons on the approval's row */
+  /** Approve or Decline buttons on the approval's row */
   buttons: number
   /** decisions or resumes the page posted */
   posts: string[]
@@ -47,7 +47,7 @@ export function phoneKeyWebVerdict(seen: PhoneSeen): Verdict {
   if (seen.why !== undefined) return fail(`Approvals could not be read: ${seen.why}`)
   const wrong: string[] = []
   if (!seen.line) wrong.push(`the approval's row does not say "${PHONE_LINE}"`)
-  if (seen.buttons !== 0) wrong.push(`the approval's row shows ${seen.buttons} Approve or Deny button(s) no key here can sign`)
+  if (seen.buttons !== 0) wrong.push(`the approval's row shows ${seen.buttons} Approve or Decline button(s) no key here can sign`)
   if (seen.posts.length > 0) wrong.push(`the page sent ${seen.posts.join(', ')}, which Lens must refuse unsigned`)
   if (seen.status !== 'pending') wrong.push(`the approval is ${seen.status || 'missing'} on Lens, not pending`)
   if (!seen.loosenLine) wrong.push(`raising the daily limit did not say "${loosenLine('…')}"`)
@@ -193,7 +193,7 @@ export function phoneKeyWeb(): Scenario {
       try {
         const row = page.locator(`[id="approval-${id}"]`)
         seen.line = await row.getByText(PHONE_LINE).waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false)
-        seen.buttons = await row.getByRole('button', { name: /^(Approve|Deny)/ }).count()
+        seen.buttons = await row.getByRole('button', { name: /^(Approve|Decline)/ }).count()
         await row.focus()
         await page.keyboard.press('a')
         await page.waitForTimeout(1_000)

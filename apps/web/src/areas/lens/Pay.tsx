@@ -24,6 +24,7 @@ import { LinkedItem } from '../../components/LinkedItem'
 import { formatDecided, formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, PREPARED_KEY, preparedBy, useKeys } from './AgentBank'
+import { DeclineForm, declinedText } from './Decline'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { paymentRequestKey } from './Approve'
 import { approvePayoutSigned, assertOver, payOutsideSigned, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
@@ -1128,22 +1129,34 @@ const SCAM_QUESTIONS = [
 ] as const
 type ScamAnswers = Partial<Record<(typeof SCAM_QUESTIONS)[number]['key'], boolean>>
 
-/** An agent's own payments out that its rules sent to a person: approve or deny here, signed once the workspace has a passkey. */
+/** An agent's own payments out that its rules sent to a person: approve or decline here, signed once the workspace has a passkey. */
 function Waiting({ agentName }: { agentName: (id: string) => string }) {
   const qc = useQueryClient()
   const approvals = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
   const { signed, onlyThePhone, hold } = useKeys()
   const waiting = (approvals.data?.approvals ?? []).filter((a) => a.status === 'pending' && a.payee?.kind === 'outside')
+  // B55.19 — the payment whose Decline form is open, and what the last decline did.
+  const [declining, setDeclining] = useState<string | null>(null)
+  const [declined, setDeclined] = useState('')
   const decide = useMutation({
-    mutationFn: async ({ a, decision }: { a: AgentApproval; decision: 'approve' | 'deny' }) =>
-      agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: APPROVALS_KEY }),
+    mutationFn: async ({ a, decision, reason }: { a: AgentApproval; decision: 'approve' | 'deny'; reason?: string }) =>
+      agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined, undefined, reason),
+    onSuccess: (_, { a, decision }) => {
+      setDeclining(null)
+      setDeclined(decision === 'deny' ? declinedText(agentName(a.agent_id), a) : '')
+      void qc.invalidateQueries({ queryKey: APPROVALS_KEY })
+    },
   })
   if (approvals.isError) return <p className="text-body text-muted">{readFailure(approvals.error, 'The agents’ requests')}</p>
-  if (waiting.length === 0) return null
+  if (waiting.length === 0) return declined ? <Note ok>{declined}</Note> : null
   return (
     <Card>
       <CardHeader>Waiting for your approval</CardHeader>
+      {declined ? (
+        <div className="px-gutter pt-3">
+          <Note ok>{declined}</Note>
+        </div>
+      ) : null}
       <ul>
         {waiting.map((a) => (
           <li key={a.id} className="flex flex-col gap-2 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`approval-${a.id}`}>
@@ -1156,13 +1169,15 @@ function Waiting({ agentName }: { agentName: (id: string) => string }) {
             </p>
             {onlyThePhone ? (
               <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
-            ) : hold ? null : (
+            ) : hold ? null : declining === a.id ? (
+              <DeclineForm disabled={decide.isPending} onDecline={(reason) => decide.mutate({ a, decision: 'deny', reason })} onCancel={() => setDeclining(null)} />
+            ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'approve' })}>
                   Approve
                 </Button>
-                <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'deny' })}>
-                  Deny
+                <Button type="button" disabled={decide.isPending} onClick={() => setDeclining(a.id)}>
+                  Decline
                 </Button>
               </div>
             )}

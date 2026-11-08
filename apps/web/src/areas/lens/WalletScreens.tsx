@@ -65,7 +65,8 @@ export function ApprovalsScreen() {
       >
         <p className="text-body text-muted">
           A request or payment waits here when it is above an agent’s approval amount. Approve it and the agent’s next
-          identical request goes through, once; deny it and the request is refused.
+          identical request goes through, once; decline it and the request is refused, and asking again the same way is
+          refused for 24 hours.
         </p>
         <CurrencyPicker />
         <Approvals nameOf={nameOf} held={{}} onSent={() => {}} primary />

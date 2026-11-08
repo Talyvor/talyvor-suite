@@ -20,6 +20,7 @@ import { AgentFace } from './AgentFace'
 import { HelperPicker } from '../../cards/HelperPicker'
 import { categoryWords } from './Budgets'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
+import { DeclineForm, declinedText } from './Decline'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
 import { CurrencyPicker, Lxc, useLxcText } from './money'
@@ -2360,7 +2361,7 @@ const DECIDED: Record<AgentApproval['status'], { status: PillStatus; label: stri
   pending: { status: 'held', label: 'Waiting' },
   approved: { status: 'settled', label: 'Approved' },
   used: { status: 'settled', label: 'Approved and used' },
-  denied: { status: 'slashed', label: 'Denied' },
+  denied: { status: 'slashed', label: 'Declined' },
   expired: { status: 'parked', label: 'Expired' },
 }
 // B55.7 — a status Lens adds before this screen knows it reads Closed instead of blanking the screen.
@@ -2500,7 +2501,7 @@ function FaceID({ signed, ready, passkeyCount }: { signed: boolean; ready: boole
       if (enrolment) {
         setSaid(null)
         setWaiting(enrolment)
-      } else setSaid({ ok: true, text: 'This device now signs approvals. Face ID asks each time you approve or deny.' })
+      } else setSaid({ ok: true, text: 'This device now signs approvals. Face ID asks each time you approve or decline.' })
     },
     onError: (err) => setSaid({ ok: false, text: deviceText(err, 'No passkey was made.') }),
     onSettled: () => qc.invalidateQueries({ queryKey: PASSKEYS_KEY }),
@@ -2715,12 +2716,14 @@ export function Approvals({
     if (list.isSuccess && hash.startsWith('#approval-')) document.getElementById(hash.slice(1))?.focus()
   }, [list.isSuccess, hash])
   const [swiping, setSwiping] = useState<{ id: string; dx: number } | null>(null)
-  const decideOne = async (a: AgentApproval, decision: 'approve' | 'deny', allow?: PayeeAllowance): Promise<React.ReactNode> => {
+  // B55.19 — the waiting row whose Decline form is open.
+  const [declining, setDeclining] = useState<string | null>(null)
+  const decideOne = async (a: AgentApproval, decision: 'approve' | 'deny', allow?: PayeeAllowance, reason?: string): Promise<React.ReactNode> => {
     // B19.10: once the workspace has a passkey, Lens takes a decision only signed with one — Face ID
     // (or Touch ID, or the device's PIN) asks here, over a challenge naming this approval alone.
-    await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id, allow) : undefined, allow)
+    await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id, allow) : undefined, allow, reason)
     const p = held[a.id]
-    if (decision === 'deny') return <>Denied. {nameOf(a.agent_id)}’s request will be refused.</>
+    if (decision === 'deny') return declinedText(nameOf(a.agent_id), a)
     // B41.4 — the rule saved with the approval.
     const rule = allow ? (
       <>
@@ -2745,11 +2748,14 @@ export function Approvals({
       qc.invalidateQueries({ queryKey: ['agent-statement'] }),
     ])
   const decide = useMutation({
-    mutationFn: async ({ a, decision, allow }: { a: AgentApproval; decision: 'approve' | 'deny'; allow?: PayeeAllowance }) => ({
+    mutationFn: async ({ a, decision, allow, reason }: { a: AgentApproval; decision: 'approve' | 'deny'; allow?: PayeeAllowance; reason?: string }) => ({
       ok: true,
-      text: await decideOne(a, decision, allow),
+      text: await decideOne(a, decision, allow, reason),
     }),
-    onSuccess: setOutcome,
+    onSuccess: (o) => {
+      setOutcome(o)
+      setDeclining(null)
+    },
     onError: (err) => setOutcome({ ok: false, text: refusalText(err) }),
     onSettled: settled,
   })
@@ -2760,7 +2766,7 @@ export function Approvals({
       const n = chosen.length
       return {
         ok: true,
-        text: decision === 'approve' ? `Approved ${n}. Each agent’s next identical request goes through, once.` : `Denied ${n}. Those requests will be refused.`,
+        text: decision === 'approve' ? `Approved ${n}. Each agent’s next identical request goes through, once.` : `Declined ${n}. Those requests are refused, and the same requests are refused without asking you for 24 hours.`,
       }
     },
     onSuccess: (o) => {
@@ -2784,7 +2790,7 @@ export function Approvals({
       if (!next.delete(id)) next.add(id)
       return next
     })
-  // j/k or the arrows move between waiting rows; a approves, d denies, x ticks — only while focus is in the list.
+  // j/k or the arrows move between waiting rows; a approves, d opens Decline, x ticks — only while focus is in the list.
   const onKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const t = e.target as HTMLElement
     // B41.4 — nor inside a row's always-allow form, whose own buttons and fields take the keys.
@@ -2796,7 +2802,7 @@ export function Approvals({
     if (e.key === 'j' || e.key === 'ArrowDown') rows[Math.min(at + 1, rows.length - 1)]?.focus()
     else if (e.key === 'k' || e.key === 'ArrowUp') rows[Math.max(at - 1, 0)]?.focus()
     else if (a && !busy && !hold && e.key === 'a') decide.mutate({ a, decision: 'approve' })
-    else if (a && !busy && !hold && e.key === 'd') decide.mutate({ a, decision: 'deny' })
+    else if (a && !busy && !hold && e.key === 'd') setDeclining(a.id)
     else if (a && pickable && e.key === 'x') toggle(a.id)
     else return
     e.preventDefault()
@@ -2869,13 +2875,13 @@ export function Approvals({
                     Approve {chosen.length}
                   </Button>
                   <Button className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'deny' })}>
-                    Deny {chosen.length}
+                    Decline {chosen.length}
                   </Button>
                 </div>
               ) : null}
               {hold ? null : (
                 <>
-                  <p className="hidden text-caption text-muted wide:block">Keys: j and k move, a approves, d denies{signed ? '' : ', x selects'}.</p>
+                  <p className="hidden text-caption text-muted wide:block">Keys: j and k move, a approves, d declines{signed ? '' : ', x selects'}.</p>
                   <p className="text-caption text-muted wide:hidden">Swipe a request right to approve it.</p>
                 </>
               )}
@@ -2923,7 +2929,7 @@ export function Approvals({
                     swipeFrom.current = null
                     setSwiping(null)
                     const dx = e.changedTouches[0].clientX - (s?.x ?? 0)
-                    // Right only: a swipe approves (with Face ID once the workspace signs), never denies by accident.
+                    // Right only: a swipe approves (with Face ID once the workspace signs), never declines by accident.
                     if (s?.id === a.id && !busy && !hold && dx >= SWIPE_PX && dx > Math.abs(e.changedTouches[0].clientY - s.y)) decide.mutate({ a, decision: 'approve' })
                   }}
                   label={
@@ -2966,7 +2972,9 @@ export function Approvals({
                   {/* One-handed on a phone: two full-width buttons under the sentence and the thumb; side by side on a wide screen. */}
                   {onlyThePhone ? (
                     <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
-                  ) : hold ? null : (
+                  ) : hold ? null : declining === a.id ? (
+                    <DeclineForm disabled={busy} onDecline={(reason) => decide.mutate({ a, decision: 'deny', reason })} onCancel={() => setDeclining(null)} />
+                  ) : (
                   <div className="flex w-full flex-col gap-2 wide:w-auto wide:flex-row wide:items-center">
                     {/* B17.325 — one teal action per screen: the first waiting request's Approve, or Approve {n} once some are picked. */}
                     <Button
@@ -2977,8 +2985,8 @@ export function Approvals({
                     >
                       {signed ? 'Approve with Face ID' : 'Approve'}
                     </Button>
-                    <Button className="h-12 w-full wide:h-8 wide:w-auto" disabled={busy} onClick={() => decide.mutate({ a, decision: 'deny' })}>
-                      Deny
+                    <Button className="h-12 w-full wide:h-8 wide:w-auto" disabled={busy} onClick={() => setDeclining(a.id)}>
+                      Decline
                     </Button>
                   </div>
                   )}
