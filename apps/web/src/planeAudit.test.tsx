@@ -28,11 +28,13 @@ describe('the instrument, before it measures anything', () => {
     expect(ratio('dark', 'ink', 'accent-tint')).toBeGreaterThanOrEqual(AA_BODY)
     expect(ratio('light', 'muted', 'accent-tint')).toBeGreaterThanOrEqual(AA_BODY)
     expect(ratio('dark', 'muted', 'accent-tint')).toBeGreaterThanOrEqual(AA_BODY)
+    // B57.2: on Pocket's values faint clears the tint too (4.60 light, 4.93 dark), so it is permitted.
+    expect(ratio('light', 'faint', 'accent-tint')).toBeGreaterThanOrEqual(AA_BODY)
+    expect(ratio('dark', 'faint', 'accent-tint')).toBeGreaterThanOrEqual(AA_BODY)
     // The refusals. These are FACTS, and if either ever passes, ROLES_ON_PLANE must be widened —
     // contrast.test.ts fails on exactly that, from the other side.
-    expect(ratio('light', 'faint', 'accent-tint')).toBeLessThan(AA_BODY)
-    expect(ratio('dark', 'faint', 'accent-tint')).toBeLessThan(AA_BODY)
-    expect(ratio('light', 'accent', 'accent-tint')).toBeLessThan(AA_BODY)
+    expect(ratio('light', 'faint', 'accent')).toBeLessThan(AA_BODY)
+    expect(ratio('dark', 'faint', 'accent')).toBeLessThan(AA_BODY)
   })
 
   it('the same pairs clear the floor on the three planes the matrix already scored', () => {
@@ -55,16 +57,18 @@ describe('judge — the predicate, both directions', () => {
     expect(judge('muted', 'surface')).toBeNull()
   })
   it('refuses a role the plane does not permit, and reports both scores', () => {
-    const v = judge('faint', 'accent-tint')
+    const v = judge('faint', 'accent')
     expect(v?.reason).toBe('refused')
     expect(v?.light).toBeLessThan(AA_BODY)
     expect(v?.dark).toBeLessThan(AA_BODY)
   })
-  it('refuses the light-only failure too — a pair ships in both themes', () => {
-    const v = judge('accent', 'accent-tint')
+  it('reports each theme\'s own score — a pair ships in both themes', () => {
+    // B57.2: Pocket's palette has no pair that fails in one theme only, so this pins that the two
+    // scores are measured separately: muted on the primary fill is 2.33 light and 2.05 dark.
+    const v = judge('muted', 'accent')
     expect(v?.reason).toBe('refused')
-    expect(v?.light).toBeLessThan(AA_BODY)
-    expect(v?.dark).toBeGreaterThan(AA_BODY) // dark is fine; the pair still fails
+    expect(v?.light).toBeCloseTo(2.33, 2)
+    expect(v?.dark).toBeCloseTo(2.05, 2)
   })
   it('reports a plane nobody classified rather than passing it', () => {
     const v = judge('ink', 'rule')

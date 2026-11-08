@@ -20,7 +20,7 @@ import {
 
 const UI_SRC = resolve(import.meta.dirname, '../../../packages/ui/src')
 const font = (name: string) => resolve(UI_SRC, 'fonts', name)
-const SANS = font('space-grotesk-latin.woff2')
+const SANS = font('figtree-latin.woff2')
 const MONO_400 = font('ibm-plex-mono-400-latin.woff2')
 const MONO_EXT = font('ibm-plex-mono-400-latin-ext.woff2')
 
@@ -92,9 +92,10 @@ describe('the instrument, before it measures anything', () => {
 })
 
 describe('the served faces, read from theme.css and the binaries', () => {
-  it('parses every @font-face the stylesheet declares, and reaches both families', () => {
+  it('parses every @font-face the stylesheet declares, and reaches all three families', () => {
     const faces = servedFaces()
-    expect(faces.length).toBe(8)
+    expect(faces.length).toBe(10)
+    expect(faces.filter((f) => f.family === 'display').length).toBe(2)
     expect(faces.filter((f) => f.family === 'sans').length).toBe(2)
     expect(faces.filter((f) => f.family === 'mono').length).toBe(6)
     for (const f of faces) {
@@ -130,11 +131,12 @@ describe('the served faces, read from theme.css and the binaries', () => {
     }
   })
 
-  it('the mono weights are three separate files and the sans is a range', () => {
-    const weights = (fam: 'sans' | 'mono') =>
+  it('the mono weights are three separate files and the sans and display faces are ranges', () => {
+    const weights = (fam: 'display' | 'sans' | 'mono') =>
       [...new Set(servedFaces().filter((f) => f.family === fam).map((f) => f.weight))].sort()
     expect(weights('mono')).toEqual(['400', '500', '600'])
-    expect(weights('sans')).toEqual(['400 700'])
+    expect(weights('sans')).toEqual(['300 900'])
+    expect(weights('display')).toEqual(['200 800'])
   })
 
   /**
@@ -154,7 +156,7 @@ describe('the served faces, read from theme.css and the binaries', () => {
    */
   it('every served face NAMES ITSELF as the family theme.css points at it for', () => {
     const faces = servedFaces()
-    expect(faces.length).toBe(8)
+    expect(faces.length).toBe(10)
     for (const f of faces) {
       const actual = woff2FamilyName(f.file)
       expect(
@@ -180,7 +182,7 @@ describe('the served faces, read from theme.css and the binaries', () => {
    */
   it('a face declared as a weight RANGE really is variable across it', () => {
     const ranges = servedFaces().filter((f) => /^\d+\s+\d+$/.test(f.weight))
-    expect(ranges.length).toBe(2)
+    expect(ranges.length).toBe(4)
     for (const f of ranges) {
       const [lo, hi] = f.weight.split(/\s+/).map(Number)
       const axes = woff2Axes(f.file)
@@ -251,25 +253,27 @@ describe('the family an element renders in', () => {
     expect(effectiveFamily(dom('<span>x</span>').firstElementChild)).toBe('sans')
   })
 
-  it('font-figure and font-mono are both the mono family', () => {
-    expect(effectiveFamily(dom('<span class="font-figure">x</span>').firstElementChild)).toBe('mono')
+  it('font-figure is the sans family (Figtree, tabular), font-mono the mono, headings the display', () => {
+    expect(effectiveFamily(dom('<span class="font-figure">x</span>').firstElementChild)).toBe('sans')
     expect(effectiveFamily(dom('<span class="font-mono">x</span>').firstElementChild)).toBe('mono')
+    expect(effectiveFamily(dom('<h2>x</h2>').firstElementChild)).toBe('display')
+    expect(effectiveFamily(dom('<span class="font-display">x</span>').firstElementChild)).toBe('display')
   })
 
   it('it comes from an ANCESTOR, which is the reason this reads a tree and not a line', () => {
-    const root = dom('<div class="font-figure"><p><span>x</span></p></div>')
+    const root = dom('<div class="font-mono"><p><span>x</span></p></div>')
     expect(effectiveFamily(root.querySelector('span'))).toBe('mono')
   })
 
   it('the NEAREST family wins, as the cascade does', () => {
-    const root = dom('<div class="font-figure"><span class="font-sans">x</span></div>')
+    const root = dom('<div class="font-mono"><span class="font-sans">x</span></div>')
     expect(effectiveFamily(root.querySelector('span'))).toBe('sans')
   })
 })
 
 describe('the audit over rendered markup', () => {
   it('names an unservable character, its family and the element that renders it', () => {
-    const found = unservedGlyphsIn(dom('<span class="font-figure text-body">≈ $12.35</span>'))
+    const found = unservedGlyphsIn(dom('<span class="font-mono text-body">≈ $12.35</span>'))
     expect(found.length).toBe(1)
     expect(found[0].codePoint).toBe('U+2248')
     expect(found[0].family).toBe('mono')

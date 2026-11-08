@@ -96,8 +96,9 @@ describe('correction 3 — the accent appears on interaction (never on text)', (
     //
     // contrast.test.ts holds the floors these numbers must not fall below; this holds
     // the exact values, so a nudge is a decision someone makes on purpose.
-    expect(tokens.light['accent-tint']).toBe('#C9E6E0')
-    expect(tokens.dark['accent-tint']).toBe('#0E2B2E')
+    // B57.2: the tint is now an alias onto Pocket's cloud-2, the chip and secondary-button plane.
+    expect(tokens.light['accent-tint']).toBe('#ECEEF2')
+    expect(tokens.dark['accent-tint']).toBe('#20232A')
   })
   // B29.7 — the board's PRODUCT UI tile puts the selected row's label in the accent, on the tint.
   it('nav hover and selection are accent-tinted; the selected label is accent-strong', () => {
