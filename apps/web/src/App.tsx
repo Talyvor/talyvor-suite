@@ -647,6 +647,9 @@ function AppShell() {
   const page = titleFor(pathname)
   useDocumentTitle(page)
   return (
+    // B57.97 — the shell, Taly and the drawer are still today's design until B57.8 and B57.9 draw them, so they are
+    // held to today's rules; the page inside is held to its route's (pocketPending.ts). B57.8 takes this marker out.
+    <div className="contents" data-design="today">
     <Shell
       // B47.2 — Chat has the whole page: the suite's sidebar waits off to the left until Menu asks for it.
       drawer={pathname === '/chat' || pathname.startsWith('/chat/')}
@@ -680,6 +683,7 @@ function AppShell() {
       {/* B27.12 — a screen that throws while drawing shows "couldn't be read" here, with the shell
           still standing. Try again drops the failed screen's cached reads and asks for them anew. */}
       <ScreenBoundary address={pathname} onRetry={() => void queryClient.resetQueries({ type: 'inactive' })}>
+        <div className="contents" data-design={designOf(pathname, ROUTE_PATHS)}>
         <Routes>
           {/* EVERY ROUTE COMES FROM CONSOLE_ROUTES, which is also what titles the header. A page
               declared here and nowhere else would be a page the top bar cannot name — that was
@@ -721,12 +725,16 @@ function AppShell() {
             }
           />
         </Routes>
+        </div>
       </ScreenBoundary>
       {/* B45.6 — Taly, on every signed-in page, told which page it is on. */}
       <TalyButton page={page} path={pathname} />
       {/* B57.5 — the confirmation after an action, shown once on the next view, and the short messages. */}
-      <SnackHost view={pathname} />
+      <div className="contents" data-design="pocket">
+        <SnackHost view={pathname} />
+      </div>
     </Shell>
+    </div>
   )
 }
 

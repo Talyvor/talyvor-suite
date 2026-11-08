@@ -112,6 +112,8 @@ const SAMPLE: Record<string, unknown> = {
       { id: 'payee_northwind', name: 'Northwind Data', country: 'US', check: 'exact_match', checked_by: 'test', checked_at: '2026-10-09T09:00:00Z', needs_confirmation: false, created_at: '2026-10-09T09:00:00Z' },
     ],
   },
+  // B57.97 — no Talyvor Card yet, as w-card opens.
+  '/api/money/physical-cards': { cards: [] },
 }
 
 /** The sample's answer for a URL, else populatedBff's, else undefined (pocket-shots answers 404). */
