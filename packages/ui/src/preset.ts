@@ -11,12 +11,29 @@ const preset = {
       // Named breakpoint so the Shell can stack under 840px without an arbitrary value.
       screens: { wide: '840px' },
       colors: {
+        // Pocket's (B57.2). Text is ink, ink-2 or ink-3; tangerine-ink is the one orange that may
+        // carry words; tangerine, the agent colours, success and danger fills are never text.
+        page: 'var(--page)',
+        cloud: { DEFAULT: 'var(--cloud)', 2: 'var(--cloud-2)' },
+        ink: { DEFAULT: 'var(--ink)', 2: 'var(--ink-2)', 3: 'var(--ink-3)' },
+        line: 'var(--line)',
+        control: 'var(--control)',
+        tangerine: { DEFAULT: 'var(--tangerine)', ink: 'var(--tangerine-ink)', 50: 'var(--tangerine-50)' },
+        success: { DEFAULT: 'var(--success)', 50: 'var(--success-50)' },
+        danger: { DEFAULT: 'var(--danger)', 50: 'var(--danger-50)' },
+        primary: 'var(--primary)',
+        'on-primary': 'var(--on-primary)',
+        scrim: 'var(--scrim)',
+        agent: {
+          cobalt: 'var(--agent-cobalt)', orchid: 'var(--agent-orchid)', sky: 'var(--agent-sky)', mint: 'var(--agent-mint)',
+          lemon: 'var(--agent-lemon)', rose: 'var(--agent-rose)', lime: 'var(--agent-lime)',
+        },
+        // Today's names, aliases onto Pocket's in theme.css, until each screen is redrawn (B57.88).
         canvas: 'var(--canvas)',
         surface: 'var(--surface)',
         raised: 'var(--raised)',
         sidebar: 'var(--sidebar)',
         rule: { DEFAULT: 'var(--rule)', strong: 'var(--rule-strong)' },
-        ink: 'var(--ink)',
         muted: 'var(--muted)',
         faint: 'var(--faint)',
         label: 'var(--label)',
@@ -31,26 +48,18 @@ const preset = {
       },
       fontFamily: {
         sans: ['var(--sans)'],
+        // Pocket's display face: headings and large money.
+        display: ['var(--display)'],
         mono: ['var(--mono)'],
         /**
          * THE FIGURE FACE — `font-figure`. Every numeral in the product renders here.
          *
-         * The public site sets both its eyebrow labels and its quoted figures in one
-         * utility whose whole definition is `font-family: var(--font-mono);
-         * font-feature-settings: "tnum" 1`. This is that, named.
-         *
-         * ⚠ THIS REVERSES A PREVIOUS DECISION, so the previous reasoning is answered
-         * rather than deleted. The system used to set numerals in the SANS with
-         * `tabular-nums`, on the premise that "mono is for IDENTIFIERS — a machine
-         * string you might copy — and 'this is a number' is not a message". That
-         * premise was true of a system-font stack, where mono was a foreign face that
-         * appeared only on SHAs and key prefixes. It is not true of this one: mono is
-         * now the face of every eyebrow label on every screen, so mono no longer says
-         * "machine string", it says "measured". What still separates an identifier from
-         * a figure is the tracking (labels carry it, figures do not) and the size step,
-         * not the family.
+         * Pocket (B57.2): Figtree with tabular figures, so columns of money line up. It was
+         * IBM Plex Mono with `tnum` while the system followed the 4 Oct board; Pocket sets every
+         * number in its UI face and only large money in the display face (`font-display`).
+         * Mono stays for identifiers: keys, hashes, code.
          */
-        figure: ['var(--mono)', { fontFeatureSettings: '"tnum" 1' }],
+        figure: ['var(--sans)', { fontFeatureSettings: '"tnum" 1' }],
       },
       fontSize: {
         // ── THE CONSOLE SCALE, IN rem ─────────────────────────────────────────────────────────
@@ -227,7 +236,9 @@ const preset = {
        */
       scale: { 98: '0.98' },
       borderColor: { DEFAULT: 'var(--rule)' },
-      borderRadius: { card: '10px', control: '6px', pill: '9999px' },
+      // Pocket's: cards 24 and 18, inputs 14 (control), the sheet 28, pills for buttons and chips.
+      borderRadius: { card: '24px', 'card-tight': '18px', control: '14px', sheet: '28px', pill: '9999px' },
+      boxShadow: { pocket: 'var(--shadow)', 'pocket-lg': 'var(--shadow-lg)' },
       spacing: { gutter: '16px', row: '38px' },
       // `below-header` — the viewport under the console's sticky header (`top-12`, a 32px control +
       // py-2). B10.3's chat fills exactly that, so its composer sits at the bottom of the screen.

@@ -1,0 +1,58 @@
+/* Verbatim: lines 1-56 of ~/talyvor-queue/design/pocket/pocket.css, the Pocket reference (B57.2).
+   site-parity.test.ts reads this file; tokens.ts must match it in both themes. Do not edit by hand. */
+/* Talyvor Pocket v4: design tokens and components.
+   The logo is the kit Nick chose on 4 Nov 2026 (design/logo/talyvor-logo/): drawn from its SVG files, never redrawn.
+   Roles: tangerine = brand and "your move"; ink = text and primary actions; agent colours = identity only;
+   green and red = status, always paired with words; cobalt is one agent colour. Text is never tangerine or an agent colour.
+   Every text pair below is checked to 4.5:1 or better; control borders to 3:1. */
+
+.pk, .pk-light {
+  --pk-page: #FFFFFF;
+  --pk-cloud: #F3F4F6;
+  --pk-cloud-2: #ECEEF2;
+  --pk-ink: #111216;
+  --pk-ink-2: #4A5061;
+  --pk-ink-3: #646B7B;
+  --pk-line: #E4E6EB;
+  --pk-control: #7A8192;
+  --pk-tangerine: #FF7A1A;
+  --pk-tangerine-ink: #A84100;
+  --pk-tangerine-50: #FFF1E6;
+  --pk-success: #0B7A45;
+  --pk-success-50: #E6F6EE;
+  --pk-danger: #C0262D;
+  --pk-danger-50: #FDECEC;
+  --pk-primary: #111216;
+  --pk-on-primary: #FFFFFF;
+  --pk-shadow: 0 1px 2px rgba(17, 18, 22, .06), 0 10px 28px rgba(17, 18, 22, .07);
+  --pk-shadow-lg: 0 2px 6px rgba(17, 18, 22, .08), 0 24px 60px rgba(17, 18, 22, .14);
+  --pk-scrim: rgba(17, 18, 22, .42);
+  --a-cobalt: #2F5BFF; --a-orchid: #B65CFF; --a-sky: #39C2FF; --a-mint: #16C79A;
+  --a-lemon: #FFD43B; --a-rose: #FF5C8A; --a-lime: #8EDC4E;
+  --pk-display: "Bricolage Grotesque", "Figtree", "Helvetica Neue", Arial, sans-serif;
+  --pk-ui: "Figtree", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+.pk-dark {
+  --pk-page: #0F1013;
+  --pk-cloud: #181A1F;
+  --pk-cloud-2: #20232A;
+  --pk-ink: #F2F3F5;
+  --pk-ink-2: #A6ACB9;
+  --pk-ink-3: #8A90A0;
+  --pk-line: #2A2E36;
+  --pk-control: #6E7482;
+  --pk-tangerine: #FF7A1A;
+  --pk-tangerine-ink: #FF8A33;
+  --pk-tangerine-50: #3A2414;
+  --pk-success: #3DD68C;
+  --pk-success-50: #12291E;
+  --pk-danger: #FF6B6B;
+  --pk-danger-50: #331717;
+  --pk-primary: #F2F3F5;
+  --pk-on-primary: #111216;
+  --pk-shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px rgba(0, 0, 0, .35);
+  --pk-shadow-lg: 0 2px 6px rgba(0, 0, 0, .5), 0 24px 60px rgba(0, 0, 0, .55);
+  --pk-scrim: rgba(0, 0, 0, .6);
+  color-scheme: dark;
+}

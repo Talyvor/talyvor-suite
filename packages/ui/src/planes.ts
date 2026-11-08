@@ -87,21 +87,16 @@ export type TextRole = (typeof TEXT_ROLES)[number]
  * `bg-accent text-accent-ink` and its hover/press step is `bg-accent-hover`, so both carry a
  * label and both are scored here rather than only as the accent's states.
  *
- * ⚠ `accent-tint` PERMITS THREE ROLES, and the two it refuses are refused BY MEASUREMENT (3.97 and
- * 3.95, both under 4.5). The product's own fix for the one place that declared a refused pair is
- * in NavItem.tsx — see its icon. `label` is refused there too: 4.05 light. `accent-strong` is the
- * selected row's label (B29.7): 5.71 light, 8.24 dark.
- *
- * ⚠ `raised` REFUSES `faint`, BY MEASUREMENT: 4.25 dark. The card plane is lighter than the
- * surface it sits on, which eats the margin `faint` was lifted to clear on canvas and surface.
- * A figure's µ-tail on a card wears `muted`.
+ * B57.2: on Pocket's values every role clears AA on `accent-tint` (cloud-2: ink-3 4.60 light,
+ * 4.93 dark) and `faint` clears it on `raised` (page: 5.34 light), so neither refusal is a fact
+ * any more and both are permitted. contrast.test.ts holds the numbers.
  */
 export const ROLES_ON_PLANE = {
   canvas: ['ink', 'muted', 'faint', 'label', 'accent', 'accent-strong'],
   surface: ['ink', 'muted', 'faint', 'label', 'accent', 'accent-strong'],
-  raised: ['ink', 'muted', 'label', 'accent', 'accent-strong'],
+  raised: ['ink', 'muted', 'faint', 'label', 'accent', 'accent-strong'],
   sidebar: ['ink', 'muted', 'faint', 'label', 'accent', 'accent-strong'],
-  'accent-tint': ['ink', 'muted', 'accent-strong'],
+  'accent-tint': ['ink', 'muted', 'faint', 'label', 'accent', 'accent-strong'],
   accent: ['accent-ink'],
   'accent-hover': ['accent-ink'],
 } as const satisfies Record<string, readonly TextRole[]>

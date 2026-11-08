@@ -319,7 +319,7 @@ export function woff2Codepoints(file: string): Set<number> {
   return out
 }
 
-export type Family = 'sans' | 'mono'
+export type Family = 'display' | 'sans' | 'mono'
 
 export interface ServedFace {
   family: Family
@@ -340,7 +340,8 @@ const UI_SRC = resolve(import.meta.dirname, '../../../packages/ui/src')
 
 /** `font-family` descriptor → the Tailwind family it backs. */
 const FAMILY_OF: Record<string, Family> = {
-  'Space Grotesk': 'sans',
+  'Bricolage Grotesque': 'display',
+  Figtree: 'sans',
   'IBM Plex Mono': 'mono',
 }
 
@@ -497,18 +498,16 @@ export interface RenderedGlyph {
  * because that is what the cascade does; with none of them the body's `font-family: var(--sans)`
  * applies, which is why the default is sans rather than unknown.
  *
- * ⚠ `font-figure` AND `font-mono` ARE THE SAME FAMILY HERE, AND THAT IS A MEASUREMENT. Both
- * resolve to `var(--mono)`; `font-figure` adds `font-feature-settings: "tnum" 1`, and the served
- * IBM Plex Mono subsets declare NO `tnum` feature at all (measured: ccmp, dnom, frac, mark, numr)
- * while all ten digits already advance 600 units. The feature is inert and would be a no-op if it
- * were not. For CHOOSING WHICH FILES TO ASK they are one family, and treating them as two would
- * ask the wrong question of every `font-mono` identifier in the product.
+ * B57.2: `font-figure` is Figtree with tabular figures, so it is the sans family; `font-mono` is
+ * IBM Plex Mono, for identifiers; `font-display` and an unclassed h1–h4 (theme.css sets headings in
+ * `var(--display)`) are Bricolage Grotesque.
  */
 export function effectiveFamily(el: Element | null): Family {
   for (let e: Element | null = el; e; e = e.parentElement) {
     const cls = e.getAttribute('class') ?? ''
-    if (/\bfont-(figure|mono)\b/.test(cls)) return 'mono'
-    if (/\bfont-sans\b/.test(cls)) return 'sans'
+    if (/\bfont-mono\b/.test(cls)) return 'mono'
+    if (/\bfont-(figure|sans)\b/.test(cls)) return 'sans'
+    if (/\bfont-display\b/.test(cls) || /^H[1-4]$/.test(e.tagName)) return 'display'
   }
   return 'sans'
 }
@@ -659,10 +658,9 @@ export const MUST_AUDIT_MONO_TEXT: Record<string, string> = {
   // passed CI, and it was worth nothing. C3 is the only reason I know: blinding the observer
   // left the product GREEN. The three sibling tables in figureAudit/focusAudit/caseAudit were
   // right all along; this one copied their shape and not their keys.
-  'src/areas/lens/Overview.test.tsx': 'the balance figures and their µ-tails, all on the figure face',
-  'src/areas/lens/Spend.test.tsx': 'the month-USD caption on the figure face',
-  'src/areas/lens/TopUp.test.tsx': 'the buy-button prices on the figure face',
-  'src/areas/marketing/Landing.test.tsx': 'the four quoted ledger figures, font-figure text-figure',
+  // B57.2: the figure face is Figtree now (the sans family), so the figure-only files left this
+  // table; the two that render identifiers in font-mono stay.
+  'src/areas/marketing/Landing.test.tsx': 'the contact address, font-mono',
   'src/areas/lens/Keys.test.tsx': 'the key prefixes, font-mono identifiers',
 }
 
