@@ -149,6 +149,7 @@ import { keysNotForwarded, keysUnlisted } from './keys.ts'
 import { rateLimitsHold, workspaceLimitsRaised } from './ratelimit.ts'
 import { marketAskScreen, marketCompareScreen, marketDiscoverScreen, marketDiscovery } from './discovery.ts'
 import { marketContentFilter } from './contentFilter.ts'
+import { marketPrivacyLabel } from './privacyLabel.ts'
 import { royaltiesNotHeadline } from './royalties.ts'
 import { statementLineKinds } from './statementKinds.ts'
 import { openapiWallets } from './openapiWallets.ts'
@@ -5318,6 +5319,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.85 — the family filter, once a run: set on Content filter, Lens's catalog drops a listing rated 18+ and keeps one
   // rated for everyone, and a listing published without a rating is rated 18+.
   if (i === 5) list.push(marketContentFilter())
+  // B41.93 — a listing's privacy label, once a run: a pipeline whose two steps call two models and keep nothing shows both
+  // models and "keeps nothing" on its page, as Lens's own label for it does.
+  if (i === 5) list.push(marketPrivacyLabel())
   // B32.75 — a sale's earning released on the seller's journal, once a run, bought by a workspace of its own from a seller it
   // makes: the bill paid, the share is due or available, Lens's release job empties the holdback, and the journal reconciles.
   if (i === 5) list.push(marketJournal(i))

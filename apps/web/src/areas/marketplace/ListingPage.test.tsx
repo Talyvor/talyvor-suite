@@ -9,8 +9,18 @@ import { App, queryClient } from '../../App'
 
 const VERSIONS = [
   { version: 1, artifact_sha256: 'a1', created_at: '2026-09-01T09:00:00Z', needs: { input: true, variables: null, model: 'gpt-4o' } },
-  { version: 2, artifact_sha256: 'a2', created_at: '2026-10-01T09:00:00Z', needs: { input: true, variables: null, model: 'gpt-4o' } },
+  {
+    version: 2,
+    artifact_sha256: 'a2',
+    created_at: '2026-10-01T09:00:00Z',
+    needs: { input: true, variables: null, model: 'gpt-4o' },
+    // B41.193 — Lens's label for a pipeline whose two steps call two models and keep nothing.
+    privacy: { models: ['gpt-4o', 'claude-sonnet-4'], tools: [], keeps: [], keeps_nothing: true },
+  },
 ]
+
+// B41.93 — a skill that uses a tool and keeps what it is given.
+const SKILL_PRIVACY = { models: [], tools: ['web_search'], keeps: ['your notes'], keeps_nothing: false }
 
 // A $20.00 rent at 1 EUR = 1.10 USD = 0.85 GBP, as Lens's B32.51 test reads it: £18.55 incl. VAT for a GB consumer, €21.82 asked for in euros.
 const DISPLAY: Record<string, Record<string, unknown>> = {
@@ -56,7 +66,9 @@ function listing(id: string, currency: string): Record<string, unknown> {
     ...base,
     id,
     // B28.426 — a skill, which can be used in Chat.
-    ...(id === 'lst_skill' ? { kind: 'skill' } : {}),
+    ...(id === 'lst_skill'
+      ? { kind: 'skill', versions: [VERSIONS[0], { ...VERSIONS[1], privacy: SKILL_PRIVACY }] }
+      : {}),
     title: 'Daily brief',
     price_per_use_ulxc: 5_000_000,
     remix_policy: 'none',
@@ -104,7 +116,13 @@ function mockBff() {
   const sent: Array<{ url: string; key: string | null; body: string }> = []
   // B28.162 — the seller's own prompt: Lens shows its owner each version's artifact.
   const own: Array<Record<string, unknown>> = [
-    { version: 1, artifact_sha256: 'o1', changelog: 'First version', created_at: '2026-09-01T09:00:00Z', artifact: { template: 'Summarise {{text}}' } },
+    {
+      version: 1,
+      artifact_sha256: 'o1',
+      changelog: 'First version',
+      created_at: '2026-09-01T09:00:00Z',
+      artifact: { template: 'Summarise {{text}}', keeps: ['summaries'] },
+    },
   ]
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -308,6 +326,18 @@ describe('listing page 2', () => {
     expect(screen.getByTestId('remix-terms').textContent).toContain('15% of each sale of your remix')
   })
 
+  it('shows the privacy label drawn from the listing’s own record: every model it calls, its tools, what it keeps (B41.93)', async () => {
+    mockBff()
+    await at('/marketplace/listings/lst_rent')
+    expect((await screen.findByTestId('listing-privacy')).textContent).toBe(
+      'Calls gpt-4o, claude-sonnet-4 · uses no tools · keeps nothing',
+    )
+    await at('/marketplace/listings/lst_skill')
+    expect((await screen.findByTestId('listing-privacy')).textContent).toBe(
+      'Calls the model you choose · uses web_search · keeps your notes',
+    )
+  })
+
   it('uploads a new version with a changelog from the seller’s own listing page', async () => {
     const { sent } = mockBff()
     await at('/marketplace/listings/lst_own')
@@ -323,7 +353,8 @@ describe('listing page 2', () => {
       {
         url: '/api/marketplace/listings/lst_own/versions',
         key: null,
-        body: '{"artifact":{"template":"Summarise {{text}} in three bullets"},"changelog":"Three bullets","parents":[]}',
+                // B41.93 — what it keeps carries over, so the next version's privacy label still says so.
+        body: '{"artifact":{"template":"Summarise {{text}} in three bullets","keeps":["summaries"]},"changelog":"Three bullets","parents":[]}',
       },
     ])
     await waitFor(() => expect(form.textContent).toContain('Publishing makes it version 3.'))
