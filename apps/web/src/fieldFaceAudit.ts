@@ -171,7 +171,9 @@ const PAINTS_NO_BOX = new Set(['hidden', 'range', 'checkbox', 'radio', 'file', '
  */
 function lacksEdge(el: Element): boolean {
   if (el.tagName === 'INPUT' && PAINTS_NO_BOX.has((el.getAttribute('type') ?? 'text').toLowerCase())) return false
-  return !(el.getAttribute('class') ?? '').split(/\s+/).includes('shadow-edge')
+  // B57.4 — or the box drawn around it, which holds the value and its unit (packages/ui/src/pocket/Field.tsx).
+  const edged = (e: Element | null) => (e?.getAttribute('class') ?? '').split(/\s+/).includes('shadow-edge')
+  return !edged(el) && !edged(el.parentElement)
 }
 
 export function unfacedFieldsIn(root: ParentNode): UnfacedField[] {

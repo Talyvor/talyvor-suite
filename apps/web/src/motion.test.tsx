@@ -152,7 +152,7 @@ function pressScaleProblems(css: string): string[] {
   //
   // Nothing moved, because Tailwind's extractor reads RAW TEXT and cannot tell a class from a
   // sentence about a class: `preset.ts:225` writes `active:scale-[0.98]` in a COMMENT and
-  // `Button.tsx:37` writes `active:scale-98` in a COMMENT, so the sentences EXPLAINING the press
+  // `packages/ui/src/components/Button.tsx:37` writes `active:scale-98` in a COMMENT, so the sentences EXPLAINING the press
   // compile the press into the stylesheet. The feature can leave the product entirely and this
   // check keeps counting the prose. It is W1.8's mechanism turning a guard into a no-op.
   //
@@ -598,6 +598,8 @@ function pressSitesInCode(files: SourceFile[]): string[] {
 const PRESS_SITES: Record<string, string> = {
   'packages/ui/src/components/Button.tsx':
     'the design-system button — every primary action in the product presses through this one class list',
+  'packages/ui/src/pocket/Button.tsx':
+    'B57.4 — Pocket\'s button, which screens move to one by one; it presses as today\'s does, through the same token',
   'packages/ui/src/components/ThemeToggle.tsx':
     'a hand-rolled <button>, not a Button, so it inherits nothing and must carry the press itself',
   'apps/web/src/components/CommandPalette.tsx':
