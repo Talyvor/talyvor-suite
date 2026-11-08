@@ -82,7 +82,8 @@ describe('approval-own-request (B50.19)', () => {
 }, 60_000)
 
 // B50.22 — passkey-enrol-signed against the stub Lens, sending the web app's BFF calls straight to the Lens routes the BFF
-// relays them to: it passes on a Lens that wants a second passkey signed by the first, and FAILs on one that does not.
+// relays them to: it passes on a Lens that keeps an unsigned second passkey waiting (B55.1) and lets it in only signed by
+// the first, and FAILs on one that registers it unsigned.
 const toLens: Post = async (ctx, path, body) => {
   const lensPath = path.replace(/^\/api\/agents\//, '/v1/workspaces/{ws}/agents/').replace(/\/resume-challenge$/, '/resume/challenge') // as the BFF relays it
   const got = await ctx.env.lens.act(ctx.app.user, 'POST', lensPath, body as object)
@@ -90,16 +91,16 @@ const toLens: Post = async (ctx, path, body) => {
 }
 
 describe('passkey-enrol-signed (B50.22)', () => {
-  it('passes on a Lens that registers a second passkey only signed by the first', async () => {
+  it('passes on a Lens that keeps an unsigned second passkey waiting and registers it only signed by the first', async () => {
     const verdict = await passkeyEnrolSigned(toLens).run(await onStub(''))
-    expect(verdict.detail).toMatch(/^passkey B with no signature refused and not listed; .* the payment landed once \(200000 µLXC\)$/)
+    expect(verdict.detail).toMatch(/^passkey B with no signature refused or kept waiting, and not listed; .* the payment landed once \(200000 µLXC\)$/)
     expect(verdict.pass).toBe(true)
   })
 
   it('FAILs when a second passkey registers with no signature', async () => {
     const verdict = await passkeyEnrolSigned(toLens).run(await onStub('enrol-unsigned'))
     expect(verdict).toMatchObject({ pass: false })
-    expect(verdict.detail).toMatch(/^passkey B with no signature answered 201, not a refusal; passkey B, sent with no signature, is listed on the workspace; an approval signed by the refused passkey B answered 200/)
+    expect(verdict.detail).toMatch(/^passkey B with no signature answered 201, neither a refusal nor kept waiting; passkey B, sent with no signature, is listed on the workspace; an approval signed by the refused passkey B answered 200/)
   })
 }, 60_000)
 

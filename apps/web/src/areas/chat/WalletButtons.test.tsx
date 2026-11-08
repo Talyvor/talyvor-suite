@@ -12,14 +12,16 @@ beforeEach(() => window.localStorage.setItem(STATEMENT_OPEN_KEY, '1'))
 
 const M = 1_000_000
 
-function mockBff() {
-  const state = { balance: 5 * M, free: 92 * M, paused: false, allPaused: false }
+function mockBff(devices: unknown[] = [], paused = false) {
+  const state = { balance: 5 * M, free: 92 * M, paused, allPaused: paused }
   const posts: Array<{ path: string; body: unknown; key: string | null }> = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices }) // B55.2: none by default, so the web decides
     if (url === '/api/models') return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, tier: 'frontier' }])
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
@@ -117,5 +119,15 @@ describe('The wallet buttons beside Chat (B28.87)', () => {
       ['/api/agents/agt_1/pause', { reason: 'paused from Chat' }],
       ['/api/agents/pause-all', { reason: 'paused from Chat' }],
     ])
+  })
+
+  // B55.2 — with only the phone's key Lens refuses an unsigned resume, so Chat offers none and says where to do it.
+  it('with only the phone’s key, offers no Resume or Start all again, sends nothing, and says to do it on the phone', async () => {
+    const bff = mockBff([{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }], true)
+    const panel = await openPanel()
+    expect(await panel.findByText('Resume Researcher on your phone with Face ID.')).toBeInTheDocument()
+    expect(panel.getByText('Start your agents again on your phone with Face ID.')).toBeInTheDocument()
+    expect(panel.queryByRole('button', { name: /^Resume|Start all again/ })).toBeNull()
+    expect(bff.posts).toEqual([])
   })
 })

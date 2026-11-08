@@ -1,5 +1,6 @@
 import { ApiError, getJSON } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
+import { currencyText } from './money'
 
 // agentBankApi.ts — B19.4: the Agent Bank screen's reads and writes, through the BFF's /api/agents
 // routes (apps/bff/agent_bank.go) to Lens's agent accounts (B19.1), rules and approvals (B19.2) and
@@ -1024,6 +1025,8 @@ export const agentBankApi = {
       : send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/deny`, assertion ? { assertion } : {}),
   // B19.10 — passkeys and push, kept by Lens (B19.16).
   passkeys: () => getJSON<{ passkeys: Passkey[] | null }>('/api/agents/passkeys', { passkeys: 'list' }),
+  // B55.2 — the phone keys Lens holds for the workspace (revoked ones included): the phone signs approvals too.
+  devices: () => getJSON<{ devices: DeviceKey[] | null }>('/api/money/devices', { devices: 'list' }),
   passkeyChallenge: () => send<{ challenge: string; rp_id: string; credential_ids?: string[] | null }>('POST', '/api/agents/passkeys/challenge'),
   registerPasskey: (body: PasskeyRegistration) => send<Passkey>('POST', '/api/agents/passkeys', body),
   approvalChallenge: (approvalID: string) =>
@@ -1771,6 +1774,14 @@ export interface Passkey {
   last_used_at?: string
 }
 
+/** B55.2 — a phone's key (Lens GET /v1/money/devices); one revoked signs nothing. */
+export interface DeviceKey {
+  id: string
+  platform: string
+  name: string
+  revoked_at?: string
+}
+
 /** A new passkey, as the browser's ceremony gives it — all base64url. */
 export interface PasskeyRegistration {
   credential_id: string
@@ -1924,9 +1935,17 @@ export interface PayPage {
   }
 }
 
-/** 12345 GBP → "£123.45": minor units in the currency's own figures. */
+/** The currencies a company or agent account holds and a bank payee or invoice takes; an agent's USDC wallet is not one. */
+export const FIATS: readonly string[] = ['GBP', 'EUR', 'USD']
+
+/**
+ * 12345 GBP → "£123.45", 1500000 USDC → "1.50 USDC": minor units in the currency's own figures. Lens keeps USDC to six
+ * decimals and Intl refuses its code (B55.26); a code it does not know reads "12.50 XYZ" and never throws.
+ */
 export function formatMinor(minor: number, currency: string): string {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(minor / 100)
+  if (currency === 'USDC') return `${(minor / 1e6).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`
+  if (!FIATS.includes(currency)) return `${(minor / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
+  return currencyText(minor / 100, currency)
 }
 
 /** "12.50" → 1250: an amount typed in the currency's major units, to the minor unit; null when it is not a positive amount. */

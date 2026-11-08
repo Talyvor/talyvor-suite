@@ -108,6 +108,7 @@ const SIDEBAR_DESTINATIONS = [
   '/marketplace/selling',
   '/marketplace/licences',
   '/marketplace/bill',
+  '/marketplace/content-filter',
   '/spend',
   '/members',
   '/settings',

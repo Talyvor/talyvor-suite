@@ -36,11 +36,11 @@ const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 export const figureText = (text: string): string => text.replace(/\s+/g, ' ').trim()
 export const lxcText = (ulxc: number): string => String(ulxc / 1e6)
 
-/** B28.22 — what the wallet screens show beside an LXC amount, in dollars at the peg: "($1.25)" (apps/web money.tsx). */
-export function usdShown(ulxc: number, usdPerLXC: number): string {
+/** B55.38 — an LXC amount as the wallet screens show it, dollars at the peg first: "$1.25 (12.5 LXC)" (apps/web money.tsx). */
+export function usdShown(lxc: string, ulxc: number, usdPerLXC: number): string {
   const usd = (ulxc / 1e6) * usdPerLXC
   const fmt = (v: number) => v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return `(${usd > 0 && usd < 0.005 ? `<${fmt(0.01)}` : fmt(usd)})`
+  return `${usd > 0 && usd < 0.005 ? `<${fmt(0.01)}` : fmt(usd)} (${lxc})`
 }
 
 /** The card under an `h2` heading (packages/ui CardHeader). */
@@ -1584,7 +1584,7 @@ export function agentApproval(seed: number): Scenario {
       if (phone !== undefined) return fail(`on a 390px phone, ${phone}`)
       const { row, said: approved } = await bank.approve(payer, payee)
       ctx.evidence.push({ note: `Waiting for a person: ${row}` }, { note: `Approve: ${approved}` })
-      const asked = `1 LXC ${usdShown(1e6, ctx.env.usdPerLXC)} — ${memo}`
+      const asked = `${usdShown('1 LXC', 1e6, ctx.env.usdPerLXC)} — ${memo}`
       if (!row.endsWith(` ${asked}`)) return fail(`the row waiting for a person does not say ${asked}: "${row}"`)
       if (!/^Approved and paid/.test(approved)) return fail(`approving did not pay: "${approved}"`)
       const after = await bookOf(ctx)
@@ -1610,13 +1610,13 @@ interface ApprovalWorker {
  * push Lens sends for it is delivered to the app's service worker, which must show it with Approve and
  * Deny, and (B29.14) with the app icon as its icon and badge. Approve, run in the service worker on that
  * notification, must move Lens's approval row to approved with no page opened or moved and no money moved;
- * the payment sent again is then paid once.
+ * the payment sent again is then paid once. B55.49: the notification reads Lens's sentence, "$0.10 (1 LXC)".
  */
 export function agentApprovalPush(seed: number): Scenario {
   return {
     id: 'agent-approval-push',
     owner: 'talyvor-suite',
-    items: ['B28.38'],
+    items: ['B28.38', 'B55.49'],
     agents: 2,
     title: 'Approve on the approval push decides it from the service worker: Lens’s row is approved without opening the app',
     run: (ctx) => withBank(ctx, async (bank) => {
@@ -1654,7 +1654,9 @@ export function agentApprovalPush(seed: number): Scenario {
       if (sw === undefined) return fail('/sw.js registered, but no service worker runs it')
 
       // The push Lens sends for a waiting approval (talyvor-lens economy/agent_approval_auth.go), delivered as a push.
-      const push = { type: 'agent_approval', approval_id: id, agent_name: payer.name, amount_ulxc: 1e6, amount_lxc: '1', reason: memo }
+      // B55.49: body is Lens's sentence, dollars beside the LXC at the $0.10 peg (B55.30).
+      const sentence = `${payer.name} wants to pay ${payee.name} $0.10 (1 LXC)`
+      const push = { type: 'agent_approval', approval_id: id, agent_name: payer.name, amount_ulxc: 1e6, amount_lxc: '1', reason: memo, body: sentence }
       await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify(push) })
       const shown = await sw.evaluate(async ({ tag, ms }) => {
         const w = globalThis as unknown as ApprovalWorker
@@ -1668,6 +1670,7 @@ export function agentApprovalPush(seed: number): Scenario {
       if (shown.actions === undefined) return fail(`the push for approval ${id} showed no notification (notifications ${shown.permission}; showing ${JSON.stringify(shown.shown)})`)
       ctx.evidence.push({ note: `the push: "${shown.title}" with ${shown.actions.join(', ') || 'no actions'}` })
       if (shown.actions.join() !== 'approve,deny') return fail(`the push for approval ${id} does not carry Approve and Deny: ${JSON.stringify(shown)}`)
+      if (shown.title !== sentence) return fail(`the push for approval ${id} reads "${shown.title}", not Lens's sentence "${sentence}"`)
       // B29.14: the push carries the Talyvor app icon, as its picture and its badge.
       if (shown.icon !== `${origin}/icon-192.png` || shown.badge !== `${origin}/icon-192.png`) return fail(`the push for approval ${id} does not carry the app icon as icon and badge: ${JSON.stringify(shown)}`)
 
@@ -1691,7 +1694,7 @@ export function agentApprovalPush(seed: number): Scenario {
       if (pays.length !== 1 || pays[0].amount_ulxc !== -1e6) return fail(`${payer.name}'s account has ${pays.length} payment line(s): ${JSON.stringify(pays)}`)
       const used = (await ctx.env.lens.agentApprovals(ctx.app.user)).find((x) => x.id === id)?.status
       if (used !== 'used') return fail(`the payment was sent again and the approval is ${used ?? 'gone'}, not used`)
-      return { pass: true, detail: `the push showed Approve and Deny and the app icon; Approve in the service worker approved ${id} with no page opened; sent again, paid once (one pay line, the approval used)` }
+      return { pass: true, detail: `the push read "${sentence}" with Approve and Deny and the app icon; Approve in the service worker approved ${id} with no page opened; sent again, paid once (one pay line, the approval used)` }
     }),
   }
 }
@@ -1749,7 +1752,7 @@ export function chatApprovalFaceID(seed: number): Scenario {
         return fail(`no card in Chat reads "${asks}…"; it shows: ${(await page.getByTestId('chat-approval').allInnerTexts()).join(' | ') || 'no approval card'}`)
       }
       const row = (await approval.getByTestId('chat-approval-asks').innerText()).trim()
-      const wanted = `${asks}1 LXC ${usdShown(1e6, ctx.env.usdPerLXC)} — ${memo}`
+      const wanted = `${asks}${usdShown('1 LXC', 1e6, ctx.env.usdPerLXC)} — ${memo}`
       if (row !== wanted) return fail(`the card reads "${row}", not "${wanted}"`)
       await mkdir(ctx.env.outDir, { recursive: true })
       for (const [width, height] of [[1440, 900], [390, 844]] as const) {
@@ -1935,6 +1938,9 @@ async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: st
   ctx.evidence.push({ note: `Home at 390: total "${totalShown}", ${a.name} "${safeShown}"; Lens: ${book.allocated_ulxc} µLXC with agents, safe to spend ${safe?.safe_to_spend} µLXC` })
   if (safe === undefined) return `Lens lists no LXC safe to spend for ${a.name}`
   if (!totalShown.includes(shownLXC(book.allocated_ulxc))) return `Home's total reads "${totalShown}", not Lens's ${shownLXC(book.allocated_ulxc)} with agents`
+  // B57.7 — the total is a balance card's <Money>: dollars large first, LXC small after them.
+  const dollars = usdShown(shownLXC(book.allocated_ulxc), book.allocated_ulxc, ctx.env.usdPerLXC).split(' (')[0]
+  if (!totalShown.startsWith(`${dollars} `)) return `Home's total reads "${totalShown}", not ${dollars} first and its LXC after`
   if (!safeShown.includes(shownLXC(safe.safe_to_spend))) return `${a.name}'s safe to spend reads "${safeShown}", not Lens's ${shownLXC(safe.safe_to_spend)}`
   const link = page.locator(`a[href="/approvals#approval-${approvalID}"]`)
   if (approvalID === '' || (await link.count()) === 0) {
@@ -4409,7 +4415,7 @@ export function agentBalanceStored(seed: number): Scenario {
         return fail(`the book does not add up: ${after.workspace_balance_ulxc} ≠ ${after.allocated_ulxc} + ${after.unallocated_ulxc}`)
       }
       const shown = await bank.balanceShown(a)
-      const want = `${shownLXC(total)} ${usdShown(total, ctx.env.usdPerLXC)}`
+      const want = usdShown(shownLXC(total), total, ctx.env.usdPerLXC)
       if (shown !== want) return fail(`Agent Wallets shows ${a.name} holding "${shown}"; its postings sum to ${want}`)
       return { pass: true, detail: `${MANY_FUNDINGS} fundings at once, ${lxcText(total)} LXC: ${a.name}'s stored balance = its ${posted.length} postings = the screen's ${shown}, and the workspace's agents hold that much more` }
     }),
@@ -4417,7 +4423,7 @@ export function agentBalanceStored(seed: number): Scenario {
 }
 
 /**
- * B28.22 — an agent funded 12.5 LXC on Agent Wallets shows "12.5 LXC ($1.25)" — its dollar value at the
+ * B28.22 — an agent funded 12.5 LXC on Agent Wallets shows "$1.25 (12.5 LXC)" — its dollar value at the
  * peg beside it — and its allowed models are picked from the catalog, not typed: the Rules card's model
  * field is a select, the model picked is the one Lens stores, and the card says so in a sentence.
  */
@@ -4437,7 +4443,7 @@ export function walletCurrency(seed: number): Scenario {
       const held = agentIn(await bookOf(ctx), a.id)?.balance_ulxc
       if (held !== amount) return fail(`funded ${amount} µLXC; Lens's book has ${a.name} holding ${held}`)
       const shown = await bank.balanceShown(a)
-      const want = `12.5 LXC ${usdShown(amount, ctx.env.usdPerLXC)}`
+      const want = usdShown('12.5 LXC', amount, ctx.env.usdPerLXC)
       ctx.evidence.push({ note: `Agent Wallets shows ${a.name} holding "${shown}"` })
       if (shown !== want) return fail(`Agent Wallets shows ${a.name} holding "${shown}"; at $${ctx.env.usdPerLXC} per LXC it should read "${want}"`)
       const model = ctx.env.judgeModel

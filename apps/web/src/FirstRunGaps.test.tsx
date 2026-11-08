@@ -83,12 +83,12 @@ describe('the marketing page offers a way in', () => {
   it('has a primary action that reaches the signup page, not only an email link', async () => {
     mockBff()
     at('/marketing')
-    // B29.4: the header carries a "Get started" too, so there are two — and EVERY one must go
-    // to /signup, not /auth/login directly: a stranger is told what this is and what happens next
-    // BEFORE being redirected to a third party. A mailto: or an in-app path is not a way in for
-    // someone with no session; nor is a bare redirect they cannot evaluate.
+    // B57.59: Pocket's header carries Open the app only, so the page's own "Get started" is the one —
+    // and it must go to /signup, not /auth/login directly: a stranger is told what this is and what
+    // happens next BEFORE being redirected to a third party. A mailto: or an in-app path is not a way
+    // in for someone with no session; nor is a bare redirect they cannot evaluate.
     const ctas = await screen.findAllByRole('link', { name: /get started/i })
-    expect(ctas.map((a) => a.getAttribute('href'))).toEqual(['/signup', '/signup'])
+    expect(ctas.map((a) => a.getAttribute('href'))).toEqual(['/signup'])
   })
 
   // THE PREMISE OF THIS TEST CHANGED, so the test changed with it rather than being deleted.

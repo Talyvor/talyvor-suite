@@ -24,7 +24,8 @@ import { Card, Note, readFailure } from "./parts";
 // renewing one can be cancelled, and stays active to its end with nothing charged after it. A rental shows how far its
 // rents have paid towards owning the listing (rent-to-own): once they reach the listing's buy price, Lens issues a
 // licence that never ends and the rents stop. A rental or subscription that ended can be renewed — its offer licensed
-// again, on this month's marketplace bill. Lens decides every one of these; the screen shows its answer.
+// again, on this month's marketplace bill. A renewing one nobody has used for 30 days is shown first, to cancel in one
+// tap (B41.76). Lens decides every one of these; the screen shows its answer.
 
 export const LICENCES_KEY = ["market-licences"];
 
@@ -241,6 +242,47 @@ function ActiveLicence({
   );
 }
 
+/** B41.76 — a renewing licence nobody has used for 30 days (Lens marks it idle): cancelled in one tap, it runs to its end. */
+function IdleLicence({ lic }: { lic: MarketLicence }) {
+  const qc = useQueryClient();
+  const cancel = useMutation({
+    mutationFn: () => marketApi.cancelLicence(lic.id),
+    onSettled: () => qc.invalidateQueries({ queryKey: LICENCES_KEY }),
+  });
+  return (
+    <li className="border-b border-rule last:border-b-0">
+      <Row
+        className="border-b-0"
+        stack
+        label={<ListingLink lic={lic} />}
+        hint={
+          <>
+            It renews on{" "}
+            <span className="font-figure">
+              {lic.ends_at ? day(lic.ends_at) : ""}
+            </span>
+            , but nobody has used it for 30 days. Cancelled, it stays active
+            until then and is not charged again.
+          </>
+        }
+      >
+        <Button
+          variant="danger"
+          disabled={cancel.isPending}
+          onClick={() => cancel.mutate()}
+        >
+          {cancel.isPending ? "Cancelling…" : "Cancel it"}
+        </Button>
+      </Row>
+      {cancel.isError ? (
+        <div className="px-gutter pb-3">
+          <Note ok={false}>{refusalText(cancel.error)}</Note>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
 function EndedLicence({
   lic,
   offers,
@@ -352,6 +394,7 @@ export function Licences() {
     listings.find((q) => (q.data as Listing | undefined)?.id === id)?.data
       ?.offers ?? [];
   const active = all.filter((l) => l.status === "active" && l.kind !== "buy");
+  const idle = active.filter((l) => l.idle && l.auto_renew);
   const owned = all.filter((l) => l.status === "active" && l.kind === "buy");
   const ended = all.filter((l) => l.status !== "active");
   // Renewing what is still covered would pay twice for the same days: only an ended rental or subscription with no
@@ -404,6 +447,16 @@ export function Licences() {
           </p>
         ) : (
           <>
+            {idle.length > 0 ? (
+              <Card>
+                <CardHeader>Not used in 30 days</CardHeader>
+                <ul data-testid="licences-idle">
+                  {idle.map((l) => (
+                    <IdleLicence key={l.id} lic={l} />
+                  ))}
+                </ul>
+              </Card>
+            ) : null}
             <Card>
               <CardHeader>Rentals and subscriptions</CardHeader>
               {active.length === 0 ? (

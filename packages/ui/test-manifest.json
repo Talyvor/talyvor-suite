@@ -1,14 +1,16 @@
 {
   "src/__tests__/components.test.tsx": 10,
-  "src/__tests__/contrast.test.ts": 160,
-  "src/__tests__/design-fixes.test.tsx": 12,
-  "src/__tests__/invariant.test.ts": 324,
+  "src/__tests__/contrast.test.ts": 111,
+  "src/__tests__/design-fixes.test.tsx": 10,
+  "src/__tests__/invariant.test.ts": 363,
   "src/__tests__/no-arbitrary-value.test.ts": 1,
+  "src/__tests__/pocket-identity.test.tsx": 12,
+  "src/__tests__/pocket.test.tsx": 32,
   "src/__tests__/promotions.test.tsx": 10,
   "src/__tests__/rowHintWraps.test.tsx": 3,
   "src/__tests__/selection.test.ts": 15,
-  "src/__tests__/site-parity.test.ts": 42,
+  "src/__tests__/site-parity.test.ts": 113,
   "src/__tests__/theme-storage.test.tsx": 8,
-  "src/__tests__/tokens.test.ts": 46,
-  "src/__tests__/typeface.test.tsx": 25
+  "src/__tests__/tokens.test.ts": 58,
+  "src/__tests__/typeface.test.tsx": 29
 }

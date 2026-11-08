@@ -591,6 +591,332 @@ func (a *app) handleRoomForkRoom(w http.ResponseWriter, r *http.Request, t tenan
 	a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, nil, "")
 }
 
+// B41.41 — shared ownership, intent only (Lens B41.141), relayed the same way. Lens answers 404 to everyone in a
+// workspace that is not synthetic until room_equity is cleared, and to anyone who is not a member:
+//
+//	GET /api/rooms/{id}/shared-ownership   {room_id, enabled, pool_bps, notice, updated_at}
+//	PUT /api/rooms/{id}/shared-ownership   {enabled, pool_bps}: the owner only; pool_bps 1000–5000, 2500 left out
+var roomOwnershipKeys = map[string][]string{"enabled": nil, "pool_bps": nil}
+
+// handleRoomSharedOwnership — GET the setting; PUT {enabled, pool_bps} changes it.
+func (a *app) handleRoomSharedOwnership(w http.ResponseWriter, r *http.Request, t tenant) {
+	path, ok := roomPath(w, r, "/shared-ownership", false)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+	case http.MethodPut:
+		body, ok := roomBody(w, r, 1<<10, roomOwnershipKeys)
+		if !ok {
+			return
+		}
+		a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPut)
+	}
+}
+
+// B41.42 — the room's rate card (Lens B41.142), relayed the same way and behind the same room_equity gate:
+//
+//	GET /api/rooms/{id}/rate-card                    {room_id, pool_points, item_cap_points, sizes: [{size, hours, points_per_hour, points}]}
+//	PUT /api/rooms/{id}/rate-card                    {pool_points, sizes: [{size, hours, points_per_hour}]}: the owner only;
+//	                                                 Lens refuses a size worth more than 5% of pool_points
+//	PUT /api/rooms/{id}/contributions/{cid}/size     {size}: fixes that size's points on it; 409 for a raise once decided
+var (
+	roomRateCardKeys = map[string][]string{"pool_points": nil, "sizes": nil}
+	roomSizeKeys     = map[string][]string{"size": nil}
+)
+
+// handleRoomRateCard — GET the rate card; PUT {pool_points, sizes} publishes it.
+func (a *app) handleRoomRateCard(w http.ResponseWriter, r *http.Request, t tenant) {
+	path, ok := roomPath(w, r, "/rate-card", false)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+	case http.MethodPut:
+		body, ok := roomBody(w, r, 8<<10, roomRateCardKeys)
+		if !ok {
+			return
+		}
+		a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPut)
+	}
+}
+
+// handleRoomContributionSize — PUT /api/rooms/{id}/contributions/{cid}/size {size}.
+func (a *app) handleRoomContributionSize(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	path, ok := roomPath(w, r, "/size", true)
+	if !ok {
+		return
+	}
+	body, ok := roomBody(w, r, 1<<10, roomSizeKeys)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+}
+
+// handleRoomPoints — GET /api/rooms/{id}/points: the room's points ledger (Lens B41.143), behind the same room_equity gate:
+// {room_id, total_points, holders: [{workspace_id, workspace_name, points, identity_checked}], entries: [...]}.
+func (a *app) handleRoomPoints(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	path, ok := roomPath(w, r, "/points", false)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+}
+
+// handleRoomLeaderboard — GET /api/rooms/{id}/leaderboard: the room's provisional leaderboard (Lens B41.145), behind the
+// same room_equity gate: {enabled, pool_bps, total_points, rows: [{workspace_id, workspace_name, points, identity_checked,
+// share_bps}], note, notice}.
+func (a *app) handleRoomLeaderboard(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	path, ok := roomPath(w, r, "/leaderboard", false)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+}
+
+// B41.46 — the room's Gate tracker (Lens B41.146), behind the same room_equity gate:
+//
+//	GET /api/rooms/{id}/gate               {room_id, thresholds, shipped: {status, note, weeks}, used: {status, people},
+//	                                       paid: {status, note, usd_micros, payers}, met, notice}
+//	PUT /api/rooms/{id}/gate-thresholds    {shipped_weeks, used_people, used_active_weeks, paid_usd_micros, paid_payers}:
+//	                                       the owner only; Lens answers 409 to any value below the current one
+var roomGateThresholdsKeys = map[string][]string{"shipped_weeks": nil, "used_people": nil, "used_active_weeks": nil,
+	"paid_usd_micros": nil, "paid_payers": nil}
+
+// handleRoomGate — GET /api/rooms/{id}/gate.
+func (a *app) handleRoomGate(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	path, ok := roomPath(w, r, "/gate", false)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+}
+
+// handleRoomGateThresholds — PUT /api/rooms/{id}/gate-thresholds raises the room's thresholds.
+func (a *app) handleRoomGateThresholds(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	path, ok := roomPath(w, r, "/gate-thresholds", false)
+	if !ok {
+		return
+	}
+	body, ok := roomBody(w, r, 1<<10, roomGateThresholdsKeys)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+}
+
+// B41.44 — a contribution's quality, scored by two reviewers Lens draws at random (Lens B41.144), behind the same
+// room_equity gate as the points ledger:
+//
+//	GET  /api/rooms/{id}/contributions/{cid}/reviews     {contribution_id, quality_bps, reviews: [{reviewer_workspace_id,
+//	                                                     reviewer_workspace_name, score_bps, ring, drawn_at, scored_at}]}
+//	POST /api/rooms/{id}/contributions/{cid}/reviewers   any member asks; Lens fills the empty seats, so nobody picks them
+//	PUT  /api/rooms/{id}/contributions/{cid}/review      {score_bps}: a drawn reviewer, 5000–15000 while it is proposed
+var roomReviewKeys = map[string][]string{"score_bps": nil}
+
+// handleRoomReviews — GET /api/rooms/{id}/contributions/{cid}/reviews.
+func (a *app) handleRoomReviews(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	path, ok := roomPath(w, r, "/reviews", true)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+}
+
+// handleRoomReviewers — POST /api/rooms/{id}/contributions/{cid}/reviewers: no body, so nobody names a reviewer.
+func (a *app) handleRoomReviewers(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	path, ok := roomPath(w, r, "/reviewers", true)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, nil, "")
+}
+
+// handleRoomReview — PUT /api/rooms/{id}/contributions/{cid}/review {score_bps}.
+func (a *app) handleRoomReview(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	path, ok := roomPath(w, r, "/review", true)
+	if !ok {
+		return
+	}
+	body, ok := roomBody(w, r, 1<<10, roomReviewKeys)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+}
+
+// B41.50 — the room's contributor agreement (Lens B41.150), behind the same room_equity gate as the points ledger. Points
+// count only once the member's workspace has signed the current version:
+//
+//	GET  /api/rooms/{id}/agreement   {version, draft, marked, text, text_sha256, signature}: signature is null until signed
+//	POST /api/rooms/{id}/agreement   {version, signed_name}: the workspace's owner or an admin, signed in as a person, signs
+//	                                 the version it read; Lens answers 409 for any version but the current one
+var roomAgreementKeys = map[string][]string{"version": nil, "signed_name": nil}
+
+// handleRoomAgreement — GET the agreement and this workspace's signature; POST {version, signed_name} signs it.
+func (a *app) handleRoomAgreement(w http.ResponseWriter, r *http.Request, t tenant) {
+	path, ok := roomPath(w, r, "/agreement", false)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+	case http.MethodPost:
+		body, ok := roomBody(w, r, 1<<10, roomAgreementKeys)
+		if !ok {
+			return
+		}
+		a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, body, "")
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
+	}
+}
+
+// B41.47 — objections to the room's frozen leaderboard (Lens B41.147), behind the same room_equity gate as the points ledger:
+//
+//	POST /api/rooms/{id}/leaderboard/freeze        the owner, once: opens the 14-day objection window
+//	GET  /api/rooms/{id}/objections                {frozen_at, objections_close_at, rules, objections: [{..., panel}]}
+//	POST /api/rooms/{id}/objections                {contribution_id, points, reason}: any member, in the window; Lens draws
+//	                                               three members linked to neither side, 409 if it cannot
+//	PUT  /api/rooms/{id}/objections/{oid}/vote     {uphold}: a drawn panelist; two votes the same way decide it
+var (
+	roomObjectionKeys = map[string][]string{"contribution_id": nil, "points": nil, "reason": nil}
+	roomUpholdKeys    = map[string][]string{"uphold": nil}
+)
+
+// handleRoomLeaderboardFreeze — POST /api/rooms/{id}/leaderboard/freeze.
+func (a *app) handleRoomLeaderboardFreeze(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	path, ok := roomPath(w, r, "/leaderboard/freeze", false)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, nil, "")
+}
+
+// handleRoomObjections — GET the objections; POST {contribution_id, points, reason} raises one.
+func (a *app) handleRoomObjections(w http.ResponseWriter, r *http.Request, t tenant) {
+	path, ok := roomPath(w, r, "/objections", false)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+	case http.MethodPost:
+		body, ok := roomBody(w, r, 4<<10, roomObjectionKeys)
+		if !ok {
+			return
+		}
+		a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, body, "")
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
+	}
+}
+
+// handleRoomObjectionVote — PUT /api/rooms/{id}/objections/{oid}/vote {uphold}.
+func (a *app) handleRoomObjectionVote(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	path, ok := roomSub(w, r, "objections", "oid", "objection id", "/vote")
+	if !ok {
+		return
+	}
+	body, ok := roomBody(w, r, 1<<10, roomUpholdKeys)
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+}
+
+// B41.52 — the room's open tasks board (Lens B41.152), behind the same room_equity gate as the rate card:
+//
+//	GET    /api/rooms/{id}/tasks                 the board, open tasks first
+//	POST   /api/rooms/{id}/tasks                 {title, description, size}: the owner or an editor; no assignee, no deadline
+//	POST   /api/rooms/{id}/tasks/{tid}/claim     any member, for itself; 409 when another member holds it
+//	DELETE /api/rooms/{id}/tasks/{tid}/claim     its claimant lets it go
+var roomTaskKeys = map[string][]string{"title": nil, "description": nil, "size": nil}
+
+// handleRoomTasks — GET the board; POST {title, description, size} posts a task.
+func (a *app) handleRoomTasks(w http.ResponseWriter, r *http.Request, t tenant) {
+	path, ok := roomPath(w, r, "/tasks", false)
+	if !ok {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+	case http.MethodPost:
+		body, ok := roomBody(w, r, 8<<10, roomTaskKeys)
+		if !ok {
+			return
+		}
+		a.marketRelay(w, r, a.client, t.token, http.MethodPost, path, body, "")
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
+	}
+}
+
+// handleRoomTaskClaim — POST claims a task for the caller itself; DELETE lets it go.
+func (a *app) handleRoomTaskClaim(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodPost+", "+http.MethodDelete)
+		return
+	}
+	path, ok := roomSub(w, r, "tasks", "tid", "task id", "/claim")
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, r.Method, path, nil, "")
+}
+
 // handleRoomInvitePreview — GET /api/room-invites/{token}: what a live link opens; 404 once it is revoked, expired or
 // used up.
 func (a *app) handleRoomInvitePreview(w http.ResponseWriter, r *http.Request, t tenant) {

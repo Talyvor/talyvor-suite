@@ -4,6 +4,7 @@ import { relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import { blankComments, stripComments } from '../../../packages/ui/src/lib/sourceText'
+import preset from '@talyvor/ui/preset'
 
 import {
   EYEBROW_CLASS,
@@ -366,5 +367,46 @@ describe('the eyebrow’s uppercase is applied at the call site, and something c
       expect(() => statSync(resolve(WEB_SRC, '..', rel)), `${rel} is listed as a floor but is not a file`)
         .not.toThrow()
     }
+  })
+})
+
+// B57.3 — on a page held to Pocket's rules, an eyebrow is Pocket's: 12px uppercase Figtree at
+// .04em tracking (`text-pocket-eyebrow`, pocket.css's .eyebrow). Today's 11px, .24em shape is an
+// offender there.
+describe('Pocket: an eyebrow is 12px uppercase Figtree at .04em', () => {
+  const pocket = (html: string) => fixture(`<div data-design="pocket">${html}</div>`)
+
+  it('Pocket’s eyebrow, uppercase, is clean', () => {
+    expect(eyebrowOffendersIn(pocket('<span class="text-pocket-eyebrow uppercase text-ink-3">Agents</span>'))).toEqual([])
+  })
+
+  it('Pocket’s eyebrow without uppercase is an offender', () => {
+    const off = eyebrowOffendersIn(pocket('<span class="text-pocket-eyebrow text-ink-3">Agents</span>'))
+    expect(off).toHaveLength(1)
+    expect(off[0].problem).toBe('transform')
+  })
+
+  it('today’s eyebrow shape on a Pocket page is an offender, uppercase or not', () => {
+    const off = eyebrowOffendersIn(pocket('<span class="font-figure text-eyebrow uppercase text-muted">spent</span>'))
+    expect(off).toHaveLength(1)
+    expect(off[0].problem).toBe('shape')
+  })
+
+  it('Pocket’s eyebrow in IBM Plex Mono is an offender', () => {
+    const off = eyebrowOffendersIn(pocket('<span class="font-mono text-pocket-eyebrow uppercase">Agents</span>'))
+    expect(off).toHaveLength(1)
+    expect(off[0].problem).toBe('face')
+  })
+
+  it('Pocket’s eyebrow in the display face is an offender', () => {
+    expect(eyebrowOffendersIn(pocket('<div class="font-display"><span class="text-pocket-eyebrow uppercase">Agents</span></div>'))).toHaveLength(1)
+  })
+
+  it('the token is 12px at .04em tracking, as pocket.css draws it', () => {
+    expect(preset.theme.extend.fontSize['pocket-eyebrow']).toEqual(['0.75rem', { lineHeight: '1.3', letterSpacing: '0.04em', fontWeight: '600' }])
+  })
+
+  it('outside a Pocket page today’s eyebrow is still clean', () => {
+    expect(eyebrowOffendersIn(fixture('<span class="font-figure text-eyebrow uppercase text-muted">spent</span>'))).toEqual([])
   })
 })

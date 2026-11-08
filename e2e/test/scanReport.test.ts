@@ -41,8 +41,8 @@ async function runOnStub(broken: string): Promise<Verdict> {
 describe('scan-report (B52.32)', () => {
   it('passes on a Lens that refuses the planted line and publishes only on approval', async () => {
     const verdict = await runOnStub('')
-    expect(verdict.detail).toBe('report 1000 drafted from recorded eia.stocks.cushing-crude data with its box, the planted "buy" line refused ' +
-      '("advice or trading wording: Buy") and never approvable, published only on the reviewer\'s approval, and scored a hit at 22500')
+    expect(verdict.detail).toBe('report 1000 drafted from recorded eia.stocks.us-distillate data with its box, the planted "buy" line refused ' +
+      '("advice or trading wording: Buy") and never approvable, published only on the reviewer\'s approval, and scored a hit at 113000')
     expect(verdict.pass).toBe(true)
   })
 

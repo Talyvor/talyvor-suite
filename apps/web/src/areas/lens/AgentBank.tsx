@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, type PillStatus } from '@talyvor/ui'
+import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { useLinked } from '../../components/LinkedItem'
@@ -11,11 +11,12 @@ import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
 import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
 import { AgentCardPanel } from './AgentCardPanel'
+import { AgentFace } from './AgentFace'
 import { categoryWords } from './Budgets'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
-import { CurrencyPicker, Lxc } from './money'
+import { CurrencyPicker, Lxc, useLxcText } from './money'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
@@ -108,6 +109,7 @@ function Totals({ book }: { book: AgentBook }) {
  */
 export function PauseEveryAgent({ book }: { book: AgentBook }) {
   const qc = useQueryClient()
+  const { hold, onlyThePhone } = useKeys()
   const [reason, setReason] = useState('')
   const change = useMutation({
     mutationFn: (pause: boolean) => (pause ? agentBankApi.pauseAll(reason.trim()) : resumeEveryAgent()),
@@ -122,11 +124,15 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
             Every agent is paused{book.all_paused_reason ? ` — ${book.all_paused_reason}` : ''}. Lens refuses each one’s
             next request or payment until you start them again.
           </p>
-          <div>
-            <Button disabled={change.isPending} onClick={() => change.mutate(false)}>
-              Start every agent again
-            </Button>
-          </div>
+          {onlyThePhone ? (
+            <OnThePhone>Start your agents again on your phone with Face ID.</OnThePhone>
+          ) : hold ? null : (
+            <div>
+              <Button disabled={change.isPending} onClick={() => change.mutate(false)}>
+                Start every agent again
+              </Button>
+            </div>
+          )}
         </>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
@@ -150,6 +156,7 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
 /** B19.20 — pausing one agent (Lens B19.6): its every movement is refused until it is resumed. */
 function PauseAgent({ agent }: { agent: Agent }) {
   const qc = useQueryClient()
+  const { hold, onlyThePhone } = useKeys()
   const change = useMutation({
     mutationFn: (pause: boolean) => (pause ? agentBankApi.pause(agent.id, 'paused from Agent Wallets') : resumeAgent(agent.id)),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
@@ -162,9 +169,13 @@ function PauseAgent({ agent }: { agent: Agent }) {
             <p className="text-body text-ink" data-testid="agent-paused">
               {agent.name} is paused{agent.paused_reason ? ` — ${agent.paused_reason}` : ''}.
             </p>
-            <Button disabled={change.isPending} onClick={() => change.mutate(false)}>
-              Resume {agent.name}
-            </Button>
+            {onlyThePhone ? (
+              <OnThePhone>Resume {agent.name} on your phone with Face ID.</OnThePhone>
+            ) : hold ? null : (
+              <Button disabled={change.isPending} onClick={() => change.mutate(false)}>
+                Resume {agent.name}
+              </Button>
+            )}
           </>
         ) : (
           <Button disabled={change.isPending} onClick={() => change.mutate(true)}>
@@ -286,6 +297,17 @@ function LimitAlerts({ nameOf }: { nameOf: (id: string) => string }) {
         </p>
       )}
     </Card>
+  )
+}
+
+/** B17.364 — a budget on a company account raises alerts before any agent exists: they show then, and nothing else does. */
+function AlertsBeforeAgents({ nameOf }: { nameOf: (id: string) => string }) {
+  const alerts = useQuery({ queryKey: ['limit-alerts'], queryFn: agentBankApi.limitAlerts })
+  if (!alerts.data?.alerts?.length) return null
+  return (
+    <Region index="02" label="Limit alerts">
+      <LimitAlerts nameOf={nameOf} />
+    </Region>
   )
 }
 
@@ -620,7 +642,12 @@ function AgentList({ agents, selected, onSelect }: { agents: Agent[]; selected: 
       {agents.map((a) => (
         <Row
           key={a.id}
-          label={a.name}
+          label={
+            <span className="flex items-center gap-2.5">
+              <AgentFace agent={a} />
+              {a.name}
+            </span>
+          }
           hint={
             <>
               Spent {lxc(a.spent_ulxc)} · <span className="font-figure">{a.keys.length}</span>{' '}
@@ -1071,7 +1098,8 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
  */
 function ListingsPicker({ agent, chosen, onChange }: { agent: Agent; chosen: string[]; onChange: (ids: string[]) => void }) {
   const catalog = useQuery({ queryKey: [...CATALOG_KEY, ''], queryFn: () => marketApi.catalog('') })
-  const listed = (catalog.data ?? []).map((l) => ({ id: l.id, title: l.title, hint: `${kindLabel(l.kind)} · ${priceText(l.price_per_use_ulxc)}` }))
+  const lxc = useLxcText()
+  const listed = (catalog.data ?? []).map((l) => ({ id: l.id, title: l.title, hint: `${kindLabel(l.kind)} · ${priceText(l.price_per_use_ulxc, lxc)}` }))
   const named = chosen
     .filter((id) => !listed.some((l) => l.id === id))
     .map((id) => ({ id, title: id, hint: 'Not in the public catalog' }))
@@ -2158,6 +2186,40 @@ const SWIPE_PX = 96
 
 // Exported because Chat's approval cards (B28.84) sign with the same passkeys.
 export const PASSKEYS_KEY = ['agent-passkeys']
+export const DEVICES_KEY = ['money-devices']
+
+/**
+ * B55.2 — what signs for this workspace. Lens wants a signature once it has any passkey or phone key, revoked keys
+ * included (until B55.15), but only a passkey signs in this browser, so with the phone's key alone nothing that needs
+ * one is sent from here. hold is true until both reads succeed, so a read that is loading or failed sends nothing
+ * either; Lens lets only an owner or admin read the phone keys, and only they decide or resume.
+ */
+export function useKeys() {
+  const passkeys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
+  const devices = useQuery({ queryKey: DEVICES_KEY, queryFn: agentBankApi.devices })
+  const passkeyCount = (passkeys.data?.passkeys ?? []).length
+  const thisBrowserSigns = passkeyCount > 0
+  const signed = thisBrowserSigns || (devices.data?.devices ?? []).length > 0
+  const isSuccess = passkeys.isSuccess && devices.isSuccess
+  const onlyThePhone = isSuccess && signed && !thisBrowserSigns
+  return { signed, thisBrowserSigns, onlyThePhone, hold: !isSuccess || onlyThePhone, passkeyCount, isSuccess }
+}
+
+/** B55.2 — said in place of a button this browser cannot sign for: where to do it, and how to sign here too (B55.3). */
+export function OnThePhone({ children }: { children: React.ReactNode }) {
+  // On Approvals itself the link would lead back to the same page.
+  const here = useLocation().pathname === '/approvals'
+  return (
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-ink" data-testid="on-the-phone">
+      <span>{children}</span>
+      {here ? null : (
+        <Link className={inlineLink} to="/approvals">
+          Add this browser
+        </Link>
+      )}
+    </p>
+  )
+}
 
 /** What went wrong on this device, in words: Lens's sentence, a cancelled prompt, or our own message. */
 export function deviceText(err: unknown, fallback: string): string {
@@ -2171,7 +2233,7 @@ export function deviceText(err: unknown, fallback: string): string {
  * B19.10 — the phone half: a passkey made here signs every approval from now on, and this device can
  * be told when one is filed. Lens keeps both (B19.16); nothing is kept in the browser but the passkey.
  */
-function FaceID({ signed, passkeyCount }: { signed: boolean; passkeyCount: number }) {
+function FaceID({ signed, hold, passkeyCount }: { signed: boolean; hold: boolean; passkeyCount: number }) {
   const qc = useQueryClient()
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
   const register = useMutation({
@@ -2190,18 +2252,21 @@ function FaceID({ signed, passkeyCount }: { signed: boolean; passkeyCount: numbe
       <CardHeader>Face ID and notifications</CardHeader>
       <div className="flex flex-col gap-2 px-gutter py-3">
         <p className="text-body text-muted">
-          {signed
+          {signed && passkeyCount === 0
+            ? 'Approvals are signed on your phone. Nothing is approved without it.'
+            : signed
             ? `Approvals are signed with a passkey (${passkeyCount} registered). Nothing is approved without one.`
             : 'Approvals are not signed yet. Make a passkey on your phone and every approval asks for Face ID.'}
         </p>
         {said ? <Note ok={said.ok}>{said.text}</Note> : null}
         <div className="flex flex-col gap-2 wide:flex-row">
-          {passkeysSupported() ? (
+          {/* B55.2 — with only the phone's key Lens refuses a passkey made here unsigned; adding this browser is B55.3. */}
+          {!passkeysSupported() ? (
+            <p className="text-caption text-muted">This browser cannot make a passkey.</p>
+          ) : hold ? null : (
             <Button className="h-12 wide:h-8" disabled={register.isPending} onClick={() => register.mutate()}>
               {signed ? 'Add this device' : 'Approve with Face ID from now on'}
             </Button>
-          ) : (
-            <p className="text-caption text-muted">This browser cannot make a passkey.</p>
           )}
           {pushSupported() ? (
             <Button className="h-12 wide:h-8" disabled={notify.isPending} onClick={() => notify.mutate()}>
@@ -2235,8 +2300,10 @@ export function Approvals({
 }) {
   const qc = useQueryClient()
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
-  const keys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
-  const signed = (keys.data?.passkeys ?? []).length > 0
+  const keys = useKeys()
+  const { signed, onlyThePhone, hold } = keys
+  // Ticking several is for a workspace that signs nothing (bulk, below), once both key reads are in.
+  const pickable = !signed && !hold
   const [outcome, setOutcome] = useState<{ ok: boolean; text: React.ReactNode } | null>(null)
   // B41.33 — the inbox: narrowed by agent and kind, several decided together, worked from the keyboard or by a swipe.
   const [byAgent, setByAgent] = useState('')
@@ -2326,9 +2393,9 @@ export function Approvals({
     const at = row ? rows.indexOf(row) : -1
     if (e.key === 'j' || e.key === 'ArrowDown') rows[Math.min(at + 1, rows.length - 1)]?.focus()
     else if (e.key === 'k' || e.key === 'ArrowUp') rows[Math.max(at - 1, 0)]?.focus()
-    else if (a && !busy && e.key === 'a') decide.mutate({ a, decision: 'approve' })
-    else if (a && !busy && e.key === 'd') decide.mutate({ a, decision: 'deny' })
-    else if (a && !signed && e.key === 'x') toggle(a.id)
+    else if (a && !busy && !hold && e.key === 'a') decide.mutate({ a, decision: 'approve' })
+    else if (a && !busy && !hold && e.key === 'd') decide.mutate({ a, decision: 'deny' })
+    else if (a && pickable && e.key === 'x') toggle(a.id)
     else return
     e.preventDefault()
   }
@@ -2350,7 +2417,7 @@ export function Approvals({
     )
   return (
     <div className="flex flex-col gap-3">
-      <FaceID signed={signed} passkeyCount={(keys.data?.passkeys ?? []).length} />
+      <FaceID signed={signed} hold={hold} passkeyCount={keys.passkeyCount} />
       {outcome ? <Note ok={outcome.ok}>{outcome.text}</Note> : null}
       {list.isError ? (
         <p className="text-body text-muted">{readFailure(list.error, 'The approvals')}</p>
@@ -2381,7 +2448,7 @@ export function Approvals({
                   <option value="payment">Payments</option>
                   <option value="model">Requests to a model</option>
                 </select>
-                {!signed && pending.length > 0 ? (
+                {pickable && pending.length > 0 ? (
                   <label className="inline-flex items-center gap-2 text-body text-ink">
                     <input
                       type="checkbox"
@@ -2393,7 +2460,7 @@ export function Approvals({
                   </label>
                 ) : null}
               </div>
-              {chosen.length > 0 ? (
+              {pickable && chosen.length > 0 ? (
                 <div className="flex flex-col gap-2 wide:flex-row">
                   <Button variant={primary ? 'primary' : 'default'} className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'approve' })}>
                     Approve {chosen.length}
@@ -2403,8 +2470,12 @@ export function Approvals({
                   </Button>
                 </div>
               ) : null}
-              <p className="hidden text-caption text-muted wide:block">Keys: j and k move, a approves, d denies{signed ? '' : ', x selects'}.</p>
-              <p className="text-caption text-muted wide:hidden">Swipe a request right to approve it.</p>
+              {hold ? null : (
+                <>
+                  <p className="hidden text-caption text-muted wide:block">Keys: j and k move, a approves, d denies{signed ? '' : ', x selects'}.</p>
+                  <p className="text-caption text-muted wide:hidden">Swipe a request right to approve it.</p>
+                </>
+              )}
             </div>
           ) : null}
           {pending.length === 0 ? (
@@ -2439,10 +2510,10 @@ export function Approvals({
                     setSwiping(null)
                     const dx = e.changedTouches[0].clientX - (s?.x ?? 0)
                     // Right only: a swipe approves (with Face ID once the workspace signs), never denies by accident.
-                    if (s?.id === a.id && !busy && dx >= SWIPE_PX && dx > Math.abs(e.changedTouches[0].clientY - s.y)) decide.mutate({ a, decision: 'approve' })
+                    if (s?.id === a.id && !busy && !hold && dx >= SWIPE_PX && dx > Math.abs(e.changedTouches[0].clientY - s.y)) decide.mutate({ a, decision: 'approve' })
                   }}
                   label={
-                    !signed ? (
+                    pickable ? (
                       <span className="inline-flex items-start gap-2">
                         <input
                           type="checkbox"
@@ -2465,17 +2536,22 @@ export function Approvals({
                           {what(a)}, asked <span className="font-figure">{formatWhen(a.created_at)}</span>
                         </span>
                       </span>
-                      <AlwaysAllow
-                        a={a}
-                        agentName={nameOf(a.agent_id)}
-                        signed={signed}
-                        disabled={busy}
-                        onApprove={(allow) => decide.mutate({ a, decision: 'approve', allow })}
-                      />
+                      {hold ? null : (
+                        <AlwaysAllow
+                          a={a}
+                          agentName={nameOf(a.agent_id)}
+                          signed={signed}
+                          disabled={busy}
+                          onApprove={(allow) => decide.mutate({ a, decision: 'approve', allow })}
+                        />
+                      )}
                     </span>
                   }
                 >
                   {/* One-handed on a phone: two full-width buttons under the sentence and the thumb; side by side on a wide screen. */}
+                  {onlyThePhone ? (
+                    <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
+                  ) : hold ? null : (
                   <div className="flex w-full flex-col gap-2 wide:w-auto wide:flex-row wide:items-center">
                     {/* B17.325 — one teal action per screen: the first waiting request's Approve, or Approve {n} once some are picked. */}
                     <Button
@@ -2490,6 +2566,7 @@ export function Approvals({
                       Deny
                     </Button>
                   </div>
+                  )}
                 </Row>
               ))}
             </div>
@@ -2609,13 +2686,18 @@ export function AgentBank() {
         <Region index="03" label="Spending">
           <Spending nameOf={nameOf} />
         </Region>
+      ) : first ? (
+        <AlertsBeforeAgents nameOf={nameOf} />
       ) : null}
 
       {agent && book.data ? (
         <Region index="04" label="Agent" className="flex flex-col gap-gutter">
-          <p className="text-head text-ink" data-testid="agent-open">
-            {agent.name}
-          </p>
+          <div className="flex items-center gap-4">
+            <AgentFace agent={agent} size={60} />
+            <p className="text-head text-ink" data-testid="agent-open">
+              {agent.name}
+            </p>
+          </div>
           {agent.description ? (
             <p className="text-body text-muted" data-testid="agent-description">
               {agent.description}

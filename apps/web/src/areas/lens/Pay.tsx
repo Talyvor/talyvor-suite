@@ -7,7 +7,7 @@ import { Region, RegionScreen } from '../../components/Region'
 import { LinkedItem } from '../../components/LinkedItem'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
-import { APPROVALS_KEY, BOOK_KEY, PASSKEYS_KEY } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, OnThePhone, useKeys } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { assertOver, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
 import {
@@ -23,13 +23,14 @@ import {
   type OutsidePayment,
   type PayeeRequest,
   type PayoutBatch,
+  FIATS,
   agentBankApi,
   formatMinor,
-  formatULXC,
   minorOf,
   newMoveKey,
   refusalText,
 } from './agentBankApi'
+import { Lxc } from './money'
 
 // Pay.tsx — B30.96: money out of an account. Saved payees outside Talyvor, each checked against its account by the account
 // partner (Lens B30.16); a payment to one, from the company's or an agent's account (B30.17), with an agent's requests that
@@ -85,7 +86,8 @@ export function PayScreen() {
   const askedPayees = (asked.data?.requests ?? []).filter((r) => r.kind === 'payee')
   const askedMandates = (asked.data?.requests ?? []).filter((r) => r.kind === 'mandate')
   const askedPlans = (asked.data?.requests ?? []).filter((r) => r.kind === 'plan' && r.status !== 'signed')
-  const open = (accounts.data?.accounts ?? []).filter((a) => a.status === 'open')
+  // A USDC wallet cannot pay a bank payee (B55.26): only pounds, euros and dollars send, repeat or take a mandate.
+  const open = (accounts.data?.accounts ?? []).filter((a) => a.status === 'open' && FIATS.includes(a.currency))
   const agentAccounts = open.filter((a) => a.purpose === 'agent')
   const saved = payees.data?.payees ?? []
   const sent = payments.data?.payments ?? []
@@ -737,8 +739,7 @@ function SendPayment({
 function Waiting({ agentName }: { agentName: (id: string) => string }) {
   const qc = useQueryClient()
   const approvals = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
-  const keys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
-  const signed = (keys.data?.passkeys ?? []).length > 0
+  const { signed, onlyThePhone, hold } = useKeys()
   const waiting = (approvals.data?.approvals ?? []).filter((a) => a.status === 'pending' && a.payee?.kind === 'outside')
   const decide = useMutation({
     mutationFn: async ({ a, decision }: { a: AgentApproval; decision: 'approve' | 'deny' }) =>
@@ -754,20 +755,24 @@ function Waiting({ agentName }: { agentName: (id: string) => string }) {
         {waiting.map((a) => (
           <li key={a.id} className="flex flex-col gap-2 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`approval-${a.id}`}>
             <p className="text-body text-ink">
-              {agentName(a.agent_id)} asked to pay {a.payee?.name} <span className="font-figure">{formatULXC(a.amount_ulxc)}</span>
+              {agentName(a.agent_id)} asked to pay {a.payee?.name} <Lxc ulxc={a.amount_ulxc} />
               {a.memo ? ` — ${a.memo}` : ''}
             </p>
             <p className="text-caption text-muted">
               Asked <span className="font-figure">{formatWhen(a.created_at)}</span>. Approved, the agent’s next identical request goes through, once.
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'approve' })}>
-                Approve
-              </Button>
-              <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'deny' })}>
-                Deny
-              </Button>
-            </div>
+            {onlyThePhone ? (
+              <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
+            ) : hold ? null : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'approve' })}>
+                  Approve
+                </Button>
+                <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'deny' })}>
+                  Deny
+                </Button>
+              </div>
+            )}
           </li>
         ))}
       </ul>

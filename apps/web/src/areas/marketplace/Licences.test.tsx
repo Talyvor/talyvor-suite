@@ -64,7 +64,8 @@ function licence(over: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-function mockBff() {
+/** `idle`: the licences Lens marks idle — renewing, and unused for 30 days (B41.176). */
+function mockBff({ idle = [] }: { idle?: string[] } = {}) {
   const sent: Array<{
     url: string;
     method: string;
@@ -116,6 +117,7 @@ function mockBff() {
       price_ulxc: 90_000_000,
     }),
   ];
+  for (const l of licences) l.idle = idle.includes(String(l.id));
   const listings: Record<string, unknown> = {
     lst_rent: {
       id: "lst_rent",
@@ -191,6 +193,7 @@ function mockBff() {
       // Lens B32.20: a cancel turns renewing off; the licence stays active to its ends_at.
       const l = licences.find((x) => x.id === cancel[1])!;
       l.auto_renew = false;
+      l.idle = false; // Lens B41.176: only a renewing licence is idle
       return json(l);
     }
     const renew = /^\/api\/marketplace\/listings\/([^/]+)\/licences$/.exec(url);
@@ -290,6 +293,37 @@ describe("your licences and your bill", () => {
     expect(within(rent).getByTestId("rent-to-own").textContent).toContain(
       "$20.00 of $30.00",
     );
+  });
+
+  it("alerts on a subscription unused for 30 days and cancels it in one tap, and alerts on none that was used", async () => {
+    mockBff();
+    await at("/marketplace/licences");
+    await screen.findByTestId("licences-active");
+    expect(screen.queryByTestId("licences-idle")).toBeNull();
+
+    const { sent } = mockBff({ idle: ["lic_sub"] });
+    await at("/marketplace/licences");
+    const alert = await screen.findByTestId("licences-idle");
+    expect(screen.getByText("Not used in 30 days")).toBeTruthy();
+    expect(within(alert).getAllByRole("listitem")).toHaveLength(1);
+    expect(alert.textContent).toContain("Daily brief");
+    expect(alert.textContent).toContain(
+      "It renews on 7 Nov 2026, but nobody has used it for 30 days",
+    );
+    fireEvent.click(within(alert).getByRole("button", { name: "Cancel it" }));
+    await waitFor(() =>
+      expect(screen.queryByTestId("licences-idle")).toBeNull(),
+    );
+    expect(sent).toEqual([
+      expect.objectContaining({
+        url: "/api/marketplace/licences/lic_sub/cancel",
+        method: "POST",
+      }),
+    ]);
+    const sub = within(screen.getByTestId("licences-active"))
+      .getByRole("link", { name: "Daily brief" })
+      .closest("li")!;
+    expect(sub.textContent).toContain("Active until 7 Nov 2026, then it ends");
   });
 
   it("renews an ended subscription under its offer, once per click", async () => {

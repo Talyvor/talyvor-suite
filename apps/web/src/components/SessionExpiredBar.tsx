@@ -1,4 +1,4 @@
-import { Button } from '@talyvor/ui'
+import { Button, KindTile } from '@talyvor/ui/pocket'
 import { isSessionExpired, sessionExpiredCopy } from '../lib/productState'
 import { useSessionExpired } from '../lib/useSessionExpired'
 
@@ -26,14 +26,24 @@ export function SessionExpiredBar() {
       // `alert` rather than `status`: this is not progress, it is a stop condition — the screen
       // below it is showing nothing and will keep showing nothing until it is acted on.
       role="alert"
-      className="mb-gutter flex flex-wrap items-center justify-between gap-3 rounded-control border border-rule-strong bg-sidebar px-gutter py-3"
+      // B57.5 — drawn in Pocket (a tight card on cloud, its kind tile, the one button), on every page.
+      data-design="pocket"
+      className="mb-gutter flex flex-wrap items-center gap-3.5 rounded-card-tight bg-cloud px-4 py-3.5"
     >
-      <p className="text-body text-ink">{sessionExpiredCopy}</p>
+      <KindTile
+        icon={
+          <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="8" cy="15" r="3.5" />
+            <path d="m10.5 12.5 7.5-7.5M15.5 7.5l2.5 2.5M13.5 9.5l2 2" />
+          </svg>
+        }
+      />
+      <p className="min-w-0 flex-1 text-body text-ink">{sessionExpiredCopy}</p>
       {/* THE FIX AS A CLICK, not as advice. /auth/login rotates the session and re-provisions,
           which mints a fresh workspace token — so this one link is the whole remedy. The manual
           workaround during the incident was "sign out and back in", which is two steps for the
           same effect and which nobody could have guessed from "Couldn't load". */}
-      <Button asChild variant="primary">
+      <Button asChild size="sm">
         <a href={`/auth/login?return_to=${encodeURIComponent(returnTo)}`}>Sign in again</a>
       </Button>
     </div>

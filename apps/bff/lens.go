@@ -632,6 +632,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B32.60 — the seller's tax details and their weekly statements. See marketplace.go.
 	a.mux.HandleFunc("/api/marketplace/seller-tax", a.requireTenant(a.handleMarketSellerTax))
 	a.mux.HandleFunc("/api/marketplace/statements", a.requireTenant(a.handleMarketStatements))
+	// B41.85 — content labels and age ratings: the seller's, and the workspace's filter and blocks. See marketplace.go.
+	a.mux.HandleFunc("/api/marketplace/listings/{id}/content-labels", a.requireTenant(a.handleMarketContentLabels))
+	a.mux.HandleFunc("/api/marketplace/content-filter", a.requireTenant(a.handleMarketContentFilter))
+	a.mux.HandleFunc("/api/marketplace/blocked-listings/{id}", a.requireTenant(a.handleMarketBlockedListing))
 	// B32.53 — rooms: the open chats Chat lists, opening one and joining one. See rooms.go.
 	a.mux.HandleFunc("/api/rooms", a.requireTenant(a.handleRooms))
 	a.mux.HandleFunc("/api/rooms/{id}", a.requireTenant(a.handleRoom))
@@ -657,6 +661,22 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/rooms/{id}/takeover", a.requireTenant(a.handleRoomTakeover))
 	a.mux.HandleFunc("/api/rooms/{id}/takeover/vote", a.requireTenant(a.handleRoomTakeoverVote))
 	a.mux.HandleFunc("/api/rooms/{id}/fork", a.requireTenant(a.handleRoomForkRoom))
+	a.mux.HandleFunc("/api/rooms/{id}/shared-ownership", a.requireTenant(a.handleRoomSharedOwnership))          // B41.41
+	a.mux.HandleFunc("/api/rooms/{id}/rate-card", a.requireTenant(a.handleRoomRateCard))                        // B41.42
+	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/size", a.requireTenant(a.handleRoomContributionSize)) // B41.42
+	a.mux.HandleFunc("/api/rooms/{id}/points", a.requireTenant(a.handleRoomPoints))                             // B41.43
+	a.mux.HandleFunc("/api/rooms/{id}/leaderboard", a.requireTenant(a.handleRoomLeaderboard))                   // B41.45
+	a.mux.HandleFunc("/api/rooms/{id}/gate", a.requireTenant(a.handleRoomGate))                                 // B41.46
+	a.mux.HandleFunc("/api/rooms/{id}/gate-thresholds", a.requireTenant(a.handleRoomGateThresholds))            // B41.46
+	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/reviews", a.requireTenant(a.handleRoomReviews))       // B41.44
+	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/reviewers", a.requireTenant(a.handleRoomReviewers))   // B41.44
+	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/review", a.requireTenant(a.handleRoomReview))         // B41.44
+	a.mux.HandleFunc("/api/rooms/{id}/agreement", a.requireTenant(a.handleRoomAgreement))                       // B41.50
+	a.mux.HandleFunc("/api/rooms/{id}/leaderboard/freeze", a.requireTenant(a.handleRoomLeaderboardFreeze))      // B41.47
+	a.mux.HandleFunc("/api/rooms/{id}/objections", a.requireTenant(a.handleRoomObjections))                     // B41.47
+	a.mux.HandleFunc("/api/rooms/{id}/objections/{oid}/vote", a.requireTenant(a.handleRoomObjectionVote))       // B41.47
+	a.mux.HandleFunc("/api/rooms/{id}/tasks", a.requireTenant(a.handleRoomTasks))                               // B41.52
+	a.mux.HandleFunc("/api/rooms/{id}/tasks/{tid}/claim", a.requireTenant(a.handleRoomTaskClaim))               // B41.52
 	a.mux.HandleFunc("/api/room-invites/{token}", a.requireTenant(a.handleRoomInvitePreview))
 	a.mux.HandleFunc("/api/room-invites/{token}/join", a.requireTenant(a.handleRoomInviteJoin))
 	// B11.3 — the Try-it pages: Tare and document conversion run on the person's input through Lens's
@@ -875,7 +895,9 @@ func (a *app) sameOriginWriteAllowed(r *http.Request) bool {
 	if a.cfg.authMode == authModeDisabled {
 		return true
 	}
-	if originExemptPath(r.URL.Path) {
+	// B50.36 — the phone harness sends no Origin; a page on another site always does, and then the door is gated like any write.
+	origin := r.Header.Get("Origin")
+	if originExemptPath(r.URL.Path) && (r.URL.Path != syntheticMobilePath || origin == "") {
 		return true
 	}
 	// A Bearer session is the phone app's, and it is then the request's only identity
@@ -890,7 +912,7 @@ func (a *app) sameOriginWriteAllowed(r *http.Request) bool {
 	if s := r.Header.Get("Sec-Fetch-Site"); s != "" && s != "same-origin" {
 		return false
 	}
-	return r.Header.Get("Origin") == a.cfg.publicBaseURL
+	return origin == a.cfg.publicBaseURL
 }
 
 // writeJSON emits a small JSON object. Used only for BFF-originated responses (context,

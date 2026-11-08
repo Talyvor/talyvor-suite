@@ -129,6 +129,10 @@ var defaultProbes = map[string]defaultProbe{
 		bootWithUnset(t, "BFF_CONNECT_MCP_PER_CONNECTION_MINUTE", minimalDisabled())
 		return strconv.Itoa(limitMCPGrant.max())
 	}},
+	"BFF_CONNECT_REDIRECT_ORIGINS": {canon: identityCanon, observe: func(t *testing.T) string {
+		bootWithUnset(t, "BFF_CONNECT_REDIRECT_ORIGINS", minimalDisabled())
+		return redirectOrigins()
+	}},
 	// The session TTL is parsed in oidc mode only, so this probe boots the mode that reads it.
 	"BFF_SESSION_TTL": {canon: durationCanon, observe: func(t *testing.T) string {
 		return bootWithUnset(t, "BFF_SESSION_TTL", minimalOIDC()).sessionTTL.String()

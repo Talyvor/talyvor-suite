@@ -66,8 +66,8 @@ func TestDeniedPage_StyledHTMLWithIdentityEchoInOrder(t *testing.T) {
 }
 
 // (1b) B29.14 — the page carries the brand: none of the old stone colours, the Obsidian canvas,
-// Frost text and teal action instead, and the flat mark inline as the very brand file the web app
-// serves (apps/web/public/brand/svg), not a redrawing of it.
+// Frost text and teal action instead, and the logo's small symbol inline as the very kit file the web
+// app serves (apps/web/public/brand/logo, B57.79), not a redrawing of it.
 func TestDeniedPage_CarriesTheBrand(t *testing.T) {
 	_, body := deniedFlow(t, "mallory@example.com", nil, nil)
 	lower := strings.ToLower(body)
@@ -81,8 +81,8 @@ func TestDeniedPage_CarriesTheBrand(t *testing.T) {
 			t.Errorf("denied page lacks the brand colour %s", c)
 		}
 	}
-	for _, f := range []string{"talyvor-mark-flat-dark.svg", "talyvor-mark-flat-light.svg"} {
-		mark, err := os.ReadFile("../web/public/brand/svg/" + f)
+	for _, f := range []string{"talyvor-symbol-small-on-dark.svg", "talyvor-symbol-small-on-light.svg"} {
+		mark, err := os.ReadFile("../web/public/brand/logo/" + f)
 		if err != nil {
 			t.Fatal(err)
 		}

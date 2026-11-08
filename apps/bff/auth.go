@@ -652,8 +652,8 @@ func (auth *authenticator) storeSession(s session) (string, error) {
 // stranger learns only that they were refused. The precise cause stays in the server log.
 //
 // IN THE BRAND (B29.14): Obsidian canvas, Frost text, a Surface panel, the teal rule and one teal
-// button, with the flat mark inline — the brand-v4 files themselves, embedded, never redrawn. Dark
-// is primary; a light-scheme browser gets the light tokens and the light mark.
+// button, with the logo's small symbol inline (B57.79) — the kit's files themselves, embedded, never
+// redrawn. Dark is primary; a light-scheme browser gets the light tokens and the on-light symbol.
 var deniedPageTmpl = template.Must(template.New("denied").Parse(`<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
@@ -671,9 +671,9 @@ var deniedPageTmpl = template.Must(template.New("denied").Parse(`<!doctype html>
          background: var(--tv-canvas); color: var(--tv-ink); }
   main { box-sizing: border-box; width: calc(100% - 2rem); max-width: 28rem; padding: 2rem 1.75rem;
          background: var(--tv-surface); border: 1px solid var(--tv-line); border-radius: 10px; }
-  .mark-dark, .mark-light { width: 40px; height: 40px; margin: 0 0 1.5rem; }
+  .mark-dark, .mark-light { width: 56px; margin: 0 0 1.5rem; }
   .mark-light { display: none; }
-  .mark-dark svg, .mark-light svg { display: block; width: 40px; height: 40px; }
+  .mark-dark svg, .mark-light svg { display: block; width: 56px; height: auto; }
   h1 { font-size: 28px; line-height: 34px; font-weight: 500; letter-spacing: -0.01em; margin: 0; }
   .rule { width: 32px; height: 2px; background: var(--tv-accent); margin: 1rem 0 1.25rem; }
   p { margin: 0 0 0.85rem; }
@@ -708,13 +708,13 @@ var deniedPageTmpl = template.Must(template.New("denied").Parse(`<!doctype html>
 </html>
 `))
 
-// The flat mark, both themes, copied byte for byte from brand-v4/svg (the same files B29.1 put in
-// apps/web/public/brand/svg). Embedded, so the page still needs no asset request.
+// The logo's small symbol, both versions, copied byte for byte from brand/logo/svg (their ids differ, so
+// both can sit in one page). Embedded, so the page still needs no asset request.
 var (
-	//go:embed brand/talyvor-mark-flat-dark.svg
-	markFlatDark string
-	//go:embed brand/talyvor-mark-flat-light.svg
-	markFlatLight string
+	//go:embed brand/talyvor-symbol-small-on-dark.svg
+	markDark string
+	//go:embed brand/talyvor-symbol-small-on-light.svg
+	markLight string
 )
 
 // writeDeniedPage renders the refusal. 403 stays 403 — the page is for the human, the status for
@@ -728,7 +728,7 @@ func writeDeniedPage(w http.ResponseWriter, email string) {
 	data := struct {
 		Email               string
 		MarkDark, MarkLight template.HTML
-	}{Email: email, MarkDark: template.HTML(markFlatDark), MarkLight: template.HTML(markFlatLight)} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
+	}{Email: email, MarkDark: template.HTML(markDark), MarkLight: template.HTML(markLight)} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
 	if err := deniedPageTmpl.Execute(w, data); err != nil {
 		log.Printf("bff: denied page render: %v", err)
 	}

@@ -233,3 +233,33 @@ func TestOAuthAuthorizeRefusesWithoutPKCE(t *testing.T) {
 		t.Fatalf("plain PKCE: %d %q", rec.Code, rec.Header().Get("Location"))
 	}
 }
+
+// B54.11: open registration keeps to loopback and the known assistants' origins; anything else is refused there.
+func TestOAuthRegisterKeepsToTheRedirectAllowList(t *testing.T) {
+	t.Setenv("BFF_CONNECT_REGISTER_PER_IP_HOUR", "100")
+	a, _ := oauthApp(t)
+	register := func(redirect string) int {
+		return serve(a, "POST", "/oauth/register", "", `{"redirect_uris":["`+redirect+`"]}`, nil, nil).Code
+	}
+	for _, ok := range []string{claudeReturn, "https://chatgpt.com/connector_platform_oauth_redirect", "http://127.0.0.1/callback", "http://localhost:53682/callback"} {
+		if code := register(ok); code != http.StatusCreated {
+			t.Fatalf("%s: %d, want it registered", ok, code)
+		}
+	}
+	for _, bad := range []string{"https://assistant.example/callback", "https://claude.ai.evil.example/api/mcp/auth_callback",
+		"https://claude.ai:8443/api/mcp/auth_callback", "cursor://anysphere.cursor-retrieval/oauth/callback"} {
+		if code := register(bad); code != http.StatusBadRequest {
+			t.Fatalf("%s: %d, want it refused", bad, code)
+		}
+	}
+
+	t.Setenv("BFF_CONNECT_REDIRECT_ORIGINS", "https://assistant.example, cursor://anysphere.cursor-retrieval")
+	for _, ok := range []string{"https://assistant.example/callback", "cursor://anysphere.cursor-retrieval/oauth/callback", "http://127.0.0.1/callback"} {
+		if code := register(ok); code != http.StatusCreated {
+			t.Fatalf("with the setting, %s: %d, want it registered", ok, code)
+		}
+	}
+	if code := register(claudeReturn); code != http.StatusBadRequest {
+		t.Fatalf("the setting replaces the list, yet Claude registered: %d", code)
+	}
+}

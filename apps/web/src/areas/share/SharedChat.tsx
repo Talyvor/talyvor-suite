@@ -82,17 +82,12 @@ function Body({ token }: { token: string }) {
   )
 }
 
-const FOOTER_LINKS = [
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/terms', label: 'Terms' },
-]
-
 export function SharedChat() {
   useDocumentTitle('Shared chat')
   const { token = '' } = useParams()
   return (
     <div className="flex min-h-full flex-col bg-canvas text-ink">
-      <SiteHeader product="Chat" />
+      <SiteHeader />
 
       <main className="flex-1">
         <div className="mx-auto w-full max-w-5xl px-gutter py-12">
@@ -100,7 +95,7 @@ export function SharedChat() {
         </div>
       </main>
 
-      <SiteFooter links={FOOTER_LINKS} />
+      <SiteFooter />
     </div>
   )
 }

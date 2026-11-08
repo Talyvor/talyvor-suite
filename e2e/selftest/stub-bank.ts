@@ -251,6 +251,8 @@ interface Listing {
   changelogs?: Record<number, string>
   /** B32.90 — what it can do, from MARKET_CAPABILITIES in their order */
   capabilities?: string[]
+  /** B41.85 — who it is for (18+ when published without one) and what it gives (Lens B41.185) */
+  age_rating?: string; content_labels?: string[]
   /** B17.244 — the approved public listing of another workspace its first version was held as a copy of (Lens B32.46) */
   similar?: { listing_id: string; title: string; score: number; remixable: boolean }
 }
@@ -391,6 +393,8 @@ const CAPABILITIES = [
 ].map(([capability, name]) => ({ capability, name, class: 'AMBER', real_money: false, level_needed: LEVEL_NEEDED[capability] ?? 'L2' }))
 /** B28.360 — an agent's card, RED in Lens (economy.CapabilityAgentCard): the card freeze in Chat carries no test-money label (B46.2). */
 const CARD_CAPABILITY = { capability: 'agent_card', name: 'Cards', class: 'RED', real_money: false, level_needed: 'L2' }
+/** B40.23 — a room's shared ownership, RED and uncleared in Lens (economy.CapabilityRoomEquity): synthetic rooms only. */
+const ROOM_EQUITY_CAPABILITY = { capability: 'room_equity', name: 'Shared ownership in rooms (intent only)', class: 'RED', real_money: false, level_needed: 'L0' }
 /** B30.115 — and the money-and-markets ones B30.1 added, in Lens's classes; `b30-capability-gone` drops fx. B30.117: each with
  * the level its live money needs, as LEVEL_NEEDED gives it (else L2); `level-needed-wrong` lists payments_out at L0. */
 const B30_CAPABILITIES = [
@@ -442,6 +446,10 @@ const MEMBER_STATES = new Set(['AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', '
 interface ReportQuarter { consideration_usd_micros: number; activities: number; fees_usd_micros: number; taxes_withheld_usd_micros: number }
 /** B32.98 — one platform-report file written (Lens platformreport.Run). */
 interface ReportRun { id: string; year: number; funding: string; format: string; generated_at: string; operator: string; rows: number; sha256: string }
+/** B41.85 — Lens's age ratings, mildest first, and its content labels (market/content.go). */
+const AGE_RATINGS = ['all', '13+', '16+', '18+']
+const CONTENT_LABELS = ['adult', 'violence', 'medical_advice', 'financial_advice', 'legal_advice']
+
 /** B32.90 — Lens's controlled list of what a listing can do (market_capabilities, migration 0219), in its order. */
 const MARKET_CAPABILITIES = ['summarize', 'extract', 'translate', 'classify', 'code-review', 'sql', 'legal', 'finance', 'write', 'research', 'data-analysis', 'customer-support']
 
@@ -492,6 +500,8 @@ export class Bank {
   private readonly passkeys = new Map<string, { credential_id: string; name: string; created_at: string }[]>()
   /** B30.126 — each passkey's public key (SPKI, base64url), by credential id, which a payee's confirmation is verified with. */
   private readonly passkeyKeys = new Map<string, string>()
+  /** B50.38 — Lens B55.1: an unsigned second passkey waits here, signing nothing, until a key the workspace has lets it in. */
+  private readonly enrolments = new Map<string, { id: string; ws: string; kind: string; name: string; code: string; status: string; created_at: string; expires_at: string }>()
   private readonly reports: Report[] = []
   private readonly accounts = new Map<string, ConnectAccount>()
   private readonly payouts: Payout[] = []
@@ -502,6 +512,9 @@ export class Bank {
   private readonly cardAuths: CardAuth[] = []
   // B34.4
   private readonly grants: Grant[] = []
+  // B41.85 — each workspace's content filter, and the listings it blocked as `${ws}|${listing}`.
+  private readonly contentFilters = new Map<string, { max_age_rating: string; blocked_labels: string[]; updated_at: string }>()
+  private readonly blocked = new Set<string>()
   private readonly lineage: Edge[] = []
   private readonly licences: StubLicence[] = []
   private readonly portfolios: Portfolio[] = []
@@ -875,6 +888,16 @@ export class Bank {
   }
 
   /** B32.85 — what one agent holds, as its postings sum. */
+  /** B41.147 — whether two workspaces share a card, as the trust desk recorded it (a room's objection panel is drawn apart). */
+  cardLinked(a: string, b: string): boolean {
+    return this.trustDesk.linked(a, b)
+  }
+
+  /** B40.23 — whether a workspace's owner passed the identity check (L2), as Lens economy.IdentityChecked reads a synthetic one. */
+  identityChecked(ws: string): boolean {
+    return this.verification.levels(ws).level >= 'L2'
+  }
+
   agentBalance(agentID: string): number {
     return this.balance(`agent:${agentID}`)
   }
@@ -1285,7 +1308,8 @@ export class Bank {
   /** B32.78 — a licence as Lens answers it: its uses covered, never the key that bought it. */
   private licenceOut(x: StubLicence): object {
     const { key: _k, ...out } = x
-    return { ...out, terms: LICENCE_TERMS[x.licence], uses_covered: this.uses.filter((u) => u.licence_id === x.id).length }
+    // B41.176 — idle needs 30 days unused, so no licence the stub holds is; fresh-licence-idle marks every one idle.
+    return { ...out, terms: LICENCE_TERMS[x.licence], uses_covered: this.uses.filter((u) => u.licence_id === x.id).length, idle: this.broken('fresh-licence-idle') }
   }
 
   private listingOut(l: Listing, viewer: string): object {
@@ -1304,7 +1328,7 @@ export class Bank {
     if (this.discoveryRoute(res, path, url, viewer)) return true
     if (path === '/v1/marketplace/listings') {
       const kind = url.searchParams.get('kind') ?? ''
-      json(res, 200, { listings: [...this.listings.values()].filter((l) => l.visibility === 'public' && this.visible(l, viewer) && (kind === '' || l.kind === kind))
+      json(res, 200, { listings: [...this.listings.values()].filter((l) => l.visibility === 'public' && this.visible(l, viewer) && this.contentShown(l, viewer, true) && (kind === '' || l.kind === kind))
         .map((l) => { const { artifact: _a, changelog: _c, ...rest } = l; return rest }) })
       return true
     }
@@ -1321,7 +1345,7 @@ export class Bank {
     const m = /^\/v1\/marketplace\/listings\/([^/]+)$/.exec(path)
     if (m === null) return false
     const l = this.listings.get(m[1])
-    if (l === undefined || !this.visible(l, viewer)) return json(res, 404, { error: 'market: no such listing' }), true
+    if (l === undefined || !this.visible(l, viewer) || !this.contentShown(l, viewer, false)) return json(res, 404, { error: 'market: no such listing' }), true
     // B32.100 — each offer also in the reader's currency (Lens B32.51): ?currency=, or that of its declared country.
     const shown = this.tax.showPrices(viewer, l.offers ?? [], url.searchParams.get('currency') ?? '')
     if (typeof shown === 'string') return json(res, 400, { error: shown }), true
@@ -1361,7 +1385,7 @@ export class Bank {
       // Words match a listing whose title or description holds any of them, as Lens's text search does.
       const words = (q.get('q') ?? '').toLowerCase().split(/\s+/).filter((w) => w !== '')
       const hits = [...this.listings.values()]
-        .filter((l) => l.visibility === 'public' && l.review_status === 'approved' && ((q.get('kind') ?? '') === '' || l.kind === q.get('kind')))
+        .filter((l) => l.visibility === 'public' && l.review_status === 'approved' && this.contentShown(l, viewer, true) && ((q.get('kind') ?? '') === '' || l.kind === q.get('kind')))
         .filter((l) => words.length === 0 || words.some((w) => `${l.title} ${l.description}`.toLowerCase().includes(w)))
         .filter((l) => cap === '' || this.broken('search-capability') || (l.capabilities ?? []).includes(cap))
         .map((l) => ({ l, price: this.perUse(l) }))
@@ -1787,7 +1811,7 @@ export class Bank {
     if (path === '/v1/wallets/capabilities') {
       const b30 = (this.broken('b30-capability-gone') ? B30_CAPABILITIES.filter((c) => c.capability !== 'fx') : B30_CAPABILITIES)
         .map((c) => (c.capability === 'payments_out' && this.broken('level-needed-wrong') ? { ...c, level_needed: 'L0' } : c))
-      return json(res, 200, { capabilities: [...CAPABILITIES, CARD_CAPABILITY, ...b30] }), true
+      return json(res, 200, { capabilities: [...CAPABILITIES, CARD_CAPABILITY, ROOM_EQUITY_CAPABILITY, ...b30] }), true
     }
     let m = /^\/v1\/wallets\/([^/]+)$/.exec(path)
     if (m !== null) {
@@ -1962,6 +1986,20 @@ export class Bank {
     const paid = this.payouts.filter((p) => p.ws === ws).reduce((s, p) => s + p.gross_usd_micros, 0)
     return { lifetime: rows.filter((r) => r.kind === 'sale').reduce((s, r) => s + r.use.price_ulxc / ULXC_PER_USD_MICRO, 0), refunded: share(reversed),
       available: Math.max(share(rows) - share(reversed) - paid, 0), paid }
+  }
+
+  /**
+   * B41.85 — whether `viewer`'s content filter shows `l` (Lens market.contentShown): rated no older than its max_age_rating
+   * and carrying no label it hides, and with `blocks` not one it blocked; its own always. STUB_BREAK=family-filter ignores
+   * the age rating.
+   */
+  private contentShown(l: Listing, viewer: string, blocks: boolean): boolean {
+    if (l.workspace_id === viewer) return true
+    const f = this.contentFilters.get(viewer)
+    const rank = (r: string) => AGE_RATINGS.indexOf(r)
+    if (f !== undefined && !this.broken('family-filter') && rank(l.age_rating ?? '18+') > rank(f.max_age_rating)) return false
+    if (f !== undefined && (l.content_labels ?? []).some((x) => f.blocked_labels.includes(x))) return false
+    return !(blocks && this.blocked.has(`${viewer}|${l.id}`))
   }
 
   /** Whether `viewer` may see listing `l`: held and taken-down listings are their owner's alone. */
@@ -2397,7 +2435,14 @@ export class Bank {
       const keys = this.passkeys.get(ws.id) ?? []
       if ((keys.length > 0 || this.devices.any(ws.id)) && !this.broken('enrol-unsigned')) {
         const challengeOf = (cdj: string | undefined) => { try { return String((JSON.parse(Buffer.from(cdj ?? '', 'base64url').toString()) as { challenge?: unknown }).challenge ?? '') } catch { return '' } }
-        if (assertion === undefined) return json(res, 403, { error: 'economy: this workspace signs with a passkey or the phone app: sign the new key with one it has' }), true
+        if (assertion === undefined) {
+          const waiting = [...this.enrolments.values()].filter((e) => e.ws === ws.id && e.status === 'waiting')
+          if (waiting.length >= 3) return json(res, 409, { error: 'economy: three new keys already wait to join this workspace — approve or decline one first' }), true
+          const e = { id: `enr_${randomBytes(8).toString('hex')}`, ws: ws.id, kind: 'passkey', name, code: randomBytes(3).toString('hex').toUpperCase(), status: 'waiting',
+            created_at: now, expires_at: new Date(Date.now() + 10 * 60_000).toISOString() }
+          this.enrolments.set(e.id, e)
+          return json(res, 202, { enrolment: { id: e.id, code: e.code, expires_at: e.expires_at } }), true
+        }
         const own = challengeOf(client_data_json)
         const signedOver = assertion.device_id !== undefined ? assertion.challenge ?? '' : challengeOf(assertion.client_data_json)
         const by = assertion.device_id !== undefined ? this.devices.refused(ws.id, assertion)
@@ -2415,6 +2460,13 @@ export class Bank {
       return json(res, 200, { challenge: challenge(), allow_credentials: (this.passkeys.get(ws.id) ?? []).map((k) => k.credential_id) }), true
     }
     if (rest === '/agents/passkeys') return json(res, 200, { passkeys: this.passkeys.get(ws.id) ?? [] }), true
+    if ((m = /^\/agents\/keys\/enrolments\/([^/]+)(\/decline)?$/.exec(rest)) !== null && (method === 'GET' || (m[2] !== undefined && method === 'POST'))) {
+      const e = this.enrolments.get(m[1] ?? '')
+      if (e?.ws !== ws.id || (m[2] !== undefined && e.status !== 'waiting')) return json(res, 404, { error: 'economy: no such key waiting to join this workspace' }), true
+      if (m[2] !== undefined) e.status = 'declined'
+      const { ws: _, ...shown } = e
+      return json(res, 200, shown), true
+    }
     if (rest === '/agents/push/public-key') return json(res, 404, { error: 'economy: web push is not configured' }), true
     if (rest === '/agents/push/subscriptions' && (method === 'POST' || method === 'DELETE')) return json(res, 404, { error: 'economy: web push is not configured' }), true
     // B34.4 — Lens's rule templates, and one applied over an agent's rules whole.
@@ -2710,7 +2762,10 @@ export class Bank {
       }
       const caps = this.checkCapabilities(b.capabilities)
       if (typeof caps === 'string') return json(res, 400, { error: caps }), true
-      const l: Listing = { id: id('lst_'), workspace_id: ws.id, kind: b.kind ?? 'prompt', title: b.title, description: b.description ?? '', capabilities: caps,
+      const rating = b.age_rating || '18+'
+      if (!AGE_RATINGS.includes(rating)) return json(res, 400, { error: 'market: invalid listing: age_rating must be all, 13+, 16+ or 18+' }), true
+      if ((b.content_labels ?? []).includes('adult') && rating !== '18+') return json(res, 400, { error: 'market: invalid listing: a listing labelled adult is rated 18+' }), true
+      const l: Listing = { age_rating: rating, content_labels: [...new Set(b.content_labels ?? [])].sort(), id: id('lst_'), workspace_id: ws.id, kind: b.kind ?? 'prompt', title: b.title, description: b.description ?? '', capabilities: caps,
         price_per_use_ulxc: b.price_per_use_ulxc ?? 0, visibility: b.visibility ?? 'public', latest_version: 1, created_at: now, updated_at: now,
         review_status: 'approved', artifact: b.artifact, changelog: b.changelog ?? '' }
       // Lens's scan names the phrases it read as an injection (market/scan.go), on the version it held.
@@ -2734,6 +2789,25 @@ export class Bank {
     }
     if (rest === '/marketplace/listings' && method === 'GET') {
       return json(res, 200, { listings: [...this.listings.values()].filter((l) => l.workspace_id === ws.id).map((l) => this.listingOut(l, ws.id)) }), true
+    }
+    // B41.85 — the workspace's content filter (18+ and nothing hidden until it sets one), and its blocks.
+    if (rest === '/marketplace/content-filter' && (method === 'GET' || method === 'PUT')) {
+      if (method === 'PUT') {
+        const b = await this.body<{ max_age_rating?: string; blocked_labels?: string[] }>(req)
+        if (!AGE_RATINGS.includes(b.max_age_rating ?? '')) return json(res, 400, { error: 'market: invalid listing: age_rating must be all, 13+, 16+ or 18+' }), true
+        this.contentFilters.set(ws.id, { max_age_rating: b.max_age_rating!, blocked_labels: [...new Set(b.blocked_labels ?? [])].sort(), updated_at: now })
+      }
+      const f = this.contentFilters.get(ws.id)
+      return json(res, 200, { max_age_rating: f?.max_age_rating ?? '18+', blocked_labels: f?.blocked_labels ?? [],
+        blocked_listings: [...this.blocked].filter((k) => k.startsWith(`${ws.id}|`)).map((k) => k.slice(ws.id.length + 1)).reverse(),
+        age_ratings: AGE_RATINGS, content_labels: CONTENT_LABELS, ...(f === undefined ? {} : { updated_at: f.updated_at }) }), true
+    }
+    if ((m = /^\/marketplace\/blocked-listings\/([^/]+)$/.exec(rest)) !== null && (method === 'PUT' || method === 'DELETE')) {
+      const l = this.listings.get(m[1])
+      if (method === 'PUT' && (l === undefined || !this.visible(l, ws.id))) return json(res, 404, { error: 'market: not found' }), true
+      if (method === 'PUT') this.blocked.add(`${ws.id}|${m[1]}`)
+      else this.blocked.delete(`${ws.id}|${m[1]}`)
+      return res.writeHead(204).end(), true
     }
     // B34.4 — a listing's owner gives it a version, its offers and its remix terms; anyone may remix one that allows it.
     // B32.90 — the collections a workspace curates: made, replaced and deleted; a collection lists public, approved listings.

@@ -24,6 +24,7 @@ function mockBff() {
     const json = (v: unknown, status = 200) =>
       new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/pricing') return json({ fees: { market_take_bps: 1500 } })
     if (url === '/api/models') return json([{ id: 'gpt-4o', provider: 'openai', display_name: 'GPT-4o', input_per_1m: 2.5, output_per_1m: 10 }])
     if (url === '/api/marketplace/listings' && method === 'POST') {
       const artifact = body.artifact as Record<string, string>
@@ -133,6 +134,9 @@ describe('the marketplace', () => {
     expect(screen.getByText('Whoever uses it fills in: text.')).toBeTruthy()
     await screen.findByRole('option', { name: 'GPT-4o' })
     fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'gpt-4o' } })
+    // B41.85 — no listing publishes until its seller chooses its age rating.
+    expect(screen.getByRole('button', { name: 'Publish' })).toHaveProperty('disabled', true)
+    fireEvent.click(screen.getByRole('button', { name: 'Everyone' }))
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
     expect(await screen.findByRole('heading', { name: 'Translate to French' })).toBeTruthy()
 
@@ -155,16 +159,30 @@ describe('the marketplace', () => {
     await waitFor(() => expect(screen.getByTestId('market-bill-total').textContent).toBe('$0.05'))
     expect(screen.getByRole('link', { name: 'Translate to French' })).toBeTruthy()
 
-    // B32.9 — the seller is told the terms: 85% of the price to them, 15% to Talyvor, and no first-million tier.
+    // B32.9, B56.4 — the seller is told the served terms: 85% from the first sale, 15% to Talyvor, no first-million tier.
     state.as = 'ws_seller'
     await at('/marketplace/selling')
     await waitFor(() => expect(screen.getByTestId('market-pending').textContent).toBe('$0.04'))
     expect(screen.getByRole('link', { name: 'Translate to French' })).toBeTruthy()
-    const terms = screen.getByText(/earns you 85% of its price/)
+    const terms = await screen.findByTestId('selling-split')
     expect(terms.textContent?.replace(/\s+/g, ' ')).toBe(
-      'A buyer’s use, rental or purchase of your listing earns you 85% of its price once their bill is paid; Talyvor keeps 15%. Your own uses, and uses by a workspace linked to yours, earn nothing.',
+      'Sellers earn 85% of every paid use, rental and purchase, from the first sale; Talyvor keeps 15%. Your own uses, and uses by a workspace linked to yours, earn nothing.',
     )
     expect(document.body.textContent).not.toMatch(/first\s+million/)
+  })
+
+  // B56.4 — the split is read from the server: none stated, none printed.
+  it('prints no split on the Selling page when the server states no take', async () => {
+    mockBff()
+    const rest = vi.mocked(globalThis.fetch).getMockImplementation()!
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) =>
+      String(input) === '/api/pricing' ? new Response(JSON.stringify({}), { status: 200 }) : rest(input, init),
+    )
+    await at('/marketplace/selling')
+    await screen.findByRole('heading', { name: 'What your listings earned' })
+    await new Promise((done) => setTimeout(done, 50))
+    expect(document.body.textContent).not.toMatch(/\d+%/)
+    expect(screen.getByText(/Your own uses, and uses by a workspace linked to yours, earn nothing\./)).toBeTruthy()
   })
 
   it('a listing Lens refuses to publish says why, and stays unpublished', async () => {
@@ -172,6 +190,7 @@ describe('the marketplace', () => {
     await at('/marketplace/publish')
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Leaky' } })
     fireEvent.change(screen.getByLabelText(/^Template/), { target: { value: 'use sk-live-123 for {{text}}' } })
+    fireEvent.click(screen.getByRole('button', { name: '18 and over' }))
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
     expect((await screen.findByRole('alert')).textContent).toBe(
       'The listing cannot be published: it carries a secret (an API key).',

@@ -83,6 +83,7 @@ without.
 | `BFF_CONNECT_TOKEN_PER_CONNECTION_MINUTE` | `10` | Connect: refreshes per connection per minute |
 | `BFF_CONNECT_MCP_PER_IP_MINUTE` | `600` | Connect: `/mcp` requests per IP per minute |
 | `BFF_CONNECT_MCP_PER_CONNECTION_MINUTE` | `120` | Connect: `/mcp` requests per connection per minute |
+| `BFF_CONNECT_REDIRECT_ORIGINS` | `https://claude.ai,https://chatgpt.com` | Connect (B54.11): the `scheme://host` origins open registration accepts as a `redirect_uri`, comma-separated, besides loopback http; set, it replaces the list; any other redirect is refused at `/oauth/register` |
 | `OPERATOR_SUBS` | — | OIDC `sub`s that may read every tenant. Unset means **nobody** |
 | `TRACK_BASE_URL` | — | optional pair with the secret below; `oidc` only |
 | `TRACK_GATEWAY_SECRET` | — | must equal Track's `GATEWAY_AUTH_SECRET` |

@@ -2,6 +2,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../App'
 import { historyKey } from './history'
+import { primaryActions, statusWithoutWords, tangerineOffenders } from '../../pocketRules'
 
 // B29.10 — chat in the brand: the composer on raised with a line-strong border and the teal Send, the model
 // picker in the eyebrow style, questions and replies at 15/24 with code and numbers in IBM Plex Mono, and the
@@ -89,5 +90,12 @@ describe('chat in the brand (B29.10)', () => {
     expect(lines.parentElement).toHaveClass('bg-raised', 'rounded-card')
     expect(within(lines).getByText('From your agents’ statements')).toHaveClass('text-eyebrow', 'uppercase', 'text-label')
     expect(within(lines).getByRole('link', { name: /^Researcher: −1\.23 LXC/ })).toBeInTheDocument()
+
+    // B57.3 — Pocket's rules: Send is the one primary (ink) action, tangerine only for the brand and
+    // "your move", status colours always with words.
+    const main = document.querySelector('main')!
+    expect(primaryActions(main)).toEqual(['Send'])
+    expect(tangerineOffenders(main).map((e) => e.outerHTML)).toEqual([])
+    expect(statusWithoutWords(main).map((e) => e.outerHTML)).toEqual([])
   })
 })

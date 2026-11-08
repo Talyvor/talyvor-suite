@@ -398,7 +398,7 @@ function RoomPage() {
   // B32.54 — a member under the current terms is in the room: its conversation, contributions, runs and spec (Room.tsx).
   const inside = !asks
   const about = issueBackLink(r.description, window.location.origin)
-  const n = (i: number) => String(inside ? i + 5 : i).padStart(2, '0')
+  const n = (i: number) => String(inside ? i + 8 : i).padStart(2, '0')
   return (
     <>
       <Region
@@ -501,9 +501,7 @@ function RoomPage() {
               {members.map((m) => (
                 <li key={m.workspace_id}>
                   <Row label={m.role}>
-                    <span className="truncate font-figure text-body text-ink" title={m.workspace_id}>
-                      {m.workspace_id}
-                    </span>
+                    <span className="truncate text-body text-ink">{m.workspace_id === r.me?.workspace_id ? 'You' : m.workspace_name}</span>
                   </Row>
                 </li>
               ))}

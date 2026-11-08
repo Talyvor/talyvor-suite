@@ -230,3 +230,50 @@ describe('the audit cannot pass by rendering nothing', () => {
     expect(satisfiesFloor(currencyOnly, 'quantity')).toBe(false)
   })
 })
+
+// B57.3 — on a page held to Pocket's rules (pocketPending.ts), every numeral is tabular in
+// Pocket's faces: Figtree, or Bricolage Grotesque for money drawn 28px and larger. Mono goes.
+describe('Pocket: every numeral is tabular in Pocket’s faces', () => {
+  const pocket = (html: string) => frag(`<div data-design="pocket">${html}</div>`)
+  const onFace = (html: string) => figuresIn(pocket(html)).map((f) => f.onFace)
+
+  it('font-figure (Figtree, tabular) is the face, as today', () => {
+    expect(onFace('<span class="font-figure">$12.35</span>')).toEqual([true])
+  })
+
+  it('Figtree with tabular-nums is the face', () => {
+    expect(onFace('<span class="tabular-nums">1,240</span>')).toEqual([true])
+  })
+
+  it('IBM Plex Mono is not, even under a font-figure ancestor: the nearest face wins', () => {
+    expect(onFace('<div class="font-figure"><span class="font-mono">$12.35</span></div>')).toEqual([false])
+  })
+
+  it('a numeral in the plain sans, not tabular, is an offender', () => {
+    expect(onFace('<span class="text-ink">0.1</span>')).toEqual([false])
+  })
+
+  it('Bricolage Grotesque is the face for money drawn 28px and larger, tabular', () => {
+    expect(onFace('<span class="font-display text-figure tabular-nums">$1,240.00</span>')).toEqual([true])
+  })
+
+  it('Bricolage Grotesque is not the face for money under 28px', () => {
+    expect(onFace('<span class="font-display text-display-4 tabular-nums">$1,240.00</span>')).toEqual([false])
+  })
+
+  it('Bricolage Grotesque is not the face for a count, at any size', () => {
+    expect(onFace('<span class="font-display text-figure tabular-nums">1,240</span>')).toEqual([false])
+  })
+
+  it('Bricolage Grotesque without tabular figures is not the face', () => {
+    expect(onFace('<span class="font-display text-figure">$1,240.00</span>')).toEqual([false])
+  })
+
+  it('a heading is Bricolage Grotesque, so a count inside one is an offender', () => {
+    expect(onFace('<h2>3</h2>')).toEqual([false])
+  })
+
+  it('outside a Pocket page today’s rule still applies: font-figure anywhere up the tree', () => {
+    expect(figuresIn(frag('<div class="font-figure"><span class="font-mono">$12.35</span></div>')).map((f) => f.onFace)).toEqual([true])
+  })
+})
