@@ -1938,6 +1938,9 @@ async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: st
   ctx.evidence.push({ note: `Home at 390: total "${totalShown}", ${a.name} "${safeShown}"; Lens: ${book.allocated_ulxc} µLXC with agents, safe to spend ${safe?.safe_to_spend} µLXC` })
   if (safe === undefined) return `Lens lists no LXC safe to spend for ${a.name}`
   if (!totalShown.includes(shownLXC(book.allocated_ulxc))) return `Home's total reads "${totalShown}", not Lens's ${shownLXC(book.allocated_ulxc)} with agents`
+  // B57.7 — the total is a balance card's <Money>: dollars large first, LXC small after them.
+  const dollars = usdShown(shownLXC(book.allocated_ulxc), book.allocated_ulxc, ctx.env.usdPerLXC).split(' (')[0]
+  if (!totalShown.startsWith(`${dollars} `)) return `Home's total reads "${totalShown}", not ${dollars} first and its LXC after`
   if (!safeShown.includes(shownLXC(safe.safe_to_spend))) return `${a.name}'s safe to spend reads "${safeShown}", not Lens's ${shownLXC(safe.safe_to_spend)}`
   const link = page.locator(`a[href="/approvals#approval-${approvalID}"]`)
   if (approvalID === '' || (await link.count()) === 0) {
