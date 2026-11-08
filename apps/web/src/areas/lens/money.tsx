@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { queryOptions, useQuery } from '@tanstack/react-query'
 import { focusRing } from '@talyvor/ui'
 import { ApiError, UnreadableError, readable } from '../../lib/api'
+import { MONEY_ORDER } from '../../moneyOrder'
 import { formatULXC } from './agentBankApi'
 import { topupApi } from './topupApi'
 
@@ -65,17 +66,24 @@ export async function fetchFX(): Promise<FXRates> {
   return readable<FXRates>('/api/fx', await res.json(), { usd_per_eur: 'number', gbp_per_eur: 'number' })
 }
 
-/** An amount of money as a person reads it: 1.25 USD → "$1.25"; a non-zero amount under a cent → "<$0.01". */
-export function fiatText(amount: number, fiat: Fiat): string {
-  const fmt = new Intl.NumberFormat(fiat === 'USD' ? 'en-US' : 'en-GB', {
+/**
+ * B55.38 — the one formatter for an amount in a currency: dollars "$450.00" (en-US), pounds "£20.00" and
+ * euros "€20.00" (en-GB), never "US$". A minus leads.
+ */
+export function currencyText(amount: number, currency: string): string {
+  return new Intl.NumberFormat(currency === 'USD' ? 'en-US' : 'en-GB', {
     style: 'currency',
-    currency: fiat,
+    currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })
+  }).format(amount)
+}
+
+/** An amount of money as a person reads it: 1.25 USD → "$1.25"; a non-zero amount under a cent → "<$0.01". */
+export function fiatText(amount: number, fiat: Fiat): string {
   const abs = Math.abs(amount)
-  if (abs > 0 && abs < 0.005) return `<${fmt.format(0.01)}`
-  return fmt.format(abs)
+  if (abs > 0 && abs < 0.005) return `<${currencyText(0.01, fiat)}`
+  return currencyText(abs, fiat)
 }
 
 /**
@@ -124,30 +132,47 @@ export function useMoney(): (ulxc: number) => string | null {
 }
 
 /**
- * `12.5 LXC ($1.25)` — the LXC figure, its unit, and what it is in the person's currency. `sign` is
- * written before both figures; a negative amount carries its own minus into both.
+ * B55.38 — an LXC amount beside its value in the person's currency, in MONEY_ORDER's order:
+ * "$450.00 (4,500 LXC)"; LXC alone while no rate backs it (`fiat` null). `sign` is written before both
+ * figures; a negative amount carries its own minus into both.
  */
+export function lxcText(ulxc: number, fiat: string | null, sign: '' | '+' | '−' = ''): string {
+  const lxc = `${sign}${formatULXC(ulxc)}`
+  if (fiat === null) return lxc
+  const cash = `${ulxc < 0 ? '-' : sign}${fiat}`
+  return MONEY_ORDER === 'usd-first' ? `${cash} (${lxc})` : `${lxc} (${cash})`
+}
+
+/** lxcText for words a screen builds itself, at the rate the screen's <Lxc> figures use. */
+export function useLxcText(): (ulxc: number, sign?: '' | '+' | '−') => string {
+  const money = useMoney()
+  return (ulxc, sign = '') => lxcText(ulxc, money(Math.abs(ulxc)), sign)
+}
+
+/** `$1.25 (12.5 LXC)` — lxcText as a figure: the leading figure in ink, the one in brackets muted. */
 export function Lxc({ ulxc, sign = '' }: { ulxc: number; sign?: '' | '+' | '−' }) {
   const money = useMoney()
   const fiat = money(Math.abs(ulxc))
-  const minus = ulxc < 0 ? '-' : sign
   // B29.9 — the whole amount, unit and fiat included, is on the figure face: IBM Plex Mono, tabular figures.
-  return (
-    <span className="whitespace-nowrap font-figure">
+  const lxc = (
+    <>
       <span className="font-figure">
         {sign}
         {formatULXC(ulxc).replace(/ LXC$/, '')}
       </span>{' '}
       LXC
-      {fiat !== null ? (
-        <>
-          {' '}
-          <span className="font-figure text-muted" data-testid="fiat">
-            ({minus}
-            {fiat})
-          </span>
-        </>
-      ) : null}
+    </>
+  )
+  if (fiat === null) return <span className="whitespace-nowrap font-figure">{lxc}</span>
+  const cash = (
+    <span className="font-figure" data-testid="fiat">
+      {`${ulxc < 0 ? '-' : sign}${fiat}`}
+    </span>
+  )
+  const [first, second] = MONEY_ORDER === 'usd-first' ? [cash, lxc] : [lxc, cash]
+  return (
+    <span className="whitespace-nowrap font-figure">
+      {first} <span className="text-muted">({second})</span>
     </span>
   )
 }

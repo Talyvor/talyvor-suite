@@ -8,18 +8,13 @@ import { formatMinor } from './agentBankApi'
 import { Lxc, fiatText, lxcText } from './money'
 
 // B55.38 — one money format on the web: dollars as $450.00 everywhere, and dollars first beside LXC,
-// in the order src/moneyOrder.ts names. The mock lets one test flip that switch.
-
-const order = vi.hoisted(() => ({ value: 'usd-first' as 'usd-first' | 'lxc-first' }))
-vi.mock('../../moneyOrder', () => ({
-  get MONEY_ORDER() {
-    return order.value
-  },
-}))
+// in the order src/moneyOrder.ts names.
 
 const M = 1_000_000
 
-function renderLxc(ulxc: number, peg: number | null) {
+type Kit = { Lxc: typeof Lxc; QueryClient: typeof QueryClient; QueryClientProvider: typeof QueryClientProvider }
+
+function renderLxc(ulxc: number, peg: number | null, kit: Kit = { Lxc, QueryClient, QueryClientProvider }) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     if (String(input) === '/api/lxc/topup-options' && peg !== null)
       return new Response(JSON.stringify({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: peg }), {
@@ -28,15 +23,15 @@ function renderLxc(ulxc: number, peg: number | null) {
       })
     return new Response('null', { status: 404 })
   })
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(createElement(QueryClientProvider, { client: qc }, createElement('p', { 'data-testid': 'amount' }, createElement(Lxc, { ulxc }))))
+  const qc = new kit.QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(createElement(kit.QueryClientProvider, { client: qc }, createElement('p', { 'data-testid': 'amount' }, createElement(kit.Lxc, { ulxc }))))
   return () => screen.getByTestId('amount').textContent
 }
 
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
-  order.value = 'usd-first'
+  vi.doUnmock('../../moneyOrder')
 })
 
 describe('one currency formatter', () => {
@@ -72,9 +67,12 @@ describe('dollars first beside LXC', () => {
 
   it('flips every amount with MONEY_ORDER', async () => {
     expect(lxcText(4500 * M, '$450.00')).toBe('$450.00 (4,500 LXC)')
-    order.value = 'lxc-first'
-    expect(lxcText(4500 * M, '$450.00')).toBe('4,500 LXC ($450.00)')
-    const text = renderLxc(4500 * M, 0.1)
+    vi.resetModules()
+    vi.doMock('../../moneyOrder', () => ({ MONEY_ORDER: 'lxc-first' }))
+    const flipped = await import('./money')
+    const rq = await import('@tanstack/react-query')
+    expect(flipped.lxcText(4500 * M, '$450.00')).toBe('4,500 LXC ($450.00)')
+    const text = renderLxc(4500 * M, 0.1, { Lxc: flipped.Lxc, QueryClient: rq.QueryClient, QueryClientProvider: rq.QueryClientProvider })
     await waitFor(() => expect(text()).toBe('4,500 LXC ($450.00)'))
   })
 })

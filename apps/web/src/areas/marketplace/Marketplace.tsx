@@ -20,6 +20,7 @@ import {
 } from "@talyvor/ui";
 import { Region, RegionScreen } from "../../components/Region";
 import { formatULXC } from "../lens/agentBankApi";
+import { Lxc } from "../lens/money";
 import { formatUSD, formatWhen } from "../lens/format";
 import { parseShare } from "../rooms/roomsApi";
 import { CollectionPage, Discover } from "./Discover";
@@ -802,7 +803,7 @@ export function PayoutsCard({
             </span>{" "}
             is now{" "}
             <span className="font-figure">
-              {formatULXC(credits.data.credits_ulxc ?? 0)}
+              <Lxc ulxc={credits.data.credits_ulxc ?? 0} />
             </span>{" "}
             in your workspace’s credits.
           </Note>
@@ -844,7 +845,7 @@ export function PayoutsCard({
                 </td>
                 <td className="px-gutter py-2 text-right font-figure">
                   {h.method === "credits"
-                    ? formatULXC(h.credits_ulxc ?? 0)
+                    ? <Lxc ulxc={h.credits_ulxc ?? 0} />
                     : formatUSD(h.net_usd_micros)}
                 </td>
               </tr>

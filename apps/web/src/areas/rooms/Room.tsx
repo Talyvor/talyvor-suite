@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Input, NavIcon, cn, focusRing } from '@talyvor/ui'
 import { Region } from '../../components/Region'
-import { formatULXC } from '../lens/agentBankApi'
+import { Lxc } from '../lens/money'
 import { formatWhen } from '../lens/format'
 import { ARTIFACT, artifactOf } from '../marketplace/Marketplace'
 import { KINDS, type ListingKind, kindLabel, marketApi, parsePrice, variablesNamedIn } from '../marketplace/marketApi'
@@ -71,11 +71,11 @@ export function RoomBudget({ wallet }: { wallet: RoomWallet }) {
       <span className="font-figure text-eyebrow uppercase text-label">The room’s budget this month</span>
       <span className="flex flex-wrap items-baseline gap-x-2">
         <span className="font-figure text-title text-ink" data-testid="room-budget-spent">
-          {formatULXC(spent)}
+          <Lxc ulxc={spent} />
         </span>
         {limit > 0 ? (
           <span className="text-body text-muted">
-            spent of <span className="font-figure text-ink">{formatULXC(limit)}</span>
+            spent of <span className="font-figure text-ink"><Lxc ulxc={limit} /></span>
           </span>
         ) : (
           <span className="text-body text-muted">spent · no monthly limit set</span>
@@ -94,7 +94,7 @@ export function RoomBudget({ wallet }: { wallet: RoomWallet }) {
         </span>
       ) : null}
       <span className="text-caption text-muted">
-        Balance <span className="font-figure text-ink">{formatULXC(wallet.balance_ulxc)}</span> ·{' '}
+        Balance <span className="font-figure text-ink"><Lxc ulxc={wallet.balance_ulxc} /></span> ·{' '}
         {wallet.may_spend ? 'You may run things on the room.' : (wallet.why_not ?? 'You may not spend the room’s money.')}
       </span>
     </div>

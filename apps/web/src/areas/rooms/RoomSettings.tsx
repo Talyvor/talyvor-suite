@@ -4,7 +4,8 @@ import { Link, useParams } from 'react-router-dom'
 import { Button, Input, Pill, Row, type PillStatus, inlineLink } from '@talyvor/ui'
 import { Region } from '../../components/Region'
 import { Approvals, Rules, rulesKey } from '../lens/AgentBank'
-import { type Agent, type AgentRules, agentBankApi, formatULXC } from '../lens/agentBankApi'
+import { type Agent, type AgentRules, agentBankApi } from '../lens/agentBankApi'
+import { useLxcText } from '../lens/money'
 import { formatWhen } from '../lens/format'
 import { parsePrice } from '../marketplace/marketApi'
 import { Card, Note, pressed, readFailure, selectClass } from '../marketplace/parts'
@@ -371,16 +372,17 @@ function Invites({ room }: { room: RoomDetail }) {
 
 // ── The room's budget ──────────────────────────────────────────────────────────────────────────────
 
-function budgetMaxText(w: RoomWallet): string {
+function budgetMaxText(w: RoomWallet, lxc: (ulxc: number) => string): string {
   return w.budget_max_ulxc < 0
     ? 'Your plan allows a room any budget.'
-    : `Your plan allows a room a budget of at most ${formatULXC(w.budget_max_ulxc)} a month.`
+    : `Your plan allows a room a budget of at most ${lxc(w.budget_max_ulxc)} a month.`
 }
 
 function Budget({ room, owner }: { room: RoomDetail; owner: boolean }) {
   const w = room.wallet
   // The rules Agent Wallets' editor reads and saves: the budget shown is the monthly limit as last saved.
   const rules = useQuery<AgentRules>({ queryKey: rulesKey(w?.agent_id ?? ''), queryFn: () => agentBankApi.rules(w!.agent_id), enabled: owner && !!w })
+  const lxc = useLxcText()
   if (!w) {
     return (
       <Region index="03" label="The room’s budget" className="flex max-w-2xl flex-col gap-3">
@@ -393,7 +395,7 @@ function Budget({ room, owner }: { room: RoomDetail; owner: boolean }) {
   return (
     <Region index="03" label="The room’s budget" className="flex max-w-2xl flex-col gap-3">
       <p className="text-body text-muted">
-        The room has a wallet of its own, “{w.name}”. Its monthly limit is the room’s budget. {budgetMaxText(w)}
+        The room has a wallet of its own, “{w.name}”. Its monthly limit is the room’s budget. {budgetMaxText(w, lxc)}
       </p>
       <RoomBudget wallet={shown} />
       {owner ? (

@@ -1,6 +1,5 @@
 import { ApiError, getJSON, readable } from "../../lib/api";
 import { isSessionExpired } from "../../lib/productState";
-import { formatULXC } from "../lens/agentBankApi";
 
 // marketApi.ts — B20.3: the marketplace screens' reads and writes, through the BFF's /api/marketplace
 // routes (apps/bff/marketplace.go) to Lens's catalog (B20.1) and its uses and earnings (B20.2).
@@ -1017,8 +1016,8 @@ export function formatDisplay(d: PriceDisplay): string {
 }
 
 /** A listing's price, in words. */
-export function priceText(micros: number): string {
-  return micros > 0 ? `${formatULXC(micros)} per use` : "Free";
+export function priceText(micros: number, lxc: (ulxc: number) => string): string {
+  return micros > 0 ? `${lxc(micros)} per use` : "Free";
 }
 
 /** `0.5` → 500,000 µLXC; empty is free (0). Null for anything that is not an amount with at most six decimals. */
