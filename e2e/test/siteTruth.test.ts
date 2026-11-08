@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { itemsFor } from '../src/filing.ts'
 import type { ReportedRun } from '../src/report.ts'
-import { FOOTER_LINKS, HEADER_LINKS, PUBLIC_PAGES, type PageRead, type SiteRead, siteFaults } from '../src/siteTruth.ts'
+import { FOOTER_LINKS, HEADER_LINKS, PRIVACY_RECORDS, PUBLIC_PAGES, type PageRead, type SiteRead, siteFaults } from '../src/siteTruth.ts'
 
 const NONE = 'Cookies\nOur public pages set no advertising or analytics cookies, and send nothing to Meta.'
 const BANNER = "Cookies\nOur public pages use one advertising cookie, Meta's, to measure our ads, and only if you accept it in the cookie banner."
@@ -11,7 +11,7 @@ const clean = (): SiteRead => ({
   cardPayments: 'test',
   pages: PUBLIC_PAGES.map((path): PageRead => ({
     path, header: [...HEADER_LINKS], footer: [...FOOTER_LINKS.slice(0, 4), 'mailto:hello@talyvor.com'],
-    text: path === '/marketing' ? 'No invitation needed. Get started' : 'Plans and prices',
+    text: path === '/marketing' ? 'No invitation needed. Get started' : path === '/privacy' ? PRIVACY_RECORDS.join(' ') : 'Plans and prices',
     emailBox: false, chooseButtons: [], cookieBanner: false,
   })),
   privacyCookies: NONE,
@@ -41,6 +41,14 @@ describe('the site-truth oracle (B51.4)', () => {
       '/pricing still shows one "Services and compute" row',
       '/pricing still shows one "SSO and audit export" row',
     ])
+  })
+
+  // B56.3: no investing on the legal pages or the documentation, and Privacy names every wallet record.
+  it('catches investing on a public page and a wallet record Privacy leaves out', () => {
+    expect(planted((r) => {
+      at(r, '/terms').text += ' Investing is simulated: simulated US dollars at real prices'
+      at(r, '/privacy').text = at(r, '/privacy').text.replace('Mandates.', '')
+    })).toEqual(['/privacy leaves out the "Mandates." record', '/terms puts investing on a public page'])
   })
 
   it('catches the waitlist on /marketing while sign-up is open, and only then', () => {

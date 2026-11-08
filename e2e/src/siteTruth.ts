@@ -5,6 +5,8 @@
 //   /pricing shows "Top up any amount" or a Choose button while card_payments is there and not "live";
 //   /pricing leaves out a plan's platform fee as /api/pricing serves it, or merges Services with Compute or sign-on with
 //     audit export in one row (B56.2);
+//   /terms, /privacy or /documentation puts investing on a public page, or Privacy leaves out a record Agent Wallets
+//     keeps (B56.3);
 //   a route under "No key needed" on /documentation answers 401 to a caller with no key;
 //   Privacy's Cookies section disagrees with the pages: a cookie banner or a request to connect.facebook.net while it says
 //     there are none, or no banner on any page while it describes one;
@@ -24,6 +26,10 @@ export const FOOTER_LINKS = ['/privacy', '/terms', '/pricing', '/documentation',
 
 /** The app's catch-all for an address it has no page at (apps/web App.tsx). */
 export const NOT_FOUND = 'Nothing at this address'
+
+/** B56.3: what no public page says while investing is not offered, and the records Privacy names. */
+const INVESTING = /investing is simulated|simulated portfolio|simulated order|no order reaches a market/i
+export const PRIVACY_RECORDS = ['Verification.', 'Saved payees.', 'Invoices.', 'Mandates.', 'Payout details.', 'Currency accounts.']
 
 const FACEBOOK = 'connect.facebook.net'
 const SETTLE_MS = 20_000
@@ -96,6 +102,11 @@ export function siteFaults(r: SiteRead): string[] {
     }
   }
 
+  for (const p of r.pages) {
+    if (['/terms', '/privacy', '/documentation'].includes(p.path) && INVESTING.test(p.text)) wrong.push(`${p.path} puts investing on a public page`)
+    if (p.path === '/privacy') for (const name of PRIVACY_RECORDS) if (!p.text.includes(name)) wrong.push(`/privacy leaves out the "${name}" record`)
+  }
+
   for (const n of r.noKey) if (n.status === 401) wrong.push(`${n.path}, under "No key needed" on /documentation, answers 401 without a key`)
 
   const saysNone = /no advertising or analytics cookies/i.test(r.privacyCookies)
@@ -154,8 +165,8 @@ export function siteTruth(): Scenario {
     id: 'site-truth',
     owner: 'talyvor-suite',
     feature: 'Public site',
-    items: ['B51.1', 'B51.4', 'B56.2'],
-    title: 'the public pages, read signed out, agree with the product: no waitlist while sign-up is open, no top-up or Choose while card payments are not live, each plan\'s served platform fee on /pricing, ' +
+    items: ['B51.1', 'B51.4', 'B56.2', 'B56.3'],
+    title: 'the public pages, read signed out, agree with the product: no waitlist while sign-up is open, no top-up or Choose while card payments are not live, each plan\'s served platform fee on /pricing, no investing and every wallet record on the legal pages, ' +
       '"No key needed" routes answer without a key, Privacy\'s Cookies section matches the pages, the shared header and footer, and no link to a 404 or the not-found page',
     run: async (ctx) => {
       const browser = ctx.app.context.browser()
