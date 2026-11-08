@@ -1390,11 +1390,12 @@ export function brandIcons(): Scenario {
         }
         for (const icon of manifest.icons ?? []) await want(icon.src, 'image/png', true)
         if ((manifest.icons ?? []).length !== 3) missing.push(`three manifest icons (found ${(manifest.icons ?? []).length})`)
-        if (manifest.theme_color !== '#060A12' || manifest.background_color !== '#060A12') missing.push('manifest colours #060A12')
-        if (!/<meta name="theme-color" content="#060A12"/.test(html)) missing.push('theme-color #060A12')
+        // B57.59, B57.79: the logo kit's ink for an installed app, Pocket's dark page for the browser's bar.
+        if (manifest.theme_color !== '#111216' || manifest.background_color !== '#111216') missing.push('manifest colours #111216')
+        if (!/<meta name="theme-color" content="#0F1013"/.test(html)) missing.push('theme-color #0F1013')
         ctx.evidence.push({ note: `${seen.join('; ')}; manifest theme ${manifest.theme_color} background ${manifest.background_color}` })
         return missing.length === 0
-          ? { pass: true, detail: 'favicon (.ico and .svg), apple-touch-icon and three manifest icons all load; #060A12 throughout' }
+          ? { pass: true, detail: 'favicon (.ico and .svg), apple-touch-icon and three manifest icons all load; the kit\'s colours throughout' }
           : { pass: false, detail: `brand package is missing: ${missing.join(', ')}` }
       } finally {
         await page.close()
@@ -1403,52 +1404,51 @@ export function brandIcons(): Scenario {
   }
 }
 
-/** B29.3 — the logo is the drawn mark and wordmark, not a CSS tile and a typed name: on the sidebar,
- *  sign-in, /marketing, /pricing and /documentation, in the dark theme and the light one. Each
- *  theme's fills are read from the browser, so a logo that does not follow the theme fails. */
+/** B29.3, B57.79 — the logo is the kit Nick chose on 4 Nov 2026, drawn from its own files: on the sidebar,
+ *  sign-in, /marketing, /pricing and /documentation, in the dark theme and the light one. Each theme must
+ *  show only that version's file, loaded, and no page may still ask for today's brand-v4 logo. */
 export function brandLogo(): Scenario {
-  // The brand-v4 files' colours as the browser reports them: Frost + Teal tip on dark, Obsidian on light.
-  const want = {
-    dark: { mark: 'rgb(230, 238, 247)', wordmark: 'rgb(250, 251, 252)' },
-    light: { mark: 'rgb(6, 10, 18)', wordmark: 'rgb(6, 10, 18)' },
-  }
   return {
     id: 'brand-logo',
     owner: 'talyvor-suite',
-    title: 'the sidebar, sign-in and public headers carry the drawn mark and wordmark in both themes',
+    items: ['B57.79'],
+    title: 'the sidebar, sign-in and public headers carry the chosen logo, its own version in each theme',
     run: async (ctx) => {
       const seen: string[] = []
       const wrong: string[] = []
-      // B51.1: /marketing shares the public header with /pricing and /documentation, so it carries the
-      // same drawn mark and wordmark (it no longer shows B29.4's lockup file).
       for (const path of ['/', '/signin', '/marketing', '/pricing', '/documentation']) {
         const page = await ctx.app.tab(path)
         try {
-          await page.locator('svg[data-brand="wordmark"]').first().waitFor({ state: 'visible' })
+          await page.locator('img[data-brand="logo"]').first().waitFor({ state: 'attached' })
           for (const theme of ['dark', 'light'] as const) {
             const got = await page.evaluate((t) => {
               document.documentElement.dataset.theme = t
-              const fill = (sel: string) => {
-                const el = document.querySelector(`svg[data-brand="${sel}"] path`)
-                return el === null ? 'absent' : getComputedStyle(el).fill
-              }
-              const lockup = document.querySelector('svg[data-brand="wordmark"]')!.parentElement!.parentElement!
-              return { mark: fill('mark'), wordmark: fill('wordmark'), typed: /talyvor/i.test(lockup.textContent ?? '') }
+              const shown = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
+                .filter((i) => getComputedStyle(i).display !== 'none')
+                .map((i) => ({ src: new URL(i.src).pathname, loaded: i.complete && i.naturalWidth > 0 }))
+              const old = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
+                .map((i) => new URL(i.src, location.href).pathname)
+                .filter((s) => /\/brand\/svg\/(talyvor-|favicon)/.test(s))
+              return { shown, old }
             }, theme)
-            seen.push(`${path} ${theme}: mark ${got.mark}, wordmark ${got.wordmark}`)
-            if (got.mark !== want[theme].mark) wrong.push(`${path} ${theme} mark ${got.mark}`)
-            if (got.wordmark !== want[theme].wordmark) wrong.push(`${path} ${theme} wordmark ${got.wordmark}`)
-            if (got.typed) wrong.push(`${path} still types Talyvor beside the logo`)
+            seen.push(`${path} ${theme}: ${got.shown.map((g) => g.src).join(' ') || 'no logo'}`)
+            if (got.shown.length === 0) wrong.push(`${path} ${theme} shows no logo`)
+            for (const g of got.shown) {
+              // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
+              if (!new RegExp(`^/brand/logo/talyvor-[a-z-]+-on-${theme}\\.svg$`).test(g.src)) wrong.push(`${path} ${theme} shows ${g.src}`)
+              if (!g.loaded) wrong.push(`${path} ${theme} ${g.src} did not load`)
+            }
+            if (got.old.length > 0) wrong.push(`${path} still asks for ${got.old.join(', ')}`)
           }
         } catch (e) {
-          wrong.push(`${path}: no drawn wordmark (${(e as Error).message.split('\n')[0]})`)
+          wrong.push(`${path}: no logo (${(e as Error).message.split('\n')[0]})`)
         } finally {
           await page.close()
         }
       }
       ctx.evidence.push({ note: seen.join('; ') })
       return wrong.length === 0
-        ? { pass: true, detail: 'drawn mark and wordmark on five screens, each theme in its own colours' }
+        ? { pass: true, detail: 'the chosen logo on five screens, its on-dark and on-light files each in its own theme' }
         : { pass: false, detail: `logo wrong: ${wrong.join(', ')}` }
     },
   }
