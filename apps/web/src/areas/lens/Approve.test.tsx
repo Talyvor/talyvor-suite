@@ -188,6 +188,17 @@ describe('the approval screen for a covered payment (B55.22)', () => {
   })
 })
 
+// B55.10 — Lens reads a request nobody answered within 24 hours as expired (B55.9): the card says so, and offers nothing.
+describe('the approval screen for an expired request (B55.10)', () => {
+  it('says the request expired and that nothing waiting was paid', async () => {
+    mockBff(false, BASE, { status: 'expired' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('This request expired: nobody approved it within 24 hours. Nothing waiting was paid.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Approve/ })).not.toBeInTheDocument()
+  })
+})
+
 describe('the approval screen when only the phone holds a key (B55.2)', () => {
   it('opens no passkey prompt, sends nothing, and says to approve on the phone', async () => {
     const bff = mockBff()

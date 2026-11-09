@@ -7,7 +7,13 @@ import { App, queryClient } from '../../App'
 
 const M = 1_000_000
 
-function mockBff(decided: Array<Record<string, unknown> & { id: string; status: string }> = []) {
+// B55.10 — a payment an assistant (client mcp:) prepared, waiting for the person.
+const PREPARED = {
+  id: 'preq_1', status: 'pending_approval', summary: '1 payment', client: 'mcp:tlv_oc_claude', agent_id: '', totals: { GBP: 12000 }, created_at: '2026-10-25T06:06:00Z',
+  items: [{ position: 1, payee_id: 'payee_1', payee_name: 'Acme Hosting', currency: 'GBP', amount_minor: 12000, reference: 'INV-7', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking' }],
+}
+
+function mockBff(decided: Array<Record<string, unknown> & { id: string; status: string }> = [], prepared: object[] = [], only?: number) {
   const approvals: Array<Record<string, unknown> & { id: string; status: string }> = [
     { id: 'apr_1', agent_id: 'agt_1', amount_ulxc: 3 * M, model: '', status: 'pending', created_at: '2026-10-25T06:01:00Z', payee: { kind: 'company', id: 'ws_a', name: 'Acme Hosting' } },
     { id: 'apr_2', agent_id: 'agt_1', amount_ulxc: 2 * M, model: 'gpt-5', status: 'pending', created_at: '2026-10-25T06:02:00Z' },
@@ -15,7 +21,7 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
     { id: 'apr_4', agent_id: 'agt_2', amount_ulxc: 1 * M, model: '', status: 'pending', created_at: '2026-10-25T06:04:00Z', payee: { kind: 'company', id: 'ws_c', name: 'Copy Desk' } },
     { id: 'apr_5', agent_id: 'agt_2', amount_ulxc: 5 * M, model: 'claude', status: 'pending', created_at: '2026-10-25T06:05:00Z' },
     ...decided,
-  ]
+  ].slice(0, only)
   const decisions: Array<{ id: string; decision: string }> = []
   const challenges: string[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -33,6 +39,7 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
         ],
       })
     if (url === '/api/agents/approvals') return json({ approvals })
+    if (url === '/api/money/payment-requests?status=pending_approval') return json({ requests: prepared })
     if (url === '/api/agents/passkeys') return json({ passkeys: [] })
     if (url === '/api/money/devices') return json({ devices: [] })
     const challenge = /^\/api\/agents\/approvals\/([^/]+)\/challenge$/.exec(url)
@@ -99,7 +106,7 @@ describe('the approvals inbox (B41.33)', () => {
     expect(await screen.findByText(/^Approved 5\./)).toBeInTheDocument()
     expect(bff.decisions.map((d) => d.id).sort()).toEqual(['apr_1', 'apr_2', 'apr_3', 'apr_4', 'apr_5'])
     expect(bff.decisions.every((d) => d.decision === 'approve')).toBe(true)
-    await waitFor(() => expect(screen.getByText('Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount.')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount, or when Chat or an assistant prepares a payment.')).toBeInTheDocument())
   })
 
   it('moves with j and k and approves with a, denies with d', async () => {
@@ -157,6 +164,35 @@ describe('the approvals inbox (B41.33)', () => {
     await inbox()
     expect(document.body.textContent).toMatch(/, 14 Oct(?! by)/)
     expect(document.body.textContent).toMatch(/, 13 Oct by Buyer/)
+  })
+})
+
+describe('payments prepared for the person (B55.10)', () => {
+  it('lists a payment an assistant prepared, with Review opening its card', async () => {
+    mockBff([], [PREPARED])
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+    const prepared = within(await screen.findByRole('group', { name: 'Prepared payments' }))
+    expect(prepared.getByText(/^Your assistant prepared a payment to Acme Hosting ·/)).toBeInTheDocument()
+    expect(prepared.getByText(/INV-7 · from the company’s account · asked/)).toBeInTheDocument()
+    expect(prepared.getByText('£120.00')).toBeInTheDocument()
+    expect(prepared.getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/approve/preq_1')
+  })
+
+  it('counts one agent request and one prepared payment as 2 on the badge', async () => {
+    mockBff([], [PREPARED], 1)
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+    expect(await screen.findByRole('link', { name: 'Approvals 2 waiting' })).toBeInTheDocument()
+  })
+
+  it('with nothing waiting, says a prepared payment appears here too', async () => {
+    mockBff([], [], 0)
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+    expect(
+      await screen.findByText('Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount, or when Chat or an assistant prepares a payment.'),
+    ).toBeInTheDocument()
   })
 })
 

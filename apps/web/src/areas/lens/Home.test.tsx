@@ -31,16 +31,28 @@ const BUSY = {
   line: '1 approval waiting, 1 bill due this week, 2 payments yesterday, spent yesterday 0.075 LXC.',
 }
 
+// B55.10 — a payment an assistant (client mcp:) prepared, and the briefing's line for it, as Lens lists it with its preq_ id.
+const PREPARED = {
+  id: 'preq_1', status: 'pending_approval', summary: '1 payment', client: 'mcp:tlv_oc_claude', agent_id: 'agt_1', totals: { GBP: 12000 }, created_at: '2026-10-04T08:20:00Z',
+  items: [{ position: 1, payee_id: 'payee_1', payee_name: 'Acme Hosting', currency: 'GBP', amount_minor: 12000, reference: 'INV-7', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking' }],
+}
+const PREPARED_BRIEFING = {
+  ...BUSY,
+  items: [{ kind: 'approval', id: 'preq_1', name: 'Acme Hosting', amount: 12000, currency: 'GBP', text: 'A payment of £120.00 to Acme Hosting waits for your approval' }, ...BUSY.items],
+}
+
 function mockBff({
   agents,
   newWorkspace = false,
   briefing = QUIET,
   workspaceName = 'Acme',
+  prepared = [],
 }: {
   agents: Array<(typeof AGENTS)[number] & { paused_at?: string }>
   newWorkspace?: boolean
-  briefing?: typeof QUIET | typeof BUSY
+  briefing?: typeof QUIET | typeof BUSY | typeof PREPARED_BRIEFING
   workspaceName?: string
+  prepared?: object[]
 }) {
   const writes: string[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -88,6 +100,7 @@ function mockBff({
         ],
       })
     if (url === '/api/agents/briefing') return json(briefing)
+    if (url === '/api/money/payment-requests?status=pending_approval') return json({ requests: prepared })
     if (url === '/api/workspace/name' && init?.method === 'PUT') {
       workspaceName = JSON.parse(String(init.body)).name
       writes.push(`PUT ${url} ${init.body}`)
@@ -170,6 +183,23 @@ describe('Home — the 30-second daily briefing (B41.6)', () => {
     await waitFor(() => expect(card).toHaveTextContent(QUIET.line))
     expect(card.tagName).toBe('DIV')
     expect(screen.queryByTestId('home-briefing-items')).not.toBeInTheDocument()
+  })
+})
+
+describe('Home — payments prepared for the person (B55.10)', () => {
+  it('lists a payment an assistant prepared first, counts it, and the briefing opens its card', async () => {
+    mockBff({ agents: AGENTS, briefing: PREPARED_BRIEFING, prepared: [PREPARED] })
+    render(<App />)
+
+    const list = within(await screen.findByTestId('home-approvals'))
+    const row = list.getByText('Your assistant prepared a payment to Acme Hosting').closest('a')!
+    expect(row).toHaveAttribute('href', '/approve/preq_1')
+    expect(row).toHaveTextContent('INV-7 · from Researcher’s account · asked')
+    expect(row).toHaveTextContent('£120.00')
+    expect(screen.getByTestId('home-approvals-waiting')).toHaveTextContent('3')
+    await waitFor(() => expect(screen.getByTestId('home-briefing-line')).toHaveTextContent(BUSY.line))
+    const items = within(screen.getByTestId('home-briefing-items')).getAllByRole('listitem')
+    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/approve/preq_1')
   })
 })
 

@@ -5,6 +5,7 @@
 // the browser makes that answer up, so no model is asked and nothing is charged, but the call goes through the BFF to Lens and
 // prepares a real request. The card must show all five, and before anything is approved the ledger must hold no payment to the
 // payee, the GBP account nothing, and the request no paid item. Decline must then turn the card into "Declined. Nothing was paid".
+// B55.10 — while it waits, Approvals lists it with a Review link that opens its card at /approve/<id>.
 
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -31,6 +32,9 @@ export interface CardSeen {
   payments: number
   accountMinor: number
   paidItems: number
+  /** B55.10 — before Decline, Approvals' Prepared payments: whether it listed the request with Review to /approve/<id>, and what it read. */
+  listed: boolean
+  approvals: string
   /** After Decline: the card's line, and payments to the payee. */
   declined: string
   paymentsAfter: number
@@ -54,11 +58,12 @@ export function paymentCardVerdict(seen: CardSeen): Verdict {
   unread(seen.payments, 'the payments out', 'the ledger holds # payment(s) to the payee')
   unread(seen.accountMinor, 'the GBP account', 'the GBP account holds # minor units')
   unread(seen.paidItems, 'the prepared request', '# of the request\'s items carry a payment')
+  if (!seen.listed) wrong.push(`Approvals did not list the prepared request with Review opening its card; it read "${seen.approvals.slice(0, 300)}"`)
   if (!seen.declined.startsWith('Declined. Nothing was paid')) wrong.push(`Decline left the card reading "${seen.declined}"`)
   if (seen.paymentsAfter !== 0) wrong.push(seen.paymentsAfter < 0 ? 'the payments out could not be read after Decline' : `after Decline the ledger holds ${seen.paymentsAfter} payment(s) to the payee`)
   if (wrong.length > 0) return fail(wrong.join('; '))
   return { pass: true, detail: `Chat's prepared payment showed the payee, ${AMOUNT}, its reference, the rule (${RULE}), Approve and Decline; ` +
-    'before approval no payment, an empty GBP account and no paid item; declined, "Declined. Nothing was paid" and still no payment' }
+    'before approval no payment, an empty GBP account and no paid item, and Approvals listed it with Review; declined, "Declined. Nothing was paid" and still no payment' }
 }
 
 export function chatPaymentCard(): Scenario {
@@ -66,10 +71,10 @@ export function chatPaymentCard(): Scenario {
     id: 'chat-payment-card',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B45.2', 'B45.34'],
+    items: ['B45.2', 'B45.34', 'B55.10'],
     feature: 'Chat',
     title: 'a payment Chat prepares shows its card under the answer with the payee, amount, reference, the rule that asked and Approve / Decline; ' +
-      'nothing is on the ledger before approval, and Decline pays nothing',
+      'nothing is on the ledger before approval, Approvals lists it with Review, and Decline pays nothing',
     run: async (ctx) => {
       const { app, env } = ctx
       const step = async <T>(method: string, path: string, body: unknown, note: string) => {
@@ -114,7 +119,7 @@ export function chatPaymentCard(): Scenario {
       }
       const provider = env.catalog.find((m) => m.display_name === app.modelNameInUse)?.provider ?? 'anthropic'
       const reference = `Nightly chat card ${RUN_SALT}`
-      const seen: CardSeen = { card: { payee: false, amount: false, reference: false, rule: false, approve: false, decline: false }, text: '', payments: -1, accountMinor: -1, paidItems: -1, declined: '', paymentsAfter: -1 }
+      const seen: CardSeen = { card: { payee: false, amount: false, reference: false, rule: false, approve: false, decline: false }, text: '', payments: -1, accountMinor: -1, paidItems: -1, declined: '', paymentsAfter: -1, listed: false, approvals: '' }
       const paymentsToPayee = async (note: string) => {
         const r = await step<{ payments: { payee_id: string }[] | null }>('GET', '/v1/money/payments', undefined, note)
         return r.value === undefined || r.status >= 300 ? -1 : (r.value.payments ?? []).filter((p) => p.payee_id === payeeID).length
@@ -176,6 +181,20 @@ export function chatPaymentCard(): Scenario {
         seen.accountMinor = gbp === undefined ? -1 : gbp.test_minor + gbp.live_minor
         const read = requestID === '' ? undefined : await step<{ items: { payment_id?: string; pay_status?: string }[] | null }>('GET', `/v1/money/payment-requests/${requestID}`, undefined, 'the prepared request before approval')
         seen.paidItems = read?.value === undefined || read.status >= 300 ? -1 : (read.value.items ?? []).filter((it) => (it.payment_id ?? '') !== '' || (it.pay_status ?? '') !== '').length
+
+        // B55.10 — Approvals, in a second tab of the same session, lists the waiting request with Review opening its card.
+        const inbox = await page.context().newPage()
+        try {
+          await inbox.goto(new URL('/approvals', page.url()).href)
+          const prepared = inbox.getByRole('group', { name: 'Prepared payments' })
+          await prepared.waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
+          seen.approvals = ((await prepared.textContent().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim()
+          const review = prepared.locator(`[data-prepared="${requestID}"]`).getByRole('link', { name: 'Review' })
+          seen.listed = requestID !== '' && (await review.getAttribute('href').catch(() => null)) === `/approve/${requestID}`
+          ctx.evidence.push({ note: 'Approvals while the request waits', answer: seen.approvals })
+        } finally {
+          await inbox.close().catch(() => undefined)
+        }
 
         await card.getByRole('button', { name: 'Decline', exact: true }).click()
         const receipt = page.locator('[data-testid="turn-assistant"]').last().getByTestId('chat-pay-receipt')

@@ -6,7 +6,7 @@ import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
-import { BOOK_KEY, OnThePhone, useKeys } from './AgentBank'
+import { BOOK_KEY, OnThePhone, PREPARED_KEY, useKeys } from './AgentBank'
 import { BILLS_KEY, PAYEES_KEY, PAYMENTS_KEY } from './Pay'
 import { assertOver } from './passkeys'
 import { AgentBankError, type AgentTrust, type ApprovalStatement, type PaymentRequest, type PaymentRequestItem, agentBankApi, formatMinor, refusalText } from './agentBankApi'
@@ -22,6 +22,8 @@ const DECIDED: Record<string, string> = {
   approved: 'Approved. Each payment you approved is paid once.',
   auto: 'Paid without asking you: each payment is inside a permission you signed.',
   blocked: 'Nothing here can be paid: every payment was blocked.',
+  // B55.10 — Lens reads a request nobody answered within its approval life as expired (B55.9).
+  expired: 'This request expired: nobody approved it within 24 hours. Nothing waiting was paid.',
 }
 
 /** B55.22 — Decline cancels only what waits: a covered item paid when it was prepared (B55.21) stays paid, and is said. */
@@ -124,12 +126,16 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
       // B41.2 — a request made of bills marks each bill it paid as paid.
       void qc.invalidateQueries({ queryKey: BILLS_KEY })
       void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
+      void qc.invalidateQueries({ queryKey: PREPARED_KEY })
     },
   })
   // B45.2 — declined: Lens cancels what waits, so none of that is paid (a covered item paid at prepare stays paid, B55.21).
   const decline = useMutation({
     mutationFn: () => agentBankApi.cancelRequest(r.id),
-    onSuccess: (done) => qc.setQueryData(paymentRequestKey(r.id), done),
+    onSuccess: (done) => {
+      qc.setQueryData(paymentRequestKey(r.id), done)
+      void qc.invalidateQueries({ queryKey: PREPARED_KEY })
+    },
   })
 
   // Known and verified are read from the payees and past payments; unread, they are not claimed either way.
