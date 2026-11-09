@@ -149,6 +149,7 @@ import { keysNotForwarded, keysUnlisted } from './keys.ts'
 import { rateLimitsHold, workspaceLimitsRaised } from './ratelimit.ts'
 import { marketAskScreen, marketCompareScreen, marketDiscoverScreen, marketDiscovery } from './discovery.ts'
 import { marketContentFilter } from './contentFilter.ts'
+import { listingAsModel } from './listingAsModel.ts'
 import { marketPrivacyLabel } from './privacyLabel.ts'
 import { royaltiesNotHeadline } from './royalties.ts'
 import { statementLineKinds } from './statementKinds.ts'
@@ -5614,6 +5615,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.426 (for talyvor-lens B28.186) — a paid skill used in Chat, once a run, on workspaces of its own: opened from its listing
   // page with Use in Chat, two questions write two billed uses on the buyer's marketplace bill and two model spend rows.
   if (i === 7) list.push(chatListing(i))
+  // B41.208 (for talyvor-lens B41.79) — a paid agent listing called as model "listing/<id>", once a run, on workspaces of its own:
+  // a plain and a streamed call on the OpenAI-compatible route each answer billed and add exactly one billed use to the bill.
+  if (i === 7) list.push(listingAsModel(i))
   // B30.118 — Know Your Agent, once a run, on a workspace of its own: the owner's read and the agent's wallet_credential hand over
   // one credential that verifies with only the published JWKS and states the daily limit; a rule change lists it "rules changed"
   // on revoked.json and the next states the new limit; pausing the agent lists that one "frozen" and the route is 409.
