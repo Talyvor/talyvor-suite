@@ -18,4 +18,11 @@ describe('device-keys-bff (B40.31)', () => {
     expect(deviceKeysVerdict({ ...PASSING, revoke: { status: 404, body: { error: 'not found' } } }).pass).toBe(false)
     expect(deviceKeysVerdict({ ...PASSING, list: { status: 200, body: { devices: [{ id: 'dk_1' }] } } }).pass).toBe(false)
   })
+
+  // B55.57 — lens #1116 drops the package name and starts with a capital.
+  it('passes on Lens’s answers worded with a capital and no package name', () => {
+    expect(deviceKeysVerdict({ ...PASSING,
+      register: { status: 400, body: { error: 'The device key is not valid: attestation' } },
+      revoke: { status: 404, body: { error: 'No such device key in this workspace' } } }).pass).toBe(true)
+  })
 })
