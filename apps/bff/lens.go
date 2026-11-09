@@ -465,6 +465,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/keys/recover/start", a.requireTenant(a.handleKeyRecoverAction("start")))
 	a.mux.HandleFunc("/api/agents/keys/recover/cancel", a.requireTenant(a.handleKeyRecoverAction("cancel")))
 	a.mux.HandleFunc("/api/agents/keys/recover/complete", a.requireTenant(a.handleKeyRecoverAction("complete")))
+	a.mux.HandleFunc("/api/agents/keys", a.requireTenant(a.handleApprovalKeys)) // B55.16
 	a.mux.HandleFunc("/api/agents/push/public-key", a.requireTenant(a.handlePushPublicKey))
 	a.mux.HandleFunc("/api/agents/push/subscriptions", a.requireTenant(a.handlePushSubscriptions))
 	a.mux.HandleFunc("/api/agents/{id}/fund", a.requireTenant(a.handleAgentMove("fund")))

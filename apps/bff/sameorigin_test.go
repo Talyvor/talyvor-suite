@@ -408,6 +408,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/agents/keys/recover/cancel", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/keys/recover/complete", body: `{"passkey":{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},
+		{method: http.MethodDelete, path: "/api/agents/passkeys", body: `{"credential_id":"c"}`}, // B55.16
 		{method: http.MethodPost, path: "/api/agents/push/subscriptions", body: `{"endpoint":"https://fcm.googleapis.com/fcm/send/x","keys":{"p256dh":"p","auth":"a"}}`},
 		{method: http.MethodDelete, path: "/api/agents/push/subscriptions", body: `{"endpoint":"https://fcm.googleapis.com/fcm/send/x"}`},
 		{method: http.MethodPost, path: "/api/features/tare/preview", body: `{"content":"{\"a\":1}","kind":"json"}`},

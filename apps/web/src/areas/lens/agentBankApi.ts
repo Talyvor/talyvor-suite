@@ -1256,6 +1256,11 @@ export const agentBankApi = {
   startRecovery: () => send<{ recovery: KeyRecovery }>('POST', '/api/agents/keys/recover/start'),
   cancelRecovery: () => send<{ recovery: KeyRecovery }>('POST', '/api/agents/keys/recover/cancel'),
   completeRecovery: (passkey: RecoveryPasskey) => send<RecoveredKey>('POST', '/api/agents/keys/recover/complete', { passkey }),
+  // B55.16 — every active passkey and phone key by name (Lens B55.15); removing one needs no signature, and Lens
+  // refuses the workspace's last key in its own words (409).
+  approvalKeys: () => getJSON<{ keys: ApprovalKey[] | null }>('/api/agents/keys', { keys: 'list' }),
+  removePasskey: (credentialID: string) => send<{ removed: boolean }>('DELETE', '/api/agents/passkeys', { credential_id: credentialID }),
+  revokeDevice: (id: string) => send<DeviceKey>('POST', `/api/money/devices/${e(id)}/revoke`),
   /** B54.34 — approving with always_allow signs that allowance too, so the challenge is asked for with it (Lens B54.29). */
   approvalChallenge: (approvalID: string, alwaysAllow?: PayeeAllowance) =>
     send<{ challenge: string; allow_credentials: string[] | null }>(
@@ -2067,6 +2072,16 @@ export interface KeyEnrolment extends EnrolmentWaiting {
   platform?: string
   status: 'waiting' | 'approved' | 'declined' | 'expired'
   created_at: string
+}
+
+/** B55.16 — a key that approves for the workspace (Lens GET /v1/workspaces/{ws}/agents/keys): a passkey or a phone's key. */
+export interface ApprovalKey {
+  kind: 'passkey' | 'phone'
+  id: string
+  name: string
+  platform: string
+  created_at: string
+  last_used_at?: string
 }
 
 /** A new passkey, as the browser's ceremony gives it — all base64url. */

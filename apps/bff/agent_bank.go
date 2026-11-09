@@ -836,6 +836,8 @@ func (a *app) handleAgentDecision(decision string) func(http.ResponseWriter, *ht
 //	POST   /api/agents/passkeys/challenge          a registration challenge and the RP ID
 //	GET    /api/agents/passkeys                    the workspace's passkeys
 //	POST   /api/agents/passkeys                    {credential_id, name, public_key, client_data_json, authenticator_data, assertion?}
+//	DELETE /api/agents/passkeys                    {credential_id}: B55.16, removed at once unless it is the last key (409)
+//	GET    /api/agents/keys                        B55.16: every active passkey and phone key, by name
 //	POST   /api/agents/approvals/{id}/challenge    the challenge approving or denying one approval is signed over
 //	                                               {"always_allow"?}: approving with always allow signs it too (B54.34)
 //	GET    /api/agents/push/public-key             the key a browser subscribes to pushes with
@@ -886,9 +888,34 @@ func (a *app) handlePasskeys(w http.ResponseWriter, r *http.Request, t tenant) {
 		// UPSTREAM-BINDS-ONLY lensPasskeyRegisterBody: none
 		body, _ := json.Marshal(in)
 		a.agentBankRelay(w, r, t, http.MethodPost, "/agents/passkeys", body)
+	case http.MethodDelete:
+		// B55.16: the id rides in the body, as a push subscription's endpoint does, because /api/agents/passkeys/{id}
+		// would collide with every /api/agents/{id}/… route. Lens needs no signature (stopping is instant) and refuses
+		// the workspace's last key, or one that owns an agent's account, with its sentence.
+		var in struct {
+			CredentialID string `json:"credential_id"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		id, ok := pathID(w, "passkey id", in.CredentialID)
+		if !ok {
+			return
+		}
+		a.agentBankRelay(w, r, t, http.MethodDelete, "/agents/passkeys/"+url.PathEscape(id), nil)
 	default:
-		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost+", "+http.MethodDelete)
 	}
+}
+
+// handleApprovalKeys — GET /api/agents/keys (B55.16): Lens's active passkeys and phone keys, each by name.
+func (a *app) handleApprovalKeys(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, "/agents/keys", nil)
 }
 
 // handleApprovalChallenge — POST /api/agents/approvals/{id}/challenge.

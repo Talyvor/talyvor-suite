@@ -491,6 +491,7 @@ const BY_PATH: Record<string, unknown> = {
   '/api/agents/passkeys': { passkeys: [] },
   // B55.54 — no key recovery waits.
   '/api/agents/keys/recover': { recovery: null },
+  '/api/agents/keys': { keys: [] }, // B55.16
   // B55.2 — nor a phone key: with one, the web leaves approving and resuming to the phone.
   '/api/money/devices': { devices: [] },
   // B19.21 — a weekly payment from the Researcher to the Writer, and the Researcher's top-up.
