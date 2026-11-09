@@ -79,6 +79,9 @@ type oauthClient struct {
 	authMethods []string
 	jwksURI     string
 	expires     time.Time
+	// refetch is when a CIMD client's document is read again (memory only: a client loaded at boot is read at once).
+	// The row outlives it, so the token endpoint has the last good copy when the document can't be fetched.
+	refetch time.Time
 }
 
 func (c oauthClient) allows(method string) bool {
@@ -285,7 +288,7 @@ func redirectRegistered(registered []string, raw string) bool {
 		return true
 	}
 	u, err := url.Parse(raw)
-	if err != nil || u.Scheme != "http" || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") {
+	if err != nil || u.Scheme != "http" || (u.Hostname() != "127.0.0.1" && u.Hostname() != "localhost") || u.User != nil || u.Fragment != "" {
 		return false
 	}
 	for _, reg := range registered {
@@ -382,13 +385,17 @@ func isCIMDClientID(id string) bool {
 		u.Fragment == "" && u.User == nil && !strings.Contains(u.Path, "/./") && !strings.Contains(u.Path, "/../")
 }
 
+// errCIMDUnreadable is a CIMD document that could not be fetched or read, as opposed to one that was read and refused.
+var errCIMDUnreadable = errors.New("the client's metadata document could not be read")
+
 // oauthClientFor finds a registered client, or fetches and checks a CIMD client's document.
 func (a *app) oauthClientFor(ctx context.Context, id string) (oauthClient, error) {
 	if id == "" {
 		return oauthClient{}, errors.New("client_id is missing")
 	}
-	if c, ok := a.oauth.clients.get(id); ok {
-		return c, nil
+	stored, ok := a.oauth.clients.get(id)
+	if ok && (!isCIMDClientID(id) || time.Now().Before(stored.refetch)) {
+		return stored, nil
 	}
 	if !isCIMDClientID(id) {
 		return oauthClient{}, errors.New("this client_id is not registered here")
@@ -405,9 +412,12 @@ func (a *app) oauthClientFor(ctx context.Context, id string) (oauthClient, error
 	hc := &http.Client{Transport: a.connectorOut, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	res, err := hc.Do(req)
 	if err != nil {
-		return oauthClient{}, fmt.Errorf("the client's metadata document could not be read: %w", err)
+		return oauthClient{}, fmt.Errorf("%w: %w", errCIMDUnreadable, err)
 	}
 	defer res.Body.Close()
+	if res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500 {
+		return oauthClient{}, fmt.Errorf("%w: it answered %d", errCIMDUnreadable, res.StatusCode)
+	}
 	if res.StatusCode != http.StatusOK {
 		return oauthClient{}, fmt.Errorf("the client's metadata document answered %d", res.StatusCode)
 	}
@@ -420,7 +430,7 @@ func (a *app) oauthClientFor(ctx context.Context, id string) (oauthClient, error
 		JWKSURI      string   `json:"jwks_uri"`
 	}
 	if err := json.NewDecoder(io.LimitReader(res.Body, oauthMaxBody)).Decode(&doc); err != nil {
-		return oauthClient{}, errors.New("the client's metadata document is not JSON")
+		return oauthClient{}, fmt.Errorf("%w: it is not JSON", errCIMDUnreadable)
 	}
 	if doc.ClientID != id {
 		return oauthClient{}, errors.New("the client's metadata document names a different client_id")
@@ -446,7 +456,11 @@ func (a *app) oauthClientFor(ctx context.Context, id string) (oauthClient, error
 	if name == "" || len(name) > 100 {
 		name = req.URL.Host
 	}
-	c := oauthClient{id: id, name: name, redirectURIs: doc.RedirectURIs, authMethods: methods, jwksURI: doc.JWKSURI, expires: time.Now().Add(oauthCIMDTTL)}
+	c := oauthClient{id: id, name: name, redirectURIs: doc.RedirectURIs, authMethods: methods, jwksURI: doc.JWKSURI,
+		expires: time.Now().Add(oauthCIMDTTL), refetch: time.Now().Add(oauthCIMDTTL)}
+	if stored.expires.After(c.expires) {
+		c.expires = stored.expires // a consented client keeps its row
+	}
 	if a.oauth.clients.size() < oauthMaxClients {
 		// Only a cache: a document not kept is fetched again.
 		if err := a.oauth.db.saveClient(ctx, c); err != nil {
@@ -611,11 +625,9 @@ func (a *app) oauthAuthorizeAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.oauth.codes.put(tokenKey(code), oc)
-	if !isCIMDClientID(c.client.id) {
-		if cl, ok := a.oauth.clients.update(c.client.id, func(cl oauthClient) oauthClient { cl.expires = time.Now().Add(oauthClientTTL); return cl }); ok {
-			if err := a.oauth.db.saveClient(r.Context(), cl); err != nil {
-				log.Printf("bff: oauth client lifetime not saved: %v", err)
-			}
+	if cl, ok := a.oauth.clients.update(c.client.id, func(cl oauthClient) oauthClient { cl.expires = time.Now().Add(oauthClientTTL); return cl }); ok {
+		if err := a.oauth.db.saveClient(r.Context(), cl); err != nil {
+			log.Printf("bff: oauth client lifetime not saved: %v", err)
 		}
 	}
 	log.Printf("bff: oauth consent given by sub=%s to client %q", s.sub, c.client.name)
