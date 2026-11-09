@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -377,9 +378,16 @@ func (a *app) handleOAuthRegister(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// cimdClientIDPattern is an https address on a host name, never an IP address (B43.29): the last label starts with
+// a letter, so 169.254.169.254, 2130706433 and [::1] are refused before anything is fetched.
+var cimdClientIDPattern = regexp.MustCompile(`^https://([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(:[0-9]{1,5})?/[^#\s]*$`)
+
 // isCIMDClientID is the CIMD test: a client_id that is an https URL with a path is the address of
 // the client's own metadata document.
 func isCIMDClientID(id string) bool {
+	if !cimdClientIDPattern.MatchString(id) {
+		return false
+	}
 	u, err := url.Parse(id)
 	return err == nil && u.Scheme == "https" && u.Host != "" && u.Path != "" && u.Path != "/" &&
 		u.Fragment == "" && u.User == nil && !strings.Contains(u.Path, "/./") && !strings.Contains(u.Path, "/../")
