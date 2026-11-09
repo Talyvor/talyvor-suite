@@ -9,7 +9,7 @@ import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, useKeys } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
-import { assertOver, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
+import { assertOver, payOutsideSigned, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
 import {
   type AgentApproval,
   type AssistantRequest,
@@ -605,7 +605,7 @@ function SendPayment({
   const complete = account !== undefined && payee !== undefined && !payee.needs_confirmation && minor !== null && checked
   const pay = useMutation({
     mutationFn: () =>
-      agentBankApi.payOutside({ account_id: account?.id ?? '', payee_id: payeeID, amount_minor: minor ?? 0, currency: account?.currency ?? '', reference: reference.trim(), idempotency_key: key }),
+      payOutsideSigned({ account_id: account?.id ?? '', payee_id: payeeID, amount_minor: minor ?? 0, currency: account?.currency ?? '', reference: reference.trim(), idempotency_key: key }),
     onSuccess: (p) => {
       setMade(p)
       setAmount('')

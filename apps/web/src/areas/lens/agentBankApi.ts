@@ -1231,7 +1231,11 @@ export const agentBankApi = {
   payments: () => getJSON<{ payments: OutsidePayment[] | null }>('/api/money/payments', { payments: 'list' }),
   // B41.7 — one search box across agents, payees, payments, bills, invoices, rules and listings (Lens B41.107).
   search: (q: string) => getJSON<SearchResults>(`/api/money/search?q=${e(q)}`, { groups: 'list' }),
-  payOutside: (body: OutsidePaymentRequest) => send<OutsidePayment>('POST', '/api/money/payments', body),
+  /** B54.35 — the challenge a person's payment is signed over, naming exactly this payment (Lens B54.33). */
+  paymentChallenge: (body: OutsidePaymentRequest) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/money/payments/challenge', body),
+  payOutside: (body: OutsidePaymentRequest, assertion?: PasskeyAssertion) =>
+    send<OutsidePayment>('POST', '/api/money/payments', assertion ? { ...body, assertion } : body),
   // B40.35 — payees and permission mandates an assistant asked for, saved or signed only by the person.
   assistantRequests: () => getJSON<{ requests: AssistantRequest[] | null }>('/api/money/assistant-requests', { requests: 'list' }),
   dismissAssistantRequest: (id: string) => send<void>('POST', `/api/money/assistant-requests/${e(id)}/dismiss`),
