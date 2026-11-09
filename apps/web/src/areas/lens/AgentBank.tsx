@@ -11,6 +11,7 @@ import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
 import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
 import { AgentAnalytics } from './AgentAnalytics'
+import { AlertChannels } from './AlertChannels'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { categoryWords } from './Budgets'
@@ -265,6 +266,7 @@ function Spending({ nameOf }: { nameOf: (id: string) => string }) {
         )}
       </Card>
       <LimitAlerts nameOf={nameOf} />
+      <AlertChannels />
     </div>
   )
 }
