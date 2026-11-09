@@ -29,10 +29,10 @@ import (
 //	DELETE /api/agents/{id}/rules/boosts/{rule}        B28.32: end a boost before its time
 //	GET  /api/agents/{id}/wallet                       B46.9: its wallet on the money layer — balance and how to pay into it
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
-//	GET  /api/agents/{id}/statement?from=&to=&format=json|csv   B19.22: its statement for a period, to download
+//	GET  /api/agents/{id}/statement?from=&to=&format=json|csv|pdf   B19.22: its statement for a period, to download (B28.55: PDF)
 //	GET  /api/agents/{id}/statement?kind=&q=&limit=&cursor=     B28.51: that statement searched, filtered and paged
 //	GET  /api/agents/{id}/analytics?from=&to=          B28.53: its spend for a period by day, model and destination
-//	GET  /api/agents/statement?from=&to=&format=json|csv        B19.22: every account in the bank, for a period
+//	GET  /api/agents/statement?from=&to=&format=json|csv|pdf        B19.22: every account in the bank, for a period
 //	POST /api/agents/{id}/claim                        B19.23: the signed-in person becomes an ownerless agent's owner
 //	PATCH /api/agents/{id}              {"name"?, "description"?}   B28.21: rename it, describe it
 //	POST /api/agents/{id}/archive                      B28.21: retire it — its balance back to the workspace, its keys revoked
@@ -415,7 +415,7 @@ func (a *app) handleAgentRuleBoostEnd(w http.ResponseWriter, r *http.Request, t 
 }
 
 // handleAgentStatement — GET /api/agents/{id}/statement: the agent's last 100 lines. With ?from=, ?to=
-// or ?format= (B19.22) it is the agent's statement for that period instead, as JSON or a CSV file; with ?kind=,
+// or ?format= (B19.22) it is the agent's statement for that period instead, as JSON, a CSV or (B28.55) a PDF; with ?kind=,
 // ?q= or ?cursor= (B28.51) too, so a search, a filter or a page past the newest lines reads the period statement.
 func (a *app) handleAgentStatement(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodGet {
@@ -472,7 +472,7 @@ func (a *app) handleAgentAnalytics(w http.ResponseWriter, r *http.Request, t ten
 const maxStatementBytes = 32 << 20
 
 // agentStatementRelay asks Lens for a period statement (Lens B19.5) and answers with it: JSON, or the
-// CSV file with Lens's filename. Only from, to and format are sent up, and (B28.51) kind, q, limit and cursor, with
+// CSV file (or, B28.55, the PDF) with Lens's filename. Only from, to and format are sent up, and (B28.51) kind, q, limit and cursor, with
 // which Lens keeps the lines of those kinds holding q and pages them newest first; Lens reads the dates (a
 // YYYY-MM-DD date is midnight UTC, the period is [from, to)) and its sentence on a bad one is relayed.
 func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tenant, suffix string) {
@@ -500,19 +500,19 @@ func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tena
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxStatementBytes+1))
-	asCSV := up.Get("format") == "csv"
+	asFile := map[string]string{"csv": "text/csv; charset=utf-8", "pdf": "application/pdf"}[up.Get("format")]
 	switch {
 	case err != nil:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Lens could not answer just now"})
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && len(raw) > maxStatementBytes:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "This statement is too long to download at once — choose a shorter period."})
-	case resp.StatusCode >= 200 && resp.StatusCode < 300 && asCSV:
-		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	case resp.StatusCode >= 200 && resp.StatusCode < 300 && asFile != "":
+		w.Header().Set("Content-Type", asFile)
 		if cd := resp.Header.Get("Content-Disposition"); cd != "" {
 			w.Header().Set("Content-Disposition", cd)
 		}
 		w.WriteHeader(resp.StatusCode)
-		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the statement CSV under text/csv, and every response carries nosniff (setSecurityHeaders)
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the statement CSV under text/csv or PDF under application/pdf, and every response carries nosniff (setSecurityHeaders)
 		_, _ = w.Write(raw)
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && json.Valid(raw):
 		w.Header().Set("Content-Type", "application/json")

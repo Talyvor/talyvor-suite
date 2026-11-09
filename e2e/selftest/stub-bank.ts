@@ -149,6 +149,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
+import { lxcCell } from '../src/statementPDF.ts'
 import { HOLD_REASON, TaxDesk } from './stub-tax.ts'
 import { VerificationDesk } from './stub-verification.ts'
 import { PayeeDesk } from './stub-payees.ts'
@@ -984,13 +985,29 @@ export class Bank {
   /**
    * B28.98 — a period statement as Lens writes it (cmd/lens writeStatement): JSON, or with ?format=csv a header, each
    * account's opening balance, every line, then each account's closing balance; times as Go's RFC 3339 with
-   * nanoseconds, a memo a spreadsheet would run as a formula kept as text.
+   * nanoseconds, a memo a spreadsheet would run as a formula kept as text. B28.55 — with ?format=pdf the same rows as
+   * Lens B28.328 draws them, each non-empty cell one string the page shows, amounts in LXC.
    */
   private answerStatement(res: ServerResponse, st: object | string, url: URL): void {
     if (typeof st === 'string') return this.d.json(res, 400, { error: st })
-    if (url.searchParams.get('format') !== 'csv') return this.d.json(res, 200, st)
+    const format = url.searchParams.get('format')
+    if (format !== 'csv' && format !== 'pdf') return this.d.json(res, 200, st)
     const s = st as { from: string; to: string; accounts: { account: string; opening_ulxc: number; closing_ulxc: number }[];
       lines: { posting_id: number; entry_id: string; at: string; account: string; kind: string; amount_ulxc: number; counterparty: string; ref?: string; balance_after_ulxc: number }[] }
+    if (format === 'pdf') {
+      const rows = [
+        ...s.accounts.map((x) => [s.from, x.account, 'opening', '', '', lxcCell(x.opening_ulxc)]),
+        ...s.lines.map((l) => [l.at, l.account, l.kind, l.counterparty, lxcCell(l.amount_ulxc), lxcCell(l.balance_after_ulxc)]),
+        ...s.accounts.map((x) => [s.to, x.account, 'closing', '', '', lxcCell(x.closing_ulxc)]),
+      ]
+      const shown = (v: string) => `(${v.replace(/[()\\]/g, '\\$&')}) Tj`
+      res.writeHead(200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="agent-statement-${s.from.slice(0, 10)}-${s.to.slice(0, 10)}.pdf"`,
+      })
+      res.end(`%PDF-1.4\n${rows.map((r) => r.filter((v) => v !== '').map(shown).join(' ') + '\n').join('')}%%EOF\n`)
+      return
+    }
     const at = (t: string) => new Date(t).toISOString().replace(/\.(\d*?)0+Z$/, '.$1Z').replace(/\.Z$/, 'Z')
     const text = (v: string) => (v !== '' && '=+-@\t\r'.includes(v[0]) ? `'${v}` : v)
     const cell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)

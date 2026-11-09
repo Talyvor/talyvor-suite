@@ -1354,6 +1354,15 @@ export class LensClient {
     return body.accounts ?? []
   }
 
+  /** B28.55 — one agent's statement (or, with no agent, every agent wallet's) for [from, to) as JSON: each account's opening and closing. */
+  async agentPeriodBalances(user: SyntheticUser, agentID: string | undefined, from: string, to: string): Promise<{ account: string; opening_ulxc: number; closing_ulxc: number }[]> {
+    const path = agentID === undefined ? 'agents/statement' : `agents/${agentID}/statement`
+    const body = (await this.call('GET', `/v1/workspaces/${user.workspaceID}/${path}?from=${from}&to=${to}`, this.bearer(user.token))) as {
+      accounts?: { account: string; opening_ulxc: number; closing_ulxc: number }[] | null
+    }
+    return body.accounts ?? []
+  }
+
   /** B28.377 — the workspace's prompt schedules, each with its runs, newest first (talyvor-lens B28.125). */
   async promptSchedules(user: SyntheticUser): Promise<PromptSchedule[]> {
     const body = (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/prompt-schedules`, this.bearer(user.token))) as { schedules?: PromptSchedule[] | null }

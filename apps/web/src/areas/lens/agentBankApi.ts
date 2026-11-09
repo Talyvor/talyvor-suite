@@ -855,14 +855,19 @@ export function retryMoveThroughRestart(failures: number, err: unknown): boolean
   return failures < 6 && (err instanceof TypeError || (err instanceof AgentBankError && [502, 503, 504].includes(err.status)))
 }
 
+/** B28.55 — a statement file's type: the CSV, the JSON or the PDF Lens writes (Lens B28.328). */
+export type StatementFormat = 'csv' | 'json' | 'pdf'
+
+const STATEMENT_ACCEPT: Record<StatementFormat, string> = { csv: 'text/csv', json: 'application/json', pdf: 'application/pdf' }
+
 /**
  * B19.22 — a statement for the period [from, to) (YYYY-MM-DD, midnight UTC) as the file Lens writes:
  * one agent's account, or with no agent every account in the bank. A refusal carries Lens's sentence.
  */
-async function statementFile(agentID: string | null, from: string, to: string, format: 'csv' | 'json'): Promise<Blob> {
+async function statementFile(agentID: string | null, from: string, to: string, format: StatementFormat): Promise<Blob> {
   const query = new URLSearchParams({ from, to, format })
   const path = agentID ? `/api/agents/${e(agentID)}/statement?${query}` : `/api/agents/statement?${query}`
-  const res = await fetch(path, { headers: { Accept: format === 'csv' ? 'text/csv' : 'application/json' } })
+  const res = await fetch(path, { headers: { Accept: STATEMENT_ACCEPT[format] } })
   if (!res.ok) {
     let sentence = ''
     try {
