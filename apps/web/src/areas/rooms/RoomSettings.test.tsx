@@ -22,7 +22,7 @@ function mockBff(split = 'equal') {
   ]
   // B55.28: a member still under the first terms, whom a payout leaves out.
   if (split === 'owner_decides') {
-    members.push({ workspace_id: LATE, role: 'member', may_spend: false, terms_version: 0, terms_current: false, joined_at: '2026-10-03T09:00:00Z' })
+    members.push({ workspace_id: LATE, workspace_name: 'Cal’s shop', role: 'member', may_spend: false, terms_version: 0, terms_current: false, joined_at: '2026-10-03T09:00:00Z' })
   }
   const keys: string[] = []
   let rules = {
@@ -256,7 +256,7 @@ describe('room settings', () => {
     const results = await screen.findByRole('list', { name: 'Payout' })
     expect(within(results).getAllByRole('listitem').map((li) => li.textContent?.replace('US$', '$'))).toEqual([
       'You: $45.00, paid',
-      `${OTHER}: $45.00, held until ${OTHER} saves payout details`,
+      `${NAMES[OTHER]}: $45.00, held until ${NAMES[OTHER]} saves payout details`,
     ])
     expect(bff.sent.filter((s) => s.url === '/api/rooms/room_1/payouts')).toEqual([
       { method: 'POST', url: '/api/rooms/room_1/payouts', body: { amount_minor: 9000, currency: 'USD' } },
@@ -273,15 +273,15 @@ describe('room settings', () => {
     const form = await screen.findByRole('form', { name: 'Pay out' })
     fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '90' } })
     fireEvent.change(within(form).getByLabelText('Percent for you'), { target: { value: '60' } })
-    fireEvent.change(within(form).getByLabelText(`Percent for ${OTHER}`), { target: { value: '30' } })
+    fireEvent.change(within(form).getByLabelText(`Percent for ${NAMES[OTHER]}`), { target: { value: '30' } })
     const pay = within(form).getByRole('button', { name: /^Pay out/ }) as HTMLButtonElement
     expect(pay.disabled).toBe(true)
-    expect(within(form).queryByLabelText(`Percent for ${LATE}`)).toBeNull()
+    expect(within(form).queryByLabelText('Percent for Cal’s shop')).toBeNull()
     expect(within(screen.getByRole('list', { name: 'Not in this payout' })).getByRole('listitem').textContent).toBe(
-      `${LATE} · Not in this payout: has not accepted the current terms.`,
+      'Cal’s shop · Not in this payout: has not accepted the current terms.',
     )
 
-    fireEvent.change(within(form).getByLabelText(`Percent for ${OTHER}`), { target: { value: '40' } })
+    fireEvent.change(within(form).getByLabelText(`Percent for ${NAMES[OTHER]}`), { target: { value: '40' } })
     expect(pay.disabled).toBe(false)
     fireEvent.click(pay)
     fireEvent.click(within(form).getByRole('button', { name: 'Pay out' }))
@@ -299,6 +299,7 @@ describe('room settings', () => {
     const held = await screen.findByTestId('room-held-for-you')
     expect(held.textContent?.replace('US$', '$')).toBe('$45.00 from this room is held for you. Add your payout details to receive it.')
     expect(within(held).getByRole('link').getAttribute('href')).toBe('/settings/payout-details')
+  })
 
   // B55.35 — members and named invites read by their workspace's name, never its id.
   it('shows members and invites by name', async () => {

@@ -710,9 +710,10 @@ function Terms({ room, owner }: { room: RoomDetail; owner: boolean }) {
 const PAYOUT_CURRENCIES = ['USD', 'GBP', 'EUR'] as const
 
 /** One member's part of a payout, in the words the owner reads after it. */
-export function payoutLine(p: EarningsPayout, me: string): string {
+export function payoutLine(p: EarningsPayout, me: string, members: Member[]): string {
   const you = p.recipient_workspace_id === me
-  const name = you ? 'You' : p.recipient_workspace_id
+  const member = members.find((m) => m.workspace_id === p.recipient_workspace_id)
+  const name = you ? 'You' : member ? memberName(member, members) : 'A member'
   const amount = formatMinor(p.amount_minor, p.currency)
   switch (p.status) {
     case 'completed':
@@ -823,10 +824,10 @@ function PayOut({ room, me }: { room: RoomDetail; me: string }) {
               <legend className="text-caption text-muted">The owner decides</legend>
               {paid.map((m) => (
                 <label key={m.workspace_id} className="flex items-center justify-between gap-3 text-body">
-                  <Who ws={m.workspace_id} me={me} />
+                  <Who ws={m.workspace_id} name={memberName(m, members)} me={me} />
                   <span className="flex items-center gap-1">
                     <Input
-                      aria-label={`Percent for ${m.workspace_id === me ? 'you' : m.workspace_id}`}
+                      aria-label={`Percent for ${m.workspace_id === me ? 'you' : memberName(m, members)}`}
                       className="block w-24 font-figure"
                       inputMode="decimal"
                       placeholder="0"
@@ -869,7 +870,7 @@ function PayOut({ room, me }: { room: RoomDetail; me: string }) {
           <ul aria-label="Payout" className="px-gutter py-2">
             {results.map((p) => (
               <li key={p.id} className="border-b border-rule py-2 text-body text-ink last:border-b-0">
-                {payoutLine(p, me)}
+                {payoutLine(p, me, members)}
               </li>
             ))}
           </ul>
@@ -879,7 +880,7 @@ function PayOut({ room, me }: { room: RoomDetail; me: string }) {
         <ul aria-label="Not in this payout" className="flex flex-col gap-1">
           {left.map((m) => (
             <li key={m.workspace_id} className="text-body text-muted">
-              <Who ws={m.workspace_id} me={me} /> · Not in this payout: has not accepted the current terms.
+              <Who ws={m.workspace_id} name={memberName(m, members)} me={me} /> · Not in this payout: has not accepted the current terms.
             </li>
           ))}
         </ul>
