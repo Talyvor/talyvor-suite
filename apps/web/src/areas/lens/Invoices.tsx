@@ -122,7 +122,7 @@ function OpenAccount({ accounts }: { accounts: CurrencyAccount[] }) {
                 <span>
                   {a.purpose === 'agent' ? (agents.find((x) => x.id === a.agent_id)?.name ?? a.name) : 'The company'} · {a.currency}
                 </span>
-                <span className="font-figure">{formatMinor(a.test_minor, a.currency)}</span>
+                <span className="font-figure">{formatMinor(a.live_minor, a.currency)}</span>
               </li>
             ))}
           </ul>
