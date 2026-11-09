@@ -38,6 +38,7 @@ import {
   type AgentTopUp as AgentTopUpValue,
   type LimitAlert,
   type PostingKind,
+  type StatementFormat,
   type StatementLine,
   AgentBankError,
   agentBankApi,
@@ -2156,8 +2157,8 @@ function saveFile(name: string, blob: Blob) {
 }
 
 /**
- * B19.22 — a statement for any period as a file an auditor can open: one agent's account, or with no
- * agent every wallet in the workspace. Lens builds it (B19.5): each account's opening balance, every line
+ * B19.22 — a statement for any period as a file an auditor can open (B28.55: or a PDF to read and print): one
+ * agent's account, or with no agent every wallet in the workspace. Lens builds it (B19.5): each account's opening balance, every line
  * naming its posting and entry, and each account's closing balance. Days are whole UTC days, the last
  * one included.
  */
@@ -2165,7 +2166,7 @@ function saveFile(name: string, blob: Blob) {
 /** `month` (B28.98): the period it opens on — last month, or in Chat this one. */
 export function StatementDownload({ agent, primary = false, month = 'last' }: { agent: Agent | null; primary?: boolean; month?: 'last' | 'this' }) {
   const [period, setPeriod] = useState(() => monthPeriod(month))
-  const [format, setFormat] = useState<'csv' | 'json'>('csv')
+  const [format, setFormat] = useState<StatementFormat>('csv')
   const who = agent ? `${agent.name}’s` : 'every agent’s'
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(period.from) && /^\d{4}-\d{2}-\d{2}$/.test(period.through) && period.from <= period.through
   const get = useMutation({
@@ -2217,10 +2218,11 @@ export function StatementDownload({ agent, primary = false, month = 'last' }: { 
           aria-label={`File type of ${who} statement`}
           className={`${scheduleSelect} w-24`}
           value={format}
-          onChange={(e) => setFormat(e.target.value as 'csv' | 'json')}
+          onChange={(e) => setFormat(e.target.value as StatementFormat)}
         >
           <option value="csv">CSV</option>
           <option value="json">JSON</option>
+          <option value="pdf">PDF</option>
         </select>
         <Button type="submit" variant={primary ? 'primary' : 'default'} disabled={!valid || get.isPending}>
           {get.isPending ? 'Preparing…' : 'Download'}

@@ -375,6 +375,35 @@ func TestAgentStatementDownloadsForAPeriod(t *testing.T) {
 	}
 }
 
+// B28.55 — a period statement asked for as a PDF (Lens B28.328) comes back as Lens wrote it: the PDF, under
+// application/pdf, with Lens's filename, byte for byte.
+func TestAgentStatementDownloadsAsPDF(t *testing.T) {
+	pdf := "%PDF-1.4\n(opening) Tj (15.500001 LXC) Tj\n%%EOF\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		if r.URL.Query().Get("format") != "pdf" {
+			http.Error(w, "not asked for a PDF", http.StatusTeapot)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", `attachment; filename="agent-statement-2026-09-01-2026-10-01.pdf"`)
+		_, _ = w.Write([]byte(pdf))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, path := range []string{"/api/agents/agt_1/statement", "/api/agents/statement"} {
+		rec := doJSON(a, http.MethodGet, path+"?from=2026-09-01&to=2026-10-01&format=pdf", "")
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/pdf" ||
+			rec.Header().Get("Content-Disposition") != `attachment; filename="agent-statement-2026-09-01-2026-10-01.pdf"` || rec.Body.String() != pdf {
+			t.Fatalf("%s = %d %v %q", path, rec.Code, rec.Header(), rec.Body.String())
+		}
+	}
+}
+
 // B28.51 — a search, a filter by kind or a page past the newest lines reaches Lens's period statement with its kind,
 // q, limit and cursor, and nothing else the browser sent.
 func TestAgentStatementSearchFilterAndPageReachLens(t *testing.T) {

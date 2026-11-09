@@ -155,6 +155,7 @@ import { royaltiesNotHeadline } from './royalties.ts'
 import { statementLineKinds } from './statementKinds.ts'
 import { statementPaging } from './statementPaging.ts'
 import { agentAnalytics } from './agentAnalytics.ts'
+import { statementPDF } from './statementPDF.ts'
 import { openapiWallets } from './openapiWallets.ts'
 
 export interface Evidence {
@@ -5130,7 +5131,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     // B28.19 — then an agent's statement after a top-up, a transfer in, a card charge and a pot move: each line by what it was.
     // B28.51 — then an agent's statement of 107 lines, paged past its newest 100 and filtered to one kind.
     // B28.53 — then an agent's spend by day, model and destination, against its statement's out.
-    case 5: list.push(walletPots(i), statementLineKinds(i), statementPaging(i), agentAnalytics(i)); break
+    // B28.55 — then an agent's statement, and every agent's, as a PDF, against the JSON statement's balances.
+    case 5: list.push(walletPots(i), statementLineKinds(i), statementPaging(i), agentAnalytics(i), statementPDF(i)); break
     case 6: list.push(walletCashOut(i)); break
     case 7: if (other < users) list.push(walletRecurring(i, other)); break
     case 8: list.push(marketTakedown(i, i - 1)); break

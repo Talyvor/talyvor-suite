@@ -12,6 +12,9 @@ const CSV = (account: string) =>
   `7,ent_1,2026-08-03T10:00:00Z,${account},fund,5000000,workspace,,5000000\r\n` +
   `,,2026-09-01T00:00:00Z,${account},closing,,,,5000000\r\n`
 
+// B28.55 — the PDF as Lens B28.328 writes it: each cell one string shown on the page, in the CSV's row order.
+const PDF = '%PDF-1.4\n(agent:agt_1) Tj (opening) Tj (0 LXC) Tj\n(agent:agt_1) Tj (closing) Tj (5 LXC) Tj\n%%EOF\n'
+
 function mockBff() {
   const asked: string[] = []
   const saved: Array<{ name: string; text: Promise<string> }> = []
@@ -45,6 +48,10 @@ function mockBff() {
     }
     if (url === '/api/agents/agt_1/statement?from=2026-08-01&to=2026-09-01&format=csv') return csv('agent:agt_1')
     if (url === '/api/agents/statement?from=2026-08-01&to=2026-09-01&format=csv') return csv('workspace')
+    if (url === '/api/agents/agt_1/statement?from=2026-08-01&to=2026-09-01&format=pdf') {
+      asked.push(url)
+      return new Response(PDF, { status: 200, headers: { 'Content-Type': 'application/pdf' } })
+    }
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/agents')
       return json({
@@ -105,5 +112,20 @@ describe('downloading a statement for a period on the Agent Bank', () => {
     const text = await saved[0].text
     expect(text).toContain('workspace,opening')
     expect(text).toContain('workspace,closing')
+  })
+
+  it("saves last month's statement for one agent as a PDF", async () => {
+    const { asked, saved } = mockBff()
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    const form = await screen.findByTestId('agent-statement-download')
+    fireEvent.change(within(form).getByLabelText('File type of Researcher’s statement'), { target: { value: 'pdf' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Download' }))
+
+    expect(await within(form).findByText('Saved researcher-statement-2026-08-01-to-2026-08-31.pdf.')).toBeTruthy()
+    expect(asked).toEqual(['/api/agents/agt_1/statement?from=2026-08-01&to=2026-09-01&format=pdf'])
+    expect(saved[0].name).toBe('researcher-statement-2026-08-01-to-2026-08-31.pdf')
+    expect(await saved[0].text).toBe(PDF)
   })
 })
