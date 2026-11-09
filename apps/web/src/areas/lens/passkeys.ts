@@ -5,7 +5,7 @@
 // on every approve or deny is signed with it over a challenge Lens issues for that one approval.
 // Pushes arrive through /sw.js, subscribed with the key Lens serves.
 
-import { agentBankApi, type PasskeyAssertion, type PayeeDetails } from './agentBankApi'
+import { agentBankApi, type OutsidePayment, type OutsidePaymentRequest, type PasskeyAssertion, type PayeeDetails } from './agentBankApi'
 
 export function b64u(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
@@ -82,6 +82,15 @@ export async function signPayeeCalled(payeeID: string): Promise<PasskeyAssertion
 /** B41.12 — signs the challenge for changing a payee's bank details to exactly `details` (Lens B41.112). */
 export async function signPayeeDetails(payeeID: string, details: PayeeDetails): Promise<PasskeyAssertion> {
   return assertOver(await agentBankApi.payeeDetailsChallenge(payeeID, details))
+}
+
+/**
+ * B54.35 — a person's payment is signed (Lens B54.33): once the workspace has a passkey, Face ID asks here over the
+ * challenge naming exactly this payment, and nothing is paid without it. With none, it pays as before.
+ */
+export async function payOutsideSigned(body: OutsidePaymentRequest): Promise<OutsidePayment> {
+  const c = await agentBankApi.paymentChallenge(body)
+  return agentBankApi.payOutside(body, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
 }
 
 /**
