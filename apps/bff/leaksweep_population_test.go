@@ -597,9 +597,13 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	//
 	// THE HUNDRED-AND-SIXTY-NINTH IS B54.35'S, POST only: /api/money/payments/challenge relays a one-time challenge for the
 	// payment it names and holds nothing; the payment it signs is read back through GET /api/money/payments.
-	if len(methodOnly) > 169 {
+	//
+	// THE HUNDRED-AND-SEVENTIETH TO SEVENTY-SECOND ARE B55.3'S, POST only: /api/agents/keys/enrolments/{id}/challenge,
+	// .../approve and .../decline let in or turn away a key waiting from another device, read back through GET
+	// /api/agents/keys/enrolments/{id}, in the sweep's reach.
+	if len(methodOnly) > 172 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 169 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 172 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}
