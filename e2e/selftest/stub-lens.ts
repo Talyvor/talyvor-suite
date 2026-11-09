@@ -770,6 +770,13 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   if (provider === 'vllm' && VLLM !== '') return vllm(req, res, path, raw)
   if (!CONFIGURED.has(provider)) return json(res, 503, { error: `provider ${provider} not configured` })
   const body = JSON.parse(raw || '{}') as { model?: string; stream?: boolean; max_tokens?: number; messages?: Msg[]; tools?: { name?: string; function?: { name?: string } }[] }
+  // talyvor-lens B41.79 — model "listing/<listing id>" is a use of that listing, answered by the listing's own model.
+  const listingAsModel = body.model?.startsWith('listing/') === true ? body.model.slice('listing/'.length).trim() : ''
+  if (listingAsModel !== '') {
+    const own = bank.listingModel(listingAsModel)
+    if (own === undefined) return json(res, 404, { error: 'market: no such listing' })
+    body.model = own
+  }
   // talyvor-lens B28.103 — model "auto" is served by the provider's cheapest chat model, and the stream names it.
   const auto = body.model === 'auto'
   const requested = auto
@@ -824,7 +831,9 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   }
   // B28.426 — talyvor-lens B28.186: a question asked through a marketplace listing (X-Talyvor-Listing) is one use of it, charged
   // as a marketplace use, and the answer says how.
-  const listing = header('x-talyvor-listing')
+  // STUB_BREAK=listing-model-stream (B41.208) — a streamed call naming a listing as its model is answered and never charged,
+  // as a streaming copy of the proxy that forgot the listing would.
+  const listing = header('x-talyvor-listing') || (broke('listing-model-stream') && body.stream === true ? '' : listingAsModel)
   if (listing !== '') {
     const charge = bank.chatListingUse(ws.id, listing)
     if (charge === undefined) return json(res, 404, { error: 'market: no such listing' })

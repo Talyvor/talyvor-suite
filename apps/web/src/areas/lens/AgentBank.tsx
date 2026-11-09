@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
@@ -10,6 +10,7 @@ import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
 import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
+import { AgentAnalytics } from './AgentAnalytics'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { categoryWords } from './Budgets'
@@ -20,6 +21,7 @@ import { CurrencyPicker, Lxc, useLxcText } from './money'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
+import { RunsOut } from './RunsOut'
 import { AgentAddress, AgentTransfers, CreditLinePanel, Loans, MoneyRequests, OfferLoan, RecurringTransfer, SendAndRequest } from './WalletMoney'
 import { CashOutCard, CashOuts, Escrows, PayIntoEscrow, Portfolios, Pots } from './WalletHoldings'
 import {
@@ -36,6 +38,8 @@ import {
   type AgentSchedule,
   type AgentTopUp as AgentTopUpValue,
   type LimitAlert,
+  type PostingKind,
+  type StatementFormat,
   type StatementLine,
   AgentBankError,
   agentBankApi,
@@ -204,7 +208,21 @@ function Spending({ nameOf }: { nameOf: (id: string) => string }) {
         ) : (
           <>
             {(forecast.data.agents ?? []).map((f) => (
-              <Row key={f.agent_id} label={f.name} hint={<>Spent {lxc(f.spent_ulxc)} so far this month</>}>
+              <Row
+                key={f.agent_id}
+                label={f.name}
+                hint={
+                  <>
+                    Spent {lxc(f.spent_ulxc)} so far this month
+                    {f.runs_out_on !== undefined ? (
+                      <>
+                        {' '}
+                        · <RunsOut forecast={f} />
+                      </>
+                    ) : null}
+                  </>
+                }
+              >
                 <span className="text-body text-ink">{lxc(f.forecast_ulxc)}</span>
               </Row>
             ))}
@@ -1973,9 +1991,48 @@ function lineStatus(l: StatementLine): { status: PillStatus; label: string } {
   return held ? { status: 'held', label: 'Held' } : { status: 'settled', label: 'Settled' }
 }
 
+/** B28.51 — the kinds the Statement can be filtered to, in the words its lines use. */
+const STATEMENT_KINDS: ReadonlyArray<{ label: string; kinds: readonly PostingKind[] }> = [
+  { label: 'Every kind', kinds: [] },
+  { label: 'Funded', kinds: ['fund'] },
+  { label: 'Taken back', kinds: ['withdraw'] },
+  { label: 'Top-ups', kinds: ['topup'] },
+  { label: 'Requests', kinds: ['spend', 'hold', 'settle', 'release'] },
+  { label: 'Platform fees', kinds: ['platform_fee'] },
+  { label: 'Payments', kinds: ['pay'] },
+  { label: 'Transfers', kinds: ['transfer', 'reversal'] },
+  { label: 'Card', kinds: ['card'] },
+  { label: 'Escrow', kinds: ['escrow'] },
+  { label: 'Pots', kinds: ['pot_in', 'pot_out'] },
+  { label: 'Cash-outs', kinds: ['cash_out'] },
+  { label: 'Credit line', kinds: ['credit_line'] },
+]
+
+/** B28.51 — the UTC day the agent was made: its statement starts there, so paging reaches its first line. */
+const firstDay = (agent: Agent) => {
+  const t = new Date(agent.created_at)
+  return Number.isNaN(t.getTime()) ? utcDay(new Date()) : utcDay(t)
+}
+
 export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id: string) => string; entry?: string }) {
-  const st = useQuery({ queryKey: statementKey(agent.id), queryFn: () => agentBankApi.statement(agent.id) })
-  const lines = st.data?.lines ?? []
+  // B28.51 — searched and filtered by Lens, a page of the newest lines at a time; Show older reads the page under it.
+  const [typed, setTyped] = useState('')
+  const [q, setQ] = useState('')
+  const [kindAt, setKindAt] = useState(0)
+  useEffect(() => {
+    const t = setTimeout(() => setQ(typed.trim()), 300)
+    return () => clearTimeout(t)
+  }, [typed])
+  const kinds = STATEMENT_KINDS[kindAt].kinds
+  const from = firstDay(agent)
+  const st = useInfiniteQuery({
+    queryKey: [...statementKey(agent.id), 'page', from, kinds.join(','), q],
+    queryFn: ({ pageParam }) => agentBankApi.statementPage(agent.id, from, { kinds, q }, pageParam),
+    initialPageParam: undefined as { to?: string; cursor: string } | undefined,
+    getNextPageParam: (last, pages) => (last.next_cursor ? { to: pages[0].to, cursor: last.next_cursor } : undefined),
+  })
+  const lines = st.data?.pages.flatMap((p) => p.lines ?? []) ?? []
+  const searching = kinds.length > 0 || q !== ''
   // B28.349 — a line linked to (from a spend answer in Chat) is marked, and brought into view.
   const linked = useRef<HTMLTableRowElement | null>(null)
   const found = entry !== undefined && lines.some((l) => l.entry_id === entry)
@@ -1985,12 +2042,37 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
   return (
     <Card>
       <CardHeader>Statement</CardHeader>
-      {st.isError ? (
+      <div className="flex flex-wrap items-center gap-2 border-b border-rule px-gutter py-3">
+        <Input
+          type="search"
+          aria-label={`Search ${agent.name}’s statement`}
+          placeholder="Search"
+          className="w-56"
+          maxLength={200}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+        />
+        <select
+          aria-label={`Kind of line in ${agent.name}’s statement`}
+          className={`${scheduleSelect} w-56`}
+          value={kindAt}
+          onChange={(e) => setKindAt(Number(e.target.value))}
+        >
+          {STATEMENT_KINDS.map((k, i) => (
+            <option key={k.label} value={i}>
+              {k.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {st.isError && st.data === undefined ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(st.error, 'This agent’s statement')}</p>
       ) : st.isPending ? (
         <p className="px-gutter py-3 text-body text-muted">Reading…</p>
       ) : lines.length === 0 ? (
-        <p className="px-gutter py-3 text-body text-muted">Nothing has moved in this wallet yet. Fund it under Money to start.</p>
+        <p className="px-gutter py-3 text-body text-muted">
+          {searching ? 'No line on this statement matches.' : 'Nothing has moved in this wallet yet. Fund it under Money to start.'}
+        </p>
       ) : (
         <table className="w-full text-body" data-testid="agent-statement">
           <thead>
@@ -2037,6 +2119,16 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
           </tbody>
         </table>
       )}
+      {st.hasNextPage ? (
+        <div className="border-t border-rule px-gutter py-3">
+          <Button type="button" onClick={() => void st.fetchNextPage()} disabled={st.isFetchingNextPage}>
+            {st.isFetchingNextPage ? 'Reading…' : 'Show older lines'}
+          </Button>
+        </div>
+      ) : null}
+      {st.isFetchNextPageError ? (
+        <p className="border-t border-rule px-gutter py-3 text-body text-muted">{readFailure(st.error, 'The older lines')}</p>
+      ) : null}
       {entry !== undefined && st.isSuccess && !found ? (
         <p className="border-t border-rule px-gutter py-3 text-body text-muted">
           The line you followed is older than the ones shown here. Download this agent’s statement for its period below.
@@ -2080,8 +2172,9 @@ function saveFile(name: string, blob: Blob) {
 }
 
 /**
- * B19.22 — a statement for any period as a file an auditor can open: one agent's account, or with no
- * agent every wallet in the workspace. Lens builds it (B19.5): each account's opening balance, every line
+ * B19.22 — a statement for any period as a file an auditor can open (B28.55: or a PDF to read and print; B28.56: or a
+ * journal to import into Xero or QuickBooks, one balanced journal per entry, each agent its cost centre): one
+ * agent's account, or with no agent every wallet in the workspace. Lens builds it (B19.5): each account's opening balance, every line
  * naming its posting and entry, and each account's closing balance. Days are whole UTC days, the last
  * one included.
  */
@@ -2089,13 +2182,16 @@ function saveFile(name: string, blob: Blob) {
 /** `month` (B28.98): the period it opens on — last month, or in Chat this one. */
 export function StatementDownload({ agent, primary = false, month = 'last' }: { agent: Agent | null; primary?: boolean; month?: 'last' | 'this' }) {
   const [period, setPeriod] = useState(() => monthPeriod(month))
-  const [format, setFormat] = useState<'csv' | 'json'>('csv')
+  const [format, setFormat] = useState<StatementFormat>('csv')
   const who = agent ? `${agent.name}’s` : 'every agent’s'
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(period.from) && /^\d{4}-\d{2}-\d{2}$/.test(period.through) && period.from <= period.through
   const get = useMutation({
     mutationFn: async () => {
       const stem = agent ? agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'agent' : 'agent-wallets'
-      const name = `${stem}-statement-${period.from}-to-${period.through}.${format}`
+      const name =
+        format === 'journal'
+          ? `${stem}-journal-${period.from}-to-${period.through}.csv`
+          : `${stem}-statement-${period.from}-to-${period.through}.${format}`
       saveFile(name, await agentBankApi.statementFile(agent?.id ?? null, period.from, dayAfter(period.through), format))
       return name
     },
@@ -2111,7 +2207,8 @@ export function StatementDownload({ agent, primary = false, month = 'last' }: { 
     >
       <p className="text-caption text-muted">
         Download {who} statement for a period: the opening balance, every movement with its posting and entry, and the
-        closing balance. Days are UTC; the last day is included.
+        closing balance. Days are UTC; the last day is included. The journal imports into Xero or QuickBooks: each entry
+        one balanced journal, each agent its cost centre.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" onClick={() => setPeriod(monthPeriod('last'))}>
@@ -2139,12 +2236,14 @@ export function StatementDownload({ agent, primary = false, month = 'last' }: { 
         />
         <select
           aria-label={`File type of ${who} statement`}
-          className={`${scheduleSelect} w-24`}
+          className={`${scheduleSelect} w-auto`}
           value={format}
-          onChange={(e) => setFormat(e.target.value as 'csv' | 'json')}
+          onChange={(e) => setFormat(e.target.value as StatementFormat)}
         >
           <option value="csv">CSV</option>
           <option value="json">JSON</option>
+          <option value="pdf">PDF</option>
+          <option value="journal">Journal for Xero or QuickBooks</option>
         </select>
         <Button type="submit" variant={primary ? 'primary' : 'default'} disabled={!valid || get.isPending}>
           {get.isPending ? 'Preparing…' : 'Download'}
@@ -2707,6 +2806,7 @@ export function AgentBank() {
             <>
               <Archived agent={agent} done={archived[agent.id]} />
               <AgentDetails key={`details-${agent.id}`} agent={agent} />
+              <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
             </>
           ) : (
@@ -2746,6 +2846,7 @@ export function AgentBank() {
               <IssueKey key={`key-${agent.id}`} agent={agent} />
               <AgentCredentialCard key={`credential-${agent.id}`} agent={agent} />
               <AgentCardPanel key={`card-${agent.id}`} agent={agent} />
+              <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
               <ArchiveAgent
                 key={`archive-${agent.id}`}

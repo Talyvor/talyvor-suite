@@ -410,7 +410,7 @@ export interface SpendForecastRead {
   at: string
   month_start: string
   month_end: string
-  agents: { agent_id: string; name: string; spent_ulxc: number; forecast_ulxc: number; balance_ulxc?: number; runs_out_at?: string | null }[] | null
+  agents: { agent_id: string; name: string; spent_ulxc: number; forecast_ulxc: number; balance_ulxc?: number; runs_out_at?: string | null; runs_out_on?: string | null; timezone?: string }[] | null
 }
 
 /** Lens economy.AgentApproval. A payment names who it pays and why (Lens B23.5). */
@@ -424,6 +424,16 @@ export interface AgentApproval {
 }
 
 /** Lens economy.AgentStatementLine: one posting on an agent's account. */
+/** B28.53 — one agent's spend for a period by day, model and destination (Lens B28.326), in µLXC. */
+export interface AgentSpendAnalytics {
+  agent_id: string
+  time_zone: string
+  out_ulxc: number
+  returned_ulxc: number
+  spent_ulxc: number
+  buckets: { day: string; model: string; destination: string; out_ulxc: number; returned_ulxc: number; spent_ulxc: number; postings: number }[] | null
+}
+
 export interface AgentLine {
   entry_id: string
   kind: string
@@ -1331,6 +1341,37 @@ export class LensClient {
     return body.lines ?? []
   }
 
+  /** B28.53 — one agent's spend from `from` to now by day, model and destination (Lens B28.326). */
+  async agentAnalytics(user: SyntheticUser, agentID: string, from: string): Promise<AgentSpendAnalytics> {
+    return (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/${agentID}/analytics?from=${from}`, this.bearer(user.token))) as AgentSpendAnalytics
+  }
+
+  /** B28.53 — the totals of one agent's statement from `from` to now (Lens B19.5): what came in and went out. */
+  async agentPeriodTotals(user: SyntheticUser, agentID: string, from: string): Promise<{ account: string; in_ulxc: number; out_ulxc: number }[]> {
+    const body = (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/${agentID}/statement?from=${from}`, this.bearer(user.token))) as {
+      accounts?: { account: string; in_ulxc: number; out_ulxc: number }[] | null
+    }
+    return body.accounts ?? []
+  }
+
+  /** B28.55 — one agent's statement (or, with no agent, every agent wallet's) for [from, to) as JSON: each account's opening and closing. */
+  async agentPeriodBalances(user: SyntheticUser, agentID: string | undefined, from: string, to: string): Promise<{ account: string; opening_ulxc: number; closing_ulxc: number }[]> {
+    const path = agentID === undefined ? 'agents/statement' : `agents/${agentID}/statement`
+    const body = (await this.call('GET', `/v1/workspaces/${user.workspaceID}/${path}?from=${from}&to=${to}`, this.bearer(user.token))) as {
+      accounts?: { account: string; opening_ulxc: number; closing_ulxc: number }[] | null
+    }
+    return body.accounts ?? []
+  }
+
+  /** B28.56 — one agent's statement (or, with no agent, every agent wallet's) for [from, to) as JSON: each account's in, out and closing. */
+  async agentPeriodInOut(user: SyntheticUser, agentID: string | undefined, from: string, to: string): Promise<{ account: string; in_ulxc: number; out_ulxc: number; closing_ulxc: number }[]> {
+    const path = agentID === undefined ? 'agents/statement' : `agents/${agentID}/statement`
+    const body = (await this.call('GET', `/v1/workspaces/${user.workspaceID}/${path}?from=${from}&to=${to}`, this.bearer(user.token))) as {
+      accounts?: { account: string; in_ulxc: number; out_ulxc: number; closing_ulxc: number }[] | null
+    }
+    return body.accounts ?? []
+  }
+
   /** B28.377 — the workspace's prompt schedules, each with its runs, newest first (talyvor-lens B28.125). */
   async promptSchedules(user: SyntheticUser): Promise<PromptSchedule[]> {
     const body = (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/prompt-schedules`, this.bearer(user.token))) as { schedules?: PromptSchedule[] | null }
@@ -1350,6 +1391,33 @@ export class LensClient {
     })
     const raw = await res.text()
     return res.ok ? { ok: true, status: res.status, value: JSON.parse(raw) as AgentPayment } : { ok: false, status: res.status, error: refusalOf(raw) }
+  }
+
+  /**
+   * B41.208 — one question to a marketplace listing called as a model ("listing/<id>", talyvor-lens B41.79) on Lens's
+   * OpenAI-compatible route, on this user's own key, streamed or not: the status, X-Talyvor-Listing-Charge (null when
+   * absent) and the answer's text, never thrown.
+   */
+  async askListingAsModel(user: SyntheticUser, listingID: string, question: string, maxTokens: number, stream: boolean): Promise<{ status: number; charge: string | null; text: string }> {
+    const key = await this.sessionKey(user)
+    const res = await this.send('POST', '/v1/proxy/openai/v1/chat/completions', {
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: stream ? 'text/event-stream' : 'application/json' },
+      body: JSON.stringify({ model: `listing/${listingID}`, max_tokens: maxTokens, stream, messages: [{ role: 'user', content: question }] }),
+    })
+    const raw = await res.text()
+    const charge = res.headers.get('X-Talyvor-Listing-Charge')
+    if (!res.ok) return { status: res.status, charge, text: refusalOf(raw) }
+    const textOf = (d: string, field: 'message' | 'delta') => {
+      try {
+        return ((JSON.parse(d) as { choices?: Record<string, { content?: string } | undefined>[] }).choices ?? []).map((c) => c[field]?.content ?? '').join('')
+      } catch {
+        return ''
+      }
+    }
+    if (!stream) return { status: res.status, charge, text: textOf(raw, 'message') }
+    const said = raw.split('\n').map((l) => /^data: (.*)$/.exec(l.trim())?.[1]).filter((d): d is string => d !== undefined && d !== '[DONE]')
+      .map((d) => textOf(d, 'delta'))
+    return { status: res.status, charge, text: said.join('') }
   }
 
   /** B17.6 — the buyer's marketplace bill for this month (Lens B20.2). */

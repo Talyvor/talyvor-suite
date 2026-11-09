@@ -28,7 +28,7 @@ import {
   statesNumber,
 } from './oracles.ts'
 import { BillingPlanCard, DocsPage, FeaturesScreen, type LoggingPolicy, TrackScreen, subscribeWithTestCard, tryConversion, tryTare } from './screens.ts'
-import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, spendNoticePush, approvalsBadge, approvalsInbox, approveAlwaysAllow, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, chatSafeToSpend, homeDailyBriefing, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, sidebarUnnamedWorkspace, walletHome, walletOnboarding } from './bank.ts'
+import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, spendNoticePush, approvalsBadge, approvalsInbox, approveAlwaysAllow, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, agentRunsOutDate, chatSafeToSpend, homeDailyBriefing, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, sidebarUnnamedWorkspace, walletHome, walletOnboarding } from './bank.ts'
 import { chatMoneyRequests, marketAbuse, marketAgentCommitment, marketAgentMCP, marketBillRefund, marketJournal, marketOffers, marketPayout, marketRent, marketTrial, marketPayoutConnect, marketHeldSeller, marketReview, marketTakedown, walletCard, walletCardPurchase, walletCashOut, walletEscrow, walletLoan, walletLoanDefault, walletLoanRepay, walletPots, walletGiveBack, walletRecurring, walletRequest, walletSendRefund } from './trade.ts'
 import type { Inventory } from './coverage.ts'
 import { apiKeyRevoke, byokAddon, chatConnectors, chatDocsPage, chatExportImport, chatFileBug, chatShareLink, chatToolGuard, chatTrackIssue, docsShareCollab, docsTeamGrant, docsTools, lensConvert, patternMiningSwitch, planChange, providerKeys, sessionSignOut, trackProject, trackSearchCycleBoard, trackWorkspaceRestore, walletFX, wrongAnswerStored } from './surface.ts'
@@ -149,9 +149,14 @@ import { keysNotForwarded, keysUnlisted } from './keys.ts'
 import { rateLimitsHold, workspaceLimitsRaised } from './ratelimit.ts'
 import { marketAskScreen, marketCompareScreen, marketDiscoverScreen, marketDiscovery } from './discovery.ts'
 import { marketContentFilter } from './contentFilter.ts'
+import { listingAsModel } from './listingAsModel.ts'
 import { marketPrivacyLabel } from './privacyLabel.ts'
 import { royaltiesNotHeadline } from './royalties.ts'
 import { statementLineKinds } from './statementKinds.ts'
+import { statementPaging } from './statementPaging.ts'
+import { agentAnalytics } from './agentAnalytics.ts'
+import { statementPDF } from './statementPDF.ts'
+import { statementJournal } from './statementJournal.ts'
 import { openapiWallets } from './openapiWallets.ts'
 
 export interface Evidence {
@@ -5092,7 +5097,7 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     // B28.377 — last of the Chat checks, as it waits a minute or two: /schedule in Chat for an agent of its own, set ahead;
     // nothing is asked before that time, the answer appears in Chat at it, and what it cost is the agent's new statement
     // line, the workspace's own balance unmoved.
-    case 6: list.push(statementReconciles(i), ledgerReadsCorrectly(), spendPlainWords(), spendPlatformFee(), agentBalanceStored(i), agentSpendQuestion(i), chatBrand(), chatHelpInFull(), chatLaunchAgent(i), chatPlainRule(i), chatAskAbove(i), chatForecastAnswer(i), chatSafeToSpend(i), chatPaidBy(i), chatAgentTask(i), chatCardFreeze(i), chatStatement(i), chatWalletAlerts(i), chatLiveStatement(i), chatRecentCalls(i), chatApprovalFaceID(i), chatWalletButtons(i), chatScheduledPrompt(i)); break
+    case 6: list.push(statementReconciles(i), ledgerReadsCorrectly(), spendPlainWords(), spendPlatformFee(), agentBalanceStored(i), agentSpendQuestion(i), chatBrand(), chatHelpInFull(), chatLaunchAgent(i), chatPlainRule(i), chatAskAbove(i), chatForecastAnswer(i), agentRunsOutDate(i), chatSafeToSpend(i), chatPaidBy(i), chatAgentTask(i), chatCardFreeze(i), chatStatement(i), chatWalletAlerts(i), chatLiveStatement(i), chatRecentCalls(i), chatApprovalFaceID(i), chatWalletButtons(i), chatScheduledPrompt(i)); break
     // B55.39 — first, while Lens still names the workspace by its id: the sidebar reads "Your workspace", never the id.
     // B28.271 — then, while the workspace has no agent: Agent Wallets is only the card that creates one.
     // B28.8 — then, still with no agent: Home's three onboarding steps.
@@ -5125,7 +5130,11 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     case 3: if (other < users) list.push(walletLoan(i, other)); break
     case 4: if (other < users) list.push(walletEscrow(i, other)); break
     // B28.19 — then an agent's statement after a top-up, a transfer in, a card charge and a pot move: each line by what it was.
-    case 5: list.push(walletPots(i), statementLineKinds(i)); break
+    // B28.51 — then an agent's statement of 107 lines, paged past its newest 100 and filtered to one kind.
+    // B28.53 — then an agent's spend by day, model and destination, against its statement's out.
+    // B28.55 — then an agent's statement, and every agent's, as a PDF, against the JSON statement's balances.
+    // B28.56 — then an agent's journal, and every agent's, for Xero or QuickBooks, against the JSON statement's in and out.
+    case 5: list.push(walletPots(i), statementLineKinds(i), statementPaging(i), agentAnalytics(i), statementPDF(i), statementJournal(i)); break
     case 6: list.push(walletCashOut(i)); break
     case 7: if (other < users) list.push(walletRecurring(i, other)); break
     case 8: list.push(marketTakedown(i, i - 1)); break
@@ -5614,6 +5623,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.426 (for talyvor-lens B28.186) — a paid skill used in Chat, once a run, on workspaces of its own: opened from its listing
   // page with Use in Chat, two questions write two billed uses on the buyer's marketplace bill and two model spend rows.
   if (i === 7) list.push(chatListing(i))
+  // B41.208 (for talyvor-lens B41.79) — a paid agent listing called as model "listing/<id>", once a run, on workspaces of its own:
+  // a plain and a streamed call on the OpenAI-compatible route each answer billed and add exactly one billed use to the bill.
+  if (i === 7) list.push(listingAsModel(i))
   // B30.118 — Know Your Agent, once a run, on a workspace of its own: the owner's read and the agent's wallet_credential hand over
   // one credential that verifies with only the published JWKS and states the daily limit; a rule change lists it "rules changed"
   // on revoked.json and the next states the new limit; pausing the agent lists that one "frozen" and the route is 409.

@@ -104,7 +104,17 @@ function mockBff({
         month_end: '2026-11-01T00:00:00Z',
         spent_ulxc: 3 * M,
         forecast_ulxc: 25 * M,
-        agents: agents.map((a) => ({ agent_id: a.id, name: a.name, spent_ulxc: a.id === 'agt_1' ? 3 * M : 0, forecast_ulxc: 0 })),
+        // B28.57 — Researcher, in Sydney, runs out at 17:00 UTC on 27 October: 28 October in its own zone (Lens B28.330).
+        // Buyer does not run out at its pace.
+        agents: agents.map((a) => ({
+          agent_id: a.id,
+          name: a.name,
+          spent_ulxc: a.id === 'agt_1' ? 3 * M : 0,
+          forecast_ulxc: 0,
+          ...(a.id === 'agt_1'
+            ? { runs_out_at: '2026-10-28T04:00:00+11:00', runs_out_on: '2026-10-28', timezone: 'Australia/Sydney' }
+            : { runs_out_at: null, runs_out_on: null, timezone: 'UTC' }),
+        })),
       })
     const rules = /^\/api\/agents\/([^/]+)\/rules$/.exec(url)
     if (rules)
@@ -188,6 +198,16 @@ describe('Home — the wallet home (B28.6)', () => {
 
   // B45.11 — DONE reads: "the approvals, the total and the first agent rows are visible without scrolling; every
   // figure matches the API". jsdom has no fold, so this pins the order and the figures; the 390px screenshot the fold.
+  it('each agent’s row says the day it runs out in its own time zone, not UTC’s, or that it does not run out (B28.57)', async () => {
+    mockBff({ agents: AGENTS })
+    render(<App />)
+
+    const researcher = await screen.findByTestId('runs-out-agt_1')
+    expect(researcher).toHaveTextContent('runs out on 28 October 2026 (Australia/Sydney)')
+    expect(within(researcher).getByText('28 October 2026')).toHaveAttribute('dateTime', '2026-10-28')
+    expect(screen.getByTestId('runs-out-agt_2')).toHaveTextContent('does not run out at this pace')
+  })
+
   it('Home in one glance: approvals first, then one total, then a row per agent, then Taly’s input', async () => {
     const writes = mockBff({ agents: AGENTS })
     window.history.pushState({}, '', '/')

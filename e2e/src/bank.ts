@@ -431,6 +431,40 @@ export class AgentBankScreen {
     return { name: download.suggestedFilename(), text: await readFile(await download.path(), 'utf8') }
   }
 
+  /**
+   * B28.55 — downloads `agent`'s statement (or, with none, every agent's) from `from` through `through` (YYYY-MM-DD, the
+   * last day included) as a PDF, on the card a person uses; the file's name and its bytes as text.
+   */
+  async statementPDF(agent: Agent | undefined, from: string, through: string): Promise<{ name: string; text: string }> {
+    await this.fresh(agent)
+    const form = this.page.getByTestId(agent === undefined ? 'bank-statement-download' : 'agent-statement-download')
+    await form.getByLabel(/^First day of/).fill(from)
+    await form.getByLabel(/^Last day of/).fill(through)
+    await form.getByLabel(/^File type of/).selectOption('pdf')
+    const [download] = await Promise.all([
+      this.page.waitForEvent('download', { timeout: ACTION_TIMEOUT_MS }),
+      form.getByRole('button', { name: 'Download', exact: true }).click(),
+    ])
+    return { name: download.suggestedFilename(), text: await readFile(await download.path(), 'latin1') }
+  }
+
+  /**
+   * B28.56 — downloads `agent`'s journal (or, with none, every agent's) from `from` through `through` (YYYY-MM-DD, the
+   * last day included) for Xero or QuickBooks, on the card a person uses; the file's name and its text.
+   */
+  async statementJournal(agent: Agent | undefined, from: string, through: string): Promise<{ name: string; text: string }> {
+    await this.fresh(agent)
+    const form = this.page.getByTestId(agent === undefined ? 'bank-statement-download' : 'agent-statement-download')
+    await form.getByLabel(/^First day of/).fill(from)
+    await form.getByLabel(/^Last day of/).fill(through)
+    await form.getByLabel(/^File type of/).selectOption('journal')
+    const [download] = await Promise.all([
+      this.page.waitForEvent('download', { timeout: ACTION_TIMEOUT_MS }),
+      form.getByRole('button', { name: 'Download', exact: true }).click(),
+    ])
+    return { name: download.suggestedFilename(), text: await readFile(await download.path(), 'utf8') }
+  }
+
   // ─── B25.4: money between owners, on the same screen ───
 
   /** Send or request → Send: `ulxc` from `agent` to the wallet `to`; the line the card then shows. */
@@ -605,6 +639,65 @@ export class AgentBankScreen {
     }
     return shown
   }
+
+  /**
+   * B28.51 — Statement read three ways: its first page, the same after Show older lines, and then filtered to the kind
+   * the filter names. Each row as the screen shows it, top to bottom: its words, its amount and the balance after it.
+   */
+  async statementPaged(agent: Agent, kind: string): Promise<{ first: StatementRow[]; all: StatementRow[]; filtered: StatementRow[] } | string> {
+    await this.fresh(agent)
+    const statement = card(this.page, 'Statement')
+    const rows = statement.getByTestId('agent-statement').locator('tbody tr')
+    const read = async (): Promise<StatementRow[]> => {
+      const shown: StatementRow[] = []
+      for (const row of await rows.all()) {
+        const cells = row.locator('td')
+        shown.push({ what: figureText(await row.getByTestId('statement-what').innerText()), amount: figureText(await cells.nth(2).innerText()), balance: figureText(await cells.nth(3).innerText()) })
+      }
+      return shown
+    }
+    await rows.first().waitFor({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
+    const first = await read()
+    const older = statement.getByRole('button', { name: 'Show older lines', exact: true })
+    if (!(await older.isVisible())) return `the Statement shows ${first.length} line(s) and no Show older lines`
+    await older.click()
+    const settle = async (want: (n: number) => boolean) => {
+      const end = Date.now() + ACTION_TIMEOUT_MS
+      while (!want(await rows.count()) && Date.now() < end) await this.page.waitForTimeout(250)
+    }
+    await settle((n) => n > first.length)
+    const all = await read()
+    await statement.getByRole('combobox', { name: `Kind of line in ${agent.name}’s statement` }).selectOption({ label: kind })
+    await settle((n) => n < all.length)
+    const filtered = await read()
+    return { first, all, filtered }
+  }
+
+  /** B28.53 — the agent's Spend by day, model and destination card, for its first period (the last 30 days). */
+  async analyticsShown(agent: Agent): Promise<AnalyticsShown | string> {
+    await this.fresh(agent)
+    const c = card(this.page, 'Spend by day, model and destination')
+    const out = c.getByTestId('agent-analytics-out')
+    await out.or(c.getByTestId('agent-analytics-none')).first().waitFor({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
+    if (!(await out.isVisible())) return `Spend by day, model and destination shows no Out: "${figureText(await c.innerText())}"`
+    const rows = async (view: string) => (await c.getByTestId(`agent-analytics-${view}-row`).allInnerTexts()).map(figureText)
+    return { out: figureText(await out.innerText()), days: await rows('day'), models: await rows('model'), destinations: await rows('destination') }
+  }
+}
+
+/** B28.53 — Spend by day, model and destination as the screen draws it: the Out figure and each view's rows. */
+export interface AnalyticsShown {
+  out: string
+  days: string[]
+  models: string[]
+  destinations: string[]
+}
+
+/** B28.51 — one row of an agent's Statement as the screen draws it. */
+export interface StatementRow {
+  what: string
+  amount: string
+  balance: string
 }
 
 /** The note a card shows once its form was sent: what was done, or "Refused …"/"Not …" and why. */
@@ -741,7 +834,7 @@ async function oneCharge(ctx: ScenarioCtx, fresh: readonly LedgerRow[]): Promise
  * An agent asks one question with its own key. Its worst case is held against the cap first; a served
  * answer is booked, as every charged answer is, for the ledger read-back.
  */
-async function agentAsks(ctx: ScenarioCtx, key: string, prompt: string, note: string, modelID = ctx.env.judgeModel, headers: Record<string, string> = {}): Promise<Answered<JudgeReply>> {
+export async function agentAsks(ctx: ScenarioCtx, key: string, prompt: string, note: string, modelID = ctx.env.judgeModel, headers: Record<string, string> = {}): Promise<Answered<JudgeReply>> {
   const { env, app } = ctx
   const model = env.catalog.find((m) => m.id === modelID)
   if (model === undefined) throw new Error(`the catalog has no model ${modelID}`)
@@ -2708,6 +2801,80 @@ export function chatForecastAnswer(seed: number): Scenario {
             ctx.evidence.push({ note: `the forecast answer at ${width}px: ${shot}` })
           }
           return { pass: true, detail: `"${question}" in Chat: "${said}" — the day ${shown} is Lens's /forecast runs_out_at ${now.runs_out_at} for ${spender.name}, which holds ${funded - paid} µLXC after one ${paid} µLXC pay line` }
+        } finally {
+          await page.close()
+        }
+      }),
+  }
+}
+
+/**
+ * B28.57 — Home says the day an agent runs out, in the agent's own time zone. The spender's rules put it in
+ * Pacific/Kiritimati (UTC+14), it is funded 5 LXC and pays 4.999 LXC away, so it runs out this month. The day Home shows
+ * is Lens's /forecast runs_out_on for it, and that is the day runs_out_at falls on in Kiritimati, recomputed here.
+ */
+export function agentRunsOutDate(seed: number): Scenario {
+  const [funded, paid, zone] = [5e6, 4_999_000, 'Pacific/Kiritimati']
+  return {
+    id: 'agent-runs-out-date',
+    owner: 'talyvor-suite',
+    items: ['B28.57', 'B28.330'],
+    agents: 2,
+    title: 'Home shows the day an agent runs out as Lens\'s /forecast runs_out_on, the date in the agent\'s own time zone (Pacific/Kiritimati)',
+    run: (ctx) =>
+      withBank(ctx, async (bank) => {
+        const { env, app } = ctx
+        const spender = await openAgent(ctx, bank, `Runs-out spender ${seed}`)
+        if (typeof spender === 'string') return fail(spender)
+        const payee = await openAgent(ctx, bank, `Runs-out payee ${seed}`)
+        if (typeof payee === 'string') return fail(payee)
+        const put = await env.lens.act<AgentRulesRead>(app.user, 'PUT', `/v1/workspaces/{ws}/agents/${spender.id}/rules`, { ...await env.lens.agentRules(app.user, spender.id), timezone: zone })
+        if (!put.ok) return fail(`putting ${spender.name} in ${zone} was refused: ${put.status} ${put.error}`)
+        const err = await bank.move(spender, funded, 'Fund')
+        if (err !== undefined) return fail(`funding ${spender.name} was refused: ${err}`)
+        const out = await bank.pay(spender, payee, paid, `run it down ${seed}`)
+        if (!/^Paid /.test(out)) return fail(`${spender.name} paying ${lxcText(paid)} LXC was not paid: "${out}"`)
+        // The ledger, not the screen: one pay line for what it paid, and what is left.
+        const lines = await env.lens.agentLines(app.user, spender.id)
+        const pays = lines.filter((l) => l.kind === 'pay')
+        if (pays.length !== 1 || pays[0].amount_ulxc !== -paid || lines[0]?.balance_after_ulxc !== funded - paid) {
+          return fail(`after paying ${paid} µLXC of ${funded}, ${spender.name}'s statement has pay line(s) ${JSON.stringify(pays)} and ends at ${lines[0]?.balance_after_ulxc}`)
+        }
+
+        const page = await app.tab('/')
+        try {
+          await page.setViewportSize({ width: 1440, height: 900 })
+          const row = page.getByTestId(`runs-out-${spender.id}`)
+          try {
+            await row.waitFor({ timeout: ACTION_TIMEOUT_MS })
+          } catch {
+            return fail(`Home shows no run-out day for ${spender.name}`)
+          }
+          const said = (await row.innerText()).trim()
+          const shown = await row.locator('time').getAttribute('datetime', { timeout: 2_000 }).catch(() => null)
+          const f = await env.lens.agentForecast(app.user)
+          const now = (f.agents ?? []).find((a) => a.agent_id === spender.id)
+          ctx.evidence.push({ note: `Home: "${said}" (${shown ?? 'no date'}); Lens's /forecast for ${spender.name}: ${JSON.stringify(now)}` })
+          if (now === undefined) return fail(`Lens's /forecast does not list ${spender.name}`)
+          if (typeof now.runs_out_at !== 'string' || typeof now.runs_out_on !== 'string') {
+            return fail(`${spender.name} holds ${lxcText(funded - paid)} LXC after paying ${lxcText(paid)} LXC, yet Lens's /forecast gives runs_out_at ${now.runs_out_at} and runs_out_on ${now.runs_out_on}`)
+          }
+          if (now.timezone !== zone) return fail(`Lens's /forecast puts ${spender.name} in ${now.timezone ?? 'no zone'}, not ${zone}`)
+          // The oracle: the day runs_out_at's instant falls on in Kiritimati, and the day it falls on in UTC for the note.
+          const dayIn = (tz: string) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(now.runs_out_at as string))
+          if (now.runs_out_on !== dayIn(zone)) return fail(`Lens's /forecast says ${spender.name} runs out on ${now.runs_out_on}, but ${now.runs_out_at} is ${dayIn(zone)} in ${zone}`)
+          if (shown !== now.runs_out_on) return fail(`Home states the day ${spender.name} runs out as ${shown ?? 'nothing'}; Lens's /forecast says ${now.runs_out_on}`)
+          if (!said.includes(`(${zone})`)) return fail(`Home's run-out line for ${spender.name} does not name its zone: "${said}"`)
+
+          await mkdir(env.outDir, { recursive: true })
+          for (const [width, height] of [[1440, 900], [390, 844]] as const) {
+            await page.setViewportSize({ width, height })
+            await row.scrollIntoViewIfNeeded()
+            const shot = join(env.outDir, `agent-runs-out-date-${width}px-user${app.user.index}.png`)
+            await page.screenshot({ path: shot })
+            ctx.evidence.push({ note: `the run-out day on Home at ${width}px: ${shot}` })
+          }
+          return { pass: true, detail: `Home: "${said}" — ${shown} is Lens's runs_out_on for ${spender.name}, the day ${now.runs_out_at} falls on in ${zone} (UTC: ${dayIn('UTC')}), after one ${paid} µLXC pay line of ${funded}` }
         } finally {
           await page.close()
         }

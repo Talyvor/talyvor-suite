@@ -29,8 +29,10 @@ import (
 //	DELETE /api/agents/{id}/rules/boosts/{rule}        B28.32: end a boost before its time
 //	GET  /api/agents/{id}/wallet                       B46.9: its wallet on the money layer — balance and how to pay into it
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
-//	GET  /api/agents/{id}/statement?from=&to=&format=json|csv   B19.22: its statement for a period, to download
-//	GET  /api/agents/statement?from=&to=&format=json|csv        B19.22: every account in the bank, for a period
+//	GET  /api/agents/{id}/statement?from=&to=&format=json|csv|pdf|journal   B19.22: its statement for a period, to download (B28.55: PDF; B28.56: a journal for Xero or QuickBooks)
+//	GET  /api/agents/{id}/statement?kind=&q=&limit=&cursor=     B28.51: that statement searched, filtered and paged
+//	GET  /api/agents/{id}/analytics?from=&to=          B28.53: its spend for a period by day, model and destination
+//	GET  /api/agents/statement?from=&to=&format=json|csv|pdf|journal        B19.22: every account in the bank, for a period
 //	POST /api/agents/{id}/claim                        B19.23: the signed-in person becomes an ownerless agent's owner
 //	PATCH /api/agents/{id}              {"name"?, "description"?}   B28.21: rename it, describe it
 //	POST /api/agents/{id}/archive                      B28.21: retire it — its balance back to the workspace, its keys revoked
@@ -413,7 +415,8 @@ func (a *app) handleAgentRuleBoostEnd(w http.ResponseWriter, r *http.Request, t 
 }
 
 // handleAgentStatement — GET /api/agents/{id}/statement: the agent's last 100 lines. With ?from=, ?to=
-// or ?format= (B19.22) it is the agent's statement for that period instead, as JSON or a CSV file.
+// or ?format= (B19.22) it is the agent's statement for that period instead, as JSON, a CSV, (B28.55) a PDF or (B28.56) a journal; with ?kind=,
+// ?q= or ?cursor= (B28.51) too, so a search, a filter or a page past the newest lines reads the period statement.
 func (a *app) handleAgentStatement(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -423,7 +426,7 @@ func (a *app) handleAgentStatement(w http.ResponseWriter, r *http.Request, t ten
 	if !ok {
 		return
 	}
-	if q := r.URL.Query(); q.Has("from") || q.Has("to") || q.Has("format") {
+	if q := r.URL.Query(); q.Has("from") || q.Has("to") || q.Has("format") || q.Has("kind") || q.Has("q") || q.Has("cursor") {
 		a.agentStatementRelay(w, r, t, suffix)
 		return
 	}
@@ -440,15 +443,41 @@ func (a *app) handleBankStatement(w http.ResponseWriter, r *http.Request, t tena
 	a.agentStatementRelay(w, r, t, "/agents/statement")
 }
 
+// handleAgentAnalytics — GET /api/agents/{id}/analytics (B28.53): the agent's spend for [from, to) by day, model
+// and destination (Lens B28.326), whose buckets' out_ulxc sum to its statement's for the same period. Only from and
+// to are sent up.
+func (a *app) handleAgentAnalytics(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	suffix, ok := agentSuffix(w, r, "analytics")
+	if !ok {
+		return
+	}
+	in, up := r.URL.Query(), url.Values{}
+	for _, k := range []string{"from", "to"} {
+		if v := in.Get(k); v != "" {
+			up.Set(k, v)
+		}
+	}
+	path := lensWorkspacePath(t, suffix)
+	if len(up) > 0 {
+		path += "?" + up.Encode()
+	}
+	a.agentBankRelayPath(w, r, t, http.MethodGet, path, nil)
+}
+
 // maxStatementBytes bounds a period statement the BFF passes on; a longer one asks for a shorter period.
 const maxStatementBytes = 32 << 20
 
 // agentStatementRelay asks Lens for a period statement (Lens B19.5) and answers with it: JSON, or the
-// CSV file with Lens's filename. Only from, to and format are sent up; Lens reads the dates (a
+// CSV file (or, B28.55, the PDF; B28.56, the journal CSV) with Lens's filename. Only from, to and format are sent up, and (B28.51) kind, q, limit and cursor, with
+// which Lens keeps the lines of those kinds holding q and pages them newest first; Lens reads the dates (a
 // YYYY-MM-DD date is midnight UTC, the period is [from, to)) and its sentence on a bad one is relayed.
 func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tenant, suffix string) {
 	in, up := r.URL.Query(), url.Values{}
-	for _, k := range []string{"from", "to", "format"} {
+	for _, k := range []string{"from", "to", "format", "kind", "q", "limit", "cursor"} {
 		if v := in.Get(k); v != "" {
 			up.Set(k, v)
 		}
@@ -471,19 +500,19 @@ func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tena
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxStatementBytes+1))
-	asCSV := up.Get("format") == "csv"
+	asFile := map[string]string{"csv": "text/csv; charset=utf-8", "journal": "text/csv; charset=utf-8", "pdf": "application/pdf"}[up.Get("format")]
 	switch {
 	case err != nil:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Lens could not answer just now"})
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && len(raw) > maxStatementBytes:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "This statement is too long to download at once — choose a shorter period."})
-	case resp.StatusCode >= 200 && resp.StatusCode < 300 && asCSV:
-		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	case resp.StatusCode >= 200 && resp.StatusCode < 300 && asFile != "":
+		w.Header().Set("Content-Type", asFile)
 		if cd := resp.Header.Get("Content-Disposition"); cd != "" {
 			w.Header().Set("Content-Disposition", cd)
 		}
 		w.WriteHeader(resp.StatusCode)
-		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the statement CSV under text/csv, and every response carries nosniff (setSecurityHeaders)
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the statement CSV under text/csv or PDF under application/pdf, and every response carries nosniff (setSecurityHeaders)
 		_, _ = w.Write(raw)
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && json.Valid(raw):
 		w.Header().Set("Content-Type", "application/json")
