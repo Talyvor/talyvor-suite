@@ -31,6 +31,7 @@ import (
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
 //	GET  /api/agents/{id}/statement?from=&to=&format=json|csv   B19.22: its statement for a period, to download
 //	GET  /api/agents/{id}/statement?kind=&q=&limit=&cursor=     B28.51: that statement searched, filtered and paged
+//	GET  /api/agents/{id}/analytics?from=&to=          B28.53: its spend for a period by day, model and destination
 //	GET  /api/agents/statement?from=&to=&format=json|csv        B19.22: every account in the bank, for a period
 //	POST /api/agents/{id}/claim                        B19.23: the signed-in person becomes an ownerless agent's owner
 //	PATCH /api/agents/{id}              {"name"?, "description"?}   B28.21: rename it, describe it
@@ -440,6 +441,31 @@ func (a *app) handleBankStatement(w http.ResponseWriter, r *http.Request, t tena
 		return
 	}
 	a.agentStatementRelay(w, r, t, "/agents/statement")
+}
+
+// handleAgentAnalytics — GET /api/agents/{id}/analytics (B28.53): the agent's spend for [from, to) by day, model
+// and destination (Lens B28.326), whose buckets' out_ulxc sum to its statement's for the same period. Only from and
+// to are sent up.
+func (a *app) handleAgentAnalytics(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	suffix, ok := agentSuffix(w, r, "analytics")
+	if !ok {
+		return
+	}
+	in, up := r.URL.Query(), url.Values{}
+	for _, k := range []string{"from", "to"} {
+		if v := in.Get(k); v != "" {
+			up.Set(k, v)
+		}
+	}
+	path := lensWorkspacePath(t, suffix)
+	if len(up) > 0 {
+		path += "?" + up.Encode()
+	}
+	a.agentBankRelayPath(w, r, t, http.MethodGet, path, nil)
 }
 
 // maxStatementBytes bounds a period statement the BFF passes on; a longer one asks for a shorter period.

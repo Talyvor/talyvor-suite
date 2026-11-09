@@ -424,6 +424,16 @@ export interface AgentApproval {
 }
 
 /** Lens economy.AgentStatementLine: one posting on an agent's account. */
+/** B28.53 — one agent's spend for a period by day, model and destination (Lens B28.326), in µLXC. */
+export interface AgentSpendAnalytics {
+  agent_id: string
+  time_zone: string
+  out_ulxc: number
+  returned_ulxc: number
+  spent_ulxc: number
+  buckets: { day: string; model: string; destination: string; out_ulxc: number; returned_ulxc: number; spent_ulxc: number; postings: number }[] | null
+}
+
 export interface AgentLine {
   entry_id: string
   kind: string
@@ -1329,6 +1339,19 @@ export class LensClient {
   async agentLines(user: SyntheticUser, agentID: string): Promise<AgentLine[]> {
     const body = (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/${agentID}/statement`, this.bearer(user.token))) as { lines?: AgentLine[] | null }
     return body.lines ?? []
+  }
+
+  /** B28.53 — one agent's spend from `from` to now by day, model and destination (Lens B28.326). */
+  async agentAnalytics(user: SyntheticUser, agentID: string, from: string): Promise<AgentSpendAnalytics> {
+    return (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/${agentID}/analytics?from=${from}`, this.bearer(user.token))) as AgentSpendAnalytics
+  }
+
+  /** B28.53 — the totals of one agent's statement from `from` to now (Lens B19.5): what came in and went out. */
+  async agentPeriodTotals(user: SyntheticUser, agentID: string, from: string): Promise<{ account: string; in_ulxc: number; out_ulxc: number }[]> {
+    const body = (await this.call('GET', `/v1/workspaces/${user.workspaceID}/agents/${agentID}/statement?from=${from}`, this.bearer(user.token))) as {
+      accounts?: { account: string; in_ulxc: number; out_ulxc: number }[] | null
+    }
+    return body.accounts ?? []
   }
 
   /** B28.377 — the workspace's prompt schedules, each with its runs, newest first (talyvor-lens B28.125). */

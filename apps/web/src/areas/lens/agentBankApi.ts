@@ -907,6 +907,31 @@ function statementPage(agentID: string, from: string, search: StatementSearch, a
   return getJSON<StatementPage>(`/api/agents/${e(agentID)}/statement?${query}`, { lines: 'list' })
 }
 
+/** B28.53 — what one agent sent to one destination for one model on one day (Lens B28.326), in µLXC. */
+export interface SpendBucket {
+  /** YYYY-MM-DD in the analytics' time zone. */
+  day: string
+  /** Empty for a movement that was not a request. */
+  model: string
+  /** The account the money went to, as the statement names it: spend, held, workspace, agent:<id>, escrow:<id>, pot:<id>. */
+  destination: string
+  out_ulxc: number
+  /** A hold's unused part, back on the day it came back. */
+  returned_ulxc: number
+  spent_ulxc: number
+  postings: number
+}
+
+/** B28.53 — one agent's spend for a period: the buckets' out_ulxc sum to its statement's out_ulxc for the same period. */
+export interface SpendAnalytics {
+  agent_id: string
+  time_zone: string
+  out_ulxc: number
+  returned_ulxc: number
+  spent_ulxc: number
+  buckets: SpendBucket[] | null
+}
+
 export const WORKSPACE_NAME_KEY = ['workspace-name']
 
 export const agentBankApi = {
@@ -951,6 +976,9 @@ export const agentBankApi = {
   endBoost: (id: string, rule: string) => send<void>('DELETE', `/api/agents/${e(id)}/rules/boosts/${e(rule)}`),
   statement: (id: string) => getJSON<{ lines: StatementLine[] | null }>(`/api/agents/${e(id)}/statement`, { lines: 'list' }),
   statementPage,
+  /** B28.53 — the agent's spend from `from` (YYYY-MM-DD) to now, by day, model and destination. */
+  analytics: (id: string, from: string) =>
+    getJSON<SpendAnalytics>(`/api/agents/${e(id)}/analytics?${new URLSearchParams({ from })}`, { buckets: 'list', out_ulxc: 'number', returned_ulxc: 'number', spent_ulxc: 'number' }),
   /** B46.9 — the agent's wallet on the money layer (Lens B46.4): its balance and how to pay into it. */
   wallet: (id: string) => getSaid<AgentMoneyWallet>(`/api/agents/${e(id)}/wallet`),
   statementFile,
