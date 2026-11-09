@@ -375,6 +375,43 @@ func TestAgentStatementDownloadsForAPeriod(t *testing.T) {
 	}
 }
 
+// B28.51 — a search, a filter by kind or a page past the newest lines reaches Lens's period statement with its kind,
+// q, limit and cursor, and nothing else the browser sent.
+func TestAgentStatementSearchFilterAndPageReachLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		got = append(got, r.URL.Path+"?"+r.URL.RawQuery)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"to":"2026-11-09T04:00:00Z","lines":[],"next_cursor":"1.2.0"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, query := range []string{"kind=withdraw&limit=100", "q=rent&workspace_id=ws_other", "from=2026-11-01&to=2026-11-09T04:00:00Z&kind=spend,hold&q=claude&limit=100&cursor=1.2.0&group=day"} {
+		rec := doJSON(a, http.MethodGet, "/api/agents/agt_1/statement?"+query, "")
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"next_cursor":"1.2.0"`) {
+			t.Fatalf("%s = %d %s", query, rec.Code, rec.Body.String())
+		}
+	}
+	want := []string{
+		"/agents/agt_1/statement?kind=withdraw&limit=100",
+		"/agents/agt_1/statement?q=rent",
+		"/agents/agt_1/statement?cursor=1.2.0&from=2026-11-01&kind=spend%2Chold&limit=100&q=claude&to=2026-11-09T04%3A00%3A00Z",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Lens got %v, want %v", got, want)
+	}
+	for i := range want {
+		if !strings.HasSuffix(got[i], want[i]) {
+			t.Fatalf("Lens got %v, want %v", got, want)
+		}
+	}
+}
+
 // B19.23 — claiming an ownerless agent reaches Lens as a POST with no body: Lens names the owner from
 // the session's credential, so nothing a browser sends can name someone else.
 func TestAgentClaimReachesLens(t *testing.T) {

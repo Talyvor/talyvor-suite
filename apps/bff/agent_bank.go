@@ -30,6 +30,7 @@ import (
 //	GET  /api/agents/{id}/wallet                       B46.9: its wallet on the money layer — balance and how to pay into it
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
 //	GET  /api/agents/{id}/statement?from=&to=&format=json|csv   B19.22: its statement for a period, to download
+//	GET  /api/agents/{id}/statement?kind=&q=&limit=&cursor=     B28.51: that statement searched, filtered and paged
 //	GET  /api/agents/statement?from=&to=&format=json|csv        B19.22: every account in the bank, for a period
 //	POST /api/agents/{id}/claim                        B19.23: the signed-in person becomes an ownerless agent's owner
 //	PATCH /api/agents/{id}              {"name"?, "description"?}   B28.21: rename it, describe it
@@ -413,7 +414,8 @@ func (a *app) handleAgentRuleBoostEnd(w http.ResponseWriter, r *http.Request, t 
 }
 
 // handleAgentStatement — GET /api/agents/{id}/statement: the agent's last 100 lines. With ?from=, ?to=
-// or ?format= (B19.22) it is the agent's statement for that period instead, as JSON or a CSV file.
+// or ?format= (B19.22) it is the agent's statement for that period instead, as JSON or a CSV file; with ?kind=,
+// ?q= or ?cursor= (B28.51) too, so a search, a filter or a page past the newest lines reads the period statement.
 func (a *app) handleAgentStatement(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -423,7 +425,7 @@ func (a *app) handleAgentStatement(w http.ResponseWriter, r *http.Request, t ten
 	if !ok {
 		return
 	}
-	if q := r.URL.Query(); q.Has("from") || q.Has("to") || q.Has("format") {
+	if q := r.URL.Query(); q.Has("from") || q.Has("to") || q.Has("format") || q.Has("kind") || q.Has("q") || q.Has("cursor") {
 		a.agentStatementRelay(w, r, t, suffix)
 		return
 	}
@@ -444,11 +446,12 @@ func (a *app) handleBankStatement(w http.ResponseWriter, r *http.Request, t tena
 const maxStatementBytes = 32 << 20
 
 // agentStatementRelay asks Lens for a period statement (Lens B19.5) and answers with it: JSON, or the
-// CSV file with Lens's filename. Only from, to and format are sent up; Lens reads the dates (a
+// CSV file with Lens's filename. Only from, to and format are sent up, and (B28.51) kind, q, limit and cursor, with
+// which Lens keeps the lines of those kinds holding q and pages them newest first; Lens reads the dates (a
 // YYYY-MM-DD date is midnight UTC, the period is [from, to)) and its sentence on a bad one is relayed.
 func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tenant, suffix string) {
 	in, up := r.URL.Query(), url.Values{}
-	for _, k := range []string{"from", "to", "format"} {
+	for _, k := range []string{"from", "to", "format", "kind", "q", "limit", "cursor"} {
 		if v := in.Get(k); v != "" {
 			up.Set(k, v)
 		}

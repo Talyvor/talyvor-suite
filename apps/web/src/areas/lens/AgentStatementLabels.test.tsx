@@ -46,7 +46,7 @@ afterEach(() => {
 describe('the agent statement', () => {
   it('names every kind of line, and a transfer, a card charge, a top-up and a pot move each by what it was', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      if (String(input) === '/api/agents/agt_1/statement')
+      if (String(input).split('?')[0] === '/api/agents/agt_1/statement')
         return new Response(JSON.stringify({ agent_id: 'agt_1', lines: rows.map(([l]) => l) }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       return new Response('null', { status: 404 })
     })

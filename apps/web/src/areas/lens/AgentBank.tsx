@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
@@ -36,6 +36,7 @@ import {
   type AgentSchedule,
   type AgentTopUp as AgentTopUpValue,
   type LimitAlert,
+  type PostingKind,
   type StatementLine,
   AgentBankError,
   agentBankApi,
@@ -1973,9 +1974,48 @@ function lineStatus(l: StatementLine): { status: PillStatus; label: string } {
   return held ? { status: 'held', label: 'Held' } : { status: 'settled', label: 'Settled' }
 }
 
+/** B28.51 — the kinds the Statement can be filtered to, in the words its lines use. */
+const STATEMENT_KINDS: ReadonlyArray<{ label: string; kinds: readonly PostingKind[] }> = [
+  { label: 'Every kind', kinds: [] },
+  { label: 'Funded', kinds: ['fund'] },
+  { label: 'Taken back', kinds: ['withdraw'] },
+  { label: 'Top-ups', kinds: ['topup'] },
+  { label: 'Requests', kinds: ['spend', 'hold', 'settle', 'release'] },
+  { label: 'Platform fees', kinds: ['platform_fee'] },
+  { label: 'Payments', kinds: ['pay'] },
+  { label: 'Transfers', kinds: ['transfer', 'reversal'] },
+  { label: 'Card', kinds: ['card'] },
+  { label: 'Escrow', kinds: ['escrow'] },
+  { label: 'Pots', kinds: ['pot_in', 'pot_out'] },
+  { label: 'Cash-outs', kinds: ['cash_out'] },
+  { label: 'Credit line', kinds: ['credit_line'] },
+]
+
+/** B28.51 — the UTC day the agent was made: its statement starts there, so paging reaches its first line. */
+const firstDay = (agent: Agent) => {
+  const t = new Date(agent.created_at)
+  return Number.isNaN(t.getTime()) ? utcDay(new Date()) : utcDay(t)
+}
+
 export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id: string) => string; entry?: string }) {
-  const st = useQuery({ queryKey: statementKey(agent.id), queryFn: () => agentBankApi.statement(agent.id) })
-  const lines = st.data?.lines ?? []
+  // B28.51 — searched and filtered by Lens, a page of the newest lines at a time; Show older reads the page under it.
+  const [typed, setTyped] = useState('')
+  const [q, setQ] = useState('')
+  const [kindAt, setKindAt] = useState(0)
+  useEffect(() => {
+    const t = setTimeout(() => setQ(typed.trim()), 300)
+    return () => clearTimeout(t)
+  }, [typed])
+  const kinds = STATEMENT_KINDS[kindAt].kinds
+  const from = firstDay(agent)
+  const st = useInfiniteQuery({
+    queryKey: [...statementKey(agent.id), 'page', from, kinds.join(','), q],
+    queryFn: ({ pageParam }) => agentBankApi.statementPage(agent.id, from, { kinds, q }, pageParam),
+    initialPageParam: undefined as { to?: string; cursor: string } | undefined,
+    getNextPageParam: (last, pages) => (last.next_cursor ? { to: pages[0].to, cursor: last.next_cursor } : undefined),
+  })
+  const lines = st.data?.pages.flatMap((p) => p.lines ?? []) ?? []
+  const searching = kinds.length > 0 || q !== ''
   // B28.349 — a line linked to (from a spend answer in Chat) is marked, and brought into view.
   const linked = useRef<HTMLTableRowElement | null>(null)
   const found = entry !== undefined && lines.some((l) => l.entry_id === entry)
@@ -1985,12 +2025,37 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
   return (
     <Card>
       <CardHeader>Statement</CardHeader>
-      {st.isError ? (
+      <div className="flex flex-wrap items-center gap-2 border-b border-rule px-gutter py-3">
+        <Input
+          type="search"
+          aria-label={`Search ${agent.name}’s statement`}
+          placeholder="Search"
+          className="w-56"
+          maxLength={200}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+        />
+        <select
+          aria-label={`Kind of line in ${agent.name}’s statement`}
+          className={`${scheduleSelect} w-56`}
+          value={kindAt}
+          onChange={(e) => setKindAt(Number(e.target.value))}
+        >
+          {STATEMENT_KINDS.map((k, i) => (
+            <option key={k.label} value={i}>
+              {k.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {st.isError && st.data === undefined ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(st.error, 'This agent’s statement')}</p>
       ) : st.isPending ? (
         <p className="px-gutter py-3 text-body text-muted">Reading…</p>
       ) : lines.length === 0 ? (
-        <p className="px-gutter py-3 text-body text-muted">Nothing has moved in this wallet yet. Fund it under Money to start.</p>
+        <p className="px-gutter py-3 text-body text-muted">
+          {searching ? 'No line on this statement matches.' : 'Nothing has moved in this wallet yet. Fund it under Money to start.'}
+        </p>
       ) : (
         <table className="w-full text-body" data-testid="agent-statement">
           <thead>
@@ -2037,6 +2102,16 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
           </tbody>
         </table>
       )}
+      {st.hasNextPage ? (
+        <div className="border-t border-rule px-gutter py-3">
+          <Button type="button" onClick={() => void st.fetchNextPage()} disabled={st.isFetchingNextPage}>
+            {st.isFetchingNextPage ? 'Reading…' : 'Show older lines'}
+          </Button>
+        </div>
+      ) : null}
+      {st.isFetchNextPageError ? (
+        <p className="border-t border-rule px-gutter py-3 text-body text-muted">{readFailure(st.error, 'The older lines')}</p>
+      ) : null}
       {entry !== undefined && st.isSuccess && !found ? (
         <p className="border-t border-rule px-gutter py-3 text-body text-muted">
           The line you followed is older than the ones shown here. Download this agent’s statement for its period below.

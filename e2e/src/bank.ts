@@ -605,6 +605,46 @@ export class AgentBankScreen {
     }
     return shown
   }
+
+  /**
+   * B28.51 — Statement read three ways: its first page, the same after Show older lines, and then filtered to the kind
+   * the filter names. Each row as the screen shows it, top to bottom: its words, its amount and the balance after it.
+   */
+  async statementPaged(agent: Agent, kind: string): Promise<{ first: StatementRow[]; all: StatementRow[]; filtered: StatementRow[] } | string> {
+    await this.fresh(agent)
+    const statement = card(this.page, 'Statement')
+    const rows = statement.getByTestId('agent-statement').locator('tbody tr')
+    const read = async (): Promise<StatementRow[]> => {
+      const shown: StatementRow[] = []
+      for (const row of await rows.all()) {
+        const cells = row.locator('td')
+        shown.push({ what: figureText(await row.getByTestId('statement-what').innerText()), amount: figureText(await cells.nth(2).innerText()), balance: figureText(await cells.nth(3).innerText()) })
+      }
+      return shown
+    }
+    await rows.first().waitFor({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
+    const first = await read()
+    const older = statement.getByRole('button', { name: 'Show older lines', exact: true })
+    if (!(await older.isVisible())) return `the Statement shows ${first.length} line(s) and no Show older lines`
+    await older.click()
+    const settle = async (want: (n: number) => boolean) => {
+      const end = Date.now() + ACTION_TIMEOUT_MS
+      while (!want(await rows.count()) && Date.now() < end) await this.page.waitForTimeout(250)
+    }
+    await settle((n) => n > first.length)
+    const all = await read()
+    await statement.getByRole('combobox', { name: `Kind of line in ${agent.name}’s statement` }).selectOption({ label: kind })
+    await settle((n) => n < all.length)
+    const filtered = await read()
+    return { first, all, filtered }
+  }
+}
+
+/** B28.51 — one row of an agent's Statement as the screen draws it. */
+export interface StatementRow {
+  what: string
+  amount: string
+  balance: string
 }
 
 /** The note a card shows once its form was sent: what was done, or "Refused …"/"Not …" and why. */
