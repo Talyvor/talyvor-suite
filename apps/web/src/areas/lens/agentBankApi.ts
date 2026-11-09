@@ -1395,6 +1395,8 @@ export interface PaymentRequestItem {
   decision: string
   reason: string
   rule?: string
+  /** The payment out that paid it, once one did. */
+  payment_id?: string
   pay_status?: string
   pay_detail?: string
   /** B41.3 (Lens B41.103) — duplicate | bank_details_changed | first_payment | unusual_amount, each with Lens's words. */
