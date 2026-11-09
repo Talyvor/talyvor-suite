@@ -619,6 +619,20 @@ const BY_PATH: Record<string, unknown> = {
         percent: 50, spent_minor: 25_000, limit_minor: 50_000, currency: 'GBP', created_at: '2026-09-20T08:00:00Z' },
     ],
   },
+  '/api/money/alerts/channels': {
+    channels: [
+      { id: 'ach_1', kind: 'push', created_at: '2026-09-18T09:00:00Z' },
+      { id: 'ach_2', kind: 'slack', url: 'https://hooks.slack.com/…k3Qz', created_at: '2026-09-18T09:05:00Z' },
+    ],
+  },
+  '/api/money/alerts/deliveries': {
+    deliveries: [
+      { id: 'adl_4', channel_id: 'ach_2', channel_kind: 'slack', alert_kind: 'limit', alert_id: 'sal_1', title: 'Budget',
+        body: 'Your spending is at 50% of this month’s budget: £250.00 of £500.00.', status: 'sent', attempts: 1, created_at: '2026-09-27T12:10:05Z', sent_at: '2026-09-27T12:10:40Z' },
+      { id: 'adl_3', channel_id: 'ach_1', channel_kind: 'push', alert_kind: 'limit', alert_id: 'sal_1', title: 'Budget',
+        body: 'Your spending is at 50% of this month’s budget: £250.00 of £500.00.', status: 'sent', attempts: 1, created_at: '2026-09-27T12:10:05Z', sent_at: '2026-09-27T12:10:38Z' },
+    ],
+  },
   '/api/agents/approvals': {
     approvals: [
       {
