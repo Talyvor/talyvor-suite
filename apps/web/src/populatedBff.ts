@@ -806,6 +806,15 @@ const BY_PATH: Record<string, unknown> = {
       { entry_id: 'e1', kind: 'fund', amount_ulxc: 11_250_000, counterparty: 'workspace', balance_after_ulxc: 11_250_000, at: '2026-09-27T10:00:00Z' },
     ],
   },
+  // B28.53 — the statement's one line out, as Lens's analytics bucket it.
+  '/api/agents/agt_research/analytics': {
+    agent_id: 'agt_research',
+    time_zone: 'UTC',
+    out_ulxc: 1_250_000,
+    returned_ulxc: 0,
+    spent_ulxc: 1_250_000,
+    buckets: [{ day: '2026-09-27', model: 'claude-sonnet-4', destination: 'spend', out_ulxc: 1_250_000, returned_ulxc: 0, spent_ulxc: 1_250_000, postings: 1 }],
+  },
   '/api/usage': {
     period_days: 7,
     models: [

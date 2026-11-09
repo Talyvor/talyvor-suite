@@ -10,6 +10,7 @@ import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
 import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
+import { AgentAnalytics } from './AgentAnalytics'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { categoryWords } from './Budgets'
@@ -2782,6 +2783,7 @@ export function AgentBank() {
             <>
               <Archived agent={agent} done={archived[agent.id]} />
               <AgentDetails key={`details-${agent.id}`} agent={agent} />
+              <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
             </>
           ) : (
@@ -2821,6 +2823,7 @@ export function AgentBank() {
               <IssueKey key={`key-${agent.id}`} agent={agent} />
               <AgentCredentialCard key={`credential-${agent.id}`} agent={agent} />
               <AgentCardPanel key={`card-${agent.id}`} agent={agent} />
+              <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
               <ArchiveAgent
                 key={`archive-${agent.id}`}

@@ -638,6 +638,25 @@ export class AgentBankScreen {
     const filtered = await read()
     return { first, all, filtered }
   }
+
+  /** B28.53 — the agent's Spend by day, model and destination card, for its first period (the last 30 days). */
+  async analyticsShown(agent: Agent): Promise<AnalyticsShown | string> {
+    await this.fresh(agent)
+    const c = card(this.page, 'Spend by day, model and destination')
+    const out = c.getByTestId('agent-analytics-out')
+    await out.or(c.getByTestId('agent-analytics-none')).first().waitFor({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
+    if (!(await out.isVisible())) return `Spend by day, model and destination shows no Out: "${figureText(await c.innerText())}"`
+    const rows = async (view: string) => (await c.getByTestId(`agent-analytics-${view}-row`).allInnerTexts()).map(figureText)
+    return { out: figureText(await out.innerText()), days: await rows('day'), models: await rows('model'), destinations: await rows('destination') }
+  }
+}
+
+/** B28.53 — Spend by day, model and destination as the screen draws it: the Out figure and each view's rows. */
+export interface AnalyticsShown {
+  out: string
+  days: string[]
+  models: string[]
+  destinations: string[]
 }
 
 /** B28.51 — one row of an agent's Statement as the screen draws it. */
@@ -781,7 +800,7 @@ async function oneCharge(ctx: ScenarioCtx, fresh: readonly LedgerRow[]): Promise
  * An agent asks one question with its own key. Its worst case is held against the cap first; a served
  * answer is booked, as every charged answer is, for the ledger read-back.
  */
-async function agentAsks(ctx: ScenarioCtx, key: string, prompt: string, note: string, modelID = ctx.env.judgeModel, headers: Record<string, string> = {}): Promise<Answered<JudgeReply>> {
+export async function agentAsks(ctx: ScenarioCtx, key: string, prompt: string, note: string, modelID = ctx.env.judgeModel, headers: Record<string, string> = {}): Promise<Answered<JudgeReply>> {
   const { env, app } = ctx
   const model = env.catalog.find((m) => m.id === modelID)
   if (model === undefined) throw new Error(`the catalog has no model ${modelID}`)

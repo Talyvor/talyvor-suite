@@ -412,6 +412,32 @@ func TestAgentStatementSearchFilterAndPageReachLens(t *testing.T) {
 	}
 }
 
+// B28.53 — an agent's spend by day, model and destination reaches Lens's analytics with its period, and nothing else
+// the browser sent; Lens's buckets come back as they are.
+func TestAgentAnalyticsReachLensWithItsPeriod(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		got = append(got, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"agent_id":"agt_1","out_ulxc":7,"buckets":[{"day":"2026-11-09","model":"m","destination":"spend","out_ulxc":7}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	rec := doJSON(a, http.MethodGet, "/api/agents/agt_1/analytics?from=2026-11-02&to=2026-11-09T04:00:00Z&workspace_id=ws_other&format=csv", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"destination":"spend","out_ulxc":7`) {
+		t.Fatalf("analytics = %d %s", rec.Code, rec.Body.String())
+	}
+	if len(got) != 1 || !strings.HasPrefix(got[0], "GET /v1/workspaces/") ||
+		!strings.HasSuffix(got[0], "/agents/agt_1/analytics?from=2026-11-02&to=2026-11-09T04%3A00%3A00Z") {
+		t.Fatalf("Lens got %v", got)
+	}
+}
+
 // B19.23 — claiming an ownerless agent reaches Lens as a POST with no body: Lens names the owner from
 // the session's credential, so nothing a browser sends can name someone else.
 func TestAgentClaimReachesLens(t *testing.T) {
