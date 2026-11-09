@@ -259,10 +259,10 @@ describe('both pages wear the brand', () => {
       expect(photo.getAttribute('srcset')).toBe('/brand/photos/lake-1200.jpg 1200w, /brand/photos/lake.jpg 2400w')
       expect(photo.getAttribute('loading')).toBe('lazy')
       expect(container.querySelector('figure.tal-entry-photo')).toHaveAttribute('data-theme', 'dark')
-      // The logo WITHOUT the tagline (retired 5 Oct 2026), the drawn file, one per theme — never
-      // the name in a font.
+      // The kit's logo (B57.6), its own files, one per theme — never the name in a font: the header's
+      // and the phone's, each its small drawing.
       const logos = Array.from(container.querySelectorAll('img[data-brand="logo"]')).map((i) => i.getAttribute('src'))
-      expect(logos).toEqual(['/brand/svg/talyvor-logo-dark-notag.svg', '/brand/svg/talyvor-logo-light-notag.svg'])
+      expect(logos).toEqual(Array(2).fill(['/brand/logo/talyvor-logo-small-on-light.svg', '/brand/logo/talyvor-logo-small-on-dark.svg']).flat())
       // The teal rule straight under the heading, and the page's one primary action in accent.
       expect(h1.nextElementSibling).toHaveClass('h-0.5', 'w-8', 'bg-accent')
       expect(container.querySelectorAll('a.bg-accent')).toHaveLength(1)

@@ -256,6 +256,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/payees/x1/called/challenge", body: `{}`},                                                            // B41.11
 		{method: http.MethodPut, path: "/api/money/budgets", body: `{"category":"ai_software","period":"month","amount_minor":10000,"currency":"GBP"}`}, // B41.39
 		{method: http.MethodDelete, path: "/api/money/budgets/x1"},
+		{method: http.MethodPost, path: "/api/money/alerts/channels", body: `{"kind":"push"}`}, // B28.66
+		{method: http.MethodDelete, path: "/api/money/alerts/channels/x1"},
 		{method: http.MethodPost, path: "/api/agents/x1/scan-watches", body: `{"series":["eia.stocks.cushing-crude"],"rule":"range"}`},                                   // B52.28
 		{method: http.MethodDelete, path: "/api/scan/watches/x1"},                                                                                                        // B52.28                                                                                      // B41.39
 		{method: http.MethodPut, path: "/api/money/spending/merchants", body: `{"merchant":"m","category":"eating_out"}`},                                                // B53.8
@@ -338,6 +340,11 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/marketplace/listings/x1/versions", body: `{"artifact":{"template":"x"},"changelog":"x"}`}, // B28.162
 		// B32.60 — saving the seller's tax details.
 		{method: http.MethodPut, path: "/api/marketplace/seller-tax", body: `{"seller_type":"individual"}`},
+		// B41.85 — a seller's relabel, the workspace's content filter, and a block and its undo.
+		{method: http.MethodPut, path: "/api/marketplace/listings/x1/content-labels", body: `{"age_rating":"all"}`},
+		{method: http.MethodPut, path: "/api/marketplace/content-filter", body: `{"max_age_rating":"all"}`},
+		{method: http.MethodPut, path: "/api/marketplace/blocked-listings/x1"},
+		{method: http.MethodDelete, path: "/api/marketplace/blocked-listings/x1"},
 		// B32.53 — opening a room and joining one.
 		{method: http.MethodPost, path: "/api/rooms", body: `{"title":"t","visibility":"public"}`},
 		{method: http.MethodPost, path: "/api/rooms/x1/join", body: `{"terms_version":1}`},
@@ -363,6 +370,26 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodDelete, path: "/api/rooms/x1/takeover"},
 		{method: http.MethodPut, path: "/api/rooms/x1/takeover/vote", body: `{"candidate_workspace_id":"x1"}`},
 		{method: http.MethodPost, path: "/api/rooms/x1/fork"},
+		// B41.41 — the owner sets shared ownership.
+		{method: http.MethodPut, path: "/api/rooms/x1/shared-ownership", body: `{"enabled":true}`},
+		// B41.42 — the owner publishes the rate card; a contribution claims a size.
+		{method: http.MethodPut, path: "/api/rooms/x1/rate-card", body: `{"pool_points":1}`},
+		{method: http.MethodPut, path: "/api/rooms/x1/contributions/x1/size", body: `{"size":"M"}`},
+		// B41.44 — a contribution's reviewers are drawn, and a drawn reviewer scores it.
+		{method: http.MethodPost, path: "/api/rooms/x1/contributions/x1/reviewers"},
+		{method: http.MethodPut, path: "/api/rooms/x1/contributions/x1/review", body: `{"score_bps":10000}`},
+		// B41.46 — the owner raises the room's Gate thresholds.
+		{method: http.MethodPut, path: "/api/rooms/x1/gate-thresholds", body: `{"used_people":150}`},
+		// B41.50 — a member signs the contributor agreement.
+		{method: http.MethodPost, path: "/api/rooms/x1/agreement", body: `{"version":"draft-1","signed_name":"A"}`},
+		// B41.47 — the owner freezes the leaderboard, a member objects, a panelist votes.
+		{method: http.MethodPost, path: "/api/rooms/x1/leaderboard/freeze"},
+		{method: http.MethodPost, path: "/api/rooms/x1/objections", body: `{"contribution_id":"x1","points":-1,"reason":"r"}`},
+		{method: http.MethodPut, path: "/api/rooms/x1/objections/x1/vote", body: `{"uphold":true}`},
+		// B41.52 — the owner posts a task, a member claims it and lets it go.
+		{method: http.MethodPost, path: "/api/rooms/x1/tasks", body: `{"title":"t","description":"","size":"M"}`},
+		{method: http.MethodPost, path: "/api/rooms/x1/tasks/x1/claim"},
+		{method: http.MethodDelete, path: "/api/rooms/x1/tasks/x1/claim"},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},
@@ -511,7 +538,7 @@ var notSweptWrite = map[string]string{
 	"/oauth/token":           "B40.6 — exempt (oauthMachinePath): an assistant's server calls it with the PKCE verifier or refresh token as its credential",
 	"/oauth/revoke":          "B40.6 — exempt (oauthMachinePath): the token being revoked is its own credential",
 	"/auth/mobile/session":   "B40.24 — exempt (originExemptPath): the phone app sends no Origin, and its ID token is the credential",
-	"/auth/synthetic/mobile": "B57.86 — exempt (originExemptPath): the phone harness sends no Origin, and the operator key is the credential",
+	"/auth/synthetic/mobile": "B57.86 — exempt (originExemptPath) only with no Origin: the phone harness sends none, and the operator key is the credential; another site's Origin is refused (B50.36, TestSyntheticPhoneSignInRefusesAnotherSite)",
 	"/mcp":                   "B40.6 — exempt (oauthMachinePath): an assistant's bearer token, never the cookie, is what it accepts",
 	"/auth/logout": "a browser POST the app issues at itself; it is swept by TestLogout_RefusesCrossOrigin, " +
 		"which drives it directly rather than through this table because it has no JSON body and no upstream.",

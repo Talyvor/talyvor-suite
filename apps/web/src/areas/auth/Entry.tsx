@@ -1,4 +1,4 @@
-import { Button, Card, Mark, ThemeToggle, Wordmark, inlineLink } from '@talyvor/ui'
+import { Button, Card, Logo, ThemeToggle, inlineLink } from '@talyvor/ui'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Waitlist } from '../../components/Waitlist'
 import { useSignupProbe, type SignupState } from '../../lib/signupOpen'
@@ -60,9 +60,6 @@ function EntryFrame({ children }: { children: React.ReactNode }) {
           figure carries data-theme="dark", so its scrim is Obsidian in both themes — text and
           gradient sit on the photo's dark side. */}
       <style>{`
-        .tal-entry-logo-light { display: none }
-        [data-theme='light'] .tal-entry-logo-dark { display: none }
-        [data-theme='light'] .tal-entry-logo-light { display: block }
         .tal-entry-photo { display: none }
         @media (min-width: 840px) {
           .tal-entry-photo { display: block; position: absolute; top: 0; bottom: 0; left: 50%; right: 0; margin: 0; background: var(--canvas) }
@@ -90,9 +87,8 @@ function EntryFrame({ children }: { children: React.ReactNode }) {
       </figure>
       <header className="relative z-10 flex items-center justify-between px-gutter py-4">
         <div className="hidden items-center gap-2.5 wide:flex">
-          <Mark size={26} aria-hidden />
           <div className="min-w-0">
-            <Wordmark height={12} />
+            <Logo width={144} />
             <div className="mt-1 text-eyebrow uppercase leading-tight text-label">Suite</div>
           </div>
         </div>
@@ -108,25 +104,9 @@ function EntryFrame({ children }: { children: React.ReactNode }) {
           `section`, `article` or `aside` — every box here is drawn by the utility classes, which
           are untouched. LandmarkCoverage.test.tsx measures the proportion at every address. */}
       <main className="relative z-10 flex flex-1 flex-col items-center justify-start px-gutter pb-16 pt-4 wide:w-1/2 wide:justify-center wide:pt-0">
-        {/* The board's logo without the tagline, the file as drawn — one per theme, the other hidden
-            by the <style> above. Phones only: from 840px the header carries the mark. */}
+        {/* B57.6 — the kit's logo, its small drawing at 150 px. Phones only: from 840px the header carries it. */}
         <div className="mb-8 wide:hidden">
-          <img
-            src="/brand/svg/talyvor-logo-dark-notag.svg"
-            alt="Talyvor"
-            width={287}
-            height={48}
-            data-brand="logo"
-            className="tal-entry-logo-dark block h-12 w-auto"
-          />
-          <img
-            src="/brand/svg/talyvor-logo-light-notag.svg"
-            alt="Talyvor"
-            width={287}
-            height={48}
-            data-brand="logo"
-            className="tal-entry-logo-light h-12 w-auto"
-          />
+          <Logo width={150} />
         </div>
         <Card className="w-full max-w-md">{children}</Card>
         <CompanyLine className="mt-6 w-full max-w-md" />

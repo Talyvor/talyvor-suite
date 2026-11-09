@@ -173,6 +173,8 @@ describe('remix and publish with parents', () => {
     })
     fireEvent.change(screen.getByLabelText('Remixes'), { target: { value: 'royalty' } })
     fireEvent.change(screen.getByLabelText(/Your share of each remix/), { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('button', { name: '16 and over' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Legal advice' }))
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
 
     await screen.findByRole('heading', { name: 'Indemnity finder, plain English' })
@@ -180,6 +182,8 @@ describe('remix and publish with parents', () => {
       remix_policy: 'royalty',
       remix_share_bps: 1000,
       parents: [{ listing_id: 'lst_orig', version: 2 }],
+      age_rating: '16+',
+      content_labels: ['legal_advice'],
     })
     expect(screen.queryByTestId('listing-review')).toBeNull()
     expect(screen.queryByTestId('similar-hold')).toBeNull()
@@ -193,6 +197,7 @@ describe('remix and publish with parents', () => {
     await at('/marketplace/publish')
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Indemnity finder' } })
     fireEvent.change(screen.getByLabelText(/^Template/), { target: { value: ORIGINAL_TEMPLATE } })
+    fireEvent.click(screen.getByRole('button', { name: 'Everyone' }))
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
 
     const hold = await screen.findByTestId('similar-hold')

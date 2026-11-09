@@ -7,10 +7,17 @@ import { describe, expect, it, vi } from 'vitest'
 
 const SW = readFileSync(resolve(import.meta.dirname, '../../../public/sw.js'), 'utf8')
 
-function worker(fetchStatus: number) {
+/** B55.2 — what the workspace signs with, as the BFF answers it: null is a read that fails. */
+type Keys = { passkeys: unknown[]; devices: { revoked_at?: string }[] } | null
+
+function worker(fetchStatus: number, keys: Keys = { passkeys: [], devices: [] }) {
   const listeners: Record<string, (e: unknown) => void> = {}
   const shown: { title: string; options: { tag?: string; data?: unknown; icon?: string; badge?: string; actions?: { action: string }[] } }[] = []
-  const fetch = vi.fn(async () => ({ ok: fetchStatus < 300, status: fetchStatus }))
+  const fetch = vi.fn(async (url: string) => {
+    if (url === '/api/agents/passkeys' || url === '/api/money/devices')
+      return keys ? { ok: true, status: 200, json: async () => keys } : { ok: false, status: 502, json: async () => ({}) }
+    return { ok: fetchStatus < 300, status: fetchStatus }
+  })
   const openWindow = vi.fn(async () => undefined)
   const self = {
     addEventListener: (type: string, fn: (e: unknown) => void) => (listeners[type] = fn),
@@ -55,7 +62,7 @@ describe('the approval push (B28.38)', () => {
     await sw.push(LENS_PUSH)
     await sw.tap('deny')
     expect(sw.fetch).toHaveBeenCalledWith('/api/agents/approvals/apr_7/deny', expect.anything())
-    expect(sw.openWindow).toHaveBeenCalledWith('/approvals')
+    expect(sw.openWindow).toHaveBeenCalledWith('/approvals#approval-apr_7')
     expect(sw.shown).toHaveLength(1)
   })
 
@@ -65,6 +72,55 @@ describe('the approval push (B28.38)', () => {
     await sw.tap('approve')
     for (const n of sw.shown) expect(n.options).toMatchObject({ icon: '/icon-192.png', badge: '/icon-192.png' })
     expect(sw.shown).toHaveLength(2)
+  })
+})
+
+describe('the approval push reads Lens’s sentence (B55.49)', () => {
+  const BODY = 'Research wants to pay Acme Hosting $340.00 (3,400 LXC)'
+
+  it('a push with body shows that sentence, and the decision repeats its amount, never bare LXC', async () => {
+    const sw = worker(200)
+    await sw.push({ ...LENS_PUSH, agent_name: 'Research', amount_lxc: '3400', body: BODY })
+    expect(sw.shown[0].title).toBe(BODY)
+    await sw.tap('approve')
+    expect(sw.shown[1].title).toBe('Approved: Research, $340.00 (3,400 LXC)')
+    for (const n of sw.shown) expect(n.title).not.toMatch(/(^|[^,\d])3400 LXC/)
+  })
+
+  it('the amount follows Lens’s order when the LXC comes first', async () => {
+    const sw = worker(200)
+    await sw.push({ ...LENS_PUSH, agent_name: 'Research', body: 'Research wants to spend 3,400 LXC ($340.00)' })
+    await sw.tap('deny')
+    expect(sw.shown[1].title).toBe('Denied: Research, 3,400 LXC ($340.00)')
+  })
+
+  it('a push from an older Lens, with no body, reads as before', async () => {
+    const sw = worker(200)
+    await sw.push(LENS_PUSH)
+    expect(sw.shown[0].title).toBe('Researcher asks you to approve 2 LXC')
+  })
+})
+
+describe('the approval push in a workspace that signs (B55.2)', () => {
+  it('carries no actions when only the phone holds a key, and a tap opens the approval', async () => {
+    const sw = worker(200, { passkeys: [], devices: [{}] })
+    await sw.push(LENS_PUSH)
+    expect(sw.shown[0].options).toMatchObject({ body: 'Open Talyvor to approve or decline it with your passkey or your phone.', actions: [] })
+    await sw.tap('')
+    expect(sw.openWindow).toHaveBeenCalledWith('/approvals#approval-apr_7')
+    expect(sw.fetch).not.toHaveBeenCalledWith(expect.stringMatching(/approve$|deny$/), expect.anything())
+  })
+
+  it('carries no actions when a key list cannot be read', async () => {
+    const sw = worker(200, null)
+    await sw.push(LENS_PUSH)
+    expect(sw.shown[0].options.actions).toEqual([])
+  })
+
+  it('a revoked phone key still counts, as Lens counts it: no actions', async () => {
+    const sw = worker(200, { passkeys: [], devices: [{ revoked_at: '2026-10-30T09:00:00Z' }] })
+    await sw.push(LENS_PUSH)
+    expect(sw.shown[0].options.actions).toEqual([])
   })
 })
 

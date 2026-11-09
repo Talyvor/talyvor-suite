@@ -37,7 +37,7 @@ function mockBff({
   briefing = QUIET,
   workspaceName = 'Acme',
 }: {
-  agents: typeof AGENTS
+  agents: Array<(typeof AGENTS)[number] & { paused_at?: string }>
   newWorkspace?: boolean
   briefing?: typeof QUIET | typeof BUSY
   workspaceName?: string
@@ -104,7 +104,17 @@ function mockBff({
         month_end: '2026-11-01T00:00:00Z',
         spent_ulxc: 3 * M,
         forecast_ulxc: 25 * M,
-        agents: agents.map((a) => ({ agent_id: a.id, name: a.name, spent_ulxc: a.id === 'agt_1' ? 3 * M : 0, forecast_ulxc: 0 })),
+        // B28.57 — Researcher, in Sydney, runs out at 17:00 UTC on 27 October: 28 October in its own zone (Lens B28.330).
+        // Buyer does not run out at its pace.
+        agents: agents.map((a) => ({
+          agent_id: a.id,
+          name: a.name,
+          spent_ulxc: a.id === 'agt_1' ? 3 * M : 0,
+          forecast_ulxc: 0,
+          ...(a.id === 'agt_1'
+            ? { runs_out_at: '2026-10-28T04:00:00+11:00', runs_out_on: '2026-10-28', timezone: 'Australia/Sydney' }
+            : { runs_out_at: null, runs_out_on: null, timezone: 'UTC' }),
+        })),
       })
     const rules = /^\/api\/agents\/([^/]+)\/rules$/.exec(url)
     if (rules)
@@ -188,6 +198,16 @@ describe('Home — the wallet home (B28.6)', () => {
 
   // B45.11 — DONE reads: "the approvals, the total and the first agent rows are visible without scrolling; every
   // figure matches the API". jsdom has no fold, so this pins the order and the figures; the 390px screenshot the fold.
+  it('each agent’s row says the day it runs out in its own time zone, not UTC’s, or that it does not run out (B28.57)', async () => {
+    mockBff({ agents: AGENTS })
+    render(<App />)
+
+    const researcher = await screen.findByTestId('runs-out-agt_1')
+    expect(researcher).toHaveTextContent('runs out on 28 October 2026 (Australia/Sydney)')
+    expect(within(researcher).getByText('28 October 2026')).toHaveAttribute('dateTime', '2026-10-28')
+    expect(screen.getByTestId('runs-out-agt_2')).toHaveTextContent('does not run out at this pace')
+  })
+
   it('Home in one glance: approvals first, then one total, then a row per agent, then Taly’s input', async () => {
     const writes = mockBff({ agents: AGENTS })
     window.history.pushState({}, '', '/')
@@ -235,6 +255,25 @@ describe('Home — the wallet home (B28.6)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
     expect(window.location.pathname).toBe('/chat')
     expect(await screen.findByDisplayValue('Which agent spent most?')).toBeInTheDocument()
+  })
+
+  // B55.2 — with only the phone's key Lens refuses an unsigned resume, so Home sends none and says where to do it.
+  it('with only the phone’s key, the switch on a paused agent sends nothing and says to resume it on the phone', async () => {
+    const writes = mockBff({ agents: [{ ...AGENTS[0], paused_at: '2026-10-04T09:00:00Z' }, AGENTS[1]] })
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    const keys: Record<string, unknown> = { '/api/agents/passkeys': { passkeys: [] }, '/api/money/devices': { devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] } }
+    vi.mocked(fetch).mockImplementation(async (input, init) =>
+      String(input) in keys ? new Response(JSON.stringify(keys[String(input)]), { status: 200, headers: { 'Content-Type': 'application/json' } }) : inner(input, init),
+    )
+    window.history.pushState({}, '', '/')
+    render(<App />)
+    const researcher = await screen.findByTestId('home-agent-agt_1')
+    await waitFor(() => expect(queryClient.getQueryState(['money-devices'])?.status).toBe('success'))
+    fireEvent.click(within(researcher).getByRole('switch', { name: 'Researcher running' }))
+    expect(within(researcher).getByTestId('on-the-phone')).toHaveTextContent('Resume Researcher on your phone with Face ID.')
+    expect(within(researcher).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
+    expect(within(researcher).queryByRole('button', { name: 'Resume' })).toBeNull()
+    expect(writes).toEqual([])
   })
 
   it('a workspace with no agents opens Home in onboarding mode', async () => {

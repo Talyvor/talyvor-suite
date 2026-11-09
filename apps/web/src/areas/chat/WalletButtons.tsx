@@ -3,7 +3,7 @@ import { useState } from 'react'
 
 import { Button, Input } from '@talyvor/ui'
 
-import { BOOK_KEY, statementKey } from '../lens/AgentBank'
+import { BOOK_KEY, OnThePhone, statementKey, useKeys } from '../lens/AgentBank'
 import { type Agent, type AgentBook, agentBankApi, newMoveKey, parseLXC, refusalText, retryMoveThroughRestart } from '../lens/agentBankApi'
 import { Lxc } from '../lens/money'
 import { resumeAgent, resumeEveryAgent } from '../lens/passkeys'
@@ -71,6 +71,7 @@ function question(agent: Agent, ask: WalletAsk): { said: React.ReactNode; yes: s
 
 export function WalletButtons({ agent, book }: { agent: Agent; book: AgentBook }) {
   const qc = useQueryClient()
+  const { hold, onlyThePhone } = useKeys()
   const [amount, setAmount] = useState('')
   const [asked, setAsked] = useState<{ ask: WalletAsk; key: string } | null>(null)
   const ask = asked?.ask ?? null
@@ -125,7 +126,7 @@ export function WalletButtons({ agent, book }: { agent: Agent; book: AgentBook }
         </Button>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {agent.paused_at ? (
+        {agent.paused_at && hold ? null : agent.paused_at ? (
           <Button disabled={done.isPending} onClick={() => open({ kind: 'resume' })}>
             Resume {agent.name}
           </Button>
@@ -134,7 +135,7 @@ export function WalletButtons({ agent, book }: { agent: Agent; book: AgentBook }
             Pause {agent.name}
           </Button>
         )}
-        {book.all_paused_at ? (
+        {book.all_paused_at && hold ? null : book.all_paused_at ? (
           <Button disabled={done.isPending} onClick={() => open({ kind: 'resume-all' })}>
             Start all again
           </Button>
@@ -144,6 +145,9 @@ export function WalletButtons({ agent, book }: { agent: Agent; book: AgentBook }
           </Button>
         )}
       </div>
+
+      {agent.paused_at && onlyThePhone ? <OnThePhone>Resume {agent.name} on your phone with Face ID.</OnThePhone> : null}
+      {book.all_paused_at && onlyThePhone ? <OnThePhone>Start your agents again on your phone with Face ID.</OnThePhone> : null}
 
       {asked !== null && q !== null ? (
         <div role="group" aria-label="Confirm" className="space-y-2 rounded-control border border-rule-strong px-3 py-2" data-testid="chat-wallet-confirm">

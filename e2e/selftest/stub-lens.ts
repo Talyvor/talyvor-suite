@@ -641,7 +641,8 @@ setInterval(() => bank.tick(), 2000)
 const physicalCards = new PhysicalCardDesk(json, read, broke)
 // B32.85 — a room's wallet is an agent of its owner's in the Bank: funded, listed and posted as any agent (stub-rooms.ts).
 setRoomWallets({ open: (ws, agentID, name) => bank.openRoomWallet(ws, agentID, name), balance: (agentID) => bank.agentBalance(agentID),
-  use: (u) => bank.roomUse(u), billed: (agentID) => bank.agentBilledThisMonth(agentID), prize: (u) => bank.prizeUse(u) })
+  use: (u) => bank.roomUse(u), billed: (agentID) => bank.agentBilledThisMonth(agentID), prize: (u) => bank.prizeUse(u),
+  linked: (a, b) => bank.cardLinked(a, b), identityChecked: (ws) => bank.identityChecked(ws) })
 // B32.88 — and an agent's room_* tools over /mcp, on its own key.
 bank.roomTool = roomAgentTool
 
@@ -769,6 +770,13 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   if (provider === 'vllm' && VLLM !== '') return vllm(req, res, path, raw)
   if (!CONFIGURED.has(provider)) return json(res, 503, { error: `provider ${provider} not configured` })
   const body = JSON.parse(raw || '{}') as { model?: string; stream?: boolean; max_tokens?: number; messages?: Msg[]; tools?: { name?: string; function?: { name?: string } }[] }
+  // talyvor-lens B41.79 — model "listing/<listing id>" is a use of that listing, answered by the listing's own model.
+  const listingAsModel = body.model?.startsWith('listing/') === true ? body.model.slice('listing/'.length).trim() : ''
+  if (listingAsModel !== '') {
+    const own = bank.listingModel(listingAsModel)
+    if (own === undefined) return json(res, 404, { error: 'market: no such listing' })
+    body.model = own
+  }
   // talyvor-lens B28.103 — model "auto" is served by the provider's cheapest chat model, and the stream names it.
   const auto = body.model === 'auto'
   const requested = auto
@@ -823,7 +831,9 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   }
   // B28.426 — talyvor-lens B28.186: a question asked through a marketplace listing (X-Talyvor-Listing) is one use of it, charged
   // as a marketplace use, and the answer says how.
-  const listing = header('x-talyvor-listing')
+  // STUB_BREAK=listing-model-stream (B41.208) — a streamed call naming a listing as its model is answered and never charged,
+  // as a streaming copy of the proxy that forgot the listing would.
+  const listing = header('x-talyvor-listing') || (broke('listing-model-stream') && body.stream === true ? '' : listingAsModel)
   if (listing !== '') {
     const charge = bank.chatListingUse(ws.id, listing)
     if (charge === undefined) return json(res, 404, { error: 'market: no such listing' })

@@ -97,7 +97,8 @@ const noArbitraryValue = {
 }
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', 'packages/ui/fixtures/**', 'apps/web/.pocket-story/**'] },
+  // brand/logo/build is the logo kit's own generator, kept as the kit ships it (B57.79).
+  { ignores: ['**/dist/**', '**/node_modules/**', 'packages/ui/fixtures/**', 'apps/web/.pocket-story/**', 'brand/logo/build/**'] },
   ...tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],

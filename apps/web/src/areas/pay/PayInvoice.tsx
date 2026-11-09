@@ -18,11 +18,6 @@ import { AgentBankError, type PayPage, agentBankApi, formatMinor, refusalText } 
 // to a payer — no ids, no ledger — and three ways to pay what is due: a card (Stripe test mode, through Lens), a transfer
 // to the issuer's account details quoting the reference, or one of the visitor's own Talyvor agents once they sign in.
 
-const FOOTER_LINKS = [
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/terms', label: 'Terms' },
-]
-
 async function readPage(token: string): Promise<PayPage> {
   const path = `/api/public/pay/${encodeURIComponent(token)}`
   const res = await fetch(path, { headers: { Accept: 'application/json' } })
@@ -314,7 +309,7 @@ export function PayInvoicePage() {
   const { token = '' } = useParams()
   return (
     <div className="flex min-h-full flex-col bg-canvas text-ink">
-      <SiteHeader product="Invoices" />
+      <SiteHeader />
 
       <main className="flex-1">
         <div className="mx-auto w-full max-w-5xl px-gutter py-12">
@@ -322,7 +317,7 @@ export function PayInvoicePage() {
         </div>
       </main>
 
-      <SiteFooter links={FOOTER_LINKS} />
+      <SiteFooter />
     </div>
   )
 }

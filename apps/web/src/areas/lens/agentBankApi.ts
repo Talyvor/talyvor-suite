@@ -1,5 +1,6 @@
 import { ApiError, getJSON } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
+import { currencyText } from './money'
 
 // agentBankApi.ts — B19.4: the Agent Bank screen's reads and writes, through the BFF's /api/agents
 // routes (apps/bff/agent_bank.go) to Lens's agent accounts (B19.1), rules and approvals (B19.2) and
@@ -447,6 +448,34 @@ export interface ScanTrackRecord {
   waiting: number
 }
 
+/** B28.66 — one place the workspace's alerts are sent (Lens B28.338). */
+export interface AlertChannel {
+  id: string
+  kind: 'push' | 'webhook' | 'slack'
+  /** a webhook's url; a Slack hook's with all but its last four characters hidden; none for push */
+  url?: string
+  /** a webhook's signing secret, only in the answer that added it */
+  secret?: string
+  added_by?: string
+  created_at: string
+}
+
+/** B28.66 — one alert sent, or to be sent, to one channel. */
+export interface AlertDelivery {
+  id: string
+  channel_id: string
+  channel_kind: AlertChannel['kind']
+  alert_kind: string
+  alert_id: string
+  title: string
+  body: string
+  status: 'queued' | 'sent' | 'failed'
+  attempts: number
+  last_error?: string
+  created_at: string
+  sent_at?: string
+}
+
 /** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
 export interface LimitAlert {
   id: string
@@ -546,6 +575,10 @@ export interface SpendForecast {
          * time zone, so its date is the agent's date; null when it does not run out at that pace.
          */
         runs_out_at?: string | null
+        /** B28.330 — runs_out_at's date in the agent's own time zone, YYYY-MM-DD; null when it does not run out. */
+        runs_out_on?: string | null
+        /** B28.330 — the agent's IANA time zone, "UTC" when none is set. */
+        timezone?: string
       }[]
     | null
 }
@@ -855,13 +888,21 @@ export function retryMoveThroughRestart(failures: number, err: unknown): boolean
 }
 
 /**
+ * B28.55 — a statement file's type: the CSV, the JSON or the PDF Lens writes (Lens B28.328), or (B28.56) the period as
+ * a CSV of double-entry journal lines Xero and QuickBooks import, each agent its cost centre (Lens B28.329).
+ */
+export type StatementFormat = 'csv' | 'json' | 'pdf' | 'journal'
+
+const STATEMENT_ACCEPT: Record<StatementFormat, string> = { csv: 'text/csv', json: 'application/json', pdf: 'application/pdf', journal: 'text/csv' }
+
+/**
  * B19.22 — a statement for the period [from, to) (YYYY-MM-DD, midnight UTC) as the file Lens writes:
  * one agent's account, or with no agent every account in the bank. A refusal carries Lens's sentence.
  */
-async function statementFile(agentID: string | null, from: string, to: string, format: 'csv' | 'json'): Promise<Blob> {
+async function statementFile(agentID: string | null, from: string, to: string, format: StatementFormat): Promise<Blob> {
   const query = new URLSearchParams({ from, to, format })
   const path = agentID ? `/api/agents/${e(agentID)}/statement?${query}` : `/api/agents/statement?${query}`
-  const res = await fetch(path, { headers: { Accept: format === 'csv' ? 'text/csv' : 'application/json' } })
+  const res = await fetch(path, { headers: { Accept: STATEMENT_ACCEPT[format] } })
   if (!res.ok) {
     let sentence = ''
     try {
@@ -872,6 +913,63 @@ async function statementFile(agentID: string | null, from: string, to: string, f
     throw new AgentBankError(res.status, path, sentence)
   }
   return res.blob()
+}
+
+/** B28.51 — what a statement page is read for: the lines of these kinds whose words hold q, any case. */
+export interface StatementSearch {
+  kinds: readonly PostingKind[]
+  q: string
+}
+
+/** B28.51 — one page of an agent's statement, newest first: `to` is the period's end, the same on every page. */
+export interface StatementPage {
+  to?: string
+  lines: StatementLine[] | null
+  /** The cursor of the page after this one; absent on the last. */
+  next_cursor?: string
+}
+
+/** B28.51 — how many lines one page of the Statement card holds. */
+export const STATEMENT_PAGE_LINES = 100
+
+/**
+ * B28.51 — a page of the agent's statement from `from` (its first day) to `to` (now, on the first page; the first
+ * page's `to` after it), searched and filtered by Lens, newest first. `cursor` is the page before's next_cursor.
+ */
+function statementPage(agentID: string, from: string, search: StatementSearch, after?: { to?: string; cursor: string }): Promise<StatementPage> {
+  const query = new URLSearchParams({ from, limit: String(STATEMENT_PAGE_LINES) })
+  if (search.kinds.length > 0) query.set('kind', search.kinds.join(','))
+  if (search.q.trim() !== '') query.set('q', search.q.trim())
+  if (after) {
+    if (after.to) query.set('to', after.to)
+    query.set('cursor', after.cursor)
+  }
+  return getJSON<StatementPage>(`/api/agents/${e(agentID)}/statement?${query}`, { lines: 'list' })
+}
+
+/** B28.53 — what one agent sent to one destination for one model on one day (Lens B28.326), in µLXC. */
+export interface SpendBucket {
+  /** YYYY-MM-DD in the analytics' time zone. */
+  day: string
+  /** Empty for a movement that was not a request. */
+  model: string
+  /** The account the money went to, as the statement names it: spend, held, workspace, agent:<id>, escrow:<id>, pot:<id>. */
+  destination: string
+  out_ulxc: number
+  /** A hold's unused part, back on the day it came back. */
+  returned_ulxc: number
+  spent_ulxc: number
+  postings: number
+}
+
+/** B28.53 — one agent's spend for a period: the buckets' out_ulxc sum to its statement's out_ulxc for the same period. */
+export interface SpendAnalytics {
+  agent_id: string
+  time_zone: string
+  out_ulxc: number
+  returned_ulxc: number
+  spent_ulxc: number
+  buckets: SpendBucket[] | null
 }
 
 export const WORKSPACE_NAME_KEY = ['workspace-name']
@@ -917,6 +1015,10 @@ export const agentBankApi = {
   /** B28.32 — end the agent's boost on that limit now, before its time. */
   endBoost: (id: string, rule: string) => send<void>('DELETE', `/api/agents/${e(id)}/rules/boosts/${e(rule)}`),
   statement: (id: string) => getJSON<{ lines: StatementLine[] | null }>(`/api/agents/${e(id)}/statement`, { lines: 'list' }),
+  statementPage,
+  /** B28.53 — the agent's spend from `from` (YYYY-MM-DD) to now, by day, model and destination. */
+  analytics: (id: string, from: string) =>
+    getJSON<SpendAnalytics>(`/api/agents/${e(id)}/analytics?${new URLSearchParams({ from })}`, { buckets: 'list', out_ulxc: 'number', returned_ulxc: 'number', spent_ulxc: 'number' }),
   /** B46.9 — the agent's wallet on the money layer (Lens B46.4): its balance and how to pay into it. */
   wallet: (id: string) => getSaid<AgentMoneyWallet>(`/api/agents/${e(id)}/wallet`),
   statementFile,
@@ -971,6 +1073,10 @@ export const agentBankApi = {
   alerts: () => getJSON<{ alerts: AgentSpendAlert[] | null; rule: string }>('/api/agents/alerts', { alerts: 'list' }),
   subscriptions: () => getJSON<{ subscriptions: SpendSubscription[] | null }>('/api/money/spending/subscriptions', { subscriptions: 'list' }),
   limitAlerts: () => getJSON<{ alerts: LimitAlert[] | null }>('/api/money/budgets/alerts', { alerts: 'list' }),
+  alertChannels: () => getJSON<{ channels: AlertChannel[] | null }>('/api/money/alerts/channels', { channels: 'list' }),
+  addAlertChannel: (kind: AlertChannel['kind'], url: string) => send<AlertChannel>('POST', '/api/money/alerts/channels', { kind, url }),
+  removeAlertChannel: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/alerts/channels/${e(id)}`),
+  alertDeliveries: () => getJSON<{ deliveries: AlertDelivery[] | null }>('/api/money/alerts/deliveries', { deliveries: 'list' }),
   budgets: () => getJSON<{ budgets: SpendBudget[] | null }>('/api/money/budgets', { budgets: 'list' }),
   setBudget: (b: SpendBudgetRequest) => send<SpendBudget>('PUT', '/api/money/budgets', b),
   deleteBudget: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/budgets/${e(id)}`),
@@ -1024,6 +1130,8 @@ export const agentBankApi = {
       : send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/deny`, assertion ? { assertion } : {}),
   // B19.10 — passkeys and push, kept by Lens (B19.16).
   passkeys: () => getJSON<{ passkeys: Passkey[] | null }>('/api/agents/passkeys', { passkeys: 'list' }),
+  // B55.2 — the phone keys Lens holds for the workspace (revoked ones included): the phone signs approvals too.
+  devices: () => getJSON<{ devices: DeviceKey[] | null }>('/api/money/devices', { devices: 'list' }),
   passkeyChallenge: () => send<{ challenge: string; rp_id: string; credential_ids?: string[] | null }>('POST', '/api/agents/passkeys/challenge'),
   registerPasskey: (body: PasskeyRegistration) => send<Passkey>('POST', '/api/agents/passkeys', body),
   approvalChallenge: (approvalID: string) =>
@@ -1287,6 +1395,8 @@ export interface PaymentRequestItem {
   decision: string
   reason: string
   rule?: string
+  /** The payment out that paid it, once one did. */
+  payment_id?: string
   pay_status?: string
   pay_detail?: string
   /** B41.3 (Lens B41.103) — duplicate | bank_details_changed | first_payment | unusual_amount, each with Lens's words. */
@@ -1771,6 +1881,14 @@ export interface Passkey {
   last_used_at?: string
 }
 
+/** B55.2 — a phone's key (Lens GET /v1/money/devices); one revoked signs nothing. */
+export interface DeviceKey {
+  id: string
+  platform: string
+  name: string
+  revoked_at?: string
+}
+
 /** A new passkey, as the browser's ceremony gives it — all base64url. */
 export interface PasskeyRegistration {
   credential_id: string
@@ -1934,7 +2052,7 @@ export const FIATS: readonly string[] = ['GBP', 'EUR', 'USD']
 export function formatMinor(minor: number, currency: string): string {
   if (currency === 'USDC') return `${(minor / 1e6).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`
   if (!FIATS.includes(currency)) return `${(minor / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(minor / 100)
+  return currencyText(minor / 100, currency)
 }
 
 /** "12.50" → 1250: an amount typed in the currency's major units, to the minor unit; null when it is not a positive amount. */

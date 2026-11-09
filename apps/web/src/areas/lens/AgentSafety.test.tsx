@@ -17,6 +17,7 @@ function mockBff(passkey = false) {
     const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
     if (init?.method === 'POST') posts.push({ url, body: init.body ? JSON.parse(String(init.body)) : null })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents')
       return json({
         workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0,
@@ -54,6 +55,22 @@ function mockBff(passkey = false) {
     if (url === '/api/agents/agt_1/rules')
       return json({ max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 0, approval_above_ulxc: 0, allowed_models: [], allowed_providers: [], allowed_listings: [], active_from: '', active_until: '', timezone: 'UTC', pause_on_unusual_spend: false })
     return new Response('null', { status: 404 })
+  })
+  return posts
+}
+
+// B55.2 — no passkey and the phone's key, answered over mockBff's stub; every POST from here is counted.
+function onlyThePhoneKey(extra: Record<string, unknown> = {}) {
+  const inner = vi.mocked(fetch).getMockImplementation()!
+  const posts: string[] = []
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] })
+    if (url in extra) return json(extra[url])
+    if ((init?.method ?? 'GET') !== 'GET') posts.push(url)
+    return inner(input, init)
   })
   return posts
 }
@@ -128,5 +145,25 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
       ['/api/agents/resume-all', { assertion }],
     ])
     expect(get.mock.calls[1][0].publicKey.userVerification).toBe('required')
+  })
+})
+
+describe('starting agents again when only the phone holds a key (B55.2)', () => {
+  it('pauses from here, but sends no resume and says to start them on the phone', async () => {
+    const posts = mockBff()
+    onlyThePhoneKey()
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
+    expect(await screen.findByText('Resume Researcher on your phone with Face ID.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resume Researcher' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause every agent' }))
+    expect(await screen.findByText('Start your agents again on your phone with Face ID.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start every agent again' })).toBeNull()
+    expect(screen.getAllByRole('link', { name: 'Add this browser' }).length).toBeGreaterThan(0)
+
+    expect(posts.map((p) => p.url)).toEqual(['/api/agents/agt_1/pause', '/api/agents/pause-all'])
   })
 })

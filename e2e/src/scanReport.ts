@@ -1,5 +1,5 @@
 // B52.32 — a Scan report end to end, once a run, on a workspace of its own, with the synthetic key (Lens B52.40): Scan's writer runs on
-// its recorded Cushing crude weeks and drafts a report that waits for a person, with its sources and the whole "How this report was
+// its recorded US distillate weeks and drafts a report that waits for a person, with its sources and the whole "How this report was
 // made" box and no trade wording; the same draft with a planted "buy" line is refused by the compliance check and can never be
 // approved; nothing is published until the test reviewer approves, and once the planted outcome arrives inside the report's range the
 // track record scores it a hit.
@@ -9,7 +9,8 @@ import type { Answered, ScanTrackRecord } from './lens.ts'
 import { said } from './routes.ts'
 import { CannotTest, type Scenario } from './scenarios.ts'
 
-const SERIES = 'eia.stocks.cushing-crude'
+// Lens records only US distillate (B52.40): Scan's model refuses Cushing crude, and the check refuses the plant by its word.
+const SERIES = 'eia.stocks.us-distillate'
 const PLANT = 'Buy Cushing crude now.'
 const TRADE = /\b(buy|buys|buying|sell|sells|selling)\b/i
 

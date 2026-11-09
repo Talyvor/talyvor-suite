@@ -226,6 +226,18 @@ export async function readAnswered(footerText: () => Promise<string>, answerText
   return { footerText: text, ...booked, answer: await answerText() }
 }
 
+/**
+ * When one compared model's stream started and ended. B54.40 — a page closed before the stream finished ends it
+ * there: the scenario has its verdict by then, and nothing is left rejecting with nobody waiting for it.
+ */
+export function timeStream(r: Request, streams: { started: number; ended?: number }[]): void {
+  const s: { started: number; ended?: number } = { started: Date.now() }
+  streams.push(s)
+  void r.response().then((res) => res?.finished()).catch(() => undefined).finally(() => {
+    s.ended = Date.now()
+  })
+}
+
 export class AppUser {
   readonly user: SyntheticUser
   readonly page: Page
@@ -633,12 +645,7 @@ export class AppUser {
     })
     const streams: { started: number; ended?: number }[] = []
     page.on('request', (r) => {
-      if (!r.url().includes('/api/ai/stream/')) return
-      const s: { started: number; ended?: number } = { started: Date.now() }
-      streams.push(s)
-      void r.response().then((res) => res?.finished()).finally(() => {
-        s.ended = Date.now()
-      })
+      if (r.url().includes('/api/ai/stream/')) timeStream(r, streams)
     })
     await page.evaluate((n) => {
       const w = window as unknown as { e2eCompareLengths?: number[][] }

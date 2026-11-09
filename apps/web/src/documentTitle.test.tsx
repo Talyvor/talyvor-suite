@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -257,8 +258,9 @@ describe('the format, and the brand it ends in', () => {
 
     const manifest = JSON.parse(pub('manifest.webmanifest').toString('utf8'))
     expect(manifest.name).toBe('Talyvor')
-    expect(manifest.background_color).toBe(tokens.dark.canvas)
-    expect(manifest.theme_color).toBe(tokens.dark.canvas)
+    // B57.59: the kit's colours for an installed app.
+    expect(manifest.background_color).toBe('#111216')
+    expect(manifest.theme_color).toBe('#111216')
     expect(manifest.icons).toEqual([
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
       { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -268,6 +270,23 @@ describe('the format, and the brand it ends in', () => {
     for (const icon of manifest.icons as { src: string; sizes: string }[]) {
       const n = Number(icon.sizes.split('x')[0])
       expect(side(icon.src.slice(1)), icon.src).toEqual([n, n])
+    }
+  })
+
+  it('ships the logo kit’s icons and share image, byte for byte (B57.59)', () => {
+    // The kit is ~/talyvor-queue/design/logo/talyvor-logo/png; these are its files' SHA-256s.
+    const kit: Record<string, string> = {
+      'favicon.ico': '77c402810384ddcca272f53952eb981862b2cf172516b2c0f7cca8f71ee43716',
+      'favicon.svg': 'bbf01081a00680d9fb57b6f7493f0149f5790b8f072db90d8a14ad9d7a015cc5',
+      'apple-touch-icon.png': '8cee7a052aed4213505e4ae9c27c7d9f1c199a41eb4489ba9d09c541a96ee349',
+      'icon-192.png': '16ff82ff519b67223c00f44777c8e1ee6328ac303d880155a378091206b7726d',
+      'icon-512.png': '33a4271eaaa09e5e45808bc84aa28ea19c27784b4ad91ae4770e9533b92f2a36',
+      'icon-maskable-512.png': '9f71d049ea20787f7f6cbadc74d2835c5bf2ee240a8d9e962f503aa01cc40637',
+      'og-image.png': 'ef798c828a44b8bebbb13edafb6f33f2be5984533b97a52e4d8aa4e26f09b5dd', // B57.79: the dark share image
+    }
+    for (const [name, sha] of Object.entries(kit)) {
+      const bytes = readFileSync(resolve(__dirname, '../public', name))
+      expect(createHash('sha256').update(bytes).digest('hex'), name).toBe(sha)
     }
   })
 })

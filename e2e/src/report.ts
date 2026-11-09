@@ -627,6 +627,7 @@ export function renderHeld(h: HeldNight): string {
     `- **Why**: ${h.why}.`,
     `- **Would have tested**: ${h.wouldTest}.`,
     `- **Checkout**: ${versionsLine(h.versions)}.`,
+    '- **Pocket problems**: not run, the night was held.',
     '- **Next**: the next night tries again; it runs once the checkout can be brought to main.',
     '',
   ].join('\n')
@@ -634,4 +635,9 @@ export function renderHeld(h: HeldNight): string {
 
 export async function writeHeld(path: string, h: HeldNight): Promise<void> {
   await prependTesters(path, renderHeld(h))
+}
+
+/** B55.52 — a Pocket problems pass that could not write its section says why, instead of nothing. */
+export async function writePocketNotRun(path: string, at: string, why: string): Promise<void> {
+  await prependTesters(path, [`## ${at} — Pocket problems pass: not run`, '', `- **Pocket problems**: not run, ${why}.`, ''].join('\n'))
 }

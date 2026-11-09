@@ -1,5 +1,5 @@
 import { Component, type ReactNode } from 'react'
-import { Button } from '@talyvor/ui'
+import { Button, EmptyState } from '@talyvor/ui/pocket'
 
 // B27.12 — a screen that throws while drawing says so, instead of taking the app with it.
 //
@@ -25,21 +25,31 @@ export class ScreenBoundary extends Component<
 
   render() {
     if (!this.state.failed) return this.props.children
+    // B57.5 — drawn in Pocket: its empty state, with the one thing to do about it.
     return (
-      <div role="alert" className="mx-auto max-w-3xl px-gutter py-4">
-        <p className="text-body text-ink">This screen couldn’t be read.</p>
-        <p className="mt-1 text-body text-muted">
-          Something it reads came back in a form it can’t show, so nothing is shown rather than something wrong.
-        </p>
-        <Button
-          className="mt-3"
-          onClick={() => {
-            this.props.onRetry()
-            this.setState({ failed: false })
-          }}
-        >
-          Try again
-        </Button>
+      <div role="alert" data-design="pocket" className="mx-auto max-w-3xl px-gutter py-4">
+        <EmptyState
+          icon={
+            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M7 3.5h7l4 4V20.5H7z" />
+              <path d="M14 3.5V8h4" />
+              <path d="M9.5 12h6M9.5 15.5h6" />
+            </svg>
+          }
+          title="This screen couldn’t be read."
+          line="Something it reads came back in a form it can’t show, so nothing is shown rather than something wrong."
+          action={
+            <Button
+              size="sm"
+              onClick={() => {
+                this.props.onRetry()
+                this.setState({ failed: false })
+              }}
+            >
+              Try again
+            </Button>
+          }
+        />
       </div>
     )
   }

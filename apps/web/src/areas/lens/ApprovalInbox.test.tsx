@@ -34,6 +34,7 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
       })
     if (url === '/api/agents/approvals') return json({ approvals })
     if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [] })
     const challenge = /^\/api\/agents\/approvals\/([^/]+)\/challenge$/.exec(url)
     if (challenge) challenges.push(challenge[1])
     const decision = /^\/api\/agents\/approvals\/([^/]+)\/(approve|deny)$/.exec(url)
@@ -53,6 +54,21 @@ const inbox = async () => {
   window.history.pushState({}, '', '/approvals')
   render(<App />)
   return within(await screen.findByRole('group', { name: 'Waiting for a person' }))
+}
+
+// B55.2 — no passkey and these phone keys, answered over mockBff's stub (null: the read is refused); every POST from here is counted.
+function onlyThePhoneKey(devices: object[] | null = [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }]) {
+  const inner = vi.mocked(fetch).getMockImplementation()!
+  const posts: string[] = []
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return devices ? json({ devices }) : json({ error: "only the workspace's owner or an admin may register, list or revoke its device keys" }, 403)
+    if ((init?.method ?? 'GET') !== 'GET') posts.push(url)
+    return inner(input, init)
+  })
+  return posts
 }
 
 afterEach(() => {
@@ -141,5 +157,58 @@ describe('the approvals inbox (B41.33)', () => {
     await inbox()
     expect(document.body.textContent).toMatch(/, 14 Oct(?! by)/)
     expect(document.body.textContent).toMatch(/, 13 Oct by Buyer/)
+  })
+})
+
+describe('the approvals inbox when only the phone holds a key (B55.2)', () => {
+  it('sends no decision, by button, key or swipe, and says to approve on the phone', async () => {
+    const bff = mockBff()
+    const posts = onlyThePhoneKey()
+    const list = await inbox()
+    expect(await list.findAllByText('Approve this on your phone: it is waiting in Talyvor there.')).toHaveLength(5)
+    expect(list.queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(list.queryByRole('checkbox')).toBeNull()
+    const row = document.querySelector<HTMLElement>('[data-approval="apr_1"]')!
+    fireEvent.keyDown(row, { key: 'a' })
+    fireEvent.keyDown(row, { key: 'd' })
+    fireEvent.touchStart(row, { touches: [{ clientX: 0, clientY: 0 }] })
+    fireEvent.touchEnd(row, { changedTouches: [{ clientX: 200, clientY: 0 }] })
+    expect(bff.decisions).toEqual([])
+    expect(posts).toEqual([])
+    // Lens refuses a passkey made here unsigned, and on Approvals the link would lead back to this page.
+    expect(screen.queryByRole('button', { name: /Add this device|Approve with Face ID from now on/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Add this browser' })).toBeNull()
+  })
+
+  it('a revoked phone key still counts, as Lens counts it: nothing is sent and the phone line shows', async () => {
+    const bff = mockBff()
+    const posts = onlyThePhoneKey([{ id: 'dk_1', platform: 'ios', name: 'Old iPhone', revoked_at: '2026-10-30T09:00:00Z' }])
+    const list = await inbox()
+    expect(await list.findAllByText('Approve this on your phone: it is waiting in Talyvor there.')).toHaveLength(5)
+    expect(list.queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    fireEvent.keyDown(document.querySelector<HTMLElement>('[data-approval="apr_1"]')!, { key: 'a' })
+    expect(bff.decisions).toEqual([])
+    expect(posts).toEqual([])
+  })
+
+  it('shows no decision and sends nothing while the phone keys cannot be read', async () => {
+    const bff = mockBff()
+    const posts = onlyThePhoneKey(null)
+    const list = await inbox()
+    await waitFor(() => expect(queryClient.getQueryState(['money-devices'])?.status).toBe('error'))
+    expect(list.queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(list.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Add this device|Approve with Face ID from now on/ })).toBeNull()
+    fireEvent.keyDown(document.querySelector<HTMLElement>('[data-approval="apr_1"]')!, { key: 'a' })
+    expect(bff.decisions).toEqual([])
+    expect(posts).toEqual([])
+  })
+
+  it('a workspace with no key at all still approves unsigned', async () => {
+    const bff = mockBff()
+    await inbox()
+    fireEvent.click(await within(document.querySelector<HTMLElement>('[data-approval="apr_1"]')!).findByRole('button', { name: 'Approve' }))
+    await waitFor(() => expect(bff.decisions).toEqual([{ id: 'apr_1', decision: 'approve' }]))
+    expect(bff.challenges).toEqual([])
   })
 })

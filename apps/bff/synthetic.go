@@ -29,7 +29,8 @@ import (
 //
 // POST /auth/synthetic/mobile (B57.86) takes the same header and body and makes the same checks, and
 // answers as /auth/mobile/session does: {"token","expires_at"}, a Bearer session the phone app sends,
-// and no cookie. It needs no Origin (lens.go's originExemptPath): the key is the proof.
+// and no cookie. It needs no Origin (lens.go's originExemptPath): the key is the proof. Sent with
+// another site's Origin it is refused like any write (B50.36).
 //
 // Unset LENS_SYNTHETIC_KEY (the default) and the route answers 404. The key is compared in constant
 // time; every attempt on either door is logged once, with its outcome and its door, never with the

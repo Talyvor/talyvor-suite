@@ -18,6 +18,7 @@ function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<st
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/money/accounts') return json({ accounts: ACCOUNTS })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [{ id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-10T09:00:00Z' }] })
     if (url === '/api/wallets/capabilities') return json({ capabilities: [{ capability: 'payments_out', name: 'Money out', class: 'RED', real_money: false, level_needed: 'L2' }] })
@@ -105,6 +106,22 @@ function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<st
 function answer(form: HTMLElement, urgent: 'Yes' | 'No', byMessage: 'Yes' | 'No') {
   fireEvent.click(within(within(form).getByRole('radiogroup', { name: 'Were you told to pay urgently?' })).getByLabelText(urgent))
   fireEvent.click(within(within(form).getByRole('radiogroup', { name: 'Did the bank details arrive by email or chat?' })).getByLabelText(byMessage))
+}
+
+// B55.2 — no passkey and the phone's key, answered over mockBff's stub; every POST from here is counted.
+function onlyThePhoneKey(extra: Record<string, unknown> = {}) {
+  const inner = vi.mocked(fetch).getMockImplementation()!
+  const posts: string[] = []
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] })
+    if (url in extra) return json(extra[url])
+    if ((init?.method ?? 'GET') !== 'GET') posts.push(url)
+    return inner(input, init)
+  })
+  return posts
 }
 
 afterEach(() => {
@@ -363,5 +380,20 @@ describe('the Pay screen', () => {
     const row = await screen.findByTestId('payment-mpay_9')
     expect(within(row).getByText('We could not read this payment’s status')).toBeTruthy()
     expect(row.textContent).not.toMatch(/on_review|on review/)
+  })
+})
+
+describe('an agent’s payment waiting on Pay when only the phone holds a key (B55.2)', () => {
+  it('sends no decision and says to approve on the phone', async () => {
+    mockBff()
+    const posts = onlyThePhoneKey({ '/api/agents/approvals': { approvals: [
+      { id: 'apr_9', agent_id: 'agt_1', amount_ulxc: 2_000_000, model: '', status: 'pending', created_at: '2026-10-25T06:01:00Z', payee: { kind: 'outside', id: 'payee_1', name: 'Acme Ltd' } },
+    ] } })
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+    const card = await screen.findByTestId('approval-apr_9')
+    expect(await within(card).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(posts).toEqual([])
   })
 })

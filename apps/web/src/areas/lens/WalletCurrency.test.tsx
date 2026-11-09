@@ -63,12 +63,12 @@ describe('amounts in your own currency and plain-English rules', () => {
     window.history.pushState({}, '', '/agents')
     render(<App />)
 
-    await waitFor(() => expect(balanceRow().textContent).toBe('12.5 LXC ($1.25)'))
+    await waitFor(() => expect(balanceRow().textContent).toBe('$1.25 (12.5 LXC)'))
     expect(within(balanceRow()).getByTestId('fiat').className).toContain('font-figure')
 
     fireEvent.change(screen.getByLabelText('Show amounts in'), { target: { value: 'GBP' } })
     // 1.25 USD ÷ 1.1672 USD per EUR × 0.8354 GBP per EUR = £0.8947
-    await waitFor(() => expect(balanceRow().textContent).toBe('12.5 LXC (£0.89)'))
+    await waitFor(() => expect(balanceRow().textContent).toBe('£0.89 (12.5 LXC)'))
     expect(window.localStorage.getItem(FIAT_KEY)).toBe('GBP')
   })
 
@@ -86,9 +86,9 @@ describe('amounts in your own currency and plain-English rules', () => {
 
     const words = await screen.findByTestId('rules-in-words')
     await waitFor(() =>
-      expect(words.textContent).toContain('Researcher may spend at most 20 LXC ($2.00) a day.'),
+      expect(words.textContent).toContain('Researcher may spend at most $2.00 (20 LXC) a day.'),
     )
-    expect(words.textContent).toContain('A person must approve any request or payment above 5 LXC ($0.50).')
+    expect(words.textContent).toContain('A person must approve any request or payment above $0.50 (5 LXC).')
     expect(words.textContent).toContain('It may use any model from any provider.')
 
     await waitFor(() => expect(within(models).getByRole('option', { name: 'Claude Haiku 4.5' })).toBeTruthy())
@@ -115,7 +115,7 @@ describe('amounts in your own currency and plain-English rules', () => {
     expect(saved[0]).toMatchObject({ hourly_limit_ulxc: 1 * M, daily_limit_ulxc: 20 * M, weekly_limit_ulxc: 50 * M })
     const words = await screen.findByTestId('rules-in-words')
     await waitFor(() =>
-      expect(words.textContent).toContain('Researcher may spend at most 1 LXC ($0.10) an hour, 20 LXC ($2.00) a day and 50 LXC ($5.00) a week.'),
+      expect(words.textContent).toContain('Researcher may spend at most $0.10 (1 LXC) an hour, $2.00 (20 LXC) a day and $5.00 (50 LXC) a week.'),
     )
   })
 
@@ -138,7 +138,7 @@ describe('amounts in your own currency and plain-English rules', () => {
     expect(saved[0].model_daily_limits_ulxc).toEqual({ 'gpt-4o': 0.5 * M, 'claude-haiku-4-5': 2 * M })
     const words = await screen.findByTestId('rules-in-words')
     await waitFor(() =>
-      expect(words.textContent).toContain('On one model it may spend at most 0.5 LXC ($0.05) a day on GPT-4o and 2 LXC ($0.20) a day on Claude Haiku 4.5.'),
+      expect(words.textContent).toContain('On one model it may spend at most $0.05 (0.5 LXC) a day on GPT-4o and $0.20 (2 LXC) a day on Claude Haiku 4.5.'),
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove the daily limit on GPT-4o for Researcher' }))
@@ -249,7 +249,7 @@ describe('the dollar figure survives a failed read of the peg', () => {
       await waitFor(() => expect(balanceRow().textContent).toBe('12.5 LXC'))
       peg.shown()
       await vi.advanceTimersByTimeAsync(2_000)
-      await waitFor(() => expect(balanceRow().textContent).toBe('12.5 LXC ($1.25)'))
+      await waitFor(() => expect(balanceRow().textContent).toBe('$1.25 (12.5 LXC)'))
       expect(peg.reads()).toBe(2)
     } finally {
       vi.useRealTimers()

@@ -20,6 +20,10 @@ const DIRECT = /\b\w+\.(?:With\([^)]*\)\.)?(Get|Post|Put|Delete|Patch)\("(\/[^"]
 const HELPER = /\b\w+\.(get|post|put|patch|delete)\(\s*\w+,\s*"(\/[^"]*)"(\+(\w+))?/
 // The suffix loops, read from the source too, so a third value added upstream is not missed.
 const LOOP = /for _, (\w+) := range \[\]string\{([^}]*)\}/
+// B56.3 — the simulated portfolio, order and quote routes stay off the public list: investing is not
+// offered until the FCA route and a broker are in place, so no public page puts it in front of
+// anyone. Lens's own /openapi.json lists none of them either. In the app they keep their Sandbox label.
+const UNLISTED = /\/portfolios(\/|$)|^\/v1\/markets\/simulated\//
 
 export function extract(lensRoot) {
   const dir = join(lensRoot, 'cmd', 'lens')
@@ -57,7 +61,7 @@ if (isMain) {
     console.error('usage: lens-routes.mjs <talyvor-lens checkout> [--check]')
     process.exit(2)
   }
-  const registered = extract(lensRoot).filter((r) => !r.admin)
+  const registered = extract(lensRoot).filter((r) => !r.admin && !UNLISTED.test(r.path))
   if (!process.argv.includes('--check')) {
     for (const r of registered) console.log(`${r.method}\t${r.path}\t${r.file}:${r.line}`)
     process.exit(0)
@@ -68,6 +72,12 @@ if (isMain) {
   )
   const have = new Set(registered.map((r) => `${r.method} ${normalise(r.path)}`))
   const documented = doc.groups.flatMap((g) => g.routes)
+  const listed = documented.filter((r) => UNLISTED.test(r.path))
+  if (listed.length > 0) {
+    console.error(`/documentation lists ${listed.length} route(s) kept off the public list (UNLISTED):`)
+    for (const r of listed) console.error(`  ${r.method} ${r.path}`)
+    process.exit(1)
+  }
   const gone = documented.filter((r) => !have.has(`${r.method} ${normalise(r.path)}`))
   if (gone.length > 0) {
     console.error(`/documentation lists ${gone.length} Lens route(s) that Lens no longer registers:`)

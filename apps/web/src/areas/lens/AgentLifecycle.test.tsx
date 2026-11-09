@@ -35,7 +35,7 @@ function mockBff() {
       Object.assign(agent, { balance_ulxc: 0, keys: [], archived_at: '2026-10-05T09:00:00Z' })
       return json({ agent_id: 'agt_1', swept_ulxc: swept, revoked_keys: ['key_1'], archived_at: '2026-10-05T09:00:00Z' })
     }
-    if (url === '/api/agents/agt_1/statement') return json({ agent_id: 'agt_1', lines })
+    if (url.split('?')[0] === '/api/agents/agt_1/statement') return json({ agent_id: 'agt_1', lines })
     if (url === '/api/agents/schedules') return json({ schedules: [] })
     if (url === '/api/agents/agt_1/topup') return json({ error: 'the agent has no automatic top-up' }, 404)
     if (url === '/api/agents/forecast') return json({ at: '', month_start: '', month_end: '', spent_ulxc: 0, forecast_ulxc: 0, agents: [] })

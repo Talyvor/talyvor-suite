@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, CONSOLE_ROUTES, queryClient } from './App'
 import { Landing } from './areas/marketing/Landing'
 import lensRoutes from './areas/documentation/lens-routes.json'
-import { COMPANY_CONTACT, COMPANY_NAME } from './company'
+import { COMPANY_CONTACT, COMPANY_LINE, COMPANY_NAME } from './company'
+import { FOOTER_LINE } from './positioning'
 
 // B51.1 (Nick, 28 Oct 2026) — the site says what Talyvor does today, the same on every page: the waitlist only while
 // sign-up is closed, one header and one footer on every public page, Privacy built from what the code does, and no
@@ -94,6 +95,14 @@ describe('the waitlist on /marketing follows the sign-up state', () => {
   })
 })
 
+const FOOTER_LINKS = [
+  'Pricing /pricing',
+  'Docs /documentation',
+  'Privacy /privacy',
+  'Terms /terms',
+  `${COMPANY_CONTACT} mailto:${COMPANY_CONTACT}`,
+]
+
 const linksOf = (el: HTMLElement) =>
   within(el)
     .getAllByRole('link')
@@ -105,24 +114,39 @@ describe.each(PUBLIC_PAGES)('%s', (path) => {
     await at(path)
     const header = screen.getAllByRole('banner')[0] // the legal pages' title block is a <header> in main too
     expect(header.textContent).not.toMatch(/suite/i)
+    // B57.59: Pocket's header — the logo home, three links and one way into the app.
     expect(linksOf(header)).toEqual([
       ' /marketing',
+      'How it works /marketing',
       'Pricing /pricing',
-      'Documentation /documentation',
+      'Docs /documentation',
       'Open the app /',
-      'Get started /signup',
     ])
-    expect(within(header).getByRole('button', { name: /theme|dark|light/i })).toBeInTheDocument()
+    expect(within(header).getAllByRole('img', { name: 'Talyvor' })[0]).toHaveAttribute('width', '168')
 
     const footer = screen.getByRole('contentinfo')
-    expect(linksOf(footer)).toEqual([
-      'Privacy /privacy',
-      'Terms /terms',
-      'Pricing /pricing',
-      'Documentation /documentation',
-      `${COMPANY_CONTACT} mailto:${COMPANY_CONTACT}`,
-    ])
-    expect(within(footer).getByText(new RegExp(COMPANY_NAME))).toBeInTheDocument()
+    expect(linksOf(footer)).toEqual(FOOTER_LINKS)
+    expect(within(footer).getByText(FOOTER_LINE)).toBeInTheDocument()
+    expect(within(footer).getByText(COMPANY_LINE)).toBeInTheDocument()
+  })
+})
+
+// B57.59: the shared pages a stranger opens by link wear the same footer, and a header that names the product.
+describe('a shared Track board', () => {
+  it('wears the product header and the one footer', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.startsWith('/auth/me')) return json({ mode: 'oidc', authenticated: false, user: null })
+      if (url === '/api/public/boards/tok_abcdefghijklmnop') return json({ workspace: 'Acme', project: 'Website', truncated: false, issues: [] })
+      return new Response('null', { status: 404 })
+    })
+    window.history.pushState({}, '', '/board/tok_abcdefghijklmnop')
+    render(<App />)
+    const header = (await screen.findAllByRole('banner'))[0]
+    expect(linksOf(header)).toEqual([' /marketing', 'Open the app /'])
+    expect(header.textContent).toContain('Track')
+    expect(linksOf(screen.getByRole('contentinfo'))).toEqual(FOOTER_LINKS)
   })
 })
 
@@ -187,7 +211,7 @@ describe('/privacy says what the code does', () => {
     expect(document.body.textContent).toContain(`${COMPANY_NAME} (company number`)
     expect(document.body.textContent).not.toMatch(/does not identify a data controller/)
     expect(screen.getAllByText(/legal review/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('28 October 2026').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('8 November 2026').length).toBeGreaterThan(0)
   })
 
   it('the waitlist: past tense while sign-up is open, the current words while closed', async () => {
