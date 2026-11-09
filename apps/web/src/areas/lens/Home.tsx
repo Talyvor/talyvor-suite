@@ -2,12 +2,15 @@ import { useState } from 'react'
 import { type UseQueryResult, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button, Card, CardHeader, Input, NavIcon, type NavIconName, Pill, Row, Switch, cn, focusRing, inlineLink } from '@talyvor/ui'
+import { Money } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
-import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, PauseEveryAgent, rulesKey } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, PauseEveryAgent, rulesKey, useKeys } from './AgentBank'
 import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText } from './agentBankApi'
+import { RunsOut } from './RunsOut'
 import { Lxc } from './money'
 import { resumeAgent } from './passkeys'
+import { AgentFace } from './AgentFace'
 import { SafeAmount, SafeBreakdown } from './SafeToSpend'
 import { FirstAgent, NameWorkspace } from './Onboarding'
 import { SharingLine } from './Sharing'
@@ -190,13 +193,14 @@ function MorningBriefing() {
   )
 }
 
-/** B45.11 — one total: what the agents hold together, and what the workspace has not given to an agent yet. */
+/** B45.11 — one total: what the agents hold together, and what the workspace has not given to an agent yet. B57.7: the
+ * total is a balance card's <Money>, dollars large and LXC small. */
 function Total({ book }: { book: AgentBook }) {
   return (
     <div className="flex flex-col gap-1 rounded-card border border-rule bg-surface px-gutter py-3">
       <span className="font-figure text-eyebrow uppercase text-faint">Across your agents</span>
-      <span className="text-head text-ink" data-testid="home-total">
-        {lxc(book.allocated_ulxc)}
+      <span data-testid="home-total">
+        <Money ulxc={book.allocated_ulxc} size="card" />
       </span>
       <span className="text-caption text-muted" data-testid="home-unallocated">
         {lxc(book.unallocated_ulxc)} more in the workspace, not yet given to an agent
@@ -208,10 +212,19 @@ function Total({ book }: { book: AgentBook }) {
 export const SAFE_TO_SPEND_KEY = ['agent-safe-to-spend'] as const
 
 /** One agent's line: its balance and safe to spend, and a switch between running and paused that asks first. */
-function AgentLine({ agent, safe }: { agent: Agent; safe: UseQueryResult<Awaited<ReturnType<typeof agentBankApi.safeToSpend>>> }) {
+function AgentLine({
+  agent,
+  safe,
+  waiting,
+}: {
+  agent: Agent
+  safe: UseQueryResult<Awaited<ReturnType<typeof agentBankApi.safeToSpend>>>
+  waiting: boolean
+}) {
   const qc = useQueryClient()
   const [asking, setAsking] = useState(false)
   const running = !agent.paused_at
+  const { hold, onlyThePhone } = useKeys()
   const change = useMutation({
     mutationFn: () => (running ? agentBankApi.pause(agent.id, 'paused from Home') : resumeAgent(agent.id)),
     onSuccess: () => setAsking(false),
@@ -221,17 +234,20 @@ function AgentLine({ agent, safe }: { agent: Agent; safe: UseQueryResult<Awaited
   return (
     <div className="border-b border-rule px-gutter py-2 last:border-b-0" data-testid={`home-agent-${agent.id}`}>
       <div className="flex min-h-row items-center justify-between gap-gutter">
-        <span className="flex min-w-0 flex-col">
-          <span className="truncate text-body text-ink">{agent.name}</span>
-          <span className="text-caption text-muted">
-            {lxc(agent.balance_ulxc)} held ·{' '}
-            {safe.isError ? (
-              <InlineFailure error={safe.error} className="" />
-            ) : figure ? (
-              <span data-testid={`home-safe-${agent.id}`}>{lxc(figure.safe_to_spend)} safe to spend</span>
-            ) : (
-              'reading safe to spend…'
-            )}
+        <span className="flex min-w-0 items-center gap-3">
+          <AgentFace agent={agent} size={44} waiting={waiting} />
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-body text-ink">{agent.name}</span>
+            <span className="text-caption text-muted">
+              {lxc(agent.balance_ulxc)} held ·{' '}
+              {safe.isError ? (
+                <InlineFailure error={safe.error} className="" />
+              ) : figure ? (
+                <span data-testid={`home-safe-${agent.id}`}>{lxc(figure.safe_to_spend)} safe to spend</span>
+              ) : (
+                'reading safe to spend…'
+              )}
+            </span>
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
@@ -244,7 +260,11 @@ function AgentLine({ agent, safe }: { agent: Agent; safe: UseQueryResult<Awaited
           />
         </span>
       </div>
-      {asking ? (
+      {asking && !running && onlyThePhone ? (
+        <div className="pb-1">
+          <OnThePhone>Resume {agent.name} on your phone with Face ID.</OnThePhone>
+        </div>
+      ) : asking && (running || !hold) ? (
         <div role="group" aria-label={`${running ? 'Pause' : 'Resume'} ${agent.name}?`} className="flex flex-wrap items-center gap-2 pb-1">
           <span className="text-body text-ink">
             {running ? `Pause ${agent.name}? Lens refuses its next request or payment.` : `Resume ${agent.name}?`}
@@ -265,11 +285,14 @@ function AgentLine({ agent, safe }: { agent: Agent; safe: UseQueryResult<Awaited
 /** B45.11 — one row per agent. */
 function AgentLines({ agents }: { agents: Agent[] }) {
   const safe = useQuery({ queryKey: SAFE_TO_SPEND_KEY, queryFn: agentBankApi.safeToSpend })
+  // The same query as the approvals card above, so the badge costs no request of its own.
+  const approvals = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
+  const waiting = new Set((approvals.data?.approvals ?? []).filter((p) => p.status === 'pending').map((p) => p.agent_id))
   return (
     <Card>
       <CardHeader>Your agents</CardHeader>
       {agents.map((a) => (
-        <AgentLine key={a.id} agent={a} safe={safe} />
+        <AgentLine key={a.id} agent={a} safe={safe} waiting={waiting.has(a.id)} />
       ))}
     </Card>
   )
@@ -310,7 +333,8 @@ function BudgetRow({
   rules: UseQueryResult<AgentRules>
 }) {
   // Lens's forecast lists every agent in the workspace; one created since it was read has spent nothing.
-  const spent = forecast.data ? ((forecast.data.agents ?? []).find((f) => f.agent_id === agent.id)?.spent_ulxc ?? 0) : null
+  const mine = (forecast.data?.agents ?? []).find((f) => f.agent_id === agent.id)
+  const spent = forecast.data ? (mine?.spent_ulxc ?? 0) : null
   const limit = rules.data ? rules.data.monthly_limit_ulxc : null
   const pct = spent !== null && limit !== null && limit > 0 ? Math.min(100, Math.round((spent / limit) * 100)) : null
   const spend = forecast.isError ? (
@@ -344,6 +368,12 @@ function BudgetRow({
         <span className="whitespace-normal">
           {spend}
           {budget ? <> · {budget}</> : null} · {lxc(agent.balance_ulxc)} left in its wallet
+          {mine?.runs_out_on !== undefined ? (
+            <>
+              {' '}
+              · <RunsOut forecast={mine} />
+            </>
+          ) : null}
         </span>
       }
     >

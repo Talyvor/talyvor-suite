@@ -27,6 +27,8 @@ function mockBff() {
       new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     const allocated = () => agents.reduce((s, a) => s + a.balance_ulxc, 0)
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents' && method === 'GET')
       return json({
         workspace_balance_ulxc: workspace,
@@ -47,7 +49,7 @@ function mockBff() {
       a.status = decision[2] === 'approve' ? 'approved' : 'denied'
       return json(a)
     }
-    const m = /^\/api\/agents\/([^/]+)\/(\w+)$/.exec(url)
+    const m = /^\/api\/agents\/([^/]+)\/(\w+)(?:\?|$)/.exec(url)
     const agent = agents.find((a) => a.id === m?.[1])
     if (!m || !agent) return new Response('null', { status: 404 })
     const r = rules[agent.id] ?? {}

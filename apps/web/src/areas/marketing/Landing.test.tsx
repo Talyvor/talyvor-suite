@@ -155,10 +155,9 @@ describe('Landing', () => {
   // COMPOUND was retired with the tagline on 5 Oct 2026 (B32.1): no verb sits on the photograph.
   it('draws the board: the mark and wordmark, the preloaded hero photo without the verbs, and the band', () => {
     const { container } = render(<Landing />)
-    // B51.1: the site's one header, with the drawn mark and wordmark.
+    // B51.1: the site's one header, with the kit's logo (B57.6).
     const header = container.querySelector('header')!
-    expect(header.querySelector('svg[data-brand="mark"]')).not.toBeNull()
-    expect(header.querySelector('svg[data-brand="wordmark"]')).not.toBeNull()
+    expect(header.querySelector('[data-brand="lockup"] img[data-brand="logo"]')).not.toBeNull()
 
     const photo = container.querySelector('figure img')!
     expect(photo.getAttribute('src')).toBe('/brand/photos/hero.jpg')

@@ -4,7 +4,7 @@
     {
       "id": "wallets",
       "title": "Agent Wallets",
-      "about": "Give each AI agent its own wallet: balance, rules, approvals, transfers, escrow, loans and a statement. Investing is simulated — no order reaches a market.",
+      "about": "Give each AI agent its own wallet: balance, rules, approvals, transfers, escrow, loans and a statement.",
       "screen": { "href": "/agents", "label": "Agent Wallets" },
       "routes": [
         { "method": "GET", "path": "/v1/workspaces/{wsID}/agents", "does": "List agents" },
@@ -70,13 +70,7 @@
         { "method": "POST", "path": "/v1/workspaces/{wsID}/loans/{loanID}/decline", "does": "Decline a loan offer" },
         { "method": "POST", "path": "/v1/workspaces/{wsID}/loans/{loanID}/withdraw", "does": "Withdraw your loan offer" },
         { "method": "POST", "path": "/v1/workspaces/{wsID}/agents/{agentID}/cash-outs", "does": "Ask to cash out to money" },
-        { "method": "GET", "path": "/v1/workspaces/{wsID}/cash-outs", "does": "Cash-out requests" },
-        { "method": "GET", "path": "/v1/markets/simulated/quotes", "does": "Simulated market quotes" },
-        { "method": "GET", "path": "/v1/workspaces/{wsID}/agents/{agentID}/portfolios", "does": "The agent's simulated portfolios" },
-        { "method": "POST", "path": "/v1/workspaces/{wsID}/agents/{agentID}/portfolios", "does": "Open a simulated portfolio" },
-        { "method": "GET", "path": "/v1/workspaces/{wsID}/agents/{agentID}/portfolios/{pfID}", "does": "One simulated portfolio" },
-        { "method": "POST", "path": "/v1/workspaces/{wsID}/agents/{agentID}/portfolios/{pfID}/orders", "does": "Place a simulated order" },
-        { "method": "POST", "path": "/v1/workspaces/{wsID}/agents/{agentID}/portfolios/{pfID}/orders/{orderID}/cancel", "does": "Cancel a simulated order" }
+        { "method": "GET", "path": "/v1/workspaces/{wsID}/cash-outs", "does": "Cash-out requests" }
       ]
     },
     {

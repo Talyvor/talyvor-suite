@@ -27,6 +27,9 @@ const FORBIDDEN: [string, RegExp][] = [
   ['illustration', /illustration/i],
   ['Coming soon', /coming soon/i],
   ['Nicolai Gaborac', /nicolai gaborac/i],
+  // B56.4 (Nick, 1 Nov 2026): 85% from the first sale, so no first-million tier.
+  ['first $1M', /first \$1 ?m(illion)?\b/i],
+  ['100% of', /100% of/i],
 ]
 const OLD_LINE = /^\s*(talyvor\s*—\s*)?money and markets for ai agents\.?\s*$/i
 
@@ -87,6 +90,9 @@ const SIGNED_IN_FORBIDDEN: [string, RegExp][] = [
   ['Nicolai Gaborac', /nicolai gaborac/i],
   // B46.14: B46.2's sign-up sentence, "…aren’t real money yet", is not said anywhere either.
   ['real money yet', /real money yet|first money partner/i],
+  ['first $1M', /first \$1 ?m(illion)?\b/i],
+  // B56.4: budgets alert at "100% of" a limit, so signed in the phrase is refused only about a seller or a sale.
+  ['100% of', /100% of[^.]*\b(sellers?|sales?|first)\b/i],
 ]
 
 describe('no signed-in address carries a disclaimer label', () => {

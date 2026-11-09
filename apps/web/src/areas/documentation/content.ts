@@ -88,14 +88,14 @@ export const CAPABILITIES: Capability[] = [
         label: 'Agent Wallets',
       },
       {
-        text: 'Set its spending rules; a payment past them waits in your approvals inbox, and a passkey can be required to approve it.',
+        text: 'Set its spending rules: a payment past a limit is refused, and one above the approval amount waits in your approvals inbox, approved with a passkey once you have one.',
         href: '/agents',
         label: 'Agent Wallets',
       },
       { text: 'Pause one agent, or stop every agent with one switch.', href: '/agents', label: 'Agent Wallets' },
       { text: 'Read and download each wallet’s statement.', href: '/agents', label: 'Agent Wallets' },
       {
-        text: 'Agents pay each other, hold money in escrow, and lend between companies. Investing is simulated: no order reaches a market.',
+        text: 'Agents pay each other, hold money in escrow, and lend between companies.',
         href: '/agents',
         label: 'Agent Wallets',
       },

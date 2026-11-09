@@ -47,6 +47,7 @@ it('holds a night whose checkout has moved off main: a TESTERS.md entry, no scen
     expect(entry).toMatch(/^# Testers — the latest run first\n\n.*\n\n## \S+ — HELD: nothing was run\n/)
     expect(entry).toContain('- **Why**: main could not be fast-forwarded into the checkout')
     expect(entry).toContain(`- **Would have tested**: main at ${head} "main moves on".`)
+    expect(entry).toContain('- **Pocket problems**: not run, the night was held.')
     expect(entry).toContain(`- **Checkout**: harness ${git(testers, 'rev-parse', '--short=7', 'HEAD')}; Lens's main at lens-src none (--lens-src none); ` +
       'production app not read: http://127.0.0.1:9/api/version')
     const log = readFileSync(join(testers, 'e2e/out/nightly.log'), 'utf8')

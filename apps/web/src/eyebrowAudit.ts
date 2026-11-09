@@ -95,9 +95,13 @@ import { onCommit } from './auditScope'
  * the same unguarded reporting path; this is a property of the shared wiring, not of this rule.
  */
 import { transformInEffect } from './caseAudit'
+import { inPocket } from './pocketPending'
 
 /** The token that makes an element an eyebrow. */
 export const EYEBROW_CLASS = 'text-eyebrow'
+
+/** B57.3 — Pocket's eyebrow: 12px Figtree at .04em (pocket.css .eyebrow), uppercase at the call site. */
+export const POCKET_EYEBROW_CLASS = 'text-pocket-eyebrow'
 
 export interface EyebrowOffender {
   /** The own-text of the eyebrow, for naming it in the failure. */
@@ -108,11 +112,40 @@ export interface EyebrowOffender {
   transform: string
   /** The class list of the element the transform was inherited FROM, or '' when none. */
   fromClassName: string
+  /**
+   * What is wrong: no uppercase in effect; today's eyebrow shape on a page held to Pocket's rules;
+   * or Pocket's eyebrow drawn in a face other than Figtree.
+   */
+  problem: 'transform' | 'shape' | 'face'
 }
 
 /** Does this element's OWN class list make it an eyebrow? */
 export function isEyebrow(el: Element): boolean {
-  return (el.getAttribute('class') ?? '').split(/\s+/).includes(EYEBROW_CLASS)
+  const cls = (el.getAttribute('class') ?? '').split(/\s+/)
+  return cls.includes(EYEBROW_CLASS) || cls.includes(POCKET_EYEBROW_CLASS)
+}
+
+/** Is the nearest face declared up the tree Figtree? Mono, the display face and a heading are not. */
+function onFigtree(el: Element): boolean {
+  for (let e: Element | null = el; e; e = e.parentElement) {
+    const cls = (e.getAttribute('class') ?? '').split(/\s+/)
+    if (cls.includes('font-mono') || cls.includes('font-display') || /^H[1-4]$/.test(e.tagName)) return false
+    if (cls.includes('font-sans') || cls.includes('font-figure')) return true
+  }
+  return true
+}
+
+/**
+ * B57.3 — on a page held to Pocket's rules (pocketPending.ts) an eyebrow is Pocket's shape, in
+ * Figtree; elsewhere today's rule alone applies. Uppercase must be in effect on both.
+ */
+function eyebrowProblem(el: Element, transform: string): EyebrowOffender['problem'] | null {
+  if (inPocket(el)) {
+    if ((el.getAttribute('class') ?? '').split(/\s+/).includes(EYEBROW_CLASS)) return 'shape'
+    if (transform !== 'uppercase') return 'transform'
+    return onFigtree(el) ? null : 'face'
+  }
+  return transform === 'uppercase' ? null : 'transform'
 }
 
 /** An element's OWN text — direct text children only, the smallest unit that carries a class. */
@@ -134,13 +167,15 @@ export function eyebrowOffendersIn(root: ParentNode): EyebrowOffender[] {
   for (const el of Array.from(root.querySelectorAll('*'))) {
     if (!isEyebrow(el)) continue
     const { transform, from } = transformInEffect(el)
-    if (transform === 'uppercase') continue
+    const problem = eyebrowProblem(el, transform)
+    if (!problem) continue
     out.push({
       text: ownText(el).trim(),
       tag: el.tagName.toLowerCase(),
       className: el.getAttribute('class') ?? '',
       transform,
       fromClassName: from?.getAttribute('class') ?? '',
+      problem,
     })
   }
   return out

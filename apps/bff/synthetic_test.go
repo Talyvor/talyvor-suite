@@ -292,3 +292,22 @@ func TestSyntheticSessionIsNeverReprovisioned(t *testing.T) {
 		t.Fatalf("a synthetic session called /v1/provision %d time(s) — that creates a real workspace", lens.provisionCalls)
 	}
 }
+
+// B50.36 — the phone harness sends no Origin; a page on another site always does. Sent from another
+// site, even with the operator key and a session cookie, the phone's synthetic door is refused 403
+// before it runs, as every other write the BFF registers is.
+func TestSyntheticPhoneSignInRefusesAnotherSite(t *testing.T) {
+	lens := newSyntheticLens(t)
+	a := syntheticApp(t, lens, testSyntheticKey)
+	body := fmt.Sprintf(`{"workspace_id":%q,"token":"jwt-synthetic"}`, testSyntheticWS)
+	req := httptest.NewRequest(http.MethodPost, syntheticMobilePath, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(syntheticKeyHeader, testSyntheticKey)
+	req.Header.Set("Origin", "https://evil.example")
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "any"})
+	rr := httptest.NewRecorder()
+	a.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden || !strings.Contains(rr.Body.String(), "cross-origin write refused") {
+		t.Fatalf("cross-site POST %s = %d %s, want 403 cross-origin write refused", syntheticMobilePath, rr.Code, rr.Body.String())
+	}
+}

@@ -230,7 +230,7 @@ export function Discover() {
               </select>
             </label>
             <label className="text-caption text-muted">
-              Most a use may cost, in US$
+              Most a use may cost, in $
               <Input
                 className="mt-1 w-full font-figure"
                 inputMode="decimal"

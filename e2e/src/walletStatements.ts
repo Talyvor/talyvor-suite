@@ -44,7 +44,7 @@ const FUND_MINOR = 10_000
 const MOVE_MINOR = 5_000
 const CAP_MINOR = 3_000
 const SPEND_MINOR = 1_234
-const MERCHANT = 'Cloud Co'
+const MERCHANT = 'Northwind Cloud Hosting'
 const DAY_MS = 86_400_000
 
 /** Lens's economy.FormatMinor for a two-place currency. */

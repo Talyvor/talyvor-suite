@@ -28,7 +28,7 @@ import {
   statesNumber,
 } from './oracles.ts'
 import { BillingPlanCard, DocsPage, FeaturesScreen, type LoggingPolicy, TrackScreen, subscribeWithTestCard, tryConversion, tryTare } from './screens.ts'
-import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, spendNoticePush, approvalsBadge, approvalsInbox, approveAlwaysAllow, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, chatSafeToSpend, homeDailyBriefing, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, sidebarUnnamedWorkspace, walletHome, walletOnboarding } from './bank.ts'
+import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, spendNoticePush, approvalsBadge, approvalsInbox, approveAlwaysAllow, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, agentRunsOutDate, chatSafeToSpend, homeDailyBriefing, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, sidebarUnnamedWorkspace, walletHome, walletOnboarding } from './bank.ts'
 import { chatMoneyRequests, marketAbuse, marketAgentCommitment, marketAgentMCP, marketBillRefund, marketJournal, marketOffers, marketPayout, marketRent, marketTrial, marketPayoutConnect, marketHeldSeller, marketReview, marketTakedown, walletCard, walletCardPurchase, walletCashOut, walletEscrow, walletLoan, walletLoanDefault, walletLoanRepay, walletPots, walletGiveBack, walletRecurring, walletRequest, walletSendRefund } from './trade.ts'
 import type { Inventory } from './coverage.ts'
 import { apiKeyRevoke, byokAddon, chatConnectors, chatDocsPage, chatExportImport, chatFileBug, chatShareLink, chatToolGuard, chatTrackIssue, docsShareCollab, docsTeamGrant, docsTools, lensConvert, patternMiningSwitch, planChange, providerKeys, sessionSignOut, trackProject, trackSearchCycleBoard, trackWorkspaceRestore, walletFX, wrongAnswerStored } from './surface.ts'
@@ -49,7 +49,14 @@ import { gatewayAuth, gatewayKeys, gatewayMCP, gatewayProviders, gatewaySessions
 import { roomsPrivate } from './rooms.ts'
 import { roomsModeration } from './roomsModeration.ts'
 import { roomInviteLimits } from './roomInvites.ts'
+import { roomContributionRecord } from './roomContributionRecord.ts'
+import { roomPoints } from './roomPoints.ts'
+import { roomReviews } from './roomReviews.ts'
+import { roomRateCard } from './roomRateCard.ts'
+import { roomSharedOwnership } from './roomSharedOwnership.ts'
 import { roomTakeover } from './roomTakeover.ts'
+import { roomObjections } from './roomObjections.ts'
+import { roomTasks } from './roomTasks.ts'
 import { roomMessages } from './roomMessages.ts'
 import { roomContributions } from './roomContributions.ts'
 import { roomWallet } from './roomWallet.ts'
@@ -80,6 +87,7 @@ import { paymentRequestBatch } from './paymentRequests.ts'
 import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { connectPay } from './connectPay.ts'
 import { screeningTravelRule } from './screeningTravelRule.ts'
+import { phoneKeyWeb } from './phoneKeyWeb.ts'
 import { trustLayer } from './trustLayer.ts'
 import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
@@ -101,6 +109,7 @@ import { chatFirstMessage } from './chatFirstMessage.ts'
 import { chatPaymentCard } from './chatPaymentCard.ts'
 import { agentWallet } from './agentWallet.ts'
 import { oneSearch } from './oneSearch.ts'
+import { alertChannels } from './alertChannels.ts'
 import { limitAlerts } from './limitAlerts.ts'
 import { subscriptionsView } from './subscriptionsView.ts'
 import { budgetsByCategory } from './budgetsByCategory.ts'
@@ -140,8 +149,15 @@ import { mcpPayRetried, mcpSDKAgentPay } from './mcpSDK.ts'
 import { keysNotForwarded, keysUnlisted } from './keys.ts'
 import { rateLimitsHold, workspaceLimitsRaised } from './ratelimit.ts'
 import { marketAskScreen, marketCompareScreen, marketDiscoverScreen, marketDiscovery } from './discovery.ts'
+import { marketContentFilter } from './contentFilter.ts'
+import { listingAsModel } from './listingAsModel.ts'
+import { marketPrivacyLabel } from './privacyLabel.ts'
 import { royaltiesNotHeadline } from './royalties.ts'
 import { statementLineKinds } from './statementKinds.ts'
+import { statementPaging } from './statementPaging.ts'
+import { agentAnalytics } from './agentAnalytics.ts'
+import { statementPDF } from './statementPDF.ts'
+import { statementJournal } from './statementJournal.ts'
 import { openapiWallets } from './openapiWallets.ts'
 
 export interface Evidence {
@@ -1385,11 +1401,12 @@ export function brandIcons(): Scenario {
         }
         for (const icon of manifest.icons ?? []) await want(icon.src, 'image/png', true)
         if ((manifest.icons ?? []).length !== 3) missing.push(`three manifest icons (found ${(manifest.icons ?? []).length})`)
-        if (manifest.theme_color !== '#060A12' || manifest.background_color !== '#060A12') missing.push('manifest colours #060A12')
-        if (!/<meta name="theme-color" content="#060A12"/.test(html)) missing.push('theme-color #060A12')
+        // B57.59, B57.79: the logo kit's ink for an installed app, Pocket's dark page for the browser's bar.
+        if (manifest.theme_color !== '#111216' || manifest.background_color !== '#111216') missing.push('manifest colours #111216')
+        if (!/<meta name="theme-color" content="#0F1013"/.test(html)) missing.push('theme-color #0F1013')
         ctx.evidence.push({ note: `${seen.join('; ')}; manifest theme ${manifest.theme_color} background ${manifest.background_color}` })
         return missing.length === 0
-          ? { pass: true, detail: 'favicon (.ico and .svg), apple-touch-icon and three manifest icons all load; #060A12 throughout' }
+          ? { pass: true, detail: 'favicon (.ico and .svg), apple-touch-icon and three manifest icons all load; the kit\'s colours throughout' }
           : { pass: false, detail: `brand package is missing: ${missing.join(', ')}` }
       } finally {
         await page.close()
@@ -1398,52 +1415,51 @@ export function brandIcons(): Scenario {
   }
 }
 
-/** B29.3 — the logo is the drawn mark and wordmark, not a CSS tile and a typed name: on the sidebar,
- *  sign-in, /marketing, /pricing and /documentation, in the dark theme and the light one. Each
- *  theme's fills are read from the browser, so a logo that does not follow the theme fails. */
+/** B29.3, B57.79 — the logo is the kit Nick chose on 4 Nov 2026, drawn from its own files: on the sidebar,
+ *  sign-in, /marketing, /pricing and /documentation, in the dark theme and the light one. Each theme must
+ *  show only that version's file, loaded, and no page may still ask for today's brand-v4 logo. */
 export function brandLogo(): Scenario {
-  // The brand-v4 files' colours as the browser reports them: Frost + Teal tip on dark, Obsidian on light.
-  const want = {
-    dark: { mark: 'rgb(230, 238, 247)', wordmark: 'rgb(250, 251, 252)' },
-    light: { mark: 'rgb(6, 10, 18)', wordmark: 'rgb(6, 10, 18)' },
-  }
   return {
     id: 'brand-logo',
     owner: 'talyvor-suite',
-    title: 'the sidebar, sign-in and public headers carry the drawn mark and wordmark in both themes',
+    items: ['B57.79'],
+    title: 'the sidebar, sign-in and public headers carry the chosen logo, its own version in each theme',
     run: async (ctx) => {
       const seen: string[] = []
       const wrong: string[] = []
-      // B51.1: /marketing shares the public header with /pricing and /documentation, so it carries the
-      // same drawn mark and wordmark (it no longer shows B29.4's lockup file).
       for (const path of ['/', '/signin', '/marketing', '/pricing', '/documentation']) {
         const page = await ctx.app.tab(path)
         try {
-          await page.locator('svg[data-brand="wordmark"]').first().waitFor({ state: 'visible' })
+          await page.locator('img[data-brand="logo"]').first().waitFor({ state: 'attached' })
           for (const theme of ['dark', 'light'] as const) {
             const got = await page.evaluate((t) => {
               document.documentElement.dataset.theme = t
-              const fill = (sel: string) => {
-                const el = document.querySelector(`svg[data-brand="${sel}"] path`)
-                return el === null ? 'absent' : getComputedStyle(el).fill
-              }
-              const lockup = document.querySelector('svg[data-brand="wordmark"]')!.parentElement!.parentElement!
-              return { mark: fill('mark'), wordmark: fill('wordmark'), typed: /talyvor/i.test(lockup.textContent ?? '') }
+              const shown = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
+                .filter((i) => getComputedStyle(i).display !== 'none')
+                .map((i) => ({ src: new URL(i.src).pathname, loaded: i.complete && i.naturalWidth > 0 }))
+              const old = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
+                .map((i) => new URL(i.src, location.href).pathname)
+                .filter((s) => /\/brand\/svg\/(talyvor-|favicon)/.test(s))
+              return { shown, old }
             }, theme)
-            seen.push(`${path} ${theme}: mark ${got.mark}, wordmark ${got.wordmark}`)
-            if (got.mark !== want[theme].mark) wrong.push(`${path} ${theme} mark ${got.mark}`)
-            if (got.wordmark !== want[theme].wordmark) wrong.push(`${path} ${theme} wordmark ${got.wordmark}`)
-            if (got.typed) wrong.push(`${path} still types Talyvor beside the logo`)
+            seen.push(`${path} ${theme}: ${got.shown.map((g) => g.src).join(' ') || 'no logo'}`)
+            if (got.shown.length === 0) wrong.push(`${path} ${theme} shows no logo`)
+            for (const g of got.shown) {
+              // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
+              if (!new RegExp(`^/brand/logo/talyvor-[a-z-]+-on-${theme}\\.svg$`).test(g.src)) wrong.push(`${path} ${theme} shows ${g.src}`)
+              if (!g.loaded) wrong.push(`${path} ${theme} ${g.src} did not load`)
+            }
+            if (got.old.length > 0) wrong.push(`${path} still asks for ${got.old.join(', ')}`)
           }
         } catch (e) {
-          wrong.push(`${path}: no drawn wordmark (${(e as Error).message.split('\n')[0]})`)
+          wrong.push(`${path}: no logo (${(e as Error).message.split('\n')[0]})`)
         } finally {
           await page.close()
         }
       }
       ctx.evidence.push({ note: seen.join('; ') })
       return wrong.length === 0
-        ? { pass: true, detail: 'drawn mark and wordmark on five screens, each theme in its own colours' }
+        ? { pass: true, detail: 'the chosen logo on five screens, its on-dark and on-light files each in its own theme' }
         : { pass: false, detail: `logo wrong: ${wrong.join(', ')}` }
     },
   }
@@ -5082,7 +5098,7 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     // B28.377 — last of the Chat checks, as it waits a minute or two: /schedule in Chat for an agent of its own, set ahead;
     // nothing is asked before that time, the answer appears in Chat at it, and what it cost is the agent's new statement
     // line, the workspace's own balance unmoved.
-    case 6: list.push(statementReconciles(i), ledgerReadsCorrectly(), spendPlainWords(), spendPlatformFee(), agentBalanceStored(i), agentSpendQuestion(i), chatBrand(), chatHelpInFull(), chatLaunchAgent(i), chatPlainRule(i), chatAskAbove(i), chatForecastAnswer(i), chatSafeToSpend(i), chatPaidBy(i), chatAgentTask(i), chatCardFreeze(i), chatStatement(i), chatWalletAlerts(i), chatLiveStatement(i), chatRecentCalls(i), chatApprovalFaceID(i), chatWalletButtons(i), chatScheduledPrompt(i)); break
+    case 6: list.push(statementReconciles(i), ledgerReadsCorrectly(), spendPlainWords(), spendPlatformFee(), agentBalanceStored(i), agentSpendQuestion(i), chatBrand(), chatHelpInFull(), chatLaunchAgent(i), chatPlainRule(i), chatAskAbove(i), chatForecastAnswer(i), agentRunsOutDate(i), chatSafeToSpend(i), chatPaidBy(i), chatAgentTask(i), chatCardFreeze(i), chatStatement(i), chatWalletAlerts(i), chatLiveStatement(i), chatRecentCalls(i), chatApprovalFaceID(i), chatWalletButtons(i), chatScheduledPrompt(i)); break
     // B55.39 — first, while Lens still names the workspace by its id: the sidebar reads "Your workspace", never the id.
     // B28.271 — then, while the workspace has no agent: Agent Wallets is only the card that creates one.
     // B28.8 — then, still with no agent: Home's three onboarding steps.
@@ -5115,7 +5131,11 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     case 3: if (other < users) list.push(walletLoan(i, other)); break
     case 4: if (other < users) list.push(walletEscrow(i, other)); break
     // B28.19 — then an agent's statement after a top-up, a transfer in, a card charge and a pot move: each line by what it was.
-    case 5: list.push(walletPots(i), statementLineKinds(i)); break
+    // B28.51 — then an agent's statement of 107 lines, paged past its newest 100 and filtered to one kind.
+    // B28.53 — then an agent's spend by day, model and destination, against its statement's out.
+    // B28.55 — then an agent's statement, and every agent's, as a PDF, against the JSON statement's balances.
+    // B28.56 — then an agent's journal, and every agent's, for Xero or QuickBooks, against the JSON statement's in and out.
+    case 5: list.push(walletPots(i), statementLineKinds(i), statementPaging(i), agentAnalytics(i), statementPDF(i), statementJournal(i)); break
     case 6: list.push(walletCashOut(i)); break
     case 7: if (other < users) list.push(walletRecurring(i, other)); break
     case 8: list.push(marketTakedown(i, i - 1)); break
@@ -5306,6 +5326,12 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   if (i === 5) list.push(marketAskScreen())
   // B41.72 — three listings compared side by side, once a run: each value in the table is the one Lens's own reads give.
   if (i === 5) list.push(marketCompareScreen())
+  // B41.85 — the family filter, once a run: set on Content filter, Lens's catalog drops a listing rated 18+ and keeps one
+  // rated for everyone, and a listing published without a rating is rated 18+.
+  if (i === 5) list.push(marketContentFilter())
+  // B41.93 — a listing's privacy label, once a run: a pipeline whose two steps call two models and keep nothing shows both
+  // models and "keeps nothing" on its page, as Lens's own label for it does.
+  if (i === 5) list.push(marketPrivacyLabel())
   // B32.75 — a sale's earning released on the seller's journal, once a run, bought by a workspace of its own from a seller it
   // makes: the bill paid, the share is due or available, Lens's release job empties the holdback, and the journal reconciles.
   if (i === 5) list.push(marketJournal(i))
@@ -5341,6 +5367,31 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B41.48 — a room's owner changing, once a run, on a Free workspace of its own: notice to an owner active today, a vote
   // and a fork are 409; handed to a member, Lens reads it as the owner and the old owner as an editor that may not spend.
   if (i === 4) list.push(roomTakeover(i))
+  // B41.41 — shared ownership, intent only, once a run, on a Free workspace of its own: the owner switches it on at the
+  // default 25% pool and a member reads it with Lens's notice word for word; a member setting it is 403, a 60% pool 400,
+  // and a stranger and a caller with no key read nothing.
+  if (i === 4) list.push(roomSharedOwnership(i))
+  // B41.42 — the rate card, once a run, on a Free workspace of its own: a contribution claimed at size M earns M's points
+  // when accepted, a size over 5% of the pool is 400, and raising its points after it is accepted is 409.
+  if (i === 4) list.push(roomRateCard(i))
+  // B41.43 — the points ledger, once a run, on a Free workspace of its own: an accepted M-size contribution earns M's points ×
+  // its quality in an append-only row, a fork credits its original the remix share, and a later rejection adds a withdrawn row.
+  if (i === 4) list.push(roomPoints(i))
+  // B41.44 — a contribution's reviewers, once a run, on a Free workspace of its own: Lens seats two plain members, never the
+  // author even when it names itself, the author's own score is refused, and quality is the median of the two scores.
+  if (i === 4) list.push(roomReviews(i))
+  // B41.47 — objections to the frozen leaderboard, once a run, on a Free workspace of its own: an objection is 409 before
+  // the freeze and while Lens cannot seat three members linked to neither side, then its panel is exactly the three plain
+  // members, never one sharing the author's card, and two votes to uphold write an objection row changing the author's points.
+  if (i === 4) list.push(roomObjections(i))
+  // B41.52 — the open tasks board, once a run, on a Free workspace of its own: a task naming an assignee or a due date is
+  // 400, one member's claim is what another reads and its own claim is 409, and once let go the other claims it.
+  if (i === 4) list.push(roomTasks(i))
+  // B40.23 — a room's contribution record, once a run, on a Free workspace of its own: with shared ownership on, three
+  // identity-checked members sign the contributor agreement, claim sized tasks, are reviewed by two drawn members and
+  // accepted; the ledger reads size × quality, the leaderboard's shares add up to 100%, a caller with no key reads none of
+  // it, and room_equity is still RED.
+  if (i === 4) list.push(roomContributionRecord(i))
   // B32.83 — a room's messages, once a run, on a Team workspace of its own: a post reaches another member's event stream
   // within two seconds, a key in a public room is 422 naming its kind and stored nowhere, an edit and a delete read back
   // as the edit and a tombstone, a private room's messages are 404 to a stranger, and the minute's limit is 429 naming it.
@@ -5457,6 +5508,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B46.9 — an agent's wallet, once a run, on a workspace of its own: the card shows Lens's balance and, on the sandbox, nothing
   // to copy; Send waits for one-tap approval under the wallet with no payment on the ledger; Decline pays nothing.
   if (i === 2) list.push(agentWallet())
+  // B55.2 — the web with only the phone's key, once a run, on a workspace of its own: Approvals says to approve on the phone,
+  // shows no Approve or Deny, sends nothing, and the approval stays pending on Lens.
+  if (i === 2) list.push(phoneKeyWeb())
   // B47.2 — Chat's page, once a run: /chat opens with the suite sidebar hidden, Menu opens it over the chat without moving it
   // and Escape closes it, at 1440 px and on a 390 px phone; Home shows the sidebar as it did before.
   if (i === 2) list.push(chatSidebar())
@@ -5513,6 +5567,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.62 — limit-approach alerts, once a run, on a workspace of its own: £8.00 paid against a £10.00 monthly budget raises one
   // 50% and one 80% alert, still one each when read again, and the Agent Bank's Limit alerts card shows the 80% one.
   if (i === 7) list.push(limitAlerts())
+  // B28.66 — where alerts go, once a run, on a workspace of its own: with push and a signed webhook added and email refused, a
+  // budget's 50% and 80% alerts queue one delivery per channel, the same four when read again, and Agent Wallets lists them.
+  if (i === 7) list.push(alertChannels())
   // B41.20 — the Subscriptions view, once a run, on a workspace of its own: a monthly standing order and a monthly listing
   // subscription each show their next charge, monthly cost and a reminder three days before.
   if (i === 7) list.push(subscriptionsView())
@@ -5570,6 +5627,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.426 (for talyvor-lens B28.186) — a paid skill used in Chat, once a run, on workspaces of its own: opened from its listing
   // page with Use in Chat, two questions write two billed uses on the buyer's marketplace bill and two model spend rows.
   if (i === 7) list.push(chatListing(i))
+  // B41.208 (for talyvor-lens B41.79) — a paid agent listing called as model "listing/<id>", once a run, on workspaces of its own:
+  // a plain and a streamed call on the OpenAI-compatible route each answer billed and add exactly one billed use to the bill.
+  if (i === 7) list.push(listingAsModel(i))
   // B30.118 — Know Your Agent, once a run, on a workspace of its own: the owner's read and the agent's wallet_credential hand over
   // one credential that verifies with only the published JWKS and states the daily limit; a rule change lists it "rules changed"
   // on revoked.json and the next states the new limit; pausing the agent lists that one "frozen" and the route is 409.

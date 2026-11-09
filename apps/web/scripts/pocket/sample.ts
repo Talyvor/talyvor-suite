@@ -44,6 +44,8 @@ const SAMPLE: Record<string, unknown> = {
     signup_open: true,
   },
   '/api/workspace/name': { id: 'ws_nicks_team', name: 'Nick’s team' },
+  // B55.38 — Lens's peg, so the shots draw each LXC figure with its dollars first.
+  '/api/lxc/topup-options': { allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 },
   '/api/agents': {
     workspace_balance_ulxc: lxc(124_800),
     allocated_ulxc: lxc(33_900),
@@ -89,8 +91,11 @@ const SAMPLE: Record<string, unknown> = {
     spent_ulxc: lxc(28_000),
     forecast_ulxc: lxc(40_569),
     agents: [
-      { agent_id: 'agt_research', name: 'Research', spent_ulxc: lxc(12_400), forecast_ulxc: lxc(17_966) },
-      { agent_id: 'agt_sales', name: 'Sales', spent_ulxc: lxc(11_000), forecast_ulxc: lxc(15_938) },
+      // B28.57 — each runs out at its pace so far this month, on that day in London (Lens B28.330).
+      { agent_id: 'agt_research', name: 'Research', spent_ulxc: lxc(12_400), forecast_ulxc: lxc(17_966), balance_ulxc: lxc(16_500),
+        runs_out_at: '2026-11-19T20:47:10Z', runs_out_on: '2026-11-19', timezone: SAMPLE_TIME_ZONE },
+      { agent_id: 'agt_sales', name: 'Sales', spent_ulxc: lxc(11_000), forecast_ulxc: lxc(15_938), balance_ulxc: lxc(12_000),
+        runs_out_at: '2026-11-14T17:40:54Z', runs_out_on: '2026-11-14', timezone: SAMPLE_TIME_ZONE },
     ],
   },
   '/api/agents/agt_research/rules': RULES({ above: 2_500, perRequest: 10_000, daily: 5_000, monthly: 20_000, models: ['claude-sonnet-5', 'claude-haiku-4-5'], hours: ['08:00', '20:00'] }),
@@ -110,6 +115,8 @@ const SAMPLE: Record<string, unknown> = {
       { id: 'payee_northwind', name: 'Northwind Data', country: 'US', check: 'exact_match', checked_by: 'test', checked_at: '2026-10-09T09:00:00Z', needs_confirmation: false, created_at: '2026-10-09T09:00:00Z' },
     ],
   },
+  // B57.97 — no Talyvor Card yet, as w-card opens.
+  '/api/money/physical-cards': { cards: [] },
 }
 
 /** The sample's answer for a URL, else populatedBff's, else undefined (pocket-shots answers 404). */

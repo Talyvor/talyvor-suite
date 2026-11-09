@@ -138,6 +138,11 @@ export function classify(status: Status, detail: string): { status: Status; drop
 }
 
 /** B35.8 — the scenarios to run again, each for the users it FAILed for, when it failed for one or two of them. */
+/** B54.40 — an ERROR because the scenario's page, context or browser closed under it: it tested nothing. */
+export function lostItsBrowser(o: Pick<Outcome, 'status' | 'detail'>): boolean {
+  return o.status === 'ERROR' && o.detail.includes('Target page, context or browser has been closed')
+}
+
 export function secondAttemptsOf(outcomes: readonly Pick<Outcome, 'scenario' | 'user' | 'status'>[]): Map<number, string[]> {
   const failed = new Map<string, number[]>()
   for (const o of outcomes) if (o.status === 'FAIL') failed.set(o.scenario, [...(failed.get(o.scenario) ?? []), o.user])
@@ -299,8 +304,10 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     probing = undefined
   }))
   // A rejection nothing was waiting for (a browser's event, a forgotten promise) is noted, not the end of the run.
+  // B54.40 — with the scenarios playing when it came, one of which left it behind.
+  const playing = new Set<string>()
   const stray = (e: unknown): void => {
-    incidents.push(`${stamp()} an error nothing was waiting for: ${describe(e)}`)
+    incidents.push(`${stamp()} an error nothing was waiting for: ${describe(e)}` + (playing.size > 0 ? ` (playing: ${[...playing].join(', ')})` : ''))
   }
   process.on('unhandledRejection', stray)
 
@@ -388,6 +395,8 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
       // Lens — is recorded as its own, for the coverage map.
       const tag: Tag = { scenario: s.id, user: user.index }
       app.tag = tag
+      const label = `user ${user.index} ${s.id}`
+      playing.add(label)
       const scenarioEnv: RunEnv = {
         ...env,
         lens: lens.tagged(tag),
@@ -413,6 +422,7 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
         where = rec.screensOf(tag)
         if (status === 'ERROR') await timed(CLOSE_MS, 'going back to Chat', unlessStopped('going back to Chat', app.openChat())).catch(() => undefined)
       }
+      playing.delete(label)
       // B35.8 — the testers' own network dropping is not the feature failing.
       const c = classify(status, detail)
       if (c.drop !== undefined) drops.push({ at: stamp(), user: user.index, scenario: s.id, detail })
@@ -434,6 +444,24 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
       } finally {
         await timed(CLOSE_MS, 'closing its browser', app.close()).catch(() => undefined)
       }
+    }
+
+    /**
+     * B54.40 — a scenario, played once more on a fresh sign-in when its page, context or browser closed under it,
+     * before it counts as errored. The fresh sign-in is the user's from then on.
+     */
+    const play = async (app: AppUser, user: SyntheticUser, s: Scenario, own: SyntheticUser | undefined): Promise<{ app: AppUser; o: Outcome }> => {
+      const once = (a: AppUser) => (own === undefined ? attempt(a, user, s) : onItsOwn(own, s))
+      const first = await once(app)
+      if (!lostItsBrowser(first)) return { app, o: first }
+      if (own === undefined) {
+        const fresh = await timed(SIGN_IN_MS, 'signing in', unlessStopped('signing in', signIn(user))).catch(() => undefined)
+        if (fresh === undefined) return { app, o: first }
+        await timed(CLOSE_MS, 'closing its browser', app.close()).catch(() => undefined)
+        app = fresh
+      }
+      const again = await once(app)
+      return { app, o: { ...again, detail: `${again.detail} (played again on a fresh browser; the first lost its own: ${first.detail})` } }
     }
 
     try {
@@ -460,7 +488,9 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
               continue
             }
             const own = s.own === true ? seated.own.get(seatKey(user.index, s.id)) : undefined
-            const o = own === undefined ? await attempt(app, user, s) : await onItsOwn(own, s)
+            const played = await play(app, user, s, own)
+            app = played.app
+            const o = played.o
             outcomes.push(o)
             console.log(`${o.status.padEnd(5)} user ${String(user.index).padStart(3)} ${s.id}${own === undefined ? '' : ` (its own ${own.plan} workspace)`}: ${o.detail}`)
             if (o.status === 'ERROR') await checkLens()
@@ -547,7 +577,9 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
                 continue
               }
               const own = s.own === true ? seated.own.get(seatKey(user.index, s.id)) : undefined
-              const o: Outcome = { ...(own === undefined ? await attempt(app, user, s) : await onItsOwn(own, s)), deep: round }
+              const played = await play(app, user, s, own)
+              app = played.app
+              const o: Outcome = { ...played.o, deep: round }
               outcomes.push(o)
               console.log(`${o.status.padEnd(5)} deep round ${round} (user ${user.index}) ${s.id}: ${o.detail}`)
               if (o.status === 'ERROR') await checkLens()
