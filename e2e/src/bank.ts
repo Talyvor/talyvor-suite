@@ -448,6 +448,23 @@ export class AgentBankScreen {
     return { name: download.suggestedFilename(), text: await readFile(await download.path(), 'latin1') }
   }
 
+  /**
+   * B28.56 — downloads `agent`'s journal (or, with none, every agent's) from `from` through `through` (YYYY-MM-DD, the
+   * last day included) for Xero or QuickBooks, on the card a person uses; the file's name and its text.
+   */
+  async statementJournal(agent: Agent | undefined, from: string, through: string): Promise<{ name: string; text: string }> {
+    await this.fresh(agent)
+    const form = this.page.getByTestId(agent === undefined ? 'bank-statement-download' : 'agent-statement-download')
+    await form.getByLabel(/^First day of/).fill(from)
+    await form.getByLabel(/^Last day of/).fill(through)
+    await form.getByLabel(/^File type of/).selectOption('journal')
+    const [download] = await Promise.all([
+      this.page.waitForEvent('download', { timeout: ACTION_TIMEOUT_MS }),
+      form.getByRole('button', { name: 'Download', exact: true }).click(),
+    ])
+    return { name: download.suggestedFilename(), text: await readFile(await download.path(), 'utf8') }
+  }
+
   // ─── B25.4: money between owners, on the same screen ───
 
   /** Send or request → Send: `ulxc` from `agent` to the wallet `to`; the line the card then shows. */

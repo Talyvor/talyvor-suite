@@ -2157,7 +2157,8 @@ function saveFile(name: string, blob: Blob) {
 }
 
 /**
- * B19.22 — a statement for any period as a file an auditor can open (B28.55: or a PDF to read and print): one
+ * B19.22 — a statement for any period as a file an auditor can open (B28.55: or a PDF to read and print; B28.56: or a
+ * journal to import into Xero or QuickBooks, one balanced journal per entry, each agent its cost centre): one
  * agent's account, or with no agent every wallet in the workspace. Lens builds it (B19.5): each account's opening balance, every line
  * naming its posting and entry, and each account's closing balance. Days are whole UTC days, the last
  * one included.
@@ -2172,7 +2173,10 @@ export function StatementDownload({ agent, primary = false, month = 'last' }: { 
   const get = useMutation({
     mutationFn: async () => {
       const stem = agent ? agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'agent' : 'agent-wallets'
-      const name = `${stem}-statement-${period.from}-to-${period.through}.${format}`
+      const name =
+        format === 'journal'
+          ? `${stem}-journal-${period.from}-to-${period.through}.csv`
+          : `${stem}-statement-${period.from}-to-${period.through}.${format}`
       saveFile(name, await agentBankApi.statementFile(agent?.id ?? null, period.from, dayAfter(period.through), format))
       return name
     },
@@ -2188,7 +2192,8 @@ export function StatementDownload({ agent, primary = false, month = 'last' }: { 
     >
       <p className="text-caption text-muted">
         Download {who} statement for a period: the opening balance, every movement with its posting and entry, and the
-        closing balance. Days are UTC; the last day is included.
+        closing balance. Days are UTC; the last day is included. The journal imports into Xero or QuickBooks: each entry
+        one balanced journal, each agent its cost centre.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" onClick={() => setPeriod(monthPeriod('last'))}>
@@ -2216,13 +2221,14 @@ export function StatementDownload({ agent, primary = false, month = 'last' }: { 
         />
         <select
           aria-label={`File type of ${who} statement`}
-          className={`${scheduleSelect} w-24`}
+          className={`${scheduleSelect} w-auto`}
           value={format}
           onChange={(e) => setFormat(e.target.value as StatementFormat)}
         >
           <option value="csv">CSV</option>
           <option value="json">JSON</option>
           <option value="pdf">PDF</option>
+          <option value="journal">Journal for Xero or QuickBooks</option>
         </select>
         <Button type="submit" variant={primary ? 'primary' : 'default'} disabled={!valid || get.isPending}>
           {get.isPending ? 'Preparing…' : 'Download'}

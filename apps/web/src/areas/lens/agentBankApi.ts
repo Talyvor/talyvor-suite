@@ -855,10 +855,13 @@ export function retryMoveThroughRestart(failures: number, err: unknown): boolean
   return failures < 6 && (err instanceof TypeError || (err instanceof AgentBankError && [502, 503, 504].includes(err.status)))
 }
 
-/** B28.55 — a statement file's type: the CSV, the JSON or the PDF Lens writes (Lens B28.328). */
-export type StatementFormat = 'csv' | 'json' | 'pdf'
+/**
+ * B28.55 — a statement file's type: the CSV, the JSON or the PDF Lens writes (Lens B28.328), or (B28.56) the period as
+ * a CSV of double-entry journal lines Xero and QuickBooks import, each agent its cost centre (Lens B28.329).
+ */
+export type StatementFormat = 'csv' | 'json' | 'pdf' | 'journal'
 
-const STATEMENT_ACCEPT: Record<StatementFormat, string> = { csv: 'text/csv', json: 'application/json', pdf: 'application/pdf' }
+const STATEMENT_ACCEPT: Record<StatementFormat, string> = { csv: 'text/csv', json: 'application/json', pdf: 'application/pdf', journal: 'text/csv' }
 
 /**
  * B19.22 — a statement for the period [from, to) (YYYY-MM-DD, midnight UTC) as the file Lens writes:

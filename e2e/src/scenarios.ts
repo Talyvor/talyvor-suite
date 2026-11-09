@@ -156,6 +156,7 @@ import { statementLineKinds } from './statementKinds.ts'
 import { statementPaging } from './statementPaging.ts'
 import { agentAnalytics } from './agentAnalytics.ts'
 import { statementPDF } from './statementPDF.ts'
+import { statementJournal } from './statementJournal.ts'
 import { openapiWallets } from './openapiWallets.ts'
 
 export interface Evidence {
@@ -5132,7 +5133,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     // B28.51 — then an agent's statement of 107 lines, paged past its newest 100 and filtered to one kind.
     // B28.53 — then an agent's spend by day, model and destination, against its statement's out.
     // B28.55 — then an agent's statement, and every agent's, as a PDF, against the JSON statement's balances.
-    case 5: list.push(walletPots(i), statementLineKinds(i), statementPaging(i), agentAnalytics(i), statementPDF(i)); break
+    // B28.56 — then an agent's journal, and every agent's, for Xero or QuickBooks, against the JSON statement's in and out.
+    case 5: list.push(walletPots(i), statementLineKinds(i), statementPaging(i), agentAnalytics(i), statementPDF(i), statementJournal(i)); break
     case 6: list.push(walletCashOut(i)); break
     case 7: if (other < users) list.push(walletRecurring(i, other)); break
     case 8: list.push(marketTakedown(i, i - 1)); break
