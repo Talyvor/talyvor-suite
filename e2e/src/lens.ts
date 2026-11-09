@@ -1352,6 +1352,33 @@ export class LensClient {
     return res.ok ? { ok: true, status: res.status, value: JSON.parse(raw) as AgentPayment } : { ok: false, status: res.status, error: refusalOf(raw) }
   }
 
+  /**
+   * B41.208 — one question to a marketplace listing called as a model ("listing/<id>", talyvor-lens B41.79) on Lens's
+   * OpenAI-compatible route, on this user's own key, streamed or not: the status, X-Talyvor-Listing-Charge (null when
+   * absent) and the answer's text, never thrown.
+   */
+  async askListingAsModel(user: SyntheticUser, listingID: string, question: string, maxTokens: number, stream: boolean): Promise<{ status: number; charge: string | null; text: string }> {
+    const key = await this.sessionKey(user)
+    const res = await this.send('POST', '/v1/proxy/openai/v1/chat/completions', {
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: stream ? 'text/event-stream' : 'application/json' },
+      body: JSON.stringify({ model: `listing/${listingID}`, max_tokens: maxTokens, stream, messages: [{ role: 'user', content: question }] }),
+    })
+    const raw = await res.text()
+    const charge = res.headers.get('X-Talyvor-Listing-Charge')
+    if (!res.ok) return { status: res.status, charge, text: refusalOf(raw) }
+    const textOf = (d: string, field: 'message' | 'delta') => {
+      try {
+        return ((JSON.parse(d) as { choices?: Record<string, { content?: string } | undefined>[] }).choices ?? []).map((c) => c[field]?.content ?? '').join('')
+      } catch {
+        return ''
+      }
+    }
+    if (!stream) return { status: res.status, charge, text: textOf(raw, 'message') }
+    const said = raw.split('\n').map((l) => /^data: (.*)$/.exec(l.trim())?.[1]).filter((d): d is string => d !== undefined && d !== '[DONE]')
+      .map((d) => textOf(d, 'delta'))
+    return { status: res.status, charge, text: said.join('') }
+  }
+
   /** B17.6 — the buyer's marketplace bill for this month (Lens B20.2). */
   async marketBill(user: SyntheticUser): Promise<MarketBill> {
     return (await this.call('GET', `/v1/workspaces/${user.workspaceID}/marketplace/bill`, this.bearer(user.token))) as MarketBill

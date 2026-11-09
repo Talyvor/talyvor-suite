@@ -667,6 +667,15 @@ export class Bank {
     return charge
   }
 
+  /**
+   * B41.208 — the model a listing called as a model ("listing/<id>", talyvor-lens B41.79) runs on: its artifact's own.
+   * Undefined for a listing that names none.
+   */
+  listingModel(listingID: string): string | undefined {
+    const m = this.listings.get(listingID)?.artifact.model
+    return typeof m === 'string' && m !== '' ? m : undefined
+  }
+
   /** B28.359 — revokes one of the workspace's agent keys by its id, as Lens's DELETE …/api-keys/{id} does; false: no such key. */
   revokeAgentKey(wsID: string, keyID: string): boolean {
     const key = this.keyByID.get(keyID)
