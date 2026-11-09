@@ -47,7 +47,7 @@ function mockBff() {
       return json(a)
     }
     if (/\/pay$/.test(url)) pays.push(url)
-    if (/\/(rules|statement)$/.test(url)) return json(url.endsWith('rules') ? { approval_above_ulxc: 2 * M } : { lines: [] })
+    if (/\/(rules|statement)(?:\?|$)/.test(url)) return json(url.endsWith('rules') ? { approval_above_ulxc: 2 * M } : { lines: [] })
     return new Response('null', { status: 404 })
   })
   return { decisions, pays }

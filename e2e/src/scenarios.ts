@@ -153,6 +153,7 @@ import { listingAsModel } from './listingAsModel.ts'
 import { marketPrivacyLabel } from './privacyLabel.ts'
 import { royaltiesNotHeadline } from './royalties.ts'
 import { statementLineKinds } from './statementKinds.ts'
+import { statementPaging } from './statementPaging.ts'
 import { openapiWallets } from './openapiWallets.ts'
 
 export interface Evidence {
@@ -5126,7 +5127,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
     case 3: if (other < users) list.push(walletLoan(i, other)); break
     case 4: if (other < users) list.push(walletEscrow(i, other)); break
     // B28.19 — then an agent's statement after a top-up, a transfer in, a card charge and a pot move: each line by what it was.
-    case 5: list.push(walletPots(i), statementLineKinds(i)); break
+    // B28.51 — then an agent's statement of 107 lines, paged past its newest 100 and filtered to one kind.
+    case 5: list.push(walletPots(i), statementLineKinds(i), statementPaging(i)); break
     case 6: list.push(walletCashOut(i)); break
     case 7: if (other < users) list.push(walletRecurring(i, other)); break
     case 8: list.push(marketTakedown(i, i - 1)); break

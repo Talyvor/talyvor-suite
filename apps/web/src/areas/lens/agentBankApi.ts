@@ -875,6 +875,38 @@ async function statementFile(agentID: string | null, from: string, to: string, f
   return res.blob()
 }
 
+/** B28.51 — what a statement page is read for: the lines of these kinds whose words hold q, any case. */
+export interface StatementSearch {
+  kinds: readonly PostingKind[]
+  q: string
+}
+
+/** B28.51 — one page of an agent's statement, newest first: `to` is the period's end, the same on every page. */
+export interface StatementPage {
+  to?: string
+  lines: StatementLine[] | null
+  /** The cursor of the page after this one; absent on the last. */
+  next_cursor?: string
+}
+
+/** B28.51 — how many lines one page of the Statement card holds. */
+export const STATEMENT_PAGE_LINES = 100
+
+/**
+ * B28.51 — a page of the agent's statement from `from` (its first day) to `to` (now, on the first page; the first
+ * page's `to` after it), searched and filtered by Lens, newest first. `cursor` is the page before's next_cursor.
+ */
+function statementPage(agentID: string, from: string, search: StatementSearch, after?: { to?: string; cursor: string }): Promise<StatementPage> {
+  const query = new URLSearchParams({ from, limit: String(STATEMENT_PAGE_LINES) })
+  if (search.kinds.length > 0) query.set('kind', search.kinds.join(','))
+  if (search.q.trim() !== '') query.set('q', search.q.trim())
+  if (after) {
+    if (after.to) query.set('to', after.to)
+    query.set('cursor', after.cursor)
+  }
+  return getJSON<StatementPage>(`/api/agents/${e(agentID)}/statement?${query}`, { lines: 'list' })
+}
+
 export const WORKSPACE_NAME_KEY = ['workspace-name']
 
 export const agentBankApi = {
@@ -918,6 +950,7 @@ export const agentBankApi = {
   /** B28.32 — end the agent's boost on that limit now, before its time. */
   endBoost: (id: string, rule: string) => send<void>('DELETE', `/api/agents/${e(id)}/rules/boosts/${e(rule)}`),
   statement: (id: string) => getJSON<{ lines: StatementLine[] | null }>(`/api/agents/${e(id)}/statement`, { lines: 'list' }),
+  statementPage,
   /** B46.9 — the agent's wallet on the money layer (Lens B46.4): its balance and how to pay into it. */
   wallet: (id: string) => getSaid<AgentMoneyWallet>(`/api/agents/${e(id)}/wallet`),
   statementFile,
