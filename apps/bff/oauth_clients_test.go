@@ -250,3 +250,25 @@ func TestOAuthRefreshOutlivesTheClientsDocument(t *testing.T) {
 		t.Fatalf("a refresh after the document became stricter: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// B43.29: a client_id that names an IP address is not a CIMD client, so the BFF never fetches it, whatever the
+// transport would have let through.
+func TestOAuthNeverFetchesAClientIDAtAnIPAddress(t *testing.T) {
+	a, ck := oauthApp(t)
+	var fetched []string
+	a.connectorOut = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		fetched = append(fetched, r.URL.String())
+		return nil, errors.New("no request may leave")
+	})
+	for _, id := range []string{"https://169.254.169.254/latest/meta-data/client.json", "https://127.0.0.1:8443/oauth/client.json",
+		"https://[::1]/oauth/client.json", "https://2130706433/oauth/client.json", "https://10.0.0.7/client.json"} {
+		q := url.Values{"response_type": {"code"}, "client_id": {id}, "redirect_uri": {claudeReturn},
+			"code_challenge": {"abc"}, "code_challenge_method": {"S256"}, "state": {"st"}}
+		if rec := serve(a, "GET", "/oauth/authorize?"+q.Encode(), "", "", nil, ck); rec.Code == http.StatusOK {
+			t.Errorf("%s: authorize showed a consent screen", id)
+		}
+	}
+	if len(fetched) != 0 {
+		t.Fatalf("fetched %v", fetched)
+	}
+}
