@@ -21,6 +21,7 @@ import { CurrencyPicker, Lxc, useLxcText } from './money'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
+import { RunsOut } from './RunsOut'
 import { AgentAddress, AgentTransfers, CreditLinePanel, Loans, MoneyRequests, OfferLoan, RecurringTransfer, SendAndRequest } from './WalletMoney'
 import { CashOutCard, CashOuts, Escrows, PayIntoEscrow, Portfolios, Pots } from './WalletHoldings'
 import {
@@ -207,7 +208,21 @@ function Spending({ nameOf }: { nameOf: (id: string) => string }) {
         ) : (
           <>
             {(forecast.data.agents ?? []).map((f) => (
-              <Row key={f.agent_id} label={f.name} hint={<>Spent {lxc(f.spent_ulxc)} so far this month</>}>
+              <Row
+                key={f.agent_id}
+                label={f.name}
+                hint={
+                  <>
+                    Spent {lxc(f.spent_ulxc)} so far this month
+                    {f.runs_out_on !== undefined ? (
+                      <>
+                        {' '}
+                        · <RunsOut forecast={f} />
+                      </>
+                    ) : null}
+                  </>
+                }
+              >
                 <span className="text-body text-ink">{lxc(f.forecast_ulxc)}</span>
               </Row>
             ))}

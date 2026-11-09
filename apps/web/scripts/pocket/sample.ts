@@ -91,8 +91,11 @@ const SAMPLE: Record<string, unknown> = {
     spent_ulxc: lxc(28_000),
     forecast_ulxc: lxc(40_569),
     agents: [
-      { agent_id: 'agt_research', name: 'Research', spent_ulxc: lxc(12_400), forecast_ulxc: lxc(17_966) },
-      { agent_id: 'agt_sales', name: 'Sales', spent_ulxc: lxc(11_000), forecast_ulxc: lxc(15_938) },
+      // B28.57 — each runs out at its pace so far this month, on that day in London (Lens B28.330).
+      { agent_id: 'agt_research', name: 'Research', spent_ulxc: lxc(12_400), forecast_ulxc: lxc(17_966), balance_ulxc: lxc(16_500),
+        runs_out_at: '2026-11-19T20:47:10Z', runs_out_on: '2026-11-19', timezone: SAMPLE_TIME_ZONE },
+      { agent_id: 'agt_sales', name: 'Sales', spent_ulxc: lxc(11_000), forecast_ulxc: lxc(15_938), balance_ulxc: lxc(12_000),
+        runs_out_at: '2026-11-14T17:40:54Z', runs_out_on: '2026-11-14', timezone: SAMPLE_TIME_ZONE },
     ],
   },
   '/api/agents/agt_research/rules': RULES({ above: 2_500, perRequest: 10_000, daily: 5_000, monthly: 20_000, models: ['claude-sonnet-5', 'claude-haiku-4-5'], hours: ['08:00', '20:00'] }),
