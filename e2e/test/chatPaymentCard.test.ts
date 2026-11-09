@@ -7,11 +7,19 @@ const shown: CardSeen = {
   payments: 0,
   accountMinor: 0,
   paidItems: 0,
+  listed: true,
+  approvals: 'Chat prepared a payment to Nightly Chat Card Joinery · £120.00 Nightly chat card · from the company’s account · asked 9 Nov, 08:00 Review',
   declined: 'Declined. Nothing was paid (£120.00 to Nightly Chat Card Joinery).',
   paymentsAfter: 0,
 }
 
 describe('the prepared payment card oracle (B45.34)', () => {
+  it('fails when Approvals does not list the waiting request (B55.10)', () => {
+    const v = paymentCardVerdict({ ...shown, listed: false, approvals: '' })
+    expect(v.pass).toBe(false)
+    expect(v.detail).toContain('Approvals did not list the prepared request with Review opening its card')
+  })
+
   it('passes a card with all five fields, nothing paid before approval, and Decline paying nothing', () => {
     expect(paymentCardVerdict(shown).pass).toBe(true)
   })

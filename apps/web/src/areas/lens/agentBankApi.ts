@@ -1253,6 +1253,9 @@ export const agentBankApi = {
   prepareRequest: (body: { voice: boolean; items: { payee_id: string; currency: string; amount_minor: number; reference: string }[] }, key: string) =>
     send<PaymentRequest>('POST', '/api/money/payment-requests', body, { 'Idempotency-Key': key }),
   paymentRequest: (id: string) => getSaid<PaymentRequest>(`/api/money/payment-requests/${e(id)}`),
+  /** B55.10 — every prepared request still waiting for the person (Lens B40.39; an expired one is left out, B55.9). */
+  pendingPaymentRequests: () =>
+    getJSON<{ requests: PaymentRequest[] | null }>('/api/money/payment-requests?status=pending_approval', { requests: 'list' }),
   /** B41.3 — `reason` is why ticked items flagged a duplicate or changed bank details are paid; Lens signs it into the statement. */
   requestApproval: (id: string, positions: number[], reason = '') =>
     send<{ statement: string; challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payment-requests/${e(id)}/approval`,

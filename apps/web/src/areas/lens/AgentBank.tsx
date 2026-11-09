@@ -39,6 +39,7 @@ import {
   type AgentSchedule,
   type AgentTopUp as AgentTopUpValue,
   type LimitAlert,
+  type PaymentRequest,
   type PostingKind,
   type StatementFormat,
   type StatementLine,
@@ -68,6 +69,8 @@ import {
 // on either screen is the figure the other shows.
 export const BOOK_KEY = ['agent-book']
 export const APPROVALS_KEY = ['agent-approvals']
+/** B55.10 — the payments Chat, an assistant, an agent or a voice request prepared, waiting for the person. */
+export const PREPARED_KEY = ['money-payment-requests', 'pending_approval']
 export const rulesKey = (id: string) => ['agent-rules', id]
 export const rulesHistoryKey = (id: string) => ['agent-rules-history', id]
 export const boostsKey = (id: string) => ['agent-rule-boosts', id]
@@ -2384,6 +2387,50 @@ function FaceID({ signed, hold, passkeyCount }: { signed: boolean; hold: boolean
   )
 }
 
+/** B55.10 — who prepared it: Lens names the client "chat", "voice", "mcp:<client id>" or "key:<key id>" (B40.3). */
+const preparedBy = (client: string) =>
+  client.startsWith('mcp:') ? 'Your assistant' : client.startsWith('key:') ? 'An agent' : client === 'voice' ? 'A voice request' : 'Chat'
+
+/** B55.10 — a prepared request in one line, its hint and its total, as Approvals and Home list it. */
+export function preparedWords(r: PaymentRequest, nameOf: (id: string) => string) {
+  const items = r.items ?? []
+  return {
+    line: items.length === 1 ? `${preparedBy(r.client)} prepared a payment to ${items[0].payee_name}` : `${preparedBy(r.client)} prepared ${items.length} payments`,
+    hint: [
+      items.length === 1 ? items[0].reference : r.summary,
+      `from ${r.agent_id ? `${nameOf(r.agent_id)}’s` : 'the company’s'} account`,
+    ].filter((x) => x !== ''),
+    total: Object.entries(r.totals ?? {})
+      .map(([cur, minor]) => formatMinor(minor, cur))
+      .join(', '),
+  }
+}
+
+/** B55.10 — one prepared request on Approvals: what it is, the total, and Review, which opens its card. */
+function PreparedRow({ r, nameOf }: { r: PaymentRequest; nameOf: (id: string) => string }) {
+  const w = preparedWords(r, nameOf)
+  return (
+    <Row
+      stack
+      data-prepared={r.id}
+      label={
+        <span className="whitespace-normal">
+          {w.line} · <span className="font-figure">{w.total}</span>
+        </span>
+      }
+      hint={
+        <span>
+          {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
+        </span>
+      }
+    >
+      <Button asChild className="h-12 w-full wide:h-8 wide:w-auto">
+        <Link to={`/approve/${encodeURIComponent(r.id)}`}>Review</Link>
+      </Button>
+    </Row>
+  )
+}
+
 export function Approvals({
   nameOf,
   held,
@@ -2401,6 +2448,7 @@ export function Approvals({
 }) {
   const qc = useQueryClient()
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
+  const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
   const keys = useKeys()
   const { signed, onlyThePhone, hold } = keys
   // Ticking several is for a workspace that signs nothing (bulk, below), once both key reads are in.
@@ -2476,6 +2524,9 @@ export function Approvals({
   const all = (list.data?.approvals ?? []).filter((a) => agentId === undefined || a.agent_id === agentId)
   const waiting = all.filter((a) => a.status === 'pending')
   const pending = waiting.filter((a) => (byAgent === '' || a.agent_id === byAgent) && (byKind === '' || (byKind === 'payment') === !a.model))
+  // B55.10 — the payments prepared for the person sit above the agents' requests, narrowed by the same filters.
+  const preparedAll = (prepared.data?.requests ?? []).filter((r) => agentId === undefined || r.agent_id === agentId)
+  const preparedShown = preparedAll.filter((r) => (byAgent === '' || r.agent_id === byAgent) && byKind !== 'model')
   const chosen = pending.filter((a) => picked.has(a.id))
   const toggle = (id: string) =>
     setPicked((s) => {
@@ -2579,12 +2630,23 @@ export function Approvals({
               )}
             </div>
           ) : null}
+          {prepared.isError ? (
+            <p className="border-b border-rule px-gutter py-3 text-body text-muted">{readFailure(prepared.error, 'The prepared payments')}</p>
+          ) : preparedShown.length > 0 ? (
+            <div role="group" aria-label="Prepared payments" className="border-b border-rule">
+              {preparedShown.map((r) => (
+                <PreparedRow key={r.id} r={r} nameOf={nameOf} />
+              ))}
+            </div>
+          ) : null}
           {pending.length === 0 ? (
-            <p className="px-gutter py-3 text-body text-muted">
-              {waiting.length > 0
-                ? 'Nothing waiting matches these filters.'
-                : 'Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount.'}
-            </p>
+            preparedShown.length > 0 ? null : (
+              <p className="px-gutter py-3 text-body text-muted">
+                {waiting.length > 0
+                  ? 'Nothing waiting matches these filters.'
+                  : 'Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount, or when Chat or an assistant prepares a payment.'}
+              </p>
+            )
           ) : (
             <div role="group" aria-label="Waiting for a person" onKeyDown={onKeys}>
               {pending.map((a, i) => (

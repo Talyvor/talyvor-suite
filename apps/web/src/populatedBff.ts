@@ -64,6 +64,15 @@ const BODIES: Record<string, unknown> = {
     ],
   },
   // B40.9 — a prepared request at the address the console sweep visits (/approve/:id): two to approve, one blocked.
+  // B55.10 — the prepared requests still waiting, as Approvals, Home and the sidebar's badge read them.
+  '/api/money/payment-requests?status=pending_approval': {
+    requests: [
+      {
+        id: 'preq_1', status: 'pending_approval', summary: '1 payment for Researcher', client: 'mcp:tlv_oc_claude', agent_id: 'agt_research', totals: { GBP: 12000 }, created_at: '2026-10-23T09:00:00Z',
+        items: [{ position: 1, payee_id: 'payee_1', payee_name: 'Acme Hosting Ltd', currency: 'GBP', amount_minor: 12000, reference: 'November hosting', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking', rule: 'requires_approval_above' }],
+      },
+    ],
+  },
   '/api/money/payment-requests/%3Aid': {
     id: 'preq_1', status: 'pending_approval', summary: '3 payments for Researcher', client: 'mcp:tlv_oc_claude', agent_id: 'agt_research', totals: { GBP: 32050 }, created_at: '2026-10-23T09:00:00Z',
     items: [
