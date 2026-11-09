@@ -969,6 +969,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Put("/v1/money/budgets", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensSpendBudgetBody",
   },
+  // B28.66 — where alerts go, added on Agent Wallets (Lens B28.338).
+  {
+    route: "POST /v1/money/alerts/channels",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyAlertChannels(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/alert_channels_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/alerts/channels", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAlertChannelBody",
+  },
   // B52.28 — a Scan agent's watch, set on Scan agents (Lens B52.27).
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/scan-watches",

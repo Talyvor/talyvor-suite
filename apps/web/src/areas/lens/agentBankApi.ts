@@ -448,6 +448,34 @@ export interface ScanTrackRecord {
   waiting: number
 }
 
+/** B28.66 — one place the workspace's alerts are sent (Lens B28.338). */
+export interface AlertChannel {
+  id: string
+  kind: 'push' | 'webhook' | 'slack'
+  /** a webhook's url; a Slack hook's with all but its last four characters hidden; none for push */
+  url?: string
+  /** a webhook's signing secret, only in the answer that added it */
+  secret?: string
+  added_by?: string
+  created_at: string
+}
+
+/** B28.66 — one alert sent, or to be sent, to one channel. */
+export interface AlertDelivery {
+  id: string
+  channel_id: string
+  channel_kind: AlertChannel['kind']
+  alert_kind: string
+  alert_id: string
+  title: string
+  body: string
+  status: 'queued' | 'sent' | 'failed'
+  attempts: number
+  last_error?: string
+  created_at: string
+  sent_at?: string
+}
+
 /** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
 export interface LimitAlert {
   id: string
@@ -1045,6 +1073,10 @@ export const agentBankApi = {
   alerts: () => getJSON<{ alerts: AgentSpendAlert[] | null; rule: string }>('/api/agents/alerts', { alerts: 'list' }),
   subscriptions: () => getJSON<{ subscriptions: SpendSubscription[] | null }>('/api/money/spending/subscriptions', { subscriptions: 'list' }),
   limitAlerts: () => getJSON<{ alerts: LimitAlert[] | null }>('/api/money/budgets/alerts', { alerts: 'list' }),
+  alertChannels: () => getJSON<{ channels: AlertChannel[] | null }>('/api/money/alerts/channels', { channels: 'list' }),
+  addAlertChannel: (kind: AlertChannel['kind'], url: string) => send<AlertChannel>('POST', '/api/money/alerts/channels', { kind, url }),
+  removeAlertChannel: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/alerts/channels/${e(id)}`),
+  alertDeliveries: () => getJSON<{ deliveries: AlertDelivery[] | null }>('/api/money/alerts/deliveries', { deliveries: 'list' }),
   budgets: () => getJSON<{ budgets: SpendBudget[] | null }>('/api/money/budgets', { budgets: 'list' }),
   setBudget: (b: SpendBudgetRequest) => send<SpendBudget>('PUT', '/api/money/budgets', b),
   deleteBudget: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/budgets/${e(id)}`),
