@@ -404,6 +404,36 @@ func TestAgentStatementDownloadsAsPDF(t *testing.T) {
 	}
 }
 
+// B28.56 — a period statement asked for as a journal (Lens B28.329) comes back as Lens wrote it: the journal CSV,
+// under text/csv, with Lens's filename, byte for byte.
+func TestAgentStatementDownloadsAsJournal(t *testing.T) {
+	journal := "journal_no,date,account,description,debit_lxc,credit_lxc,cost_centre,ref\r\n" +
+		"ent_1,2026-09-03,agent:agt_1,fund,2.000000,,agt_1,\r\nent_1,2026-09-03,workspace,fund,,2.000000,agt_1,\r\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		if r.URL.Query().Get("format") != "journal" {
+			http.Error(w, "not asked for a journal", http.StatusTeapot)
+			return
+		}
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="agent-journal-2026-09-01-2026-10-01.csv"`)
+		_, _ = w.Write([]byte(journal))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, path := range []string{"/api/agents/agt_1/statement", "/api/agents/statement"} {
+		rec := doJSON(a, http.MethodGet, path+"?from=2026-09-01&to=2026-10-01&format=journal", "")
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/csv; charset=utf-8" ||
+			rec.Header().Get("Content-Disposition") != `attachment; filename="agent-journal-2026-09-01-2026-10-01.csv"` || rec.Body.String() != journal {
+			t.Fatalf("%s = %d %v %q", path, rec.Code, rec.Header(), rec.Body.String())
+		}
+	}
+}
+
 // B28.51 — a search, a filter by kind or a page past the newest lines reaches Lens's period statement with its kind,
 // q, limit and cursor, and nothing else the browser sent.
 func TestAgentStatementSearchFilterAndPageReachLens(t *testing.T) {
