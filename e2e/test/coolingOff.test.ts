@@ -8,7 +8,7 @@ import type { Post } from '../src/security.ts'
 
 // B41.11 — payee-cooling-off against the stub Lens (selftest/stub-payees.ts), the web app's BFF calls sent to the Lens routes
 // the BFF relays them to: it passes on a Lens that holds a large first payment to a new payee until the owner signs "I called
-// them", and FAILs on one that pays it at once.
+// them", and FAILs on one that pays it at once, or (B54.35) that pays the owner's payment unsigned once the workspace has a passkey.
 
 async function freePort(): Promise<number> {
   return new Promise((resolve) => {
@@ -57,5 +57,12 @@ describe('payee-cooling-off (B41.11)', () => {
     const verdict = await runOnStub('cooling-off-skipped')
     expect(verdict).toMatchObject({ pass: false })
     expect(verdict.detail).toMatch(/^a GBP 2,000.00 payment to a payee saved moments ago must be refused 409 for its cooling-off; Lens answered 201/)
+  })
+
+  // B54.35 — once the workspace has a passkey, the owner's payment unsigned pays nothing.
+  it('FAILs when the owner\'s payment with no signature is paid in a workspace with a passkey', async () => {
+    const verdict = await runOnStub('payment-unsigned-paid')
+    expect(verdict).toMatchObject({ pass: false })
+    expect(verdict.detail).toMatch(/^once the workspace has a passkey, the owner's payment with no signature must be refused 403; Lens answered 201/)
   })
 }, 60_000)
