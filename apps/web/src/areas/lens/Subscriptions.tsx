@@ -8,7 +8,8 @@ import { BOOK_KEY } from './AgentBank'
 import { PAYEES_KEY, SCHEDULES_KEY } from './Pay'
 import { LICENCES_KEY } from '../marketplace/Licences'
 import { type Listing, type MarketLicence, marketApi } from '../marketplace/marketApi'
-import { type AgentSchedule, agentBankApi, formatMinor, formatULXC } from './agentBankApi'
+import { type AgentSchedule, agentBankApi, formatMinor } from './agentBankApi'
+import { useLxcText } from './money'
 
 // Subscriptions.tsx — B41.20: everything that charges again, in one list, soonest first — the payments Lens found recurring
 // on a card or a payment out (B41.120), the standing orders an agent pays (B30.18) and the marketplace rentals and
@@ -41,7 +42,6 @@ function orderMonthly(minor: number, every: AgentSchedule['every']): number {
   return Math.round(minor * perMonth)
 }
 
-const money = (minor: number, currency: string) => (currency === 'LXC' ? formatULXC(minor) : formatMinor(minor, currency))
 const day = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 const daysBefore = (d: Date, n: number) => new Date(d.getTime() - n * DAY_MS)
 
@@ -51,6 +51,8 @@ export function SubscriptionsScreen() {
   const licences = useQuery({ queryKey: LICENCES_KEY, queryFn: marketApi.licences })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const payees = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees })
+  const lxc = useLxcText()
+  const money = (minor: number, currency: string) => (currency === 'LXC' ? lxc(minor) : formatMinor(minor, currency))
   const renewing = (licences.data ?? []).filter((l) => l.status === 'active' && l.auto_renew && l.kind !== 'buy' && l.ends_at !== null)
   // A rental's period and price are its offer's, on its listing.
   const listings = useQueries({

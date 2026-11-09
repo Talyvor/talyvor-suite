@@ -11,11 +11,12 @@ import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
 import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
 import { AgentCardPanel } from './AgentCardPanel'
+import { AgentFace } from './AgentFace'
 import { categoryWords } from './Budgets'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
-import { CurrencyPicker, Lxc } from './money'
+import { CurrencyPicker, Lxc, useLxcText } from './money'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
@@ -641,7 +642,12 @@ function AgentList({ agents, selected, onSelect }: { agents: Agent[]; selected: 
       {agents.map((a) => (
         <Row
           key={a.id}
-          label={a.name}
+          label={
+            <span className="flex items-center gap-2.5">
+              <AgentFace agent={a} />
+              {a.name}
+            </span>
+          }
           hint={
             <>
               Spent {lxc(a.spent_ulxc)} · <span className="font-figure">{a.keys.length}</span>{' '}
@@ -1092,7 +1098,8 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
  */
 function ListingsPicker({ agent, chosen, onChange }: { agent: Agent; chosen: string[]; onChange: (ids: string[]) => void }) {
   const catalog = useQuery({ queryKey: [...CATALOG_KEY, ''], queryFn: () => marketApi.catalog('') })
-  const listed = (catalog.data ?? []).map((l) => ({ id: l.id, title: l.title, hint: `${kindLabel(l.kind)} · ${priceText(l.price_per_use_ulxc)}` }))
+  const lxc = useLxcText()
+  const listed = (catalog.data ?? []).map((l) => ({ id: l.id, title: l.title, hint: `${kindLabel(l.kind)} · ${priceText(l.price_per_use_ulxc, lxc)}` }))
   const named = chosen
     .filter((id) => !listed.some((l) => l.id === id))
     .map((id) => ({ id, title: id, hint: 'Not in the public catalog' }))
@@ -2685,9 +2692,12 @@ export function AgentBank() {
 
       {agent && book.data ? (
         <Region index="04" label="Agent" className="flex flex-col gap-gutter">
-          <p className="text-head text-ink" data-testid="agent-open">
-            {agent.name}
-          </p>
+          <div className="flex items-center gap-4">
+            <AgentFace agent={agent} size={60} />
+            <p className="text-head text-ink" data-testid="agent-open">
+              {agent.name}
+            </p>
+          </div>
           {agent.description ? (
             <p className="text-body text-muted" data-testid="agent-description">
               {agent.description}

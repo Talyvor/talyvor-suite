@@ -115,7 +115,6 @@ const PROSE_ONLY: Record<string, string> = {
   'p-[13px]': "preset.ts's sentence naming the arbitrary values local/no-arbitrary-value forbids",
   'leading-[1.04]': "preset.ts's display-scale comment quoting the site's markup",
   'tracking-[-0.03em]': "preset.ts's display-scale comment quoting the site's markup",
-  'tabular-nums': "preset.ts's comment explaining that the numerals STOPPED using it",
   transition: 'a .tsx comment — the bare word, where the code only ever writes transition-colors',
 }
 

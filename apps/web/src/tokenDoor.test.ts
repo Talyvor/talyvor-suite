@@ -96,13 +96,13 @@ const CLOSED: Record<string, string> = {
     'every entry is a CSS variable that flips with the theme; a Tailwind hue is a frozen hex ' +
     'that would look right in one theme and wrong in the other',
   borderColor: 'the rule colours, same variables, same reason',
-  outlineColor: 'the focus ring is one colour and it is the accent',
+  outlineColor: 'the focus ring is one colour: the accent on today\'s components, tangerine on Pocket\'s (B57.4)',
   ringColor: 'as outlineColor — the focus ring is the accent and there is no second one',
-  fontFamily: 'three faces — sans, mono, and the figure face. There is no fourth',
+  fontFamily: 'Pocket\'s faces — sans (Figtree), display (Bricolage Grotesque), mono for code, and the figure face',
   fontSize:
     'the locked scale. Each step carries its own leading AND weight, so a Tailwind step is ' +
     'not merely a different size — it silently drops the weight the step exists to carry',
-  borderRadius: 'three corners: control 6px, card 10px, pill. Tailwind ships nine others',
+  borderRadius: 'Pocket\'s corners: control 14, card 24, card-tight 18, sheet 28, pill, tile 12, inset 16. Tailwind ships nine others',
 }
 
 /**
@@ -113,10 +113,15 @@ const CLOSED: Record<string, string> = {
 const OPEN: Record<string, string> = {
   spacing:
     'gutter (16px) and row (38px) are SEMANTIC NAMES added to Tailwind\'s numeric scale, ' +
-    'which stays in use and should: gap-2 alone appears in 24 files',
+    'which stays in use and should: gap-2 alone appears in 24 files. B57.4 adds Pocket\'s control sizes ' +
+    'as half steps of that same scale (6.5 is 26px, 8.5 is 34, 11.5 is 46, 13.5 is 54)',
   height: 'row (38px), the same semantic name over the same numeric scale as spacing',
+  outlineWidth: 'one added width, 3, Pocket\'s focus ring (B57.4); today\'s ring keeps Tailwind\'s outline-2',
   minHeight: 'row, as spacing — and min-h-screen/min-h-full are not spacing values at all',
   screens: 'wide is an ADDED breakpoint; sm:/md:/lg: remain Tailwind\'s and remain correct',
+  boxShadow:
+    'pocket and pocket-lg are Pocket\'s two shadows (white cards, the sheet), ADDED beside ' +
+    'Tailwind\'s; screens not yet redrawn keep shadow-sm/md/lg until Pocket redraws them',
   scale:
     'one added step, 98, the press. Tailwind\'s scale-95/100 remain reachable and ' +
     'apps/web/src/motion.test.tsx is what pins the press to one step',

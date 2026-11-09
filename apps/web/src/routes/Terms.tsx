@@ -9,8 +9,8 @@ import { SharedAnswersFact, StoredAnswersFacts } from '../components/StoredAnswe
 // interest, so they are stated in terms of what the code does (a balance decremented against
 // usage) rather than in terms of what we would prefer them to be.
 
-/** The day these words last changed (B46.1 put them in plain words). Change it with them. */
-const UPDATED = '2026-10-24'
+/** The day these words last changed (B56.3: approvals as the rules make them, no investing). Change it with them. */
+const UPDATED = '2026-11-08'
 
 export function Terms() {
   return (
@@ -71,8 +71,8 @@ export function Terms() {
           Each agent you create has a wallet: LXC you move into it from your workspace, rules for
           what it may spend, and a statement of everything it did. Lens enforces those rules before
           a model call or a payment is made. A request or payment the rules refuse is not made; one
-          over the approval amount waits for a person to approve it, and with a passkey that
-          approval is signed on your own device.
+          over the approval amount waits for a person to approve it, unless you always allow that
+          payee or a mandate covers it. With a passkey that approval is signed on your own device.
         </p>
         <p className="mt-3 text-reading">
           <strong>An agent spends what its rules allow without asking anyone.</strong> The rules are
@@ -83,8 +83,7 @@ export function Terms() {
           An agent can pay other agents, including another company&rsquo;s, hold money in escrow and
           pots, and lend to or borrow from another company. None of these moves real money until our
           first money partner is switched on, and an agent&rsquo;s virtual card can&rsquo;t make
-          real purchases yet. Investing is simulated: simulated US dollars at real prices, never real
-          assets.
+          real purchases yet.
         </p>
         <LawyerReview compact>
           Who is liable for a payment an agent makes within its rules, for a payment to another
@@ -106,8 +105,8 @@ export function Terms() {
           can take one down for good, which refunds every use of it still inside the 14-day holdback.
         </p>
         <p className="mt-3 text-reading text-muted">
-          Only a workspace&rsquo;s owner or an admin can publish. A seller earns 85% of every use,
-          rental and purchase whose bill was paid; Talyvor keeps 15%. Earnings are held for 14 days for refunds, then paid once a week to a
+          Only a workspace&rsquo;s owner or an admin can publish. Sellers earn 85% of every paid use,
+          rental and purchase, from the first sale; Talyvor keeps 15%. Earnings are held for 14 days for refunds, then paid once a week to a
           Stripe account the seller connects, less Stripe&rsquo;s fees at cost — or taken at once as
           Talyvor credits, with no fees and no minimum. Each weekly payout has a statement of its sales,
           fees, royalties and refunds. A seller gives Talyvor their tax details before they are paid;

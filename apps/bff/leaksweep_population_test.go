@@ -581,11 +581,22 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	// THE HUNDRED-AND-SIXTY-SECOND IS B41.46'S, PUT only: /api/rooms/{id}/gate-thresholds raises the room's Gate thresholds,
 	// read back through GET /api/rooms/{id}/gate, in the sweep's reach.
 	//
-	// THE HUNDRED-AND-SIXTY-THIRD IS B55.28'S, POST only: /api/rooms/{id}/payouts pays a room's members by its terms, and
+	// THE HUNDRED-AND-SIXTY-THIRD AND FOURTH ARE B41.47'S: POST /api/rooms/{id}/leaderboard/freeze freezes the leaderboard
+	// and PUT /api/rooms/{id}/objections/{oid}/vote votes on an objection, both read back through GET
+	// /api/rooms/{id}/objections, in the sweep's reach.
+	//
+	// THE HUNDRED-AND-SIXTY-FIFTH IS B41.52'S, POST and DELETE: /api/rooms/{id}/tasks/{tid}/claim claims a task and lets it
+	// go, read back through GET /api/rooms/{id}/tasks, in the sweep's reach.
+	//
+	// THE HUNDRED-AND-SIXTY-SIXTH AND SEVENTH ARE B41.85'S: PUT /api/marketplace/listings/{id}/content-labels relabels a
+	// listing, read back through GET /api/marketplace/listings/{id}, and PUT and DELETE /api/marketplace/blocked-listings/{id}
+	// block a listing and show it again, read back through GET /api/marketplace/content-filter, both in the sweep's reach.
+	//
+	// THE HUNDRED-AND-SIXTY-EIGHTH IS B55.28'S, POST only: /api/rooms/{id}/payouts pays a room's members by its terms, and
 	// each payout is read back through GET /api/money/earnings-payouts, in the sweep's reach.
-	if len(methodOnly) > 163 {
+	if len(methodOnly) > 168 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 163 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 168 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}

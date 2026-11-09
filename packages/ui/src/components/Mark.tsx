@@ -1,48 +1,56 @@
-// The Talyvor mark, copied path for path from brand-v4 svg/talyvor-mark-flat-dark.svg and
-// svg/talyvor-mark-flat-light.svg. Never redraw it. The two files share every path and differ only
-// in their fills, so theme.css carries each file's fills as --mark-* under [data-theme='dark'] and
-// [data-theme='light']: one inline SVG draws the dark file in the dark theme and the light file in
-// the light one, scoped to the nearest data-theme like every other token.
+// B57.6 — the logo's symbol and the app icon, each the kit's own drawing for its size (design/logo/talyvor-logo,
+// copied unchanged into apps/web/public/brand/logo). Below 48 px the symbol is not drawn: use the app icon.
 import { cn } from '../lib/cn'
+import { LOGO_DIR, ThemedImg } from './Wordmark'
 
-export interface MarkProps extends React.SVGProps<SVGSVGElement> {
-  /** Edge in px. 26 suits the sidebar and the page headers. */
-  size?: number
+/** The symbol: its full drawing from 120 px wide, the small one from 48 to 120. */
+export function symbolFile(width: number) {
+  return width >= 120 ? 'talyvor-symbol' : 'talyvor-symbol-small'
 }
 
-export function Mark({ size = 24, className, ...props }: MarkProps) {
+/** The app icon: the full drawing from 120 px, the small from 48, the 32 px drawing from 20, the 16 px below. */
+export function appIconFile(size: number) {
+  if (size >= 120) return 'talyvor-app-icon-rounded.svg'
+  if (size >= 48) return 'talyvor-favicon-small.svg'
+  if (size >= 20) return 'talyvor-favicon-tiny.svg'
+  return 'talyvor-favicon-pico.svg'
+}
+
+export interface LogoSymbolProps {
+  /** Width in px, 48 or more; the height follows the drawing's 1312:944. */
+  width?: number
+  className?: string
+}
+
+/** The streams and arrow without the name. */
+export function LogoSymbol({ width = 48, className }: LogoSymbolProps) {
+  const w = Math.max(48, width)
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="44.5 48 566 566"
+    <span className={cn('inline-block shrink-0 leading-none', className)} data-brand="symbol">
+      <ThemedImg file={symbolFile(w)} width={w} height={Math.round(((w * 944) / 1312) * 10) / 10} />
+    </span>
+  )
+}
+
+export interface AppIconProps {
+  /** Edge in px. */
+  size?: number
+  className?: string
+  /** Decorative beside a name that already says Talyvor. */
+  'aria-hidden'?: boolean
+}
+
+/** The rounded app icon, the same in both themes: it carries its own ink tile. */
+export function AppIcon({ size = 24, className, 'aria-hidden': hidden }: AppIconProps) {
+  return (
+    <img
+      src={`${LOGO_DIR}/${appIconFile(size)}`}
+      alt={hidden ? '' : 'Talyvor'}
       width={size}
       height={size}
-      role="img"
-      aria-label="Talyvor"
-      data-brand="mark"
-      className={cn('shrink-0', className)}
-      {...props}
-    >
-      <path
-        style={{ fill: 'var(--mark-upper)' }}
-        d="M58 52Q58 48 62 48L89.32 48C283.7 48 276.73 228 397.9 228L464.57 298L398.08 298C211.52 298 246.28 127 90.37 127L62 127Q58 127 58 123Z"
-      />
-      <path
-        style={{ fill: 'var(--mark-upper)' }}
-        d="M58 220Q58 216 62 216L138.61 216C199.23 216 200.46 331 402 331L197.86 331C153.13 313.86 149.25 287 118.28 287L62 287Q58 287 58 283Z"
-      />
-      <path
-        style={{ fill: 'var(--mark-lower)' }}
-        d="M58 442Q58 446 62 446L138.61 446C199.23 446 200.46 331 402 331L197.86 331C153.13 348.14 149.25 375 118.28 375L62 375Q58 375 58 379Z"
-      />
-      <path
-        style={{ fill: 'var(--mark-base)' }}
-        d="M58 610Q58 614 62 614L89.32 614C283.7 614 276.73 434 397.9 434L464.57 364L398.08 364C211.52 364 246.28 535 90.37 535L62 535Q58 535 58 539Z"
-      />
-      <path
-        style={{ fill: 'var(--mark-tip)' }}
-        d="M407.9 228L512.77 228Q517.77 228 520.82 231.96L594.56 327.83Q597 331 594.56 334.17L520.82 430.04Q517.77 434 512.77 434L407.9 434L506 331Z"
-      />
-    </svg>
+      decoding="async"
+      data-brand="app-icon"
+      className={cn('block shrink-0', className)}
+    />
   )
 }

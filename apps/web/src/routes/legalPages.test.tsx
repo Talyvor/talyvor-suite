@@ -6,6 +6,9 @@ import { longDate, sectionId } from './legalParts'
 // B28.274 — Privacy and Terms are read whole and dated: each says the day its words last changed,
 // lists every section before the first, and ends with a line saying it has ended.
 
+/** What the legal pages and the documentation never say while investing is not offered (B56.3). */
+const INVESTING = /investing is simulated|simulated portfolio|simulated order|no order reaches a market/i
+
 const SIGNED_OUT = { mode: 'oidc', authenticated: false, user: null }
 
 beforeEach(() => {
@@ -35,8 +38,8 @@ describe('the legal pages', () => {
   })
 
   it.each([
-    ['Terms', '2026-10-24', '24 October 2026'],
-    ['Privacy', '2026-10-28', '28 October 2026'], // B51.1: the waitlist, cookies and what leaves
+    ['Terms', '2026-11-08', '8 November 2026'], // B56.3: approvals as the rules make them, no investing
+    ['Privacy', '2026-11-08', '8 November 2026'], // B56.3: the six wallet records it left out
   ])('%s is dated, lists every section, and says where it ends', async (title, day, long) => {
     const { container } = at(`/${title.toLowerCase()}`)
     await screen.findByRole('heading', { level: 1, name: title })
@@ -64,5 +67,32 @@ describe('the legal pages', () => {
     const tare = screen.getByRole('heading', { level: 2, name: /Tare training|Learning from your prose/ }).closest('section')!
     expect(tare).toHaveTextContent(/keep.*prose.*improve how Tare shortens prompts/)
     expect(within(tare).getByText('Draft — for legal review')).toBeInTheDocument()
+  })
+
+  // B56.3 — they say only what the code does: investing is not offered, so neither page mentions it.
+  it.each(['/terms', '/privacy'])('%s puts no investing on a public page', async (path) => {
+    const { container } = at(path)
+    await screen.findByRole('heading', { level: 1 })
+    expect(container.querySelector('main')).not.toHaveTextContent(INVESTING)
+  })
+
+  it('Terms says an over-approval payment waits unless the payee is always allowed or a mandate covers it', async () => {
+    at('/terms')
+    await screen.findByRole('heading', { level: 1, name: 'Terms' })
+    expect(screen.getByText(/one over the approval amount waits/)).toHaveTextContent(
+      /waits for a person to approve it, unless you always allow that payee or a mandate covers it\./,
+    )
+  })
+
+  it('Privacy names every record Agent Wallets keeps', async () => {
+    at('/privacy')
+    const section = (await screen.findByRole('heading', { level: 2, name: 'What Agent Wallets stores' })).closest('section')!
+    const records = within(section)
+      .getAllByRole('listitem')
+      .map((li) => li.querySelector('strong')?.textContent)
+    for (const name of ['Verification.', 'Saved payees.', 'Invoices.', 'Mandates.', 'Payout details.', 'Currency accounts.']) {
+      expect(records).toContain(name)
+    }
+    expect(section).toHaveTextContent(/the account Talyvor pays you to: the holder.s name and the account.s details/i)
   })
 })

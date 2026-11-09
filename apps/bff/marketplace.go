@@ -41,6 +41,11 @@ import (
 //	GET  /api/marketplace/seller-tax               B32.60: the seller's tax details, masked, what is missing and any payout hold
 //	PUT  /api/marketplace/seller-tax               B32.60: save them; tins, date_of_birth and account_identifier null keep what is stored
 //	GET  /api/marketplace/statements?period=       B32.60: the weeks the seller was paid in; with a period (2026-W41) that week's statement
+//	PUT  /api/marketplace/listings/{id}/content-labels B41.85: {age_rating, content_labels} the seller relabels their listing
+//	GET  /api/marketplace/content-filter           B41.85: the age rating and labels this workspace is shown, the listings it blocked
+//	PUT  /api/marketplace/content-filter           B41.85: {max_age_rating, blocked_labels}; a family filter is max_age_rating "all"
+//	PUT  /api/marketplace/blocked-listings/{id}    B41.85: keep a listing out of this workspace's catalog, search and collections
+//	DELETE /api/marketplace/blocked-listings/{id}  B41.85: show it again
 //
 // Reads and publishing go on the session's workspace token, as the Agent Bank's do. A USE does not:
 // Lens runs the listing by calling its own proxy with the caller's credential, and every /v1/proxy/*
@@ -87,6 +92,8 @@ func (a *app) marketRelay(w http.ResponseWriter, r *http.Request, client *http.C
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	switch {
+	case resp.StatusCode == http.StatusNoContent:
+		w.WriteHeader(http.StatusNoContent)
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && json.Valid(raw):
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(resp.StatusCode)
@@ -135,6 +142,8 @@ func (a *app) handleMarketListings(w http.ResponseWriter, r *http.Request, t ten
 			RemixPolicy     string          `json:"remix_policy"`
 			RemixShareBPS   int             `json:"remix_share_bps"`
 			Parents         []marketParent  `json:"parents"`
+			AgeRating       string          `json:"age_rating"`     // B41.85: Lens rates a listing without one 18+
+			ContentLabels   []string        `json:"content_labels"` // B41.85
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 320<<10)).Decode(&in); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -585,6 +594,72 @@ func (a *app) handleMarketReport(w http.ResponseWriter, r *http.Request, t tenan
 	// UPSTREAM-BINDS-ONLY lensMarketReportBody: none
 	body, _ := json.Marshal(in)
 	a.marketRelay(w, r, a.client, t.token, http.MethodPost, "/v1/marketplace/listings/"+url.PathEscape(id)+"/reports", body, "")
+}
+
+// handleMarketContentLabels — PUT /api/marketplace/listings/{id}/content-labels {age_rating, content_labels} (B41.85, Lens
+// B41.185): the seller rates their listing all, 13+, 16+ or 18+ and declares what it gives (adult, violence, medical, financial
+// or legal advice). Lens refuses an adult listing rated below 18+, someone else's listing, and anyone but the workspace's
+// owner or an admin, each with its sentence.
+func (a *app) handleMarketContentLabels(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut {
+		methodNotAllowed(w, http.MethodPut)
+		return
+	}
+	id, ok := pathID(w, "listing id", r.PathValue("id"))
+	if !ok {
+		return
+	}
+	var in struct {
+		AgeRating     string   `json:"age_rating"`
+		ContentLabels []string `json:"content_labels"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	// UPSTREAM-BINDS-ONLY lensMarketContentLabelsBody: none
+	body, _ := json.Marshal(in)
+	a.marketRelay(w, r, a.client, t.token, http.MethodPut,
+		lensWorkspacePath(t, "/marketplace/listings/"+url.PathEscape(id)+"/content-labels"), body, "")
+}
+
+// handleMarketContentFilter — GET /api/marketplace/content-filter (B41.85, Lens B41.185): the oldest age rating this
+// workspace is shown, the labels it hides, the listings it blocked and the ratings and labels there are. PUT
+// {max_age_rating, blocked_labels} replaces it; "all" is the family filter. A workspace always sees its own listings.
+func (a *app) handleMarketContentFilter(w http.ResponseWriter, r *http.Request, t tenant) {
+	path := lensWorkspacePath(t, "/marketplace/content-filter")
+	switch r.Method {
+	case http.MethodGet:
+		a.marketRelay(w, r, a.client, t.token, http.MethodGet, path, nil, "")
+	case http.MethodPut:
+		var in struct {
+			MaxAgeRating  string   `json:"max_age_rating"`
+			BlockedLabels []string `json:"blocked_labels"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		// UPSTREAM-BINDS-ONLY lensMarketContentFilterBody: none
+		body, _ := json.Marshal(in)
+		a.marketRelay(w, r, a.client, t.token, http.MethodPut, path, body, "")
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPut)
+	}
+}
+
+// handleMarketBlockedListing — PUT /api/marketplace/blocked-listings/{id} (B41.85, Lens B41.185) keeps a listing out of
+// this workspace's catalog, search and collections; DELETE shows it again. Both answer 204.
+func (a *app) handleMarketBlockedListing(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPut && r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodPut+", "+http.MethodDelete)
+		return
+	}
+	id, ok := pathID(w, "listing id", r.PathValue("id"))
+	if !ok {
+		return
+	}
+	a.marketRelay(w, r, a.client, t.token, r.Method, lensWorkspacePath(t, "/marketplace/blocked-listings/"+url.PathEscape(id)), nil, "")
 }
 
 // payoutsOff is what the seller reads when Lens has no Stripe to pay through (it answers 503).

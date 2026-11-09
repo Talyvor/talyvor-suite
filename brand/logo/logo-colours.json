@@ -1,0 +1,468 @@
+{
+  "name": "Talyvor logo",
+  "chosen": "4 Nov 2026 by Nick (\"4 lowercase ... make it the actual logo and use it\"); upgraded the same day (\"more beautiful and full ... some kind of effect ... text fuller ... more friendly font\"); then the light version's middle stream made blue and the animation dropped (\"i want the middle set of lines of the light version to be the blue colour of dark version, not black. and i dont want the video of moving lights through the lines.\")",
+  "pocket_tokens": {
+    "ink": "#111216",
+    "ink-2": "#4A5061",
+    "ink-3": "#646B7B",
+    "tangerine": "#FF7A1A",
+    "tangerine-ink": "#A84100",
+    "dark-page": "#0F1013",
+    "dark-ink": "#F2F3F5",
+    "cobalt": "#2F5BFF",
+    "sky": "#39C2FF"
+  },
+  "versions": {
+    "on-light": {
+      "background_examples": [
+        "#FFFFFF (Pocket page)",
+        "#F3F4F6 (Pocket cloud)"
+      ],
+      "stream_top": [
+        {
+          "at": 0,
+          "colour": "#9AA0AE",
+          "opacity": 0
+        },
+        {
+          "at": 0.08,
+          "colour": "#8A90A0",
+          "opacity": 0.36
+        },
+        {
+          "at": 0.2,
+          "colour": "#4A5061",
+          "opacity": 0.8
+        },
+        {
+          "at": 0.4,
+          "colour": "#2A2D36",
+          "opacity": 1
+        },
+        {
+          "at": 0.62,
+          "colour": "#16181D",
+          "opacity": 1
+        },
+        {
+          "at": 0.86,
+          "colour": "#111216",
+          "opacity": 1
+        },
+        {
+          "at": 0.93,
+          "colour": "#6E3412",
+          "opacity": 1
+        },
+        {
+          "at": 1,
+          "colour": "#FF7A1A",
+          "opacity": 1
+        }
+      ],
+      "stream_middle": [
+        {
+          "at": 0,
+          "colour": "#3B6FE8",
+          "opacity": 0
+        },
+        {
+          "at": 0.08,
+          "colour": "#3E74EC",
+          "opacity": 0.34
+        },
+        {
+          "at": 0.24,
+          "colour": "#4C8DF0",
+          "opacity": 0.86
+        },
+        {
+          "at": 0.5,
+          "colour": "#67ABF6",
+          "opacity": 1
+        },
+        {
+          "at": 0.78,
+          "colour": "#4C8DF0",
+          "opacity": 1
+        },
+        {
+          "at": 1,
+          "colour": "#3E74EC",
+          "opacity": 1
+        }
+      ],
+      "stream_bottom": [
+        {
+          "at": 0,
+          "colour": "#FFC08A",
+          "opacity": 0
+        },
+        {
+          "at": 0.08,
+          "colour": "#FFAA66",
+          "opacity": 0.42
+        },
+        {
+          "at": 0.24,
+          "colour": "#FF9140",
+          "opacity": 0.92
+        },
+        {
+          "at": 0.5,
+          "colour": "#FF8329",
+          "opacity": 1
+        },
+        {
+          "at": 1,
+          "colour": "#FF7A1A",
+          "opacity": 1
+        }
+      ],
+      "silk": {
+        "top": [
+          {
+            "at": 0,
+            "colour": "#646B7B",
+            "opacity": 0
+          },
+          {
+            "at": 0.3,
+            "colour": "#4A5061",
+            "opacity": 0.07
+          },
+          {
+            "at": 0.7,
+            "colour": "#23262E",
+            "opacity": 0.13
+          },
+          {
+            "at": 1,
+            "colour": "#6E3412",
+            "opacity": 0.22
+          }
+        ],
+        "mid": [
+          {
+            "at": 0,
+            "colour": "#3B6FE8",
+            "opacity": 0
+          },
+          {
+            "at": 0.3,
+            "colour": "#4C8DF0",
+            "opacity": 0.07
+          },
+          {
+            "at": 0.7,
+            "colour": "#67ABF6",
+            "opacity": 0.12
+          },
+          {
+            "at": 1,
+            "colour": "#3E74EC",
+            "opacity": 0.18
+          }
+        ],
+        "bot": [
+          {
+            "at": 0,
+            "colour": "#FFB57A",
+            "opacity": 0
+          },
+          {
+            "at": 0.3,
+            "colour": "#FF9A4A",
+            "opacity": 0.11
+          },
+          {
+            "at": 0.7,
+            "colour": "#FF8329",
+            "opacity": 0.19
+          },
+          {
+            "at": 1,
+            "colour": "#FF7A1A",
+            "opacity": 0.28
+          }
+        ]
+      },
+      "light_where_streams_meet": [
+        {
+          "at": 0,
+          "colour": "#FF9A3D",
+          "opacity": 0.55
+        },
+        {
+          "at": 0.35,
+          "colour": "#FF7A1A",
+          "opacity": 0.22
+        },
+        {
+          "at": 1,
+          "colour": "#FF7A1A",
+          "opacity": 0
+        }
+      ],
+      "chevron": [
+        {
+          "at": 0,
+          "colour": "#FFA13D"
+        },
+        {
+          "at": 0.48,
+          "colour": "#FF7A1A"
+        },
+        {
+          "at": 1,
+          "colour": "#EE5A0A"
+        }
+      ],
+      "chevron_shade": {
+        "colour": "#B8440B",
+        "opacity": 0.3
+      },
+      "chevron_gloss_opacity": 0.42,
+      "chevron_edge_light": {
+        "colour": "#FFFFFF",
+        "opacity": 0.3
+      },
+      "chevron_shadow": {
+        "colour": "#A84100",
+        "opacity": 0.3
+      },
+      "glow": false,
+      "wordmark": "#111216"
+    },
+    "on-dark": {
+      "background_examples": [
+        "#0F1013 (Pocket dark page)",
+        "#111216 (Pocket ink)"
+      ],
+      "stream_top": [
+        {
+          "at": 0,
+          "colour": "#FFFFFF",
+          "opacity": 0
+        },
+        {
+          "at": 0.08,
+          "colour": "#D7DAE2",
+          "opacity": 0.3
+        },
+        {
+          "at": 0.2,
+          "colour": "#E6E8EE",
+          "opacity": 0.74
+        },
+        {
+          "at": 0.4,
+          "colour": "#F6F7F9",
+          "opacity": 0.96
+        },
+        {
+          "at": 0.84,
+          "colour": "#FFFFFF",
+          "opacity": 1
+        },
+        {
+          "at": 0.93,
+          "colour": "#FFD2A6",
+          "opacity": 1
+        },
+        {
+          "at": 1,
+          "colour": "#FF9A40",
+          "opacity": 1
+        }
+      ],
+      "stream_middle": [
+        {
+          "at": 0,
+          "colour": "#3B6FE8",
+          "opacity": 0
+        },
+        {
+          "at": 0.08,
+          "colour": "#3E74EC",
+          "opacity": 0.32
+        },
+        {
+          "at": 0.24,
+          "colour": "#4C8DF0",
+          "opacity": 0.82
+        },
+        {
+          "at": 0.5,
+          "colour": "#67ABF6",
+          "opacity": 1
+        },
+        {
+          "at": 0.78,
+          "colour": "#B6DCFF",
+          "opacity": 1
+        },
+        {
+          "at": 1,
+          "colour": "#F0F8FF",
+          "opacity": 1
+        }
+      ],
+      "stream_bottom": [
+        {
+          "at": 0,
+          "colour": "#A84100",
+          "opacity": 0
+        },
+        {
+          "at": 0.08,
+          "colour": "#B8430A",
+          "opacity": 0.36
+        },
+        {
+          "at": 0.24,
+          "colour": "#E2560B",
+          "opacity": 0.9
+        },
+        {
+          "at": 0.5,
+          "colour": "#FF7A1A",
+          "opacity": 1
+        },
+        {
+          "at": 0.84,
+          "colour": "#FF9A3A",
+          "opacity": 1
+        },
+        {
+          "at": 1,
+          "colour": "#FFB860",
+          "opacity": 1
+        }
+      ],
+      "silk": {
+        "top": [
+          {
+            "at": 0,
+            "colour": "#FFFFFF",
+            "opacity": 0
+          },
+          {
+            "at": 0.3,
+            "colour": "#E6E8EE",
+            "opacity": 0.06
+          },
+          {
+            "at": 0.7,
+            "colour": "#FFFFFF",
+            "opacity": 0.12
+          },
+          {
+            "at": 1,
+            "colour": "#FFD2A6",
+            "opacity": 0.2
+          }
+        ],
+        "mid": [
+          {
+            "at": 0,
+            "colour": "#3B6FE8",
+            "opacity": 0
+          },
+          {
+            "at": 0.3,
+            "colour": "#4C8DF0",
+            "opacity": 0.1
+          },
+          {
+            "at": 0.7,
+            "colour": "#67ABF6",
+            "opacity": 0.17
+          },
+          {
+            "at": 1,
+            "colour": "#B6DCFF",
+            "opacity": 0.24
+          }
+        ],
+        "bot": [
+          {
+            "at": 0,
+            "colour": "#A84100",
+            "opacity": 0
+          },
+          {
+            "at": 0.3,
+            "colour": "#E2560B",
+            "opacity": 0.13
+          },
+          {
+            "at": 0.7,
+            "colour": "#FF7A1A",
+            "opacity": 0.22
+          },
+          {
+            "at": 1,
+            "colour": "#FFB860",
+            "opacity": 0.32
+          }
+        ]
+      },
+      "light_where_streams_meet": [
+        {
+          "at": 0,
+          "colour": "#FFF3E2",
+          "opacity": 0.95
+        },
+        {
+          "at": 0.18,
+          "colour": "#FFC27A",
+          "opacity": 0.62
+        },
+        {
+          "at": 0.45,
+          "colour": "#FF7A1A",
+          "opacity": 0.22
+        },
+        {
+          "at": 1,
+          "colour": "#FF7A1A",
+          "opacity": 0
+        }
+      ],
+      "chevron": [
+        {
+          "at": 0,
+          "colour": "#FFB24A"
+        },
+        {
+          "at": 0.48,
+          "colour": "#FF7A1A"
+        },
+        {
+          "at": 1,
+          "colour": "#FF4F0A"
+        }
+      ],
+      "chevron_shade": {
+        "colour": "#C2380A",
+        "opacity": 0.34
+      },
+      "chevron_gloss_opacity": 0.46,
+      "chevron_edge_light": {
+        "colour": "#FFD39C",
+        "opacity": 0.55
+      },
+      "chevron_shadow": null,
+      "glow": true,
+      "wordmark": "#F2F3F5"
+    }
+  },
+  "wordmark": {
+    "based_on": "Figtree (SIL Open Font License 1.1), the typeface of Pocket's app",
+    "weight": 850,
+    "redrawn": "corners softened by 0.026 em, inner joins eased by 0.013 em, tracking -0.004 em, pair adjustments {'ta': -0.006, 'yv': 0.004, 'vo': -0.004}",
+    "note": "outlined in every file; no font is needed to show the logo"
+  },
+  "geometry": "one drawing; on-light and on-dark differ only in colour and light (checked by build/check_identical.py); no animation"
+}

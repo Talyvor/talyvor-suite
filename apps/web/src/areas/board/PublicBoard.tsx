@@ -60,11 +60,6 @@ function Body({ token }: { token: string }) {
   )
 }
 
-const FOOTER_LINKS = [
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/terms', label: 'Terms' },
-]
-
 export function PublicBoard() {
   useDocumentTitle('Board')
   const { token = '' } = useParams()
@@ -78,7 +73,7 @@ export function PublicBoard() {
         </div>
       </main>
 
-      <SiteFooter links={FOOTER_LINKS} width="max-w-6xl" />
+      <SiteFooter width="max-w-6xl" />
     </div>
   )
 }

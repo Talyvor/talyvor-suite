@@ -4,8 +4,9 @@ import { Link, useParams } from 'react-router-dom'
 import { Button, Input, Pill, Row, type PillStatus, inlineLink } from '@talyvor/ui'
 import { Region } from '../../components/Region'
 import { Approvals, Rules, rulesKey } from '../lens/AgentBank'
-import { type Agent, type AgentRules, type EarningsPayout, agentBankApi, formatMinor, formatULXC, minorOf, newMoveKey } from '../lens/agentBankApi'
+import { type Agent, type AgentRules, type EarningsPayout, agentBankApi, formatMinor, minorOf, newMoveKey } from '../lens/agentBankApi'
 import { MONEY_ACCOUNTS_KEY } from '../lens/Invoices'
+import { useLxcText } from '../lens/money'
 import { formatWhen } from '../lens/format'
 import { parsePrice } from '../marketplace/marketApi'
 import { Card, Note, pressed, readFailure, selectClass } from '../marketplace/parts'
@@ -49,13 +50,17 @@ const prizesKey = (id: string) => [...ROOMS_KEY, 'prizes', id]
 
 const roomHref = (id: string) => `/rooms/${encodeURIComponent(id)}`
 
-function Who({ ws, me }: { ws: string; me: string }) {
+/** A member's name. A name is its workspace's own choice, so one two members share carries the end of each id. */
+function memberName(m: Member, members: Member[]): string {
+  const shared = members.some((o) => o.workspace_id !== m.workspace_id && o.workspace_name === m.workspace_name)
+  return shared ? `${m.workspace_name} · ${m.workspace_id.replace(/^ws_/, '').slice(-8)}` : m.workspace_name
+}
+
+function Who({ ws, name, me }: { ws: string; name: string; me: string }) {
   return ws === me ? (
     <span className="text-ink">You</span>
   ) : (
-    <span className="inline-block max-w-xs truncate align-bottom font-figure text-ink" title={ws}>
-      {ws}
-    </span>
+    <span className="inline-block max-w-xs truncate align-bottom text-ink">{name}</span>
   )
 }
 
@@ -67,12 +72,13 @@ function MemberRow({ room, m, me }: { room: RoomDetail; m: Member; me: string })
     mutationFn: (c: MemberChange) => roomsApi.changeMember(room.id, m.workspace_id, c),
     onSuccess: () => qc.invalidateQueries({ queryKey: roomKey(room.id) }),
   })
-  const name = m.workspace_id === me ? 'you' : m.workspace_id
+  const named = memberName(m, room.members ?? [])
+  const name = m.workspace_id === me ? 'you' : named
   return (
     <li>
       <Row
         stack
-        label={<Who ws={m.workspace_id} me={me} />}
+        label={<Who ws={m.workspace_id} name={named} me={me} />}
         hint={
           m.role === 'owner'
             ? 'Owner — opened the room and spends its money'
@@ -97,7 +103,7 @@ function MemberRow({ room, m, me }: { room: RoomDetail; m: Member; me: string })
               ))}
             </select>
             <Button
-              aria-label={`${m.workspace_id === me ? 'You' : m.workspace_id} may spend the room’s money`}
+              aria-label={`${m.workspace_id === me ? 'You' : named} may spend the room’s money`}
               aria-pressed={m.may_spend}
               className={pressed}
               disabled={change.isPending}
@@ -156,7 +162,7 @@ function HandOver({ room, me }: { room: RoomDetail; me: string }) {
             <option value="">Choose…</option>
             {eligible.map((m) => (
               <option key={m.workspace_id} value={m.workspace_id}>
-                {m.workspace_id}
+                {memberName(m, room.members ?? [])}
               </option>
             ))}
           </select>
@@ -230,7 +236,7 @@ function InviteRow({ room, i }: { room: RoomDetail; i: Invite }) {
         label={
           i.kind === 'named' ? (
             <>
-              For <span className="font-figure">{i.workspace_id}</span>
+              For {i.workspace_name ?? 'a workspace that has not joined yet'}
             </>
           ) : (
             <>
@@ -367,16 +373,17 @@ function Invites({ room }: { room: RoomDetail }) {
 
 // ── The room's budget ──────────────────────────────────────────────────────────────────────────────
 
-function budgetMaxText(w: RoomWallet): string {
+function budgetMaxText(w: RoomWallet, lxc: (ulxc: number) => string): string {
   return w.budget_max_ulxc < 0
     ? 'Your plan allows a room any budget.'
-    : `Your plan allows a room a budget of at most ${formatULXC(w.budget_max_ulxc)} a month.`
+    : `Your plan allows a room a budget of at most ${lxc(w.budget_max_ulxc)} a month.`
 }
 
 function Budget({ room, owner }: { room: RoomDetail; owner: boolean }) {
   const w = room.wallet
   // The rules Agent Wallets' editor reads and saves: the budget shown is the monthly limit as last saved.
   const rules = useQuery<AgentRules>({ queryKey: rulesKey(w?.agent_id ?? ''), queryFn: () => agentBankApi.rules(w!.agent_id), enabled: owner && !!w })
+  const lxc = useLxcText()
   if (!w) {
     return (
       <Region index="03" label="The room’s budget" className="flex max-w-2xl flex-col gap-3">
@@ -389,7 +396,7 @@ function Budget({ room, owner }: { room: RoomDetail; owner: boolean }) {
   return (
     <Region index="03" label="The room’s budget" className="flex max-w-2xl flex-col gap-3">
       <p className="text-body text-muted">
-        The room has a wallet of its own, “{w.name}”. Its monthly limit is the room’s budget. {budgetMaxText(w)}
+        The room has a wallet of its own, “{w.name}”. Its monthly limit is the room’s budget. {budgetMaxText(w, lxc)}
       </p>
       <RoomBudget wallet={shown} />
       {owner ? (

@@ -185,7 +185,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/money/invoices': 3,
   // B30.96 — payees, send, payments out, standing orders, mandates and bulk payouts.
   '/money/spending': 10, // B53.8: this week, this month, budgets, unusual, payments, subscriptions and the latest notices; B53.16: safe to spend, off plan and the payments due, under the populated fixture
-  '/money/card': 1, // B53.12: the populated fixture's one active card
+  '/money/card': 0, // B57.97: drawn in Pocket, whose cards head themselves with an h3
   '/scan/reports': 1, // B52.28: the library's one card, under the populated fixture's one report
   '/scan/reports/:id': 1, // B52.28: the report's card (the box is a header-less card)
   '/scan/agents': 1, // B52.28: the populated fixture's one Scan agent
@@ -360,9 +360,9 @@ describe('a card header is a section title, so it is a heading element', () => {
         'means something that is not a section title has entered the headings rotor — a balance, ' +
         'a wordmark, a badge.',
     ).toHaveLength(1 + pageScale.length + titles.length)
-    // B29.3: the wordmark is the drawn brand SVG now, not a `text-head` div — so it is found by
-    // what it is, and the heading it must not be is any ancestor, not only its own tag.
-    const wordmark = document.querySelector('svg[data-brand="wordmark"]')
+    // B57.6: the wordmark is the kit's logo now, its files as <img>, not a `text-head` div — so it is found
+    // by what it is, and the heading it must not be is any ancestor, not only its own tag.
+    const wordmark = document.querySelector('[data-brand="lockup"]')
     expect(wordmark, 'the sidebar wordmark is gone — this case no longer measures anything').toBeTruthy()
     expect(
       wordmark!.closest('h1,h2,h3,h4,h5,h6')?.tagName ?? 'none',

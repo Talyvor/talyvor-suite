@@ -1,51 +1,72 @@
 import { describe, expect, it } from 'vitest'
 import { contrastRatio } from '../lib/contrast'
-import { tokens, type TokenName } from '../tokens'
+import { pocket, tokens, type PocketName } from '../tokens'
 import { AA_BODY, TEXT_PLANES, TEXT_ROLES as PLANE_TEXT_ROLES, permits, ratio } from '../planes'
 
 /**
- * THE PALETTE, MEASURED.
+ * THE PALETTE, MEASURED — Pocket's contrast table (B57.2).
  *
- * A colour token set is the one place where "it reads fine" and "it fails AA for a
- * large minority of readers" look identical to the author. This scores every sanctioned
- * pairing and fails on the number, not the impression.
- *
- * ⚠ IT FOUND SOMETHING THE MOMENT IT WAS WRITTEN. On the palette this replaced, `faint`
- * — the µ-tail of every money figure, at 12.5px — measured 2.98:1 on the light canvas
- * and 3.83:1 on the dark surface. Both fail AA for body text (4.5:1); the light pair
- * fails even the 3:1 large-text floor. It had been shipping.
- *
- * ⚠ EVERY TOKEN MUST BE CLASSIFIED. The three roles below must partition `TokenName`
- * exactly — a token in none of them, or in two, fails `the classification is total`.
- * That is deliberate: a new token must be argued into a role, because the alternative
- * is that it defaults into the unchecked set and nobody notices for a year.
+ * Every row of the reference's "Contrast, computed from the stylesheet" table (design/pocket
+ * index.html, #system), in its own words, scored from tokens.ts: 4.5:1 for text, 3:1 for control
+ * edges, focus rings and faces. A name is a Pocket token, read in the row's theme; a #hex is a
+ * colour the reference draws outside the tokens (the ink hero, the wallpaper). The published
+ * ratio is asserted too, so a token that drifts from the table moves a number and goes red even
+ * while it still clears its floor.
  */
+type Colour = PocketName | `#${string}`
+type Row = readonly [pair: string, fg: Colour, bg: Colour, published: number, needs: 4.5 | 3]
 
-// Text roles: words render in these, so AA body applies (4.5:1).
-const TEXT_ROLES = ['ink', 'muted', 'faint', 'label', 'accent', 'accent-strong'] as const
-// Backgrounds: the opaque planes text and affordances land on.
-const BACKGROUNDS = ['canvas', 'surface', 'sidebar'] as const
-// The card plane. Its text is scored by the plane table below, which refuses `faint` on it by
-// measurement; its affordances are scored here with the backgrounds.
-const CARD_PLANES = ['raised'] as const
-// Affordance roles: dots, 2px ticks, 4px bars, pills — non-text, so the 3:1 UI floor.
-const AFFORDANCE_ROLES = ['lens', 'lxc', 'tier1', 'tier3', 'settled', 'held', 'slashed'] as const
-// Ink that lands ON the accent fill (the primary button label). Scored against the fill.
-const ON_ACCENT = ['accent-ink'] as const
-// The accent fill's pressed/hover step — scored as a background for accent-ink.
-const ACCENT_STATES = ['accent-hover', 'accent-tint'] as const
-/**
- * DECORATIVE — exempt from a contrast floor, and this is the one exemption, so it is
- * argued rather than assumed. `rule` / `rule-strong` are separators. WCAG 1.4.11 applies
- * to a graphic that is REQUIRED to understand the content; every rule in this system sits
- * beside the thing it separates (a card has a label, a row has text, a table has headers),
- * so no rule is the sole carrier of any information. Raising them to 3:1 would produce the
- * heavy-boxed console this design language exists to avoid.
- *
- * ⚠ If a rule ever becomes the ONLY indicator of a state — a selected row marked by nothing
- * but its border, say — it stops being decorative and must move to AFFORDANCE_ROLES.
- */
-const DECORATIVE = ['rule', 'rule-strong'] as const
+const THEMED: Record<'light' | 'dark', readonly Row[]> = {
+  light: [
+    ['Body text', 'ink', 'page', 18.72, 4.5],
+    ['Secondary text', 'ink-2', 'page', 8.04, 4.5],
+    ['Small grey text', 'ink-3', 'page', 5.34, 4.5],
+    ['Small grey text on a card', 'ink-3', 'cloud', 4.85, 4.5],
+    ['Grey text on a chip', 'ink-3', 'cloud-2', 4.6, 4.5],
+    ['Orange words', 'tangerine-ink', 'page', 6.14, 4.5],
+    ['Waiting chip', 'tangerine-ink', 'tangerine-50', 5.55, 4.5],
+    ['Money in', 'success', 'page', 5.41, 4.5],
+    ['Good chip', 'success', 'success-50', 4.84, 4.5],
+    ['Bad chip', 'danger', 'danger-50', 5.17, 4.5],
+    ['Primary button', 'on-primary', 'primary', 18.72, 4.5],
+    ['Input and toggle edges', 'control', 'page', 3.9, 3],
+    ['Focus ring', 'ink', 'page', 18.72, 3],
+    ['Focus ring on a card', 'ink', 'cloud', 17.01, 3],
+  ],
+  dark: [
+    ['Body text', 'ink', 'page', 17.14, 4.5],
+    ['Secondary text', 'ink-2', 'page', 8.36, 4.5],
+    ['Small grey text', 'ink-3', 'page', 5.96, 4.5],
+    ['Small grey text on a card', 'ink-3', 'cloud', 5.45, 4.5],
+    ['Grey text on a chip', 'ink-3', 'cloud-2', 4.93, 4.5],
+    ['Orange words', 'tangerine-ink', 'page', 8.09, 4.5],
+    ['Waiting chip', 'tangerine-ink', 'tangerine-50', 6.19, 4.5],
+    ['Money in', 'success', 'page', 10.14, 4.5],
+    ['Good chip', 'success', 'success-50', 8.22, 4.5],
+    ['Bad chip', 'danger', 'danger-50', 5.93, 4.5],
+    ['Primary button', 'on-primary', 'primary', 16.86, 4.5],
+    ['Input and toggle edges', 'control', 'page', 4.06, 3],
+    ['Focus ring', 'ink', 'page', 17.14, 3],
+    ['Focus ring on a card', 'ink', 'cloud', 15.68, 3],
+  ],
+}
+
+/** The "Both" rows: the same pair in either theme. */
+const BOTH: readonly Row[] = [
+  ['Ink on tangerine', '#111216', 'tangerine', 7.18, 4.5],
+  ['Text on the ink hero', '#F2F3F5', '#111216', 16.86, 4.5],
+  ['Second text on the ink hero', '#C9CDD6', '#111216', 11.75, 4.5],
+  ['Outline button edge on the ink hero', '#7A8192', '#111216', 4.8, 3],
+  ['Focus ring on the ink hero and the lock screen', '#F2F3F5', '#111216', 16.86, 3],
+  ['Focus ring on the home-screen wallpaper, at its lightest', '#F2F3F5', '#4B3A5E', 9.15, 3],
+  ['Face on cobalt', '#FFFFFF', 'agent-cobalt', 5.17, 3],
+  ['Face on orchid', '#111216', 'agent-orchid', 5.32, 3],
+  ['Face on sky', '#111216', 'agent-sky', 9.21, 3],
+  ['Face on mint', '#111216', 'agent-mint', 8.62, 3],
+  ['Face on lemon', '#111216', 'agent-lemon', 13.13, 3],
+  ['Face on rose', '#111216', 'agent-rose', 6.37, 3],
+  ['Face on lime', '#111216', 'agent-lime', 11.14, 3],
+]
 
 describe('the instrument, before it measures anything', () => {
   // Published WCAG values. If these drift, every assertion below is decoration.
@@ -72,96 +93,34 @@ describe('the instrument, before it measures anything', () => {
   })
 })
 
-describe('the classification is total', () => {
-  const classified = [
-    ...TEXT_ROLES,
-    ...BACKGROUNDS,
-    ...CARD_PLANES,
-    ...AFFORDANCE_ROLES,
-    ...ON_ACCENT,
-    ...ACCENT_STATES,
-    ...DECORATIVE,
-  ] as readonly string[]
-  const declared = Object.keys(tokens.light) as TokenName[]
-
-  it('every token has exactly one role', () => {
-    const missing = declared.filter((t) => !classified.includes(t))
-    expect(missing, `unclassified token(s): ${missing.join(', ')} — give each a role above`).toEqual([])
-    const counts = new Map<string, number>()
-    for (const c of classified) counts.set(c, (counts.get(c) ?? 0) + 1)
-    const doubled = [...counts].filter(([, n]) => n > 1).map(([n]) => n)
-    expect(doubled, `token(s) in two roles: ${doubled.join(', ')}`).toEqual([])
-  })
-  it('no role names a token that does not exist', () => {
-    const phantom = classified.filter((c) => !(c in tokens.light))
-    expect(phantom, `role names a non-token: ${phantom.join(', ')}`).toEqual([])
-  })
-  it('light and dark declare the same token names', () => {
-    expect(Object.keys(tokens.dark).sort()).toEqual(Object.keys(tokens.light).sort())
-  })
-})
-
 for (const theme of ['light', 'dark'] as const) {
-  const t = tokens[theme]
-  describe(`${theme}: text meets AA body (4.5:1)`, () => {
-    for (const role of TEXT_ROLES) {
-      for (const bg of BACKGROUNDS) {
-        it(`${role} on ${bg}`, () => {
-          const r = contrastRatio(t[role], t[bg])
-          expect(r, `${role} (${t[role]}) on ${bg} (${t[bg]}) = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5)
-        })
-      }
+  const value = (c: Colour) => (c.startsWith('#') ? c : pocket[theme][c as PocketName])
+  describe(`${theme}: every pair in Pocket's contrast table`, () => {
+    for (const [pair, fg, bg, published, needs] of [...THEMED[theme], ...BOTH]) {
+      it(`${pair}: ${fg} on ${bg} needs ${needs}:1 and measures ${published}:1`, () => {
+        const r = contrastRatio(value(fg), value(bg))
+        const note = `${pair} (${value(fg)} on ${value(bg)}) = ${r.toFixed(2)}:1`
+        expect(r, note).toBeGreaterThanOrEqual(needs)
+        expect(Math.round(r * 100) / 100, `${note}, the reference publishes ${published}:1`).toBeCloseTo(published, 2)
+      })
     }
-  })
-
-  describe(`${theme}: affordances meet the 3:1 non-text floor`, () => {
-    for (const role of AFFORDANCE_ROLES) {
-      for (const bg of [...BACKGROUNDS, ...CARD_PLANES]) {
-        it(`${role} on ${bg}`, () => {
-          const r = contrastRatio(t[role], t[bg])
-          expect(r, `${role} (${t[role]}) on ${bg} (${t[bg]}) = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3)
-        })
-      }
-    }
-  })
-
-  describe(`${theme}: the accent fill carries its own ink`, () => {
-    it('accent-ink on accent meets AA body', () => {
-      const r = contrastRatio(t['accent-ink'], t.accent)
-      expect(r, `accent-ink on accent = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5)
-    })
-    it('accent-ink on accent-hover meets AA body — the pressed state is not a blind spot', () => {
-      const r = contrastRatio(t['accent-ink'], t['accent-hover'])
-      expect(r, `accent-ink on accent-hover = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5)
-    })
-    it('ink on accent-tint meets AA body — the tint is a hover/selected BACKGROUND for ink text', () => {
-      // ⚠ THIS CASE IS CORRECT AND IT IS ONE PAIR. It was the only thing scoring the tint, and it
-      // named the one role somebody thought of; `faint` on the same plane is 3.97:1 and nothing
-      // asked. §"the tint is a plane, so every role is asked about it" below is the total form.
-      const r = contrastRatio(t.ink, t['accent-tint'])
-      expect(r, `ink on accent-tint = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5)
-    })
-    it('the tint is separable from the full fill (>= 3:1) so a hover is not mistaken for a press', () => {
-      const r = contrastRatio(t.accent, t['accent-tint'])
-      expect(r, `accent on accent-tint = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3)
-    })
   })
 }
+
+describe('the table covers both themes alike', () => {
+  it('light and dark score the same pairs', () => {
+    expect(THEMED.dark.map((r) => r.slice(0, 3))).toEqual(THEMED.light.map((r) => r.slice(0, 3)))
+  })
+})
 
 /**
  * THE PLANES, TOTAL — every role asked about every plane, in both directions.
  *
- * ── WHAT THE MATRIX ABOVE CANNOT ASK ─────────────────────────────────────────────────────────
+ * ── TODAY'S NAMES, STILL SCORED ─────────────────────────────────────────────────────────────
  *
- * `TEXT_ROLES x BACKGROUNDS` scores four roles against three planes and is total over THOSE. The
- * product renders text on a fourth, `accent-tint` — NavItem's selected and hovered row, and every
- * default/danger Button's press — and the only thing scoring it was one hand-written case naming
- * one role. MEASURED at `7513c91` from the running DOM of the whole apps/web suite: 10 rendered
- * sites — the ten sidebar destinations, each of which is the selected row on its own view — and
- * `faint` on that plane is 3.97:1 light / 3.63:1 dark. The plane's own component declared exactly
- * that pair on its icon. (The count is 10 and not the 8 an earlier draft carried: the probe
- * deduplicated inside a module vitest re-instantiates per test FILE, so 8 was a fact about the
- * instrument. planes.ts records the re-measurement.)
+ * The table above scores Pocket's names. Screens not yet redrawn still paint with today's names,
+ * which tokens.ts keeps as aliases onto Pocket's values; planes.ts says which of those text roles
+ * each of those planes permits, and this asks every role about every plane.
  *
  * ── WHY THE REFUSALS ARE CHECKED TOO ─────────────────────────────────────────────────────────
  *
@@ -179,11 +138,6 @@ describe('the tint is a plane, so every role is asked about it', () => {
   it('every plane in the classification is a real token', () => {
     const phantom = TEXT_PLANES.filter((p) => !(p in tokens.light))
     expect(phantom, `plane names a non-token: ${phantom.join(', ')}`).toEqual([])
-  })
-
-  it('every background the matrix scores, and the card plane, is also a classified plane', () => {
-    const missing = [...BACKGROUNDS, ...CARD_PLANES].filter((b) => !(TEXT_PLANES as string[]).includes(b))
-    expect(missing, `background(s) absent from ROLES_ON_PLANE: ${missing.join(', ')}`).toEqual([])
   })
 
   for (const plane of TEXT_PLANES) {

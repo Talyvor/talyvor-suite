@@ -6,7 +6,8 @@ import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
-import { type ScanFinding, type ScanWatch, agentBankApi, formatULXC, parseLXC, refusalText } from './agentBankApi'
+import { type ScanFinding, type ScanWatch, agentBankApi, parseLXC, refusalText } from './agentBankApi'
+import { Lxc } from './money'
 
 // Scan.tsx — B52.28: Scan in the app. The report library lists every published Scan report by family, and each report
 // opens on its own page (ScanReport.tsx) with its chart, sources and how it was made (Lens B52.33). Scan agents watch the series their owner picks, with the owner's own idea of
@@ -180,7 +181,7 @@ export function ScanAgentsScreen() {
                         <br />
                         {a.body}
                         <br />
-                        Sources: {(a.attribution ?? []).join('; ') || 'none named'} · paid <span className="font-figure">{formatULXC(a.charged_ulxc)}</span>
+                        Sources: {(a.attribution ?? []).join('; ') || 'none named'} · paid <Lxc ulxc={a.charged_ulxc} />
                       </>
                     }
                   />

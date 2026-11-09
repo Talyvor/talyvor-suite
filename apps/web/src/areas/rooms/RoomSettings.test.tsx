@@ -9,14 +9,16 @@ import { App, queryClient } from '../../App'
 
 const ME = 'ws_me'
 const OTHER = 'ws_other'
+// B55.34 — Lens names every member, and a named invite whose workspace has been a member, by its workspace.
+const NAMES: Record<string, string> = { [ME]: 'Ben’s lab', [OTHER]: 'Ana’s studio' }
 const PLAN_MAX_ULXC = 1_000_000_000 // Free's room_budget_max_usd, $100, at the peg
 
 const LATE = 'ws_late'
 
 function mockBff(split = 'equal') {
   const members = [
-    { workspace_id: ME, role: 'owner', may_spend: true, terms_version: 1, terms_current: true, joined_at: '2026-10-01T09:00:00Z' },
-    { workspace_id: OTHER, role: 'member', may_spend: false, terms_version: 1, terms_current: true, joined_at: '2026-10-02T09:00:00Z' },
+    { workspace_id: ME, workspace_name: NAMES[ME], role: 'owner', may_spend: true, terms_version: 1, terms_current: true, joined_at: '2026-10-01T09:00:00Z' },
+    { workspace_id: OTHER, workspace_name: NAMES[OTHER], role: 'member', may_spend: false, terms_version: 1, terms_current: true, joined_at: '2026-10-02T09:00:00Z' },
   ]
   // B55.28: a member still under the first terms, whom a payout leaves out.
   if (split === 'owner_decides') {
@@ -134,7 +136,7 @@ function mockBff(split = 'equal') {
     }
     return new Response('null', { status: 404 })
   })
-  return { sent, keys }
+  return { sent, keys, invites, members }
 }
 
 afterEach(() => {
@@ -149,10 +151,10 @@ describe('room settings', () => {
     window.history.pushState({}, '', '/rooms/room_1/settings')
     render(<App />)
 
-    const spend = await screen.findByRole('button', { name: `${OTHER} may spend the room’s money` })
+    const spend = await screen.findByRole('button', { name: 'Ana’s studio may spend the room’s money' })
     expect(spend.getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(spend)
-    await waitFor(() => expect(screen.getByRole('button', { name: `${OTHER} may spend the room’s money` }).getAttribute('aria-pressed')).toBe('true'))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ana’s studio may spend the room’s money' }).getAttribute('aria-pressed')).toBe('true'))
     expect(bff.sent.find((s) => s.method === 'PATCH')).toEqual({ method: 'PATCH', url: `/api/rooms/room_1/members/${OTHER}`, body: { may_spend: true } })
 
     const invites = await screen.findByRole('list', { name: 'Invites' })
@@ -191,7 +193,7 @@ describe('room settings', () => {
     render(<App />)
 
     const budget = await screen.findByTestId('room-budget')
-    expect(within(budget).getByText('200 LXC')).toBeTruthy()
+    expect(budget.textContent).toContain('200 LXC')
     const limit = await screen.findByLabelText('Monthly limit for Room: Agent pricing, in LXC')
     fireEvent.change(limit, { target: { value: '2000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
@@ -199,11 +201,11 @@ describe('room settings', () => {
     expect(refusal.textContent).toBe(
       'A monthly limit of 2,000 LXC is above the room’s budget: rooms_plan_limits (LENS_ROOMS_PLAN_LIMITS): your free plan allows a room a budget of at most $100 (1,000 LXC) a month — the team plan allows $5000.',
     )
-    expect(within(budget).getByText('200 LXC')).toBeTruthy()
+    expect(budget.textContent).toContain('200 LXC')
 
     fireEvent.change(limit, { target: { value: '500' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-    await waitFor(() => expect(within(screen.getByTestId('room-budget')).getByText('500 LXC')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('room-budget').textContent).toContain('500 LXC'))
     expect(bff.sent.filter((s) => s.url === '/api/agents/ag_room/rules').map((s) => s.body.monthly_limit_ulxc)).toEqual([2_000_000_000, 500_000_000])
   })
 
@@ -297,5 +299,35 @@ describe('room settings', () => {
     const held = await screen.findByTestId('room-held-for-you')
     expect(held.textContent?.replace('US$', '$')).toBe('$45.00 from this room is held for you. Add your payout details to receive it.')
     expect(within(held).getByRole('link').getAttribute('href')).toBe('/settings/payout-details')
+
+  // B55.35 — members and named invites read by their workspace's name, never its id.
+  it('shows members and invites by name', async () => {
+    const named = { room_id: 'room_1', kind: 'named', max_uses: 1, uses: 0, live: true, created_by_workspace_id: ME, created_at: '2026-10-07T09:00:00Z' }
+    mockBff().invites.push(
+      { ...named, id: 'rinv_2', workspace_id: OTHER, workspace_name: NAMES[OTHER] },
+      { ...named, id: 'rinv_3', workspace_id: 'ws_new' }, // never a member: Lens does not name it
+    )
+    window.history.pushState({}, '', '/rooms/room_1/settings')
+    render(<App />)
+    const invites = await screen.findByRole('list', { name: 'Invites' })
+    expect(within(invites).getByText('For Ana’s studio')).toBeTruthy()
+    expect(within(invites).getByText('For a workspace that has not joined yet')).toBeTruthy()
+    const members = screen.getByRole('list', { name: 'Members' })
+    expect(within(members).getByText('You')).toBeTruthy()
+    expect(within(members).getByText('Ana’s studio')).toBeTruthy()
+    expect(within(screen.getByLabelText('New owner')).getByRole('option', { name: 'Ana’s studio' })).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/ws_other|ws_new/)
+  })
+
+  // B55.35 — a name is the workspace's own choice, so two members of one name are told apart where the owner hands over
+  // the room or lets a member spend.
+  it('tells two members of the same name apart', async () => {
+    const bff = mockBff()
+    bff.members.push({ workspace_id: 'ws_copycat', workspace_name: NAMES[OTHER], role: 'member', may_spend: false, terms_version: 1, terms_current: true, joined_at: '2026-10-03T09:00:00Z' })
+    window.history.pushState({}, '', '/rooms/room_1/settings')
+    render(<App />)
+    const owner = await screen.findByLabelText('New owner')
+    expect(within(owner).getAllByRole('option').map((o) => o.textContent)).toEqual(['Choose…', 'Ana’s studio · other', 'Ana’s studio · copycat'])
+    expect(screen.getByRole('button', { name: 'Ana’s studio · copycat may spend the room’s money' })).toBeTruthy()
   })
 })

@@ -632,6 +632,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B32.60 — the seller's tax details and their weekly statements. See marketplace.go.
 	a.mux.HandleFunc("/api/marketplace/seller-tax", a.requireTenant(a.handleMarketSellerTax))
 	a.mux.HandleFunc("/api/marketplace/statements", a.requireTenant(a.handleMarketStatements))
+	// B41.85 — content labels and age ratings: the seller's, and the workspace's filter and blocks. See marketplace.go.
+	a.mux.HandleFunc("/api/marketplace/listings/{id}/content-labels", a.requireTenant(a.handleMarketContentLabels))
+	a.mux.HandleFunc("/api/marketplace/content-filter", a.requireTenant(a.handleMarketContentFilter))
+	a.mux.HandleFunc("/api/marketplace/blocked-listings/{id}", a.requireTenant(a.handleMarketBlockedListing))
 	// B32.53 — rooms: the open chats Chat lists, opening one and joining one. See rooms.go.
 	a.mux.HandleFunc("/api/rooms", a.requireTenant(a.handleRooms))
 	a.mux.HandleFunc("/api/rooms/{id}", a.requireTenant(a.handleRoom))
@@ -668,6 +672,11 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/reviewers", a.requireTenant(a.handleRoomReviewers))   // B41.44
 	a.mux.HandleFunc("/api/rooms/{id}/contributions/{cid}/review", a.requireTenant(a.handleRoomReview))         // B41.44
 	a.mux.HandleFunc("/api/rooms/{id}/agreement", a.requireTenant(a.handleRoomAgreement))                       // B41.50
+	a.mux.HandleFunc("/api/rooms/{id}/leaderboard/freeze", a.requireTenant(a.handleRoomLeaderboardFreeze))      // B41.47
+	a.mux.HandleFunc("/api/rooms/{id}/objections", a.requireTenant(a.handleRoomObjections))                     // B41.47
+	a.mux.HandleFunc("/api/rooms/{id}/objections/{oid}/vote", a.requireTenant(a.handleRoomObjectionVote))       // B41.47
+	a.mux.HandleFunc("/api/rooms/{id}/tasks", a.requireTenant(a.handleRoomTasks))                               // B41.52
+	a.mux.HandleFunc("/api/rooms/{id}/tasks/{tid}/claim", a.requireTenant(a.handleRoomTaskClaim))               // B41.52
 	// B55.28 — payout details, the earnings payouts and a room's payout by its terms. See money_earnings.go.
 	a.mux.HandleFunc("/api/money/payout-details", a.requireTenant(a.handleMoneyPayoutDetails))
 	a.mux.HandleFunc("/api/money/earnings-payouts", a.requireTenant(a.handleMoneyEarningsPayouts))

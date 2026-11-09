@@ -26,11 +26,11 @@ import {
   FIATS,
   agentBankApi,
   formatMinor,
-  formatULXC,
   minorOf,
   newMoveKey,
   refusalText,
 } from './agentBankApi'
+import { Lxc } from './money'
 
 // Pay.tsx — B30.96: money out of an account. Saved payees outside Talyvor, each checked against its account by the account
 // partner (Lens B30.16); a payment to one, from the company's or an agent's account (B30.17), with an agent's requests that
@@ -755,7 +755,7 @@ function Waiting({ agentName }: { agentName: (id: string) => string }) {
         {waiting.map((a) => (
           <li key={a.id} className="flex flex-col gap-2 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`approval-${a.id}`}>
             <p className="text-body text-ink">
-              {agentName(a.agent_id)} asked to pay {a.payee?.name} <span className="font-figure">{formatULXC(a.amount_ulxc)}</span>
+              {agentName(a.agent_id)} asked to pay {a.payee?.name} <Lxc ulxc={a.amount_ulxc} />
               {a.memo ? ` — ${a.memo}` : ''}
             </p>
             <p className="text-caption text-muted">

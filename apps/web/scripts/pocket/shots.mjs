@@ -4,9 +4,10 @@
  *
  *   pnpm --filter @talyvor/web pocket:shots <item> <checks.json>
  *
- * checks.json is a list of { route, screen, steps?, dark? }: the app's address, the reference's screen id
+ * checks.json is a list of { route, screen, steps?, dark?, frame? }: the app's address, the reference's screen id
  * (README.md's tables; leave it out for a page with no reference, such as the story page), the words or aria-labels to press in the app to reach the screen as a person would
- * (w-home+sheet-A is reached by pressing "Review"), and whether to shoot it dark.
+ * (w-home+sheet-A is reached by pressing "Review"), whether to shoot it dark, and whether the reference is only the
+ * dialog's frame over its page (B57.5: a dialog on the story page, beside the reference's dialog without its page).
  *
  * It builds the app once, serves dist with every /api and /auth request answered from scripts/pocket/sample.ts,
  * and for each check shoots the app at 1440x900 and 390x844 with the reference beside it, into
@@ -143,12 +144,12 @@ async function reference(c) {
   if ((await page.evaluate(() => window.__proto.current())) !== c.screen) throw new Error(`the reference has no screen ${c.screen}`)
   if (c.dark) await page.evaluate(() => document.querySelectorAll('#proto .phold .pk').forEach((el) => el.classList.replace('pk-light', 'pk-dark') || el.classList.add('pk-dark')))
   await page.waitForTimeout(300)
-  const hold = page.locator('#proto .phold > *').first()
+  const hold = page.locator(c.frame ? '#proto .phold .scrim > *' : '#proto .phold > *').first()
   // The viewer scrolls a tall screen inside its stage; a window taller than the screen shows it whole.
   const box = await hold.boundingBox()
   await page.setViewportSize({ width: 1440, height: Math.ceil(box.y + box.height + 100) })
   await page.waitForTimeout(300)
-  const words = await page.evaluate(`(${check.wordsOf})(document.querySelector('#proto .phold'))`)
+  const words = await page.evaluate(`(${check.wordsOf})(document.querySelector('#proto .phold${c.frame ? ' .scrim' : ''}'))`)
   const png = await hold.screenshot()
   await page.close()
   return { words, png }

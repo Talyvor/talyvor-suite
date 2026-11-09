@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { bodyFor, populatedBff, settleQueries } from '../../populatedBff'
+import { cardOnItsPlane, primaryActions, statusWithoutWords, tangerineOffenders } from '../../pocketRules'
 
 // B29.9 — Agent Wallets, Approvals, Statements, Royalties, Ledger and Spend in the brand, read off the populated
 // fixture: one teal action per screen, cards on the raised plane, every amount on the figure face, status pills.
@@ -15,7 +16,8 @@ async function at(address: string): Promise<HTMLElement> {
 }
 
 /** The teal-filled actions: the primary Button, as a button or a link. */
-const primaries = (main: HTMLElement) => Array.from(main.querySelectorAll('button.bg-accent, a.bg-accent')).map((b) => b.textContent?.trim())
+// B57.3 — the primary (ink) actions, by Pocket's name and today's.
+const primaries = primaryActions
 const pills = (root: HTMLElement) => Array.from(root.querySelectorAll('span.rounded-pill.border')).map((p) => p.textContent)
 
 beforeEach(() => {
@@ -46,7 +48,10 @@ describe('the wallet screens in the brand', () => {
 
     const cards = Array.from(main.querySelectorAll('.rounded-card'))
     expect(cards.length, `no card rendered on ${address}`).toBeGreaterThan(0)
-    for (const c of cards) expect(c.className, `a card on ${address} is not on the raised plane`).toContain('bg-raised')
+    for (const c of cards) expect(cardOnItsPlane(c), `a card on ${address} is not on its plane: ${c.className}`).toBe(true)
+    // B57.3 — Pocket's rules: tangerine only for the brand and "your move", status colours always with words.
+    expect(tangerineOffenders(main).map((e) => e.outerHTML)).toEqual([])
+    expect(statusWithoutWords(main).map((e) => e.outerHTML)).toEqual([])
 
     // The figure audit already holds every numeral; this holds the unit beside it, so the amount is one face.
     let amounts = 0

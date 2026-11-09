@@ -29,13 +29,16 @@ import {
 //   wallet records     areas/lens/agentBankApi.ts (AgentApproval, Passkey, AgentCard, Cardholder)
 //   passkeys, pushes   areas/lens/passkeys.ts (Lens keeps the public key; pushes via /sw.js)
 //   virtual cards      areas/lens/AgentCardPanel.tsx
-//   payouts            areas/marketplace/Marketplace.tsx (Stripe asks; Talyvor never sees bank details)
+//   payouts            areas/marketplace/Marketplace.tsx (Stripe asks; Talyvor never sees what you give Stripe)
+//   verification, payees, invoices, mandates, payout details, currency accounts (B56.3)
+//                      talyvor-lens internal/economy/verification.go, money_payees.go, money_invoices.go,
+//                      money_mandates.go, money_earnings_payouts.go, money_ledger.go
 //   single-use cards   talyvor-lens internal/economy/money_cards.go (B46.10: the card partner gets merchant and cap)
 //   waitlist, cookies  /auth/me's signup_open (lib/signupOpen.ts) and META_DATASET_ID (areas/marketing/pixel.ts), B51.1
 //   deletion           areas/lens/StoredAnswers.tsx, areas/track/WorkspaceSettings.tsx
 
-/** The day these words last changed (B51.1: the waitlist, cookies and what leaves). Change it with them. */
-const UPDATED = '2026-10-28'
+/** The day these words last changed (B56.3: the six wallet records it left out). Change it with them. */
+const UPDATED = '2026-11-08'
 
 export function Privacy() {
   // The ReturnLink's /auth/me read, so the waitlist section costs no second request.
@@ -173,6 +176,45 @@ export function Privacy() {
             merchant, cap and state, and the charge made on it. The card partner that issues them
             receives the merchant and the cap, not your name or address.
           </li>
+          <li>
+            <strong className="text-ink">Verification.</strong> When you verify yourself or your
+            company, our verification provider makes the check. We keep each check&rsquo;s level, the
+            provider that made it, its result and date and the provider&rsquo;s reference for it, with
+            the name it verified, the country and, for a company, its number. Your date of birth and
+            the names of a company&rsquo;s directors and owners go only to the provider. We keep
+            none of them.
+          </li>
+          <li>
+            <strong className="text-ink">Saved payees.</strong> Someone outside Talyvor you save to
+            be paid: their name, country and account details (a sort code and account number, an
+            IBAN and BIC, or a routing number) or a USDC address. We keep what their bank said when it
+            checked the name against the account, and when you confirmed the payee, called them or
+            changed their details.
+          </li>
+          <li>
+            <strong className="text-ink">Invoices.</strong> Each invoice you send: your
+            customer&rsquo;s name, email, address and VAT number, your own VAT number, its lines, due
+            date and memo, what has been paid on it and the reminders sent.
+          </li>
+          <li>
+            <strong className="text-ink">Mandates.</strong> A mandate lets one payee take money from
+            an agent&rsquo;s account within limits you set. We keep the payee&rsquo;s name, the
+            account, the most it may take each time and each month, what it has taken this month,
+            when it ends, and when and by whom it was revoked.
+          </li>
+          <li>
+            <strong className="text-ink">Payout details.</strong> The account Talyvor pays you to:
+            the holder&rsquo;s name and the account&rsquo;s details (an IBAN and BIC, or a USDC
+            address), the partner that checks the holder and whether it verified them. The
+            holder&rsquo;s country goes to that check and is not kept.
+          </li>
+          <li>
+            <strong className="text-ink">Currency accounts.</strong> Your company&rsquo;s and each
+            agent&rsquo;s accounts in pounds, euros and dollars, and every movement into and out of
+            them: its amount, currency and time, what moved it, its memo, who it came from or went
+            to, and our payments partner&rsquo;s reference for it. A card payment also keeps the
+            merchant&rsquo;s category and country.
+          </li>
         </ul>
       </Section>
 
@@ -187,7 +229,7 @@ export function Privacy() {
           Each use of a listing is recorded with its price, for the buyer&rsquo;s monthly bill and the
           seller&rsquo;s earnings. A report someone files about a listing is kept with its reason
           and details. If you connect a Stripe account to be paid, Stripe asks who you are and where
-          to send the money; Talyvor never sees your bank details.
+          to send the money; Talyvor never sees the bank details you give Stripe.
         </p>
       </Section>
 

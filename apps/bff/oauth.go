@@ -866,7 +866,7 @@ func writeConnectPage(w http.ResponseWriter, status int, p connectPage) {
 	data := struct {
 		connectPage
 		MarkDark, MarkLight template.HTML
-	}{p, template.HTML(markFlatDark), template.HTML(markFlatLight)} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
+	}{p, template.HTML(markDark), template.HTML(markLight)} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
 	if err := connectPageTmpl.Execute(w, data); err != nil {
 		log.Printf("bff: connect page render: %v", err)
 	}
@@ -889,9 +889,9 @@ var connectPageTmpl = template.Must(template.New("connect").Parse(`<!doctype htm
          background: var(--tv-canvas); color: var(--tv-ink); }
   main { box-sizing: border-box; width: calc(100% - 2rem); max-width: 28rem; padding: 2rem 1.75rem;
          background: var(--tv-surface); border: 1px solid var(--tv-line); border-radius: 10px; }
-  .mark-dark, .mark-light { width: 40px; height: 40px; margin: 0 0 1.5rem; }
+  .mark-dark, .mark-light { width: 56px; margin: 0 0 1.5rem; }
   .mark-light { display: none; }
-  .mark-dark svg, .mark-light svg { display: block; width: 40px; height: 40px; }
+  .mark-dark svg, .mark-light svg { display: block; width: 56px; height: auto; }
   h1 { font-size: 28px; line-height: 34px; font-weight: 500; letter-spacing: -0.01em; margin: 0; overflow-wrap: anywhere; }
   .rule { width: 32px; height: 2px; background: var(--tv-accent); margin: 1rem 0 1.25rem; }
   p { margin: 0 0 0.85rem; }

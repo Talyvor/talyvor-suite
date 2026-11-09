@@ -241,6 +241,9 @@ function requiredOfATextField(): string[] {
 const NOT_A_TEXT_FIELD: Record<string, string> = {
   'packages/ui/src/components/Input.tsx':
     'the component itself — it IS the contract, and holding the definition to its own derived requirements is circular',
+  'packages/ui/src/pocket/Field.tsx':
+    'B57.4 — Pocket\'s Input, its own contract (pocket.css .input): the box around the <input> carries the edge, the ring ' +
+    'and the disabled dimming, and there is no border for today\'s hover:border-rule-strong to darken',
   'apps/web/src/areas/chat/FilePicker.tsx':
     'an sr-only <input type="file"> the chat composer\'s Attach button opens; it is never seen or typed into, so no text-field affordance applies',
   'apps/web/src/areas/chat/ExportImport.tsx':

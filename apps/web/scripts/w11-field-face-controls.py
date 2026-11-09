@@ -288,6 +288,38 @@ def c9():
 
 
 # ── COMPANION: MUST STAY GREEN ───────────────────────────────────────────────────────────────
+# ── B57.3: THE SAME DEFECTS, PLANTED IN POCKET'S RULE. Run alone: `w11-field-face-controls.py P1 P2`.
+
+
+@control(
+    "P1",
+    "src/fieldFaceAudit.test.tsx (the Pocket cases)",
+    "the control edge never missing: on a Pocket page a field with no 1.5px edge passes.",
+)
+def p1():
+    orig = edit(AUDIT, [("  return !(el.getAttribute('class') ?? '').split(/\\s+/).includes('shadow-edge')", "  return false")], [1])
+    try:
+        code, out = vitest(["src/fieldFaceAudit.test.tsx"])
+        return code != 0, out
+    finally:
+        AUDIT.write_bytes(orig)
+
+
+@control(
+    "P2",
+    "src/fieldFaceAudit.test.tsx (the Pocket cases)",
+    "any face is Pocket's face for a numeric field: a value in IBM Plex Mono passes, the same defect "
+    "C2 plants in today's rule.",
+)
+def p2():
+    orig = edit(AUDIT, [("pocket ? onPocketFace(el, 'quantity') : onFigureFace(el)", "pocket ? true : onFigureFace(el)")], [1])
+    try:
+        code, out = vitest(["src/fieldFaceAudit.test.tsx"])
+        return code != 0, out
+    finally:
+        AUDIT.write_bytes(orig)
+
+
 def companion():
     """A control that BREAKS THE BUILD is not a control — a compile error reads as a caught
     mutation. Run before each control's own verdict is trusted."""
