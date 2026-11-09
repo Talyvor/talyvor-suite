@@ -1134,8 +1134,13 @@ export const agentBankApi = {
   devices: () => getJSON<{ devices: DeviceKey[] | null }>('/api/money/devices', { devices: 'list' }),
   passkeyChallenge: () => send<{ challenge: string; rp_id: string; credential_ids?: string[] | null }>('POST', '/api/agents/passkeys/challenge'),
   registerPasskey: (body: PasskeyRegistration) => send<Passkey>('POST', '/api/agents/passkeys', body),
-  approvalChallenge: (approvalID: string) =>
-    send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/approvals/${e(approvalID)}/challenge`),
+  /** B54.34 — approving with always_allow signs that allowance too, so the challenge is asked for with it (Lens B54.29). */
+  approvalChallenge: (approvalID: string, alwaysAllow?: PayeeAllowance) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>(
+      'POST',
+      `/api/agents/approvals/${e(approvalID)}/challenge`,
+      alwaysAllow ? { always_allow: alwaysAllow } : undefined,
+    ),
   pushPublicKey: () => getJSON<{ public_key: string }>('/api/agents/push/public-key', { public_key: 'string' }),
   subscribePush: (sub: PushSubscriptionBody) => send<{ endpoint: string }>('POST', '/api/agents/push/subscriptions', sub),
   // B22.10 — money between owners (Lens B22.1, B22.3, B22.4, B22.5).

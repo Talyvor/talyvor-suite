@@ -5,7 +5,7 @@
 // on every approve or deny is signed with it over a challenge Lens issues for that one approval.
 // Pushes arrive through /sw.js, subscribed with the key Lens serves.
 
-import { agentBankApi, type OutsidePayment, type OutsidePaymentRequest, type PasskeyAssertion, type PayeeDetails } from './agentBankApi'
+import { agentBankApi, type OutsidePayment, type OutsidePaymentRequest, type PasskeyAssertion, type PayeeAllowance, type PayeeDetails } from './agentBankApi'
 
 export function b64u(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
@@ -64,9 +64,9 @@ export async function registerThisDevice(name: string): Promise<void> {
   })
 }
 
-/** Signs one approval's challenge with a passkey of this workspace — Face ID asks here. */
-export async function signApproval(approvalID: string): Promise<PasskeyAssertion> {
-  return assertOver(await agentBankApi.approvalChallenge(approvalID))
+/** Signs one approval's challenge with a passkey of this workspace — Face ID asks here. With always allow, over that allowance too. */
+export async function signApproval(approvalID: string, alwaysAllow?: PayeeAllowance): Promise<PasskeyAssertion> {
+  return assertOver(await agentBankApi.approvalChallenge(approvalID, alwaysAllow))
 }
 
 /** B30.96 — signs a saved payee's challenge the same way: a close or no match is confirmed only so (Lens B30.16). */
