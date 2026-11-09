@@ -2809,6 +2809,80 @@ export function chatForecastAnswer(seed: number): Scenario {
 }
 
 /**
+ * B28.57 — Home says the day an agent runs out, in the agent's own time zone. The spender's rules put it in
+ * Pacific/Kiritimati (UTC+14), it is funded 5 LXC and pays 4.999 LXC away, so it runs out this month. The day Home shows
+ * is Lens's /forecast runs_out_on for it, and that is the day runs_out_at falls on in Kiritimati, recomputed here.
+ */
+export function agentRunsOutDate(seed: number): Scenario {
+  const [funded, paid, zone] = [5e6, 4_999_000, 'Pacific/Kiritimati']
+  return {
+    id: 'agent-runs-out-date',
+    owner: 'talyvor-suite',
+    items: ['B28.57', 'B28.330'],
+    agents: 2,
+    title: 'Home shows the day an agent runs out as Lens\'s /forecast runs_out_on, the date in the agent\'s own time zone (Pacific/Kiritimati)',
+    run: (ctx) =>
+      withBank(ctx, async (bank) => {
+        const { env, app } = ctx
+        const spender = await openAgent(ctx, bank, `Runs-out spender ${seed}`)
+        if (typeof spender === 'string') return fail(spender)
+        const payee = await openAgent(ctx, bank, `Runs-out payee ${seed}`)
+        if (typeof payee === 'string') return fail(payee)
+        const put = await env.lens.act<AgentRulesRead>(app.user, 'PUT', `/v1/workspaces/{ws}/agents/${spender.id}/rules`, { ...await env.lens.agentRules(app.user, spender.id), timezone: zone })
+        if (!put.ok) return fail(`putting ${spender.name} in ${zone} was refused: ${put.status} ${put.error}`)
+        const err = await bank.move(spender, funded, 'Fund')
+        if (err !== undefined) return fail(`funding ${spender.name} was refused: ${err}`)
+        const out = await bank.pay(spender, payee, paid, `run it down ${seed}`)
+        if (!/^Paid /.test(out)) return fail(`${spender.name} paying ${lxcText(paid)} LXC was not paid: "${out}"`)
+        // The ledger, not the screen: one pay line for what it paid, and what is left.
+        const lines = await env.lens.agentLines(app.user, spender.id)
+        const pays = lines.filter((l) => l.kind === 'pay')
+        if (pays.length !== 1 || pays[0].amount_ulxc !== -paid || lines[0]?.balance_after_ulxc !== funded - paid) {
+          return fail(`after paying ${paid} µLXC of ${funded}, ${spender.name}'s statement has pay line(s) ${JSON.stringify(pays)} and ends at ${lines[0]?.balance_after_ulxc}`)
+        }
+
+        const page = await app.tab('/')
+        try {
+          await page.setViewportSize({ width: 1440, height: 900 })
+          const row = page.getByTestId(`runs-out-${spender.id}`)
+          try {
+            await row.waitFor({ timeout: ACTION_TIMEOUT_MS })
+          } catch {
+            return fail(`Home shows no run-out day for ${spender.name}`)
+          }
+          const said = (await row.innerText()).trim()
+          const shown = await row.locator('time').getAttribute('datetime', { timeout: 2_000 }).catch(() => null)
+          const f = await env.lens.agentForecast(app.user)
+          const now = (f.agents ?? []).find((a) => a.agent_id === spender.id)
+          ctx.evidence.push({ note: `Home: "${said}" (${shown ?? 'no date'}); Lens's /forecast for ${spender.name}: ${JSON.stringify(now)}` })
+          if (now === undefined) return fail(`Lens's /forecast does not list ${spender.name}`)
+          if (typeof now.runs_out_at !== 'string' || typeof now.runs_out_on !== 'string') {
+            return fail(`${spender.name} holds ${lxcText(funded - paid)} LXC after paying ${lxcText(paid)} LXC, yet Lens's /forecast gives runs_out_at ${now.runs_out_at} and runs_out_on ${now.runs_out_on}`)
+          }
+          if (now.timezone !== zone) return fail(`Lens's /forecast puts ${spender.name} in ${now.timezone ?? 'no zone'}, not ${zone}`)
+          // The oracle: the day runs_out_at's instant falls on in Kiritimati, and the day it falls on in UTC for the note.
+          const dayIn = (tz: string) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(now.runs_out_at as string))
+          if (now.runs_out_on !== dayIn(zone)) return fail(`Lens's /forecast says ${spender.name} runs out on ${now.runs_out_on}, but ${now.runs_out_at} is ${dayIn(zone)} in ${zone}`)
+          if (shown !== now.runs_out_on) return fail(`Home states the day ${spender.name} runs out as ${shown ?? 'nothing'}; Lens's /forecast says ${now.runs_out_on}`)
+          if (!said.includes(`(${zone})`)) return fail(`Home's run-out line for ${spender.name} does not name its zone: "${said}"`)
+
+          await mkdir(env.outDir, { recursive: true })
+          for (const [width, height] of [[1440, 900], [390, 844]] as const) {
+            await page.setViewportSize({ width, height })
+            await row.scrollIntoViewIfNeeded()
+            const shot = join(env.outDir, `agent-runs-out-date-${width}px-user${app.user.index}.png`)
+            await page.screenshot({ path: shot })
+            ctx.evidence.push({ note: `the run-out day on Home at ${width}px: ${shot}` })
+          }
+          return { pass: true, detail: `Home: "${said}" — ${shown} is Lens's runs_out_on for ${spender.name}, the day ${now.runs_out_at} falls on in ${zone} (UTC: ${dayIn('UTC')}), after one ${paid} µLXC pay line of ${funded}` }
+        } finally {
+          await page.close()
+        }
+      }),
+  }
+}
+
+/**
  * B41.5 — "How much can <agent> spend?" asked in Chat is answered from Lens's safe-to-spend figure (B41.105). The agent
  * holds 100 LXC, has a 20 LXC monthly transfer scheduled and a 30 LXC payment waiting for a person: Lens says 50 LXC is
  * safe to spend (whether or not the transfer's first run has paid yet, it is 50), and Chat shows that figure without

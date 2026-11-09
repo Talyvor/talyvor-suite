@@ -547,6 +547,10 @@ export interface SpendForecast {
          * time zone, so its date is the agent's date; null when it does not run out at that pace.
          */
         runs_out_at?: string | null
+        /** B28.330 — runs_out_at's date in the agent's own time zone, YYYY-MM-DD; null when it does not run out. */
+        runs_out_on?: string | null
+        /** B28.330 — the agent's IANA time zone, "UTC" when none is set. */
+        timezone?: string
       }[]
     | null
 }

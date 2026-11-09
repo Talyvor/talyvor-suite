@@ -7,6 +7,7 @@ import { Region, RegionScreen } from '../../components/Region'
 import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
 import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, PauseEveryAgent, rulesKey, useKeys } from './AgentBank'
 import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText } from './agentBankApi'
+import { RunsOut } from './RunsOut'
 import { Lxc } from './money'
 import { resumeAgent } from './passkeys'
 import { AgentFace } from './AgentFace'
@@ -332,7 +333,8 @@ function BudgetRow({
   rules: UseQueryResult<AgentRules>
 }) {
   // Lens's forecast lists every agent in the workspace; one created since it was read has spent nothing.
-  const spent = forecast.data ? ((forecast.data.agents ?? []).find((f) => f.agent_id === agent.id)?.spent_ulxc ?? 0) : null
+  const mine = (forecast.data?.agents ?? []).find((f) => f.agent_id === agent.id)
+  const spent = forecast.data ? (mine?.spent_ulxc ?? 0) : null
   const limit = rules.data ? rules.data.monthly_limit_ulxc : null
   const pct = spent !== null && limit !== null && limit > 0 ? Math.min(100, Math.round((spent / limit) * 100)) : null
   const spend = forecast.isError ? (
@@ -366,6 +368,12 @@ function BudgetRow({
         <span className="whitespace-normal">
           {spend}
           {budget ? <> · {budget}</> : null} · {lxc(agent.balance_ulxc)} left in its wallet
+          {mine?.runs_out_on !== undefined ? (
+            <>
+              {' '}
+              · <RunsOut forecast={mine} />
+            </>
+          ) : null}
         </span>
       }
     >

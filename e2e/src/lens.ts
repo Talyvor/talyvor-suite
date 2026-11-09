@@ -410,7 +410,7 @@ export interface SpendForecastRead {
   at: string
   month_start: string
   month_end: string
-  agents: { agent_id: string; name: string; spent_ulxc: number; forecast_ulxc: number; balance_ulxc?: number; runs_out_at?: string | null }[] | null
+  agents: { agent_id: string; name: string; spent_ulxc: number; forecast_ulxc: number; balance_ulxc?: number; runs_out_at?: string | null; runs_out_on?: string | null; timezone?: string }[] | null
 }
 
 /** Lens economy.AgentApproval. A payment names who it pays and why (Lens B23.5). */
