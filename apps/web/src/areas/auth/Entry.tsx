@@ -1,9 +1,11 @@
-import { Button, Card, Logo, ThemeToggle, inlineLink } from '@talyvor/ui'
+import { Logo, ThemeToggle, cn } from '@talyvor/ui'
+import { Button, pocketFocusRing } from '@talyvor/ui/pocket'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Waitlist } from '../../components/Waitlist'
 import { useSignupProbe, type SignupState } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
 import { SharedAnswersFact } from '../../components/StoredAnswersFacts'
+import { usePricing } from '../marketing/pricingApi'
 
 // Entry.tsx — the two front doors: /signup for a stranger, /signin for someone coming back.
 //
@@ -34,109 +36,129 @@ import { SharedAnswersFact } from '../../components/StoredAnswersFacts'
 //   is true of every issuer: an account you already have, and no new password.
 //
 //   Anything about who may enter — unless the server said. See lib/signupOpen.ts.
+//
+// B57.49 — BOTH PAGES ARE POCKET'S AUTH CARD (reference w-signup, w-signin): a white card on the cloud page with the
+// logo's streams flowing into it from the left. The streams are the kit's own brand art, decorative.
 
 /** The BFF's OIDC entry point. Both pages end here; nothing else in this file is a destination. */
 function loginHref(returnTo?: string): string {
   return returnTo ? `/auth/login?return_to=${encodeURIComponent(returnTo)}` : '/auth/login'
 }
 
-/** The lake photograph — brand-v4 photos/lake.jpg (2400w) and lake-1200.jpg. It fills the right
- *  half from 840px, so it is drawn at half the viewport. */
-const LAKE_SRCSET = '/brand/photos/lake-1200.jpg 1200w, /brand/photos/lake.jpg 2400w'
+/** A link inside the card's words: pocket.css's bold ink link. */
+const cardLink = cn('font-semibold text-ink', pocketFocusRing)
 
-/** The teal rule: 32×2 accent under a heading, one per card. */
-function TealRule() {
-  return <span className="block h-0.5 w-8 bg-accent" aria-hidden="true" />
+/** Privacy and Terms, small and underlined, at the foot of each card. */
+const footLink = cn('underline underline-offset-2 transition-colors duration-200 hover:text-ink', pocketFocusRing)
+
+/** pocket.css .authart: the kit's streams (brand/logo/svg/talyvor-streams-on-*.svg), 440 wide, left of centre, the
+ *  version for the nearest theme shown as the logo's are (theme.css --logo-on-light, --logo-on-dark). From 840px:
+ *  on a phone the card fills the width and there is no left for the streams to flow in from. */
+function Streams() {
+  return (
+    <div className="pointer-events-none absolute left-0 top-1/2 hidden select-none wide:block" style={{ transform: 'translateY(-47.46%)' }} aria-hidden="true">
+      {(['light', 'dark'] as const).map((v) => (
+        <img
+          key={v}
+          src={`/brand/logo/talyvor-streams-on-${v}.svg`}
+          alt=""
+          width={440}
+          height={338}
+          decoding="async"
+          data-brand="streams"
+          style={{ display: `var(--logo-on-${v})`, width: 440, height: 'auto' }}
+        />
+      ))}
+    </div>
+  )
 }
 
-/** The shell both entry pages share — the brand's split: the card on Obsidian at the left, the lake
- *  photograph behind an Obsidian gradient at the right. On a phone the photo steps out and the logo
- *  lockup with its tagline sits above the card instead of the mark in the header. Public pages, so
- *  no Shell/sidebar — there is no workspace to navigate yet. */
+/** The card every entry state is drawn in: pocket.css .authcard, white with its large shadow on the cloud page. */
+export function AuthCard({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn('relative z-10 grid w-full max-w-md justify-items-start gap-3.5 rounded-sheet bg-page p-8 shadow-pocket-lg', className)}>
+      {children}
+    </div>
+  )
+}
+
+/** pocket.css .h-page in the card: the page's one h1, in the display face, under the logo. */
+function CardHeading({ children }: { children: React.ReactNode }) {
+  return <h1 className="mt-4 font-display text-title font-bold text-ink">{children}</h1>
+}
+
+/** The card's lead line under its heading. */
+function Lead({ children }: { children: React.ReactNode }) {
+  return <p className="text-reading text-ink-2">{children}</p>
+}
+
+/** The card's logo, which goes to the website. */
+function CardLogo() {
+  return (
+    <a href="/marketing" aria-label="Talyvor website" className={cn('rounded-control', pocketFocusRing)}>
+      <Logo width={144} />
+    </a>
+  )
+}
+
+/** The shell both entry pages share — pocket.css .authp: the card centred on the cloud page, the streams behind it.
+ *  Public pages, so no Shell/sidebar — there is no workspace to navigate yet. */
 function EntryFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-canvas text-ink">
-      {/* The pieces the preset has no token for: the lockup per theme and the photo's scrim. The
-          figure carries data-theme="dark", so its scrim is Obsidian in both themes — text and
-          gradient sit on the photo's dark side. */}
-      <style>{`
-        .tal-entry-photo { display: none }
-        @media (min-width: 840px) {
-          .tal-entry-photo { display: block; position: absolute; top: 0; bottom: 0; left: 50%; right: 0; margin: 0; background: var(--canvas) }
-          .tal-entry-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 72% 50% }
-          .tal-entry-scrim {
-            position: absolute; inset: 0;
-            background: linear-gradient(90deg, var(--canvas) 0%, color-mix(in srgb, var(--canvas) 72%, transparent) 28%,
-              color-mix(in srgb, var(--canvas) 20%, transparent) 100%);
-          }
-        }
-      `}</style>
-      {/* Decorative, so `loading="lazy"`: below 840px the figure is display:none and a lazy image
-          there is never fetched, so a phone does not pay for a photo it does not show. */}
-      <figure data-theme="dark" className="tal-entry-photo" aria-hidden="true">
-        <img
-          src="/brand/photos/lake.jpg"
-          srcSet={LAKE_SRCSET}
-          sizes="50vw"
-          width={2400}
-          height={1357}
-          loading="lazy"
-          alt=""
-        />
-        <div className="tal-entry-scrim" />
-      </figure>
-      <header className="relative z-10 flex items-center justify-between px-gutter py-4">
-        <div className="hidden items-center gap-2.5 wide:flex">
-          <div className="min-w-0">
-            <Logo width={144} />
-            <div className="mt-1 text-eyebrow uppercase leading-tight text-label">Suite</div>
-          </div>
-        </div>
-        <ThemeToggle className="ml-auto" />
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-cloud text-ink">
+      <Streams />
+      <header className="relative z-10 flex justify-end px-gutter py-4">
+        <ThemeToggle />
       </header>
-      {/* `main`, NOT `div` — the element and its classes are unchanged; only the tag moved. A DOM
-          census over every address found 93% of /signin's text and 97% of /signup's outside any
-          landmark region, because the only region on these pages was the header above. Landmark
-          navigation is one of the two ways a screen-reader user moves through a page, and on the
-          two front doors it reached the wordmark and nothing else. The Shell does this for all
-          twelve gated addresses and Landing does it for /marketing; these two did not.
-          Zero-pixel: the built stylesheet contains NO rule naming `main`, `header`, `footer`,
-          `section`, `article` or `aside` — every box here is drawn by the utility classes, which
-          are untouched. LandmarkCoverage.test.tsx measures the proportion at every address. */}
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-start px-gutter pb-16 pt-4 wide:w-1/2 wide:justify-center wide:pt-0">
-        {/* B57.6 — the kit's logo, its small drawing at 150 px. Phones only: from 840px the header carries it. */}
-        <div className="mb-8 wide:hidden">
-          <Logo width={150} />
-        </div>
-        <Card className="w-full max-w-md">{children}</Card>
+      {/* `main`, NOT `div`: the page's words are in a landmark region (LandmarkCoverage.test.tsx measures it). */}
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-gutter pb-16 wide:px-10">
+        <AuthCard>{children}</AuthCard>
         <CompanyLine className="mt-6 w-full max-w-md" />
       </main>
     </div>
   )
 }
 
-/** What you get on the other side. Three lines, each one a thing that exists in the product
- *  today — not a roadmap. The first is the one that matters: it is the promise the whole
- *  per-tenant provisioning chain was built to keep. */
+/** The card's last line on both pages. Linked on every entry surface: someone deciding whether to create an account
+ *  must be able to read what the service does with their data BEFORE they do. Both routes are public for that reason. */
+function PrivacyTerms() {
+  return (
+    <p className="text-caption font-normal text-ink-3">
+      <a href="/privacy" className={footLink}>Privacy</a>
+      {' · '}
+      <a href="/terms" className={footLink}>Terms</a>
+    </p>
+  )
+}
+
+/** The first of the three lines is the one that matters: it is the promise the whole per-tenant provisioning chain was
+ *  built to keep. The second is true of every new workspace: Lens makes its first agent, with a wallet and rules, at
+ *  sign-up. */
 const WHAT_YOU_GET: string[] = [
   'Your own workspace: a balance, keys and a ledger nobody else can see.',
-  'An API key and a base URL to point your existing tools at.',
-  'A record of what every model call cost, per request.',
+  'Your first agent, with a wallet and rules, made for you.',
 ]
+
+/** The third line, printed only while /api/pricing's labels (B56.9) say Sandbox for every money capability: the
+ *  moment Lens takes any one live, or says nothing, the line is left out rather than left wrong. */
+export const SANDBOX_LINE = 'Money features in Sandbox, where no real money moves.'
+
+function useAllSandbox(): boolean {
+  const pricing = usePricing()
+  const labels = pricing.status === 'ok' ? pricing.pricing.labels : undefined
+  const states = Object.values(labels ?? {})
+  return states.length > 0 && states.every((l) => l === 'sandbox')
+}
 
 /** The one line that says whether a stranger may actually start, DERIVED from the gate.
  *  `unknown` renders nothing: a promise we cannot verify is not printed. */
 function AccessLine({ state }: { state: SignupState }) {
   if (state === 'open') {
-    return (
-      <p className="text-caption text-faint">
-        Open to anyone, no invitation needed.
-      </p>
-    )
+    return <p className="text-body text-ink-3">Open to anyone, no invitation needed.</p>
   }
   if (state === 'closed') {
     return (
-      <p className="text-caption text-faint">
+      <p className="text-body text-ink-3">
         We’re letting the first companies in one at a time. If you’ve already been added, continue
         above. Otherwise join the waitlist below.
       </p>
@@ -149,16 +171,14 @@ function AccessLine({ state }: { state: SignupState }) {
  *  asked to "create your workspace" is being told their account does not exist. */
 function AlreadyIn() {
   return (
-    <div className="flex flex-col gap-4 p-gutter">
-      <h1 className="text-display-3 text-ink">You’re signed in</h1>
-      <TealRule />
-      <p className="text-body text-muted">
-        This browser already has a Talyvor session, so there is nothing to sign up for.
-      </p>
-      <Button asChild variant="primary" className="h-10 px-5">
+    <>
+      <CardLogo />
+      <CardHeading>You’re signed in</CardHeading>
+      <Lead>This browser already has a Talyvor session, so there is nothing to sign up for.</Lead>
+      <Button asChild size="lg" className="w-full">
         <a href="/">Open the app</a>
       </Button>
-    </div>
+    </>
   )
 }
 
@@ -166,6 +186,7 @@ function AlreadyIn() {
 
 export function SignUp() {
   const { signup, authenticated } = useSignupProbe()
+  const allSandbox = useAllSandbox()
   // Both branches name themselves — `AlreadyIn` is a different screen at the same address, and
   // titling it "Create a workspace" would be the tab naming a screen the reader is not on. The
   // strings are these components' own `<h1>` and the label the product puts on links here.
@@ -179,65 +200,41 @@ export function SignUp() {
   }
   return (
     <EntryFrame>
-      <div className="flex flex-col gap-5 p-gutter">
-        <div className="flex flex-col gap-3">
-          <h1 className="text-display-3 text-ink">Create your Talyvor workspace</h1>
-          <TealRule />
-          {/* WHAT IT IS, in one line. A stranger decides here whether to keep reading. */}
-          <p className="text-body text-muted">
-            Talyvor is the financial ecosystem for the AI agent economy. Today each agent gets a wallet: a budget,
-            spending rules, approvals and a live statement, enforced before the model call or the
-            payment.
-          </p>
-        </div>
-
-        {/* WHAT HAPPENS WHEN YOU CONTINUE. A redirect to a third party is the moment a stranger
-            is most likely to abandon, so it is described before it happens rather than
-            explained afterwards. */}
-        <div className="flex flex-col gap-3 border-t border-rule pt-4">
-          <p className="text-body text-muted">
-            You’ll be sent to sign in with an account you already have, then come straight back
-            here. There is no form and no new password to create.
-          </p>
-        </div>
-
-        {/* WHAT YOU GET. */}
-        <ul className="flex flex-col gap-2 border-t border-rule pt-4">
-          {WHAT_YOU_GET.map((line) => (
-            <li key={line} className="flex gap-2.5 text-body text-muted">
-              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-pill bg-accent" aria-hidden="true" />
-              <span>{line}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="flex flex-col gap-3 border-t border-rule pt-4">
-          <Button asChild variant="primary" className="h-10 px-5">
-            <a href={loginHref('/')}>Continue</a>
-          </Button>
-          <AccessLine state={signup} />
-          {/* B44.1 — while sign-up is closed, a stranger can still leave an email. */}
-          {signup === 'closed' && <Waitlist />}
-          {/* B27.22 — sharing is on from the first request, so a stranger is told before they
-              continue, with the way to switch it off. */}
-          <SharedAnswersFact className="text-caption text-faint" />
-          {/* ⚠ THIS WAS MISSING, ON THE ONE SURFACE THAT NEEDS IT MOST. The sign-in card's
-              comment says the policies are "linked on every entry surface", and this is an
-              entry surface — the one where a stranger is deciding whether to create an
-              account at all. It had the claim without the link. */}
-          <p className="text-caption text-faint">
-            <a href="/privacy" className={inlineLink}>Privacy</a>
-            {' · '}
-            <a href="/terms" className={inlineLink}>Terms</a>
-          </p>
-          <p className="text-caption text-faint">
-            Already have a workspace?{' '}
-            <a href="/signin" className={inlineLink}>
-              Sign in
-            </a>
-          </p>
-        </div>
-      </div>
+      <CardLogo />
+      <CardHeading>Create your Talyvor workspace</CardHeading>
+      {/* WHAT IT IS, in one line. A stranger decides here whether to keep reading. */}
+      <Lead>
+        Talyvor is the financial ecosystem for the AI agent economy. Today each agent gets a wallet: a budget, spending
+        rules, approvals and a live statement, enforced before the model call or the payment.
+      </Lead>
+      {/* WHAT HAPPENS WHEN YOU CONTINUE. A redirect to a third party is the moment a stranger is most likely to
+          abandon, so it is described before it happens rather than explained afterwards. */}
+      <Lead>
+        You’ll be sent to sign in with an account you already have, then come straight back here. There is no form
+        and no new password to create.
+      </Lead>
+      {/* WHAT YOU GET. */}
+      <ul className="m-0 grid list-disc gap-1.5 pl-5 text-body text-ink-2">
+        {[...WHAT_YOU_GET, ...(allSandbox ? [SANDBOX_LINE] : [])].map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      <Button asChild size="lg" className="w-full">
+        <a href={loginHref('/')}>Continue</a>
+      </Button>
+      <AccessLine state={signup} />
+      {/* B44.1 — while sign-up is closed, a stranger can still leave an email. */}
+      {signup === 'closed' && <Waitlist pocket className="w-full" />}
+      {/* B27.22 — sharing is on from the first request, so a stranger is told before they
+          continue, with the way to switch it off. */}
+      <SharedAnswersFact className="text-body text-ink-3" />
+      <p className="text-body text-ink-2">
+        Already have a workspace?{' '}
+        <a href="/signin" className={cardLink}>
+          Sign in
+        </a>
+      </p>
+      <PrivacyTerms />
     </EntryFrame>
   )
 }
@@ -268,34 +265,28 @@ export function SignIn({ returnTo }: { returnTo?: string } = {}) {
   )
 }
 
-/** The card body on its own, so AuthGate can render the identical words without a second probe
- *  (it has already asked /auth/me — that is how it knows to show this at all). */
+/** The card's words on their own, so AuthGate can render the identical words in its own AuthCard without a second
+ *  probe (it has already asked /auth/me — that is how it knows to show this at all). B56.19's email-first step is
+ *  added here when it lands. */
 export function SignInCard({ returnTo }: { returnTo?: string }) {
   return (
-    <div className="flex flex-col gap-4 p-gutter">
-      <h1 className="text-display-3 text-ink">Sign in to Talyvor</h1>
-      <TealRule />
-      {/* Linked on every entry surface, not only a footer: someone deciding whether to create an
-          account must be able to read what the service does with their data BEFORE they do. Both
-          routes are public for that reason. */}
-      <p className="text-caption text-faint">
-        <a href="/privacy" className={inlineLink}>Privacy</a>
-        {' · '}
-        <a href="/terms" className={inlineLink}>Terms</a>
-      </p>
-      <p className="text-body text-muted">
-        Use the same account you signed up with. You’ll be taken there to confirm it’s you, and
-        returned here. There is no password for Talyvor itself.
-      </p>
-      <Button asChild variant="primary" className="h-10 px-5">
+    <>
+      <CardLogo />
+      <CardHeading>Sign in to Talyvor</CardHeading>
+      <Lead>
+        Use the same account you signed up with. You’ll be taken there to confirm it’s you, and returned here. There is
+        no password for Talyvor itself.
+      </Lead>
+      <Button asChild size="lg" className="w-full">
         <a href={loginHref(returnTo)}>Sign in</a>
       </Button>
-      <p className="text-caption text-faint">
+      <p className="text-body text-ink-2">
         New to Talyvor?{' '}
-        <a href="/signup" className={inlineLink}>
+        <a href="/signup" className={cardLink}>
           Create a workspace
         </a>
       </p>
-    </div>
+      <PrivacyTerms />
+    </>
   )
 }

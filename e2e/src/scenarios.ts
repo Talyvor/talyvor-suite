@@ -1573,19 +1573,19 @@ export function marketingBoard(): Scenario {
   }
 }
 
-/** B29.6 — /signin and /signup in the brand, as a signed-out stranger sees them: at 1440 the lake photo
- *  fills the right half beside the card; at 390 the photo is not shown (nor fetched), the logo without
- *  the tagline (B32.1) sits above the card, and nothing scrolls sideways. One teal action on each page. */
+/** B57.49 — /signin and /signup are Pocket's auth card, as a signed-out stranger sees them: a white card on the cloud
+ *  page with the kit's logo in it, above the heading; at 1440 the logo's streams flow into the card from the left; at
+ *  390 the streams are not shown and nothing scrolls sideways. One ink action on each page, and it goes to /auth/login. */
 export function signinBoard(): Scenario {
   return {
     id: 'signin-board',
     owner: 'talyvor-suite',
-    title: '/signin and /signup show the brand split at 1440 and the logo without the tagline at 390, signed out',
+    title: '/signin and /signup are Pocket’s auth card, the streams flowing into it at 1440 and the card alone at 390, signed out',
     run: async (ctx) => {
       const browser = ctx.app.context.browser()
       if (browser === null) throw new CannotTest('no browser to open a signed-out context in')
       const origin = new URL(ctx.app.page.url()).origin
-      const context = await browser.newContext()
+      const context = await browser.newContext({ colorScheme: 'light' })
       const wrong: string[] = []
       try {
         for (const [path, action] of [['/signin', 'Sign in'], ['/signup', 'Continue']] as const) {
@@ -1594,51 +1594,47 @@ export function signinBoard(): Scenario {
           await page.locator('h1').waitFor({ state: 'visible' })
           for (const [width, height] of [[1440, 900], [390, 844]] as const) {
             await page.setViewportSize({ width, height })
-            // A page without the photo is a FAIL with its evidence, not a timeout that ERRORs.
-            if (width === 1440) await page.locator('figure img').waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined)
             const got = await page.evaluate(async (label) => {
-              const photo = document.querySelector<HTMLImageElement>('figure img')
-              const shown = photo !== null && getComputedStyle(photo.parentElement!).display !== 'none'
-              if (shown && !photo.complete) await new Promise((r) => photo.addEventListener('load', r, { once: true }))
-              const logo = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
-                .find((i) => getComputedStyle(i).display !== 'none' && getComputedStyle(i.parentElement!).display !== 'none')
-              if (logo !== undefined && !logo.complete) await new Promise((r) => logo.addEventListener('load', r, { once: true }))
-              const wordmark = document.querySelector('header svg[data-brand="wordmark"]')
-              const p = shown ? photo.getBoundingClientRect() : null
-              const h1 = document.querySelector('h1')!.getBoundingClientRect()
+              const loaded = async (img: HTMLImageElement | undefined) => {
+                if (img !== undefined && !img.complete) await new Promise((r) => img.addEventListener('load', r, { once: true }))
+              }
+              const visible = (el: Element) => (el as HTMLElement).checkVisibility()
+              const streams = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="streams"]')).find(visible)
+              const logo = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]')).find(visible)
+              await loaded(streams)
+              await loaded(logo)
+              const h1 = document.querySelector('h1')!
+              const card = h1.parentElement!
+              const s = streams?.getBoundingClientRect()
+              const c = card.getBoundingClientRect()
               const primary = Array.from(document.querySelectorAll<HTMLAnchorElement>('main a')).filter((a) => a.textContent?.trim() === label)
-              const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
-              const probe = document.createElement('i')
-              probe.style.color = accent
-              document.body.append(probe)
-              const accentRGB = getComputedStyle(probe).color
-              probe.remove()
+              const ink = Array.from(document.querySelectorAll('a, button')).filter((el) => getComputedStyle(el).backgroundColor === 'rgb(17, 18, 22)')
               return {
-                photo: shown && p !== null ? { left: p.left, right: p.right, loaded: photo.naturalWidth > 0, src: photo.currentSrc } : null,
+                streams: streams === undefined || s === undefined ? null : { left: s.left, right: s.right, loaded: streams.naturalWidth > 0, src: new URL(streams.src).pathname },
+                card: { bg: getComputedStyle(card).backgroundColor, page: getComputedStyle(document.querySelector('main')!.parentElement!).backgroundColor, left: c.left },
                 logo: logo === undefined ? '' : `${new URL(logo.src).pathname}${logo.naturalWidth > 0 ? '' : ' (not loaded)'}`,
-                logoAboveH1: logo !== undefined && logo.getBoundingClientRect().bottom <= h1.top,
-                wordmark: wordmark !== null && getComputedStyle(wordmark.parentElement!.parentElement!).display !== 'none',
-                teal: primary.length === 1 && getComputedStyle(primary[0]).backgroundColor === accentRGB,
-                tealCount: Array.from(document.querySelectorAll('a, button')).filter((el) => getComputedStyle(el).backgroundColor === accentRGB).length,
+                logoInCardAboveH1: logo !== undefined && card.contains(logo) && logo.getBoundingClientRect().bottom <= h1.getBoundingClientRect().top,
+                primary: primary.length === 1 ? primary[0].getAttribute('href') ?? '' : null,
+                inkCount: ink.length,
+                primaryIsInk: primary.length === 1 && ink.includes(primary[0]),
                 scroll: document.documentElement.scrollWidth,
                 client: document.documentElement.clientWidth,
               }
             }, action)
-            ctx.evidence.push({ note: `${path} ${width}: photo ${JSON.stringify(got.photo)}; logo ${got.logo || 'none'}; wordmark ${got.wordmark}; teal ${got.tealCount}; scroll ${got.scroll}/${got.client}` })
+            ctx.evidence.push({ note: `${path} ${width}: streams ${JSON.stringify(got.streams)}; card ${JSON.stringify(got.card)}; logo ${got.logo || 'none'}; ink ${got.inkCount}; "${action}" → ${got.primary}; scroll ${got.scroll}/${got.client}` })
             const at = `${path} ${width}px`
-            if (!got.teal || got.tealCount !== 1) wrong.push(`${at}: "${action}" is not the one teal action (${got.tealCount} teal)`)
+            if (got.card.bg !== 'rgb(255, 255, 255)') wrong.push(`${at}: the card is not white (${got.card.bg})`)
+            if (got.card.page !== 'rgb(243, 244, 246)') wrong.push(`${at}: the page is not Pocket's cloud (${got.card.page})`)
+            if (!/^\/brand\/logo\/talyvor-logo-small-on-light\.svg$/.test(got.logo)) wrong.push(`${at}: logo "${got.logo}"`)
+            else if (!got.logoInCardAboveH1) wrong.push(`${at}: the logo is not in the card above the heading`)
+            if (got.primary === null || !got.primary.startsWith('/auth/login')) wrong.push(`${at}: "${action}" is not one link to /auth/login (${got.primary})`)
+            if (!got.primaryIsInk || got.inkCount !== 1) wrong.push(`${at}: "${action}" is not the one ink action (${got.inkCount} ink)`)
             if (got.scroll > got.client) wrong.push(`${at}: scrolls sideways (${got.scroll} > ${got.client})`)
             if (width === 1440) {
-              if (got.photo === null || !got.photo.loaded) wrong.push(`${at}: the lake photo is not shown`)
-              else if (!/\/brand\/photos\/lake(-1200)?\.jpg$/.test(new URL(got.photo.src).pathname)) wrong.push(`${at}: photo ${got.photo.src}`)
-              else if (got.photo.left < width / 2 - 1 || got.photo.right < width - 1) wrong.push(`${at}: the photo is not the right half (${got.photo.left}–${got.photo.right})`)
-              if (!got.wordmark) wrong.push(`${at}: no mark and wordmark in the header`)
-              if (got.logo !== '') wrong.push(`${at}: the phone lockup shows on a wide screen`)
-            } else {
-              if (got.photo !== null) wrong.push(`${at}: the photo shows on a phone`)
-              if (!/^\/brand\/svg\/talyvor-logo-(dark|light)-notag\.svg$/.test(got.logo)) wrong.push(`${at}: lockup "${got.logo}"`)
-              else if (!got.logoAboveH1) wrong.push(`${at}: the lockup is not above the card`)
-            }
+              if (got.streams === null || !got.streams.loaded) wrong.push(`${at}: the streams are not shown`)
+              else if (got.streams.src !== '/brand/logo/talyvor-streams-on-light.svg') wrong.push(`${at}: streams ${got.streams.src}`)
+              else if (got.streams.left > 1 || got.streams.right > got.card.left + 40) wrong.push(`${at}: the streams do not flow into the card from the left (${got.streams.left}–${got.streams.right}, card at ${got.card.left})`)
+            } else if (got.streams !== null) wrong.push(`${at}: the streams show on a phone`)
           }
           await page.close()
         }
@@ -1646,7 +1642,7 @@ export function signinBoard(): Scenario {
         await context.close()
       }
       return wrong.length === 0
-        ? { pass: true, detail: 'signed out: the lake photo on the right half at 1440, the logo without the tagline above the card at 390, one teal action, no sideways scroll, on /signin and /signup' }
+        ? { pass: true, detail: 'signed out: Pocket’s white auth card on the cloud page with the logo above the heading, the streams flowing into it at 1440 and hidden at 390, one ink action to /auth/login, no sideways scroll, on /signin and /signup' }
         : { pass: false, detail: wrong.join('; ') }
     },
   }

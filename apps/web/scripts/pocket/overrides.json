@@ -1,1 +1,5 @@
-[]
+[
+  { "screen": "w-signin", "prototype": "Email", "words": "Use the same account you signed up with", "item": "B56.19: the email-first step is not built yet, so sign-in keeps its one step" },
+  { "screen": "w-signin", "prototype": "you@company.com", "words": "Use the same account you signed up with", "item": "B56.19: the email-first step is not built yet, so sign-in keeps its one step" },
+  { "screen": "w-signin", "prototype": "Continue", "words": "Sign in", "item": "B56.19: the email-first step is not built yet, so sign-in keeps its one step" }
+]
