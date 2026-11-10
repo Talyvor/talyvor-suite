@@ -83,6 +83,9 @@
 //   request-id  — an answer carries no X-Talyvor-Request-ID, so the report cannot say which request served it (B28.458)
 //   reconciliation-missing — yesterday's pounds run has a payment the partner's statement does not show, and the £7.00
 //                 shortfall it leaves in the safeguarding view (B30.123)
+//   label-built — /v1/public/plan-gates reports sso built while building.json still labels it Building (B56.13)
+//   label-charged — /v1/public/fees reports fx_margin_bps charged while building.json still labels it Building (B56.13)
+//   label-live  — /v1/public/labels labels fx live while /status.json's fx rail is in test (B56.13)
 //
 // B17.6 adds the Agent Bank and the marketplace (stub-bank.ts): agents with keys of their own, whose
 // requests through the proxy are judged by their rules and spent from their own balance.
@@ -1194,6 +1197,10 @@ function reconciliationRuns(): unknown[] {
   })
 }
 
+/** talyvor-lens B56.7 — the money capabilities /v1/public/labels labels (economy capabilityRails, those that move money). */
+const PUBLIC_LABELLED = ['spend_on_talyvor', 'buy_marketplace_listings', 'rent_and_subscribe_listings', 'move_between_own_agents', 'pay_another_owner',
+  'escrow', 'cash_out', 'agent_card', 'currency_accounts', 'account_details', 'payments_in', 'payments_out', 'fx', 'stablecoins', 'merchant_acceptance']
+
 // talyvor-lens's /status.json (B37.3's documented keys): Lens's own components up, the rails answering their probes (B37.2).
 function statusJSON(): unknown {
   const at = new Date().toISOString()
@@ -1351,7 +1358,14 @@ createServer(async (req, res) => {
       const gate = (agents: number, seats: number, keys: string, live: boolean, sso: boolean, edge: boolean) =>
         ({ agents, seats, own_provider_keys: keys, live_money: live, slack_teams_approvals: live, sso, audit_export: sso, edge })
       return json(res, 200, { order: ['free', 'team', 'business', 'enterprise'], plans: { free: gate(3, 1, 'none', false, false, false),
-        team: gate(25, 5, 'add_on', true, false, false), business: gate(-1, 25, 'included', true, true, false), enterprise: gate(-1, -1, 'included', true, true, true) } })
+        team: gate(25, 5, 'add_on', true, false, false), business: gate(-1, 25, 'included', true, true, false), enterprise: gate(-1, -1, 'included', true, true, true) },
+        // talyvor-lens B56.8 — plans.Built, as Lens's main has it.
+        built: { agents: true, seats: true, own_provider_keys: true, live_money: true, slack_teams_approvals: false, sso: broke('label-built'), audit_export: true, edge: false } })
+    }
+    // talyvor-lens B56.7 — every money capability's label: sandbox, card payments and every partner rail being in test.
+    if (p === '/v1/public/labels') {
+      return json(res, 200, { card_payments: 'test', updated_at: new Date().toISOString(),
+        labels: Object.fromEntries(PUBLIC_LABELLED.map((c) => [c, c === 'fx' && broke('label-live') ? 'live' : 'sandbox'])) })
     }
     // B52.28 — every published Scan report's range and outcome (stub-scan.ts).
     if (p === '/v1/public/scan/track-record') return bank.scan.trackRecord(res)
@@ -1362,7 +1376,10 @@ createServer(async (req, res) => {
     if (p === '/v1/public/fees') {
       return json(res, 200, { market_take_bps: 1500, services_take_bps: 500, compute_take_bps: 500, lending_fee_bps: 100,
         platform_fee_bps: { ...PLATFORM_FEE_BPS, enterprise: 100 }, fx_margin_bps: { free: 0, team: 50, business: 25, enterprise: 15 },
-        intl_payment_fee_minor: { GBP: 500, EUR: 600, USD: 700 }, merchant_fee_bps: 75, merchant_a2a_fee_bps: 100 })
+        intl_payment_fee_minor: { GBP: 500, EUR: 600, USD: 700 }, merchant_fee_bps: 75, merchant_a2a_fee_bps: 100,
+        // talyvor-lens B56.8 — fees.Charged, as Lens's main has it.
+        charged: { market_take_bps: true, services_take_bps: true, compute_take_bps: true, lending_fee_bps: false, platform_fee_bps: true,
+          fx_margin_bps: broke('label-charged'), intl_payment_fee_minor: true, merchant_fee_bps: false, merchant_a2a_fee_bps: false } })
     }
     // B28.127 — a shared chat, read with no credential: its title, turns and when it was shared, or 404.
     const sharedChat = /^\/v1\/public\/chat-shares\/([A-Za-z0-9_-]+)$/.exec(p)

@@ -392,8 +392,10 @@ const CAPABILITIES = [
   ['pay_another_owner', 'Pay another owner'], ['loans_between_companies', 'Loans between companies'], ['escrow', 'Escrow'],
   ['rules_approvals_statements_pots', 'Rules, approvals, statements and pots'], ['cash_out', 'Cash out'], ['company_credit_line', 'Company credit line'],
 ].map(([capability, name]) => ({ capability, name, class: 'AMBER', real_money: false, level_needed: LEVEL_NEEDED[capability] ?? 'L2' }))
-/** B28.360 — an agent's card, RED in Lens (economy.CapabilityAgentCard): the card freeze in Chat carries no test-money label (B46.2). */
+/** B28.360 — an agent's card, RED in Lens (economy.CapabilityAgentCard): labelled Sandbox like every capability that moves money (B56.13). */
 const CARD_CAPABILITY = { capability: 'agent_card', name: 'Cards', class: 'RED', real_money: false, level_needed: 'L2' }
+/** talyvor-lens B56.7 — the capabilities that move no money, so Lens labels them neither Live nor Sandbox. */
+const UNLABELLED = new Set(['rules_approvals_statements_pots', 'room_equity'])
 /** B40.23 — a room's shared ownership, RED and uncleared in Lens (economy.CapabilityRoomEquity): synthetic rooms only. */
 const ROOM_EQUITY_CAPABILITY = { capability: 'room_equity', name: 'Shared ownership in rooms (intent only)', class: 'RED', real_money: false, level_needed: 'L0' }
 /** B30.115 — and the money-and-markets ones B30.1 added, in Lens's classes; `b30-capability-gone` drops fx. B30.117: each with
@@ -1871,7 +1873,9 @@ export class Bank {
     if (path === '/v1/wallets/capabilities') {
       const b30 = (this.broken('b30-capability-gone') ? B30_CAPABILITIES.filter((c) => c.capability !== 'fx') : B30_CAPABILITIES)
         .map((c) => (c.capability === 'payments_out' && this.broken('level-needed-wrong') ? { ...c, level_needed: 'L0' } : c))
-      return json(res, 200, { capabilities: [...CAPABILITIES, CARD_CAPABILITY, ROOM_EQUITY_CAPABILITY, ...b30] }), true
+      // talyvor-lens B56.7 — a synthetic workspace's money is Sandbox: each capability that moves money carries that label.
+      return json(res, 200, { capabilities: [...CAPABILITIES, CARD_CAPABILITY, ROOM_EQUITY_CAPABILITY, ...b30]
+        .map((c) => (UNLABELLED.has(c.capability) ? c : { ...c, label: 'sandbox' })) }), true
     }
     let m = /^\/v1\/wallets\/([^/]+)$/.exec(path)
     if (m !== null) {
