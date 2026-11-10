@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { ApprovalCard, declined, paymentRequestKey, totalsOf } from '../lens/Approve'
+import { ApprovalCard, decidedLine, declined, paymentRequestKey, totalsOf } from '../lens/Approve'
 import { type PaymentRequest, agentBankApi, formatMinor } from '../lens/agentBankApi'
 import { readFailure } from '../lens/WalletMoney'
 
@@ -24,7 +24,7 @@ export function receipt(r: PaymentRequest): string {
     case 'blocked':
       return `Blocked, so nothing was paid (${what}).`
     default:
-      return `${what}: ${r.status}.`
+      return decidedLine(r.status)
   }
 }
 

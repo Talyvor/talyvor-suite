@@ -173,7 +173,7 @@ describe('the approval screen for a covered payment (B55.22)', () => {
     expect(await screen.findByText('Paid without asking you: each payment is inside a permission you signed.')).toBeInTheDocument()
     const item = screen.getByTestId('approve-item-1')
     expect(item.textContent).toContain('Inside a permission you signed: paid without asking you.')
-    expect(item.textContent).toContain('Payment: completed')
+    expect(item.textContent).toContain('Paid')
   })
 
   it.each([
@@ -185,6 +185,57 @@ describe('the approval screen for a covered payment (B55.22)', () => {
     window.history.pushState({}, '', '/approve/preq_1')
     render(<App />)
     expect(await screen.findByText(line)).toBeInTheDocument()
+  })
+})
+
+// B55.33 — every status, rule and flag on the card reads in words: no raw status, rule code or flag code.
+describe('the approval card in words (B55.33)', () => {
+  it.each([
+    ['pending', 'On its way'],
+    ['sent', 'Sent'],
+    ['completed', 'Paid'],
+    ['failed', 'Not paid: it failed'],
+    ['returned', 'Came back'],
+    ['not_approved', 'Not paid: you left it out'],
+    ['not_paid', 'Not paid: a marketplace purchase is not paid from here yet'],
+    ['queued_somewhere', 'Not paid yet'],
+  ])('says a payment that is %s as "%s"', async (pay_status, words) => {
+    mockBff(false, [{ ...BASE[0], pay_status }], { status: 'approved' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    const item = await screen.findByTestId('approve-item-1')
+    expect(within(item).getByText(words)).toBeInTheDocument()
+    expect(item.textContent).not.toContain('Payment:')
+  })
+
+  it('says a refused payment with the reason Lens gives', async () => {
+    mockBff(false, [{ ...BASE[0], pay_status: 'refused', pay_detail: 'the payee’s bank turned it down' }], { status: 'approved' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('Not paid: the payee’s bank turned it down')).toBeInTheDocument()
+  })
+
+  it('shows no rule code, no raw status, and no pill for a flag it has no words for', async () => {
+    mockBff(false, [{ ...BASE[0], flags: [{ code: 'velocity_spike', detail: 'three payments to Acme Ltd in an hour' }] }, { ...BASE[2], pay_status: 'not_paid' }],
+      { summary: 'Pay 2 payments, £129.00: 1 waits for you, 1 blocked' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    const card = await screen.findByTestId('approve-card')
+    const text = card.textContent ?? ''
+    expect(text).not.toMatch(/\([a-z_.]+\)/)
+    expect(text).not.toContain('requires_approval_above')
+    expect(text).not.toContain('not_')
+    expect(text).not.toContain('item(s)')
+    expect(text).not.toContain('velocity_spike')
+    expect(within(card).getByText('Three payments to Acme Ltd in an hour.')).toBeInTheDocument()
+  })
+
+  it('says a request in a state it does not know is closed', async () => {
+    mockBff(false, BASE, { status: 'superseded' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('This request is closed.')).toBeInTheDocument()
+    expect(screen.getByTestId('approve-card').textContent).not.toContain('superseded')
   })
 })
 
