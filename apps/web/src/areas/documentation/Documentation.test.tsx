@@ -157,3 +157,30 @@ describe('/documentation', () => {
     )
   })
 })
+
+// B56.10 — each claim that moves money carries Lens's label, and payouts in money say Building in words from the registry.
+describe('/documentation labels', () => {
+  it('labels the money claims as /api/pricing serves them, and says payouts in money are building', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (String(input).startsWith('/auth/me')) return json({ mode: 'oidc', authenticated: false, user: null, signup_open: true })
+      if (String(input) === '/api/pricing')
+        return json({ min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000], labels: {
+          move_between_own_agents: 'live', pay_another_owner: 'sandbox', escrow: 'live', loans_between_companies: 'live',
+          buy_marketplace_listings: 'sandbox', rent_and_subscribe_listings: 'sandbox',
+        } })
+      return new Response('null', { status: 404 })
+    })
+    window.history.pushState({}, '', DOCUMENTATION_PATH)
+    render(<App />)
+    const claim = async (text: string) => (await screen.findByText(text, { exact: false })).closest('li')!
+    const chip = (li: Element) => [...li.querySelectorAll('[data-status-key]')].map((c) => c.textContent)
+    await vi.waitFor(async () => expect(chip(await claim('Create an agent, fund its wallet'))).toEqual(['Live']))
+    expect(chip(await claim('Agents pay each other'))).toEqual(['Sandbox'])
+    expect(chip(await claim('See what you owe for the listings'))).toEqual(['Sandbox'])
+    const payouts = await claim('See what your listings earned')
+    expect(payouts.textContent).toContain('Paying earnings out in money is building; until then they are taken as Talyvor credits.')
+    expect(chip(payouts)).toEqual(['Building'])
+    expect(chip(await claim('Read and download each wallet'))).toEqual([]) // statements carry no chip
+  })
+})

@@ -17,7 +17,7 @@ export const POSITIONING_SENTENCES = [
 /** Hey Taly works in web Chat today (B45.27). The computer only, until the phone's release build carries its key. */
 export const HEY_TALY = 'Say Hey Taly to talk to Taly while Chat is open on your computer.'
 
-/** What we're building next, said in passing as on its way, never as live (B56.10 adds its chip). */
+/** What we’re building next, said in passing as on its way, never as live; its Building chip is payments_for_everyone (B56.10). */
 export const ON_ITS_WAY = 'Next we’re building payments for everyone, not only businesses.'
 
 /** The footer's short form of the line, beside the company name. */

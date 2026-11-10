@@ -1,11 +1,13 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CONTACT_EMAIL, Landing, POOLED_DISCOUNT_PERCENT } from './Landing'
 import { LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
 import { HEY_TALY, ON_ITS_WAY, POSITIONING_SENTENCES } from '../../positioning'
 import { COMPANY_CONTACT } from '../../company'
+import { BUILDING } from '../../labels/StatusLabel'
+import { MARKETPLACE, WALLETS } from '../../labels/capabilities'
 
 // Area-owned test — replaces the deleted shared areas/scaffold.test.tsx (the
 // deadlock: a shared test over per-area screens; see #7). The marketing tab
@@ -257,5 +259,55 @@ describe('Landing', () => {
         if (other !== unit) expect(container.textContent ?? '').not.toContain(other)
       }
     }
+  })
+})
+
+// B56.10 — Live or Sandbox on the money sections as /api/pricing serves Lens's labels, and Building only from the registry.
+describe('Landing labels', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  function serveLabels(labels: Record<string, string> | undefined) {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+      String(input) === '/api/pricing'
+        ? new Response(JSON.stringify({ min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000], labels }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        : new Response('null', { status: 404 }),
+    )
+  }
+
+  const chip = (container: HTMLElement, key: string) => container.querySelector(`[data-status-key="${key}"]`)?.textContent
+
+  it('draws Wallets and Marketplace as Lens labels them: Live only when every capability is live', async () => {
+    serveLabels({ ...Object.fromEntries(WALLETS.map((k) => [k, 'live'])), buy_marketplace_listings: 'live', rent_and_subscribe_listings: 'sandbox' })
+    const { container } = render(<Landing />)
+    await vi.waitFor(() => expect(chip(container, WALLETS.join(' '))).toBe('Live'))
+    expect(chip(container, MARKETPLACE.join(' '))).toBe('Sandbox')
+    expect(container.querySelector(`#wallets [data-status-key="${WALLETS.join(' ')}"]`)).not.toBeNull()
+  })
+
+  it('draws no Live or Sandbox while Lens serves no labels', async () => {
+    serveLabels(undefined)
+    const { container } = render(<Landing />)
+    await screen.findByTestId('labels-meaning')
+    await new Promise((done) => setTimeout(done, 20))
+    expect(container.querySelectorAll('[data-status-key][data-status-label="live"], [data-status-key][data-status-label="sandbox"]')).toHaveLength(0)
+  })
+
+  it('carries Building from building.json on the account statements line, twice, and on what is on its way', () => {
+    const { container } = render(<Landing />)
+    const building = [...container.querySelectorAll('[data-status-key][data-status-label="building"]')].map((el) => el.getAttribute('data-status-key'))
+    expect(building.sort()).toEqual(['account_statements', 'account_statements', 'payments_for_everyone'])
+    for (const key of building) expect(BUILDING.some((e) => e.key === key), key!).toBe(true)
+    expect(screen.getAllByText('Statements for dollar, pound, euro and USDC accounts')).toHaveLength(2)
+    expect(screen.getByText(ON_ITS_WAY).querySelector('[data-status-label="building"]')).not.toBeNull()
+  })
+
+  it('says what the labels mean', () => {
+    render(<Landing />)
+    const block = screen.getByTestId('labels-meaning')
+    for (const line of ['Moves real money.', 'Works. No real money moves.', 'In our build queue. Not shipped yet.'])
+      expect(block.textContent).toContain(line)
   })
 })

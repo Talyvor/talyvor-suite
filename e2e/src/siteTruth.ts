@@ -9,6 +9,8 @@
 //     public page offers a first-$1M or "100% of" tier (B56.4);
 //   /terms, /privacy or /documentation puts investing on a public page, or Privacy leaves out a record Agent Wallets
 //     keeps (B56.3);
+//   a page draws Live for money /api/pricing's labels do not call live, or /marketing or /pricing draws no Live or
+//     Sandbox while /api/pricing serves labels (B56.10);
 //   a route under "No key needed" on /documentation answers 401 to a caller with no key;
 //   Privacy's Cookies section disagrees with the pages: a cookie banner or a request to connect.facebook.net while it says
 //     there are none, or no banner on any page while it describes one;
@@ -51,6 +53,8 @@ export interface PageRead {
   emailBox: boolean
   chooseButtons: string[]
   cookieBanner: boolean
+  /** B56.10 — each Live or Sandbox chip the page draws: its state and the capability keys it labels. */
+  labels?: { state: string; key: string }[]
 }
 
 export interface SiteRead {
@@ -61,6 +65,8 @@ export interface SiteRead {
   platformFeeBps?: Record<string, number>
   /** /api/pricing's fees.market_take_bps; undefined while it serves no fees. */
   marketTakeBps?: number
+  /** /api/pricing's labels (B56.10); undefined while it serves none. */
+  labels?: Record<string, string>
   pages: PageRead[]
   /** The text of Privacy's Cookies section; '' when there is none. */
   privacyCookies: string
@@ -121,6 +127,16 @@ export function siteFaults(r: SiteRead): string[] {
     if (p.path === '/privacy') for (const name of PRIVACY_RECORDS) if (!p.text.includes(name)) wrong.push(`/privacy leaves out the "${name}" record`)
   }
 
+  // B56.10: a chip says Live only where Lens says live for every capability it labels, and the money pages carry labels.
+  for (const p of r.pages) {
+    for (const l of p.labels ?? []) {
+      if (l.state === 'live' && l.key.split(' ').some((k) => r.labels?.[k] !== 'live'))
+        wrong.push(`${p.path} draws Live for ${l.key} while /api/pricing does not label it live`)
+    }
+    if (r.labels !== undefined && ['/marketing', '/pricing'].includes(p.path) && (p.labels ?? []).length === 0)
+      wrong.push(`${p.path} draws no Live or Sandbox while /api/pricing serves labels`)
+  }
+
   for (const n of r.noKey) if (n.status === 401) wrong.push(`${n.path}, under "No key needed" on /documentation, answers 401 without a key`)
 
   const saysNone = /no advertising or analytics cookies/i.test(r.privacyCookies)
@@ -155,6 +171,8 @@ async function readPage(page: Page, origin: string, path: string): Promise<PageR
     emailBox: await page.locator('input[type="email"]').count() > 0 || await page.getByLabel('Email address').count() > 0,
     chooseButtons: (await page.getByRole('link', { name: /^Choose\b/ }).or(page.getByRole('button', { name: /^Choose\b/ })).allInnerTexts()).map((t) => t.trim()),
     cookieBanner: await page.getByRole('dialog', { name: 'Cookies' }).isVisible(),
+    labels: await page.locator('[data-status-key][data-status-label="live"], [data-status-key][data-status-label="sandbox"]')
+      .evaluateAll((els) => els.map((el) => ({ state: el.getAttribute('data-status-label') ?? '', key: el.getAttribute('data-status-key') ?? '' }))),
   }
 }
 
@@ -179,8 +197,8 @@ export function siteTruth(): Scenario {
     id: 'site-truth',
     owner: 'talyvor-suite',
     feature: 'Public site',
-    items: ['B51.1', 'B51.4', 'B56.2', 'B56.3', 'B56.4'],
-    title: 'the public pages, read signed out, agree with the product: no waitlist while sign-up is open, no top-up or Choose while card payments are not live, each plan\'s served platform fee on /pricing, the 85/15 split from the first sale on /pricing and /terms, no investing and every wallet record on the legal pages, ' +
+    items: ['B51.1', 'B51.4', 'B56.2', 'B56.3', 'B56.4', 'B56.10'],
+    title: 'the public pages, read signed out, agree with the product: no waitlist while sign-up is open, no top-up or Choose while card payments are not live, each plan\'s served platform fee on /pricing, the 85/15 split from the first sale on /pricing and /terms, Live only where Lens labels the money live, no investing and every wallet record on the legal pages, ' +
       '"No key needed" routes answer without a key, Privacy\'s Cookies section matches the pages, the shared header and footer, and no link to a 404 or the not-found page',
     run: async (ctx) => {
       const browser = ctx.app.context.browser()
@@ -195,10 +213,11 @@ export function siteTruth(): Scenario {
         const meBody = (await me.json().catch(() => null)) as { signup_open?: boolean | null } | null
         const signup = typeof meBody?.signup_open === 'boolean' ? (meBody.signup_open ? 'open' : 'closed') : 'unknown'
         const priced = await stranger.request.get(`${origin}/api/pricing`)
-        const served = (await priced.json().catch(() => null)) as { card_payments?: string; fees?: { platform_fee_bps?: Record<string, number>; market_take_bps?: number } } | null
+        const served = (await priced.json().catch(() => null)) as { card_payments?: string; fees?: { platform_fee_bps?: Record<string, number>; market_take_bps?: number }; labels?: Record<string, string> } | null
         const cardPayments = served?.card_payments
         const platformFeeBps = served?.fees?.platform_fee_bps
         const marketTakeBps = served?.fees?.market_take_bps
+        const labels = served?.labels
         ctx.evidence.push({ note: `/auth/me ${me.status()}: sign-up ${signup}; /api/pricing ${priced.status()}: card_payments ${cardPayments ?? 'not served yet (B51.2)'}` })
 
         const page = await stranger.newPage()
@@ -248,7 +267,7 @@ export function siteTruth(): Scenario {
         const unreached = links.filter((l) => l.status === 0).map((l) => l.href)
         ctx.evidence.push({ note: `${links.length} links followed${unreached.length > 0 ? `; no answer from ${unreached.join(', ')}` : ''}` })
 
-        const wrong = siteFaults({ signup, cardPayments, platformFeeBps, marketTakeBps, pages, privacyCookies, facebook: [...facebook], noKey, links })
+        const wrong = siteFaults({ signup, cardPayments, platformFeeBps, marketTakeBps, labels, pages, privacyCookies, facebook: [...facebook], noKey, links })
         return wrong.length === 0
           ? { pass: true, detail: `${PUBLIC_PAGES.length} public pages agree with the product (sign-up ${signup}, card_payments ${cardPayments ?? 'not served'}); ` +
               `${noKey.length} "No key needed" routes answer without a key; ${links.length} links land` }

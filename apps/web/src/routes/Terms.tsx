@@ -2,6 +2,7 @@ import { LegalPage, LawyerReview, Section } from './legalParts'
 import { COMPANY_CONTACT, COMPANY_NAME, COMPANY_NUMBER, REGISTERED_OFFICE } from '../company'
 import { inlineLink } from '@talyvor/ui'
 import { SharedAnswersFact, StoredAnswersFacts } from '../components/StoredAnswersFacts'
+import { buildingWords } from '../labels/StatusLabel'
 
 // Terms — what the service actually is and is not, written from the code.
 //
@@ -9,8 +10,8 @@ import { SharedAnswersFact, StoredAnswersFacts } from '../components/StoredAnswe
 // interest, so they are stated in terms of what the code does (a balance decremented against
 // usage) rather than in terms of what we would prefer them to be.
 
-/** The day these words last changed (B56.3: approvals as the rules make them, no investing). Change it with them. */
-const UPDATED = '2026-11-08'
+/** The day these words last changed (B56.10: paying earnings out in money is building). Change it with them. */
+const UPDATED = '2026-11-10'
 
 export function Terms() {
   return (
@@ -108,7 +109,8 @@ export function Terms() {
           Only a workspace&rsquo;s owner or an admin can publish. Sellers earn 85% of every paid use,
           rental and purchase, from the first sale; Talyvor keeps 15%. Earnings are held for 14 days for refunds, then paid once a week to a
           Stripe account the seller connects, less Stripe&rsquo;s fees at cost — or taken at once as
-          Talyvor credits, with no fees and no minimum. Each weekly payout has a statement of its sales,
+          Talyvor credits, with no fees and no minimum. {buildingWords('money_payouts', 'until then they are taken as Talyvor credits')}{' '}
+          Each weekly payout has a statement of its sales,
           fees, royalties and refunds. A seller gives Talyvor their tax details before they are paid;
           payouts to a seller whose details are still incomplete after three requests are held until
           they are complete. A refund after the seller was paid is recovered from their next earnings.

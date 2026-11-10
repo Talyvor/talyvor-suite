@@ -12,11 +12,14 @@ import { BOOK_KEY } from '../lens/AgentBank'
 import { Note } from '../lens/WalletMoney'
 import { formatWhen } from '../lens/format'
 import { AgentBankError, type PayPage, agentBankApi, formatMinor, refusalText } from '../lens/agentBankApi'
+import { StatusLabel } from '../../labels/StatusLabel'
+import { usePricing } from '../marketing/pricingApi'
 
 // B30.97 — an invoice's pay page, opened by whoever holds its link, signed out (Lens B30.20). OUTSIDE the AuthGate
 // (App.tsx) for the same reason as a shared chat: the payer has no account here. It shows the invoice as Lens serves it
 // to a payer — no ids, no ledger — and three ways to pay what is due: a card (Stripe test mode, through Lens), a transfer
 // to the issuer's account details quoting the reference, or one of the visitor's own Talyvor agents once they sign in.
+// B56.10: beside what is due, Lens's Live or Sandbox for money paid in from outside Talyvor, from the public labels.
 
 async function readPage(token: string): Promise<PayPage> {
   const path = `/api/public/pay/${encodeURIComponent(token)}`
@@ -39,6 +42,8 @@ const payable = (p: PayPage) => p.invoice.status === 'sent' || p.invoice.status 
 function Body({ token }: { token: string }) {
   const [search] = useSearchParams()
   const returned = search.get('paid') === 'card'
+  const pricing = usePricing()
+  const labels = pricing.status === 'ok' ? pricing.pricing.labels : undefined
   const page = useQuery({
     queryKey: ['pay-page', token],
     queryFn: () => readPage(token),
@@ -78,9 +83,12 @@ function Body({ token }: { token: string }) {
       <p className="text-eyebrow uppercase text-label">
         Invoice <span className="font-figure">{inv.number}</span> · from {inv.issuer || 'a Talyvor agent'}
       </p>
-      <h1 className="mt-4 text-display-3 text-ink" data-testid="pay-headline">
-        {headline}
-      </h1>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <h1 className="text-display-3 text-ink" data-testid="pay-headline">
+          {headline}
+        </h1>
+        {payable(p) ? <StatusLabel capability="payments_in" labels={labels} /> : null}
+      </div>
       <TealRule className="mt-5" />
       {returned && inv.status !== 'paid' ? (
         <p className="mt-5 text-body text-muted" role="status">

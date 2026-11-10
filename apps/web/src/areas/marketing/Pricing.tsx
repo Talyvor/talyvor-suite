@@ -12,6 +12,8 @@ import {
 } from './pricingApi'
 import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
 import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, MoneyFeatureFees, TAX_LINE, platformFees } from './PriceCard'
+import { LabelsMeaning, StatusLabel } from '../../labels/StatusLabel'
+import { CREDIT_FOR_AGENTS, MARKETPLACE } from '../../labels/capabilities'
 
 // /pricing (B5.2) — what anything costs, for a buyer who has not signed up. Public, OUTSIDE the
 // AuthGate like /marketing, and built the same way: no router context, plain anchors, Landing's
@@ -152,6 +154,8 @@ export function Pricing() {
   useDocumentTitle('Pricing')
   const state = usePricing()
   const cards = cardPayments(state) === 'live'
+  // B56.10: Lens's Live or Sandbox for each money section; none until /api/pricing answers with labels.
+  const labels = state.status === 'ok' ? state.pricing.labels : undefined
   return (
     <div className="flex min-h-full flex-col bg-canvas text-ink">
       <PublicHeader current="/pricing" />
@@ -172,12 +176,16 @@ export function Pricing() {
             <div className="mt-10">
               <RateCard state={state} />
             </div>
+            <LabelsMeaning className="mt-10" />
           </div>
         </section>
 
         <section aria-labelledby="topup-heading" className="border-b border-rule">
           <div className="mx-auto w-full max-w-5xl px-gutter py-16">
-            <Eyebrow index="01">Credit for agents</Eyebrow>
+            <div className="flex flex-wrap items-center gap-3">
+              <Eyebrow index="01">Credit for agents</Eyebrow>
+              <StatusLabel capability={CREDIT_FOR_AGENTS} labels={labels} />
+            </div>
             <h2 id="topup-heading" className="mt-6 max-w-2xl text-display-3 text-ink">
               Top up the workspace, then fund each agent from it.
             </h2>
@@ -263,7 +271,7 @@ export function Pricing() {
                 </div>
                 <h3 className="mt-12 text-head text-ink">Fees on any plan</h3>
                 <div className="mt-4">
-                  <FeesOnAnyPlan fees={state.pricing.fees} />
+                  <FeesOnAnyPlan fees={state.pricing.fees} labels={labels} />
                 </div>
                 {state.pricing.fees ? (
                   <>
@@ -272,6 +280,7 @@ export function Pricing() {
                       <MoneyFeatureFees
                         fees={state.pricing.fees}
                         planIds={state.pricing.plan_gates?.order ?? []}
+                        labels={labels}
                       />
                     </div>
                   </>
@@ -298,7 +307,10 @@ export function Pricing() {
 
         <section aria-labelledby="marketplace-bill-heading" className="border-b border-rule">
           <div className="mx-auto w-full max-w-5xl px-gutter py-16">
-            <Eyebrow index="04">The Marketplace bill</Eyebrow>
+            <div className="flex flex-wrap items-center gap-3">
+              <Eyebrow index="04">The Marketplace bill</Eyebrow>
+              <StatusLabel capability={MARKETPLACE} labels={labels} />
+            </div>
             <h2 id="marketplace-bill-heading" className="mt-6 max-w-2xl text-display-3 text-ink">
               Paid listings, on one bill a month.
             </h2>
