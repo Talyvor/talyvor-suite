@@ -1693,6 +1693,8 @@ export interface WalletCapability {
   }
   /** B30.4: the verification level its live money needs, "L0" to "L3". */
   level_needed?: string
+  /** B56.9: live or sandbox for this workspace (talyvor-lens B56.7), on each capability that moves money. For StatusLabel. */
+  label?: string
 }
 
 /** Lens economy.VerificationCheck (B30.4): one check, as the provider that made it answered. */

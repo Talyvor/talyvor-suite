@@ -260,6 +260,8 @@
   "src/greppableSources.test.ts": 3,
   "src/headerReflow.test.tsx": 4,
   "src/inlineLinkTreatment.test.ts": 5,
+  "src/labels/registry.test.ts": 4,
+  "src/labels/StatusLabel.test.tsx": 5,
   "src/LandmarkCoverage.test.tsx": 70,
   "src/landmarkIds.test.tsx": 11,
   "src/Legal.test.tsx": 30,

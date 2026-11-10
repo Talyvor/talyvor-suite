@@ -1,6 +1,7 @@
 // positioning.ts: what Talyvor says it is, in Nick's words of 23 Oct 2026 (positioning v2, B44.4), in plain
-// words and with no status or disclaimer line since 24 Oct (B46.1). Since 1 Nov (B56.1) every line is true today:
-// what works is said as working, and what the build queue has not reached yet is said as on its way.
+// words and with no status or disclaimer line since 24 Oct (B46.1); the one label is StatusLabel (B56.9). Since 1 Nov
+// (B56.1) every line is true today: what works is said as working, and what the build queue has not reached yet is
+// said as on its way.
 //
 // Every public page reads these, so the website cannot carry two versions of the product. Use them as
 // written; "Money and markets for AI agents" may stay as a supporting line, never as the headline.
