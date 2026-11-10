@@ -14,6 +14,8 @@
 //   a route under "No key needed" on /documentation answers 401 to a caller with no key;
 //   Privacy's Cookies section disagrees with the pages: a cookie banner or a request to connect.facebook.net while it says
 //     there are none, or no banner on any page while it describes one;
+//   /your-money leaves out that LXC is not money, that a mandate needs the owner's signed say, or that Talyvor is not a
+//     bank (B57.62);
 //   a public page without the shared header and footer (B51.1);
 //   a link on a public page that answers 404, or lands on the app's not-found page.
 // Where a link lands is read in this user's own signed-in tab, since a stranger is shown sign-in at every console address.
@@ -22,11 +24,11 @@ import type { BrowserContext, Page } from 'playwright'
 import type { Scenario } from './scenarios.ts'
 import { CannotTest } from './scenarios.ts'
 
-export const PUBLIC_PAGES = ['/marketing', '/pricing', '/documentation', '/documentation/claude', '/privacy', '/terms'] as const
+export const PUBLIC_PAGES = ['/marketing', '/pricing', '/your-money', '/documentation', '/documentation/claude', '/privacy', '/terms'] as const
 
 /** B51.1's one header and one footer, as B57.59 draws them in Pocket: the addresses each must link to. */
-export const HEADER_LINKS = ['/marketing', '/pricing', '/documentation', '/']
-export const FOOTER_LINKS = ['/pricing', '/documentation', '/privacy', '/terms', 'mailto:']
+export const HEADER_LINKS = ['/marketing', '/pricing', '/your-money', '/documentation', '/']
+export const FOOTER_LINKS = ['/pricing', '/your-money', '/documentation', '/privacy', '/terms', 'mailto:']
 
 /** The app's catch-all for an address it has no page at (apps/web App.tsx). */
 export const NOT_FOUND = 'Nothing at this address'
@@ -34,6 +36,10 @@ export const NOT_FOUND = 'Nothing at this address'
 /** B56.3: what no public page says while investing is not offered, and the records Privacy names. */
 const INVESTING = /investing is simulated|simulated portfolio|simulated order|no order reaches a market/i
 export const PRIVACY_RECORDS = ['Verification.', 'Saved payees.', 'Invoices.', 'Mandates.', 'Payout details.', 'Currency accounts.']
+
+/** B57.62: what /your-money must say — that LXC is not money, that a mandate needs the owner's signed say (B55.24), and
+ *  that Talyvor is not a bank. */
+export const YOUR_MONEY_LINES = ['LXC is not money, not a deposit and not an investment', 'every mandate needs your signed say', 'Talyvor is not a bank.']
 
 /** B56.4: the one split sentence, at the take /api/pricing serves. */
 export const splitSentence = (takeBps: number) =>
@@ -125,6 +131,7 @@ export function siteFaults(r: SiteRead): string[] {
     if (FIRST_MILLION.test(text)) wrong.push(`${p.path} offers a first-million tier`)
     if (['/terms', '/privacy', '/documentation'].includes(p.path) && INVESTING.test(p.text)) wrong.push(`${p.path} puts investing on a public page`)
     if (p.path === '/privacy') for (const name of PRIVACY_RECORDS) if (!p.text.includes(name)) wrong.push(`/privacy leaves out the "${name}" record`)
+    if (p.path === '/your-money') for (const line of YOUR_MONEY_LINES) if (!text.includes(line)) wrong.push(`/your-money leaves out "${line}"`)
   }
 
   // B56.10: a chip says Live only where Lens says live for every capability it labels, and the money pages carry labels.
