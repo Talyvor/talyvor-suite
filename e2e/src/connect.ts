@@ -475,8 +475,12 @@ export function connectMCP(): Scenario {
           await card.waitFor({ timeout: 30_000 })
           const words = (await card.innerText()).replace(/\s+/g, ' ')
           ctx.evidence.push({ note: `the approval card: "${words}"` })
-          // B46.2 (Nick, 24 Oct): the card carries no "Test money" chip any more, so only the payees are read.
           if (!words.includes('Nightly MCP Supplier One Ltd') || !words.includes('Nightly MCP Supplier Two Ltd')) wrong.push(`the approval card does not show both payees: "${words}"`)
+          // B56.13 — no "Test money" chip (B46.2): Lens's Sandbox for the payments out, as it labels a synthetic workspace (B56.11).
+          const chip = page.locator('[data-status-key="payments_out"]')
+          const chipState = await chip.first().getAttribute('data-status-label', { timeout: 10_000 }).catch(() => null)
+          if (chipState !== 'sandbox') wrong.push(`the approval card's payments out are labelled ${JSON.stringify(chipState)}, not Sandbox`)
+          if (await page.getByText('Test money', { exact: true }).count() > 0) wrong.push('the approval card still carries a "Test money" chip')
           if (!(await page.getByTestId('approve-total').innerText()).includes('2 of 2 payments to approve, total £30.00')) wrong.push(`the approval card's total reads "${await page.getByTestId('approve-total').innerText()}"`)
           await page.getByRole('checkbox', { name: 'Approve £20.00 to Nightly MCP Supplier Two Ltd' }).click()
           const total = await page.getByTestId('approve-total').innerText()
