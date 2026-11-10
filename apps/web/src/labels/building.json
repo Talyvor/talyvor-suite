@@ -1,5 +1,4 @@
 [
-  { "key": "account_statements", "feature": "Statements for dollar, pound, euro and USDC accounts", "item": "B56.15" },
   { "key": "slack_teams_approvals", "feature": "Approvals in Slack and Teams", "item": "B56.17" },
   { "key": "sso", "feature": "Single sign-on", "item": "B56.19" },
   { "key": "edge", "feature": "Talyvor Edge in your own cluster", "item": "B56.30" },

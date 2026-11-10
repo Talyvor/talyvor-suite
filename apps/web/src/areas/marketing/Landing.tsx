@@ -99,14 +99,10 @@ export function TealRule({ className = '' }: { className?: string }) {
   return <span className={`block h-0.5 w-8 bg-accent ${className}`} aria-hidden="true" />
 }
 
-/** B56.10 — Nick's words stay; the currency accounts' statements are still in the build queue (B56.15), so the band's
- *  Measurable and card 04 carry this line and its Building chip under them. */
-const ACCOUNT_STATEMENTS = 'Statements for dollar, pound, euro and USDC accounts'
-
 /** The board's four-column positioning band, after section 01. */
-const BAND: Array<{ eyebrow: string; line: string; building?: boolean }> = [
+const BAND: Array<{ eyebrow: string; line: string }> = [
   { eyebrow: 'Sovereign', line: 'Designed to run on your own infrastructure.' },
-  { eyebrow: 'Measurable', line: 'Every call and payment on a statement.', building: true },
+  { eyebrow: 'Measurable', line: 'Every call and payment on a statement.' },
   { eyebrow: 'Integrated', line: 'Wallets, cards, gateway and marketplace in one.' },
   { eyebrow: 'Compounding', line: 'Savings and earnings build over time.' },
 ]
@@ -118,7 +114,7 @@ const HERO_SIZES = '(min-width: 840px) 50vw, 100vw'
 
 /** What an agent's wallet does, in the order a request meets it. Each line is something the
  *  console already does — /agents is where a customer sets every one of them. */
-const WALLET: Array<{ title: string; body: string; building?: boolean }> = [
+const WALLET: Array<{ title: string; body: string }> = [
   {
     title: 'A budget of its own',
     body: 'Fund each agent from the workspace balance. It spends its own money, and when the money runs out the next call is refused rather than billed to you, unless your company has a Talyvor credit line, which covers it and bills you once a month.',
@@ -134,19 +130,8 @@ const WALLET: Array<{ title: string; body: string; building?: boolean }> = [
   {
     title: 'A live statement',
     body: 'Every hold, charge, payment and refund lands on the agent’s own statement as it happens, so you can read what an agent spent the way you read a bank account.',
-    building: true,
   },
 ]
-
-/** B56.10 — the currency accounts' statements line, with its chip from the registry. */
-function AccountStatements() {
-  return (
-    <p className="mt-3 flex flex-wrap items-center gap-2 text-body text-muted">
-      {ACCOUNT_STATEMENTS}
-      <StatusLabel building="account_statements" />
-    </p>
-  )
-}
 
 /** B56.10 — a section's eyebrow with Live or Sandbox beside it, as Lens labels the money it describes. */
 function LabelledEyebrow({ labels, capability, ...eyebrow }: Parameters<typeof Eyebrow>[0] & {
@@ -431,7 +416,6 @@ export function Landing() {
                     <span className="text-head text-ink">{w.title}</span>
                   </div>
                   <p className="mt-3 text-body text-muted">{w.body}</p>
-                  {w.building ? <AccountStatements /> : null}
                 </li>
               ))}
             </ol>
@@ -445,7 +429,6 @@ export function Landing() {
               <li key={b.eyebrow}>
                 <div className="text-eyebrow uppercase text-accent">{b.eyebrow}</div>
                 <p className="mt-2 text-body text-muted">{b.line}</p>
-                {b.building ? <AccountStatements /> : null}
               </li>
             ))}
           </ul>

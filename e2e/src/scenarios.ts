@@ -109,6 +109,7 @@ import { chatFirstMessage } from './chatFirstMessage.ts'
 import { chatPaymentCard } from './chatPaymentCard.ts'
 import { agentWallet } from './agentWallet.ts'
 import { oneSearch } from './oneSearch.ts'
+import { accountStatements } from './accountStatements.ts'
 import { alertChannels } from './alertChannels.ts'
 import { limitAlerts } from './limitAlerts.ts'
 import { subscriptionsView } from './subscriptionsView.ts'
@@ -5570,6 +5571,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.66 — where alerts go, once a run, on a workspace of its own: with push and a signed webhook added and email refused, a
   // budget's 50% and 80% alerts queue one delivery per channel, the same four when read again, and Agent Wallets lists them.
   if (i === 7) list.push(alertChannels())
+  // B56.15 — a currency account's statement on Statements, once a run, on a workspace of its own.
+  if (i === 7) list.push(accountStatements())
   // B41.20 — the Subscriptions view, once a run, on a workspace of its own: a monthly standing order and a monthly listing
   // subscription each show their next charge, monthly cost and a reminder three days before.
   if (i === 7) list.push(subscriptionsView())

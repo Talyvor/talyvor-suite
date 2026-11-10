@@ -476,13 +476,20 @@ const maxStatementBytes = 32 << 20
 // which Lens keeps the lines of those kinds holding q and pages them newest first; Lens reads the dates (a
 // YYYY-MM-DD date is midnight UTC, the period is [from, to)) and its sentence on a bad one is relayed.
 func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tenant, suffix string) {
+	a.statementRelay(w, r, t, lensWorkspacePath(t, suffix), "from", "to", "format", "kind", "q", "limit", "cursor")
+}
+
+// statementRelay is agentStatementRelay for any Lens statement path, sending up only the query keys named (B56.15: a
+// currency account's statement, /v1/money/accounts/{id}/statement, takes from, to and format).
+func (a *app) statementRelay(w http.ResponseWriter, r *http.Request, t tenant, path string, keys ...string) {
+	suffix := strings.TrimPrefix(path, lensWorkspacePath(t, ""))
 	in, up := r.URL.Query(), url.Values{}
-	for _, k := range []string{"from", "to", "format", "kind", "q", "limit", "cursor"} {
+	for _, k := range keys {
 		if v := in.Get(k); v != "" {
 			up.Set(k, v)
 		}
 	}
-	target := a.cfg.lensBaseURL + lensWorkspacePath(t, suffix)
+	target := a.cfg.lensBaseURL + path
 	if len(up) > 0 {
 		target += "?" + up.Encode()
 	}

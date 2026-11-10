@@ -271,17 +271,17 @@ const PINS: Record<string, Pin> = {
     why: 'a DEVELOPER-FACING FAILURE MESSAGE naming the shape to copy — read exactly when somebody is already confused',
   },
 
-  'apps/web/src/areas/lens/Overview.tsx:340|apps/web/src/areas/marketing/Landing.tsx:199': {
+  'apps/web/src/areas/lens/Overview.tsx:340|apps/web/src/areas/marketing/Landing.tsx:184': {
     kind: 'LIVE',
     fragment: 'transition-colors duration-200',
     why: "the SITE's motion shape, quoted where the console copies it — W1.1.0's rule is that a console link moves the way the public page moves, so the call site names the line it is imitating rather than inventing a fifth hover shape",
   },
-  'apps/web/src/areas/lens/CacheCard.tsx:58|apps/web/src/areas/marketing/Landing.tsx:199': {
+  'apps/web/src/areas/lens/CacheCard.tsx:58|apps/web/src/areas/marketing/Landing.tsx:184': {
     kind: 'LIVE',
     fragment: 'transition-colors duration-200',
     why: 'the same shape on the card Overview renders in region 04 — this card is on BOTH /overview and /spend, so the pointer is what says the affordance is one component having one answer',
   },
-  'apps/web/src/areas/lens/Overview.test.tsx:392|apps/web/src/areas/marketing/Landing.tsx:199': {
+  'apps/web/src/areas/lens/Overview.test.tsx:392|apps/web/src/areas/marketing/Landing.tsx:184': {
     kind: 'LIVE',
     fragment: 'transition-colors duration-200',
     why: "the failure message of Overview's motion sweep, naming the line a developer should copy — read exactly when somebody is already confused, the same argument motion.test.tsx:154 makes",
@@ -434,7 +434,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the BFF half of the same parenthesis — the sentence promises this line says the payment happens at Stripe AFTER the redirect',
   },
-  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:984': {
+  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:985': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'the first of the TWO independent clamps the page ceiling rests on, quoted verbatim by the sentence that cites it',
@@ -444,7 +444,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the example that paragraph gives of a citation checkable from here — now checked, which is what it asked for',
   },
-  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:984': {
+  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:985': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'its second example, pinned for the same reason',
@@ -501,7 +501,7 @@ const PINS: Record<string, Pin> = {
   // in THIS repository can move without touching the screen. That is exactly the rot this file
   // was written for: `billing.go:180` moved and the sentence explaining "nothing was charged"
   // ended up pointing at the one function that cannot charge.
-  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/lens.go:1234': {
+  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/lens.go:1235': {
     kind: 'LIVE',
     fragment: 'X-User-Email',
     why: 'the screen marks YOUR row by comparing /auth/me\'s email to the roster; the claim that this header is the membership join key is the whole basis for that being a join rather than a guess',
@@ -536,7 +536,7 @@ const PINS: Record<string, Pin> = {
     fragment: 's.email',
     why: 'the fixture claims to serve /auth/me "in the exact shape" — a fixture more generous than the real handler is how the docs translate probe went green in English',
   },
-  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/lens.go:1234': {
+  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/lens.go:1235': {
     kind: 'LIVE',
     fragment: 'X-User-Email',
     why: 'the case that argues the comparison must be EXACT rests on this being the key the upstream joined on',

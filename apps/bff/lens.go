@@ -533,6 +533,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/kya/verify", a.requireTenant(a.handleKYAVerify))
 	// B30.97 — invoices from an agent's currency account and their public pay page (Lens B30.20). See money_invoices.go.
 	a.mux.HandleFunc("/api/money/accounts", a.requireTenant(a.handleMoneyAccounts))
+	a.mux.HandleFunc("/api/money/accounts/{id}/statement", a.requireTenant(a.handleMoneyAccountStatement)) // B56.15
 	a.mux.HandleFunc("/api/money/invoices", a.requireTenant(a.handleMoneyInvoices))
 	a.mux.HandleFunc("/api/money/invoices/{id}/send", a.requireTenant(a.handleMoneyInvoiceMove("send")))
 	a.mux.HandleFunc("/api/money/invoices/{id}/void", a.requireTenant(a.handleMoneyInvoiceMove("void")))

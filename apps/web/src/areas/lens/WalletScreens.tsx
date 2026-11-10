@@ -1,20 +1,24 @@
-import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { Button, CardHeader, Row, inlineLink } from '@talyvor/ui'
-import { Card, pressed } from './walletBrand'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Button, CardHeader, inlineLink } from '@talyvor/ui'
+import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { ApiError } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
 import { APPROVALS_KEY, Approvals, BOOK_KEY, PREPARED_KEY, Statement, StatementDownload } from './AgentBank'
-import { agentBankApi } from './agentBankApi'
-import { CurrencyPicker, Lxc } from './money'
+import { agentBankApi, type Agent, type CurrencyAccount } from './agentBankApi'
+import { AccountStatement, MarketplaceBill, accountTitle } from './AccountStatement'
+import { MONEY_ACCOUNTS_KEY } from './Invoices'
+import { CurrencyPicker } from './money'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { AGENT_CREDIT } from '../../labels/capabilities'
 
 // B28.7 — the sidebar is wallet-first: Approvals and Statements are destinations of their own, not
 // regions a person scrolls to inside Agent Wallets. Both read the same cache as Agent Wallets and Home,
 // so a decision made on any of them is the figure the others show.
+
+/** A tab that is on: the tint and a teal edge, as a pressed toggle on the wallet screens. */
+const selected = 'aria-selected:border-accent aria-selected:bg-accent-tint'
 
 function readFailure(err: unknown, what: string): string {
   return isSessionExpired(err) ? `${what} can’t be read until you sign in again.` : `${what} could not be read just now.`
@@ -72,10 +76,20 @@ export function ApprovalsScreen() {
   )
 }
 
+/** B56.15 — one tab on Statements: an agent's or the room's wallet in LXC, or a currency account in its own currency. */
+type StatementTab = { id: string; title: string; agent: Agent; account?: undefined } | { id: string; title: string; account: CurrencyAccount; agent?: undefined }
+
 export function StatementsScreen() {
   const { book, agents, nameOf } = useAgentNames()
-  const [chosen, setChosen] = useState<string | null>(null)
-  const agent = agents.find((a) => a.id === chosen) ?? agents[0] ?? null
+  const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
+  const [params, setParams] = useSearchParams()
+  // B56.15 — each agent's credits, then each room's wallet, then every currency account the company or an agent holds.
+  const tabs: StatementTab[] = [
+    ...agents.filter((a) => a.kind !== 'room').map((a) => ({ id: a.id, title: a.name, agent: a })),
+    ...agents.filter((a) => a.kind === 'room').map((a) => ({ id: a.id, title: a.name, agent: a })),
+    ...(accounts.data?.accounts ?? []).map((a) => ({ id: a.id, title: accountTitle(a, agents), account: a })),
+  ]
+  const tab = tabs.find((t) => t.id === params.get('wallet')) ?? tabs[0] ?? null
   return (
     <RegionScreen>
       <Region
@@ -99,32 +113,36 @@ export function StatementsScreen() {
             ; its statement starts the first time its wallet is funded.
           </p>
         ) : (
-          <>
-            <Card>
-              <CardHeader aside={<WorkspaceLabel capability={AGENT_CREDIT} />}>Statement for every agent</CardHeader>
-              <StatementDownload agent={null} primary />
-            </Card>
-            <Card>
-              <CardHeader>Agents</CardHeader>
-              {agents.map((a) => (
-                <Row key={a.id} label={a.name}>
-                  <div className="flex items-center gap-3">
-                    <span className="text-body text-ink">
-                      <Lxc ulxc={a.balance_ulxc} />
-                    </span>
-                    <Button aria-pressed={agent?.id === a.id} className={pressed} onClick={() => setChosen(a.id)}>
-                      {agent?.id === a.id ? 'Showing' : 'Show statement'}
-                    </Button>
-                  </div>
-                </Row>
-              ))}
-            </Card>
-          </>
+          <Card>
+            <CardHeader aside={<WorkspaceLabel capability={AGENT_CREDIT} />}>Statement for every agent</CardHeader>
+            <StatementDownload agent={null} primary />
+          </Card>
         )}
+        {accounts.isError ? <p className="text-body text-muted">{readFailure(accounts.error, 'The currency accounts')}</p> : null}
+        {tabs.length > 0 ? (
+          <div role="tablist" aria-label="Statements" className="flex flex-wrap gap-2">
+            {tabs.map((t) => (
+              <Button
+                key={t.id}
+                role="tab"
+                aria-selected={t.id === tab?.id}
+                className={selected}
+                onClick={() => setParams({ wallet: t.id }, { replace: true })}
+              >
+                {t.title}
+              </Button>
+            ))}
+          </div>
+        ) : null}
       </Region>
-      {agent ? (
-        <Region index="01" label={agent.name} className="flex max-w-2xl flex-col gap-3">
-          <Statement key={agent.id} agent={agent} nameOf={nameOf} />
+      {tab?.agent ? (
+        <Region index="01" label={tab.title} className="flex max-w-2xl flex-col gap-3">
+          <Statement key={tab.id} agent={tab.agent} nameOf={nameOf} />
+          <MarketplaceBill key={`bill-${tab.id}`} agent={tab.agent} />
+        </Region>
+      ) : tab?.account ? (
+        <Region index="01" label={tab.title} className="flex max-w-2xl flex-col gap-3">
+          <AccountStatement key={tab.id} account={tab.account} title={tab.title} />
         </Region>
       ) : null}
     </RegionScreen>

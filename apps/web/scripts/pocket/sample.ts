@@ -109,6 +109,22 @@ const SAMPLE: Record<string, unknown> = {
       { id: 'macc_room_usd', agent_id: 'agt_room', currency: 'USD', purpose: 'agent', status: 'open', name: 'US dollar account', balance_minor: 25_000, test_minor: 25_000, live_minor: 0 },
     ],
   },
+  // B56.15 — each account's statement this month, as README's "Statements for currency accounts" tells it.
+  '/api/money/accounts/macc_company_usd/statement': {
+    account_id: 'macc_company_usd', currency: 'USD', from: '2026-10-01T00:00:00Z', to: '2026-10-21T00:00:00Z',
+    opening_minor: 365_000, in_minor: 0, out_minor: 45_000, closing_minor: 320_000,
+    lines: [{ entry_id: 'ment_kite', line: 1, at: '2026-10-01T09:00:00Z', kind: 'payment_out', amount_minor: -45_000, funding: 'test', counterparty: 'Kite Accounting', balance_after_minor: 320_000 }],
+  },
+  '/api/money/accounts/macc_research_usd/statement': {
+    account_id: 'macc_research_usd', agent_id: 'agt_research', currency: 'USD', from: '2026-10-01T00:00:00Z', to: '2026-10-21T00:00:00Z',
+    opening_minor: 0, in_minor: 40_000, out_minor: 0, closing_minor: 40_000,
+    lines: [{ entry_id: 'ment_fennel', line: 1, at: '2026-10-12T09:00:00Z', kind: 'payment_in', amount_minor: 40_000, funding: 'test', counterparty: 'Fennel Labs', balance_after_minor: 40_000 }],
+  },
+  '/api/money/accounts/macc_room_usd/statement': {
+    account_id: 'macc_room_usd', agent_id: 'agt_room', currency: 'USD', from: '2026-10-01T00:00:00Z', to: '2026-10-21T00:00:00Z',
+    opening_minor: 0, in_minor: 25_000, out_minor: 0, closing_minor: 25_000,
+    lines: [{ entry_id: 'ment_team', line: 1, at: '2026-10-15T09:00:00Z', kind: 'payment_in', amount_minor: 25_000, funding: 'test', counterparty: 'Nick’s team', balance_after_minor: 25_000 }],
+  },
   '/api/money/payees': {
     payees: [
       { id: 'payee_kite', name: 'Kite Accounting', country: 'US', check: 'exact_match', checked_by: 'test', checked_at: '2026-10-01T08:00:00Z', needs_confirmation: false, created_at: '2026-09-20T09:00:00Z' },
