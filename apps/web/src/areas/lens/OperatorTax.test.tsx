@@ -120,7 +120,8 @@ describe('the operator’s Tax page (B32.63)', () => {
   it('uploads a rates CSV and sees each rate with its validity', async () => {
     const bff = mockBff()
     const nav = await at('/operator/tax')
-    expect(within(nav).getByRole('link', { name: 'Tax' })).toHaveAttribute('href', '/operator/tax')
+    // B57.8 — the operator's pages are under Settings in the sidebar.
+    expect(within(nav).getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByText(/No tax rate is loaded/)).toBeTruthy()
     const form = screen.getByRole('form', { name: 'Load tax rates' })
     fireEvent.change(within(form).getByLabelText('Rates file'), {

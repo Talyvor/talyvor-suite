@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useMemo } from 'react'
+import { useLayoutEffect, useMemo } from 'react'
 import { QueryCache, QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import {
   BrowserRouter,
@@ -11,19 +11,19 @@ import {
   useLocation,
   useNavigationType,
 } from 'react-router-dom'
+import { Logo, ThemeToggle, cn, inlineLink } from '@talyvor/ui'
 import {
-  Logo,
-  NavIcon,
-  NavItem,
-  Shell,
-  ThemeToggle,
-  cn,
-  focusRing,
-  inlineLink,
-  type NavIconName,
-} from '@talyvor/ui'
-import { Button as PocketButton, EmptyState, SnackHost } from '@talyvor/ui/pocket'
-import { AuthGate, SessionChip } from './components/AuthGate'
+  Button as PocketButton,
+  EmptyState,
+  Icon as PocketIcon,
+  PageHeading,
+  Shell as PocketShell,
+  SnackHost,
+  pocketFocusRing,
+  type IconName as PocketIconName,
+} from '@talyvor/ui/pocket'
+import { AuthGate } from './components/AuthGate'
+import { EveryAgentSwitch, KillBanner } from './components/EveryAgent'
 import { TalyButton } from './taly/TalyButton'
 import { useDocumentTitle } from './documentTitle'
 import { ApiError, UnreadableError } from './lib/api'
@@ -92,11 +92,9 @@ import { Terms } from './routes/Terms'
 import { SignIn } from './areas/auth/Entry'
 import { SignUp, SignUpKey } from './areas/auth/SignUp'
 import { SessionExpiredBar } from './components/SessionExpiredBar'
-import { CommandPalette, type PalettePage } from './components/CommandPalette'
+import { CommandPalette, ariaKeys, shortcutText, type PalettePage } from './components/CommandPalette'
 import { ScreenBoundary } from './components/ScreenBoundary'
-import { type DocRef, pageHref, useDocsNav } from './areas/docs/docsNav'
 import { useAuthMeReader } from './lib/authMe'
-import { useSidebarFold } from './sidebarFold'
 import { designOf } from './pocketPending'
 import { WorkspaceSandbox } from './labels/workspace'
 import { AreaRoute, IfArea, useWorkspaceAreas } from './lib/workspaceAreas'
@@ -132,75 +130,6 @@ export const queryClient: QueryClient = new QueryClient({
     },
   },
 })
-
-/**
- * B24.1 — which group holds which addresses, so the group holding the current page opens on load.
- * A path owns itself and everything below it; `/` owns only itself.
- */
-const GROUP_PATHS: Record<string, readonly string[]> = {
-  Marketplace: ['/marketplace'],
-  Work: ['/track', '/docs'],
-  Developers: ['/setup', '/keys', '/spend', '/features'],
-  Billing: ['/billing', '/plans', '/overview', '/ledger', '/pricing'],
-  Money: ['/money'],
-  Settings: ['/settings', '/members'],
-  Operator: ['/operator'],
-}
-const GROUPS = Object.keys(GROUP_PATHS)
-
-function groupOf(pathname: string): string | undefined {
-  return GROUPS.find((g) =>
-    GROUP_PATHS[g].some((p) => pathname === p || (p !== '/' && pathname.startsWith(`${p}/`))),
-  )
-}
-
-/**
- * A group title is a real <button> that opens and closes its links; folded, the links are not
- * rendered at all, so nothing hidden can be tabbed to or read out.
- */
-function Group({
-  label,
-  open,
-  onToggle,
-  children,
-}: {
-  label: string
-  open: boolean
-  onToggle: () => void
-  children: React.ReactNode
-}) {
-  const regionId = useId()
-  return (
-    <div className="flex flex-col">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={regionId}
-        onClick={onToggle}
-        className={cn(
-          'flex items-center justify-between gap-2 rounded-control px-3 pb-1.5 pt-1 text-left transition-colors duration-200 hover:text-ink',
-          'font-figure text-eyebrow uppercase text-label',
-          focusRing,
-        )}
-      >
-        {label}
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 12 12"
-          className={cn('h-3 w-3 shrink-0 transition-transform duration-200', !open && '-rotate-90')}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-        >
-          <path d="M3 4.5 6 7.5l3-3" />
-        </svg>
-      </button>
-      <div id={regionId} hidden={!open} className={open ? 'flex flex-col gap-0.5' : undefined}>
-        {open ? children : null}
-      </div>
-    </div>
-  )
-}
 
 /**
  * THE CONSOLE'S PAGES — ONE TABLE, because two tables that must agree do not.
@@ -256,19 +185,19 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   // surface a subscriber uses, not an administrative one.
   { path: '/chat', title: 'Chat', element: <Chat /> },
   // B10.3 — the chat carries no instructions; they live here, linked from its rail.
-  { path: '/chat/help', title: 'How to use Talyvor Chat', element: <ChatHelp /> },
+  { path: '/chat/help', title: 'How to use Chat', element: <ChatHelp /> },
   // B28.369 — one question to three models at once, side by side, each answer priced. Linked from Chat's rail.
   { path: '/chat/compare', title: 'Compare models', element: <CompareModels /> },
   // B28.115 — custom instructions, sent with every question in every chat. Linked from Chat's rail.
   { path: '/chat/instructions', title: 'Custom instructions', element: <InstructionsPage /> },
   // B28.370 — the prompt library: the workspace's named prompts in Lens, used in any chat by name. Linked from Chat's rail.
-  { path: '/chat/prompts', title: 'Prompt library', element: <PromptsPage /> },
+  { path: '/chat/prompts', title: 'Prompts', element: <PromptsPage /> },
   // B28.377 — prompts scheduled with /schedule, each asked on an agent's wallet, and their answers. Linked from Chat's rail.
   { path: '/chat/scheduled', title: 'Scheduled prompts', element: <ScheduledPage /> },
   // B28.371 — memory: what Chat remembers about the person, opt-in, every fact listed and deleted. Linked from Chat's rail.
   { path: '/chat/memory', title: 'Memory', element: <MemoryPage /> },
   // B28.380 — uploaded files: every file attached in Chat, kept in Lens, listed and deleted for good. Linked from Chat's rail.
-  { path: '/chat/files', title: 'Uploaded files', element: <FilesPage /> },
+  { path: '/chat/files', title: 'Files', element: <FilesPage /> },
   // B28.122 — connectors: the person's own MCP servers, whose tools Chat offers beside Talyvor's. Linked from Chat's rail.
   { path: '/chat/connectors', title: 'Connectors', element: <ConnectorsPage /> },
   // B32.53 — rooms: open chats other workspaces join, the directory and a new room. Chat's rail lists them too.
@@ -284,12 +213,12 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/billing/success', title: 'Billing', element: <BillingSuccess /> },
   { path: '/billing/cancel', title: 'Billing', element: <BillingCancel /> },
   { path: '/keys', title: 'API keys', element: <Keys /> },
-  // B19.4 — each AI agent's own wallet: balance, rules, statement, payments and approvals. B21.6: Agent Wallets.
-  { path: '/agents', title: 'Agent Wallets', element: <AgentBank /> },
+  // B19.4 — each AI agent's own wallet: balance, rules, statement, payments and approvals. B57.8: Pocket's Agents.
+  { path: '/agents', title: 'Agents', element: <AgentBank /> },
   // B20.3 — browse, use and publish agents, prompts, skills, evaluations and pipelines; what they earned.
   { path: '/marketplace/*', title: 'Marketplace', element: <MarketplaceArea /> },
-  { path: '/setup', title: 'Setup', element: <Setup /> },
-  { path: '/spend', title: 'Spend & routing', element: <Spend /> },
+  { path: '/setup', title: 'Connect an agent', element: <Setup /> },
+  { path: '/spend', title: 'Spend and routing', element: <Spend /> },
   { path: '/members', title: 'Members', element: <Members /> },
   { path: '/settings', title: 'Settings', element: <Settings /> },
   // B30.116 — the owner's verification level, each check, and the level each capability needs for live money.
@@ -307,7 +236,7 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.
   { path: '/money/pay', title: 'Pay', element: <PayScreen /> },
   // B45.37 — the page an assistant's recurring-payments link opens: its standing orders, and one passkey signature.
-  { path: '/money/plans/:id', title: 'Recurring payments', element: <RecurringPlanScreen /> },
+  { path: '/money/plans/:id', title: 'Sign recurring payments', element: <RecurringPlanScreen /> },
   // B41.20 — every recurring payment, standing order and renewing rental, with its next charge, monthly cost and reminder.
   { path: '/money/subscriptions', title: 'Subscriptions', element: <SubscriptionsScreen /> },
   // B41.39 — a weekly or monthly budget per category, its progress from the postings, and its 50/80/100% alerts.
@@ -324,7 +253,7 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   // B40.9 — the page a prepared request's approval link opens (Lens B40.3), from Chat, an assistant or a push.
   { path: '/approve/:id', title: 'Approve payments', element: <ApproveScreen /> },
   // B8.2 — every capability, what it does and costs, whether it is on, and its switch.
-  { path: '/features', title: 'Features', element: <Features /> },
+  { path: '/features', title: 'Gateway features', element: <Features /> },
   // B11.3 — run Tare or document conversion on your own input: no model call, no charge.
   { path: '/features/try/tare', title: 'Try Tare', element: <TryTare /> },
   { path: '/features/try/conversion', title: 'Try document conversion', element: <TryConversion /> },
@@ -359,289 +288,133 @@ function titleFor(pathname: string): string {
  * "Open link in new tab" or "Copy link address", and by a screen reader's links list, which held
  * Privacy and Terms and nothing else. See ConsoleNavLinks.test.tsx.
  *
- * ⚠ NOT `<Link>` WEARING THE ROW'S CLASSES, AND NOT A HAND-ROLLED MODIFIER CHECK. The row's
- * `truncate` span has to survive (240px sidebar), which rules out cloning the caller's element,
- * and "which clicks belong to the browser" is a rule react-router already owns. `useHref` +
- * `useLinkClickHandler` are exactly what `Link` itself is built from: the handler preventDefaults
- * and routes a plain left click, and returns untouched on a modified one, so the browser opens
- * the new tab it was asked for.
+ * ⚠ NOT A HAND-ROLLED MODIFIER CHECK. "Which clicks belong to the browser" is a rule react-router
+ * already owns. `useHref` + `useLinkClickHandler` are exactly what `Link` itself is built from: the
+ * handler preventDefaults and routes a plain left click, and returns untouched on a modified one,
+ * so the browser opens the new tab it was asked for.
+ *
+ * B57.8 — drawn as Pocket's row (pocket.css .nav a): its line icon, the label, and the selected row on cloud.
  */
 function NavDestination({
   to,
   label,
   icon,
-  wildcard = false,
   active,
   badge,
-  className,
 }: {
   to: string
   label: string
-  /** B29.7 — the row's 20px line icon. */
-  icon: NavIconName
-  wildcard?: boolean
-  /** Overrides the exact/prefix rule where a row shares its prefix with a sibling row. */
-  active?: boolean
+  icon: PocketIconName
+  active: boolean
   /** B28.7 — a count beside the label (approvals waiting); nothing is drawn at zero or while unknown. */
   badge?: number | null
-  className?: string
 }) {
-  const { pathname } = useLocation()
   const href = useHref(to)
   const onClick = useLinkClickHandler<HTMLAnchorElement>(to)
   return (
-    <NavItem
-      active={active ?? (wildcard ? pathname.startsWith(to) : pathname === to)}
+    <a
       href={href}
       onClick={onClick}
-      icon={<NavIcon name={icon} />}
-      className={className}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'flex items-center gap-3 rounded-tile px-2.5 py-2 text-body font-semibold',
+        active ? 'bg-cloud text-ink' : 'text-ink-2',
+        pocketFocusRing,
+      )}
     >
-      {label}
+      <PocketIcon name={icon} />
+      <span className="min-w-0 truncate">{label}</span>
       {badge ? (
-        <span className="ml-2 rounded-pill border border-rule bg-surface px-1.5 font-figure text-caption text-ink">
+        // Your move: what waits for you (pocket.css .nav a .n), in the tangerine that may carry words.
+        <span
+          data-tangerine="your-move"
+          className="ml-auto grid h-5.5 min-w-5.5 place-items-center rounded-pill bg-tangerine-50 px-1.5 font-figure text-caption text-tangerine-ink"
+        >
           {badge}
           <span className="sr-only"> waiting</span>
         </span>
       ) : null}
-    </NavItem>
+    </a>
   )
 }
 
+/** A path owns itself and everything below it; `/` owns only itself. */
+const under = (pathname: string, ...paths: string[]) =>
+  paths.some((p) => pathname === p || (p !== '/' && pathname.startsWith(`${p}/`)))
+
 function Sidebar() {
   const { pathname } = useLocation()
-  const me = useAuthMeReader()
   const pending = usePendingApprovals()
   // B46.16 — the name sign-up gave the workspace, under the brand.
   const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
   // B55.39 — Lens names a new workspace by its id; the sidebar never shows it.
-  const workspaceLabel = workspace.data?.name === workspace.data?.id ? 'Your workspace' : workspace.data?.name
-  // B59.2 — a row for an area this workspace does not have is not drawn, and a group left with no rows goes with it.
+  const workspaceLabel = !workspace.data?.name || workspace.data.name === workspace.data.id ? 'Your workspace' : workspace.data.name
+  // B59.2 — a row for an area this workspace does not have is not drawn.
   const areas = useWorkspaceAreas()
-  const work = areas.has('track') || areas.has('docs')
-  // B59.10 — the account's type and kind: its chip under the name, and Members only for a Business (drawn while the
-  // account is read, so a fresh load at /members shows its own row).
+  // B59.10 — the account's type and kind: its chip under the name.
   const account = useAccount()
-  const item = (
-    to: string,
-    label: string,
-    icon: NavIconName,
-    opts: { wildcard?: boolean; active?: boolean; badge?: number | null; indent?: boolean } = {},
-  ) => !areas.shows(to) ? null : (
-    <NavDestination
-      to={to}
-      label={label}
-      icon={icon}
-      wildcard={opts.wildcard}
-      active={opts.active}
-      badge={opts.badge}
-      className={opts.indent ? 'pl-8' : undefined}
-    />
+  const item = (to: string, label: string, icon: PocketIconName, active: boolean, badge?: number | null) =>
+    !areas.shows(to) ? null : <NavDestination to={to} label={label} icon={icon} active={active} badge={badge} />
   )
-  // B10.6 — Docs lists the pages a person PINNED and the last five they OPENED, never every page
-  // (at fifty it was unusable); every page is one click away on "All documents". B8.1's reason for
-  // naming things here stands: a page is one click from anywhere once it is pinned or recent.
-  const docsNav = useDocsNav()
-  // B24.1 — every group folds to its title; the one holding this page starts open.
-  const fold = useSidebarFold(
-    GROUPS.filter(
-      (g) => (g !== 'Operator' || me.data?.operator) && (g !== 'Marketplace' || areas.has('marketplace')) && (g !== 'Work' || work),
-    ),
-    groupOf(pathname),
-  )
-  const docsListed = areas.has('docs') ? [...docsNav.pinned, ...docsNav.recent] : []
-  const onTrackIssues = pathname === '/track' || pathname.startsWith('/track/issues')
-  const onDocsIndex = pathname.startsWith('/docs') && !docsListed.some((d) => pathname === pageHref(d))
-  const docLink = (d: DocRef) => (
-    <NavDestination
-      key={`${d.spaceId}/${d.pageId}`}
-      to={pageHref(d)}
-      label={d.title}
-      icon="page"
-      active={pathname === pageHref(d)}
-      className="pl-8"
-    />
-  )
+  // B57.8 — Pocket's rows, and no folding groups: every page that left the sidebar is linked from the page it belongs
+  // to (Billing links Overview and Ledger, the Marketplace its own pages, Settings the settings), and ⌘K finds every page.
   return (
-    <nav className="flex flex-col gap-5 pb-2" aria-label="Sections">
-      {/* B57.6 — the corner carries the kit's logo, its small drawing at 144 px as Pocket's sidebar does;
-          the product label under it stays text, as an eyebrow. */}
-      <div className="flex items-center gap-2.5 px-3 pb-2 pt-3">
-        <div className="shrink-0">
-          <Logo width={144} />
-          <div className="mt-1 text-eyebrow uppercase leading-tight text-label">Suite</div>
+    <nav className="flex flex-1 flex-col" aria-label="Sections">
+      {/* B57.6 — the kit's small drawing at 144 px, light or dark by the theme, to Home. */}
+      <Link to="/" aria-label="Talyvor, Home" className={cn('flex self-start rounded-tile px-2 pb-3.5 pt-1', pocketFocusRing)}>
+        <Logo width={144} />
+      </Link>
+      {workspace.isPending ? null : (
+        <div className="mb-2.5 flex items-center gap-2.5 rounded-inset bg-cloud p-2.5" data-testid="sidebar-workspace">
+          <span aria-hidden="true" className="grid h-8.5 w-8.5 shrink-0 place-items-center rounded-tile bg-cloud-2 font-bold text-ink">
+            {workspaceLabel.charAt(0).toUpperCase()}
+          </span>
+          <div className="grid min-w-0 justify-items-start gap-1">
+            <span className="max-w-full truncate text-body font-semibold text-ink" title={workspaceLabel} data-testid="sidebar-workspace-name">
+              {workspaceLabel}
+            </span>
+            {/* B56.11 — one Sandbox chip under the name while Lens says no money capability is live for this workspace. */}
+            {/* B59.10 — the switcher's chip, "Business · Hybrid", once Lens has said which. */}
+            {account.account ? (
+              <span className="rounded-pill bg-cloud-2 px-2 text-caption text-ink" data-testid="sidebar-account-chip">
+                {accountChip(account.account)}
+              </span>
+            ) : null}
+            <WorkspaceSandbox />
+          </div>
         </div>
-        {/* An icon beside the wordmark, so the corner holds the board's mark and name without the two
-            words crowding them; its name is the text a screen reader and a pointer's tooltip read. */}
-        <button
-          type="button"
-          onClick={fold.toggleAll}
-          title={fold.anyOpen ? 'Fold all' : 'Open all'}
-          className={cn(
-            'ml-auto inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-muted transition-colors duration-200 hover:text-ink',
-            focusRing,
-          )}
-        >
-          <NavIcon name={fold.anyOpen ? 'fold' : 'unfold'} />
-          <span className="sr-only">{fold.anyOpen ? 'Fold all' : 'Open all'}</span>
-        </button>
+      )}
+      <div className="grid gap-0.5">
+        {item('/', 'Home', 'home', pathname === '/')}
+        {item('/approvals', 'Approvals', 'approvals', under(pathname, '/approvals', '/approve'), pending)}
+        {item('/agents', 'Agents', 'agents', under(pathname, '/agents'))}
+        {item('/statements', 'Statements', 'statements', under(pathname, '/statements'))}
+        {item('/money/pay', 'Pay', 'payments', under(pathname, '/money/pay', '/money/plans'))}
+        {item('/money/invoices', 'Invoices', 'invoices', under(pathname, '/money/invoices'))}
+        {item('/money/spending', 'Spending', 'spending', under(pathname, '/money/spending', '/money/budgets', '/money/subscriptions', '/money/card'))}
+        {item('/chat', 'Chat', 'chat', under(pathname, '/chat'))}
+        {item('/rooms', 'Rooms', 'rooms', under(pathname, '/rooms'))}
+        {item('/marketplace', 'Marketplace', 'marketplace', under(pathname, '/marketplace'))}
+        <div role="separator" className="mx-1.5 my-2.5 h-px bg-line" />
+        {item('/scan/reports', 'Scan', 'scan', under(pathname, '/scan'))}
+        {item(areas.has('track') ? '/track' : '/docs', 'Track and Docs', 'work', under(pathname, '/track', '/docs'))}
+        {item('/setup', 'Developers', 'code', under(pathname, '/setup', '/keys', '/spend', '/features'))}
+        {item('/billing', 'Billing', 'billing', under(pathname, '/billing', '/plans', '/overview', '/ledger'))}
+        {item('/settings', 'Settings', 'settings', under(pathname, '/settings', '/members', '/operator'))}
       </div>
-      {workspace.data?.name ? (
-        <div className="-mt-4 truncate px-3 text-caption text-ink" title={workspaceLabel} data-testid="sidebar-workspace-name">
-          {workspaceLabel}
-        </div>
-      ) : null}
-      {/* B59.10 — the switcher's chip, "Business · Hybrid", once Lens has said which. */}
-      {account.account ? (
-        <span
-          className="-mt-3 ml-3 self-start rounded-pill border border-rule bg-surface px-2 text-caption text-ink"
-          data-testid="sidebar-account-chip"
-        >
-          {accountChip(account.account)}
-        </span>
-      ) : null}
-      {/* B56.11 — one Sandbox chip under the name while Lens says no money capability is live for this workspace. */}
-      <WorkspaceSandbox className="-mt-3 ml-3 self-start" />
-      {/* B28.7 — WALLET-FIRST. The product is agent wallets, so the wallet's own screens lead and never
-          fold away: the home, what is waiting for a person, the agents and their statements, then Chat.
-          Everything else is grouped below them, in the order a person reaches for it. */}
-      <div className="flex flex-col gap-0.5">
-        {item('/', 'Home', 'home')}
-        {item('/approvals', 'Approvals', 'approvals', { badge: pending })}
-        {/* The label is the page's title, so the row and the heading it opens are one name. */}
-        {item('/agents', 'Agent Wallets', 'wallet')}
-        {item('/statements', 'Statements', 'statement')}
-        {item('/statements/royalties', 'Royalties', 'coins', { indent: true })}
-        {item('/chat', 'Chat', 'chat', { wildcard: true })}
-        {item('/rooms', 'Rooms', 'members', { indent: true, wildcard: true })}
-      </div>
-      {areas.has('marketplace') ? (
-      <Group label="Marketplace" {...fold.group('Marketplace')}>
-        {item('/marketplace', 'Discover', 'grid', {
-          active:
-            pathname === '/marketplace' ||
-            pathname.startsWith('/marketplace/listings') ||
-            pathname.startsWith('/marketplace/collections') ||
-            pathname.startsWith('/marketplace/compare'),
-        })}
-        {item('/marketplace/publish', 'Publish', 'upload')}
-        {item('/marketplace/selling', 'Your listings & earnings', 'tag')}
-        {item('/marketplace/licences', 'Your licences', 'key')}
-        {item('/marketplace/bill', 'Your bill', 'receipt')}
-        {item('/marketplace/content-filter', 'Content filter', 'sliders')}
-        {/* B20.12 — offered only to someone the BFF's operator gate will admit. */}
-        {me.data?.operator ? item('/marketplace/review', 'Review queue', 'prove') : null}
-      </Group>
-      ) : null}
-      {/* Docs is BACK. It left the nav because it served one PINNED workspace shared by every
-          signed-in person; it now takes the SESSION's workspace, the same way Track does, so the
-          condition written into the removal comment has been met rather than waived. See
-          apps/bff docsWorkspaceFor and the Track↔Docs enumeration that broke the cold-start
-          deadlock (talyvor-track bf60842, talyvor-docs c970329). */}
-      {work ? (
-      <Group label="Work" {...fold.group('Work')}>
-        {item('/track', 'Track', 'issues', { active: onTrackIssues })}
-        {item('/track/board', 'Board', 'board', { indent: true })}
-        {item('/track/cycles', 'Cycles', 'cycle', { indent: true })}
-        {item('/track/projects', 'Projects', 'folder', { indent: true })}
-        {item('/docs', 'Docs', 'docs', { active: onDocsIndex })}
-        {areas.has('docs') && docsNav.pinned.length > 0 ? (
-          <>
-            <p className="pl-8 pr-3 pt-1 text-caption text-faint">Pinned</p>
-            {docsNav.pinned.map(docLink)}
-          </>
-        ) : null}
-        {areas.has('docs') && docsNav.recent.length > 0 ? (
-          <>
-            <p className="pl-8 pr-3 pt-1 text-caption text-faint">Recent</p>
-            {docsNav.recent.map(docLink)}
-          </>
-        ) : null}
-      </Group>
-      ) : null}
-      <Group label="Developers" {...fold.group('Developers')}>
-        {/* Connecting an agent sits beside Keys because minting a key and being told what to do with
-            it are one task; a trial user who finds only Keys is stuck holding a credential. */}
-        {item('/setup', 'Connect an agent', 'plug')}
-        {item('/keys', 'API keys', 'key')}
-        {item('/spend', 'Spend & routing', 'route')}
-        {item('/features', 'Gateway features', 'sliders')}
-      </Group>
-      <Group label="Billing" {...fold.group('Billing')}>
-        {/* Buying LXC has to be findable, not a URL you have to be told. The
-            wildcard keeps it highlighted on the Stripe return pages too. */}
-        {item('/billing', 'Plan & top up', 'card', { wildcard: true })}
-        {item('/plans', 'Plans', 'layers')}
-        {item('/overview', 'Overview', 'chart')}
-        {item('/ledger', 'Ledger', 'ledger')}
-        {/* The public price list (B5.2). It opens outside the console, as a buyer sees it. */}
-        {item('/pricing', 'Pricing', 'price')}
-      </Group>
-      {/* B30.97 — the first Money item; B30.105 fills the group in. */}
-      <Group label="Money" {...fold.group('Money')}>
-        {item('/money/pay', 'Pay', 'coins')}
-        {item('/money/invoices', 'Invoices', 'receipt')}
-        {item('/money/subscriptions', 'Subscriptions', 'cycle')}
-        {item('/money/spending', 'Spending', 'chart')}
-        {item('/money/budgets', 'Budgets', 'sliders')}
-        {item('/scan/reports', 'Scan reports', 'page', { wildcard: true })}
-        {item('/scan/agents', 'Scan agents', 'agent')}
-        {item('/scan/track-record', 'Track record', 'prove', { indent: true })}
-      </Group>
-      <Group label="Settings" {...fold.group('Settings')}>
-        {item('/settings', 'Settings', 'settings')}
-        {account.shows?.team !== false ? item('/members', 'Members', 'members') : null}
-        {item('/settings/verification', 'Verification', 'prove')}
-        {item('/settings/terms', 'Capability terms', 'page')}
-        {item('/settings/webhooks', 'Webhooks', 'plug')}
-        {item('/settings/email-branding', 'Email branding', 'page')}
-        {item('/settings/connect', 'Connect your AI', 'plug')}
-      </Group>
-      {/* B18.25 — offered only to someone the BFF's operator gate will admit. */}
-      {me.data?.operator ? (
-        <Group label="Operator" {...fold.group('Operator')}>
-          {item('/operator', 'Workspaces', 'server')}
-          {item('/operator/tax', 'Tax', 'receipt')}
-          {item('/operator/compliance', 'Compliance', 'ledger')}
-        </Group>
-      ) : null}
-      {/* The first "Operator" group held one item, /admin, and went with it: an operator
-          console whose five screens were entirely fabricated (invented node ids, IPs,
-          certificate fingerprints, a Let's Encrypt issuer string) with no BFF route and no
-          path to real data in this deployment. A fixture badge cannot carry that content —
-          a cert expiring in 17 days is not a placeholder to whoever is reading it.
-
-          /specimen (the design-system gallery) is GONE — route and component both. Unlinked
-          was not the same as unreachable: a trial user given the URL, or one guessing it, got
-          an internal work-in-progress component sheet. "Reviews open it by URL" was a reason to
-          keep it in git history, which deleting does, not to serve it to customers. Pinned by
-          FirstRunGaps.test.tsx. */}
-
       {/* ── THE POLICIES, AND WHY HERE ────────────────────────────────────────────────
-          Both routes have always resolved, and until now nothing inside the app linked to
-          them: they appeared on the marketing page, the sign-in card and the consent screen —
-          three surfaces a signed-in person has already passed and does not return to. So the
-          moment someone wanted to check what we do with their data, the answer was "type the
-          URL", which is unreachable for anyone who does not already know it.
+          Both routes have always resolved, and until B28 nothing inside the app linked to them: they
+          appeared on the marketing page, the sign-in card and the consent screen — three surfaces a
+          signed-in person has already passed and does not return to.
 
-          NOT A PAGE FOOTER. A footer sits below the content, and this app's content-heavy
-          routes (Ledger, Spend) scroll — so on exactly the pages where a person is looking at
-          their data and thinks to ask, the footer is permanently below the fold. The sidebar
-          is `sticky top-0`, which makes this reachable from any route without scrolling. It
-          also avoids adding a region to the shared Shell in packages/ui for two links.
-
-          NOT THE SETTINGS PAGE. Settings is where you look for YOUR settings; a person hunting
-          for OUR policies has no reason to expect them there, and it costs a click and a guess.
-          Fine as a second home, wrong as the only one.
-
-          NOT A NAV ITEM. Rendered as small muted text rather than NavItem, below the product
-          groups and after a rule: these are not destinations you visit in the course of work,
-          and styling them like Overview or Keys would overstate them. Findable without being
-          prominent is the whole requirement for a legal surface.
+          NOT A PAGE FOOTER: content-heavy routes scroll, so a footer is below the fold on exactly the
+          pages where a person is looking at their data. The sidebar is sticky, so this is reachable from
+          any route without scrolling. Small and muted after a rule, because they are not destinations you
+          visit in the course of work (pocket.css .sidefoot).
 
           Link, not <a href>: same-tab client-side navigation, and it keeps a real href so the
           link is a link to assistive tech and to a middle-click. */}
-      <div className="mt-auto border-t border-rule px-3 pt-3 text-caption text-faint">
+      <div className="mt-auto border-t border-line px-2.5 pt-3 text-caption font-normal text-ink-3">
         <Link className={inlineLink} to="/privacy">
           Privacy
         </Link>
@@ -651,6 +424,21 @@ function Sidebar() {
         </Link>
       </div>
     </nav>
+  )
+}
+
+/** B57.8 — the avatar opens Settings, where Sign out is. The person's initial, from the address they signed in with. */
+function Avatar() {
+  const me = useAuthMeReader()
+  const initial = (me.data?.user?.email ?? '').charAt(0).toUpperCase()
+  return (
+    <Link
+      to="/settings"
+      aria-label="Settings and sign out"
+      className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-pill bg-cloud-2 text-body font-bold text-ink', pocketFocusRing)}
+    >
+      {initial || <PocketIcon name="settings" size={18} />}
+    </Link>
   )
 }
 
@@ -671,10 +459,10 @@ function palettePages(operator: boolean, shows: (path: string) => boolean): Pale
 
 /** B59.10 — Members is a Business's team; a Personal account is never offered it. Its own component, told only whether
  * the account is Personal, so the account's read re-renders the palette once at most and never the whole shell. */
-function Palette({ pages }: { pages: PalettePage[] }) {
+function Palette({ pages, trigger }: { pages: PalettePage[]; trigger: (open: () => void) => React.ReactNode }) {
   const personal = usePersonal()
   const offered = useMemo(() => (personal ? pages.filter((p) => p.path !== '/members') : pages), [pages, personal])
-  return <CommandPalette pages={offered} />
+  return <CommandPalette pages={offered} trigger={trigger} />
 }
 
 function AppShell() {
@@ -684,53 +472,75 @@ function AppShell() {
   const areas = useWorkspaceAreas()
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `areas.key` changes exactly when `areas.shows` answers differently
   const pages = useMemo(() => palettePages(operator, areas.shows), [operator, areas.key])
-  // ONE expression, two consumers: the banner paints it and the browser tab is told it. They
+  // ONE expression, two consumers: the page's heading paints it and the browser tab is told it. They
   // cannot drift into naming different pages because there is nothing to drift between —
-  // documentTitle.test.tsx asserts the tab's page half IS the banner's string, at every address.
+  // documentTitle.test.tsx asserts the tab's page half IS the heading's string, at every address.
   const page = titleFor(pathname)
   useDocumentTitle(page)
+  // B47.2 — Chat has the whole page: the suite's sidebar waits off to the left until Menu asks for it.
+  const chat = pathname === '/chat' || pathname.startsWith('/chat/')
   return (
-    // B57.97 — the shell, Taly and the drawer are still today's design until B57.8 and B57.9 draw them, so they are
-    // held to today's rules; the page inside is held to its route's (pocketPending.ts). B57.8 takes this marker out.
-    <div className="contents" data-design="today">
-    <Shell
-      // B47.2 — Chat has the whole page: the suite's sidebar waits off to the left until Menu asks for it.
-      drawer={pathname === '/chat' || pathname.startsWith('/chat/')}
+    // B57.8 — Pocket's shell: the sidebar, the top bar, the kill banner and the page's heading. Taly, the palette and the
+    // theme switch are still today's design until B57.9 and B57.42 draw them, and carry their own marker.
+    <div className="contents" data-design="pocket">
+    <PocketShell
+      drawer={chat}
       sidebar={<Sidebar />}
-      nav={
+      bar={
         <>
-          {/* THE ONE HEADING ON A GATED SCREEN. This element already named the page; it was a
-              `<div>`, so a probe over all twelve CONSOLE_ROUTES addresses counted ZERO heading
-              elements in the rendered DOM at every one of them — nothing behind the gate could be
-              reached with the H key or listed in a headings rotor. It is the same computed `page`
-              the tab title takes, so the browser tab, the visible title and the heading are one
-              answer rather than three that agree today. MEASURED ZERO-PIXEL out of the built
-              stylesheet: the shipped sheet's only rules naming h1 are preflight's
-              `h1,…,h6{font-size:inherit;font-weight:inherit}` and `…,h1,…{margin:0}`, and
-              `.text-bar` supplies 20px/500 either way (B29.7). ConsoleHeading.test.tsx pins the name at
-              every address.
-              B28.267 — it wraps rather than ellipsises: at 390 "How to use Talyvor Chat" was cut to "H…". */}
-          <h1 className="min-w-0 flex-1 break-words text-bar text-ink">{page}</h1>
-          <div className="flex min-w-0 items-center gap-3">
-            <SessionChip />
-            <Palette pages={pages} />
-            <TeamOnly />
+          <Palette
+            pages={pages}
+            trigger={(open) => (
+              // pocket.css .top .search: the search that opens ⌘K (B57.9).
+              // Below 840 it is the pill and its icon alone, so the bar fits 320; its words stay its name.
+              <button
+                type="button"
+                onClick={open}
+                aria-label="Search agents, payees, bills… or type a command"
+                aria-keyshortcuts={ariaKeys('palette')}
+                className={cn(
+                  'flex h-10 min-w-0 flex-1 items-center gap-2 rounded-pill bg-cloud px-3.5 text-left text-body text-ink-3 wide:max-w-md',
+                  pocketFocusRing,
+                )}
+              >
+                <PocketIcon name="search" size={16} />
+                <span className="hidden min-w-0 flex-1 truncate wide:block">Search agents, payees, bills… or type a command</span>
+                <kbd className="hidden rounded-tile bg-page px-1.5 py-1 font-figure text-caption text-ink-3 shadow-edge wide:inline">
+                  {shortcutText('palette').replace('Cmd+', '⌘')}
+                </kbd>
+              </button>
+            )}
+          />
+          <span className="flex-1" />
+          <TeamOnly />
+          <EveryAgentSwitch />
+          {/* B57.42 moves the theme switch to Settings as Appearance; until then it stays here, in today's design. */}
+          <div className="contents" data-design="today">
             <ThemeToggle />
           </div>
+          <Avatar />
         </>
       }
     >
+      {/* B57.8 — while every agent is paused, on every page, with its own Start every agent again. */}
+      <KillBanner />
       {/* ABOVE THE CONTENT, ON EVERY ROUTE. When the workspace credential dies, every panel
           below is empty for one reason; this says it once. Renders nothing when nothing is
           refused, so it costs an unbroken app a null. */}
       <SessionExpiredBar />
+      {/* THE ONE HEADING ON A GATED SCREEN. It is the same computed `page` the tab title takes, so
+          the browser tab and the heading are one answer rather than two that agree today.
+          ConsoleHeading.test.tsx pins the name at every address. B57.8 — Pocket sets it at the top of
+          the content as the page's heading; Chat keeps the whole page, so there it is for a screen
+          reader only. */}
+      <PageHeading className={pathname === '/chat' ? 'sr-only' : 'mb-4.5'}>{page}</PageHeading>
       {/* B27.12 — a screen that throws while drawing shows "couldn't be read" here, with the shell
           still standing. Try again drops the failed screen's cached reads and asks for them anew. */}
       <ScreenBoundary address={pathname} onRetry={() => void queryClient.resetQueries({ type: 'inactive' })}>
         <div className="contents" data-design={designOf(pathname, ROUTE_PATHS)}>
         <Routes>
-          {/* EVERY ROUTE COMES FROM CONSOLE_ROUTES, which is also what titles the header. A page
-              declared here and nowhere else would be a page the top bar cannot name — that was
+          {/* EVERY ROUTE COMES FROM CONSOLE_ROUTES, which is also what titles the page. A page
+              declared here and nowhere else would be a page the heading cannot name — that was
               the state this table replaced. */}
           {CONSOLE_ROUTES.map((r) => (
             <Route key={r.path} path={r.path} element={<AreaRoute path={r.path}>{r.element}</AreaRoute>} />
@@ -771,16 +581,16 @@ function AppShell() {
         </Routes>
         </div>
       </ScreenBoundary>
-      {/* B45.6 — Taly, on every signed-in page, told which page it is on. */}
+      {/* B45.6 — Taly, on every signed-in page, told which page it is on. Today's design until B57.9. */}
       {/* B59.2 — Taly goes with Chat. */}
       <IfArea area="chat">
-        <TalyButton page={page} path={pathname} />
+        <div className="contents" data-design="today">
+          <TalyButton page={page} path={pathname} />
+        </div>
       </IfArea>
       {/* B57.5 — the confirmation after an action, shown once on the next view, and the short messages. */}
-      <div className="contents" data-design="pocket">
-        <SnackHost view={pathname} />
-      </div>
-    </Shell>
+      <SnackHost view={pathname} />
+    </PocketShell>
     </div>
   )
 }

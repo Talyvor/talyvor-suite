@@ -56,13 +56,13 @@ import { PENDING_TOPUP_KEY } from './areas/lens/topupApi'
 // ⚠ AND NO BAR COVERS FOR IT. Measured false above: a fetch rejection carries no status, so
 // `isSessionExpired` (ApiError + 401) is false, and the mutation error never reaches the query
 // cache that SessionExpiredBar derives from. The App's only global handler is
-// `QueryCache.onError` (App.tsx:113) — queries, not mutations.
+// `QueryCache.onError` (App.tsx:109) — queries, not mutations.
 //
 // THE FIX SAYS NOTHING NEW. The fallback is the sentence topupApi.ts already raises for an
 // answer it cannot use (`'upstream'`, topupApi.ts:264): "Couldn't start the payment — nothing
 // was charged. Please try again." It is honest for a rejection by construction — this call only
 // asks Lens to create a Stripe Checkout Session, and the payment happens at Stripe AFTER the
-// redirect (TopUp.tsx:32, apps/bff/billing.go:300), so a call that never completed cannot
+// redirect (TopUp.tsx:33, apps/bff/billing.go:300), so a call that never completed cannot
 // have charged anyone.
 
 const AUTHENTICATED = {
@@ -174,7 +174,7 @@ describe('/billing — a checkout that never got an answer', () => {
   // ⚠ NOT AN ASSERTION ABOUT NAVIGATION. `window.location.assign` cannot be spied in this jsdom
   // ("Cannot redefine property: assign"), and a test that throws while setting up its own spy
   // reads in the runner exactly like a caught defect. What IS observable is the marker the flow
-  // depends on — and TopUp.tsx:322 states the rule: written only once the session exists, so a
+  // depends on — and TopUp.tsx:323 states the rule: written only once the session exists, so a
   // failed checkout must not leave a pending marker behind.
   it('leaves no pending top-up marker behind when the call never completed', async () => {
     checkoutAnswer = 'reject'

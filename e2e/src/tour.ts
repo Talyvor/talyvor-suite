@@ -159,29 +159,27 @@ export function brandPlanes(): Scenario {
 }
 
 /**
- * B29.7 — the shell in the board's PRODUCT UI tile, as the browser paints it in the dark theme: every
- * destination in the sidebar carries a 20px line icon, the selected row (Home, on /) sits on the
- * accent tint with Teal text, and the top-bar title is Space Grotesk 500 at 20px.
+ * B57.8 — Pocket's shell, as the browser paints it in the dark theme: every row in the sidebar carries its 20px line
+ * icon, the selected row (Home, on /) sits on the cloud in ink, as Pocket's own colours read on the page, and the top
+ * bar holds the search that opens ⌘K, Pause every agent and the avatar to Settings, with no page title or Sign out.
  */
-export const DARK_SHELL = { activeBg: 'rgb(14, 43, 46)', activeInk: 'rgb(58, 214, 192)', titleSize: '20px', titleWeight: '500' } as const
-
 export function appShell(): Scenario {
   return {
     id: 'app-shell',
     owner: 'talyvor-suite',
-    title: 'every sidebar link carries its icon, the selected row is Teal on the tint, and the top bar is 20px',
+    items: ['B29.7', 'B57.8'],
+    title: 'every sidebar row carries its icon, the selected row is ink on the cloud, and the top bar is search, Pause every agent and the avatar',
     run: async (ctx) => {
       const page = await ctx.app.tab('/')
       try {
         const nav = page.getByRole('navigation', { name: 'Sections' })
         await nav.locator('a[aria-current="page"]').waitFor({ timeout: HEADING_TIMEOUT_MS })
-        // The theme first, then a pause: a NavItem's colours ease over 200ms, and read mid-ease they are the light theme's.
         await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'))
         await page.waitForTimeout(400)
         const seen = await page.evaluate(() => {
           const nav = document.querySelector('nav[aria-label="Sections"]')!
-          // Privacy and Terms are the two policy links under the rule, not destinations; they carry no icon.
-          const rows = Array.from(nav.querySelectorAll('a[href]')).filter((a) => !['/privacy', '/terms'].includes(a.getAttribute('href') ?? ''))
+          // The logo is named, not a row; Privacy and Terms are the two policy links at the foot, with no icon.
+          const rows = Array.from(nav.querySelectorAll('a[href]:not([aria-label])')).filter((a) => !['/privacy', '/terms'].includes(a.getAttribute('href') ?? ''))
           const bare = rows
             .filter((a) => {
               const svg = a.querySelector('svg[data-icon]')
@@ -189,31 +187,45 @@ export function appShell(): Scenario {
             })
             .map((a) => (a.textContent ?? '').trim())
           const active = nav.querySelector('a[aria-current="page"]')
-          const h1 = document.querySelector('header h1')
+          // Pocket's own colours, as the page resolves them, so the row is held to the tokens rather than to numbers here.
+          const probe = document.createElement('span')
+          document.body.append(probe)
+          probe.style.color = 'var(--cloud)'
+          const cloud = getComputedStyle(probe).color
+          probe.style.color = 'var(--ink)'
+          const ink = getComputedStyle(probe).color
+          probe.remove()
+          const bar = document.querySelector('header')
+          const named = (sel: string) => Array.from(bar?.querySelectorAll(sel) ?? []).map((el) => (el.getAttribute('aria-label') ?? el.textContent ?? '').trim())
           return {
             rows: rows.length,
             bare,
             active: active ? (active.textContent ?? '').trim() : null,
             activeBg: active ? getComputedStyle(active).backgroundColor : 'none',
             activeInk: active ? getComputedStyle(active).color : 'none',
-            titleSize: h1 ? getComputedStyle(h1).fontSize : 'no title',
-            titleWeight: h1 ? getComputedStyle(h1).fontWeight : 'no title',
-            titleFace: h1 ? getComputedStyle(h1).fontFamily : 'no title',
+            cloud,
+            ink,
+            buttons: named('button'),
+            links: named('a[href]'),
+            title: bar?.querySelector('h1')?.textContent ?? null,
           }
         })
         ctx.evidence.push({
-          note: `${seen.rows} sidebar links, ${seen.bare.length} without an icon; selected "${seen.active}" ${seen.activeInk} on ${seen.activeBg}; title ${seen.titleSize}/${seen.titleWeight} ${seen.titleFace}`,
+          note: `${seen.rows} sidebar rows, ${seen.bare.length} without an icon; selected "${seen.active}" ${seen.activeInk} on ${seen.activeBg}; top bar: ${[...seen.buttons, ...seen.links].join(' · ')}`,
         })
         const wrong: string[] = []
-        if (seen.rows === 0) wrong.push('the sidebar has no links')
+        if (seen.rows === 0) wrong.push('the sidebar has no rows')
         if (seen.bare.length > 0) wrong.push(`no 20px icon on ${seen.bare.join(', ')}`)
         if (seen.active !== 'Home') wrong.push(`on / the selected row is ${seen.active ?? 'nothing'}, not Home`)
-        for (const k of ['activeBg', 'activeInk', 'titleSize', 'titleWeight'] as const) {
-          if (seen[k] !== DARK_SHELL[k]) wrong.push(`${k} is ${seen[k]}, not ${DARK_SHELL[k]}`)
-        }
-        if (!seen.titleFace.includes('Space Grotesk')) wrong.push(`the title is set in ${seen.titleFace}`)
+        if (seen.activeBg !== seen.cloud) wrong.push(`the selected row is on ${seen.activeBg}, not the cloud ${seen.cloud}`)
+        if (seen.activeInk !== seen.ink) wrong.push(`the selected row is ${seen.activeInk}, not the ink ${seen.ink}`)
+        if (!seen.buttons.some((b) => b.startsWith('Search agents, payees, bills'))) wrong.push('the top bar has no search')
+        if (!seen.buttons.includes('Pause every agent') && !seen.buttons.includes('Start every agent again')) wrong.push('the top bar has no Pause every agent')
+        if (!seen.links.includes('Settings and sign out')) wrong.push('the top bar has no avatar to Settings')
+        if (seen.buttons.includes('Sign out')) wrong.push('Sign out is still in the top bar')
+        if (seen.title !== null) wrong.push(`the top bar still carries the title "${seen.title}"`)
         return wrong.length === 0
-          ? { pass: true, detail: `all ${seen.rows} sidebar links carry an icon; Home is Teal on the tint; the title is 20px Space Grotesk 500` }
+          ? { pass: true, detail: `all ${seen.rows} sidebar rows carry an icon; Home is ink on the cloud; the top bar is search, Pause every agent and the avatar` }
           : { pass: false, detail: wrong.join('; '), where: ['/'] }
       } finally {
         await page.close()
@@ -228,14 +240,14 @@ export function appShell(): Scenario {
  * with the console's own heading naming the page there — not the catch-all's "Not found".
  */
 export const HOME_CARDS = [
-  { title: 'Agent Wallets', path: '/agents', heading: 'Agent Wallets' },
+  { title: 'Agent Wallets', path: '/agents', heading: 'Agents' },
   { title: 'Approvals', path: '/approvals', heading: 'Approvals' },
   { title: 'Statements', path: '/statements', heading: 'Statements' },
   { title: 'Chat', path: '/chat', heading: 'Chat' },
   { title: 'Marketplace', path: '/marketplace', heading: 'Marketplace' },
   { title: 'Track', path: '/track', heading: 'Track' },
   { title: 'Docs', path: '/docs', heading: 'Docs' },
-  { title: 'Developers', path: '/setup', heading: 'Setup' },
+  { title: 'Developers', path: '/setup', heading: 'Connect an agent' },
 ] as const
 
 export function homeCards(): Scenario {
@@ -263,7 +275,7 @@ export function homeCards(): Scenario {
             wrong.push(`the ${card.title} card opened ${at}, not ${card.path}`)
             continue
           }
-          const title = page.locator('header h1')
+          const title = page.locator('main h1')
           await title.filter({ hasText: card.heading }).waitFor({ timeout: HEADING_TIMEOUT_MS }).catch(() => undefined)
           const said = ((await title.textContent()) ?? '').trim()
           if (said !== card.heading) wrong.push(`the ${card.title} card opened ${at}, titled "${said}", not "${card.heading}"`)
@@ -289,13 +301,13 @@ export function homeCards(): Scenario {
  * user's spend cap skipped wallet-home, Lens has nothing pending and Approvals holds no Approve to fill (B17.141).
  */
 export const WALLET_SCREENS = [
-  { path: '/agents', title: 'Agent Wallets', teal: 'Fund' },
+  { path: '/agents', title: 'Agents', teal: 'Fund' },
   { path: '/approvals', title: 'Approvals', teal: 'Approve' },
   { path: '/statements', title: 'Statements', teal: 'Download' },
   // B34.1 — nothing has earned on this user's work, so Royalties' one action is Open Setup, where poolable work is consented to.
   { path: '/statements/royalties', title: 'Royalties', teal: 'Open Setup' },
   { path: '/ledger', title: 'Ledger', teal: null },
-  { path: '/spend', title: 'Spend & routing', teal: null },
+  { path: '/spend', title: 'Spend and routing', teal: null },
 ] as const
 export const DARK_WALLET = { teal: 'rgb(58, 214, 192)', raised: 'rgb(14, 26, 42)' } as const
 
@@ -312,7 +324,7 @@ export function walletBrand(): Scenario {
         const teal = screen.path === '/approvals' && pending === 0 ? null : screen.teal
         const page = await ctx.app.tab(screen.path)
         try {
-          await page.locator('header h1').filter({ hasText: screen.title }).waitFor({ timeout: HEADING_TIMEOUT_MS })
+          await page.locator('main h1').filter({ hasText: screen.title }).waitFor({ timeout: HEADING_TIMEOUT_MS })
           await page.waitForLoadState('networkidle', { timeout: SETTLE_TIMEOUT_MS }).catch(() => undefined)
           // B17.237 — the heading is the shell's; a screen's cards come with its first read, which can outlast the settle.
           await page.locator('main .rounded-card').first().waitFor({ timeout: HEADING_TIMEOUT_MS }).catch(() => undefined)
@@ -523,7 +535,7 @@ export function chatHelpInFull(): Scenario {
           await page.setViewportSize({ width, height })
           await page.waitForTimeout(200)
           const seen = await page.evaluate(() => {
-            const title = document.querySelector('header h1')
+            const title = document.querySelector('main h1')
             const sections = Array.from(document.querySelectorAll('main section'))
             const last = sections[sections.length - 1]?.textContent?.trim() ?? ''
             return {
@@ -537,8 +549,8 @@ export function chatHelpInFull(): Scenario {
           const file = `chat-help-${width}.jpg`
           await page.screenshot({ path: join(dir, file), type: 'jpeg', quality: 80, fullPage: true })
           const at = `${width}`
-          if (seen.title !== 'How to use Talyvor Chat') wrong.push(`${at}: the top bar says ${JSON.stringify(seen.title)}`)
-          if (seen.titleCut) wrong.push(`${at}: the title "How to use Talyvor Chat" is cut off`)
+          if (seen.title !== 'How to use Chat') wrong.push(`${at}: the top bar says ${JSON.stringify(seen.title)}`)
+          if (seen.titleCut) wrong.push(`${at}: the title "How to use Chat" is cut off`)
           const missing = CHAT_HELP_SECTIONS.filter((h) => !seen.headings.includes(h))
           if (missing.length > 0) wrong.push(`${at}: missing section(s): ${missing.join(', ')}`)
           if (!seen.lastEnds.endsWith(CHAT_HELP_LAST_SENTENCE)) wrong.push(`${at}: the last section ends "…${seen.lastEnds.slice(-40)}"`)
@@ -686,13 +698,13 @@ export function marketBrand(): Scenario {
  * photographed into the report.
  */
 export const BRAND_SCREENS = [
-  { path: '/features', title: 'Features' },
+  { path: '/features', title: 'Gateway features' },
   { path: '/track', title: 'Track' },
   { path: '/track/board', title: 'Track' },
   { path: '/track/cycles', title: 'Track' },
   { path: '/track/projects', title: 'Track' },
   { path: '/docs', title: 'Docs' },
-  { path: '/setup', title: 'Setup' },
+  { path: '/setup', title: 'Connect an agent' },
   { path: '/keys', title: 'API keys' },
   { path: '/billing', title: 'Billing' },
   { path: '/plans', title: 'Plans' },
@@ -713,7 +725,7 @@ export function screensBrand(): Scenario {
       for (const screen of BRAND_SCREENS) {
         const page = await ctx.app.tab(screen.path)
         try {
-          await page.locator('header h1').filter({ hasText: screen.title }).waitFor({ timeout: HEADING_TIMEOUT_MS })
+          await page.locator('main h1').filter({ hasText: screen.title }).waitFor({ timeout: HEADING_TIMEOUT_MS })
           await page.waitForLoadState('networkidle', { timeout: SETTLE_TIMEOUT_MS }).catch(() => undefined)
           // B17.237 — the heading is the shell's; a screen's cards come with its first read, which can outlast the settle.
           await page.locator('main .rounded-card').first().waitFor({ timeout: HEADING_TIMEOUT_MS }).catch(() => undefined)

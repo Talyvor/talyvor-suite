@@ -29,14 +29,14 @@ describe('Royalties sits under Statements', () => {
     window.history.pushState({}, '', '/')
   })
 
-  it('the sidebar offers Royalties directly after Statements, and no Earnings', async () => {
-    window.history.pushState({}, '', '/statements')
+  it('B57.8 — Royalties left the sidebar for Pocket’s rows; the Statements row stays marked on it, and no Earnings', async () => {
+    window.history.pushState({}, '', '/statements/royalties')
     render(<App />)
     const nav = await screen.findByRole('navigation', { name: /sections/i })
     const names = within(nav).getAllByRole('link').map((a) => a.textContent)
-    expect(names[names.indexOf('Statements') + 1]).toBe('Royalties')
-    expect(within(nav).getByRole('link', { name: 'Royalties' })).toHaveAttribute('href', '/statements/royalties')
+    expect(names).not.toContain('Royalties')
     expect(names).not.toContain('Earnings')
+    expect(within(nav).getByRole('link', { name: 'Statements' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('the old /earnings address lands on Royalties', async () => {

@@ -454,7 +454,7 @@ const PINS: Record<string, Pin> = {
   // 132 → 131 at B57.49: the Suite eyebrow under the logo on /signup and /signin goes; Pocket's auth card has none.
   // 131 → 126 at B57.63: the legal pages' two eyebrows, the pay page's eyebrow and the docs' route-table and connector
   // tool-table headers move to Pocket's Eyebrow and micro labels.
-  // 126 → 124 at B59.5: /marketing's band eyebrow and the pooled stepper's unit label leave with the hidden areas.
+  // 126 → 124 at B57.8: the sidebar's folding group titles go.
   'apps/web/src/caseAudit.ts|<N> uppercase class lists': {
     kind: 'LIVE',
     of: 'TOTAL',

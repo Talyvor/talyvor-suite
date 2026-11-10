@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
@@ -80,9 +80,15 @@ describe('the billing routes Lens already redirects to', () => {
 
   it('reaches the top-up screen from the sidebar, so buying is discoverable', async () => {
     at('/')
-    // B24.1 — two clicks: the Billing title opens its links.
+    // B57.8 — one click: Billing is a row of its own.
     const nav = await screen.findByRole('navigation', { name: /sections/i })
-    fireEvent.click(within(nav).getByRole('button', { name: 'Billing' }))
-    expect(within(nav).getByRole('link', { name: /^plan & top up$/i })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'Billing' })).toHaveAttribute('href', '/billing')
+  })
+
+  it('B57.8 — Billing links Overview and Ledger, which left the sidebar', async () => {
+    at('/billing')
+    const links = await screen.findByRole('navigation', { name: 'Where the money went' })
+    expect(within(links).getByRole('link', { name: /^Spend and earnings/ })).toHaveAttribute('href', '/overview')
+    expect(within(links).getByRole('link', { name: /^Ledger/ })).toHaveAttribute('href', '/ledger')
   })
 })

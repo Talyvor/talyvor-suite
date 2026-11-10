@@ -1421,7 +1421,7 @@ export function Chat() {
       {railHidden ? (
         <aside
           aria-label="Conversations"
-          className="hidden border-r border-rule bg-sidebar wide:sticky wide:top-12 wide:flex wide:h-below-header wide:w-12 wide:shrink-0 wide:flex-col wide:items-center wide:gap-1 wide:py-2"
+          className="hidden border-r border-rule bg-sidebar wide:sticky wide:top-header wide:flex wide:h-below-header wide:w-12 wide:shrink-0 wide:flex-col wide:items-center wide:gap-1 wide:py-2"
         >
           <button
             type="button"
@@ -1450,7 +1450,7 @@ export function Chat() {
       ) : (
         <aside
           aria-label="Conversations"
-          className="hidden border-r border-rule bg-sidebar wide:sticky wide:top-12 wide:flex wide:h-below-header wide:w-64 wide:shrink-0 wide:flex-col"
+          className="hidden border-r border-rule bg-sidebar wide:sticky wide:top-header wide:flex wide:h-below-header wide:w-64 wide:shrink-0 wide:flex-col"
         >
           <div className="flex justify-end px-2 pt-2">
             <button
@@ -1907,7 +1907,7 @@ export function Chat() {
       {/* B28.120 — the canvas, open: beside the conversation where the statement stands, a drawer on a narrower screen. */}
       {canvasPanel !== null ? (
         statementBeside ? (
-          <aside aria-label="Canvas" className="sticky top-12 flex h-below-header w-2/5 shrink-0 flex-col border-l border-rule">
+          <aside aria-label="Canvas" className="sticky top-header flex h-below-header w-2/5 shrink-0 flex-col border-l border-rule">
             {canvasPanel}
           </aside>
         ) : (
@@ -1917,7 +1917,7 @@ export function Chat() {
         )
       ) : statementBeside ? (
         statementKept ? (
-          <aside aria-label="Statement" className="sticky top-12 flex h-below-header w-80 shrink-0 flex-col border-l border-rule bg-sidebar">
+          <aside aria-label="Statement" className="sticky top-header flex h-below-header w-80 shrink-0 flex-col border-l border-rule bg-sidebar">
             <div className="flex justify-end px-2 pt-2">
               <button type="button" className={railIconClass} onClick={() => setStatementKept(false)} aria-label="Close statement" title="Close statement">
                 <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5">

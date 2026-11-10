@@ -164,7 +164,8 @@ describe('first run opens Home in onboarding mode', () => {
     const nav = within(await screen.findByRole('navigation', { name: /sections/i }))
     expect(nav.getByRole('link', { name: /^home$/i })).toBeInTheDocument()
     expect(nav.getByRole('link', { name: /^statements$/i })).toBeInTheDocument()
-    expect(nav.getByRole('link', { name: /^api keys$/i })).toBeInTheDocument()
+    // B57.8 — API keys is one of Developers' pages, and the Developers row is marked here.
+    expect(nav.getByRole('link', { name: /^developers$/i })).toHaveAttribute('aria-current', 'page')
   })
 
   it('a new workspace that Lens gave "My first agent" is asked its name, and the sidebar never shows its id', async () => {

@@ -280,10 +280,10 @@ export const DocEditor = forwardRef<DocEditorHandle, DocEditorProps>(function Do
   return (
     <div className="rounded-control border border-rule bg-surface transition-colors duration-200 hover:border-rule-strong">
       {/* Sticky, so the toolbar — and what is pinned in it — stays in view down a long page.
-          `top-12` is the shell's sticky header (a 32px control + py-2), so the two stack rather
+          `top-header` is the shell's sticky top bar (B57.8), so the two stack rather
           than overlap. `z-10` is needed over the text: ProseMirror's stylesheet positions the editable
           relatively, which would otherwise paint the page's words across the toolbar. */}
-      <div className="sticky top-12 z-10 flex flex-wrap items-center gap-1 rounded-t-control border-b border-rule bg-surface px-2 py-2">
+      <div className="sticky top-header z-10 flex flex-wrap items-center gap-1 rounded-t-control border-b border-rule bg-surface px-2 py-2">
         <div className="flex flex-wrap gap-1" role="toolbar" aria-label="Formatting">
           {tools.map((t) => (
             <Button

@@ -227,14 +227,19 @@ export class AgentBankScreen {
   async pauseAll(reason: string): Promise<string | undefined> {
     await this.fresh()
     await this.page.getByLabel('Why every agent is paused').fill(reason)
-    await this.page.getByRole('button', { name: 'Pause every agent' }).click()
+    // B57.8 — the page's own switch; the top bar and the kill banner carry ones with the same names.
+    await this.fleet().getByRole('button', { name: 'Pause every agent' }).click()
     return outcome(this.page.getByTestId('agents-all-paused'), this.page.locator('body'))
   }
 
   async resumeAll(): Promise<string | undefined> {
     await this.fresh()
-    await this.page.getByRole('button', { name: 'Start every agent again' }).click()
-    return outcome(this.page.getByRole('button', { name: 'Pause every agent' }), this.page.locator('body'))
+    await this.fleet().getByRole('button', { name: 'Start every agent again' }).click()
+    return outcome(this.fleet().getByRole('button', { name: 'Pause every agent' }), this.page.locator('body'))
+  }
+
+  private fleet() {
+    return this.page.getByTestId('pause-every-agent')
   }
 
   /** Pays `to` from `from` on Pay another agent; answers the line the card then shows. */
@@ -1640,6 +1645,58 @@ export function agentPauseAll(seed: number): Scenario {
   }
 }
 
+/**
+ * B57.8 — Pause every agent from the shell's top bar, on a page that is not Agents: Lens's book says every agent is
+ * paused, the agent's next request is refused before the provider with no spend row on the ledger, and the kill banner
+ * is on the next page too. Start every agent again opens the killoff dialog; started from there (a workspace with no
+ * passkey starts unsigned, as Lens allows), the book is clear and the banner gone.
+ */
+export function shellPauseAll(seed: number): Scenario {
+  const r = seeded(seed * 37 + 5)
+  return {
+    id: 'shell-pause-all',
+    owner: 'talyvor-suite',
+    agents: 1,
+    items: ['B57.8'],
+    title: 'Pause every agent in the top bar stops every agent before the provider, the kill banner follows to every page, and Start every agent again starts them',
+    run: (ctx) => withBank(ctx, async (bank) => {
+      const a = await openAgent(ctx, bank, `Shell ${seed}`)
+      if (typeof a === 'string') return fail(a)
+      const err = await bank.move(a, 500_000, 'Fund')
+      if (err !== undefined) return fail(`funding ${a.name} was refused: ${err}`)
+      const key = await bank.issueKey(a)
+      const page = await ctx.app.tab('/money/invoices')
+      try {
+        const bar = page.getByRole('banner')
+        await bar.getByRole('button', { name: 'Pause every agent' }).click({ timeout: ACTION_TIMEOUT_MS })
+        await page.getByTestId('kill-banner').waitFor({ timeout: ACTION_TIMEOUT_MS })
+        if (new URL(page.url()).pathname !== '/money/invoices') return fail(`Pause every agent left the page for ${page.url()}`)
+        const paused = await bookOf(ctx)
+        if (paused.all_paused_at === undefined) return fail('the top bar says every agent is paused; Lens’s book does not')
+        const spends0 = new Set((await spendRows(ctx)).map((x) => x.id))
+        const t = await agentAsks(ctx, key, sum(r).q, `${a.name}, paused from the top bar`)
+        if (t.ok) return fail(`paused from the top bar, ${a.name} was served: "${t.value.text}"`)
+        if (t.status !== 403 || !/every agent in this workspace is paused/.test(t.error)) return fail(`${a.name} was refused, but not by the pause: ${t.status} ${t.error}`)
+        if ((await spendRows(ctx)).some((x) => !spends0.has(x.id))) return fail('paused, yet the ledger gained a spend row')
+        if (agentIn(await bookOf(ctx), a.id)?.balance_ulxc !== 500_000) return fail(`paused, yet ${a.name}'s balance moved`)
+        await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Statements' }).click()
+        await page.getByTestId('kill-banner').waitFor({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
+        if ((await page.getByTestId('kill-banner').count()) === 0) return fail('on Statements, with every agent paused, there is no kill banner')
+        await bar.getByRole('button', { name: 'Start every agent again' }).click()
+        const dialog = page.getByRole('dialog', { name: 'Start every agent again?' })
+        await dialog.getByRole('button', { name: /^Start (every agent again|them with your passkey)$/ }).click({ timeout: ACTION_TIMEOUT_MS })
+        await page.getByTestId('kill-banner').waitFor({ state: 'detached', timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
+        const again = await bookOf(ctx)
+        if (again.all_paused_at !== undefined) return fail('started again from the killoff dialog, yet Lens’s book still says every agent is paused')
+        if ((await page.getByTestId('kill-banner').count()) > 0) return fail('started again, yet the kill banner stays')
+        return { pass: true, detail: `paused from the top bar on Invoices: Lens's book paused, ${a.name} refused (403) with no spend row, the banner on Statements; started again from the dialog, the book is clear` }
+      } finally {
+        await page.close()
+      }
+    }),
+  }
+}
+
 export function agentApproval(seed: number): Scenario {
   return {
     id: 'agent-approval',
@@ -2052,7 +2109,8 @@ async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: st
 
 /** B28.271 — what Agent Wallets may not show a workspace with no agents: none of these has anything to act on yet. */
 const EMPTY_HIDDEN = [
-  { what: 'the pause-all switch', find: (p: Page) => p.getByRole('button', { name: 'Pause every agent' }) },
+  // B57.8 — the page's own; the top bar's Pause every agent is on every page.
+  { what: 'the pause-all switch', find: (p: Page) => p.getByTestId('pause-every-agent') },
   { what: 'the month-end forecast', find: (p: Page) => p.getByTestId('agents-forecast') },
   { what: 'the Approvals region', find: (p: Page) => p.getByRole('region', { name: 'Approvals' }) },
   { what: 'the Spending region', find: (p: Page) => p.getByRole('region', { name: 'Spending' }) },
@@ -3849,36 +3907,33 @@ async function giveBack(ctx: ScenarioCtx, name: string): Promise<void> {
 }
 
 /**
- * B28.7 — the navigation is wallet-first. With every group open, the sidebar reads top to bottom: Home,
- * Approvals, Agent Wallets, Statements, Chat, then Marketplace, Work (Track, Docs), Developers (Connect an
- * agent, API keys, Spend & routing, Gateway features), Billing and Settings. The Approvals badge is held to
- * Lens's own pending count, and every link the sidebar offers opens a page rather than the catch-all.
+ * B28.7 — the navigation is wallet-first. B57.8 — and it is Pocket's rows, with no folding groups: Home, Approvals,
+ * Agents, Statements, Pay, Invoices, Spending, Chat, Rooms, Marketplace; a rule; Scan, Track and Docs, Developers,
+ * Billing, Settings; Privacy and Terms at its foot. The Approvals badge is held to Lens's own pending count, and every
+ * link the sidebar offers opens a page rather than the catch-all.
  */
 export const WALLET_FIRST_NAV = [
-  'Home', 'Approvals', 'Agent Wallets', 'Statements', 'Chat', 'Marketplace', 'Work', 'Track', 'Docs',
-  'Developers', 'Connect an agent', 'API keys', 'Spend & routing', 'Gateway features', 'Billing', 'Settings',
+  'Home', 'Approvals', 'Agents', 'Statements', 'Pay', 'Invoices', 'Spending', 'Chat', 'Rooms', 'Marketplace',
+  'Scan', 'Track and Docs', 'Developers', 'Billing', 'Settings', 'Privacy', 'Terms',
 ] as const
 
 export function walletFirstNav(): Scenario {
   return {
     id: 'wallet-first-nav',
     owner: 'talyvor-suite',
-    items: ['B28.7'],
+    items: ['B28.7', 'B57.8'],
     title: 'the sidebar leads with the wallet, its Approvals badge is Lens’s pending count, and every link opens a page',
     run: async (ctx) => {
       const page = await ctx.app.tab('/')
       try {
         const nav = page.getByRole('navigation', { name: 'Sections' })
         await nav.getByRole('link', { name: 'Statements' }).waitFor({ timeout: ACTION_TIMEOUT_MS })
-        const fold = nav.getByRole('button', { name: 'Fold all' })
-        if ((await fold.count()) > 0) await fold.click()
-        await nav.getByRole('button', { name: 'Open all' }).click()
+        // The logo leads, to Home, and is named rather than a row; every row after it is a link.
         const rows = await nav
-          .locator('a[href], button[aria-expanded]')
+          .locator('a[href]:not([aria-label])')
           .evaluateAll((els) => els.map((e) => ({ text: (e.textContent ?? '').trim(), href: e.getAttribute('href') })))
         const named = rows.map((r) => r.text.replace(/\d+ waiting$/, '').trim())
-        // A group and its one same-named link (Settings, then Settings) read as one entry.
-        const order = named.filter((l, i) => (WALLET_FIRST_NAV as readonly string[]).includes(l) && l !== named[i - 1])
+        const order = named
         const pending = (await ctx.env.lens.agentApprovals(ctx.app.user)).filter((x) => x.status === 'pending').length
         // B34.1 — the badge is drawn once the page has read the approvals; read before that, it is none.
         const badge = await badgeReaches(page, pending, ACTION_TIMEOUT_MS)

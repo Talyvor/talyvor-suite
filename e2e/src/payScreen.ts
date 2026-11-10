@@ -131,7 +131,7 @@ export function payScreen(): Scenario {
       const reference = `Nightly ${RUN_SALT}`
       const page = await ctx.app.tab('/money/pay')
       try {
-        await page.locator('header h1').filter({ hasText: 'Pay' }).waitFor({ timeout: TIMEOUT_MS })
+        await page.locator('main h1').filter({ hasText: 'Pay' }).waitFor({ timeout: TIMEOUT_MS })
         const onScreen = (await page.locator('body').innerText()).match(DISCLAIMER)
         if (onScreen) return fail(`the Pay screen carries a disclaimer line: "${onScreen[0]}"`)
         // The scam warning is role="alert" too, and stays up while the payment sends: it is not a refusal.
