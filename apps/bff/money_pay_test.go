@@ -156,3 +156,41 @@ func TestPayeeDetailsChangeReachesLens(t *testing.T) {
 		t.Fatalf("Lens received %q, want %q", got, want)
 	}
 }
+
+// B54.35 — a person's payment goes up with its signature exactly as the browser or the phone sent it (Lens B54.33), and
+// the challenge it is signed over is asked for with the payment as it will be sent: the same six fields, nothing more.
+func TestPaymentSignatureReachesLensUnchanged(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" "+string(raw))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"challenge":"Y2g","allow_credentials":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	payment := `"account_id":"macc_1","payee_id":"payee_1","amount_minor":2000,"currency":"GBP","reference":"Rent","idempotency_key":"k1"`
+	if rec := doJSON(a, http.MethodPost, "/api/money/payments/challenge", `{`+payment+`,"funding":"live","assertion":{"signature":"s"}}`); rec.Code != http.StatusOK {
+		t.Fatalf("challenge = %d %s", rec.Code, rec.Body.String())
+	}
+	passkey := `{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}`
+	phone := `{"device_id":"dev_1","challenge":"Y2g","signature":"MEUCIQ","user_handle":"u"}`
+	for _, assertion := range []string{passkey, phone} {
+		if rec := doJSON(a, http.MethodPost, "/api/money/payments", `{`+payment+`,"assertion":`+assertion+`}`); rec.Code != http.StatusOK {
+			t.Fatalf("signed payment = %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	want := []string{
+		`POST /v1/money/payments/challenge {` + payment + `}`,
+		`POST /v1/money/payments {` + payment + `,"assertion":` + passkey + `}`,
+		`POST /v1/money/payments {` + payment + `,"assertion":` + phone + `}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("Lens received\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+	}
+}

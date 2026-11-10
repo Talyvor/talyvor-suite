@@ -256,6 +256,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/payees/x1/called/challenge", body: `{}`},                                                            // B41.11
 		{method: http.MethodPut, path: "/api/money/budgets", body: `{"category":"ai_software","period":"month","amount_minor":10000,"currency":"GBP"}`}, // B41.39
 		{method: http.MethodDelete, path: "/api/money/budgets/x1"},
+		{method: http.MethodPost, path: "/api/money/alerts/channels", body: `{"kind":"push"}`}, // B28.66
+		{method: http.MethodDelete, path: "/api/money/alerts/channels/x1"},
 		{method: http.MethodPost, path: "/api/agents/x1/scan-watches", body: `{"series":["eia.stocks.cushing-crude"],"rule":"range"}`},                                   // B52.28
 		{method: http.MethodDelete, path: "/api/scan/watches/x1"},                                                                                                        // B52.28                                                                                      // B41.39
 		{method: http.MethodPut, path: "/api/money/spending/merchants", body: `{"merchant":"m","category":"eating_out"}`},                                                // B53.8
@@ -279,6 +281,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/permission-mandates/x1/revoke", body: `{}`}, // B41.15
 		{method: http.MethodPost, path: "/api/money/devices/x1/push-token", body: `{"push_token":"t"}`},
 		{method: http.MethodPost, path: "/api/money/payments", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`},
+		{method: http.MethodPost, path: "/api/money/payments/challenge", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`}, // B54.35
 		{method: http.MethodPost, path: "/api/money/mandates", body: `{"account_id":"x1","payee_business_id":"b","payee_id":"x1","payee_name":"n","max_per_pull_minor":1,"max_per_month_minor":1,"expires_at":"2099-01-01T00:00:00Z"}`},
 		{method: http.MethodPost, path: "/api/money/mandates/x1/revoke", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/payouts", body: `{}`},
@@ -393,6 +396,10 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodDelete, path: "/api/rooms/x1/tasks/x1/claim"},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
+		// B55.3 — a key waiting from another device is let in or turned away.
+		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/challenge", body: `{}`},
+		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/approve", body: `{"assertion":{"credential_id":"c","client_data_json":"j","authenticator_data":"a","signature":"s"}}`},
+		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/decline", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},
 		{method: http.MethodPost, path: "/api/agents/push/subscriptions", body: `{"endpoint":"https://fcm.googleapis.com/fcm/send/x","keys":{"p256dh":"p","auth":"a"}}`},
 		{method: http.MethodDelete, path: "/api/agents/push/subscriptions", body: `{"endpoint":"https://fcm.googleapis.com/fcm/send/x"}`},

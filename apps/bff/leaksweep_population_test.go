@@ -592,11 +592,21 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	// listing, read back through GET /api/marketplace/listings/{id}, and PUT and DELETE /api/marketplace/blocked-listings/{id}
 	// block a listing and show it again, read back through GET /api/marketplace/content-filter, both in the sweep's reach.
 	//
-	// THE HUNDRED-AND-SIXTY-EIGHTH IS B55.28'S, POST only: /api/rooms/{id}/payouts pays a room's members by its terms, and
+	// THE HUNDRED-AND-SIXTY-EIGHTH IS B28.66'S, DELETE only: /api/money/alerts/channels/{id} removes an alert channel, read
+	// back through GET /api/money/alerts/channels, in the sweep's reach.
+	//
+	// THE HUNDRED-AND-SIXTY-NINTH IS B54.35'S, POST only: /api/money/payments/challenge relays a one-time challenge for the
+	// payment it names and holds nothing; the payment it signs is read back through GET /api/money/payments.
+	//
+	// THE HUNDRED-AND-SEVENTIETH TO SEVENTY-SECOND ARE B55.3'S, POST only: /api/agents/keys/enrolments/{id}/challenge,
+	// .../approve and .../decline let in or turn away a key waiting from another device, read back through GET
+	// /api/agents/keys/enrolments/{id}, in the sweep's reach.
+	//
+	// THE HUNDRED-AND-SEVENTY-THIRD IS B55.28'S, POST only: /api/rooms/{id}/payouts pays a room's members by its terms, and
 	// each payout is read back through GET /api/money/earnings-payouts, in the sweep's reach.
-	if len(methodOnly) > 168 {
+	if len(methodOnly) > 173 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 168 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 173 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}

@@ -29,8 +29,10 @@ import (
 //	DELETE /api/agents/{id}/rules/boosts/{rule}        B28.32: end a boost before its time
 //	GET  /api/agents/{id}/wallet                       B46.9: its wallet on the money layer — balance and how to pay into it
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
-//	GET  /api/agents/{id}/statement?from=&to=&format=json|csv   B19.22: its statement for a period, to download
-//	GET  /api/agents/statement?from=&to=&format=json|csv        B19.22: every account in the bank, for a period
+//	GET  /api/agents/{id}/statement?from=&to=&format=json|csv|pdf|journal   B19.22: its statement for a period, to download (B28.55: PDF; B28.56: a journal for Xero or QuickBooks)
+//	GET  /api/agents/{id}/statement?kind=&q=&limit=&cursor=     B28.51: that statement searched, filtered and paged
+//	GET  /api/agents/{id}/analytics?from=&to=          B28.53: its spend for a period by day, model and destination
+//	GET  /api/agents/statement?from=&to=&format=json|csv|pdf|journal        B19.22: every account in the bank, for a period
 //	POST /api/agents/{id}/claim                        B19.23: the signed-in person becomes an ownerless agent's owner
 //	PATCH /api/agents/{id}              {"name"?, "description"?}   B28.21: rename it, describe it
 //	POST /api/agents/{id}/archive                      B28.21: retire it — its balance back to the workspace, its keys revoked
@@ -413,7 +415,8 @@ func (a *app) handleAgentRuleBoostEnd(w http.ResponseWriter, r *http.Request, t 
 }
 
 // handleAgentStatement — GET /api/agents/{id}/statement: the agent's last 100 lines. With ?from=, ?to=
-// or ?format= (B19.22) it is the agent's statement for that period instead, as JSON or a CSV file.
+// or ?format= (B19.22) it is the agent's statement for that period instead, as JSON, a CSV, (B28.55) a PDF or (B28.56) a journal; with ?kind=,
+// ?q= or ?cursor= (B28.51) too, so a search, a filter or a page past the newest lines reads the period statement.
 func (a *app) handleAgentStatement(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -423,7 +426,7 @@ func (a *app) handleAgentStatement(w http.ResponseWriter, r *http.Request, t ten
 	if !ok {
 		return
 	}
-	if q := r.URL.Query(); q.Has("from") || q.Has("to") || q.Has("format") {
+	if q := r.URL.Query(); q.Has("from") || q.Has("to") || q.Has("format") || q.Has("kind") || q.Has("q") || q.Has("cursor") {
 		a.agentStatementRelay(w, r, t, suffix)
 		return
 	}
@@ -440,15 +443,41 @@ func (a *app) handleBankStatement(w http.ResponseWriter, r *http.Request, t tena
 	a.agentStatementRelay(w, r, t, "/agents/statement")
 }
 
+// handleAgentAnalytics — GET /api/agents/{id}/analytics (B28.53): the agent's spend for [from, to) by day, model
+// and destination (Lens B28.326), whose buckets' out_ulxc sum to its statement's for the same period. Only from and
+// to are sent up.
+func (a *app) handleAgentAnalytics(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	suffix, ok := agentSuffix(w, r, "analytics")
+	if !ok {
+		return
+	}
+	in, up := r.URL.Query(), url.Values{}
+	for _, k := range []string{"from", "to"} {
+		if v := in.Get(k); v != "" {
+			up.Set(k, v)
+		}
+	}
+	path := lensWorkspacePath(t, suffix)
+	if len(up) > 0 {
+		path += "?" + up.Encode()
+	}
+	a.agentBankRelayPath(w, r, t, http.MethodGet, path, nil)
+}
+
 // maxStatementBytes bounds a period statement the BFF passes on; a longer one asks for a shorter period.
 const maxStatementBytes = 32 << 20
 
 // agentStatementRelay asks Lens for a period statement (Lens B19.5) and answers with it: JSON, or the
-// CSV file with Lens's filename. Only from, to and format are sent up; Lens reads the dates (a
+// CSV file (or, B28.55, the PDF; B28.56, the journal CSV) with Lens's filename. Only from, to and format are sent up, and (B28.51) kind, q, limit and cursor, with
+// which Lens keeps the lines of those kinds holding q and pages them newest first; Lens reads the dates (a
 // YYYY-MM-DD date is midnight UTC, the period is [from, to)) and its sentence on a bad one is relayed.
 func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tenant, suffix string) {
 	in, up := r.URL.Query(), url.Values{}
-	for _, k := range []string{"from", "to", "format"} {
+	for _, k := range []string{"from", "to", "format", "kind", "q", "limit", "cursor"} {
 		if v := in.Get(k); v != "" {
 			up.Set(k, v)
 		}
@@ -471,19 +500,19 @@ func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tena
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxStatementBytes+1))
-	asCSV := up.Get("format") == "csv"
+	asFile := map[string]string{"csv": "text/csv; charset=utf-8", "journal": "text/csv; charset=utf-8", "pdf": "application/pdf"}[up.Get("format")]
 	switch {
 	case err != nil:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Lens could not answer just now"})
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && len(raw) > maxStatementBytes:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "This statement is too long to download at once — choose a shorter period."})
-	case resp.StatusCode >= 200 && resp.StatusCode < 300 && asCSV:
-		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	case resp.StatusCode >= 200 && resp.StatusCode < 300 && asFile != "":
+		w.Header().Set("Content-Type", asFile)
 		if cd := resp.Header.Get("Content-Disposition"); cd != "" {
 			w.Header().Set("Content-Disposition", cd)
 		}
 		w.WriteHeader(resp.StatusCode)
-		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the statement CSV under text/csv, and every response carries nosniff (setSecurityHeaders)
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the statement CSV under text/csv or PDF under application/pdf, and every response carries nosniff (setSecurityHeaders)
 		_, _ = w.Write(raw)
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && json.Valid(raw):
 		w.Header().Set("Content-Type", "application/json")
@@ -689,6 +718,7 @@ func (a *app) handleAgentDecision(decision string) func(http.ResponseWriter, *ht
 //	GET    /api/agents/passkeys                    the workspace's passkeys
 //	POST   /api/agents/passkeys                    {credential_id, name, public_key, client_data_json, authenticator_data, assertion?}
 //	POST   /api/agents/approvals/{id}/challenge    the challenge approving or denying one approval is signed over
+//	                                               {"always_allow"?}: approving with always allow signs it too (B54.34)
 //	GET    /api/agents/push/public-key             the key a browser subscribes to pushes with
 //	POST   /api/agents/push/subscriptions          {endpoint, keys: {p256dh, auth}}
 //	DELETE /api/agents/push/subscriptions          {endpoint}
@@ -752,7 +782,78 @@ func (a *app) handleApprovalChallenge(w http.ResponseWriter, r *http.Request, t 
 	if !ok {
 		return
 	}
-	a.agentBankRelay(w, r, t, http.MethodPost, "/agents/approvals/"+url.PathEscape(id)+"/challenge", nil)
+	// B54.34: approving with always_allow signs that allowance too (Lens B54.29), so its challenge is asked for with it.
+	var in struct {
+		AlwaysAllow *payeeAllowance `json:"always_allow,omitempty"`
+	}
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil && err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+	}
+	var body []byte
+	if in.AlwaysAllow != nil {
+		// UPSTREAM-BINDS-ONLY lensApprovalChallengeBody: none
+		body, _ = json.Marshal(in)
+	}
+	a.agentBankRelay(w, r, t, http.MethodPost, "/agents/approvals/"+url.PathEscape(id)+"/challenge", body)
+}
+
+// B55.3 — a key let in from another device (Lens B55.1). A passkey or phone key registered with no assertion in a workspace
+// that has a key answers 202 {"enrolment": {"id", "code", "expires_at"}} and waits for a key the workspace has to let it in.
+//
+//	GET  /api/agents/keys/enrolments                the keys waiting
+//	GET  /api/agents/keys/enrolments/{id}           one, whatever its status
+//	POST /api/agents/keys/enrolments/{id}/challenge the challenge letting it in is signed over
+//	POST /api/agents/keys/enrolments/{id}/approve   {assertion} by a passkey or phone key the workspace has
+//	POST /api/agents/keys/enrolments/{id}/decline   it can never be let in after
+
+// handleKeyEnrolments — GET /api/agents/keys/enrolments.
+func (a *app) handleKeyEnrolments(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, "/agents/keys/enrolments", nil)
+}
+
+// handleKeyEnrolment — GET /api/agents/keys/enrolments/{id}.
+func (a *app) handleKeyEnrolment(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	if id, ok := pathID(w, "enrolment id", r.PathValue("id")); ok {
+		a.agentBankRelay(w, r, t, http.MethodGet, "/agents/keys/enrolments/"+url.PathEscape(id), nil)
+	}
+}
+
+// handleKeyEnrolmentAction — POST /api/agents/keys/enrolments/{id}/challenge, …/approve and …/decline.
+func (a *app) handleKeyEnrolmentAction(action string) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		id, ok := pathID(w, "enrolment id", r.PathValue("id"))
+		if !ok {
+			return
+		}
+		var body []byte
+		if action == "approve" {
+			var in struct {
+				Assertion *passkeyAssertion `json:"assertion"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil || in.Assertion == nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "letting a key in needs a key the workspace has to sign it"})
+				return
+			}
+			// UPSTREAM-BINDS-ONLY lensKeyEnrolmentApproveBody: none
+			body, _ = json.Marshal(in)
+		}
+		a.agentBankRelay(w, r, t, http.MethodPost, "/agents/keys/enrolments/"+url.PathEscape(id)+"/"+action, body)
+	}
 }
 
 // handlePushPublicKey — GET /api/agents/push/public-key.

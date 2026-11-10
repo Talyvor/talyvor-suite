@@ -45,10 +45,19 @@
 // the new details and …/{id}/details changes them only on an assertion by one of the workspace's passkeys over it; the payee
 // then reads held_until 24 hours on and a notice, and until then every payment to it is refused 409. Its defect:
 //   details-hold-skipped   — a payment to a payee whose bank details changed moments ago is paid
+// B54.35 — and a person's payment is signed (Lens B54.33): once the workspace has a passkey, the owner's POST /v1/money/payments
+// pays only with an assertion by one of them over POST /v1/money/payments/challenge's challenge for exactly that payment;
+// unsigned or signed for another it is refused 403 and nothing moves. Its defect:
+//   payment-unsigned-paid  — the owner's payment with no signature is paid in a workspace with a passkey
 // B28.62 — and budgets with their limit-approach alerts (Lens B53.4, B28.335): PUT and GET /v1/money/budgets, spent from the
 // payments out of the month (or the week from Monday, UTC) in the budget's currency and wallet; GET /v1/money/budgets/alerts
 // raises each 50, 80 and 100% reached, once a period, and lists them newest first. Its defect:
 //   limit-alert-twice      — an alert already raised in its period is raised again on every read
+// B28.66 — and where alerts go (Lens B28.338): POST, GET and DELETE /v1/money/alerts/channels keep push, webhook (https; its
+// whsec_ secret answered once) and slack channels and refuse email; GET /v1/money/alerts/deliveries queues one delivery per
+// channel for each limit alert raised since the channel was added, and lists them newest first. The stub sends nothing, so
+// every delivery reads queued. Its defect:
+//   alert-delivery-once    — an alert is queued for the first channel only
 // B41.39 — and a budget by category: PUT /v1/money/spending/merchants puts a merchant (here a payee's name) in a category, and a
 // budget with a category spends only its category's payments; a payment with no correction is uncategorised. Its defect:
 //   budget-category-ignored — a budget with a category spends every payment in its currency
@@ -119,6 +128,9 @@ interface StubBudget { id: string; agent_id: string; category: string; period: s
 interface StubCharge { entry_id: string; agent_id: string; merchant: string; mcc: string; country: string; amount_minor: number; currency: string; created_at: string }
 interface StubLimitAlert { id: string; kind: string; subject: string; agent_id?: string; category?: string; period: string; period_start: string; percent: number
   spent_minor: number; limit_minor: number; currency: string; created_at: string }
+interface StubAlertChannel { id: string; kind: string; url: string; created_at: string }
+interface StubAlertDelivery { id: string; channel_id: string; channel_kind: string; alert_kind: string; alert_id: string; title: string; body: string
+  status: string; attempts: number; created_at: string }
 
 const CURRENCIES = ['GBP', 'EUR', 'USD']
 /** B53.14 — how the issuer reports a charge at each merchant (Lens issuerfake); any other is 5999 in GB. */
@@ -136,6 +148,12 @@ const HELP = { MoneyHelper: 'https://www.moneyhelper.org.uk', StepChange: 'https
 // B41.12 — Lens's PayeeDetailsNotice, word for word.
 const DETAILS_NOTICE = 'Call them on a number you already know — not one from the message that asked for the change — to check the new details are theirs.'
 const HELD = 'screening: held — the name is close to one on a sanctions list, and waits for an operator to release it'
+const PAYMENT_UNSIGNED = 'economy: this workspace signs its payments with a passkey or the phone app — sign this payment\'s challenge (POST /v1/money/payments/challenge)'
+
+type OwnerPayment = { payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string }
+
+/** B54.35 — the challenge's key: every field of the payment as asked (Lens's paymentPurpose), so a signature for it pays no other. */
+const paymentKey = (b: OwnerPayment) => `payment:${[b.account_id, b.payee_id, b.amount_minor, b.currency, b.funding, b.reference, b.idempotency_key].map((x) => x ?? '').join('\0')}`
 /** Minor units as Lens prints them: "GBP 10.00". */
 const money = (minor: number, currency: string): string => `${currency} ${(minor / 100).toFixed(2)}`
 
@@ -162,6 +180,9 @@ export class PayeeDesk {
   /** B28.62 — each workspace's budgets and the alerts they raised. */
   private readonly budgets = new Map<string, StubBudget[]>()
   private readonly limitAlerts = new Map<string, StubLimitAlert[]>()
+  /** B28.66 — each workspace's alert channels and the deliveries queued to them. */
+  private readonly alertChannels = new Map<string, StubAlertChannel[]>()
+  private readonly alertDeliveries = new Map<string, StubAlertDelivery[]>()
   /** B41.39 — each workspace's merchant corrections, by the merchant's lower-cased name. */
   private readonly merchantCategories = new Map<string, Map<string, string>>()
   /** B53.14 — each workspace's card charges. */
@@ -231,6 +252,7 @@ export class PayeeDesk {
   async route(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
     const list = this.payees.get(ws) ?? []
     if (path === '/v1/money/accounts' || path === '/v1/money/payments') return this.money(req, res, ws, path, list), true
+    if (path === '/v1/money/payments/challenge' && req.method === 'POST') return this.paymentChallenge(req, res, ws), true
     const funded = /^\/v1\/money\/accounts\/([^/]+)\/test-money$/.exec(path)
     if (funded !== null && req.method === 'POST') return this.testMoney(req, res, ws, funded[1]), true
     if (await this.invoiceRoute(req, res, ws, path)) return true
@@ -402,6 +424,45 @@ export class PayeeDesk {
       }
       this.limitAlerts.set(ws, alerts)
       return this.json(res, 200, { alerts: [...alerts].reverse() }), true
+    }
+    return this.alertChannelRoute(req, res, ws, path)
+  }
+
+  /** B28.66 — where alerts go (POST, GET and DELETE /v1/money/alerts/channels) and what was queued to each (GET /v1/money/alerts/deliveries). */
+  private async alertChannelRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string): Promise<boolean> {
+    const channels = this.alertChannels.get(ws) ?? []
+    if (path === '/v1/money/alerts/channels' && req.method === 'GET') return this.json(res, 200, { channels }), true
+    if (path === '/v1/money/alerts/channels' && req.method === 'POST') {
+      const c = await this.body<{ kind?: string; url?: string }>(req)
+      const url = (c.url ?? '').trim()
+      if (c.kind === 'email') return this.json(res, 400, { error: 'economy: alert channel: email alerts need an email integration, which is not connected yet' }), true
+      if (c.kind === 'webhook' && !url.startsWith('https://')) return this.json(res, 400, { error: "economy: alert channel: a webhook's url must be https, on the public internet" }), true
+      if (c.kind === 'slack' && !url.startsWith('https://hooks.slack.com/')) {
+        return this.json(res, 400, { error: "economy: alert channel: a Slack channel's url is its incoming webhook, https://hooks.slack.com/…" }), true
+      }
+      if (c.kind !== 'push' && c.kind !== 'webhook' && c.kind !== 'slack') return this.json(res, 400, { error: 'economy: alert channel: kind must be push, webhook or slack' }), true
+      const added: StubAlertChannel = { id: `ach_${randomUUID()}`, kind: c.kind, url: c.kind === 'push' ? '' : url, created_at: new Date().toISOString() }
+      this.alertChannels.set(ws, [...channels, added])
+      return this.json(res, 201, { ...added, ...(c.kind === 'webhook' ? { secret: `whsec_${randomUUID().replace(/-/g, '')}` } : {}) }), true
+    }
+    const one = /^\/v1\/money\/alerts\/channels\/([^/]+)$/.exec(path)
+    if (one !== null && req.method === 'DELETE') {
+      if (!channels.some((c) => c.id === one[1])) return this.json(res, 404, { error: 'economy: no such alert channel' }), true
+      this.alertChannels.set(ws, channels.filter((c) => c.id !== one[1]))
+      return this.json(res, 200, { deleted: one[1] }), true
+    }
+    if (path === '/v1/money/alerts/deliveries' && req.method === 'GET') {
+      const deliveries = this.alertDeliveries.get(ws) ?? []
+      const to = this.broken('alert-delivery-once') ? channels.slice(0, 1) : channels
+      for (const c of to) {
+        for (const a of this.limitAlerts.get(ws) ?? []) {
+          if (a.created_at < c.created_at || deliveries.some((d) => d.channel_id === c.id && d.alert_id === a.id)) continue
+          deliveries.push({ id: `adl_${randomUUID()}`, channel_id: c.id, channel_kind: c.kind, alert_kind: 'limit', alert_id: a.id,
+            title: `${a.percent}% of a budget`, body: '', status: 'queued', attempts: 0, created_at: new Date().toISOString() })
+        }
+      }
+      this.alertDeliveries.set(ws, deliveries)
+      return this.json(res, 200, { deliveries: [...deliveries].reverse() }), true
     }
     return false
   }
@@ -643,10 +704,22 @@ export class PayeeDesk {
     }
     const payments = this.payments.get(ws) ?? []
     if (req.method !== 'POST') return this.json(res, 200, { payments })
-    const b = await this.body<{ payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string }>(req)
+    const b = await this.body<OwnerPayment & { assertion?: Assertion }>(req)
+    if (this.passkeys(ws).length > 0 && !this.broken('payment-unsigned-paid')) {
+      const refused = this.refused(ws, paymentKey(b), b.assertion)
+      if (refused !== undefined) return this.json(res, 403, { error: b.assertion === undefined ? PAYMENT_UNSIGNED : refused })
+    }
     const p = this.pay(ws, payees, b)
     if ('error' in p) return this.json(res, p.status, { error: p.error })
     return this.json(res, 201, p)
+  }
+
+  /** B54.35 — the challenge the owner's payment `b` is signed over, naming exactly it, and the passkeys that may sign it. */
+  private async paymentChallenge(req: IncomingMessage, res: ServerResponse, ws: string): Promise<void> {
+    const b = await this.body<OwnerPayment>(req)
+    const c = randomBytes(32).toString('base64url')
+    this.challenges.set(paymentKey(b), c)
+    return this.json(res, 200, { challenge: c, allow_credentials: this.passkeys(ws).map((k) => k.credential_id), user_verification: 'required' })
   }
 
   /** B30.15 — POST /v1/money/accounts/{id}/test-money {amount_minor, idempotency_key}: test money into the account, once a key. */

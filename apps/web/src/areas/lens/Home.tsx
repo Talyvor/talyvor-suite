@@ -5,8 +5,10 @@ import { Button, Card, CardHeader, Input, NavIcon, type NavIconName, Pill, Row, 
 import { Money } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
-import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, PauseEveryAgent, rulesKey, useKeys } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, PREPARED_KEY, PauseEveryAgent, preparedWords, rulesKey, useKeys } from './AgentBank'
 import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText } from './agentBankApi'
+import { RunsOut } from './RunsOut'
+import { formatWhen } from './format'
 import { Lxc } from './money'
 import { resumeAgent } from './passkeys'
 import { AgentFace } from './AgentFace'
@@ -16,7 +18,7 @@ import { SharingLine } from './Sharing'
 
 // Home.tsx — B28.6: the first screen after sign-in is the wallet home. It answers, in order:
 //   1. What does the workspace hold, and how much of it have I not yet given to an agent?
-//   2. Is anything waiting for me? — the approvals an agent's rules filed for a person.
+//   2. Is anything waiting for me? — the approvals an agent's rules filed for a person, and the payments prepared for one.
 //   3. How far through its budget is each agent? — this month's spend against its monthly limit.
 //   4. Where is the month heading? — Lens's forecast, the pace so far run on to the month's end, and the company's safe
 //      to spend: its balance less the month's scheduled payments, bills due and approvals waiting (B41.5).
@@ -86,32 +88,58 @@ function Muted({ children }: { children: React.ReactNode }) {
 /** At most this many approvals are listed on Home, so the total and the agents stay above a phone's fold. */
 const APPROVALS_SHOWN = 3
 
-/** B45.11 — the approvals waiting for a person, first; each opens its card on Approvals. */
+/** B45.11 — the approvals waiting for a person, first; each opens its card on Approvals. B55.10: the payments Chat or an
+ * assistant prepared come before them, each opening its own card at /approve/<id>, and the count is both. */
 function ApprovalsFirst({ nameOf }: { nameOf: (id: string) => string }) {
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
+  const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
   const pending = (list.data?.approvals ?? []).filter((a) => a.status === 'pending')
+  const requests = prepared.data?.requests ?? []
+  const count = pending.length + requests.length
+  const preparedShown = requests.slice(0, APPROVALS_SHOWN)
   return (
     <Card>
       <CardHeader>
         Waiting for you
-        {list.isSuccess ? (
+        {list.isSuccess && prepared.isSuccess ? (
           <>
             {' · '}
             <span className="font-figure" data-testid="home-approvals-waiting">
-              {pending.length}
+              {count}
             </span>
           </>
         ) : null}
       </CardHeader>
       {list.isError ? (
         <PanelFailure error={list.error} what="the approvals" />
-      ) : list.isPending ? (
+      ) : prepared.isError ? (
+        <PanelFailure error={prepared.error} what="the prepared payments" />
+      ) : list.isPending || prepared.isPending ? (
         <Muted>Reading…</Muted>
-      ) : pending.length === 0 ? (
+      ) : count === 0 ? (
         <Muted>Nothing is waiting for you.</Muted>
       ) : (
         <ul data-testid="home-approvals">
-          {pending.slice(0, APPROVALS_SHOWN).map((a) => (
+          {preparedShown.map((r) => {
+            const w = preparedWords(r, nameOf)
+            return (
+              <li key={r.id} className="border-b border-rule last:border-b-0">
+                <Link
+                  to={`/approve/${encodeURIComponent(r.id)}`}
+                  className={cn('flex min-h-row items-center justify-between gap-gutter px-gutter py-2', focusRing)}
+                >
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-body text-ink">{w.line}</span>
+                    <span className="truncate text-caption text-muted">
+                      {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
+                    </span>
+                  </span>
+                  <span className="shrink-0 font-figure text-body text-ink">{w.total}</span>
+                </Link>
+              </li>
+            )
+          })}
+          {pending.slice(0, APPROVALS_SHOWN - preparedShown.length).map((a) => (
             <li key={a.id} className="border-b border-rule last:border-b-0">
               <Link
                 to={`/approvals#approval-${a.id}`}
@@ -127,10 +155,10 @@ function ApprovalsFirst({ nameOf }: { nameOf: (id: string) => string }) {
               </Link>
             </li>
           ))}
-          {pending.length > APPROVALS_SHOWN ? (
+          {count > APPROVALS_SHOWN ? (
             <li className="px-gutter py-2 text-body">
               <Link to="/approvals" className={inlineLink}>
-                {pending.length - APPROVALS_SHOWN} more waiting
+                {count - APPROVALS_SHOWN} more waiting
               </Link>
             </li>
           ) : null}
@@ -178,7 +206,8 @@ function MorningBriefing() {
           return (
             <li key={`${it.kind}-${it.id ?? i}`} className="border-t border-rule" data-kind={it.kind}>
               {it.kind === 'approval' && it.id ? (
-                <Link to={`/approvals#approval-${it.id}`} className={cn('flex min-h-row items-center px-gutter py-2', focusRing)}>
+                // B55.10 — a prepared payment (Lens's preq_ id) opens its own card; an agent's request, its card on Approvals.
+                <Link to={it.id.startsWith('preq_') ? `/approve/${encodeURIComponent(it.id)}` : `/approvals#approval-${it.id}`} className={cn('flex min-h-row items-center px-gutter py-2', focusRing)}>
                   {body}
                 </Link>
               ) : (
@@ -332,7 +361,8 @@ function BudgetRow({
   rules: UseQueryResult<AgentRules>
 }) {
   // Lens's forecast lists every agent in the workspace; one created since it was read has spent nothing.
-  const spent = forecast.data ? ((forecast.data.agents ?? []).find((f) => f.agent_id === agent.id)?.spent_ulxc ?? 0) : null
+  const mine = (forecast.data?.agents ?? []).find((f) => f.agent_id === agent.id)
+  const spent = forecast.data ? (mine?.spent_ulxc ?? 0) : null
   const limit = rules.data ? rules.data.monthly_limit_ulxc : null
   const pct = spent !== null && limit !== null && limit > 0 ? Math.min(100, Math.round((spent / limit) * 100)) : null
   const spend = forecast.isError ? (
@@ -366,6 +396,12 @@ function BudgetRow({
         <span className="whitespace-normal">
           {spend}
           {budget ? <> · {budget}</> : null} · {lxc(agent.balance_ulxc)} left in its wallet
+          {mine?.runs_out_on !== undefined ? (
+            <>
+              {' '}
+              · <RunsOut forecast={mine} />
+            </>
+          ) : null}
         </span>
       }
     >

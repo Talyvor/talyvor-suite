@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
@@ -9,7 +9,9 @@ import { isSessionExpired } from '../../lib/productState'
 import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
-import { notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
+import { letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
+import { AgentAnalytics } from './AgentAnalytics'
+import { AlertChannels } from './AlertChannels'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { categoryWords } from './Budgets'
@@ -20,6 +22,7 @@ import { CurrencyPicker, Lxc, useLxcText } from './money'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
+import { RunsOut } from './RunsOut'
 import { AgentAddress, AgentTransfers, CreditLinePanel, Loans, MoneyRequests, OfferLoan, RecurringTransfer, SendAndRequest } from './WalletMoney'
 import { CashOutCard, CashOuts, Escrows, PayIntoEscrow, Portfolios, Pots } from './WalletHoldings'
 import {
@@ -30,12 +33,16 @@ import {
   type ApprovalPayee,
   type AgentBook,
   type AgentKey,
+  type KeyEnrolment,
   type AgentRules,
   type AgentRulesVersion,
   type AgentRuleBoost,
   type AgentSchedule,
   type AgentTopUp as AgentTopUpValue,
   type LimitAlert,
+  type PaymentRequest,
+  type PostingKind,
+  type StatementFormat,
   type StatementLine,
   AgentBankError,
   agentBankApi,
@@ -63,6 +70,8 @@ import {
 // on either screen is the figure the other shows.
 export const BOOK_KEY = ['agent-book']
 export const APPROVALS_KEY = ['agent-approvals']
+/** B55.10 — the payments Chat, an assistant, an agent or a voice request prepared, waiting for the person. */
+export const PREPARED_KEY = ['money-payment-requests', 'pending_approval']
 export const rulesKey = (id: string) => ['agent-rules', id]
 export const rulesHistoryKey = (id: string) => ['agent-rules-history', id]
 export const boostsKey = (id: string) => ['agent-rule-boosts', id]
@@ -204,7 +213,21 @@ function Spending({ nameOf }: { nameOf: (id: string) => string }) {
         ) : (
           <>
             {(forecast.data.agents ?? []).map((f) => (
-              <Row key={f.agent_id} label={f.name} hint={<>Spent {lxc(f.spent_ulxc)} so far this month</>}>
+              <Row
+                key={f.agent_id}
+                label={f.name}
+                hint={
+                  <>
+                    Spent {lxc(f.spent_ulxc)} so far this month
+                    {f.runs_out_on !== undefined ? (
+                      <>
+                        {' '}
+                        · <RunsOut forecast={f} />
+                      </>
+                    ) : null}
+                  </>
+                }
+              >
                 <span className="text-body text-ink">{lxc(f.forecast_ulxc)}</span>
               </Row>
             ))}
@@ -247,6 +270,7 @@ function Spending({ nameOf }: { nameOf: (id: string) => string }) {
         )}
       </Card>
       <LimitAlerts nameOf={nameOf} />
+      <AlertChannels />
     </div>
   )
 }
@@ -1973,9 +1997,48 @@ function lineStatus(l: StatementLine): { status: PillStatus; label: string } {
   return held ? { status: 'held', label: 'Held' } : { status: 'settled', label: 'Settled' }
 }
 
+/** B28.51 — the kinds the Statement can be filtered to, in the words its lines use. */
+const STATEMENT_KINDS: ReadonlyArray<{ label: string; kinds: readonly PostingKind[] }> = [
+  { label: 'Every kind', kinds: [] },
+  { label: 'Funded', kinds: ['fund'] },
+  { label: 'Taken back', kinds: ['withdraw'] },
+  { label: 'Top-ups', kinds: ['topup'] },
+  { label: 'Requests', kinds: ['spend', 'hold', 'settle', 'release'] },
+  { label: 'Platform fees', kinds: ['platform_fee'] },
+  { label: 'Payments', kinds: ['pay'] },
+  { label: 'Transfers', kinds: ['transfer', 'reversal'] },
+  { label: 'Card', kinds: ['card'] },
+  { label: 'Escrow', kinds: ['escrow'] },
+  { label: 'Pots', kinds: ['pot_in', 'pot_out'] },
+  { label: 'Cash-outs', kinds: ['cash_out'] },
+  { label: 'Credit line', kinds: ['credit_line'] },
+]
+
+/** B28.51 — the UTC day the agent was made: its statement starts there, so paging reaches its first line. */
+const firstDay = (agent: Agent) => {
+  const t = new Date(agent.created_at)
+  return Number.isNaN(t.getTime()) ? utcDay(new Date()) : utcDay(t)
+}
+
 export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id: string) => string; entry?: string }) {
-  const st = useQuery({ queryKey: statementKey(agent.id), queryFn: () => agentBankApi.statement(agent.id) })
-  const lines = st.data?.lines ?? []
+  // B28.51 — searched and filtered by Lens, a page of the newest lines at a time; Show older reads the page under it.
+  const [typed, setTyped] = useState('')
+  const [q, setQ] = useState('')
+  const [kindAt, setKindAt] = useState(0)
+  useEffect(() => {
+    const t = setTimeout(() => setQ(typed.trim()), 300)
+    return () => clearTimeout(t)
+  }, [typed])
+  const kinds = STATEMENT_KINDS[kindAt].kinds
+  const from = firstDay(agent)
+  const st = useInfiniteQuery({
+    queryKey: [...statementKey(agent.id), 'page', from, kinds.join(','), q],
+    queryFn: ({ pageParam }) => agentBankApi.statementPage(agent.id, from, { kinds, q }, pageParam),
+    initialPageParam: undefined as { to?: string; cursor: string } | undefined,
+    getNextPageParam: (last, pages) => (last.next_cursor ? { to: pages[0].to, cursor: last.next_cursor } : undefined),
+  })
+  const lines = st.data?.pages.flatMap((p) => p.lines ?? []) ?? []
+  const searching = kinds.length > 0 || q !== ''
   // B28.349 — a line linked to (from a spend answer in Chat) is marked, and brought into view.
   const linked = useRef<HTMLTableRowElement | null>(null)
   const found = entry !== undefined && lines.some((l) => l.entry_id === entry)
@@ -1985,12 +2048,37 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
   return (
     <Card>
       <CardHeader>Statement</CardHeader>
-      {st.isError ? (
+      <div className="flex flex-wrap items-center gap-2 border-b border-rule px-gutter py-3">
+        <Input
+          type="search"
+          aria-label={`Search ${agent.name}’s statement`}
+          placeholder="Search"
+          className="w-56"
+          maxLength={200}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+        />
+        <select
+          aria-label={`Kind of line in ${agent.name}’s statement`}
+          className={`${scheduleSelect} w-56`}
+          value={kindAt}
+          onChange={(e) => setKindAt(Number(e.target.value))}
+        >
+          {STATEMENT_KINDS.map((k, i) => (
+            <option key={k.label} value={i}>
+              {k.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {st.isError && st.data === undefined ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(st.error, 'This agent’s statement')}</p>
       ) : st.isPending ? (
         <p className="px-gutter py-3 text-body text-muted">Reading…</p>
       ) : lines.length === 0 ? (
-        <p className="px-gutter py-3 text-body text-muted">Nothing has moved in this wallet yet. Fund it under Money to start.</p>
+        <p className="px-gutter py-3 text-body text-muted">
+          {searching ? 'No line on this statement matches.' : 'Nothing has moved in this wallet yet. Fund it under Money to start.'}
+        </p>
       ) : (
         <table className="w-full text-body" data-testid="agent-statement">
           <thead>
@@ -2037,6 +2125,16 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
           </tbody>
         </table>
       )}
+      {st.hasNextPage ? (
+        <div className="border-t border-rule px-gutter py-3">
+          <Button type="button" onClick={() => void st.fetchNextPage()} disabled={st.isFetchingNextPage}>
+            {st.isFetchingNextPage ? 'Reading…' : 'Show older lines'}
+          </Button>
+        </div>
+      ) : null}
+      {st.isFetchNextPageError ? (
+        <p className="border-t border-rule px-gutter py-3 text-body text-muted">{readFailure(st.error, 'The older lines')}</p>
+      ) : null}
       {entry !== undefined && st.isSuccess && !found ? (
         <p className="border-t border-rule px-gutter py-3 text-body text-muted">
           The line you followed is older than the ones shown here. Download this agent’s statement for its period below.
@@ -2080,8 +2178,9 @@ function saveFile(name: string, blob: Blob) {
 }
 
 /**
- * B19.22 — a statement for any period as a file an auditor can open: one agent's account, or with no
- * agent every wallet in the workspace. Lens builds it (B19.5): each account's opening balance, every line
+ * B19.22 — a statement for any period as a file an auditor can open (B28.55: or a PDF to read and print; B28.56: or a
+ * journal to import into Xero or QuickBooks, one balanced journal per entry, each agent its cost centre): one
+ * agent's account, or with no agent every wallet in the workspace. Lens builds it (B19.5): each account's opening balance, every line
  * naming its posting and entry, and each account's closing balance. Days are whole UTC days, the last
  * one included.
  */
@@ -2089,13 +2188,16 @@ function saveFile(name: string, blob: Blob) {
 /** `month` (B28.98): the period it opens on — last month, or in Chat this one. */
 export function StatementDownload({ agent, primary = false, month = 'last' }: { agent: Agent | null; primary?: boolean; month?: 'last' | 'this' }) {
   const [period, setPeriod] = useState(() => monthPeriod(month))
-  const [format, setFormat] = useState<'csv' | 'json'>('csv')
+  const [format, setFormat] = useState<StatementFormat>('csv')
   const who = agent ? `${agent.name}’s` : 'every agent’s'
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(period.from) && /^\d{4}-\d{2}-\d{2}$/.test(period.through) && period.from <= period.through
   const get = useMutation({
     mutationFn: async () => {
       const stem = agent ? agent.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'agent' : 'agent-wallets'
-      const name = `${stem}-statement-${period.from}-to-${period.through}.${format}`
+      const name =
+        format === 'journal'
+          ? `${stem}-journal-${period.from}-to-${period.through}.csv`
+          : `${stem}-statement-${period.from}-to-${period.through}.${format}`
       saveFile(name, await agentBankApi.statementFile(agent?.id ?? null, period.from, dayAfter(period.through), format))
       return name
     },
@@ -2111,7 +2213,8 @@ export function StatementDownload({ agent, primary = false, month = 'last' }: { 
     >
       <p className="text-caption text-muted">
         Download {who} statement for a period: the opening balance, every movement with its posting and entry, and the
-        closing balance. Days are UTC; the last day is included.
+        closing balance. Days are UTC; the last day is included. The journal imports into Xero or QuickBooks: each entry
+        one balanced journal, each agent its cost centre.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" onClick={() => setPeriod(monthPeriod('last'))}>
@@ -2139,12 +2242,14 @@ export function StatementDownload({ agent, primary = false, month = 'last' }: { 
         />
         <select
           aria-label={`File type of ${who} statement`}
-          className={`${scheduleSelect} w-24`}
+          className={`${scheduleSelect} w-auto`}
           value={format}
-          onChange={(e) => setFormat(e.target.value as 'csv' | 'json')}
+          onChange={(e) => setFormat(e.target.value as StatementFormat)}
         >
           <option value="csv">CSV</option>
           <option value="json">JSON</option>
+          <option value="pdf">PDF</option>
+          <option value="journal">Journal for Xero or QuickBooks</option>
         </select>
         <Button type="submit" variant={primary ? 'primary' : 'default'} disabled={!valid || get.isPending}>
           {get.isPending ? 'Preparing…' : 'Download'}
@@ -2232,16 +2337,47 @@ export function deviceText(err: unknown, fallback: string): string {
 /**
  * B19.10 — the phone half: a passkey made here signs every approval from now on, and this device can
  * be told when one is filed. Lens keeps both (B19.16); nothing is kept in the browser but the passkey.
+ * B55.3: with only the phone's key, a passkey made here waits until the phone lets it in (Lens B55.1).
  */
-function FaceID({ signed, hold, passkeyCount }: { signed: boolean; hold: boolean; passkeyCount: number }) {
+function FaceID({ signed, ready, passkeyCount }: { signed: boolean; ready: boolean; passkeyCount: number }) {
   const qc = useQueryClient()
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
+  const [waiting, setWaiting] = useState<{ id: string; code: string } | null>(null)
   const register = useMutation({
     mutationFn: () => registerThisDevice(navigator.userAgent.includes('iPhone') ? 'iPhone' : 'This device'),
-    onSuccess: () => setSaid({ ok: true, text: 'This device now signs approvals. Face ID asks each time you approve or deny.' }),
+    onSuccess: (enrolment) => {
+      if (enrolment) {
+        setSaid(null)
+        setWaiting(enrolment)
+      } else setSaid({ ok: true, text: 'This device now signs approvals. Face ID asks each time you approve or deny.' })
+    },
     onError: (err) => setSaid({ ok: false, text: deviceText(err, 'No passkey was made.') }),
     onSettled: () => qc.invalidateQueries({ queryKey: PASSKEYS_KEY }),
   })
+  // Asked every 3 seconds while the phone decides; Lens expires the enrolment after 10 minutes, and so does this.
+  const poll = useQuery({
+    queryKey: ['key-enrolment', waiting?.id],
+    queryFn: () => agentBankApi.enrolment(waiting!.id),
+    enabled: waiting !== null,
+    refetchInterval: 3000,
+  })
+  const status = waiting ? poll.data?.status : undefined
+  useEffect(() => {
+    if (!waiting) return
+    const end = (added: boolean) => {
+      setWaiting(null)
+      setSaid(
+        added
+          ? { ok: true, text: 'This browser now signs approvals. Face ID, Touch ID or this device’s PIN asks each time you approve or decline.' }
+          : { ok: false, text: 'This browser was not added. Nothing changed.' },
+      )
+      if (added) qc.invalidateQueries({ queryKey: PASSKEYS_KEY })
+    }
+    if (status === 'approved') return end(true)
+    if (status === 'declined' || status === 'expired') return end(false)
+    const timer = setTimeout(() => end(false), 10 * 60_000)
+    return () => clearTimeout(timer)
+  }, [waiting, status, qc])
   const notify = useMutation({
     mutationFn: notifyThisDevice,
     onSuccess: () => setSaid({ ok: true, text: 'This device is told when an agent asks for approval.' }),
@@ -2258,13 +2394,17 @@ function FaceID({ signed, hold, passkeyCount }: { signed: boolean; hold: boolean
             ? `Approvals are signed with a passkey (${passkeyCount} registered). Nothing is approved without one.`
             : 'Approvals are not signed yet. Make a passkey on your phone and every approval asks for Face ID.'}
         </p>
-        {said ? <Note ok={said.ok}>{said.text}</Note> : null}
+        {waiting ? (
+          <Note ok>Waiting for your phone. Open Talyvor on your phone and let this browser in. The code there should be <span className="font-figure">{waiting.code}</span>.</Note>
+        ) : said ? (
+          <Note ok={said.ok}>{said.text}</Note>
+        ) : null}
+        {passkeyCount > 0 ? <WaitingPhones /> : null}
         <div className="flex flex-col gap-2 wide:flex-row">
-          {/* B55.2 — with only the phone's key Lens refuses a passkey made here unsigned; adding this browser is B55.3. */}
           {!passkeysSupported() ? (
             <p className="text-caption text-muted">This browser cannot make a passkey.</p>
-          ) : hold ? null : (
-            <Button className="h-12 wide:h-8" disabled={register.isPending} onClick={() => register.mutate()}>
+          ) : !ready ? null : (
+            <Button className="h-12 wide:h-8" disabled={register.isPending || waiting !== null} onClick={() => register.mutate()}>
               {signed ? 'Add this device' : 'Approve with Face ID from now on'}
             </Button>
           )}
@@ -2280,6 +2420,94 @@ function FaceID({ signed, hold, passkeyCount }: { signed: boolean; hold: boolean
         </div>
       </div>
     </Card>
+  )
+}
+
+/** B55.10 — who prepared it: Lens names the client "chat", "voice", "mcp:<client id>" or "key:<key id>" (B40.3). */
+const preparedBy = (client: string) =>
+  client.startsWith('mcp:') ? 'Your assistant' : client.startsWith('key:') ? 'An agent' : client === 'voice' ? 'A voice request' : 'Chat'
+
+/** B55.10 — a prepared request in one line, its hint and its total, as Approvals and Home list it. */
+export function preparedWords(r: PaymentRequest, nameOf: (id: string) => string) {
+  const items = r.items ?? []
+  return {
+    line: items.length === 1 ? `${preparedBy(r.client)} prepared a payment to ${items[0].payee_name}` : `${preparedBy(r.client)} prepared ${items.length} payments`,
+    hint: [
+      items.length === 1 ? items[0].reference : r.summary,
+      `from ${r.agent_id ? `${nameOf(r.agent_id)}’s` : 'the company’s'} account`,
+    ].filter((x) => x !== ''),
+    total: Object.entries(r.totals ?? {})
+      .map(([cur, minor]) => formatMinor(minor, cur))
+      .join(', '),
+  }
+}
+
+/** B55.10 — one prepared request on Approvals: what it is, the total, and Review, which opens its card. */
+function PreparedRow({ r, nameOf }: { r: PaymentRequest; nameOf: (id: string) => string }) {
+  const w = preparedWords(r, nameOf)
+  return (
+    <Row
+      stack
+      data-prepared={r.id}
+      label={
+        <span className="whitespace-normal">
+          {w.line} · <span className="font-figure">{w.total}</span>
+        </span>
+      }
+      hint={
+        <span>
+          {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
+        </span>
+      }
+    >
+      <Button asChild className="h-12 w-full wide:h-8 wide:w-auto">
+        <Link to={`/approve/${encodeURIComponent(r.id)}`}>Review</Link>
+      </Button>
+    </Row>
+  )
+}
+
+const ENROLMENTS_KEY = ['key-enrolments']
+
+/**
+ * B55.3 — a phone waiting to approve payments too (Lens B55.1), let in by this browser's passkey signing its enrolment
+ * challenge. Lens lets only an owner or admin read them, so for anyone else the list fails and nothing shows.
+ */
+function WaitingPhones() {
+  const qc = useQueryClient()
+  const list = useQuery({ queryKey: ENROLMENTS_KEY, queryFn: agentBankApi.enrolments, refetchInterval: 3000 })
+  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
+  const decide = useMutation({
+    mutationFn: async ({ en, letIn }: { en: KeyEnrolment; letIn: boolean }) => {
+      await (letIn ? letInKey(en.id) : agentBankApi.declineEnrolment(en.id))
+    },
+    onSuccess: (_, { en, letIn }) => setSaid({ ok: true, text: letIn ? `${en.name} can approve now.` : `${en.name} was not added. Nothing changed.` }),
+    onError: (err, { en }) => setSaid({ ok: false, text: deviceText(err, `${en.name} was not added. Nothing changed.`) }),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ENROLMENTS_KEY })
+      qc.invalidateQueries({ queryKey: DEVICES_KEY })
+    },
+  })
+  const phones = (list.data?.enrolments ?? []).filter((en) => en.kind === 'device' && en.status === 'waiting')
+  return (
+    <>
+      {said ? <Note ok={said.ok}>{said.text}</Note> : null}
+      {phones.map((en) => (
+        <div key={en.id} className="flex flex-col gap-2">
+          <p className="text-body text-ink">
+            Your {en.name} asks to approve payments too. Let it in only if you are adding it now and its code is <span className="font-figure">{en.code}</span>.
+          </p>
+          <div className="flex flex-col gap-2 wide:flex-row">
+            <Button variant="primary" className="h-12 wide:h-8" disabled={decide.isPending} onClick={() => decide.mutate({ en, letIn: true })}>
+              Let it approve
+            </Button>
+            <Button className="h-12 wide:h-8" disabled={decide.isPending} onClick={() => decide.mutate({ en, letIn: false })}>
+              Not this one
+            </Button>
+          </div>
+        </div>
+      ))}
+    </>
   )
 }
 
@@ -2300,6 +2528,7 @@ export function Approvals({
 }) {
   const qc = useQueryClient()
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
+  const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
   const keys = useKeys()
   const { signed, onlyThePhone, hold } = keys
   // Ticking several is for a workspace that signs nothing (bulk, below), once both key reads are in.
@@ -2319,7 +2548,7 @@ export function Approvals({
   const decideOne = async (a: AgentApproval, decision: 'approve' | 'deny', allow?: PayeeAllowance): Promise<React.ReactNode> => {
     // B19.10: once the workspace has a passkey, Lens takes a decision only signed with one — Face ID
     // (or Touch ID, or the device's PIN) asks here, over a challenge naming this approval alone.
-    await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined, allow)
+    await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id, allow) : undefined, allow)
     const p = held[a.id]
     if (decision === 'deny') return <>Denied. {nameOf(a.agent_id)}’s request will be refused.</>
     // B41.4 — the rule saved with the approval.
@@ -2375,6 +2604,9 @@ export function Approvals({
   const all = (list.data?.approvals ?? []).filter((a) => agentId === undefined || a.agent_id === agentId)
   const waiting = all.filter((a) => a.status === 'pending')
   const pending = waiting.filter((a) => (byAgent === '' || a.agent_id === byAgent) && (byKind === '' || (byKind === 'payment') === !a.model))
+  // B55.10 — the payments prepared for the person sit above the agents' requests, narrowed by the same filters.
+  const preparedAll = (prepared.data?.requests ?? []).filter((r) => agentId === undefined || r.agent_id === agentId)
+  const preparedShown = preparedAll.filter((r) => (byAgent === '' || r.agent_id === byAgent) && byKind !== 'model')
   const chosen = pending.filter((a) => picked.has(a.id))
   const toggle = (id: string) =>
     setPicked((s) => {
@@ -2417,7 +2649,7 @@ export function Approvals({
     )
   return (
     <div className="flex flex-col gap-3">
-      <FaceID signed={signed} hold={hold} passkeyCount={keys.passkeyCount} />
+      <FaceID signed={signed} ready={keys.isSuccess} passkeyCount={keys.passkeyCount} />
       {outcome ? <Note ok={outcome.ok}>{outcome.text}</Note> : null}
       {list.isError ? (
         <p className="text-body text-muted">{readFailure(list.error, 'The approvals')}</p>
@@ -2478,12 +2710,23 @@ export function Approvals({
               )}
             </div>
           ) : null}
+          {prepared.isError ? (
+            <p className="border-b border-rule px-gutter py-3 text-body text-muted">{readFailure(prepared.error, 'The prepared payments')}</p>
+          ) : preparedShown.length > 0 ? (
+            <div role="group" aria-label="Prepared payments" className="border-b border-rule">
+              {preparedShown.map((r) => (
+                <PreparedRow key={r.id} r={r} nameOf={nameOf} />
+              ))}
+            </div>
+          ) : null}
           {pending.length === 0 ? (
-            <p className="px-gutter py-3 text-body text-muted">
-              {waiting.length > 0
-                ? 'Nothing waiting matches these filters.'
-                : 'Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount.'}
-            </p>
+            preparedShown.length > 0 ? null : (
+              <p className="px-gutter py-3 text-body text-muted">
+                {waiting.length > 0
+                  ? 'Nothing waiting matches these filters.'
+                  : 'Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount, or when Chat or an assistant prepares a payment.'}
+              </p>
+            )
           ) : (
             <div role="group" aria-label="Waiting for a person" onKeyDown={onKeys}>
               {pending.map((a, i) => (
@@ -2707,6 +2950,7 @@ export function AgentBank() {
             <>
               <Archived agent={agent} done={archived[agent.id]} />
               <AgentDetails key={`details-${agent.id}`} agent={agent} />
+              <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
             </>
           ) : (
@@ -2746,6 +2990,7 @@ export function AgentBank() {
               <IssueKey key={`key-${agent.id}`} agent={agent} />
               <AgentCredentialCard key={`credential-${agent.id}`} agent={agent} />
               <AgentCardPanel key={`card-${agent.id}`} agent={agent} />
+              <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
               <ArchiveAgent
                 key={`archive-${agent.id}`}

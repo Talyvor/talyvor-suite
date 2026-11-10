@@ -444,6 +444,11 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/approvals/{id}/challenge", a.requireTenant(a.handleApprovalChallenge))
 	a.mux.HandleFunc("/api/agents/passkeys", a.requireTenant(a.handlePasskeys))
 	a.mux.HandleFunc("/api/agents/passkeys/challenge", a.requireTenant(a.handlePasskeyChallenge))
+	a.mux.HandleFunc("/api/agents/keys/enrolments", a.requireTenant(a.handleKeyEnrolments))
+	a.mux.HandleFunc("/api/agents/keys/enrolments/{id}", a.requireTenant(a.handleKeyEnrolment))
+	a.mux.HandleFunc("/api/agents/keys/enrolments/{id}/challenge", a.requireTenant(a.handleKeyEnrolmentAction("challenge")))
+	a.mux.HandleFunc("/api/agents/keys/enrolments/{id}/approve", a.requireTenant(a.handleKeyEnrolmentAction("approve")))
+	a.mux.HandleFunc("/api/agents/keys/enrolments/{id}/decline", a.requireTenant(a.handleKeyEnrolmentAction("decline")))
 	a.mux.HandleFunc("/api/agents/push/public-key", a.requireTenant(a.handlePushPublicKey))
 	a.mux.HandleFunc("/api/agents/push/subscriptions", a.requireTenant(a.handlePushSubscriptions))
 	a.mux.HandleFunc("/api/agents/{id}/fund", a.requireTenant(a.handleAgentMove("fund")))
@@ -458,7 +463,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/{id}/rules/boosts/{rule}", a.requireTenant(a.handleAgentRuleBoostEnd)) // B28.32
 	a.mux.HandleFunc("/api/agents/{id}/wallet", a.requireTenant(a.handleAgentWallet))                    // B46.9
 	a.mux.HandleFunc("/api/agents/{id}/statement", a.requireTenant(a.handleAgentStatement))
-	a.mux.HandleFunc("/api/agents/statement", a.requireTenant(a.handleBankStatement)) // B19.22
+	a.mux.HandleFunc("/api/agents/statement", a.requireTenant(a.handleBankStatement))       // B19.22
+	a.mux.HandleFunc("/api/agents/{id}/analytics", a.requireTenant(a.handleAgentAnalytics)) // B28.53
 	a.mux.HandleFunc("/api/agents/{id}/pay", a.requireTenant(a.handleAgentPay))
 	a.mux.HandleFunc("/api/agents/{id}/claim", a.requireTenant(a.handleAgentClaim))                     // B19.23
 	a.mux.HandleFunc("/api/agents/{id}/card", a.requireTenant(a.handleAgentCard))                       // B19.24
@@ -542,9 +548,13 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/payees/{id}/called", a.requireTenant(a.handleMoneyPayeeCalled(false)))
 	a.mux.HandleFunc("/api/money/payees/{id}/details/challenge", a.requireTenant(a.handleMoneyPayeeDetails(true))) // B41.12
 	a.mux.HandleFunc("/api/money/payees/{id}/details", a.requireTenant(a.handleMoneyPayeeDetails(false)))
-	a.mux.HandleFunc("/api/money/payments", a.requireTenant(a.handleMoneyPayments))
+	a.mux.HandleFunc("/api/money/payments", a.requireTenant(a.handleMoneyPayments(false)))
+	a.mux.HandleFunc("/api/money/payments/challenge", a.requireTenant(a.handleMoneyPayments(true)))    // B54.35
 	a.mux.HandleFunc("/api/money/search", a.requireTenant(a.handleMoneySearch))                        // B41.7, money_search.go
 	a.mux.HandleFunc("/api/money/budgets/alerts", a.requireTenant(a.handleMoneyBudgetAlerts))          // B28.62, money_search.go
+	a.mux.HandleFunc("/api/money/alerts/channels", a.requireTenant(a.handleMoneyAlertChannels))        // B28.66, money_search.go
+	a.mux.HandleFunc("/api/money/alerts/channels/{id}", a.requireTenant(a.handleMoneyAlertChannel))    // B28.66, money_search.go
+	a.mux.HandleFunc("/api/money/alerts/deliveries", a.requireTenant(a.handleMoneyAlertDeliveries))    // B28.66, money_search.go
 	a.mux.HandleFunc("/api/money/budgets", a.requireTenant(a.handleMoneyBudgets))                      // B41.39, money_search.go
 	a.mux.HandleFunc("/api/money/budgets/{id}", a.requireTenant(a.handleMoneyBudget))                  // B41.39, money_search.go
 	a.mux.HandleFunc("/api/money/spending/subscriptions", a.requireTenant(a.handleMoneySubscriptions)) // B41.20, money_search.go

@@ -163,6 +163,42 @@ describe('the approval screen', () => {
   })
 })
 
+// B55.22 — Lens pays a covered item when it is prepared (B55.21): the card says it was paid, and a Decline says what still was.
+describe('the approval screen for a covered payment (B55.22)', () => {
+  const PAID = { ...BASE[0], decision: 'auto', reason: '', rule: '', payment_id: 'mpay_1', pay_status: 'completed' }
+  it('says a covered payment was paid without asking, with its payment status', async () => {
+    mockBff(false, [PAID], { status: 'auto' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('Paid without asking you: each payment is inside a permission you signed.')).toBeInTheDocument()
+    const item = screen.getByTestId('approve-item-1')
+    expect(item.textContent).toContain('Inside a permission you signed: paid without asking you.')
+    expect(item.textContent).toContain('Payment: completed')
+  })
+
+  it.each([
+    [[], 'Declined. Nothing that waited for you will be paid.'],
+    [[PAID], 'Declined. Nothing that waited for you will be paid. 1 inside a permission you signed was paid.'],
+    [[PAID, { ...PAID, position: 4, payment_id: 'mpay_2' }], 'Declined. Nothing that waited for you will be paid. 2 inside a permission you signed were paid.'],
+  ])('says what was paid when a request is declined (%#)', async (paid, line) => {
+    mockBff(false, [...paid, { ...BASE[1], pay_status: 'not_approved' }], { status: 'cancelled' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText(line)).toBeInTheDocument()
+  })
+})
+
+// B55.10 — Lens reads a request nobody answered within 24 hours as expired (B55.9): the card says so, and offers nothing.
+describe('the approval screen for an expired request (B55.10)', () => {
+  it('says the request expired and that nothing waiting was paid', async () => {
+    mockBff(false, BASE, { status: 'expired' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('This request expired: nobody approved it within 24 hours. Nothing waiting was paid.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Approve/ })).not.toBeInTheDocument()
+  })
+})
+
 describe('the approval screen when only the phone holds a key (B55.2)', () => {
   it('opens no passkey prompt, sends nothing, and says to approve on the phone', async () => {
     const bff = mockBff()

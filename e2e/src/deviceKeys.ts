@@ -26,11 +26,11 @@ export function deviceKeysVerdict(seen: DeviceKeysSeen): Verdict {
   const wrong: string[] = []
   const said = (a: Answer) => `${a.status} ${JSON.stringify(a.body)}`
   if (seen.challenge.status !== 200 || !seen.challenge.body.challenge) wrong.push(`the registration challenge answered ${said(seen.challenge)}`)
-  if (seen.register.status !== 400 || !(seen.register.body.error ?? '').includes('the device key is not valid')) {
+  if (seen.register.status !== 400 || !/the device key is not valid/i.test(seen.register.body.error ?? '')) {
     wrong.push(`registering a key with no real attestation answered ${said(seen.register)}, not Lens's 400 "the device key is not valid"`)
   }
   if (seen.list.status !== 200 || (seen.list.body.devices ?? []).length !== 0) wrong.push(`the device list answered ${said(seen.list)}, not 200 with no key`)
-  if (seen.revoke.status !== 404 || !(seen.revoke.body.error ?? '').includes('no such device key')) {
+  if (seen.revoke.status !== 404 || !/no such device key/i.test(seen.revoke.body.error ?? '')) {
     wrong.push(`revoking a key that does not exist answered ${said(seen.revoke)}, not Lens's 404 "no such device key"`)
   }
   if (wrong.length > 0) return fail(wrong.join('; '))

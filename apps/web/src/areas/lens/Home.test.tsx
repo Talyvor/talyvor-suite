@@ -31,16 +31,28 @@ const BUSY = {
   line: '1 approval waiting, 1 bill due this week, 2 payments yesterday, spent yesterday 0.075 LXC.',
 }
 
+// B55.10 — a payment an assistant (client mcp:) prepared, and the briefing's line for it, as Lens lists it with its preq_ id.
+const PREPARED = {
+  id: 'preq_1', status: 'pending_approval', summary: '1 payment', client: 'mcp:tlv_oc_claude', agent_id: 'agt_1', totals: { GBP: 12000 }, created_at: '2026-10-04T08:20:00Z',
+  items: [{ position: 1, payee_id: 'payee_1', payee_name: 'Acme Hosting', currency: 'GBP', amount_minor: 12000, reference: 'INV-7', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking' }],
+}
+const PREPARED_BRIEFING = {
+  ...BUSY,
+  items: [{ kind: 'approval', id: 'preq_1', name: 'Acme Hosting', amount: 12000, currency: 'GBP', text: 'A payment of £120.00 to Acme Hosting waits for your approval' }, ...BUSY.items],
+}
+
 function mockBff({
   agents,
   newWorkspace = false,
   briefing = QUIET,
   workspaceName = 'Acme',
+  prepared = [],
 }: {
   agents: Array<(typeof AGENTS)[number] & { paused_at?: string }>
   newWorkspace?: boolean
-  briefing?: typeof QUIET | typeof BUSY
+  briefing?: typeof QUIET | typeof BUSY | typeof PREPARED_BRIEFING
   workspaceName?: string
+  prepared?: object[]
 }) {
   const writes: string[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -88,6 +100,7 @@ function mockBff({
         ],
       })
     if (url === '/api/agents/briefing') return json(briefing)
+    if (url === '/api/money/payment-requests?status=pending_approval') return json({ requests: prepared })
     if (url === '/api/workspace/name' && init?.method === 'PUT') {
       workspaceName = JSON.parse(String(init.body)).name
       writes.push(`PUT ${url} ${init.body}`)
@@ -104,7 +117,17 @@ function mockBff({
         month_end: '2026-11-01T00:00:00Z',
         spent_ulxc: 3 * M,
         forecast_ulxc: 25 * M,
-        agents: agents.map((a) => ({ agent_id: a.id, name: a.name, spent_ulxc: a.id === 'agt_1' ? 3 * M : 0, forecast_ulxc: 0 })),
+        // B28.57 — Researcher, in Sydney, runs out at 17:00 UTC on 27 October: 28 October in its own zone (Lens B28.330).
+        // Buyer does not run out at its pace.
+        agents: agents.map((a) => ({
+          agent_id: a.id,
+          name: a.name,
+          spent_ulxc: a.id === 'agt_1' ? 3 * M : 0,
+          forecast_ulxc: 0,
+          ...(a.id === 'agt_1'
+            ? { runs_out_at: '2026-10-28T04:00:00+11:00', runs_out_on: '2026-10-28', timezone: 'Australia/Sydney' }
+            : { runs_out_at: null, runs_out_on: null, timezone: 'UTC' }),
+        })),
       })
     const rules = /^\/api\/agents\/([^/]+)\/rules$/.exec(url)
     if (rules)
@@ -163,6 +186,23 @@ describe('Home — the 30-second daily briefing (B41.6)', () => {
   })
 })
 
+describe('Home — payments prepared for the person (B55.10)', () => {
+  it('lists a payment an assistant prepared first, counts it, and the briefing opens its card', async () => {
+    mockBff({ agents: AGENTS, briefing: PREPARED_BRIEFING, prepared: [PREPARED] })
+    render(<App />)
+
+    const list = within(await screen.findByTestId('home-approvals'))
+    const row = list.getByText('Your assistant prepared a payment to Acme Hosting').closest('a')!
+    expect(row).toHaveAttribute('href', '/approve/preq_1')
+    expect(row).toHaveTextContent('INV-7 · from Researcher’s account · asked')
+    expect(row).toHaveTextContent('£120.00')
+    expect(screen.getByTestId('home-approvals-waiting')).toHaveTextContent('3')
+    await waitFor(() => expect(screen.getByTestId('home-briefing-line')).toHaveTextContent(BUSY.line))
+    const items = within(screen.getByTestId('home-briefing-items')).getAllByRole('listitem')
+    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/approve/preq_1')
+  })
+})
+
 describe('Home — the wallet home (B28.6)', () => {
   it('a returning user lands on Home and sees each agent’s budget used and the approvals waiting', async () => {
     mockBff({ agents: AGENTS })
@@ -188,6 +228,16 @@ describe('Home — the wallet home (B28.6)', () => {
 
   // B45.11 — DONE reads: "the approvals, the total and the first agent rows are visible without scrolling; every
   // figure matches the API". jsdom has no fold, so this pins the order and the figures; the 390px screenshot the fold.
+  it('each agent’s row says the day it runs out in its own time zone, not UTC’s, or that it does not run out (B28.57)', async () => {
+    mockBff({ agents: AGENTS })
+    render(<App />)
+
+    const researcher = await screen.findByTestId('runs-out-agt_1')
+    expect(researcher).toHaveTextContent('runs out on 28 October 2026 (Australia/Sydney)')
+    expect(within(researcher).getByText('28 October 2026')).toHaveAttribute('dateTime', '2026-10-28')
+    expect(screen.getByTestId('runs-out-agt_2')).toHaveTextContent('does not run out at this pace')
+  })
+
   it('Home in one glance: approvals first, then one total, then a row per agent, then Taly’s input', async () => {
     const writes = mockBff({ agents: AGENTS })
     window.history.pushState({}, '', '/')

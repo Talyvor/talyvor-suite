@@ -149,6 +149,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
+import { lxcCell } from '../src/statementPDF.ts'
 import { HOLD_REASON, TaxDesk } from './stub-tax.ts'
 import { VerificationDesk } from './stub-verification.ts'
 import { PayeeDesk } from './stub-payees.ts'
@@ -667,6 +668,15 @@ export class Bank {
     return charge
   }
 
+  /**
+   * B41.208 — the model a listing called as a model ("listing/<id>", talyvor-lens B41.79) runs on: its artifact's own.
+   * Undefined for a listing that names none.
+   */
+  listingModel(listingID: string): string | undefined {
+    const m = this.listings.get(listingID)?.artifact.model
+    return typeof m === 'string' && m !== '' ? m : undefined
+  }
+
   /** B28.359 — revokes one of the workspace's agent keys by its id, as Lens's DELETE …/api-keys/{id} does; false: no such key. */
   revokeAgentKey(wsID: string, keyID: string): boolean {
     const key = this.keyByID.get(keyID)
@@ -975,13 +985,32 @@ export class Bank {
   /**
    * B28.98 — a period statement as Lens writes it (cmd/lens writeStatement): JSON, or with ?format=csv a header, each
    * account's opening balance, every line, then each account's closing balance; times as Go's RFC 3339 with
-   * nanoseconds, a memo a spreadsheet would run as a formula kept as text.
+   * nanoseconds, a memo a spreadsheet would run as a formula kept as text. B28.55 — with ?format=pdf the same rows as
+   * Lens B28.328 draws them, each non-empty cell one string the page shows, amounts in LXC. B28.56 — with
+   * ?format=journal the journal Lens B28.329 writes: one per entry, a posting in a debit and one out a credit, closed on
+   * the counterparty where the statement holds only part of the entry, the entry's agent its cost centre.
    */
   private answerStatement(res: ServerResponse, st: object | string, url: URL): void {
     if (typeof st === 'string') return this.d.json(res, 400, { error: st })
-    if (url.searchParams.get('format') !== 'csv') return this.d.json(res, 200, st)
+    const format = url.searchParams.get('format')
+    if (format !== 'csv' && format !== 'pdf' && format !== 'journal') return this.d.json(res, 200, st)
     const s = st as { from: string; to: string; accounts: { account: string; opening_ulxc: number; closing_ulxc: number }[];
       lines: { posting_id: number; entry_id: string; at: string; account: string; kind: string; amount_ulxc: number; counterparty: string; ref?: string; balance_after_ulxc: number }[] }
+    if (format === 'journal') return this.answerJournal(res, s)
+    if (format === 'pdf') {
+      const rows = [
+        ...s.accounts.map((x) => [s.from, x.account, 'opening', '', '', lxcCell(x.opening_ulxc)]),
+        ...s.lines.map((l) => [l.at, l.account, l.kind, l.counterparty, lxcCell(l.amount_ulxc), lxcCell(l.balance_after_ulxc)]),
+        ...s.accounts.map((x) => [s.to, x.account, 'closing', '', '', lxcCell(x.closing_ulxc)]),
+      ]
+      const shown = (v: string) => `(${v.replace(/[()\\]/g, '\\$&')}) Tj`
+      res.writeHead(200, {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="agent-statement-${s.from.slice(0, 10)}-${s.to.slice(0, 10)}.pdf"`,
+      })
+      res.end(`%PDF-1.4\n${rows.map((r) => r.filter((v) => v !== '').map(shown).join(' ') + '\n').join('')}%%EOF\n`)
+      return
+    }
     const at = (t: string) => new Date(t).toISOString().replace(/\.(\d*?)0+Z$/, '.$1Z').replace(/\.Z$/, 'Z')
     const text = (v: string) => (v !== '' && '=+-@\t\r'.includes(v[0]) ? `'${v}` : v)
     const cell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
@@ -996,6 +1025,30 @@ export class Bank {
       'Content-Disposition': `attachment; filename="agent-statement-${s.from.slice(0, 10)}-${s.to.slice(0, 10)}.csv"`,
     })
     res.end(rows.map((r) => r.map(cell).join(',') + '\n').join(''))
+  }
+
+  private answerJournal(res: ServerResponse, s: { from: string; to: string;
+    lines: { entry_id: string; at: string; account: string; kind: string; amount_ulxc: number; counterparty: string; ref?: string }[] }): void {
+    const text = (v: string) => (v !== '' && '=+-@\t\r'.includes(v[0]) ? `'${v}` : v)
+    const cell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
+    const lxc = (ulxc: number) => (ulxc === 0 ? '' : `${Math.floor(ulxc / 1_000_000)}.${String(ulxc % 1_000_000).padStart(6, '0')}`)
+    const agent = (account: string) => (account.startsWith('agent:') ? account.slice('agent:'.length) : '')
+    const legs = new Map<string, typeof s.lines>()
+    for (const l of s.lines) legs.set(l.entry_id, [...(legs.get(l.entry_id) ?? []), l])
+    const rows = [['journal_no', 'date', 'account', 'description', 'debit_lxc', 'credit_lxc', 'cost_centre', 'ref']]
+    for (const [entry, ls] of legs) {
+      const centre = ls.map((l) => agent(l.account) || agent(l.counterparty)).find((c) => c !== '') ?? ''
+      const row = (l: (typeof ls)[number], account: string, amount: number) =>
+        [entry, l.at.slice(0, 10), account, text(l.kind), lxc(Math.max(amount, 0)), lxc(Math.max(-amount, 0)), centre, text(l.ref ?? '')]
+      for (const l of ls) rows.push(row(l, l.account, l.amount_ulxc))
+      const sum = ls.reduce((t, l) => t + l.amount_ulxc, 0)
+      if (sum !== 0) rows.push(row(ls[0], ls[0].counterparty, -sum))
+    }
+    res.writeHead(200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="agent-journal-${s.from.slice(0, 10)}-${s.to.slice(0, 10)}.csv"`,
+    })
+    res.end(rows.map((r) => r.map(cell).join(',') + '\r\n').join(''))
   }
 
   private async body<T>(req: IncomingMessage): Promise<T> {
@@ -1501,8 +1554,15 @@ export class Bank {
     const t: Transfer = { id: id('xfr_'), from_workspace_id: from.ws, from_agent_id: from.id, to_workspace_id: to.ws, to_agent_id: to.id, amount_ulxc: amount,
       memo, class: from.ws === to.ws ? 'GREEN' : 'AMBER', test_funded_ulxc: live ? 0 : amount, created_at: new Date().toISOString(), ...links }
     this.transfers.unshift(t)
-    this.post(from.ws, 'transfer', [[`agent:${from.id}`, -amount, `agent:${to.id}`]], t.id)
-    if (credit) this.post(to.ws, 'transfer', [[`agent:${to.id}`, amount, `agent:${from.id}`]], t.id)
+    // B28.56 — one entry inside a company, as Lens posts it, so the company's journal balances on its own lines; between
+    // two companies each side is on its own company's book.
+    const out: [string, number, string] = [`agent:${from.id}`, -amount, `agent:${to.id}`]
+    const into: [string, number, string] = [`agent:${to.id}`, amount, `agent:${from.id}`]
+    if (credit && from.ws === to.ws) this.post(from.ws, 'transfer', [out, into], t.id)
+    else {
+      this.post(from.ws, 'transfer', [out], t.id)
+      if (credit) this.post(to.ws, 'transfer', [into], t.id)
+    }
     // B28.290 — as Lens's moveLXC: between two workspaces the credits leave one's LXC balance and reach the other's, a ledger
     // row on each naming the transfer and its class.
     if (from.ws !== to.ws) {

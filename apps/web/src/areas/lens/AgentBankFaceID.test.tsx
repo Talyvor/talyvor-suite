@@ -47,7 +47,7 @@ function mockBff() {
       return json(a)
     }
     if (/\/pay$/.test(url)) pays.push(url)
-    if (/\/(rules|statement)$/.test(url)) return json(url.endsWith('rules') ? { approval_above_ulxc: 2 * M } : { lines: [] })
+    if (/\/(rules|statement)(?:\?|$)/.test(url)) return json(url.endsWith('rules') ? { approval_above_ulxc: 2 * M } : { lines: [] })
     return new Response('null', { status: 404 })
   })
   return { decisions, pays }
@@ -112,5 +112,113 @@ describe('Agent Bank approvals with Face ID', () => {
     expect(bff.decisions[1].decision).toBe('deny')
     expect((bff.decisions[1].body.assertion as Record<string, string>).signature).toBe(b64u(bytes('sig-over-challenge-apr_2')))
     expect(bff.pays).toEqual([])
+  })
+})
+
+// B55.3 — a key let in from the other device (Lens B55.1): with only the phone's key a passkey made here waits for the
+// phone, and with a passkey here a phone waiting is let in by this browser signing its enrolment challenge.
+function mockEnrol({ passkeys, enrolments, polls = [] }: { passkeys: string[]; enrolments: Record<string, unknown>[]; polls?: string[] }) {
+  const sent: Array<{ url: string; body: Record<string, unknown> }> = []
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = String(input)
+    const method = init?.method ?? 'GET'
+    const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {}
+    const json = (v: unknown, status = 200) =>
+      new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
+    if (method === 'POST') sent.push({ url, body })
+    if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/money/devices') return json({ devices: [{ id: 'dev_1', platform: 'ios', name: 'iPhone' }] })
+    if (url === '/api/agents' && method === 'GET')
+      return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [] })
+    if (url === '/api/agents/approvals') return json({ approvals: [] })
+    if (url === '/api/agents/passkeys' && method === 'GET')
+      return json({ passkeys: passkeys.map((c) => ({ credential_id: b64u(bytes(c)), name: 'Laptop', created_at: '2026-11-08T06:00:00Z' })) })
+    if (url === '/api/agents/passkeys/challenge') return json({ challenge: b64u(bytes('reg')), rp_id: 'localhost', credential_ids: passkeys.map((c) => b64u(bytes(c))) })
+    if (url === '/api/agents/passkeys')
+      return json({ enrolment: { id: 'enr_web', code: '482913', expires_at: '2026-11-08T06:10:00Z' } }, 202)
+    if (url === '/api/agents/keys/enrolments') return json({ enrolments })
+    if (url === '/api/agents/keys/enrolments/enr_web') return json({ id: 'enr_web', kind: 'passkey', status: polls.shift() ?? 'waiting' })
+    const challenge = /^\/api\/agents\/keys\/enrolments\/([^/]+)\/challenge$/.exec(url)
+    if (challenge) return json({ challenge: b64u(bytes(`enrol:${challenge[1]}`)), allow_credentials: passkeys.map((c) => b64u(bytes(c))) })
+    const decided = /^\/api\/agents\/keys\/enrolments\/([^/]+)\/(approve|decline)$/.exec(url)
+    if (decided) {
+      const en = enrolments.find((x) => x.id === decided[1])!
+      en.status = decided[2] === 'approve' ? 'approved' : 'declined'
+      return json(en)
+    }
+    return new Response('null', { status: 404 })
+  })
+  return { sent }
+}
+
+describe('a key let in from the other device (B55.3)', () => {
+  afterEach(() => {
+    delete (window as { PublicKeyCredential?: unknown }).PublicKeyCredential
+  })
+
+  it('with only the phone’s key, Add this device waits for the phone with its code, then says it was let in', async () => {
+    const polls = ['waiting', 'approved']
+    const { sent } = mockEnrol({ passkeys: [], enrolments: [], polls })
+    Object.assign(window, { PublicKeyCredential: function PublicKeyCredential() {} })
+    const create = vi.fn(async () => ({
+      rawId: bytes('newcred').buffer,
+      response: { clientDataJSON: bytes('cd').buffer, getAuthenticatorData: () => bytes('ad').buffer, getPublicKey: () => bytes('pk').buffer, getPublicKeyAlgorithm: () => -7 },
+    }))
+    Object.defineProperty(navigator, 'credentials', { value: { get: vi.fn(), create }, configurable: true })
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add this device' }))
+    expect(await screen.findByText(/^Waiting for your phone/)).toHaveTextContent(
+      /^Waiting for your phone\. Open Talyvor on your phone and let this browser in\. The code there should be 482913\.$/,
+    )
+    const reg = sent.find((s) => s.url === '/api/agents/passkeys')!
+    expect(reg.body).not.toHaveProperty('assertion')
+    expect(
+      await screen.findByText(
+        'This browser now signs approvals. Face ID, Touch ID or this device’s PIN asks each time you approve or decline.',
+        {},
+        { timeout: 6000 },
+      ),
+    ).toBeInTheDocument()
+    expect(polls).toEqual([])
+  }, 10_000)
+
+  it('with a passkey here, a waiting phone shows its code; Let it approve signs its challenge, Not this one turns another away', async () => {
+    const get = vi.fn(async (opts: CredentialRequestOptions) => {
+      const challenge = new TextDecoder().decode(opts.publicKey!.challenge as Uint8Array)
+      return {
+        rawId: bytes('cred1').buffer,
+        response: { clientDataJSON: bytes(`cd-${challenge}`).buffer, authenticatorData: bytes('authdata').buffer, signature: bytes(`sig-over-${challenge}`).buffer },
+      }
+    })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    const waiting = (id: string, name: string, code: string) => ({
+      id, kind: 'device', name, platform: 'ios', code, status: 'waiting', created_at: '2026-11-08T06:00:00Z', expires_at: '2026-11-08T06:10:00Z',
+    })
+    const { sent } = mockEnrol({ passkeys: ['cred1'], enrolments: [waiting('enr_1', 'iPhone', '551203'), waiting('enr_2', 'Pixel', '700114')] })
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+
+    expect(await screen.findByText(/^Your iPhone asks/)).toHaveTextContent(
+      /^Your iPhone asks to approve payments too\. Let it in only if you are adding it now and its code is 551203\.$/,
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: 'Let it approve' })[0])
+    expect(await screen.findByText('iPhone can approve now.')).toBeInTheDocument()
+    const approve = sent.find((s) => s.url === '/api/agents/keys/enrolments/enr_1/approve')!
+    expect(approve.body).toEqual({
+      assertion: {
+        credential_id: b64u(bytes('cred1')),
+        client_data_json: b64u(bytes('cd-enrol:enr_1')),
+        authenticator_data: b64u(bytes('authdata')),
+        signature: b64u(bytes('sig-over-enrol:enr_1')),
+      },
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Not this one' }).at(-1)!)
+    expect(await screen.findByText('Pixel was not added. Nothing changed.')).toBeInTheDocument()
+    expect(sent.map((s) => s.url)).toContain('/api/agents/keys/enrolments/enr_2/decline')
+    expect(sent.map((s) => s.url)).not.toContain('/api/agents/keys/enrolments/enr_2/approve')
   })
 })

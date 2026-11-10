@@ -559,6 +559,30 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor: "decide := func(approve bool) http.HandlerFunc {",
     subject: "lensApprovalDecisionBody",
   },
+  // B54.34 — approving with always allow asks for a challenge over that allowance too (Lens B54.29).
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/approvals/{approvalID}/challenge",
+    file: "apps/bff/agent_bank.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleApprovalChallenge(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/approvals/{approvalID}/challenge", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensApprovalChallengeBody",
+  },
+  // B55.3 — a key waiting from another device, let in by a key the workspace has (Lens B55.1).
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/keys/enrolments/{id}/approve",
+    file: "apps/bff/agent_bank.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleKeyEnrolmentAction(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/key_enrolments_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/keys/enrolments/{id}/approve", keyOwnerOnly(ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensKeyEnrolmentApproveBody",
+  },
   // B41.8 — resuming an agent, or every agent, signed with Face ID once the workspace has a passkey (Lens B41.108).
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/resume",
@@ -968,6 +992,18 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor:
       'r.Put("/v1/money/budgets", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensSpendBudgetBody",
+  },
+  // B28.66 — where alerts go, added on Agent Wallets (Lens B28.338).
+  {
+    route: "POST /v1/money/alerts/channels",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyAlertChannels(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/alert_channels_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/alerts/channels", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAlertChannelBody",
   },
   // B52.28 — a Scan agent's watch, set on Scan agents (Lens B52.27).
   {

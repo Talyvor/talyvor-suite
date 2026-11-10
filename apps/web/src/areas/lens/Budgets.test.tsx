@@ -80,4 +80,21 @@ describe('budgets by category (B41.39)', () => {
     }
     expect(document.body.textContent).not.toMatch(/Spending:|_/)
   })
+
+  // B55.57 — lens #1116 drops the prefix and starts with a capital; the screen says the same.
+  it('says a refused budget in words when Lens starts its sentence with a capital', async () => {
+    mockBff([], [
+      'Category must be empty (all spending) or one of ai_software, groceries, eating_out',
+      'At most 100 budgets in a workspace',
+    ])
+    window.history.pushState({}, '', '/money/budgets')
+    render(<App />)
+    await screen.findByTestId('budget-bdg_1')
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '250' } })
+
+    for (const said of ['Choose a category from the list.', 'A workspace can have at most 100 budgets.']) {
+      fireEvent.click(screen.getByRole('button', { name: 'Save budget' }))
+      expect(await screen.findByText(said)).toBeTruthy()
+    }
+  })
 })

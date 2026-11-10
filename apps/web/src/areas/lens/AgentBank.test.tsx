@@ -49,7 +49,7 @@ function mockBff() {
       a.status = decision[2] === 'approve' ? 'approved' : 'denied'
       return json(a)
     }
-    const m = /^\/api\/agents\/([^/]+)\/(\w+)$/.exec(url)
+    const m = /^\/api\/agents\/([^/]+)\/(\w+)(?:\?|$)/.exec(url)
     const agent = agents.find((a) => a.id === m?.[1])
     if (!m || !agent) return new Response('null', { status: 404 })
     const r = rules[agent.id] ?? {}

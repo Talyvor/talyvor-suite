@@ -64,6 +64,15 @@ const BODIES: Record<string, unknown> = {
     ],
   },
   // B40.9 — a prepared request at the address the console sweep visits (/approve/:id): two to approve, one blocked.
+  // B55.10 — the prepared requests still waiting, as Approvals, Home and the sidebar's badge read them.
+  '/api/money/payment-requests?status=pending_approval': {
+    requests: [
+      {
+        id: 'preq_1', status: 'pending_approval', summary: '1 payment for Researcher', client: 'mcp:tlv_oc_claude', agent_id: 'agt_research', totals: { GBP: 12000 }, created_at: '2026-10-23T09:00:00Z',
+        items: [{ position: 1, payee_id: 'payee_1', payee_name: 'Acme Hosting Ltd', currency: 'GBP', amount_minor: 12000, reference: 'November hosting', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking', rule: 'requires_approval_above' }],
+      },
+    ],
+  },
   '/api/money/payment-requests/%3Aid': {
     id: 'preq_1', status: 'pending_approval', summary: '3 payments for Researcher', client: 'mcp:tlv_oc_claude', agent_id: 'agt_research', totals: { GBP: 32050 }, created_at: '2026-10-23T09:00:00Z',
     items: [
@@ -619,6 +628,20 @@ const BY_PATH: Record<string, unknown> = {
         percent: 50, spent_minor: 25_000, limit_minor: 50_000, currency: 'GBP', created_at: '2026-09-20T08:00:00Z' },
     ],
   },
+  '/api/money/alerts/channels': {
+    channels: [
+      { id: 'ach_1', kind: 'push', created_at: '2026-09-18T09:00:00Z' },
+      { id: 'ach_2', kind: 'slack', url: 'https://hooks.slack.com/…k3Qz', created_at: '2026-09-18T09:05:00Z' },
+    ],
+  },
+  '/api/money/alerts/deliveries': {
+    deliveries: [
+      { id: 'adl_4', channel_id: 'ach_2', channel_kind: 'slack', alert_kind: 'limit', alert_id: 'sal_1', title: 'Budget',
+        body: 'Your spending is at 50% of this month’s budget: £250.00 of £500.00.', status: 'sent', attempts: 1, created_at: '2026-09-27T12:10:05Z', sent_at: '2026-09-27T12:10:40Z' },
+      { id: 'adl_3', channel_id: 'ach_1', channel_kind: 'push', alert_kind: 'limit', alert_id: 'sal_1', title: 'Budget',
+        body: 'Your spending is at 50% of this month’s budget: £250.00 of £500.00.', status: 'sent', attempts: 1, created_at: '2026-09-27T12:10:05Z', sent_at: '2026-09-27T12:10:38Z' },
+    ],
+  },
   '/api/agents/approvals': {
     approvals: [
       {
@@ -811,6 +834,15 @@ const BY_PATH: Record<string, unknown> = {
       { entry_id: 'e2', kind: 'spend', amount_ulxc: -1_250_000, counterparty: 'spend', ref: 'req_1', model: 'claude-sonnet-4', source: 'Chat', balance_after_ulxc: 10_000_000, at: '2026-09-27T11:00:00Z' },
       { entry_id: 'e1', kind: 'fund', amount_ulxc: 11_250_000, counterparty: 'workspace', balance_after_ulxc: 11_250_000, at: '2026-09-27T10:00:00Z' },
     ],
+  },
+  // B28.53 — the statement's one line out, as Lens's analytics bucket it.
+  '/api/agents/agt_research/analytics': {
+    agent_id: 'agt_research',
+    time_zone: 'UTC',
+    out_ulxc: 1_250_000,
+    returned_ulxc: 0,
+    spent_ulxc: 1_250_000,
+    buckets: [{ day: '2026-09-27', model: 'claude-sonnet-4', destination: 'spend', out_ulxc: 1_250_000, returned_ulxc: 0, spent_ulxc: 1_250_000, postings: 1 }],
   },
   '/api/usage': {
     period_days: 7,
