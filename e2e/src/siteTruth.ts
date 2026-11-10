@@ -16,6 +16,7 @@
 //     there are none, or no banner on any page while it describes one;
 //   /your-money leaves out that LXC is not money, that a mandate needs the owner's signed say, or that Talyvor is not a
 //     bank (B57.62);
+//   a page Pocket has drawn (POCKET_PAGES) served in today's design (B57.63);
 //   a public page without the shared header and footer (B51.1);
 //   a link on a public page that answers 404, or lands on the app's not-found page.
 // Where a link lands is read in this user's own signed-in tab, since a stranger is shown sign-in at every console address.
@@ -29,6 +30,9 @@ export const PUBLIC_PAGES = ['/marketing', '/pricing', '/your-money', '/document
 /** B51.1's one header and one footer, as B57.59 draws them in Pocket: the addresses each must link to. */
 export const HEADER_LINKS = ['/marketing', '/pricing', '/your-money', '/documentation', '/']
 export const FOOTER_LINKS = ['/pricing', '/your-money', '/documentation', '/privacy', '/terms', 'mailto:']
+
+/** B57.61, B57.62 and B57.63: the public pages drawn in Pocket, which must say so (`data-design="pocket"`). */
+export const POCKET_PAGES = ['/pricing', '/your-money', '/documentation', '/documentation/claude', '/privacy', '/terms']
 
 /** The app's catch-all for an address it has no page at (apps/web App.tsx). */
 export const NOT_FOUND = 'Nothing at this address'
@@ -61,6 +65,8 @@ export interface PageRead {
   cookieBanner: boolean
   /** B56.10 — each Live or Sandbox chip the page draws: its state and the capability keys it labels. */
   labels?: { state: string; key: string }[]
+  /** B57.63 — the design the page's title is held to (apps/web pocketPending.ts): "pocket", "today", or "" with no title. */
+  design?: string
 }
 
 export interface SiteRead {
@@ -132,6 +138,7 @@ export function siteFaults(r: SiteRead): string[] {
     if (['/terms', '/privacy', '/documentation'].includes(p.path) && INVESTING.test(p.text)) wrong.push(`${p.path} puts investing on a public page`)
     if (p.path === '/privacy') for (const name of PRIVACY_RECORDS) if (!p.text.includes(name)) wrong.push(`/privacy leaves out the "${name}" record`)
     if (p.path === '/your-money') for (const line of YOUR_MONEY_LINES) if (!text.includes(line)) wrong.push(`/your-money leaves out "${line}"`)
+    if (p.design !== undefined && POCKET_PAGES.includes(p.path) && p.design !== 'pocket') wrong.push(`${p.path} is not drawn in Pocket`)
   }
 
   // B56.10: a chip says Live only where Lens says live for every capability it labels, and the money pages carry labels.
@@ -180,6 +187,7 @@ async function readPage(page: Page, origin: string, path: string): Promise<PageR
     cookieBanner: await page.getByRole('dialog', { name: 'Cookies' }).isVisible(),
     labels: await page.locator('[data-status-key][data-status-label="live"], [data-status-key][data-status-label="sandbox"]')
       .evaluateAll((els) => els.map((el) => ({ state: el.getAttribute('data-status-label') ?? '', key: el.getAttribute('data-status-key') ?? '' }))),
+    design: await page.evaluate(() => document.querySelector('h1')?.closest('[data-design]')?.getAttribute('data-design') ?? ''),
   }
 }
 

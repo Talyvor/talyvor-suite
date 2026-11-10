@@ -51,6 +51,8 @@ describe(CLAUDE_CONNECTOR_PATH, () => {
   })
 
   it('every control on the page does something', async () => {
+    // jsdom has no clipboard; Copy's own answer is what is pressed.
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
     const report = await pressEverything(CLAUDE_CONNECTOR_PATH)
     expect(report.dead).toEqual([])
     expect(report.pressed).toBeGreaterThan(5)

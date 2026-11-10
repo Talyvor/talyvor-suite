@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { itemsFor } from '../src/filing.ts'
 import type { ReportedRun } from '../src/report.ts'
-import { FOOTER_LINKS, HEADER_LINKS, PRIVACY_RECORDS, PUBLIC_PAGES, YOUR_MONEY_LINES, type PageRead, type SiteRead, siteFaults, splitSentence } from '../src/siteTruth.ts'
+import { FOOTER_LINKS, HEADER_LINKS, POCKET_PAGES, PRIVACY_RECORDS, PUBLIC_PAGES, YOUR_MONEY_LINES, type PageRead, type SiteRead, siteFaults, splitSentence } from '../src/siteTruth.ts'
 
 const NONE = 'Cookies\nOur public pages set no advertising or analytics cookies, and send nothing to Meta.'
 const BANNER = "Cookies\nOur public pages use one advertising cookie, Meta's, to measure our ads, and only if you accept it in the cookie banner."
@@ -12,7 +12,7 @@ const clean = (): SiteRead => ({
   pages: PUBLIC_PAGES.map((path): PageRead => ({
     path, header: [...HEADER_LINKS], footer: [...FOOTER_LINKS.slice(0, 5), 'mailto:hello@talyvor.com'],
     text: path === '/marketing' ? 'No invitation needed. Get started' : path === '/privacy' ? PRIVACY_RECORDS.join(' ') : path === '/your-money' ? YOUR_MONEY_LINES.join(' ') : 'Plans and prices',
-    emailBox: false, chooseButtons: [], cookieBanner: false,
+    emailBox: false, chooseButtons: [], cookieBanner: false, design: POCKET_PAGES.includes(path) ? 'pocket' : 'today',
   })),
   privacyCookies: NONE,
   facebook: [],
@@ -30,6 +30,14 @@ const at = (r: SiteRead, path: string) => r.pages.find((p) => p.path === path)!
 describe('the site-truth oracle (B51.4)', () => {
   it('passes a site that agrees with the product', () => {
     expect(siteFaults(clean())).toEqual([])
+  })
+
+  // B57.63: the pages Pocket has drawn are served in Pocket.
+  it('catches a Pocket page served in today’s design, or with no title to hold', () => {
+    expect(planted((r) => { at(r, '/terms').design = 'today'; at(r, '/documentation/claude').design = '' })).toEqual([
+      '/documentation/claude is not drawn in Pocket',
+      '/terms is not drawn in Pocket',
+    ])
   })
 
   // B57.62: /your-money says LXC is not money, a mandate needs the owner's signed say, and Talyvor is not a bank.

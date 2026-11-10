@@ -80,7 +80,7 @@ export function Terms() {
           what stand between an agent and its wallet, so set them to what you are prepared to have
           spent. Pausing an agent, or every agent at once, stops it until you resume it.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           An agent can pay other agents, including another company&rsquo;s, hold money in escrow and
           pots, and lend to or borrow from another company. None of these moves real money until our
           first money partner is switched on, and an agent&rsquo;s virtual card can&rsquo;t make
@@ -105,7 +105,7 @@ export function Terms() {
           Anyone who can see a listing can report it; Talyvor reviews reported and held listings and
           can take one down for good, which refunds every use of it still inside the 14-day holdback.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           Only a workspace&rsquo;s owner or an admin can publish. Sellers earn 85% of every paid use,
           rental and purchase, from the first sale; Talyvor keeps 15%. Earnings are held for 14 days for refunds, then paid once a week to a
           Stripe account the seller connects, less Stripe&rsquo;s fees at cost, or taken at once as
@@ -127,13 +127,13 @@ export function Terms() {
           switched off or under evaluation. A contribution can be genuine and produce no ledger
           entry.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           Where a mechanism is under evaluation, what it <em>would</em> have paid is recorded for
           our own checking and never credited: it does not reach your balance. Your balance and
           ledger show only what you have actually been paid. This is the same statement the app
           makes on the sharing screen, and it is deliberately the same words.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           Rates, caps and eligibility can change, including to zero. Nothing here is a promise of
           future earnings.
         </p>
@@ -153,7 +153,7 @@ export function Terms() {
           the holding period is for: it is the window in which a payout can still be contested.
           Once it settles, it is not clawed back.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           We do not fix the length here on purpose. It is an operator setting, not a term of this
           document, and this same page ships with self-hosted installations whose operator may have
           chosen a different one. Your balance screen shows the held amount and says that it settles
@@ -181,7 +181,7 @@ export function Terms() {
           PDF), it is sent to a <strong>vision model</strong> to be read. That is an extra model
           call on your document, and it costs tokens rather than saving them.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           The converted text is what everything downstream treats as your prompt, so what{' '}
           <a className={inlineLink} href="/privacy">Privacy</a> says about prompts applies to your
           documents' contents too. You can turn conversion off in settings.
@@ -248,7 +248,7 @@ export function Terms() {
           workspace&rsquo;s data and shows that request until it is done. In Track, a
           workspace&rsquo;s owner can delete it and restore it within 14 days.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           Deleting all of your data is carried out by an operator, not automatically, and no
           turnaround is promised. Billing and ledger records, agent wallet statements included, are
           kept, because the law requires them. The full account is in{' '}

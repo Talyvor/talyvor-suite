@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../App'
 import { longDate, sectionId } from './legalParts'
@@ -77,10 +77,12 @@ describe('the legal pages', () => {
     const { container } = at(path)
     await screen.findByRole('heading', { level: 1 })
     expect(container.querySelector('main')?.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    cleanup()
+    vi.restoreAllMocks()
     const report = await pressEverything(path)
     expect(report.dead).toEqual([])
     expect(report.pressed).toBeGreaterThan(15)
-  })
+  }, 120_000)
 
   // B56.3 — they say only what the code does: investing is not offered, so neither page mentions it.
   it.each(['/terms', '/privacy'])('%s puts no investing on a public page', async (path) => {

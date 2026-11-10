@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { pressEverything } from '../../test/pressEverything'
 
 // B30.97 — the pay page, signed out: it shows the invoice as Lens serves it with no test-money label (B46.2), the card button asks
 // the BFF's public route for the checkout and sends the browser there, and back with ?paid=card it reads again until paid.
@@ -58,7 +59,7 @@ describe('the pay page', () => {
     const invoice = screen.getByTestId('pay-invoice')
     expect(within(invoice).getByText('Fixture Ltd')).toBeInTheDocument()
     expect(within(invoice).getByTestId('pay-amount').textContent).toBe('£120.00')
-    expect(within(invoice).getByText('Due 31 December 2026')).toBeInTheDocument()
+    expect(within(invoice).getByText(/^Due/, { selector: 'p' }).textContent).toBe('Due 31 December 2026')
     expect(within(invoice).getByRole('cell', { name: 'Research' })).toBeInTheDocument()
     expect(document.body.textContent).not.toMatch(/test money/i)
     expect(screen.getByTestId('pay-due').textContent).toBe('£120.00')

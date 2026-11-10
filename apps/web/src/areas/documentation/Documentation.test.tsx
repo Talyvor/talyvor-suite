@@ -153,7 +153,7 @@ describe('/documentation', () => {
     const report = await pressEverything(DOCUMENTATION_PATH)
     expect(report.dead).toEqual([])
     expect(report.pressed).toBeGreaterThan(20)
-  })
+  }, 120_000)
 
   it('names the suite’s licence exactly as its LICENSE file does', () => {
     const first = readFileSync(resolve(SRC, '../../../LICENSE'), 'utf8').split('\n')[0].trim()

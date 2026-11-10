@@ -49,9 +49,16 @@ describe('pocketPending.ts', () => {
   })
 
   it('App marks every page with the design it is held to', async () => {
-    window.history.pushState({}, '', '/privacy')
-    render(<App />)
-    const heading = await screen.findByRole('heading', { level: 1 })
-    expect(heading.closest('[data-design]')?.getAttribute('data-design')).toBe('today')
+    // B57.63 took /privacy out of the list, so it is Pocket's; /marketing is still today's.
+    for (const [path, design] of [
+      ['/marketing', 'today'],
+      ['/privacy', 'pocket'],
+    ]) {
+      window.history.pushState({}, '', path)
+      const view = render(<App />)
+      const heading = await screen.findByRole('heading', { level: 1 })
+      expect(heading.closest('[data-design]')?.getAttribute('data-design')).toBe(design)
+      view.unmount()
+    }
   })
 })
