@@ -1140,7 +1140,7 @@ export function Chat() {
           if (selected !== undefined && !readsImages(selected)) {
             const reader = models.find(readsImages)
             setAttachError(
-              `${selected.display_name} can’t read images${reader === undefined ? '.' : ` — pick one that can, such as ${reader.display_name}.`}`,
+              `${selected.display_name} can’t read images${reader === undefined ? '.' : `. Pick one that can, such as ${reader.display_name}.`}`,
             )
             continue
           }
@@ -1887,11 +1887,11 @@ export function Chat() {
                   {selected.auto === undefined ? 'List price · ' : 'Auto · list price '}
                   {formatUsdPer1M((selected.auto?.cheapest ?? selected).input_per_1m)}
                   {selected.auto !== undefined && selected.auto.dearest.input_per_1m !== selected.auto.cheapest.input_per_1m
-                    ? `–${formatUsdPer1M(selected.auto.dearest.input_per_1m)}`
+                    ? ` to ${formatUsdPer1M(selected.auto.dearest.input_per_1m)}`
                     : ''}{' '}
                   in / {formatUsdPer1M((selected.auto?.cheapest ?? selected).output_per_1m)}
                   {selected.auto !== undefined && selected.auto.dearest.output_per_1m !== selected.auto.cheapest.output_per_1m
-                    ? `–${formatUsdPer1M(selected.auto.dearest.output_per_1m)}`
+                    ? ` to ${formatUsdPer1M(selected.auto.dearest.output_per_1m)}`
                     : ''}{' '}
                   out per 1M tokens
                 </p>
@@ -2364,7 +2364,7 @@ function SentDocuments({ message, answering }: { message: ChatMessage; answering
         {message.converted === true
           ? 'Converted to text before the model read it.'
           : message.converted === false
-            ? 'Sent as the original file — Lens did not convert it (document conversion is off for this workspace; see Settings).'
+            ? 'Sent as the original file. Lens did not convert it (document conversion is off for this workspace; see Settings).'
             : answering
               ? 'Sending…'
               : kept
@@ -2640,11 +2640,11 @@ function Reply({
                   (message.requests !== undefined && message.requests > 1 ? ` · ${message.requests} requests` : '')
                 : message.charged_ulxc !== undefined
                   ? formatCharged(message.charged_ulxc)
-                  : 'Price not known — the provider reported no token counts for this answer'}
+                  : 'Price not known: the provider reported no token counts for this answer'}
           </p>
           {message.marked_wrong ? (
             <p className="ml-1 w-full text-caption text-muted" data-testid="turn-marked">
-              Marked wrong — this answer won’t be served again{canRegenerate ? '. Regenerate asks the model afresh.' : '.'}
+              Marked wrong: this answer won’t be served again{canRegenerate ? '. Regenerate asks the model afresh.' : '.'}
             </p>
           ) : marking === 'failed' ? (
             <p role="status" className="ml-1 w-full text-caption text-muted">

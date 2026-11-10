@@ -68,7 +68,7 @@ function CompanyPrice({ id, pricing }: { id: string; pricing: Pricing }) {
 
 function ownKeys(g: PlanGate, pricing: Pricing): ReactNode {
   if (g.own_provider_keys === 'included') return 'Included'
-  if (g.own_provider_keys === 'none') return '—'
+  if (g.own_provider_keys === 'none') return 'Not included'
   return pricing.byok_add_on_usd_cents ? (
     <>
       <span className="font-figure">{formatCents(pricing.byok_add_on_usd_cents)}</span> add-on
@@ -79,7 +79,7 @@ function ownKeys(g: PlanGate, pricing: Pricing): ReactNode {
 }
 
 function included(on: boolean): string {
-  return on ? 'Included' : '—'
+  return on ? 'Included' : 'Not included'
 }
 
 /** B56.10 — a switch the plan includes that Lens does not enforce yet carries Building; "—" carries nothing. */
@@ -156,7 +156,7 @@ export function CompanyCard({
         </Row>
         {fees ? (
           <Row label="FX margin over the reference rate">
-            {contracted ? 'Agreed' : fx ? <span className="font-figure">{formatBPS(fx)}</span> : '—'}
+            {contracted ? 'Agreed' : fx ? <span className="font-figure">{formatBPS(fx)}</span> : 'None'}
             {contracted || fx ? (
               <>
                 <StatusLabel capability="fx" labels={pricing.labels} />

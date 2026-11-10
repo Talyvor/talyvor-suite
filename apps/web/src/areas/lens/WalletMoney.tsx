@@ -249,7 +249,7 @@ function transferText(t: AgentTransfer, agentID: string): string {
   const out = t.from_agent_id === agentID
   const verb = t.refund_of ? (out ? 'Gave back' : 'Given back') : out ? 'Sent' : 'Received'
   const other = out ? t.to_agent_id : t.from_agent_id
-  return `${verb} ${out ? 'to' : 'from'} ${other}${t.memo ? ` — ${t.memo}` : ''}`
+  return `${verb} ${out ? 'to' : 'from'} ${other}${t.memo ? ` · ${t.memo}` : ''}`
 }
 
 /**
@@ -437,7 +437,7 @@ function eventText(e: Loan['events'][number], l: Loan, lxc: (ulxc: number) => st
         e.late_fee_ulxc ? ` + ${lxc(e.late_fee_ulxc)} late fee` : ''
       }`
     case 'missed':
-      return `Instalment ${e.instalment} missed${e.detail ? ` — ${e.detail.replace(/^economy: /, '')}` : ''}`
+      return `Instalment ${e.instalment} missed${e.detail ? `: ${e.detail.replace(/^economy: /, '')}` : ''}`
     case 'late':
       return 'The loan is late; the instalment is tried again one period on, with the late fee'
     case 'defaulted':

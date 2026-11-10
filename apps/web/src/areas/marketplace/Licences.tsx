@@ -201,7 +201,7 @@ function ActiveLicence({
             ) : (
               <>
                 Active until <span className="font-figure">{ends}</span>, then
-                it ends — nothing more is charged
+                it ends and nothing more is charged
               </>
             )}
           </>

@@ -78,7 +78,7 @@ function classify(
   if (status === 402) {
     return new ConvertError(
       'insufficient',
-      'Not enough LENS for that amount — nothing was converted. Try a smaller amount.',
+      'Not enough LENS for that amount. Nothing was converted. Try a smaller amount.',
       status,
       path,
     )
@@ -94,7 +94,7 @@ function classify(
   if (status === 404 || status === 503) {
     return new ConvertError(
       'unavailable',
-      'Conversion isn’t available on this deployment — nothing was converted.',
+      'Conversion isn’t available on this deployment. Nothing was converted.',
       status,
       path,
     )
@@ -107,14 +107,14 @@ function classify(
   if (status === 401) {
     return new ConvertError(
       'signed_out',
-      'Your session has expired. Sign in again, then convert — nothing was converted.',
+      'Your session has expired. Sign in again, then convert. Nothing was converted.',
       status,
       path,
     )
   }
   return new ConvertError(
     'upstream',
-    'Couldn’t convert — nothing was converted. Please try again.',
+    'Couldn’t convert. Nothing was converted. Please try again.',
     status,
     path,
   )

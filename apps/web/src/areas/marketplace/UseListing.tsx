@@ -139,7 +139,7 @@ export function UseListing({ listing, own, held }: { listing: Listing; own: bool
             {held.included_uses ? (
               <>
                 {' '}
-                — its first <span className="font-figure">{held.included_uses}</span>
+                (its first <span className="font-figure">{held.included_uses}</span>)
               </>
             ) : null}
             : nothing new goes on your bill. The models it calls are billed to you as usual.
@@ -183,7 +183,7 @@ export function UseListing({ listing, own, held }: { listing: Listing; own: bool
         ) : null}
         {listing.kind === 'prompt' && !needs && !(vars.length > 0) ? (
           <p className="text-caption text-muted">
-            If this prompt needs values filled in, Lens names them the first time you use it — nothing runs or is
+            If this prompt needs values filled in, Lens names them the first time you use it. Nothing runs or is
             charged until they are there.
           </p>
         ) : null}

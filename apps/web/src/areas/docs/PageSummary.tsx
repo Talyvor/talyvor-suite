@@ -94,7 +94,7 @@ export function PageSummary({ pageId, text, onSpent }: { pageId: string; text: s
             {isAIUnavailable(summarize.error) ? (
               aiNotConfiguredCopy
             ) : isSessionExpired(summarize.error) ? null : (
-              <>Couldn’t summarise this page — nothing was asked of the model. Try again.</>
+              <>Couldn’t summarise this page. Nothing was asked of the model. Try again.</>
             )}
           </p>
         ) : summarize.data ? (

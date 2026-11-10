@@ -48,7 +48,7 @@ export function MemoryPage() {
       {/* The page's name is the console banner's <h1> (CONSOLE_ROUTES' title), so no second one here. */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="text-body text-muted">
-          Chat can remember what you tell it about yourself — your name, your work, how you like answers — and send it
+          Chat can remember what you tell it about yourself (your name, your work, how you like answers) and send it
           with every question, in every chat. It is off until you turn it on, and remembers only what you ask it to.
         </p>
         <Link className={`text-body text-ink ${inlineLink}`} to="/chat">

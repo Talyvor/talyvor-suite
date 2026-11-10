@@ -155,8 +155,8 @@ export function Earnings() {
         <p data-testid="royalties-framing" className="mb-3 max-w-2xl text-body text-muted">
           Sharing answers exists to save on repeated questions: an answer another company already
           paid for is served to you without paying a model. When one of yours is served to them,
-          this workspace earns a small royalty in LENS — a side effect of sharing, not what it is
-          for.{' '}
+          this workspace earns a small royalty in LENS (a side effect of sharing, not what it is
+          for).{' '}
           <Link className={`text-ink ${inlineLink}`} to="/settings">
             Shared answers in Settings
           </Link>
@@ -166,7 +166,7 @@ export function Earnings() {
         ) : !s.earning_enabled ? (
           <div className="space-y-3">
             <p data-testid="earning-off" className="text-body text-ink">
-              Reuse earning is switched off in this deployment, so there is nothing to report — not
+              Reuse earning is switched off in this deployment, so there is nothing to report: not
               zero, unmeasured.
             </p>
             <p className="text-body text-muted">
@@ -207,7 +207,7 @@ export function Earnings() {
             {s.capital_settled_ulens > 0 ? (
               <p data-testid="capital-line" className="text-body text-muted">
                 Separately, <MuNumeral micros={s.capital_settled_ulens} unit="lens" /> of yield on
-                LENS you locked. That is income, and it is not something you answered — so it is not
+                LENS you locked. That is income, and it is not something you answered, so it is not
                 part of the figure above.
               </p>
             ) : null}
@@ -255,7 +255,7 @@ export function Earnings() {
                   who stops at the first line never reaches. Prose saying "Setup is the next thing
                   to check" would have satisfied nobody: the reader still has to go and find it. */}
               <p data-testid="nothing-earned" className="text-body text-ink">
-                Nothing has earned yet — earning is on, and no contribution of yours has been
+                Nothing has earned yet: earning is on, and no contribution of yours has been
                 reused.
               </p>
               <p className="text-body text-muted">

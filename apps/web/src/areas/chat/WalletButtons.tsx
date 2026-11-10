@@ -98,11 +98,11 @@ export function WalletButtons({ agent, book }: { agent: Agent; book: AgentBook }
     <div className="space-y-2" data-testid="chat-wallet-buttons">
       {book.all_paused_at ? (
         <p className="text-caption text-ink" data-testid="chat-all-paused">
-          Every agent is paused{book.all_paused_reason ? ` — ${book.all_paused_reason}` : ''}.
+          Every agent is paused{book.all_paused_reason ? `: ${book.all_paused_reason}` : ''}.
         </p>
       ) : agent.paused_at ? (
         <p className="text-caption text-ink" data-testid="chat-agent-paused">
-          {agent.name} is paused{agent.paused_reason ? ` — ${agent.paused_reason}` : ''}.
+          {agent.name} is paused{agent.paused_reason ? `: ${agent.paused_reason}` : ''}.
         </p>
       ) : null}
 

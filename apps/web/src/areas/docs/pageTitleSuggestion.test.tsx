@@ -213,7 +213,7 @@ describe('the page title suggestion control', () => {
     expect(await screen.findByText('How Rollbacks Work')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /use this title/i }))
 
-    expect(await screen.findByText(/couldn’t apply it — this page’s title is unchanged/i)).toBeInTheDocument()
+    expect(await screen.findByText(/couldn’t apply it\. this page’s title is unchanged/i)).toBeInTheDocument()
   })
 
   // ⚠ THE MIDDLE STATE. Docs answers 503 + AI_UNAVAILABLE when its own Lens credential is missing;

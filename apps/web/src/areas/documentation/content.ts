@@ -58,17 +58,17 @@ export const START: Claim[] = [
   {
     text: 'Create an agent. It gets a wallet of its own, empty until you fund it.',
     href: '/agents',
-    label: 'Agent Wallets — Create agent',
+    label: 'Agent Wallets: Create agent',
   },
   {
     text: 'Fund its wallet from the workspace’s balance. The agent can spend only what its wallet holds.',
     href: '/agents',
-    label: 'Agent Wallets — Fund',
+    label: 'Agent Wallets: Fund',
   },
   {
     text: 'Issue the agent its own key: a proxy key that spends only this agent’s balance, under its rules. It is shown once.',
     href: '/agents',
-    label: 'Agent Wallets — Issue a key',
+    label: 'Agent Wallets: Issue a key',
   },
   {
     text: 'Give the agent that key and the base URL Setup prints for Claude Code, Cursor, Continue or the OpenAI SDK.',
@@ -78,7 +78,7 @@ export const START: Claim[] = [
   {
     text: 'Watch its statement: every request the agent makes is a line with what it cost and the balance left.',
     href: '/agents',
-    label: 'Agent Wallets — Statement',
+    label: 'Agent Wallets: Statement',
   },
   {
     text: 'Connect Claude, so it can read your accounts and prepare payments that you approve in Talyvor.',
@@ -118,7 +118,7 @@ export const CAPABILITIES: Capability[] = [
         label: 'Agent Wallets',
         money: BETWEEN_OWNERS,
       },
-      { text: 'Every wallet route Lens answers, with what each one does.', href: '#lens-wallets', label: 'Lens API — Agent Wallets' },
+      { text: 'Every wallet route Lens answers, with what each one does.', href: '#lens-wallets', label: 'Lens API: Agent Wallets' },
     ],
   },
   {
@@ -135,17 +135,17 @@ export const CAPABILITIES: Capability[] = [
       {
         text: 'Pick the model from every priced model the deployment serves, each with its price per million tokens.',
         href: '/chat/help',
-        label: 'How to use Chat — Models',
+        label: 'How to use Chat: Models',
       },
       {
         text: 'Attach PDF, Word, Excel, PowerPoint, CSV, HTML, JSON, XML, text or Markdown files up to 25 MB; Lens converts them to text first, so the model is billed for the words, not the file.',
         href: '/chat/help',
-        label: 'How to use Chat — Attaching documents',
+        label: 'How to use Chat: Attaching documents',
       },
       {
         text: 'Mark a wrong answer and the stored answer is removed, so it is never served again to you or anyone.',
         href: '/chat/help',
-        label: 'How to use Chat — Asking',
+        label: 'How to use Chat: Asking',
       },
       {
         text: 'Turn document conversion on or off for the workspace.',
@@ -163,7 +163,7 @@ export const CAPABILITIES: Capability[] = [
       { text: 'Create spaces and write pages in them; a save records a new version.', href: '/docs', label: 'All documents' },
       { text: 'Search every page in the workspace, or ask a question across them.', href: '/docs', label: 'All documents' },
       {
-        text: 'On a page: summarise it, translate it, get a title suggested, read its changelog, or ask AI about a selection — and see what that AI work cost.',
+        text: 'On a page: summarise it, translate it, get a title suggested, read its changelog, or ask AI about a selection, and see what that AI work cost.',
         href: '/docs',
         label: 'Open a page from All documents',
       },
@@ -186,7 +186,7 @@ export const CAPABILITIES: Capability[] = [
         label: 'Issues',
       },
       {
-        text: 'On an issue: summarise its thread, find likely duplicates, and get a triage suggestion — each metered through Lens.',
+        text: 'On an issue: summarise its thread, find likely duplicates, and get a triage suggestion, each metered through Lens.',
         href: '/track',
         label: 'Issues',
       },
@@ -207,7 +207,7 @@ export const CAPABILITIES: Capability[] = [
     lede: 'Use what other teams published and publish your own. A listing runs through Lens as your workspace, and a paid listing’s price goes on your monthly bill.',
     claims: [
       {
-        text: 'Discover published listings — trending, new, searched by capability and price, and collections — and open one to use it.',
+        text: 'Discover published listings (trending, new, searched by capability and price, and collections) and open one to use it.',
         href: '/marketplace',
         label: 'Discover',
       },
@@ -250,7 +250,7 @@ export const CAPABILITIES: Capability[] = [
       {
         text: 'Or point Claude Code itself at Lens with the two variables Setup prints.',
         href: '/setup',
-        label: 'Setup — Claude Code',
+        label: 'Setup: Claude Code',
       },
     ],
   },

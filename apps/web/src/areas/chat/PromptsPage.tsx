@@ -39,7 +39,7 @@ export function PromptsPage() {
       {/* The page's name is the console banner's <h1> (CONSOLE_ROUTES' title), so no second one here. */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="text-body text-muted">
-          Prompts your workspace keeps by name — a support tone, a review checklist, a house style. Use one in any chat and
+          Prompts your workspace keeps by name: a support tone, a review checklist, a house style. Use one in any chat and
           every question in it is sent with the prompt as it reads now, for everyone in the workspace.
         </p>
         <Link className={`text-body text-ink ${inlineLink}`} to="/chat">

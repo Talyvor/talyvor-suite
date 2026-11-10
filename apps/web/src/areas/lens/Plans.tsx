@@ -55,8 +55,8 @@ import { BUY_FROM_TALYVOR } from '../../labels/capabilities'
 const SUBSCRIBE_FAILURE: Record<SubscribeError['kind'], string> = {
   not_for_sale: 'Plans aren’t on sale on this deployment yet. Nothing was charged.',
   already_subscribed: 'This workspace already has a plan. Nothing was charged.',
-  signed_out: 'Your session has expired — sign in again to choose a plan. Nothing was charged.',
-  upstream: 'Lens couldn’t start the checkout just now. Nothing was charged — try again in a moment.',
+  signed_out: 'Your session has expired. Sign in again to choose a plan. Nothing was charged.',
+  upstream: 'Lens couldn’t start the checkout just now. Nothing was charged. Try again in a moment.',
 }
 
 /** A subscriber's move to another plan (B18.20): asked for, confirmed with what Stripe will charge, sent. */
@@ -142,7 +142,7 @@ function PlanCard({
               of usage included this month
             </li>
           ) : null}
-          <li>Past it, chat continues on prepaid credits — never an overage</li>
+          <li>Past it, chat continues on prepaid credits, never an overage</li>
         </ul>
       </div>
       {current || canChoose || switching ? (
@@ -215,13 +215,13 @@ function ByokAddonCard({
       <div className="flex flex-col gap-3 px-gutter py-5 wide:flex-row wide:gap-gutter">
         <div className="flex flex-col gap-3 wide:w-64 wide:shrink-0">
           <p id="plan-byok" className="font-figure text-eyebrow uppercase text-label">
-            {BYOK.name} — Team’s add-on
+            {BYOK.name} · Team’s add-on
           </p>
           <MonthlyPrice usdCents={usdCents} testId="plan-price-byok" />
         </div>
         <ul className="flex list-disc flex-col gap-1 pl-5 text-body text-muted">
           <li>Your own API keys for {providerList()}, added in Settings</li>
-          <li>No Talyvor token charge on a request sent on your key — your provider bills you directly</li>
+          <li>No Talyvor token charge on a request sent on your key: your provider bills you directly</li>
           <li>Included in Business</li>
         </ul>
       </div>
@@ -286,7 +286,7 @@ function UsageMeter({ summary }: { summary: PlanSummary }) {
           Renews {formatDay(a.period_end)}.{' '}
           {pct >= 100
             ? 'It is used up, so chat is drawing your LXC balance until then.'
-            : 'When it runs out, chat draws your LXC balance — the plan never bills an overage.'}
+            : 'When it runs out, chat draws your LXC balance. The plan never bills an overage.'}
         </p>
       </div>
     </Card>
@@ -321,7 +321,7 @@ function EarningsCard({
           </p>
         ) : fee > 0 ? (
           <p className="text-body text-ink">
-            Your answers earned you <span className="font-figure">{formatCents(back)}</span> this month —{' '}
+            Your answers earned you <span className="font-figure">{formatCents(back)}</span> this month:{' '}
             <span className="font-figure">{formatCents(back)}</span> of your{' '}
             <span className="font-figure">{formatCents(fee)}</span> plan back.
           </p>
@@ -348,7 +348,7 @@ function EarningsCard({
       {helped ? (
         <Row
           label="People your answers helped"
-          hint={`Every other workspace that reused one of your answers or converted documents — ${helped.reuses.toLocaleString('en-US')} ${helped.reuses === 1 ? 'reuse' : 'reuses'} in all, so far. A count, never who`}
+          hint={`Every other workspace that reused one of your answers or converted documents: ${helped.reuses.toLocaleString('en-US')} ${helped.reuses === 1 ? 'reuse' : 'reuses'} in all, so far. A count, never who`}
         >
           <span className="font-figure text-body text-ink" data-testid="plans-helped">
             {helped.helped_workspaces.toLocaleString('en-US')}
@@ -362,7 +362,7 @@ function EarningsCard({
 export const SUBSCRIPTION_KEY = ['plan-subscription']
 
 function changeFailure(err: unknown): string {
-  if (isSessionExpired(err)) return 'Nothing changed — sign in again.'
+  if (isSessionExpired(err)) return 'Nothing changed. Sign in again.'
   if (err instanceof SubscriptionChangeError && err.sentence) {
     const s = err.sentence.replace(/^billing: /, '')
     return `${s.charAt(0).toUpperCase()}${s.slice(1)}${s.endsWith('.') ? '' : '.'}`

@@ -66,7 +66,7 @@ describe('Agent Bank approvals with Face ID', () => {
     window.history.pushState({}, '', '/agents')
     render(<App />)
     const asks = await screen.findByText(/wants to pay/)
-    expect(asks).toHaveTextContent(/^Researcher wants to pay Acme Hosting 3 LXC — October invoice$/)
+    expect(asks).toHaveTextContent(/^Researcher wants to pay Acme Hosting 3 LXC · October invoice$/)
   })
 
   it('signs each approve and deny with the passkey over that approval’s challenge', async () => {

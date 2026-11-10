@@ -43,7 +43,7 @@
  * deployment's Lens, so this client does not get to assume the field arrived.
  */
 export function formatUsdPer1M(value: number): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'Not known'
 
   const raw = String(value)
   // Exponential form is unreachable from the real catalog (the smallest seeded rate is 0.015), but
@@ -199,7 +199,7 @@ export function formatCostRange(lowUsd: number, highUsd: number, usdPerLXC: numb
   const pegged = typeof usdPerLXC === 'number' && Number.isFinite(usdPerLXC) && usdPerLXC > 0
   const low = outward(pegged ? lowUsd / usdPerLXC : lowUsd, 'down')
   const high = outward(pegged ? highUsd / usdPerLXC : highUsd, 'up')
-  const range = low === high ? figure(low) : `${figure(low)}–${figure(high)}`
+  const range = low === high ? figure(low) : `${figure(low)} to ${figure(high)}`
   return pegged ? `≈ ${range} LXC` : `≈ $${range}`
 }
 

@@ -119,7 +119,7 @@ export function RunCost({ refs, payer, me }: { refs: RunRefs; payer: string; me:
       : refs.charge === 'billed'
         ? usdText(refs.price_usd_micros ?? 0)
         : refs.charge === 'own'
-          ? 'No charge — the payer’s own work'
+          ? 'No charge: the payer’s own work'
           : refs.charge === 'licensed'
             ? 'Covered by a licence'
             : refs.charge === 'trial'
@@ -334,7 +334,7 @@ function ContributionForm({
         </label>
       </div>
       <label className="flex flex-col gap-1 text-caption text-muted">
-        {fork ? `${what.label} — empty keeps the original’s` : what.label}
+        {fork ? `${what.label} (empty keeps the original’s)` : what.label}
         <textarea className={`min-h-20 w-full rounded-control border border-rule bg-surface p-3 text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`} value={text} placeholder={what.hint} onChange={(e) => setText(e.target.value)} />
       </label>
       <label className="text-caption text-muted">
@@ -347,7 +347,7 @@ function ContributionForm({
           onChange={(e) => setPrice(e.target.value)}
         />
       </label>
-      {micros === null ? <Note ok={false}>A price is an amount of dollars, like 0.10 — or empty for the room’s default.</Note> : null}
+      {micros === null ? <Note ok={false}>A price is an amount of dollars, like 0.10, or empty for the room’s default.</Note> : null}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={!ok || pending}>
           {pending ? (fork ? 'Forking…' : 'Proposing…') : fork ? 'Fork it' : 'Propose'}
@@ -524,7 +524,7 @@ function Board({ room, me }: { room: RoomDetail; me: string }) {
     <Region index="02" label="Contributions" fullWidth className="flex flex-col gap-4">
       <div className="flex max-w-3xl flex-wrap items-center gap-3">
         <p className="grow text-body text-muted">
-          Work proposed to the room. Fork one to build on it — its author earns the room’s remix share — and vote for the
+          Work proposed to the room. Fork one to build on it (its author earns the room’s remix share) and vote for the
           ones the room should keep.
         </p>
         <Button aria-expanded={proposing} onClick={() => setProposing((p) => !p)}>

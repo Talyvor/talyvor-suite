@@ -91,7 +91,7 @@ export function OperatorTrail() {
   return (
     <Region index="02" label="Audit" heading="Operator actions" sectionClassName="pb-10 pt-4 wide:pb-12">
       <p className="max-w-2xl text-body text-muted">
-        Every action an operator took here — approving or taking down a listing, retrying a parked use — with who
+        Every action an operator took here (approving or taking down a listing, retrying a parked use), with who
         took it and when, newest first. Nobody can change or delete a line. Pick an operator or a target in the
         list to see only theirs.
       </p>

@@ -105,14 +105,14 @@ describe('The wallet buttons beside Chat (B28.87)', () => {
     expect(panel.getByRole('group', { name: 'Confirm' })).toHaveTextContent('Pause Researcher? Lens refuses its next request or payment until you resume it.')
     expect(bff.posts).toEqual([])
     fireEvent.click(panel.getByRole('button', { name: 'Yes, pause Researcher' }))
-    expect(await panel.findByTestId('chat-agent-paused')).toHaveTextContent('Researcher is paused — paused from Chat.')
+    expect(await panel.findByTestId('chat-agent-paused')).toHaveTextContent('Researcher is paused: paused from Chat.')
     expect(panel.getByRole('button', { name: 'Resume Researcher' })).toBeInTheDocument()
 
     fireEvent.click(panel.getByRole('button', { name: 'Pause all' }))
     expect(panel.getByRole('group', { name: 'Confirm' })).toHaveTextContent('Pause every agent?')
     expect(bff.posts).toHaveLength(1)
     fireEvent.click(panel.getByRole('button', { name: 'Yes, pause all' }))
-    expect(await panel.findByTestId('chat-all-paused')).toHaveTextContent('Every agent is paused — paused from Chat.')
+    expect(await panel.findByTestId('chat-all-paused')).toHaveTextContent('Every agent is paused: paused from Chat.')
     expect(panel.getByRole('button', { name: 'Start all again' })).toBeInTheDocument()
 
     expect(bff.posts.map((p) => [p.path, p.body])).toEqual([

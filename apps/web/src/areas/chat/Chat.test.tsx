@@ -919,7 +919,7 @@ describe('what each answer cost', () => {
     expect(screen.queryByTestId('cost-preview')).toBeNull()
     fireEvent.change(box, { target: { value: 'What is the capital of France?' } })
     // 30 bytes. Low: 3 tokens in + 1 out = $0.00004 = 0.0004 LXC. High: 15 + 64 + 8 in + 4,096 out = $0.102835, up to 1.03 LXC.
-    expect(screen.getByTestId('cost-preview').textContent).toBe('Sending this ≈ 0.0004–1.03 LXC · answer up to 4,096 tokens')
+    expect(screen.getByTestId('cost-preview').textContent).toBe('Sending this ≈ 0.0004 to 1.03 LXC · answer up to 4,096 tokens')
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     // (22 × $5 + 4 × $25) / 1M = $0.00021 = 0.0021 LXC: inside 0.0004–1.03.
     expect((await screen.findByTestId('turn-cost')).textContent).toBe('≈ 0.0021 LXC · Claude Opus 5 · 22 in / 4 out tokens')
@@ -1129,7 +1129,7 @@ describe('the reading column (B10.3)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Wrong answer' }))
     await waitFor(() =>
       expect(screen.getByTestId('turn-marked').textContent).toBe(
-        'Marked wrong — this answer won’t be served again. Regenerate asks the model afresh.',
+        'Marked wrong: this answer won’t be served again. Regenerate asks the model afresh.',
       ),
     )
     expect(feedback).toHaveBeenCalledWith({ request_id: 'req-42', signal: 'negative' })
@@ -1927,7 +1927,7 @@ describe('images for models that read them (B28.379)', () => {
     const { posted } = mockChat({ catalog: SEEING })
     renderChat()
     await attach('Gemini 2 Pro', [png()])
-    expect((await screen.findByRole('alert')).textContent).toBe('Gemini 2 Pro can’t read images — pick one that can, such as GPT-4o.')
+    expect((await screen.findByRole('alert')).textContent).toBe('Gemini 2 Pro can’t read images. Pick one that can, such as GPT-4o.')
     await attach('GPT-4o', [new File(['not a picture'], 'fake.png')])
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('fake.png couldn’t be read as a PNG, JPEG, GIF or WebP image.'))
     await attach('GPT-4o', [new File([new Uint8Array(IMAGE_LIMIT_BYTES + 1)], 'huge.png')])
@@ -1951,7 +1951,7 @@ describe('images for models that read them (B28.379)', () => {
     await attach('GPT-4o', [big('a.png'), big('b.png')])
     await waitFor(() => expect(screen.getAllByTestId('attached-image')).toHaveLength(3))
     await ask('Compare them')
-    await screen.findByText(/^The images in this conversation are too large to send together — at most 4 MB in all\./)
+    await screen.findByText(/^The images in this conversation are too large to send together: at most 4 MB in all\./)
     expect(posted).not.toHaveBeenCalled()
   })
 })

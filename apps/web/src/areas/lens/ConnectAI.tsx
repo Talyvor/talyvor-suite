@@ -247,7 +247,7 @@ export function ConnectAI() {
       <Region index="00" label="Connect your AI" heading="Connect your AI" sectionClassName="pb-10 pt-4 wide:pb-12">
         <p className="max-w-2xl text-body text-muted">
           Add Talyvor to the assistant you already use. It can read your balances and bills, draft invoices and prepare
-          payments — every payment waits for you to approve it here.
+          payments. Every payment waits for you to approve it here.
         </p>
         <div className="mt-4 max-w-2xl">
           <CopyBlock text={url} label="the address" />

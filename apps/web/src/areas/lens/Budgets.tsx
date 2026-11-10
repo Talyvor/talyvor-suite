@@ -97,7 +97,7 @@ export function BudgetsScreen() {
         className="flex max-w-2xl flex-col gap-3"
       >
         <p className="text-body text-muted">
-          A weekly or monthly budget for a kind of spending — AI and software, travel, eating out — on your own wallet, one
+          A weekly or monthly budget for a kind of spending (AI and software, travel, eating out) on your own wallet, one
           agent’s, or every wallet together. You get an alert when spending reaches 50, 80 and 100% of it, once each period.
         </p>
       </Region>

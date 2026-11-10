@@ -99,7 +99,7 @@ export function ForecastCard({ question, onClose }: { question: string; onClose:
                       </option>
                     ))}
                   </select>
-                  <p className="text-caption text-muted">No agent is called “{typed}” — pick one.</p>
+                  <p className="text-caption text-muted">No agent is called “{typed}”. Pick one.</p>
                 </>
               ) : (
                 <>

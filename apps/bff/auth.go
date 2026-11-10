@@ -660,7 +660,7 @@ var deniedPageTmpl = template.Must(template.New("denied").Parse(`<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#060A12">
-<title>Access not granted — Talyvor</title>
+<title>Access not granted | Talyvor</title>
 <style>
   :root { color-scheme: dark light;
           --tv-canvas: #060A12; --tv-surface: #081220; --tv-line: rgba(126,147,171,.18);
@@ -698,7 +698,7 @@ var deniedPageTmpl = template.Must(template.New("denied").Parse(`<!doctype html>
   <div class="mark-light">{{.MarkLight}}</div>
   <h1>Access not granted</h1>
   <div class="rule"></div>
-  {{if .Email}}<p>You are signed in as <strong>{{.Email}}</strong> — the sign-in itself worked.</p>
+  {{if .Email}}<p>You are signed in as <strong>{{.Email}}</strong>. The sign-in itself worked.</p>
   {{else}}<p>Your sign-in itself worked.</p>{{end}}
   <p>This workspace has not granted you access.</p>
   <p class="muted">If you believe you should have access, contact the person who runs this

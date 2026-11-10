@@ -381,7 +381,7 @@ export function IssueList() {
         {empty ? (
           <>
             <p className="max-w-2xl text-body text-muted">
-              An issue is anything this workspace needs to remember — a bug, a task, a decision to
+              An issue is anything this workspace needs to remember: a bug, a task, a decision to
               come back to. It stays in your own workspace.
             </p>
             {/* ⚠ THE NEXT ACTION IS PERFORMED, NOT DESCRIBED. The copy this replaces read "Create
@@ -436,13 +436,13 @@ export function IssueList() {
                 // "not as sent" for 400/409/422; it does not mean that for 401, where nothing
                 // about the request is wrong. Outcome kept, remedy left to the one voice that
                 // owns it (Documents.tsx's rule, applied here).
-                'Couldn’t create that issue — nothing was saved.'
+                'Couldn’t create that issue. Nothing was saved.'
               : create.error instanceof CreateRefusal && !create.error.retryable && create.error.reason
                 ? // The upstream sentence, verbatim. It is written for a person (Track's writeErr
                   // messages name the field and what to do), and paraphrasing it here would be this
                   // screen inventing a diagnosis it does not have.
-                  `Couldn’t create that issue — ${create.error.reason}`
-                : 'Couldn’t create that issue — nothing was saved. Try again.'}
+                  `Couldn’t create that issue: ${create.error.reason}`
+                : 'Couldn’t create that issue. Nothing was saved. Try again.'}
           </p>
         ) : null}
       </Region>
@@ -565,7 +565,7 @@ export function IssueList() {
                 Exported <span className="font-figure">{exportView.data.count}</span> issue(s) · AI cost{' '}
                 <span className="font-figure">{formatCost(exportView.data.total)}</span> in total
                 {exportView.data.truncated
-                  ? ' — stopped at the export cap, so the file is the first part of this view, not all of it.'
+                  ? '. It stopped at the export cap, so the file is the first part of this view, not all of it.'
                   : '.'}
               </>
             ) : null}
@@ -705,8 +705,8 @@ export function IssueList() {
                   ? // A 401 refuses the credential, not the change — the same request will be refused
                     // identically until the session is renewed, so "try again" would be false. The
                     // outcome is still owed: the reader pressed something and it did not take.
-                    'Couldn’t change the status — nothing was changed.'
-                  : 'Couldn’t change the status — nothing was changed. Try again.'}
+                    'Couldn’t change the status. Nothing was changed.'
+                  : 'Couldn’t change the status. Nothing was changed. Try again.'}
               </p>
             ) : null}
 
@@ -717,7 +717,7 @@ export function IssueList() {
                 rather than offering a Next button that could not report where it was. */}
             {rows.length === PAGE ? (
               <p className="text-caption text-muted">
-                Showing the first {PAGE}. There may be more — narrow by status or assignee to see
+                Showing the first {PAGE}. There may be more. Narrow by status or assignee to see
                 them. This tracker has no total to count against, so no page number is shown.
               </p>
             ) : null}

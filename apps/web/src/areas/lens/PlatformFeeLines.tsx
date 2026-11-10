@@ -28,5 +28,5 @@ export function PlatformFeeLines({ fees, floor }: { fees: readonly FeeLine[]; fl
 /** The window total's hint: it names the platform fee only when the window holds one. */
 export const totalHint = (fees: readonly FeeLine[]): string =>
   fees.length > 0
-    ? 'every model and the platform fee on it — the window total that left the balance'
-    : 'every model — the window total that left the balance'
+    ? 'every model and the platform fee on it: the window total that left the balance'
+    : 'every model: the window total that left the balance'

@@ -274,8 +274,8 @@ describe('what a metered card claims about money when the call fails', () => {
     // ⚠ THE VACUITY PAIR. `not.toMatch` is satisfied perfectly by a regex that matches nothing,
     // so both are shown to match the sentence they are for and to miss the one they are not.
     expect(NO_WORK.test('nothing was asked of the model. Try again.')).toBe(true)
-    expect(NO_WORK.test('This is a fault, not an empty thread — nothing was charged.')).toBe(false)
-    expect(NO_CHARGE.test('This is a fault, not an empty thread — nothing was charged.')).toBe(true)
+    expect(NO_WORK.test('This is a fault, not an empty thread. Nothing was charged.')).toBe(false)
+    expect(NO_CHARGE.test('This is a fault, not an empty thread. Nothing was charged.')).toBe(true)
     expect(NO_CHARGE.test('nothing was asked of the model. Try again.')).toBe(false)
     // And neither may match the honest form this repo already ships one card over.
     const honest = 'this app cannot say whether this one was billed'

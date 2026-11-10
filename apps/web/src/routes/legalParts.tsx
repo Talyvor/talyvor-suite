@@ -160,7 +160,7 @@ export function LawyerReview({
       }
     >
       <div className="text-caption font-medium text-ink">
-        {label ?? (compact ? 'Needs legal review' : 'Draft — needs legal review before it is relied on')}
+        {label ?? (compact ? 'Needs legal review' : 'Draft: needs legal review before it is relied on')}
       </div>
       <p className="mt-1 text-reading text-muted">{children}</p>
     </div>

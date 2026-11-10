@@ -87,7 +87,7 @@
         { "method": "POST", "path": "/v1/proxy/groq/*", "does": "Groq request" },
         { "method": "POST", "path": "/v1/proxy/vllm/*", "does": "Request to a vLLM server Lens is configured with" },
         { "method": "POST", "path": "/oai/*", "does": "Same handler as /v1/proxy/openai, shorter prefix" },
-        { "method": "POST", "path": "/anthropic/*", "does": "Same handler as /v1/proxy/anthropic — the one Claude Code uses" },
+        { "method": "POST", "path": "/anthropic/*", "does": "Same handler as /v1/proxy/anthropic, the one Claude Code uses" },
         { "method": "POST", "path": "/v1/documents", "does": "Upload a document to convert for a model" }
       ]
     },

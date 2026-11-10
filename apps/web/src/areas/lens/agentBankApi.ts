@@ -2004,7 +2004,7 @@ export function approvalNamedIn(err: unknown): string | null {
 
 /** Why a write did not happen, in Lens's words where Lens gave some. */
 export function refusalText(err: unknown): string {
-  if (isSessionExpired(err)) return 'Nothing changed — sign in again.'
+  if (isSessionExpired(err)) return 'Nothing changed. Sign in again.'
   if (err instanceof AgentBankError && err.status < 500 && err.sentence) {
     const s = err.sentence.replace(/^economy: (spending: )?/, '')
     return `${s.charAt(0).toUpperCase()}${s.slice(1)}${s.endsWith('.') ? '' : '.'}`

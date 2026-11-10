@@ -13,7 +13,7 @@ import listing from './claude-connector.json'
 
 const KIND: Record<string, string> = {
   read: 'Reads',
-  write: 'Drafts — nothing is sent, saved or signed until you do it in Talyvor',
+  write: 'Drafts: nothing is sent, saved or signed until you do it in Talyvor',
   send: 'Sends, or puts a payment in front of you to approve',
 }
 

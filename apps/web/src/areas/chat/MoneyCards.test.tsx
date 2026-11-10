@@ -67,7 +67,7 @@ async function openChat() {
   window.history.pushState({}, '', '/chat')
   render(<App />)
   const card = await screen.findByTestId('chat-money-request')
-  await waitFor(() => expect(within(card).getByTestId('chat-money-asks')).toHaveTextContent(/^Maker asks Researcher for 0\.8 LXC — invoice 12$/))
+  await waitFor(() => expect(within(card).getByTestId('chat-money-asks')).toHaveTextContent(/^Maker asks Researcher for 0\.8 LXC · invoice 12$/))
   return card
 }
 
@@ -97,7 +97,7 @@ describe('Chat money requests and escrows (B28.355)', () => {
     const bff = mockBff()
     await openChat()
     const card = await screen.findByTestId('chat-escrow')
-    expect(within(card).getByTestId('chat-escrow-holds')).toHaveTextContent(/^Researcher holds 1 LXC for Maker — logo$/)
+    expect(within(card).getByTestId('chat-escrow-holds')).toHaveTextContent(/^Researcher holds 1 LXC for Maker · logo$/)
     fireEvent.click(within(card).getByRole('button', { name: 'Confirm delivered' }))
 
     expect(await within(card).findByRole('status')).toHaveTextContent(/^Confirmed delivered\. Maker is paid 1 LXC from escrow\. See it on Researcher’s statement$/)

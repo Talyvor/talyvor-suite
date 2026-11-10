@@ -70,7 +70,7 @@ function Purchases({ auths }: { auths: CardAuthorization[] }) {
               </td>
               <td className="py-2 text-right font-figure">{moneyText(a.amount_minor, a.currency)}</td>
               <td className="px-gutter py-2 text-right font-figure">
-                {a.approved && a.amount_ulxc ? <Lxc ulxc={a.amount_ulxc} sign="−" /> : '—'}
+                {a.approved && a.amount_ulxc ? <Lxc ulxc={a.amount_ulxc} sign="−" /> : 'None'}
               </td>
             </tr>
           )
@@ -131,8 +131,8 @@ function IssueCard({ agent }: { agent: Agent }) {
     >
       <p className="text-body text-muted">
         Give {agent.name} a virtual card. Each purchase is paid from its wallet only if its rules
-        allow it, converted from pounds at the day’s European Central Bank rate. Stripe issues the card to a person —
-        the cardholder — and a merchant may ask for their billing address. Their phone number is optional.
+        allow it, converted from pounds at the day’s European Central Bank rate. Stripe issues the card to a person
+        (the cardholder), and a merchant may ask for their billing address. Their phone number is optional.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {FIELDS.map((f) => (

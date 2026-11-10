@@ -130,7 +130,7 @@ export function Projects() {
             </div>
             {create.isError ? (
               <p className="text-caption text-ink" role="alert">
-                Track refused that project, so none was created — an identifier already in use is the
+                Track refused that project, so none was created. An identifier already in use is the
                 usual reason. Change it and try again.
               </p>
             ) : null}
@@ -150,7 +150,7 @@ export function Projects() {
         ) : list.length === 0 ? (
           <div className="flex flex-col items-start gap-3">
             <p className="max-w-2xl text-body text-muted">
-              No projects yet. Name one above and start it — then put issues in it from their pages.
+              No projects yet. Name one above and start it, then put issues in it from their pages.
             </p>
             {/* B3.4 — the empty state goes where it points: the caret lands in Name. */}
             <Button onClick={() => document.getElementById('project-name')?.focus()}>

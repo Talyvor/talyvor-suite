@@ -109,7 +109,7 @@ export function Privacy() {
         ) : (
         <p className="text-reading">
           If you join the waitlist we store your email address, when you joined, the page you joined
-          from and the campaign tags in its link (utm_source, utm_medium, utm_campaign) — never your
+          from and the campaign tags in its link (utm_source, utm_medium, utm_campaign), never your
           IP address or browser. We use it only to invite you in, and keep it until you
           join or ask us to remove it: email{' '}
           <a className={inlineLink} href={`mailto:${COMPANY_CONTACT}`}>
@@ -151,7 +151,7 @@ export function Privacy() {
           <li>
             <strong className="text-ink">Rules and approvals.</strong> Each agent&rsquo;s budget,
             limits and approval amount. When a request or payment needs a person, we keep what was
-            asked — the amount, the model or the payee, the agent&rsquo;s stated reason and memo —
+            asked (the amount, the model or the payee, the agent&rsquo;s stated reason and memo)
             and whether and when it was approved or denied.
           </li>
           <li>
@@ -220,7 +220,7 @@ export function Privacy() {
 
       <Section title="What the Marketplace stores and shows">
         <p className="text-reading">
-          A listing you publish — an agent, prompt, skill, evaluation or pipeline — is stored and{' '}
+          A listing you publish (an agent, prompt, skill, evaluation or pipeline) is stored and{' '}
           <strong>shown to every other Talyvor workspace</strong>. Lens checks it before it is
           published and refuses one that carries a secret, personal data or a prompt injection; that
           check is a safeguard, not a reason to put anything private into a listing.
@@ -241,7 +241,7 @@ export function Privacy() {
         </p>
         <ul className="mt-3 flex list-disc flex-col gap-2 pl-5 text-reading text-muted">
           <li>
-            <strong className="text-ink">What the assistant receives.</strong> The answer to each thing it asks for —
+            <strong className="text-ink">What the assistant receives.</strong> The answer to each thing it asks for:
             your balances, agents, saved payees, mandates, marketplace listings, invoices and payment requests. That
             answer goes to the assistant&rsquo;s provider (Anthropic, for Claude), and from then on is governed by
             their terms, not ours.
@@ -274,7 +274,7 @@ export function Privacy() {
         <p className="mt-3 text-reading text-muted">
           There is a <code>full</code> setting that <em>does</em> persist prompt text, so that
           popular questions can be pre-warmed. It is not the default and nothing in the app turns it
-          on. If an operator sets it on your workspace, your prompt text is retained — and you would
+          on. If an operator sets it on your workspace, your prompt text is retained, and you would
           have no way to tell from the product that this had happened. We are stating that plainly
           because it is the kind of thing a policy usually omits.
         </p>
@@ -289,8 +289,8 @@ export function Privacy() {
           says about prompts applies to the contents of your documents.
         </p>
         <p className="mt-3 text-reading">
-          <strong>If a file has no text to extract</strong> — a scan, a photograph, an image-only
-          PDF — it is sent to a <strong>vision model</strong> to be read. Your document is
+          <strong>If a file has no text to extract</strong> (a scan, a photograph, an image-only
+          PDF), it is sent to a <strong>vision model</strong> to be read. Your document is
           transmitted to a model provider to have its contents recovered.
         </p>
         <p className="mt-3 text-reading text-muted">
@@ -347,13 +347,13 @@ export function Privacy() {
           </a>
           , off until the workspace&rsquo;s owner turns it on. While it is on, when Tare cannot shorten
           the prose in a workspace&rsquo;s newest message, Talyvor keeps that prose and uses it to
-          improve how Tare shortens prompts — for that and nothing else. It never keeps prose from a
+          improve how Tare shortens prompts, for that and nothing else. It never keeps prose from a
           temporary chat, a chat kept out of the shared pool, a message in which personal data was found
           or a guardrail stopped, or a workspace whose request logging is off. Talyvor records who turned
           the switch on or off, and when. Turning it off stops the keeping at once and deletes what was
           kept from that workspace.
         </p>
-        <LawyerReview compact label="Draft — for legal review">
+        <LawyerReview compact label="Draft: for legal review">
           Keeping a customer&rsquo;s prose to improve Tare needs its legal basis, and how long it is
           kept while the switch stays on, set before this is relied on.
         </LawyerReview>
@@ -362,7 +362,7 @@ export function Privacy() {
       <Section title="How long we keep it">
         <p className="text-reading">
           Usage and billing records, and every agent wallet&rsquo;s statement, are kept for as long
-          as the account exists — they are the ledger, and a balance you cannot audit is not a
+          as the account exists. They are the ledger, and a balance you cannot audit is not a
           balance.
         </p>
         <p className="mt-3 text-reading">
@@ -381,7 +381,7 @@ export function Privacy() {
         <ul className="flex list-disc flex-col gap-2 pl-5 text-reading text-muted">
           <li>
             <strong className="text-ink">The AI provider</strong> you or your agent chose receives your
-            prompt. It has to — that is the request. Their handling is governed by their terms, not ours.
+            prompt. It has to: that is the request. Their handling is governed by their terms, not ours.
           </li>
           <li>
             <strong className="text-ink">OpenAI</strong> computes each question&rsquo;s embedding, and{' '}
@@ -402,7 +402,7 @@ export function Privacy() {
           </li>
           <li>
             <strong className="text-ink">Stripe</strong> handles payment. Your card details go to
-            Stripe directly and never reach us — we never see or store a card number. We send
+            Stripe directly and never reach us. We never see or store a card number. We send
             Stripe a workspace identifier and an amount, so we can credit the right balance. Stripe
             also issues agents&rsquo; virtual cards, so it receives the cardholder details described
             above, and pays Marketplace sellers, so it receives what a seller gives it when connecting.
@@ -412,12 +412,12 @@ export function Privacy() {
             receives each card&rsquo;s merchant and cap, as described above.
           </li>
           <li>
-            <strong className="text-ink">Your browser&rsquo;s push service</strong> — Apple, Google
-            or Mozilla, depending on the browser — carries approval notifications to a device you
+            <strong className="text-ink">Your browser&rsquo;s push service</strong> (Apple, Google
+            or Mozilla, depending on the browser) carries approval notifications to a device you
             turned them on for.
           </li>
           <li>
-            <strong className="text-ink">Other Talyvor workspaces</strong> — cached answers, as
+            <strong className="text-ink">Other Talyvor workspaces</strong>: cached answers, as
             described above, when sharing is on; the listings you publish on the Marketplace; and,
             when an agent pays another owner&rsquo;s agent, that payment.
           </li>
@@ -444,7 +444,7 @@ export function Privacy() {
         </p>
         <p className="mt-3 text-reading text-muted">
           Deleting all of your data is carried out by an operator, not automatically, and no
-          turnaround is promised. Billing and ledger records — agent wallet statements included —
+          turnaround is promised. Billing and ledger records (agent wallet statements included)
           are kept, because the law requires them.
         </p>
         <LawyerReview compact>

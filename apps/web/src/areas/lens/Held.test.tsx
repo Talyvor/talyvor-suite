@@ -80,7 +80,7 @@ describe('a held royalty is shown, and shown as not yet spendable', () => {
   // ⚠ THE REPORTED STATE: everything earned is held, nothing is spendable.
   it('shows the held amount instead of only a bare 0', async () => {
     renderOverview()
-    expect(await screen.findByText(/Held — not yet spendable/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Held: not yet spendable/i)).toBeInTheDocument()
   })
 
   it('says it settles on its own, so nobody waits for a button that does not exist', async () => {
@@ -120,7 +120,7 @@ describe('a held royalty is shown, and shown as not yet spendable', () => {
   // workspace cannot spend, and the conversion would then refuse an amount just displayed.
   it('does not fold held into the spendable balance', async () => {
     renderOverview()
-    await screen.findByText(/Held — not yet spendable/i)
+    await screen.findByText(/Held: not yet spendable/i)
     // The headline is the SPENDABLE figure. With 0 spendable and 822 held, a summed headline would
     // render 822 twice — once as the balance, once as the held row. Lifetime earned is 900 here so
     // it cannot contribute a match.
@@ -132,7 +132,7 @@ describe('a held royalty is shown, and shown as not yet spendable', () => {
     mockBff({ held_balance_ulens: 0, balance_ulens: 5000 })
     renderOverview()
     await screen.findByText(/Lifetime earned/i)
-    expect(screen.queryByText(/Held — not yet spendable/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Held: not yet spendable/i)).not.toBeInTheDocument()
   })
 
   // Deployment skew: a Lens older than the field omits it. The screen must degrade to today's
@@ -141,7 +141,7 @@ describe('a held royalty is shown, and shown as not yet spendable', () => {
     mockBff({ held_balance_ulens: undefined })
     renderOverview()
     await screen.findByText(/Lifetime earned/i)
-    expect(screen.queryByText(/Held — not yet spendable/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Held: not yet spendable/i)).not.toBeInTheDocument()
   })
 })
 

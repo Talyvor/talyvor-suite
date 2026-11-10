@@ -71,7 +71,7 @@ describe('the Verification screen', () => {
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'owner@example.com' } })
     fireEvent.change(screen.getByLabelText('Phone, in international form'), { target: { value: '+447700900123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Check email and phone' }))
-    expect(await screen.findByText('Passed by the Test provider: L1 — email and phone confirmed. It does not count for live money.')).toBeTruthy()
+    expect(await screen.findByText('Passed by the Test provider: L1 (email and phone confirmed). It does not count for live money.')).toBeTruthy()
 
     expect(await screen.findByRole('heading', { name: 'Reach L2: identity checked' })).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Full name'), { target: { value: 'Ada Owner' } })
@@ -85,7 +85,7 @@ describe('the Verification screen', () => {
     expect(screen.getByTestId('verification-test-only').textContent).toContain('do not count for live money')
     const rows = screen.getAllByTestId('verification-check')
     expect(rows.map((r) => r.textContent?.slice(0, 2))).toEqual(['L2', 'L1'])
-    for (const r of rows) expect(within(r).getByText('Test check — not counted for live money')).toBeTruthy()
+    for (const r of rows) expect(within(r).getByText('Test check: not counted for live money')).toBeTruthy()
     expect(within(rows[0]).getByText('kyc_test_2')).toBeTruthy()
 
     expect(screen.getByTestId('capability-level-spend_on_talyvor').textContent).toBe('Spending on TalyvorL0')

@@ -217,10 +217,10 @@ export class AgentBankScreen {
   async issueKey(agent: Agent): Promise<string> {
     await this.fresh(agent)
     await card(this.page, 'Key').getByRole('button', { name: 'Issue a key', exact: true }).click()
-    const shown = card(this.page, `${agent.name}’s key — shown once`)
+    const shown = card(this.page, `${agent.name}’s key (shown once)`)
     await shown.waitFor({ timeout: ACTION_TIMEOUT_MS })
     const key = (await shown.locator('.select-all').innerText()).trim()
-    await shown.getByRole('button', { name: 'Done — I stored it' }).click()
+    await shown.getByRole('button', { name: 'Done, I stored it' }).click()
     return key
   }
 

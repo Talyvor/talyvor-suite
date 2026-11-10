@@ -57,7 +57,7 @@ describe('the Capability terms screen', () => {
 
     const fx = await screen.findByTestId('terms-fx')
     expect(within(fx).getByText('Not accepted yet')).toBeTruthy()
-    expect(within(screen.getByTestId('terms-payments_out')).getByText('Version 2 is new — accept it again')).toBeTruthy()
+    expect(within(screen.getByTestId('terms-payments_out')).getByText('Version 2 is new: accept it again')).toBeTruthy()
     expect(screen.getByTestId('terms-count').textContent).toBe('0 of 2 accepted')
     expect(screen.queryByTestId('terms-preview')).toBeNull()
     expect(document.body.textContent).not.toMatch(/test money/i)

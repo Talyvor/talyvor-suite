@@ -1349,10 +1349,10 @@ export function socialPreview(): Scenario {
             `og:description="${meta('property', 'og:description')}" og:image="${image}" -> ${img?.status() ?? 'not fetched'} ${imgType}`,
         })
         const missing = [
-          title === 'Talyvor — the financial ecosystem for the AI agent economy' ? '' : '<title>',
+          title === 'Talyvor | the financial ecosystem for the AI agent economy' ? '' : '<title>',
           tab === title ? '' : 'the tab title after the app ran',
           meta('name', 'description') === '' ? 'meta description' : '',
-          meta('property', 'og:title') === 'Talyvor — the financial ecosystem for the AI agent economy' ? '' : 'og:title',
+          meta('property', 'og:title') === 'Talyvor | the financial ecosystem for the AI agent economy' ? '' : 'og:title',
           meta('property', 'og:description') === '' ? 'og:description' : '',
           img?.status() === 200 && imgType.startsWith('image/') ? '' : 'og:image that loads',
           meta('name', 'twitter:card') === 'summary_large_image' ? '' : 'twitter:card',
@@ -1754,7 +1754,7 @@ export function legalPagesWhole(): Scenario {
           if (listed.length === 0 || listed.join('|') !== headings.join('|')) {
             wrong.push(`${path} lists ${listed.length} sections but has ${headings.length}`)
           }
-          if (!(await main.getByText(/Draft — needs legal review/).isVisible())) wrong.push(`${path} lost its draft warning`)
+          if (!(await main.getByText(/Draft: needs legal review/).isVisible())) wrong.push(`${path} lost its draft warning`)
           const last = (await main.innerText()).trim().split('\n').filter((l) => l.trim() !== '').at(-1) ?? ''
           if (!last.startsWith(`End of ${title}.`)) wrong.push(`${path} ends with "${last.slice(-80)}"`)
         } finally {
@@ -2005,9 +2005,9 @@ const PREVIEW_QUESTIONS = [
   'Write a 200-word story about a lost umbrella.',
 ]
 
-/** The range Chat shows under the box before sending, read as it reads: "Sending this ≈ 0.0004–1.03 LXC · …". */
+/** The range Chat shows under the box before sending, read as it reads: "Sending this ≈ 0.0004 to 1.03 LXC · …". */
 export function shownRange(text: string): { low: number; high: number; unit: 'USD' | 'LXC' } | undefined {
-  const m = /≈ (\$?)([\d,.]+)(?:–([\d,.]+))?( LXC)?/.exec(text.replace(/\s+/g, ' '))
+  const m = /≈ (\$?)([\d,.]+)(?: to ([\d,.]+))?( LXC)?/.exec(text.replace(/\s+/g, ' '))
   if (m === null || (m[1] === '$') === (m[4] === ' LXC')) return undefined
   const low = Number(m[2].replaceAll(',', ''))
   return { low, high: m[3] === undefined ? low : Number(m[3].replaceAll(',', '')), unit: m[1] === '$' ? 'USD' : 'LXC' }
@@ -3328,7 +3328,7 @@ export function tareTraining(seed: number): Scenario {
           const text = (await section.count()) === 1 ? await section.innerText() : ''
           ctx.evidence.push({ note: `${path}: ${text.slice(0, 400)}` })
           if (!/improve how Tare shortens prompts/.test(text)) wrong.push(`${path} has no "${heading}" paragraph saying what is kept and why`)
-          else if (!text.includes('Draft — for legal review')) wrong.push(`${path}'s "${heading}" paragraph is not marked "Draft — for legal review"`)
+          else if (!text.includes('Draft: for legal review')) wrong.push(`${path}'s "${heading}" paragraph is not marked "Draft: for legal review"`)
         }
         return verdictOf(wrong, `on from the screen and Lens read it on; refused signed out (${out}) and to another company (${theirs?.status ?? 'none this run'}); off read back off; Privacy and Terms carry the draft paragraph`)
       } finally {

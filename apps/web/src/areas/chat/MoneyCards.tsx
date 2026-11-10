@@ -153,7 +153,7 @@ export function MoneyCards() {
                 </p>
                 <p className="text-body text-ink" data-testid="chat-money-asks">
                   {nameOf(r.from_agent_id)} asks {nameOf(r.to_agent_id)} for <Lxc ulxc={r.amount_ulxc} />
-                  {r.memo ? ` — ${r.memo}` : ''}
+                  {r.memo ? ` · ${r.memo}` : ''}
                 </p>
                 {waiting ? (
                   <>
@@ -186,7 +186,7 @@ export function MoneyCards() {
               </p>
               <p className="text-body text-ink" data-testid="chat-escrow-holds">
                 {nameOf(e.payer_agent_id)} holds <Lxc ulxc={e.amount_ulxc} /> for {nameOf(e.payee_agent_id)}
-                {e.memo ? ` — ${e.memo}` : ''}
+                {e.memo ? ` · ${e.memo}` : ''}
               </p>
               {waiting ? (
                 <>

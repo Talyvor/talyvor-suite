@@ -71,7 +71,7 @@ function Adjustments({ plan, finding, budgets }: { plan: SpendPlan; finding: Pla
       })}
       {subs.map((p) => (
         <li key={`${p.id}-${p.due}`} className="text-body text-ink" data-testid={`plan-adjust-subscription-${p.id}`}>
-          Pause {p.payee} — <span className="font-figure">{formatMinor(p.amount_minor, p.currency)}</span> on {planDay(p.due)}.{' '}
+          Pause {p.payee}: <span className="font-figure">{formatMinor(p.amount_minor, p.currency)}</span> on {planDay(p.due)}.{' '}
           <Link className={inlineLink} to="/money/subscriptions">
             See it in Subscriptions
           </Link>

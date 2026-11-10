@@ -72,7 +72,7 @@ function Body({ token }: { token: string }) {
   const inv = p.invoice
   const headline =
     inv.status === 'paid'
-      ? 'Paid — thank you'
+      ? 'Paid, thank you'
       : inv.status === 'void'
         ? 'This invoice was voided'
         : payable(p)

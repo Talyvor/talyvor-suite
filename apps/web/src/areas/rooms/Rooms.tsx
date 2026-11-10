@@ -281,8 +281,8 @@ function NewRoom() {
                 value={visibility}
                 onChange={(e) => setVisibility(e.target.value as 'public' | 'private')}
               >
-                <option value="public">Public — anyone can find and join it</option>
-                <option value="private">Private — only workspaces you invite</option>
+                <option value="public">Public: anyone can find and join it</option>
+                <option value="private">Private: only workspaces you invite</option>
               </select>
             </label>
           </div>
@@ -344,7 +344,7 @@ function NewRoom() {
               The remix share is what the author of a piece earns when someone builds on it.
             </p>
           </fieldset>
-          {micros === null ? <Note ok={false}>A price is an amount of dollars, like 0.10 — or empty for free.</Note> : null}
+          {micros === null ? <Note ok={false}>A price is an amount of dollars, like 0.10, or empty for free.</Note> : null}
           {bps === null ? <Note ok={false}>A remix share is a percentage from 0 to 100, like 12.5.</Note> : null}
           <div>
             <Button type="submit" variant="primary" disabled={!ready || create.isPending}>
@@ -436,7 +436,7 @@ function RoomPage() {
         {inside && r.wallet ? <RoomBudget wallet={r.wallet} /> : null}
         {inside && (r.me?.role === 'owner' || r.me?.role === 'editor') ? (
           <Link className={`text-body text-ink ${inlineLink}`} to={`${roomHref(r.id)}/settings`}>
-            Room settings — members, invites, budget and prizes
+            Room settings: members, invites, budget and prizes
           </Link>
         ) : null}
       </Region>

@@ -51,7 +51,7 @@ export function CopyBlock({ text, label }: { text: string; label: string }) {
   // had the correct shape — see src/timerCleanup.test.tsx, which pins both.
   const resetTimer = useRef<number | undefined>(undefined)
   useEffect(() => () => window.clearTimeout(resetTimer.current), [])
-  const copyFailedNote = 'Couldn’t copy — select the block above and copy it yourself.'
+  const copyFailedNote = 'Couldn’t copy. Select the block above and copy it yourself.'
   return (
     <div className="space-y-1">
       <pre className="overflow-x-auto rounded-control border border-rule bg-canvas px-3 py-2 font-mono text-ink">
@@ -215,7 +215,7 @@ export function Setup() {
             in the slot said "your workspace is —", which is not a thing anyone can act on. */}
         {ctx.data ? (
           <p className="mt-4 text-caption text-muted">
-            Workspace <span className="font-mono">{ctx.data.workspace_id}</span> — the one this
+            Workspace <span className="font-mono">{ctx.data.workspace_id}</span>, the one this
             session signed in to. Keys you mint here belong to it.
           </p>
         ) : null}
@@ -247,7 +247,7 @@ export function Setup() {
                   reads BEFORE pasting a key said the reassuring part only. */}
               <li>
                 <strong>Logging is separate and configurable.</strong> On the default setting the
-                audit trail is metadata — who called what, when, and what it cost — and the log does
+                audit trail is metadata (who called what, when, and what it cost) and the log does
                 not keep the prompt text. There is a <em>full</em> setting that does keep prompt text, and
                 also sends the prompt and the answer to a 30-day stream. Nothing in this app turns
                 it on, but an operator can, and you would not be able to tell from here. The{' '}
@@ -273,7 +273,7 @@ export function Setup() {
               </li>
               <li>
                 <strong>Your prompts are never served to another company.</strong> Even with pooling
-                on, what can be shared is an <em>answer</em> to a semantically equivalent question —
+                on, what can be shared is an <em>answer</em> to a semantically equivalent question,
                 never your prompt, never your key, never your workspace’s identity. But an answer
                 often restates the question it answered, so the fact to plan around is{' '}
                 <em>the answer leaves this workspace</em>, not <em>the prompt does not</em>.
@@ -294,21 +294,21 @@ export function Setup() {
               // another screen. It now points at the card directly beneath it, and says the one
               // consequence that matters rather than restating the mechanism.
               <p className="text-body text-ink">
-                Here it is, once. Copy it now — Lens keeps a hash, not the key, so nobody can show it
+                Here it is, once. Copy it now. Lens keeps a hash, not the key, so nobody can show it
                 to you again, and a key you did not copy has to be replaced rather than recovered.
               </p>
             ) : existing.length > 0 ? (
               <div className="space-y-2 text-body text-ink">
                 <p>
                   You already have {existing.length === 1 ? 'a key' : `${existing.length} keys`}, but
-                  a key is shown <strong>only once</strong>, at the moment it is created — Lens
+                  a key is shown <strong>only once</strong>, at the moment it is created. Lens
                   stores a hash, so it cannot be shown again. If you still have it, paste it over the
                   placeholder below. If not, create a fresh one.
                 </p>
                 <ul className="space-y-0.5 text-caption text-muted">
                   {existing.map((k) => (
                     <li key={k.id}>
-                      <span className="font-mono">{k.key_prefix}</span> — {k.name} (identifier, not a
+                      <span className="font-mono">{k.key_prefix}</span> · {k.name} (identifier, not a
                       credential)
                     </li>
                   ))}
@@ -342,7 +342,7 @@ export function Setup() {
               // tool snippets below: present, but dressed as configuration, so the one thing that had
               // to be unmissable looked like the thing you skim past.
               <RevealOnce
-                title="Your key — shown once"
+                title="Your key: shown once"
                 secret={minted.key}
                 copyLabel="Copy key"
                 identifier={minted.prefix}
@@ -352,7 +352,7 @@ export function Setup() {
             ) : null}
             {mint.isError ? (
               <p className="border-l-2 border-l-slashed pl-2 text-body text-ink">
-                Couldn’t create a key. Nothing was changed — try again, or use the Keys screen.
+                Couldn’t create a key. Nothing was changed. Try again, or use the Keys screen.
               </p>
             ) : null}
           </div>
@@ -378,8 +378,8 @@ export function Setup() {
                 whether every other panel failed for the same reason, so it must not name a cause. */}
             <PanelFailure error={ctx.error} what="this deployment’s settings" />
             <div className="px-gutter pb-3 text-caption text-muted">
-              The blocks are withheld because the address is UNKNOWN, not because it is missing —
-              reload, and if it keeps failing the setting is not the thing to check.
+              The blocks are withheld because the address is UNKNOWN, not because it is missing.
+              Reload, and if it keeps failing the setting is not the thing to check.
             </div>
           </Card>
         ) : baseUrlState === 'unset' ? (
@@ -387,7 +387,7 @@ export function Setup() {
             <CardHeader>Setup instructions unavailable</CardHeader>
             <div className="px-gutter py-3 text-body text-muted">
               This deployment has no public Lens URL configured, so we cannot tell you which address
-              to use — and a guessed one would fail with an error that looks like a bad key. Ask your
+              to use, and a guessed one would fail with an error that looks like a bad key. Ask your
               operator to set <span className="font-mono">LENS_PUBLIC_BASE_URL</span> on the app, then
               reload.
             </div>
@@ -427,11 +427,11 @@ export function Setup() {
 
       <Region index="05" label="Prove it worked">
         <Card raised proof>
-          <CardHeader>Confirm it worked — two requests</CardHeader>
+          <CardHeader>Confirm it worked: two requests</CardHeader>
           <div className="space-y-2 px-gutter py-3 text-body text-ink">
             <ol className="list-decimal space-y-1 pl-5">
               <li>
-                <strong>Send one request</strong> from the tool you just configured. Anything —
+                <strong>Send one request</strong> from the tool you just configured. Anything:
                 “write me a haiku about caching”.
               </li>
               <li>
@@ -447,7 +447,7 @@ export function Setup() {
               <li>
                 <strong>Send the same request again.</strong> The second one is a cache hit: a new row
                 at no cost, answered without going to the provider at all. That is the mechanism, in
-                two requests — the first one pays, the repeat does not.
+                two requests: the first one pays, the repeat does not.
               </li>
             </ol>
             <p className="text-caption text-muted">

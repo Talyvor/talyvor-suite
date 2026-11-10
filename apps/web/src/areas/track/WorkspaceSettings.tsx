@@ -36,7 +36,7 @@ async function restoreWorkspace(id: string): Promise<void> {
 function refusal(err: unknown, what: 'delete' | 'restore'): string {
   if (err instanceof ApiError && err.status === 403) return `Only this workspace’s owner can ${what} it.`
   if (err instanceof ApiError && err.status === 409) return 'Its 14 days to restore have passed, so it can’t be brought back.'
-  return `Track didn’t ${what} it. Nothing changed — you can try again.`
+  return `Track didn’t ${what} it. Nothing changed. You can try again.`
 }
 
 function DeleteWorkspace({ ws }: { ws: TrackWorkspace }) {
@@ -196,9 +196,9 @@ export function WorkspaceSettings() {
                 <div className="min-w-0">
                   <p className="text-body text-ink">{ws.name}</p>
                   <p className="text-caption text-muted">
-                    Deleted <span className="font-figure">{ws.deleted_at ? formatDay(ws.deleted_at) : '—'}</span> · goes
+                    Deleted <span className="font-figure">{ws.deleted_at ? formatDay(ws.deleted_at) : 'No date'}</span> · goes
                     for good on{' '}
-                    <span className="font-figure">{ws.restorable_until ? formatDay(ws.restorable_until) : '—'}</span>
+                    <span className="font-figure">{ws.restorable_until ? formatDay(ws.restorable_until) : 'No date'}</span>
                   </p>
                 </div>
                 <RestoreWorkspace ws={ws} />

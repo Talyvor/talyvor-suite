@@ -12,7 +12,7 @@ export const BRAND = 'Talyvor'
  * two are the same string at two instants of the same load. The test reads index.html and asserts
  * they are equal.
  */
-export const HOME_TITLE = `${BRAND} — the financial ecosystem for the AI agent economy`
+export const HOME_TITLE = `${BRAND} | the financial ecosystem for the AI agent economy`
 
 /**
  * `null` means "this surface has no name of its own" — the front door — and takes the brand

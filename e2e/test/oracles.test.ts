@@ -22,7 +22,7 @@ describe('parseFooter reads every line the Chat screen writes under an answer', 
   it('a replay, a shared answer, no price, and anything else', () => {
     expect(parseFooter('from your earlier answer · 0 LXC')).toEqual({ kind: 'cache' })
     expect(parseFooter('shared answer · 30% off · ≈ 0.0004 LXC')).toEqual({ kind: 'pool', discountPct: 30, figure: 0.0004 })
-    expect(parseFooter('Price not known — the provider reported no token counts for this answer')).toEqual({ kind: 'unpriced' })
+    expect(parseFooter('Price not known: the provider reported no token counts for this answer')).toEqual({ kind: 'unpriced' })
     expect(parseFooter('≈ $0.1 LXC · x · 1 in / 1 out tokens').kind).toBe('unreadable')
   })
 })

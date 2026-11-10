@@ -6,7 +6,7 @@
 // owner issues an invoice from that account — two lines, one with VAT — with "Create and send": the row must read Sent with
 // a pay link. A stranger (a fresh browser context, signed out) opens the link: the page must show the total due and no
 // disclaimer line (B49.2), and "Pay … by card" must open a checkout that takes the 4242 test card and come back to the
-// link reading "Paid — thank you". Then Lens's own record (GET /v1/money/invoices on the owner's token, not through the
+// link reading "Paid, thank you". Then Lens's own record (GET /v1/money/invoices on the owner's token, not through the
 // screen) must hold the invoice paid, with one card payment of the total, and the agent's GBP account (GET /v1/money/accounts)
 // must hold the total more than before: the posting is what makes it paid. The screen must read Paid as well.
 // Screenshots of both screens at 1440 and 390. Then a second invoice is voided on the screen (B55.41): Void must ask first, Keep
@@ -147,9 +147,9 @@ export function invoicesScreen(): Scenario {
         await payWithTestCard(pay, 'customer@example.com')
         await pay.waitForURL((u) => u.origin === appURL && u.pathname === `/pay/${token}`, { timeout: CHECKOUT_MS })
         ctx.evidence.push({ note: `the checkout came back to ${pay.url()}` })
-        await headline.filter({ hasText: 'Paid — thank you' }).waitFor({ timeout: CHECKOUT_MS }).catch(() => undefined)
+        await headline.filter({ hasText: 'Paid, thank you' }).waitFor({ timeout: CHECKOUT_MS }).catch(() => undefined)
         const read = ((await headline.textContent()) ?? '').trim()
-        if (read !== 'Paid — thank you') return fail(`after the card payment the pay page reads "${read}", not "Paid — thank you"`)
+        if (read !== 'Paid, thank you') return fail(`after the card payment the pay page reads "${read}", not "Paid, thank you"`)
         ctx.evidence.push({ note: `the pay page, paid, ${await screenshots(ctx, pay, 'pay-page-paid')}` })
       } finally {
         await stranger.close().catch(() => undefined)
@@ -221,7 +221,7 @@ export function invoicesScreen(): Scenario {
       return {
         pass: true,
         detail: `${number} for ${TOTAL_TEXT} issued and sent on the screen; its pay page, signed out, carried no disclaimer line, took the test ` +
-          `card and read Paid — thank you; Lens records it paid by one card payment of ${TOTAL_MINOR} minor, the agent’s GBP account ` +
+          `card and read Paid, thank you; Lens records it paid by one card payment of ${TOTAL_MINOR} minor, the agent’s GBP account ` +
           `${before.test_minor} → ${after.test_minor}; the screen reads Paid; ${toVoid.number} asked before voiding, stayed sent on Keep it ` +
           'and was void on Void it',
       }

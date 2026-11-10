@@ -355,9 +355,9 @@ function orderText(o: SimOrder): string {
   const how = o.type === 'market' ? 'at market' : `at ${price(o.limit_price_usd ?? '0')} or better`
   const outcome =
     o.status === 'filled' && o.fill_price_usd
-      ? ` — filled at ${price(o.fill_price_usd)}${o.fill_rate_date ? ` (${o.fill_rate_date} rate)` : ''}`
+      ? `, filled at ${price(o.fill_price_usd)}${o.fill_rate_date ? ` (${o.fill_rate_date} rate)` : ''}`
       : o.status === 'rejected' && o.reason
-        ? ` — ${o.reason.replace(/^economy: /, '')}`
+        ? `: ${o.reason.replace(/^economy: /, '')}`
         : ''
   return `${what} ${how}${outcome}`
 }

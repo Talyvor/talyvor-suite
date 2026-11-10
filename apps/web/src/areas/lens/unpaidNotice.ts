@@ -55,6 +55,6 @@ export const UNPAID_NOTICE_HEADLINE = 'Not every kind of contribution earns LENS
 export const UNPAID_CONTRIBUTION_NOTICE =
   'Several earning mechanisms are switched off or still being evaluated, so a contribution can ' +
   'be genuine and still produce no ledger entry. Where a mechanism is under evaluation, what it ' +
-  'would have paid is recorded for checking and never credited — it does not reach your balance. ' +
+  'would have paid is recorded for checking and never credited. It does not reach your balance. ' +
   'Your balance and ledger show only what you have actually been paid, so if you contributed and ' +
   'see nothing there, that is the reason rather than an error.'

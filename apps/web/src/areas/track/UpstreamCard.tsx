@@ -39,10 +39,10 @@ export function UpstreamCard({
         ) : state === 'unconfigured' ? (
           notConfiguredCopy('Track')
         ) : state === 'error' ? (
-          'The Track proxy answered with an error — nothing is shown rather than something stale or invented.'
+          'The Track proxy answered with an error. Nothing is shown rather than something stale or invented.'
         ) : (
           <>
-            Track is configured on this deployment, but this view does not read it yet — so
+            Track is configured on this deployment, but this view does not read it yet, so
             nothing is shown here rather than a stand-in.{' '}
             <span className="font-mono text-caption">{reads}</span> is the read it needs.
           </>

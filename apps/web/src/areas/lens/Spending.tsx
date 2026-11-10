@@ -155,8 +155,8 @@ export function SpendingScreen() {
           <p className="text-body text-muted">
             <Link className={inlineLink} to="/money/card">
               Your Talyvor Card
-            </Link>{' '}
-            — order one, follow its delivery, activate it, or replace a lost one.
+            </Link>:{' '}
+            order one, follow its delivery, activate it, or replace a lost one.
           </p>
         ) : null}
       </Region>
@@ -246,8 +246,8 @@ export function SpendingScreen() {
                           {' '}
                           <a className={inlineLink} href={h.url} target="_blank" rel="noreferrer">
                             {h.name}
-                          </a>{' '}
-                          — {h.for}.
+                          </a>:{' '}
+                          {h.for}.
                         </span>
                       ))}
                     </>

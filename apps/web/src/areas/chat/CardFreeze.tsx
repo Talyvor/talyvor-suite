@@ -114,7 +114,7 @@ export function CardFreezeCard({ command, onClose }: { command: string; onClose:
                 ))}
               </select>
               {typed.agent !== '' && named === undefined && book.data !== undefined && agentId === null ? (
-                <p className="text-caption text-muted">No agent is called “{typed.agent}” — pick one.</p>
+                <p className="text-caption text-muted">No agent is called “{typed.agent}”. Pick one.</p>
               ) : null}
               {book.isError ? (
                 <p className="text-caption text-muted">Your agents could not be read just now.</p>

@@ -50,7 +50,7 @@ function refusal(err: unknown, what: string): string {
   if (err instanceof ApiError && err.code === 'BAD_URL') return 'The URL must start with https://.'
   if (err instanceof ApiError && (err.code === 'BLOCKED_ADDRESS' || err.code === 'BAD_HOST'))
     return 'Docs only sends to a public address it can reach. Use your server’s public https URL.'
-  return `Docs didn’t ${what}. Nothing changed — you can try again.`
+  return `Docs didn’t ${what}. Nothing changed. You can try again.`
 }
 
 function Secret({ secret, onDone }: { secret: string; onDone: () => void }) {
@@ -102,7 +102,7 @@ function AddWebhook({ onSecret }: { onSecret: (s: string) => void }) {
         />
       </label>
       <fieldset className="flex flex-col gap-1">
-        <legend className="text-caption text-muted">Events — none chosen sends all three</legend>
+        <legend className="text-caption text-muted">Events (none chosen sends all three)</legend>
         {EVENTS.map((ev) => (
           <label key={ev} className="flex items-center gap-2 text-body text-ink">
             <input

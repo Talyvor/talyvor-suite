@@ -261,7 +261,7 @@ describe('the marketplace', () => {
 
     // The period in progress first, then each invoice by its billing period — never a calendar month.
     const period = await screen.findByLabelText('Billing period')
-    expect(within(period).getAllByRole('option').map((o) => o.textContent)).toEqual(['Oct 14 – Nov 14, 2026 · in progress', 'Sep 14 – Oct 14, 2026 · paid'])
+    expect(within(period).getAllByRole('option').map((o) => o.textContent)).toEqual(['Oct 14 to Nov 14, 2026 · in progress', 'Sep 14 to Oct 14, 2026 · paid'])
     expect(await screen.findByText('Not invoiced yet')).toBeTruthy()
     expect(screen.queryByTestId('market-invoice-pdf')).toBeNull()
 

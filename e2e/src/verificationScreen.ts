@@ -69,7 +69,7 @@ export function verificationScreen(): Scenario {
         for (const [i, want] of ['L2', 'L1'].entries()) {
           const c = checks[i]
           if (!c.startsWith(want)) return fail(`check ${i + 1}, newest first, is "${c}", not ${want}`)
-          if (!c.includes('Test check — not counted for live money')) return fail(`the ${want} check is not marked "Test check — not counted for live money": "${c}"`)
+          if (!c.includes('Test check: not counted for live money')) return fail(`the ${want} check is not marked "Test check: not counted for live money": "${c}"`)
           if (!/Evidence reference\s*\S+/.test(c)) return fail(`the ${want} check shows no evidence reference: "${c}"`)
         }
 

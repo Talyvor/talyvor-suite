@@ -60,7 +60,7 @@ export function AlertChannels() {
       {secret ? (
         <div className="px-gutter py-3">
           <RevealOnce
-            title="Webhook signing secret — shown once"
+            title="Webhook signing secret (shown once)"
             secret={secret.secret ?? ''}
             copyLabel="Copy secret"
             identifierLabel="Sends to"

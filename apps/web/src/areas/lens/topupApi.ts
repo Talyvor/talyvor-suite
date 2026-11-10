@@ -262,7 +262,7 @@ export const topupApi = {
       // to. Inventing a 502 here would put a status on the record that no server produced.
       throw new CheckoutError(
         'upstream',
-        'Couldn’t start the payment — nothing was charged. Please try again.',
+        'Couldn’t start the payment: nothing was charged. Please try again.',
         res.status,
       )
     }

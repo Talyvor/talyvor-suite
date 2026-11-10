@@ -119,7 +119,7 @@ function EntryFrame({ children }: { children: React.ReactNode }) {
  *  today — not a roadmap. The first is the one that matters: it is the promise the whole
  *  per-tenant provisioning chain was built to keep. */
 const WHAT_YOU_GET: string[] = [
-  'Your own workspace — a balance, keys and a ledger nobody else can see.',
+  'Your own workspace: a balance, keys and a ledger nobody else can see.',
   'An API key and a base URL to point your existing tools at.',
   'A record of what every model call cost, per request.',
 ]
@@ -130,7 +130,7 @@ function AccessLine({ state }: { state: SignupState }) {
   if (state === 'open') {
     return (
       <p className="text-caption text-faint">
-        Open to anyone — no invitation needed.
+        Open to anyone, no invitation needed.
       </p>
     )
   }
@@ -138,7 +138,7 @@ function AccessLine({ state }: { state: SignupState }) {
     return (
       <p className="text-caption text-faint">
         We’re letting the first companies in one at a time. If you’ve already been added, continue
-        above — otherwise join the waitlist below.
+        above. Otherwise join the waitlist below.
       </p>
     )
   }
@@ -285,7 +285,7 @@ export function SignInCard({ returnTo }: { returnTo?: string }) {
       </p>
       <p className="text-body text-muted">
         Use the same account you signed up with. You’ll be taken there to confirm it’s you, and
-        returned here — there is no password for Talyvor itself.
+        returned here. There is no password for Talyvor itself.
       </p>
       <Button asChild variant="primary" className="h-10 px-5">
         <a href={loginHref(returnTo)}>Sign in</a>

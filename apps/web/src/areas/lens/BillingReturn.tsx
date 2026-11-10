@@ -191,7 +191,7 @@ function PlanSuccess({ plan, pollIntervalMs, timeoutMs }: { plan: PlanOffer } & 
                 : 'This month’s included usage is ready, and chat draws it first.'
             : timedOut || failed
               ? 'The plan starts when a webhook from Stripe reaches Lens. It usually takes seconds; check Plans again in a few minutes.'
-              : 'The payment succeeded at Stripe. Waiting for Lens to start your plan — this usually takes a few seconds.'}
+              : 'The payment succeeded at Stripe. Waiting for Lens to start your plan. This usually takes a few seconds.'}
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {active && byok ? (
@@ -356,7 +356,7 @@ function TopUpSuccess({ sessionId, pollIntervalMs, timeoutMs }: { sessionId: str
               been applied.
             </p>
             <p className="text-body text-muted">
-              This is a problem reaching Lens from this app — not a problem with the payment.
+              This is a problem reaching Lens from this app, not a problem with the payment.
               Try the ledger in a moment.
             </p>
           </div>
@@ -365,7 +365,7 @@ function TopUpSuccess({ sessionId, pollIntervalMs, timeoutMs }: { sessionId: str
             <p className="text-body text-muted">The credit hasn’t appeared yet.</p>
             <p className="text-body text-muted">
               It is applied when a webhook from Stripe reaches Lens. That usually takes seconds,
-              but it can lag — and it never arrives at all if Stripe can’t reach this
+              but it can lag, and it never arrives at all if Stripe can’t reach this
               deployment’s Lens.
             </p>
             <p className="text-body text-muted">
@@ -375,7 +375,7 @@ function TopUpSuccess({ sessionId, pollIntervalMs, timeoutMs }: { sessionId: str
           </div>
         ) : (
           <p className="text-body text-muted">
-            The payment succeeded at Stripe. Waiting for it to be applied to your balance — this
+            The payment succeeded at Stripe. Waiting for it to be applied to your balance. This
             usually takes a few seconds.
           </p>
         )}
@@ -396,7 +396,7 @@ function TopUpSuccess({ sessionId, pollIntervalMs, timeoutMs }: { sessionId: str
               hint={
                 credited
                   ? 'Read after the credit was observed to land'
-                  : 'Read just now — on its own it says nothing about this payment'
+                  : 'Read just now. On its own it says nothing about this payment'
               }
             >
               <div className="flex items-baseline gap-3">
@@ -440,7 +440,7 @@ export function BillingCancel() {
         className="max-w-2xl"
       >
         <p className="text-body text-muted">
-          You left Stripe’s checkout before paying, so nothing was charged — your balance and your
+          You left Stripe’s checkout before paying, so nothing was charged. Your balance and your
           plan are as they were.
         </p>
       </Region>

@@ -169,7 +169,7 @@ describe('BYOK in the app (B27.27)', () => {
 
     // Plans again: BYOK, Team's add-on, at the served price — added to the live Team subscription.
     act(() => go('/plans'))
-    const card = (await screen.findByText('BYOK — Team’s add-on')).closest('section')!
+    const card = (await screen.findByText('BYOK · Team’s add-on')).closest('section')!
     expect(card.textContent).toContain('$188')
     expect(card.textContent).toContain('No Talyvor token charge on a request sent on your key')
     fireEvent.click(await within(card).findByRole('button', { name: 'Add BYOK to Team' }))
@@ -188,7 +188,7 @@ describe('BYOK in the app (B27.27)', () => {
 
     // Features explains BYOK and sees the key.
     act(() => go('/features'))
-    expect((await screen.findByTestId('state-Bring your own keys (BYOK)')).textContent).toBe('On — requests to OpenAI go on your keys')
+    expect((await screen.findByTestId('state-Bring your own keys (BYOK)')).textContent).toBe('On: requests to OpenAI go on your keys')
 
     // Chat: the question goes upstream on the user's own key, and the answer says so — no token price.
     act(() => go('/chat'))
@@ -204,7 +204,7 @@ describe('BYOK in the app (B27.27)', () => {
   it('a workspace not on BYOK is offered the plan in Settings, never a key field', async () => {
     fakeTalyvor()
     renderAt('/settings', { '/settings': <Settings /> })
-    expect((await screen.findByTestId('provider-keys-plan')).textContent).toBe('Your own keys come with BYOK — Team’s add-on, included in Business. See Plans.')
+    expect((await screen.findByTestId('provider-keys-plan')).textContent).toBe('Your own keys come with BYOK (Team’s add-on, included in Business). See Plans.')
     expect(screen.queryByRole('button', { name: /^Add .* key$/ })).toBeNull()
   })
 })

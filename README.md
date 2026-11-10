@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<p align="center">Talyvor — the financial ecosystem for the AI agent economy.</p>
+<p align="center">Talyvor: the financial ecosystem for the AI agent economy.</p>
 
 # talyvor-suite
 
