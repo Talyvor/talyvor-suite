@@ -12,7 +12,8 @@ import { formatBPS, formatLimit, formatMinor, planName, type Fees, type PlanGate
 // plan unlocks is Lens's plan gates (B32.12); every fee is Lens's GET /v1/public/fees (B32.8). A figure Lens did
 // not state is not printed. The only figure written here is Free's: it is the plan with no price.
 //
-// B46.1 (Nick, 24 Oct 2026): no preview or test-money labels on the public page; the fees are stated plainly.
+// B46.1 (Nick, 24 Oct 2026): no preview or test-money labels on the public page; the fees are stated plainly. The
+// one label is StatusLabel (B56.9), Live or Sandbox from Lens and Building from the registry.
 
 /** "a, b or c". */
 function either(items: string[]): string {

@@ -42,6 +42,8 @@ export interface PlanGates {
   /** The company plans from the smallest up. */
   order: string[]
   plans: Record<string, PlanGate>
+  /** B56.9 — by each gate's name, whether Lens enforces it today (talyvor-lens B56.8); ABSENT when Lens did not say. */
+  built?: Record<string, boolean>
 }
 
 /** Every fee Talyvor charges, as Lens's GET /v1/public/fees states it (talyvor-lens B32.8). */
@@ -58,6 +60,8 @@ export interface Fees {
   intl_payment_fee_minor: Record<string, number>
   merchant_fee_bps: number
   merchant_a2a_fee_bps: number
+  /** B56.9 — by each fee's name, whether Lens charges it today (talyvor-lens B56.8); ABSENT when Lens did not say. */
+  charged?: Record<string, boolean>
 }
 
 export interface Pricing {
@@ -78,6 +82,8 @@ export interface Pricing {
   fees?: Fees
   /** B51.3 — whether a card can be charged (talyvor-lens B51.2); ABSENT when Lens did not say. */
   card_payments?: 'live' | 'test' | 'off'
+  /** B56.9 — each money capability live or sandbox (talyvor-lens B56.7), for StatusLabel; ABSENT when Lens did not say. */
+  labels?: Record<string, string>
 }
 
 /** The plans' names. Words, not figures: every figure about a plan is read from Lens. */
