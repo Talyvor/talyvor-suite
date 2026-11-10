@@ -57,7 +57,7 @@ function mockBff({ allPaused = false, paused = false } = {}) {
     if (url === '/api/agents/alerts') return json({ alerts: [], rule: 'the rule' })
     if (url === '/api/agents/schedules') return json({ schedules: [] })
     if (url === '/api/marketplace/listings') return json({ listings: [] })
-    if (/^\/api\/agents\/agt_\d\/statement$/.test(url)) return json({ agent_id: 'agt_1', lines: [] })
+    if (/^\/api\/agents\/agt_\d\/statement(\?.*)?$/.test(url)) return json({ agent_id: 'agt_1', lines: [] })
     if (/^\/api\/agents\/agt_\d\/rules$/.test(url))
       return json({ max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 2_000_000, approval_above_ulxc: 0, allowed_models: [], allowed_providers: [], allowed_listings: [], active_from: '', active_until: '', timezone: 'UTC', pause_on_unusual_spend: false })
     return new Response('null', { status: 404 })
