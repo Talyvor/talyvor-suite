@@ -2736,6 +2736,19 @@ function MandateRequestRow({
 }) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
+  // The payee's name is the agent's own words, so where the money goes is shown as Lens holds it: the Talyvor workspace,
+  // or the owner's own saved payee an outside business's pulls are paid out to. Pay's ['money-payees'] read, shared.
+  const payees = useQuery({ queryKey: ['money-payees'], queryFn: agentBankApi.payees, enabled: Boolean(m.payee_business_id) })
+  const savedPayee = (payees.data?.payees ?? []).find((p) => p.id === m.payee_id)
+  const into = m.payee_workspace_id ? (
+    <>
+      into Talyvor workspace <span className="font-figure">{m.payee_workspace_id}</span>
+    </>
+  ) : (
+    <>
+      paid out to your saved payee {savedPayee ? savedPayee.name : <span className="font-figure">{m.payee_id}</span>}
+    </>
+  )
   const decide = useMutation({
     mutationFn: (approve: boolean) => (approve ? approveMandateSigned(m.id) : agentBankApi.declineMandate(m.id)),
     onSuccess: (_, approve) =>
@@ -2759,7 +2772,7 @@ function MandateRequestRow({
       }
       hint={
         <span>
-          Up to <span className="font-figure">{formatMinor(m.max_per_pull_minor, m.currency)}</span> a pull · expires{' '}
+          Up to <span className="font-figure">{formatMinor(m.max_per_pull_minor, m.currency)}</span> a pull · {into} · expires{' '}
           <span className="font-figure">{formatWhen(m.expires_at)}</span> · asked <span className="font-figure">{formatWhen(m.created_at)}</span>
         </span>
       }

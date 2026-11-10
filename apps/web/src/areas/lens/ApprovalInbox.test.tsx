@@ -280,6 +280,8 @@ describe('an agent’s mandate request waiting on Approvals (B55.40)', () => {
     const group = await screen.findByRole('group', { name: 'Mandate requests' })
     const requests = within(group)
     expect(group.textContent).toContain('Researcher asks to let Acme Hosting pull up to £20.00 a month')
+    // The payee's name is the agent's own words: the account the money goes to is shown as Lens holds it.
+    expect(group.textContent).toContain('into Talyvor workspace ws_a')
     expect(await screen.findByRole('link', { name: 'Approvals 1 waiting' })).toBeInTheDocument()
     fireEvent.click(requests.getByRole('button', { name: 'Review' }))
     fireEvent.click(await requests.findByRole('button', { name: 'Approve' }))
