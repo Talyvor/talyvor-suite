@@ -82,6 +82,7 @@ import { PayInvoicePage } from './areas/pay/PayInvoice'
 import { OperatorWorkspaces } from './areas/lens/OperatorWorkspaces'
 import { Landing } from './areas/marketing/Landing'
 import { Pricing } from './areas/marketing/Pricing'
+import { YourMoney } from './areas/marketing/YourMoney'
 import { Documentation } from './areas/documentation/Documentation'
 import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH } from './areas/documentation/content'
 import { ClaudeConnector } from './areas/documentation/ClaudeConnector'
@@ -747,7 +748,7 @@ function AppShell() {
  * (pocketPending.test.tsx reads that block and fails if the two differ).
  */
 const PUBLIC_PATHS = [
-  '/marketing/*', '/pricing', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms', '/signup', '/signin',
+  '/marketing/*', '/pricing', '/your-money', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms', '/signup', '/signin',
   '/board/:token', '/share/:token', '/pay/:token', '/docs/s/:token',
 ]
 
@@ -821,6 +822,8 @@ export function App() {
             <Route path="/marketing/*" element={<Landing />} />
             {/* B5.2 — the price list, public for the same reason: a buyer reads it before signing up. */}
             <Route path="/pricing" element={<Pricing />} />
+            {/* B57.62 — how your money is held, public for the same reason: a buyer reads it before signing up. */}
+            <Route path="/your-money" element={<YourMoney />} />
             {/* B27.31 — what the product does, each claim linked to its screen. Public for the same
                 reason as the price list. Not /docs: that is the Docs product, behind the gate. */}
             <Route path={DOCUMENTATION_PATH} element={<Documentation />} />

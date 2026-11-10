@@ -11,7 +11,7 @@ import { FOOTER_LINE } from './positioning'
 // sign-up is closed, one header and one footer on every public page, Privacy built from what the code does, and no
 // link on a public page to an address the app doesn't serve or an anchor that isn't there.
 
-const PUBLIC_PAGES = ['/marketing', '/pricing', '/documentation', '/documentation/claude', '/privacy', '/terms']
+const PUBLIC_PAGES = ['/marketing', '/pricing', '/your-money', '/documentation', '/documentation/claude', '/privacy', '/terms']
 
 const PRICING = {
   usd_per_lxc: 0.1,
@@ -97,6 +97,7 @@ describe('the waitlist on /marketing follows the sign-up state', () => {
 
 const FOOTER_LINKS = [
   'Pricing /pricing',
+  'Your money /your-money',
   'Docs /documentation',
   'Privacy /privacy',
   'Terms /terms',
@@ -114,11 +115,12 @@ describe.each(PUBLIC_PAGES)('%s', (path) => {
     await at(path)
     const header = screen.getAllByRole('banner')[0] // the legal pages' title block is a <header> in main too
     expect(header.textContent).not.toMatch(/suite/i)
-    // B57.59: Pocket's header — the logo home, three links and one way into the app.
+    // B57.59: Pocket's header — the logo home, the site's links (B57.62 added Your money) and one way into the app.
     expect(linksOf(header)).toEqual([
       ' /marketing',
       'How it works /marketing',
       'Pricing /pricing',
+      'Your money /your-money',
       'Docs /documentation',
       'Open the app /',
     ])

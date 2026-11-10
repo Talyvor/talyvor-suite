@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { itemsFor } from '../src/filing.ts'
 import type { ReportedRun } from '../src/report.ts'
-import { FOOTER_LINKS, HEADER_LINKS, PRIVACY_RECORDS, PUBLIC_PAGES, type PageRead, type SiteRead, siteFaults, splitSentence } from '../src/siteTruth.ts'
+import { FOOTER_LINKS, HEADER_LINKS, PRIVACY_RECORDS, PUBLIC_PAGES, YOUR_MONEY_LINES, type PageRead, type SiteRead, siteFaults, splitSentence } from '../src/siteTruth.ts'
 
 const NONE = 'Cookies\nOur public pages set no advertising or analytics cookies, and send nothing to Meta.'
 const BANNER = "Cookies\nOur public pages use one advertising cookie, Meta's, to measure our ads, and only if you accept it in the cookie banner."
@@ -10,8 +10,8 @@ const clean = (): SiteRead => ({
   signup: 'open',
   cardPayments: 'test',
   pages: PUBLIC_PAGES.map((path): PageRead => ({
-    path, header: [...HEADER_LINKS], footer: [...FOOTER_LINKS.slice(0, 4), 'mailto:hello@talyvor.com'],
-    text: path === '/marketing' ? 'No invitation needed. Get started' : path === '/privacy' ? PRIVACY_RECORDS.join(' ') : 'Plans and prices',
+    path, header: [...HEADER_LINKS], footer: [...FOOTER_LINKS.slice(0, 5), 'mailto:hello@talyvor.com'],
+    text: path === '/marketing' ? 'No invitation needed. Get started' : path === '/privacy' ? PRIVACY_RECORDS.join(' ') : path === '/your-money' ? YOUR_MONEY_LINES.join(' ') : 'Plans and prices',
     emailBox: false, chooseButtons: [], cookieBanner: false,
   })),
   privacyCookies: NONE,
@@ -30,6 +30,14 @@ const at = (r: SiteRead, path: string) => r.pages.find((p) => p.path === path)!
 describe('the site-truth oracle (B51.4)', () => {
   it('passes a site that agrees with the product', () => {
     expect(siteFaults(clean())).toEqual([])
+  })
+
+  // B57.62: /your-money says LXC is not money, a mandate needs the owner's signed say, and Talyvor is not a bank.
+  it('catches /your-money without the mandate line or the not-a-bank line', () => {
+    expect(planted((r) => { at(r, '/your-money').text = YOUR_MONEY_LINES[0] })).toEqual([
+      '/your-money leaves out "every mandate needs your signed say"',
+      '/your-money leaves out "Talyvor is not a bank."',
+    ])
   })
 
   // B56.2: the page prints each plan's served platform fee, and no merged fee or gate row.
@@ -116,8 +124,8 @@ describe('the site-truth oracle (B51.4)', () => {
 
   it('catches a public page without the shared header or footer', () => {
     expect(planted((r) => { at(r, '/terms').header = ['/marketing', '/']; at(r, '/privacy').footer = [] })).toEqual([
-      '/privacy lacks the shared footer (no link to /pricing, /documentation, /privacy, /terms, mailto:)',
-      '/terms lacks the shared header (no link to /pricing, /documentation)',
+      '/privacy lacks the shared footer (no link to /pricing, /your-money, /documentation, /privacy, /terms, mailto:)',
+      '/terms lacks the shared header (no link to /pricing, /your-money, /documentation)',
     ])
   })
 

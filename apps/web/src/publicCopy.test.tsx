@@ -11,9 +11,9 @@ import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH } from './areas/documentation
 // B56.9 (Nick, 1 Nov 2026: "yes to labels") reverses B46.1 for StatusLabel alone: Live, Sandbox and Building may
 // be drawn by it and by nothing else, and every disclaimer phrase below still fails.
 
-const PUBLIC_ROUTES = ['/marketing', '/pricing', '/signup', '/signin', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms']
+const PUBLIC_ROUTES = ['/marketing', '/pricing', '/your-money', '/signup', '/signin', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms']
 // The pages that name the product carry the line; /signin is a door with nothing to pitch.
-const NAMES_THE_PRODUCT = new Set(['/marketing', '/pricing', '/signup', DOCUMENTATION_PATH, '/privacy', '/terms'])
+const NAMES_THE_PRODUCT = new Set(['/marketing', '/pricing', '/your-money', '/signup', DOCUMENTATION_PATH, '/privacy', '/terms'])
 
 const FORBIDDEN: [string, RegExp][] = [
   ['MIXT', /\bmixt\b/i],
