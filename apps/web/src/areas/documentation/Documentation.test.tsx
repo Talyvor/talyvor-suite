@@ -5,6 +5,7 @@ import { matchRoutes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, CONSOLE_ROUTES, queryClient } from '../../App'
 import { Landing } from '../marketing/Landing'
+import { pressEverything } from '../../test/pressEverything'
 import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH, LICENCES } from './content'
 
 // B27.31 — /documentation opens signed out, and every link on it reaches a screen the app mounts.
@@ -79,7 +80,7 @@ describe('/documentation', () => {
     mockSignedOut()
     window.history.pushState({}, '', DOCUMENTATION_PATH)
     render(<App />)
-    expect(await screen.findByRole('heading', { level: 1, name: /what talyvor does today/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Documentation' })).toBeInTheDocument()
     const contents = screen.getByRole('navigation', { name: 'On this page' })
     for (const name of ['Lens API', 'Chat', 'Docs', 'Track', 'Agent Wallets', 'Marketplace', 'Talyvor Code', 'Licences']) {
       expect(within(contents).getByRole('link', { name })).toHaveAttribute('href', expect.stringMatching(/^#/))
@@ -90,7 +91,7 @@ describe('/documentation', () => {
     mockSignedOut()
     window.history.pushState({}, '', DOCUMENTATION_PATH)
     const { container } = render(<App />)
-    await screen.findByRole('heading', { level: 1, name: /what talyvor does today/i })
+    await screen.findByRole('heading', { level: 1, name: 'Documentation' })
     const steps = within(container.querySelector<HTMLElement>('#start')!).getAllByRole('link').map((a) => a.textContent)
     expect(steps).toEqual([
       'Sign up',
@@ -117,7 +118,7 @@ describe('/documentation', () => {
     mockSignedOut()
     window.history.pushState({}, '', DOCUMENTATION_PATH)
     const { container } = render(<App />)
-    await screen.findByRole('heading', { level: 1, name: /what talyvor does today/i })
+    await screen.findByRole('heading', { level: 1, name: 'Documentation' })
     const hrefs = [...container.querySelectorAll('a[href]')].map((a) => a.getAttribute('href') ?? '')
     const internal = hrefs.filter((h) => !/^(https?:\/\/|mailto:)/.test(h))
     expect(internal.length).toBeGreaterThan(30)
@@ -125,6 +126,33 @@ describe('/documentation', () => {
       h.startsWith('#') ? container.querySelector(h) === null : !mounts(h.split('#')[0]),
     )
     expect(broken).toEqual([])
+  })
+
+  // B57.63 — the reference's s-docs: a card for each part of Talyvor, each opening its guide on the page, then the
+  // Claude connector; the page is held to Pocket's rules.
+  it('opens on a card for each part of Talyvor and one for the Claude connector (B57.63)', async () => {
+    mockSignedOut()
+    window.history.pushState({}, '', DOCUMENTATION_PATH)
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { level: 1, name: 'Documentation' })
+    expect(screen.getByText('How each part of Talyvor works, and every route of its API.')).toBeInTheDocument()
+    const parts = within(screen.getByRole('list', { name: 'Parts of Talyvor' })).getAllByRole('link')
+    expect(parts.map((a) => [a.querySelector('b')?.textContent, a.getAttribute('href')])).toEqual([
+      ['Agent Wallets', '#wallets'],
+      ['Chat', '#chat'],
+      ['Marketplace', '#marketplace'],
+      ['Docs', '#docs'],
+      ['Track', '#track'],
+      ['Talyvor Code', '#code'],
+    ])
+    expect(screen.getByRole('link', { name: 'The Claude connector' })).toHaveAttribute('href', CLAUDE_CONNECTOR_PATH)
+    expect(container.querySelector('main')?.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+  })
+
+  it('every control on the page does something', async () => {
+    const report = await pressEverything(DOCUMENTATION_PATH)
+    expect(report.dead).toEqual([])
+    expect(report.pressed).toBeGreaterThan(20)
   })
 
   it('names the suite’s licence exactly as its LICENSE file does', () => {
@@ -146,7 +174,7 @@ describe('/documentation', () => {
     mockSignedOut()
     window.history.pushState({}, '', DOCUMENTATION_PATH)
     const { container } = render(<App />)
-    await screen.findByRole('heading', { level: 1, name: /what talyvor does today/i })
+    await screen.findByRole('heading', { level: 1, name: 'Documentation' })
     expect(
       screen.getByText(
         'Set its spending rules: a payment past a limit is refused, and one above the approval amount waits in your approvals inbox, approved with a passkey once you have one.',

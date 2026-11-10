@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../App'
 import { longDate, sectionId } from './legalParts'
 import { BUILDING } from '../labels/StatusLabel'
+import { pressEverything } from '../test/pressEverything'
 
 // B28.274 — Privacy and Terms are read whole and dated: each says the day its words last changed,
 // lists every section before the first, and ends with a line saying it has ended.
@@ -68,6 +69,17 @@ describe('the legal pages', () => {
     const tare = screen.getByRole('heading', { level: 2, name: /Tare training|Learning from your prose/ }).closest('section')!
     expect(tare).toHaveTextContent(/keep.*prose.*improve how Tare shortens prompts/)
     expect(within(tare).getByText('Draft: for legal review')).toBeInTheDocument()
+  })
+
+  // B57.63 — both are drawn in Pocket (the reference's s-privacy and s-terms) with their words unchanged, and every
+  // control on them does something.
+  it.each(['/privacy', '/terms'])('%s is held to Pocket’s rules and every control on it does something', async (path) => {
+    const { container } = at(path)
+    await screen.findByRole('heading', { level: 1 })
+    expect(container.querySelector('main')?.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    const report = await pressEverything(path)
+    expect(report.dead).toEqual([])
+    expect(report.pressed).toBeGreaterThan(15)
   })
 
   // B56.3 — they say only what the code does: investing is not offered, so neither page mentions it.
