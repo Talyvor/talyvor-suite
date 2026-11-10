@@ -12,6 +12,8 @@ import (
 //
 //	GET  /api/money/accounts                        the company's and its agents' currency accounts (Lens B30.13)
 //	POST /api/money/accounts   {currency, agent_id}  open one, the company's or an agent's, on test money
+//	GET  /api/money/accounts/{id}/statement?from=&to=&format=json|csv   B56.15: one account's statement for a period (Lens
+//	                                                B56.14): the opening, in, out and closing, and every posting to it
 //	GET  /api/money/invoices                        every invoice the workspace's agents issued, with payments and reminders
 //	POST /api/money/invoices   {account_id, customer_name, customer_email, customer_address, customer_vat_number,
 //	                            seller_vat_number, lines, due_date, remind_days_before, memo, send}   issue one from an agent's account
@@ -58,6 +60,20 @@ func (a *app) handleMoneyAccounts(w http.ResponseWriter, r *http.Request, t tena
 	default:
 		methodNotAllowed(w, "GET, POST")
 	}
+}
+
+// handleMoneyAccountStatement — GET /api/money/accounts/{id}/statement (B56.15): Lens decides whose account the session
+// may read (the workspace's owner or an admin, any of its accounts) and answers JSON, or the CSV with its filename.
+func (a *app) handleMoneyAccountStatement(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	id, ok := pathID(w, "account id", r.PathValue("id"))
+	if !ok {
+		return
+	}
+	a.statementRelay(w, r, t, "/v1/money/accounts/"+url.PathEscape(id)+"/statement", "from", "to", "format")
 }
 
 // handleMoneyInvoices — GET /api/money/invoices lists them; POST issues one.

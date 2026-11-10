@@ -92,7 +92,7 @@ interface HeldPayment {
 // full digit wide, so "Payee 3 1 LXC" read with a double gap before LXC.
 const lxc = (micros: number) => <Lxc ulxc={micros} />
 
-function Note({ ok, children }: { ok: boolean; children: React.ReactNode }) {
+export function Note({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
     <p role={ok ? 'status' : 'alert'} className="text-caption text-ink">
       {children}
@@ -100,7 +100,7 @@ function Note({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   )
 }
 
-function readFailure(err: unknown, what: string): string {
+export function readFailure(err: unknown, what: string): string {
   return isSessionExpired(err) ? `${what} can’t be read until you sign in again.` : `${what} could not be read just now.`
 }
 
@@ -2153,7 +2153,7 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
 const utcDay = (d: Date) => d.toISOString().slice(0, 10)
 
 /** Last month, or this month so far, as its first and last UTC day. */
-function monthPeriod(which: 'last' | 'this', now = new Date()): { from: string; through: string } {
+export function monthPeriod(which: 'last' | 'this', now = new Date()): { from: string; through: string } {
   const y = now.getUTCFullYear()
   const m = now.getUTCMonth()
   return which === 'last'
@@ -2162,13 +2162,13 @@ function monthPeriod(which: 'last' | 'this', now = new Date()): { from: string; 
 }
 
 /** The day after a YYYY-MM-DD day: Lens's period ends before `to`, and the screen names the last day it covers. */
-function dayAfter(d: string): string {
+export function dayAfter(d: string): string {
   const t = new Date(`${d}T00:00:00Z`)
   t.setUTCDate(t.getUTCDate() + 1)
   return utcDay(t)
 }
 
-function saveFile(name: string, blob: Blob) {
+export function saveFile(name: string, blob: Blob) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

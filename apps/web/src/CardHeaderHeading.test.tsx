@@ -118,7 +118,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/': 4,
   // B28.7 — Approvals (waiting, decided) and Statements (every agent, the agents, one statement).
   '/approvals': 2,
-  '/statements': 3,
+  '/statements': 2,
   '/overview': 6,
   '/ledger': 1,
   // ⚠ 0 IS STRUCTURAL HERE, NOT THE 404-FIXTURE FLOOR W1.1.17b WARNS ABOUT. /chat renders no

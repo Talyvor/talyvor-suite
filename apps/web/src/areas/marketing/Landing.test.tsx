@@ -295,12 +295,13 @@ describe('Landing labels', () => {
     expect(container.querySelectorAll('[data-status-key][data-status-label="live"], [data-status-key][data-status-label="sandbox"]')).toHaveLength(0)
   })
 
-  it('carries Building from building.json on the account statements line, twice, and on what is on its way', () => {
+  // B56.15 — the currency accounts' statements shipped, so the band and card 04 are true as written and carry no Building.
+  it('carries Building from building.json only on what is on its way', () => {
     const { container } = render(<Landing />)
     const building = [...container.querySelectorAll('[data-status-key][data-status-label="building"]')].map((el) => el.getAttribute('data-status-key'))
-    expect(building.sort()).toEqual(['account_statements', 'account_statements', 'payments_for_everyone'])
+    expect(building).toEqual(['payments_for_everyone'])
     for (const key of building) expect(BUILDING.some((e) => e.key === key), key!).toBe(true)
-    expect(screen.getAllByText('Statements for dollar, pound, euro and USDC accounts')).toHaveLength(2)
+    expect(screen.queryByText('Statements for dollar, pound, euro and USDC accounts')).toBeNull()
     expect(screen.getByText(ON_ITS_WAY).querySelector('[data-status-label="building"]')).not.toBeNull()
   })
 

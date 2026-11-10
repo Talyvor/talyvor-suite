@@ -101,3 +101,55 @@ func TestInvoicesReachLensAndThePayPageCarriesNoCredential(t *testing.T) {
 		}
 	}
 }
+
+// B56.15 — a currency account's statement reaches Lens's B56.14 route on the session's own token, with only from, to
+// and format sent up; JSON and the CSV (with Lens's filename) come back as Lens wrote them, and Lens's refusal of a
+// session that is not the owner or an admin is relayed with its sentence.
+func TestMoneyAccountStatementReachesLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		got = append(got, r.URL.Path+"?"+r.URL.RawQuery)
+		switch {
+		case strings.Contains(r.URL.Path, "/acct_theirs/"):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":"only the workspace's owner or an admin reads its accounts"}`))
+		case r.URL.Query().Get("format") == "csv":
+			w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+			w.Header().Set("Content-Disposition", `attachment; filename="account-statement-USD-2026-10-01-2026-11-01.csv"`)
+			_, _ = w.Write([]byte("entry_id,line,at,kind,amount_minor,currency\n,,2026-10-01T00:00:00Z,opening,,USD\n"))
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"account_id":"acct_usd","currency":"USD","opening_minor":365000,"in_minor":0,"out_minor":45000,"closing_minor":320000,"lines":[]}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	rec := doJSON(a, http.MethodGet, "/api/money/accounts/acct_usd/statement?from=2026-10-01&to=2026-11-01&kind=card_charge", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"closing_minor":320000`) {
+		t.Fatalf("json = %d %s", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(a, http.MethodGet, "/api/money/accounts/acct_usd/statement?from=2026-10-01&to=2026-11-01&format=csv", "")
+	if rec.Code != http.StatusOK || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/csv") ||
+		!strings.Contains(rec.Header().Get("Content-Disposition"), "account-statement-USD-2026-10-01-2026-11-01.csv") ||
+		!strings.Contains(rec.Body.String(), "opening") {
+		t.Fatalf("csv = %d %v %s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	rec = doJSON(a, http.MethodGet, "/api/money/accounts/acct_theirs/statement", "")
+	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "owner or an admin") {
+		t.Fatalf("refusal = %d %s", rec.Code, rec.Body.String())
+	}
+	want := []string{
+		"/v1/money/accounts/acct_usd/statement?from=2026-10-01&to=2026-11-01",
+		"/v1/money/accounts/acct_usd/statement?format=csv&from=2026-10-01&to=2026-11-01",
+		"/v1/money/accounts/acct_theirs/statement?",
+	}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("Lens got %v, want %v", got, want)
+	}
+}

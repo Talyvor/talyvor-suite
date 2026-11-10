@@ -44,6 +44,8 @@ describe('the wallet screens in the brand', () => {
 
   it.each(SCREENS)('%s: at most one teal action, cards on raised, and every LXC amount on the figure face', async (address, teal) => {
     const main = await at(address)
+    // B56.15 — Statements' wallets are tabs, so its LXC amounts are the open statement's lines, read once they arrive.
+    if (address === '/statements') await screen.findByTestId('agent-statement')
     expect(primaries(main), 'the teal fill is the one primary action').toEqual(teal)
 
     const cards = Array.from(main.querySelectorAll('.rounded-card'))

@@ -33,6 +33,8 @@ export interface Agent {
   description?: string
   /** B28.21 — set once it is archived: swept to zero, its keys revoked, refused every movement of its own. */
   archived_at?: string
+  /** B32.32 — "room" for a room's wallet, which Lens keeps as an agent account named "Room: <title>"; else "agent". */
+  kind?: string
 }
 
 /** Lens economy.AgentArchive (B28.21): what archiving an agent did. */
@@ -915,6 +917,25 @@ async function statementFile(agentID: string | null, from: string, to: string, f
   return res.blob()
 }
 
+/**
+ * B56.15 — a currency account's statement for [from, to) as the CSV Lens writes (Lens B56.14). A refusal carries
+ * Lens's sentence.
+ */
+async function accountStatementFile(accountID: string, from: string, to: string): Promise<Blob> {
+  const path = `/api/money/accounts/${e(accountID)}/statement?${new URLSearchParams({ from, to, format: 'csv' })}`
+  const res = await fetch(path, { headers: { Accept: 'text/csv' } })
+  if (!res.ok) {
+    let sentence = ''
+    try {
+      sentence = ((await res.json()) as { error?: string }).error ?? ''
+    } catch {
+      // a body that is not JSON carries no sentence
+    }
+    throw new AgentBankError(res.status, path, sentence)
+  }
+  return res.blob()
+}
+
 /** B28.51 — what a statement page is read for: the lines of these kinds whose words hold q, any case. */
 export interface StatementSearch {
   kinds: readonly PostingKind[]
@@ -1022,6 +1043,14 @@ export const agentBankApi = {
   /** B46.9 — the agent's wallet on the money layer (Lens B46.4): its balance and how to pay into it. */
   wallet: (id: string) => getSaid<AgentMoneyWallet>(`/api/agents/${e(id)}/wallet`),
   statementFile,
+  /** B56.15 — what the agent put on its company's marketplace bill in [from, to) (Lens B56.14); its balance moves not. */
+  marketplaceBill: (id: string, from: string, to: string) =>
+    getJSON<{ marketplace_bill?: MarketplaceBillLine[] | null }>(`/api/agents/${e(id)}/statement?${new URLSearchParams({ from, to, format: 'json' })}`),
+  /** B56.15 — a currency account's statement for [from, to) (YYYY-MM-DD): opening, in, out, closing and every posting; a
+   *  refusal (only the owner or an admin reads the company's accounts) carries Lens's sentence. */
+  accountStatement: (id: string, from: string, to: string) =>
+    getSaid<MoneyStatement>(`/api/money/accounts/${e(id)}/statement?${new URLSearchParams({ from, to })}`),
+  accountStatementFile,
   /** B19.24 — the agent's test-mode card and every purchase on it; null when it has none (Lens answers 404). */
   card: async (id: string): Promise<{ card: AgentCard; authorizations: CardAuthorization[] | null } | null> => {
     try {
@@ -1995,6 +2024,50 @@ export interface CurrencyAccount {
   balance_minor: number
   test_minor: number
   live_minor: number
+}
+
+/** B56.15 — one posting to a currency account (Lens economy.MoneyStatementLine): money in positive, out negative. */
+export interface MoneyStatementLine {
+  entry_id: string
+  line: number
+  at: string
+  /** the entry's: payment_in, invoice_payment, mandate_pull, card_charge, … */
+  kind: string
+  amount_minor: number
+  funding: string
+  /** who an outside payment was from or to; else the other account, or "workspace:<id>" */
+  counterparty: string
+  memo?: string
+  partner_ref?: string
+  balance_after_minor: number
+}
+
+/** B56.15 — a currency account over [from, to) (Lens economy.MoneyStatement): opening + in − out = closing. */
+export interface MoneyStatement {
+  account_id: string
+  agent_id?: string
+  currency: string
+  from: string
+  to: string
+  opening_minor: number
+  in_minor: number
+  out_minor: number
+  closing_minor: number
+  lines: MoneyStatementLine[] | null
+}
+
+/** B56.15 — one use or payment an agent put on its company's monthly marketplace bill (Lens economy.MarketplaceBillLine). */
+export interface MarketplaceBillLine {
+  use_id: string
+  at: string
+  /** pay, for a payment to another company's agent; else use, buy, rent, subscribe or renewal */
+  kind: string
+  listing_id?: string
+  payee_agent_id?: string
+  amount_ulxc: number
+  memo?: string
+  /** "on the marketplace bill" */
+  label: string
 }
 
 /** One line of an invoice (Lens economy.InvoiceLine): a quantity at a unit price in minor units, with its VAT rate in basis points. */
