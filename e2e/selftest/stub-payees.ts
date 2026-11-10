@@ -153,6 +153,11 @@ const PAYMENT_UNSIGNED = 'economy: this workspace signs its payments with a pass
 type OwnerPayment = { payee_id?: string; amount_minor?: number; currency?: string; funding?: string; reference?: string; idempotency_key?: string; account_id?: string }
 
 /** B54.35 — the challenge's key: every field of the payment as asked (Lens's paymentPurpose), so a signature for it pays no other. */
+/** B55.56 — a mandate grant as the owner signs it (Lens economy.MandateGrant), and the challenge key its signature answers. */
+interface MandateGrant { account_id?: string; payee_workspace_id?: string; payee_business_id?: string; payee_id?: string; payee_name?: string
+  max_per_pull_minor?: number; max_per_month_minor?: number; expires_at?: string }
+const grantKey = (g: MandateGrant) => `mandate:${[g.account_id, g.payee_workspace_id, g.payee_business_id, g.payee_id, g.payee_name, g.max_per_pull_minor, g.max_per_month_minor, g.expires_at].map((x) => x ?? '').join('\0')}`
+const MANDATE_UNSIGNED = 'economy: this workspace signs its mandates with a passkey or the phone app — sign this mandate\'s challenge (POST /v1/money/mandates/challenge)'
 const paymentKey = (b: OwnerPayment) => `payment:${[b.account_id, b.payee_id, b.amount_minor, b.currency, b.funding, b.reference, b.idempotency_key].map((x) => x ?? '').join('\0')}`
 /** Minor units as Lens prints them: "GBP 10.00". */
 const money = (minor: number, currency: string): string => `${currency} ${(minor / 100).toFixed(2)}`
@@ -831,15 +836,42 @@ export class PayeeDesk {
     return p
   }
 
-  /** B30.96 — mandates on an agent's account (Lens B30.19): granted, listed, revoked. Pulls are not served here. */
+  /**
+   * B30.96 — mandates on an agent's account (Lens B30.19): granted, listed, revoked. Pulls are not served here. B55.56: the
+   * owner's grant comes as {grant, assertion} (or the grant alone) and, once the workspace has a passkey, is made only with
+   * an assertion over POST /v1/money/mandates/challenge's challenge for exactly that grant; a requested mandate is approved
+   * the same way, over its own challenge, or declined.
+   */
   private async mandateRoute(req: IncomingMessage, res: ServerResponse, ws: string, path: string, payees: Payee[]): Promise<boolean> {
     const list = this.mandates.get(ws) ?? []
     if (path === '/v1/money/mandates' && req.method === 'GET') {
-      return this.json(res, 200, { granted: list.map(({ workspace_id: _w, ...m }) => ({ workspace_id: ws, ...m })), received: [] }), true
+      const status = new URL(req.url ?? '/', 'http://stub').searchParams.get('status') ?? ''
+      return this.json(res, 200, { granted: list.filter((m) => status === '' || m.status === status).map(({ workspace_id: _w, ...m }) => ({ workspace_id: ws, ...m })), received: [] }), true
+    }
+    const signed = (key: string, a: Assertion | undefined) => this.passkeys(ws).length === 0 ? undefined : a === undefined ? MANDATE_UNSIGNED : this.refused(ws, key, a)
+    if (path === '/v1/money/mandates/challenge' && req.method === 'POST') {
+      const b = await this.body<{ grant?: MandateGrant; mandate_id?: string }>(req)
+      const c = randomBytes(32).toString('base64url')
+      this.challenges.set(b.mandate_id ? `mandate-approve:${b.mandate_id}` : grantKey(b.grant ?? {}), c)
+      return this.json(res, 200, { challenge: c, allow_credentials: this.passkeys(ws).map((k) => k.credential_id), user_verification: 'required' }), true
+    }
+    const decide = /^\/v1\/money\/mandates\/([^/]+)\/(approve|decline)$/.exec(path)
+    if (decide !== null && req.method === 'POST') {
+      const m = list.find((x) => x.id === decide[1])
+      if (m === undefined) return this.json(res, 404, { error: 'economy: no such mandate' }), true
+      if (m.status !== 'requested') return this.json(res, 409, { error: `economy: the mandate is ${m.status}, not requested` }), true
+      if (decide[2] === 'approve') {
+        const refused = signed(`mandate-approve:${m.id}`, (await this.body<{ assertion?: Assertion }>(req)).assertion)
+        if (refused !== undefined) return this.json(res, 403, { error: refused }), true
+      }
+      m.status = decide[2] === 'approve' ? 'active' : 'declined'
+      return this.json(res, 200, m), true
     }
     if (path === '/v1/money/mandates' && req.method === 'POST') {
-      const g = await this.body<{ account_id?: string; payee_workspace_id?: string; payee_business_id?: string; payee_id?: string; payee_name?: string
-        max_per_pull_minor?: number; max_per_month_minor?: number; expires_at?: string }>(req)
+      const raw = await this.body<MandateGrant & { grant?: MandateGrant; assertion?: Assertion }>(req)
+      const g = raw.grant ?? raw
+      const refused = signed(grantKey(g), raw.assertion)
+      if (refused !== undefined) return this.json(res, 403, { error: refused }), true
       const bad = (msg: string) => this.json(res, 400, { error: `economy: invalid mandate: ${msg}` })
       const company = (g.payee_workspace_id ?? '').trim()
       const business = (g.payee_business_id ?? '').trim()

@@ -1392,7 +1392,14 @@ export const agentBankApi = {
   /** B45.2 — declined: Lens cancels the request and pays none of it. */
   cancelRequest: (id: string) => send<PaymentRequest>('POST', `/api/money/payment-requests/${e(id)}/cancel`),
   mandates: () => getJSON<{ granted: Mandate[] | null; received: Mandate[] | null }>('/api/money/mandates', { granted: 'list', received: 'list' }),
-  grantMandate: (body: MandateGrant) => send<Mandate>('POST', '/api/money/mandates', body),
+  /** B55.56 — the challenge the owner's grant, or approval of an agent's request, is signed over (Lens B55.24). */
+  mandateChallenge: (body: { grant: MandateGrant } | { mandate_id: string }) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/money/mandates/challenge', body),
+  grantMandate: (grant: MandateGrant, assertion?: PasskeyAssertion) =>
+    send<Mandate>('POST', '/api/money/mandates', assertion ? { grant, assertion } : { grant }),
+  approveMandate: (id: string, assertion?: PasskeyAssertion) =>
+    send<Mandate>('POST', `/api/money/mandates/${e(id)}/approve`, assertion ? { assertion } : {}),
+  declineMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/decline`),
   revokeMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/revoke`),
   payouts: () => getJSON<{ payouts: PayoutBatch[] | null }>('/api/money/payouts', { payouts: 'list' }),
   payout: (id: string) => getSaid<PayoutBatch>(`/api/money/payouts/${e(id)}`),
@@ -1642,9 +1649,11 @@ export interface Mandate {
   max_per_month_minor: number
   pulled_this_month_minor: number
   expires_at: string
-  /** active | revoked */
+  /** requested (an agent's own key asked; B55.24) | active | revoked | expired | declined */
   status: string
   revoked_at?: string
+  approved_at?: string
+  declined_at?: string
   created_at: string
   /** an outside business's key, answered once, when granted */
   pull_key?: string

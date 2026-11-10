@@ -1211,6 +1211,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payouts/{id}/approve", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPayoutApproveBody",
   },
+  // B55.56 — the challenge the owner's grant, or approval of an agent's request, is signed over, and the signed approval (Lens B55.24).
+  {
+    route: "POST /v1/money/mandates/challenge",
+    file: "apps/bff/money_pay.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyMandateChallenge(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_mandates_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/mandates/challenge", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensMandateChallengeBody",
+  },
+  {
+    route: "POST /v1/money/mandates/{id}/approve",
+    file: "apps/bff/money_pay.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyMandateDecide(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_mandates_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/mandates/{id}/approve", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensMandateApproveBody",
+  },
   // B40.7 — the MCP server at /mcp: an assistant drafts an invoice (Lens B30.20) and prepares payment requests (Lens B40.3).
   {
     route: "POST /v1/money/invoices",

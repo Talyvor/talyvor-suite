@@ -27,7 +27,7 @@ import { APPROVALS_KEY, BOOK_KEY, OnThePhone, PREPARED_KEY, preparedBy, useKeys 
 import { DeclineForm, declinedText } from './Decline'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { paymentRequestKey } from './Approve'
-import { approvePayoutSigned, assertOver, payOutsideSigned, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
+import { approveMandateSigned, approvePayoutSigned, assertOver, grantMandateSigned, payOutsideSigned, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
 import {
   type AgentApproval,
   type AssistantRequest,
@@ -1359,7 +1359,20 @@ function StandingOrders({
   )
 }
 
-/** A mandate from an agent's account: a Talyvor company or an outside business pulls within it (B30.19). */
+/** What a mandate's status reads as, and its pill (B55.56: an agent's own key only asks; the owner decides). */
+const MANDATE_STATUS: Record<string, { text: string; pill: PillStatus }> = {
+  requested: { text: 'Asked', pill: 'held' },
+  active: { text: 'Active', pill: 'settled' },
+  declined: { text: 'Declined', pill: 'slashed' },
+  expired: { text: 'Expired', pill: 'idle' },
+  revoked: { text: 'Revoked', pill: 'slashed' },
+}
+const mandateStatus = (s: string) => MANDATE_STATUS[s] ?? MANDATE_STATUS.revoked
+
+/**
+ * A mandate from an agent's account: a Talyvor company or an outside business pulls within it (B30.19). B55.56: the
+ * owner's grant is signed as a payment is, and a mandate an agent asked for waits here for Approve (signed) or Decline.
+ */
 function Mandates({
   accounts,
   payees,
@@ -1385,7 +1398,7 @@ function Mandates({
   const refresh = () => void qc.invalidateQueries({ queryKey: MANDATES_KEY })
   const grant = useMutation({
     mutationFn: () =>
-      agentBankApi.grantMandate({
+      grantMandateSigned({
         account_id: account?.id ?? '',
         payee_workspace_id: kind === 'company' ? form.workspace.trim() : '',
         payee_business_id: kind === 'business' ? form.business.trim() : '',
@@ -1402,6 +1415,10 @@ function Mandates({
     },
   })
   const revoke = useMutation({ mutationFn: (id: string) => agentBankApi.revokeMandate(id), onSuccess: refresh })
+  const decide = useMutation({
+    mutationFn: ({ id, approve }: { id: string; approve: boolean }) => (approve ? approveMandateSigned(id) : agentBankApi.declineMandate(id)),
+    onSuccess: refresh,
+  })
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
   const row = (m: Mandate, granted: boolean) => (
     <li key={m.id} className="flex flex-col gap-1 border-b border-rule pb-2 last:border-b-0 last:pb-0" data-testid={`mandate-${m.id}`}>
@@ -1410,12 +1427,25 @@ function Mandates({
           {granted ? `${m.payee_name} pulls from ${agentName(m.agent_id)}` : `${m.payee_name} lets you pull`} · up to <span className="font-figure">{formatMinor(m.max_per_pull_minor, m.currency)}</span> a pull,{' '}
           <span className="font-figure">{formatMinor(m.max_per_month_minor, m.currency)}</span> a month
         </span>
-        <Pill status={m.status === 'active' ? 'settled' : 'slashed'}>{m.status === 'active' ? 'Active' : 'Revoked'}</Pill>
+        <Pill status={mandateStatus(m.status).pill}>{mandateStatus(m.status).text}</Pill>
       </div>
       <p className="text-caption text-muted">
         Pulled this month <span className="font-figure">{formatMinor(m.pulled_this_month_minor, m.currency)}</span> · expires{' '}
         <span className="font-figure">{formatWhen(m.expires_at)}</span>
       </p>
+      {granted && m.status === 'requested' ? (
+        <>
+          <p className="text-caption text-muted">{agentName(m.agent_id)} asked for this mandate. Nothing is pulled until you approve it.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: true })}>
+              Approve
+            </Button>
+            <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: false })}>
+              Decline
+            </Button>
+          </div>
+        </>
+      ) : null}
       {granted && m.status === 'active' ? (
         <div>
           <Button type="button" disabled={revoke.isPending} onClick={() => revoke.mutate(m.id)}>
@@ -1449,6 +1479,7 @@ function Mandates({
           </>
         ) : null}
         {revoke.isError ? <Note ok={false}>{refusalText(revoke.error)}</Note> : null}
+        {decide.isError ? <Note ok={false}>{refusalText(decide.error)}</Note> : null}
           <form
             className="flex flex-col gap-3"
             data-testid="new-mandate"

@@ -113,6 +113,7 @@ var decodedFromUpstream = map[string]string{
 	"passkeyAssertion":       "an approval's passkey assertion, decoded wholesale from the browser's approve/deny body and relayed to Lens as it came (B19.10)",
 	"recoveryPasskeyBody":    "the new passkey of a key recovery, decoded from the browser's body and relayed to Lens with only its own fields (B55.54)",
 	"recoveryDeviceBody":     "the new phone key of a key recovery, decoded from the browser's body and relayed to Lens with only its own fields (B55.54)",
+	"mandateGrant":           "a mandate grant, decoded field by field from the Pay screen's grant or challenge body and relayed to Lens as it came (B55.56)",
 	"cardAddress":            "a physical card's postal address, decoded from the browser's order body and relayed to Lens with only its own fields (B53.12)",
 	"workspaceRequest":       "Lens's B59.27 request record, decoded from its GET and POST /v1/workspaces/{id}/requests replies and shown without its workspace or filer (B59.28)",
 	"pricedPlan":             "Lens's public GET /v1/billing/plans reply, decoded in readPlans() and served on /api/pricing (B28.5)",
