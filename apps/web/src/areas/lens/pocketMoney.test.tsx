@@ -195,7 +195,7 @@ const NOT_YET = [
   'areas/lens/format.ts',
   'areas/lens/rulePickers.tsx',
   'areas/lens/topupApi.ts',
-  'areas/marketing/PriceCard.tsx',
+  'areas/marketing/PricingPlans.tsx',
   'areas/marketing/pricingApi.ts',
   'areas/marketplace/EarningsList.tsx',
   'areas/marketplace/Licences.tsx',

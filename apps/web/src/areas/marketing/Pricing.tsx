@@ -1,154 +1,75 @@
-import { Button, inlineLink } from '@talyvor/ui'
+import { Button, Card, Eyebrow } from '@talyvor/ui/pocket'
 import { useDocumentTitle } from '../../documentTitle'
 import { formatCents, formatLXC, lxcForCents } from '../lens/topupApi'
-import { Eyebrow, Figure, TealRule } from './Landing'
-import {
-  PRICING_PATH,
-  cardPayments,
-  formatPeg,
-  usePricing,
-  type Pricing as PricingData,
-  type PricingState,
-} from './pricingApi'
+import { cardPayments, formatPeg, usePricing, type PricingState } from './pricingApi'
 import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
-import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, MoneyFeatureFees, TAX_LINE, platformFees } from './PriceCard'
-import { LabelsMeaning, StatusLabel } from '../../labels/StatusLabel'
+import { TAX_LINE } from './PriceCard'
+import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, MoneyFeatureFees, RequestCost } from './PricingPlans'
+import { LABEL_LINES, StatusLabel } from '../../labels/StatusLabel'
 import { CREDIT_FOR_AGENTS, MARKETPLACE } from '../../labels/capabilities'
+import { POSITIONING_LINE } from '../../positioning'
 
 // /pricing (B5.2) — what anything costs, for a buyer who has not signed up. Public, OUTSIDE the
-// AuthGate like /marketing, and built the same way: no router context, plain anchors, Landing's
-// instrument language.
+// AuthGate like /marketing, and built the same way: no router context, plain anchors.
 //
-// ⚠ EVERY FIGURE IS SERVED. The peg and the top-up range come from GET /api/pricing (see
-// pricingApi.ts), and the page prints that address so a buyer can check it. What is written here is
-// only the RULES the figures obey — how a request is charged, what is not charged — each read from
-// talyvor-lens:
+// ⚠ EVERY FIGURE IS SERVED. The peg, the plans, the gates and the fees come from GET /api/pricing (see
+// pricingApi.ts). What is written here is only the RULES the figures obey — how a request is charged — each read
+// from talyvor-lens:
 //   request charge   internal/proxy/agent_allocator.go settleReservationBasis:
 //                    ceil(delivered USD / peg × 1e6) µLXC — the model's catalog rate, rounded UP
 //   platform fee     internal/economy/platform_fee.go: the plan's platform_fee_bps, its own row (B56.2)
-//   no top-up fee    internal/billing/billing.go lxcForCents: usdCents × ulxcPerCent, exact
-//   the floor/cap    internal/billing/billing.go minTopUpCents / maxTopUpCents and their reasons
-//   no seats         internal/billing has no seat or per-member charge anywhere
-// "No subscription REQUIRED", not "no subscription": a deployment may also sell a plan (B1.5), but
-// nothing needs one — prepaid credits alone run every request.
 //
-// B28.4 — credit for agents, the plans, and the Marketplace bill, each listed once. Pooling is one line
-// under what a request costs: a saving, not the price.
-//
-// B29.5 — the brand board's look: an eyebrow over every section and a teal rule under its headline
-// (Landing's pieces), every card a raised panel with a 1px line border, every price in IBM Plex Mono
-// with tabular figures, one teal button on each plan card, and Pro outlined in accent. Nothing here
-// says "most popular": no figure measures it, so only the outline marks it.
-//
-// B32.14 — the plans section is the approved price card (PriceCard.tsx): for companies, for individuals,
-// and the fees on any plan, every figure from GET /api/pricing — the same read /plans sells from, so this
-// page cannot quote a price that screen does not charge.
+// B57.61 — the page is Pocket's (design/pocket s-pricing): the headline and Create your workspace, the four company
+// plans with Team highlighted, credit for agents and what a request costs, the chat plans, the Marketplace bill, the
+// fees on any plan and on money features, what the labels mean and the tax line. The served-rate card, the list of
+// top-up amounts and the monthly-billing line are left out: the headline states the rate, and the billing screen
+// sells the top-ups.
 
-/** An illustrative "any amount" top-up, shown beside the presets only when the served range
- *  admits it. It is an AMOUNT, not a price — what it buys is computed from the served peg. */
-const ANY_AMOUNT_EXAMPLE_CENTS = 250_000
+/** The amount the headline converts at the served rate. An AMOUNT, not a price: what it buys is computed. */
+const EXAMPLE_CENTS = 1000
 
-function RateCard({ state }: { state: PricingState }) {
+/** The headline's second line: the served rate and what the example amount buys at it, or nothing unconfirmed. */
+function RateLine({ state }: { state: PricingState }) {
   const peg = state.status === 'ok' ? state.pricing.usd_per_lxc : undefined
+  const lxc = lxcForCents(EXAMPLE_CENTS, peg)
+  if (typeof peg !== 'number' || lxc === null) return null
   return (
-    <div className="overflow-hidden rounded-card border border-rule bg-raised">
-      <div className="px-gutter py-6">
-        <p className="text-eyebrow uppercase text-label">One credit</p>
-        <div className="mt-3" aria-live="polite">
-          {typeof peg === 'number' && peg > 0 ? (
-            <p className="flex flex-wrap items-baseline gap-x-3">
-              <Figure value="1" unit="LXC" />
-              <span className="font-figure text-figure text-label">=</span>
-              <Figure value={formatPeg(peg)} unit="USD" />
-            </p>
-          ) : state.status === 'loading' ? (
-            <p className="text-body text-muted">Reading the rate from this deployment…</p>
-          ) : (
-            <p className="max-w-xl text-body text-muted">
-              This deployment did not confirm its credit rate just now, so no rate is printed here:
-              a price this page cannot back is not shown.
-            </p>
-          )}
-        </div>
-      </div>
-      <p className="border-t border-rule px-gutter py-3 text-caption text-label">
-        Served live, not typed into this page. Check it yourself:{' '}
-        <a href={PRICING_PATH} className={`font-mono ${inlineLink}`}>
-          GET {PRICING_PATH}
-        </a>
-      </p>
-    </div>
+    <>
+      {' '}
+      <span className="font-figure">1 LXC</span> is <span className="font-figure">{formatPeg(peg)}</span>, so{' '}
+      <span className="font-figure">{formatCents(EXAMPLE_CENTS)}</span> buys <span className="font-figure">{formatLXC(lxc)}</span>.
+    </>
   )
 }
 
-/** B51.3 — while a card cannot be charged, the amounts and what they buy, and no line about topping up by card. */
-function TopUps({ pricing }: { pricing: PricingData }) {
-  const cards = pricing.card_payments === 'live'
-  const { min_usd_cents: min, max_usd_cents: max, usd_per_lxc: peg } = pricing
-  const amounts = [...pricing.preset_usd_cents]
-  if (ANY_AMOUNT_EXAMPLE_CENTS >= min && ANY_AMOUNT_EXAMPLE_CENTS <= max && !amounts.includes(ANY_AMOUNT_EXAMPLE_CENTS)) {
-    amounts.push(ANY_AMOUNT_EXAMPLE_CENTS)
-  }
-  const rows = amounts.map((cents) => ({ cents, lxc: lxcForCents(cents, peg) }))
+/** A section heading in Pocket's display face (pocket.css .ssec h2), with any chip beside it. */
+function SectionHeading({ id, children, chip }: { id: string; children: React.ReactNode; chip?: React.ReactNode }) {
   return (
-    <div>
-      {cards ? (
-        <p className="mb-6 max-w-xl text-lede text-ink">
-          Top up any amount from <span className="font-figure">{formatCents(min)}</span> to{' '}
-          <span className="font-figure">{formatCents(max)}</span>.
-        </p>
-      ) : null}
-      <div className="grid gap-px overflow-hidden rounded-card border border-rule bg-rule wide:grid-cols-4">
-        {rows.map(({ cents, lxc }) => (
-          <div key={cents} className="bg-raised px-5 py-4">
-            <p className="font-figure text-figure text-ink">{formatCents(cents)}</p>
-            <p className="mt-1 font-figure text-caption text-muted">
-              {lxc === null ? 'credits at the served rate' : `buys ${formatLXC(lxc)}`}
-            </p>
-          </div>
-        ))}
-      </div>
-      {cards ? (
-        <div className="mt-6 grid gap-x-12 gap-y-4 wide:grid-cols-2">
-          <p className="text-body text-muted">
-            <span className="text-ink">
-              Why <span className="font-figure">{formatCents(min)}</span> at the bottom.
-            </span> Card payments carry
-            a fixed fee per charge; below this it stops being a small part of what you paid.
-          </p>
-          <p className="text-body text-muted">
-            <span className="text-ink">
-              Why <span className="font-figure">{formatCents(max)}</span> at the top.
-            </span> It is the most one
-            stolen or disputed card can cost, since credit spent before a chargeback cannot be taken
-            back. A team spending more tops up more than once.
-          </p>
-        </div>
-      ) : null}
-    </div>
+    <h2 id={id} className="flex flex-wrap items-center gap-3 font-display text-display-2 font-extrabold text-ink">
+      <span>{children}</span>
+      {chip}
+    </h2>
   )
 }
 
-const NO_TOP_UP_FEE = 'No top-up fee.'
+/** One band of the page: pocket.css .ssec. */
+function Band({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <section aria-labelledby={label} className={`mx-auto w-full max-w-6xl px-gutter pt-14 wide:px-12 ${className}`}>
+      {children}
+    </section>
+  )
+}
 
-const NOT_CHARGED: Array<{ title: string; body: string }> = [
-  {
-    title: 'No subscription required.',
-    body: 'Agents run on prepaid credit alone. A plan is for people who want usage included each month; nothing requires one.',
-  },
-  {
-    title: 'No per-seat price.',
-    body: 'A plan is priced per workspace, not per person. Everyone in it draws on the same balance, up to the seats the plan includes.',
-  },
-  {
-    title: 'No minimum on prepaid credit.',
-    body: 'A balance you are not using costs nothing, and nothing is due on it until you top up again. A paid plan, if you choose one, is billed every month.',
-  },
-  {
-    title: NO_TOP_UP_FEE,
-    body: 'The whole amount becomes credit. The card fee is not taken out of what you bought.',
-  },
-]
+/** pocket.css .split2: words on the left, a card on the right, seven parts to five, from 840px. */
+function Split({ left, right }: { left: React.ReactNode; right: React.ReactNode }) {
+  return (
+    <div className="grid items-center gap-8 wide:grid-cols-12">
+      <div className="wide:col-span-7">{left}</div>
+      <div className="wide:col-span-5">{right}</div>
+    </div>
+  )
+}
 
 export function Pricing() {
   useDocumentTitle('Pricing')
@@ -156,216 +77,144 @@ export function Pricing() {
   const cards = cardPayments(state) === 'live'
   // B56.10: Lens's Live or Sandbox for each money section; none until /api/pricing answers with labels.
   const labels = state.status === 'ok' ? state.pricing.labels : undefined
+  const pricing = state.status === 'ok' ? state.pricing : undefined
   return (
-    <div className="flex min-h-full flex-col bg-canvas text-ink">
-      <PublicHeader current="/pricing" />
+    <div data-design="pocket" className="flex min-h-full flex-col bg-page text-ink">
+      <PublicHeader current="/pricing" width="max-w-6xl" />
 
       <main className="flex-1">
-        <section aria-labelledby="pricing-heading" className="border-b border-rule">
-          <div className="mx-auto w-full max-w-5xl px-gutter pb-16 pt-16 wide:pt-20">
-            <Eyebrow index="00">Pricing</Eyebrow>
-            <h1 id="pricing-heading" className="mt-7 max-w-3xl text-display-2 text-ink">
-              Credit for your agents. A plan for your people.
-            </h1>
-            <p className="mt-6 max-w-2xl text-lede text-muted">
-              Each agent spends prepaid credit from its own wallet, at the list price of the model it
-              calls plus your plan’s platform fee. A company’s plan sets how many agents and seats it has; a person who chats can add a
-              monthly plan with usage included. Paid Marketplace listings come on one bill a month.
-            </p>
-            <TealRule className="mt-8" />
-            <div className="mt-10">
-              <RateCard state={state} />
-            </div>
-            <LabelsMeaning className="mt-10" />
+        <section aria-labelledby="pricing-heading" className="mx-auto grid w-full max-w-6xl justify-items-center gap-1 px-gutter pt-14 text-center wide:px-12">
+          <Eyebrow>{POSITIONING_LINE.replace(/\.$/, '')}</Eyebrow>
+          <h1 id="pricing-heading" className="mt-3 max-w-3xl font-display text-display-1 font-extrabold text-ink">
+            Credit for your agents. A plan for your people.
+          </h1>
+          <p className="mt-3 max-w-2xl text-lede text-ink-2">
+            Every plan has wallets, rules, approvals and statements.
+            <RateLine state={state} />
+          </p>
+          <div className="mt-5">
+            <Button asChild variant="primary" size="lg">
+              <a href="/signup">Create your workspace</a>
+            </Button>
           </div>
         </section>
 
-        <section aria-labelledby="topup-heading" className="border-b border-rule">
-          <div className="mx-auto w-full max-w-5xl px-gutter py-16">
-            <div className="flex flex-wrap items-center gap-3">
-              <Eyebrow index="01">Credit for agents</Eyebrow>
-              <StatusLabel capability={CREDIT_FOR_AGENTS} labels={labels} />
-            </div>
-            <h2 id="topup-heading" className="mt-6 max-w-2xl text-display-3 text-ink">
-              Top up the workspace, then fund each agent from it.
-            </h2>
-            <TealRule className="mt-5" />
-            <p className="mt-6 max-w-2xl text-body text-muted">
-              Credit is bought by the workspace and handed to each agent from its balance. An agent
-              spends only what it was given: when its wallet is empty, its next call is refused rather
-              than billed to you, unless your company has a Talyvor credit line, which covers it and bills
-              you once a month.
+        <Band label="plans-heading">
+          <h2 id="plans-heading" className="sr-only">
+            Plans for companies
+          </h2>
+          {pricing ? (
+            <CompanyPlans pricing={pricing} />
+          ) : state.status === 'loading' ? (
+            <p className="text-body text-ink-2">Reading the price card…</p>
+          ) : (
+            <p className="max-w-xl text-body text-ink-2">
+              The price card could not be read from this deployment just now, so no price is printed here.
             </p>
-            <div className="mt-8">
-              {state.status === 'ok' ? (
-                <TopUps pricing={state.pricing} />
-              ) : state.status === 'loading' ? (
-                <p className="text-body text-muted">Reading the top-up range…</p>
-              ) : (
-                <p className="max-w-xl text-body text-muted">
-                  The top-up range could not be read from this deployment just now. Signed-in
-                  workspaces see it on the billing screen.
-                </p>
-              )}
-            </div>
-          </div>
-        </section>
+          )}
+        </Band>
 
-        <section aria-labelledby="request-heading" className="border-b border-rule">
-          <div className="mx-auto w-full max-w-5xl px-gutter py-16">
-            <Eyebrow index="02">What a request costs</Eyebrow>
-            <h2 id="request-heading" className="mt-6 max-w-2xl text-display-3 text-ink">
-              The model’s list price, plus your plan’s platform fee.
-            </h2>
-            <TealRule className="mt-5" />
-            <p className="mt-6 max-w-2xl text-body text-muted">
-              A request is charged the tokens its provider reports, times that model’s catalog rate
-              per million tokens, converted at the rate above, rounded up to the millionth of a
-              credit, never down. Each model’s rate is shown beside it when you pick it in the app.
-            </p>
-            {state.status === 'ok' && state.pricing.fees ? (
-              <p data-testid="platform-fee-line" className="mt-4 max-w-2xl text-body text-muted">
-                Your plan’s platform fee on that price is charged on its own line:{' '}
-                <span className="font-figure text-ink">
-                  {platformFees(state.pricing.fees, state.pricing.plan_gates?.order ?? [])}
-                </span>
-                .
-              </p>
-            ) : null}
-            <ul className="mt-4 max-w-2xl list-disc pl-5 text-body text-muted">
-              <li>
-                One saving: an answer served from the shared pool costs less than list, because nobody
-                paid to generate it a second time.{' '}
-                <a href="/marketing#pooling" className={`text-ink ${inlineLink}`}>
-                  How shared answers work
-                </a>
-                .
-              </li>
-            </ul>
-          </div>
-        </section>
-
-        <section aria-labelledby="plans-heading" className="border-b border-rule">
-          <div className="mx-auto w-full max-w-5xl px-gutter py-16">
-            <Eyebrow index="03">Plans</Eyebrow>
-            <h2 id="plans-heading" className="mt-6 max-w-2xl text-display-3 text-ink">
-              A plan for every company, and for every person who chats.
-            </h2>
-            <TealRule className="mt-5" />
-            {state.status === 'ok' ? (
+        <Band label="credit-heading">
+          <Split
+            left={
               <>
-                <h3 className="mt-10 text-head text-ink">For companies</h3>
-                <p className="mt-2 max-w-2xl text-body text-muted">
-                  One plan per workspace, billed monthly. Every plan reaches every model from every provider.
+                <SectionHeading id="credit-heading" chip={<StatusLabel capability={CREDIT_FOR_AGENTS} labels={labels} />}>
+                  Credit for agents
+                </SectionHeading>
+                <p className="mt-5 text-lede text-ink-2">
+                  Each agent spends LXC from its own wallet. When its wallet is empty, its next call is refused rather than
+                  billed to you, unless your company has a Talyvor credit line, which covers it and bills you once a month.
                 </p>
-                <div className="mt-6">
-                  <CompanyPlans pricing={state.pricing} />
-                </div>
-                <h3 className="mt-12 text-head text-ink">For individuals</h3>
-                <p className="mt-2 max-w-2xl text-body text-muted">
-                  The plans differ only in how much usage is included each month. Past it, chat continues on
-                  prepaid credit. A plan never bills an overage.
-                </p>
-                <div className="mt-6">
-                  <IndividualPlans pricing={state.pricing} />
-                </div>
-                <h3 className="mt-12 text-head text-ink">Fees on any plan</h3>
-                <div className="mt-4">
-                  <FeesOnAnyPlan fees={state.pricing.fees} labels={labels} />
-                </div>
-                {state.pricing.fees ? (
-                  <>
-                    <h3 className="mt-12 text-head text-ink">Money features, as our money partners switch them on</h3>
-                    <div className="mt-4">
-                      <MoneyFeatureFees
-                        fees={state.pricing.fees}
-                        planIds={state.pricing.plan_gates?.order ?? []}
-                        labels={labels}
-                      />
-                    </div>
-                  </>
-                ) : null}
               </>
-            ) : state.status === 'loading' ? (
-              <p className="mt-8 text-body text-muted">Reading the price card…</p>
-            ) : (
-              <p className="mt-8 max-w-xl text-body text-muted">
-                The price card could not be read from this deployment just now, so no price is printed here.
-              </p>
-            )}
-            <p data-testid="tax-line" className="mt-10 max-w-2xl text-body text-ink">
-              {TAX_LINE}
-            </p>
-            <p className="mt-3 text-caption text-label">
-              Every figure is served live, not typed into this page:{' '}
-              <a href={PRICING_PATH} className={`font-mono ${inlineLink}`}>
-                GET {PRICING_PATH}
-              </a>
-            </p>
-          </div>
-        </section>
+            }
+            right={
+              <Card tone="white">
+                <h3 className="font-display text-head font-bold text-ink">What a request costs</h3>
+                <p className="mt-1 text-body text-ink-2">The model’s list price, and your plan’s platform fee on its own line:</p>
+                {pricing?.fees ? (
+                  <div data-testid="platform-fee-line">
+                    <RequestCost fees={pricing.fees} planIds={pricing.plan_gates?.order ?? []} />
+                  </div>
+                ) : null}
+              </Card>
+            }
+          />
+        </Band>
 
-        <section aria-labelledby="marketplace-bill-heading" className="border-b border-rule">
-          <div className="mx-auto w-full max-w-5xl px-gutter py-16">
-            <div className="flex flex-wrap items-center gap-3">
-              <Eyebrow index="04">The Marketplace bill</Eyebrow>
-              <StatusLabel capability={MARKETPLACE} labels={labels} />
-            </div>
-            <h2 id="marketplace-bill-heading" className="mt-6 max-w-2xl text-display-3 text-ink">
-              Paid listings, on one bill a month.
-            </h2>
-            <TealRule className="mt-5" />
-            <div className="mt-8 grid gap-x-12 gap-y-6 wide:grid-cols-2">
-              <p className="text-body text-muted">
-                Agents, prompts, skills and evaluations other teams publish on the Marketplace. Each
-                use of a paid listing, by you or one of your agents, is charged the price the listing
-                shows and billed {cards ? 'on your card ' : ''}once a month, never taken from your credits.
-              </p>
-              <p className="text-body text-muted">
-                The models a listing calls are charged like any other request, not on this bill. Every
-                line of it is on the Marketplace’s bill screen, month by month.
-              </p>
-            </div>
+        <Band label="chat-plans-heading">
+          <SectionHeading id="chat-plans-heading">Chat plans, for one person</SectionHeading>
+          <div className="mt-6">
+            {pricing ? <IndividualPlans pricing={pricing} /> : null}
           </div>
-        </section>
+        </Band>
 
-        <section aria-labelledby="not-charged-heading" className="border-b border-rule">
-          <div className="mx-auto w-full max-w-5xl px-gutter py-16">
-            <Eyebrow index="05">What you are not charged for</Eyebrow>
-            <h2 id="not-charged-heading" className="mt-6 max-w-2xl text-display-3 text-ink">
-              What prepaid credit does not charge for.
-            </h2>
-            <TealRule className="mt-5" />
-            <div className="mt-8 grid gap-3 wide:grid-cols-2">
-              {NOT_CHARGED.filter((n) => cards || n.title !== NO_TOP_UP_FEE).map((n) => (
-                <div key={n.title} className="rounded-card border border-rule bg-raised p-6">
-                  <p className="text-head text-ink">{n.title}</p>
-                  <p className="mt-2 text-body text-muted">{n.body}</p>
+        <Band label="marketplace-bill-heading">
+          <Split
+            left={
+              <SectionHeading id="marketplace-bill-heading" chip={<StatusLabel capability={MARKETPLACE} labels={labels} />}>
+                Paid listings, on one bill a month.
+              </SectionHeading>
+            }
+            right={
+              <div className="grid gap-4">
+                <p className="text-lede text-ink-2">
+                  Agents, prompts, skills and evaluations other teams publish on the Marketplace. Each use of a paid listing,
+                  by you or one of your agents, is charged the price the listing shows and billed {cards ? 'on your card ' : ''}
+                  once a month, never taken from your credits.
+                </p>
+                <p className="text-lede text-ink-2">The models a listing calls are charged like any other request, not on this bill.</p>
+              </div>
+            }
+          />
+        </Band>
+
+        <Band label="fees-heading">
+          <Split
+            left={
+              <>
+                <SectionHeading id="fees-heading">Fees on any plan</SectionHeading>
+                <p className="mt-5 text-lede text-ink-2">Taken from each sale or payment.</p>
+              </>
+            }
+            right={pricing ? <FeesOnAnyPlan fees={pricing.fees} labels={labels} /> : null}
+          />
+        </Band>
+
+        {pricing?.fees ? (
+          <Band label="money-fees-heading">
+            <Split
+              left={<SectionHeading id="money-fees-heading">Fees on money features</SectionHeading>}
+              right={<MoneyFeatureFees fees={pricing.fees} planIds={pricing.plan_gates?.order ?? []} labels={labels} />}
+            />
+          </Band>
+        ) : null}
+
+        <Band label="labels-heading">
+          <div data-testid="labels-meaning">
+            <p id="labels-heading" className="text-pocket-eyebrow uppercase text-ink-3">
+              What the labels mean
+            </p>
+            <dl className="mt-3 grid gap-4 wide:grid-cols-3">
+              {(['live', 'sandbox', 'building'] as const).map((s) => (
+                <div key={s} className="grid justify-items-start gap-2.5 rounded-card bg-cloud p-5">
+                  <dt>
+                    <StatusLabel legend={s} />
+                  </dt>
+                  <dd className="m-0 text-body text-ink-2">{LABEL_LINES[s]}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
           </div>
-        </section>
+        </Band>
 
-        <section aria-labelledby="pricing-close-heading">
-          <div className="mx-auto w-full max-w-5xl px-gutter py-20">
-            <h2 id="pricing-close-heading" className="max-w-3xl text-display-3 text-ink">
-              Start with the smallest top-up and read the ledger.
-            </h2>
-            <TealRule className="mt-6" />
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Button asChild variant="primary" className="h-10 px-5">
-                <a href="/signup">Create your workspace</a>
-              </Button>
-              <Button asChild className="h-10 px-5">
-                <a href="/marketing">Back to the overview</a>
-              </Button>
-            </div>
-          </div>
+        <section aria-label="Tax" className="mx-auto w-full max-w-6xl px-gutter pb-4 pt-10 wide:px-12">
+          <p data-testid="tax-line" className="text-body text-ink-3">
+            {TAX_LINE}
+          </p>
         </section>
       </main>
 
-      <PublicFooter />
+      <PublicFooter width="max-w-6xl" />
     </div>
   )
 }

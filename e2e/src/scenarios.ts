@@ -1846,16 +1846,16 @@ export function pricingTruth(): Scenario {
 /** B32.14 — the company plans, smallest first, as the price card draws them. */
 const COMPANY_OFFERS = ['free', 'team', 'business', 'enterprise'] as const
 
-/** B29.5 — /pricing in the brand, at 1440 and at 390: every plan card on the raised plane with one teal button
- *  (B51.3: while card_payments is "live"; none otherwise),
- *  Pro and only Pro outlined in accent, every price set in IBM Plex Mono (the font loaded, not just named), an
- *  eyebrow over each section, the H1 unchanged, nothing sideways. B32.14 — the cards are the approved price card:
- *  four company plans (Start free, Choose Team, Choose Business, Talk to us) and three for individuals (Choose …). */
+/** B57.61 — /pricing in Pocket (design/pocket s-pricing), at 1440 and at 390: Team and only Team highlighted (white with
+ *  the ink ring), every other plan card on cloud, each with one outlined button while card_payments is "live" (B51.3;
+ *  none otherwise), every price in Figtree (the font loaded, not just named), each of the reference's sections, the
+ *  H1 unchanged, one ink action (Create your workspace), nothing sideways. The cards are the approved price card: four
+ *  company plans (Start free, Choose Team, Choose Business, Talk to us) and three for one person (Choose …). */
 export function pricingBoard(): Scenario {
   return {
     id: 'pricing-board',
     owner: 'talyvor-suite',
-    title: '/pricing shows raised plan cards, one teal button each, Pro outlined and mono prices, at 1440 and 390',
+    title: '/pricing is Pocket’s: Team highlighted, the rest on cloud, one outlined button each, Figtree prices, every section, at 1440 and 390',
     run: async (ctx) => {
       const page = await ctx.app.tab('/pricing')
       const wrong: string[] = []
@@ -1871,35 +1871,41 @@ export function pricingBoard(): Scenario {
           const got = await page.evaluate(async () => {
             await document.fonts.ready
             // A token's colour as the browser resolves it, so the check follows the theme in force.
-            const resolve = (prop: string, value: string) => {
+            const resolve = (value: string) => {
               const probe = document.createElement('div')
-              probe.style.setProperty(prop, value)
+              probe.style.setProperty('background-color', value)
               document.body.append(probe)
-              const c = getComputedStyle(probe).getPropertyValue(prop)
+              const c = getComputedStyle(probe).backgroundColor
               probe.remove()
               return c
             }
-            const raised = resolve('background-color', 'var(--raised)')
-            const accent = resolve('background-color', 'var(--accent)')
+            const cloud = resolve('var(--cloud)')
+            const white = resolve('var(--page)')
+            const primary = resolve('var(--primary)')
             const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="pricing-plan"], [data-testid^="company-plan-"]')).map((card) => {
               const price = card.querySelector<HTMLElement>('[data-testid="pricing-plan-price"], [data-testid^="price-"]')
-              const links = Array.from(card.querySelectorAll<HTMLAnchorElement>('a'))
               const style = getComputedStyle(card)
               return {
                 name: (card.querySelector('[data-testid="pricing-plan-name"]') ?? card.querySelector('p'))?.textContent?.trim() ?? '',
-                raised: style.backgroundColor === raised,
-                outlined: style.borderTopColor === accent,
-                buttons: links.map((a) => ({ text: a.innerText.trim(), href: a.getAttribute('href') ?? '', teal: getComputedStyle(a).backgroundColor === accent })),
-                mono: price !== null && /IBM Plex Mono/.test(getComputedStyle(price).fontFamily) && document.fonts.check(`28px "IBM Plex Mono"`),
+                plane: style.backgroundColor === cloud ? 'cloud' : style.backgroundColor === white ? 'white' : style.backgroundColor,
+                ringed: style.boxShadow.includes('inset'),
+                buttons: Array.from(card.querySelectorAll<HTMLAnchorElement>('a')).map((a) => ({
+                  text: a.innerText.trim(),
+                  href: a.getAttribute('href') ?? '',
+                  outlined: getComputedStyle(a).boxShadow.includes('inset') && getComputedStyle(a).backgroundColor !== primary,
+                })),
+                figtree: price !== null && /Figtree/.test(getComputedStyle(price).fontFamily) && document.fonts.check('28px "Figtree"'),
               }
             })
-            // Each eyebrow's label as drawn, in spaced caps (Landing.tsx Eyebrow).
-            const labels = Array.from(document.querySelectorAll<HTMLElement>('main .text-eyebrow')).map((e) => e.innerText.trim())
+            const headings = Array.from(document.querySelectorAll('main h1, main h2, main h3, main p')).map((e) => e.textContent?.trim() ?? '')
             return {
               cards,
               h1: document.querySelector('h1')!.textContent!.trim(),
-              eyebrows: ['PRICING', 'CREDIT FOR AGENTS', 'WHAT A REQUEST COSTS', 'PLANS', 'THE MARKETPLACE BILL', 'WHAT YOU ARE NOT CHARGED FOR']
-                .filter((e) => !labels.includes(e)),
+              missing: ['Credit for agents', 'What a request costs', 'Chat plans, for one person', 'Paid listings, on one bill a month.', 'Fees on any plan', 'What the labels mean']
+                .filter((h) => !headings.some((t) => t === h || t.startsWith(h))),
+              primaries: Array.from(document.querySelectorAll<HTMLAnchorElement>('main a, main button'))
+                .filter((a) => getComputedStyle(a).backgroundColor === primary)
+                .map((a) => a.innerText.trim()),
               scroll: document.documentElement.scrollWidth,
               client: document.documentElement.clientWidth,
             }
@@ -1910,40 +1916,42 @@ export function pricingBoard(): Scenario {
           if (names.join() !== PRICE_CARDS.map((c) => c.name).join()) wrong.push(`${at}: the plan cards are [${names.join(', ')}], not [${PRICE_CARDS.map((c) => c.name).join(', ')}]`)
           for (const c of got.cards) {
             const want = PRICE_CARDS.find((p) => p.name === c.name)
-            if (!c.raised) wrong.push(`${at}: ${c.name} is not on the raised plane`)
+            const plane = c.name === 'Team' ? 'white' : 'cloud'
+            if (c.plane !== plane) wrong.push(`${at}: ${c.name} is on ${c.plane}, not ${plane}`)
             const buttons = want === undefined ? '' : planButtonFault(c.name, c.buttons, want, cardPayments)
             if (buttons !== '') wrong.push(`${at}: ${buttons}`)
-            if (!c.mono) wrong.push(`${at}: ${c.name}'s price is not in IBM Plex Mono`)
+            if (!c.figtree) wrong.push(`${at}: ${c.name}'s price is not in Figtree`)
           }
-          const outlined = got.cards.filter((c) => c.outlined).map((c) => c.name)
-          if (outlined.join() !== 'Pro') wrong.push(`${at}: outlined in accent: [${outlined.join(', ')}], not [Pro]`)
+          const ringed = got.cards.filter((c) => c.ringed).map((c) => c.name)
+          if (ringed.join() !== 'Team') wrong.push(`${at}: highlighted: [${ringed.join(', ')}], not [Team]`)
+          if (got.primaries.join() !== 'Create your workspace') wrong.push(`${at}: the ink actions are [${got.primaries.join(', ')}], not [Create your workspace]`)
           if (got.h1 !== 'Credit for your agents. A plan for your people.') wrong.push(`${at}: the H1 reads "${got.h1}"`)
-          if (got.eyebrows.length > 0) wrong.push(`${at}: no eyebrow ${got.eyebrows.join(', ')}`)
+          if (got.missing.length > 0) wrong.push(`${at}: no section ${got.missing.join(', ')}`)
           if (got.scroll > got.client) wrong.push(`${at}: scrolls sideways (${got.scroll} > ${got.client})`)
         }
       } finally {
         await page.close()
       }
       return wrong.length === 0
-        ? { pass: true, detail: 'four company and three individual plan cards, raised, one teal button each while a card can be charged and none while it cannot, Pro outlined, mono prices, every eyebrow, at 1440 and 390' }
+        ? { pass: true, detail: 'four company and three chat plan cards, Team highlighted and the rest on cloud, one outlined button each while a card can be charged and none while it cannot, Figtree prices, every section, one ink action, at 1440 and 390' }
         : { pass: false, detail: `/pricing: ${wrong.join('; ')}` }
     },
   }
 }
 
-/** B51.3 — while card_payments is "live" a plan card carries one teal button to where it is chosen; otherwise none
- *  (the page's one action is then Create your workspace). '' when the card is right. */
+/** B51.3 — a plan card's buttons: one outlined button (B57.61; the page's one ink action is Create your workspace) to
+ *  the plan's place while a card can be charged, and none while it cannot. */
 export function planButtonFault(
   name: string,
-  buttons: { text: string; href: string; teal: boolean }[],
+  buttons: { text: string; href: string; outlined: boolean }[],
   want: { button: string; href: string },
   cardPayments: string | undefined,
 ): string {
   if (cardPayments !== 'live') {
     return buttons.length === 0 ? '' : `${name}'s buttons are ${JSON.stringify(buttons)} while card_payments is "${cardPayments ?? 'not served'}", not none`
   }
-  const ok = buttons.length === 1 && buttons[0].text === want.button && buttons[0].href.startsWith(want.href) && buttons[0].teal
-  return ok ? '' : `${name}'s buttons are ${JSON.stringify(buttons)}, not one teal "${want.button}" to ${want.href}`
+  const ok = buttons.length === 1 && buttons[0].text === want.button && buttons[0].href.startsWith(want.href) && buttons[0].outlined
+  return ok ? '' : `${name}'s buttons are ${JSON.stringify(buttons)}, not one outlined "${want.button}" to ${want.href}`
 }
 
 /** B32.14 — the price card's plans in the order /pricing draws them, each with its one button and where it goes. */
