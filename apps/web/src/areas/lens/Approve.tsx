@@ -26,6 +26,33 @@ const DECIDED: Record<string, string> = {
   expired: 'This request expired: nobody approved it within 24 hours. Nothing waiting was paid.',
 }
 
+/** B55.33 — a decided request in one line; a status Lens adds later reads as closed, never as its code. */
+export const decidedLine = (status: string) => DECIDED[status] ?? 'This request is closed.'
+
+/** B55.33 — each item's payment in words, as on the phone (B55.11); a status Lens adds later is "Not paid yet". */
+export function payWords(it: PaymentRequestItem): string {
+  switch (it.pay_status) {
+    case 'pending':
+      return 'On its way'
+    case 'sent':
+      return 'Sent'
+    case 'completed':
+      return 'Paid'
+    case 'failed':
+      return 'Not paid: it failed'
+    case 'returned':
+      return 'Came back'
+    case 'refused':
+      return it.pay_detail ? `Not paid: ${it.pay_detail}` : 'Not paid'
+    case 'not_approved':
+      return 'Not paid: you left it out'
+    case 'not_paid':
+      return 'Not paid: a marketplace purchase is not paid from here yet'
+    default:
+      return 'Not paid yet'
+  }
+}
+
 /** B55.22 — Decline cancels only what waits: a covered item paid when it was prepared (B55.21) stays paid, and is said. */
 export function declined(r: PaymentRequest): string {
   const n = r.items.filter((it) => it.decision === 'auto' && it.payment_id).length
@@ -173,7 +200,7 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
             ) : null}
           </p>
         ) : (
-          <Note ok={r.status === 'approved'}>{r.status === 'cancelled' ? declined(r) : (DECIDED[r.status] ?? r.status)}</Note>
+          <Note ok={r.status === 'approved'}>{r.status === 'cancelled' ? declined(r) : decidedLine(r.status)}</Note>
         )}
         {unread ? <p className="text-caption text-muted">Whether each payee is new or verified could not be read just now.</p> : null}
         <ul className="flex flex-col divide-y divide-rule">
@@ -205,11 +232,14 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
                         <Pill status={verified ? 'settled' : 'held'}>{verified ? 'Verified' : 'Not verified'}</Pill>
                       </>
                     ) : null}
-                    {(it.flags ?? []).map((f) => (
-                      <Pill key={f.code} status={FLAGS[f.code]?.needsReason ? 'slashed' : 'held'}>
-                        {FLAGS[f.code]?.label ?? f.code}
-                      </Pill>
-                    ))}
+                    {/* B55.33 — a flag Lens adds later draws no pill: its words still show below. */}
+                    {(it.flags ?? []).map((f) =>
+                      FLAGS[f.code] ? (
+                        <Pill key={f.code} status={FLAGS[f.code].needsReason ? 'slashed' : 'held'}>
+                          {FLAGS[f.code].label}
+                        </Pill>
+                      ) : null,
+                    )}
                     {it.reference ? <span className="break-all">Reference: {it.reference}</span> : null}
                   </div>
                   {(it.flags ?? []).map((f) => (
@@ -223,7 +253,6 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
                       : it.decision === 'blocked'
                         ? `Blocked: ${it.reason}.`
                         : `Asks for approval: ${it.reason}.`}
-                    {it.rule ? <span className="font-figure"> ({it.rule})</span> : null}
                   </p>
                   {it.pay_status === 'held' ? (
                     <p className="text-caption text-ink">
@@ -233,7 +262,7 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
                       </Link>
                     </p>
                   ) : it.pay_status ? (
-                    <p className="text-caption text-ink">Payment: {it.pay_status}</p>
+                    <p className="text-caption text-ink">{payWords(it)}</p>
                   ) : null}
                 </div>
               </li>
