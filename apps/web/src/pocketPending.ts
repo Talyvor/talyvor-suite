@@ -24,8 +24,6 @@ export const POCKET_PENDING: readonly string[] = [
   '/documentation/claude',
   '/privacy',
   '/terms',
-  '/signup',
-  '/signin',
   '/board/:token',
   '/share/:token',
   '/pay/:token',

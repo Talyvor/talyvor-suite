@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Button, Card } from '@talyvor/ui'
+import { Button } from '@talyvor/ui'
 import { api } from '../lib/api'
 import { useAuthMeReader } from '../lib/authMe'
 import { useDocumentTitle } from '../documentTitle'
-import { SignInCard } from '../areas/auth/Entry'
+import { AuthCard, SignInCard } from '../areas/auth/Entry'
 
 // The auth gate: one probe (/auth/me) decides whether the app or the sign-in
 // card renders. ONLY an oidc-mode BFF reporting "no session" gates — disabled
@@ -98,10 +98,11 @@ function SignedOut() {
     // address-shaped sweep in this repo is structurally blind to it, which is how it stayed that
     // way while twelve addresses were swept for headings twice. Zero-pixel: no rule in the built
     // stylesheet names a sectioning element. LandmarkCoverage.test.tsx asserts it as a state.
-    <main className="flex min-h-screen items-center justify-center bg-canvas px-gutter">
-      <Card className="w-full max-w-sm">
+    // B57.49 — Pocket's auth card on the cloud page, held to Pocket's rules at whichever address it stands in for.
+    <main data-design="pocket" className="flex min-h-screen items-center justify-center bg-cloud px-gutter">
+      <AuthCard>
         <SignInCard returnTo={returnTo} />
-      </Card>
+      </AuthCard>
     </main>
   )
 }

@@ -1,18 +1,22 @@
 import { useId, useState } from 'react'
 import { Button, Input, inlineLink } from '@talyvor/ui'
+import { Button as PocketButton, Input as PocketInput, pocketFocusRing } from '@talyvor/ui/pocket'
 import { CopyButton } from '../areas/chat/CopyButton'
 
 // B44.1 — talyvor.com's waitlist: one email field and one button, on /marketing and on /signup while
 // sign-up is closed. A plain fetch, no providers: Landing renders bare (see Landing.tsx).
 // B45.21 — a joiner gets their own link (/marketing?ref=<code>); joining through someone's link counts once for them.
+// B57.49 — `pocket` draws it in Pocket's field and button, for the sign-up card; /marketing keeps today's until its item.
 
 /** Fired on window the moment someone joins. B44.2 counts a Lead on it; nothing personal rides on it. */
 export const WAITLIST_JOINED_EVENT = 'talyvor:waitlist-joined'
 
 type State = 'idle' | 'sending' | 'joined'
 
-export function Waitlist({ className }: { className?: string }) {
+export function Waitlist({ className, pocket = false }: { className?: string; pocket?: boolean }) {
   const id = useId()
+  const Field = pocket ? PocketInput : Input
+  const privacyLink = pocket ? `underline underline-offset-2 ${pocketFocusRing}` : inlineLink
   const [email, setEmail] = useState('')
   const [website, setWebsite] = useState('')
   const [state, setState] = useState<State>('idle')
@@ -82,7 +86,7 @@ export function Waitlist({ className }: { className?: string }) {
         Email address
       </label>
       <div className="flex flex-wrap gap-2">
-        <Input
+        <Field
           id={`${id}-email`}
           type="email"
           name="email"
@@ -93,15 +97,21 @@ export function Waitlist({ className }: { className?: string }) {
           onChange={(e) => setEmail(e.target.value)}
           aria-invalid={error ? true : undefined}
           aria-describedby={`${id}-note`}
-          className="h-10 w-full max-w-xs flex-1"
+          className={pocket ? 'w-full flex-1' : 'h-10 w-full max-w-xs flex-1'}
         />
-        <Button type="submit" variant="primary" className="h-10 px-5" disabled={state === 'sending'}>
-          Join the waitlist
-        </Button>
+        {pocket ? (
+          <PocketButton type="submit" disabled={state === 'sending'}>
+            Join the waitlist
+          </PocketButton>
+        ) : (
+          <Button type="submit" variant="primary" className="h-10 px-5" disabled={state === 'sending'}>
+            Join the waitlist
+          </Button>
+        )}
       </div>
       {/* The honeypot: off-screen and out of the tab order, so only a bot fills it. */}
       <div className="sr-only" aria-hidden="true">
-        <Input
+        <Field
           type="text"
           name="website"
           tabIndex={-1}
@@ -117,7 +127,7 @@ export function Waitlist({ className }: { className?: string }) {
       )}
       <p id={`${id}-note`} className="mt-2 text-caption text-faint">
         We’ll email you when your place opens. No newsletter.{' '}
-        <a href="/privacy" className={inlineLink}>
+        <a href="/privacy" className={privacyLink}>
           Privacy
         </a>
       </p>

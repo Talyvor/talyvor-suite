@@ -4,10 +4,11 @@
  *
  *   pnpm --filter @talyvor/web pocket:shots <item> <checks.json>
  *
- * checks.json is a list of { route, screen, steps?, dark?, frame? }: the app's address, the reference's screen id
+ * checks.json is a list of { route, screen, steps?, dark?, frame?, answers? }: the app's address, the reference's screen id
  * (README.md's tables; leave it out for a page with no reference, such as the story page), the words or aria-labels to press in the app to reach the screen as a person would
  * (w-home+sheet-A is reached by pressing "Review"), whether to shoot it dark, and whether the reference is only the
- * dialog's frame over its page (B57.5: a dialog on the story page, beside the reference's dialog without its page).
+ * dialog's frame over its page (B57.5: a dialog on the story page, beside the reference's dialog without its page),
+ * and what to answer instead of the sample for some addresses, by path (B57.49: /auth/me signed out for /signup).
  *
  * It builds the app once, serves dist with every /api and /auth request answered from scripts/pocket/sample.ts,
  * and for each check shoots the app at 1440x900 and 390x844 with the reference beside it, into
@@ -120,6 +121,12 @@ async function openApp(c, size) {
   const page = await ctx.newPage()
   await page.clock.setFixedTime(new Date(SAMPLE_NOW))
   const t = tracker(page)
+  if (c.answers) {
+    await page.route(
+      (url) => url.pathname in c.answers,
+      (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(c.answers[new URL(route.request().url()).pathname]) }),
+    )
+  }
   await page.goto(BASE + c.route)
   await settle(page, t)
   let missed = ''
