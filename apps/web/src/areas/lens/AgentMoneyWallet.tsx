@@ -8,6 +8,8 @@ import { PAYEES_KEY } from './Pay'
 import { CopyButton } from '../chat/CopyButton'
 import { PreparedPayment } from '../chat/PaymentCards'
 import { type Agent, type AgentMoneyWallet, type OutsidePayee, agentBankApi, formatMinor, minorOf, newMoveKey, refusalText } from './agentBankApi'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { MONEY_WALLET } from '../../labels/capabilities'
 
 // AgentMoneyWallet.tsx — B46.9: the agent's wallet on the money layer (Lens B46.4). What it holds, how to add money to
 // it — a USDC address on Base with its QR code, or an IBAN in the account holder's name, whichever its partner gives —
@@ -148,7 +150,7 @@ export function AgentMoneyWalletCard({ agent }: { agent: Agent }) {
   const wallet = useQuery({ queryKey: walletKey(agent.id), queryFn: () => agentBankApi.wallet(agent.id) })
   return (
     <Card>
-      <CardHeader>Wallet</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability={MONEY_WALLET} />}>Wallet</CardHeader>
       <div className="flex flex-col gap-4 px-gutter py-3" data-testid="agent-money-wallet">
         {wallet.isPending ? (
           <p className="text-body text-muted">Reading the wallet…</p>

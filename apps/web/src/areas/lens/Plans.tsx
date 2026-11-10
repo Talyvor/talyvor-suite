@@ -28,6 +28,8 @@ import { Lxc } from './money'
 import { CARDS_OFF, cardPayments, usePricing, type Pricing } from '../marketing/pricingApi'
 import { CompanyCard, TAX_LINE } from '../marketing/PriceCard'
 import { COMPANY_CONTACT } from '../../company'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { BUY_FROM_TALYVOR } from '../../labels/capabilities'
 
 // /plans (B13.3) — the three plans side by side, and for a subscriber: how much of this period's
 // included usage is used, and what their answers earned back.
@@ -499,6 +501,7 @@ export function Plans({
         heading={current ? `You’re on ${current.name}.` : 'Every model, on every plan.'}
         sectionClassName="pb-10 pt-4 wide:pb-12"
       >
+        <WorkspaceLabel capability={BUY_FROM_TALYVOR} className="mb-3" />
         <p className="max-w-2xl text-body text-muted">
           A company’s plan sets its agents, seats and fees; a plan for individuals includes usage each month. Every plan
           reaches every model from every provider. Your answers earn once your workspace has bought credits.

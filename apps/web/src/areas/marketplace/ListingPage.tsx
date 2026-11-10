@@ -14,6 +14,8 @@ import { Card, Price, readFailure } from './parts'
 import { SimilarHold, republishPrefill } from './Remix'
 import { ReportListing } from './Report'
 import { UseListing } from './UseListing'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { MARKETPLACE } from '../../labels/capabilities'
 
 // ListingPage.tsx — B20.3: one listing — what it is, what a use costs, using it, and its versions.
 // Lens shows a version's artifact to the listing's owner and nobody else, which is how this page
@@ -88,6 +90,7 @@ export function ListingPage() {
         sectionClassName="pb-10 pt-4 wide:pb-12"
         className="flex max-w-2xl flex-col gap-3"
       >
+        <WorkspaceLabel capability={MARKETPLACE} className="self-start" />
         <p className="text-caption text-muted">
           <Link className={`text-ink ${inlineLink}`} to="/marketplace">
             Marketplace

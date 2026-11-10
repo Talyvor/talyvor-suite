@@ -19,6 +19,7 @@ import {
   retryMoveThroughRestart,
 } from './agentBankApi'
 import { Note, readFailure } from './WalletMoney'
+import { WorkspaceLabel } from '../../labels/workspace'
 
 // WalletHoldings.tsx — B22.12: Agent Wallets' escrow (Lens B22.6), pots (B22.7), simulated portfolios and
 // orders (B22.8) and cash-out (B22.9). Each capability carries its class the way B22.10's screens show it:
@@ -211,7 +212,7 @@ export function PayIntoEscrow({ agent }: { agent: Agent }) {
   })
   return (
     <Card>
-      <CardHeader>Pay into escrow</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability="escrow" />}>Pay into escrow</CardHeader>
       <form
         className="flex flex-col gap-2 px-gutter py-3"
         onSubmit={(e) => {
@@ -326,7 +327,7 @@ export function Escrows({ agents }: { agents: Agent[] }) {
   const escrows = list.data?.escrows ?? []
   return (
     <Card>
-      <CardHeader>Escrow</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability="escrow" />}>Escrow</CardHeader>
       {list.isError ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The escrows')}</p>
       ) : list.isSuccess && escrows.length === 0 ? (
@@ -489,7 +490,7 @@ export function Portfolios({ agent }: { agent: Agent }) {
   const instruments = (quotes.data?.quotes ?? []).map((q) => q.instrument)
   return (
     <Card>
-      <CardHeader>Investing, simulated</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability="invest_and_trade" />}>Investing, simulated</CardHeader>
       <div className="flex flex-col gap-2 px-gutter py-3">
         <p className="text-body text-muted">
           Portfolios of simulated US dollars that buy and sell real currencies at real prices
@@ -545,7 +546,7 @@ export function CashOutCard({ agent }: { agent: Agent }) {
   })
   return (
     <Card>
-      <CardHeader>Cash out</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability="cash_out" />}>Cash out</CardHeader>
       <form
         className="flex flex-col gap-2 px-gutter py-3"
         onSubmit={(e) => {
@@ -602,7 +603,7 @@ export function CashOuts({ agents }: { agents: Agent[] }) {
   const cashOuts = list.data?.cash_outs ?? []
   return (
     <Card>
-      <CardHeader>Cash-outs</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability="cash_out" />}>Cash-outs</CardHeader>
       {list.isError ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The cash-outs')}</p>
       ) : list.isSuccess && cashOuts.length === 0 ? (

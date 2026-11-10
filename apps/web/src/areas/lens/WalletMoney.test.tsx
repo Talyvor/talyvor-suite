@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -59,9 +59,9 @@ function mockBff({ received = false } = {}) {
     if (url === '/api/wallets/capabilities')
       return json({
         capabilities: [
-          { capability: 'pay_another_owner', name: 'Sending and requesting money between different owners', class: 'AMBER', real_money: false },
-          { capability: 'loans_between_companies', name: 'Loans between companies', class: 'AMBER', real_money: false },
-          { capability: 'company_credit_line', name: 'Talyvor’s credit line to companies, for Talyvor services', class: 'GREEN', real_money: true },
+          { capability: 'pay_another_owner', name: 'Sending and requesting money between different owners', class: 'AMBER', real_money: false, label: 'sandbox' },
+          { capability: 'loans_between_companies', name: 'Loans between companies', class: 'AMBER', real_money: false, label: 'sandbox' },
+          { capability: 'company_credit_line', name: 'Talyvor’s credit line to companies, for Talyvor services', class: 'GREEN', real_money: true, label: 'sandbox' },
         ],
       })
     if (url === '/api/agents/agt_1/send' && method === 'POST')
@@ -104,11 +104,15 @@ afterEach(() => {
 })
 
 describe('money between owners on Agent Wallets', () => {
-  it('carries no test-money label on any AMBER capability (B46.2)', async () => {
+  it('labels money between owners, loans and the credit line with Lens’s Sandbox, and no test-money line (B46.2, B56.11)', async () => {
     mockBff()
     window.history.pushState({}, '', '/agents')
     render(<App />)
     await screen.findByTestId('agent-address')
+    await waitFor(() => expect(document.querySelector('[data-status-key="company_credit_line"]')?.textContent).toBe('Sandbox'))
+    for (const key of ['pay_another_owner', 'loans_between_companies'])
+      expect([...document.querySelectorAll(`[data-status-key="${key}"]`)].every((el) => el.textContent === 'Sandbox'), key).toBe(true)
+    expect(document.querySelectorAll('[data-status-key="pay_another_owner"]').length).toBeGreaterThanOrEqual(4)
     expect(screen.queryByTestId(/^test-money-only-/)).toBeNull()
     expect(document.body.textContent).not.toMatch(/test money|test credits|licensed partner|lawyer’s sign-off/i)
     // Never the word bank — but for the European Central Bank, whose rate the card panel (B19.24) names.

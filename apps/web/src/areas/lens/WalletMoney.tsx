@@ -14,6 +14,8 @@ import {
   parseLXC,
   refusalText,
 } from './agentBankApi'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { BETWEEN_OWNERS_PAY } from '../../labels/capabilities'
 
 // WalletMoney.tsx — B22.10: Agent Wallets' money between owners. An agent's address (its wallet ID and a
 // handle), sending credits to any agent on Talyvor and asking one for them (Lens B22.3), the requests the
@@ -120,7 +122,7 @@ export function SendAndRequest({ agent }: { agent: Agent }) {
   const sent = move.data?.t ?? null
   return (
     <Card>
-      <CardHeader>Send or request</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability={BETWEEN_OWNERS_PAY} />}>Send or request</CardHeader>
       <form
         className="flex flex-col gap-2 px-gutter py-3"
         onSubmit={(e) => {
@@ -194,7 +196,7 @@ export function RecurringTransfer({ agent }: { agent: Agent }) {
   })
   return (
     <Card>
-      <CardHeader>Recurring transfer</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability={BETWEEN_OWNERS_PAY} />}>Recurring transfer</CardHeader>
       <form
         className="flex flex-col gap-2 px-gutter py-3"
         onSubmit={(e) => {
@@ -272,7 +274,7 @@ export function AgentTransfers({ agent }: { agent: Agent }) {
   const transfers = list.data?.transfers ?? []
   return (
     <Card>
-      <CardHeader>Transfers</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability={BETWEEN_OWNERS_PAY} />}>Transfers</CardHeader>
       {list.isError ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The transfers')}</p>
       ) : list.isSuccess && transfers.length === 0 ? (
@@ -329,7 +331,7 @@ export function MoneyRequests({ agents }: { agents: Agent[] }) {
   const requests = list.data?.requests ?? []
   return (
     <Card>
-      <CardHeader>Requests</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability={BETWEEN_OWNERS_PAY} />}>Requests</CardHeader>
       {list.isError ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The requests')}</p>
       ) : list.isSuccess && requests.length === 0 ? (
@@ -381,7 +383,7 @@ export function CreditLinePanel() {
   const line = useQuery({ queryKey: CREDIT_KEY, queryFn: agentBankApi.creditLine })
   return (
     <Card>
-      <CardHeader>Credit line</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability="company_credit_line" />}>Credit line</CardHeader>
       <div className="flex flex-col gap-2 px-gutter py-3">
         {line.isError ? (
           <p className="text-body text-muted">{readFailure(line.error, 'The credit line')}</p>
@@ -516,7 +518,7 @@ export function Loans({ agents }: { agents: Agent[] }) {
   const loans = list.data?.loans ?? []
   return (
     <Card>
-      <CardHeader>Loans</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability="loans_between_companies" />}>Loans</CardHeader>
       {list.isError ? (
         <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The loans')}</p>
       ) : list.isSuccess && loans.length === 0 ? (
@@ -561,7 +563,7 @@ export function OfferLoan({ agent }: { agent: Agent }) {
   })
   return (
     <Card>
-      <CardHeader>Offer a loan</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability="loans_between_companies" />}>Offer a loan</CardHeader>
       <form
         className="flex flex-col gap-2 px-gutter py-3"
         onSubmit={(e) => {

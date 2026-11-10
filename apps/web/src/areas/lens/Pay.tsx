@@ -31,6 +31,8 @@ import {
   refusalText,
 } from './agentBankApi'
 import { Lxc } from './money'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { PAY_OUT } from '../../labels/capabilities'
 
 // Pay.tsx — B30.96: money out of an account. Saved payees outside Talyvor, each checked against its account by the account
 // partner (Lens B30.16); a payment to one, from the company's or an agent's account (B30.17), with an agent's requests that
@@ -100,6 +102,7 @@ export function PayScreen() {
   return (
     <RegionScreen>
       <Region index="00" label="Pay" heading="Send money from an account" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-2xl flex-col gap-3">
+        <WorkspaceLabel capability={PAY_OUT} className="self-start" />
         <p className="text-body text-muted">
           Save the people and companies you pay, then send money from the company’s or an agent’s account in pounds, euros or dollars:
           one payment, a standing order, a mandate the payee pulls within, or a file of payouts approved once. An agent’s own request

@@ -86,6 +86,8 @@ import {
   selectClass,
   useRunnableModels,
 } from "./parts";
+import { WorkspaceLabel } from "../../labels/workspace";
+import { MARKETPLACE } from "../../labels/capabilities";
 
 // Marketplace.tsx — B20.3: the marketplace. Find what other teams published (agents, prompts, skills,
 // evaluations and pipelines — Lens B20.1; B32.61: on Discover.tsx, by Lens's search, trending and collections),
@@ -894,6 +896,7 @@ function Selling() {
         sectionClassName="pb-10 pt-4 wide:pb-12"
         className="flex max-w-2xl flex-col gap-3"
       >
+        <WorkspaceLabel capability={MARKETPLACE} className="self-start" />
         <p data-testid="selling-split" className="text-body text-muted">
           {take !== undefined && (
             <>

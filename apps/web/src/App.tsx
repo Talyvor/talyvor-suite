@@ -96,6 +96,7 @@ import { type DocRef, pageHref, useDocsNav } from './areas/docs/docsNav'
 import { useAuthMeReader } from './lib/authMe'
 import { useSidebarFold } from './sidebarFold'
 import { designOf } from './pocketPending'
+import { WorkspaceSandbox } from './labels/workspace'
 
 // App.tsx is a SHARED file (see README §Directory ownership): it owns routing
 // and the nav for every area. Area work happens inside src/areas/<area>/ —
@@ -479,6 +480,8 @@ function Sidebar() {
           {workspaceLabel}
         </div>
       ) : null}
+      {/* B56.11 — one Sandbox chip under the name while Lens says no money capability is live for this workspace. */}
+      <WorkspaceSandbox className="-mt-3 ml-3 self-start" />
       {/* B28.7 — WALLET-FIRST. The product is agent wallets, so the wallet's own screens lead and never
           fold away: the home, what is waiting for a person, the agents and their statements, then Chat.
           Everything else is grouped below them, in the order a person reaches for it. */}

@@ -707,17 +707,17 @@ const BY_PATH: Record<string, unknown> = {
     timezone: '',
   },
   // B22.10 — money between owners: the classes, a transfer each way, an incoming request, a company credit line
-  // and a loan being repaid.
+  // and a loan being repaid. B56.11: each money capability Sandbox for this workspace, as Lens answers today.
   '/api/wallets/capabilities': {
     capabilities: [
-      { capability: 'spend_on_talyvor', name: 'Spending on Talyvor', class: 'GREEN', real_money: true, level_needed: 'L0' },
-      { capability: 'pay_another_owner', name: 'Sending and requesting money between different owners', class: 'AMBER', real_money: false, level_needed: 'L2' },
-      { capability: 'company_credit_line', name: 'Talyvor’s credit line to companies, for Talyvor services', class: 'GREEN', real_money: true, level_needed: 'L0' },
-      { capability: 'loans_between_companies', name: 'Loans between companies', class: 'AMBER', real_money: false, level_needed: 'L3' },
+      { capability: 'spend_on_talyvor', name: 'Spending on Talyvor', class: 'GREEN', real_money: true, level_needed: 'L0', label: 'sandbox' },
+      { capability: 'pay_another_owner', name: 'Sending and requesting money between different owners', class: 'AMBER', real_money: false, level_needed: 'L2', label: 'sandbox' },
+      { capability: 'company_credit_line', name: 'Talyvor’s credit line to companies, for Talyvor services', class: 'GREEN', real_money: true, level_needed: 'L0', label: 'sandbox' },
+      { capability: 'loans_between_companies', name: 'Loans between companies', class: 'AMBER', real_money: false, level_needed: 'L3', label: 'sandbox' },
       { capability: 'rules_approvals_statements_pots', name: 'Rules, approvals, statements and pots', class: 'GREEN', real_money: true, level_needed: 'L0' },
-      { capability: 'escrow', name: 'Escrow between agents', class: 'AMBER', real_money: false, level_needed: 'L2' },
-      { capability: 'cash_out', name: 'Cashing credits out as money', class: 'RED', real_money: false, level_needed: 'L2' },
-      { capability: 'invest_and_trade', name: 'Investing and trading real assets', class: 'RED', real_money: false, level_needed: 'L2' },
+      { capability: 'escrow', name: 'Escrow between agents', class: 'AMBER', real_money: false, level_needed: 'L2', label: 'sandbox' },
+      { capability: 'cash_out', name: 'Cashing credits out as money', class: 'RED', real_money: false, level_needed: 'L2', label: 'sandbox' },
+      { capability: 'invest_and_trade', name: 'Investing and trading real assets', class: 'RED', real_money: false, level_needed: 'L2', label: 'sandbox' },
     ],
   },
   // B30.116 — the owner's verification: L2 on the Test provider's checks, so the live level is still L0.

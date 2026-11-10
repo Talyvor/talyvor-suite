@@ -19,6 +19,8 @@ import {
   topupApi,
   type CheckoutFailureKind,
 } from './topupApi'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { BUY_FROM_TALYVOR } from '../../labels/capabilities'
 
 // /billing — buying LXC. Until this screen there was no way for a customer to do
 // it at all: the Lens half (checkout, a signature-verified webhook, exactly-once
@@ -361,6 +363,7 @@ export function TopUp({
         sectionClassName="pb-10 pt-4 wide:pb-12"
         className="max-w-2xl"
       >
+        <WorkspaceLabel capability={BUY_FROM_TALYVOR} className="mb-3" />
         <p className="text-body text-muted">
           LXC is the usage credit every request through Lens is billed against.{' '}
           {billingOff
