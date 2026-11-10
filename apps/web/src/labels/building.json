@@ -1,1 +1,11 @@
-[]
+[
+  { "key": "account_statements", "feature": "Statements for dollar, pound, euro and USDC accounts", "item": "B56.15" },
+  { "key": "slack_teams_approvals", "feature": "Approvals in Slack and Teams", "item": "B56.17" },
+  { "key": "sso", "feature": "Single sign-on", "item": "B56.19" },
+  { "key": "edge", "feature": "Talyvor Edge in your own cluster", "item": "B56.30" },
+  { "key": "merchant_fees", "feature": "The fees for accepting payments", "item": "B56.21" },
+  { "key": "lending_fee", "feature": "The fee on a loan arranged", "item": "B56.22" },
+  { "key": "fx_margin", "feature": "Currency conversion", "item": "B56.23" },
+  { "key": "money_payouts", "feature": "Paying earnings out in money", "item": "B56.24" },
+  { "key": "payments_for_everyone", "feature": "Payments for everyone, not only businesses", "item": "B53.20" }
+]

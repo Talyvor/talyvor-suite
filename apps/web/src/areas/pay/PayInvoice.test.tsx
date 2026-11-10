@@ -7,7 +7,7 @@ import { App, queryClient } from '../../App'
 
 const TOKEN = '0123456789abcdef0123456789abcdef0123456789abcdef'
 
-function mockBff() {
+function mockBff(labels?: Record<string, string>) {
   let status: 'sent' | 'paid' = 'sent'
   let cardCalls = 0
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -16,6 +16,7 @@ function mockBff() {
     const json = (v: unknown, code = 200) => new Response(JSON.stringify(v), { status: code, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: false, user: null })
     if (url === '/api/agents') return json({ error: 'sign in' }, 401)
+    if (url === '/api/pricing' && labels) return json({ min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000], labels })
     if (url === `/api/public/pay/${TOKEN}/card` && init?.method === 'POST') {
       cardCalls += 1
       return json({ url: 'https://checkout.stripe.com/c/pay/cs_test_1' }, 201)
@@ -69,5 +70,25 @@ describe('the pay page', () => {
     expect((await screen.findByTestId('pay-headline')).textContent).toBe('Paid — thank you')
     expect(screen.getByTestId('pay-paid').textContent).toContain('£120.00 by card')
     expect(screen.queryByRole('button', { name: /by card/ })).toBeNull()
+  })
+})
+
+// B56.10 — beside what is due, Lens's label for money paid in from outside Talyvor, as /api/pricing serves it.
+describe('the pay page label', () => {
+  it.each([
+    ['sandbox', 'Sandbox'],
+    ['live', 'Live'],
+  ])('draws %s beside the amount when Lens labels payments in %s', async (served, drawn) => {
+    mockBff({ payments_in: served })
+    window.history.pushState({}, '', `/pay/${TOKEN}`)
+    render(<App />)
+    const headline = await screen.findByTestId('pay-headline')
+    const label = await vi.waitFor(() => {
+      const el = headline.parentElement!.querySelector('[data-status-label]')
+      expect(el).not.toBeNull()
+      return el!
+    })
+    expect(label.getAttribute('data-status-key')).toBe('payments_in')
+    expect(label.textContent).toBe(drawn)
   })
 })

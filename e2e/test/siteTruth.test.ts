@@ -43,6 +43,24 @@ describe('the site-truth oracle (B51.4)', () => {
     ])
   })
 
+  // B56.10: Live only where /api/pricing labels every capability live, and the money pages carry a label once Lens serves them.
+  it('catches a Live chip Lens does not back and a money page with no label', () => {
+    const served = (r: SiteRead) => { r.labels = { spend_on_talyvor: 'live', payments_out: 'sandbox' } }
+    const drawn = (r: SiteRead, path: string, labels: PageRead['labels']) => { at(r, path).labels = labels }
+    expect(planted((r) => {
+      served(r)
+      drawn(r, '/marketing', [{ state: 'sandbox', key: 'spend_on_talyvor payments_out' }])
+      drawn(r, '/pricing', [{ state: 'live', key: 'spend_on_talyvor' }])
+    })).toEqual([])
+    expect(planted((r) => {
+      served(r)
+      drawn(r, '/pricing', [{ state: 'live', key: 'spend_on_talyvor payments_out' }])
+    })).toEqual([
+      '/marketing draws no Live or Sandbox while /api/pricing serves labels',
+      '/pricing draws Live for spend_on_talyvor payments_out while /api/pricing does not label it live',
+    ])
+  })
+
   // B56.4: /pricing and /terms say the served split from the first sale, and no page offers a first-million tier.
   it('catches a split without "from the first sale" and a first-million tier', () => {
     const SPLIT = 'Sellers earn 85% of every paid use, rental and purchase, from the first sale; Talyvor keeps 15%.'

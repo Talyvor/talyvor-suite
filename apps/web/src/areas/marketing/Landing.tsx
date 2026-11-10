@@ -7,6 +7,9 @@ import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
 import { COMPANY_CONTACT } from '../../company'
 import { Waitlist } from '../../components/Waitlist'
 import { HEY_TALY, ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from '../../positioning'
+import { LabelsMeaning, StatusLabel } from '../../labels/StatusLabel'
+import { MARKETPLACE, WALLETS } from '../../labels/capabilities'
+import { usePricing } from './pricingApi'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). It must render with no
 // session, no router context, and no providers: Landing.test.tsx renders <Landing /> bare, so
@@ -96,10 +99,14 @@ export function TealRule({ className = '' }: { className?: string }) {
   return <span className={`block h-0.5 w-8 bg-accent ${className}`} aria-hidden="true" />
 }
 
+/** B56.10 — Nick's words stay; the currency accounts' statements are still in the build queue (B56.15), so the band's
+ *  Measurable and card 04 carry this line and its Building chip under them. */
+const ACCOUNT_STATEMENTS = 'Statements for dollar, pound, euro and USDC accounts'
+
 /** The board's four-column positioning band, after section 01. */
-const BAND: Array<{ eyebrow: string; line: string }> = [
+const BAND: Array<{ eyebrow: string; line: string; building?: boolean }> = [
   { eyebrow: 'Sovereign', line: 'Designed to run on your own infrastructure.' },
-  { eyebrow: 'Measurable', line: 'Every call and payment on a statement.' },
+  { eyebrow: 'Measurable', line: 'Every call and payment on a statement.', building: true },
   { eyebrow: 'Integrated', line: 'Wallets, cards, gateway and marketplace in one.' },
   { eyebrow: 'Compounding', line: 'Savings and earnings build over time.' },
 ]
@@ -111,7 +118,7 @@ const HERO_SIZES = '(min-width: 840px) 50vw, 100vw'
 
 /** What an agent's wallet does, in the order a request meets it. Each line is something the
  *  console already does — /agents is where a customer sets every one of them. */
-const WALLET: Array<{ title: string; body: string }> = [
+const WALLET: Array<{ title: string; body: string; building?: boolean }> = [
   {
     title: 'A budget of its own',
     body: 'Fund each agent from the workspace balance. It spends its own money, and when the money runs out the next call is refused rather than billed to you, unless your company has a Talyvor credit line, which covers it and bills you once a month.',
@@ -127,8 +134,32 @@ const WALLET: Array<{ title: string; body: string }> = [
   {
     title: 'A live statement',
     body: 'Every hold, charge, payment and refund lands on the agent’s own statement as it happens, so you can read what an agent spent the way you read a bank account.',
+    building: true,
   },
 ]
+
+/** B56.10 — the currency accounts' statements line, with its chip from the registry. */
+function AccountStatements() {
+  return (
+    <p className="mt-3 flex flex-wrap items-center gap-2 text-body text-muted">
+      {ACCOUNT_STATEMENTS}
+      <StatusLabel building="account_statements" />
+    </p>
+  )
+}
+
+/** B56.10 — a section's eyebrow with Live or Sandbox beside it, as Lens labels the money it describes. */
+function LabelledEyebrow({ labels, capability, ...eyebrow }: Parameters<typeof Eyebrow>[0] & {
+  labels: Record<string, string> | undefined
+  capability: readonly string[]
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Eyebrow {...eyebrow} />
+      <StatusLabel capability={capability} labels={labels} />
+    </div>
+  )
+}
 
 /** The worked pooled hit, stepped. The visitor advances it themselves — four beats, each one a real
  *  figure from the settled row, so the mechanism arrives as a sequence rather than a paragraph. */
@@ -201,6 +232,9 @@ export function Landing() {
   // bare-fetch hook rather than react-query — this page renders with no providers at all, and a
   // probe that failed to answer leaves the page saying nothing about access rather than guessing.
   const { signup } = useSignupProbe()
+  // B56.10: Lens's Live or Sandbox for the money sections, from the same public read /pricing makes; none until it answers.
+  const pricing = usePricing()
+  const labels = pricing.status === 'ok' ? pricing.pricing.labels : undefined
   // THE FRONT DOOR TAKES THE BRAND LINE — `null`, not a page name. That is what the marketing
   // site does with its own home page, while every inner page is `<page> | TALYVOR`, and this
   // page's own h1 is a sentence, not a name. See documentTitle.test.tsx for the fetched titles.
@@ -291,7 +325,10 @@ export function Landing() {
                 <p className="mt-4 text-body text-muted">{POSITIONING_SENTENCES[1]}</p>
                 {/* B56.1: what works, then what is on its way, never as live (Landing.test.tsx pins both). */}
                 <p className="mt-4 text-body text-muted">{HEY_TALY}</p>
-                <p className="mt-4 text-body text-muted">{ON_ITS_WAY}</p>
+                <p className="mt-4 flex flex-wrap items-center gap-2 text-body text-muted">
+                  {ON_ITS_WAY}
+                  <StatusLabel building="payments_for_everyone" />
+                </p>
                 {/* ⚠ THE PRIMARY ACTION POINTS AT /signup, NOT /auth/login, AND NOT AT A MAILTO.
                     Preserved from the previous version because the reasoning is easy to "simplify"
                     away: an earlier draft sent people to sign-in on the theory that a stranger could
@@ -367,9 +404,9 @@ export function Landing() {
           className="scroll-mt-16 border-b border-rule"
         >
           <div className="mx-auto w-full max-w-6xl px-gutter py-16 wide:py-20">
-            <Eyebrow index="01" icon="prove">
+            <LabelledEyebrow index="01" icon="prove" labels={labels} capability={WALLETS}>
               Wallets
-            </Eyebrow>
+            </LabelledEyebrow>
             {/* THE ONE HEADING THAT NAMES THE PRODUCT. Landing.test.tsx asserts exactly one heading
                 matches /talyvor/i, so nothing else on this page may put the name in a heading. */}
             <h2
@@ -394,6 +431,7 @@ export function Landing() {
                     <span className="text-head text-ink">{w.title}</span>
                   </div>
                   <p className="mt-3 text-body text-muted">{w.body}</p>
+                  {w.building ? <AccountStatements /> : null}
                 </li>
               ))}
             </ol>
@@ -407,6 +445,7 @@ export function Landing() {
               <li key={b.eyebrow}>
                 <div className="text-eyebrow uppercase text-accent">{b.eyebrow}</div>
                 <p className="mt-2 text-body text-muted">{b.line}</p>
+                {b.building ? <AccountStatements /> : null}
               </li>
             ))}
           </ul>
@@ -443,9 +482,9 @@ export function Landing() {
         {/* ── 03 · Marketplace ─────────────────────────────────────────────── */}
         <section aria-labelledby="marketplace-heading" className="border-b border-rule">
           <div className="mx-auto w-full max-w-6xl px-gutter py-16 wide:py-20">
-            <Eyebrow index="03" icon="compound">
+            <LabelledEyebrow index="03" icon="compound" labels={labels} capability={MARKETPLACE}>
               Marketplace
-            </Eyebrow>
+            </LabelledEyebrow>
             <h2
               id="marketplace-heading"
               className="mt-6 max-w-3xl text-display-3 text-ink"
@@ -507,6 +546,7 @@ export function Landing() {
               Give your first agent a wallet.
             </h2>
             <TealRule className="mt-6" />
+            <LabelsMeaning className="mt-8" />
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button asChild variant="primary" className="h-10 px-5">
                 <a href="/signup">Create your workspace</a>

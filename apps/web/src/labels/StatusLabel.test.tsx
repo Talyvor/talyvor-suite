@@ -58,3 +58,21 @@ describe('StatusLabel (B56.9)', () => {
     expect(container.innerHTML).toBe('')
   })
 })
+
+describe('StatusLabel for a section (B56.10)', () => {
+  it('draws Live only when Lens says live for every key, Sandbox for any sandbox, and nothing for one unanswered', () => {
+    const labels = { a: 'live', b: 'live', c: 'sandbox' }
+    const { container } = render(
+      <>
+        <StatusLabel capability={['a', 'b']} labels={labels} />
+        <StatusLabel capability={['a', 'c']} labels={labels} />
+        <StatusLabel capability={['a', 'missing']} labels={labels} />
+      </>,
+    )
+    const drawn = [...container.querySelectorAll('[data-status-label]')].map((el) => [el.getAttribute('data-status-key'), el.textContent])
+    expect(drawn).toEqual([
+      ['a b', 'Live'],
+      ['a c', 'Sandbox'],
+    ])
+  })
+})

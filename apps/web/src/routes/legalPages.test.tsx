@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../App'
 import { longDate, sectionId } from './legalParts'
+import { BUILDING } from '../labels/StatusLabel'
 
 // B28.274 — Privacy and Terms are read whole and dated: each says the day its words last changed,
 // lists every section before the first, and ends with a line saying it has ended.
@@ -38,7 +39,7 @@ describe('the legal pages', () => {
   })
 
   it.each([
-    ['Terms', '2026-11-08', '8 November 2026'], // B56.3: approvals as the rules make them, no investing
+    ['Terms', '2026-11-10', '10 November 2026'], // B56.10: paying earnings out in money is building
     ['Privacy', '2026-11-08', '8 November 2026'], // B56.3: the six wallet records it left out
   ])('%s is dated, lists every section, and says where it ends', async (title, day, long) => {
     const { container } = at(`/${title.toLowerCase()}`)
@@ -94,5 +95,16 @@ describe('the legal pages', () => {
       expect(records).toContain(name)
     }
     expect(section).toHaveTextContent(/the account Talyvor pays you to: the holder.s name and the account.s details/i)
+  })
+})
+
+// B56.10 — Terms says in words, from the Building registry, that paying earnings out in money is still being built.
+describe('Terms and the Building registry', () => {
+  it('says payouts in money are building while building.json has money_payouts', async () => {
+    expect(BUILDING.some((e) => e.key === 'money_payouts')).toBe(true)
+    at('/terms')
+    expect(
+      await screen.findByText(/Paying earnings out in money is building; until then they are taken as Talyvor credits\./),
+    ).toBeTruthy()
   })
 })

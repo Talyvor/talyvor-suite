@@ -37,8 +37,15 @@ export function buildingEntry(key: string): BuildingEntry | undefined {
 }
 
 export type StatusLabelProps =
-  | { /** A money capability's key, as Lens names it. */ capability: string; labels: Record<string, string> | undefined; className?: string }
+  | {
+      /** A money capability's key, as Lens names it; or every key a section covers (B56.10), Live only when each is. */
+      capability: string | readonly string[]
+      labels: Record<string, string> | undefined
+      className?: string
+    }
   | { /** A key in building.json. */ building: string; className?: string }
+  /** B56.10 — "What the labels mean": the state itself, beside its line, saying nothing about any feature. */
+  | { legend: LabelState; className?: string }
 
 // pocket.css .status: Live outlined in success with a solid dot, Sandbox outlined in the control edge with a dashed
 // square, Building on tangerine with a half-filled circle.
@@ -69,9 +76,47 @@ function Mark({ state }: { state: LabelState }) {
 }
 
 function stateOf(props: StatusLabelProps): LabelState | null {
+  if ('legend' in props) return props.legend
   if ('building' in props) return buildingEntry(props.building) ? 'building' : null
-  const label = props.labels?.[props.capability]
-  return label === 'live' || label === 'sandbox' ? label : null
+  // A section that covers several capabilities moves real money only when every one does; one Lens did not answer
+  // leaves the section unlabelled.
+  const keys: readonly string[] = typeof props.capability === 'string' ? [props.capability] : props.capability
+  const states = keys.map((k) => props.labels?.[k])
+  if (!states.length || states.some((l) => l !== 'live' && l !== 'sandbox')) return null
+  return states.every((l) => l === 'live') ? 'live' : 'sandbox'
+}
+
+/** What the chip is about: the registry key, or the capability keys Lens labelled; none for the legend. */
+function keyOf(props: StatusLabelProps): string | undefined {
+  if ('legend' in props) return undefined
+  if ('building' in props) return props.building
+  return typeof props.capability === 'string' ? props.capability : props.capability.join(' ')
+}
+
+/** B56.10 — the "What the labels mean" block on /marketing and /pricing: each label beside its one line. */
+export function LabelsMeaning({ className }: { className?: string }) {
+  return (
+    <div data-testid="labels-meaning" className={className}>
+      <p className="text-eyebrow uppercase text-label">What the labels mean</p>
+      <dl className="mt-3 flex flex-col gap-2">
+        {(['live', 'sandbox', 'building'] as const).map((state) => (
+          <div key={state} className="flex flex-wrap items-center gap-3">
+            <dt>
+              <StatusLabel legend={state} />
+            </dt>
+            <dd className="text-body text-muted">{LABEL_LINES[state]}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  )
+}
+
+/** B56.10 — a line still in the build queue, said in words from the registry: "Paying earnings out in money is
+ *  building; until then they are taken as Talyvor credits." Null once the registry has no entry for key. */
+export function buildingWords(key: string, until: string): string | null {
+  const entry = buildingEntry(key)
+  return entry ? `${entry.feature} is building; ${until}.` : null
 }
 
 export function StatusLabel(props: StatusLabelProps) {
@@ -81,6 +126,7 @@ export function StatusLabel(props: StatusLabelProps) {
   return (
     <span
       data-status-label={state}
+      data-status-key={keyOf(props)}
       {...{ [DESIGN_ATTR]: 'pocket' }}
       title={`${WORDS[state]}: ${line.charAt(0).toLowerCase()}${line.slice(1)}`}
       className={cn(

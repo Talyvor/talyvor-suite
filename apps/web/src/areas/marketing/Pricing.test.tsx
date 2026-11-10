@@ -1,6 +1,8 @@
 import { render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Pricing } from './Pricing'
+import { BUILDING } from '../../labels/StatusLabel'
+import { CREDIT_FOR_AGENTS, MARKETPLACE, MONEY_FEATURES } from '../../labels/capabilities'
 
 // The page renders BARE — no router, no query client — like Landing. What it prints is what
 // GET /api/pricing served, so each test serves a peg this repo never writes down (0.2, not the
@@ -231,5 +233,65 @@ describe('/pricing', () => {
     expect(within(main).getAllByRole('link', { name: /choose|start free|talk to us|create your workspace/i }).map((a) => a.textContent)).toEqual([
       'Create your workspace',
     ])
+  })
+})
+
+// B56.10 — every money section and fee row follows the labels /api/pricing serves, and Building sits only on a switch Lens
+// does not enforce or a fee it does not charge, and only from building.json.
+describe('/pricing labels', () => {
+  const live = (keys: readonly string[]) => Object.fromEntries(keys.map((k) => [k, 'live']))
+  const LABELLED = {
+    ...CHANGED_CARD,
+    labels: { ...live(CREDIT_FOR_AGENTS), ...live(MONEY_FEATURES), buy_marketplace_listings: 'live', rent_and_subscribe_listings: 'sandbox', pay_another_owner: 'sandbox', loans_between_companies: 'sandbox', agent_card: 'sandbox' },
+    plan_gates: { ...CHANGED_CARD.plan_gates, built: { slack_teams_approvals: false, sso: true, edge: false, audit_export: true } },
+    fees: { ...CHANGED_CARD.fees, charged: { fx_margin_bps: false, lending_fee_bps: true, merchant_fee_bps: false, merchant_a2a_fee_bps: false } },
+  }
+  const chips = (el: HTMLElement) =>
+    [...el.querySelectorAll('[data-status-key]')].map((c) => `${c.getAttribute('data-status-key')}=${c.textContent}`)
+  const row = (el: HTMLElement, label: string) => within(el).getByText(label, { selector: 'dt' }).parentElement!
+
+  it('draws each section and row as Lens labels it', async () => {
+    serve(LABELLED)
+    render(<Pricing />)
+    const team = await screen.findByTestId('company-plan-team')
+    expect(chips(screen.getByRole('heading', { name: /top up the workspace/i }).parentElement!)).toEqual([`${CREDIT_FOR_AGENTS.join(' ')}=Live`])
+    expect(chips(screen.getByRole('heading', { name: /paid listings, on one bill/i }).parentElement!)).toEqual([`${MARKETPLACE.join(' ')}=Sandbox`])
+    expect(chips(row(team, 'Money features'))).toEqual([`${MONEY_FEATURES.join(' ')}=Live`])
+    expect(chips(row(screen.getByTestId('company-plan-free'), 'Money features'))).toEqual([])
+    const anyPlan = screen.getByTestId('fees-any-plan')
+    expect(chips(row(anyPlan, 'Services'))).toEqual(['pay_another_owner=Sandbox'])
+    expect(chips(row(anyPlan, 'Selling on the Marketplace'))).toEqual([`${MARKETPLACE.join(' ')}=Sandbox`])
+    const money = screen.getByTestId('fees-money-features')
+    expect(chips(row(money, 'International payments'))).toEqual(['payments_out=Live'])
+    expect(chips(row(money, 'Agent cards'))).toEqual(['agent_card=Sandbox'])
+  })
+
+  it('carries Building from building.json on what Lens does not enforce or charge yet, and nowhere else', async () => {
+    serve(LABELLED)
+    render(<Pricing />)
+    const team = await screen.findByTestId('company-plan-team')
+    const business = screen.getByTestId('company-plan-business')
+    const building = (el: HTMLElement) =>
+      [...el.querySelectorAll('[data-status-key][data-status-label="building"]')].map((c) => c.getAttribute('data-status-key'))
+    expect(building(row(team, 'Slack and Teams approvals'))).toEqual(['slack_teams_approvals'])
+    expect(building(row(screen.getByTestId('company-plan-free'), 'Slack and Teams approvals'))).toEqual([]) // "—"
+    expect(building(row(business, 'Single sign-on'))).toEqual([]) // Lens says built
+    expect(building(row(business, 'Audit export'))).toEqual([])
+    expect(building(row(screen.getByTestId('company-plan-enterprise'), 'Talyvor Edge'))).toEqual(['edge'])
+    expect(building(row(team, 'FX margin over the reference rate'))).toEqual(['fx_margin'])
+    const money = screen.getByTestId('fees-money-features')
+    expect(building(row(money, 'Loans arranged'))).toEqual([]) // Lens says charged
+    expect(building(row(money, 'Accepting payments'))).toEqual(['merchant_fees'])
+    expect(building(row(screen.getByTestId('fees-any-plan'), 'Compute'))).toEqual([])
+    for (const el of document.querySelectorAll('[data-status-key][data-status-label="building"]'))
+      expect(BUILDING.some((e) => e.key === el.getAttribute('data-status-key'))).toBe(true)
+    expect(screen.getByTestId('labels-meaning').textContent).toContain('In our build queue. Not shipped yet.')
+  })
+
+  it('draws no Live or Sandbox while Lens serves no labels', async () => {
+    serve(CHANGED_CARD)
+    const { container } = render(<Pricing />)
+    await screen.findByTestId('company-plan-team')
+    expect(container.querySelectorAll('[data-status-key][data-status-label="live"], [data-status-key][data-status-label="sandbox"]')).toHaveLength(0)
   })
 })

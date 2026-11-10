@@ -9,6 +9,11 @@
 // CLI, the two surfaces a user installs today; the JetBrains plugin is not on a marketplace and is
 // not listed. Lens's routes are in lens-routes.json, extracted from Lens's source and checked by
 // scripts/lens-routes.mjs in CI.
+//
+// B56.10: a claim that moves money carries Lens's Live or Sandbox, and a claim still partly in the build queue says so
+// in words from building.json, with its Building chip.
+
+import { BETWEEN_OWNERS, MARKETPLACE } from '../../labels/capabilities'
 
 export const DOCUMENTATION_PATH = '/documentation'
 
@@ -21,6 +26,9 @@ export const LENS_ORIGIN = 'https://lens.talyvor.com'
 export const CODE_MARKETPLACE_URL = 'https://marketplace.visualstudio.com/items?itemName=talyvor.talyvor-code'
 export const CODE_INSTALL_URL = 'https://raw.githubusercontent.com/Talyvor/talyvor-code/main/install.sh'
 
+/** B56.10 — the money capabilities Lens labels, by the claim that moves that money. */
+const FUND_AGENTS = ['move_between_own_agents'] as const
+
 export interface Claim {
   /** One sentence: what a person can do. */
   text: string
@@ -28,6 +36,11 @@ export interface Claim {
   href: string
   /** The link's own words. */
   label: string
+  /** B56.10 — the money capabilities the claim moves: Live or Sandbox from Lens beside it. */
+  money?: readonly string[]
+  /** B56.10 — what in the claim is still in the build queue: building.json's key, and what holds until it ships. Said in
+   *  words, with its chip, while the registry has the key. */
+  building?: { key: string; until: string }
 }
 
 export interface Capability {
@@ -81,7 +94,12 @@ export const CAPABILITIES: Capability[] = [
     role: 'A wallet for each AI agent',
     lede: 'Each agent a workspace runs gets a wallet of its own on Lens’s double-entry ledger: the workspace funds it, the agent spends only what it holds, and its statement is every posting against it. Lens checks the rules before a provider is called or a payment moves.',
     claims: [
-      { text: 'Create an agent, fund its wallet and take funds back.', href: '/agents', label: 'Agent Wallets' },
+      {
+        text: 'Create an agent, fund its wallet and take funds back.',
+        href: '/agents',
+        label: 'Agent Wallets',
+        money: FUND_AGENTS,
+      },
       {
         text: 'Issue the agent a key that spends only its own balance, under its rules.',
         href: '/agents',
@@ -98,6 +116,7 @@ export const CAPABILITIES: Capability[] = [
         text: 'Agents pay each other, hold money in escrow, and lend between companies.',
         href: '/agents',
         label: 'Agent Wallets',
+        money: BETWEEN_OWNERS,
       },
       { text: 'Every wallet route Lens answers, with what each one does.', href: '#lens-wallets', label: 'Lens API — Agent Wallets' },
     ],
@@ -197,8 +216,14 @@ export const CAPABILITIES: Capability[] = [
         text: 'See what your listings earned, and connect a Stripe account to be paid.',
         href: '/marketplace/selling',
         label: 'Your listings & earnings',
+        building: { key: 'money_payouts', until: 'until then they are taken as Talyvor credits' },
       },
-      { text: 'See what you owe for the listings you used.', href: '/marketplace/bill', label: 'Your bill' },
+      {
+        text: 'See what you owe for the listings you used.',
+        href: '/marketplace/bill',
+        label: 'Your bill',
+        money: MARKETPLACE,
+      },
     ],
   },
   {

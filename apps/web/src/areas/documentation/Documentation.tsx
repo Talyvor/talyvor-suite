@@ -15,6 +15,8 @@ import {
 import lensRoutes from './lens-routes.json'
 import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
 import { POSITIONING_LINE } from '../../positioning'
+import { StatusLabel, buildingWords } from '../../labels/StatusLabel'
+import { usePricing } from '../marketing/pricingApi'
 
 // /documentation (B27.31) — what Talyvor does today, one claim per thing a person can do, each
 // linked to the screen or route that does it. Public, OUTSIDE the AuthGate like /marketing and
@@ -24,10 +26,24 @@ import { POSITIONING_LINE } from '../../positioning'
 // ⚠ NOT /docs. /docs/* is the Docs product — the team wiki — and has been since before this page;
 // mounting the documentation there would take the wiki's index away from every signed-in user.
 
-function ClaimRow({ claim }: { claim: Claim }) {
+type Labels = Record<string, string> | undefined
+
+function ClaimRow({ claim, labels }: { claim: Claim; labels: Labels }) {
+  const building = claim.building ? buildingWords(claim.building.key, claim.building.until) : null
   return (
     <li className="flex flex-col gap-1 border-t border-rule py-4 wide:flex-row wide:items-baseline wide:justify-between wide:gap-8">
-      <p className="max-w-lg text-reading text-ink">{claim.text}</p>
+      <div className="max-w-lg">
+        <p className="flex flex-wrap items-center gap-2 text-reading text-ink">
+          {claim.text}
+          {claim.money ? <StatusLabel capability={claim.money} labels={labels} /> : null}
+        </p>
+        {claim.building && building ? (
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-body text-muted">
+            {building}
+            <StatusLabel building={claim.building.key} />
+          </p>
+        ) : null}
+      </div>
       <a href={claim.href} className={`shrink-0 text-caption text-muted ${inlineLink}`}>
         {claim.label}
       </a>
@@ -35,11 +51,11 @@ function ClaimRow({ claim }: { claim: Claim }) {
   )
 }
 
-function Claims({ claims }: { claims: Claim[] }) {
+function Claims({ claims, labels }: { claims: Claim[]; labels?: Labels }) {
   return (
     <ul className="mt-8 border-b border-rule">
       {claims.map((c) => (
-        <ClaimRow key={`${c.href} ${c.text}`} claim={c} />
+        <ClaimRow key={`${c.href} ${c.text}`} claim={c} labels={labels} />
       ))}
     </ul>
   )
@@ -110,6 +126,9 @@ const CONTENTS: Array<{ id: string; label: string }> = [
 
 export function Documentation() {
   useDocumentTitle('Documentation')
+  // B56.10: Lens's Live or Sandbox beside each claim that moves money, from the public read /pricing makes.
+  const pricing = usePricing()
+  const labels = pricing.status === 'ok' ? pricing.pricing.labels : undefined
   return (
     <div className="flex min-h-full flex-col bg-canvas text-ink">
       <PublicHeader current={DOCUMENTATION_PATH} />
@@ -167,7 +186,7 @@ export function Documentation() {
               </h2>
               <TealRule className="mt-5" />
               <p className="mt-5 max-w-lg text-reading text-muted">{c.lede}</p>
-              <Claims claims={c.claims} />
+              <Claims claims={c.claims} labels={labels} />
             </div>
           </section>
         ))}
