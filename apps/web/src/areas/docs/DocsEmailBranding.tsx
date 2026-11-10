@@ -47,7 +47,7 @@ function refusal(err: unknown): string {
   if (err instanceof ApiError && err.status === 403) return OWNER_ONLY
   const said = (err as { said?: string }).said
   if (err instanceof ApiError && err.status === 400 && said) return said
-  return 'Docs didn’t save it. Nothing changed — you can try again.'
+  return 'Docs didn’t save it. Nothing changed. You can try again.'
 }
 
 function Preview({ b }: { b: Branding }) {

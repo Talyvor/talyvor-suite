@@ -124,7 +124,7 @@ export function FindDuplicates({ issueId }: { issueId: string }) {
               ))}
             </ul>
             <p className="text-caption text-muted">
-              Scored by Track’s AI, not measured — the number is the model’s own claim about how
+              Scored by Track’s AI, not measured: the number is the model’s own claim about how
               alike two issues are.
             </p>
             <WindowNote />
@@ -167,7 +167,7 @@ function WindowNote() {
 function SelfNote() {
   return (
     <p className="text-caption text-muted">
-      Track’s answer also named this issue itself, which it cannot be a duplicate of — that row is
+      Track’s answer also named this issue itself, which it cannot be a duplicate of, so that row is
       not shown.
     </p>
   )
@@ -180,7 +180,7 @@ function DroppedNote({ n }: { n: number }) {
   // literal scanner reads as a Tailwind class list. Prose belongs in the document.
   return (
     <p className="text-caption text-muted">
-      {n} {n === 1 ? 'row' : 'rows'} arrived and could not be drawn — the response carried a
+      {n} {n === 1 ? 'row' : 'rows'} arrived and could not be drawn. The response carried a
       candidate with no id or no title, which is a line with nothing written on it.
     </p>
   )

@@ -88,12 +88,12 @@ export type UpstreamState = 'loading' | 'unconfigured' | 'error' | 'configured'
 /** id → display name via the roster; an unknown/absent id renders as em-dash (the
  *  roster is the single naming authority — no name is ever invented client-side). */
 export function memberName(members: TrackMember[], id: string | undefined): string {
-  if (!id) return '—'
-  return members.find((m) => m.id === id)?.name ?? '—'
+  if (!id) return 'None'
+  return members.find((m) => m.id === id)?.name ?? 'None'
 }
 
 export function teamIdentifier(teams: TrackTeam[], id: string): string {
-  return teams.find((t) => t.id === id)?.identifier ?? '—'
+  return teams.find((t) => t.id === id)?.identifier ?? 'None'
 }
 
 /** A list read's rows, or none. getJSONArray only turns `null` into `[]`; a body that is not an

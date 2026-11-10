@@ -271,7 +271,7 @@ export function ScheduleCard({ command, model, paidBy, onClose }: { command: str
                 </select>
               </div>
               {typed.agent !== '' && named === undefined && book.data !== undefined && agentId === null ? (
-                <p className="text-caption text-muted">No agent is called “{typed.agent}” — pick one.</p>
+                <p className="text-caption text-muted">No agent is called “{typed.agent}”. Pick one.</p>
               ) : null}
               {book.isError ? (
                 <p className="text-caption text-muted">Your agents could not be read just now.</p>
@@ -280,7 +280,7 @@ export function ScheduleCard({ command, model, paidBy, onClose }: { command: str
                   The workspace has no agent yet. Launch one with <span className="font-mono">/agent</span>.
                 </p>
               ) : null}
-              {gone ? <p className="text-caption text-ink">That time has passed — pick a time to come.</p> : null}
+              {gone ? <p className="text-caption text-ink">That time has passed. Pick a time to come.</p> : null}
               <p className="text-caption text-muted" data-testid="chat-schedule-terms">
                 {on === undefined ? (
                   'Pick a model in the message box first: the prompt goes to the conversation’s model.'

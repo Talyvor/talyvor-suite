@@ -121,7 +121,7 @@ const WALLET: Array<{ title: string; body: string }> = [
   },
   {
     title: 'Spending rules',
-    body: 'Caps per request, per day and per month, the models it may call and the hours it may work — checked before the model is called, not reconciled after.',
+    body: 'Caps per request, per day and per month, the models it may call and the hours it may work, checked before the model is called, not reconciled after.',
   },
   {
     title: 'Approvals',
@@ -205,7 +205,7 @@ function WorkedHit() {
         </div>
       </div>
       <p className="border-t border-rule px-gutter py-3 text-caption text-label">
-        Real figures from one settled transaction — list, charge, saving and mint exactly as the
+        Real figures from one settled transaction: list, charge, saving and mint exactly as the
         ledger recorded them.
       </p>
     </div>
@@ -355,13 +355,13 @@ export function Landing() {
                   is not printed in either direction. */}
               {signup === 'closed' ? (
                 <p className="mt-5 max-w-xl text-body text-muted">
-                  We’re letting the first companies in one at a time — start at sign-up and we’ll
+                  We’re letting the first companies in one at a time. Start at sign-up and we’ll
                   come back to you.
                 </p>
               ) : null}
               {signup === 'open' ? (
                 <p className="mt-5 max-w-xl text-body text-muted">
-                  No invitation needed — sign in with an account you already have and you’ll have your
+                  No invitation needed. Sign in with an account you already have and you’ll have your
                   own workspace in a few seconds.
                 </p>
               ) : null}
@@ -403,7 +403,7 @@ export function Landing() {
             <TealRule className="mt-5" />
             <p className="mt-5 max-w-xl text-body text-muted">
               Every model call and every payment an agent makes passes through the gateway first.
-              The wallet is consulted there — so a rule that says no stops the call, instead of
+              The wallet is consulted there, so a rule that says no stops the call, instead of
               showing up as a line on next month’s invoice.
             </p>
             <ol className="mt-10 grid gap-3 wide:grid-cols-2">
@@ -455,7 +455,7 @@ export function Landing() {
               </p>
               <p className="rounded-card border border-rule bg-raised p-6 text-body text-muted">
                 The same app is where you fund an agent, set its rules, approve what it asked to
-                spend and read its statement — the wallet console sits beside the conversation
+                spend and read its statement. The wallet console sits beside the conversation
                 rather than in a separate admin product.
               </p>
             </div>
@@ -510,7 +510,7 @@ export function Landing() {
               answer is served from the pool at{' '}
               <span className="font-figure">{POOLED_DISCOUNT_PERCENT}%</span> off list, and the
               workspace whose answer it was is paid half of the charge. Only answers cross between
-              workspaces — never the prompt that produced them. Step through one real settled
+              workspaces, never the prompt that produced them. Step through one real settled
               transaction:
             </p>
             <div className="mt-8">

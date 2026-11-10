@@ -259,7 +259,7 @@ describe('listing page 2', () => {
     // B41.90 — checkout says what the 14-day holdback protects and until when: before Lens lists invoices, this
     // month's bill is charged on the 1st of the next.
     expect((await screen.findByTestId('buyer-protection')).textContent).toBe(
-      'Buyer protection until 15 Nov 2026. The seller is paid 14 days after your bill is paid — this one on 1 Nov 2026. Until then, if a listing does not do what it says, you get your money back.',
+      'Buyer protection until 15 Nov 2026. The seller is paid 14 days after your bill is paid (this one on 1 Nov 2026). Until then, if a listing does not do what it says, you get your money back.',
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Rent for $20.00' }))
     const held = await screen.findByTestId('listing-held')

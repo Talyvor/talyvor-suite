@@ -65,7 +65,7 @@ function RateCard({ state }: { state: PricingState }) {
             <p className="text-body text-muted">Reading the rate from this deployment…</p>
           ) : (
             <p className="max-w-xl text-body text-muted">
-              This deployment did not confirm its credit rate just now, so no rate is printed here —
+              This deployment did not confirm its credit rate just now, so no rate is printed here:
               a price this page cannot back is not shown.
             </p>
           )}
@@ -146,7 +146,7 @@ const NOT_CHARGED: Array<{ title: string; body: string }> = [
   },
   {
     title: NO_TOP_UP_FEE,
-    body: 'The whole amount becomes credit — the card fee is not taken out of what you bought.',
+    body: 'The whole amount becomes credit. The card fee is not taken out of what you bought.',
   },
 ]
 
@@ -220,7 +220,7 @@ export function Pricing() {
             <TealRule className="mt-5" />
             <p className="mt-6 max-w-2xl text-body text-muted">
               A request is charged the tokens its provider reports, times that model’s catalog rate
-              per million tokens, converted at the rate above — rounded up to the millionth of a
+              per million tokens, converted at the rate above, rounded up to the millionth of a
               credit, never down. Each model’s rate is shown beside it when you pick it in the app.
             </p>
             {state.status === 'ok' && state.pricing.fees ? (
@@ -264,7 +264,7 @@ export function Pricing() {
                 <h3 className="mt-12 text-head text-ink">For individuals</h3>
                 <p className="mt-2 max-w-2xl text-body text-muted">
                   The plans differ only in how much usage is included each month. Past it, chat continues on
-                  prepaid credit — a plan never bills an overage.
+                  prepaid credit. A plan never bills an overage.
                 </p>
                 <div className="mt-6">
                   <IndividualPlans pricing={state.pricing} />
@@ -319,7 +319,7 @@ export function Pricing() {
               <p className="text-body text-muted">
                 Agents, prompts, skills and evaluations other teams publish on the Marketplace. Each
                 use of a paid listing, by you or one of your agents, is charged the price the listing
-                shows and billed {cards ? 'on your card ' : ''}once a month — never taken from your credits.
+                shows and billed {cards ? 'on your card ' : ''}once a month, never taken from your credits.
               </p>
               <p className="text-body text-muted">
                 The models a listing calls are charged like any other request, not on this bill. Every

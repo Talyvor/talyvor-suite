@@ -237,6 +237,7 @@
   "src/ConsoleTitle.test.tsx": 68,
   "src/controlParity.test.ts": 10,
   "src/copyFailure.test.tsx": 12,
+  "src/copyRules.test.ts": 22,
   "src/danglingClaimAudit.test.ts": 5,
   "src/deadClasses.test.ts": 6,
   "src/displayScale.test.ts": 6,

@@ -235,8 +235,8 @@ export function Documentation() {
             <p className="mt-5 max-w-lg text-reading text-muted">
               Each repository is under the Business Source License 1.1, which lets you read the source
               and use it on the terms in its LICENSE file; it is not an open-source licence. On the
-              Change Date, <span className="font-figure text-ink">{CHANGE_DATE}</span> — or four years
-              after a version is first published, if that comes first — that version becomes available
+              Change Date, <span className="font-figure text-ink">{CHANGE_DATE}</span> (or four years
+              after a version is first published, if that comes first), that version becomes available
               under the {CHANGE_LICENCE}. The LICENSE file in each repository is the authority.
             </p>
             <ul className="mt-8 border-b border-rule">

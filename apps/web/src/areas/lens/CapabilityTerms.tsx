@@ -22,7 +22,7 @@ const byWhom = (person: string) => (person.includes('@') && !person.includes(':'
 
 function state(t: WorkspaceTerms): { text: string; pill: PillStatus } {
   if (t.accepted) return { text: 'Accepted', pill: 'settled' }
-  if (t.previously_accepted_version) return { text: `Version ${t.version} is new — accept it again`, pill: 'held' }
+  if (t.previously_accepted_version) return { text: `Version ${t.version} is new: accept it again`, pill: 'held' }
   return { text: 'Not accepted yet', pill: 'idle' }
 }
 

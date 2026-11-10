@@ -61,7 +61,7 @@ export function VerificationScreen() {
       >
         <p className="text-body text-muted">
           Each level lets your agents do more with live money. Talyvor checks one level at a time and keeps the level, who
-          checked it, when, and the checker’s reference as its evidence — never a copy of a document.
+          checked it, when, and the checker’s reference as its evidence, never a copy of a document.
         </p>
         {v.isError ? (
           <p className="text-body text-muted">{readFailure(v.error, 'Your verification')}</p>
@@ -245,7 +245,7 @@ function NextCheck({ v }: { v: WorkspaceVerification }) {
 }
 
 function CheckOutcome({ c }: { c: VerificationCheck }) {
-  const what = `${c.level} — ${MEANING[c.level] ?? c.level}`
+  const what = `${c.level} (${MEANING[c.level] ?? c.level})`
   if (c.status === 'completed') {
     return <Note ok>{c.test ? `Passed by the Test provider: ${what}. It does not count for live money.` : `Passed: ${what}.`}</Note>
   }
@@ -288,7 +288,7 @@ function CheckList() {
               {c.test ? (
                 <p className="flex items-center gap-1.5 text-caption text-ink">
                   <span className="h-1.5 w-1.5 shrink-0 rounded-pill bg-held" aria-hidden="true" />
-                  Test check — not counted for live money
+                  Test check: not counted for live money
                 </p>
               ) : null}
               <p className="text-caption text-muted">

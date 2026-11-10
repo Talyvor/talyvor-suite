@@ -258,11 +258,11 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
                       <p className="text-caption text-ink">
                         A payment of more than <span className="font-figure">1,000</span> to {p.name} waits until{' '}
                         <span className="font-figure">{formatWhen(p.cooling_off_until)}</span>. To pay it sooner, call {p.name} on a number you
-                        already had — not one from an email, an invoice or a message — and check the account details with them.
+                        already had (not one from an email, an invoice or a message) and check the account details with them.
                       </p>
                       <div>
                         <Button type="button" disabled={called.isPending} onClick={() => called.mutate(p.id)}>
-                          {called.isPending && called.variables === p.id ? 'Confirming…' : 'I called them — confirm with a passkey'}
+                          {called.isPending && called.variables === p.id ? 'Confirming…' : 'I called them: confirm with a passkey'}
                         </Button>
                       </div>
                     </div>
@@ -326,7 +326,7 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
           {made !== null ? (
             <Note ok>
               {made.name} saved: {status(made.check, CHECK).text.toLowerCase()}
-              {made.suggested_name ? ` — the account is held by ${made.suggested_name}` : ''}
+              {made.suggested_name ? `. The account is held by ${made.suggested_name}` : ''}
               {made.needs_confirmation ? '. Confirm it with a passkey before the first payment.' : '.'}
             </Note>
           ) : null}
@@ -337,7 +337,7 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
 }
 
 // B41.12: the notice shown before a change is signed — Lens's PayeeDetailsNotice, the one it answers the change with.
-const CHANGE_NOTICE = 'Call them on a number you already know — not one from the message that asked for the change — to check the new details are theirs.'
+const CHANGE_NOTICE = 'Call them on a number you already know (not one from the message that asked for the change) to check the new details are theirs.'
 
 /** B41.12 — changing a saved payee's bank details (Lens B41.112): signed with a passkey over exactly the new details, the
  *  name checked afresh at the new account's bank, and every payment to the payee held for 24 hours after. */
@@ -706,7 +706,7 @@ function SendPayment({
                 </p>
                 <p className="text-caption text-ink">
                   Fraudsters rush people into paying, and they send or change bank details by email or chat. Before you pay, call {payee.name} on a
-                  number you already have — not one from the message — and check the details. Money sent to a fraudster is often not recovered.
+                  number you already have (not one from the message) and check the details. Money sent to a fraudster is often not recovered.
                 </p>
                 <label className="flex items-start gap-2 text-caption text-ink">
                   <input
@@ -730,7 +730,7 @@ function SendPayment({
         {made !== null ? (
           <Note ok>
             <span className="font-figure">{formatMinor(made.amount_minor, made.currency)}</span> to {made.payee_name}: {paymentStatus(made.status).text.toLowerCase()}
-            {made.detail ? ` — ${made.detail}` : ''}.
+            {made.detail ? ` (${made.detail})` : ''}.
           </Note>
         ) : null}
       </form>
@@ -759,7 +759,7 @@ function Waiting({ agentName }: { agentName: (id: string) => string }) {
           <li key={a.id} className="flex flex-col gap-2 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`approval-${a.id}`}>
             <p className="text-body text-ink">
               {agentName(a.agent_id)} asked to pay {a.payee?.name} <Lxc ulxc={a.amount_ulxc} />
-              {a.memo ? ` — ${a.memo}` : ''}
+              {a.memo ? ` · ${a.memo}` : ''}
             </p>
             <p className="text-caption text-muted">
               Asked <span className="font-figure">{formatWhen(a.created_at)}</span>. Approved, the agent’s next identical request goes through, once.
@@ -1176,7 +1176,7 @@ function Payouts() {
           }}
         >
           <p className="text-caption text-muted">
-            A CSV with a header row — <span className="font-figure">payee_id,amount,currency,reference</span> — and up to 1,000 rows, each a saved payee’s id, an amount such as{' '}
+            A CSV with a header row (<span className="font-figure">payee_id,amount,currency,reference</span>) and up to 1,000 rows, each a saved payee’s id, an amount such as{' '}
             <span className="font-figure">12.34</span>, GBP, EUR or USD and a reference. Every row is checked before anything moves; one approval pays the valid ones from the company’s
             account.
           </p>
@@ -1257,7 +1257,7 @@ function Batch({ b }: { b: PayoutBatch }) {
                 <span className="min-w-0">
                   <span className="font-figure">{r.line}</span> · {r.payee_name || r.payee_id}
                   {r.reference ? ` · ${r.reference}` : ''}
-                  {r.detail ? <span className="text-muted"> — {r.detail}</span> : null}
+                  {r.detail ? <span className="text-muted"> · {r.detail}</span> : null}
                 </span>
                 <span className="flex items-center gap-2">
                   <span className="font-figure">{formatMinor(r.amount_minor, r.currency)}</span>
@@ -1336,7 +1336,7 @@ function Bills({ payeeName }: { payeeName: (id: string | undefined) => string })
           }}
         >
           <p className="text-caption text-muted">
-            Add an invoice you received — a PDF, Word, HTML or text file — and Talyvor reads its supplier, amount, due date and invoice number and finds the saved payee. Bank details
+            Add an invoice you received (a PDF, Word, HTML or text file) and Talyvor reads its supplier, amount, due date and invoice number and finds the saved payee. Bank details
             printed on an invoice are shown, never paid on their own: a bill is paid to a saved payee. The same invoice added twice is one bill.
           </p>
           <div className="flex flex-wrap items-center gap-2">

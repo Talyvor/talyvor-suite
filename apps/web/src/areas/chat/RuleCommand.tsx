@@ -194,10 +194,10 @@ export function RuleCard({ command, onClose }: { command: string; onClose: () =>
                 </select>
               </div>
               {typed.agent !== '' && named === undefined && book.data !== undefined ? (
-                <p className="text-caption text-muted">No agent is called “{typed.agent}” — pick one.</p>
+                <p className="text-caption text-muted">No agent is called “{typed.agent}”. Pick one.</p>
               ) : null}
               {chosenModel === null && (choices.models.length > 0 || choices.failed) ? (
-                <p className="text-caption text-muted">No model in the catalog is called “{typed.model}” — pick one.</p>
+                <p className="text-caption text-muted">No model in the catalog is called “{typed.model}”. Pick one.</p>
               ) : null}
               {!byDay ? <p className="text-caption text-muted">Lens caps one model by the day: choose a day, or every model.</p> : null}
               {agent !== undefined && ulxc !== null && ulxc > 0 && chosenModel !== null && byDay ? (
@@ -348,7 +348,7 @@ export function AskAboveCard({ command, onClose }: { command: string; onClose: (
                 />
               </div>
               {typed.agent !== '' && named === undefined && book.data !== undefined ? (
-                <p className="text-caption text-muted">No agent is called “{typed.agent}” — pick one.</p>
+                <p className="text-caption text-muted">No agent is called “{typed.agent}”. Pick one.</p>
               ) : null}
               {agent !== undefined && ulxc !== null && ulxc > 0 ? (
                 <p className="text-body text-ink" data-testid="chat-ask-above-change">

@@ -105,7 +105,7 @@ describe('Chat approval cards (B28.84)', () => {
 
     // Read the moment the card first appears: its amount already carries its currency (B17.139).
     const card = (await screen.findAllByTestId('chat-approval'))[0]
-    expect(within(card).getByTestId('chat-approval-asks')).toHaveTextContent(/^Researcher wants to pay Writer \$0\.20 \(2 LXC\) — October drafts$/)
+    expect(within(card).getByTestId('chat-approval-asks')).toHaveTextContent(/^Researcher wants to pay Writer \$0\.20 \(2 LXC\) · October drafts$/)
     fireEvent.click(await within(card).findByRole('button', { name: 'Approve with Face ID' }))
 
     const said = await within(card).findByRole('status')

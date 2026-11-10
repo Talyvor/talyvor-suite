@@ -17,7 +17,7 @@ export function ReportListing({ listing }: { listing: Listing }) {
       <Note ok>
         {report.data.already_reported
           ? 'You have already reported this listing; Talyvor’s review has it.'
-          : 'Reported. Talyvor reviews it, and takes it down if it breaks the rules — anyone who paid for it inside the holdback is refunded.'}
+          : 'Reported. Talyvor reviews it, and takes it down if it breaks the rules. Anyone who paid for it inside the holdback is refunded.'}
       </Note>
     )
   }

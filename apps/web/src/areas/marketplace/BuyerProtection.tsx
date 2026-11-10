@@ -23,7 +23,7 @@ export function BuyerProtection({ paid, due = false }: { paid: string; due?: boo
       {due ? (
         <>
           {' '}
-          — this one on <span className="font-figure">{day(paid)}</span>
+          (this one on <span className="font-figure">{day(paid)}</span>)
         </>
       ) : null}
       . Until then, if a listing does not do what it says, you get your money back.

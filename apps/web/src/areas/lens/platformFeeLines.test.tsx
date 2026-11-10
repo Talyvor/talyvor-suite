@@ -67,7 +67,7 @@ describe('the platform fee on the spend screens (B32.69)', () => {
     expect(within(fees).getAllByTestId('platform-fee-label').map((l) => l.textContent)).toEqual(['Platform fee 3%'])
     expect(text(fees)).toContain('300,000µlxc') // 0.3 LXC: the µ-split shows a figure under one LXC as µLXC (the unit is upper-cased by CSS)
     expect(fees).toHaveTextContent('on 1 call')
-    expect(screen.getByText('every model and the platform fee on it — the window total that left the balance')).toBeInTheDocument()
+    expect(screen.getByText('every model and the platform fee on it: the window total that left the balance')).toBeInTheDocument()
     // The fee names no model, and is not reported as a charge that failed to.
     expect(screen.queryByTestId('lxc-unsplit')).toBeNull()
   })
@@ -76,7 +76,7 @@ describe('the platform fee on the spend screens (B32.69)', () => {
     renderSpend([SPEND_ROW])
     expect(text(await screen.findByTestId('lxc-debit-total'))).toBe('10.000000lxc')
     expect(screen.queryByTestId('lxc-platform-fees')).toBeNull()
-    expect(screen.getByText('every model — the window total that left the balance')).toBeInTheDocument()
+    expect(screen.getByText('every model: the window total that left the balance')).toBeInTheDocument()
   })
 
   it('carries a fee line’s label into Chat’s statement lines', () => {

@@ -181,7 +181,7 @@ export function Ledger() {
 
         <div className="flex items-center justify-between">
           <span className="font-figure text-body text-muted">
-            Rows {rows.length ? shownOffset + 1 : 0}–{shownOffset + rows.length}
+            Rows {rows.length ? shownOffset + 1 : 0} to {shownOffset + rows.length}
           </span>
           <div className="flex gap-2">
             <Button onClick={() => setOffset((o) => Math.max(0, o - PAGE))} disabled={!hasPrev}>

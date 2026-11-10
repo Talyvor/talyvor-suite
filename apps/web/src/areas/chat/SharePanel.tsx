@@ -143,13 +143,13 @@ export function SharePanel({ conversation, onClose }: { conversation: Conversati
       {create.isError ? (
         <p className="text-caption text-ink" role="alert">
           {create.error instanceof ApiError && create.error.status === 413
-            ? 'This chat is too long to share — nothing was shared.'
-            : 'The link wasn’t made — nothing was shared. Try again.'}
+            ? 'This chat is too long to share. Nothing was shared.'
+            : 'The link wasn’t made. Nothing was shared. Try again.'}
         </p>
       ) : null}
       {revoke.isError ? (
         <p className="text-caption text-ink" role="alert">
-          The link wasn’t turned off — it still works. Try again.
+          The link wasn’t turned off. It still works. Try again.
         </p>
       ) : null}
 

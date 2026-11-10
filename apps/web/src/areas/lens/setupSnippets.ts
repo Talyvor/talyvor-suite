@@ -124,7 +124,7 @@ export function toolsFor(base: string, key: string): Tool[] {
     },
     {
       id: 'openai-sdk',
-      name: 'OpenAI SDK — Python, Node, LangChain, any script',
+      name: 'OpenAI SDK: Python, Node, LangChain, any script',
       kind: 'env',
       env: openaiSDK,
       // ⚠ READ BEFORE PASTING. OPENAI_BASE_URL is global to the SDK client, so it redirects
@@ -137,10 +137,10 @@ export function toolsFor(base: string, key: string): Tool[] {
       hazard:
         'If this app also creates embeddings, do NOT set these as environment variables. ' +
         'OPENAI_BASE_URL applies to every call the SDK makes, and embeddings are not proxied ' +
-        'yet — they would be sent to the chat endpoint and rejected. Use the per-client form ' +
+        'yet. They would be sent to the chat endpoint and rejected. Use the per-client form ' +
         'below instead, which routes only chat through Lens.',
       alternative: {
-        title: 'Route only chat — two clients (use this if you embed)',
+        title: 'Route only chat: two clients (use this if you embed)',
         code:
           `from openai import OpenAI\n` +
           `\n` +
@@ -155,7 +155,7 @@ export function toolsFor(base: string, key: string): Tool[] {
       },
       note:
         'Works for the official openai package in Python and Node, and for anything built on ' +
-        'it. LangChain reads OPENAI_API_BASE first if you already have that set — unset it, ' +
+        'it. LangChain reads OPENAI_API_BASE first if you already have that set. Unset it, ' +
         'or pass base_url= explicitly (and note the embeddings caveat above applies to ' +
         'LangChain retrieval too).',
       copyText: shellExport(openaiSDK),
@@ -171,7 +171,7 @@ export function toolsFor(base: string, key: string): Tool[] {
         'Cursor verifies the key before saving; if that check fails, confirm the URL has no trailing slash.',
       ],
       note:
-        'Cursor reads its endpoint from its own settings, not the environment — exporting ' +
+        'Cursor reads its endpoint from its own settings, not the environment. Exporting ' +
         'OPENAI_BASE_URL in a shell has no effect on it.',
       copyText: openaiBase,
     },
@@ -186,7 +186,7 @@ export function toolsFor(base: string, key: string): Tool[] {
         'Set apiKey to your Talyvor key.',
       ],
       note:
-        'Continue is configured by file, not environment. apiBase is per-model — which helps ' +
+        'Continue is configured by file, not environment. apiBase is per-model, which helps ' +
         'here: set it only on your chat model and an embeddings model in the same config keeps ' +
         'talking to the provider directly.',
       copyText: openaiBase,
@@ -197,7 +197,7 @@ export function toolsFor(base: string, key: string): Tool[] {
 /** What Lens does and does not forward, stated once so the page can render it verbatim.
  *  Derived from the route table + config, not from marketing copy. */
 export const MECHANISM_CAVEATS: string[] = [
-  'Chat completions only, for now. Lens forwards to the provider’s chat endpoint regardless of the path your client appends, so an embeddings call is rejected rather than proxied. It fails loudly — nothing is cached and no vector store is affected — but a retrieval app will break if you route it here.',
-  'POST only. No GET route is mounted, so a client that probes GET /models on startup sees 405 — that alone does not mean your key is wrong.',
+  'Chat completions only, for now. Lens forwards to the provider’s chat endpoint regardless of the path your client appends, so an embeddings call is rejected rather than proxied. It fails loudly (nothing is cached and no vector store is affected), but a retrieval app will break if you route it here.',
+  'POST only. No GET route is mounted, so a client that probes GET /models on startup sees 405. That alone does not mean your key is wrong.',
   'Your existing model names keep working. You are changing where the request goes, not what you ask for.',
 ]

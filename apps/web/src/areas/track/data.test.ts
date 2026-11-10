@@ -23,9 +23,9 @@ describe('ids resolve through the roster, never inventing a name', () => {
 
   it('resolves a known id and dashes the unknown or absent', () => {
     expect(memberName(members, 'm1')).toBe('Ada')
-    expect(memberName(members, 'nope')).toBe('—')
-    expect(memberName(members, undefined)).toBe('—')
+    expect(memberName(members, 'nope')).toBe('None')
+    expect(memberName(members, undefined)).toBe('None')
     expect(teamIdentifier(teams, 'team-a')).toBe('ALP')
-    expect(teamIdentifier(teams, 'nope')).toBe('—')
+    expect(teamIdentifier(teams, 'nope')).toBe('None')
   })
 })

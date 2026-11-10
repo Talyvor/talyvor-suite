@@ -200,7 +200,7 @@ export function TaskCard({ command, model, onClose }: { command: string; model: 
                 <Input aria-label="The task" placeholder="What it should do" value={task} disabled={run.isPending} onChange={(e) => setEdited(e.target.value)} />
               </div>
               {typed.agent !== '' && named === undefined && read !== undefined && agentId === null ? (
-                <p className="text-caption text-muted">No agent is called “{typed.agent}” — pick one.</p>
+                <p className="text-caption text-muted">No agent is called “{typed.agent}”. Pick one.</p>
               ) : null}
               {book.isError ? (
                 <p className="text-caption text-muted">Your agents could not be read just now.</p>

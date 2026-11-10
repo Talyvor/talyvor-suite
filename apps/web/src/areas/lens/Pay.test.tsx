@@ -148,7 +148,7 @@ describe('the Pay screen', () => {
     expect(wait.textContent).toContain('A payment of more than 1,000 to Joinery Ltd waits until')
     expect(wait.textContent).toContain('call Joinery Ltd on a number you already had')
     expect(within(screen.getByTestId('payee-payee_new')).getByText('New payee')).toBeTruthy()
-    fireEvent.click(within(wait).getByRole('button', { name: 'I called them — confirm with a passkey' }))
+    fireEvent.click(within(wait).getByRole('button', { name: 'I called them: confirm with a passkey' }))
     await vi.waitFor(() => expect(screen.queryByTestId('cooling-off-payee_new')).toBeNull())
     expect(get).toHaveBeenCalledTimes(1)
     expect(bff.sent).toEqual([expect.objectContaining({ url: '/api/money/payees/payee_new/called', body: { assertion: expect.objectContaining({ credential_id: 'AQ', signature: 'BA' }) } })])

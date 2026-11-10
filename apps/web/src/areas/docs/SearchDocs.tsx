@@ -63,7 +63,7 @@ import { isSessionExpired } from '../../lib/productState'
 /** The hedge. One string, used by every state that has no proof either way, so the three cannot
  *  drift into three different promises. */
 const cannotSayCopy =
-  'This answer cannot say whether the semantic half ran — Docs merges an unconfigured semantic ' +
+  'This answer cannot say whether the semantic half ran. Docs merges an unconfigured semantic ' +
   'search in as an empty list and the response has no field for it.'
 
 /** Proof, and it is ON SCREEN. Requires a DRAWN row: "these" names the list under it. */
@@ -76,7 +76,7 @@ const shownCopy =
  *  "these", and the previous version's only options were to say it falsely or to hedge over proof
  *  it was holding. It ends on the drop deliberately — the reader's next question is which row. */
 const ranButDroppedCopy =
-  'The semantic half ran here and this workspace’s pages are embedded — the row that proves it is ' +
+  'The semantic half ran here and this workspace’s pages are embedded: the row that proves it is ' +
   'one of the rows that could not be drawn.'
 
 /**
@@ -161,7 +161,7 @@ export function SearchDocs() {
       {run.isError ? (
         <div className="px-gutter pb-3 text-body text-muted">
           {isSessionExpired(run.error) ? null : (
-            <>Couldn’t search — nothing was read, so nothing is shown. Try again.</>
+            <>Couldn’t search. Nothing was read, so nothing is shown. Try again.</>
           )}
         </div>
       ) : view === null ? null : view.kind === 'unrecognised' ? (
@@ -177,7 +177,7 @@ export function SearchDocs() {
               document text, so a long phrase narrows fast — and the semantic half, where it runs,
               only returns rows above a 0.75 cosine floor. Fewer words is genuinely the move. */}
           <p className="text-body text-muted">
-            Nothing in this workspace matched that. Widen the query — fewer words, or different ones.
+            Nothing in this workspace matched that. Widen the query: fewer words, or different ones.
           </p>
           {view.dropped > 0 ? <DroppedNote n={view.dropped} /> : null}
           {/* `false` is not a hedge here: nothing was drawn, so no shown row can carry proof —
@@ -274,7 +274,7 @@ function DroppedNote({ n }: { n: number }) {
   // a string.
   return (
     <p className="text-caption text-muted">
-      {n} {n === 1 ? 'result' : 'results'} arrived and could not be drawn — the response carried a
+      {n} {n === 1 ? 'result' : 'results'} arrived and could not be drawn. The response carried a
       row with no title or no address, which is a line with nothing written on it.
     </p>
   )

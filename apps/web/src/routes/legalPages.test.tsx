@@ -63,11 +63,11 @@ describe('the legal pages', () => {
     // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const end = screen.getByText(new RegExp(`^End of ${title}\\.`))
     expect(end).toHaveTextContent(`End of ${title}. Last updated ${long}. Back to the contents`)
-    expect(screen.getByText(/Draft — needs legal review/)).toBeInTheDocument()
+    expect(screen.getByText(/Draft: needs legal review/)).toBeInTheDocument()
     // B27.38 — each says what Tare training keeps and why, in a paragraph marked as a draft.
     const tare = screen.getByRole('heading', { level: 2, name: /Tare training|Learning from your prose/ }).closest('section')!
     expect(tare).toHaveTextContent(/keep.*prose.*improve how Tare shortens prompts/)
-    expect(within(tare).getByText('Draft — for legal review')).toBeInTheDocument()
+    expect(within(tare).getByText('Draft: for legal review')).toBeInTheDocument()
   })
 
   // B56.3 — they say only what the code does: investing is not offered, so neither page mentions it.

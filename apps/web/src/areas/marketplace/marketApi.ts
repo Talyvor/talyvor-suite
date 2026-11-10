@@ -1112,7 +1112,7 @@ export function variablesNamedIn(err: unknown): string[] {
 
 /** Why a write did not happen, in Lens's words where Lens gave some. */
 export function refusalText(err: unknown): string {
-  if (isSessionExpired(err)) return "Nothing happened — sign in again.";
+  if (isSessionExpired(err)) return "Nothing happened. Sign in again.";
   if (
     err instanceof MarketError &&
     err.sentence &&
@@ -1150,7 +1150,7 @@ export function recentMonths(now: Date): string[] {
 export function periodName(start: string, end: string): string {
   const across =
     new Date(start).getUTCFullYear() !== new Date(end).getUTCFullYear();
-  return `${dayName(start, across)} – ${dayName(end)}`;
+  return `${dayName(start, across)} to ${dayName(end)}`;
 }
 
 /** `2026-10-14T…` → `Oct 14, 2026` (UTC), or `Oct 14` without its year. */

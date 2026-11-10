@@ -87,8 +87,8 @@ function FindingLine({ f }: { f: ScanFinding }) {
   return (
     <>
       <span className="font-figure">{fig(f.value)}</span> {f.unit} on <span className="font-figure">{day(f.at)}</span> · normal{' '}
-      <span className="font-figure">{fig(f.normal_low)}</span>–<span className="font-figure">{fig(f.normal_high)}</span> · likely{' '}
-      <span className="font-figure">{fig(f.outlook_low)}</span>–<span className="font-figure">{fig(f.outlook_high)}</span> by{' '}
+      <span className="font-figure">{fig(f.normal_low)}</span> to <span className="font-figure">{fig(f.normal_high)}</span> · likely{' '}
+      <span className="font-figure">{fig(f.outlook_low)}</span> to <span className="font-figure">{fig(f.outlook_high)}</span> by{' '}
       <span className="font-figure">{day(f.outlook_at)}</span>
     </>
   )
@@ -134,7 +134,7 @@ export function ScanAgentsScreen() {
     <RegionScreen>
       <Region index="00" label="Scan" heading="Scan agents" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-2xl flex-col gap-3">
         <p className="text-body text-muted">
-          A Scan agent watches the data you pick — gas storage, gas flows, oil stocks, crop condition — and tells you when a
+          A Scan agent watches the data you pick (gas storage, gas flows, oil stocks, crop condition) and tells you when a
           reading is unusual by your own measure. Each alert is a brief account of what the data did, with its sources, paid
           from the agent’s wallet within the limits you set. It says what happened, never what to do about it.
         </p>
@@ -291,8 +291,8 @@ export function ScanTrackRecordScreen() {
                   <>
                     Published <span className="font-figure">{day(r.published_at)}</span> · read{' '}
                     <span className="font-figure">{fig(r.value)}</span> {r.unit} against a normal of{' '}
-                    <span className="font-figure">{fig(r.normal_low)}</span>–<span className="font-figure">{fig(r.normal_high)}</span> · range{' '}
-                    <span className="font-figure">{fig(r.outlook_low)}</span>–<span className="font-figure">{fig(r.outlook_high)}</span> for{' '}
+                    <span className="font-figure">{fig(r.normal_low)}</span> to <span className="font-figure">{fig(r.normal_high)}</span> · range{' '}
+                    <span className="font-figure">{fig(r.outlook_low)}</span> to <span className="font-figure">{fig(r.outlook_high)}</span> for{' '}
                     <span className="font-figure">{day(r.outlook_at)}</span>
                     <br />
                     {r.hit === undefined ? (

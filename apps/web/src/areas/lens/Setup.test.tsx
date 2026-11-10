@@ -417,7 +417,7 @@ describe('a minted key is presented as a credential, not as configuration', () =
     renderSetup()
     await mintOnSetup()
 
-    fireEvent.click(screen.getByRole('button', { name: /done — i stored it/i }))
+    fireEvent.click(screen.getByRole('button', { name: /done, i stored it/i }))
 
     await waitFor(() =>
       expect(screen.getByRole('link', { name: /manage keys/i })).toBeInTheDocument(),

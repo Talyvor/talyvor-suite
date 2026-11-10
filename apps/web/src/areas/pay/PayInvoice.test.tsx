@@ -67,7 +67,7 @@ describe('the pay page', () => {
     queryClient.clear()
     window.history.pushState({}, '', `/pay/${TOKEN}?paid=card`)
     render(<App />)
-    expect((await screen.findByTestId('pay-headline')).textContent).toBe('Paid — thank you')
+    expect((await screen.findByTestId('pay-headline')).textContent).toBe('Paid, thank you')
     expect(screen.getByTestId('pay-paid').textContent).toContain('£120.00 by card')
     expect(screen.queryByRole('button', { name: /by card/ })).toBeNull()
   })

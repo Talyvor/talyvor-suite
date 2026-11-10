@@ -82,7 +82,7 @@ export function ContentPicker({
           ))}
         </div>
       </div>
-      <LabelBoxes legend="What it gives — tick every one that applies" labels={labels} onChange={onLabels} />
+      <LabelBoxes legend="What it gives: tick every one that applies" labels={labels} onChange={onLabels} />
       {rating === null ? (
         <p className="text-caption text-muted">Choose who it is for. Every listing carries an age rating.</p>
       ) : !contentReady(rating, labels) ? (

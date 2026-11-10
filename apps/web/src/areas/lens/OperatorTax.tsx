@@ -215,8 +215,8 @@ function Registrations() {
   return (
     <Region index="02" label="Registrations" heading="Talyvor’s registrations" fullWidth sectionClassName="pb-10 pt-4 wide:pb-12">
       <p className="max-w-2xl text-body text-muted">
-        A consumer sale into a jurisdiction is taxed only once Talyvor holds a registration covering it — its own,
-        or its union’s, such as EU OSS non-Union. Record one here as it is granted.
+        A consumer sale into a jurisdiction is taxed only once Talyvor holds a registration covering it (its own,
+        or its union’s, such as EU OSS non-Union). Record one here as it is granted.
       </p>
       <form
         aria-label="Add a registration"
@@ -377,8 +377,8 @@ function Returns() {
               ? 'The journal’s tax accounts agree to the micro-dollar.'
               : (
                 <>
-                  The journal’s tax accounts say <span className="font-figure text-ink">{formatUSD(q.data.journal_tax_usd_micros)}</span>{' '}
-                  — find the difference before filing.
+                  The journal’s tax accounts say <span className="font-figure text-ink">{formatUSD(q.data.journal_tax_usd_micros)}</span>.
+                  Find the difference before filing.
                 </>
               )}
           </p>

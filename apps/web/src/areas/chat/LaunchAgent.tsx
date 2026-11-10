@@ -190,7 +190,7 @@ export function LaunchAgentCard({ command, onClose }: { command: string; onClose
                 </Link>
               </p>
               <div className="flex flex-col gap-1">
-                <p className="text-body text-ink">Its key — store it now, it will not be shown again:</p>
+                <p className="text-body text-ink">Its key (store it now, it will not be shown again):</p>
                 <p className="flex flex-wrap items-center gap-x-2">
                   <span className="break-all font-mono text-ink" data-testid="chat-launch-key">
                     {issued.key}

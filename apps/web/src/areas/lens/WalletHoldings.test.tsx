@@ -187,7 +187,7 @@ describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
     fireEvent.change(await screen.findByLabelText('Instrument for FX test'), { target: { value: 'EUR' } })
     fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '1000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Place order' }))
-    expect((await screen.findByText(/^Filled:/)).textContent).toBe('Filled: Buy 1,000 EUR at market — filled at $1.08 (2026-09-28 rate).')
+    expect((await screen.findByText(/^Filled:/)).textContent).toBe('Filled: Buy 1,000 EUR at market, filled at $1.08 (2026-09-28 rate).')
     expect(sent).toContainEqual({ method: 'POST', url: '/api/agents/agt_1/portfolios/pf_1/orders', body: { instrument: 'EUR', side: 'buy', type: 'market', quantity_micros: 1_000_000_000 } })
     const shown = await within(screen.getByTestId('portfolio')).findByText('1,000 EUR')
     expect(shown).toBeTruthy()

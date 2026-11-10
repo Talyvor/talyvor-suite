@@ -42,7 +42,7 @@ export function SharingFacts() {
       <p className="text-body">
         Shared answers save on repeated questions. When another company has already asked a
         near-identical question, this workspace can be served their answer instead of paying a
-        model for a new one — and an answer produced here may be served to them the same way.
+        model for a new one, and an answer produced here may be served to them the same way.
       </p>
 
       <div className="flex flex-col gap-3 sm:flex-row">

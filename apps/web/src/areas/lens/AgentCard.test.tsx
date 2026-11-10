@@ -99,7 +99,7 @@ describe("an agent's card on Agent Wallets", () => {
     expect(within(rows[0]).getByText('Declined')).toBeTruthy()
     expect(rows[0].textContent).toContain("the agent's limit per request is 20 LXC")
     expect(rows[0].textContent).toContain('£2.00')
-    expect(rows[0].textContent).toContain('—') // nothing charged
+    expect(rows[0].textContent).toContain('None') // nothing charged
     expect(within(rows[1]).getByText('Approved')).toBeTruthy()
     expect(rows[1].textContent).toContain("within the agent's rules and balance")
     expect(rows[1].textContent).toContain('£1 = $1.3972 · ECB, 2026-09-25')

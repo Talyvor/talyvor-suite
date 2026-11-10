@@ -132,7 +132,7 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
       {book.all_paused_at ? (
         <>
           <p role="status" className="text-body text-ink" data-testid="agents-all-paused">
-            Every agent is paused{book.all_paused_reason ? ` — ${book.all_paused_reason}` : ''}. Lens refuses each one’s
+            Every agent is paused{book.all_paused_reason ? `: ${book.all_paused_reason}` : ''}. Lens refuses each one’s
             next request or payment until you start them again.
           </p>
           {onlyThePhone ? (
@@ -178,7 +178,7 @@ function PauseAgent({ agent }: { agent: Agent }) {
         {agent.paused_at ? (
           <>
             <p className="text-body text-ink" data-testid="agent-paused">
-              {agent.name} is paused{agent.paused_reason ? ` — ${agent.paused_reason}` : ''}.
+              {agent.name} is paused{agent.paused_reason ? `: ${agent.paused_reason}` : ''}.
             </p>
             {onlyThePhone ? (
               <OnThePhone>Resume {agent.name} on your phone with Face ID.</OnThePhone>
@@ -319,7 +319,7 @@ function LimitAlerts({ nameOf }: { nameOf: (id: string) => string }) {
       ) : (
         <p className="px-gutter py-3 text-body text-muted">
           No limit reached yet. An alert appears here when spending reaches 50, 80 or 100% of a budget, a card’s cap or an
-          agent’s limit — once each period. Open an agent below to choose its limits.
+          agent’s limit, once each period. Open an agent below to choose its limits.
         </p>
       )}
     </Card>
@@ -470,7 +470,7 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
           <Input
             aria-label={`Scheduled amount in LXC for ${agent.name}`}
             inputMode="decimal"
-            placeholder={toListing ? 'At most — its price' : 'LXC'}
+            placeholder={toListing ? 'At most its price' : 'LXC'}
             className="w-32 font-figure"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -788,7 +788,7 @@ function Ownership({ agent }: { agent: Agent }) {
       {agent.owner_user_id === '' ? (
         <>
           <Pill status="held">No owner</Pill>
-          <span className="text-caption text-muted">Nobody owns {agent.name} yet — claim it under Money.</span>
+          <span className="text-caption text-muted">Nobody owns {agent.name} yet. Claim it under Money.</span>
         </>
       ) : agent.verified ? (
         <>
@@ -1138,7 +1138,7 @@ function ListingsPicker({ agent, chosen, onChange }: { agent: Agent; chosen: str
           catalog.isError
             ? 'The marketplace could not be read just now; the listings already chosen are kept.'
             : chosen.length > 0
-              ? 'Only the listings marked Allowed — Lens refuses any other.'
+              ? 'Only the listings marked Allowed. Lens refuses any other.'
               : 'Any listing. Mark some Allowed to allow only those.'
         }
       />
@@ -1221,7 +1221,7 @@ function PayeesPicker({ agent, agents, payees, onChange }: { agent: Agent; agent
         label="Who it may pay"
         hint={`${
           payees.allowed.length > 0
-            ? 'Only the payees marked Allowed — Lens refuses a payment to any other.'
+            ? 'Only the payees marked Allowed. Lens refuses a payment to any other.'
             : payees.blocked.length > 0
               ? 'Anyone but the payees marked Blocked.'
               : 'Anyone. Mark a payee Blocked to refuse it, or Allowed to allow only those.'
@@ -1915,7 +1915,7 @@ function IssueKey({ agent }: { agent: Agent }) {
   if (issued) {
     return (
       <RevealOnce
-        title={`${agent.name}’s key — shown once`}
+        title={`${agent.name}’s key (shown once)`}
         secret={issued.key}
         copyLabel="Copy key"
         identifier={issued.prefix}
@@ -1959,7 +1959,7 @@ export function lineText(l: StatementLine, nameOf: (id: string) => string): stri
       return 'Covered by the credit line'
     case 'pay': {
       const what = out ? `Paid ${other}` : `Received from ${other}`
-      return l.ref ? `${what} — ${l.ref}` : what
+      return l.ref ? `${what} · ${l.ref}` : what
     }
     case 'transfer':
       return out ? `Transferred to ${other}` : `Transfer from ${other}`
@@ -2331,7 +2331,7 @@ export function OnThePhone({ children }: { children: React.ReactNode }) {
 /** What went wrong on this device, in words: Lens's sentence, a cancelled prompt, or our own message. */
 export function deviceText(err: unknown, fallback: string): string {
   if (err instanceof AgentBankError) return refusalText(err)
-  if (err instanceof DOMException && err.name === 'NotAllowedError') return 'Cancelled — nothing changed.'
+  if (err instanceof DOMException && err.name === 'NotAllowedError') return 'Cancelled. Nothing changed.'
   if (err instanceof DOMException && err.name === 'NotSupportedError') return fallback
   return err instanceof Error && err.message ? err.message : fallback
 }
@@ -2647,7 +2647,7 @@ export function Approvals({
     a.payee ? (
       <span className="whitespace-normal">
         {nameOf(a.agent_id)} wants to pay {a.payee.name || a.payee.id} {lxc(a.amount_ulxc)}
-        {a.memo ? ` — ${a.memo}` : ''}
+        {a.memo ? ` · ${a.memo}` : ''}
       </span>
     ) : (
       <>

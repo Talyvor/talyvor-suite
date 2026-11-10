@@ -100,7 +100,7 @@ export function readBack(r: PaymentRequest, from = ''): string {
   if (it.decision === 'blocked') return `The payment of ${amount} to ${it.payee_name} can’t be made: ${it.reason}.`
   const ref = it.reference.trim()
   const what = ref === '' ? '' : /^(?:invoice|bill)\b/i.test(ref) ? ` for ${ref}` : ` for the ${ref}`
-  return `Pay ${it.payee_name} ${amount}${from === '' ? '' : ` from ${from}`}${what} — look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.`
+  return `Pay ${it.payee_name} ${amount}${from === '' ? '' : ` from ${from}`}${what}. Look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.`
 }
 
 export function PayCard({

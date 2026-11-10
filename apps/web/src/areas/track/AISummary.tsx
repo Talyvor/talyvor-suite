@@ -106,8 +106,8 @@ export function AISummary({ issueId }: { issueId: string }) {
           <p className="text-body text-muted">{notConfiguredCopy('Track')}</p>
         ) : q.isError ? (
           <p className="text-body text-muted">
-            Couldn’t reach Track, so there is no summary. This is a fault, not an empty thread —
-            nothing was charged.
+            Couldn’t reach Track, so there is no summary. This is a fault, not an empty thread.
+            Nothing was charged.
           </p>
         ) : view?.kind === 'ai-unavailable' ? (
           // ⚠ THE `ai_available` CONSUMPTION W1.7 ASKED FOR. The reason is Track's own sentence and

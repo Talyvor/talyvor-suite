@@ -136,9 +136,9 @@ export const ARTIFACT: Record<
 type Visibility = "public" | "unlisted" | "private";
 
 const VISIBILITY: readonly [Visibility, string][] = [
-  ["public", "Public — anyone can find it"],
-  ["unlisted", "Unlisted — only people with the link"],
-  ["private", "Private — only this workspace"],
+  ["public", "Public: anyone can find it"],
+  ["unlisted", "Unlisted: only people with the link"],
+  ["private", "Private: only this workspace"],
 ];
 
 export function artifactOf(
@@ -404,7 +404,7 @@ function Publish() {
           </div>
           {micros === null ? (
             <Note ok={false}>
-              A price is an amount of LXC, like 0.5 — or empty for free.
+              A price is an amount of LXC, like 0.5, or empty for free.
             </Note>
           ) : null}
           <div className="flex flex-wrap items-end gap-3 border-t border-rule pt-4">
@@ -778,7 +778,7 @@ export function PayoutsCard({
         <span className="font-figure text-body text-ink">
           {!p.paid_this_week && p.available_usd_micros >= p.minimum_usd_micros
             ? formatUSD(p.quote.net_usd_micros)
-            : "—"}
+            : "Not yet"}
         </span>
       </Row>
       <Row
@@ -852,7 +852,7 @@ export function PayoutsCard({
                   {h.paid_at
                     ? formatWhen(h.paid_at)
                     : h.last_error
-                      ? "Stripe refused — retrying"
+                      ? "Stripe refused, retrying"
                       : "Sending"}
                 </td>
                 <td className="py-2">
@@ -1305,7 +1305,7 @@ function Bill() {
     >
       <p className="text-body text-muted">
         Every paid listing your workspace or its agents used, billed each
-        month — never taken from your credits.{cards === "off" ? ` ${CARDS_OFF}` : ""} The models a
+        month, never taken from your credits.{cards === "off" ? ` ${CARDS_OFF}` : ""} The models a
         listing calls are on your usual bill, not here.
       </p>
       {invoices.isError ? (

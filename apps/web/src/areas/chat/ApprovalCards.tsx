@@ -142,7 +142,7 @@ export function ApprovalCards() {
                   {a.payee ? (
                     <>
                       {nameOf(a.agent_id)} wants to pay {a.payee.name || a.payee.id} <Lxc ulxc={a.amount_ulxc} />
-                      {a.memo ? ` — ${a.memo}` : ''}
+                      {a.memo ? ` · ${a.memo}` : ''}
                     </>
                   ) : (
                     <>

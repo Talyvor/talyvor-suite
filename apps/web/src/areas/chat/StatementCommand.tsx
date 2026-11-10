@@ -75,7 +75,7 @@ export function StatementCard({ command, onClose }: { command: string; onClose: 
                   ))}
                 </select>
                 {typed !== '' && named === undefined && book.data !== undefined && agentId === null ? (
-                  <p className="text-caption text-muted">No agent is called “{typed}” — this is every agent’s; pick one.</p>
+                  <p className="text-caption text-muted">No agent is called “{typed}”. This is every agent’s; pick one.</p>
                 ) : null}
               </div>
               {/* The form Agent Wallets uses, so the file is the one it downloads. Send stays the view's one primary. */}

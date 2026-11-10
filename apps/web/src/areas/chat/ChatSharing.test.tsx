@@ -63,7 +63,7 @@ describe('Sharing (B28.381)', () => {
     expect(sharing.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(sharing)
     expect(sharing.getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByTestId('chat-sharing-state').textContent).toBe('Off — this chat’s answers are never shared with another workspace')
+    expect(screen.getByTestId('chat-sharing-state').textContent).toBe('Off: this chat’s answers are never shared with another workspace')
     await ask('What is the capital of France?', 1)
     expect(asked).toEqual(['off'])
 

@@ -69,7 +69,7 @@ describe('where alerts go (B28.66)', () => {
     expect(await within(card).findByText('whsec_shown_once')).toBeTruthy()
     expect(posted).toEqual([{ kind: 'webhook', url: 'https://ops.example/alerts' }])
     await waitFor(() => expect(within(card).getByTestId('alert-channel-ach_2').textContent).toContain('Webhook, signed'))
-    fireEvent.click(within(card).getByRole('button', { name: 'Done — I stored it' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Done, I stored it' }))
     expect(within(card).queryByText('whsec_shown_once')).toBeNull()
   })
 })

@@ -161,11 +161,11 @@ describe('the two token economies are separated and correctly labelled', () => {
     renderOverview()
 
     // the two section markers, each side wearing its own metal
-    expect(await screen.findByText('Spent — LXC')).toBeInTheDocument()
-    expect(screen.getByText('Earned — LENS · mint attribution')).toBeInTheDocument()
+    expect(await screen.findByText('Spent · LXC')).toBeInTheDocument()
+    expect(screen.getByText('Earned · LENS · mint attribution')).toBeInTheDocument()
     expect(screen.getByText('Inference debits')).toBeInTheDocument()
     // the word "Spend" never labels the mint table: the card header carries both
-    expect(screen.getByText('Spend & earnings — last 30 days')).toBeInTheDocument()
+    expect(screen.getByText('Spend & earnings: last 30 days')).toBeInTheDocument()
   })
 
   it('splits LXC spend per model — and no longer claims it cannot', async () => {
@@ -174,7 +174,7 @@ describe('the two token economies are separated and correctly labelled', () => {
 
     // x1 was REQUESTED as sonnet and SERVED by haiku, so its charge is attributed to
     // haiku; x2 was served by sonnet. The grant credit (x3) is excluded by sign.
-    await waitFor(() => expect(screen.getByText('Spend by model — LXC')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Spend by model · LXC')).toBeInTheDocument())
     const split = screen.getByTestId('lxc-by-model')
     expect(split).toHaveTextContent('claude-sonnet-5')
     expect(split).toHaveTextContent('claude-haiku-4-5')
@@ -203,7 +203,7 @@ describe('the cache card reads MEASURED numbers, or says why it cannot', () => {
     expect(screen.getByText(/≈ 25%/)).toBeInTheDocument()
     expect(screen.getByText(/8 requests recorded/)).toBeInTheDocument()
     // and it is no longer sample data
-    expect(screen.queryByText(/Sample data — awaiting/)).toBeNull()
+    expect(screen.queryByText(/Sample data: awaiting/)).toBeNull()
     expect(screen.queryByText(/≈ 87%/)).toBeNull()
   })
 
@@ -417,7 +417,7 @@ describe('a brand-new workspace with zero data', () => {
     expect(await screen.findByText(/No activity yet/i)).toBeInTheDocument()
     expect(screen.queryByText(/Couldn’t load/i)).toBeNull()
     // Held is absent entirely at zero — a permanent "Held 0" would be noise.
-    expect(screen.queryByText(/Held — not yet spendable/)).toBeNull()
+    expect(screen.queryByText(/Held: not yet spendable/)).toBeNull()
   })
 
   // ⚠ THE SCREEN-LEVEL EMPTY STATE, WHICH IS THE ONE A NEW SIGNUP ACTUALLY MEETS. Every case
@@ -528,7 +528,7 @@ describe('the screen reads as regions, in the site’s language', () => {
   it('every region is a landmark named by its own uppercase eyebrow', async () => {
     mockBff()
     renderOverview()
-    await screen.findByText('Spend & earnings — last 30 days')
+    await screen.findByText('Spend & earnings: last 30 days')
 
     const regions = screen.getAllByRole('region')
     expect(
@@ -549,7 +549,7 @@ describe('the screen reads as regions, in the site’s language', () => {
   it('each region label wears the eyebrow token AND its casing, with the accent on a tick', async () => {
     mockBff()
     renderOverview()
-    await screen.findByText('Spend & earnings — last 30 days')
+    await screen.findByText('Spend & earnings: last 30 days')
 
     const labels = Array.from(document.querySelectorAll('[data-testid="region-label"]'))
     expect(labels.length, 'no region labels rendered — the assertions below would be vacuous').toBe(6)

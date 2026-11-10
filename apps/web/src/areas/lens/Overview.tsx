@@ -141,8 +141,8 @@ function LensCard() {
                   and Terms already states both, so this row contradicted it by omission. */}
           {(q.data.held_balance_ulens ?? 0) > 0 ? (
             <Row
-              label="Held — not yet spendable"
-              hint="settles on its own after a holding period — during which it can still be revoked"
+              label="Held: not yet spendable"
+              hint="settles on its own after a holding period, during which it can still be revoked"
             >
               <MuNumeral micros={q.data.held_balance_ulens ?? 0} unit="lens" />
             </Row>
@@ -249,8 +249,8 @@ function SpendCard({ now }: { now: Date }) {
     : false;
   return (
     <Card raised>
-      <CardHeader>Spend &amp; earnings — last 30 days</CardHeader>
-      <TokenSection token="lxc">Spent — LXC</TokenSection>
+      <CardHeader>Spend &amp; earnings: last 30 days</CardHeader>
+      <TokenSection token="lxc">Spent · LXC</TokenSection>
       <Row
         label="This month, in US dollars"
         hint="roughly what your AI calls have cost since the 1st"
@@ -291,7 +291,7 @@ function SpendCard({ now }: { now: Date }) {
           SERVED, falling back to the requested one (a hold predates routing). */}
       {lxcSplit.length > 0 ? (
         <>
-          <TokenSection token="lxc">Spend by model — LXC</TokenSection>
+          <TokenSection token="lxc">Spend by model · LXC</TokenSection>
           <div data-testid="lxc-by-model">
             {lxcSplit.map((a) => (
               <Row
@@ -319,7 +319,7 @@ function SpendCard({ now }: { now: Date }) {
       {lxcTruncated ? (
         <WindowIncomplete days={30} pageSize={LEDGER_PAGE} testId="lxc-window-incomplete" />
       ) : null}
-      <TokenSection token="lens">Earned — LENS · mint attribution</TokenSection>
+      <TokenSection token="lens">Earned · LENS · mint attribution</TokenSection>
       {ledger.isLoading ? (
         <Loading />
       ) : ledger.isError ? (
@@ -335,7 +335,7 @@ function SpendCard({ now }: { now: Date }) {
               ledger is not empty; the model attribution is. */}
           {mintTruncated ? "At least " : ""}
           {windowRows.length} ledger row{windowRows.length === 1 ? "" : "s"} landed in the
-          last 30 days, and none of them records which model it came from — so there is
+          last 30 days, and none of them records which model it came from, so there is
           nothing to split by model. The rows themselves are on the{" "}
           {/* ⚠ THE SITE'S MOTION SHAPE, NOT A NEW ONE. Landing.tsx:184 moves its section tabs with
               `transition-colors duration-200` and lands the hover on `text-ink`; this is that,
@@ -353,7 +353,7 @@ function SpendCard({ now }: { now: Date }) {
               brand-new workspace and leaves a first user unable to tell working from broken.
               Say what PUTS a row here. */}
           No earnings yet. A row appears here when another company is served an answer this
-          workspace produced — which needs sharing left on, and needs your traffic to have
+          workspace produced, which needs sharing left on, and needs your traffic to have
           answered something they later ask.
         </div>
       ) : (
@@ -466,7 +466,7 @@ function ProductsCard() {
   return (
     <Card raised>
       <CardHeader>Products</CardHeader>
-      <Row label="Lens" hint="Inference gateway — balances, ledger, keys">
+      <Row label="Lens" hint="Inference gateway: balances, ledger, keys">
         {lens.isLoading ? (
           <span className="text-caption text-muted">Checking…</span>
         ) : lens.isError ? (
@@ -544,7 +544,7 @@ function RecentActivity() {
         <div className="px-gutter py-3 text-body text-muted">
           {/* ⚠ Same class as the earnings empty state above. It now names the one action that
               creates the first entry, and points at it. */}
-          No activity yet. The first entry appears the moment a request goes through Lens —{' '}
+          No activity yet. The first entry appears the moment a request goes through Lens:{' '}
           <Link className={inlineLink} to="/setup">
             point a tool at it
           </Link>{' '}

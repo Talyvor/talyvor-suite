@@ -105,7 +105,7 @@ function KeyRow({ k }: { k: WorkspaceAPIKey }) {
               up to the TTL. An operator killing a LEAKED key has to know that; "revoked" implying
               "dead now" would be the most dangerous sentence on this screen. */}
           <p className="text-caption text-muted">
-            Traffic already using this key can keep working for up to 5 minutes — Lens caches key
+            Traffic already using this key can keep working for up to 5 minutes. Lens caches key
             checks for that long. Treat it as revoked in 5 minutes, not immediately.
           </p>
           <div className="flex items-center gap-2">
@@ -133,7 +133,7 @@ function KeyRow({ k }: { k: WorkspaceAPIKey }) {
             <p className="text-body text-muted">
               {revoke.error instanceof ApiError && revoke.error.status === 404
                 ? 'That key is already gone, or does not belong to this workspace. Nothing was changed.'
-                : 'Couldn’t revoke that key — nothing was changed. Try again.'}
+                : 'Couldn’t revoke that key. Nothing was changed. Try again.'}
             </p>
           ) : null}
         </div>
@@ -236,7 +236,7 @@ function AccessList() {
       })}
       {cut.isError ? (
         <div role="alert" className="px-gutter py-3 text-body text-ink">
-          That was not revoked — nothing was changed. Try again.
+          That was not revoked. Nothing was changed. Try again.
         </div>
       ) : null}
     </>
@@ -253,7 +253,7 @@ function AccessList() {
 // moment while it lasts.
 const HEADLINE = 'Mint and revoke the keys that reach Lens.'
 const HEADLINE_EMPTY = 'This workspace has no keys.'
-const HEADLINE_REVEAL = 'Copy your key now — it is not shown again.'
+const HEADLINE_REVEAL = 'Copy your key now. It is not shown again.'
 
 /**
  * What ends the empty state. Two steps, and the second is the one this screen never made:
@@ -354,7 +354,7 @@ export function Keys() {
       >
         <p className="text-body text-muted">
           A workspace key is what a tool presents to Lens. It is minted here, shown once, and from
-          then on identified only by its prefix — the list below, and every message about a key,
+          then on identified only by its prefix. The list below, and every message about a key,
           use that.
         </p>
         {/* ⚠ THE STEPS RENDER ONLY WHEN THE WORKSPACE HAS NOTHING, and the branch is a RENDER
@@ -382,7 +382,7 @@ export function Keys() {
         {minted ? (
           <div className="mb-gutter">
             <RevealOnce
-              title="Workspace key — shown once"
+              title="Workspace key (shown once)"
               secret={minted.key}
               copyLabel="Copy key"
               identifier={minted.prefix}
@@ -431,7 +431,7 @@ export function Keys() {
                   the OUTCOME still has to be stated, because the reader pressed a button and needs
                   to know it did not take, so ONLY THE ADVICE MOVES. */}
               {mint.error instanceof ApiError && mint.error.status === 403
-                ? 'Couldn’t mint the key — the request origin was rejected. Reach this app at its configured address.'
+                ? 'Couldn’t mint the key. The request origin was rejected. Reach this app at its configured address.'
                 : isSessionExpired(mint.error)
                   ? 'Couldn’t mint the key. Nothing was changed.'
                   : 'Couldn’t mint the key. Please try again.'}

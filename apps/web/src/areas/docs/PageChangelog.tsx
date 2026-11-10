@@ -129,7 +129,7 @@ export function PageChangelog({ spaceId, pageId }: { spaceId: string; pageId: st
           // ⚠ THIS SENTENCE IS THE FINDING, MADE VISIBLE. Upstream this exact state is a 201 and a
           // durable, publishable row whose body is the words "No issues."
           <span className="text-caption text-muted">
-            Name at least one issue — with none, Docs would still create an entry, and its body
+            Name at least one issue. With none, Docs would still create an entry, and its body
             would be the words “No issues.”
           </span>
         ) : (
@@ -146,13 +146,13 @@ export function PageChangelog({ spaceId, pageId }: { spaceId: string; pageId: st
         {generate.isError ? (
           <p className="text-body text-muted">
             {isSessionExpired(generate.error) ? null : (
-              <>Couldn’t generate this entry — nothing was written. Try again.</>
+              <>Couldn’t generate this entry. Nothing was written. Try again.</>
             )}
           </p>
         ) : generate.data ? (
           <>
             <p className="text-body text-ink">
-              {generate.data.title} — {generate.data.summary}
+              {generate.data.title}: {generate.data.summary}
             </p>
             {/* THE SENTENCE THE OTHER FOUR CONTROLS CANNOT SHARE. There is no charge to name here
                 and there IS a row to name, so this says what was left behind and where it is not

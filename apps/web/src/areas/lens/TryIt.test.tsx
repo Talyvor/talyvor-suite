@@ -100,7 +100,7 @@ describe('Try Tare', () => {
       kind: '',
       model: 'gpt-4o',
     })
-    expect(result.textContent).toContain('About 120 tokens become 45 — 75 fewer (estimated)')
+    expect(result.textContent).toContain('About 120 tokens become 45, 75 fewer (estimated)')
     expect(result.textContent).toContain('$0.00019 less per request on GPT-4o')
     expect(result.textContent).toContain(REDUCED.reduced)
   })
@@ -160,7 +160,7 @@ describe('Try document conversion', () => {
     const result = await screen.findByTestId('conversion-result')
     expect(posts[0].type).toBe('text/html')
     expect(posts[0].body).toBe(file)
-    expect(result.textContent).toContain('The HTML file is about 225 tokens; as text, about 7 — 218 fewer (estimated).')
+    expect(result.textContent).toContain('The HTML file is about 225 tokens; as text, about 7, 218 fewer (estimated).')
     expect(result.textContent).toContain('# Quarterly plan')
     expect(screen.getByRole('button', { name: 'Download as Markdown' })).toBeTruthy()
   })

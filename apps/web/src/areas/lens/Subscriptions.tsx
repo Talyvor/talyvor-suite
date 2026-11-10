@@ -127,8 +127,8 @@ export function SubscriptionsScreen() {
         className="flex max-w-2xl flex-col gap-3"
       >
         <p className="text-body text-muted">
-          The payments your agents and you make again and again — a card or a payment out that recurs, a standing order, a
-          marketplace rental or subscription that renews — each with its next charge, what it costs a month, and a reminder three
+          The payments your agents and you make again and again (a card or a payment out that recurs, a standing order, a
+          marketplace rental or subscription that renews), each with its next charge, what it costs a month, and a reminder three
           days before it renews.
         </p>
         {!pending ? (

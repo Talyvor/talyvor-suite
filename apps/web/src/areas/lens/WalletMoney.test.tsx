@@ -163,14 +163,14 @@ describe('money between owners on Agent Wallets', () => {
     render(<App />)
 
     expect((await screen.findByTestId('agent-balance-agt_1')).textContent).toContain('50')
-    expect(await screen.findByText('Received from agt_bea — overpaid')).toBeTruthy()
+    expect(await screen.findByText('Received from agt_bea · overpaid')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Give back' }))
     expect(sent).toEqual([]) // the first press only asks
     fireEvent.click(screen.getByRole('button', { name: 'Yes, give it back' }))
 
     expect((await screen.findByText(/^Gave .*back to agt_bea\.$/)).textContent).toMatch(/^Gave 1\.5 LXC.* back to agt_bea\.$/)
     expect(sent).toContainEqual({ method: 'POST', url: '/api/wallets/transfers/xfr_in/refund', body: {} })
-    expect(await screen.findByText('Gave back to agt_bea — refund: overpaid')).toBeTruthy()
+    expect(await screen.findByText('Gave back to agt_bea · refund: overpaid')).toBeTruthy()
     expect(screen.getByText('Given back')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Give back' })).toBeNull()
     await vi.waitFor(() => expect(screen.getByTestId('agent-balance-agt_1').textContent).toContain('48.5'))

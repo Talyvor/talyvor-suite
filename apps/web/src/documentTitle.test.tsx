@@ -190,8 +190,8 @@ const NO_SUCH_PAGE = ['/admin', '/specimen', '/nonesuch', '/keys/extra', '/billi
 
 /** Public addresses and the WHOLE title each must carry. `/marketing` is the front door. */
 const PINNED_PUBLIC: ReadonlyArray<readonly [string, string]> = [
-  ['/marketing', 'Talyvor — the financial ecosystem for the AI agent economy'],
-  ['/marketing/pricing', 'Talyvor — the financial ecosystem for the AI agent economy'],
+  ['/marketing', 'Talyvor | the financial ecosystem for the AI agent economy'],
+  ['/marketing/pricing', 'Talyvor | the financial ecosystem for the AI agent economy'],
   ['/privacy', 'Privacy | Talyvor'],
   ['/terms', 'Terms | Talyvor'],
   ['/signup', 'Create a workspace | Talyvor'],
@@ -203,7 +203,7 @@ describe('the format, and the brand it ends in', () => {
     // Hardcoded on both sides. A guard that builds its expectation from the constant it is
     // checking passes for every value of that constant.
     expect(documentTitle('Ledger')).toBe('Ledger | Talyvor')
-    expect(documentTitle(null)).toBe('Talyvor — the financial ecosystem for the AI agent economy')
+    expect(documentTitle(null)).toBe('Talyvor | the financial ecosystem for the AI agent economy')
     expect(BRAND).toBe('Talyvor')
   })
 
@@ -228,7 +228,7 @@ describe('the format, and the brand it ends in', () => {
       'AI agents are starting to earn, spend and work for people and companies. Talyvor is where they do it safely.'
     expect(description.length, 'a search result shows about 160 characters').toBeLessThanOrEqual(160)
     expect(tag('name', 'description')).toBe(description)
-    expect(tag('property', 'og:title')).toBe('Talyvor — the financial ecosystem for the AI agent economy')
+    expect(tag('property', 'og:title')).toBe('Talyvor | the financial ecosystem for the AI agent economy')
     expect(tag('property', 'og:description')).toBe(description)
     expect(tag('property', 'og:image')).toBe('https://app.talyvor.com/og-image.png')
     expect(tag('name', 'twitter:card')).toBe('summary_large_image')

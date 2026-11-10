@@ -92,13 +92,13 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
 
     fireEvent.change(await screen.findByLabelText('Why every agent is paused'), { target: { value: 'audit' } })
     fireEvent.click(screen.getByRole('button', { name: 'Pause every agent' }))
-    expect((await screen.findByTestId('agents-all-paused')).textContent).toContain('Every agent is paused — audit.')
+    expect((await screen.findByTestId('agents-all-paused')).textContent).toContain('Every agent is paused: audit.')
 
     fireEvent.click(screen.getByRole('button', { name: 'Start every agent again' }))
     await screen.findByRole('button', { name: 'Pause every agent' })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
-    expect((await screen.findByTestId('agent-paused')).textContent).toBe('Researcher is paused — paused from Agent Wallets.')
+    expect((await screen.findByTestId('agent-paused')).textContent).toBe('Researcher is paused: paused from Agent Wallets.')
     expect(screen.getByText('Paused')).toBeTruthy()
 
     expect(posts.map((p) => [p.url, p.body])).toEqual([

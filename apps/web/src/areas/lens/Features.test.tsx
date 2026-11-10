@@ -163,7 +163,7 @@ describe('the Features screen', () => {
     })
     window.history.pushState({}, '', '/features')
     render(<App />)
-    await waitFor(() => expect(screen.getByTestId('state-Agent Wallets')).toHaveTextContent('On — 2 agents; 1 approval waiting'))
+    await waitFor(() => expect(screen.getByTestId('state-Agent Wallets')).toHaveTextContent('On: 2 agents; 1 approval waiting'))
     expect(screen.getByTestId('evidence-Agent Wallets').textContent).toBe(
       'See it working: 2 agents hold 20 LXC of this workspace’s 50 LXC and have spent 2.5 LXC (measured). Each agent’s statement lists every charge.',
     )
@@ -258,7 +258,7 @@ describe('the Features screen', () => {
     expect(r()).toHaveTextContent('Code and JSON are never touched')
     fireEvent.click(within(r()).getByRole('switch'))
     await waitFor(() =>
-      expect(within(r()).getByTestId('state-Tare prose model')).toHaveTextContent('On — takes effect once Tare is on'),
+      expect(within(r()).getByTestId('state-Tare prose model')).toHaveTextContent('On: takes effect once Tare is on'),
     )
     expect(posts).toEqual([{ url: '/api/features/tare-model', body: { tare_model: true } }])
   })
@@ -308,7 +308,7 @@ describe('the Features screen', () => {
     const { unmount } = render(<App />)
     await waitFor(() =>
       expect(screen.getByTestId('evidence-New models').textContent).toContain(
-        'See it working: 2 models are waiting for a price — not offered, and never charged at zero, until one is confirmed.',
+        'See it working: 2 models are waiting for a price: not offered, and never charged at zero, until one is confirmed.',
       ),
     )
     expect(Array.from(within(screen.getByTestId('models-waiting')).getAllByRole('listitem')).map((li) => li.textContent)).toEqual([
@@ -344,7 +344,7 @@ describe('the Features screen', () => {
     const { unmount } = render(<App />)
     await waitFor(() =>
       expect(screen.getByTestId('evidence-Tare').textContent).toBe(
-        'See it working: 4 requests reduced from 10,000 to 3,800 tokens, about $0.02 saved — estimated, from Lens’s token estimates at each model’s input rate.',
+        'See it working: 4 requests reduced from 10,000 to 3,800 tokens, about $0.02 saved, estimated, from Lens’s token estimates at each model’s input rate.',
       ),
     )
     unmount()
@@ -375,7 +375,7 @@ describe('the Features screen', () => {
     render(<App />)
     await waitFor(() =>
       expect(within(row('Answer sharing')).getByTestId('state-Answer sharing')).toHaveTextContent(
-        /Paused — personal-data detection is off, so no new answer of yours is shared/,
+        /Paused: personal-data detection is off, so no new answer of yours is shared/,
       ),
     )
     expect(within(row('Answer sharing')).getByRole('switch')).toBeChecked()
@@ -387,7 +387,7 @@ describe('the Features screen', () => {
     render(<App />)
     await waitFor(() =>
       expect(within(row('Answer sharing')).getByTestId('state-Answer sharing')).toHaveTextContent(
-        'On — your answers earn when someone else is served one',
+        'On: your answers earn when someone else is served one',
       ),
     )
   })
@@ -456,11 +456,11 @@ describe('the Features screen', () => {
     const r = () => row('Routing pattern sharing')
     const state = () => within(r()).getByTestId('state-Routing pattern sharing')
     await waitFor(() => expect(within(r()).getByRole('switch')).not.toBeChecked())
-    expect(state()).toHaveTextContent('Off — switch it on here')
+    expect(state()).toHaveTextContent('Off: switch it on here')
     fireEvent.click(within(r()).getByRole('switch'))
-    await waitFor(() => expect(state()).toHaveTextContent('On — the shape of your requests is shared'))
+    await waitFor(() => expect(state()).toHaveTextContent('On: the shape of your requests is shared'))
     fireEvent.click(within(r()).getByRole('switch'))
-    await waitFor(() => expect(state()).toHaveTextContent('Off — switch it on here'))
+    await waitFor(() => expect(state()).toHaveTextContent('Off: switch it on here'))
     expect(posts).toEqual([
       { url: '/api/features/pattern-mining', body: { opted_in: true } },
       { url: '/api/features/pattern-mining', body: { opted_in: false } },
@@ -508,7 +508,7 @@ describe('the Features screen', () => {
     expect(posts).toEqual([{ url: '/api/features/logging', body: { logging_policy: 'none' } }])
     // B18.57 — under none Lens keeps no cached copy, so the workspace's own cache is paused.
     expect(within(row('Answer cache')).getByTestId('state-Answer cache')).toHaveTextContent(
-      'Paused — request logging is none, so nothing is kept to answer from',
+      'Paused: request logging is none, so nothing is kept to answer from',
     )
   })
 
@@ -522,13 +522,13 @@ describe('the Features screen', () => {
     fireEvent.change(within(r()).getByRole('textbox', { name: /Limit in dollars/ }), { target: { value: '50' } })
     fireEvent.click(within(r()).getByRole('button', { name: 'Set' }))
     await waitFor(() =>
-      expect(within(r()).getByTestId('state-Spending limit')).toHaveTextContent('On — $50.00 a month; requests past it are refused'),
+      expect(within(r()).getByTestId('state-Spending limit')).toHaveTextContent('On: $50.00 a month; requests past it are refused'),
     )
     expect(within(r()).getByTestId('evidence-Spending limit')).toHaveTextContent('$12.50 spent of $50.00 a month')
 
     fireEvent.click(within(r()).getByRole('switch'))
     await waitFor(() =>
-      expect(within(r()).getByTestId('state-Spending limit')).toHaveTextContent('Off — the limit of $50.00 a month is kept'),
+      expect(within(r()).getByTestId('state-Spending limit')).toHaveTextContent('Off: the limit of $50.00 a month is kept'),
     )
     expect(posts).toEqual([
       { url: '/api/features/budget', body: { limit_usd: 50, enforcement: 'hard_block' } },
@@ -545,7 +545,7 @@ describe('the Features screen', () => {
     fireEvent.change(within(r()).getByRole('textbox', { name: /Limit in dollars/ }), { target: { value: '0.0005' } })
     fireEvent.click(within(r()).getByRole('button', { name: 'Set' }))
     await waitFor(() =>
-      expect(within(r()).getByTestId('state-Spending limit')).toHaveTextContent('On — $0.0005 a month; requests past it are refused'),
+      expect(within(r()).getByTestId('state-Spending limit')).toHaveTextContent('On: $0.0005 a month; requests past it are refused'),
     )
   })
 

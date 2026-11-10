@@ -94,11 +94,11 @@ describe('/documentation', () => {
     const steps = within(container.querySelector<HTMLElement>('#start')!).getAllByRole('link').map((a) => a.textContent)
     expect(steps).toEqual([
       'Sign up',
-      'Agent Wallets — Create agent',
-      'Agent Wallets — Fund',
-      'Agent Wallets — Issue a key',
+      'Agent Wallets: Create agent',
+      'Agent Wallets: Fund',
+      'Agent Wallets: Issue a key',
       'Setup',
-      'Agent Wallets — Statement',
+      'Agent Wallets: Statement',
       'Talyvor in Claude',
     ])
     const contents = within(screen.getByRole('navigation', { name: 'On this page' })).getAllByRole('link')

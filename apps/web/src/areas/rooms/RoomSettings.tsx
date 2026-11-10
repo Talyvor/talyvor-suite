@@ -80,7 +80,7 @@ function MemberRow({ room, m, me }: { room: RoomDetail; m: Member; me: string })
         label={<Who ws={m.workspace_id} name={named} me={me} />}
         hint={
           m.role === 'owner'
-            ? 'Owner — opened the room and spends its money'
+            ? 'Owner: opened the room and spends its money'
             : `${m.terms_current ? 'Under the current terms' : 'Has not accepted the current terms'} · joined ${formatWhen(m.joined_at)}`
         }
       >
@@ -191,7 +191,7 @@ function Members({ room, me }: { room: RoomDetail; me: string }) {
     <Region index="01" label="Members" className="flex max-w-2xl flex-col gap-3">
       <p className="text-body text-muted">
         An editor manages members and invites; a viewer reads the room. A member who may spend can run things on the
-        room’s budget when its terms let members spend — now: {spendPolicyText(room.terms.spend_policy).toLowerCase()}.
+        room’s budget when its terms let members spend. Now: {spendPolicyText(room.terms.spend_policy).toLowerCase()}.
       </p>
       {/* The owner is always a member, so the list is never empty. */}
       <Card>
@@ -300,7 +300,7 @@ function Invites({ room }: { room: RoomDetail }) {
       ) : (
         <>
           <p className="text-body text-muted">
-            A link admits workspaces until it is used up, expires or is revoked. It is shown once, when it is made — copy
+            A link admits workspaces until it is used up, expires or is revoked. It is shown once, when it is made. Copy
             it then.
           </p>
           <Card>
@@ -343,7 +343,7 @@ function Invites({ room }: { room: RoomDetail }) {
                     <Button onClick={copy}>Copy</Button>
                   </div>
                   {copied === true ? <Note ok>Copied. Send it to the people you want in the room.</Note> : null}
-                  {copied === false ? <Note ok={false}>This browser would not copy it — select the link and copy it.</Note> : null}
+                  {copied === false ? <Note ok={false}>This browser would not copy it. Select the link and copy it.</Note> : null}
                 </div>
               ) : null}
               {create.isError ? <Note ok={false}>{roomRefusal(create.error)}</Note> : null}
@@ -456,7 +456,7 @@ function PrizeRow({ room, p, owner, titleOf }: { room: RoomDetail; p: Prize; own
               {p.status === 'awarded' ? (
                 <>Awarded to “{titleOf(p.contribution_id ?? '')}”</>
               ) : p.status === 'closed' ? (
-                'Closed at its deadline unawarded — nothing was charged'
+                'Closed at its deadline unawarded: nothing was charged'
               ) : (
                 <>
                   {p.criteria ? `${p.criteria} · ` : ''}closes <span className="font-figure">{formatWhen(p.deadline)}</span>
@@ -576,7 +576,7 @@ function Prizes({ room, owner }: { room: RoomDetail; owner: boolean }) {
     <Region index="04" label="Prizes" className="flex max-w-2xl flex-col gap-3">
       <p className="text-body text-muted">
         A prize comes out of the room’s budget: at most what this month’s budget has left, less the prizes still open.
-        Awarding it buys the winning contribution for your workspace — it goes on your marketplace bill, and the winner is
+        Awarding it buys the winning contribution for your workspace. It goes on your marketplace bill, and the winner is
         paid when that clears. A prize nobody wins closes at its deadline and nothing is charged.
       </p>
       {owner ? <PostPrize room={room} /> : <p className="text-body text-muted">Only the room’s owner posts and awards prizes.</p>}
@@ -657,7 +657,7 @@ function TermsForm({ room }: { room: RoomDetail }) {
           </select>
         </label>
       </div>
-      {micros === null ? <Note ok={false}>A price is an amount of dollars, like 0.10 — or empty for free.</Note> : null}
+      {micros === null ? <Note ok={false}>A price is an amount of dollars, like 0.10, or empty for free.</Note> : null}
       {bps === null ? <Note ok={false}>A remix share is a percentage from 0 to 100, like 12.5.</Note> : null}
       <div>
         <Button type="submit" disabled={!ready || save.isPending}>

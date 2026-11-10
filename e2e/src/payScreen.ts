@@ -63,9 +63,9 @@ export async function payInvoiceByCard(ctx: ScenarioCtx, token: string): Promise
     await pay.waitForURL((u) => u.origin !== appURL, { timeout: CHECKOUT_MS })
     await payWithTestCard(pay, 'funding@example.com')
     await pay.waitForURL((u) => u.origin === appURL && u.pathname === `/pay/${token}`, { timeout: CHECKOUT_MS })
-    await headline.filter({ hasText: 'Paid — thank you' }).waitFor({ timeout: CHECKOUT_MS }).catch(() => undefined)
+    await headline.filter({ hasText: 'Paid, thank you' }).waitFor({ timeout: CHECKOUT_MS }).catch(() => undefined)
     const read = ((await headline.textContent()) ?? '').trim()
-    if (read !== 'Paid — thank you') return `after the card payment the funding invoice’s pay page reads "${read}", not "Paid — thank you"`
+    if (read !== 'Paid, thank you') return `after the card payment the funding invoice’s pay page reads "${read}", not "Paid, thank you"`
   } finally {
     await stranger.close().catch(() => undefined)
   }

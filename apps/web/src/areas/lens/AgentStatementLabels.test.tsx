@@ -22,7 +22,7 @@ const rows: Array<[StatementLine, string]> = [
   [line('hold', -1, 'spend'), 'Held for a request'],
   [line('release', 1, 'spend'), 'Released after a request'],
   [line('settle', -1, 'spend'), 'Settled a request'],
-  [line('pay', -3, 'agent:agt_2', 'draft'), 'Paid Writer — draft'],
+  [line('pay', -3, 'agent:agt_2', 'draft'), 'Paid Writer · draft'],
   [line('transfer', 5, 'agent:agt_2', 'tr_1'), 'Transfer from Writer'],
   [line('transfer', -2, 'agent:agt_2', 'tr_2'), 'Transferred to Writer'],
   [line('reversal', -5, 'agent:agt_2'), 'Given back to Writer'],

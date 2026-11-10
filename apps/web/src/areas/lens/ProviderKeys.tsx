@@ -14,7 +14,7 @@ import { PROVIDER_KEYS_KEY, ProviderKeyError, providerKeysApi, type ProviderKey 
 
 /** Lens's sentence for a refused save or removal, as the screen says it. */
 function refusal(err: unknown, nothing: string): string {
-  if (isSessionExpired(err)) return `${nothing} — sign in again.`
+  if (isSessionExpired(err)) return `${nothing}. Sign in again.`
   if (err instanceof ProviderKeyError && err.sentence) {
     const s = err.sentence.replace(/^byok: /, '')
     return `${s.charAt(0).toUpperCase()}${s.slice(1)}${s.endsWith('.') ? '' : '.'}`
@@ -155,7 +155,7 @@ export function ProviderKeysCard() {
       <div className="flex flex-col gap-3 border-b border-rule px-gutter py-4">
         <p className="text-body">
           On the BYOK plan, a request to a provider you hold a key for goes upstream on your key and Talyvor charges it
-          no tokens — your provider bills you. A key is encrypted when it is stored and sent only to its own provider.
+          no tokens: your provider bills you. A key is encrypted when it is stored and sent only to its own provider.
           It is never shown again: only its last four characters are.
         </p>
         {q.isPending ? (
@@ -172,7 +172,7 @@ export function ProviderKeysCard() {
           </p>
         ) : !data.byok ? (
           <p className="text-body text-ink" data-testid="provider-keys-plan">
-            Your own keys come with BYOK — Team’s add-on, included in Business.{' '}
+            Your own keys come with BYOK (Team’s add-on, included in Business).{' '}
             <Link to="/plans" className={inlineLink}>
               See Plans
             </Link>

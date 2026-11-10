@@ -49,7 +49,7 @@ export function FeatureSpendCard({ days }: { days: 7 | 30 }) {
     <Card>
       <CardHeader>Spend by feature</CardHeader>
       <div className="px-gutter pb-1 pt-2.5 text-caption font-normal text-muted">
-        Provider USD for the last {days} days, grouped by the tag each call carried — the tag the
+        Provider USD for the last {days} days, grouped by the tag each call carried: the tag the
         AI cards in Docs and Track print. Questions asked in Chat are tagged{' '}
         <span className="font-figure">chat</span>. This window is not the month-to-date figure
         above, so the two are not expected to match. Track tags its calls with the issue’s own
@@ -69,7 +69,7 @@ export function FeatureSpendCard({ days }: { days: 7 | 30 }) {
               accessible name is a defect rather than a repetition: it is ambiguous to a screen
               reader and it makes a by-name query resolve to whichever came first. */}
           Nothing went through Lens in this window, so there is nothing to break down yet. Tags
-          appear once calls do —{' '}
+          appear once calls do:{' '}
           <Link className={inlineLink} to="/setup">
             connect a tool in Setup
           </Link>
