@@ -213,7 +213,7 @@ export async function readBuildingLabels(o: { appURL: string; lensURL: string; b
     cardPayments: status?.card_payments, rails: status?.rails ?? undefined, pages }, unread)
 }
 
-const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
+const cell = (s: string): string => s.replace(/\\/g, '\\\\').replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
 
 /** The report's Building labels section. */
 export function renderBuildingLabels(r: BuildingLabelsReport | undefined): string[] {
