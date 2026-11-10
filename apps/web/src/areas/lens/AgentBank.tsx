@@ -54,6 +54,8 @@ import {
   refusalText,
   retryMoveThroughRestart,
 } from './agentBankApi'
+import { WorkspaceLabel, approvalCapability, paymentRequestCapabilities } from '../../labels/workspace'
+import { AGENT_CREDIT } from '../../labels/capabilities'
 
 // AgentBank.tsx — B19.4: Agent Wallets (named so by B21.6). Each AI agent a workspace runs has a wallet of its own on
 // Lens's double-entry ledger (B19.1): the workspace funds it and takes funds back, the agent spends
@@ -2047,7 +2049,7 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
   }, [found])
   return (
     <Card>
-      <CardHeader>Statement</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability={AGENT_CREDIT} />}>Statement</CardHeader>
       <div className="flex flex-wrap items-center gap-2 border-b border-rule px-gutter py-3">
         <Input
           type="search"
@@ -2455,8 +2457,11 @@ function PreparedRow({ r, nameOf }: { r: PaymentRequest; nameOf: (id: string) =>
         </span>
       }
       hint={
-        <span>
-          {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+          <WorkspaceLabel capability={paymentRequestCapabilities(r)} />
+          <span>
+            {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
+          </span>
         </span>
       }
     >
@@ -2528,6 +2533,8 @@ export function Approvals({
 }) {
   const qc = useQueryClient()
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
+  const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
+  const ownAgent = (id: string) => (book.data?.agents ?? []).some((x) => x.id === id)
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
   const keys = useKeys()
   const { signed, onlyThePhone, hold } = keys
@@ -2775,6 +2782,7 @@ export function Approvals({
                     <span className="flex flex-col gap-2">
                       <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                         <Pill status={DECIDED.pending.status}>{DECIDED.pending.label}</Pill>
+                        <WorkspaceLabel capability={approvalCapability(a, ownAgent)} />
                         <span>
                           {what(a)}, asked <span className="font-figure">{formatWhen(a.created_at)}</span>
                         </span>
@@ -2877,6 +2885,7 @@ export function AgentBank() {
         sectionClassName="pb-10 pt-4 wide:pb-12"
         className="flex max-w-2xl flex-col gap-3"
       >
+        <WorkspaceLabel capability={AGENT_CREDIT} className="self-start" />
         <p className="text-body text-muted">
           Give every AI agent a wallet of its own. Fund it from the workspace, set what it may spend and when a
           person must approve, and read every movement on its statement. Lens checks the rules before a provider is
@@ -2890,7 +2899,7 @@ export function AgentBank() {
             {hasAgents || book.data.all_paused_at ? <PauseEveryAgent book={book.data} /> : null}
             {hasAgents ? (
               <Card>
-                <CardHeader>Statement for every agent</CardHeader>
+                <CardHeader aside={<WorkspaceLabel capability={AGENT_CREDIT} />}>Statement for every agent</CardHeader>
                 <StatementDownload agent={null} />
               </Card>
             ) : null}

@@ -15,3 +15,24 @@ export const MONEY_FEATURES = ['currency_accounts', 'account_details', 'payments
 
 /** The documentation's claim that agents pay each other, hold escrow and lend between companies. */
 export const BETWEEN_OWNERS = ['pay_another_owner', 'escrow', 'loans_between_companies'] as const
+
+// B56.11 — the signed-in money screens: the capabilities each one moves, labelled from the workspace's own answer
+// (GET /api/wallets/capabilities' label) rather than the public one.
+
+/** Agent Wallets, its Statement for every agent and each agent's statement: credit the workspace hands its agents. */
+export const AGENT_CREDIT = ['spend_on_talyvor', 'move_between_own_agents'] as const
+
+/** Billing's top-ups and Plans: what the workspace buys from Talyvor. */
+export const BUY_FROM_TALYVOR = ['spend_on_talyvor'] as const
+
+/** Pay and a payment prepared for the person to approve: money paid out to people and companies outside Talyvor. */
+export const PAY_OUT = ['payments_out'] as const
+
+/** Invoices: money paid into an agent's account from outside Talyvor. */
+export const PAY_IN = ['payments_in'] as const
+
+/** An agent's wallet on the money layer: its account, and the details others pay into. */
+export const MONEY_WALLET = ['currency_accounts', 'account_details'] as const
+
+/** Sending to, asking from and paying another owner's agent on a schedule. */
+export const BETWEEN_OWNERS_PAY = ['pay_another_owner'] as const

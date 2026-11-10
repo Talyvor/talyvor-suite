@@ -32,6 +32,7 @@ import { ContributionReviews } from './RoomReviews'
 import { RoomSharedOwnership } from './RoomSharedOwnership'
 import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 import { RoomTasks } from './RoomTasks'
+import { WorkspaceLabel } from '../../labels/workspace'
 
 // Room.tsx — B32.54: the room screen, for a member under the room's current terms. The conversation is fed by the
 // room's event stream (Lens B32.30 through apps/bff/rooms.go), so another member's message appears as it is posted;
@@ -72,7 +73,10 @@ export function RoomBudget({ wallet }: { wallet: RoomWallet }) {
   const share = limit > 0 ? Math.min(100, Math.round((spent / limit) * 100)) : 0
   return (
     <div className="flex flex-col gap-2 rounded-card border border-rule bg-raised p-4" data-testid="room-budget">
-      <span className="font-figure text-eyebrow uppercase text-label">The room’s budget this month</span>
+      <span className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-figure text-eyebrow uppercase text-label">The room’s budget this month</span>
+        <WorkspaceLabel capability="spend_on_talyvor" />
+      </span>
       <span className="flex flex-wrap items-baseline gap-x-2">
         <span className="font-figure text-title text-ink" data-testid="room-budget-spent">
           <Lxc ulxc={spent} />

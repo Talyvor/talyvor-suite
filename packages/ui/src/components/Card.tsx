@@ -32,9 +32,11 @@ export function Card({ proof = false, raised = false, className, children, ...pr
 
 export interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode
+  /** Beside the title, outside the heading, so the heading's name stays the title alone (B56.11's label). */
+  aside?: React.ReactNode
 }
 
-export function CardHeader({ className, children, ...props }: CardHeaderProps) {
+export function CardHeader({ className, children, aside, ...props }: CardHeaderProps) {
   return (
     <div className={cn('flex items-center justify-between gap-gutter border-b border-rule px-gutter py-2.5', className)} {...props}>
       {/* `h2`, NOT `div` — the element and its classes are unchanged; only the tag moved.
@@ -52,6 +54,7 @@ export function CardHeader({ className, children, ...props }: CardHeaderProps) {
           apps/web/src/CardHeaderHeading.test.tsx holds the element, the level, the sweep across
           every gated address, and the over-correction it refuses. */}
       <h2 className="text-head text-ink">{children}</h2>
+      {aside}
     </div>
   )
 }

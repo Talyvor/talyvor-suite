@@ -6,6 +6,7 @@ import { isSessionExpired } from '../../lib/productState'
 import { formatWhen } from './format'
 import { type Agent, type AgentCard, type CardAuthorization, type Cardholder, agentBankApi, refusalText } from './agentBankApi'
 import { Lxc } from './money'
+import { WorkspaceLabel } from '../../labels/workspace'
 
 // AgentCardPanel.tsx — B19.24: an agent's card on Agent Wallets. Lens (B19.12) issues an agent a virtual
 // card through Stripe Issuing, in TEST MODE ONLY — cards are class RED, test money until a licensed partner
@@ -171,7 +172,7 @@ export function AgentCardPanel({ agent }: { agent: Agent }) {
   const q = useQuery({ queryKey: cardKey(agent.id), queryFn: () => agentBankApi.card(agent.id) })
   return (
     <Card>
-      <CardHeader>Card</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability="agent_card" />}>Card</CardHeader>
       {q.isError ? (
         <p className="px-gutter py-3 text-body text-muted">
           {isSessionExpired(q.error)

@@ -7,5 +7,9 @@
   { "key": "lending_fee", "feature": "The fee on a loan arranged", "item": "B56.22" },
   { "key": "fx_margin", "feature": "Currency conversion", "item": "B56.23" },
   { "key": "money_payouts", "feature": "Paying earnings out in money", "item": "B56.24" },
-  { "key": "payments_for_everyone", "feature": "Payments for everyone, not only businesses", "item": "B53.20" }
+  { "key": "payments_for_everyone", "feature": "Payments for everyone, not only businesses", "item": "B53.20" },
+  { "key": "agent_wallet_kinds", "feature": "Agents that hold currency accounts, a crypto wallet or both", "item": "B48.18" },
+  { "key": "apple_pay_google_pay", "feature": "Apple Pay and Google Pay", "item": "B53.11" },
+  { "key": "counter", "feature": "Counter, which negotiates for you inside the limits you sign", "item": "B52.15" },
+  { "key": "connect_in_assistants", "feature": "Talyvor in Claude’s and ChatGPT’s directories", "item": "B52.8" }
 ]

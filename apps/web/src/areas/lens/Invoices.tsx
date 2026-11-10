@@ -7,6 +7,8 @@ import { LinkedItem } from '../../components/LinkedItem'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { PAY_IN } from '../../labels/capabilities'
 import { type CurrencyAccount, type Invoice, type InvoiceRequest, FIATS, agentBankApi, formatMinor, minorOf, refusalText } from './agentBankApi'
 
 // Invoices.tsx — B30.97: invoices and their pay links (Lens B30.20). An agent's currency account issues an invoice —
@@ -48,6 +50,7 @@ export function InvoicesScreen() {
         sectionClassName="pb-10 pt-4 wide:pb-12"
         className="flex max-w-2xl flex-col gap-3"
       >
+        <WorkspaceLabel capability={PAY_IN} className="self-start" />
         <p className="text-body text-muted">
           An agent issues an invoice in pounds, euros or dollars and sends a pay link. Whoever holds the link pays by card, by a
           transfer quoting the reference, or from one of their own Talyvor agents, and the money lands in the agent’s account.

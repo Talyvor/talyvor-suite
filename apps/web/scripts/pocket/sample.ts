@@ -117,6 +117,13 @@ const SAMPLE: Record<string, unknown> = {
   },
   // B57.97 — no Talyvor Card yet, as w-card opens.
   '/api/money/physical-cards': { cards: [] },
+  // B56.11 — every money capability Sandbox for this workspace, as Lens answers in production today (talyvor-lens B56.7).
+  '/api/wallets/capabilities': {
+    capabilities: [
+      ...['spend_on_talyvor', 'buy_marketplace_listings', 'rent_and_subscribe_listings', 'move_between_own_agents', 'company_credit_line', 'pay_another_owner', 'loans_between_companies', 'escrow', 'cash_out', 'invest_and_trade', 'agent_card', 'currency_accounts', 'account_details', 'payments_in', 'payments_out', 'fx'].map((capability) => ({ capability, name: capability, class: 'RED', real_money: false, label: 'sandbox' })),
+      { capability: 'rules_approvals_statements_pots', name: 'Rules, approvals, statements and pots', class: 'GREEN', real_money: true },
+    ],
+  },
 }
 
 /** The sample's answer for a URL, else populatedBff's, else undefined (pocket-shots answers 404). */

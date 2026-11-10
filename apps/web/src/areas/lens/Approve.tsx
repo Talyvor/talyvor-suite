@@ -9,6 +9,7 @@ import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY, OnThePhone, PREPARED_KEY, useKeys } from './AgentBank'
 import { BILLS_KEY, PAYEES_KEY, PAYMENTS_KEY } from './Pay'
 import { assertOver } from './passkeys'
+import { WorkspaceLabel, paymentRequestCapabilities } from '../../labels/workspace'
 import { AgentBankError, type AgentTrust, type ApprovalStatement, type PaymentRequest, type PaymentRequestItem, agentBankApi, formatMinor, refusalText } from './agentBankApi'
 
 // Approve.tsx — B40.9: /approve/<id>, the page a prepared request's approval link opens (Lens B40.3) — from Chat, an
@@ -176,7 +177,7 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
 
   return (
     <Card>
-      <CardHeader>{r.summary || 'Payments waiting for your approval'}</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability={paymentRequestCapabilities(r)} />}>{r.summary || 'Payments waiting for your approval'}</CardHeader>
       <div className="flex flex-col gap-3 px-gutter py-3" data-testid="approve-card">
         <p className="flex flex-wrap items-center gap-2 text-caption text-ink">
           <span>

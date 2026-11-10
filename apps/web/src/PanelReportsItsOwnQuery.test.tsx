@@ -165,23 +165,23 @@ function mockBff(refusals: Array<[string, number]> = []) {
  */
 const ADDRESS_ROUTES: Record<string, string[]> = {
   // B28.6 — `/` is the wallet home; Overview moved to /overview with the same reads. B28.22 — and the LXC peg, for dollars.
-  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/passkeys', '/api/agents/safe-to-spend', '/api/docs/membership', '/api/docs/pins', '/api/lxc/topup-options', '/api/money/devices', '/api/money/payment-requests', '/api/workspace/name'],
-  '/overview': ['/api/agents/approvals', '/api/bonds', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/workspace/name'],
-  '/ledger': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/lxc/history', '/api/money/payment-requests', '/api/workspace/name'],
-  '/billing': ['/api/agents/approvals', '/api/billing/allowance', '/api/docs/membership', '/api/docs/pins', '/api/lxc/balance', '/api/lxc/topup-options', '/api/money/payment-requests', '/api/pricing', '/api/workspace/name'],
-  '/keys': ['/api/agents/approvals', '/api/connect/assistants', '/api/docs/membership', '/api/docs/pins', '/api/keys', '/api/money/access', '/api/money/payment-requests', '/api/workspace/name'],
-  '/setup': ['/api/agents/approvals', '/api/context', '/api/docs/membership', '/api/docs/pins', '/api/keys', '/api/money/payment-requests', '/api/workspace/name'],
-  '/spend': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/lxc/history', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/workspace/name'],
-  '/members': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/members', '/api/money/payment-requests', '/api/workspace/name'],
-  '/settings': ['/api/agents/approvals', '/api/distill', '/api/docs/membership', '/api/docs/pins', '/api/money/payment-requests', '/api/provider-keys', '/api/workspace/name'],
+  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/passkeys', '/api/agents/safe-to-spend', '/api/docs/membership', '/api/docs/pins', '/api/lxc/topup-options', '/api/money/devices', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/name'],
+  '/overview': ['/api/agents/approvals', '/api/bonds', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/wallets/capabilities', '/api/workspace/name'],
+  '/ledger': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/lxc/history', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/name'],
+  '/billing': ['/api/agents/approvals', '/api/billing/allowance', '/api/docs/membership', '/api/docs/pins', '/api/lxc/balance', '/api/lxc/topup-options', '/api/money/payment-requests', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/name'],
+  '/keys': ['/api/agents/approvals', '/api/connect/assistants', '/api/docs/membership', '/api/docs/pins', '/api/keys', '/api/money/access', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/name'],
+  '/setup': ['/api/agents/approvals', '/api/context', '/api/docs/membership', '/api/docs/pins', '/api/keys', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/name'],
+  '/spend': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/lxc/history', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/wallets/capabilities', '/api/workspace/name'],
+  '/members': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/members', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/name'],
+  '/settings': ['/api/agents/approvals', '/api/distill', '/api/docs/membership', '/api/docs/pins', '/api/money/payment-requests', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/name'],
   // B8.1 made every gated address ask for /api/docs/spaces, for the sidebar's list of spaces. B10.6
   // replaced that list with the pages this browser pinned or opened, which needs no read — so only
   // Overview (its product status) and /docs itself still ask for it. B18.27 moved the pins to Docs,
   // so every address asks for /api/docs/pins again — one read, for the sidebar. B27.15 asks Docs
   // whether the person is a member first (/api/docs/membership), and reads pins only if so.
   // B4.2 added /api/track/projects — the issue list's Project filter.
-  '/track': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/members', '/api/money/payment-requests', '/api/track/issues', '/api/track/projects', '/api/track/workspaces', '/api/workspace/name'],
-  '/docs': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/money/payment-requests', '/api/workspace/name'],
+  '/track': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/members', '/api/money/payment-requests', '/api/track/issues', '/api/track/projects', '/api/track/workspaces', '/api/wallets/capabilities', '/api/workspace/name'],
+  '/docs': ['/api/agents/approvals', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/name'],
 }
 
 const FAILURE_WORDING = /Couldn[’']t (load|check)/i
@@ -264,8 +264,9 @@ describe('the swept set', () => {
     // 67 → 78 at B46.16: the sidebar reads the workspace's name on every address. 79 at B51.3: /billing reads whether a card can be charged. 80 at B45.11: `/` reads safe to spend. 81 at B41.6: `/` reads the morning briefing. 83 at B41.15: /keys reads the connected assistants and what else may act for it.
     // 83 → 85 at B55.2: `/` reads the passkeys and the phone keys, to know whether this browser can resume an agent.
     // 85 → 96 at B55.10: the sidebar's Approvals badge counts the prepared payments too, on every address.
+    // 96 → 107 at B56.11: the sidebar reads the capabilities' labels on every address, for its Sandbox chip.
     const pairs = Object.values(ADDRESS_ROUTES).reduce((n, r) => n + r.length, 0)
-    expect(pairs).toBe(96)
+    expect(pairs).toBe(107)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {

@@ -14,6 +14,7 @@ import { TERMS, Term } from '../lens/Term'
 import { Card } from '../lens/walletBrand'
 import { PENDING_POLL_MS } from '../lens/WalletScreens'
 import { isSessionExpired } from '../../lib/productState'
+import { WorkspaceLabel, approvalCapability } from '../../labels/workspace'
 import { statementLineHref } from './chatApi'
 
 // B28.84 — what an agent is waiting on, where the person already is. Each approval Lens has pending is a card in the
@@ -131,6 +132,7 @@ export function ApprovalCards() {
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
                 {open ? <Pill status="held">Waiting for you</Pill> : null}
                 {open ? <Term term="Waiting for you">{TERMS.approval}</Term> : null}
+                <WorkspaceLabel capability={approvalCapability(a, (id) => agents.some((x) => x.id === id))} />
                 <span>
                   Asked <span className="font-figure">{formatWhen(a.created_at)}</span>
                 </span>

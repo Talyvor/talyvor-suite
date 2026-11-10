@@ -9,6 +9,8 @@ import { isSessionExpired } from '../../lib/productState'
 import { APPROVALS_KEY, Approvals, BOOK_KEY, PREPARED_KEY, Statement, StatementDownload } from './AgentBank'
 import { agentBankApi } from './agentBankApi'
 import { CurrencyPicker, Lxc } from './money'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { AGENT_CREDIT } from '../../labels/capabilities'
 
 // B28.7 — the sidebar is wallet-first: Approvals and Statements are destinations of their own, not
 // regions a person scrolls to inside Agent Wallets. Both read the same cache as Agent Wallets and Home,
@@ -99,7 +101,7 @@ export function StatementsScreen() {
         ) : (
           <>
             <Card>
-              <CardHeader>Statement for every agent</CardHeader>
+              <CardHeader aside={<WorkspaceLabel capability={AGENT_CREDIT} />}>Statement for every agent</CardHeader>
               <StatementDownload agent={null} primary />
             </Card>
             <Card>
