@@ -19,7 +19,6 @@ import { matchRoutes } from 'react-router-dom'
 export const POCKET_PENDING: readonly string[] = [
   // The public pages.
   '/marketing/*',
-  '/pricing',
   '/documentation',
   '/documentation/claude',
   '/privacy',
