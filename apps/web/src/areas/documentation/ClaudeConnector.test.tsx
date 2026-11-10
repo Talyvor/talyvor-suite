@@ -4,6 +4,7 @@ import { App, queryClient } from '../../App'
 import { COMPANY_CONTACT } from '../../company'
 import { CLAUDE_CONNECTOR_PATH } from './content'
 import listing from './claude-connector.json'
+import { pressEverything } from '../../test/pressEverything'
 
 // B40.20 — the page Claude's connector directory links to opens signed out and carries what the directory asks for:
 // the example prompts, every tool, privacy and a support contact. The privacy section it links to exists.
@@ -31,8 +32,15 @@ afterEach(() => {
 describe(CLAUDE_CONNECTOR_PATH, () => {
   it('opens signed out with the prompts, every tool, the privacy section and a support contact', async () => {
     openSignedOut(CLAUDE_CONNECTOR_PATH)
-    expect(await screen.findByRole('heading', { level: 1, name: 'Talyvor in Claude.' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Talyvor in Claude' })).toBeInTheDocument()
     expect(screen.getByText('https://app.talyvor.com/mcp')).toBeInTheDocument()
+    // B57.63 — the reference's s-claude: who decides, the address to copy, and what it can do.
+    expect(
+      screen.getByText('Claude prepares, and you decide. A payment Claude prepares waits in Talyvor until you approve it there, with your passkey.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'Add Talyvor to Claude' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: 'What it can do' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument()
     for (const p of ["What's due this week?", 'Prepare payment of my bills due Friday', 'Find a translation agent under £20 a month']) {
       expect(screen.getByText(`“${p}”`)).toBeInTheDocument()
     }
@@ -40,6 +48,14 @@ describe(CLAUDE_CONNECTOR_PATH, () => {
     expect(rows.map((r) => r.firstChild?.firstChild?.textContent)).toEqual(listing.tools.map((t) => t.name))
     expect(screen.getByRole('link', { name: 'Privacy › AI assistants you connect' })).toHaveAttribute('href', '/privacy#ai-assistants-you-connect')
     expect(within(screen.getByRole('main')).getByRole('link', { name: COMPANY_CONTACT })).toHaveAttribute('href', `mailto:${COMPANY_CONTACT}`)
+  })
+
+  it('every control on the page does something', async () => {
+    // jsdom has no clipboard; Copy's own answer is what is pressed.
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+    const report = await pressEverything(CLAUDE_CONNECTOR_PATH)
+    expect(report.dead).toEqual([])
+    expect(report.pressed).toBeGreaterThan(5)
   })
 
   it('links to a privacy section that says what an assistant receives and what it cannot do', async () => {

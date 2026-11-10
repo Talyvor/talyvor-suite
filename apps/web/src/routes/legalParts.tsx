@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import { useAuthMeReader } from '../lib/authMe'
 import { useDocumentTitle } from '../documentTitle'
 import { inlineLink } from '@talyvor/ui'
+import { Eyebrow } from '@talyvor/ui/pocket'
 import { PublicFooter, PublicHeader } from '../components/SiteChrome'
-import { TealRule } from '../areas/marketing/Landing'
 
 // legalParts — the shared furniture for /privacy and /terms.
 //
@@ -12,6 +12,10 @@ import { TealRule } from '../areas/marketing/Landing'
 // identically on both, and the cross-links are generated rather than typed. The consent screen and
 // the sharing settings share a module for the same reason, and for the same lesson — the first
 // draft of the consent screen carried its own copy and promised a settings page that did not exist.
+//
+// B57.63 — drawn in Pocket (design/pocket s-privacy, s-terms): one narrow column on the page, each section
+// numbered on its disc as the reference's rows are, the contents and the review notes as cloud cards. The words
+// are unchanged.
 
 /**
  * ReturnLink — the way out of a document that is otherwise a dead end.
@@ -50,7 +54,7 @@ function ReturnLink() {
   return (
     <Link
       to={signedOut ? '/marketing' : '/'}
-      className={`text-caption text-faint ${inlineLink}`}
+      className={`text-body text-ink-3 ${inlineLink}`}
     >
       ‹ Back to Talyvor
     </Link>
@@ -92,10 +96,9 @@ function LegalHeader({ title, updated }: { title: string; updated: string }) {
       <div className="mb-8">
         <ReturnLink />
       </div>
-      <div className="text-eyebrow uppercase text-label">Talyvor</div>
-      <h1 className="mt-4 text-display-2 text-ink">{title}</h1>
-      <TealRule className="mt-6" />
-      <p className="mt-6 text-reading text-muted">
+      <Eyebrow>Talyvor</Eyebrow>
+      <h1 className="mt-3 font-display text-display-1 font-extrabold text-ink">{title}</h1>
+      <p className="mt-3 text-body text-ink-3">
         Last updated <Updated updated={updated} />. Written from the code.{' '}
         <Link className={inlineLink} to={title === 'Privacy' ? '/terms' : '/privacy'}>
           {title === 'Privacy' ? 'Terms' : 'Privacy'}
@@ -109,12 +112,12 @@ function LegalHeader({ title, updated }: { title: string; updated: string }) {
  *  — and where it ends — before scrolling. */
 function Contents({ titles }: { titles: string[] }) {
   return (
-    <nav id="on-this-page" aria-label="On this page" className="mb-10 border-l-2 border-rule pl-4">
-      <div className="text-eyebrow uppercase text-label">On this page</div>
-      <ol className="mt-3 flex flex-col gap-1.5">
+    <nav id="on-this-page" aria-label="On this page" className="mb-10 rounded-card bg-cloud p-5">
+      <Eyebrow>On this page</Eyebrow>
+      <ol className="mt-3 flex flex-col gap-1.5 text-body">
         {titles.map((t) => (
           <li key={t}>
-            <a className={inlineLink} href={`#${sectionId(t)}`}>
+            <a className={`text-ink-2 ${inlineLink}`} href={`#${sectionId(t)}`}>
               {t}
             </a>
           </li>
@@ -127,7 +130,7 @@ function Contents({ titles }: { titles: string[] }) {
 /** The document's last line, so its end reads as an end and not as a page that stopped loading. */
 function EndOf({ title, updated }: { title: string; updated: string }) {
   return (
-    <p className="mt-12 border-t border-rule pt-6 text-caption text-muted">
+    <p className="mt-12 border-t border-line pt-6 text-body text-ink-3">
       End of {title}. Last updated <Updated updated={updated} />.{' '}
       <a className={inlineLink} href="#on-this-page">
         Back to the contents
@@ -154,15 +157,11 @@ export function LawyerReview({
   label?: string
 }) {
   return (
-    <div
-      className={
-        'rounded-card border border-rule border-l-2 border-l-held bg-raised px-4 ' + (compact ? 'py-3 mt-4' : 'py-4 mb-10')
-      }
-    >
-      <div className="text-caption font-medium text-ink">
+    <div className={'bg-cloud ' + (compact ? 'mt-4 rounded-card-tight px-4 py-3.5' : 'mb-10 rounded-card p-5')}>
+      <div className="text-body font-bold text-ink">
         {label ?? (compact ? 'Needs legal review' : 'Draft: needs legal review before it is relied on')}
       </div>
-      <p className="mt-1 text-reading text-muted">{children}</p>
+      <p className="mt-1 text-reading text-ink-2">{children}</p>
     </div>
   )
 }
@@ -197,15 +196,16 @@ export function LegalPage({
   const sections = kids.filter(isSection)
   const first = sections.length > 0 ? kids.indexOf(sections[0]) : kids.length
   return (
-    <div className="flex min-h-full flex-col bg-canvas text-ink">
+    <div data-design="pocket" className="flex min-h-full flex-col bg-page text-ink">
       <PublicHeader />
       <main className="flex-1">
-        <div className="mx-auto w-full max-w-5xl px-gutter pb-16 pt-10 wide:pt-14">
-          <div className="max-w-lg text-reading">
+        {/* pocket.css .ssec.narrow: one narrow column. */}
+        <div className="mx-auto w-full max-w-4xl px-gutter pb-4 pt-14">
+          <div className="max-w-2xl text-reading">
             <LegalHeader title={title} updated={updated} />
             {kids.slice(0, first)}
             {sections.length > 0 && <Contents titles={sections.map((s) => s.props.title)} />}
-            {kids.slice(first)}
+            {kids.slice(first).map((k) => (isSection(k) ? <Numbered key={k.key} n={sections.indexOf(k) + 1} section={k} /> : k))}
             <EndOf title={title} updated={updated} />
           </div>
         </div>
@@ -215,10 +215,25 @@ export function LegalPage({
   )
 }
 
+/**
+ * A section beside its number on a disc, as pocket.css's .mrow draws a row. The disc sits outside the <section>, so
+ * the section reads, and is quoted, as its words alone.
+ */
+function Numbered({ n, section }: { n: number; section: ReactElement }) {
+  return (
+    <div className="mb-10 flex gap-3 border-t border-line pt-6">
+      <span aria-hidden="true" className="inline-grid h-7 w-7 shrink-0 place-items-center rounded-pill bg-tangerine-50 font-figure text-caption font-bold text-tangerine-ink">
+        {n}
+      </span>
+      <div className="min-w-0 flex-1">{section}</div>
+    </div>
+  )
+}
+
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section id={sectionId(title)} className="mb-10 scroll-mt-6 wide:scroll-mt-20">
-      <h2 className="mb-4 text-display-4 text-ink">{title}</h2>
+    <section id={sectionId(title)} className="scroll-mt-6 wide:scroll-mt-20">
+      <h2 className="mb-4 font-display text-head font-bold text-ink">{title}</h2>
       {children}
     </section>
   )

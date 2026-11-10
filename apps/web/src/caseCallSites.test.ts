@@ -452,16 +452,18 @@ const PINS: Record<string, Pin> = {
   // 130 → 131 at B28.53: the By day, By model and By destination eyebrow on an agent's spend.
   // 131 → 132 at B56.10: the "What the labels mean" eyebrow on /marketing and /pricing.
   // 132 → 131 at B57.49: the Suite eyebrow under the logo on /signup and /signin goes; Pocket's auth card has none.
+  // 131 → 126 at B57.63: the legal pages' two eyebrows, the pay page's eyebrow and the docs' route-table and connector
+  // tool-table headers move to Pocket's Eyebrow and micro labels.
   'apps/web/src/caseAudit.ts|<N> uppercase class lists': {
     kind: 'LIVE',
     of: 'TOTAL',
-    states: 131,
+    states: 126,
     why: "the argument for why the rule cannot live in the token — #99 wrote TWENTY here, the 'twenty other' figure with `other` dropped",
   },
   'apps/web/src/caseAudit.ts|uppercase (<N> class lists': {
     kind: 'LIVE',
     of: 'TOTAL',
-    states: 131,
+    states: 126,
     why: '#99 wrote 25 here: every occurrence of the WORD in non-test source with comments kept, which counts the paragraphs about the class',
   },
   'packages/ui/src/components/CaseSafe.tsx|<N> other uppercase class lists': {
