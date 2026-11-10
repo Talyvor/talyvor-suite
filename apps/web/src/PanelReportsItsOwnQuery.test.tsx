@@ -114,6 +114,7 @@ function bodyFor(url: string): unknown {
     return { at: '2026-10-04T00:00:00Z', month_start: '2026-10-01T00:00:00Z', month_end: '2026-11-01T00:00:00Z', spent_ulxc: 0, forecast_ulxc: 0, agents: [] }
   if (url.includes('/api/agents/approvals')) return { approvals: [] }
   if (url.includes('/api/money/payment-requests')) return { requests: [] }
+  if (url.includes('/api/money/mandates')) return { granted: [], received: [] } // B55.40: the badge counts an agent's mandate request
   if (url.includes('/api/agents/briefing')) return { items: [], spent_yesterday: [], quiet: true, line: 'A quiet day: nothing was spent yesterday, and nothing is waiting for you.' }
   if (url.includes('/api/agents/agt_1/rules'))
     return { max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 0, approval_above_ulxc: 0, allowed_models: null, allowed_providers: null, active_from: '', active_until: '', timezone: '' }
@@ -165,23 +166,23 @@ function mockBff(refusals: Array<[string, number]> = []) {
  */
 const ADDRESS_ROUTES: Record<string, string[]> = {
   // B28.6 — `/` is the wallet home; Overview moved to /overview with the same reads. B28.22 — and the LXC peg, for dollars.
-  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/agents/passkeys', '/api/agents/safe-to-spend', '/api/lxc/topup-options', '/api/money/devices', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/overview': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/bonds', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/ledger': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/billing': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/billing/allowance', '/api/lxc/balance', '/api/lxc/topup-options', '/api/money/payment-requests', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/keys': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/connect/assistants', '/api/keys', '/api/money/access', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/setup': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/context', '/api/keys', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/spend': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/members': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/distill', '/api/money/payment-requests', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/agents/passkeys', '/api/agents/safe-to-spend', '/api/lxc/topup-options', '/api/money/devices', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/overview': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/bonds', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/ledger': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/billing': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/billing/allowance', '/api/lxc/balance', '/api/lxc/topup-options', '/api/money/mandates', '/api/money/payment-requests', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/keys': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/connect/assistants', '/api/keys', '/api/money/access', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/setup': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/context', '/api/keys', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/spend': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/members': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/distill', '/api/money/mandates', '/api/money/payment-requests', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B8.1 made every gated address ask for /api/docs/spaces, for the sidebar's list of spaces. B10.6
   // replaced that list with the pages this browser pinned or opened, which needs no read — so only
   // Overview (its product status) and /docs itself still ask for it. B18.27 moved the pins to Docs,
   // so every address asks for /api/docs/pins again — one read, for the sidebar. B27.15 asks Docs
   // whether the person is a member first (/api/docs/membership), and reads pins only if so.
   // B4.2 added /api/track/projects — the issue list's Project filter.
-  '/track': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/payment-requests', '/api/track/issues', '/api/track/projects', '/api/track/workspaces', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/docs': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/track': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/track/issues', '/api/track/projects', '/api/track/workspaces', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/docs': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
 }
 
 const FAILURE_WORDING = /Couldn[’']t (load|check)/i
@@ -270,7 +271,8 @@ describe('the swept set', () => {
     const pairs = Object.values(ADDRESS_ROUTES).reduce((n, r) => n + r.length, 0)
     // 97 → 108 at B59.10: the sidebar reads the account's type and kind on every address, for its chip.
     // 108 → 119 at B55.54: the shell reads whether a key recovery waits, on every address, to show it on every page.
-    expect(pairs).toBe(119)
+    // 119 → 130 at B55.40: and an agent's mandate requests, which its Approvals badge counts, on every address.
+    expect(pairs).toBe(130)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {

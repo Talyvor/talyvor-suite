@@ -1386,6 +1386,8 @@ function Mandates({
 }) {
   const qc = useQueryClient()
   const mandates = useQuery({ queryKey: MANDATES_KEY, queryFn: agentBankApi.mandates })
+  // B55.40: with only the phone's key this browser cannot sign a grant or an approval, so nothing is sent from here.
+  const { onlyThePhone, hold } = useKeys()
   const [accountID, setAccountID] = useState(accounts[0]?.id ?? '')
   const [kind, setKind] = useState<'company' | 'business'>('business')
   const [form, setForm] = useState({ workspace: '', business: '', payee: '', name: '', pull: '', month: '', expires: inDays(365) })
@@ -1436,14 +1438,18 @@ function Mandates({
       {granted && m.status === 'requested' ? (
         <>
           <p className="text-caption text-muted">{agentName(m.agent_id)} asked for this mandate. Nothing is pulled until you approve it.</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: true })}>
-              Approve
-            </Button>
-            <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: false })}>
-              Decline
-            </Button>
-          </div>
+          {onlyThePhone ? (
+            <OnThePhone>Approve this mandate with a passkey on this browser: add this browser first.</OnThePhone>
+          ) : hold ? null : (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: true })}>
+                Approve
+              </Button>
+              <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: false })}>
+                Decline
+              </Button>
+            </div>
+          )}
         </>
       ) : null}
       {granted && m.status === 'active' ? (
@@ -1485,7 +1491,7 @@ function Mandates({
             data-testid="new-mandate"
             onSubmit={(e) => {
               e.preventDefault()
-              if (complete && !grant.isPending) grant.mutate()
+              if (complete && !grant.isPending && !hold) grant.mutate()
             }}
           >
             <div className="grid gap-3 wide:grid-cols-2">
@@ -1538,11 +1544,15 @@ function Mandates({
                 <Input aria-label="Expires on" type="date" className="font-figure" value={form.expires} onChange={(e) => set({ expires: e.target.value })} />
               </label>
             </div>
-            <div>
-              <Button type="submit" disabled={!complete || grant.isPending}>
-                {grant.isPending ? 'Granting…' : 'Grant mandate'}
-              </Button>
-            </div>
+            {onlyThePhone ? (
+              <OnThePhone>Grant this mandate with a passkey on this browser: add this browser first.</OnThePhone>
+            ) : (
+              <div>
+                <Button type="submit" disabled={!complete || grant.isPending || hold}>
+                  {grant.isPending ? 'Granting…' : 'Grant mandate'}
+                </Button>
+              </div>
+            )}
             {grant.isError ? <Note ok={false}>{refusalText(grant.error)}</Note> : null}
             {made !== null ? (
               <Note ok>

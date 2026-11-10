@@ -701,6 +701,48 @@ describe('a payout batch’s approval (B58.6)', () => {
   })
 })
 
+/** B55.40 — the mandate form filled for a Talyvor company: £5.00 a pull, £20.00 a month. */
+async function fillMandate() {
+  const form = await screen.findByTestId('new-mandate')
+  fireEvent.change(within(form).getByLabelText('Mandate payee kind'), { target: { value: 'company' } })
+  fireEvent.change(within(form).getByLabelText('Payee’s workspace id'), { target: { value: 'ws_kite' } })
+  fireEvent.change(within(form).getByLabelText('Most per pull'), { target: { value: '5.00' } })
+  fireEvent.change(within(form).getByLabelText('Most per month'), { target: { value: '20.00' } })
+  return form
+}
+
+describe('a mandate the owner grants from Pay (B55.40)', () => {
+  it('grants nothing when the passkey prompt is cancelled, and says nothing changed', async () => {
+    const bff = mockBff([], [], [], [], ['Y3JlZDE'])
+    const get = vi.fn().mockResolvedValue(null)
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+    const form = await fillMandate()
+    fireEvent.click(within(form).getByRole('button', { name: 'Grant mandate' }))
+    await within(form).findByText('Nothing changed. You can try again.')
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(bff.sent.map((c) => c.url)).toEqual(['/api/money/mandates/challenge'])
+  })
+
+  it('with only the phone’s key, says to add this browser first and sends nothing, for a grant or an agent’s request', async () => {
+    MANDATES = [{ id: 'mdt_a', agent_id: 'agt_1', account_id: 'macc_agt', currency: 'GBP', payee_workspace_id: 'ws_kite', payee_name: 'Kite', max_per_pull_minor: 500,
+      max_per_month_minor: 2000, pulled_this_month_minor: 0, expires_at: '2027-11-10T23:59:59Z', status: 'requested', created_at: '2026-11-10T09:00:00Z' }]
+    mockBff()
+    const posts = onlyThePhoneKey()
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+    const form = await fillMandate()
+    expect(await within(form).findByText('Grant this mandate with a passkey on this browser: add this browser first.')).toBeInTheDocument()
+    expect(within(form).queryByRole('button', { name: 'Grant mandate' })).toBeNull()
+    fireEvent.submit(form)
+    const asked = screen.getByTestId('mandate-mdt_a')
+    expect(within(asked).getByText('Approve this mandate with a passkey on this browser: add this browser first.')).toBeInTheDocument()
+    expect(within(asked).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
+    expect(posts).toEqual([])
+  })
+})
+
 describe('an agent’s payment waiting on Pay when only the phone holds a key (B55.2)', () => {
   it('sends no decision and says to approve on the phone', async () => {
     mockBff()

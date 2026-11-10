@@ -6,7 +6,7 @@ import { Button as PocketButton, Icon, Select, Tabs } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { ApiError } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
-import { APPROVALS_KEY, Approvals, BOOK_KEY, PREPARED_KEY, Statement } from './AgentBank'
+import { APPROVALS_KEY, Approvals, BOOK_KEY, MANDATE_REQUESTS_KEY, PREPARED_KEY, Statement } from './AgentBank'
 import { AgentStatement, DownloadFailed, JOURNAL_SENTENCE, MONTH_FILE_TYPES, downloadWords, useMonthFile } from './AgentStatement'
 import { agentBankApi, type Agent, type CurrencyAccount, type StatementFormat } from './agentBankApi'
 import { AccountStatement, MarketplaceBill, accountTitle, useAccountMonthCsv } from './AccountStatement'
@@ -50,7 +50,13 @@ export function usePendingApprovals(): number | null {
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals, ...poll })
   // B55.10 — a payment Chat or an assistant prepared waits for a person too, so the badge counts it.
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests, ...poll })
-  return list.data ? (list.data.approvals ?? []).filter((a) => a.status === 'pending').length + (prepared.data?.requests ?? []).length : null
+  // B55.40 — and so does an agent's mandate request.
+  const mandates = useQuery({ queryKey: MANDATE_REQUESTS_KEY, queryFn: agentBankApi.requestedMandates, ...poll })
+  return list.data
+    ? (list.data.approvals ?? []).filter((a) => a.status === 'pending').length +
+        (prepared.data?.requests ?? []).length +
+        (mandates.data?.granted ?? []).filter((m) => m.status === 'requested').length
+    : null
 }
 
 export function ApprovalsScreen() {

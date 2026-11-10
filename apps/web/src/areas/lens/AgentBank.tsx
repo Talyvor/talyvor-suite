@@ -12,7 +12,7 @@ import { IfArea } from '../../lib/workspaceAreas'
 import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
-import { assertOver, letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
+import { approveMandateSigned, assertOver, letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
 import { GetAKeyBack, NoLiveKey, RecoveryCodeRow } from './KeyRecovery'
 import { AgentAnalytics } from './AgentAnalytics'
 import { AlertChannels } from './AlertChannels'
@@ -47,6 +47,7 @@ import {
   type AgentSchedule,
   type AgentTopUp as AgentTopUpValue,
   type LimitAlert,
+  type Mandate,
   type PasskeyAssertion,
   type PaymentRequest,
   type PostingKind,
@@ -84,6 +85,8 @@ export const BOOK_KEY = ['agent-book']
 export const APPROVALS_KEY = ['agent-approvals']
 /** B55.10 — the payments Chat, an assistant, an agent or a voice request prepared, waiting for the person. */
 export const PREPARED_KEY = ['money-payment-requests', 'pending_approval']
+/** B55.40 — the mandates an agent's own key asked for; under Pay's ['money-mandates'], so a grant or revoke there reads them again. */
+export const MANDATE_REQUESTS_KEY = ['money-mandates', 'requested']
 export const rulesKey = (id: string) => ['agent-rules', id]
 export const rulesHistoryKey = (id: string) => ['agent-rules-history', id]
 export const boostsKey = (id: string) => ['agent-rule-boosts', id]
@@ -2714,6 +2717,73 @@ export function PreparedRow({ r, nameOf, labelled = false }: { r: PaymentRequest
   )
 }
 
+/**
+ * B55.40 — an agent's own key asked for a mandate (Lens B55.24): it pulls nothing until the owner approves it here, signed
+ * over a challenge naming that request as an approval is, or declines it. With only the phone's key, this browser cannot sign.
+ */
+function MandateRequestRow({
+  m,
+  nameOf,
+  onlyThePhone,
+  hold,
+  onOutcome,
+}: {
+  m: Mandate
+  nameOf: (id: string) => string
+  onlyThePhone: boolean
+  hold: boolean
+  onOutcome: (o: { ok: boolean; text: React.ReactNode }) => void
+}) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const decide = useMutation({
+    mutationFn: (approve: boolean) => (approve ? approveMandateSigned(m.id) : agentBankApi.declineMandate(m.id)),
+    onSuccess: (_, approve) =>
+      onOutcome({
+        ok: true,
+        text: approve
+          ? `Approved. ${m.payee_name} can pull from ${nameOf(m.agent_id)} up to ${formatMinor(m.max_per_month_minor, m.currency)} a month.`
+          : `Declined. ${m.payee_name} will not pull from ${nameOf(m.agent_id)}.`,
+      }),
+    onError: (err) => onOutcome({ ok: false, text: refusalText(err) }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['money-mandates'] }),
+  })
+  return (
+    <Row
+      stack
+      data-mandate={m.id}
+      label={
+        <span className="whitespace-normal">
+          {nameOf(m.agent_id)} asks to let {m.payee_name} pull up to <span className="font-figure">{formatMinor(m.max_per_month_minor, m.currency)}</span> a month
+        </span>
+      }
+      hint={
+        <span>
+          Up to <span className="font-figure">{formatMinor(m.max_per_pull_minor, m.currency)}</span> a pull · expires{' '}
+          <span className="font-figure">{formatWhen(m.expires_at)}</span> · asked <span className="font-figure">{formatWhen(m.created_at)}</span>
+        </span>
+      }
+    >
+      {!open ? (
+        <Button className="h-12 w-full wide:h-8 wide:w-auto" onClick={() => setOpen(true)}>
+          Review
+        </Button>
+      ) : onlyThePhone ? (
+        <OnThePhone>Approve this mandate with a passkey on this browser: add this browser first.</OnThePhone>
+      ) : hold ? null : (
+        <div className="flex flex-col gap-2 wide:flex-row">
+          <Button variant="primary" className="h-12 wide:h-8" disabled={decide.isPending} onClick={() => decide.mutate(true)}>
+            Approve
+          </Button>
+          <Button className="h-12 wide:h-8" disabled={decide.isPending} onClick={() => decide.mutate(false)}>
+            Decline
+          </Button>
+        </div>
+      )}
+    </Row>
+  )
+}
+
 const ENROLMENTS_KEY = ['key-enrolments']
 
 /**
@@ -2778,6 +2848,7 @@ export function Approvals({
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const ownAgent = (id: string) => (book.data?.agents ?? []).some((x) => x.id === id)
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
+  const mandateRequests = useQuery({ queryKey: MANDATE_REQUESTS_KEY, queryFn: agentBankApi.requestedMandates })
   const keys = useKeys()
   const { signed, onlyThePhone, hold } = keys
   // Ticking several is for a workspace that signs nothing (bulk, below), once both key reads are in.
@@ -2861,6 +2932,10 @@ export function Approvals({
   // B55.10 — the payments prepared for the person sit above the agents' requests, narrowed by the same filters.
   const preparedAll = (prepared.data?.requests ?? []).filter((r) => agentId === undefined || r.agent_id === agentId)
   const preparedShown = preparedAll.filter((r) => (byAgent === '' || r.agent_id === byAgent) && byKind !== 'model')
+  // B55.40 — an agent's mandate request waits here too, narrowed the same way.
+  const requestsShown = (mandateRequests.data?.granted ?? []).filter(
+    (m) => m.status === 'requested' && (agentId === undefined || m.agent_id === agentId) && (byAgent === '' || m.agent_id === byAgent) && byKind !== 'model',
+  )
   const chosen = pending.filter((a) => picked.has(a.id))
   const toggle = (id: string) =>
     setPicked((s) => {
@@ -2974,8 +3049,17 @@ export function Approvals({
               ))}
             </div>
           ) : null}
+          {mandateRequests.isError ? (
+            <p className="border-b border-rule px-gutter py-3 text-body text-muted">{readFailure(mandateRequests.error, 'The mandate requests')}</p>
+          ) : requestsShown.length > 0 ? (
+            <div role="group" aria-label="Mandate requests" className="border-b border-rule">
+              {requestsShown.map((m) => (
+                <MandateRequestRow key={m.id} m={m} nameOf={nameOf} onlyThePhone={onlyThePhone} hold={hold} onOutcome={setOutcome} />
+              ))}
+            </div>
+          ) : null}
           {pending.length === 0 ? (
-            preparedShown.length > 0 ? null : (
+            preparedShown.length > 0 || requestsShown.length > 0 ? null : (
               <p className="px-gutter py-3 text-body text-muted">
                 {waiting.length > 0
                   ? 'Nothing waiting matches these filters.'

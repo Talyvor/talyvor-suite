@@ -1426,6 +1426,9 @@ export const agentBankApi = {
   approveMandate: (id: string, assertion?: PasskeyAssertion) =>
     send<Mandate>('POST', `/api/money/mandates/${e(id)}/approve`, assertion ? { assertion } : {}),
   declineMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/decline`),
+  /** B55.40 — the mandates an agent's own key asked for, waiting for the owner on Approvals; each pulls nothing until approved. */
+  requestedMandates: () =>
+    getJSON<{ granted: Mandate[] | null; received: Mandate[] | null }>('/api/money/mandates?status=requested', { granted: 'list', received: 'list' }),
   revokeMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/revoke`),
   payouts: () => getJSON<{ payouts: PayoutBatch[] | null }>('/api/money/payouts', { payouts: 'list' }),
   payout: (id: string) => getSaid<PayoutBatch>(`/api/money/payouts/${e(id)}`),
