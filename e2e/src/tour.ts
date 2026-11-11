@@ -125,14 +125,15 @@ export function everyScreen(): Scenario {
   }
 }
 
-/** B29.2 — the brand board's two dark planes, as the browser paints them: Obsidian and Surface. */
-export const DARK_PLANES = { canvas: 'rgb(6, 10, 18)', sidebar: 'rgb(8, 18, 32)' } as const
+/** B29.2, B58.16 — the two dark planes, as the browser paints them: Pocket's page #0F1013 and cloud #181A1F
+ *  (packages/ui/src/theme.css), the logo kit's dark page. brand-v4's Obsidian and Surface are retired. */
+export const DARK_PLANES = { canvas: 'rgb(15, 16, 19)', sidebar: 'rgb(24, 26, 31)' } as const
 
 export function brandPlanes(): Scenario {
   return {
     id: 'brand-planes',
     owner: 'talyvor-suite',
-    title: 'in the dark theme the page canvas is the board’s Obsidian and the sidebar its Surface',
+    title: 'in the dark theme the page canvas is Pocket’s page and the sidebar its cloud',
     run: async (ctx) => {
       const page = await ctx.app.tab('/')
       try {
@@ -148,7 +149,7 @@ export function brandPlanes(): Scenario {
           .filter((k) => seen[k] !== DARK_PLANES[k])
           .map((k) => `the ${k} is ${seen[k]}, not ${DARK_PLANES[k]}`)
         return wrong.length === 0
-          ? { pass: true, detail: `dark canvas ${seen.canvas} and sidebar ${seen.sidebar}, as on the board` }
+          ? { pass: true, detail: `dark canvas ${seen.canvas} and sidebar ${seen.sidebar}, as Pocket draws them` }
           : { pass: false, detail: wrong.join('; '), where: ['/'] }
       } finally {
         await page.close()

@@ -2,8 +2,10 @@
 // with a fresh one, the catalog's price, or the ledger read back. A scenario returns a verdict; a thrown
 // CapReached makes it SKIP, anything else thrown makes it ERROR (run.ts).
 
+import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { deflateSync } from 'node:zlib'
 import type { Locator, Page, Request, Response } from 'playwright'
 import { type AppUser, type Attachment, type ChargeBook, NetworkDropped, type Turn, chargeULXC } from './app.ts'
@@ -1367,8 +1369,20 @@ export function socialPreview(): Scenario {
   }
 }
 
-/** B29.1 — the brand package: the tab icon, the Home Screen icon and the install manifest, each
- *  fetched from the app under test at the path the page names, and each answered as itself. */
+/** B58.16 — the logo kit Nick chose on 4 Nov 2026, as this repo keeps it: each icon path and the kit file it must be. */
+const LOGO_KIT = resolve(dirname(fileURLToPath(import.meta.url)), '../../brand/logo')
+const KIT_ICONS: Record<string, string> = {
+  '/favicon.ico': 'png/favicon/favicon.ico',
+  '/favicon.svg': 'png/favicon/favicon.svg',
+  '/apple-touch-icon.png': 'png/app-icon/apple-touch-icon.png',
+  '/icon-192.png': 'png/app-icon/icon-192.png',
+  '/icon-512.png': 'png/app-icon/icon-512.png',
+  '/icon-maskable-512.png': 'png/app-icon/icon-maskable-512.png',
+}
+
+/** B29.1, B58.16 — the brand package: the tab icon, the Home Screen icon and the install manifest, each
+ *  fetched from the app under test at the path the page names, each answered as itself and byte for byte
+ *  the chosen kit's file, and brand-v4's old teal icons no longer served. */
 export function brandIcons(): Scenario {
   return {
     id: 'brand-icons',
@@ -1385,7 +1399,9 @@ export function brandIcons(): Scenario {
           const res = await at(path)
           const ct = res.headers()['content-type'] ?? ''
           seen.push(`${path} -> ${res.status()} ${ct}${linked ? '' : ' (not linked from the page)'}`)
+          const kit = KIT_ICONS[path]
           if (!linked || res.status() !== 200 || !ct.startsWith(type)) missing.push(path)
+          else if (kit !== undefined && !(await res.body()).equals(readFileSync(join(LOGO_KIT, kit)))) missing.push(`${path} as the kit's ${kit}`)
           return res
         }
         // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
@@ -1405,9 +1421,12 @@ export function brandIcons(): Scenario {
         // B57.59, B57.79: the logo kit's ink for an installed app, Pocket's dark page for the browser's bar.
         if (manifest.theme_color !== '#111216' || manifest.background_color !== '#111216') missing.push('manifest colours #111216')
         if (!/<meta name="theme-color" content="#0F1013"/.test(html)) missing.push('theme-color #0F1013')
+        // B58.16: the app falls back to its page for an unknown path, so an old icon is gone once it is not an image.
+        const old = await at('/brand/svg/icon-route-teal.svg')
+        if ((old.headers()['content-type'] ?? '').startsWith('image/')) missing.push('/brand/svg/icon-route-teal.svg gone')
         ctx.evidence.push({ note: `${seen.join('; ')}; manifest theme ${manifest.theme_color} background ${manifest.background_color}` })
         return missing.length === 0
-          ? { pass: true, detail: 'favicon (.ico and .svg), apple-touch-icon and three manifest icons all load; the kit\'s colours throughout' }
+          ? { pass: true, detail: 'favicon (.ico and .svg), apple-touch-icon and three manifest icons all load as the kit\'s own files; the kit\'s colours throughout' }
           : { pass: false, detail: `brand package is missing: ${missing.join(', ')}` }
       } finally {
         await page.close()
@@ -1433,11 +1452,14 @@ export function brandLogo(): Scenario {
         try {
           await page.locator('img[data-brand="logo"]').first().waitFor({ state: 'attached' })
           for (const theme of ['dark', 'light'] as const) {
-            const got = await page.evaluate((t) => {
+            const got = await page.evaluate(async (t) => {
               document.documentElement.dataset.theme = t
-              const shown = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
+              const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
                 .filter((i) => getComputedStyle(i).display !== 'none')
-                .map((i) => ({ src: new URL(i.src).pathname, loaded: i.complete && i.naturalWidth > 0 }))
+              // B58.16: judged the moment the <img> was attached, the file was still on its way and every page read
+              // "did not load". decode() settles once the file is in or has failed; only then is it judged.
+              await Promise.all(imgs.map((i) => i.decode().catch(() => undefined)))
+              const shown = imgs.map((i) => ({ src: new URL(i.src).pathname, loaded: i.complete && i.naturalWidth > 0 }))
               const old = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
                 .map((i) => new URL(i.src, location.href).pathname)
                 .filter((s) => /\/brand\/svg\/(talyvor-|favicon)/.test(s))

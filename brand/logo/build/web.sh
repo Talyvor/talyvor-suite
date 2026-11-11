@@ -10,6 +10,10 @@ python3 "$kit/build/export.py" "$out"
 python3 "$kit/build/check_identical.py" "$out/svg"
 
 cp "$out"/svg/*.svg "$kit/svg/"
+# B58.16: the PNGs and the ICO this repo serves are kept in the kit too, so logoSwap.test.ts can compare them.
+cp "$out"/png/favicon/favicon.{ico,svg} "$kit/png/favicon/"
+cp "$out"/png/app-icon/{apple-touch-icon,icon-192,icon-512,icon-maskable-512}.png "$kit/png/app-icon/"
+cp "$out/png/social/og-image-dark-1200x630.png" "$kit/png/social/"
 web="$root/apps/web/public"
 for f in "$web"/brand/logo/*.svg; do cp "$out/svg/$(basename "$f")" "$f"; done
 cp "$out"/svg/talyvor-symbol-small-on-{dark,light}.svg "$root/apps/bff/brand/"
