@@ -134,7 +134,8 @@ describe('Agent Bank', () => {
     render(<App />)
     const card = await screen.findByTestId('agent-first')
     expect(within(card).getByText('Create your first agent')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Pause every agent' })).toBeNull()
+    // B57.8 — the top bar's Pause every agent is on every page; the page draws none of its own.
+    expect(screen.queryByTestId('pause-every-agent')).toBeNull()
     expect(screen.queryByTestId('agents-forecast')).toBeNull()
     expect(screen.queryByTestId('agent-bank-totals')).toBeNull()
     for (const region of ['Approvals', 'Spending', 'Between owners', 'Held and cashed out'])
@@ -142,7 +143,7 @@ describe('Agent Bank', () => {
 
     await createAgent('First')
     expect(screen.queryByTestId('agent-first')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('pause-every-agent')).getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Approvals' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Spending' })).toBeInTheDocument()
   })

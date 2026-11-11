@@ -75,6 +75,9 @@ function mockBff(me: Record<string, unknown>) {
         headers: { 'Content-Type': 'application/json' },
       })
     }
+    // B53.12 — /money/card sends the person to Spending while Lens's physical-card switch is off (404), so its title is
+    // read with the switch on, as ConsoleTitle.test.tsx reads it.
+    if (url === '/api/money/physical-cards') return new Response(JSON.stringify({ cards: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     return new Response('null', { status: 404 })
   })
 }
@@ -131,14 +134,14 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/overview': 'Overview',
   '/ledger': 'Ledger',
   '/chat': 'Chat',
-  '/chat/help': 'How to use Talyvor Chat',
+  '/chat/help': 'How to use Chat',
   // B28.369 — compare models side by side.
   '/chat/compare': 'Compare models',
   '/chat/instructions': 'Custom instructions',
-  '/chat/prompts': 'Prompt library',
+  '/chat/prompts': 'Prompts',
   '/chat/scheduled': 'Scheduled prompts',
   '/chat/memory': 'Memory',
-  '/chat/files': 'Uploaded files',
+  '/chat/files': 'Files',
   '/chat/connectors': 'Connectors',
   '/rooms/*': 'Rooms',
   // B28.10 — Earnings became Royalties, under Statements; /earnings redirects to it.
@@ -148,13 +151,13 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/billing/success': 'Billing',
   '/billing/cancel': 'Billing',
   '/keys': 'API keys',
-  '/agents': 'Agent Wallets',
+  '/agents': 'Agents',
   // B28.7 — the wallet's own destinations in the sidebar.
   '/approvals': 'Approvals',
   '/statements': 'Statements',
   '/marketplace/*': 'Marketplace',
-  '/setup': 'Setup',
-  '/spend': 'Spend & routing',
+  '/setup': 'Connect an agent',
+  '/spend': 'Spend and routing',
   '/members': 'Members',
   '/operator': 'Operator',
   '/operator/tax': 'Tax',
@@ -176,8 +179,8 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/money/spending': 'Spending',
   '/money/card': 'Talyvor Card',
   '/approve/:id': 'Approve payments',
-  '/money/plans/:id': 'Recurring payments',
-  '/features': 'Features',
+  '/money/plans/:id': 'Sign recurring payments',
+  '/features': 'Gateway features',
   '/features/try/tare': 'Try Tare',
   '/features/try/conversion': 'Try document conversion',
   '/track/*': 'Track',

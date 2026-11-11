@@ -262,13 +262,15 @@ const preset = {
         0.75: '0.1875rem', 5.25: '1.3125rem', 6.5: '1.625rem', 8.5: '2.125rem', 9.5: '2.375rem', 11.5: '2.875rem', 13.5: '3.375rem',
         // B57.5 — the sheet's 7px tangerine edge (1.75) and its 22px foot (5.5), the sheet 420 wide (105), a dialog 480 (120).
         1.75: '0.4375rem', 5.5: '1.375rem', 105: '26.25rem', 120: '30rem',
+        // B57.8 — the shell: the sidebar 232 wide (58) with its 18px padding (4.5), and the top bar 72 tall (`header`).
+        4.5: '1.125rem', 58: '14.5rem', header: '4.5rem',
       },
       // Pocket's focus ring is 3px of tangerine (B57.4).
       outlineWidth: { 3: '3px' },
-      // `below-header` — the viewport under the console's sticky header (`top-12`, a 32px control +
-      // py-2). B10.3's chat fills exactly that, so its composer sits at the bottom of the screen.
-      height: { row: '38px', 'below-header': 'calc(100dvh - 3rem)' },
-      minHeight: { row: '38px', 'below-header': 'calc(100dvh - 3rem)' },
+      // `below-header` — the viewport under the console's sticky top bar (`top-header`, Pocket's 72px, B57.8).
+      // B10.3's chat fills exactly that, so its composer sits at the bottom of the screen.
+      height: { row: '38px', 'below-header': 'calc(100dvh - 4.5rem)' },
+      minHeight: { row: '38px', 'below-header': 'calc(100dvh - 4.5rem)' },
       outlineColor: { accent: 'var(--accent)' },
       ringColor: { accent: 'var(--accent)' },
     },

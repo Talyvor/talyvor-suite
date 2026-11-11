@@ -74,7 +74,7 @@ describe('the Docs screen while Docs refuses (B27.15)', () => {
 })
 
 describe('Chat while Docs refuses (B27.15)', () => {
-  it('loads with no failed request: the sidebar asks whether the person can read Docs, and does not ask for pins', async () => {
+  it('loads with no failed request, and asks Docs nothing: B57.8 took the Docs pages out of the sidebar', async () => {
     window.history.pushState({}, '', '/chat')
     const failed: string[] = []
     const spy = vi.spyOn(globalThis, 'fetch')
@@ -94,7 +94,7 @@ describe('Chat while Docs refuses (B27.15)', () => {
     await screen.findByRole('navigation', { name: /sections/i })
     await settleQueries(queryClient, waitFor)
 
-    expect(seen.asked).toContain('/api/docs/membership')
+    expect(seen.asked).not.toContain('/api/docs/membership')
     expect(seen.asked).not.toContain('/api/docs/pins')
     expect(failed).toEqual([])
   })

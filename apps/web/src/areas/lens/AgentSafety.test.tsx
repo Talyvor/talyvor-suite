@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -81,6 +81,11 @@ afterEach(() => {
   queryClient.clear()
 })
 
+/** B57.8 — the page's own switch: the top bar and the kill banner carry ones with the same names. */
+async function fleet() {
+  return within(await screen.findByTestId('pause-every-agent'))
+}
+
 describe('the Agent Bank stops every agent or one, and shows what they are spending', () => {
   it('pauses every agent with a reason, starts them again, pauses one, and shows the forecast and an alert', async () => {
     const posts = mockBff()
@@ -91,11 +96,11 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
     expect(screen.getByText(/spent/, { selector: 'div' }).textContent).toContain('Researcher spent 0.6 LXC in an hour')
 
     fireEvent.change(await screen.findByLabelText('Why every agent is paused'), { target: { value: 'audit' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Pause every agent' }))
+    fireEvent.click((await fleet()).getByRole('button', { name: 'Pause every agent' }))
     expect((await screen.findByTestId('agents-all-paused')).textContent).toContain('Every agent is paused: audit.')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start every agent again' }))
-    await screen.findByRole('button', { name: 'Pause every agent' })
+    fireEvent.click((await fleet()).getByRole('button', { name: 'Start every agent again' }))
+    await (await fleet()).findByRole('button', { name: 'Pause every agent' })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
     expect((await screen.findByTestId('agent-paused')).textContent).toBe('Researcher is paused: paused from Agent Wallets.')
@@ -130,9 +135,9 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
     fireEvent.click(screen.getByRole('button', { name: 'Resume Researcher' }))
     await screen.findByRole('button', { name: 'Pause Researcher' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pause every agent' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Start every agent again' }))
-    await screen.findByRole('button', { name: 'Pause every agent' })
+    fireEvent.click((await fleet()).getByRole('button', { name: 'Pause every agent' }))
+    fireEvent.click(await (await fleet()).findByRole('button', { name: 'Start every agent again' }))
+    await (await fleet()).findByRole('button', { name: 'Pause every agent' })
 
     const assertion = { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' }
     expect(posts.map((p) => [p.url, p.body])).toEqual([
@@ -159,9 +164,9 @@ describe('starting agents again when only the phone holds a key (B55.2)', () => 
     expect(await screen.findByText('Resume Researcher on your phone with Face ID.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Resume Researcher' })).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pause every agent' }))
+    fireEvent.click((await fleet()).getByRole('button', { name: 'Pause every agent' }))
     expect(await screen.findByText('Start your agents again on your phone with Face ID.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Start every agent again' })).toBeNull()
+    expect((await fleet()).queryByRole('button', { name: 'Start every agent again' })).toBeNull()
     expect(screen.getAllByRole('link', { name: 'Add this browser' }).length).toBeGreaterThan(0)
 
     expect(posts.map((p) => p.url)).toEqual(['/api/agents/agt_1/pause', '/api/agents/pause-all'])

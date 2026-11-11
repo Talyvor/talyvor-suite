@@ -143,9 +143,20 @@ const SAMPLE: Record<string, unknown> = {
   },
 }
 
+/** B57.8 — Pause every agent pauses the sample's agents until Start every agent again, so the shots draw the kill banner. */
+let allPaused = false
+
+/** Each page the shots open starts with the agents running. */
+export function sampleReset(): void {
+  allPaused = false
+}
+
 /** The sample's answer for a URL, else populatedBff's, else undefined (pocket-shots answers 404). */
 export function sampleBodyFor(url: string): unknown {
   const path = url.split('?')[0]
+  if (path === '/api/agents/pause-all') return (allPaused = true), { all_paused: true }
+  if (path === '/api/agents/resume-all') return (allPaused = false), { all_paused: false }
+  if (path === '/api/agents' && allPaused) return { ...(SAMPLE[path] as object), all_paused_at: SAMPLE_NOW, all_paused_reason: 'paused from the top bar' }
   if (url in SAMPLE) return SAMPLE[url]
   if (path in SAMPLE) return SAMPLE[path]
   return bodyFor(url)

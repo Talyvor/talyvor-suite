@@ -35,18 +35,21 @@ describe('Docs is offered in the Products nav', () => {
     window.localStorage.clear()
   })
 
-  it('renders a Docs navigation item now that Docs is per-identity', async () => {
+  it('B57.8 — the sidebar’s one row for both is Track and Docs, and it opens Track', async () => {
     render(<App />)
     const nav = await screen.findByRole('navigation', { name: /sections/i })
-    // B24.1, B28.7 — Docs is a link inside the Work group, whose title opens it.
-    fireEvent.click(within(nav).getByRole('button', { name: 'Work' }))
-    expect(within(nav).getByRole('link', { name: 'Docs' })).toBeInTheDocument()
+    fireEvent.click(within(nav).getByRole('link', { name: 'Track and Docs' }))
+    expect(window.location.pathname).toBe('/track')
   })
 
-  it('still lists Track, so the assertion above is about Docs and not a nav that renders everything', async () => {
+  it('Track links Docs, so Docs is two clicks from anywhere', async () => {
+    window.history.pushState({}, '', '/track')
     render(<App />)
-    const nav = await screen.findByRole('navigation', { name: /sections/i })
-    fireEvent.click(within(nav).getByRole('button', { name: 'Work' }))
-    expect(within(nav).getByRole('link', { name: 'Track' })).toBeInTheDocument()
+    const track = await screen.findByRole('navigation', { name: 'Track' })
+    fireEvent.click(within(track).getByRole('link', { name: 'Docs' }))
+    expect(window.location.pathname).toBe('/docs')
+    // The row stays marked on Docs, which it holds too.
+    const nav = screen.getByRole('navigation', { name: /sections/i })
+    expect(within(nav).getByRole('link', { name: 'Track and Docs' })).toHaveAttribute('aria-current', 'page')
   })
 })

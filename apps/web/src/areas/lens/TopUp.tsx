@@ -21,6 +21,7 @@ import {
 } from './topupApi'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { BUY_FROM_TALYVOR } from '../../labels/capabilities'
+import { BILLING_LINKS, PageLinks } from '../../components/PageLinks'
 
 // /billing — buying LXC. Until this screen there was no way for a customer to do
 // it at all: the Lens half (checkout, a signature-verified webhook, exactly-once
@@ -530,6 +531,8 @@ export function TopUp({
           </p>
         </Region>
       )}
+      {/* B57.8 — Overview and Ledger left the sidebar; Billing links them. */}
+      <PageLinks label="Where the money went" links={BILLING_LINKS} />
     </RegionScreen>
   )
 }

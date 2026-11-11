@@ -2,8 +2,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 
 import { App, CONSOLE_ROUTES, queryClient } from './App'
-import { SIDEBAR_FOLD_KEY } from './sidebarFold'
-import { revealLink } from './sidebarTestKit'
 
 /**
  * scrollReset.test.tsx — CLIENT-SIDE NAVIGATION CARRIED THE PREVIOUS PAGE'S SCROLL OFFSET INTO
@@ -77,9 +75,13 @@ function sectionsNav(): HTMLElement {
   return nav
 }
 
-/** B24.1 — the link sits in a group that may be folded, so its title is pressed first. */
+/** The sidebar's row to `path` (B57.8: nothing folds, so it is on screen). */
 function destination(path: string): HTMLAnchorElement {
-  return revealLink(sectionsNav(), path)
+  const row = Array.from(sectionsNav().querySelectorAll<HTMLAnchorElement>('a[href]:not([aria-label])')).find(
+    (a) => new URL(a.href, window.location.origin).pathname === path,
+  )
+  if (!row) throw new Error(`the sidebar has no row to ${path}`)
+  return row
 }
 
 let scrollTo: MockInstance
@@ -94,7 +96,6 @@ afterEach(() => {
   vi.restoreAllMocks()
   queryClient.clear()
   document.body.replaceChildren()
-  window.localStorage.removeItem(SIDEBAR_FOLD_KEY)
 })
 
 describe('the instrument, before it is pointed at the product', () => {
@@ -135,7 +136,7 @@ describe('a push navigation puts the reader at the top of the page they asked fo
   for (const route of CONSOLE_ROUTES) {
     const address = route.path.replace(/\/\*$/, '')
     // Somewhere else to go from here. `/` is a destination from every address but its own.
-    const target = address === '/' ? '/ledger' : '/'
+    const target = address === '/' ? '/money/pay' : '/'
 
     it(`${address} → ${target}: the top of the document is requested`, async () => {
       window.history.pushState({}, '', address)
@@ -192,8 +193,8 @@ describe('a pop navigation is left to the browser, which restores the offset its
     // C3 in w11-scroll-reset-controls.py did exactly that until this line was added.
     scrollTo.mockClear()
 
-    fireEvent.click(destination('/ledger'))
-    await waitFor(() => expect(window.location.pathname).toBe('/ledger'))
+    fireEvent.click(destination('/money/pay'))
+    await waitFor(() => expect(window.location.pathname).toBe('/money/pay'))
     // FLOOR: the push must have scrolled, in THIS test, or "back did not scroll" is a fact
     // about a spy that was never going to record anything.
     expect(

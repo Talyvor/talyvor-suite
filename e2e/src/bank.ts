@@ -227,14 +227,19 @@ export class AgentBankScreen {
   async pauseAll(reason: string): Promise<string | undefined> {
     await this.fresh()
     await this.page.getByLabel('Why every agent is paused').fill(reason)
-    await this.page.getByRole('button', { name: 'Pause every agent' }).click()
+    // B57.8 — the page's own switch; the top bar and the kill banner carry ones with the same names.
+    await this.fleet().getByRole('button', { name: 'Pause every agent' }).click()
     return outcome(this.page.getByTestId('agents-all-paused'), this.page.locator('body'))
   }
 
   async resumeAll(): Promise<string | undefined> {
     await this.fresh()
-    await this.page.getByRole('button', { name: 'Start every agent again' }).click()
-    return outcome(this.page.getByRole('button', { name: 'Pause every agent' }), this.page.locator('body'))
+    await this.fleet().getByRole('button', { name: 'Start every agent again' }).click()
+    return outcome(this.fleet().getByRole('button', { name: 'Pause every agent' }), this.page.locator('body'))
+  }
+
+  private fleet() {
+    return this.page.getByTestId('pause-every-agent')
   }
 
   /** Pays `to` from `from` on Pay another agent; answers the line the card then shows. */
@@ -2052,7 +2057,8 @@ async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: st
 
 /** B28.271 — what Agent Wallets may not show a workspace with no agents: none of these has anything to act on yet. */
 const EMPTY_HIDDEN = [
-  { what: 'the pause-all switch', find: (p: Page) => p.getByRole('button', { name: 'Pause every agent' }) },
+  // B57.8 — the page's own; the top bar's Pause every agent is on every page.
+  { what: 'the pause-all switch', find: (p: Page) => p.getByTestId('pause-every-agent') },
   { what: 'the month-end forecast', find: (p: Page) => p.getByTestId('agents-forecast') },
   { what: 'the Approvals region', find: (p: Page) => p.getByRole('region', { name: 'Approvals' }) },
   { what: 'the Spending region', find: (p: Page) => p.getByRole('region', { name: 'Spending' }) },
@@ -3849,36 +3855,33 @@ async function giveBack(ctx: ScenarioCtx, name: string): Promise<void> {
 }
 
 /**
- * B28.7 — the navigation is wallet-first. With every group open, the sidebar reads top to bottom: Home,
- * Approvals, Agent Wallets, Statements, Chat, then Marketplace, Work (Track, Docs), Developers (Connect an
- * agent, API keys, Spend & routing, Gateway features), Billing and Settings. The Approvals badge is held to
- * Lens's own pending count, and every link the sidebar offers opens a page rather than the catch-all.
+ * B28.7 — the navigation is wallet-first. B57.8 — and it is Pocket's rows, with no folding groups: Home, Approvals,
+ * Agents, Statements, Pay, Invoices, Spending, Chat, Rooms, Marketplace; a rule; Scan, Track and Docs, Developers,
+ * Billing, Settings; Privacy and Terms at its foot. The Approvals badge is held to Lens's own pending count, and every
+ * link the sidebar offers opens a page rather than the catch-all.
  */
 export const WALLET_FIRST_NAV = [
-  'Home', 'Approvals', 'Agent Wallets', 'Statements', 'Chat', 'Marketplace', 'Work', 'Track', 'Docs',
-  'Developers', 'Connect an agent', 'API keys', 'Spend & routing', 'Gateway features', 'Billing', 'Settings',
+  'Home', 'Approvals', 'Agents', 'Statements', 'Pay', 'Invoices', 'Spending', 'Chat', 'Rooms', 'Marketplace',
+  'Scan', 'Track and Docs', 'Developers', 'Billing', 'Settings', 'Privacy', 'Terms',
 ] as const
 
 export function walletFirstNav(): Scenario {
   return {
     id: 'wallet-first-nav',
     owner: 'talyvor-suite',
-    items: ['B28.7'],
+    items: ['B28.7', 'B57.8'],
     title: 'the sidebar leads with the wallet, its Approvals badge is Lens’s pending count, and every link opens a page',
     run: async (ctx) => {
       const page = await ctx.app.tab('/')
       try {
         const nav = page.getByRole('navigation', { name: 'Sections' })
         await nav.getByRole('link', { name: 'Statements' }).waitFor({ timeout: ACTION_TIMEOUT_MS })
-        const fold = nav.getByRole('button', { name: 'Fold all' })
-        if ((await fold.count()) > 0) await fold.click()
-        await nav.getByRole('button', { name: 'Open all' }).click()
+        // The logo leads, to Home, and is named rather than a row; every row after it is a link.
         const rows = await nav
-          .locator('a[href], button[aria-expanded]')
+          .locator('a[href]:not([aria-label])')
           .evaluateAll((els) => els.map((e) => ({ text: (e.textContent ?? '').trim(), href: e.getAttribute('href') })))
         const named = rows.map((r) => r.text.replace(/\d+ waiting$/, '').trim())
-        // A group and its one same-named link (Settings, then Settings) read as one entry.
-        const order = named.filter((l, i) => (WALLET_FIRST_NAV as readonly string[]).includes(l) && l !== named[i - 1])
+        const order = named
         const pending = (await ctx.env.lens.agentApprovals(ctx.app.user)).filter((x) => x.status === 'pending').length
         // B34.1 — the badge is drawn once the page has read the approvals; read before that, it is none.
         const badge = await badgeReaches(page, pending, ACTION_TIMEOUT_MS)

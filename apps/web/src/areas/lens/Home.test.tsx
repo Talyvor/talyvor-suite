@@ -218,7 +218,7 @@ describe('Home — the wallet home (B28.6)', () => {
 
     expect(await screen.findByRole('heading', { level: 2, name: 'Welcome to Talyvor' })).toBeInTheDocument()
     expect(await screen.findByText('Your agents’ wallets, at a glance.')).toBeInTheDocument()
-    expect(screen.getByRole('banner')).toHaveTextContent('Home')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Home')
 
 
     // Researcher spent 3 of its 12 LXC monthly budget: 25%. Buyer has no budget, so it is offered one.
@@ -230,7 +230,7 @@ describe('Home — the wallet home (B28.6)', () => {
 
     // The rest of the home: the forecast, and pause-all.
     expect(await screen.findByTestId('home-forecast')).toHaveTextContent('25 LXC')
-    expect(screen.getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('pause-every-agent')).getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
   })
 
   // B45.11 — DONE reads: "the approvals, the total and the first agent rows are visible without scrolling; every
@@ -477,7 +477,7 @@ describe('Home — the product cards (B29.8)', () => {
       expect(window.location.pathname).toBe(card.to)
       const route = CONSOLE_ROUTES.find((r) => (r.path.endsWith('/*') ? card.to === r.path.slice(0, -2) : r.path === card.to))
       expect(route, `${card.to} is not a console route`).toBeDefined()
-      expect(screen.getByRole('banner')).toHaveTextContent(route!.title)
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(route!.title)
       cleanup()
       queryClient.clear()
     }

@@ -1,9 +1,7 @@
 import { useEffect, useRef } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Button } from '@talyvor/ui'
 import { api } from '../lib/api'
-import { useAuthMeReader } from '../lib/authMe'
 import { useDocumentTitle } from '../documentTitle'
 import { AuthCard, SignInCard } from '../areas/auth/Entry'
 
@@ -104,32 +102,5 @@ function SignedOut() {
         <SignInCard returnTo={returnTo} />
       </AuthCard>
     </main>
-  )
-}
-
-// SessionChip: who is signed in + the way out. Renders nothing when there is no
-// session to show (disabled mode, or the gate is about to take over anyway).
-export function SessionChip() {
-  const q = useAuthMeReader()
-  const qc = useQueryClient()
-  if (!q.data?.authenticated || !q.data.user) return null
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      {/* B28.267 — off on a phone, where the page title needs the width more than the address does. */}
-      <span className="hidden truncate text-caption text-muted wide:block" title={q.data.user.email}>
-        {q.data.user.email}
-      </span>
-      <Button
-        className="shrink-0"
-        onClick={() => {
-          void fetch('/auth/logout', { method: 'POST' }).then(() => {
-            // The session is dead server-side; re-probe so the gate re-renders.
-            void qc.invalidateQueries({ queryKey: ['auth-me'] })
-          })
-        }}
-      >
-        Sign out
-      </Button>
-    </div>
   )
 }

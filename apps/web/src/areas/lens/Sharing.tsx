@@ -10,6 +10,7 @@ import { IfArea } from '../../lib/workspaceAreas'
 import { ProviderKeysCard } from './ProviderKeys'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Region, RegionScreen } from '../../components/Region'
+import { SettingsLinks } from '../../components/PageLinks'
 import { pressed } from './walletBrand'
 import { KIND_LABEL, KIND_LINE, TYPE_LABEL, useAccount, usePersonal } from './agentBankApi'
 
@@ -257,6 +258,8 @@ export function Settings() {
   // B29.12 — the board's pattern: an eyebrow names each section and its card sits on the raised plane.
   return (
     <RegionScreen>
+      {/* B57.8 — Sign out moved here from the top bar, and the settings pages that left the sidebar are linked. */}
+      <SettingsLinks />
       {/* B59.2 — shared answers and document conversion are the gateway's, and go with it. */}
       <IfArea area="gateway">
       <Region index="00" label="Sharing">

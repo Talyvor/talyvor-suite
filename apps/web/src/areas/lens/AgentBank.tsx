@@ -131,7 +131,7 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" data-testid="pause-every-agent">
       {book.all_paused_at ? (
         <>
           <p role="status" className="text-body text-ink" data-testid="agents-all-paused">

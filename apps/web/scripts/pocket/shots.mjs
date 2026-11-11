@@ -59,7 +59,7 @@ const overrides = JSON.parse(await readFile(join(WEB, 'scripts/pocket/overrides.
 
 // The sample and the checks are TypeScript the app's own imports resolve; vite loads them as it does in a build.
 const loader = await createServer({ root: WEB, logLevel: 'error', server: { middlewareMode: true, hmr: false }, appType: 'custom', optimizeDeps: { noDiscovery: true } })
-const { sampleBodyFor, SAMPLE_NOW, SAMPLE_TIME_ZONE } = await loader.ssrLoadModule('/scripts/pocket/sample.ts')
+const { sampleBodyFor, sampleReset, SAMPLE_NOW, SAMPLE_TIME_ZONE } = await loader.ssrLoadModule('/scripts/pocket/sample.ts')
 const check = await loader.ssrLoadModule('/src/test/pocketCheck.ts')
 await loader.close()
 
@@ -118,6 +118,7 @@ async function press(page, words) {
 
 /** The app at `route` after `steps`, in a fresh page at `size`. */
 async function openApp(c, size) {
+  sampleReset()
   const ctx = await browser.newContext({ viewport: size, timezoneId: SAMPLE_TIME_ZONE, colorScheme: c.dark ? 'dark' : 'light' })
   const page = await ctx.newPage()
   await page.clock.setFixedTime(new Date(SAMPLE_NOW))
