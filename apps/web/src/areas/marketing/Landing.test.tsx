@@ -245,7 +245,7 @@ describe('Landing labels', () => {
     const deck = ['premium', 'business', 'stable-premium', 'agent-remy', 'agent-sunny', 'agent-penny', 'agent-max', 'agent-nova', 'agent-ollie']
     const { container } = render(<Landing />)
     const faces = [...container.querySelectorAll('#wallets picture img')]
-    expect(faces.map((img) => img.getAttribute('src'))).toEqual(deck.map((id) => `/brand/cards/${id}.png`))
+    expect(faces.map((img) => img.getAttribute('src'))).toEqual(deck.map((id) => `/card-faces/${id}.png`))
     for (const img of faces) {
       expect(img.getAttribute('alt')).toMatch(/\S card$/)
       const webp = img.parentElement!.querySelector('source[type="image/webp"]')!.getAttribute('srcset')!
