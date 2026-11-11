@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Landing } from './Landing'
 import { Pricing } from './Pricing'
 import { SiteFooter, SiteHeader } from '../../components/SiteChrome'
+import { Documentation } from '../documentation/Documentation'
 
 // B59.5 — the public website shows the launch pack only (LAUNCH-PACK.md section 2): the nav, the home page, /pricing
 // and the footer name no hidden area, link to none, and say nothing is coming soon. A hidden area simply isn't there.
+// B59.37 — and so does /documentation, every guide, claim and Lens route group on it.
 
 /** The hidden areas as a visitor would read them, and the old gateway's parts by their own words. */
 const HIDDEN: Array<[string, RegExp]> = [
@@ -115,6 +117,24 @@ describe('B59.5 — the public website shows the launch pack only', () => {
     await screen.findByTestId('company-plan-enterprise')
     await screen.findByTestId('fees-money-features')
     const { text, hrefs } = read(container)
+    expect(named(text)).toEqual([])
+    expect(hrefs.filter((h) => HIDDEN_HREF.test(h))).toEqual([])
+  })
+})
+
+describe('B59.37 — the public documentation shows the launch pack only', () => {
+  it('/documentation names and links to no hidden area in any part card, guide, claim or route group', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+      String(input) === '/api/pricing'
+        ? new Response(JSON.stringify(CARD), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        : new Response('null', { status: 404 }),
+    )
+    const { container } = render(<Documentation />)
+    await screen.findByRole('heading', { level: 1, name: 'Documentation' })
+    // The licences table stays as it is: it names the repositories, not what the product offers.
+    const page = container.cloneNode(true) as HTMLElement
+    page.querySelector('#licences')?.remove()
+    const { text, hrefs } = read(page)
     expect(named(text)).toEqual([])
     expect(hrefs.filter((h) => HIDDEN_HREF.test(h))).toEqual([])
   })

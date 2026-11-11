@@ -193,14 +193,13 @@ describe('every link on every public page goes somewhere real', () => {
 })
 
 describe('/documentation lists only what Lens serves without a key under "No key needed"', () => {
-  it('puts /v1/tokens/rates and /v1/economy/stats with the routes that take a key', () => {
+  // B59.37 — both went with the shared-answers group, which the launch pack hides; neither comes back as public.
+  it('does not put /v1/tokens/rates or /v1/economy/stats under No key needed', () => {
     const publicGroup = lensRoutes.groups.find((g) => g.id === 'public')!
     expect(publicGroup.about).toBe('No key needed.')
     const paths = publicGroup.routes.map((r) => r.path)
     expect(paths).not.toContain('/v1/tokens/rates')
     expect(paths).not.toContain('/v1/economy/stats')
-    const keyed = lensRoutes.groups.filter((g) => g.id !== 'public').flatMap((g) => g.routes.map((r) => r.path))
-    expect(keyed).toEqual(expect.arrayContaining(['/v1/tokens/rates', '/v1/economy/stats']))
   })
 })
 
