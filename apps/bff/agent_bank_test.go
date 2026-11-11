@@ -37,6 +37,10 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/pay"):
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "economy: the agent's spending rules refuse this request: the agent has spent 0 LXC of its daily limit of 5 LXC, and this payment would cost up to 6 LXC"})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_held/pay"): // B58.1: Lens's answer for a payment held for the owner (B58.2)
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "pending_approval", "approval_id": "apr_x", "amount_ulxc": 6_000_000,
+				"message": "economy: payment of 6 LXC is above the agent's approval amount. Approval apr_x must be approved before it is sent"})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/fund"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"agent_id": "agt_1", "balance_ulxc": 10_000_000})
 		case strings.HasSuffix(r.URL.Path, "/resume/challenge"), strings.HasSuffix(r.URL.Path, "/agents/resume-all/challenge"):
@@ -174,6 +178,20 @@ func TestAgentBankRelaysLensRefusalSentence(t *testing.T) {
 	rec = doJSON(a, http.MethodGet, "/api/agents/approvals", "")
 	if rec.Code != http.StatusBadGateway || strings.Contains(rec.Body.String(), "internal server error") {
 		t.Fatalf("a Lens 500 = %d %s, want a 502 of the BFF's own", rec.Code, rec.Body.String())
+	}
+}
+
+// B58.1 — a payment Lens holds for the owner answers 202, and the browser gets that status with the hold's fields, so
+// the web can say it waits in Approvals and never that it was paid.
+func TestAgentBankRelaysAHeldPayment(t *testing.T) {
+	a, _ := newFakeLensAgentBank(t)
+	rec := doJSON(a, http.MethodPost, "/api/agents/agt_held/pay", `{"to_agent_id":"agt_2","amount_ulxc":6000000}`)
+	var got struct {
+		Status     string `json:"status"`
+		ApprovalID string `json:"approval_id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || rec.Code != http.StatusAccepted || got.Status != "pending_approval" || got.ApprovalID != "apr_x" {
+		t.Fatalf("a held pay = %d %s, want 202 with status pending_approval and approval_id apr_x", rec.Code, rec.Body.String())
 	}
 }
 
