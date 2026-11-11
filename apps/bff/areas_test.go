@@ -75,21 +75,28 @@ func serveAs(a *app, sess *http.Cookie, path string) *httptest.ResponseRecorder 
 	return rec
 }
 
-// One BFF route of each hidden area that has any.
-var areaProbes = []struct{ area, path string }{
-	{"marketplace", "/api/marketplace/mine"},
-	{"rooms", "/api/rooms"},
-	{"chat", "/api/chat/prompts"},
-	{"docs", "/api/docs/spaces"},
-	{"track", "/api/track/projects"},
-	{"scan", "/api/scan/watches"},
-	{"credit", "/api/wallets/loans"},
-	{"gateway", "/api/models"},
+// One BFF route of each hidden area that has any, and what a GET of it answers once the area is on
+// (its handler's own answer: a route that takes only POST says so once the gate lets it through).
+var areaProbes = []struct {
+	area, path string
+	on         int
+}{
+	{"marketplace", "/api/marketplace/mine", http.StatusOK},
+	{"rooms", "/api/rooms", http.StatusOK},
+	{"chat", "/api/chat/prompts", http.StatusOK},
+	{"docs", "/api/docs/spaces", http.StatusOK},
+	{"track", "/api/track/projects", http.StatusOK},
+	{"scan", "/api/scan/watches", http.StatusOK},
+	{"credit", "/api/wallets/loans", http.StatusOK},
+	{"gateway", "/api/models", http.StatusOK},
+	{"credit", "/api/agents/ag-1/loans", http.StatusMethodNotAllowed},
+	{"scan", "/api/agents/ag-1/scan-watches", http.StatusMethodNotAllowed},
+	{"chat", "/api/agents/prompt-schedules", http.StatusOK},
 }
 
 func TestAreas_AHiddenAreasRoutesAnswer404UntilLensListsTheArea(t *testing.T) {
 	for _, p := range areaProbes {
-		t.Run(p.area, func(t *testing.T) {
+		t.Run(p.area+p.path, func(t *testing.T) {
 			u := newAreasUpstream(t)
 			a, sess := areasApp(t, u)
 
@@ -109,8 +116,8 @@ func TestAreas_AHiddenAreasRoutesAnswer404UntilLensListsTheArea(t *testing.T) {
 			}
 
 			u.set(p.area)
-			if rec := serveAs(a, sess, p.path); rec.Code != http.StatusOK {
-				t.Fatalf("%s on: GET %s → %d (%s), want 200", p.area, p.path, rec.Code, rec.Body.String())
+			if rec := serveAs(a, sess, p.path); rec.Code != p.on {
+				t.Fatalf("%s on: GET %s → %d (%s), want %d", p.area, p.path, rec.Code, rec.Body.String(), p.on)
 			}
 		})
 	}
@@ -119,7 +126,7 @@ func TestAreas_AHiddenAreasRoutesAnswer404UntilLensListsTheArea(t *testing.T) {
 func TestAreas_ALaunchRouteIsNeverGated(t *testing.T) {
 	u := newAreasUpstream(t)
 	a, sess := areasApp(t, u)
-	for _, path := range []string{"/api/money/accounts", "/api/agents", "/api/wallets/credit-line", "/api/pooling", "/api/members"} {
+	for _, path := range []string{"/api/money/accounts", "/api/agents", "/api/agents/ag-1/rules", "/api/agents/schedules", "/api/wallets/credit-line", "/api/pooling", "/api/members"} {
 		if got := areaOfPath(path); got != "" {
 			t.Errorf("%s is in area %q; it is a launch route", path, got)
 		}

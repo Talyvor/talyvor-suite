@@ -56,8 +56,27 @@ var areaRoutes = []struct{ prefix, area string }{
 	{"/api/features/guardrails", "gateway"},
 }
 
+// agentAreaRoutes are the routes under /api/agents that belong to an area: the segment after
+// /api/agents/{id}/ (an agent's own), or after /api/agents/ (the workspace's list of them).
+var agentAreaRoutes = map[string]string{
+	"loans":            "credit",
+	"scan-watches":     "scan",
+	"prompt-schedules": "chat", // Chat's scheduled prompts
+}
+
 // areaOfPath names the area a request path belongs to, or "" when it belongs to none.
 func areaOfPath(path string) string {
+	if rest, ok := strings.CutPrefix(path, "/api/agents/"); ok {
+		seg := strings.Split(rest, "/")
+		if area := agentAreaRoutes[seg[0]]; area != "" {
+			return area
+		}
+		if len(seg) > 1 {
+			if area := agentAreaRoutes[seg[1]]; area != "" {
+				return area
+			}
+		}
+	}
 	for _, e := range areaRoutes {
 		if strings.HasSuffix(e.prefix, "/") {
 			if strings.HasPrefix(path, e.prefix) {
