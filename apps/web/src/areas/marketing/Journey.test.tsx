@@ -71,7 +71,7 @@ describe('a signed-out visitor arrives from talyvor.com and can act', () => {
     mockBff()
     at(href)
     // ARRIVAL: content only the signup screen carries.
-    expect(await screen.findByRole('heading', { name: /create your talyvor workspace/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Who is this account for?' })).toBeInTheDocument()
   })
 
   it('reaches privacy before handing over an account', async () => {

@@ -88,9 +88,7 @@ describe('/signup and /signin are public routes', () => {
     at('/signup')
     // The gate's card would be the failure: a signup page you must already be signed in to
     // read is not a signup page.
-    expect(
-      await screen.findByRole('heading', { name: /create your (talyvor )?workspace/i }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Who is this account for?' })).toBeInTheDocument()
     expect(screen.queryByText(/this workspace requires authentication/i)).toBeNull()
   })
 
@@ -112,71 +110,18 @@ describe('/signup and /signin are public routes', () => {
     expect(signupHeading).not.toEqual(signinHeading)
   })
 
-  it('both end at the SAME mechanism — /auth/login', async () => {
-    // Each page's PRIMARY action, by its own exact label. (The pages also cross-link to each
-    // other, which is why a loose /sign in/i matches two elements on the signup page.)
-    for (const [path, label] of [
-      ['/signup', /^continue$/i],
-      ['/signin', /^sign in$/i],
-    ] as const) {
-      mockMe({ signup_open: true })
-      at(path)
-      const action = await screen.findByRole('link', { name: label })
-      expect(action.getAttribute('href')).toMatch(/^\/auth\/login/)
-      cleanup()
-      queryClient.clear()
-      vi.restoreAllMocks()
-    }
+  // B59.8: /signup reaches /auth/login from its step 2, with its answers (SignUp.test.tsx).
+  it('sign-in ends at /auth/login', async () => {
+    mockMe({ signup_open: true })
+    at('/signin')
+    const action = await screen.findByRole('link', { name: /^sign in$/i })
+    expect(action.getAttribute('href')).toMatch(/^\/auth\/login/)
   })
 })
 
 // ─── the words a stranger reads ─────────────────────────────────────────────
 
 describe('the signup page is written for someone who has never heard of us', () => {
-  it('says what Talyvor is, what happens next, and what they get', async () => {
-    mockMe({ signup_open: true })
-    at('/signup')
-    await screen.findByRole('heading', { level: 1 })
-    const text = document.body.textContent ?? ''
-
-    // 1. what it is — in one line, on the page, before they commit to anything.
-    expect(text).toMatch(/Talyvor is the financial ecosystem for the AI agent economy/i)
-    expect(text).not.toMatch(/self-hosted/i) // B28.3: nothing self-hosts Lens
-    // 2. what happens when they continue — no surprise redirect.
-    expect(text).toMatch(/you[’']ll be (sent|taken)/i)
-    // 3. what they get — the thing on the other side (B57.49: the first line kept, the second rewritten).
-    const lines = within(screen.getByRole('list')).getAllByRole('listitem').map((li) => li.textContent)
-    expect(lines.slice(0, 2)).toEqual([
-      'Your own workspace: a balance, keys and a ledger nobody else can see.',
-      'Your first agent, with a wallet and rules, made for you.',
-    ])
-  })
-
-  // B57.49 — the third line is Lens's to say: printed only while /api/pricing labels every money capability Sandbox.
-  it('says money features are in Sandbox only while Lens labels every one of them Sandbox', async () => {
-    const line = 'Money features in Sandbox, where no real money moves.'
-    for (const [labels, shown] of [
-      [{ spend_on_talyvor: 'sandbox', payments_out: 'sandbox' }, true],
-      [{ spend_on_talyvor: 'live', payments_out: 'sandbox' }, false],
-      [{}, false],
-      [undefined, false],
-    ] as const) {
-      mockMe({ signup_open: true, labels })
-      at('/signup')
-      await screen.findByRole('heading', { level: 1 })
-      if (shown) expect(await screen.findByText(line)).toBeInTheDocument()
-      else {
-        await waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.some(([u]) => String(u) === '/api/pricing')).toBe(true))
-        await new Promise((r) => setTimeout(r, 0))
-        expect(screen.queryByText(line)).toBeNull()
-      }
-      expect(screen.getAllByRole('listitem')).toHaveLength(shown ? 3 : 2)
-      cleanup()
-      queryClient.clear()
-      vi.restoreAllMocks()
-    }
-  })
-
   it('does NOT use enterprise-SSO language', async () => {
     mockMe({ signup_open: true })
     at('/signup')
@@ -187,13 +132,6 @@ describe('the signup page is written for someone who has never heard of us', () 
     // Both apostrophe forms, both spellings — see the apostrophe warning at the top.
     expect(text).not.toMatch(/organi[sz]ation[’']?s identity provider/i)
     expect(text).not.toMatch(/\bSSO\b/)
-  })
-
-  it('promises no new password, because there is none', async () => {
-    mockMe({ signup_open: true })
-    at('/signup')
-    await screen.findByRole('heading', { level: 1 })
-    expect(document.body.textContent ?? '').toMatch(/no (new )?password/i)
   })
 
   // B27.22 — sharing is on by default, so the page says so before Continue, and links to the
@@ -246,7 +184,7 @@ describe('what the page promises tracks the actual gate', () => {
     // sentence is available, so neither is printed.
     expect(text).not.toMatch(/no invitation needed|anyone can start/i)
     expect(text).not.toMatch(/closed trial|invitation only/i)
-    expect(screen.getByRole('link', { name: /^continue$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^continue$/i })).toBeInTheDocument()
   })
 
   it('an OLDER BFF that does not report signup_open is treated as unknown, not as open', async () => {
@@ -282,12 +220,10 @@ describe('an already-signed-in person is not asked to sign up again', () => {
 
 // ─── B57.49: Pocket's auth card ─────────────────────────────────────────────
 
-describe('both pages are Pocket’s auth card', () => {
+// B59.8: /signup is its own wide page now (SignUp.test.tsx).
+describe('the sign-in page is Pocket’s auth card', () => {
   it('the streams behind a white card on the cloud page, the logo to the website, one ink action', async () => {
-    for (const [path, action] of [
-      ['/signin', /^sign in$/i],
-      ['/signup', /^continue$/i],
-    ] as const) {
+    for (const [path, action] of [['/signin', /^sign in$/i]] as const) {
       mockMe({ signup_open: true })
       const { container } = at(path)
       const h1 = await screen.findByRole('heading', { level: 1 })

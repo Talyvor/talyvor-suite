@@ -43,9 +43,18 @@ func (a *app) handleMobileSession(w http.ResponseWriter, r *http.Request) {
 	}
 	var in struct {
 		IDToken string `json:"id_token"`
+		// B59.8: sign-up's answers, the same three the web sends; none on a sign-in.
+		AccountType string `json:"account_type"`
+		MoneyKind   string `json:"money_kind"`
+		Name        string `json:"name"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&in); err != nil || in.IDToken == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `send {"id_token": "…"}`})
+		return
+	}
+	signup, err := parseSignupAccount(in.AccountType, in.MoneyKind, in.Name)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	ctx := r.Context()
@@ -87,7 +96,7 @@ func (a *app) handleMobileSession(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "this workspace has not granted you access"})
 		return
 	}
-	s, err := a.provisionSession(ctx, idt.Subject, claims.Email)
+	s, err := a.provisionSession(ctx, idt.Subject, claims.Email, signup)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{
 			"error": "could not provision your workspace — try again shortly"})

@@ -89,7 +89,8 @@ import { ClaudeConnector } from './areas/documentation/ClaudeConnector'
 import { MetaPixel } from './areas/marketing/MetaPixel'
 import { Privacy } from './routes/Privacy'
 import { Terms } from './routes/Terms'
-import { SignIn, SignUp } from './areas/auth/Entry'
+import { SignIn } from './areas/auth/Entry'
+import { SignUp, SignUpKey } from './areas/auth/SignUp'
 import { SessionExpiredBar } from './components/SessionExpiredBar'
 import { CommandPalette, type PalettePage } from './components/CommandPalette'
 import { ScreenBoundary } from './components/ScreenBoundary'
@@ -768,7 +769,7 @@ function AppShell() {
  * (pocketPending.test.tsx reads that block and fails if the two differ).
  */
 const PUBLIC_PATHS = [
-  '/marketing/*', '/pricing', '/your-money', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms', '/signup', '/signin',
+  '/marketing/*', '/pricing', '/your-money', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms', '/signup', '/signup/key', '/signin',
   '/board/:token', '/share/:token', '/pay/:token', '/docs/s/:token',
 ]
 
@@ -858,6 +859,8 @@ export function App() {
                 signed in to read is not a signup page. Same mechanism (/auth/login), different
                 words: see areas/auth/Entry.tsx. */}
             <Route path="/signup" element={<SignUp />} />
+            {/* B59.8 — sign-up's step 3, where the identity provider sends a new workspace: a passkey or the phone. */}
+            <Route path="/signup/key" element={<SignUpKey />} />
             <Route path="/signin" element={<SignIn />} />
             {/* B27.30 — a Track board its workspace published as a link, read by anyone holding it.
                 Outside the gate: the reader has no account. Read-only — see areas/board/PublicBoard.tsx. */}

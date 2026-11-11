@@ -76,16 +76,18 @@ func provisionIdentity(issuer, subject string) string {
 }
 
 // provision turns an identity into a tenant. cachePoolable is passed only when non-nil, so
-// "said nothing" reaches Lens as silence and its new-workspace default applies.
-func (a *app) provision(ctx context.Context, identity string, cachePoolable *bool) (provisionResult, error) {
+// "said nothing" reaches Lens as silence and its new-workspace default applies. signup is sign-up's
+// answers (B59.8), the same: empty sends none of them.
+func (a *app) provision(ctx context.Context, identity string, cachePoolable *bool, signup signupAccount) (provisionResult, error) {
 	var out provisionResult
 	if a.cfg.provisionSecret == "" {
 		return out, errors.New("LENS_PROVISION_SECRET is not configured")
 	}
 	// UPSTREAM-BINDS-ONLY lensProvisionBody: none
-	// ⚠ display_name IS DECLARED AND NEVER ASSIGNED, so `omitempty` keeps it off the wire — but the
-	// tag is still this file ASSERTING that lens binds a key by that name, and the guard counts it.
-	// A rename upstream falsifies the assertion whether or not a value was ever sent.
+	// display_name, account_type and money_kind are sign-up's answers (B59.8), off the wire on a
+	// sign-in. Lens sets them only on the call that makes the workspace. A renamed account_type or
+	// money_kind upstream is SILENT: lens reads the key as left out and makes the workspace business
+	// and hybrid, whatever the person picked.
 	//
 	// ⚠⚠ ttl_hours IS SILENT AND IT IS A CREDENTIAL LIFETIME. MEASURED against lens f09348d1 by
 	// driving the real newProvisionHandler: a renamed key yields 0, auth.ClampTTL(0) returns
@@ -100,7 +102,10 @@ func (a *app) provision(ctx context.Context, identity string, cachePoolable *boo
 		DisplayName   string `json:"display_name,omitempty"`
 		CachePoolable *bool  `json:"cache_poolable,omitempty"`
 		TTLHours      int    `json:"ttl_hours"`
-	}{Identity: identity, CachePoolable: cachePoolable, TTLHours: sessionTokenTTLHours})
+		AccountType   string `json:"account_type,omitempty"`
+		MoneyKind     string `json:"money_kind,omitempty"`
+	}{Identity: identity, DisplayName: signup.name, CachePoolable: cachePoolable, TTLHours: sessionTokenTTLHours,
+		AccountType: signup.accountType, MoneyKind: signup.moneyKind})
 	if err != nil {
 		return out, err
 	}
@@ -418,7 +423,7 @@ func (a *app) handlePoolingChoice(w http.ResponseWriter, r *http.Request, t tena
 // ignored on every login after the first — a value that means something different from what it
 // appears to say. nil reaches Lens as silence, which is exactly "take the default".
 func (a *app) provisionForSession(ctx context.Context, identity string) (provisionResult, error) {
-	return a.provision(ctx, identity, nil)
+	return a.provision(ctx, identity, nil, signupAccount{})
 }
 
 // redactSecret keeps a provisioning failure's detail out of the log if it ever echoed the secret.

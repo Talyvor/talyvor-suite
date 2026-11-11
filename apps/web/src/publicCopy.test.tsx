@@ -12,8 +12,9 @@ import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH } from './areas/documentation
 // be drawn by it and by nothing else, and every disclaimer phrase below still fails.
 
 const PUBLIC_ROUTES = ['/marketing', '/pricing', '/your-money', '/signup', '/signin', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms']
-// The pages that name the product carry the line; /signin is a door with nothing to pitch.
-const NAMES_THE_PRODUCT = new Set(['/marketing', '/pricing', '/your-money', '/signup', DOCUMENTATION_PATH, '/privacy', '/terms'])
+// The pages that name the product carry the line; /signin is a door with nothing to pitch, and so is /signup since
+// B59.8 made it the launch pack's form (who the account is for, the kind of money, then a key).
+const NAMES_THE_PRODUCT = new Set(['/marketing', '/pricing', '/your-money', DOCUMENTATION_PATH, '/privacy', '/terms'])
 
 const FORBIDDEN: [string, RegExp][] = [
   ['MIXT', /\bmixt\b/i],
