@@ -56,3 +56,25 @@ describe('the chosen logo is the only logo (B57.79)', () => {
     expect(named.trim().split('\n').filter(Boolean)).toEqual([])
   })
 })
+
+// B58.16 — the icons and favicons too: every icon path the web app serves is the kit's own PNG, ICO or SVG,
+// byte for byte, and /brand serves nothing else — no old teal icon left behind.
+describe('every icon path serves the chosen kit (B58.16)', () => {
+  const manifest = JSON.parse(readFileSync(at('apps/web/public/manifest.webmanifest'), 'utf8')) as { icons: { src: string }[] }
+  const icons: [string, string][] = [
+    ['favicon.ico', 'png/favicon/favicon.ico'],
+    ['favicon.svg', 'png/favicon/favicon.svg'],
+    ['apple-touch-icon.png', 'png/app-icon/apple-touch-icon.png'],
+    ['og-image.png', 'png/social/og-image-dark-1200x630.png'],
+    ...manifest.icons.map((i): [string, string] => [i.src.slice(1), `png/app-icon/${i.src.slice(1)}`]),
+  ]
+
+  it.each(icons)('/%s is the kit’s %s', (served, source) => {
+    expect(existsSync(resolve(KIT, source)), `${source} is not in the kit`).toBe(true)
+    expect(readFileSync(at('apps/web/public', served)).equals(readFileSync(resolve(KIT, source))), served).toBe(true)
+  })
+
+  it('serves only the kit’s logo files and the photographs under /brand', () => {
+    expect(readdirSync(at('apps/web/public/brand')).sort()).toEqual(['logo', 'photos'])
+  })
+})
