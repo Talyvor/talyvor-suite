@@ -355,7 +355,6 @@ function Sidebar() {
   const account = useAccount()
   const item = (to: string, label: string, icon: PocketIconName, active: boolean, badge?: number | null) =>
     !areas.shows(to) ? null : <NavDestination to={to} label={label} icon={icon} active={active} badge={badge} />
-  )
   // B57.8 — Pocket's rows, and no folding groups: every page that left the sidebar is linked from the page it belongs
   // to (Billing links Overview and Ledger, the Marketplace its own pages, Settings the settings), and ⌘K finds every page.
   return (
@@ -397,7 +396,7 @@ function Sidebar() {
         {item('/marketplace', 'Marketplace', 'marketplace', under(pathname, '/marketplace'))}
         <div role="separator" className="mx-1.5 my-2.5 h-px bg-line" />
         {item('/scan/reports', 'Scan', 'scan', under(pathname, '/scan'))}
-        {item(areas.has('track') ? '/track' : '/docs', 'Track and Docs', 'work', under(pathname, '/track', '/docs'))}
+        {item('/track', 'Track and Docs', 'work', under(pathname, '/track', '/docs'))}
         {item('/setup', 'Developers', 'code', under(pathname, '/setup', '/keys', '/spend', '/features'))}
         {item('/billing', 'Billing', 'billing', under(pathname, '/billing', '/plans', '/overview', '/ledger'))}
         {item('/settings', 'Settings', 'settings', under(pathname, '/settings', '/members', '/operator'))}

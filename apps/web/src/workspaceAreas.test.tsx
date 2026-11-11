@@ -7,15 +7,18 @@ import { areaSource, readWorkspaceAreas } from './lib/workspaceAreas'
 // then the console draws no nav row, Home card, command palette entry or Settings entry for it, and its address goes
 // to Home. These read the areas from the BFF, as the console does, rather than the open-everything test default.
 
-/** What each hidden area draws in the console when it is on: its addresses, its Home card and a page title. */
+/**
+ * What each hidden area draws in the console when it is on: its addresses, its Home card and a page title, and whether
+ * it has a sidebar row (B57.8 — Docs is reached from Track and Settings, and the gateway's features from Developers).
+ */
 const AREAS = [
-  { area: 'chat', paths: ['/chat'], card: 'home-card-chat', page: 'Prompt library' },
-  { area: 'rooms', paths: ['/rooms'], card: null, page: 'Rooms' },
-  { area: 'marketplace', paths: ['/marketplace'], card: 'home-card-marketplace', page: 'Marketplace' },
-  { area: 'track', paths: ['/track'], card: 'home-card-track', page: 'Track' },
-  { area: 'docs', paths: ['/docs', '/settings/webhooks', '/settings/email-branding'], card: 'home-card-docs', page: 'Webhooks' },
-  { area: 'scan', paths: ['/scan/reports', '/scan/agents', '/scan/track-record'], card: null, page: 'Scan reports' },
-  { area: 'gateway', paths: ['/features'], card: null, page: 'Features' },
+  { area: 'chat', paths: ['/chat'], card: 'home-card-chat', page: 'Prompts', row: true },
+  { area: 'rooms', paths: ['/rooms'], card: null, page: 'Rooms', row: true },
+  { area: 'marketplace', paths: ['/marketplace'], card: 'home-card-marketplace', page: 'Marketplace', row: true },
+  { area: 'track', paths: ['/track'], card: 'home-card-track', page: 'Track', row: true },
+  { area: 'docs', paths: ['/docs', '/settings/webhooks', '/settings/email-branding'], card: 'home-card-docs', page: 'Webhooks', row: false },
+  { area: 'scan', paths: ['/scan/reports', '/scan/agents', '/scan/track-record'], card: null, page: 'Scan reports', row: true },
+  { area: 'gateway', paths: ['/features'], card: null, page: 'Gateway features', row: false },
 ] as const
 
 const inArea = (href: string, paths: readonly string[]) =>
@@ -42,15 +45,13 @@ async function openApp(path: string) {
   const nav = await screen.findByRole('navigation', { name: /sections/i })
   // Wait for the areas read, when the console makes one, to answer before reading what it drew.
   await waitFor(() => expect(queryClient.getQueryState(['workspace-areas'])?.status).not.toBe('pending'))
-  const openAll = within(nav).queryByRole('button', { name: 'Open all' })
-  if (openAll !== null) fireEvent.click(openAll)
   return nav
 }
 
 const navHrefs = (nav: HTMLElement) => within(nav).queryAllByRole('link').map((a) => a.getAttribute('href') ?? '')
 
 function paletteOptions(): string[] {
-  fireEvent.click(screen.getByRole('button', { name: 'Command palette' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Search agents, payees, bills… or type a command' }))
   const options = within(screen.getByRole('listbox', { name: 'Commands' }))
     .queryAllByRole('option')
     .map((o) => o.textContent ?? '')
@@ -84,7 +85,7 @@ describe('a hidden area is not there (B59.2)', () => {
     it(`${a.area}: all of it is there once Lens lists the area`, async () => {
       mockBff([a.area])
       const nav = await openApp('/')
-      expect(navHrefs(nav).filter((h) => inArea(h, a.paths)).length).toBeGreaterThan(0)
+      if (a.row) expect(navHrefs(nav).filter((h) => inArea(h, a.paths)).length).toBeGreaterThan(0)
       if (a.card !== null) expect(screen.getByTestId(a.card)).toBeTruthy()
       expect(paletteOptions()).toContain(a.page)
       cleanup()

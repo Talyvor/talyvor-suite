@@ -286,7 +286,7 @@
   "src/noFlashTheme.test.ts": 8,
   "src/oneActionOneCharge.test.tsx": 24,
   "src/pageScale.test.tsx": 5,
-  "src/PanelReportsItsOwnQuery.test.tsx": 147,
+  "src/PanelReportsItsOwnQuery.test.tsx": 137,
   "src/pinnedClock.test.ts": 5,
   "src/placeholderAudit.test.tsx": 15,
   "src/planeAudit.test.tsx": 28,
@@ -325,7 +325,7 @@
   "src/trackWriteBodyRegister.test.ts": 18,
   "src/typeScaleUnits.test.ts": 18,
   "src/upstreamCitations.test.ts": 8,
-  "src/WalletFirstNav.test.tsx": 6,
+  "src/WalletFirstNav.test.tsx": 7,
   "src/workspaceAreas.test.tsx": 16,
   "src/writeUnderDeadCredential.test.tsx": 15,
   "src/xssPayloads.test.tsx": 5

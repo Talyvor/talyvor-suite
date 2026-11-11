@@ -268,7 +268,8 @@ describe('the swept set', () => {
     // 107 → 97 at B57.8: the top bar reads the agents' book on every address, for Pause every agent and the kill banner;
     // the sidebar no longer lists Docs pages, so only /docs, which lists them now, asks Docs for the membership and the pins.
     const pairs = Object.values(ADDRESS_ROUTES).reduce((n, r) => n + r.length, 0)
-    expect(pairs).toBe(97)
+    // 97 → 108 at B59.10: the sidebar reads the account's type and kind on every address, for its chip.
+    expect(pairs).toBe(108)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {
