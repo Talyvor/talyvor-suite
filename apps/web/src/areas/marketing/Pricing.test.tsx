@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Pricing } from './Pricing'
 import { pressEverything } from '../../test/pressEverything'
 import { BUILDING } from '../../labels/StatusLabel'
-import { CREDIT_FOR_AGENTS, MARKETPLACE, MONEY_FEATURES } from '../../labels/capabilities'
+import { CREDIT_FOR_AGENTS, MONEY_FEATURES } from '../../labels/capabilities'
 
 // The page renders BARE — no router, no query client — like Landing. What it prints is what
 // GET /api/pricing served, so each test serves a peg this repo never writes down (0.2, not the
@@ -96,8 +96,9 @@ describe('/pricing', () => {
   })
 
   // B32.14: the approved price card, every figure as GET /api/pricing served it. Each test serves figures this
-  // repo never writes down, so a page reading a constant instead of the server fails.
-  it('prints the company plans, chat plans and fees exactly as served, and the tax line under them', async () => {
+  // repo never writes down, so a page reading a constant instead of the server fails. B59.5: no chat plans, Edge row,
+  // Marketplace, compute or loan fee (LAUNCH-PACK.md section 2).
+  it('prints the company plans and fees exactly as served, and the tax line under them', async () => {
     serve(CHANGED_CARD)
     render(<Pricing />)
     const team = await screen.findByTestId('company-plan-team')
@@ -130,29 +131,18 @@ describe('/pricing', () => {
     expect(enterprise).toHaveTextContent('From$3,000a month')
     expect(enterprise).toHaveTextContent('Platform fee on AI spendAgreed')
     expect(enterprise).toHaveTextContent('AgentsUnlimited')
-    expect(enterprise).toHaveTextContent('Talyvor EdgeBuildingIncluded')
     expect(within(enterprise).getByRole('link', { name: 'Talk to us' })).toHaveAttribute('href', 'mailto:hello@talyvor.com')
 
     // B56.2: what a request costs, each plan's served platform fee on its own line.
     expect(screen.getByTestId('platform-fee-line')).toHaveTextContent('Free6%Team3.25%Business1.5%EnterpriseAgreed')
 
-    const chat = screen.getAllByTestId('pricing-plan').map((card) => card.textContent)
-    expect(chat).toEqual([
-      'Plus$21a month, with $36.00 (180 LXC) of use includedChoose Plus',
-      'Pro$110a month, with $218.00 (1,090 LXC) of use includedChoose Pro',
-      'Max$210a month, with $400.00 (2,000 LXC) of use includedChoose Max',
-    ])
-
     const fees = screen.getByTestId('fees-any-plan')
-    // B56.4: one sentence, from the first sale, with the served take.
-    expect(fees).toHaveTextContent('Sellers earn 85% of every paid use, rental and purchase, from the first sale; Talyvor keeps 15%.')
-    // B56.2: Services and Compute are two rows even when equal, and Services says what it is taken on.
+    // Services says what it is taken on.
     expect(fees).toHaveTextContent('Services4% of a payment to another company’s agent')
-    expect(fees).toHaveTextContent('Compute4%')
-    expect(fees).not.toHaveTextContent(/Services and compute|Loans|International|Agent cards|Accepting payments|FX margin/)
+    expect(fees).not.toHaveTextContent(/Services and compute|Compute|Sellers|Loans|International|Agent cards|Accepting payments|FX margin/)
     expect(screen.getByRole('heading', { name: 'Fees on money features' })).toBeInTheDocument()
     const money = screen.getByTestId('fees-money-features')
-    expect(money).toHaveTextContent('Loans arrangedBuilding1.5%')
+    expect(money).not.toHaveTextContent(/Loans/)
     expect(money).toHaveTextContent('£4, €5 or $8 plus the partner’s cost')
     expect(money).toHaveTextContent('Agent cardsFree to issue')
     expect(money).toHaveTextContent('Accepting paymentsBuilding0.8% plus card processing, or 1.1% from an account')
@@ -160,15 +150,16 @@ describe('/pricing', () => {
     expect(screen.getByTestId('tax-line')).toHaveTextContent(
       'Prices are in US dollars. Where Talyvor must charge VAT or sales tax, it is added at checkout and shown before you pay.',
     )
-    expect(screen.getAllByRole('heading', { name: /one bill a month/i })).toHaveLength(1)
+    expect(screen.queryByRole('heading', { name: /one bill a month|chat plans/i })).not.toBeInTheDocument()
+    expect(enterprise).not.toHaveTextContent(/Edge/)
   })
 
-  it('says a company’s credit line covers an empty wallet', async () => {
+  it('says an empty wallet refuses the next call', async () => {
     serve(CHANGED_CARD)
     render(<Pricing />)
     await screen.findByTestId('company-plan-team')
     expect(screen.getByText(/its next call is refused/)).toHaveTextContent(
-      'When its wallet is empty, its next call is refused rather than billed to you, unless your company has a Talyvor credit line, which covers it and bills you once a month.',
+      'Each agent spends LXC from its own wallet. When its wallet is empty, its next call is refused rather than billed to you.',
     )
   })
 
@@ -176,11 +167,9 @@ describe('/pricing', () => {
     serve({ min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000] })
     render(<Pricing />)
     expect(await screen.findByText(/what each plan includes could not be read/i)).toBeInTheDocument()
-    expect(screen.getByText(/did not state its plans for individuals/i)).toBeInTheDocument()
     expect(screen.getByText(/the fees could not be read/i)).toBeInTheDocument()
     expect(screen.queryByTestId('platform-fee-line')).not.toBeInTheDocument()
     expect(screen.queryByTestId('fees-money-features')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('pricing-plan-price')).not.toBeInTheDocument()
     // And the tax line is still said.
     expect(screen.getByTestId('tax-line')).toBeInTheDocument()
   })
@@ -208,7 +197,6 @@ describe('/pricing', () => {
     await screen.findByTestId('company-plan-team')
 
     expect(screen.getByTestId('price-team')).toHaveTextContent('$59')
-    expect(screen.getAllByTestId('pricing-plan-price')).toHaveLength(3)
     expect(container.textContent ?? '').not.toMatch(/on your card/i)
     const main = container.querySelector('main')!
     expect(within(main).getAllByRole('link', { name: /choose|start free|talk to us|create your workspace/i }).map((a) => a.textContent)).toEqual([
@@ -243,12 +231,10 @@ describe('/pricing labels', () => {
     render(<Pricing />)
     const team = await screen.findByTestId('company-plan-team')
     expect(chips(screen.getByRole('heading', { name: /^credit for agents/i }))).toEqual([`${CREDIT_FOR_AGENTS.join(' ')}=Live`])
-    expect(chips(screen.getByRole('heading', { name: /paid listings, on one bill/i }))).toEqual([`${MARKETPLACE.join(' ')}=Sandbox`])
     expect(chips(row(team, 'Live money'))).toEqual([`${MONEY_FEATURES.join(' ')}=Live`])
     expect(chips(row(screen.getByTestId('company-plan-free'), 'Live money'))).toEqual([])
     const anyPlan = screen.getByTestId('fees-any-plan')
     expect(chips(row(anyPlan, 'Services'))).toEqual(['pay_another_owner=Sandbox'])
-    expect(chips(row(anyPlan, 'Selling on the Marketplace'))).toEqual([`${MARKETPLACE.join(' ')}=Sandbox`])
     const money = screen.getByTestId('fees-money-features')
     expect(chips(row(money, 'International payments'))).toEqual(['payments_out=Live'])
     expect(chips(row(money, 'Agent cards'))).toEqual(['agent_card=Sandbox'])
@@ -265,12 +251,9 @@ describe('/pricing labels', () => {
     expect(building(row(screen.getByTestId('company-plan-free'), 'Slack and Teams approvals'))).toEqual([]) // "—"
     expect(building(row(business, 'Single sign-on'))).toEqual([]) // Lens says built
     expect(building(row(business, 'Audit export'))).toEqual([])
-    expect(building(row(screen.getByTestId('company-plan-enterprise'), 'Talyvor Edge'))).toEqual(['edge'])
     expect(building(row(team, 'FX margin over the reference rate'))).toEqual(['fx_margin'])
     const money = screen.getByTestId('fees-money-features')
-    expect(building(row(money, 'Loans arranged'))).toEqual([]) // Lens says charged
     expect(building(row(money, 'Accepting payments'))).toEqual(['merchant_fees'])
-    expect(building(row(screen.getByTestId('fees-any-plan'), 'Compute'))).toEqual([])
     for (const el of document.querySelectorAll('[data-status-key][data-status-label="building"]'))
       expect(BUILDING.some((e) => e.key === el.getAttribute('data-status-key'))).toBe(true)
     expect(screen.getByTestId('labels-meaning').textContent).toContain('In our build queue. Not shipped yet.')

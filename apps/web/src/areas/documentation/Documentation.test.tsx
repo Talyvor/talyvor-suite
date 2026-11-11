@@ -164,7 +164,7 @@ describe('/documentation', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('null', { status: 404 }))
     render(<Landing />)
     for (const region of [screen.getByRole('banner'), screen.getByRole('contentinfo')]) {
-      expect(within(region).getByRole('link', { name: 'Docs' })).toHaveAttribute('href', DOCUMENTATION_PATH)
+      expect(within(region).getByRole('link', { name: 'Documentation' })).toHaveAttribute('href', DOCUMENTATION_PATH)
     }
   })
 
