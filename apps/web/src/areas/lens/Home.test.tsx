@@ -192,10 +192,17 @@ describe('Home — payments prepared for the person (B55.10)', () => {
     render(<App />)
 
     const list = within(await screen.findByTestId('home-approvals'))
-    const row = list.getByText('Your assistant prepared a payment to Acme Hosting').closest('a')!
-    expect(row).toHaveAttribute('href', '/approve/preq_1')
+    // B57.116 — drawn as w-home draws a waiting request: Chat's mark, the line over its hint, the total over its
+    // currency, and Pocket's Review opening the request's card.
+    const row = list.getByText('Your assistant prepared a payment to Acme Hosting').closest<HTMLElement>('[data-prepared]')!
+    expect(row).toHaveAttribute('data-prepared', 'preq_1')
+    expect(row.querySelector('[data-icon="chat"]')).not.toBeNull()
     expect(row).toHaveTextContent('INV-7 · from Researcher’s account · asked')
-    expect(row).toHaveTextContent('£120.00')
+    expect(within(row).getByText('£120.00')).toBeInTheDocument()
+    expect(within(row).getByText('GBP')).toBeInTheDocument()
+    const review = within(row).getByRole('link', { name: 'Review' })
+    expect(review).toHaveAttribute('href', '/approve/preq_1')
+    expect(review).toHaveClass('rounded-pill')
     expect(screen.getByTestId('home-approvals-waiting')).toHaveTextContent('3')
     await waitFor(() => expect(screen.getByTestId('home-briefing-line')).toHaveTextContent(BUSY.line))
     const items = within(screen.getByTestId('home-briefing-items')).getAllByRole('listitem')

@@ -173,10 +173,34 @@ describe('payments prepared for the person (B55.10)', () => {
     window.history.pushState({}, '', '/approvals')
     render(<App />)
     const prepared = within(await screen.findByRole('group', { name: 'Prepared payments' }))
-    expect(prepared.getByText(/^Your assistant prepared a payment to Acme Hosting ·/)).toBeInTheDocument()
+    expect(prepared.getByText('Your assistant prepared a payment to Acme Hosting')).toBeInTheDocument()
     expect(prepared.getByText(/INV-7 · from the company’s account · asked/)).toBeInTheDocument()
     expect(prepared.getByText('£120.00')).toBeInTheDocument()
     expect(prepared.getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/approve/preq_1')
+  })
+
+  // B57.116 — drawn as w-approvals draws a waiting request: Chat's mark, the line over its hint, the total over its
+  // currency, and Pocket's Review.
+  it('draws the row in Pocket’s components: the line, its hint, the total and Review to /approve/{id}', async () => {
+    const MANY = { ...PREPARED, id: 'preq_2', client: 'chat', summary: '2 payments', totals: { GBP: 15000 }, items: [PREPARED.items[0], { ...PREPARED.items[0], position: 2, payee_name: 'Bolt Cloud', amount_minor: 3000 }] }
+    mockBff([], [PREPARED, MANY])
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+    await screen.findByRole('group', { name: 'Prepared payments' })
+    const one = document.querySelector<HTMLElement>('[data-prepared="preq_1"]')!
+    expect(one.querySelector('[data-icon="chat"]')).not.toBeNull()
+    expect(within(one).getByText('Your assistant prepared a payment to Acme Hosting')).toHaveClass('font-semibold')
+    expect(one).toHaveTextContent('INV-7 · from the company’s account · asked')
+    expect(within(one).getByText('£120.00')).toBeInTheDocument()
+    expect(within(one).getByText('GBP')).toBeInTheDocument()
+    const review = within(one).getByRole('link', { name: 'Review' })
+    expect(review).toHaveAttribute('href', '/approve/preq_1')
+    expect(review).toHaveClass('rounded-pill')
+    const many = document.querySelector<HTMLElement>('[data-prepared="preq_2"]')!
+    expect(within(many).getByText('Chat prepared 2 payments')).toBeInTheDocument()
+    expect(many).toHaveTextContent('2 payments · from the company’s account · asked')
+    expect(within(many).getByText('£150.00')).toBeInTheDocument()
+    expect(within(many).getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/approve/preq_2')
   })
 
   it('counts one agent request and one prepared payment as 2 on the badge', async () => {
