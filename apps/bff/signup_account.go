@@ -2,7 +2,9 @@ package main
 
 import (
 	"errors"
+	"net/http"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -35,8 +37,17 @@ func parseSignupAccount(accountType, moneyKind, name string) (signupAccount, err
 	switch {
 	case accountType != "business" && accountType != "personal",
 		moneyKind != "fiat" && moneyKind != "stablecoin" && moneyKind != "hybrid",
-		name == "", utf8.RuneCountInString(name) > signupNameMax:
+		name == "", utf8.RuneCountInString(name) > signupNameMax,
+		strings.IndexFunc(name, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r) }) >= 0:
 		return signupAccount{}, errSignupAccount
 	}
 	return signupAccount{accountType: accountType, moneyKind: moneyKind, name: name}, nil
+}
+
+// signupFromAnotherSite reports a browser's sign-up that started on another site: a link elsewhere that would choose,
+// for whoever signs up through it, a type that can never change. The /signup page is same-origin and a typed address
+// is "none"; a browser that sends no Sec-Fetch-Site (and the phone, which never comes through /auth/login) is let in.
+func signupFromAnotherSite(r *http.Request) bool {
+	site := r.Header.Get("Sec-Fetch-Site")
+	return site != "" && site != "same-origin" && site != "none"
 }

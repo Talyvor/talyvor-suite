@@ -82,6 +82,8 @@ func TestB598_SignUpCannotStartWithoutBoth(t *testing.T) {
 		{"account_type": {"business"}, "money_kind": {"gold"}, "name": {"Northwind Studio"}},
 		{"account_type": {"personal"}, "money_kind": {"hybrid"}},
 		{"account_type": {"personal"}, "money_kind": {"hybrid"}, "name": {strings.Repeat("n", 81)}},
+		{"account_type": {"personal"}, "money_kind": {"hybrid"}, "name": {"Maya\u202eLind"}},
+		{"account_type": {"personal"}, "money_kind": {"hybrid"}, "name": {"Maya\nLind"}},
 	} {
 		resp, body := s.signUpAs("b598-refused", q)
 		if resp.StatusCode != http.StatusBadRequest {
@@ -120,5 +122,30 @@ func TestB598_ThePhoneSendsTheSameAnswers(t *testing.T) {
 	}
 	if got, want := func() [3]string { a, _ := s.accountOf("b598-phone"); return a }(), [3]string{"business", "stablecoin", "Northwind Studio"}; got != want {
 		t.Errorf("Lens was sent %q, want %q", got, want)
+	}
+}
+
+// A link on another site cannot choose the type and the kind for whoever signs up through it; a plain sign-in from
+// anywhere still starts.
+func TestB598_SignUpStartsOnlyFromThisSite(t *testing.T) {
+	s := startStrangerSuite(t, []string{"*"})
+	login := func(site, query string) int {
+		req, _ := http.NewRequest(http.MethodGet, s.ts.URL+"/auth/login?"+query, nil)
+		req.Header.Set("Sec-Fetch-Site", site)
+		resp, err := s.browser().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	answers := url.Values{"account_type": {"personal"}, "money_kind": {"fiat"}, "name": {"Maya Lind"}}.Encode()
+	for site, want := range map[string]int{"cross-site": 400, "same-site": 400, "same-origin": 302, "none": 302} {
+		if got := login(site, answers); got != want {
+			t.Errorf("sign-up with Sec-Fetch-Site %s: %d, want %d", site, got, want)
+		}
+	}
+	if got := login("cross-site", "return_to=%2F"); got != 302 {
+		t.Errorf("a sign-in from another site: %d, want 302", got)
 	}
 }

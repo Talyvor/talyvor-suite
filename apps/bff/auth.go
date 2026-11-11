@@ -395,6 +395,9 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	signup, err := parseSignupAccount(q.Get("account_type"), q.Get("money_kind"), q.Get("name"))
+	if err == nil && signup != (signupAccount{}) && signupFromAnotherSite(r) {
+		err = errors.New("start sign-up at /signup")
+	}
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
