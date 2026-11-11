@@ -174,9 +174,8 @@ describe('Landing', () => {
     while (walker.nextNode()) words.push(...(walker.currentNode.textContent!.match(/\b(route|prove|reuse|compound)\b/gi) ?? []))
     expect(words, 'a retired verb shows as a word').toEqual([])
 
-    // one brand icon per numbered section, in the page's order
-    const icons = [...container.querySelectorAll('section img[src^="/brand/svg/icon-"]')].map((i) => i.getAttribute('src'))
-    expect(icons).toEqual(['/brand/svg/icon-prove-teal.svg'])
+    // B58.16: brand-v4's teal section icons are gone with that kit
+    expect(container.querySelectorAll('img[src^="/brand/svg/"]')).toHaveLength(0)
   })
 })
 

@@ -19,7 +19,7 @@ import { usePricing } from './pricingApi'
 //
 // The brand board's WEBSITE HERO tile (brand-v4 BRAND.md, "The marketing page"; B29.4): the drawn
 // mark and wordmark in the site header (B51.1: every public page shares it), an eyebrow over every headline, one teal rule per section, raised
-// panels with a 1px line border instead of shadows, the four brand icons, and every money figure in
+// panels with a 1px line border instead of shadows, and every money figure in
 // IBM Plex Mono with tabular figures. The hero photograph bleeds off the right edge behind a gradient
 // from the canvas; on a phone it moves under the text. The
 // copy is unchanged — only the look moved. Display sizes are still the preset's; anything the
@@ -50,15 +50,11 @@ import { usePricing } from './pricingApi'
 export const CONTACT_EMAIL: string = import.meta.env.VITE_CONTACT_EMAIL || COMPANY_CONTACT
 const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}`
 
-/** The brand icons, copied as drawn from brand-v4 svg/ into public/brand/svg (B29.1). */
-type BrandIcon = 'route' | 'prove' | 'reuse' | 'compound'
-
-/** A section's eyebrow, the board's way: the brand icon, the mono index, the spaced-caps label.
- *  /pricing (B29.5) and /documentation (B29.13) use it with no icon. */
-export function Eyebrow({ index, icon, children }: { index: string; icon?: BrandIcon; children: React.ReactNode }) {
+/** A section's eyebrow: the mono index and the spaced-caps label. B58.16: brand-v4's teal icons are gone
+ *  with the rest of that kit; the chosen logo kit draws no section icons. */
+export function Eyebrow({ index, children }: { index: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3">
-      {icon ? <img src={`/brand/svg/icon-${icon}-teal.svg`} alt="" width={24} height={24} className="shrink-0" /> : null}
       <span className="font-figure text-caption text-faint">{index}</span>
       <span className="text-eyebrow uppercase text-label">{children}</span>
     </div>
@@ -285,7 +281,7 @@ export function Landing() {
           className="scroll-mt-16 border-b border-rule"
         >
           <div className="mx-auto w-full max-w-6xl px-gutter py-16 wide:py-20">
-            <LabelledEyebrow index="01" icon="prove" labels={labels} capability={WALLETS}>
+            <LabelledEyebrow index="01" labels={labels} capability={WALLETS}>
               Wallets
             </LabelledEyebrow>
             {/* THE ONE HEADING THAT NAMES THE PRODUCT. Landing.test.tsx asserts exactly one heading
