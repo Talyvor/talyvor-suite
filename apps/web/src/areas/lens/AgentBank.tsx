@@ -7,6 +7,7 @@ import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { useLinked } from '../../components/LinkedItem'
 import { isSessionExpired } from '../../lib/productState'
+import { IfArea } from '../../lib/workspaceAreas'
 import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
@@ -3031,7 +3032,10 @@ export function AgentBank() {
         <Region index="05" label="Between owners" className="flex flex-col gap-gutter">
           <MoneyRequests agents={agents} />
           <CreditLinePanel />
-          <Loans agents={agents} />
+          {/* B59.2 — lending between owners is credit's, and goes with it. */}
+          <IfArea area="credit">
+            <Loans agents={agents} />
+          </IfArea>
         </Region>
       ) : null}
 

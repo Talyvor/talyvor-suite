@@ -324,6 +324,7 @@
   "src/typeScaleUnits.test.ts": 18,
   "src/upstreamCitations.test.ts": 8,
   "src/WalletFirstNav.test.tsx": 6,
+  "src/workspaceAreas.test.tsx": 16,
   "src/writeUnderDeadCredential.test.tsx": 15,
   "src/xssPayloads.test.tsx": 5
 }
