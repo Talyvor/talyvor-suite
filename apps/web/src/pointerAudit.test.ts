@@ -261,9 +261,9 @@ const PINS: Record<string, Pin> = {
     why: 'the ONE applied `normal-case` in the product; the sentence says "exactly ONE ... in the product" in the present tense',
   },
   'apps/web/src/caseAudit.ts:44|apps/web/src/areas/marketing/Landing.tsx:71': {
-    kind: 'LIVE',
+    kind: 'HISTORICAL',
     fragment: 'font-figure text-eyebrow uppercase text-label',
-    why: 'the uppercase label whose µ arrives as a prop from 130 lines away — the reason the rule cannot be a source rule',
+    why: 'the uppercase label whose µ arrived as a prop from 130 lines away AS AT `a0bd22f`, quoted with that SHA — B59.5 took the pooled stepper and its Figure off the home page'
   },
   'apps/web/src/test-setup.ts:209|packages/ui/src/components/CaseSafe.tsx:85': {
     kind: 'LIVE',
@@ -272,19 +272,19 @@ const PINS: Record<string, Pin> = {
   },
 
   'apps/web/src/areas/lens/Overview.tsx:340|apps/web/src/areas/marketing/Landing.tsx:184': {
-    kind: 'LIVE',
+    kind: 'HISTORICAL',
     fragment: 'transition-colors duration-200',
-    why: "the SITE's motion shape, quoted where the console copies it — W1.1.0's rule is that a console link moves the way the public page moves, so the call site names the line it is imitating rather than inventing a fifth hover shape",
+    why: "the SITE's motion shape, quoted where the console copies it — W1.1.0's rule is that a console link moves the way the public page moves, so the call site names the line it is imitating rather than inventing a fifth hover shape. AS AT `a0bd22f`, quoted with that SHA: B59.5 took the pooled stepper off the home page",
   },
   'apps/web/src/areas/lens/CacheCard.tsx:58|apps/web/src/areas/marketing/Landing.tsx:184': {
-    kind: 'LIVE',
+    kind: 'HISTORICAL',
     fragment: 'transition-colors duration-200',
-    why: 'the same shape on the card Overview renders in region 04 — this card is on BOTH /overview and /spend, so the pointer is what says the affordance is one component having one answer',
+    why: 'the same shape on the card Overview renders in region 04 — this card is on BOTH /overview and /spend, so the pointer is what says the affordance is one component having one answer. AS AT `a0bd22f`, quoted with that SHA: B59.5 took the pooled stepper off the home page',
   },
   'apps/web/src/areas/lens/Overview.test.tsx:392|apps/web/src/areas/marketing/Landing.tsx:184': {
-    kind: 'LIVE',
+    kind: 'HISTORICAL',
     fragment: 'transition-colors duration-200',
-    why: "the failure message of Overview's motion sweep, naming the line a developer should copy — read exactly when somebody is already confused, the same argument motion.test.tsx:154 makes",
+    why: "the failure message of Overview's motion sweep, naming the line a developer should copy — read exactly when somebody is already confused, the same argument motion.test.tsx:154 makes. AS AT `a0bd22f`, quoted with that SHA: B59.5 took the pooled stepper off the home page",
   },
   'apps/web/src/pinnedClock.test.ts:13|apps/web/src/areas/lens/lxcSplitCoverage.test.tsx:136': {
     kind: 'HISTORICAL',

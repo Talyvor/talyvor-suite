@@ -604,8 +604,6 @@ const PRESS_SITES: Record<string, string> = {
     'a hand-rolled <button>, not a Button, so it inherits nothing and must carry the press itself',
   'apps/web/src/components/CommandPalette.tsx':
     'B28.135 — the command palette button sits beside ThemeToggle in the top bar, drawn as it is, so it presses as it does',
-  'apps/web/src/areas/marketing/Landing.tsx':
-    'the public stepper — the only press on a surface reached before signing in, and the one no render assertion covered',
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════

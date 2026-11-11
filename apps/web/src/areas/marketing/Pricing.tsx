@@ -1,12 +1,12 @@
 import { Button, Card, Eyebrow } from '@talyvor/ui/pocket'
 import { useDocumentTitle } from '../../documentTitle'
 import { formatCents, formatLXC, lxcForCents } from '../lens/topupApi'
-import { cardPayments, formatPeg, usePricing, type PricingState } from './pricingApi'
+import { formatPeg, usePricing, type PricingState } from './pricingApi'
 import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
 import { TAX_LINE } from './PriceCard'
-import { CompanyPlans, FeesOnAnyPlan, IndividualPlans, MoneyFeatureFees, RequestCost } from './PricingPlans'
+import { CompanyPlans, FeesOnAnyPlan, MoneyFeatureFees, RequestCost } from './PricingPlans'
 import { LABEL_LINES, StatusLabel } from '../../labels/StatusLabel'
-import { CREDIT_FOR_AGENTS, MARKETPLACE } from '../../labels/capabilities'
+import { CREDIT_FOR_AGENTS } from '../../labels/capabilities'
 import { POSITIONING_LINE } from '../../positioning'
 
 // /pricing (B5.2) — what anything costs, for a buyer who has not signed up. Public, OUTSIDE the
@@ -20,10 +20,10 @@ import { POSITIONING_LINE } from '../../positioning'
 //   platform fee     internal/economy/platform_fee.go: the plan's platform_fee_bps, its own row (B56.2)
 //
 // B57.61 — the page is Pocket's (design/pocket s-pricing): the headline and Create your workspace, the four company
-// plans with Team highlighted, credit for agents and what a request costs, the chat plans, the Marketplace bill, the
-// fees on any plan and on money features, what the labels mean and the tax line. The served-rate card, the list of
-// top-up amounts and the monthly-billing line are left out: the headline states the rate, and the billing screen
-// sells the top-ups.
+// plans with Team highlighted, credit for agents and what a request costs, the fees on any plan and on money features,
+// what the labels mean and the tax line. The served-rate card, the list of top-up amounts and the monthly-billing line
+// are left out: the headline states the rate, and the billing screen sells the top-ups. B59.5: the chat plans and the
+// Marketplace bill are left out too, with every other hidden area (LAUNCH-PACK.md section 2).
 
 /** The amount the headline converts at the served rate. An AMOUNT, not a price: what it buys is computed. */
 const EXAMPLE_CENTS = 1000
@@ -74,7 +74,6 @@ function Split({ left, right }: { left: React.ReactNode; right: React.ReactNode 
 export function Pricing() {
   useDocumentTitle('Pricing')
   const state = usePricing()
-  const cards = cardPayments(state) === 'live'
   // B56.10: Lens's Live or Sandbox for each money section; none until /api/pricing answers with labels.
   const labels = state.status === 'ok' ? state.pricing.labels : undefined
   const pricing = state.status === 'ok' ? state.pricing : undefined
@@ -123,7 +122,7 @@ export function Pricing() {
                 </SectionHeading>
                 <p className="mt-5 text-lede text-ink-2">
                   Each agent spends LXC from its own wallet. When its wallet is empty, its next call is refused rather than
-                  billed to you, unless your company has a Talyvor credit line, which covers it and bills you once a month.
+                  billed to you.
                 </p>
               </>
             }
@@ -141,39 +140,12 @@ export function Pricing() {
           />
         </Band>
 
-        <Band label="chat-plans-heading">
-          <SectionHeading id="chat-plans-heading">Chat plans, for one person</SectionHeading>
-          <div className="mt-6">
-            {pricing ? <IndividualPlans pricing={pricing} /> : null}
-          </div>
-        </Band>
-
-        <Band label="marketplace-bill-heading">
-          <Split
-            left={
-              <SectionHeading id="marketplace-bill-heading" chip={<StatusLabel capability={MARKETPLACE} labels={labels} />}>
-                Paid listings, on one bill a month.
-              </SectionHeading>
-            }
-            right={
-              <div className="grid gap-4">
-                <p className="text-lede text-ink-2">
-                  Agents, prompts, skills and evaluations other teams publish on the Marketplace. Each use of a paid listing,
-                  by you or one of your agents, is charged the price the listing shows and billed {cards ? 'on your card ' : ''}
-                  once a month, never taken from your credits.
-                </p>
-                <p className="text-lede text-ink-2">The models a listing calls are charged like any other request, not on this bill.</p>
-              </div>
-            }
-          />
-        </Band>
-
         <Band label="fees-heading">
           <Split
             left={
               <>
                 <SectionHeading id="fees-heading">Fees on any plan</SectionHeading>
-                <p className="mt-5 text-lede text-ink-2">Taken from each sale or payment.</p>
+                <p className="mt-5 text-lede text-ink-2">Taken from each payment.</p>
               </>
             }
             right={pricing ? <FeesOnAnyPlan fees={pricing.fees} labels={labels} /> : null}
