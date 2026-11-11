@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { ApiError, getJSON } from '../../lib/api'
 import { approvalInSentence, unlessHeld } from '../../lib/held'
 import { isSessionExpired } from '../../lib/productState'
@@ -2174,4 +2175,105 @@ export function minorOf(text: string): number | null {
   if (m === null) return null
   const minor = Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0'))
   return Number.isSafeInteger(minor) && minor > 0 ? minor : null
+}
+
+// B59.10 — a workspace is Business or Personal, and Fiat only, Stablecoin and crypto only, or Hybrid (Lens
+// B59.6), and each screen renders only what its type and kind have — SPEC 3.3 and 3.4, the launch pack's two tables.
+// Hidden means not rendered, never greyed out. Lens refuses a money route of the wrong kind on its own (B59.7); this is
+// what the screens draw.
+
+export type AccountType = 'business' | 'personal'
+export type MoneyKind = 'fiat' | 'stablecoin' | 'hybrid'
+export interface WorkspaceAccount {
+  account_type: AccountType
+  money_kind: MoneyKind
+}
+
+export const ACCOUNT_KEY = ['workspace-account'] as const
+
+/** GET /api/workspace/account — the workspace's type and kind of money (Lens B59.6). */
+export function readWorkspaceAccount(): Promise<WorkspaceAccount> {
+  return getJSON<WorkspaceAccount>('/api/workspace/account', { account_type: 'string', money_kind: 'string' })
+}
+
+/** What a workspace's type and kind show. */
+export interface Shows {
+  /** Bank transfers in and out: payees by their bank details, IBANs to pay in. Not for Stablecoin. */
+  bankTransfers: boolean
+  /** Wallet addresses, on-chain send and receive. Not for Fiat. */
+  onChain: boolean
+  /** Convert between the two sides. Hybrid only. */
+  convert: boolean
+  /** Instant transfer. Hybrid only. */
+  instantTransfer: boolean
+  /** Team, roles and a second approver. Business only. */
+  team: boolean
+  /** Payout batches. Business only. */
+  payoutBatches: boolean
+  /** The owner's card tiers, lowest first. */
+  cardTiers: readonly string[]
+  /** The agents' heading: "Your agents", or "Your team’s agents". */
+  agents: string
+  /** The owner's own account, where a payment names it: "Your account", or "The company". */
+  owner: string
+}
+
+export function shows({ account_type, money_kind }: WorkspaceAccount): Shows {
+  const business = account_type === 'business'
+  return {
+    bankTransfers: money_kind !== 'stablecoin',
+    onChain: money_kind !== 'fiat',
+    convert: money_kind === 'hybrid',
+    instantTransfer: money_kind === 'hybrid',
+    team: business,
+    payoutBatches: business,
+    cardTiers: business ? ['Team', 'Business', 'Enterprise'] : ['Daily', 'Premium', 'Platinum'],
+    agents: business ? 'Your team’s agents' : 'Your agents',
+    owner: business ? 'The company' : 'Your account',
+  }
+}
+
+export const TYPE_LABEL: Record<AccountType, string> = { business: 'Business', personal: 'Personal' }
+export const KIND_LABEL: Record<MoneyKind, string> = { fiat: 'Fiat only', stablecoin: 'Stablecoin and crypto only', hybrid: 'Hybrid' }
+export const KIND_LINE: Record<MoneyKind, string> = {
+  fiat: 'Your agents pay ordinary bills with cards and bank transfers.',
+  stablecoin: 'Your agents work on chain.',
+  hybrid: 'Both side by side, under one set of rules.',
+}
+const KIND_CHIP: Record<MoneyKind, string> = { fiat: 'Fiat', stablecoin: 'Stablecoin', hybrid: 'Hybrid' }
+
+/** The account's chip, as the switcher shows it: "Business · Hybrid". */
+export const accountChip = (a: WorkspaceAccount) => `${TYPE_LABEL[a.account_type]} · ${KIND_CHIP[a.money_kind]}`
+
+/** Every workspace Lens had before B59.6 became Business and Hybrid, so nothing it used disappeared. */
+const AS_MIGRATED: WorkspaceAccount = { account_type: 'business', money_kind: 'hybrid' }
+
+/**
+ * The session's workspace's type and kind, and what they show. While the read is in flight `shows` is null and a
+ * screen renders nothing that depends on it. A read that failed draws the screens as every existing workspace was
+ * migrated, Business and Hybrid, so a failed read never empties someone's money screens; `account` stays null, so
+ * nothing claims to know the type or kind.
+ */
+export function useAccount(): { account: WorkspaceAccount | null; shows: Shows | null } {
+  const q = useQuery({ queryKey: ACCOUNT_KEY, queryFn: readWorkspaceAccount, staleTime: 60_000, retry: false })
+  if (q.isPending) return { account: null, shows: null }
+  if (q.isError) return { account: null, shows: shows(AS_MIGRATED) }
+  return { account: q.data, shows: shows(q.data) }
+}
+
+/**
+ * Whether the account is known to be Personal: false while it is read and when the read fails. It re-renders its caller
+ * once at most, when a Personal account's answer arrives, so the shell and every route can ask it.
+ */
+export function usePersonal(): boolean {
+  return (
+    useQuery({
+      queryKey: ACCOUNT_KEY,
+      queryFn: readWorkspaceAccount,
+      staleTime: 60_000,
+      retry: false,
+      select: (a) => a.account_type === 'personal',
+      notifyOnChangeProps: ['data'],
+    }).data === true
+  )
 }

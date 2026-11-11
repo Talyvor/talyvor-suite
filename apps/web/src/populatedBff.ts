@@ -179,6 +179,7 @@ const BODIES: Record<string, unknown> = {
   '/api/docs/membership': { member: true },
   // B46.16 — the sidebar shows the workspace's name on every address.
   '/api/workspace/name': { id: 'ws_1', name: 'Acme' },
+  '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
   // B39.34 — Settings → Email branding, as a workspace that branded its Docs email.
   '/api/docs/email-branding': { from_name: 'Acme Robotics', header_color: '#1E40AF', logo_url: '' },
   // B40.8 — Settings → Connect your AI, with Claude connected and used.

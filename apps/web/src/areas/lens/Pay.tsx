@@ -29,6 +29,7 @@ import {
   minorOf,
   newMoveKey,
   refusalText,
+  useAccount,
 } from './agentBankApi'
 import { Lxc } from './money'
 import { WorkspaceLabel } from '../../labels/workspace'
@@ -39,6 +40,8 @@ import { PAY_OUT } from '../../labels/capabilities'
 // wait for a person's approval shown here; standing orders (B30.18); mandates a payee pulls within (B30.19); and bulk
 // payouts from a CSV, validated row by row and paid on one approval (B30.21). Lens decides everything — which account may
 // pay, the agent's rules, screening, what posts — and a refusal shows its sentence. Every amount is Lens's minor units.
+// B59.10 — by the workspace's type and kind (account.ts): a Stablecoin and crypto account has no bank transfers, so none of
+// the above is rendered for it; payout batches are a Business's; a Personal account reads "your account", not the company's.
 
 export const PAYEES_KEY = ['money-payees']
 export const PAYMENTS_KEY = ['money-payments']
@@ -94,19 +97,46 @@ export function PayScreen() {
   const saved = payees.data?.payees ?? []
   const sent = payments.data?.payments ?? []
   const agentName = (id: string | undefined) => book.data?.agents?.find((x) => x.id === id)?.name ?? id ?? ''
-  const accountName = (a: CurrencyAccount) => `${a.purpose === 'agent' ? agentName(a.agent_id) : 'The company'} · ${a.currency}`
+  const { shows } = useAccount()
+  const business = shows?.team === true
+  const accountName = (a: CurrencyAccount) => `${a.purpose === 'agent' ? agentName(a.agent_id) : (shows?.owner ?? 'The company')} · ${a.currency}`
   const payeeName = (id: string | undefined) => saved.find((p) => p.id === id)?.name ?? id ?? ''
   const reading = (q: { isError: boolean; isPending: boolean; error: unknown }, what: string) =>
     q.isError ? <p className="text-body text-muted">{readFailure(q.error, what)}</p> : q.isPending ? <p className="text-body text-muted">Reading…</p> : null
 
+  if (!shows) {
+    return (
+      <RegionScreen>
+        <Region index="00" label="Pay" heading="Send money from an account" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-2xl flex-col gap-3">
+          <p className="text-body text-muted">Reading…</p>
+        </Region>
+      </RegionScreen>
+    )
+  }
+  if (!shows.bankTransfers) {
+    return (
+      <RegionScreen>
+        <Region index="00" label="Pay" heading="Send money from an account" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-2xl flex-col gap-3">
+          <p className="text-body text-muted" data-testid="pay-on-chain">
+            Your agents work on chain: each agent’s wallet address is on{' '}
+            <Link className={inlineLink} to="/agents">
+              Agent Wallets
+            </Link>
+            .
+          </p>
+        </Region>
+      </RegionScreen>
+    )
+  }
   return (
     <RegionScreen>
       <Region index="00" label="Pay" heading="Send money from an account" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-2xl flex-col gap-3">
         <WorkspaceLabel capability={PAY_OUT} className="self-start" />
-        <p className="text-body text-muted">
-          Save the people and companies you pay, then send money from the company’s or an agent’s account in pounds, euros or dollars:
-          one payment, a standing order, a mandate the payee pulls within, or a file of payouts approved once. An agent’s own request
-          above its approval amount waits here for you.
+        <p className="text-body text-muted" data-testid="pay-lead">
+          {business
+            ? 'Save the people and companies you pay, then send money from the company’s or an agent’s account in pounds, euros or dollars: one payment, a standing order, a mandate the payee pulls within, or a file of payouts approved once.'
+            : 'Save the people and companies you pay, then send money from your account or an agent’s in pounds, euros or dollars: one payment, a standing order, or a mandate the payee pulls within.'}{' '}
+          An agent’s own request above its approval amount waits here for you.
         </p>
         {askedPayees.length + askedMandates.length > 0 ? (
           <p className="text-body text-ink" data-testid="pay-asked">
@@ -138,7 +168,9 @@ export function PayScreen() {
       <Region index="02" label="Send" heading="Pay a saved payee" className="flex max-w-2xl flex-col gap-3">
         {reading(accounts, 'Your accounts') ??
           (open.length === 0 ? (
-            <p className="text-body text-muted" data-testid="pay-no-account">No currency account yet: open the company’s account on Invoices, then pay from it here.</p>
+            <p className="text-body text-muted" data-testid="pay-no-account">
+              No currency account yet: open {business ? 'the company’s account' : 'your account'} on Invoices, then pay from it here.
+            </p>
           ) : (
             <SendPayment accounts={open} payees={saved} sent={sent} accountName={accountName} />
           ))}
@@ -171,14 +203,16 @@ export function PayScreen() {
             <Mandates accounts={agentAccounts} payees={saved} accountName={accountName} agentName={agentName} />
           ))}
       </Region>
-      <Region index="05" label="Bulk payouts" heading="Pay many at once from a file" className="flex max-w-2xl flex-col gap-3">
-        <Payouts />
-      </Region>
-      <Region index="06" label="Bills" heading="Bills you received" className="flex max-w-2xl flex-col gap-3">
+      {shows.payoutBatches ? (
+        <Region index="05" label="Bulk payouts" heading="Pay many at once from a file" className="flex max-w-2xl flex-col gap-3">
+          <Payouts />
+        </Region>
+      ) : null}
+      <Region index={shows.payoutBatches ? '06' : '05'} label="Bills" heading="Bills you received" className="flex max-w-2xl flex-col gap-3">
         <Bills payeeName={payeeName} />
       </Region>
       {askedMandates.length > 0 ? (
-        <Region index="07" label="Assistant permissions" heading="Sign what an assistant may pay for you" className="flex max-w-2xl flex-col gap-3">
+        <Region index={shows.payoutBatches ? '07' : '06'} label="Assistant permissions" heading="Sign what an assistant may pay for you" className="flex max-w-2xl flex-col gap-3">
           <AssistantMandates requests={askedMandates} payeeName={payeeName} />
         </Region>
       ) : null}

@@ -79,7 +79,8 @@ describe('the remaining signed-in screens in the brand', () => {
     )
     const main = await at('/settings')
     const eyebrows = within(main).getAllByTestId('region-label').map((l) => l.textContent)
-    expect(eyebrows).toEqual(['00Sharing', '01Documents', '02Provider keys'])
+    // B59.10 — the populated workspace is Business and Hybrid: its account, and its team.
+    expect(eyebrows).toEqual(['00Sharing', '01Documents', '02Provider keys', '03Account', '04Team'])
 
     const keep = await within(main).findByRole('button', { name: 'Do not share my answers' })
     expect(keep).toHaveAttribute('aria-pressed', 'true')

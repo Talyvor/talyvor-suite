@@ -30,14 +30,14 @@ import { ApiError, UnreadableError } from './lib/api'
 import { Overview } from './areas/lens/Overview'
 import { Home } from './areas/lens/Home'
 import { AppMoney } from './areas/lens/money'
-import { WORKSPACE_NAME_KEY, agentBankApi } from './areas/lens/agentBankApi'
+import { WORKSPACE_NAME_KEY, accountChip, agentBankApi, useAccount, usePersonal } from './areas/lens/agentBankApi'
 import { Ledger } from './areas/lens/Ledger'
 import { Earnings, EarningsMoved, ROYALTIES_PATH } from './areas/lens/Earnings'
 import { Keys } from './areas/lens/Keys'
 import { Setup } from './areas/lens/Setup'
 import { Spend } from './areas/lens/Spend'
 import { Members } from './areas/lens/Members'
-import { Settings } from './areas/lens/Sharing'
+import { Settings, TeamOnly } from './areas/lens/Sharing'
 import { Features } from './areas/lens/Features'
 import { AgentBank } from './areas/lens/AgentBank'
 import { ApprovalsScreen, StatementsScreen, usePendingApprovals } from './areas/lens/WalletScreens'
@@ -419,6 +419,9 @@ function Sidebar() {
   // B59.2 — a row for an area this workspace does not have is not drawn, and a group left with no rows goes with it.
   const areas = useWorkspaceAreas()
   const work = areas.has('track') || areas.has('docs')
+  // B59.10 — the account's type and kind: its chip under the name, and Members only for a Business (drawn while the
+  // account is read, so a fresh load at /members shows its own row).
+  const account = useAccount()
   const item = (
     to: string,
     label: string,
@@ -487,6 +490,15 @@ function Sidebar() {
         <div className="-mt-4 truncate px-3 text-caption text-ink" title={workspaceLabel} data-testid="sidebar-workspace-name">
           {workspaceLabel}
         </div>
+      ) : null}
+      {/* B59.10 — the switcher's chip, "Business · Hybrid", once Lens has said which. */}
+      {account.account ? (
+        <span
+          className="-mt-3 ml-3 self-start rounded-pill border border-rule bg-surface px-2 text-caption text-ink"
+          data-testid="sidebar-account-chip"
+        >
+          {accountChip(account.account)}
+        </span>
       ) : null}
       {/* B56.11 — one Sandbox chip under the name while Lens says no money capability is live for this workspace. */}
       <WorkspaceSandbox className="-mt-3 ml-3 self-start" />
@@ -578,7 +590,7 @@ function Sidebar() {
       </Group>
       <Group label="Settings" {...fold.group('Settings')}>
         {item('/settings', 'Settings', 'settings')}
-        {item('/members', 'Members', 'members')}
+        {account.shows?.team !== false ? item('/members', 'Members', 'members') : null}
         {item('/settings/verification', 'Verification', 'prove')}
         {item('/settings/terms', 'Capability terms', 'page')}
         {item('/settings/webhooks', 'Webhooks', 'plug')}
@@ -657,6 +669,14 @@ function palettePages(operator: boolean, shows: (path: string) => boolean): Pale
   ).map((r) => ({ path: r.path.replace(/\/\*$/, ''), title: r.title }))
 }
 
+/** B59.10 — Members is a Business's team; a Personal account is never offered it. Its own component, told only whether
+ * the account is Personal, so the account's read re-renders the palette once at most and never the whole shell. */
+function Palette({ pages }: { pages: PalettePage[] }) {
+  const personal = usePersonal()
+  const offered = useMemo(() => (personal ? pages.filter((p) => p.path !== '/members') : pages), [pages, personal])
+  return <CommandPalette pages={offered} />
+}
+
 function AppShell() {
   const { pathname } = useLocation()
   const operator = useAuthMeReader().data?.operator === true
@@ -693,7 +713,8 @@ function AppShell() {
           <h1 className="min-w-0 flex-1 break-words text-bar text-ink">{page}</h1>
           <div className="flex min-w-0 items-center gap-3">
             <SessionChip />
-            <CommandPalette pages={pages} />
+            <Palette pages={pages} />
+            <TeamOnly />
             <ThemeToggle />
           </div>
         </>
