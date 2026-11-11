@@ -4,11 +4,12 @@
  *
  *   pnpm --filter @talyvor/web pocket:shots <item> <checks.json>
  *
- * checks.json is a list of { route, screen, steps?, dark?, frame?, answers? }: the app's address, the reference's screen id
+ * checks.json is a list of { route, screen, steps?, dark?, frame?, answers?, state? }: the app's address, the reference's screen id
  * (README.md's tables; leave it out for a page with no reference, such as the story page), the words or aria-labels to press in the app to reach the screen as a person would
  * (w-home+sheet-A is reached by pressing "Review"), whether to shoot it dark, and whether the reference is only the
  * dialog's frame over its page (B57.5: a dialog on the story page, beside the reference's dialog without its page),
- * and what to answer instead of the sample for some addresses, by path (B57.49: /auth/me signed out for /signup).
+ * and what to answer instead of the sample for some addresses, by path (B57.49: /auth/me signed out for /signup), and
+ * the reference's state to set before its shot (B57.116: { "pr": 1, "nw": 0 } shows a prepared payment).
  *
  * It builds the app once, serves dist with every /api and /auth request answered from scripts/pocket/sample.ts,
  * and for each check shoots the app at 1440x900 and 390x844 with the reference beside it, into
@@ -149,6 +150,8 @@ async function reference(c) {
   await page.waitForFunction(() => window.__proto)
   await page.evaluate((s) => window.__proto.open(s), c.screen)
   if ((await page.evaluate(() => window.__proto.current())) !== c.screen) throw new Error(`the reference has no screen ${c.screen}`)
+  // B57.116 — a row the reference hides until its state is set (w-approvals' prepared payment is pr=1, nw=0).
+  if (c.state) await page.evaluate((st) => window.__proto.setState(st), c.state)
   if (c.dark) await page.evaluate(() => document.querySelectorAll('#proto .phold .pk').forEach((el) => el.classList.replace('pk-light', 'pk-dark') || el.classList.add('pk-dark')))
   await page.waitForTimeout(300)
   const hold = page.locator(c.frame ? '#proto .phold .scrim > *' : '#proto .phold > *').first()

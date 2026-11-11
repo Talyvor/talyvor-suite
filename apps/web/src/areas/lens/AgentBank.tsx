@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
+import { Icon, Button as PocketButton, Row as PocketRow, RoomBadge } from '@talyvor/ui/pocket'
 import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { useLinked } from '../../components/LinkedItem'
@@ -55,6 +56,7 @@ import {
   retryMoveThroughRestart,
 } from './agentBankApi'
 import { WorkspaceLabel, approvalCapability, paymentRequestCapabilities } from '../../labels/workspace'
+import { DESIGN_ATTR } from '../../pocketPending'
 import { AGENT_CREDIT } from '../../labels/capabilities'
 
 // AgentBank.tsx — B19.4: Agent Wallets (named so by B21.6). Each AI agent a workspace runs has a wallet of its own on
@@ -2444,31 +2446,45 @@ export function preparedWords(r: PaymentRequest, nameOf: (id: string) => string)
   }
 }
 
-/** B55.10 — one prepared request on Approvals: what it is, the total, and Review, which opens its card. */
-function PreparedRow({ r, nameOf }: { r: PaymentRequest; nameOf: (id: string) => string }) {
+/**
+ * B55.10 — one prepared request: what it is, the total, and Review, which opens its card. B57.116: Approvals and Home
+ * draw it in Pocket's row as w-approvals and w-home draw a waiting request: Chat's mark, the line over its hint, the
+ * total over its currency, and Review. Approvals also says whether the payment is sandbox or live (B56.11).
+ */
+export function PreparedRow({ r, nameOf, labelled = false }: { r: PaymentRequest; nameOf: (id: string) => string; labelled?: boolean }) {
   const w = preparedWords(r, nameOf)
   return (
-    <Row
-      stack
-      data-prepared={r.id}
-      label={
-        <span className="whitespace-normal">
-          {w.line} · <span className="font-figure">{w.total}</span>
-        </span>
-      }
-      hint={
-        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-          <WorkspaceLabel capability={paymentRequestCapabilities(r)} />
-          <span>
-            {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
+    // Each row sits in its own wrapper, so the hairline between rows is the wrapper's, as pocket.css .li draws it. The
+    // wrapper is marked Pocket, as StatusLabel is, so the design guards hold the row to Pocket's rules on a page still
+    // drawn in today's.
+    <div data-prepared={r.id} {...{ [DESIGN_ATTR]: 'pocket' }} className="border-t border-line first:border-t-0">
+      <PocketRow
+        wrap
+        leading={<RoomBadge icon={<Icon name="chat" />} />}
+        title={w.line}
+        line={
+          <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+            {labelled ? <WorkspaceLabel capability={paymentRequestCapabilities(r)} /> : null}
+            <span>
+              {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
+            </span>
           </span>
-        </span>
-      }
-    >
-      <Button asChild className="h-12 w-full wide:h-8 wide:w-auto">
-        <Link to={`/approve/${encodeURIComponent(r.id)}`}>Review</Link>
-      </Button>
-    </Row>
+        }
+        amount={
+          <>
+            <span className="block">{w.total}</span>
+            <span className="block text-caption font-normal text-ink-3">{Object.keys(r.totals ?? {}).join(', ')}</span>
+          </>
+        }
+        action={
+          // Secondary, as the reference's briefing draws Review, so the screen's one ink primary stays its own (B57.3).
+          // A payment waiting for the person is their move, so Pocket's tangerine focus ring has its reason.
+          <PocketButton asChild variant="secondary" size="sm" data-tangerine="your-move">
+            <Link to={`/approve/${encodeURIComponent(r.id)}`}>Review</Link>
+          </PocketButton>
+        }
+      />
+    </div>
   )
 }
 
@@ -2720,9 +2736,9 @@ export function Approvals({
           {prepared.isError ? (
             <p className="border-b border-rule px-gutter py-3 text-body text-muted">{readFailure(prepared.error, 'The prepared payments')}</p>
           ) : preparedShown.length > 0 ? (
-            <div role="group" aria-label="Prepared payments" className="border-b border-rule">
+            <div role="group" aria-label="Prepared payments" className="border-b border-rule px-gutter">
               {preparedShown.map((r) => (
-                <PreparedRow key={r.id} r={r} nameOf={nameOf} />
+                <PreparedRow key={r.id} r={r} nameOf={nameOf} labelled />
               ))}
             </div>
           ) : null}

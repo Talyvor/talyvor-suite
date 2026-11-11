@@ -86,6 +86,8 @@
 //   label-built — /v1/public/plan-gates reports sso built while building.json still labels it Building (B56.13)
 //   label-charged — /v1/public/fees reports fx_margin_bps charged while building.json still labels it Building (B56.13)
 //   label-live  — /v1/public/labels labels fx live while /status.json's fx rail is in test (B56.13)
+//   pool-off    — pooling is off for the deployment: GET /v1/pooling says so and why, and the pool serves nothing (B58.15)
+//   pool-dead   — GET /v1/pooling says pooling is on, and the pool serves nothing (B58.15)
 //
 // B17.6 adds the Agent Bank and the marketplace (stub-bank.ts): agents with keys of their own, whose
 // requests through the proxy are judged by their rules and spent from their own balance.
@@ -947,7 +949,7 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   let cut = false
   const own = personal || tooled ? undefined
     : ws.answers.get(key) ?? (converted > 0 && messages.length === 1 ? alikeDocument(ws.answers, model.id, text(messages[0])) : undefined)
-  const shared = messages.length === 1 && !personal && !tooled ? pool.get(key) ?? (broke('pool-negation') ? looseMatch(model.id, said) : undefined) : undefined
+  const shared = messages.length === 1 && !personal && !tooled && !broke('pool-off') && !broke('pool-dead') ? pool.get(key) ?? (broke('pool-negation') ? looseMatch(model.id, said) : undefined) : undefined
   if (broke('pool-tells') && [...workspaces.values()].some((w) => w.id !== ws.id && w.answers.has(key))) headers['X-Talyvor-Pool-Seen'] = 'elsewhere'
   const inTok = tokens(messages.map(text).join(' ')) + 8
   // B28.358 — what an answer costs at list price, which a replay saves whole and a pooled serve in part.
@@ -1544,6 +1546,10 @@ createServer(async (req, res) => {
         created_by: '', created_at: now, updated_at: now }
       prompts.set(name, prompt)
       return json(res, 201, prompt)
+    }
+    // B58.15 — whether cross-workspace pooling is on for the deployment, and why not (Lens B58.14 poolStateHandler).
+    if (p === '/v1/pooling' && req.method === 'GET') {
+      return json(res, 200, broke('pool-off') ? { pooling: 'off', cause: 'flag', reason: 'LENS_CACHE_POOLABLE_ENABLED is off on this deployment' } : { pooling: 'on' })
     }
     // B34.5 — an answer marked wrong (Lens B15.4): its stored copy and its pooled copy go, and it is never served again.
     if (p === '/v1/feedback' && req.method === 'POST') {

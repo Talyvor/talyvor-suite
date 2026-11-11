@@ -129,14 +129,8 @@ const CONTENTS: Array<{ id: string; label: string }> = [
 ]
 
 // B57.63 — the reference's cards, in its order and with its words: each opens that part's guide on this page.
-const PARTS: Array<{ id: string; line: string }> = [
-  { id: 'wallets', line: 'Wallets, rules, approvals and statements' },
-  { id: 'chat', line: 'Every model, paid by an agent or the workspace' },
-  { id: 'marketplace', line: 'Use, rent and sell agents, prompts, skills and evaluations' },
-  { id: 'docs', line: 'Spaces and pages with AI tools' },
-  { id: 'track', line: 'Issues with the AI cost of each' },
-  { id: 'code', line: 'The CLI, the editor extensions and the MCP server' },
-]
+// B59.37 — the launch pack's parts only.
+const PARTS: Array<{ id: string; line: string }> = [{ id: 'wallets', line: 'Wallets, rules, approvals and statements' }]
 
 /** One part of the page: its eyebrow, its heading and what follows, on the page's one column. */
 function Part({ id, eyebrow, heading, children }: { id: string; eyebrow: string; heading: string; children: React.ReactNode }) {
@@ -218,10 +212,10 @@ export function Documentation() {
           </Part>
         ))}
 
-        <Part id="lens" eyebrow="Lens API" heading="One gateway for every model call and every agent payment.">
+        <Part id="lens" eyebrow="Lens API" heading="One API for every model call and every agent payment.">
           <div className="mt-4 grid gap-x-12 gap-y-4 wide:grid-cols-2">
             <p className="max-w-lg text-reading text-ink-2">
-              The hosted gateway is <span className="font-mono text-ink">{LENS_ORIGIN}</span>. Every
+              Lens is hosted at <span className="font-mono text-ink">{LENS_ORIGIN}</span>. Every
               route except the public ones takes your key as{' '}
               <span className="font-mono text-ink">Authorization: Bearer &lt;key&gt;</span> or{' '}
               <span className="font-mono text-ink">X-Talyvor-Key: &lt;key&gt;</span>. The{' '}
@@ -230,8 +224,8 @@ export function Documentation() {
             </p>
             <p className="max-w-lg text-reading text-ink-2">
               Below is every route a customer can call, <span className="font-figure">{ROUTE_COUNT}</span> of them, read from Lens’s
-              source and each answered by the hosted gateway. Admin and operator routes are not
-              listed. The core routes are also described in the gateway’s{' '}
+              source and each answered by hosted Lens. Admin and operator routes are not
+              listed. The core routes are also described in Lens’s{' '}
               <a href={`${LENS_ORIGIN}/openapi.json`} className={`text-ink ${inlineLink}`}>
                 OpenAPI document
               </a>

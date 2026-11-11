@@ -5,10 +5,9 @@ import { Button, Card, CardHeader, Input, NavIcon, type NavIconName, Pill, Row, 
 import { Money } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
-import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, PREPARED_KEY, PauseEveryAgent, preparedWords, rulesKey, useKeys } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, PREPARED_KEY, PauseEveryAgent, PreparedRow, rulesKey, useKeys } from './AgentBank'
 import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText } from './agentBankApi'
 import { RunsOut } from './RunsOut'
-import { formatWhen } from './format'
 import { Lxc } from './money'
 import { resumeAgent } from './passkeys'
 import { AgentFace } from './AgentFace'
@@ -89,7 +88,8 @@ function Muted({ children }: { children: React.ReactNode }) {
 const APPROVALS_SHOWN = 3
 
 /** B45.11 — the approvals waiting for a person, first; each opens its card on Approvals. B55.10: the payments Chat or an
- * assistant prepared come before them, each opening its own card at /approve/<id>, and the count is both. */
+ * assistant prepared come before them, each opening its own card at /approve/<id>, and the count is both. B57.116: each is
+ * drawn in Pocket's row with Review, as w-home draws it. */
 function ApprovalsFirst({ nameOf }: { nameOf: (id: string) => string }) {
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
@@ -120,25 +120,11 @@ function ApprovalsFirst({ nameOf }: { nameOf: (id: string) => string }) {
         <Muted>Nothing is waiting for you.</Muted>
       ) : (
         <ul data-testid="home-approvals">
-          {preparedShown.map((r) => {
-            const w = preparedWords(r, nameOf)
-            return (
-              <li key={r.id} className="border-b border-rule last:border-b-0">
-                <Link
-                  to={`/approve/${encodeURIComponent(r.id)}`}
-                  className={cn('flex min-h-row items-center justify-between gap-gutter px-gutter py-2', focusRing)}
-                >
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-body text-ink">{w.line}</span>
-                    <span className="truncate text-caption text-muted">
-                      {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
-                    </span>
-                  </span>
-                  <span className="shrink-0 font-figure text-body text-ink">{w.total}</span>
-                </Link>
-              </li>
-            )
-          })}
+          {preparedShown.map((r) => (
+            <li key={r.id} className="border-b border-rule px-gutter last:border-b-0">
+              <PreparedRow r={r} nameOf={nameOf} />
+            </li>
+          ))}
           {pending.slice(0, APPROVALS_SHOWN - preparedShown.length).map((a) => (
             <li key={a.id} className="border-b border-rule last:border-b-0">
               <Link
