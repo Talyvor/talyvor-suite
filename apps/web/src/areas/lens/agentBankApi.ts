@@ -1,4 +1,5 @@
 import { ApiError, getJSON } from '../../lib/api'
+import { approvalInSentence, unlessHeld } from '../../lib/held'
 import { isSessionExpired } from '../../lib/productState'
 import { currencyText } from './money'
 
@@ -824,6 +825,8 @@ export class AgentBankError extends ApiError {
     status: number,
     path: string,
     readonly sentence: string,
+    /** B58.1: the approval a payment waits on, when Lens answered it held */
+    readonly approvalID = '',
   ) {
     super(status, path)
   }
@@ -1074,7 +1077,8 @@ export const agentBankApi = {
   /** B19.23 — the signed-in person becomes the owner of an agent that has none. */
   claim: (id: string) => send<{ agent_id: string; owner_user_id: string }>('POST', `/api/agents/${e(id)}/claim`),
   pay: (id: string, to_agent_id: string, amount_ulxc: number, memo: string) =>
-    send<AgentPayment>('POST', `/api/agents/${e(id)}/pay`, { to_agent_id, amount_ulxc, memo }),
+    unlessHeld(send<AgentPayment>('POST', `/api/agents/${e(id)}/pay`, { to_agent_id, amount_ulxc, memo }),
+      (h) => new AgentBankError(202, `/api/agents/${e(id)}/pay`, h.message ?? '', h.approval_id)),
   approvals: () => getJSON<{ approvals: AgentApproval[] | null }>('/api/agents/approvals', { approvals: 'list' }),
   // B19.21 — scheduled payments and automatic top-ups.
   schedules: () => getJSON<{ schedules: AgentSchedule[] | null }>('/api/agents/schedules', { schedules: 'list' }),
@@ -1997,9 +2001,9 @@ export function limitText(micros: number): string {
   return micros > 0 ? String(micros / 1_000_000) : ''
 }
 
-/** The approval a payment filed, named in Lens's refusal: "… approval apr_… must be approved …". */
+/** The approval a payment filed: Lens's held answer names it (B58.2), or its refusal's sentence does, in any case. */
 export function approvalNamedIn(err: unknown): string | null {
-  return err instanceof AgentBankError ? (/approval (apr_[\w-]+)/.exec(err.sentence)?.[1] ?? null) : null
+  return err instanceof AgentBankError ? err.approvalID || approvalInSentence(err.sentence) : null
 }
 
 /** Why a write did not happen, in Lens's words where Lens gave some. */

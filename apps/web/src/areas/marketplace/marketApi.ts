@@ -1,4 +1,5 @@
 import { ApiError, getJSON, readable } from "../../lib/api";
+import { unlessHeld } from "../../lib/held";
 import { isSessionExpired } from "../../lib/productState";
 
 // marketApi.ts — B20.3: the marketplace screens' reads and writes, through the BFF's /api/marketplace
@@ -806,6 +807,8 @@ export class MarketError extends ApiError {
     status: number,
     path: string,
     readonly sentence: string,
+    /** B58.1: the approval a use or licence waits on, when Lens answered it held */
+    readonly approvalID = "",
   ) {
     super(status, path);
   }
@@ -851,7 +854,8 @@ const e = encodeURIComponent;
 
 /** Licenses one of a listing's offers. Lens requires the Idempotency-Key, so a retried click never buys twice. */
 function license(listingID: string, offerID: string, version: number, key: string) {
-  return send<MarketLicence>(`/api/marketplace/listings/${e(listingID)}/licences`, {
+  const path = `/api/marketplace/listings/${e(listingID)}/licences`;
+  const answer = send<MarketLicence>(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -860,6 +864,7 @@ function license(listingID: string, offerID: string, version: number, key: strin
     },
     body: JSON.stringify({ offer_id: offerID, version }),
   });
+  return unlessHeld(answer, (h) => new MarketError(202, path, h.message ?? "", h.approval_id));
 }
 
 export const marketApi = {
@@ -1000,7 +1005,9 @@ export const marketApi = {
   remix: (id: string, version = 0) =>
     post<RemixOpened>(`/api/marketplace/listings/${e(id)}/remix`, { version }),
   use: (id: string, req: UseRequest) =>
-    post<ListingUse>(`/api/marketplace/listings/${e(id)}/use`, req),
+    unlessHeld(post<ListingUse>(`/api/marketplace/listings/${e(id)}/use`, req), (h) =>
+      new MarketError(202, `/api/marketplace/listings/${e(id)}/use`, h.message ?? "", h.approval_id),
+    ),
   // B41.85 — a seller's relabel, and this workspace's content filter and blocks (Lens B41.185).
   setContentLabels: (id: string, age_rating: AgeRating, content_labels: ContentLabel[]) =>
     put<Listing>(`/api/marketplace/listings/${e(id)}/content-labels`, { age_rating, content_labels }),
