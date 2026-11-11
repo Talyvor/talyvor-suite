@@ -30,6 +30,7 @@ import { CompanyCard, TAX_LINE } from '../marketing/PriceCard'
 import { COMPANY_CONTACT } from '../../company'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { BUY_FROM_TALYVOR } from '../../labels/capabilities'
+import { IfArea } from '../../lib/workspaceAreas'
 
 // /plans (B13.3) — the three plans side by side, and for a subscriber: how much of this period's
 // included usage is used, and what their answers earned back.
@@ -313,11 +314,14 @@ function EarningsCard({
       <div className="flex flex-col gap-2 border-b border-rule px-gutter py-4">
         {sharing === false ? (
           <p className="text-body text-ink">
-            Answer sharing is off, so new answers earn nothing.{' '}
-            <Link to="/features" className={inlineLink}>
-              Turn it on in Features
-            </Link>
-            .
+            Answer sharing is off, so new answers earn nothing.
+            <IfArea area="gateway">
+              {' '}
+              <Link to="/features" className={inlineLink}>
+                Turn it on in Features
+              </Link>
+              .
+            </IfArea>
           </p>
         ) : fee > 0 ? (
           <p className="text-body text-ink">

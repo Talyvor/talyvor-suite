@@ -6,6 +6,7 @@ import { ApiError } from '../../lib/api'
 import { useAuthMeReader } from '../../lib/authMe'
 import { DocumentFacts, DistillChoice } from './Documents'
 import { StoredAnswersFacts } from '../../components/StoredAnswersFacts'
+import { IfArea } from '../../lib/workspaceAreas'
 import { ProviderKeysCard } from './ProviderKeys'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Region, RegionScreen } from '../../components/Region'
@@ -206,6 +207,8 @@ export function Settings() {
   // B29.12 — the board's pattern: an eyebrow names each section and its card sits on the raised plane.
   return (
     <RegionScreen>
+      {/* B59.2 — shared answers and document conversion are the gateway's, and go with it. */}
+      <IfArea area="gateway">
       <Region index="00" label="Sharing">
         <Card raised>
           <CardHeader>Shared answers (saves on repeated questions)</CardHeader>
@@ -228,6 +231,7 @@ export function Settings() {
           </div>
         </Card>
       </Region>
+      </IfArea>
 
       {/* B27.27 — BYOK's keys: added, replaced and removed here, only their last four ever shown. */}
       <Region index="02" label="Provider keys">

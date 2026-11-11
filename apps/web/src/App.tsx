@@ -98,6 +98,7 @@ import { useAuthMeReader } from './lib/authMe'
 import { useSidebarFold } from './sidebarFold'
 import { designOf } from './pocketPending'
 import { WorkspaceSandbox } from './labels/workspace'
+import { AreaRoute, IfArea, useWorkspaceAreas } from './lib/workspaceAreas'
 
 // App.tsx is a SHARED file (see README §Directory ownership): it owns routing
 // and the nav for every area. Area work happens inside src/areas/<area>/ —
@@ -414,12 +415,15 @@ function Sidebar() {
   const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
   // B55.39 — Lens names a new workspace by its id; the sidebar never shows it.
   const workspaceLabel = workspace.data?.name === workspace.data?.id ? 'Your workspace' : workspace.data?.name
+  // B59.2 — a row for an area this workspace does not have is not drawn, and a group left with no rows goes with it.
+  const areas = useWorkspaceAreas()
+  const work = areas.has('track') || areas.has('docs')
   const item = (
     to: string,
     label: string,
     icon: NavIconName,
     opts: { wildcard?: boolean; active?: boolean; badge?: number | null; indent?: boolean } = {},
-  ) => (
+  ) => !areas.shows(to) ? null : (
     <NavDestination
       to={to}
       label={label}
@@ -436,10 +440,12 @@ function Sidebar() {
   const docsNav = useDocsNav()
   // B24.1 — every group folds to its title; the one holding this page starts open.
   const fold = useSidebarFold(
-    me.data?.operator ? GROUPS : GROUPS.filter((g) => g !== 'Operator'),
+    GROUPS.filter(
+      (g) => (g !== 'Operator' || me.data?.operator) && (g !== 'Marketplace' || areas.has('marketplace')) && (g !== 'Work' || work),
+    ),
     groupOf(pathname),
   )
-  const docsListed = [...docsNav.pinned, ...docsNav.recent]
+  const docsListed = areas.has('docs') ? [...docsNav.pinned, ...docsNav.recent] : []
   const onTrackIssues = pathname === '/track' || pathname.startsWith('/track/issues')
   const onDocsIndex = pathname.startsWith('/docs') && !docsListed.some((d) => pathname === pageHref(d))
   const docLink = (d: DocRef) => (
@@ -496,6 +502,7 @@ function Sidebar() {
         {item('/chat', 'Chat', 'chat', { wildcard: true })}
         {item('/rooms', 'Rooms', 'members', { indent: true, wildcard: true })}
       </div>
+      {areas.has('marketplace') ? (
       <Group label="Marketplace" {...fold.group('Marketplace')}>
         {item('/marketplace', 'Discover', 'grid', {
           active:
@@ -512,30 +519,33 @@ function Sidebar() {
         {/* B20.12 — offered only to someone the BFF's operator gate will admit. */}
         {me.data?.operator ? item('/marketplace/review', 'Review queue', 'prove') : null}
       </Group>
+      ) : null}
       {/* Docs is BACK. It left the nav because it served one PINNED workspace shared by every
           signed-in person; it now takes the SESSION's workspace, the same way Track does, so the
           condition written into the removal comment has been met rather than waived. See
           apps/bff docsWorkspaceFor and the Track↔Docs enumeration that broke the cold-start
           deadlock (talyvor-track bf60842, talyvor-docs c970329). */}
+      {work ? (
       <Group label="Work" {...fold.group('Work')}>
         {item('/track', 'Track', 'issues', { active: onTrackIssues })}
         {item('/track/board', 'Board', 'board', { indent: true })}
         {item('/track/cycles', 'Cycles', 'cycle', { indent: true })}
         {item('/track/projects', 'Projects', 'folder', { indent: true })}
         {item('/docs', 'Docs', 'docs', { active: onDocsIndex })}
-        {docsNav.pinned.length > 0 ? (
+        {areas.has('docs') && docsNav.pinned.length > 0 ? (
           <>
             <p className="pl-8 pr-3 pt-1 text-caption text-faint">Pinned</p>
             {docsNav.pinned.map(docLink)}
           </>
         ) : null}
-        {docsNav.recent.length > 0 ? (
+        {areas.has('docs') && docsNav.recent.length > 0 ? (
           <>
             <p className="pl-8 pr-3 pt-1 text-caption text-faint">Recent</p>
             {docsNav.recent.map(docLink)}
           </>
         ) : null}
       </Group>
+      ) : null}
       <Group label="Developers" {...fold.group('Developers')}>
         {/* Connecting an agent sits beside Keys because minting a key and being told what to do with
             it are one task; a trial user who finds only Keys is stuck holding a credential. */}
@@ -636,16 +646,23 @@ function Sidebar() {
  * without the palette finding it. Stripe's two return pages are where Stripe sends a person, not somewhere to go, and
  * the operator's are offered only to someone the BFF's operator gate admits, as in the sidebar.
  */
-function palettePages(operator: boolean): PalettePage[] {
+function palettePages(operator: boolean, shows: (path: string) => boolean): PalettePage[] {
   return CONSOLE_ROUTES.filter(
-    (r) => r.path !== '/billing/success' && r.path !== '/billing/cancel' && (operator || !r.path.startsWith('/operator')),
+    (r) =>
+      r.path !== '/billing/success' &&
+      r.path !== '/billing/cancel' &&
+      (operator || !r.path.startsWith('/operator')) &&
+      shows(r.path),
   ).map((r) => ({ path: r.path.replace(/\/\*$/, ''), title: r.title }))
 }
 
 function AppShell() {
   const { pathname } = useLocation()
   const operator = useAuthMeReader().data?.operator === true
-  const pages = useMemo(() => palettePages(operator), [operator])
+  // B59.2 — and no page of an area this workspace does not have.
+  const areas = useWorkspaceAreas()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `areas.key` changes exactly when `areas.shows` answers differently
+  const pages = useMemo(() => palettePages(operator, areas.shows), [operator, areas.key])
   // ONE expression, two consumers: the banner paints it and the browser tab is told it. They
   // cannot drift into naming different pages because there is nothing to drift between —
   // documentTitle.test.tsx asserts the tab's page half IS the banner's string, at every address.
@@ -694,7 +711,7 @@ function AppShell() {
               declared here and nowhere else would be a page the top bar cannot name — that was
               the state this table replaced. */}
           {CONSOLE_ROUTES.map((r) => (
-            <Route key={r.path} path={r.path} element={r.element} />
+            <Route key={r.path} path={r.path} element={<AreaRoute path={r.path}>{r.element}</AreaRoute>} />
           ))}
           {/* B28.10 — a retired address that still has somewhere to go. Not in CONSOLE_ROUTES for
               the catch-all's reason: a redirect is not a page, so it has no title of its own. */}
@@ -733,7 +750,10 @@ function AppShell() {
         </div>
       </ScreenBoundary>
       {/* B45.6 — Taly, on every signed-in page, told which page it is on. */}
-      <TalyButton page={page} path={pathname} />
+      {/* B59.2 — Taly goes with Chat. */}
+      <IfArea area="chat">
+        <TalyButton page={page} path={pathname} />
+      </IfArea>
       {/* B57.5 — the confirmation after an action, shown once on the next view, and the short messages. */}
       <div className="contents" data-design="pocket">
         <SnackHost view={pathname} />

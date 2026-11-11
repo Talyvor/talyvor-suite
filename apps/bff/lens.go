@@ -60,6 +60,9 @@ type app struct {
 
 	// trackSpendSynced is when each Track workspace last asked Track to credit its Chat spend (track_spend.go).
 	trackSpendSynced sync.Map
+
+	// areas reads which areas a workspace has (areas.go); newApp sets it from areasReader.
+	areas func(context.Context, tenant) ([]string, error)
 }
 
 func newApp(cfg config, auth *authenticator) *app {
@@ -74,6 +77,7 @@ func newApp(cfg config, auth *authenticator) *app {
 		connectorOut: newConnectorTransport(),
 		oauth:        newOAuthServer(),
 	}
+	a.areas = areasReader(a)
 
 	// Talyvor Connect (B40.6, oauth.go): an outside assistant signs in as a person and reaches /mcp.
 	a.mux.HandleFunc("/.well-known/oauth-protected-resource", a.oauthOn(a.handleProtectedResourceMetadata))
@@ -865,6 +869,11 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !a.sameOriginWriteAllowed(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": "cross-origin write refused: the Origin header must be the app origin"})
+		return
+	}
+	// B59.2 — a route of an area this workspace does not have is not there (areas.go).
+	if a.areaHidden(r) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such endpoint"})
 		return
 	}
 	a.mux.ServeHTTP(w, r)

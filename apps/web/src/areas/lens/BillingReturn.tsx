@@ -8,6 +8,7 @@ import { formatUSD } from './format'
 import { clearPendingTopUp, formatCents, readPendingTopUp } from './topupApi'
 import { clearPendingPlan, planApi, readPendingPlan, type PlanOffer, type SubscriptionStatus } from './planApi'
 import { isSessionExpired } from '../../lib/productState'
+import { IfArea } from '../../lib/workspaceAreas'
 import { SUBSCRIPTION_KEY } from './Plans'
 
 // /billing/success and /billing/cancel — the URLs Lens ALREADY redirects Stripe
@@ -202,9 +203,11 @@ function PlanSuccess({ plan, pollIntervalMs, timeoutMs }: { plan: PlanOffer } & 
           <Button asChild variant={active && byok ? undefined : 'primary'}>
             <Link to="/plans">See your plan</Link>
           </Button>
-          <Button asChild>
-            <Link to="/chat">Open chat</Link>
-          </Button>
+          <IfArea area="chat">
+            <Button asChild>
+              <Link to="/chat">Open chat</Link>
+            </Button>
+          </IfArea>
         </div>
       </Region>
     </RegionScreen>

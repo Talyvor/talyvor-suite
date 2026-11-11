@@ -14,6 +14,7 @@ import { AgentFace } from './AgentFace'
 import { SafeAmount, SafeBreakdown } from './SafeToSpend'
 import { FirstAgent, NameWorkspace } from './Onboarding'
 import { SharingLine } from './Sharing'
+import { IfArea, useWorkspaceAreas } from '../../lib/workspaceAreas'
 
 // Home.tsx — B28.6: the first screen after sign-in is the wallet home. It answers, in order:
 //   1. What does the workspace hold, and how much of it have I not yet given to an agent?
@@ -56,9 +57,11 @@ export const PRODUCT_CARDS: readonly { title: string; to: string; icon: NavIconN
 
 /** The board's product cards: raised, a brand line icon, the product's name and one line, and an arrow. */
 function ProductCards() {
+  // B59.2 — a card for an area this workspace does not have is not drawn.
+  const areas = useWorkspaceAreas()
   return (
     <ul className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Products">
-      {PRODUCT_CARDS.map((p) => (
+      {PRODUCT_CARDS.filter((p) => areas.shows(p.to)).map((p) => (
         <li key={p.to} className="flex">
           <Link
             to={p.to}
@@ -485,7 +488,9 @@ function FirstWallet({ book, onStarted, onFinished }: { book: AgentBook; onStart
         payment moves. This workspace holds {lxc(book.workspace_balance_ulxc)}; your first agent is one click away.
       </p>
       <FirstAgent book={book} onStarted={onStarted} onFinished={onFinished} />
-      <SharingLine />
+      <IfArea area="gateway">
+        <SharingLine />
+      </IfArea>
       <p className="text-caption text-muted">
         Already pointing tools at Lens with a workspace key?{' '}
         <Link to="/setup" className={inlineLink}>
@@ -538,7 +543,9 @@ export function Home() {
             <ApprovalsFirst nameOf={nameOf} />
             <Total book={book.data} />
             <AgentLines agents={agents} />
-            <AskTaly />
+            <IfArea area="chat">
+              <AskTaly />
+            </IfArea>
           </>
         )}
       </Region>
