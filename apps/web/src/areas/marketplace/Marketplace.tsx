@@ -88,6 +88,7 @@ import {
 } from "./parts";
 import { WorkspaceLabel } from "../../labels/workspace";
 import { MARKETPLACE } from "../../labels/capabilities";
+import { MarketplaceLinks } from "../../components/PageLinks";
 
 // Marketplace.tsx — B20.3: the marketplace. Find what other teams published (agents, prompts, skills,
 // evaluations and pipelines — Lens B20.1; B32.61: on Discover.tsx, by Lens's search, trending and collections),
@@ -1327,6 +1328,8 @@ function Bill() {
 export function MarketplaceArea() {
   return (
     <RegionScreen>
+      {/* B57.8 — the Marketplace's own pages left the sidebar; the Marketplace links them. */}
+      <MarketplaceLinks />
       <Routes>
         <Route index element={<Discover />} />
         <Route path="listings/:id" element={<ListingPage />} />

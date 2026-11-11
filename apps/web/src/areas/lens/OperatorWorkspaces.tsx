@@ -6,6 +6,7 @@ import { isSessionExpired } from '../../lib/productState'
 import { ParkedUses } from '../marketplace/ParkedUses'
 import { formatWhen } from './format'
 import { OperatorTrail } from './OperatorTrail'
+import { PageLinks } from '../../components/PageLinks'
 
 // OperatorWorkspaces.tsx — B18.25: the operator screen. Every workspace on this deployment, with what it
 // spent this month and in all, how many requests it made, the LENS it holds unsettled and when it last
@@ -71,6 +72,15 @@ export function OperatorWorkspaces() {
   const held = rows.reduce((s, w) => s + w.held_ulens, 0)
   return (
     <RegionScreen>
+      {/* B57.8 — the operator's pages left the sidebar; Settings links this one, and this one links the rest. */}
+      <PageLinks
+        label="Operator pages"
+        links={[
+          { to: '/operator/tax', title: 'Tax' },
+          { to: '/operator/compliance', title: 'Compliance' },
+          { to: '/marketplace/review', title: 'Review queue' },
+        ]}
+      />
       <Region index="00" label="Operator" heading="Every workspace" sectionClassName="pb-10 pt-4 wide:pb-12">
         <p className="max-w-2xl text-body text-muted">
           What each workspace spent, the LENS it holds that has not settled yet, and when it last made a request.

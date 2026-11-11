@@ -89,7 +89,7 @@ export function invoicesScreen(): Scenario {
       let number = ''
       const page = await ctx.app.tab('/money/invoices')
       try {
-        await page.locator('header h1').filter({ hasText: 'Invoices' }).waitFor({ timeout: TIMEOUT_MS })
+        await page.locator('main h1').filter({ hasText: 'Invoices' }).waitFor({ timeout: TIMEOUT_MS })
         const onScreen = (await page.locator('body').innerText()).match(DISCLAIMER)
         if (onScreen) return fail(`the Invoices screen carries a disclaimer line: "${onScreen[0]}"`)
         const form = page.getByTestId('new-invoice')

@@ -14,13 +14,15 @@ export function cardOnItsPlane(el: Element): boolean {
   return inPocket(el) ? isPocketCard(el) : el.className.includes('bg-raised')
 }
 
-/** The class list without variants: `hover:bg-tangerine` paints tangerine too. */
-function utilities(el: Element): string[] {
+/** The class list without variants: `hover:bg-tangerine` paints tangerine too. `except` is left out before the strip. */
+function utilities(el: Element, except = ''): string[] {
   return (el.getAttribute('class') ?? '')
     .split(/\s+/)
-    .filter(Boolean)
+    .filter((c) => c && c !== except)
     .map((c) => c.slice(c.lastIndexOf(':') + 1))
 }
+
+const FOCUS_RING = 'focus-visible:outline-tangerine'
 
 /**
  * The primary (ink) fills in a view, as a button or a link, by Pocket's name and today's alias. The
@@ -47,7 +49,8 @@ export const TANGERINE_REASONS = ['brand', 'your-move'] as const
  */
 export function tangerineOffenders(root: ParentNode): Element[] {
   return Array.from(root.querySelectorAll('[class]')).filter((el) => {
-    const painted = utilities(el).filter((c) => TANGERINE.test(c))
+    // B57.8 — Pocket's focus ring (pocketFocusRing, B57.4) is tangerine on keyboard focus by design: the ring, not a paint.
+    const painted = utilities(el, FOCUS_RING).filter((c) => TANGERINE.test(c))
     if (painted.length === 0) return false
     if (painted.some((c) => c.startsWith('text-'))) return true
     const reason = el.closest('[data-tangerine]')?.getAttribute('data-tangerine') ?? ''

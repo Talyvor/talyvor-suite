@@ -35,7 +35,7 @@ export function verificationScreen(): Scenario {
     run: async (ctx) => {
       const page = await ctx.app.tab('/settings/verification')
       try {
-        await page.locator('header h1').filter({ hasText: 'Verification' }).waitFor({ timeout: TIMEOUT_MS })
+        await page.locator('main h1').filter({ hasText: 'Verification' }).waitFor({ timeout: TIMEOUT_MS })
         const atL0 = await reached(page, 'Reach L1: email and phone confirmed')
         if (atL0 !== undefined) return fail(`a new workspace on the Verification screen: ${atL0}`)
 

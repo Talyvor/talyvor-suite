@@ -119,7 +119,14 @@ interface Command {
   run: () => void
 }
 
-export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
+export function CommandPalette({
+  pages,
+  trigger,
+}: {
+  pages: readonly PalettePage[]
+  /** B57.8 — the control that opens it; the shell's top bar draws Pocket's search button here. */
+  trigger?: (open: () => void) => React.ReactNode
+}) {
   const [shown, setShown] = useState<'palette' | 'shortcuts' | null>(null)
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -191,6 +198,7 @@ export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
 
   return (
     <>
+      {trigger ? trigger(() => setShown('palette')) : (
       <button
         type="button"
         onClick={() => setShown('palette')}
@@ -209,6 +217,9 @@ export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
           <path d="m16 16 4.5 4.5" />
         </svg>
       </button>
+      )}
+      {/* B57.97 — the palette is still today's design until B57.9 draws it, so it is held to today's rules. */}
+      <div className="contents" data-design="today">
       {shown === 'palette' ? (
         <Palette
           commands={commands}
@@ -223,6 +234,7 @@ export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
       ) : shown === 'shortcuts' ? (
         <ShortcutList shortcuts={chat ? SHORTCUTS : SHORTCUTS.filter((s) => !CHAT_SHORTCUTS.has(s.id))} onClose={close} />
       ) : null}
+      </div>
     </>
   )
 }

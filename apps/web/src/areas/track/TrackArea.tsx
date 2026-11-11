@@ -132,6 +132,10 @@ export function TrackArea() {
         <Link className={inlineLink} to="/track/settings">
           Workspace settings
         </Link>
+        {/* B57.8 — the sidebar's one row is Track and Docs, so Track links Docs. */}
+        <Link className={inlineLink} to="/docs">
+          Docs
+        </Link>
       </nav>
       <Routes>
         <Route index element={<IssueList />} />

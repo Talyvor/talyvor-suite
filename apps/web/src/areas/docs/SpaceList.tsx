@@ -8,6 +8,7 @@ import { Region, RegionScreen } from '../../components/Region'
 import { ApiError } from '../../lib/api'
 import { AskAI } from './AskAI'
 import { SearchDocs } from './SearchDocs'
+import { PinnedRecent } from './PinnedRecent'
 import { docsApi, type DocsSpace } from './api'
 import { Chip } from './components'
 import { DOCS_MEMBERSHIP_KEY, readDocsMembership } from './docsNav'
@@ -232,6 +233,7 @@ export function SpaceList() {
             </Button>
           </>
         ) : null}
+        <PinnedRecent />
       </Region>
 
       <Region index="01" label="What this workspace has">

@@ -65,7 +65,7 @@ export function termsAndCredentialScreens(): Scenario {
 
       const page = await ctx.app.tab('/settings/terms')
       try {
-        await page.locator('header h1').filter({ hasText: 'Capability terms' }).waitFor({ timeout: TIMEOUT_MS })
+        await page.locator('main h1').filter({ hasText: 'Capability terms' }).waitFor({ timeout: TIMEOUT_MS })
         const row = page.getByTestId(`terms-${CAPABILITY}`)
         await row.waitFor({ timeout: TIMEOUT_MS })
         const shown = ((await row.textContent()) ?? '').trim()
