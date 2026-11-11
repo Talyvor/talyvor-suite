@@ -145,6 +145,8 @@ func (z *sessionSealer) open(sid string) (session, bool) {
 		sub: p.Sub, email: p.Email, expires: time.Unix(0, p.Expires),
 		workspaceID: p.WorkspaceID, lensToken: p.LensToken,
 		trackWorkspaceID: p.TrackWS, cachePoolable: p.Poolable, synthetic: p.Synthetic,
+		// B55.54: a session is sealed once, when it is signed in, so the seal's own time is its sign-in time.
+		signedInAt: issued,
 	}
 	if p.TokenExp != 0 {
 		s.lensTokenExp = time.Unix(0, p.TokenExp)

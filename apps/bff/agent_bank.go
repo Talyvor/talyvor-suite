@@ -72,6 +72,12 @@ func (a *app) lensRelay(w http.ResponseWriter, r *http.Request, bearer, method, 
 
 // lensRelayTyped is lensRelay with the body's own Content-Type — text/csv for a payout batch uploaded as a file (B30.96).
 func (a *app) lensRelayTyped(w http.ResponseWriter, r *http.Request, bearer, method, path string, body []byte, contentType, shown string) {
+	a.lensRelayHeaders(w, r, bearer, method, path, body, contentType, shown, nil)
+}
+
+// lensRelayHeaders is lensRelayTyped with headers of the BFF's own for Lens: the session's sign-in time on the key
+// recovery routes (B55.54, key_recovery.go). Never a header the browser sent.
+func (a *app) lensRelayHeaders(w http.ResponseWriter, r *http.Request, bearer, method, path string, body []byte, contentType, shown string, extra http.Header) {
 	var rd io.Reader
 	if body != nil {
 		rd = bytes.NewReader(body)
@@ -90,6 +96,9 @@ func (a *app) lensRelayTyped(w http.ResponseWriter, r *http.Request, bearer, met
 	}
 	if k := r.Header.Get("Idempotency-Key"); k != "" && len(k) <= 128 {
 		req.Header.Set("Idempotency-Key", k)
+	}
+	for k, v := range extra {
+		req.Header[k] = v
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {
