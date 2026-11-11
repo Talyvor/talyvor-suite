@@ -10,7 +10,7 @@ import { App, queryClient } from '../../App'
 
 const M = 1_000_000
 
-function mockBff() {
+function mockBff({ hold = 'sentence' }: { hold?: 'sentence' | 'accepted' } = {}) {
   const agents: Array<{ id: string; name: string; balance_ulxc: number; spent_ulxc: number; keys: string[]; created_at: string }> = []
   const rules: Record<string, Record<string, unknown>> = {}
   const approvals: Array<{ id: string; agent_id: string; amount_ulxc: number; model: string; status: string; created_at: string; fp: string; payee?: { kind: 'agent'; id: string; name: string }; memo?: string }> = []
@@ -93,6 +93,10 @@ function mockBff() {
                 payee: { kind: 'agent', id: payee.id, name: payee.name }, memo: String(body.memo) }
               approvals.push(open)
             }
+            // B58.2: Lens answers a held payment 202 with the approval as a field, and the same words as its message.
+            if (hold === 'accepted')
+              return json({ status: 'pending_approval', approval_id: open.id, amount_ulxc: amount,
+                message: `economy: payment of ${amount / M} LXC is above the agent's approval amount. Approval ${open.id} must be approved before it is sent` }, 202)
             return json({ error: `this request would cost up to ${amount / M} LXC, above the agent's approval amount — approval ${open.id} must be approved by the workspace's owner before it is retried` }, 403)
           }
         }
@@ -232,5 +236,33 @@ describe('Agent Bank', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     await waitFor(() => expect(screen.getByTestId('agent-balance-agt_2')).toHaveTextContent('7 LXC'))
     expect(screen.getByTestId('agent-balance-agt_1')).toHaveTextContent('3 LXC')
+  })
+
+  // B58.1 — Lens answers a held payment 202 {"status":"pending_approval","approval_id"} (B58.2): the screen says it
+  // waits in Approvals, the same as the sentence says it today, and never that it was paid.
+  it('shows a payment Lens answers as pending approval as waiting in Approvals, never as paid', async () => {
+    const bff = mockBff({ hold: 'accepted' })
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    await screen.findByTestId('agent-first')
+    await createAgent('Writer')
+    await createAgent('Researcher')
+    fireEvent.change(screen.getByLabelText('Amount in LXC for Researcher'), { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Fund' }))
+    await waitFor(() => expect(screen.getByTestId('agent-balance-agt_2')).toHaveTextContent('10 LXC'))
+    fireEvent.change(await screen.findByLabelText('Ask a person above for Researcher, in LXC'), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+    await screen.findByText(/Saved\. Lens applies these rules/)
+
+    fireEvent.click(within(screen.getByRole('group', { name: 'Pay to' })).getByRole('button', { name: 'Writer' }))
+    fireEvent.change(screen.getByLabelText('Payment in LXC from Researcher'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Pay' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('It is waiting in Approvals'))
+    expect(screen.getByRole('alert')).toHaveTextContent('Approval apr_1 must be approved before it is sent.')
+    expect(screen.queryByText(/^Paid /)).toBeNull()
+    expect(bff.approvals.map((a) => a.status)).toEqual(['pending'])
+    expect(screen.getByTestId('agent-balance-agt_2')).toHaveTextContent('10 LXC')
+    expect(await screen.findByText(/wants to pay Writer/)).toHaveTextContent('Researcher wants to pay Writer 3 LXC')
   })
 })

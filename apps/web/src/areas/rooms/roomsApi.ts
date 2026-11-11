@@ -1,4 +1,5 @@
 import { getJSON, getJSONArray } from '../../lib/api'
+import { unlessHeld } from '../../lib/held'
 import { isSessionExpired } from '../../lib/productState'
 import { type ListingKind, MarketError } from '../marketplace/marketApi'
 
@@ -622,7 +623,9 @@ export const roomsApi = {
     post<Contribution>(`/api/rooms/${e(id)}/contributions/${e(cid)}/vote`, { value }, 'PUT'),
   decide: (id: string, cid: string, status: 'accepted' | 'rejected') =>
     post<Contribution>(`/api/rooms/${e(id)}/contributions/${e(cid)}`, { status }, 'PATCH'),
-  run: (id: string, req: RunRequest) => post<RunResult>(`/api/rooms/${e(id)}/runs`, req),
+  run: (id: string, req: RunRequest) =>
+    unlessHeld(post<RunResult>(`/api/rooms/${e(id)}/runs`, req), (h) =>
+      new MarketError(202, `/api/rooms/${e(id)}/runs`, h.message ?? '', h.approval_id)),
   // B41.60 — the room's AI, whose context is the room's latest messages, its spec among them.
   ask: (id: string, req: { question: string; model: string; pay: 'room' | 'self' }) => post<RunResult>(`/api/rooms/${e(id)}/ask`, req),
   // B32.55 — room settings.
