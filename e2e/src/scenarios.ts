@@ -1489,13 +1489,15 @@ export function walletHero(): Scenario {
           /where they do it safely: wallets and cards/i.test(text) ? '' : 'the wallet lead in the hero',
           ...[/a budget of its own/i, /spending rules/i, /approvals/i, /a live statement/i]
             .map((w) => (w.test(text) ? '' : `the wallet section's ${w}`)),
-          ...[/rules before the money moves/i, /console for your agents/i, /where agents spend/i, /repeated questions cost less/i]
-            .map((h) => (sections.some((s) => h.test(s)) ? '' : `a section heading ${h}`)),
+          /rules before the money moves/i.test(sections.join('\n')) ? '' : 'the wallet section heading',
+          // B59.5: Chat, the Marketplace and pooling are hidden areas, so the front door has no section for them.
+          ...[/console for your agents/i, /where agents spend/i, /repeated questions cost less/i]
+            .map((h) => (sections.some((s) => h.test(s)) ? `a hidden area's section ${h}` : '')),
           /toward zero|ninety\s+days|near-zero/i.test(text) ? 'the price-curve claim is still there' : '',
           /Talyvor Ltd · the financial ecosystem for the AI agent economy/i.test(footer) ? '' : 'the footer line',
         ].filter((m) => m !== '')
         return missing.length === 0
-          ? { pass: true, detail: 'leads with wallets; wallets, chat, marketplace and pooling sections present; no price curve' }
+          ? { pass: true, detail: 'leads with wallets; no chat, marketplace or pooling section; no price curve' }
           : { pass: false, detail: `/marketing: ${missing.join('; ')}` }
       } finally {
         await page.close()
@@ -1764,31 +1766,26 @@ export function legalPagesWhole(): Scenario {
   }
 }
 
-/** B28.4 — /pricing lists every offer once, at the price the signed-in /plans screen sells it at, and the Marketplace
- *  bill once. B32.14 — the offers are the approved price card: Free, Team, Business and Enterprise for companies;
- *  Plus, Pro and Max for individuals; BYOK as Team's add-on. The oracle is /plans itself: no price is typed in here. */
+/** B28.4 — /pricing lists every offer once, at the price the signed-in /plans screen sells it at. B32.14 — the offers
+ *  are the approved price card: Free, Team, Business and Enterprise for companies; BYOK as Team's add-on. B59.5: the
+ *  chat plans and the Marketplace bill are hidden areas, so /pricing lists neither. The oracle is /plans itself: no
+ *  price is typed in here. */
 export function pricingTruth(): Scenario {
   return {
     id: 'pricing-truth',
     owner: 'talyvor-suite',
     items: ['B28.4'],
-    title: 'pricing lists every company plan, every plan for individuals, BYOK and the marketplace bill once, at the prices /plans sells',
+    title: 'pricing lists every company plan and BYOK once, at the prices /plans sells, and no chat plan or marketplace bill',
     run: async (ctx) => {
       const money = /\$[\d,]+(?:\.\d\d)?/
       const pricing = await ctx.app.tab('/pricing')
-      const listed: { name: string; price: string }[] = []
+      let listed = 0
       const companies: Record<string, { cards: number; price: string }> = {}
       let byokOnTeam = ''
       let bills = 0
       try {
-        const cards = pricing.getByTestId('pricing-plan')
-        await cards.first().waitFor({ state: 'visible' })
-        for (const card of await cards.all()) {
-          listed.push({
-            name: (await card.getByTestId('pricing-plan-name').innerText()).trim(),
-            price: (await card.getByTestId('pricing-plan-price').innerText()).trim(),
-          })
-        }
+        await pricing.getByTestId('company-plan-team').waitFor({ state: 'visible' })
+        listed = await pricing.getByTestId('pricing-plan').count()
         for (const id of COMPANY_OFFERS) {
           const card = pricing.getByTestId(`company-plan-${id}`)
           const n = await card.count()
@@ -1803,11 +1800,6 @@ export function pricingTruth(): Scenario {
       const plans = await ctx.app.tab('/plans')
       const sold: Record<string, string> = {}
       try {
-        for (const [name, id] of [['Plus', 'plus'], ['Pro', 'pro'], ['Max', 'max']]) {
-          const price = plans.getByTestId(`plan-price-${id}`)
-          await price.waitFor({ state: 'visible' })
-          sold[name] = (await price.innerText()).match(money)?.[0] ?? '(no price)'
-        }
         for (const id of COMPANY_OFFERS.filter((c) => c !== 'free')) {
           const price = plans.getByTestId(`price-${id}`)
           await price.waitFor({ state: 'visible' })
@@ -1819,14 +1811,9 @@ export function pricingTruth(): Scenario {
       } finally {
         await plans.close()
       }
-      ctx.evidence.push({ note: `/pricing ${JSON.stringify(listed)}, companies ${JSON.stringify(companies)}, BYOK on Team "${byokOnTeam}"; /plans ${JSON.stringify(sold)}; marketplace bill headings ${bills}` })
+      ctx.evidence.push({ note: `/pricing chat plans ${listed}, companies ${JSON.stringify(companies)}, BYOK on Team "${byokOnTeam}"; /plans ${JSON.stringify(sold)}; marketplace bill headings ${bills}` })
       const wrong = [
-        ...['Plus', 'Pro', 'Max'].map((name) => {
-          const on = listed.filter((o) => o.name === name)
-          if (on.length !== 1) return `${name} listed ${on.length} times`
-          return on[0].price === sold[name] ? '' : `${name} is ${on[0].price} on /pricing but ${sold[name]} on /plans`
-        }),
-        listed.length === 3 ? '' : `${listed.length} plans for individuals listed, not 3`,
+        listed === 0 ? '' : `${listed} chat plans listed, not none`,
         ...COMPANY_OFFERS.map((id) => {
           const c = companies[id]
           if (c.cards !== 1) return `${id} listed ${c.cards} times`
@@ -1834,10 +1821,10 @@ export function pricingTruth(): Scenario {
           return c.price === want ? '' : `${id} is ${c.price} on /pricing but ${want} on /plans`
         }),
         byokOnTeam.includes(`${sold.BYOK} add-on`) ? '' : `Team's own provider keys read "${byokOnTeam}", not BYOK's ${sold.BYOK} add-on`,
-        bills === 1 ? '' : `the marketplace bill is listed ${bills} times`,
+        bills === 0 ? '' : `the marketplace bill is listed ${bills} times, not none`,
       ].filter((m) => m !== '')
       return wrong.length === 0
-        ? { pass: true, detail: `Free, Team ${sold.team}, Business ${sold.business}, Enterprise ${sold.enterprise}; Plus ${sold.Plus}, Pro ${sold.Pro}, Max ${sold.Max}; BYOK ${sold.BYOK} on Team; the marketplace bill — once each, as /plans sells them` }
+        ? { pass: true, detail: `Free, Team ${sold.team}, Business ${sold.business}, Enterprise ${sold.enterprise}; BYOK ${sold.BYOK} on Team — once each, as /plans sells them; no chat plan or marketplace bill` }
         : { pass: false, detail: `/pricing: ${wrong.join('; ')}` }
     },
   }
@@ -1850,7 +1837,7 @@ const COMPANY_OFFERS = ['free', 'team', 'business', 'enterprise'] as const
  *  the ink ring), every other plan card on cloud, each with one outlined button while card_payments is "live" (B51.3;
  *  none otherwise), every price in Figtree (the font loaded, not just named), each of the reference's sections, the
  *  H1 unchanged, one ink action (Create your workspace), nothing sideways. The cards are the approved price card: four
- *  company plans (Start free, Choose Team, Choose Business, Talk to us) and three for one person (Choose …). */
+ *  company plans (Start free, Choose Team, Choose Business, Talk to us); B59.5 took the chat plans off with Chat. */
 export function pricingBoard(): Scenario {
   return {
     id: 'pricing-board',
@@ -1860,7 +1847,6 @@ export function pricingBoard(): Scenario {
       const page = await ctx.app.tab('/pricing')
       const wrong: string[] = []
       try {
-        await page.getByTestId('pricing-plan').first().waitFor({ state: 'visible' })
         await page.getByTestId('company-plan-team').waitFor({ state: 'visible' })
         // B51.3: a plan has its button only while a card can be charged.
         const priced = await page.request.get(new URL('/api/pricing', page.url()).href)
@@ -1901,7 +1887,7 @@ export function pricingBoard(): Scenario {
             return {
               cards,
               h1: document.querySelector('h1')!.textContent!.trim(),
-              missing: ['Credit for agents', 'What a request costs', 'Chat plans, for one person', 'Paid listings, on one bill a month.', 'Fees on any plan', 'What the labels mean']
+              missing: ['Credit for agents', 'What a request costs', 'Fees on any plan', 'What the labels mean']
                 .filter((h) => !headings.some((t) => t === h || t.startsWith(h))),
               primaries: Array.from(document.querySelectorAll<HTMLAnchorElement>('main a, main button'))
                 .filter((a) => getComputedStyle(a).backgroundColor === primary)
@@ -1933,7 +1919,7 @@ export function pricingBoard(): Scenario {
         await page.close()
       }
       return wrong.length === 0
-        ? { pass: true, detail: 'four company and three chat plan cards, Team highlighted and the rest on cloud, one outlined button each while a card can be charged and none while it cannot, Figtree prices, every section, one ink action, at 1440 and 390' }
+        ? { pass: true, detail: 'four company plan cards, Team highlighted and the rest on cloud, one outlined button each while a card can be charged and none while it cannot, Figtree prices, every section, one ink action, at 1440 and 390' }
         : { pass: false, detail: `/pricing: ${wrong.join('; ')}` }
     },
   }
@@ -1960,9 +1946,6 @@ const PRICE_CARDS = [
   { name: 'Team', button: 'Choose Team', href: '/plans' },
   { name: 'Business', button: 'Choose Business', href: '/plans' },
   { name: 'Enterprise', button: 'Talk to us', href: 'mailto:' },
-  { name: 'Plus', button: 'Choose Plus', href: '/plans' },
-  { name: 'Pro', button: 'Choose Pro', href: '/plans' },
-  { name: 'Max', button: 'Choose Max', href: '/plans' },
 ] as const
 
 export function streamsProgressively(): Scenario {

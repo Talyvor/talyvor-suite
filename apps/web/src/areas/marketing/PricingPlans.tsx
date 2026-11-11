@@ -1,16 +1,16 @@
 import type { ReactNode } from 'react'
 import { Button, Card, Facts } from '@talyvor/ui/pocket'
 import { COMPANY_CONTACT } from '../../company'
-import { fiatText, lxcText } from '../lens/money'
 import { formatCents } from '../lens/topupApi'
 import { CONTRACTED, included, ownKeys } from './PriceCard'
 import { formatBPS, formatLimit, formatMinor, planName, type Fees, type PlanGate, type Pricing } from './pricingApi'
 import { StatusLabel } from '../../labels/StatusLabel'
-import { MARKETPLACE, MONEY_FEATURES } from '../../labels/capabilities'
+import { MONEY_FEATURES } from '../../labels/capabilities'
 
-// B57.61 — /pricing in Pocket (design/pocket s-pricing). The plan cards, the chat plans and both fee lists, drawn in
+// B57.61 — /pricing in Pocket (design/pocket s-pricing). The plan cards and both fee lists, drawn in
 // Pocket's components for /pricing alone; /plans keeps PriceCard.tsx's CompanyCard, in today's design, until its own
-// B57 item. Every figure is still served (pricingApi.ts), and every label is the one B56.10 placed.
+// B57 item. Every figure is still served (pricingApi.ts), and every label is the one B56.10 placed. B59.5: no row or
+// fee for a hidden area (LAUNCH-PACK.md section 2): no Edge, no Marketplace, compute or loan fee.
 //
 // Prices are Figtree's tabular figures (font-figure), as every money figure outside <Money> is; the reference's
 // display face for them needs <Money>'s provider, which a public page rendered bare does not have.
@@ -110,9 +110,6 @@ function PlanCard({ id, gate, pricing }: { id: string; gate: PlanGate; pricing: 
         >
           {included(gate.slack_teams_approvals)}
         </PlanRow>
-        <PlanRow label="Talyvor Edge" chip={gate.edge && built?.edge !== true ? <StatusLabel building="edge" /> : null}>
-          {included(gate.edge)}
-        </PlanRow>
         {fees ? (
           <PlanRow
             label="FX margin over the reference rate"
@@ -148,49 +145,6 @@ export function CompanyPlans({ pricing }: { pricing: Pricing }) {
       {gates.order.map((id) => (
         <PlanCard key={id} id={id} gate={gates.plans[id]} pricing={pricing} />
       ))}
-    </div>
-  )
-}
-
-/** For one person: the chat plans, each with the usage it includes this month (pocket.css .pmini). */
-export function IndividualPlans({ pricing }: { pricing: Pricing }) {
-  const plans = pricing.plans
-  if (!plans?.length) {
-    return (
-      <p className="max-w-xl text-body text-ink-2">
-        This deployment did not state its plans for individuals just now, so none is printed here.
-      </p>
-    )
-  }
-  return (
-    <div className="grid gap-4 wide:grid-cols-3">
-      {plans.map((p) => {
-        const name = planName(p.id)
-        return (
-          <div key={p.id} data-testid="pricing-plan" className="grid content-start gap-1 rounded-card bg-cloud p-5">
-            <p className="text-body font-bold text-ink" data-testid="pricing-plan-name">
-              {name}
-            </p>
-            <p data-testid="pricing-plan-price" className="font-figure text-title font-bold text-ink">
-              {formatCents(p.usd_cents)}
-            </p>
-            <p className="text-body text-ink-3">
-              a month, with{' '}
-              <span className="font-figure" data-testid={`pricing-included-${p.id}`}>
-                {lxcText(p.included_ulxc, pricing.usd_per_lxc ? fiatText((p.included_ulxc / 1_000_000) * pricing.usd_per_lxc, 'USD') : null)}
-              </span>{' '}
-              of use included
-            </p>
-            {pricing.card_payments === 'live' ? (
-              <div className="pt-2">
-                <Button asChild variant="outline" size="sm">
-                  <a href="/plans">Choose {name}</a>
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        )
-      })}
     </div>
   )
 }
@@ -242,20 +196,11 @@ export function FeesOnAnyPlan({ fees, labels }: { fees: Fees | undefined; labels
       </p>
     )
   }
-  const take = fees.market_take_bps
   return (
     <FeeList testId="fees-any-plan">
-      <FeeRow label="Selling on the Marketplace" chips={<StatusLabel capability={MARKETPLACE} labels={labels} />}>
-        Sellers earn <span className="font-figure">{formatBPS(10_000 - take)}</span> of every paid use, rental and purchase,
-        from the first sale; Talyvor keeps <span className="font-figure">{formatBPS(take)}</span>.
-      </FeeRow>
-      {/* B56.2: two rows even when equal. Lens takes the services fee only on a payment to another company's agent. */}
+      {/* Lens takes the services fee only on a payment to another company's agent. */}
       <FeeRow label="Services" chips={<StatusLabel capability="pay_another_owner" labels={labels} />}>
         <span className="font-figure">{formatBPS(fees.services_take_bps)}</span> of a payment to another company’s agent
-      </FeeRow>
-      {/* B56.10: no Building on Compute, because Lens charges it. */}
-      <FeeRow label="Compute">
-        <span className="font-figure">{formatBPS(fees.compute_take_bps)}</span>
       </FeeRow>
     </FeeList>
   )
@@ -288,17 +233,6 @@ export function MoneyFeatureFees({ fees, planIds, labels }: { fees: Fees; planId
       >
         <span className="font-figure">{formatBPS(fees.merchant_fee_bps)}</span> plus card processing, or{' '}
         <span className="font-figure">{formatBPS(fees.merchant_a2a_fee_bps)}</span> from an account
-      </FeeRow>
-      <FeeRow
-        label="Loans arranged"
-        chips={
-          <>
-            <StatusLabel capability="loans_between_companies" labels={labels} />
-            {fees.charged?.lending_fee_bps ? null : <StatusLabel building="lending_fee" />}
-          </>
-        }
-      >
-        <span className="font-figure">{formatBPS(fees.lending_fee_bps)}</span>
       </FeeRow>
       {fx.length > 0 ? (
         <FeeRow

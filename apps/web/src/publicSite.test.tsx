@@ -98,7 +98,7 @@ describe('the waitlist on /marketing follows the sign-up state', () => {
 const FOOTER_LINKS = [
   'Pricing /pricing',
   'Your money /your-money',
-  'Docs /documentation',
+  'Documentation /documentation',
   'Privacy /privacy',
   'Terms /terms',
   `${COMPANY_CONTACT} mailto:${COMPANY_CONTACT}`,
@@ -121,7 +121,7 @@ describe.each(PUBLIC_PAGES)('%s', (path) => {
       'How it works /marketing',
       'Pricing /pricing',
       'Your money /your-money',
-      'Docs /documentation',
+      'Documentation /documentation',
       'Open the app /',
     ])
     expect(within(header).getAllByRole('img', { name: 'Talyvor' })[0]).toHaveAttribute('width', '168')

@@ -1,13 +1,12 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CONTACT_EMAIL, Landing, POOLED_DISCOUNT_PERCENT } from './Landing'
-import { LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
-import { HEY_TALY, ON_ITS_WAY, POSITIONING_SENTENCES } from '../../positioning'
+import { CONTACT_EMAIL, Landing } from './Landing'
+import { ON_ITS_WAY, POSITIONING_SENTENCES } from '../../positioning'
 import { COMPANY_CONTACT } from '../../company'
 import { BUILDING } from '../../labels/StatusLabel'
-import { MARKETPLACE, WALLETS } from '../../labels/capabilities'
+import { WALLETS } from '../../labels/capabilities'
 
 // Area-owned test — replaces the deleted shared areas/scaffold.test.tsx (the
 // deadlock: a shared test over per-area screens; see #7). The marketing tab
@@ -42,17 +41,15 @@ describe('Landing', () => {
     expect(screen.queryByText(/no inbox/)).toBeNull()
   })
 
-  // B28.2: ONE percentage is allowed, and it is the measured one. The pooled discount is derived in
-  // Landing.tsx from the settled ledger row (list − charged over list), so the "30% off" in the copy
-  // and the stepper's figures are one number. Any other % on the page is an unmeasured claim.
-  it('prints exactly one kind of percentage — the pooled discount derived from the ledger row', () => {
+  // B28.2: a percentage on this page would be an unmeasured claim. The one measured one, the pooled discount, left with
+  // pooling (B59.5), so none is printed.
+  it('prints no percentage', () => {
     const { container } = render(<Landing />)
-    expect(POOLED_DISCOUNT_PERCENT).toBe(30)
     // The page's own <style> block (B29.4's photo scrim and crops) is CSS, not copy a visitor reads.
     const page = container.cloneNode(true) as HTMLElement
     page.querySelectorAll('style').forEach((s) => s.remove())
     const percents = new Set(page.textContent?.match(/\d+%/g) ?? [])
-    expect([...percents]).toEqual([`${POOLED_DISCOUNT_PERCENT}%`])
+    expect([...percents]).toEqual([])
   })
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -107,9 +104,11 @@ describe('Landing', () => {
     const { container } = render(<Landing />)
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('The financial ecosystem for the AI agent economy.')
     const text = container.textContent ?? ''
-    // wallets, chat, marketplace, and the one pooling block — each section's own heading
-    for (const h of [/rules before the money moves/i, /console for your agents/i, /where agents spend/i, /repeated questions cost less/i])
-      expect(screen.getByRole('heading', { level: 2, name: h })).toBeInTheDocument()
+    // B59.5: wallets, then the close; Chat, the Marketplace and pooling are hidden areas.
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Talyvor checks the rules before the money moves.',
+      'Give your first agent a wallet.',
+    ])
     expect(text).not.toMatch(/toward zero|ninety\s+days|90 days|near-zero/i)
     // B44.4: the footer carries positioning v2's line.
     expect(text).toContain('Talyvor Ltd · the financial ecosystem for the AI agent economy')
@@ -123,24 +122,20 @@ describe('Landing', () => {
     const text = container.textContent ?? ''
     for (const s of POSITIONING_SENTENCES) expect(text).toContain(s)
     expect(text).toContain(ON_ITS_WAY)
-    expect(text).toContain(HEY_TALY)
-    expect(text).toMatch(/Rooms/)
     expect(text).not.toMatch(/Accounts, cards|accounts in currencies|loans between companies/i)
     expect(text).not.toMatch(/with credit and trading through licensed partners/i)
   })
 
   // B56.1: every line on the page is true today (Nick, 1 Nov 2026). Outside a limit Lens refuses, so only a payment
-  // above the approval amount waits; Hey Taly works in Chat on a computer; a company's credit line covers an empty
-  // wallet; Always allow and a mandate move money with no approval.
-  it('says the four true lines and none of the old ones', () => {
+  // above the approval amount waits; an empty wallet refuses; Always allow and a mandate move money with no approval.
+  // B59.5: Hey Taly and the credit line left with Chat and lending.
+  it('says the true lines and none of the old ones', () => {
     const { container } = render(<Landing />)
     const text = container.textContent ?? ''
     expect(text).toContain('all within limits the owner sets, with any payment above the amount they choose waiting for one tap.')
-    expect(text).toContain(HEY_TALY)
-    expect(HEY_TALY).toBe('Say Hey Taly to talk to Taly while Chat is open on your computer.')
     expect(ON_ITS_WAY).toBe('Next we’re building payments for everyone, not only businesses.')
     expect(text).toContain(
-      'refused rather than billed to you, unless your company has a Talyvor credit line, which covers it and bills you once a month.',
+      'when the money runs out the next call is refused rather than billed to you.',
     )
     expect(text).toContain('A payment above the line you set waits for a person, unless you always allow that payee or a mandate covers it.')
     expect(text).not.toMatch(/anything outside waiting|Next we.re building Hey Taly|Nothing moves until someone approves it/)
@@ -153,9 +148,10 @@ describe('Landing', () => {
 
   // B29.4: the board's WEBSITE HERO. The pieces a visitor sees, each read from the DOM: the drawn
   // mark and wordmark (B51.1, the site header), the hero photograph with the 1200 version for phones and the
-  // SAME srcset and sizes index.html preloads, and the band. The verb stack ROUTE · PROVE · REUSE ·
-  // COMPOUND was retired with the tagline on 5 Oct 2026 (B32.1): no verb sits on the photograph.
-  it('draws the board: the mark and wordmark, the preloaded hero photo without the verbs, and the band', () => {
+  // SAME srcset and sizes index.html preloads. The verb stack ROUTE · PROVE · REUSE · COMPOUND was retired with the
+  // tagline on 5 Oct 2026 (B32.1): no verb sits on the photograph. B59.5: the band named Edge, the gateway and the
+  // marketplace, so it is gone.
+  it('draws the board: the mark and wordmark, the preloaded hero photo without the verbs', () => {
     const { container } = render(<Landing />)
     // B51.1: the site's one header, with the kit's logo (B57.6).
     const header = container.querySelector('header')!
@@ -178,87 +174,9 @@ describe('Landing', () => {
     while (walker.nextNode()) words.push(...(walker.currentNode.textContent!.match(/\b(route|prove|reuse|compound)\b/gi) ?? []))
     expect(words, 'a retired verb shows as a word').toEqual([])
 
-    const text = container.textContent ?? ''
-    for (const line of [
-      'SovereignDesigned to run on your own infrastructure.',
-      'MeasurableEvery call and payment on a statement.',
-      'IntegratedWallets, cards, gateway and marketplace in one.',
-      'CompoundingSavings and earnings build over time.',
-    ])
-      expect(text).toContain(line)
     // one brand icon per numbered section, in the page's order
     const icons = [...container.querySelectorAll('section img[src^="/brand/svg/icon-"]')].map((i) => i.getAttribute('src'))
-    expect(icons).toEqual(['prove', 'route', 'compound', 'reuse'].map((n) => `/brand/svg/icon-${n}-teal.svg`))
-  })
-
-  /**
-   * THE STEPPER'S OTHER THREE BEATS WERE RENDERED BY NOTHING, AND THAT WAS MEASURED, not assumed.
-   *
-   * `WorkedHit` renders only `beats[step].figure`, and `step` starts at 0. So of the SIX µ-prefixed
-   * unit labels on this page, four tests rendered three — `µLXC list` (beat 1), `µLXC you pay` and
-   * `µLXC kept` — and `µLXC charged`, `µLXC saved` and `µLENS earned` were behind a click no test
-   * performed. The case audit found the three it could see and would have stayed green over a
-   * regression in the other three forever.
-   *
-   * Advancing the stepper is what puts them in front of the audit. It also happens to be the only
-   * test of the stepper at all: each beat must show its own figure and its own body, so a wiring
-   * mistake that showed beat 1's number under beat 3's sentence is caught here too.
-   *
-   * ⚠ AND THE UNIT LABEL WAS THE ONLY THING ANYTHING CHECKED — THE NUMBER BESIDE IT WAS RENDERED
-   * BY NOTHING. MEASURED at `dfb6566`, not reasoned about: beat 3's figure re-wired to
-   * `LEDGER_HIT.contributorEarnedMicroLENS` (822) with its unit left as `µLXC saved`, then the
-   * FULL root `pnpm test` — EXIT 0, apps/web 1070/1070, packages/ui 350/350, test-manifest ok,
-   * audit-reach 72/72, audit-gate ok both projects. The front page would have told a visitor that
-   * 1,645 charged and 822 saved make 2,350, an arithmetic contradiction on the ONE part of this
-   * page its own caption presents as measured rather than modelled, and every gate in the repo
-   * agreed. A label check cannot see a wrong number under a right label; the table below now
-   * carries the value with its unit and the assertion binds the two.
-   *
-   * ⚠ THIS IS A WIRING GUARD, NOT A SECOND COPY OF THE ARITHMETIC — SAID PLAINLY BECAUSE THE
-   * DIFFERENCE IS WHAT MAKES IT HONEST. The expected strings are built from `economics.ts`'s own
-   * constants through the page's own `micro`, so MUTATING A CONSTANT MOVES BOTH SIDES AND IS NOT
-   * CAUGHT HERE. Its catcher is `economics.test.ts` ("adds up: charged + saved is list"), the file
-   * that owns the arithmetic — measured as a control, not predicted: `chargedMicroLXC` 1645→1700
-   * reds economics.test.ts ALONE and this file stays green. Re-pinning the four literals here
-   * would be the third copy of a number that already has two homes, which is the shape
-   * `site-parity.test.ts` warns against in its own header.
-   */
-  it('advances through all four beats of the worked hit, rendering each unit with its own figure', async () => {
-    const { container } = render(<Landing />)
-    const beats: [RegExp, string, string][] = [
-      [/An agent asks/i, 'µLXC list', micro(LEDGER_HIT.listMicroLXC)],
-      [/It is served from the pool/i, 'µLXC charged', micro(LEDGER_HIT.chargedMicroLXC)],
-      [/The wallet keeps the difference/i, 'µLXC saved', micro(SAVED_MICRO_LXC)],
-      [/The contributor is paid half/i, 'µLENS earned', micro(LEDGER_HIT.contributorEarnedMicroLENS)],
-    ]
-    // ⚠ NOT `getByText`. CaseSafe splits a protected label into spans, so no element's OWN text is
-    // "µLXC list" any more and Testing Library's default matcher reads own text — measured, that
-    // query fails with "the text is broken up by multiple elements". `textContent` is what the
-    // visitor sees and what survives the fix; caseAudit.test.tsx pins that consequence.
-    //
-    // ⚠ AND IT MUST YIELD BETWEEN CLICKS, WHICH WAS MEASURED RATHER THAN REASONED ABOUT. The case
-    // audit captures through a MutationObserver, whose callback is a MICROTASK. Clicking all four
-    // beats synchronously mounted and unmounted beats 2 and 3 inside one synchronous block, so the
-    // observer only ever saw the final DOM: with the fix reverted the audit named FOUR offenders,
-    // not six, and `µLXC charged` and `µLXC saved` were invisible. Yielding lets the observer run
-    // at each step. Verified by counting: 4 offenders without the yield, 6 with it.
-    for (const [label, unit, value] of beats) {
-      fireEvent.click(screen.getByRole('button', { name: label }))
-      await new Promise((r) => setTimeout(r, 0))
-      // ⚠ THE BEAT PANEL, NOT THE WHOLE PAGE. A page-wide search for a beat's number could be
-      // answered by some other section and stay green with the stepper unwired. `.tal-rise` is the
-      // beat panel and the only className of that name in this app; rename it and this reads ''
-      // and reds, rather than quietly finding the number somewhere else.
-      const panel = container.querySelector('.tal-rise')?.textContent ?? ''
-      expect(panel, `beat "${unit}" must render ${value} beside its own unit`).toContain(
-        `${value}${unit}`,
-      )
-      // and the step really MOVED — every other beat's unit is gone, so a mis-wired stepper
-      // showing beat 1's figure under beat 3's sentence fails here rather than passing quietly.
-      for (const [, other] of beats) {
-        if (other !== unit) expect(container.textContent ?? '').not.toContain(other)
-      }
-    }
+    expect(icons).toEqual(['/brand/svg/icon-prove-teal.svg'])
   })
 })
 
@@ -279,11 +197,10 @@ describe('Landing labels', () => {
 
   const chip = (container: HTMLElement, key: string) => container.querySelector(`[data-status-key="${key}"]`)?.textContent
 
-  it('draws Wallets and Marketplace as Lens labels them: Live only when every capability is live', async () => {
-    serveLabels({ ...Object.fromEntries(WALLETS.map((k) => [k, 'live'])), buy_marketplace_listings: 'live', rent_and_subscribe_listings: 'sandbox' })
+  it('draws Wallets as Lens labels it: Live only when every capability is live', async () => {
+    serveLabels({ ...Object.fromEntries(WALLETS.map((k) => [k, 'live'])), payments_out: 'sandbox' })
     const { container } = render(<Landing />)
-    await vi.waitFor(() => expect(chip(container, WALLETS.join(' '))).toBe('Live'))
-    expect(chip(container, MARKETPLACE.join(' '))).toBe('Sandbox')
+    await vi.waitFor(() => expect(chip(container, WALLETS.join(' '))).toBe('Sandbox'))
     expect(container.querySelector(`#wallets [data-status-key="${WALLETS.join(' ')}"]`)).not.toBeNull()
   })
 
