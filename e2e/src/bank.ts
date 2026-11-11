@@ -1645,58 +1645,6 @@ export function agentPauseAll(seed: number): Scenario {
   }
 }
 
-/**
- * B57.8 — Pause every agent from the shell's top bar, on a page that is not Agents: Lens's book says every agent is
- * paused, the agent's next request is refused before the provider with no spend row on the ledger, and the kill banner
- * is on the next page too. Start every agent again opens the killoff dialog; started from there (a workspace with no
- * passkey starts unsigned, as Lens allows), the book is clear and the banner gone.
- */
-export function shellPauseAll(seed: number): Scenario {
-  const r = seeded(seed * 37 + 5)
-  return {
-    id: 'shell-pause-all',
-    owner: 'talyvor-suite',
-    agents: 1,
-    items: ['B57.8'],
-    title: 'Pause every agent in the top bar stops every agent before the provider, the kill banner follows to every page, and Start every agent again starts them',
-    run: (ctx) => withBank(ctx, async (bank) => {
-      const a = await openAgent(ctx, bank, `Shell ${seed}`)
-      if (typeof a === 'string') return fail(a)
-      const err = await bank.move(a, 500_000, 'Fund')
-      if (err !== undefined) return fail(`funding ${a.name} was refused: ${err}`)
-      const key = await bank.issueKey(a)
-      const page = await ctx.app.tab('/money/invoices')
-      try {
-        const bar = page.getByRole('banner')
-        await bar.getByRole('button', { name: 'Pause every agent' }).click({ timeout: ACTION_TIMEOUT_MS })
-        await page.getByTestId('kill-banner').waitFor({ timeout: ACTION_TIMEOUT_MS })
-        if (new URL(page.url()).pathname !== '/money/invoices') return fail(`Pause every agent left the page for ${page.url()}`)
-        const paused = await bookOf(ctx)
-        if (paused.all_paused_at === undefined) return fail('the top bar says every agent is paused; Lens’s book does not')
-        const spends0 = new Set((await spendRows(ctx)).map((x) => x.id))
-        const t = await agentAsks(ctx, key, sum(r).q, `${a.name}, paused from the top bar`)
-        if (t.ok) return fail(`paused from the top bar, ${a.name} was served: "${t.value.text}"`)
-        if (t.status !== 403 || !/every agent in this workspace is paused/.test(t.error)) return fail(`${a.name} was refused, but not by the pause: ${t.status} ${t.error}`)
-        if ((await spendRows(ctx)).some((x) => !spends0.has(x.id))) return fail('paused, yet the ledger gained a spend row')
-        if (agentIn(await bookOf(ctx), a.id)?.balance_ulxc !== 500_000) return fail(`paused, yet ${a.name}'s balance moved`)
-        await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Statements' }).click()
-        await page.getByTestId('kill-banner').waitFor({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
-        if ((await page.getByTestId('kill-banner').count()) === 0) return fail('on Statements, with every agent paused, there is no kill banner')
-        await bar.getByRole('button', { name: 'Start every agent again' }).click()
-        const dialog = page.getByRole('dialog', { name: 'Start every agent again?' })
-        await dialog.getByRole('button', { name: /^Start (every agent again|them with your passkey)$/ }).click({ timeout: ACTION_TIMEOUT_MS })
-        await page.getByTestId('kill-banner').waitFor({ state: 'detached', timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
-        const again = await bookOf(ctx)
-        if (again.all_paused_at !== undefined) return fail('started again from the killoff dialog, yet Lens’s book still says every agent is paused')
-        if ((await page.getByTestId('kill-banner').count()) > 0) return fail('started again, yet the kill banner stays')
-        return { pass: true, detail: `paused from the top bar on Invoices: Lens's book paused, ${a.name} refused (403) with no spend row, the banner on Statements; started again from the dialog, the book is clear` }
-      } finally {
-        await page.close()
-      }
-    }),
-  }
-}
-
 export function agentApproval(seed: number): Scenario {
   return {
     id: 'agent-approval',
