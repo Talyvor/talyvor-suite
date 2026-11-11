@@ -7,7 +7,7 @@ import { Note, readFailure } from './WalletMoney'
 import { PAYEES_KEY } from './Pay'
 import { CopyButton } from '../chat/CopyButton'
 import { PreparedPayment } from '../chat/PaymentCards'
-import { type Agent, type AgentMoneyWallet, type OutsidePayee, agentBankApi, formatMinor, minorOf, newMoveKey, refusalText } from './agentBankApi'
+import { type Agent, type AgentMoneyWallet, type OutsidePayee, type Shows, agentBankApi, formatMinor, minorOf, newMoveKey, refusalText, useAccount } from './agentBankApi'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { MONEY_WALLET } from '../../labels/capabilities'
 
@@ -15,6 +15,8 @@ import { MONEY_WALLET } from '../../labels/capabilities'
 // it — a USDC address on Base with its QR code, or an IBAN in the account holder's name, whichever its partner gives —
 // and Send, which prepares a payment for the person to approve with one tap (Lens B40.3, B40.9's approval card). While
 // the sandbox serves the wallet its details are made up, so there is nothing to copy: only Lens's sentence saying so.
+// B59.10 — by the workspace's kind (account.ts): a Fiat only account renders no address, a Stablecoin and crypto only
+// account no IBAN and no Send, which pays a saved bank payee.
 
 export const walletKey = (id: string) => ['agent-money-wallet', id]
 
@@ -46,8 +48,12 @@ function Detail({ name, value }: { name: string; value: string }) {
 }
 
 /** How to add money: the address and its QR code, or the IBAN and its holder; nothing to copy from the sandbox. */
-function AddMoney({ agent, wallet }: { agent: Agent; wallet: AgentMoneyWallet }) {
-  const r = wallet.receive
+function AddMoney({ agent, wallet, shows }: { agent: Agent; wallet: AgentMoneyWallet; shows: Shows }) {
+  const r = {
+    ...wallet.receive,
+    address: shows.onChain ? wallet.receive.address : undefined,
+    iban: shows.bankTransfers ? wallet.receive.iban : undefined,
+  }
   if (wallet.mode !== 'LIVE' || (!r.address && !r.iban)) {
     return (
       <p className="text-body text-muted" data-testid="wallet-no-details">
@@ -148,6 +154,7 @@ function Send({ agent }: { agent: Agent }) {
 /** The agent's wallet: balance, how to add money, and Send. */
 export function AgentMoneyWalletCard({ agent }: { agent: Agent }) {
   const wallet = useQuery({ queryKey: walletKey(agent.id), queryFn: () => agentBankApi.wallet(agent.id) })
+  const { shows } = useAccount()
   return (
     <Card>
       <CardHeader aside={<WorkspaceLabel capability={MONEY_WALLET} />}>Wallet</CardHeader>
@@ -163,14 +170,16 @@ export function AgentMoneyWalletCard({ agent }: { agent: Agent }) {
             </p>
             <section className="flex flex-col gap-2" aria-label="Add money">
               <h3 className="text-body font-medium text-ink">Add money</h3>
-              <AddMoney agent={agent} wallet={wallet.data} />
+              {shows ? <AddMoney agent={agent} wallet={wallet.data} shows={shows} /> : null}
             </section>
           </>
         )}
-        <section className="flex flex-col gap-2" aria-label="Send money">
-          <h3 className="text-body font-medium text-ink">Send</h3>
-          <Send agent={agent} />
-        </section>
+        {shows?.bankTransfers ? (
+          <section className="flex flex-col gap-2" aria-label="Send money">
+            <h3 className="text-body font-medium text-ink">Send</h3>
+            <Send agent={agent} />
+          </section>
+        ) : null}
       </div>
     </Card>
   )

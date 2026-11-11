@@ -6,7 +6,7 @@ import { Money } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
 import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, PREPARED_KEY, PauseEveryAgent, PreparedRow, rulesKey, useKeys } from './AgentBank'
-import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText } from './agentBankApi'
+import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText, useAccount } from './agentBankApi'
 import { RunsOut } from './RunsOut'
 import { Lxc } from './money'
 import { resumeAgent } from './passkeys'
@@ -299,15 +299,16 @@ function AgentLine({
   )
 }
 
-/** B45.11 — one row per agent. */
+/** B45.11 — one row per agent. B59.10: under "Your agents", or a Business's "Your team’s agents". */
 function AgentLines({ agents }: { agents: Agent[] }) {
+  const { shows } = useAccount()
   const safe = useQuery({ queryKey: SAFE_TO_SPEND_KEY, queryFn: agentBankApi.safeToSpend })
   // The same query as the approvals card above, so the badge costs no request of its own.
   const approvals = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
   const waiting = new Set((approvals.data?.approvals ?? []).filter((p) => p.status === 'pending').map((p) => p.agent_id))
   return (
     <Card>
-      <CardHeader>Your agents</CardHeader>
+      <CardHeader>{shows?.agents ?? 'Your agents'}</CardHeader>
       {agents.map((a) => (
         <AgentLine key={a.id} agent={a} safe={safe} waiting={waiting.has(a.id)} />
       ))}

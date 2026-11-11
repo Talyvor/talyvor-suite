@@ -44,6 +44,7 @@ const SAMPLE: Record<string, unknown> = {
     signup_open: true,
   },
   '/api/workspace/name': { id: 'ws_nicks_team', name: 'Nick’s team' },
+  '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
   // B55.38 — Lens's peg, so the shots draw each LXC figure with its dollars first.
   '/api/lxc/topup-options': { allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 },
   '/api/agents': {

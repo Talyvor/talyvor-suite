@@ -410,12 +410,12 @@ func newApp(cfg config, auth *authenticator) *app {
 	// same-Origin on the write, key attached server-side, and the response states what Lens
 	// RECORDED. See distill.go — distill_poolable is deliberately NOT exposed here.
 	a.mux.HandleFunc("/api/distill", a.requireTenant(a.handleDistill))
-
 	// B8.2 — the Features screen: every capability setting on the workspace (read), and the two
 	// switches Lens already had a route for and nothing called. See features.go.
 	a.mux.HandleFunc("/api/features", a.requireTenant(a.handleFeatures))
 	// B59.38 — which areas the workspace has; the phone shows an area only when it is listed. See workspace_areas.go.
 	a.mux.HandleFunc("/api/workspace/areas", a.requireTenant(a.handleWorkspaceAreas))
+	a.mux.HandleFunc("/api/workspace/account", a.requireTenant(a.handleWorkspaceAccount)) // B59.10 — the type and kind of money. See workspace_account.go.
 	a.mux.HandleFunc("/api/features/tare", a.requireTenant(a.handleFeatureTare))
 	a.mux.HandleFunc("/api/features/cost-optimize-routing", a.requireTenant(a.handleFeatureCostRouting))
 	// B11.2 — the shared-conversions switch Lens had and nothing called, and Tare's recorded savings.
