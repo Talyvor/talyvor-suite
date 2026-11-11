@@ -1,11 +1,8 @@
 import { Logo, ThemeToggle, cn } from '@talyvor/ui'
 import { Button, pocketFocusRing } from '@talyvor/ui/pocket'
 import { CompanyLine } from '../../components/CompanyLine'
-import { Waitlist } from '../../components/Waitlist'
 import { useSignupProbe, type SignupState } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
-import { SharedAnswersFact } from '../../components/StoredAnswersFacts'
-import { usePricing } from '../marketing/pricingApi'
 
 // Entry.tsx — the two front doors: /signup for a stranger, /signin for someone coming back.
 //
@@ -36,6 +33,9 @@ import { usePricing } from '../marketing/pricingApi'
 //   is true of every issuer: an account you already have, and no new password.
 //
 //   Anything about who may enter — unless the server said. See lib/signupOpen.ts.
+//
+// B59.8 — /signup itself is SignUp.tsx: who the account is for, the kind of money, then a key. What it shares with
+// /signin (the card, the access line, Privacy and Terms) is exported from here.
 //
 // B57.49 — BOTH PAGES ARE POCKET'S AUTH CARD (reference w-signup, w-signin): a white card on the cloud page with the
 // logo's streams flowing into it from the left. The streams are the kit's own brand art, decorative.
@@ -103,7 +103,7 @@ function CardLogo() {
 
 /** The shell both entry pages share — pocket.css .authp: the card centred on the cloud page, the streams behind it.
  *  Public pages, so no Shell/sidebar — there is no workspace to navigate yet. */
-function EntryFrame({ children }: { children: React.ReactNode }) {
+export function EntryFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-cloud text-ink">
       <Streams />
@@ -121,7 +121,7 @@ function EntryFrame({ children }: { children: React.ReactNode }) {
 
 /** The card's last line on both pages. Linked on every entry surface: someone deciding whether to create an account
  *  must be able to read what the service does with their data BEFORE they do. Both routes are public for that reason. */
-function PrivacyTerms() {
+export function PrivacyTerms() {
   return (
     <p className="text-caption font-normal text-ink-3">
       <a href="/privacy" className={footLink}>Privacy</a>
@@ -131,28 +131,9 @@ function PrivacyTerms() {
   )
 }
 
-/** The first of the three lines is the one that matters: it is the promise the whole per-tenant provisioning chain was
- *  built to keep. The second is true of every new workspace: Lens makes its first agent, with a wallet and rules, at
- *  sign-up. */
-const WHAT_YOU_GET: string[] = [
-  'Your own workspace: a balance, keys and a ledger nobody else can see.',
-  'Your first agent, with a wallet and rules, made for you.',
-]
-
-/** The third line, printed only while /api/pricing's labels (B56.9) say Sandbox for every money capability: the
- *  moment Lens takes any one live, or says nothing, the line is left out rather than left wrong. */
-export const SANDBOX_LINE = 'Money features in Sandbox, where no real money moves.'
-
-function useAllSandbox(): boolean {
-  const pricing = usePricing()
-  const labels = pricing.status === 'ok' ? pricing.pricing.labels : undefined
-  const states = Object.values(labels ?? {})
-  return states.length > 0 && states.every((l) => l === 'sandbox')
-}
-
 /** The one line that says whether a stranger may actually start, DERIVED from the gate.
  *  `unknown` renders nothing: a promise we cannot verify is not printed. */
-function AccessLine({ state }: { state: SignupState }) {
+export function AccessLine({ state }: { state: SignupState }) {
   if (state === 'open') {
     return <p className="text-body text-ink-3">Open to anyone, no invitation needed.</p>
   }
@@ -169,7 +150,7 @@ function AccessLine({ state }: { state: SignupState }) {
 
 /** Rendered instead of the pitch when the browser already has a session: a signed-in person
  *  asked to "create your workspace" is being told their account does not exist. */
-function AlreadyIn() {
+export function AlreadyIn() {
   return (
     <>
       <CardLogo />
@@ -179,63 +160,6 @@ function AlreadyIn() {
         <a href="/">Open the app</a>
       </Button>
     </>
-  )
-}
-
-// ─── /signup ────────────────────────────────────────────────────────────────
-
-export function SignUp() {
-  const { signup, authenticated } = useSignupProbe()
-  const allSandbox = useAllSandbox()
-  // Both branches name themselves — `AlreadyIn` is a different screen at the same address, and
-  // titling it "Create a workspace" would be the tab naming a screen the reader is not on. The
-  // strings are these components' own `<h1>` and the label the product puts on links here.
-  useDocumentTitle(authenticated ? 'You’re signed in' : 'Create a workspace')
-  if (authenticated) {
-    return (
-      <EntryFrame>
-        <AlreadyIn />
-      </EntryFrame>
-    )
-  }
-  return (
-    <EntryFrame>
-      <CardLogo />
-      <CardHeading>Create your Talyvor workspace</CardHeading>
-      {/* WHAT IT IS, in one line. A stranger decides here whether to keep reading. */}
-      <Lead>
-        Talyvor is the financial ecosystem for the AI agent economy. Today each agent gets a wallet: a budget, spending
-        rules, approvals and a live statement, enforced before the model call or the payment.
-      </Lead>
-      {/* WHAT HAPPENS WHEN YOU CONTINUE. A redirect to a third party is the moment a stranger is most likely to
-          abandon, so it is described before it happens rather than explained afterwards. */}
-      <Lead>
-        You’ll be sent to sign in with an account you already have, then come straight back here. There is no form
-        and no new password to create.
-      </Lead>
-      {/* WHAT YOU GET. */}
-      <ul className="m-0 grid list-disc gap-1.5 pl-5 text-body text-ink-2">
-        {[...WHAT_YOU_GET, ...(allSandbox ? [SANDBOX_LINE] : [])].map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
-      <Button asChild size="lg" className="w-full">
-        <a href={loginHref('/')}>Continue</a>
-      </Button>
-      <AccessLine state={signup} />
-      {/* B44.1 — while sign-up is closed, a stranger can still leave an email. */}
-      {signup === 'closed' && <Waitlist pocket className="w-full" />}
-      {/* B27.22 — sharing is on from the first request, so a stranger is told before they
-          continue, with the way to switch it off. */}
-      <SharedAnswersFact className="text-body text-ink-3" />
-      <p className="text-body text-ink-2">
-        Already have a workspace?{' '}
-        <a href="/signin" className={cardLink}>
-          Sign in
-        </a>
-      </p>
-      <PrivacyTerms />
-    </EntryFrame>
   )
 }
 

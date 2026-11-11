@@ -83,10 +83,11 @@ func (s session) expiresAt() time.Time { return s.expires }
 // pendingLogin is the state of one in-flight OIDC flow, bound to one browser via
 // the pending cookie. Single-use: consumed on the first callback that presents it.
 type pendingLogin struct {
-	state    string // CSRF token, round-trips via the IdP
-	verifier string // PKCE code verifier; its S256 hash went to the IdP
-	nonce    string // binds the id_token to this flow
-	returnTo string // sanitised same-app path to land on
+	state    string        // CSRF token, round-trips via the IdP
+	verifier string        // PKCE code verifier; its S256 hash went to the IdP
+	nonce    string        // binds the id_token to this flow
+	returnTo string        // sanitised same-app path to land on
+	signup   signupAccount // B59.8: sign-up's answers, empty on a sign-in
 	expires  time.Time
 }
 
@@ -392,6 +393,12 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if a.handleAuthUnavailable(w) {
 		return
 	}
+	q := r.URL.Query()
+	signup, err := parseSignupAccount(q.Get("account_type"), q.Get("money_kind"), q.Get("name"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	state, err1 := randomToken()
 	nonce, err2 := randomToken()
 	pendingID, err3 := randomToken()
@@ -404,7 +411,8 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		state:    state,
 		verifier: verifier,
 		nonce:    nonce,
-		returnTo: sanitizeReturnTo(r.URL.Query().Get("return_to")),
+		returnTo: sanitizeReturnTo(q.Get("return_to")),
+		signup:   signup,
 		expires:  time.Now().Add(pendingTTL),
 	})
 	setCookie(w, pendingCookieName, pendingID, int(pendingTTL.Seconds()))
@@ -412,7 +420,7 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// The denied page's "sign in with a different account" restart. Gated to this
 	// ONE literal — arbitrary client input never reaches the IdP URL. Standard
 	// OIDC prompt value; providers that don't support it ignore it harmlessly.
-	if r.URL.Query().Get("prompt") == "select_account" {
+	if q.Get("prompt") == "select_account" {
 		opts = append(opts, oauth2.SetAuthURLParam("prompt", "select_account"))
 	}
 	http.Redirect(w, r, a.auth.oauth.AuthCodeURL(state, opts...), http.StatusFound)
@@ -535,7 +543,7 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 	if old, err := r.Cookie(sessionCookieName); err == nil {
 		a.auth.endSession(old.Value)
 	}
-	s, perr := a.provisionSession(ctx, idt.Subject, claims.Email)
+	s, perr := a.provisionSession(ctx, idt.Subject, claims.Email, p.signup)
 	if perr != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{
 			"error": "could not provision your workspace — try again shortly"})
@@ -551,13 +559,13 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 // provisionSession turns an identity the allowlist admitted into a session, not yet stored: the
-// browser callback and the phone sign-in (mobile_session.go) both come through here.
-func (a *app) provisionSession(ctx context.Context, sub, email string) (session, error) {
+// browser callback and the phone sign-in (mobile_session.go) both come through here, with sign-up's answers (B59.8).
+func (a *app) provisionSession(ctx context.Context, sub, email string, signup signupAccount) (session, error) {
 	// PROVISION: turn this identity into a tenant before the session exists. The workspace id is
 	// derived by LENS from the identity we present — the BFF never names a workspace, so no bug
 	// here can aim at another tenant. A provisioning failure is a hard stop: falling back to a
 	// shared workspace is the exact state this replaced, so there is no fallback path at all.
-	prov, perr := a.provisionForSession(ctx, provisionIdentity(a.cfg.oidcIssuer, sub))
+	prov, perr := a.provision(ctx, provisionIdentity(a.cfg.oidcIssuer, sub), nil, signup)
 	if perr != nil {
 		log.Printf("bff: provisioning FAILED for sub=%s: %s", sub, redactSecret(perr.Error()))
 		return session{}, perr
