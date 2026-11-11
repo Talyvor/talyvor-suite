@@ -6,7 +6,11 @@
 // Every public page reads these, so the website cannot carry two versions of the product. Use them as
 // written; "Money and markets for AI agents" may stay as a supporting line, never as the headline.
 
-export const POSITIONING_LINE = 'The financial ecosystem for the AI agent economy.'
+// B58.17 (Nick, 10 Nov 2026): the line is the agent accounts story, and it always comes with OWNER_LINE.
+export const POSITIONING_LINE = 'An account for every AI agent.'
+
+/** Said with POSITIONING_LINE wherever it leads. */
+export const OWNER_LINE = 'You own it. Your agent runs it.'
 
 // The end of the second sentence: outside a limit Lens refuses, and only a payment above the approval amount waits.
 export const POSITIONING_SENTENCES = [

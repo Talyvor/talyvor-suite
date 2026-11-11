@@ -1,7 +1,7 @@
 import { Logo, ThemeToggle, cn } from '@talyvor/ui'
 import { Button, pocketFocusRing } from '@talyvor/ui/pocket'
 import { CompanyLine } from '../../components/CompanyLine'
-import { useSignupProbe, type SignupState } from '../../lib/signupOpen'
+import { ACCESS_LINE, useSignupProbe, type SignupState } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
 
 // Entry.tsx — the two front doors: /signup for a stranger, /signin for someone coming back.
@@ -135,13 +135,16 @@ export function PrivacyTerms() {
  *  `unknown` renders nothing: a promise we cannot verify is not printed. */
 export function AccessLine({ state }: { state: SignupState }) {
   if (state === 'open') {
-    return <p className="text-body text-ink-3">Open to anyone, no invitation needed.</p>
+    return (
+      <p data-access-line className="text-body text-ink-3">
+        {ACCESS_LINE.open}
+      </p>
+    )
   }
   if (state === 'closed') {
     return (
-      <p className="text-body text-ink-3">
-        We’re letting the first companies in one at a time. If you’ve already been added, continue
-        above. Otherwise join the waitlist below.
+      <p data-access-line className="text-body text-ink-3">
+        {ACCESS_LINE.closed} If you’ve already been added, continue above. Otherwise join the waitlist below.
       </p>
     )
   }

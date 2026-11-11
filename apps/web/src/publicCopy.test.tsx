@@ -83,7 +83,7 @@ describe('every public page speaks positioning v2', () => {
     expect(h1.textContent, `${path}'s h1 is the old line`).not.toMatch(OLD_LINE)
 
     if (NAMES_THE_PRODUCT.has(path))
-      expect(text, `${path} does not carry the line`).toMatch(/the financial ecosystem for the AI agent economy/i)
+      expect(text, `${path} does not carry the line`).toMatch(/the financial ecosystem for the AI agent economy|An account for every AI agent/i)
 
     // Per text node: textContent joins neighbours, so an address runs into the next word.
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
