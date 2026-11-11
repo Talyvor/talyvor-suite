@@ -13,8 +13,8 @@ export const CREDIT_FOR_AGENTS = ['spend_on_talyvor', 'move_between_own_agents']
 /** A plan card's Money features row: the accounts and payments a plan with live money takes live as each is cleared. */
 export const MONEY_FEATURES = ['currency_accounts', 'account_details', 'payments_in', 'payments_out', 'fx', 'merchant_acceptance'] as const
 
-/** The documentation's claim that agents pay each other, hold escrow and lend between companies. */
-export const BETWEEN_OWNERS = ['pay_another_owner', 'escrow', 'loans_between_companies'] as const
+/** The documentation's claim that agents pay each other and hold escrow. */
+export const BETWEEN_OWNERS = ['pay_another_owner', 'escrow'] as const
 
 // B56.11 — the signed-in money screens: the capabilities each one moves, labelled from the workspace's own answer
 // (GET /api/wallets/capabilities' label) rather than the public one.
