@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -54,7 +54,7 @@ function mockBff({ publicLens = 'https://lens.talyvor.com', existingKeys = [], m
 function renderSetup() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/setup']}>
       <QueryClientProvider client={qc}>
         <Setup />
       </QueryClientProvider>
@@ -118,21 +118,23 @@ describe('Setup — the two lines', () => {
     })
   })
 
-  it('copies the two-line block to the clipboard', async () => {
+  it('copies each of the two lines to the clipboard', async () => {
     mockBff()
     renderSetup()
     const mint = await screen.findByRole('button', { name: /create a key|mint/i })
     fireEvent.click(mint)
     await waitFor(() => expect(screen.getAllByText(new RegExp(MINTED.key)).length).toBeGreaterThan(0))
-    // BY NAME, not copies[0]: a reveal card now renders its own "Copy key" above these blocks, and
-    // a positional pick silently retargets the moment anything is added to the page. The claim
-    // being made is about the TWO-LINE block, so it names that button.
-    const twoLines = await screen.findAllByRole('button', { name: /copy the two lines/i })
-    fireEvent.click(twoLines[0])
-    await waitFor(() => expect(writeText).toHaveBeenCalled())
-    const copied = String((writeText.mock.calls as unknown as string[][])[0]?.[0] ?? '')
-    expect(copied).toContain('ANTHROPIC_BASE_URL="https://lens.talyvor.com/anthropic"')
-    expect(copied).toContain(`ANTHROPIC_AUTH_TOKEN="${MINTED.key}"`)
+    // BY NAME, not copies[0]: the key's own Copy sits above these boxes, and a positional pick
+    // silently retargets the moment anything is added to the page. B57.55 — Pocket draws each
+    // variable in its own code box, so each line has its own Copy, named by its variable.
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Copy ANTHROPIC_BASE_URL' }))[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Copy ANTHROPIC_AUTH_TOKEN' }))[0])
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2))
+    const copied = (writeText.mock.calls as unknown as string[][]).map((c) => String(c[0]))
+    expect(copied).toEqual([
+      'export ANTHROPIC_BASE_URL="https://lens.talyvor.com/anthropic"',
+      `export ANTHROPIC_AUTH_TOKEN="${MINTED.key}"`,
+    ])
   })
 })
 
@@ -484,36 +486,31 @@ describe('Setup — the screen reads as an ordered task', () => {
     mockBff()
     renderSetup()
 
-    const opening = await screen.findByRole('heading', { name: /point your tools at lens/i })
+    const opening = await screen.findByRole('heading', { name: 'Point your tools at Talyvor.' })
     expect(opening.tagName).toBe('H2')
-    // `text-page` is the console's ONE display step — clamp(24px, 3vw, 38px), floored on `title`'s 24px so nothing regresses at narrow widths (W1.1.0). It replaced `text-title` here, which was the top of the console ramp and the largest type a console screen could write.
-    expect(opening.className).toContain('text-page')
-    expect(document.querySelectorAll('.text-page')).toHaveLength(1)
-    expect(document.querySelectorAll('.text-title')).toHaveLength(0)
+    // B57.55 — Pocket's page heading (w-dev): the display face at the title step, the one on the page.
+    expect(opening.className).toContain('text-title')
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1)
   })
 
-  it('names its regions in the order the task is actually done', async () => {
+  it('sits under the Developers tab row, on Connect an agent', async () => {
+    mockBff()
+    renderSetup()
+    const tabs = within(await screen.findByRole('tablist', { name: 'Developers' })).getAllByRole('tab')
+    expect(tabs.map((t) => t.textContent)).toEqual(['Connect an agent', 'API keys', 'Spend and routing', 'Gateway features'])
+    expect(tabs.filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent)).toEqual(['Connect an agent'])
+  })
+
+  it('names its cards in the order the task is actually done', async () => {
     mockBff()
     renderSetup()
     await screen.findByRole('button', { name: /create a key/i })
 
-    const regions = screen.getAllByRole('region')
     expect(
-      regions.map(
-        (r) =>
-          document.getElementById(r.getAttribute('aria-labelledby') ?? '')?.textContent?.trim(),
-      ),
-      'read this → get a credential → point your tool → know the edges → prove it worked. A ' +
-        'region with no name is a section a rotor cannot list, and an unordered stack of nine ' +
-        'cards is what this screen was.',
-    ).toEqual([
-      'Point your tools at Lens.',
-      'Read this first',
-      'Get a credential',
-      'Point your tool',
-      'Know the edges',
-      'Prove it worked',
-    ])
+      screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent),
+      'get a credential → point your tool → prove it worked, and beside them what happens to the ' +
+        'traffic and where the mechanism stops. An unordered stack of nine cards is what this screen was.',
+    ).toEqual(['Your key', 'Point your tool', 'Confirm it worked: two requests', 'What Talyvor does with your traffic', 'Worth knowing'])
   })
 
   // ⚠ THE CAVEATS USED TO SIT BEHIND THE BASE URL. They describe what Lens does and does not proxy,

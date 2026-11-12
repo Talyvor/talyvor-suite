@@ -57,12 +57,18 @@ function renderKeys() {
   // here rather than dropping the link — someone who mints a key on this screen and is told
   // nothing about using it is the exact gap /setup exists to close.
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/keys']}>
       <QueryClientProvider client={client}>
         <Keys />
       </QueryClientProvider>
     </MemoryRouter>,
   )
+}
+
+/** B57.55 — a key is made in the New key dialog: open it and hand back its name field. */
+async function openNewKey(): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('button', { name: 'New key' }))
+  return screen.findByLabelText('Key name')
 }
 
 beforeEach(() => {
@@ -101,19 +107,19 @@ describe('B28.266 — Keys tells one key from another, and the name field starts
     })
     renderKeys()
     await screen.findByText('CI pipeline')
-    expect(screen.getByText(/proxy · created .* · last used Jul 21, 00:05/)).toBeInTheDocument()
-    expect(screen.getByText(/proxy · created .* · never used · expires Dec 31, 14:00/)).toBeInTheDocument()
+    expect(screen.getByText(/proxy · made .* · last used Jul 21, 00:05/)).toBeInTheDocument()
+    expect(screen.getByText(/proxy · made .* · never used · expires Dec 31, 14:00/)).toBeInTheDocument()
   })
 
-  it('the "New key name" field is cleared once the key is created', async () => {
+  it('the name field starts empty again for the next key', async () => {
     mockKeys()
     renderKeys()
     await screen.findByText('CI pipeline')
-    const field = screen.getByLabelText(/new key name/i)
-    fireEvent.change(field, { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
-    expect(field).toHaveValue('')
+    fireEvent.click(screen.getByRole('button', { name: 'Done, I stored it' }))
+    expect(await openNewKey()).toHaveValue('')
   })
 })
 
@@ -123,13 +129,13 @@ describe('Keys — mint is a one-time reveal', () => {
     renderKeys()
     await screen.findByText('CI pipeline')
 
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
 
     expect(await screen.findByText(MINTED.key)).toBeInTheDocument()
-    expect(screen.getByText(/will not be shown again/i)).toBeInTheDocument()
-    // Scoped to the reveal's region: the list refetches on mint, so its new row carries the prefix too.
-    expect(within(screen.getByRole('region', { name: /create a key/i })).getByText(MINTED.prefix)).toBeInTheDocument()
+    expect(screen.getByText(/nobody can show it to you again/i)).toBeInTheDocument()
+    // Scoped to the dialog: the list refetches on mint, so its new row carries the prefix too.
+    expect(within(screen.getByRole('dialog', { name: 'New key' })).getByText(MINTED.prefix)).toBeInTheDocument()
     expect(screen.getByText(/not a credential/i)).toBeInTheDocument()
   })
 
@@ -138,8 +144,8 @@ describe('Keys — mint is a one-time reveal', () => {
     renderKeys()
     await screen.findByText('CI pipeline')
 
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
 
     expect(post).toHaveBeenCalledTimes(1)
@@ -152,8 +158,8 @@ describe('Keys — mint is a one-time reveal', () => {
     mockKeys()
     renderKeys()
     await screen.findByText('CI pipeline')
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
 
     fireEvent.click(screen.getByRole('button', { name: /copy key/i }))
@@ -161,14 +167,16 @@ describe('Keys — mint is a one-time reveal', () => {
     expect(writeText).toHaveBeenCalledWith(MINTED.key)
     expect(writeText).not.toHaveBeenCalledWith(MINTED.prefix)
     expect(await screen.findByRole('button', { name: /^copied$/i })).toBeInTheDocument()
+    // Said where it is seen, as well as to a screen reader.
+    expect(screen.getAllByText('Copied. Store it now: it will not be shown again').filter((e) => !e.closest('.sr-only'))).toHaveLength(1)
   })
 
   it('dismissing removes the key from the DOM permanently; the refetched list gains it BY PREFIX', async () => {
     mockKeys()
     renderKeys()
     await screen.findByText('CI pipeline')
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
 
     fireEvent.click(screen.getByRole('button', { name: /i stored it/i }))
@@ -188,8 +196,8 @@ describe('Keys — mint is a one-time reveal', () => {
     mockKeys({ existing: [] })
     renderKeys()
     await screen.findByText(/has no keys/i)
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
 
     const list = screen.getByRole('region', { name: /the keys that exist/i })
@@ -205,8 +213,8 @@ describe('Keys — mint is a one-time reveal', () => {
     mockKeys({ postStatus: 500 })
     renderKeys()
     await screen.findByText('CI pipeline')
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
 
     expect(await screen.findByText(/Couldn’t mint the key/)).toBeInTheDocument()
     expect(screen.queryByText(MINTED.key)).not.toBeInTheDocument()
@@ -293,7 +301,7 @@ describe('revoking a key', () => {
 
     await screen.findByText('tlv_ws_ff66ef1f')
     fireEvent.click(screen.getByRole('button', { name: /revoke tlv_ws_ff66ef1f/i }))
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }))
 
     expect(screen.queryByLabelText(/type tlv_ws_ff66ef1f/i)).toBeNull()
     expect(deleted).toEqual([])
@@ -343,28 +351,28 @@ describe('W1.1.5 — the screen has a shape a reader can navigate', () => {
     mockKeys()
     renderKeys()
     await screen.findByText('CI pipeline')
-    const pageScale = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6')).filter((h) =>
-      h.className.includes('text-page'),
-    )
     expect(
-      pageScale.map((h) => h.tagName),
+      screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent),
       'the screen writes ONE page-scale claim about what this page is; the shell already writes ' +
         'the only h1',
-    ).toEqual(['H2'])
+    ).toEqual(['Make and revoke the keys that reach Talyvor.'])
   })
 
-  it('every section of the screen is a NAMED landmark — none is anonymous', async () => {
+  it('sits under the Developers tab row, on API keys', async () => {
+    mockKeys()
+    renderKeys()
+    const tabs = within(await screen.findByRole('tablist', { name: 'Developers' })).getAllByRole('tab')
+    expect(tabs.filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent)).toEqual(['API keys'])
+  })
+
+  it('every card of the screen is a NAMED landmark — none is anonymous', async () => {
     mockKeys()
     renderKeys()
     await screen.findByText('CI pipeline')
-    const sections = Array.from(document.querySelectorAll('section'))
-    expect(
-      sections.length,
-      'the screen draws no sections at all — it is the single anonymous panel the rebuild replaces',
-    ).toBeGreaterThan(2)
-    // A <section> is a `region` landmark ONLY when it has an accessible name, so the two counts
-    // must agree. A floor on getAllByRole('region') alone passes an unnamed sibling.
-    expect(screen.getAllByRole('region')).toHaveLength(sections.length)
+    expect(screen.getAllByRole('region').map((r) => r.getAttribute('aria-labelledby') && document.getElementById(r.getAttribute('aria-labelledby')!)?.textContent)).toEqual([
+      'The keys that exist',
+      'What may act for this workspace',
+    ])
   })
 })
 
@@ -376,7 +384,7 @@ describe('W1.1.5 — a workspace with no key is told what a key is FOR', () => {
     // The next action after minting is not on this screen, and it never was: Setup holds the two
     // environment variables. The empty state names that destination instead of implying the key
     // does something by existing.
-    expect(screen.getByRole('link', { name: /setup/i })).toHaveAttribute('href', '/setup')
+    expect(screen.getByRole('link', { name: 'Connect an agent' })).toHaveAttribute('href', '/setup')
   })
 
   it('a list that could NOT be read is never drawn as a workspace with no keys', async () => {
@@ -389,18 +397,16 @@ describe('W1.1.5 — a workspace with no key is told what a key is FOR', () => {
     expect(screen.queryByText(/has no keys/i)).toBeNull()
   })
 
-  it('the reveal state says at page scale that the credential will not be shown again', async () => {
+  it('the reveal says, in the dialog that holds the key, that it will not be shown again', async () => {
     mockKeys()
     renderKeys()
-    fireEvent.change(await screen.findByLabelText('New key name'), { target: { value: 'Laptop' } })
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
-    const pageScale = document.querySelector('h2.text-page')
     expect(
-      pageScale?.textContent ?? '',
-      'the one moment this screen has a credential on it is the one moment its page-scale claim ' +
-        'should be about the credential',
-    ).toMatch(/again/i)
+      within(screen.getByRole('dialog', { name: 'New key' })).getByText(/nobody can show it to you again/i),
+      'the one moment this screen has a credential on it is the one moment it must say so beside it',
+    ).toBeInTheDocument()
   })
 })
 

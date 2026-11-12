@@ -171,6 +171,12 @@ const SAMPLE: Record<string, unknown> = {
   },
   // B57.97 — no Talyvor Card yet, as w-card opens.
   '/api/money/physical-cards': { cards: [] },
+  // B57.55 — Developers: the address tools are pointed at, and the workspace's two keys, as w-dev-keys lists them.
+  '/api/context': { workspace_id: 'ws_nicks_team', lens_base_url: 'http://lens:8080', lens_public_base_url: 'https://lens.talyvor.com' },
+  '/api/keys': [
+    { id: 'key_setup', workspace_id: 'ws_nicks_team', key_prefix: 'tlv_ws_7f3a5b12', name: 'Setup', scopes: ['proxy'], created_at: '2026-09-14T09:00:00Z', last_used_at: '2026-10-22T08:40:00Z' },
+    { id: 'key_ci', workspace_id: 'ws_nicks_team', key_prefix: 'tlv_ws_c21d7e90', name: 'CI pipeline', scopes: ['proxy'], created_at: '2026-10-02T09:00:00Z', last_used_at: '2026-10-21T16:20:00Z' },
+  ],
   // B56.11 — every money capability Sandbox for this workspace, as Lens answers in production today (talyvor-lens B56.7).
   '/api/wallets/capabilities': {
     capabilities: [

@@ -127,7 +127,6 @@ describe('the floor', () => {
 
   it('names every file, and only files, that render a placeholder', () => {
     expect(Object.keys(MUST_RENDER_PLACEHOLDER).sort()).toEqual([
-      'src/Legal.test.tsx',
       'src/SessionExpired.test.tsx',
       'src/areas/docs/DocsArea.test.tsx',
       'src/areas/lens/Keys.test.tsx',

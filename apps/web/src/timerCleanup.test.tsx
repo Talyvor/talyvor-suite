@@ -127,7 +127,7 @@ describe('no component leaves a timer running after it unmounts', () => {
     // A key must exist before the page prints the two lines it offers to copy — the same order
     // Setup.test.tsx's own copy case drives.
     fireEvent.click(await screen.findByRole('button', { name: /create a key|mint/i }))
-    const copy = await screen.findAllByRole('button', { name: /copy the two lines/i })
+    const copy = await screen.findAllByRole('button', { name: /copy ANTHROPIC_BASE_URL/i })
 
     tracking = true
     fireEvent.click(copy[0])

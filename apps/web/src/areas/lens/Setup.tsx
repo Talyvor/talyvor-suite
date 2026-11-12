@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Button, Card, CardHeader, RevealOnce, inlineLink } from '@talyvor/ui'
+import { Button as TodayButton, inlineLink } from '@talyvor/ui'
+import { Button, Card, Icon, showSnack } from '@talyvor/ui/pocket'
 
 import { api } from '../../lib/api'
-import { Region, RegionScreen } from '../../components/Region'
 import { PanelFailure } from '../../components/SessionExpiredBar'
 import { StoredAnswersFacts } from '../../components/StoredAnswersFacts'
 import { useAuthMeReader } from '../../lib/authMe'
+import { DESIGN_ATTR } from '../../pocketPending'
+import { DevelopersHead } from './Developers'
 import { keysApi, type MintResult, type WorkspaceAPIKey } from './keysApi'
 import { KEY_PLACEHOLDER, MECHANISM_CAVEATS, toolsFor, type Tool } from './setupSnippets'
 
@@ -41,8 +43,11 @@ import { KEY_PLACEHOLDER, MECHANISM_CAVEATS, toolsFor, type Tool } from './setup
 // `http://192.168.100.149:8791`: all FIVE copy buttons on this page clicked in turn, every
 // label unchanged, and NOT ONE error raised. `RevealOnce` had no `?.` and threw instead; both
 // told the reader exactly the same thing, which was nothing.
-export function CopyBlock({ text, label }: { text: string; label: string }) {
-  // Three states, the same as RevealOnce's — not yet, done, and did not happen.
+/**
+ * The copy behind every Copy on this page. Three states, the same as RevealOnce's — not yet, done,
+ * and did not happen.
+ */
+function useCopy(text: string) {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
   // ⚠ THE RESET MUST NOT OUTLIVE THE COMPONENT. Uncancelled, this 1500ms timer fires
   // `setCopyState` on an unmounted tree; under vitest it fires into a torn-down jsdom and reds the
@@ -51,34 +56,38 @@ export function CopyBlock({ text, label }: { text: string; label: string }) {
   // had the correct shape — see src/timerCleanup.test.tsx, which pins both.
   const resetTimer = useRef<number | undefined>(undefined)
   useEffect(() => () => window.clearTimeout(resetTimer.current), [])
-  const copyFailedNote = 'Couldn’t copy. Select the block above and copy it yourself.'
+  const copy = () => {
+    // Synchronous call, `try` for the throw, rejection handler for the refusal — see the note in
+    // RevealOnce: awaiting first would move the write out of the click's turn, which is the one
+    // thing Safari refuses.
+    try {
+      void navigator.clipboard.writeText(text).then(
+        () => {
+          setCopyState('copied')
+          window.clearTimeout(resetTimer.current)
+          resetTimer.current = window.setTimeout(() => setCopyState('idle'), 1500)
+        },
+        () => setCopyState('failed'),
+      )
+    } catch {
+      setCopyState('failed')
+    }
+  }
+  return { copyState, copy }
+}
+
+const copyFailedNote = 'Couldn’t copy. Select the block above and copy it yourself.'
+
+export function CopyBlock({ text, label }: { text: string; label: string }) {
+  const { copyState, copy } = useCopy(text)
   return (
     <div className="space-y-1">
       <pre className="overflow-x-auto rounded-control border border-rule bg-canvas px-3 py-2 font-mono text-ink">
         {text}
       </pre>
-      <Button
-        variant="default"
-        onClick={() => {
-          // Synchronous call, `try` for the throw, rejection handler for the refusal — see the
-          // note in RevealOnce: awaiting first would move the write out of the click's turn,
-          // which is the one thing Safari refuses.
-          try {
-            void navigator.clipboard.writeText(text).then(
-              () => {
-                setCopyState('copied')
-                window.clearTimeout(resetTimer.current)
-                resetTimer.current = window.setTimeout(() => setCopyState('idle'), 1500)
-              },
-              () => setCopyState('failed'),
-            )
-          } catch {
-            setCopyState('failed')
-          }
-        }}
-      >
+      <TodayButton variant="default" onClick={copy}>
         {copyState === 'copied' ? 'Copied' : `Copy ${label}`}
-      </Button>
+      </TodayButton>
       {/* sr-only in every state, so this announces without moving a pixel — the same seam
           RevealOnce already uses for the same event. */}
       <span aria-live="polite" className="sr-only">
@@ -89,42 +98,80 @@ export function CopyBlock({ text, label }: { text: string; label: string }) {
   )
 }
 
+/**
+ * B57.55 — Pocket's code box (pocket.css .codebox): the code on cloud, Copy beside it. Not the kit's
+ * CodeBox, because that one throws where a page is not a secure context and says nothing a screen
+ * reader hears; this one keeps CopyBlock's three states. `label` names WHAT is copied for a screen
+ * reader, since every button on the page reads Copy.
+ */
+export function CodeCopy({ text, label, copied }: { text: string; label: string; copied?: string }) {
+  const { copyState, copy } = useCopy(text)
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-center justify-between gap-3 rounded-control bg-cloud py-2.5 pl-4 pr-2.5">
+        <pre className="m-0 min-w-0 whitespace-pre-wrap break-all font-mono text-body font-semibold text-ink">{text}</pre>
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<Icon name="copy" size={16} />}
+          aria-label={copyState === 'copied' ? undefined : `Copy ${label}`}
+          onClick={copy}
+        >
+          {copyState === 'copied' ? 'Copied' : 'Copy'}
+        </Button>
+      </div>
+      <span role="status" aria-live="polite" className="sr-only">
+        {copyState === 'copied' ? (copied ?? 'Copied to clipboard') : copyState === 'failed' ? copyFailedNote : ''}
+      </span>
+      {copyState === 'failed' ? (
+        <p className="text-body text-ink">{copyFailedNote}</p>
+      ) : copyState === 'copied' && copied ? (
+        <p className="text-caption text-ink-3">{copied}</p>
+      ) : null}
+    </div>
+  )
+}
+
+/** pocket.css .steps2: an ordered list, its numbers in the list's own margin. */
+const steps = 'm-0 grid list-decimal gap-1.5 pl-5 text-reading text-ink-2'
+
 function ToolCard({ tool }: { tool: Tool }) {
   return (
-    <Card raised>
-      <CardHeader>{tool.name}</CardHeader>
-      <div className="space-y-3 px-gutter py-3">
-        {/* The hazard renders ABOVE the snippet, inside this tool's own card. A page-level
-            warning banner is the thing nobody reads before pasting; this one sits between the
-            reader and the instruction it qualifies. */}
-        {tool.hazard ? (
-          <p className="rounded-control border border-rule border-l-2 border-l-slashed bg-canvas px-3 py-2 text-body text-ink">
-            <strong>Before you paste this:</strong> {tool.hazard}
-          </p>
-        ) : null}
-        {tool.kind === 'env' ? (
-          <CopyBlock text={tool.copyText} label="the two lines" />
-        ) : (
-          <>
-            <ol className="list-decimal space-y-1 pl-5 text-body text-ink">
-              {tool.setting!.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
-            <CopyBlock text={tool.copyText} label="the URL" />
-          </>
-        )}
-        {tool.alternative ? (
-          <div className="space-y-1">
-            <p className="text-caption text-ink">{tool.alternative.title}</p>
-            <CopyBlock text={tool.alternative.code} label="the example" />
-          </div>
-        ) : null}
-        {tool.note ? <p className="text-caption text-muted">{tool.note}</p> : null}
-      </div>
+    <Card className="grid gap-2">
+      <h4 className="font-display text-reading font-bold text-ink">{tool.name}</h4>
+      {/* The hazard renders ABOVE the snippet, inside this tool's own card. A page-level
+          warning banner is the thing nobody reads before pasting; this one sits between the
+          reader and the instruction it qualifies. */}
+      {tool.hazard ? (
+        <p className="rounded-control bg-page px-3.5 py-2.5 text-body text-ink">
+          <strong>Before you paste this:</strong> {tool.hazard}
+        </p>
+      ) : null}
+      {tool.kind === 'env' ? (
+        // One box per line, as Pocket draws it: each variable is copied on its own.
+        tool.env!.map((v) => <CodeCopy key={v.name} text={`export ${v.name}="${v.value}"`} label={v.name} />)
+      ) : (
+        <>
+          <ol className={steps}>
+            {tool.setting!.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          <CodeCopy text={tool.copyText} label="the address" />
+        </>
+      )}
+      {tool.alternative ? (
+        <div className="grid gap-1.5">
+          <p className="text-body font-semibold text-ink">{tool.alternative.title}</p>
+          <CodeCopy text={tool.alternative.code} label="the example" />
+        </div>
+      ) : null}
+      {tool.note ? <p className="text-caption text-ink-3">{tool.note}</p> : null}
     </Card>
   )
 }
+
+const cardHeading = 'font-display text-reading font-bold text-ink'
 
 export function Setup() {
   const qc = useQueryClient()
@@ -148,6 +195,7 @@ export function Setup() {
       // A second mint is a second unstored secret. Carrying the previous acknowledgement forward
       // would leave the new key exposed to exactly the flow that lost the first one.
       setStored(false)
+      showSnack({ title: 'Here it is, once', line: 'Copy it now: Talyvor keeps a hash, not the key.' })
       void qc.invalidateQueries({ queryKey: ['keys'] })
     },
   })
@@ -191,70 +239,200 @@ export function Setup() {
   const credential = minted?.key ?? ''
   const tools = toolsFor(publicBase, credential)
 
+  // W1.1.2 — the page is an ordered task: get a credential, point a tool, prove it. B57.55 draws it
+  // as Pocket's w-dev does: that task down the wide column, and what Talyvor does with the traffic
+  // and where the mechanism stops beside it, so both are read before anything is pasted.
   return (
-    // W1.1.2 — WHAT THIS REPLACED. A single-column stack of nine cards with no heading of the
-    // screen's own and no marking between them, on the screen first run ROUTES a new user to. The
-    // page is an ordered task — read this, get a credential, point a tool, know the edges, prove it
-    // — and nothing on it said so or numbered it. The regions are that order, in the language
-    // W1.1.1 brought over from the public site (see components/Region.tsx).
-    <RegionScreen>
-      <Region
-        index="00"
-        label="Setup"
-        heading="Point your tools at Lens."
-        sectionClassName="pb-10 pt-4 wide:pb-12"
-        className="max-w-2xl"
-      >
-        <p className="text-body text-muted">
-          You do not change your code or your model names. You change where the request goes: two
-          environment variables, and your existing tool talks to Lens instead of the provider
-          directly. Lens forwards it, records what it cost, and serves a repeat of the same request
-          from cache.
+    <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-5 px-gutter py-4 wide:py-6">
+      <DevelopersHead
+        heading="Point your tools at Talyvor."
+        line="You change where requests go, not your code or your model names. Talyvor forwards each request, records what it cost, and serves a repeat of the same request from its cache."
+      />
+      {/* The workspace this session signed in to. It renders only once it is KNOWN — an em dash
+          in the slot said "your workspace is —", which is not a thing anyone can act on. */}
+      {ctx.data ? (
+        <p className="-mt-2 text-caption text-ink-3">
+          Workspace <span className="font-mono">{ctx.data.workspace_id}</span>, the one this session signed in to. Keys you
+          make here belong to it.
         </p>
-        {/* The workspace this session signed in to. It renders only once it is KNOWN — an em dash
-            in the slot said "your workspace is —", which is not a thing anyone can act on. */}
-        {ctx.data ? (
-          <p className="mt-4 text-caption text-muted">
-            Workspace <span className="font-mono">{ctx.data.workspace_id}</span>, the one this
-            session signed in to. Keys you mint here belong to it.
-          </p>
-        ) : null}
-      </Region>
+      ) : null}
 
-      <Region index="01" label="Read this first">
-        <Card raised>
-          <CardHeader>What Talyvor does with your traffic</CardHeader>
-          <div className="space-y-2 px-gutter py-3 text-body text-ink">
-            <p>
-              You are about to route AI requests through a third party, so here is what happens to
-              them, before you paste anything.
-            </p>
-            <ul className="list-disc space-y-1 pl-5">
+      <div className="grid items-start gap-4 wide:grid-cols-12">
+        <div className="grid gap-4 wide:col-span-8">
+          <Card tone="white" className="grid gap-2">
+            <h3 className={cardHeading}>Your key</h3>
+            {minted && !stored ? (
+              // ⚠ THIS SENTENCE IS PART OF WHAT WENT WRONG. It once said "filled into the blocks
+              // below … Copy the block now", which was true and useless: it pointed at snippets
+              // further down instead of at the secret. It points at the box directly beneath it, and
+              // says the one consequence that matters rather than restating the mechanism.
+              <>
+                <p className="text-reading text-ink-2">
+                  <strong className="text-ink">Your key, shown once.</strong> Copy it now: Talyvor keeps a hash, not the key, so
+                  nobody can show it to you again, and a key you did not copy has to be replaced rather than recovered.
+                </p>
+                <CodeCopy text={minted.key} label="key" copied="Copied. Store it now: it will not be shown again" />
+                <p className="text-caption text-ink-3">
+                  Identifier, not a credential: <span className="font-mono">{minted.prefix}</span>. Safe to share; this is how the
+                  key appears in lists.
+                </p>
+                <div>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setStored(true)
+                      showSnack({ title: 'Stored', line: 'The blocks below carry your key.' })
+                    }}
+                  >
+                    Done, I stored it
+                  </Button>
+                </div>
+              </>
+            ) : minted ? (
+              <p className="text-reading text-ink-2">
+                Your key is in the blocks below. <span className="font-mono">{minted.prefix}</span>
+              </p>
+            ) : existing.length > 0 ? (
+              <>
+                <p className="text-reading text-ink-2">
+                  You already have {existing.length === 1 ? 'a key' : `${existing.length} keys`}, but a key is shown{' '}
+                  <strong className="text-ink">only once</strong>, at the moment it is made. Talyvor stores a hash, so it cannot
+                  be shown again. If you still have it, paste it over the placeholder below. If not, make a fresh one.
+                </p>
+                <ul className="grid gap-0.5 text-caption text-ink-3">
+                  {existing.map((k) => (
+                    <li key={k.id}>
+                      <span className="font-mono">{k.key_prefix}</span> · {k.name} (identifier, not a credential)
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="text-reading text-ink-2">You do not have a key yet. Make one and it will be filled into every block below.</p>
+            )}
+            {minted && !stored ? null : (
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={() => mint.mutate()} disabled={mint.isPending}>
+                  {mint.isPending ? 'Creating…' : 'Create a key for setup'}
+                </Button>
+                {/* ⚠ THE LINK IS WITHHELD WHILE AN UNACKNOWLEDGED SECRET IS ON SCREEN. It sat beside the
+                    button someone just pressed, so the nearest control was the one that destroys what
+                    pressing it produced. The sidebar, the back button and a reload all still work; what
+                    is removed is the PRODUCT'S OWN INVITATION to leave. */}
+                {!unstoredSecret ? (
+                  <Link className={`text-body font-semibold text-ink ${inlineLink}`} to="/keys">
+                    Manage keys
+                  </Link>
+                ) : null}
+              </div>
+            )}
+            {mint.isError ? (
+              <p className="text-body text-ink">Couldn’t create a key. Nothing was changed. Try again, or use API keys.</p>
+            ) : null}
+          </Card>
+
+          <h3 className="font-display text-head font-bold text-ink">Point your tool</h3>
+          {/* ⚠ FOUR STATES, AND ONLY ONE OF THEM MAY TALK ABOUT THE DEPLOYMENT. See §publicBase
+              above: this used to be a single `publicBase === ''` test, so a read that had not
+              happened yet and a read that FAILED both rendered as a settled fact about somebody
+              else's configuration. */}
+          {baseUrlState === 'reading' ? (
+            <Card>
+              <p className="text-body text-ink-2">Reading this deployment’s settings…</p>
+            </Card>
+          ) : baseUrlState === 'unreadable' ? (
+            <Card className="grid gap-2">
+              {/* The shared failure voice: a panel knows its own request failed and cannot know
+                  whether every other panel failed for the same reason, so it must not name a cause. */}
+              <PanelFailure error={ctx.error} what="this deployment’s settings" />
+              <p className="text-caption text-ink-3">
+                The blocks are withheld because the address is UNKNOWN, not because it is missing. Reload, and if it keeps
+                failing the setting is not the thing to check.
+              </p>
+            </Card>
+          ) : baseUrlState === 'unset' ? (
+            <Card className="grid gap-1">
+              <h4 className={cardHeading}>Setup instructions unavailable</h4>
+              <p className="text-body text-ink-2">
+                This deployment has no public Lens URL configured, so we cannot tell you which address to use, and a guessed
+                one would fail with an error that looks like a bad key. Ask your operator to set{' '}
+                <span className="font-mono">LENS_PUBLIC_BASE_URL</span> on the app, then reload.
+              </p>
+            </Card>
+          ) : (
+            <>
+              {!minted ? (
+                <p className="text-caption text-ink-3">
+                  The blocks below show <span className="font-mono">{KEY_PLACEHOLDER}</span> where your key goes. Make a key
+                  above to have it filled in.
+                </p>
+              ) : null}
+              {tools.map((t) => (
+                <ToolCard key={t.id} tool={t} />
+              ))}
+            </>
+          )}
+
+          <Card tone="white" className="grid gap-2">
+            <h3 className={cardHeading}>Confirm it worked: two requests</h3>
+            <ol className={steps}>
               <li>
-                <strong>What is stored.</strong> To serve a repeat request from cache, Lens stores the
+                <strong className="text-ink">Send one request</strong> from the tool you just set up. Anything: “write me a
+                haiku about caching”.
+              </li>
+              <li>
+                <strong className="text-ink">
+                  Open the{' '}
+                  <Link className={`text-ink ${inlineLink}`} to="/ledger">
+                    ledger
+                  </Link>
+                  .
+                </strong>{' '}
+                Within a few seconds a row appears for it, with what it cost. That row is the proof your traffic is flowing
+                through Talyvor: no row means the request never arrived, and the base URL is the first thing to check.
+              </li>
+              <li>
+                <strong className="text-ink">Send the same request again.</strong> The second one is a cache hit: a new row at
+                no cost, answered without going to the provider at all. That is the mechanism, in two requests: the first one
+                pays, the repeat does not.
+              </li>
+            </ol>
+            <p className="text-body text-ink-3">
+              How much this saves depends entirely on how much your traffic repeats, so we do not print a number here. The
+              ledger shows yours.
+            </p>
+          </Card>
+        </div>
+
+        <div className="grid gap-4 wide:col-span-4">
+          <Card className="grid gap-2">
+            <h3 className={cardHeading}>What Talyvor does with your traffic</h3>
+            <p className="text-body text-ink-2">
+              You are about to route AI requests through a third party, so here is what happens to them, before you paste
+              anything.
+            </p>
+            <ul className="m-0 grid list-disc gap-1.5 pl-5 text-body text-ink-2">
+              <li>
+                <strong className="text-ink">What is stored.</strong> To serve a repeat request from cache, Talyvor stores the
                 answer that came back, with the question it answered.
-                <StoredAnswersFacts className="mt-1 text-body text-ink" />
-                Under <em>none</em> this workspace&rsquo;s own cache is off: a repeated question goes to
-                the model and is paid for again. Answers other companies chose to share can still be
-                served.
+                <StoredAnswersFacts className="mt-1 text-body text-ink-2" />
+                Under <em>none</em> this workspace&rsquo;s own cache is off: a repeated question goes to the model and is paid
+                for again. Answers other companies chose to share can still be served.
               </li>
               {/* ⚠ THIS SAID LOGGING WAS "who called what, when, and what it cost" AND STOPPED —
                   which describes the DEFAULT setting and reads as though prompt text is never
-                  persisted. It is not the whole mechanism: under the `full` setting Lens writes
-                  prompt_text to token_events AND publishes the raw prompt and response to a
-                  30-day stream (proxy.go gates both on LoggingFull; `metadata`, the default,
-                  blanks the prompt). The Privacy page has always said so. The screen someone
-                  reads BEFORE pasting a key said the reassuring part only. */}
+                  persisted. Under the `full` setting Lens writes prompt_text to token_events AND
+                  publishes the raw prompt and response to a 30-day stream (proxy.go gates both on
+                  LoggingFull). The Privacy page has always said so. */}
               <li>
-                <strong>Logging is separate and configurable.</strong> On the default setting the
-                audit trail is metadata (who called what, when, and what it cost) and the log does
-                not keep the prompt text. There is a <em>full</em> setting that does keep prompt text, and
-                also sends the prompt and the answer to a 30-day stream. Nothing in this app turns
-                it on, but an operator can, and you would not be able to tell from here. The{' '}
+                <strong className="text-ink">Logging is separate and configurable.</strong> On the default setting the audit
+                trail is metadata (who called what, when, and what it cost) and the log does not keep the prompt text. There is
+                a <em>full</em> setting that does keep prompt text, and also sends the prompt and the answer to a 30-day stream.
+                Nothing in this app turns it on, but an operator can, and you would not be able to tell from here. The{' '}
                 <em>none</em> setting keeps nothing: not in the log, and not in the cache.
               </li>
               <li>
-                <strong>
+                <strong className="text-ink">
                   {sharing === true
                     ? 'Sharing is currently ON for this workspace.'
                     : sharing === false
@@ -266,197 +444,33 @@ export function Setup() {
                   : sharing === false
                     ? 'Nothing new generated here is shared. Answers shared before stay available to others, and keep earning, until you delete them in Features.'
                     : 'We could not read the recorded value, so we will not guess at it.'}{' '}
-                <Link className={inlineLink} to="/settings">
+                <Link className={`text-ink ${inlineLink}`} to="/settings">
                   {sharing === undefined ? 'See the setting' : 'Change it'}
                 </Link>
                 .
               </li>
               <li>
-                <strong>Your prompts are never served to another company.</strong> Even with pooling
-                on, what can be shared is an <em>answer</em> to a semantically equivalent question,
-                never your prompt, never your key, never your workspace’s identity. But an answer
-                often restates the question it answered, so the fact to plan around is{' '}
-                <em>the answer leaves this workspace</em>, not <em>the prompt does not</em>.
+                <strong className="text-ink">Your prompts are never served to another company.</strong> Even with pooling on,
+                what can be shared is an <em>answer</em> to a semantically equivalent question, never your prompt, never your
+                key, never your workspace’s identity. But an answer often restates the question it answered, so the fact to
+                plan around is <em>the answer leaves this workspace</em>, not <em>the prompt does not</em>.
               </li>
             </ul>
-          </div>
-        </Card>
-      </Region>
-
-      <Region index="02" label="Get a credential">
-        <Card raised>
-          <CardHeader>Your key</CardHeader>
-          <div className="space-y-3 px-gutter py-3">
-            {minted ? (
-              // ⚠ THIS SENTENCE IS PART OF WHAT WENT WRONG. It said "filled into the blocks below …
-              // Copy the block now", which was true and useless: it pointed at snippets further down
-              // instead of at the secret, and the only unmissable thing on the row was a link to
-              // another screen. It now points at the card directly beneath it, and says the one
-              // consequence that matters rather than restating the mechanism.
-              <p className="text-body text-ink">
-                Here it is, once. Copy it now. Lens keeps a hash, not the key, so nobody can show it
-                to you again, and a key you did not copy has to be replaced rather than recovered.
-              </p>
-            ) : existing.length > 0 ? (
-              <div className="space-y-2 text-body text-ink">
-                <p>
-                  You already have {existing.length === 1 ? 'a key' : `${existing.length} keys`}, but
-                  a key is shown <strong>only once</strong>, at the moment it is created. Lens
-                  stores a hash, so it cannot be shown again. If you still have it, paste it over the
-                  placeholder below. If not, create a fresh one.
-                </p>
-                <ul className="space-y-0.5 text-caption text-muted">
-                  {existing.map((k) => (
-                    <li key={k.id}>
-                      <span className="font-mono">{k.key_prefix}</span> · {k.name} (identifier, not a
-                      credential)
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <p className="text-body text-ink">
-                You do not have a key yet. Create one and it will be filled into every block below.
-              </p>
-            )}
-            <div className="flex items-center gap-gutter">
-              <Button onClick={() => mint.mutate()} disabled={mint.isPending}>
-                {mint.isPending ? 'Creating…' : 'Create a key for setup'}
-              </Button>
-              {/* ⚠ THE LINK IS WITHHELD WHILE AN UNACKNOWLEDGED SECRET IS ON SCREEN, and this is the
-                  whole navigation argument in one line. It sat in THIS row — so the nearest control to
-                  the button someone just pressed was the one that destroys what pressing it produced.
-                  It is not blocked from anywhere: the sidebar, the back button, a typed URL and a
-                  reload all still work, and a modal that pretended otherwise would be theatre, since
-                  it cannot stop any of them either. What is removed is the PRODUCT'S OWN INVITATION to
-                  leave. You cannot stop someone walking out; you can stop holding the door open. */}
-              {!unstoredSecret ? (
-                <Link className={`text-caption text-muted ${inlineLink}`} to="/keys">
-                  Manage keys
-                </Link>
-              ) : null}
-            </div>
-            {minted && !stored ? (
-              // The SAME component the Keys screen mints into — one presentation of "here is a secret,
-              // once", not a second one invented here. Before this, Setup put the key only inside the
-              // tool snippets below: present, but dressed as configuration, so the one thing that had
-              // to be unmissable looked like the thing you skim past.
-              <RevealOnce
-                title="Your key: shown once"
-                secret={minted.key}
-                copyLabel="Copy key"
-                identifier={minted.prefix}
-                identifierNote="Safe to share; this is how the key appears in lists."
-                onDone={() => setStored(true)}
-              />
-            ) : null}
-            {mint.isError ? (
-              <p className="border-l-2 border-l-slashed pl-2 text-body text-ink">
-                Couldn’t create a key. Nothing was changed. Try again, or use the Keys screen.
-              </p>
-            ) : null}
-          </div>
-        </Card>
-      </Region>
-
-      <Region index="03" label="Point your tool" className="max-w-3xl space-y-gutter">
-        {/* ⚠ FOUR STATES, AND ONLY ONE OF THEM MAY TALK ABOUT THE DEPLOYMENT. See §publicBase
-            above: this used to be a single `publicBase === ''` test, so a read that had not
-            happened yet and a read that FAILED both rendered as a settled fact about somebody
-            else's configuration. */}
-        {baseUrlState === 'reading' ? (
-          <Card raised>
-            <CardHeader>Setup instructions</CardHeader>
-            <div className="px-gutter py-3 text-body text-muted">
-              Reading this deployment’s settings…
-            </div>
           </Card>
-        ) : baseUrlState === 'unreadable' ? (
-          <Card raised>
-            <CardHeader>Setup instructions</CardHeader>
-            {/* The shared failure voice: a panel knows its own request failed and cannot know
-                whether every other panel failed for the same reason, so it must not name a cause. */}
-            <PanelFailure error={ctx.error} what="this deployment’s settings" />
-            <div className="px-gutter pb-3 text-caption text-muted">
-              The blocks are withheld because the address is UNKNOWN, not because it is missing.
-              Reload, and if it keeps failing the setting is not the thing to check.
-            </div>
-          </Card>
-        ) : baseUrlState === 'unset' ? (
-          <Card raised>
-            <CardHeader>Setup instructions unavailable</CardHeader>
-            <div className="px-gutter py-3 text-body text-muted">
-              This deployment has no public Lens URL configured, so we cannot tell you which address
-              to use, and a guessed one would fail with an error that looks like a bad key. Ask your
-              operator to set <span className="font-mono">LENS_PUBLIC_BASE_URL</span> on the app, then
-              reload.
-            </div>
-          </Card>
-        ) : (
-          <>
-            {!minted ? (
-              <p className="text-caption text-muted">
-                The blocks below show{' '}
-                <span className="font-mono">{KEY_PLACEHOLDER}</span> where your key goes. Create a key
-                above to have it filled in.
-              </p>
-            ) : null}
-            {tools.map((t) => (
-              <ToolCard key={t.id} tool={t} />
-            ))}
-          </>
-        )}
-      </Region>
 
-      {/* ⚠ THE CAVEATS MOVED OUT FROM BEHIND THE BASE URL. They describe what Lens does and does
-          not proxy — chat completions only, POST only, your model names keep working — which is
-          true of the mechanism whatever this deployment publishes. Gated on the URL, the page's
-          most general content was conditional on its most deployment-specific fact, and the reader
-          who most needs to know what will break (the one who cannot set up yet) was the one who
-          could not see it. */}
-      <Region index="04" label="Know the edges">
-        <Card raised>
-          <CardHeader>Worth knowing</CardHeader>
-          <ul className="list-disc space-y-1 px-gutter py-3 pl-8 text-body text-ink">
-            {MECHANISM_CAVEATS.map((c) => (
-              <li key={c}>{c}</li>
-            ))}
-          </ul>
-        </Card>
-      </Region>
-
-      <Region index="05" label="Prove it worked">
-        <Card raised proof>
-          <CardHeader>Confirm it worked: two requests</CardHeader>
-          <div className="space-y-2 px-gutter py-3 text-body text-ink">
-            <ol className="list-decimal space-y-1 pl-5">
-              <li>
-                <strong>Send one request</strong> from the tool you just configured. Anything:
-                “write me a haiku about caching”.
-              </li>
-              <li>
-                <strong>Open the{' '}
-                <Link className={inlineLink} to="/ledger">
-                  ledger
-                </Link>
-                .</strong>{' '}
-                Within a few seconds a row appears for it, with what it cost. That row is the proof
-                your traffic is flowing through Lens: no row means the request never arrived, and the
-                base URL is the first thing to check.
-              </li>
-              <li>
-                <strong>Send the same request again.</strong> The second one is a cache hit: a new row
-                at no cost, answered without going to the provider at all. That is the mechanism, in
-                two requests: the first one pays, the repeat does not.
-              </li>
-            </ol>
-            <p className="text-caption text-muted">
-              How much this saves depends entirely on how much your traffic repeats, so we do not
-              print a number here. The ledger shows yours.
-            </p>
-          </div>
-        </Card>
-      </Region>
-    </RegionScreen>
+          {/* ⚠ THE CAVEATS ARE NOT BEHIND THE BASE URL. They describe what Talyvor does and does not
+              forward, which is true of the mechanism whatever this deployment publishes, so the reader
+              who cannot set up yet still sees what will break. */}
+          <Card className="grid gap-2">
+            <h3 className={cardHeading}>Worth knowing</h3>
+            <ul className="m-0 grid list-disc gap-1.5 pl-5 text-body text-ink-2">
+              {MECHANISM_CAVEATS.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      </div>
+    </div>
   )
 }

@@ -154,7 +154,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // and the page says there is no payment to confirm — it draws no card.
   '/billing/success': 0,
   '/billing/cancel': 0,
-  '/keys': 4,
+  '/keys': 0,
   // B19.4 — Waiting for a person, Agents, and the open agent's Money, Rules, Pay, Key and Statement.
   '/agents': 39, // B46.9 "Wallet"; B30.103 "Know Your Agent credential"; B19.10 added "Face ID and notifications"; B19.20 "Month-end forecast" and "Unusual spend"; B19.21 "Scheduled payments" and "Automatic top-up"; B19.22 "Statement for every agent"; B19.24 "Card"; B22.10 "Address", "Send or request", "Transfers", "Recurring transfer", "Offer a loan", "Requests", "Credit line" and "Loans"; B22.12 "Pay into escrow", "Pots", "Investing, simulated", "Cash out", "Escrow" and "Cash-outs"; B28.21 "Name and description" and "Archive"; B28.30 "Would it pass?"; B28.31 "Rules history"; B28.32 "Limit boost"; B28.62 "Limit alerts"; B28.53 "Spend by day, model and destination"; B28.66 "Where alerts go" and "Sent alerts"
   // B20.3 — the catalog's Listings card. 1 → 0 at B29.11: the listings are cards of their own, a list
@@ -162,7 +162,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/marketplace': 0,
   // 5 → 8 at W1.1.17b. THREE OF SETUP'S CARDS ARE GATED ON DATA and the census had never seen
   // them: it awaited the sidebar and counted, so every screen was measured mid-load.
-  '/setup': 8,
+  '/setup': 0,
   // 4, not 3: `1b58635` (#251) added `FeatureSpendCard` — "Spend by feature". The card arrived as
   // a NEW FILE that Spend.tsx renders, so `grep -c '<CardHeader' Spend.tsx` reads 2 before and
   // after and would have argued the opposite.
@@ -243,15 +243,16 @@ describe('a card header is a section title, so it is a heading element', () => {
   })
 
   it('h2 is the right LEVEL — it sits under the page name the shell already writes', async () => {
-    await at('/setup')
+    // B57.55 — /setup, which this case was first written against, is drawn in Pocket now; /overview has the most.
+    await at('/overview')
     const h1s = document.querySelectorAll('h1')
     expect(h1s.length, 'the shell writes exactly one h1 per address (#126, #127)').toBe(1)
     const titles = cardHeaderTitles(document.body)
-    expect(titles.length, '/setup renders nine cards; a sweep that found none would be vacuous').toBeGreaterThan(4)
+    expect(titles.length, '/overview renders six cards; a sweep that found none would be vacuous').toBeGreaterThan(4)
     for (const t of titles) {
       expect(
         t.tagName,
-        `"${t.textContent?.trim()}" on /setup is a section title under "${h1s[0].textContent?.trim()}" ` +
+        `"${t.textContent?.trim()}" on /overview is a section title under "${h1s[0].textContent?.trim()}" ` +
           'and must be a heading one level down — not two (a skipped level is its own defect) and ' +
           'not none',
       ).toBe('H2')

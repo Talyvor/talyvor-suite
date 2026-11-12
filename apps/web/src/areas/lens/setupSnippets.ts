@@ -118,7 +118,7 @@ export function toolsFor(base: string, key: string): Tool[] {
       env: claudeCode,
       note:
         'ANTHROPIC_AUTH_TOKEN, not ANTHROPIC_API_KEY. The two are not interchangeable here: ' +
-        'ANTHROPIC_API_KEY is sent as an X-Api-Key header, which Lens does not read, so it ' +
+        'ANTHROPIC_API_KEY is sent as an X-Api-Key header, which Talyvor does not read, so it ' +
         'returns 401. ANTHROPIC_AUTH_TOKEN is sent as Authorization: Bearer, which it does.',
       copyText: shellExport(claudeCode),
     },
@@ -138,19 +138,19 @@ export function toolsFor(base: string, key: string): Tool[] {
         'If this app also creates embeddings, do NOT set these as environment variables. ' +
         'OPENAI_BASE_URL applies to every call the SDK makes, and embeddings are not proxied ' +
         'yet. They would be sent to the chat endpoint and rejected. Use the per-client form ' +
-        'below instead, which routes only chat through Lens.',
+        'below instead, which routes only chat through Talyvor.',
       alternative: {
         title: 'Route only chat: two clients (use this if you embed)',
         code:
           `from openai import OpenAI\n` +
           `\n` +
-          `# Chat goes through Lens.\n` +
-          `lens = OpenAI(base_url="${openaiBase}", api_key="${cred}")\n` +
+          `# Chat goes through Talyvor.\n` +
+          `talyvor = OpenAI(base_url="${openaiBase}", api_key="${cred}")\n` +
           `\n` +
           `# Embeddings keep talking to the provider directly, for now.\n` +
           `direct = OpenAI(api_key="YOUR_OPENAI_KEY")\n` +
           `\n` +
-          `lens.chat.completions.create(model="gpt-4o", messages=[...])\n` +
+          `talyvor.chat.completions.create(model="gpt-4o", messages=[...])\n` +
           `direct.embeddings.create(model="text-embedding-3-small", input="…")`,
       },
       note:
@@ -197,7 +197,7 @@ export function toolsFor(base: string, key: string): Tool[] {
 /** What Lens does and does not forward, stated once so the page can render it verbatim.
  *  Derived from the route table + config, not from marketing copy. */
 export const MECHANISM_CAVEATS: string[] = [
-  'Chat completions only, for now. Lens forwards to the provider’s chat endpoint regardless of the path your client appends, so an embeddings call is rejected rather than proxied. It fails loudly (nothing is cached and no vector store is affected), but a retrieval app will break if you route it here.',
+  'Chat completions only, for now. Talyvor forwards to the provider’s chat endpoint regardless of the path your client appends, so an embeddings call is rejected rather than proxied. It fails loudly (nothing is cached and no vector store is affected), but a retrieval app will break if you route it here.',
   'POST only. No GET route is mounted, so a client that probes GET /models on startup sees 405. That alone does not mean your key is wrong.',
   'Your existing model names keep working. You are changing where the request goes, not what you ask for.',
 ]
