@@ -457,16 +457,17 @@ const PINS: Record<string, Pin> = {
   // 126 → 124 at B59.5: /marketing's band eyebrow and the pooled stepper's unit label leave with the hidden areas.
   // 124 → 122 at B57.8: the sidebar's folding group titles go.
   // 122 → 120 at B57.55: /keys' two "Step 01/02" eyebrows go with its empty state's steps.
+  // 120 → 121 at B57.122: the card face's family label (Personal, Corporate, Stablecoin) under its tier.
   'apps/web/src/caseAudit.ts|<N> uppercase class lists': {
     kind: 'LIVE',
     of: 'TOTAL',
-    states: 120,
+    states: 121,
     why: "the argument for why the rule cannot live in the token — #99 wrote TWENTY here, the 'twenty other' figure with `other` dropped",
   },
   'apps/web/src/caseAudit.ts|uppercase (<N> class lists': {
     kind: 'LIVE',
     of: 'TOTAL',
-    states: 120,
+    states: 121,
     why: '#99 wrote 25 here: every occurrence of the WORD in non-test source with comments kept, which counts the paragraphs about the class',
   },
   'packages/ui/src/components/CaseSafe.tsx|<N> other uppercase class lists': {
