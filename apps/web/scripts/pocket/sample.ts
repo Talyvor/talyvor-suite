@@ -126,6 +126,25 @@ const SAMPLE: Record<string, unknown> = {
     opening_minor: 0, in_minor: 25_000, out_minor: 0, closing_minor: 25_000,
     lines: [{ entry_id: 'ment_team', line: 1, at: '2026-10-15T09:00:00Z', kind: 'payment_in', amount_minor: 25_000, funding: 'test', counterparty: 'Nick’s team', balance_after_minor: 25_000 }],
   },
+  // B57.24 — the catalog names the sample's two models, as the statements write them.
+  '/api/models': [
+    ...(bodyFor('/api/models') as object[]),
+    { id: 'claude-sonnet-5', provider: 'anthropic', display_name: 'Claude Sonnet 5', input_per_1m: 3, output_per_1m: 15, release_date: '2026-09-01', tier: 'balanced' },
+    { id: 'claude-haiku-4-5', provider: 'anthropic', display_name: 'Claude Haiku 4.5', input_per_1m: 1, output_per_1m: 5, release_date: '2025-10-15', tier: 'fast' },
+  ],
+  // B57.24 — each agent's statement this month by model and day, as w-stmt-research, w-stmt-sales and w-stmt-ops draw
+  // it: the newest lines, then (Show all) the month's older ones.
+  ...agentStatement('agt_research', { opening: 18_900, in: 10_000, out: 12_400 }, [
+    modelDay('rs1', '2026-10-22T09:24:00Z', 'claude-sonnet-5', 312, -420, -23.1),
+    modelDay('rh1', '2026-10-21T10:12:00Z', 'claude-haiku-4-5', 88, -20, -1.1),
+    funded('rf1', '2026-10-20T17:30:00Z', 10_000),
+  ], [modelDay('rs0', '2026-10-14T15:00:00Z', 'claude-sonnet-5', 2_604, -11_313.6, -622.2)]),
+  ...agentStatement('agt_sales', { opening: 0, in: 23_000, out: 11_000 }, [
+    modelDay('sh1', '2026-10-22T08:52:00Z', 'claude-haiku-4-5', 410, -120, -6.6),
+  ], [modelDay('sh0', '2026-10-15T12:00:00Z', 'claude-haiku-4-5', 9_870, -10_306, -567.4), funded('sf0', '2026-10-05T09:10:00Z', 23_000)]),
+  ...agentStatement('agt_ops', { opening: 0, in: 10_000, out: 4_600 }, [
+    modelDay('oh1', '2026-10-20T16:05:00Z', 'claude-haiku-4-5', 140, -40, -2.2),
+  ], [modelDay('oh0', '2026-10-12T11:00:00Z', 'claude-haiku-4-5', 4_200, -4_320, -237.8), funded('of0', '2026-10-09T09:10:00Z', 10_000)]),
   '/api/money/payees': {
     payees: [
       { id: 'payee_kite', name: 'Kite Accounting', country: 'US', check: 'exact_match', checked_by: 'test', checked_at: '2026-10-01T08:00:00Z', needs_confirmation: false, created_at: '2026-09-20T09:00:00Z' },
@@ -141,6 +160,33 @@ const SAMPLE: Record<string, unknown> = {
       { capability: 'rules_approvals_statements_pots', name: 'Rules, approvals, statements and pots', class: 'GREEN', real_money: true },
     ],
   },
+}
+
+/** B57.24 — a model's questions on one day (Lens B57.13's ?group=day), and its platform fee the line under it. */
+function modelDay(id: string, at: string, model: string, requests: number, amount: number, fee: number) {
+  const line = { counterparty: 'spend', balance_after_ulxc: 0, at, model, day: at.slice(0, 10) }
+  return [
+    { ...line, entry_id: id, kind: 'spend', requests, amount_ulxc: Math.round(lxc(amount)) },
+    { ...line, entry_id: `${id}_fee`, kind: 'platform_fee', label: 'Platform fee 5.5%', memo: 'On those requests', amount_ulxc: Math.round(lxc(fee)) },
+  ]
+}
+
+function funded(id: string, at: string, amount: number) {
+  return [{ entry_id: id, kind: 'fund', counterparty: 'workspace', balance_after_ulxc: 0, at, amount_ulxc: lxc(amount) }]
+}
+
+/** An agent's statement this month: its newest lines, and the page Show all reads after them. */
+function agentStatement(agent: string, band: { opening: number; in: number; out: number }, newest: object[][], older: object[][]) {
+  const page = (lines: object[][], next?: string) => ({
+    agent_id: agent, from: '2026-10-01T00:00:00Z', to: SAMPLE_NOW, group: 'day', time_zone: SAMPLE_TIME_ZONE,
+    accounts: [{ account: `agent:${agent}`, opening_ulxc: lxc(band.opening), in_ulxc: lxc(band.in), out_ulxc: lxc(band.out), closing_ulxc: lxc(band.opening + band.in - band.out) }],
+    lines: lines.flat(),
+    ...(next ? { next_cursor: next } : {}),
+  })
+  return {
+    [`/api/agents/${agent}/statement`]: page(newest, `${agent}.older`),
+    [`/api/agents/${agent}/statement?from=2026-10-01&group=day&limit=500&to=${encodeURIComponent(SAMPLE_NOW)}&cursor=${agent}.older`]: page(older),
+  }
 }
 
 /** B57.8 — Pause every agent pauses the sample's agents until Start every agent again, so the shots draw the kill banner. */

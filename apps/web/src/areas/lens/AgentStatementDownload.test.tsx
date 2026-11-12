@@ -53,6 +53,9 @@ function mockBff() {
       return new Response(CSV(account), { status: 200, headers: { 'Content-Type': 'text/csv; charset=utf-8' } })
     }
     if (url === '/api/agents/agt_1/statement?from=2026-08-01&to=2026-09-01&format=csv') return csv('agent:agt_1')
+    // B57.24 — Statements' two downloads are this month so far.
+    if (url === '/api/agents/agt_1/statement?from=2026-09-01&to=2026-09-29&format=csv') return csv('agent:agt_1')
+    if (url === '/api/agents/statement?from=2026-09-01&to=2026-09-29&format=csv') return csv('workspace')
     if (url === '/api/agents/statement?from=2026-08-01&to=2026-09-01&format=csv') return csv('workspace')
     if (url === '/api/agents/agt_1/statement?from=2026-08-01&to=2026-09-01&format=pdf') {
       asked.push(url)
@@ -152,5 +155,46 @@ describe('downloading a statement for a period on the Agent Bank', () => {
     expect(asked).toEqual(['/api/agents/statement?from=2026-08-01&to=2026-09-01&format=journal'])
     expect(saved[0].name).toBe('agent-wallets-journal-2026-08-01-to-2026-08-31.csv')
     expect(await saved[0].text).toBe(JOURNAL)
+  })
+})
+
+// B57.24 — on Statements, Download CSV saves the open agent's statement for this month so far, and Statement for every
+// agent beside it the workspace's: Lens's files, one row per posting.
+describe('the two downloads on Statements', () => {
+  it('Download CSV saves this month so far for the agent whose tab is open', async () => {
+    const { asked, saved } = mockBff()
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Download CSV' }))
+    await waitFor(() => expect(saved[0]?.name).toBe('researcher-statement-2026-09-01-to-2026-09-28.csv'))
+    expect(asked).toEqual(['/api/agents/agt_1/statement?from=2026-09-01&to=2026-09-29&format=csv'])
+    expect(await saved[0].text).toContain('agent:agt_1,closing,,,,5000000')
+    expect(await screen.findByText('Downloading Researcher’s statement for September as a CSV file')).toBeTruthy()
+  })
+
+  it('Statement for every agent saves this month so far for the whole workspace', async () => {
+    const { asked, saved } = mockBff()
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Statement for every agent' }))
+    await waitFor(() => expect(saved[0]?.name).toBe('agent-wallets-statement-2026-09-01-to-2026-09-28.csv'))
+    expect(asked).toEqual(['/api/agents/statement?from=2026-09-01&to=2026-09-29&format=csv'])
+    expect(await saved[0].text).toContain('workspace,closing')
+  })
+
+  it('says so under the buttons when Lens cannot write the file', async () => {
+    const { saved } = mockBff()
+    const bff = vi.mocked(globalThis.fetch).getMockImplementation()!
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) =>
+      String(input) === '/api/agents/statement?from=2026-09-01&to=2026-09-29&format=csv' ? new Response('{}', { status: 502 }) : bff(input, init),
+    )
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Statement for every agent' }))
+    expect(await screen.findByText('The statement could not be read just now.')).toBeTruthy()
+    expect(saved).toEqual([])
   })
 })

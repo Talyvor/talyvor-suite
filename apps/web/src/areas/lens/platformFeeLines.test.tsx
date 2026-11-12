@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Spend } from './Spend'
 import { spendLines } from '../chat/chatApi'
+import { AgentStatement } from './AgentStatement'
+import { AppMoney } from './money'
 
 // B32.69 — the platform fee on AI spend (B32.11) is its own line on the spend screens, in Lens's words, and
 // counted in the window's total. The history below is Lens's: the call's spend row and its platform_fee row,
@@ -87,5 +89,47 @@ describe('the platform fee on the spend screens (B32.69)', () => {
       ] }],
     })
     expect(spendLines(said).map((l) => l.label)).toEqual(['Platform fee 3%', undefined])
+  })
+})
+
+// B57.24 — on an agent's statement read by day (Lens B57.13), each model's platform fees on a day are one line of their
+// own, in Lens's words with its memo, just under that model's line, and never added into it.
+describe('the platform fee on an agent’s statement (B57.24)', () => {
+  it('draws each model’s fee as its own line under the model’s, in Lens’s words', async () => {
+    const line = (entry: string, model: string, over: object) => ({
+      entry_id: entry, kind: 'spend', counterparty: 'spend', balance_after_ulxc: 0, at: '2026-10-05T10:00:05Z', model, day: '2026-10-05', ...over,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path = String(input)
+        const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        if (path.startsWith('/api/agents/agt_1/statement?'))
+          return json({ to: '2026-10-05T12:00:00Z', group: 'day', time_zone: 'UTC', lines: [
+            line('ent_1', 'claude-sonnet-5', { requests: 2, amount_ulxc: -10_000_000 }),
+            line('ent_2', 'claude-sonnet-5', { kind: 'platform_fee', label: 'Platform fee 3%', memo: 'On those requests', amount_ulxc: -300_000 }),
+            line('ent_3', 'gpt-5', { requests: 1, amount_ulxc: -1_000_000 }),
+            line('ent_4', 'gpt-5', { kind: 'platform_fee', label: 'Platform fee 3%', memo: 'On those requests', amount_ulxc: -30_000 }),
+          ] })
+        return new Response('null', { status: 404 })
+      }),
+    )
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <AppMoney>
+            <AgentStatement agent={{ id: 'agt_1', name: 'Research', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-01T09:00:00Z' }} nameOf={() => 'an agent'} />
+          </AppMoney>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    )
+    const rows = within(await screen.findByTestId('statement-lines')).getAllByRole('row').slice(1)
+    // No peg is served, so each amount is LXC alone.
+    expect(rows.map((r) => text(within(r).getByTestId('statement-doc-what')) + ' ' + text(within(r).getAllByRole('cell')[2]))).toEqual([
+      'claude-sonnet-5·2requests −10LXC',
+      'Platformfee3%·Onthoserequests −0.3LXC',
+      'gpt-5·1request −1LXC',
+      'Platformfee3%·Onthoserequests −0.03LXC',
+    ])
   })
 })

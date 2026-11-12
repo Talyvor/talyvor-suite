@@ -36,7 +36,8 @@ describe('the wallet screens in the brand', () => {
   const SCREENS: Array<[string, string[]]> = [
     ['/agents', ['Fund']],
     ['/approvals', ['Approve']],
-    ['/statements', ['Download']],
+    // B57.24 — Statements' two downloads are Pocket's secondary buttons, as w-stmt-research draws them.
+    ['/statements', []],
     ['/statements/royalties', []],
     ['/ledger', []],
     ['/spend', []],
@@ -45,7 +46,7 @@ describe('the wallet screens in the brand', () => {
   it.each(SCREENS)('%s: at most one teal action, cards on raised, and every LXC amount on the figure face', async (address, teal) => {
     const main = await at(address)
     // B56.15 — Statements' wallets are tabs, so its LXC amounts are the open statement's lines, read once they arrive.
-    if (address === '/statements') await screen.findByTestId('agent-statement')
+    if (address === '/statements') await screen.findByTestId('statement-lines')
     expect(primaries(main), 'the teal fill is the one primary action').toEqual(teal)
 
     const cards = Array.from(main.querySelectorAll('.rounded-card'))
@@ -64,6 +65,11 @@ describe('the wallet screens in the brand', () => {
         amounts++
         expect(n.parentElement?.closest('.font-figure'), `"${n.parentElement?.textContent}" is not on the figure face`).not.toBeNull()
       }
+    }
+    // B57.7 — Pocket's <Money> writes the figure and its unit as one text, dollars first: it is held the same way.
+    for (const m of Array.from(main.querySelectorAll('[data-money]'))) {
+      amounts++
+      expect(m.closest('.font-figure'), `"${m.textContent}" is not on the figure face`).not.toBeNull()
     }
     if (['/agents', '/approvals', '/statements'].includes(address)) expect(amounts, 'no LXC amount was read').toBeGreaterThan(0)
   })
@@ -90,8 +96,11 @@ describe('the wallet screens in the brand', () => {
     expect(pills(waiting)).toEqual(['Waiting'])
     document.body.replaceChildren()
 
+    // B57.24 — the statement document says each line's state in words after it, as the reference does.
     await at('/statements')
-    expect(pills(screen.getByTestId('agent-statement'))).toEqual(['Settled', 'Settled'])
+    const what = within(await screen.findByTestId('statement-lines')).getAllByTestId('statement-doc-what').map((w) => w.textContent)
+    expect(what.length).toBeGreaterThan(0)
+    for (const w of what) expect(w).toMatch(/ · (Settled|Held|On those requests|\d+ requests?( today)?)$/)
     document.body.replaceChildren()
 
     const royalties = await at('/statements/royalties')

@@ -1,24 +1,21 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Button, CardHeader, inlineLink } from '@talyvor/ui'
-import { Card } from './walletBrand'
+import { inlineLink } from '@talyvor/ui'
+import { Button as PocketButton, Icon, Tabs } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { ApiError } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
-import { APPROVALS_KEY, Approvals, BOOK_KEY, PREPARED_KEY, Statement, StatementDownload } from './AgentBank'
+import { APPROVALS_KEY, Approvals, BOOK_KEY, PREPARED_KEY, Statement } from './AgentBank'
+import { AgentStatement, DownloadFailed, useMonthCsv } from './AgentStatement'
 import { agentBankApi, type Agent, type CurrencyAccount } from './agentBankApi'
 import { AccountStatement, MarketplaceBill, accountTitle } from './AccountStatement'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { CurrencyPicker } from './money'
-import { WorkspaceLabel } from '../../labels/workspace'
-import { AGENT_CREDIT } from '../../labels/capabilities'
+import { DESIGN_ATTR } from '../../pocketPending'
 
 // B28.7 — the sidebar is wallet-first: Approvals and Statements are destinations of their own, not
 // regions a person scrolls to inside Agent Wallets. Both read the same cache as Agent Wallets and Home,
 // so a decision made on any of them is the figure the others show.
-
-/** A tab that is on: the tint and a teal edge, as a pressed toggle on the wallet screens. */
-const selected = 'aria-selected:border-accent aria-selected:bg-accent-tint'
 
 function readFailure(err: unknown, what: string): string {
   return isSessionExpired(err) ? `${what} can’t be read until you sign in again.` : `${what} could not be read just now.`
@@ -90,15 +87,15 @@ export function StatementsScreen() {
     ...(accounts.data?.accounts ?? []).map((a) => ({ id: a.id, title: accountTitle(a, agents), account: a })),
   ]
   const tab = tabs.find((t) => t.id === params.get('wallet')) ?? tabs[0] ?? null
+  // B57.24 — an agent's tab is its statement as a document; the room's wallet and the currency accounts are B57.25's.
+  const agentTab = tab?.agent && tab.agent.kind !== 'room' ? tab.agent : null
+  const everyAgent = useMonthCsv(null)
+  const thisAgent = useMonthCsv(agentTab)
+  // Pocket's tabs choose by their words, so two wallets of one name take the first's tab.
+  const titles = [...new Set(tabs.map((t) => t.title))]
   return (
     <RegionScreen>
-      <Region
-        index="00"
-        label="Statements"
-        heading="Every movement in every agent’s wallet"
-        sectionClassName="pb-10 pt-4 wide:pb-12"
-        className="flex max-w-2xl flex-col gap-3"
-      >
+      <Region index="00" label="Statements" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-4xl flex-col gap-4">
         <CurrencyPicker />
         {book.isError ? (
           <p className="text-body text-muted">{readFailure(book.error, 'The agents')}</p>
@@ -113,29 +110,40 @@ export function StatementsScreen() {
             ; its statement starts the first time its wallet is funded.
           </p>
         ) : (
-          <Card>
-            <CardHeader aside={<WorkspaceLabel capability={AGENT_CREDIT} />}>Statement for every agent</CardHeader>
-            <StatementDownload agent={null} primary />
-          </Card>
+          <div {...{ [DESIGN_ATTR]: 'pocket' }} className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <PocketButton variant="secondary" disabled={everyAgent.isPending} onClick={() => everyAgent.mutate()}>
+                Statement for every agent
+              </PocketButton>
+              {agentTab ? (
+                <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAgent.isPending} onClick={() => thisAgent.mutate()}>
+                  Download CSV
+                </PocketButton>
+              ) : null}
+            </div>
+            {everyAgent.isError ? <DownloadFailed error={everyAgent.error} /> : null}
+            {thisAgent.isError ? <DownloadFailed error={thisAgent.error} /> : null}
+          </div>
         )}
         {accounts.isError ? <p className="text-body text-muted">{readFailure(accounts.error, 'The currency accounts')}</p> : null}
-        {tabs.length > 0 ? (
-          <div role="tablist" aria-label="Statements" className="flex flex-wrap gap-2">
-            {tabs.map((t) => (
-              <Button
-                key={t.id}
-                role="tab"
-                aria-selected={t.id === tab?.id}
-                className={selected}
-                onClick={() => setParams({ wallet: t.id }, { replace: true })}
-              >
-                {t.title}
-              </Button>
-            ))}
+        {tab ? (
+          <div {...{ [DESIGN_ATTR]: 'pocket' }}>
+            <Tabs
+              label="Statements"
+              tabs={titles}
+              value={tab.title}
+              onChange={(title) => setParams({ wallet: tabs.find((t) => t.title === title)?.id ?? '' }, { replace: true })}
+            />
           </div>
         ) : null}
+        {agentTab ? (
+          <>
+            <AgentStatement key={agentTab.id} agent={agentTab} nameOf={nameOf} />
+            <MarketplaceBill key={`bill-${agentTab.id}`} agent={agentTab} />
+          </>
+        ) : null}
       </Region>
-      {tab?.agent ? (
+      {tab?.agent && !agentTab ? (
         <Region index="01" label={tab.title} className="flex max-w-2xl flex-col gap-3">
           <Statement key={tab.id} agent={tab.agent} nameOf={nameOf} />
           <MarketplaceBill key={`bill-${tab.id}`} agent={tab.agent} />

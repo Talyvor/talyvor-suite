@@ -116,9 +116,10 @@ function cardHeaderTitles(root: ParentNode): Element[] {
 const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B28.6 — `/` is the wallet home; B45.11: waiting for you, your agents, budgets, forecast. Overview's six moved to /overview.
   '/': 4,
-  // B28.7 — Approvals (waiting, decided) and Statements (every agent, the agents, one statement).
+  // B28.7 — Approvals (waiting, decided). B57.24: Statements opens on an agent's statement, a Pocket document whose
+  // name is its own heading, so it has no card header.
   '/approvals': 2,
-  '/statements': 2,
+  '/statements': 0,
   '/overview': 6,
   '/ledger': 1,
   // ⚠ 0 IS STRUCTURAL HERE, NOT THE 404-FIXTURE FLOOR W1.1.17b WARNS ABOUT. /chat renders no

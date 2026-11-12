@@ -74,7 +74,8 @@ afterEach(() => {
 describe('plain-language mode (B41.40)', () => {
   it('explains every line and column of the statement in one tap, and Statements has no critical accessibility issue', async () => {
     mockBff()
-    window.history.pushState({}, '', '/statements')
+    // B57.24 — Statements draws an agent's statement as Pocket's document, without the ?; the agent's own page keeps it.
+    window.history.pushState({}, '', '/agents?agent=agt_1')
     render(<App />)
     const table = await screen.findByTestId('agent-statement')
     const rows = within(table).getAllByRole('row').slice(1)
@@ -86,6 +87,12 @@ describe('plain-language mode (B41.40)', () => {
     }
     expect(explain(within(table).getByRole('button', { name: 'What does “LXC” mean?' }))).toMatch(/^LXC is the credit your agents spend/)
     expect(explain(within(table).getByRole('button', { name: 'What does “Balance” mean?' }))).toMatch(/^Balance is /)
+    expect(await critical()).toEqual([])
+    cleanup()
+
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+    await screen.findByTestId('statement-lines')
     expect(await critical()).toEqual([])
   })
 

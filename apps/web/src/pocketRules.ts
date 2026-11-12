@@ -26,10 +26,12 @@ const FOCUS_RING = 'focus-visible:outline-tangerine'
 
 /**
  * The primary (ink) fills in a view, as a button or a link, by Pocket's name and today's alias. The
- * resting fill only: a switch's `aria-checked:bg-accent` is a state, not a primary action.
+ * resting fill only: a switch's `aria-checked:bg-accent` is a state, not a primary action, and so (B57.24) is the ink of
+ * the tab that is on in Pocket's tabs.
  */
 export function primaryActions(root: ParentNode): string[] {
   return Array.from(root.querySelectorAll('button, a'))
+    .filter((el) => el.getAttribute('role') !== 'tab')
     .filter((el) => (el.getAttribute('class') ?? '').split(/\s+/).some((c) => c === 'bg-primary' || c === 'bg-accent'))
     .map((el) => el.textContent?.trim() ?? '')
 }
