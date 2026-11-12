@@ -8,6 +8,8 @@ import { type Agent, type AgentCard, type CardAuthorization, type Cardholder, ag
 import { Lxc } from './money'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { AgentCard as AgentCardFace } from '../../cards/AgentCard'
+import { CardDisputesAndRefunds, CardExport } from './CardDisputes'
+import { DESIGN_ATTR } from '../../pocketPending'
 
 // AgentCardPanel.tsx — B19.24: an agent's card on Agent Wallets. Lens (B19.12) issues an agent a virtual
 // card through Stripe Issuing, in TEST MODE ONLY — cards are class RED, test money until a licensed partner
@@ -199,6 +201,13 @@ export function AgentCardPanel({ agent }: { agent: Agent }) {
             ) : (
               <Purchases auths={q.data.authorizations ?? []} />
             )}
+          </div>
+          {/* B59.25 — what came back of its payments, and every card payment of a date range as a file. */}
+          <div {...{ [DESIGN_ATTR]: 'pocket' }}>
+            <CardDisputesAndRefunds agentID={agent.id} />
+            <div className="border-t border-rule px-gutter py-3">
+              <CardExport />
+            </div>
           </div>
         </>
       ) : (

@@ -269,6 +269,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/physical-cards", body: `{"name_on_card":"A","address":{"line1":"1","city":"L","postcode":"N1 9GU","country":"GB"}}`}, // B53.12
 		{method: http.MethodPost, path: "/api/money/physical-cards/x1/activate", body: `{"last4":"4242"}`},                                                               // B53.12
 		{method: http.MethodPost, path: "/api/money/physical-cards/x1/replace", body: `{"reason":"lost"}`},                                                               // B53.12
+		{method: http.MethodPost, path: "/api/money/card-disputes", body: `{"payment_id":"x1","reason":"a"}`},                                                            // B59.25
 		{method: http.MethodPost, path: "/api/money/payees/x1/called", body: `{"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
 		{method: http.MethodPost, path: "/api/money/payees/x1/details/challenge", body: `{"sort_code":"400000","account_number":"12345678"}`}, // B41.12
 		{method: http.MethodPost, path: "/api/money/payees/x1/details", body: `{"sort_code":"400000","account_number":"12345678","assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},

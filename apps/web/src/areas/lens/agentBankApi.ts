@@ -963,6 +963,22 @@ async function accountStatementFile(accountID: string, from: string, to: string)
   return res.blob()
 }
 
+/** B59.25 — the card payments, disputes and refunds made from one day to another, both included, as Lens's CSV (Lens B59.24). */
+async function cardExportFile(from: string, through: string): Promise<Blob> {
+  const path = `/api/money/card-exports?${new URLSearchParams({ from, to: through })}`
+  const res = await fetch(path, { headers: { Accept: 'text/csv' } })
+  if (!res.ok) {
+    let sentence = ''
+    try {
+      sentence = ((await res.json()) as { error?: string }).error ?? ''
+    } catch {
+      // a body that is not JSON carries no sentence
+    }
+    throw new AgentBankError(res.status, path, sentence)
+  }
+  return res.blob()
+}
+
 /** B28.51 — what a statement page is read for: the lines of these kinds whose words hold q, any case. */
 export interface StatementSearch {
   kinds: readonly PostingKind[]
@@ -1127,6 +1143,16 @@ export const agentBankApi = {
   accountStatement: (id: string, from: string, to: string) =>
     getSaid<MoneyStatement>(`/api/money/accounts/${e(id)}/statement?${new URLSearchParams({ from, to })}`),
   accountStatementFile,
+  /** B59.25 — the workspace's card disputes, newest first, and where each stands (Lens B59.24). */
+  cardDisputes: async (): Promise<CardDispute[]> =>
+    (await getSaid<{ card_disputes: CardDispute[] | null }>('/api/money/card-disputes')).card_disputes ?? [],
+  /** B59.25 — disputes a card payment, named by the issuer's id for it, with the owner's reason. Lens answers the dispute. */
+  openCardDispute: (paymentID: string, reason: string) =>
+    send<CardDispute>('POST', '/api/money/card-disputes', { payment_id: paymentID, reason }),
+  /** B59.25 — the merchants' refunds on the workspace's card payments, newest first. */
+  cardRefunds: async (): Promise<CardRefund[]> =>
+    (await getSaid<{ card_refunds: CardRefund[] | null }>('/api/money/card-refunds')).card_refunds ?? [],
+  cardExportFile,
   /** B19.24 — the agent's test-mode card and every purchase on it; null when it has none (Lens answers 404). */
   card: async (id: string): Promise<{ card: AgentCard; authorizations: CardAuthorization[] | null } | null> => {
     try {
@@ -2163,6 +2189,41 @@ export interface CurrencyAccount {
   balance_minor: number
   test_minor: number
   live_minor: number
+}
+
+/** B59.25 — where a card dispute stands (Lens economy.CardDispute*). */
+export type CardDisputeStatus = 'opened' | 'with_issuer' | 'won' | 'lost'
+
+/** B59.25 — Lens economy.CardDispute: one dispute of a card payment, named by the issuer's id for the payment. */
+export interface CardDispute {
+  id: string
+  payment_id: string
+  agent_id?: string
+  card_id: string
+  merchant: string
+  amount_minor: number
+  currency: string
+  reason: string
+  status: CardDisputeStatus
+  /** what came back of the payment: the payment once won, else 0 */
+  credited_minor: number
+  decided_at?: string
+  created_at: string
+}
+
+/** B59.25 — Lens economy.CardPaymentRefund: a merchant's refund of a card payment, and what it credited. */
+export interface CardRefund {
+  id: string
+  payment_id: string
+  agent_id?: string
+  card_id: string
+  merchant: string
+  /** what the merchant refunded */
+  amount_minor: number
+  currency: string
+  /** what came back: no more than was left of the payment */
+  credited_minor: number
+  created_at: string
 }
 
 /** B56.15 — one posting to a currency account (Lens economy.MoneyStatementLine): money in positive, out negative. */

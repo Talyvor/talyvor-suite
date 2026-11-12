@@ -1143,6 +1143,17 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor: "type BusinessDetails struct",
     subject: "lensWorkspaceBusinessBody",
   },
+  // B59.25 — a card payment disputed with a reason (Lens B59.24).
+  {
+    route: "POST /v1/money/card-disputes",
+    file: "apps/bff/money_card_disputes.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"payment_id": in.PaymentID, "reason": in.Reason})',
+    upstreamFile: "cmd/lens/card_disputes_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/card-disputes", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensCardDisputeOpenBody",
+  },
   // B59.28 — help and complaints, closing the account and the workspace's data, each a request (Lens B59.27).
   {
     route: "POST /v1/workspaces/{wsID}/requests",

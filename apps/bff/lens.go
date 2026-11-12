@@ -590,6 +590,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/physical-cards", a.requireTenant(a.handlePhysicalCards))
 	a.mux.HandleFunc("/api/money/physical-cards/{id}/activate", a.requireTenant(a.handlePhysicalCardActivate))
 	a.mux.HandleFunc("/api/money/physical-cards/{id}/replace", a.requireTenant(a.handlePhysicalCardReplace))
+	// B59.25 — card disputes, merchant refunds and the card export (Lens B59.24). See money_card_disputes.go.
+	a.mux.HandleFunc("/api/money/card-disputes", a.requireTenant(a.handleMoneyCardDisputes))
+	a.mux.HandleFunc("/api/money/card-refunds", a.requireTenant(a.handleMoneyCardRefunds))
+	a.mux.HandleFunc("/api/money/card-exports", a.requireTenant(a.handleMoneyCardExport))
 
 	a.mux.HandleFunc("/api/money/mandates", a.requireTenant(a.handleMoneyMandates))
 	a.mux.HandleFunc("/api/money/mandates/challenge", a.requireTenant(a.handleMoneyMandateChallenge))
