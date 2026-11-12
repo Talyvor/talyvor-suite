@@ -601,6 +601,22 @@ func TestAgentRenameAndArchiveReachLens(t *testing.T) {
 	}
 }
 
+// B57.124 — the helper the owner picks reaches Lens as the agent's colour, on create and on edit; an edit that
+// leaves the helper alone sends no colour, so Lens keeps the one it has.
+func TestAgentHelperColourReachesLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	doJSON(a, http.MethodPost, "/api/agents", `{"name":"Atlas","colour":"cobalt"}`) // the fake has no create answer: what Lens got is the check
+	if rec := doJSON(a, http.MethodPatch, "/api/agents/agt_1", `{"colour":"rose"}`); rec.Code != http.StatusOK {
+		t.Fatalf("pick Ollie = %d %s", rec.Code, rec.Body.String())
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	want := []string{`/agents {"colour":"cobalt","name":"Atlas"}`, `/agents/agt_1 {"name":null,"description":null,"colour":"rose"}`}
+	if len(f.got) != 2 || !strings.HasSuffix(f.got[0], want[0]) || !strings.HasSuffix(f.got[1], want[1]) {
+		t.Fatalf("Lens got %q; want …%q", f.got, want)
+	}
+}
+
 // B28.30 — "would this pass my rules?" reaches Lens's simulator with only the request's fields (a browser's
 // workspace id goes nowhere) and answers Lens's verdict and reason.
 func TestRuleSimulationReachesLens(t *testing.T) {

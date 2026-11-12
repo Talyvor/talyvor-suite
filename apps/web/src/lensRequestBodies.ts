@@ -265,12 +265,12 @@ export const LENS_BODIES: LensBody[] = [
       'r.Put("/v1/workspaces/{wsID}/name", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensWorkspaceNameBody",
   },
-  // B19.4 — the Agent Bank: creating an agent, issuing it a key, moving LXC, its rules, paying.
+  // B19.4 — the Agent Bank: creating an agent (B57.124: with its helper's colour), issuing it a key, moving LXC, its rules, paying.
   {
     route: "POST /v1/workspaces/{wsID}/agents",
     file: "apps/bff/agent_bank.go",
     kind: "map-literal",
-    anchor: 'json.Marshal(map[string]string{"name": in.Name})',
+    anchor: 'json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour})',
     upstreamFile: "cmd/lens/agent_accounts_handler.go",
     upstreamAnchor:
       'r.Post("/v1/workspaces/{wsID}/agents", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
@@ -755,7 +755,7 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/cash-outs", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensAgentCashOutBody",
   },
-  // B28.21 — renaming and describing an agent.
+  // B28.21 — renaming and describing an agent; B57.124: choosing its helper.
   {
     route: "PATCH /v1/workspaces/{wsID}/agents/{agentID}",
     file: "apps/bff/agent_bank.go",
