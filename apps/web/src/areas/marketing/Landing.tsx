@@ -92,6 +92,21 @@ const WALLET: Array<{ title: string; body: string }> = [
   },
 ]
 
+/** B57.129 — the approved card faces (talyvor-cards-final/deck, Nick, 10 Nov 2026): one owner card of each family, then
+ *  the six agents. Each is a 768-wide WebP with a PNG fallback in /card-faces, under 300 KB (Landing.test.tsx). The
+ *  faces carry no network mark: that corner stays empty until the issuer gives the artwork. */
+const CARD_FACES: Array<{ id: string; alt: string }> = [
+  { id: 'premium', alt: 'Premium personal owner card' },
+  { id: 'business', alt: 'Business corporate card' },
+  { id: 'stable-premium', alt: 'Premium stablecoin owner card' },
+  { id: 'agent-remy', alt: 'Remy, Research’s agent card' },
+  { id: 'agent-sunny', alt: 'Sunny, Sales’s agent card' },
+  { id: 'agent-penny', alt: 'Penny, Bookkeeping’s agent card' },
+  { id: 'agent-max', alt: 'Max, Ads’s agent card' },
+  { id: 'agent-nova', alt: 'Nova, Travel’s agent card' },
+  { id: 'agent-ollie', alt: 'Ollie, Support’s agent card' },
+]
+
 /** B56.10 — a section's eyebrow with Live or Sandbox beside it, as Lens labels the money it describes. */
 function LabelledEyebrow({ labels, capability, ...eyebrow }: Parameters<typeof Eyebrow>[0] & {
   labels: Record<string, string> | undefined
@@ -306,6 +321,24 @@ export function Landing() {
                 </li>
               ))}
             </ol>
+            <ul className="mt-10 grid grid-cols-2 gap-3 wide:grid-cols-3">
+              {CARD_FACES.map((c) => (
+                <li key={c.id}>
+                  <picture>
+                    <source type="image/webp" srcSet={`/card-faces/${c.id}.webp`} />
+                    <img
+                      src={`/card-faces/${c.id}.png`}
+                      width={768}
+                      height={485}
+                      loading="lazy"
+                      decoding="async"
+                      alt={c.alt}
+                      className="block h-auto w-full"
+                    />
+                  </picture>
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
 

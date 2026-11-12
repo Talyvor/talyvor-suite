@@ -239,4 +239,27 @@ describe('Landing labels', () => {
     for (const line of ['Moves real money.', 'Works. No real money moves.', 'In our build queue. Not shipped yet.'])
       expect(block.textContent).toContain(line)
   })
+
+  // B57.129 — the approved deck faces (talyvor-cards-final/deck): one owner card of each family, then the six agents.
+  it('shows the approved card faces, each a WebP with a PNG fallback under 300 KB and alt text', () => {
+    const deck = ['premium', 'business', 'stable-premium', 'agent-remy', 'agent-sunny', 'agent-penny', 'agent-max', 'agent-nova', 'agent-ollie']
+    const { container } = render(<Landing />)
+    const faces = [...container.querySelectorAll('#wallets picture img')]
+    expect(faces.map((img) => img.getAttribute('src'))).toEqual(deck.map((id) => `/card-faces/${id}.png`))
+    for (const img of faces) {
+      expect(img.getAttribute('alt')).toMatch(/\S card$/)
+      const webp = img.parentElement!.querySelector('source[type="image/webp"]')!.getAttribute('srcset')!
+      expect(webp).toBe(img.getAttribute('src')!.replace(/\.png$/, '.webp'))
+      const png = readFileSync(resolve(__dirname, '../../../public', img.getAttribute('src')!.slice(1)))
+      const riff = readFileSync(resolve(__dirname, '../../../public', webp.slice(1)))
+      expect(png.subarray(1, 4).toString('latin1')).toBe('PNG')
+      expect(riff.subarray(8, 12).toString('latin1')).toBe('WEBP')
+      expect(png.length).toBeLessThan(300 * 1024)
+      expect(riff.length).toBeLessThan(300 * 1024)
+    }
+    expect(screen.getByAltText('Remy, Research’s agent card')).toBeInTheDocument()
+    // No card network's mark: the network corner stays empty until the issuer gives the artwork.
+    const words = `${container.textContent} ${faces.map((img) => img.getAttribute('alt')).join(' ')}`
+    expect(words).not.toMatch(/visa|mastercard/i)
+  })
 })
