@@ -107,7 +107,7 @@
   "src/areas/lens/Held.test.tsx": 7,
   "src/areas/lens/Home.test.tsx": 13,
   "src/areas/lens/Invoices.test.tsx": 5,
-  "src/areas/lens/Keys.test.tsx": 21,
+  "src/areas/lens/Keys.test.tsx": 27,
   "src/areas/lens/KindAndType.test.tsx": 30,
   "src/areas/lens/Ledger.test.tsx": 9,
   "src/areas/lens/ledgerInFlightIdentity.test.tsx": 2,

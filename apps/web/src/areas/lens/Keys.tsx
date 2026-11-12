@@ -1,12 +1,11 @@
 import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Row } from '@talyvor/ui'
 import { Button, Card, Dialog, EmptyState, Eyebrow, Field, Icon, Input, Row as PocketRow, showSnack } from '@talyvor/ui/pocket'
 import { keysApi, type MintResult, type WorkspaceAPIKey } from './keysApi'
 import { formatWhen } from './format'
 import { ApiError, getJSON, readable } from '../../lib/api'
-import { ConnectedList } from './ConnectAI'
+import { CallList, CONNECTED_KEY, NEVER, SCOPE_WORDS, revokeAssistant, useConnectedAssistants, type Connected } from './ConnectAI'
 import { isSessionExpired } from '../../lib/productState'
 import { PanelFailure } from '../../components/SessionExpiredBar'
 import { CodeCopy } from './Setup'
@@ -123,8 +122,8 @@ function keyFacts(k: WorkspaceAPIKey): string {
 
 // B41.15 — everything else allowed to act for the workspace, from Lens's GET /v1/money/access (B41.115): the
 // permission mandates its owner signed for assistants and agents, the phones' device keys and the passkeys. Each row
-// says what it may do, when it was last used and when it expires, and is revoked in one tap — no typed confirm, since
-// a mandate or a device is named in words, not by one of many look-alike identifiers.
+// says what it may do, when it was last used and when it expires. B57.94: each is drawn as a Pocket row, named in words,
+// and revoking or removing one asks first in a dialog that names it (w-dev-keys, w-security+remove-key).
 interface AccessItem {
   kind: 'mandate' | 'device' | 'passkey'
   id: string
@@ -146,6 +145,18 @@ const STATUS_WORD: Record<AccessItem['status'], string> = {
   revoked: 'Revoked',
 }
 
+/**
+ * The row's name in words. The BFF names a mandate by the assistant it was signed for (B55.42) and says "A permission
+ * you signed" when it cannot; a client id it passed through anyway ("mcp:…", "key:…") is never printed.
+ */
+function nameOf(it: AccessItem): string {
+  const words = it.name
+    .split(', ')
+    .filter((n) => n && !/^[a-z]+:/.test(n))
+    .join(', ')
+  return words || (it.kind === 'mandate' ? 'A permission you signed' : KIND_WORD[it.kind])
+}
+
 function accessFacts(it: AccessItem): string {
   const facts = [KIND_WORD[it.kind], `may ${it.may}`, `added ${formatWhen(it.created_at)}`]
   facts.push(it.last_used_at ? `last used ${formatWhen(it.last_used_at)}` : 'never used')
@@ -159,56 +170,234 @@ const REVOKE_PATH: Partial<Record<AccessItem['kind'], (id: string) => string>> =
   device: (id) => `/api/money/devices/${encodeURIComponent(id)}/revoke`,
 }
 
+/** Lens's 409 in its own words: the last key, or a key that owns an agent's account (B55.15). */
+class Refusal extends ApiError {
+  constructor(
+    path: string,
+    /** Lens's sentence. Never invented — absent stays absent. */
+    readonly reason: string,
+  ) {
+    super(409, path)
+    this.name = 'Refusal'
+  }
+}
+
 async function revokeAccess(it: AccessItem): Promise<void> {
   const path = REVOKE_PATH[it.kind]!(it.id)
   const res = await fetch(path, { method: 'POST', headers: { Accept: 'application/json' } })
+  if (res.status === 409) {
+    const said = ((await res.json().catch(() => null)) as { error?: unknown } | null)?.error
+    if (typeof said === 'string' && said) throw new Refusal(path, said)
+  }
   if (!res.ok) throw new ApiError(res.status, path)
 }
 
-function AccessList() {
+/** A passkey or a phone key: what approves payments. */
+const approves = (it: AccessItem) => it.kind !== 'mandate'
+
+/**
+ * RevokeAccess — the dialog that asks before a permission is revoked or a phone or passkey removed. Unlike an API key,
+ * each is named in words, so the dialog names it rather than asking for an identifier typed. The last key that can
+ * approve offers no Remove: with none, nobody could approve. Lens refuses that too (B55.15); this only says it first.
+ */
+function RevokeAccess({ it, last, onClose }: { it: AccessItem; last: boolean; onClose: () => void }) {
   const qc = useQueryClient()
+  const name = nameOf(it)
+  const removing = approves(it)
+  const cut = useMutation({
+    mutationFn: () => revokeAccess(it),
+    onSuccess: () => {
+      showSnack(
+        removing
+          ? { title: `Removed: ${name}`, line: 'It can no longer approve anything.' }
+          : { title: `Revoked: ${name}`, line: `It can no longer ${it.may}.` },
+      )
+      onClose()
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ACCESS_KEY }),
+  })
+  const verb = removing ? 'Remove it' : 'Revoke'
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`${removing ? 'Remove' : 'Revoke'} “${name}”?`}
+      actions={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Keep it
+          </Button>
+          {removing && last ? null : (
+            <Button variant="danger" onClick={() => cut.mutate()} disabled={cut.isPending}>
+              {cut.isPending ? (removing ? 'Removing…' : 'Revoking…') : verb}
+            </Button>
+          )}
+        </>
+      }
+    >
+      <p>{removing ? 'It can no longer approve anything.' : `It can no longer ${it.may}.`}</p>
+      {removing && last ? <p>It is your last key. With none, nobody could approve, so add another first.</p> : null}
+      {cut.isError ? (
+        <p role="alert" className="text-body text-ink">
+          {cut.error instanceof Refusal ? cut.error.reason : 'That was not revoked. Nothing was changed. Try again.'}
+        </p>
+      ) : null}
+    </Dialog>
+  )
+}
+
+function AccessList() {
+  const [asking, setAsking] = useState<AccessItem | null>(null)
   const list = useQuery({
     queryKey: ACCESS_KEY,
     queryFn: async () =>
       readable<{ items: AccessItem[] }>('/api/money/access', await getJSON<unknown>('/api/money/access'), { items: 'array' })
         .items,
   })
-  const cut = useMutation({ mutationFn: revokeAccess, onSettled: () => qc.invalidateQueries({ queryKey: ACCESS_KEY }) })
 
-  if (list.isPending) return <div className="px-gutter py-3 text-body text-muted">Loading…</div>
+  if (list.isPending) return <p className="text-body text-ink-2">Loading…</p>
   if (list.isError)
     return (
-      <div className="px-gutter py-3 text-body text-muted">
+      <p className="text-body text-ink-2">
         {list.error instanceof ApiError && list.error.status === 403
           ? 'Only the workspace’s owner or an admin sees the permissions, phones and passkeys that act for it.'
           : 'The permissions, phones and passkeys that act for this workspace were not read. This is a fault, not an empty list.'}
-      </div>
+      </p>
     )
   if (!list.data.length)
-    return <div className="px-gutter py-3 text-body text-muted">No permission, phone or passkey acts for this workspace yet. They appear here when you sign one or add a phone.</div>
+    return <p className="text-body text-ink-2">No permission, phone or passkey acts for this workspace yet. They appear here when you sign one or add a phone.</p>
+  const keys = list.data.filter((it) => approves(it) && it.status === 'active')
   return (
-    <>
+    <div>
       {list.data.map((it) => {
-        const label = `${KIND_WORD[it.kind]} ${it.name}`
-        const pending = cut.isPending && cut.variables?.id === it.id
+        const name = nameOf(it)
         return (
-          <Row key={`${it.kind}-${it.id}`} stack label={it.name || KIND_WORD[it.kind]} hint={accessFacts(it)}>
-            {it.status !== 'active' ? (
-              <span className="text-caption text-muted">{STATUS_WORD[it.status]}</span>
-            ) : it.revoke && REVOKE_PATH[it.kind] ? (
-              <Button variant="outline" size="sm" aria-label={`Revoke ${label}`} disabled={pending} onClick={() => cut.mutate(it)}>
-                {pending ? 'Revoking…' : 'Revoke'}
-              </Button>
-            ) : null}
-          </Row>
+          <PocketRow
+            key={`${it.kind}-${it.id}`}
+            wrap
+            title={name}
+            line={accessFacts(it)}
+            action={
+              it.status !== 'active' ? (
+                <span className="text-body text-ink-3">{STATUS_WORD[it.status]}</span>
+              ) : it.revoke && REVOKE_PATH[it.kind] ? (
+                <Button variant="outline" size="sm" aria-label={`${approves(it) ? 'Remove' : 'Revoke'} ${KIND_WORD[it.kind]} ${name}`} onClick={() => setAsking(it)}>
+                  {approves(it) ? 'Remove' : 'Revoke'}
+                </Button>
+              ) : undefined
+            }
+          />
         )
       })}
-      {cut.isError ? (
-        <div role="alert" className="px-gutter py-3 text-body text-ink">
-          That was not revoked. Nothing was changed. Try again.
-        </div>
+      {asking ? (
+        <RevokeAccess it={asking} last={keys.length === 1 && keys[0].id === asking.id} onClose={() => setAsking(null)} />
       ) : null}
-    </>
+    </div>
+  )
+}
+
+/** What a connected assistant may do and when it last acted, in the words its consent screen used. */
+function assistantFacts(c: Connected): string {
+  const facts = c.scopes.map((s) => SCOPE_WORDS[s] ?? s)
+  facts.push(c.last_used_at === NEVER ? 'never used' : `last used ${formatWhen(c.last_used_at)}`)
+  facts.push(`connected ${formatWhen(c.connected_at)}`)
+  return facts.join(' · ')
+}
+
+/** RevokeAssistant — asks before an assistant is disconnected (w-connect+revoke-claude). */
+function RevokeAssistant({ c, onClose, onRevoked }: { c: Connected; onClose: () => void; onRevoked: () => void }) {
+  const qc = useQueryClient()
+  const cut = useMutation({
+    mutationFn: () => revokeAssistant(c.id),
+    onSuccess: () => {
+      showSnack({ title: `${c.name} can no longer reach Talyvor`, line: 'Add it again with your Talyvor address.' })
+      onRevoked()
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: CONNECTED_KEY }),
+  })
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Revoke ${c.name}?`}
+      actions={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Keep it
+          </Button>
+          <Button variant="danger" onClick={() => cut.mutate()} disabled={cut.isPending}>
+            {cut.isPending ? 'Revoking…' : 'Revoke'}
+          </Button>
+        </>
+      }
+    >
+      <p>{c.name} can no longer reach Talyvor. You can add it again at any time.</p>
+      {cut.isError ? (
+        <p role="alert" className="text-body text-ink">
+          That assistant was not revoked. Try again.
+        </p>
+      ) : null}
+    </Dialog>
+  )
+}
+
+/** The assistants this person has connected, as Pocket rows; Revoke asks first. */
+function AssistantList() {
+  const [asking, setAsking] = useState<Connected | null>(null)
+  const [cutName, setCutName] = useState('')
+  const list = useConnectedAssistants()
+  // B41.15 — the revocation stays said after its row is gone: the assistant's next request is refused.
+  const cutDone = cutName ? (
+    <p role="status" className="text-body text-ink">
+      {cutName} is disconnected. Its next request to Talyvor is refused as not connected.
+    </p>
+  ) : null
+
+  if (list.isError)
+    return (
+      <p className="text-body text-ink-2">
+        {list.error instanceof ApiError && list.error.status === 404
+          ? 'Assistants cannot sign in to Talyvor on this server, so none are connected.'
+          : 'Your connected assistants could not be read. This is a fault, not an empty list.'}
+      </p>
+    )
+  if (list.isPending) return <p className="text-body text-ink-2">Reading your connected assistants…</p>
+  return (
+    <div>
+      {cutDone}
+      {list.data.length ? (
+        list.data.map((c) => (
+          <PocketRow
+            key={c.id}
+            wrap
+            title={c.name}
+            line={
+              <>
+                {assistantFacts(c)}
+                <CallList calls={c.calls} />
+              </>
+            }
+            action={
+              <Button variant="outline" size="sm" aria-label={`Revoke ${c.name}`} onClick={() => setAsking(c)}>
+                Revoke
+              </Button>
+            }
+          />
+        ))
+      ) : (
+        <p className="text-body text-ink-2">No assistant is connected yet. Add one from Settings › Connect your AI.</p>
+      )}
+      {asking ? (
+        <RevokeAssistant
+          c={asking}
+          onClose={() => setAsking(null)}
+          onRevoked={() => {
+            setCutName(asking.name)
+            setAsking(null)
+          }}
+        />
+      ) : null}
+    </div>
   )
 }
 
@@ -413,10 +602,10 @@ export function Keys() {
             </h3>
             <p className="text-body text-ink-2">
               Assistants you connected, the permissions you signed for them and your agents, and the phones and passkeys that
-              approve payments. Revoking one stops it at once.
+              approve payments. Revoking or removing one stops it at once; the last one that can approve is never removed.
             </p>
             <Eyebrow className="mt-2">Connected assistants</Eyebrow>
-            <ConnectedList />
+            <AssistantList />
             <Eyebrow className="mt-2">Permissions, phones and passkeys</Eyebrow>
             <AccessList />
           </Card>

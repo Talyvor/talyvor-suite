@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Keys } from './Keys'
 import type { WorkspaceAPIKey } from './keysApi'
+import { pressEverything } from '../../test/pressEverything'
 
 // /keys is LIVE — wired to the BFF's GET + POST /api/keys (apps/bff/keys.go). The
 // screen exists because the mint response has `key` and `prefix` ADJACENT and
@@ -410,49 +411,132 @@ describe('W1.1.5 — a workspace with no key is told what a key is FOR', () => {
   })
 })
 
-// B41.15's DONE on the page: Claude's connection, a mandate, a phone and a passkey are listed together with what
-// each may do, last use and expiry; revoking Claude says so on the page, and a revoked phone reads Revoked.
-describe('B41.15 — what may act for this workspace, revoked in one tap', () => {
+// B41.15's DONE on the page, asked first since B57.94: Claude's connection, a mandate, a phone and a passkey are listed
+// together with what each may do, last use and expiry; revoking Claude says so on the page, and a removed phone reads
+// Revoked.
+describe('B41.15 — what may act for this workspace, revoked after asking', () => {
   it('lists assistants, mandates, phones and passkeys and revokes them through the BFF', async () => {
-    let assistants = [
-      { id: 'g-1', name: 'Claude', scopes: ['payments:prepare'], connected_at: '2026-10-20T09:00:00Z', last_used_at: '2026-10-23T08:15:00Z' },
-    ]
-    let deviceStatus = 'active'
-    const posts: string[] = []
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-      const url = String(input)
-      const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
-      if ((init?.method ?? 'GET').toUpperCase() === 'POST') {
-        posts.push(url)
-        if (url === '/api/connect/assistants/g-1/revoke') assistants = []
-        if (url === '/api/money/devices/dk_1/revoke') deviceStatus = 'revoked'
-        return new Response(null, { status: 204 })
-      }
-      if (url === '/api/keys') return json(EXISTING)
-      if (url === '/api/connect/assistants') return json({ assistants })
-      if (url === '/api/money/access')
-        return json({
-          items: [
-            { kind: 'mandate', id: 'pm_1', name: 'claude', may: 'prepare payments in GBP', created_at: '2026-10-20T09:00:00Z', last_used_at: null, expires_at: '2026-12-31T00:00:00Z', status: 'active', revoke: '/v1/money/permission-mandates/pm_1/revoke' },
-            { kind: 'device', id: 'dk_1', name: 'Work iPhone', may: 'sign approvals and mandates', created_at: '2026-10-01T09:00:00Z', last_used_at: '2026-10-22T09:00:00Z', expires_at: null, status: deviceStatus, revoke: '/v1/money/devices/dk_1/revoke' },
-            { kind: 'passkey', id: 'cred_1', name: 'MacBook', may: 'sign approvals and mandates', created_at: '2026-09-01T09:00:00Z', last_used_at: null, expires_at: null, status: 'active', revoke: '' },
-          ],
-        })
-      return new Response('null', { status: 404 })
-    })
+    const posts = mockAccess()
     renderKeys()
 
     expect(await screen.findByText(/Permission · may prepare payments in GBP · .* · never used · expires Dec 31/)).toBeInTheDocument()
     expect(screen.getByText(/Phone · may sign approvals and mandates · .* · last used Oct 22/)).toBeInTheDocument()
     expect(screen.getByText('MacBook')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Revoke Passkey MacBook' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Remove Passkey MacBook' })).toBeNull()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke Claude' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Claude is disconnected. Its next request to Talyvor is refused as not connected.')
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Revoke' }))
+    expect(await screen.findByText('Claude is disconnected. Its next request to Talyvor is refused as not connected.')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke Phone Work iPhone' }))
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Revoke Phone Work iPhone' })).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Phone Work iPhone' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove it' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove Phone Work iPhone' })).toBeNull())
     expect(screen.getByText('Revoked')).toBeInTheDocument()
     expect(posts).toEqual(['/api/connect/assistants/g-1/revoke', '/api/money/devices/dk_1/revoke'])
   })
+})
+
+/** B57.94 — the assistants and what else may act, as the BFF answers them. Returns the POSTs sent, in order. */
+function mockAccess({ items }: { items?: unknown[] } = {}): string[] {
+  let assistants = [
+    { id: 'g-1', name: 'Claude', scopes: ['payments:prepare'], connected_at: '2026-10-20T09:00:00Z', last_used_at: '2026-10-23T08:15:00Z' },
+  ]
+  let deviceStatus = 'active'
+  const posts: string[] = []
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if ((init?.method ?? 'GET').toUpperCase() === 'POST') {
+      posts.push(url)
+      if (url === '/api/connect/assistants/g-1/revoke') assistants = []
+      if (url === '/api/money/devices/dk_1/revoke') deviceStatus = 'revoked'
+      return new Response(null, { status: 204 })
+    }
+    if (url === '/api/keys') return json(EXISTING)
+    if (url === '/api/connect/assistants') return json({ assistants })
+    if (url === '/api/money/access')
+      return json({
+        items: items ?? [
+          { kind: 'mandate', id: 'pm_1', name: 'claude', may: 'prepare payments in GBP', created_at: '2026-10-20T09:00:00Z', last_used_at: null, expires_at: '2026-12-31T00:00:00Z', status: 'active', revoke: '/v1/money/permission-mandates/pm_1/revoke' },
+          { kind: 'device', id: 'dk_1', name: 'Work iPhone', may: 'sign approvals and mandates', created_at: '2026-10-01T09:00:00Z', last_used_at: '2026-10-22T09:00:00Z', expires_at: null, status: deviceStatus, revoke: '/v1/money/devices/dk_1/revoke' },
+          { kind: 'passkey', id: 'cred_1', name: 'MacBook', may: 'sign approvals and mandates', created_at: '2026-09-01T09:00:00Z', last_used_at: null, expires_at: null, status: 'active', revoke: '' },
+        ],
+      })
+    return new Response('null', { status: 404 })
+  })
+  return posts
+}
+
+describe('B57.94 — what may act for this workspace, every name in words, every revoke asked first', () => {
+  it('no row prints an mcp: name: a permission whose assistant is not named reads as one you signed', async () => {
+    mockAccess({
+      items: [
+        { kind: 'mandate', id: 'pm_2', name: 'mcp:client_9f2, key:tlv_ws_1a2b3c4d', may: 'prepare payments in GBP', created_at: '2026-10-20T09:00:00Z', last_used_at: null, expires_at: null, status: 'active', revoke: '/v1/money/permission-mandates/pm_2/revoke' },
+      ],
+    })
+    renderKeys()
+    const region = await screen.findByRole('region', { name: 'What may act for this workspace' })
+    expect(await within(region).findByText('A permission you signed')).toBeInTheDocument()
+    expect(region.textContent).not.toMatch(/mcp:|key:/)
+    for (const b of within(region).getAllByRole('button')) expect(b.getAttribute('aria-label') ?? '').not.toMatch(/mcp:|key:/)
+  })
+
+  it('revoking an assistant asks first, and Keep it sends nothing', async () => {
+    const posts = mockAccess()
+    renderKeys()
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke Claude' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Revoke Claude?' })
+    expect(dialog).toHaveTextContent('Claude can no longer reach Talyvor. You can add it again at any time.')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(posts).toEqual([])
+  })
+
+  it('revoking a permission asks first, and Keep it sends nothing', async () => {
+    const posts = mockAccess()
+    renderKeys()
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke Permission claude' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Revoke “claude”?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(posts).toEqual([])
+  })
+
+  it('the last key that can approve is never removed: its dialog says why and offers no Remove it', async () => {
+    const posts = mockAccess({
+      items: [
+        { kind: 'device', id: 'dk_1', name: 'Work iPhone', may: 'sign approvals and mandates', created_at: '2026-10-01T09:00:00Z', last_used_at: null, expires_at: null, status: 'active', revoke: '/v1/money/devices/dk_1/revoke' },
+        { kind: 'passkey', id: 'cred_1', name: 'MacBook', may: 'sign approvals and mandates', created_at: '2026-09-01T09:00:00Z', last_used_at: null, expires_at: null, status: 'revoked', revoke: '' },
+      ],
+    })
+    renderKeys()
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Phone Work iPhone' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Remove “Work iPhone”?' })
+    expect(dialog).toHaveTextContent('It is your last key. With none, nobody could approve, so add another first.')
+    expect(within(dialog).queryByRole('button', { name: 'Remove it' })).toBeNull()
+    expect(posts).toEqual([])
+  })
+
+  it('a removal Talyvor refuses says why in its own words, and nothing changes', async () => {
+    mockAccess()
+    const fetch = vi.mocked(globalThis.fetch)
+    const answer = fetch.getMockImplementation()!
+    fetch.mockImplementation(async (input, init) =>
+      String(input) === '/api/money/devices/dk_1/revoke'
+        ? new Response(JSON.stringify({ error: 'This key owns an agent’s account, so it cannot be removed.' }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+        : answer(input, init),
+    )
+    renderKeys()
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Phone Work iPhone' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove it' }))
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('This key owns an agent’s account, so it cannot be removed.')
+  })
+})
+
+describe('B57.94 — every control on Keys does something', () => {
+  it('pressEverything finds no dead control on /keys', async () => {
+    const report = await pressEverything('/keys')
+    expect(report.pressed).toBeGreaterThan(0)
+    expect(report.dead).toEqual([])
+  }, 120_000)
 })

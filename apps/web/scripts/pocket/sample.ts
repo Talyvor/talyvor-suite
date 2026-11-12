@@ -177,6 +177,21 @@ const SAMPLE: Record<string, unknown> = {
     { id: 'key_setup', workspace_id: 'ws_nicks_team', key_prefix: 'tlv_ws_7f3a5b12', name: 'Setup', scopes: ['proxy'], created_at: '2026-09-14T09:00:00Z', last_used_at: '2026-10-22T08:40:00Z' },
     { id: 'key_ci', workspace_id: 'ws_nicks_team', key_prefix: 'tlv_ws_c21d7e90', name: 'CI pipeline', scopes: ['proxy'], created_at: '2026-10-02T09:00:00Z', last_used_at: '2026-10-21T16:20:00Z' },
   ],
+  // B57.94 — what may act for the workspace, as w-dev-keys lists it: Claude connected on 3 October, the passkeys on the
+  // iPhone and This Mac (3 October) and the phone's key in the Talyvor app (4 October).
+  '/api/connect/assistants': {
+    assistants: [
+      { id: 'grant_claude', name: 'Claude', scopes: ['wallets:read', 'invoices:draft', 'payments:prepare'], connected_at: '2026-10-03T09:00:00Z', last_used_at: '2026-10-22T08:15:00Z',
+        calls: [{ tool: 'get_balances', args_sha256: 'a'.repeat(64), result: 'done', at: '2026-10-22T08:15:00Z' }] },
+    ],
+  },
+  '/api/money/access': {
+    items: [
+      { kind: 'device', id: 'dk_iphone', name: 'iPhone, Talyvor app', may: 'sign approvals and mandates', created_at: '2026-10-04T09:00:00Z', last_used_at: '2026-10-22T09:00:00Z', expires_at: null, status: 'active', revoke: '/v1/money/devices/dk_iphone/revoke' },
+      { kind: 'passkey', id: 'cred_iphone', name: 'iPhone', may: 'sign approvals and mandates', created_at: '2026-10-03T09:00:00Z', last_used_at: '2026-10-22T09:00:00Z', expires_at: null, status: 'active', revoke: '' },
+      { kind: 'passkey', id: 'cred_mac', name: 'This Mac', may: 'sign approvals and mandates', created_at: '2026-10-03T08:00:00Z', last_used_at: '2026-10-20T09:00:00Z', expires_at: null, status: 'active', revoke: '' },
+    ],
+  },
   // B56.11 — every money capability Sandbox for this workspace, as Lens answers in production today (talyvor-lens B56.7).
   '/api/wallets/capabilities': {
     capabilities: [

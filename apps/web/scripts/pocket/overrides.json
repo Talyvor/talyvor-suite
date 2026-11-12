@@ -3,8 +3,5 @@
   { "screen": "w-signin", "prototype": "you@company.com", "words": "Use the same account you signed up with", "item": "B56.19: the email-first step is not built yet, so sign-in keeps its one step" },
   { "screen": "w-signin", "prototype": "Continue", "words": "Sign in", "item": "B56.19: the email-first step is not built yet, so sign-in keeps its one step" },
   { "screen": "s-pay-invoice", "prototype": "Pay by transfer", "words": "Pay by card", "item": "B49.2: no live partner serves account details yet, so the pay page shows none rather than a Test partner's" },
-  { "screen": "s-pay-invoice", "prototype": "Sign in", "words": "Pay with this agent", "item": "B57.63: the sample workspace is signed in, so its agent is chosen here; signed out the card reads Sign in (PayInvoice.test.tsx)" },
-  { "screen": "w-dev-keys", "prototype": "Remove", "words": "Revoke", "item": "B57.94: what may act for this workspace is drawn in Pocket there; until then each passkey and phone is revoked with Revoke" },
-  { "screen": "w-dev-keys+new-key", "prototype": "Remove", "words": "Revoke", "item": "B57.94: what may act for this workspace is drawn in Pocket there; until then each passkey and phone is revoked with Revoke" },
-  { "screen": "w-dev-keys+revoke-key", "prototype": "Remove", "words": "Revoke", "item": "B57.94: what may act for this workspace is drawn in Pocket there; until then each passkey and phone is revoked with Revoke" }
+  { "screen": "s-pay-invoice", "prototype": "Sign in", "words": "Pay with this agent", "item": "B57.63: the sample workspace is signed in, so its agent is chosen here; signed out the card reads Sign in (PayInvoice.test.tsx)" }
 ]
