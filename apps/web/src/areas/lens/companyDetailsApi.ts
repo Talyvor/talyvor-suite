@@ -25,6 +25,7 @@ export interface CompanyDetails {
 export const COMPANY_WORDS = {
   title: 'Company details',
   line: 'These go to our partner’s identity check later. No identity documents are asked for.',
+  company: 'The company',
   people: 'People with control',
   peopleLine: 'Each director, and anyone who owns or controls part of the company.',
   name: 'Name',

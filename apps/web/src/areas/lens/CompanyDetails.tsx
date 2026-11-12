@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { cn } from '@talyvor/ui'
 import { Button, Card, Crumb, Field, Icon, Input, Select, showSnack } from '@talyvor/ui/pocket'
 import { isSessionExpired } from '../../lib/productState'
 import { COUNTRIES, PROFILE_ERRORS, PROFILE_LABELS } from '../auth/signupWords'
@@ -87,6 +88,9 @@ function FieldError({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** A row's heading until the person has a name. */
+const personLabel = (i: number) => `Person ${i + 1}`
+
 function refusal(err: unknown): string {
   if (isSessionExpired(err)) return 'Nothing changed. Sign in again.'
   if (err instanceof CompanyRefusedError && err.status === 400 && err.sentence) {
@@ -111,11 +115,13 @@ function CompanyForm({ saved }: { saved: CompanyDetails }) {
   const errors = tried ? check(draft) : {}
   const set = (field: 'companyName' | 'registrationNumber' | 'country') => (v: string) => setDraft({ ...draft, [field]: v })
   const setPerson = (i: number, p: Partial<PersonDraft>) => setDraft({ ...draft, people: draft.people.map((q, j) => (j === i ? { ...q, ...p } : q)) })
+  const companyId = useId()
+  const peopleId = useId()
   return (
     <form
       noValidate
       aria-label={COMPANY_WORDS.title}
-      className="grid gap-5"
+      className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault()
         setTried(true)
@@ -123,92 +129,114 @@ function CompanyForm({ saved }: { saved: CompanyDetails }) {
         save.mutate(bodyOf(draft))
       }}
     >
-      <div className="grid max-w-xl gap-4">
-        <div className="grid gap-1.5">
-          <Field label={PROFILE_LABELS.companyName}>
-            <Input value={draft.companyName} maxLength={200} autoComplete="organization" aria-invalid={errors.companyName ? true : undefined} onChange={(e) => set('companyName')(e.target.value)} />
-          </Field>
-          {errors.companyName ? <FieldError>{errors.companyName}</FieldError> : null}
-        </div>
-        <div className="grid gap-1.5">
-          <Field label={PROFILE_LABELS.registrationNumber}>
-            <Input value={draft.registrationNumber} maxLength={64} autoComplete="off" aria-invalid={errors.registrationNumber ? true : undefined} onChange={(e) => set('registrationNumber')(e.target.value)} />
-          </Field>
-          {errors.registrationNumber ? <FieldError>{errors.registrationNumber}</FieldError> : null}
-        </div>
-        <div className="grid gap-1.5">
-          <Field label={PROFILE_LABELS.country}>
-            <Select value={draft.country} aria-invalid={errors.country ? true : undefined} onChange={(e) => set('country')(e.target.value)}>
-              {/* hidden, not disabled: a disabled option greys the whole box (Select's has-[:disabled]) */}
-              <option value="" hidden>
-                {PROFILE_LABELS.country}
-              </option>
-              {COUNTRIES.map(([code, name]) => (
-                <option key={code} value={code}>
-                  {name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {errors.country ? <FieldError>{errors.country}</FieldError> : null}
-        </div>
-      </div>
-      <section aria-labelledby="company-people" className="grid gap-3">
-        <div>
-          <h3 id="company-people" className="font-display text-reading font-bold text-ink">
-            {COMPANY_WORDS.people}
+      {/* B57.145 — Pocket's settings form (w-payout-details): a white card with its title, the fields two to a row. */}
+      <section aria-labelledby={companyId}>
+        <Card tone="white" className="grid gap-4">
+          <h3 id={companyId} className="font-display text-reading font-bold text-ink">
+            {COMPANY_WORDS.company}
           </h3>
-          <p className="text-body text-ink-2">{COMPANY_WORDS.peopleLine}</p>
-        </div>
-        <ul className="grid gap-3">
-          {draft.people.map((p, i) => {
-            const e = errors.people?.[i] ?? {}
-            return (
-              <li key={p.key} data-testid={`person-${i}`} className="grid gap-3 border-b border-line pb-3 last:border-b-0 wide:grid-cols-12 wide:items-start">
-                <div className="grid gap-1.5 wide:col-span-4">
-                  <Field label={COMPANY_WORDS.name}>
-                    <Input value={p.name} maxLength={200} autoComplete="off" aria-invalid={e.name ? true : undefined} onChange={(ev) => setPerson(i, { name: ev.target.value })} />
-                  </Field>
-                  {e.name ? <FieldError>{e.name}</FieldError> : null}
-                </div>
-                <div className="wide:col-span-3">
-                  <Field label={COMPANY_WORDS.role}>
-                    <Select value={p.role} onChange={(ev) => setPerson(i, { role: ev.target.value as ControlRole })}>
-                      {(Object.keys(ROLE_LABEL) as ControlRole[]).map((r) => (
-                        <option key={r} value={r}>
-                          {ROLE_LABEL[r]}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                </div>
-                <div className="grid gap-1.5 wide:col-span-3">
-                  <Field label={COMPANY_WORDS.share}>
-                    <Input value={p.share} inputMode="decimal" unit="%" aria-invalid={e.share ? true : undefined} onChange={(ev) => setPerson(i, { share: ev.target.value })} />
-                  </Field>
-                  {e.share ? <FieldError>{e.share}</FieldError> : null}
-                </div>
-                <div className="wide:col-span-2 wide:pt-7">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    aria-label={`${COMPANY_WORDS.remove} ${p.name.trim() || `person ${i + 1}`}`}
-                    onClick={() => setDraft({ ...draft, people: draft.people.filter((_, j) => j !== i) })}
-                  >
-                    {COMPANY_WORDS.remove}
-                  </Button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-        {errors.shares ? <FieldError>{errors.shares}</FieldError> : null}
-        <div>
-          <Button type="button" variant="secondary" icon={<Icon name="plus" size={18} />} onClick={() => setDraft({ ...draft, people: [...draft.people, { key: Math.max(-1, ...draft.people.map((q) => q.key)) + 1, name: '', role: 'director', share: '' }] })}>
-            {COMPANY_WORDS.add}
-          </Button>
-        </div>
+          <div className="grid gap-4 wide:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Field label={PROFILE_LABELS.companyName}>
+                <Input value={draft.companyName} maxLength={200} autoComplete="organization" aria-invalid={errors.companyName ? true : undefined} onChange={(e) => set('companyName')(e.target.value)} />
+              </Field>
+              {errors.companyName ? <FieldError>{errors.companyName}</FieldError> : null}
+            </div>
+            <div className="grid gap-1.5">
+              <Field label={PROFILE_LABELS.registrationNumber}>
+                <Input value={draft.registrationNumber} maxLength={64} autoComplete="off" aria-invalid={errors.registrationNumber ? true : undefined} onChange={(e) => set('registrationNumber')(e.target.value)} />
+              </Field>
+              {errors.registrationNumber ? <FieldError>{errors.registrationNumber}</FieldError> : null}
+            </div>
+            <div className="grid gap-1.5">
+              <Field label={PROFILE_LABELS.country}>
+                <Select value={draft.country} aria-invalid={errors.country ? true : undefined} onChange={(e) => set('country')(e.target.value)}>
+                  {/* hidden, not disabled: a disabled option greys the whole box (Select's has-[:disabled]) */}
+                  <option value="" hidden>
+                    {PROFILE_LABELS.country}
+                  </option>
+                  {COUNTRIES.map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {errors.country ? <FieldError>{errors.country}</FieldError> : null}
+            </div>
+          </div>
+        </Card>
+      </section>
+      {/* B57.145 — the people as a list (w-members): each row headed by the person, their role and share, a hairline between. */}
+      <section aria-labelledby={peopleId}>
+        <Card tone="white" className="grid gap-4">
+          <div className="grid gap-1">
+            <h3 id={peopleId} className="font-display text-reading font-bold text-ink">
+              {COMPANY_WORDS.people}
+            </h3>
+            <p className="text-body text-ink-2">{COMPANY_WORDS.peopleLine}</p>
+          </div>
+          <ul className="grid">
+            {draft.people.map((p, i) => {
+              const e = errors.people?.[i] ?? {}
+              const name = p.name.trim()
+              const bps = shareBps(p.share)
+              return (
+                <li key={p.key} data-testid={`person-${i}`} className="grid gap-3 border-t border-line py-4 first:border-t-0 first:pt-0">
+                  <div className="flex items-center gap-3">
+                    <span aria-hidden="true" className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-pill bg-cloud-2 text-body font-bold text-ink', !name && 'font-figure')}>
+                      {name ? name.charAt(0).toUpperCase() : i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="truncate font-semibold text-ink">{name || personLabel(i)}</h4>
+                      <p className="text-body text-ink-3">{bps ? `${ROLE_LABEL[p.role]} · ${shareText(bps)}%` : ROLE_LABEL[p.role]}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`${COMPANY_WORDS.remove} ${name || personLabel(i).toLowerCase()}`}
+                      onClick={() => setDraft({ ...draft, people: draft.people.filter((_, j) => j !== i) })}
+                    >
+                      {COMPANY_WORDS.remove}
+                    </Button>
+                  </div>
+                  <div className="grid gap-3 wide:grid-cols-12 wide:items-start">
+                    <div className="grid gap-1.5 wide:col-span-6">
+                      <Field label={COMPANY_WORDS.name}>
+                        <Input value={p.name} maxLength={200} autoComplete="off" aria-invalid={e.name ? true : undefined} onChange={(ev) => setPerson(i, { name: ev.target.value })} />
+                      </Field>
+                      {e.name ? <FieldError>{e.name}</FieldError> : null}
+                    </div>
+                    <div className="wide:col-span-3">
+                      <Field label={COMPANY_WORDS.role}>
+                        <Select value={p.role} onChange={(ev) => setPerson(i, { role: ev.target.value as ControlRole })}>
+                          {(Object.keys(ROLE_LABEL) as ControlRole[]).map((r) => (
+                            <option key={r} value={r}>
+                              {ROLE_LABEL[r]}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    </div>
+                    <div className="grid gap-1.5 wide:col-span-3">
+                      <Field label={COMPANY_WORDS.share}>
+                        <Input value={p.share} inputMode="decimal" unit="%" aria-invalid={e.share ? true : undefined} onChange={(ev) => setPerson(i, { share: ev.target.value })} />
+                      </Field>
+                      {e.share ? <FieldError>{e.share}</FieldError> : null}
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          {errors.shares ? <FieldError>{errors.shares}</FieldError> : null}
+          <div>
+            <Button type="button" variant="secondary" icon={<Icon name="plus" size={18} />} onClick={() => setDraft({ ...draft, people: [...draft.people, { key: Math.max(-1, ...draft.people.map((q) => q.key)) + 1, name: '', role: 'director', share: '' }] })}>
+              {COMPANY_WORDS.add}
+            </Button>
+          </div>
+        </Card>
       </section>
       {save.isError ? (
         <p role="alert" className="text-body text-danger">
@@ -226,20 +254,20 @@ function CompanyForm({ saved }: { saved: CompanyDetails }) {
 
 /**
  * The company details for a Business account; nothing at all for a Personal one, or while either is read. `titled` gives
- * the card its own heading, for sign-up; in Settings the page's heading already names it.
+ * the section its own heading, for sign-up; in Settings the page's heading already names it, and the line sits under it.
  */
 export function CompanyDetailsSection({ titled = false }: { titled?: boolean }) {
   const business = useAccount().account?.account_type === 'business'
   const details = useCompanyDetails(business)
   if (!business || details.isPending || details.data === null) return null
   return (
-    <Card tone="white" className="grid gap-4">
+    <div className="grid gap-4">
       <div className="grid gap-1">
         {titled ? <h2 className="font-display text-bar font-bold text-ink">{COMPANY_WORDS.title}</h2> : null}
-        <p className="text-body text-ink-2">{COMPANY_WORDS.line}</p>
+        <p className={titled ? 'text-body text-ink-2' : 'max-w-2xl text-reading text-ink-2'}>{COMPANY_WORDS.line}</p>
       </div>
       {details.data ? <CompanyForm saved={details.data} /> : <p className="text-body text-ink-2">{COMPANY_WORDS.readFailed}</p>}
-    </Card>
+    </div>
   )
 }
 
