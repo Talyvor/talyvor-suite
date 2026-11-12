@@ -109,8 +109,8 @@ describe('/pricing', () => {
     expect(team).toHaveTextContent('Platform fee on AI spend3.25%')
     expect(team).toHaveTextContent('Own provider keys$209 add-on')
     expect(team).toHaveTextContent('Live moneyIncluded')
+    expect(team).toHaveTextContent('FX margin over the reference rate0.6%')
     // A Building chip sits beside its row's label, before what the plan gives (building.json's, not Lens's).
-    expect(team).toHaveTextContent('FX margin over the reference rateBuilding0.6%')
     expect(team).toHaveTextContent('Slack and Teams approvalsBuildingIncluded')
     expect(team).toHaveTextContent('Single sign-onNot included')
     expect(team).toHaveTextContent('Audit exportNot included')
@@ -146,7 +146,7 @@ describe('/pricing', () => {
     expect(money).toHaveTextContent('£4, €5 or $8 plus the partner’s cost')
     expect(money).toHaveTextContent('Agent cardsFree to issue')
     expect(money).toHaveTextContent('Accepting paymentsBuilding0.8% plus card processing, or 1.1% from an account')
-    expect(money).toHaveTextContent('FX margin over the reference rateBuildingTeam 0.6% · Business 0.3% · Enterprise agreed')
+    expect(money).toHaveTextContent('FX margin over the reference rateTeam 0.6% · Business 0.3% · Enterprise agreed')
     expect(screen.getByTestId('tax-line')).toHaveTextContent(
       'Prices are in US dollars. Where Talyvor must charge VAT or sales tax, it is added at checkout and shown before you pay.',
     )
@@ -251,7 +251,7 @@ describe('/pricing labels', () => {
     expect(building(row(screen.getByTestId('company-plan-free'), 'Slack and Teams approvals'))).toEqual([]) // "—"
     expect(building(row(business, 'Single sign-on'))).toEqual([]) // Lens says built
     expect(building(row(business, 'Audit export'))).toEqual([])
-    expect(building(row(team, 'FX margin over the reference rate'))).toEqual(['fx_margin'])
+    expect(building(row(team, 'FX margin over the reference rate'))).toEqual([]) // B17.456: currency conversion shipped (B56.23)
     const money = screen.getByTestId('fees-money-features')
     expect(building(row(money, 'Accepting payments'))).toEqual(['merchant_fees'])
     for (const el of document.querySelectorAll('[data-status-key][data-status-label="building"]'))
