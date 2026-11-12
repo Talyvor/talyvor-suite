@@ -98,7 +98,7 @@ describe("an agent's card on Agent Wallets", () => {
     expect(face.getAttribute('data-card')).toBe('agent-remy')
     expect(face).not.toHaveTextContent(/\d/)
 
-    const rows = within(screen.getByTestId('agent-card-purchases')).getAllByRole('row').slice(1)
+    const rows = screen.getAllByTestId('agent-card-purchase')
     expect(rows).toHaveLength(2)
     expect(within(rows[0]).getByText('Declined')).toBeTruthy()
     expect(rows[0].textContent).toContain("the agent's limit per request is 20 LXC")
@@ -116,6 +116,38 @@ describe("an agent's card on Agent Wallets", () => {
         body: { first_name: 'Ada', last_name: 'Lovelace', email: '', phone_number: '', line1: '1 High Street', line2: '', city: 'London', postal_code: 'N1 1AA', country: 'GB' },
       },
     ])
+  })
+
+  // B57.142 — the Card panel is drawn in Pocket, as the launch pack's W4 draws an agent's card on its page: the card
+  // art 312 wide on a white Pocket card, the last-four line under it, each purchase a row with its decision in words.
+  it("draws the agent's card in Pocket, 312 wide, with the last four under it", async () => {
+    mockBff()
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    const issue = await screen.findByRole('button', { name: 'Issue a card' })
+    const panel = screen.getByTestId('agent-card-panel')
+    expect(panel.getAttribute('data-design')).toBe('pocket') // the issue form is Pocket's too
+    expect(within(panel).getByRole('heading', { name: 'Card' })).toBeTruthy()
+    for (const [label, value] of [
+      ['First name', 'Ada'],
+      ['Last name', 'Lovelace'],
+      ['Address', '1 High Street'],
+      ['Town or city', 'London'],
+      ['Postcode', 'N1 1AA'],
+    ]) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value } })
+    }
+    fireEvent.click(issue)
+
+    const face = await screen.findByRole('img', { name: "Researcher, Research's agent card" })
+    expect(face.className).toContain('max-w-78')
+    const line = screen.getByTestId('agent-card')
+    expect(face.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const purchases = screen.getAllByTestId('agent-card-purchase')
+    expect(purchases).toHaveLength(2)
+    expect(within(purchases[0]).getByText('Declined')).toBeTruthy()
+    expect(within(purchases[1]).getByText('Approved')).toBeTruthy()
   })
 
   // B27.21 — the holder's own phone goes with the cardholder, as Stripe takes it (E.164); one without its
