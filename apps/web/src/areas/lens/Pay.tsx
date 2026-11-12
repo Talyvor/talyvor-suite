@@ -26,7 +26,7 @@ import { Note, readFailure } from './WalletMoney'
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, PREPARED_KEY, preparedBy, useKeys } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { paymentRequestKey } from './Approve'
-import { assertOver, payOutsideSigned, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
+import { approvePayoutSigned, assertOver, payOutsideSigned, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
 import {
   type AgentApproval,
   type AssistantRequest,
@@ -1575,13 +1575,18 @@ function Payouts() {
   )
 }
 
-/** One batch: its counts and totals, every row's result once read, and its one approval. */
+/**
+ * One batch: its counts and totals, every row's result once read, and its one approval. B58.6: a batch awaiting approval
+ * shows every row it pays, and once the workspace has a key, Approve asks for the passkey over the batch's own challenge
+ * (Lens B58.5); with only the phone's key, it says to approve there.
+ */
 function Batch({ b }: { b: PayoutBatch }) {
   const qc = useQueryClient()
-  const [shown, setShown] = useState(b.rows !== undefined && b.rows !== null)
+  const { signed, onlyThePhone, hold } = useKeys()
+  const [shown, setShown] = useState((b.rows !== undefined && b.rows !== null) || b.status === 'awaiting_approval')
   const detail = useQuery({ queryKey: [...PAYOUTS_KEY, b.id], queryFn: () => agentBankApi.payout(b.id), enabled: shown, initialData: b.rows ? b : undefined })
   const approve = useMutation({
-    mutationFn: () => agentBankApi.approvePayout(b.id),
+    mutationFn: () => approvePayoutSigned(b.id),
     onSuccess: (next) => {
       qc.setQueryData([...PAYOUTS_KEY, b.id], next)
       setShown(true)
@@ -1648,12 +1653,28 @@ function Batch({ b }: { b: PayoutBatch }) {
             Rows
           </Button>
         ) : null}
-        {batch.status === 'awaiting_approval' && batch.rows_valid > 0 ? (
+        {batch.status === 'awaiting_approval' && batch.rows_valid > 0 && !hold ? (
           <Button type="button" disabled={approve.isPending} onClick={() => approve.mutate()}>
             {approve.isPending ? 'Paying…' : `Approve and pay ${batch.rows_valid} ${batch.rows_valid === 1 ? 'row' : 'rows'}`}
           </Button>
         ) : null}
       </div>
+      {batch.status === 'awaiting_approval' && batch.rows_valid > 0 ? (
+        onlyThePhone ? (
+          <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
+        ) : signed && !hold ? (
+          <p className="text-caption text-muted" data-testid="payout-signs">
+            Your passkey signs these <span className="font-figure">{batch.rows_valid}</span> valid {batch.rows_valid === 1 ? 'row' : 'rows'}
+            {totals.length > 0 ? (
+              <>
+                {' '}
+                and <span className="font-figure">{totals.map(([c, n]) => formatMinor(n, c)).join(', ')}</span>
+              </>
+            ) : null}
+            . If the batch changes after you sign, nothing is paid.
+          </p>
+        ) : null
+      ) : null}
       {approve.isError ? <Note ok={false}>{refusalText(approve.error)}</Note> : null}
     </div>
   )

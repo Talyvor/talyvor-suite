@@ -1153,6 +1153,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/mandates", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensMandateGrantBody",
   },
+  // B58.6 — a payout batch approved with the owner's passkey or phone key over its own challenge (Lens B58.5).
+  {
+    route: "POST /v1/money/payouts/{id}/approve",
+    file: "apps/bff/money_pay.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPayoutApprove(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_payouts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/payouts/{id}/approve", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPayoutApproveBody",
+  },
   // B40.7 — the MCP server at /mcp: an assistant drafts an invoice (Lens B30.20) and prepares payment requests (Lens B40.3).
   {
     route: "POST /v1/money/invoices",

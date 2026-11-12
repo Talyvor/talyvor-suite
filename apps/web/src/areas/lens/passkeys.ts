@@ -5,7 +5,7 @@
 // on every approve or deny is signed with it over a challenge Lens issues for that one approval.
 // Pushes arrive through /sw.js, subscribed with the key Lens serves.
 
-import { agentBankApi, type EnrolmentWaiting, type OutsidePayment, type OutsidePaymentRequest, type PasskeyAssertion, type PayeeAllowance, type PayeeDetails } from './agentBankApi'
+import { agentBankApi, type EnrolmentWaiting, type OutsidePayment, type OutsidePaymentRequest, type PasskeyAssertion, type PayeeAllowance, type PayeeDetails, type PayoutBatch } from './agentBankApi'
 
 export function b64u(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
@@ -100,6 +100,15 @@ export async function signPayeeDetails(payeeID: string, details: PayeeDetails): 
 export async function payOutsideSigned(body: OutsidePaymentRequest): Promise<OutsidePayment> {
   const c = await agentBankApi.paymentChallenge(body)
   return agentBankApi.payOutside(body, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
+/**
+ * B58.6 — a payout batch is approved signed (Lens B58.5): once the workspace has a passkey, Face ID asks here over the
+ * challenge naming the batch as it stands, and nothing is paid without it. With none, it is approved as before.
+ */
+export async function approvePayoutSigned(batchID: string): Promise<PayoutBatch> {
+  const c = await agentBankApi.payoutChallenge(batchID)
+  return agentBankApi.approvePayout(batchID, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
 }
 
 /**

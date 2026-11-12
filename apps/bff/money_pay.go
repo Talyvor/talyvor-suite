@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -32,7 +33,10 @@ import (
 //	POST /api/money/payouts  (text/csv)             up to 1,000 payouts, validated row by row and held for one approval; the
 //	                                                Idempotency-Key header goes up with the file
 //	GET  /api/money/payouts/{id}                    one batch with every row's result
-//	POST /api/money/payouts/{id}/approve            pay every valid row, once
+//	POST /api/money/payouts/{id}/approve {assertion}   pay every valid row, once; B58.6: "assertion" is the passkey's or
+//	                          the phone's signature over the batch's challenge, sent up exactly as it came
+//	POST /api/money/payouts/{id}/approve/challenge  B58.6: the challenge approving the batch is signed over, and the batch
+//	                          it names (Lens B58.5): its id, its rows and its totals by currency
 //
 // Lens decides everything: who may pay from which account, the agent's rules, screening, what each row is worth and what
 // posts. A refusal comes back with its sentence (lensRelay). Funding is never named here: Lens takes test money until its
@@ -283,15 +287,34 @@ func (a *app) handleMoneyPayout(w http.ResponseWriter, r *http.Request, t tenant
 	a.agentBankRelayPath(w, r, t, http.MethodGet, "/v1/money/payouts/"+url.PathEscape(id), nil)
 }
 
-// handleMoneyPayoutApprove — POST /api/money/payouts/{id}/approve: every valid row is paid, once.
-func (a *app) handleMoneyPayoutApprove(w http.ResponseWriter, r *http.Request, t tenant) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
+// handleMoneyPayoutApprove — POST /api/money/payouts/{id}/approve: every valid row is paid, once. B58.6: once the
+// workspace has a passkey or a device key, Lens pays a batch only with "assertion", that key's signature over the batch's
+// own challenge (Lens B58.5), so it goes up exactly as sent, a passkey's or the phone's; and
+// POST /api/money/payouts/{id}/approve/challenge relays the challenge, which Lens builds from the batch as it stands.
+func (a *app) handleMoneyPayoutApprove(challenge bool) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		id, ok := pathID(w, "batch id", r.PathValue("id"))
+		if !ok {
+			return
+		}
+		path := "/v1/money/payouts/" + url.PathEscape(id) + "/approve"
+		if challenge {
+			a.agentBankRelayPath(w, r, t, http.MethodPost, path+"/challenge", nil)
+			return
+		}
+		var in struct {
+			Assertion json.RawMessage `json:"assertion,omitempty"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		// UPSTREAM-BINDS-ONLY lensPayoutApproveBody: none
+		body, _ := json.Marshal(in)
+		a.agentBankRelayPath(w, r, t, http.MethodPost, path, body)
 	}
-	id, ok := pathID(w, "batch id", r.PathValue("id"))
-	if !ok {
-		return
-	}
-	a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/payouts/"+url.PathEscape(id)+"/approve", nil)
 }
