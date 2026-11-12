@@ -329,13 +329,20 @@ function LimitAlerts({ nameOf }: { nameOf: (id: string) => string }) {
   )
 }
 
-/** B17.364 — a budget on a company account raises alerts before any agent exists: they show then, and nothing else does. */
+/**
+ * B17.364 — a budget on a company account raises alerts before any agent exists: they show then, and nothing else does.
+ * B17.425 — so do the channels they go to, once one is added: the Where alerts go card is where its deliveries are read.
+ */
 function AlertsBeforeAgents({ nameOf }: { nameOf: (id: string) => string }) {
   const alerts = useQuery({ queryKey: ['limit-alerts'], queryFn: agentBankApi.limitAlerts })
-  if (!alerts.data?.alerts?.length) return null
+  const channels = useQuery({ queryKey: ['alert-channels'], queryFn: agentBankApi.alertChannels })
+  const raised = (alerts.data?.alerts?.length ?? 0) > 0
+  const added = (channels.data?.channels?.length ?? 0) > 0
+  if (!raised && !added) return null
   return (
-    <Region index="02" label="Limit alerts">
-      <LimitAlerts nameOf={nameOf} />
+    <Region index="02" label="Limit alerts" className="flex flex-col gap-3">
+      {raised ? <LimitAlerts nameOf={nameOf} /> : null}
+      {added ? <AlertChannels /> : null}
     </Region>
   )
 }
