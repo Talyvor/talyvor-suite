@@ -94,6 +94,7 @@ import { Terms } from './routes/Terms'
 import { SignIn } from './areas/auth/Entry'
 import { SignUp, SignUpKey } from './areas/auth/SignUp'
 import { SessionExpiredBar } from './components/SessionExpiredBar'
+import { KeyRecoveryNotice, RecoveryCodeSheet } from './areas/lens/KeyRecovery'
 import { CommandPalette, ariaKeys, shortcutText, type PalettePage } from './components/CommandPalette'
 import { ScreenBoundary } from './components/ScreenBoundary'
 import { useAuthMeReader } from './lib/authMe'
@@ -533,6 +534,10 @@ function AppShell() {
           below is empty for one reason; this says it once. Renders nothing when nothing is
           refused, so it costs an unbroken app a null. */}
       <SessionExpiredBar />
+      {/* B55.54 — a recovery waiting, on every page for everyone in the workspace, and a recovery code Lens answered,
+          shown once wherever the key was made. */}
+      <KeyRecoveryNotice />
+      <RecoveryCodeSheet />
       {/* THE ONE HEADING ON A GATED SCREEN. It is the same computed `page` the tab title takes, so
           the browser tab and the heading are one answer rather than two that agree today.
           ConsoleHeading.test.tsx pins the name at every address. B57.8 — Pocket sets it at the top of

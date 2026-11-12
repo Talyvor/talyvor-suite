@@ -583,6 +583,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/agents/keys/enrolments/{id}/approve", keyOwnerOnly(ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensKeyEnrolmentApproveBody",
   },
+  // B55.54 — a new recovery code signed with a key the workspace has, and a key got back when every key was removed
+  // (Lens B55.48). The recover row's body is also what …/keys/recover/complete is sent, without the code.
+  {
+    route: "POST /v1/workspaces/{wsID}/keys/recovery-code",
+    file: "apps/bff/key_recovery.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleRecoveryCode(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/key_recovery_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/keys/recovery-code", keyOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensRecoveryCodeBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/keys/recover",
+    file: "apps/bff/key_recovery.go",
+    kind: "anon-struct",
+    fn: "func (a *app) relayRecoveryKey(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/key_recovery_handler.go",
+    upstreamAnchor: "type recoveryKeyBody struct",
+    subject: "lensKeyRecoverBody",
+  },
   // B41.8 — resuming an agent, or every agent, signed with Face ID once the workspace has a passkey (Lens B41.108).
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/resume",

@@ -240,11 +240,12 @@ describe('the approvals inbox when only the phone holds a key (B55.2)', () => {
     expect(screen.queryByRole('link', { name: 'Add this browser' })).toBeNull()
   })
 
-  it('a revoked phone key still counts, as Lens counts it: nothing is sent and the phone line shows', async () => {
+  // B55.54: and with no key live there is no phone to approve on either, so each row says every key was removed.
+  it('a revoked phone key still counts, as Lens counts it: nothing is sent and each row says every key was removed', async () => {
     const bff = mockBff()
     const posts = onlyThePhoneKey([{ id: 'dk_1', platform: 'ios', name: 'Old iPhone', revoked_at: '2026-10-30T09:00:00Z' }])
     const list = await inbox()
-    expect(await list.findAllByText('Approve this on your phone: it is waiting in Talyvor there.')).toHaveLength(5)
+    expect(await list.findAllByText('Every key of this workspace was removed, so nothing can approve.')).toHaveLength(5)
     expect(list.queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
     fireEvent.keyDown(document.querySelector<HTMLElement>('[data-approval="apr_1"]')!, { key: 'a' })
     expect(bff.decisions).toEqual([])

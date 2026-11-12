@@ -1227,6 +1227,14 @@ export const agentBankApi = {
     send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/keys/enrolments/${e(id)}/challenge`),
   approveEnrolment: (id: string, assertion: PasskeyAssertion) => send<KeyEnrolment>('POST', `/api/agents/keys/enrolments/${e(id)}/approve`, { assertion }),
   declineEnrolment: (id: string) => send<KeyEnrolment>('POST', `/api/agents/keys/enrolments/${e(id)}/decline`),
+  // B55.54 — a recovery code, and a key back when every key of the workspace was removed (Lens B55.48).
+  recoveryCodeChallenge: () => send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/agents/keys/recovery-code/challenge'),
+  newRecoveryCode: (assertion: PasskeyAssertion) => send<{ recovery_code: string }>('POST', '/api/agents/keys/recovery-code', { assertion }),
+  waitingRecovery: () => getJSON<{ recovery: KeyRecovery | null }>('/api/agents/keys/recover'),
+  recoverWithCode: (code: string, passkey: RecoveryPasskey) => send<RecoveredKey>('POST', '/api/agents/keys/recover', { code, passkey }),
+  startRecovery: () => send<{ recovery: KeyRecovery }>('POST', '/api/agents/keys/recover/start'),
+  cancelRecovery: () => send<{ recovery: KeyRecovery }>('POST', '/api/agents/keys/recover/cancel'),
+  completeRecovery: (passkey: RecoveryPasskey) => send<RecoveredKey>('POST', '/api/agents/keys/recover/complete', { passkey }),
   /** B54.34 — approving with always_allow signs that allowance too, so the challenge is asked for with it (Lens B54.29). */
   approvalChallenge: (approvalID: string, alwaysAllow?: PayeeAllowance) =>
     send<{ challenge: string; allow_credentials: string[] | null }>(
@@ -1991,6 +1999,30 @@ export interface Passkey {
   name: string
   created_at: string
   last_used_at?: string
+  /** B41.116: revoked by a lockdown, it signs nothing. */
+  revoked_at?: string
+  /** B55.54: answered once, with the workspace's first key (Lens B55.48). */
+  recovery_code?: string
+}
+
+/** B55.54 — a recovery started without the code (Lens economy.KeyRecovery): a key can be added from ready_at. */
+export interface KeyRecovery {
+  id: string
+  status: 'waiting' | 'cancelled' | 'completed' | 'expired'
+  created_at: string
+  ready_at: string
+  expires_at: string
+  /** started by the person asking, who alone adds its key */
+  mine: boolean
+}
+
+/** B55.54 — the new passkey a recovery adds, as POST /api/agents/passkeys takes it. */
+export type RecoveryPasskey = Omit<PasskeyRegistration, 'assertion'>
+
+/** B55.54 — the key a recovery added and the workspace's new recovery code, shown this once. */
+export interface RecoveredKey {
+  key: { kind: 'passkey' | 'device'; id: string; name: string }
+  recovery_code: string
 }
 
 /** B55.2 — a phone's key (Lens GET /v1/money/devices); one revoked signs nothing. */

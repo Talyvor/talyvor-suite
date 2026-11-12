@@ -489,6 +489,8 @@ const BY_PATH: Record<string, unknown> = {
   },
   // B19.10 — no passkey yet, so approvals are sent unsigned, as B19.4 sends them.
   '/api/agents/passkeys': { passkeys: [] },
+  // B55.54 — no key recovery waits.
+  '/api/agents/keys/recover': { recovery: null },
   // B55.2 — nor a phone key: with one, the web leaves approving and resuming to the phone.
   '/api/money/devices': { devices: [] },
   // B19.21 — a weekly payment from the Researcher to the Writer, and the Researcher's top-up.

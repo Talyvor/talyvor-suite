@@ -76,6 +76,10 @@ type session struct {
 	// synthetic marks a B17.2 test user's session (synthetic.go). Its workspace came from Lens's
 	// synthetic routes, not from provisioning, so it is never re-provisioned (tenant.go).
 	synthetic bool
+
+	// signedInAt is when this person signed in (B55.54): getting a key back needs a sign-in within the last 10
+	// minutes, so it goes to Lens with the recovery routes (key_recovery.go).
+	signedInAt time.Time
 }
 
 func (s session) expiresAt() time.Time { return s.expires }
@@ -634,6 +638,9 @@ func (a *app) startSession(w http.ResponseWriter, r *http.Request, s session, ma
 func (auth *authenticator) storeSession(s session) (string, error) {
 	var sid string
 	var err error
+	if s.signedInAt.IsZero() {
+		s.signedInAt = time.Now()
+	}
 	if auth.sealer != nil {
 		sid, err = auth.sealer.seal(s)
 	} else {

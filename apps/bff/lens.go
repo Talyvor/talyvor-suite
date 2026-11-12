@@ -458,6 +458,13 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/keys/enrolments/{id}/challenge", a.requireTenant(a.handleKeyEnrolmentAction("challenge")))
 	a.mux.HandleFunc("/api/agents/keys/enrolments/{id}/approve", a.requireTenant(a.handleKeyEnrolmentAction("approve")))
 	a.mux.HandleFunc("/api/agents/keys/enrolments/{id}/decline", a.requireTenant(a.handleKeyEnrolmentAction("decline")))
+	// B55.54 — a recovery code, and a key back when every key of the workspace was removed (Lens B55.48).
+	a.mux.HandleFunc("/api/agents/keys/recovery-code/challenge", a.requireTenant(a.handleRecoveryCode("/challenge")))
+	a.mux.HandleFunc("/api/agents/keys/recovery-code", a.requireTenant(a.handleRecoveryCode("")))
+	a.mux.HandleFunc("/api/agents/keys/recover", a.requireTenant(a.handleKeyRecover))
+	a.mux.HandleFunc("/api/agents/keys/recover/start", a.requireTenant(a.handleKeyRecoverAction("start")))
+	a.mux.HandleFunc("/api/agents/keys/recover/cancel", a.requireTenant(a.handleKeyRecoverAction("cancel")))
+	a.mux.HandleFunc("/api/agents/keys/recover/complete", a.requireTenant(a.handleKeyRecoverAction("complete")))
 	a.mux.HandleFunc("/api/agents/push/public-key", a.requireTenant(a.handlePushPublicKey))
 	a.mux.HandleFunc("/api/agents/push/subscriptions", a.requireTenant(a.handlePushSubscriptions))
 	a.mux.HandleFunc("/api/agents/{id}/fund", a.requireTenant(a.handleAgentMove("fund")))

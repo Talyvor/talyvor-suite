@@ -51,6 +51,8 @@ const sessionTokenTTLHours = 8
 type tenant struct {
 	workspaceID string
 	token       string
+	// signedInAt is when the session's person signed in; zero without a session (B55.54, key_recovery.go).
+	signedInAt time.Time
 }
 
 func (t tenant) ok() bool { return t.workspaceID != "" && t.token != "" }
@@ -179,7 +181,7 @@ func (a *app) tenantFrom(r *http.Request) (tenant, bool) {
 		return tenant{}, false
 	}
 	s = a.refreshWorkspaceToken(r.Context(), sid, s)
-	t := tenant{workspaceID: s.workspaceID, token: s.lensToken}
+	t := tenant{workspaceID: s.workspaceID, token: s.lensToken, signedInAt: s.signedInAt}
 	return t, t.ok()
 }
 

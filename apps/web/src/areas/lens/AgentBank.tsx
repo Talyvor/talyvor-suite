@@ -12,6 +12,7 @@ import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
 import { letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
+import { GetAKeyBack, NoLiveKey, RecoveryCodeRow } from './KeyRecovery'
 import { AgentAnalytics } from './AgentAnalytics'
 import { AlertChannels } from './AlertChannels'
 import { AgentCardPanel } from './AgentCardPanel'
@@ -2324,17 +2325,23 @@ export function useKeys() {
   const passkeys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
   const devices = useQuery({ queryKey: DEVICES_KEY, queryFn: agentBankApi.devices })
   const passkeyCount = (passkeys.data?.passkeys ?? []).length
-  const thisBrowserSigns = passkeyCount > 0
-  const signed = thisBrowserSigns || (devices.data?.devices ?? []).length > 0
   const isSuccess = passkeys.isSuccess && devices.isSuccess
+  // B55.54 — keys, but every one revoked (Lens lists revoked passkeys and phone keys): nothing can approve until one is
+  // got back (KeyRecovery.tsx), so nothing that needs a signature is offered here, as with the phone's key alone.
+  const live = [...(passkeys.data?.passkeys ?? []), ...(devices.data?.devices ?? [])].filter((k) => !k.revoked_at).length
+  const noLiveKey = isSuccess && passkeyCount + (devices.data?.devices ?? []).length > 0 && live === 0
+  const thisBrowserSigns = passkeyCount > 0 && !noLiveKey
+  const signed = passkeyCount > 0 || (devices.data?.devices ?? []).length > 0
   const onlyThePhone = isSuccess && signed && !thisBrowserSigns
-  return { signed, thisBrowserSigns, onlyThePhone, hold: !isSuccess || onlyThePhone, passkeyCount, isSuccess }
+  return { signed, thisBrowserSigns, onlyThePhone, noLiveKey, hold: !isSuccess || onlyThePhone, passkeyCount, isSuccess }
 }
 
 /** B55.2 — said in place of a button this browser cannot sign for: where to do it, and how to sign here too (B55.3). */
 export function OnThePhone({ children }: { children: React.ReactNode }) {
   // On Approvals itself the link would lead back to the same page.
   const here = useLocation().pathname === '/approvals'
+  // B55.54 — with no live key there is no phone to do it on either: say so, and where to get a key back.
+  if (useKeys().noLiveKey) return <NoLiveKey here={here} />
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-ink" data-testid="on-the-phone">
       <span>{children}</span>
@@ -2689,7 +2696,8 @@ export function Approvals({
     )
   return (
     <div className="flex flex-col gap-3">
-      <FaceID signed={signed} ready={keys.isSuccess} passkeyCount={keys.passkeyCount} />
+      {keys.noLiveKey ? <GetAKeyBack /> : <FaceID signed={signed} ready={keys.isSuccess} passkeyCount={keys.passkeyCount} />}
+      {keys.thisBrowserSigns ? <RecoveryCodeRow /> : null}
       {outcome ? <Note ok={outcome.ok}>{outcome.text}</Note> : null}
       {list.isError ? (
         <p className="text-body text-muted">{readFailure(list.error, 'The approvals')}</p>

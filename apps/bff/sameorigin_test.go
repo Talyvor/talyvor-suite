@@ -399,6 +399,13 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/approve", body: `{"assertion":{"credential_id":"c","client_data_json":"j","authenticator_data":"a","signature":"s"}}`},
 		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/decline", body: `{}`},
+		// B55.54 — a new recovery code, and a key back when every key was removed.
+		{method: http.MethodPost, path: "/api/agents/keys/recovery-code/challenge", body: `{}`},
+		{method: http.MethodPost, path: "/api/agents/keys/recovery-code", body: `{"assertion":{"credential_id":"c","client_data_json":"j","authenticator_data":"a","signature":"s"}}`},
+		{method: http.MethodPost, path: "/api/agents/keys/recover", body: `{"code":"c","passkey":{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}}`},
+		{method: http.MethodPost, path: "/api/agents/keys/recover/start", body: `{}`},
+		{method: http.MethodPost, path: "/api/agents/keys/recover/cancel", body: `{}`},
+		{method: http.MethodPost, path: "/api/agents/keys/recover/complete", body: `{"passkey":{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},
 		{method: http.MethodPost, path: "/api/agents/push/subscriptions", body: `{"endpoint":"https://fcm.googleapis.com/fcm/send/x","keys":{"p256dh":"p","auth":"a"}}`},
 		{method: http.MethodDelete, path: "/api/agents/push/subscriptions", body: `{"endpoint":"https://fcm.googleapis.com/fcm/send/x"}`},
