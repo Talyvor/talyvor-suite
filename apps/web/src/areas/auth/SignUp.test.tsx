@@ -159,6 +159,21 @@ describe('step 3: add a passkey or pair your phone', () => {
     expect(screen.getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
   })
 
+  it('draws P1’s step bars for a narrow screen: three bars, all reached, and “Step 3 of 3”', async () => {
+    mockFetch({ authenticated: true })
+    at('/signup/key')
+    const bars = await screen.findByText('Step 3 of 3')
+    const row = bars.parentElement!
+    expect(row.querySelectorAll('[data-step-bar]')).toHaveLength(3)
+    expect(row.querySelectorAll('[data-step-bar="reached"]')).toHaveLength(3)
+  })
+
+  it('labels the new workspace from its own capabilities, and says Status unknown when that read fails (S-06)', async () => {
+    mockFetch({ authenticated: true })
+    at('/signup/key')
+    expect(await screen.findByText('Status unknown')).toBeInTheDocument()
+  })
+
   it('asks someone with no session to sign in first, and brings them back to step 3', async () => {
     mockFetch({ authenticated: false })
     at('/signup/key')
