@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { cn } from '@talyvor/ui'
 import { type AgentApproval, type PaymentRequest, agentBankApi } from '../areas/lens/agentBankApi'
 import { CAPABILITIES_KEY } from '../areas/lens/WalletMoney'
 import { StatusLabel } from './StatusLabel'
@@ -10,9 +11,16 @@ import { StatusLabel } from './StatusLabel'
 
 /** Lens's label for each of the workspace's money capabilities, by key; undefined until it answers. */
 export function useWorkspaceLabels(): Record<string, string> | undefined {
-  const caps = useQuery({ queryKey: CAPABILITIES_KEY, queryFn: agentBankApi.capabilities, staleTime: 60_000 })
-  if (!caps.data) return undefined
-  return Object.fromEntries((caps.data.capabilities ?? []).flatMap((c) => (c.label ? [[c.capability, c.label]] : [])))
+  return labelsOf(useCapabilities().data)
+}
+
+function useCapabilities() {
+  return useQuery({ queryKey: CAPABILITIES_KEY, queryFn: agentBankApi.capabilities, staleTime: 60_000 })
+}
+
+function labelsOf(data: Awaited<ReturnType<typeof agentBankApi.capabilities>> | undefined): Record<string, string> | undefined {
+  if (!data) return undefined
+  return Object.fromEntries((data.capabilities ?? []).flatMap((c) => (c.label ? [[c.capability, c.label]] : [])))
 }
 
 /** The chip for a money screen or panel: Live only when Lens says live for every capability it moves. */
@@ -20,13 +28,28 @@ export function WorkspaceLabel({ capability, className }: { capability: string |
   return <StatusLabel capability={capability} labels={useWorkspaceLabels()} className={className} />
 }
 
-/** The sidebar's one chip under the workspace name: Sandbox while every money capability Lens labels is sandbox for
- *  this workspace, and nothing once any is live (each screen then says which). */
-export function WorkspaceSandbox({ className }: { className?: string }) {
-  const labels = useWorkspaceLabels()
-  const keys = Object.keys(labels ?? {})
-  if (!keys.length || keys.some((k) => labels?.[k] !== 'sandbox')) return null
-  return <StatusLabel capability={keys} labels={labels} className={className} />
+/** B57.118 — the top bar's label, top right on every signed-in screen (the launch pack's design, W2 to W5): Sandbox
+ *  while any money capability Lens labels is sandbox for this workspace, Live once every one is live. Nothing while Lens
+ *  is reading or gives no label; a read that failed says Status unknown, so the label never vanishes for a reason the
+ *  owner cannot see (S-06). */
+export function WorkspaceStatus({ className }: { className?: string }) {
+  const caps = useCapabilities()
+  const labels = labelsOf(caps.data)
+  if (!labels && caps.isError) {
+    return (
+      <span
+        data-testid="workspace-status-unknown"
+        title="Talyvor could not read whether this workspace moves real money."
+        className={cn(
+          'inline-flex h-6 items-center whitespace-nowrap rounded-pill bg-page px-2.5 text-micro font-semibold text-ink-2 shadow-edge',
+          className,
+        )}
+      >
+        Status unknown
+      </span>
+    )
+  }
+  return <StatusLabel capability={Object.keys(labels ?? {})} labels={labels} className={className} />
 }
 
 /** The capability an agent's approval moves money on: a model call is spending on Talyvor; a payment is by its payee. */

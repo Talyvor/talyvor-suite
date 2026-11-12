@@ -96,7 +96,7 @@ import { CommandPalette, ariaKeys, shortcutText, type PalettePage } from './comp
 import { ScreenBoundary } from './components/ScreenBoundary'
 import { useAuthMeReader } from './lib/authMe'
 import { designOf } from './pocketPending'
-import { WorkspaceSandbox } from './labels/workspace'
+import { WorkspaceStatus } from './labels/workspace'
 import { AreaRoute, IfArea, useWorkspaceAreas } from './lib/workspaceAreas'
 
 // App.tsx is a SHARED file (see README §Directory ownership): it owns routing
@@ -372,14 +372,12 @@ function Sidebar() {
             <span className="max-w-full truncate text-body font-semibold text-ink" title={workspaceLabel} data-testid="sidebar-workspace-name">
               {workspaceLabel}
             </span>
-            {/* B56.11 — one Sandbox chip under the name while Lens says no money capability is live for this workspace. */}
             {/* B59.10 — the switcher's chip, "Business · Hybrid", once Lens has said which. */}
             {account.account ? (
               <span className="rounded-pill bg-cloud-2 px-2 text-caption text-ink" data-testid="sidebar-account-chip">
                 {accountChip(account.account)}
               </span>
             ) : null}
-            <WorkspaceSandbox />
           </div>
         </div>
       )}
@@ -512,6 +510,8 @@ function AppShell() {
           />
           <span className="flex-1" />
           <TeamOnly />
+          {/* B57.118 — the label, top right on every screen, before Pause every agent (the launch pack's W2 to W5). */}
+          <WorkspaceStatus />
           <EveryAgentSwitch />
           {/* B57.42 moves the theme switch to Settings as Appearance; until then it stays here, in today's design. */}
           <div className="contents" data-design="today">

@@ -266,7 +266,7 @@
   "src/greppableSources.test.ts": 3,
   "src/headerReflow.test.tsx": 4,
   "src/inlineLinkTreatment.test.ts": 5,
-  "src/labels/appLabels.test.tsx": 14,
+  "src/labels/appLabels.test.tsx": 15,
   "src/labels/registry.test.ts": 4,
   "src/labels/StatusLabel.test.tsx": 6,
   "src/LandmarkCoverage.test.tsx": 72,
