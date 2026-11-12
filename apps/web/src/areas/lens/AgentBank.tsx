@@ -4,6 +4,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Icon, Button as PocketButton, Row as PocketRow, RoomBadge, faceOf, type FaceColour } from '@talyvor/ui/pocket'
 import { Card, pressed } from './walletBrand'
+import { LAST_KEY, RemoveKeyDialog } from './RemoveKey'
 import { Region, RegionScreen } from '../../components/Region'
 import { useLinked } from '../../components/LinkedItem'
 import { isSessionExpired } from '../../lib/productState'
@@ -33,6 +34,7 @@ import { CashOutCard, CashOuts, Escrows, PayIntoEscrow, Portfolios, Pots } from 
 import {
   type Agent,
   type AgentApproval,
+  type ApprovalKey,
   type PayeeAllowance,
   type AgentArchive,
   type ApprovalPayee,
@@ -2486,15 +2488,67 @@ export function deviceText(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback
 }
 
+export const APPROVAL_KEYS_KEY = ['approval-keys']
+
+/** B55.16 — "Passkey · added 14 Oct · last used yesterday", or "Phone key · …". */
+function keyFacts(k: ApprovalKey): string {
+  return [
+    k.kind === 'phone' ? 'Phone key' : 'Passkey',
+    `added ${formatDecided(k.created_at)}`,
+    k.last_used_at ? `last used ${formatDecided(k.last_used_at)}` : 'never used',
+  ].join(' · ')
+}
+
+/** B55.16 — the card's line: "2 passkeys and your phone’s key are registered. You approve with one of them; …". */
+function keysLine(keys: ApprovalKey[]): string {
+  const phones = keys.filter((k) => k.kind === 'phone').length
+  const passkeys = keys.length - phones
+  const what = [
+    passkeys === 0 ? '' : `${passkeys} passkey${passkeys === 1 ? '' : 's'}`,
+    phones === 0 ? '' : phones === 1 ? 'your phone’s key' : `${phones} phone keys`,
+  ]
+    .filter((x) => x !== '')
+    .join(' and ')
+  const head = `${what.charAt(0).toUpperCase()}${what.slice(1)} ${keys.length === 1 ? 'is' : 'are'} registered.`
+  return keys.length === 1
+    ? `${head} You approve with it; nothing is approved without it.`
+    : `${head} You approve with one of them; nothing is approved without one.`
+}
+
 /**
  * B19.10 — the phone half: a passkey made here signs every approval from now on, and this device can
  * be told when one is filed. Lens keeps both (B19.16); nothing is kept in the browser but the passkey.
  * B55.3: with only the phone's key, a passkey made here waits until the phone lets it in (Lens B55.1).
+ * B55.16 — every passkey and phone key is listed by name, and any but the last can be removed.
  */
 function FaceID({ signed, ready, passkeyCount }: { signed: boolean; ready: boolean; passkeyCount: number }) {
   const qc = useQueryClient()
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
   const [waiting, setWaiting] = useState<{ id: string; code: string } | null>(null)
+  // Lens lets only the owner or an admin read the keys; anyone else keeps the line below without the list.
+  const keys = useQuery({ queryKey: APPROVAL_KEYS_KEY, queryFn: agentBankApi.approvalKeys })
+  const list = keys.data?.keys ?? []
+  const [asking, setAsking] = useState<ApprovalKey | null>(null)
+  const remove = useMutation({
+    // Removing needs no signature: stopping a key is instant, and Lens refuses the last one.
+    mutationFn: async (k: ApprovalKey) => {
+      await (k.kind === 'phone' ? agentBankApi.revokeDevice(k.id) : agentBankApi.removePasskey(k.id))
+    },
+    onSuccess: (_, k) => {
+      setAsking(null)
+      setSaid({ ok: true, text: `Removed: ${k.name}. It can no longer approve anything.` })
+    },
+    onSettled: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: APPROVAL_KEYS_KEY }),
+        qc.invalidateQueries({ queryKey: PASSKEYS_KEY }),
+        qc.invalidateQueries({ queryKey: DEVICES_KEY }),
+      ]),
+  })
+  const ask = (k: ApprovalKey | null) => {
+    remove.reset()
+    setAsking(k)
+  }
   const register = useMutation({
     mutationFn: () => registerThisDevice(navigator.userAgent.includes('iPhone') ? 'iPhone' : 'This device'),
     onSuccess: (enrolment) => {
@@ -2540,12 +2594,36 @@ function FaceID({ signed, ready, passkeyCount }: { signed: boolean; ready: boole
       <CardHeader>Face ID and notifications</CardHeader>
       <div className="flex flex-col gap-2 px-gutter py-3">
         <p className="text-body text-muted">
-          {signed && passkeyCount === 0
+          {keys.isSuccess && list.length > 0
+            ? keysLine(list)
+            : signed && passkeyCount === 0
             ? 'Approvals are signed on your phone. Nothing is approved without it.'
             : signed
             ? `Approvals are signed with a passkey (${passkeyCount} registered). Nothing is approved without one.`
             : 'Approvals are not signed yet. Make a passkey on your phone and every approval asks for Face ID.'}
         </p>
+        {list.length > 0 ? (
+          <div className="-mx-gutter" data-testid="approval-keys">
+            {list.map((k) => (
+              <Row key={`${k.kind}-${k.id}`} stack label={k.name || (k.kind === 'phone' ? 'Phone key' : 'Passkey')} hint={keyFacts(k)}>
+                {list.length === 1 ? (
+                  <span className="text-caption text-muted">{LAST_KEY}</span>
+                ) : (
+                  <Button className="h-12 wide:h-8" aria-label={`Remove ${k.name}`} onClick={() => ask(k)}>
+                    Remove
+                  </Button>
+                )}
+              </Row>
+            ))}
+          </div>
+        ) : null}
+        <RemoveKeyDialog
+          name={asking?.name ?? null}
+          pending={remove.isPending}
+          error={remove.error}
+          onKeep={() => ask(null)}
+          onRemove={() => asking && remove.mutate(asking)}
+        />
         {waiting ? (
           <Note ok>Waiting for your phone. Open Talyvor on your phone and let this browser in. The code there should be <span className="font-figure">{waiting.code}</span>.</Note>
         ) : said ? (

@@ -74,7 +74,7 @@
   "src/areas/lens/AgentAnalytics.test.tsx": 2,
   "src/areas/lens/AgentBank.test.tsx": 5,
   "src/areas/lens/agentBankApi.test.ts": 4,
-  "src/areas/lens/AgentBankFaceID.test.tsx": 4,
+  "src/areas/lens/AgentBankFaceID.test.tsx": 8,
   "src/areas/lens/AgentCard.test.tsx": 2,
   "src/areas/lens/AgentCredential.test.tsx": 2,
   "src/areas/lens/AgentLifecycle.test.tsx": 1,
