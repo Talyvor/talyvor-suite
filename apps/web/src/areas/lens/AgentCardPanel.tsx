@@ -7,12 +7,15 @@ import { formatWhen } from './format'
 import { type Agent, type AgentCard, type CardAuthorization, type Cardholder, agentBankApi, refusalText } from './agentBankApi'
 import { Lxc } from './money'
 import { WorkspaceLabel } from '../../labels/workspace'
+import { AgentCard as AgentCardFace } from '../../cards/AgentCard'
 
 // AgentCardPanel.tsx — B19.24: an agent's card on Agent Wallets. Lens (B19.12) issues an agent a virtual
 // card through Stripe Issuing, in TEST MODE ONLY — cards are class RED, test money until a licensed partner
 // exists — and decides every purchase on it in real time by the agent's rules and balance, converting it
 // from pounds at the day's European Central Bank reference rate. This shows the card and each purchase
 // with Lens's own reason and the rate; issuing one asks for the cardholder Stripe needs.
+// B57.125 — an issued card is drawn as the agent's own card: its helper, its name and its job line, with the number's
+// last four and the expiry in the line under it, never on the face.
 
 export const cardKey = (id: string) => ['agent-card', id]
 
@@ -183,6 +186,9 @@ export function AgentCardPanel({ agent }: { agent: Agent }) {
         <p className="px-gutter py-3 text-body text-muted">Reading…</p>
       ) : q.data ? (
         <>
+          <div className="px-gutter pt-3">
+            <AgentCardFace agent={agent} className="max-w-sm" />
+          </div>
           <CardFace card={q.data.card} />
           <div className="border-t border-rule">
             {(q.data.authorizations ?? []).length === 0 ? (

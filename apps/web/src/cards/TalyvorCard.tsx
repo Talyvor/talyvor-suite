@@ -25,7 +25,18 @@ export function holderSize(holder: string, agent: boolean): number {
   return Math.max(16, Math.min(26, Math.floor((26 * 14) / Math.max(holder.length, 1))))
 }
 
-const u = (px: number) => `calc(100cqw * ${px} / ${cardLayout.width})`
+/** A length from Card.dc.html at 428 px wide, scaled with the card. */
+export const cardUnit = (px: number) => `calc(100cqw * ${px} / ${cardLayout.width})`
+const u = cardUnit
+
+/** The card's box: its proportions and its 18 px corner. Text sizes in it are container units. */
+export const cardFrame: CSSProperties = {
+  aspectRatio: `${cardLayout.width} / ${cardLayout.height}`,
+  containerType: 'inline-size',
+  // The root cannot size against itself in container units, so its 18 px corner is a share of its own box.
+  borderRadius: `${(1800 / cardLayout.width).toFixed(3)}% / ${(1800 / cardLayout.height).toFixed(3)}%`,
+}
+export const cardShadow = '0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18)'
 
 const line: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
 
@@ -52,15 +63,7 @@ export function TalyvorCard({ card, holder, sub, alt, className }: TalyvorCardPr
       aria-label={label}
       data-card={card.id}
       className={cn('relative w-full overflow-hidden font-sans', className)}
-      style={{
-        aspectRatio: `${cardLayout.width} / ${cardLayout.height}`,
-        containerType: 'inline-size',
-        // The root cannot size against itself in container units, so its 18 px corner is a share of its own box.
-        borderRadius: `${(1800 / cardLayout.width).toFixed(3)}% / ${(1800 / cardLayout.height).toFixed(3)}%`,
-        background: '#111216',
-        color: face.ink,
-        boxShadow: '0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18)',
-      }}
+      style={{ ...cardFrame, background: '#111216', color: face.ink, boxShadow: cardShadow }}
     >
       <img src={card.art} alt="" className="absolute inset-0 h-full w-full object-cover" />
       <div className="absolute inset-0" style={{ background: face.scrim }} />
@@ -121,15 +124,22 @@ export function TalyvorCard({ card, holder, sub, alt, className }: TalyvorCardPr
           {card.badge.label}
         </div>
       ) : null}
-      <div className="absolute" style={{ left: u(cardLayout.holderLeft), bottom: u(20), maxWidth: u(cardLayout.holderMaxWidth) }}>
-        <div
-          className="font-display"
-          style={{ ...line, fontWeight: 750, fontSize: u(holderSize(holder, agent)), letterSpacing: '-0.01em', lineHeight: 1.05 }}
-        >
-          {holder}
-        </div>
-        <div style={{ ...line, fontSize: u(12), fontWeight: 600, color: face.ink2, marginTop: u(4) }}>{sub}</div>
+      <CardHolder holder={holder} sub={sub} agent={agent} ink2={face.ink2} />
+    </div>
+  )
+}
+
+/** The holder bottom left, clear of the network corner, with its one sub line in the face's second ink. */
+export function CardHolder({ holder, sub, agent, ink2 }: { holder: string; sub: string; agent: boolean; ink2: string }) {
+  return (
+    <div className="absolute" style={{ left: u(cardLayout.holderLeft), bottom: u(20), maxWidth: u(cardLayout.holderMaxWidth) }}>
+      <div
+        className="font-display"
+        style={{ ...line, fontWeight: 750, fontSize: u(holderSize(holder, agent)), letterSpacing: '-0.01em', lineHeight: 1.05 }}
+      >
+        {holder}
       </div>
+      <div style={{ ...line, fontSize: u(12), fontWeight: 600, color: ink2, marginTop: u(4) }}>{sub}</div>
     </div>
   )
 }
