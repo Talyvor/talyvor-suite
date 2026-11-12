@@ -2730,6 +2730,8 @@ export class Bank {
         return json(res, 200, this.walletsOf(a)), true
       }
       if (action === '/rules' && method === 'GET') return json(res, 200, a.rules), true
+      // B55.13 — what a change would do to the rules. The stub's workspaces sign nothing, so every change saves as today.
+      if (action === '/rules/challenge' && method === 'POST') return json(res, 200, { looser: false, changes: [], allow_credentials: [] }), true
       if (action === '/rules' && method === 'PUT') {
         const r = await this.body<Partial<Rules>>(req)
         const both = (r.allowed_payees ?? []).find((x) => (r.blocked_payees ?? []).includes(x))

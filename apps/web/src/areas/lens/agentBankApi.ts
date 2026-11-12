@@ -105,6 +105,21 @@ export interface AgentRuleBoost {
   created_at: string
 }
 
+/** B55.14 — one change to an agent's rules, as Lens judges it (economy.RulesProposal, B55.13). */
+export type RulesChange =
+  | { rules: AgentRules }
+  | { rollback_to: number }
+  | { template: string }
+  | { boost: { rule: string; value: number; until: string } }
+
+/** Lens economy.RulesJudgement (B55.13): whether a change loosens the rules, each rule it changes in words, and the challenge a looser one is signed over. */
+export interface RulesJudgement {
+  looser: boolean
+  changes: string[] | null
+  challenge?: string
+  allow_credentials: string[] | null
+}
+
 /** Lens economy.AgentBook: workspace = allocated + unallocated; spent is what the agents spent. */
 export interface AgentBook {
   workspace_balance_ulxc: number
@@ -1075,19 +1090,24 @@ export const agentBankApi = {
       monthly_limit_ulxc: 'number',
       approval_above_ulxc: 'number',
     }),
-  setRules: (id: string, rules: AgentRules) => send<AgentRules>('PUT', `/api/agents/${e(id)}/rules`, rules),
+  /** B55.14: a looser save carries the passkey's assertion beside the rules (Lens B55.13). */
+  setRules: (id: string, rules: AgentRules, assertion?: PasskeyAssertion) =>
+    send<AgentRules>('PUT', `/api/agents/${e(id)}/rules`, assertion ? { rules, assertion } : rules),
+  /** B55.14 — what a change would do to the agent's rules, and the challenge a looser one is signed over; saves nothing. */
+  rulesChallenge: (id: string, change: RulesChange) => send<RulesJudgement>('POST', `/api/agents/${e(id)}/rules-challenge`, change),
   /** B28.30 — would the agent's rules let this request through? Lens judges it and moves nothing. */
   simulate: (id: string, req: SimulatedRequest) => send<RuleSimulation>('POST', `/api/agents/${e(id)}/rules/simulate`, req),
   /** B28.31 — every version of the agent's rules, newest first: the first is the rules in force. */
   rulesHistory: (id: string) =>
     getJSON<{ versions: AgentRulesVersion[] | null }>(`/api/agents/${e(id)}/rules/history`, { versions: 'list' }),
   /** B28.31 — put the agent's rules back exactly as they were at version; Lens records that as a new version. */
-  rollbackRules: (id: string, version: number) => send<AgentRules>('POST', `/api/agents/${e(id)}/rules/rollback`, { version }),
+  rollbackRules: (id: string, version: number, assertion?: PasskeyAssertion) =>
+    send<AgentRules>('POST', `/api/agents/${e(id)}/rules/rollback`, { version, ...(assertion ? { assertion } : {}) }),
   /** B28.32 — the agent's limits raised for now, the soonest to end first. */
   boosts: (id: string) => getJSON<{ boosts: AgentRuleBoost[] | null }>(`/api/agents/${e(id)}/rules/boosts`, { boosts: 'list' }),
   /** B28.32 — raise one of the agent's limits to value until a time; from then on it is the rules' limit again by itself. */
-  boost: (id: string, b: { rule: string; value: number; until: string }) =>
-    send<AgentRuleBoost>('POST', `/api/agents/${e(id)}/rules/boosts`, b),
+  boost: (id: string, b: { rule: string; value: number; until: string }, assertion?: PasskeyAssertion) =>
+    send<AgentRuleBoost>('POST', `/api/agents/${e(id)}/rules/boosts`, { ...b, ...(assertion ? { assertion } : {}) }),
   /** B28.32 — end the agent's boost on that limit now, before its time. */
   endBoost: (id: string, rule: string) => send<void>('DELETE', `/api/agents/${e(id)}/rules/boosts/${e(rule)}`),
   statement: (id: string) => getJSON<{ lines: StatementLine[] | null }>(`/api/agents/${e(id)}/statement`, { lines: 'list' }),

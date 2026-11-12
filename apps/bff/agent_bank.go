@@ -21,12 +21,14 @@ import (
 //	POST /api/agents/{id}/fund          {"amount_ulxc"}   move the workspace's LXC to the agent
 //	POST /api/agents/{id}/withdraw      {"amount_ulxc"}   take it back
 //	POST /api/agents/{id}/keys          {"name"}       issue the agent a proxy key of its own, shown once
-//	GET  /api/agents/{id}/rules, PUT {rules}           the agent's spending rules
+//	GET  /api/agents/{id}/rules, PUT {rules}           the agent's spending rules; PUT {"rules", "assertion"} when looser (B55.14)
+//	POST /api/agents/{id}/rules-challenge {"rules"}|{"rollback_to"}|{"template"}|{"boost"}   B55.14: looser or not, the
+//	                                                   changes in words, and the challenge a looser save is signed over
 //	POST /api/agents/{id}/rules/simulate {"amount_ulxc", "model"?, "provider"?, "payee"?, "at"?}   B28.30: would they let it through? moves nothing
 //	GET  /api/agents/{id}/rules/history                B28.31: every version of the rules, newest first, who changed them and how
-//	POST /api/agents/{id}/rules/rollback {"version"}   B28.31: put the rules back exactly as they were at that version
+//	POST /api/agents/{id}/rules/rollback {"version", "assertion"?}   B28.31: put the rules back exactly as they were at that version
 //	GET  /api/agents/{id}/rules/boosts                 B28.32: the limits raised for now, and until when
-//	POST /api/agents/{id}/rules/boosts {"rule", "value", "until"}   B28.32: raise a limit until a time; it reverts by itself
+//	POST /api/agents/{id}/rules/boosts {"rule", "value", "until", "assertion"?}   B28.32: raise a limit until a time; it reverts by itself
 //	DELETE /api/agents/{id}/rules/boosts/{rule}        B28.32: end a boost before its time
 //	GET  /api/agents/{id}/wallet                       B46.9: its wallet on the money layer — balance and how to pay into it
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
@@ -230,6 +232,36 @@ func (a *app) handleAgentRules(w http.ResponseWriter, r *http.Request, t tenant)
 		a.agentBankRelay(w, r, t, http.MethodGet, suffix, nil)
 		return
 	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	// B55.14: a looser change comes as {"rules", "assertion"} (Lens B55.13); otherwise the rules alone, which have no
+	// "rules" field of their own.
+	var signed struct {
+		Rules     json.RawMessage   `json:"rules"`
+		Assertion *passkeyAssertion `json:"assertion"`
+	}
+	if json.Unmarshal(raw, &signed) == nil && signed.Rules != nil {
+		raw = signed.Rules
+	}
+	rules, ok := agentRulesFields(w, raw)
+	if !ok {
+		return
+	}
+	if signed.Rules == nil || signed.Assertion == nil {
+		a.agentBankRelay(w, r, t, http.MethodPut, suffix, rules)
+		return
+	}
+	// UPSTREAM-BINDS-ONLY lensAgentRulesSignedBody: none
+	body, _ := json.Marshal(map[string]any{"rules": json.RawMessage(rules), "assertion": signed.Assertion})
+	a.agentBankRelay(w, r, t, http.MethodPut, suffix, body)
+}
+
+// agentRulesFields rebuilds an agent's rules from raw, field by field, as Lens's economy.AgentRules reads them; a body
+// that is not rules is answered 400 here.
+func agentRulesFields(w http.ResponseWriter, raw []byte) ([]byte, bool) {
 	// Lens's economy.AgentRules. Lens decodes it with DisallowUnknownFields, so a field named here
 	// that Lens does not have is a 400, never a rule silently dropped.
 	var in struct {
@@ -266,13 +298,54 @@ func (a *app) handleAgentRules(w http.ResponseWriter, r *http.Request, t tenant)
 		// B19.6 — Lens replaces every other rule on a save, so this is carried back as it was read.
 		PauseOnUnusualSpend bool `json:"pause_on_unusual_spend"`
 	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return nil, false
+	}
+	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_licences, max_commitment_ulxc, may_subscribe, payee_allowances
+	body, _ := json.Marshal(in)
+	return body, true
+}
+
+// ruleBoostBody is a boost as Lens's economy.AgentRuleBoost is asked for one: the limit, raised to, until when.
+type ruleBoostBody struct {
+	Rule  string    `json:"rule"`
+	Value int64     `json:"value"`
+	Until time.Time `json:"until"`
+}
+
+// handleAgentRulesChallenge — POST /api/agents/{id}/rules-challenge (Lens: …/rules/challenge; B55.14): what a change would do to the agent's
+// rules — looser or not, and each rule it changes in the words rules history uses — and, when looser, the challenge its
+// save is signed over and the passkeys that may sign it. Lens (B55.13) judges a save, a rollback, a template or a boost
+// by the rules it puts in force, and saves nothing here.
+func (a *app) handleAgentRulesChallenge(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	suffix, ok := agentSuffix(w, r, "rules/challenge")
+	if !ok {
+		return
+	}
+	// Lens's economy.RulesProposal: exactly one is set, and Lens says so when not.
+	var in struct {
+		Rules      json.RawMessage `json:"rules,omitempty"`
+		RollbackTo int             `json:"rollback_to,omitempty"`
+		Template   string          `json:"template,omitempty"`
+		Boost      *ruleBoostBody  `json:"boost,omitempty"`
+	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_licences, max_commitment_ulxc, may_subscribe, payee_allowances
+	if in.Rules != nil {
+		if in.Rules, ok = agentRulesFields(w, in.Rules); !ok {
+			return
+		}
+	}
+	// UPSTREAM-BINDS-ONLY lensAgentRulesChallengeBody: none
 	body, _ := json.Marshal(in)
-	a.agentBankRelay(w, r, t, http.MethodPut, suffix, body)
+	a.agentBankRelay(w, r, t, http.MethodPost, suffix, body)
 }
 
 // simulatedPayee is Lens's economy.Payee: who a simulated payment goes to — an agent, a listing, a company or
@@ -365,6 +438,8 @@ func (a *app) handleAgentRulesRollback(w http.ResponseWriter, r *http.Request, t
 	}
 	var in struct {
 		Version int `json:"version"`
+		// B55.14: a rollback that loosens the rules is signed over its challenge (Lens B55.13).
+		Assertion *passkeyAssertion `json:"assertion,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -397,6 +472,8 @@ func (a *app) handleAgentRuleBoosts(w http.ResponseWriter, r *http.Request, t te
 		Rule  string    `json:"rule"`
 		Value int64     `json:"value"`
 		Until time.Time `json:"until"`
+		// B55.14: a boost always loosens the rules, so it is signed once the workspace has a key (Lens B55.13).
+		Assertion *passkeyAssertion `json:"assertion,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})

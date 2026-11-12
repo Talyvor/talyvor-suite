@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { type EnrolSeen, type PhoneSeen, enrolVerdict, phoneKeyWebVerdict } from '../src/phoneKeyWeb.ts'
 
-const right: PhoneSeen = { line: true, buttons: 0, posts: [], status: 'pending' }
+const right: PhoneSeen = { line: true, buttons: 0, posts: [], status: 'pending', loosenLine: true, rulesSaved: [500_000], daily: 500_000 }
 
 describe('the phone-key-web oracle (B55.2)', () => {
   it('passes the phone line, no button, nothing sent and the approval still pending', () => {
@@ -14,6 +14,14 @@ describe('the phone-key-web oracle (B55.2)', () => {
     expect(v.detail).toContain('shows 2 Approve or Deny button(s)')
     expect(v.detail).toContain('the page sent /api/agents/approvals/apr_1/approve')
     expect(v.detail).toContain('the approval is approved on Lens, not pending')
+  })
+
+  it('fails a raised limit sent from the web, or a lowered one Lens does not hold (B55.14)', () => {
+    const v = phoneKeyWebVerdict({ ...right, loosenLine: false, rulesSaved: [2_000_000, 500_000], daily: 2_000_000 })
+    expect(v.pass).toBe(false)
+    expect(v.detail).toContain('raising the daily limit did not say')
+    expect(v.detail).toContain('the page saved daily limits [2000000, 500000]')
+    expect(v.detail).toContain('the daily limit on Lens is 2000000 µLXC')
   })
 })
 

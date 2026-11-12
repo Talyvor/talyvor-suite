@@ -76,6 +76,8 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 				{"version": 2, "rules": map[string]any{"daily_limit_ulxc": 1_000_000}, "changed_by": "jwt:user:ws_1", "change": "template researcher", "created_at": "2026-10-05T09:01:00Z"},
 				{"version": 1, "rules": map[string]any{"daily_limit_ulxc": 5_000_000}, "changed_by": "jwt:user:ws_1", "change": "set", "created_at": "2026-10-05T09:00:00Z"},
 			}})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules/challenge"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"looser": true, "changes": []string{"Daily limit: was 5 LXC, now 9 LXC"}, "challenge": "ch_rules", "allow_credentials": []string{"cred_1"}, "user_verification": "required"})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules/rollback"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"daily_limit_ulxc": 5_000_000})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules/boosts") && r.Method == http.MethodPost:
@@ -691,6 +693,58 @@ func TestRulesHistoryAndRollbackReachLens(t *testing.T) {
 		!strings.HasPrefix(f.got[1], "POST /v1/workspaces/") || !strings.HasSuffix(f.got[1], `/agents/agt_1/rules/rollback {"version":1}`) ||
 		strings.Contains(f.got[1], "ws_other") {
 		t.Fatalf("Lens got %q; want GET …/rules/history and POST …/rules/rollback {\"version\":1}", f.got)
+	}
+}
+
+// B55.14 — what a change would do reaches Lens's rules/challenge with exactly one of the rules (field by field), a version,
+// a template or a boost; a looser save, rollback or boost then carries its assertion, and a browser's extra fields go nowhere.
+func TestRulesChallengeAndSignedChangesReachLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	const as = `{"credential_id":"cred_1","client_data_json":"cd","authenticator_data":"ad","signature":"sig"}`
+	rec := doJSON(a, http.MethodPost, "/api/agents/agt_1/rules-challenge", `{"rules":{"daily_limit_ulxc":9000000,"junk":1},"workspace_id":"ws_other"}`)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"looser":true`) || !strings.Contains(rec.Body.String(), `"challenge":"ch_rules"`) {
+		t.Fatalf("challenge = %d %s", rec.Code, rec.Body.String())
+	}
+	for _, body := range []string{`{"rollback_to":3,"x":1}`, `{"template":"researcher"}`, `{"boost":{"rule":"daily_limit_ulxc","value":50000000,"until":"2026-10-06T18:00:00Z","x":1}}`} {
+		if rec := doJSON(a, http.MethodPost, "/api/agents/agt_1/rules-challenge", body); rec.Code != http.StatusOK {
+			t.Fatalf("challenge %s = %d %s", body, rec.Code, rec.Body.String())
+		}
+	}
+	for _, c := range []struct{ method, path, body string }{
+		{http.MethodPut, "/api/agents/agt_1/rules", `{"rules":{"daily_limit_ulxc":9000000},"assertion":` + as + `,"workspace_id":"ws_other"}`},
+		{http.MethodPost, "/api/agents/agt_1/rules/rollback", `{"version":1,"assertion":` + as + `}`},
+		{http.MethodPost, "/api/agents/agt_1/rules/boosts", `{"rule":"daily_limit_ulxc","value":50000000,"until":"2026-10-06T18:00:00Z","assertion":` + as + `}`},
+	} {
+		if rec := doJSON(a, c.method, c.path, c.body); rec.Code >= 300 {
+			t.Fatalf("%s %s = %d %s", c.method, c.path, rec.Code, rec.Body.String())
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.got) != 7 {
+		t.Fatalf("Lens got %q; want four challenges and three signed changes", f.got)
+	}
+	ends := []string{
+		`/agents/agt_1/rules/challenge {"rules":{"max_per_request_ulxc":0,"daily_limit_ulxc":9000000,`,
+		`/agents/agt_1/rules/challenge {"rollback_to":3}`,
+		`/agents/agt_1/rules/challenge {"template":"researcher"}`,
+		`/agents/agt_1/rules/challenge {"boost":{"rule":"daily_limit_ulxc","value":50000000,"until":"2026-10-06T18:00:00Z"}}`,
+		`/agents/agt_1/rules {"assertion":` + as + `,"rules":{"max_per_request_ulxc":0,"daily_limit_ulxc":9000000,`,
+		`/agents/agt_1/rules/rollback {"version":1,"assertion":` + as + `}`,
+		`/agents/agt_1/rules/boosts {"rule":"daily_limit_ulxc","value":50000000,"until":"2026-10-06T18:00:00Z","assertion":` + as + `}`,
+	}
+	for i, want := range ends {
+		got := f.got[i]
+		if i == 0 || i == 4 {
+			if _, after, ok := strings.Cut(got, "/agents/agt_1/rules"); !ok || !strings.HasPrefix("/agents/agt_1/rules"+after, want) {
+				t.Fatalf("Lens got %q; want it to start %q", got, want)
+			}
+		} else if !strings.HasSuffix(got, want) {
+			t.Fatalf("Lens got %q; want it to end %q", got, want)
+		}
+		if strings.Contains(got, "ws_other") || strings.Contains(got, "junk") || strings.Contains(got, `"x"`) {
+			t.Fatalf("Lens got %q; a browser's extra field went up", got)
+		}
 	}
 }
 
