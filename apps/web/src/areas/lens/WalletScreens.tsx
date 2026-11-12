@@ -1,13 +1,14 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { inlineLink } from '@talyvor/ui'
-import { Button as PocketButton, Icon, Tabs } from '@talyvor/ui/pocket'
+import { Button as PocketButton, Icon, Select, Tabs } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { ApiError } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
 import { APPROVALS_KEY, Approvals, BOOK_KEY, PREPARED_KEY, Statement } from './AgentBank'
-import { AgentStatement, DownloadFailed, useMonthCsv } from './AgentStatement'
-import { agentBankApi, type Agent, type CurrencyAccount } from './agentBankApi'
+import { AgentStatement, DownloadFailed, MONTH_FILE_TYPES, useMonthFile } from './AgentStatement'
+import { agentBankApi, type Agent, type CurrencyAccount, type StatementFormat } from './agentBankApi'
 import { AccountStatement, MarketplaceBill, accountTitle, useAccountMonthCsv } from './AccountStatement'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { CurrencyPicker } from './money'
@@ -90,8 +91,10 @@ export function StatementsScreen() {
   // B57.24 — an agent's tab is its statement as a document; B57.25 — so is a currency account's.
   const agentTab = tab?.agent && tab.agent.kind !== 'room' ? tab.agent : null
   const accountTab = tab?.account ?? null
-  const everyAgent = useMonthCsv(null)
-  const thisAgent = useMonthCsv(agentTab)
+  const everyAgent = useMonthFile(null)
+  const thisAgent = useMonthFile(agentTab)
+  // B57.112 — the file type both agent downloads save; a currency account's statement is Lens's CSV only.
+  const [format, setFormat] = useState<StatementFormat>('csv')
   const thisAccount = useAccountMonthCsv(accountTab, tab?.title ?? '')
   // Pocket's tabs choose by their words, so two wallets of one name take the first's tab.
   const titles = [...new Set(tabs.map((t) => t.title))]
@@ -114,12 +117,19 @@ export function StatementsScreen() {
         ) : (
           <div {...{ [DESIGN_ATTR]: 'pocket' }} className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <PocketButton variant="secondary" disabled={everyAgent.isPending} onClick={() => everyAgent.mutate()}>
+              <Select aria-label="File type" className="w-auto" value={format} onChange={(e) => setFormat(e.target.value as StatementFormat)}>
+                {MONTH_FILE_TYPES.map((t) => (
+                  <option key={t.format} value={t.format}>
+                    {t.words}
+                  </option>
+                ))}
+              </Select>
+              <PocketButton variant="secondary" disabled={everyAgent.isPending} onClick={() => everyAgent.mutate(format)}>
                 Statement for every agent
               </PocketButton>
               {agentTab ? (
-                <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAgent.isPending} onClick={() => thisAgent.mutate()}>
-                  Download CSV
+                <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAgent.isPending} onClick={() => thisAgent.mutate(format)}>
+                  Download {format.toUpperCase()}
                 </PocketButton>
               ) : accountTab ? (
                 <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAccount.isPending} onClick={() => thisAccount.mutate()}>

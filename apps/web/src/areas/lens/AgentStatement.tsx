@@ -9,7 +9,7 @@ import { AGENT_CREDIT } from '../../labels/capabilities'
 import { fetchModels } from '../chat/chatApi'
 import { Note, STATEMENT_KINDS, dayAfter, lineText, monthPeriod, readFailure, saveFile } from './AgentBank'
 import { AgentFace } from './AgentFace'
-import { AgentBankError, STATEMENT_PAGE_LINES, agentBankApi, refusalText, type Agent, type StatementLine } from './agentBankApi'
+import { AgentBankError, STATEMENT_PAGE_LINES, agentBankApi, refusalText, type Agent, type StatementFormat, type StatementLine } from './agentBankApi'
 
 // B57.24 — an agent's statement on Statements as the reference draws it (w-stmt-research): a document card with the
 // agent's face and name, this month so far, the band of Opening, Money in, Money out and Balance now, and its lines
@@ -64,21 +64,32 @@ function lineWhat(l: StatementLine, nameOf: (id: string) => string, modelOf: (id
 /** The file's stem: the agent's name in lower case, its words joined by hyphens. */
 const stem = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'agent'
 
-/** This month so far, for one agent (or with none every agent), as Lens's CSV: one row per posting. */
-export function useMonthCsv(agent: Agent | null) {
+/** B57.112 — the file types Statements offers, as the choice names them. */
+export const MONTH_FILE_TYPES: Array<{ format: Extract<StatementFormat, 'csv' | 'json' | 'pdf'>; words: string }> = [
+  { format: 'csv', words: 'CSV' },
+  { format: 'json', words: 'JSON' },
+  { format: 'pdf', words: 'PDF' },
+]
+
+/**
+ * This month so far, for one agent (or with none every agent), as the file Lens writes: the CSV one row per posting,
+ * or (B57.112) its JSON or PDF.
+ */
+export function useMonthFile(agent: Agent | null) {
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (format: StatementFormat = 'csv') => {
       const { from, through } = monthPeriod('this')
-      const name = `${agent ? stem(agent.name) : 'agent-wallets'}-statement-${from}-to-${through}.csv`
-      saveFile(name, await agentBankApi.statementFile(agent?.id ?? null, from, dayAfter(through), 'csv'))
+      const name = `${agent ? stem(agent.name) : 'agent-wallets'}-statement-${from}-to-${through}.${format}`
+      saveFile(name, await agentBankApi.statementFile(agent?.id ?? null, from, dayAfter(through), format))
       return name
     },
-    onSuccess: () => {
+    onSuccess: (_name, format = 'csv') => {
       const month = new Date().toLocaleDateString('en-GB', { month: 'long' })
+      const type = format.toUpperCase()
       showToast(
         agent
-          ? `Downloading ${agent.name}’s statement for ${month} as a CSV file`
-          : `Downloading the workspace’s statement for ${month}: every agent’s lines in one CSV file`,
+          ? `Downloading ${agent.name}’s statement for ${month} as a ${type} file`
+          : `Downloading the workspace’s statement for ${month}: every agent’s lines in one ${type} file`,
       )
     },
   })

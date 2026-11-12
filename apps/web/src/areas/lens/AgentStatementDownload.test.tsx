@@ -57,6 +57,11 @@ function mockBff() {
     if (url === '/api/agents/agt_1/statement?from=2026-09-01&to=2026-09-29&format=csv') return csv('agent:agt_1')
     if (url === '/api/agents/statement?from=2026-09-01&to=2026-09-29&format=csv') return csv('workspace')
     if (url === '/api/agents/statement?from=2026-08-01&to=2026-09-01&format=csv') return csv('workspace')
+    // B57.112 — and as a PDF when the file type says so.
+    if (url === '/api/agents/agt_1/statement?from=2026-09-01&to=2026-09-29&format=pdf' || url === '/api/agents/statement?from=2026-09-01&to=2026-09-29&format=pdf') {
+      asked.push(url)
+      return new Response(PDF, { status: 200, headers: { 'Content-Type': 'application/pdf' } })
+    }
     if (url === '/api/agents/agt_1/statement?from=2026-08-01&to=2026-09-01&format=pdf') {
       asked.push(url)
       return new Response(PDF, { status: 200, headers: { 'Content-Type': 'application/pdf' } })
@@ -182,6 +187,37 @@ describe('the two downloads on Statements', () => {
     await waitFor(() => expect(saved[0]?.name).toBe('agent-wallets-statement-2026-09-01-to-2026-09-28.csv'))
     expect(asked).toEqual(['/api/agents/statement?from=2026-09-01&to=2026-09-29&format=csv'])
     expect(await saved[0].text).toContain('workspace,closing')
+  })
+
+  // B57.112 — the file type choice beside them, in Pocket's Select: CSV, JSON or PDF, and the buttons save that file.
+  it('offers CSV, JSON and PDF, and Download PDF saves the open agent’s statement as a PDF', async () => {
+    const { asked, saved } = mockBff()
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    const type = (await screen.findByLabelText('File type')) as HTMLSelectElement
+    expect(type.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    expect([...type.options].map((o) => o.text)).toEqual(['CSV', 'JSON', 'PDF'])
+    fireEvent.change(type, { target: { value: 'pdf' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Download PDF' }))
+
+    await waitFor(() => expect(saved[0]?.name).toBe('researcher-statement-2026-09-01-to-2026-09-28.pdf'))
+    expect(asked).toEqual(['/api/agents/agt_1/statement?from=2026-09-01&to=2026-09-29&format=pdf'])
+    expect(await saved[0].text).toBe(PDF)
+    expect(await screen.findByText('Downloading Researcher’s statement for September as a PDF file')).toBeTruthy()
+  })
+
+  it('Statement for every agent saves the PDF when PDF is chosen', async () => {
+    const { asked, saved } = mockBff()
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    fireEvent.change(await screen.findByLabelText('File type'), { target: { value: 'pdf' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Statement for every agent' }))
+
+    await waitFor(() => expect(saved[0]?.name).toBe('agent-wallets-statement-2026-09-01-to-2026-09-28.pdf'))
+    expect(asked).toEqual(['/api/agents/statement?from=2026-09-01&to=2026-09-29&format=pdf'])
+    expect(await saved[0].text).toBe(PDF)
   })
 
   it('says so under the buttons when Lens cannot write the file', async () => {
