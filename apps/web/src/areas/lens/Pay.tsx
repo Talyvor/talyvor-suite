@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { type UseQueryResult, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type UseQueryResult, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, cn, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import {
   Button as PocketButton,
@@ -25,6 +25,7 @@ import { formatDecided, formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, PREPARED_KEY, preparedBy, useKeys } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
+import { paymentRequestKey } from './Approve'
 import { assertOver, payOutsideSigned, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
 import {
   type AgentApproval,
@@ -282,8 +283,10 @@ function lastPaid(payeeID: string, sent: OutsidePayment[]): OutsidePayment | und
   return sent.filter((p) => p.payee_id === payeeID && paid(p)).sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
 }
 
-/** B57.31 — a payment a prepared request paid: Lens pays item n of request preq_x under the key "preq:preq_x:n". */
-const fromPrepared = (p: OutsidePayment) => p.idempotency_key.startsWith('preq:')
+/** B57.31 — the request a payment may have come from: Lens pays item n of request preq_x under the key "preq:preq_x:n". The
+ *  key is only a hint, since a caller chooses its own key: a payment reads as prepared only once that request, read from
+ *  Lens, names this payment as the one that paid it. */
+const preparedRequestOf = (p: OutsidePayment) => /^preq:([^:]+):\d+$/.exec(p.idempotency_key)?.[1]
 
 /**
  * B57.31 — one payment to a saved payee, from the company's or an agent's account (B30.17): From with what it holds, To,
@@ -521,6 +524,11 @@ function Said({ ok, children }: { ok: boolean; children: React.ReactNode }) {
 function PaymentsOut({ payments, waiting }: { payments: UseQueryResult<{ payments: OutsidePayment[] | null }>; waiting: PaymentRequest[] }) {
   const sent = payments.data?.payments ?? []
   const items = waiting.flatMap((r) => (r.items ?? []).filter((i) => !i.payment_id).map((i) => ({ r, i })))
+  const hinted = [...new Set(sent.map(preparedRequestOf).filter((id): id is string => id !== undefined))]
+  const requests = useQueries({ queries: hinted.map((id) => ({ queryKey: paymentRequestKey(id), queryFn: () => agentBankApi.paymentRequest(id) })) })
+  // Who prepared each payment, for the payments a request Lens holds says it paid.
+  const preparedFor = new Map<string, string>()
+  for (const q of requests) for (const i of q.data?.items ?? []) if (i.payment_id) preparedFor.set(i.payment_id, preparedBy(q.data?.client ?? ''))
   return (
     <PocketCard>
       <h2 className="font-display text-head font-bold text-ink">Payments out</h2>
@@ -557,7 +565,7 @@ function PaymentsOut({ payments, waiting }: { payments: UseQueryResult<{ payment
                   title={`${p.payee_name} · ${formatMinor(p.amount_minor, p.currency)}`}
                   line={
                     <>
-                      {[p.reference, formatDecided(p.created_at), fromPrepared(p) ? `prepared by Chat, approved by you` : ''].filter((x) => x !== '').join(' · ')}
+                      {[p.reference, formatDecided(p.created_at), preparedFor.has(p.id) ? `prepared by ${preparedFor.get(p.id)}, approved by you` : ''].filter((x) => x !== '').join(' · ')}
                       {p.detail ? <span className="block">{p.detail}</span> : null}
                     </>
                   }

@@ -104,6 +104,9 @@ function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<st
     }
     if (url === '/api/money/payments') return json({ payments })
     if (url === '/api/money/payment-requests?status=pending_approval') return json({ requests: prepared })
+    // B57.31 — a request Chat prepared that paid mpay_3; no other request exists, whatever a payment's key says.
+    if (url === '/api/money/payment-requests/preq_7') return json({ id: 'preq_7', status: 'approved', summary: '', client: 'chat', totals: { GBP: 18000 }, created_at: '2026-10-01T09:00:00Z',
+      items: [{ position: 1, payee_id: 'payee_2', payee_name: 'Kite Accounting', currency: 'GBP', amount_minor: 18000, reference: '', decision: 'auto', reason: '', payment_id: 'mpay_3' }] })
     return json({ error: 'not found' }, 404)
   })
   return { sent }
@@ -205,6 +208,7 @@ describe('the Pay screen', () => {
       PAYMENT('mpay_1', 'payee_1', 'Acme Ltd', 2000, 'completed', { reference: 'October hosting' }),
       PAYMENT('mpay_2', 'payee_2', 'Kite Accounting', 45000, 'failed', { detail: 'the account partner refused the payee’s account' }),
       PAYMENT('mpay_3', 'payee_2', 'Kite Accounting', 18000, 'completed', { idempotency_key: 'preq:preq_7:1' }),
+      PAYMENT('mpay_4', 'payee_2', 'Kite Accounting', 100, 'completed', { idempotency_key: 'preq:preq_forged:1' }),
     ], [], [
       { id: 'preq_9', status: 'pending_approval', summary: '', client: 'chat', totals: { GBP: 5000 }, created_at: '2026-10-22T10:31:00Z',
         items: [{ position: 1, payee_id: 'payee_1', payee_name: 'Acme Ltd', currency: 'GBP', amount_minor: 5000, reference: 'Invoice 1042', decision: 'needs_approval', reason: '' }] },
@@ -218,7 +222,8 @@ describe('the Pay screen', () => {
     const refused = screen.getByTestId('payment-mpay_2')
     expect(within(refused).getByText('Refused')).toBeTruthy()
     expect(refused.textContent).toContain('the account partner refused the payee’s account')
-    expect(screen.getByTestId('payment-mpay_3').textContent).toContain('prepared by Chat, approved by you')
+    await vi.waitFor(() => expect(screen.getByTestId('payment-mpay_3').textContent).toContain('prepared by Chat, approved by you'))
+    expect(screen.getByTestId('payment-mpay_4').textContent).not.toContain('prepared') // a key alone proves nothing
     const waiting = await screen.findByTestId('prepared-preq_9')
     expect(waiting.textContent).toContain('Acme Ltd · £50.00')
     expect(waiting.textContent).toContain('Invoice 1042 · prepared by Chat')
