@@ -115,7 +115,8 @@ function cardHeaderTitles(root: ParentNode): Element[] {
  */
 const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B28.6 — `/` is the wallet home; B45.11: waiting for you, your agents, budgets, forecast. Overview's six moved to /overview.
-  '/': 4,
+  // B57.16: "Your agents" is a heading over Pocket's agent cards, no longer a card header.
+  '/': 3,
   // B28.7 — Approvals (waiting, decided). B57.24: Statements opens on an agent's statement, a Pocket document whose
   // name is its own heading, so it has no card header.
   '/approvals': 2,
