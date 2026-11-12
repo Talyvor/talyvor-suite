@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { populatedBff, settleQueries } from '../../populatedBff'
 import { pressAll } from '../../test/pressEverything'
@@ -161,4 +161,82 @@ describe('the physical Talyvor Card (B53.12, in Pocket by B57.97)', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/money/spending'))
     expect(screen.queryByRole('link', { name: 'Your Talyvor Card' })).toBeNull()
   })
+})
+
+// B57.127 — the owner's own card wears its tier art: Daily for a Personal account, Team for a Business (whatever its
+// money, as B59.10 keeps personal tiers off a Business), Stablecoin Daily for a Personal stablecoin-only one. The tier choice beside it is a picture only: it is kept in this browser, sends nothing to
+// Lens, and changes nothing else on the page.
+describe('the owner’s own card face (B57.127)', () => {
+  const requests: string[] = []
+  function mockAccount(account: { account_type: string; money_kind: string }, name = { id: 'ws_1', name: 'Acme Labs' }) {
+    requests.length = 0
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      requests.push(`${init?.method ?? 'GET'} ${url}`)
+      const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+      if (url === '/api/workspace/account') return json(account)
+      if (url === '/api/workspace/name') return json(name)
+      if (url === '/api/money/physical-cards') return json({ cards: [card({ state: 'active' })] })
+      return new Response('null', { status: 404 })
+    })
+  }
+  const face = () => screen.findByRole('img', { name: /card$/ })
+
+  beforeEach(() => window.localStorage.clear())
+
+  it.each([
+    [{ account_type: 'business', money_kind: 'fiat' }, 'team', 'Acme Labs, Team corporate card', 'For your team and its agents'],
+    [{ account_type: 'business', money_kind: 'stablecoin' }, 'team', 'Acme Labs, Team corporate card', 'For your team and its agents'],
+    [{ account_type: 'personal', money_kind: 'fiat' }, 'daily', 'Acme Labs, Daily personal card', 'Your everyday account'],
+    [{ account_type: 'personal', money_kind: 'stablecoin' }, 'stable', 'Acme Labs, Daily stablecoin card', 'Spends from your own wallet'],
+  ])('%o shows the %s face by default', async (account, id, alt, sub) => {
+    mockAccount(account)
+    await openCardPage()
+    const shown = await screen.findByRole('img', { name: alt })
+    expect(shown).toHaveAttribute('data-card', id)
+    expect(shown).toHaveTextContent(sub)
+  })
+
+  it('names the card by its family while the workspace is still called by its id', async () => {
+    mockAccount({ account_type: 'business', money_kind: 'fiat' }, { id: 'ws_1', name: 'ws_1' })
+    await openCardPage()
+    expect(await face()).toHaveAccessibleName('Company card, Team corporate card')
+  })
+
+  it('switching the display tier changes only the picture, sends nothing to Lens, and is kept in this browser', async () => {
+    mockAccount({ account_type: 'business', money_kind: 'fiat' })
+    await openCardPage()
+    await screen.findByRole('img', { name: 'Acme Labs, Team corporate card' })
+    await settleQueries(queryClient, waitFor)
+    const outside = () => {
+      const page = screen.getByRole('heading', { name: 'Your Talyvor Card' }).closest('.grid')!.parentElement!.cloneNode(true) as HTMLElement
+      page.querySelector('[data-testid="owner-card-face"]')?.remove()
+      return page.textContent
+    }
+    const before = outside()
+    const sent = requests.length
+
+    const tiers = screen.getByRole('tablist', { name: 'Card tier' })
+    expect(within(tiers).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Team', 'Business', 'Enterprise'])
+    fireEvent.click(within(tiers).getByRole('tab', { name: 'Enterprise' }))
+
+    const shown = await screen.findByRole('img', { name: 'Acme Labs, Enterprise corporate card' })
+    expect(shown).toHaveAttribute('data-card', 'enterprise')
+    expect(requests.slice(sent)).toEqual([])
+    expect(outside()).toBe(before)
+
+    // A fresh page in the same browser opens on the face chosen.
+    cleanup()
+    queryClient.clear()
+    await openCardPage()
+    expect(await screen.findByRole('img', { name: 'Acme Labs, Enterprise corporate card' })).toHaveAttribute('data-card', 'enterprise')
+  })
+
+  async function openCardPage() {
+    window.history.pushState({}, '', '/money/card')
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Your Talyvor Card' })
+  }
 })
