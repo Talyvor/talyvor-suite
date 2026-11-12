@@ -192,7 +192,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/scan/track-record': 1, // B52.28: the Reports card
   '/money/budgets': 1, // B41.39: the Budgets card, under the populated fixture's one budget
   '/money/subscriptions': 1, // B41.20: the Subscriptions card, under the populated fixture's two found subscriptions
-  '/money/pay': 9, // B40.35: the assistant's payee requests and its drafted mandate, under the populated fixture; B41.1: the bills inbox
+  '/money/pay': 5, // B57.31: the top of Pay is drawn in Pocket, so only today's cards kept below it count; B41.1: the bills inbox
   // B40.9 — one card: the prepared request.
   '/approve/:id': 1,
   // B45.37 — one card: the plan the assistant prepared.

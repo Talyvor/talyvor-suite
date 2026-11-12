@@ -59,7 +59,7 @@ describe.each(TYPES.flatMap((t) => KINDS.map((k) => [t, k] as const)))('a %s acc
     const { main } = await at('/money/pay', account)
     const text = main.textContent ?? ''
     expect(within(main).queryByRole('heading', { name: 'People and companies you pay' }) !== null).toBe(kind !== 'stablecoin')
-    expect(within(main).queryByLabelText('Account details') !== null).toBe(kind !== 'stablecoin')
+    expect(within(main).queryByRole('button', { name: 'Add a payee' }) !== null).toBe(kind !== 'stablecoin') // B57.31: Add a payee is a dialog
     expect(within(main).queryByTestId('pay-on-chain') !== null).toBe(kind === 'stablecoin')
     expect(within(main).queryByRole('heading', { name: 'Pay many at once from a file' }) !== null).toBe(business && kind !== 'stablecoin')
     expect(within(main).queryByLabelText('Payouts CSV') !== null).toBe(business && kind !== 'stablecoin')

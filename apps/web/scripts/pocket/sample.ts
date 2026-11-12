@@ -145,10 +145,28 @@ const SAMPLE: Record<string, unknown> = {
   ...agentStatement('agt_ops', { opening: 0, in: 10_000, out: 4_600 }, [
     modelDay('oh1', '2026-10-20T16:05:00Z', 'claude-haiku-4-5', 140, -40, -2.2),
   ], [modelDay('oh0', '2026-10-12T11:00:00Z', 'claude-haiku-4-5', 4_200, -4_320, -237.8), funded('of0', '2026-10-09T09:10:00Z', 10_000)]),
+  // B57.31 — README's payees: both by routing and account number, Kite last paid $450.00 on 1 Oct, Northwind not paid yet.
   '/api/money/payees': {
     payees: [
-      { id: 'payee_kite', name: 'Kite Accounting', country: 'US', check: 'exact_match', checked_by: 'test', checked_at: '2026-10-01T08:00:00Z', needs_confirmation: false, created_at: '2026-09-20T09:00:00Z' },
-      { id: 'payee_northwind', name: 'Northwind Data', country: 'US', check: 'exact_match', checked_by: 'test', checked_at: '2026-10-09T09:00:00Z', needs_confirmation: false, created_at: '2026-10-09T09:00:00Z' },
+      { id: 'payee_kite', name: 'Kite Accounting', country: 'US', routing_number: '011000015', account_number: '000000000', check: 'exact_match', checked_by: 'test', checked_at: '2026-10-01T08:00:00Z', needs_confirmation: false, created_at: '2026-09-20T09:00:00Z' },
+      { id: 'payee_northwind', name: 'Northwind Data', country: 'US', routing_number: '011000015', account_number: '000000000', check: 'exact_match', checked_by: 'test', checked_at: '2026-10-09T09:00:00Z', needs_confirmation: false, created_at: '2026-10-09T09:00:00Z' },
+    ],
+  },
+  '/api/money/payments': {
+    payments: [
+      { id: 'mpay_kite', account_id: 'macc_company_usd', payee_id: 'payee_kite', payee_name: 'Kite Accounting', amount_minor: 45_000, currency: 'USD', funding: 'test', reference: 'October bookkeeping', idempotency_key: 'k_kite', status: 'completed', created_at: '2026-10-01T09:00:00Z', updated_at: '2026-10-01T09:00:05Z' },
+    ],
+  },
+  // w-pay's payee Claude asked to add, today at 09:05; nothing else waits for the person on Pay.
+  '/api/money/assistant-requests': {
+    requests: [
+      { id: 'ar_larch', kind: 'payee', assistant: 'Claude', created_at: '2026-10-22T08:05:00Z', confirm_url: '/money/pay', status: 'pending_confirmation',
+        details: { name: 'Larch Labs', country: 'US', routing_number: '011000015', account_number: '000000000' } },
+    ],
+  },
+  '/api/money/bills': {
+    bills: [
+      { id: 'bill_kite', source: 'email', supplier: 'Kite Accounting', invoice_number: 'KA-1001', amount_minor: 45_000, currency: 'USD', due_date: '2026-10-01', payee_id: 'payee_kite', payee_match: 'matched', status: 'paid', missing: [], created_at: '2026-09-28T09:00:00Z' },
     ],
   },
   // B57.97 — no Talyvor Card yet, as w-card opens.
