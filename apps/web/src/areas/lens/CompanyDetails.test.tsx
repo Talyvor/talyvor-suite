@@ -73,6 +73,26 @@ describe('company details and people with control (B59.31)', () => {
     expect((await screen.findByRole('status')).textContent).toContain('Saved')
   })
 
+  // B57.145 — drawn as Pocket's settings forms are (w-payout-details, w-members): the company in its own titled card,
+  // and the people with control as a list, each row headed by the person, their role and their share.
+  it('draws the company in its own card and each person as a row with their role and share', async () => {
+    mockBff('business')
+    open('/settings/company')
+    const company = await screen.findByRole('region', { name: 'The company' })
+    expect(within(company).getByLabelText('Company name')).toBeTruthy()
+    const people = screen.getByRole('region', { name: 'People with control' })
+    const ada = within(people).getAllByRole('listitem')[0]
+    expect(within(ada).getByRole('heading', { name: 'Ada Lovelace' })).toBeTruthy()
+    expect(within(ada).getByText('Director · 60%')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add a person' }))
+    const added = within(people).getAllByRole('listitem')[1]
+    expect(within(added).getByRole('heading', { name: 'Person 2' })).toBeTruthy()
+    fireEvent.change(within(added).getByLabelText('Role'), { target: { value: 'shareholder' } })
+    fireEvent.change(within(added).getByLabelText('Share'), { target: { value: '25.5' } })
+    expect(within(added).getByText('Shareholder · 25.5%')).toBeTruthy()
+  })
+
   it('sends nothing while a person has no name or the shares come to more than 100%', async () => {
     const { puts } = mockBff('business')
     open('/settings/company')
