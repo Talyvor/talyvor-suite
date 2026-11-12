@@ -2429,7 +2429,7 @@ function FaceID({ signed, ready, passkeyCount }: { signed: boolean; ready: boole
 }
 
 /** B55.10 — who prepared it: Lens names the client "chat", "voice", "mcp:<client id>" or "key:<key id>" (B40.3). */
-const preparedBy = (client: string) =>
+export const preparedBy = (client: string) =>
   client.startsWith('mcp:') ? 'Your assistant' : client.startsWith('key:') ? 'An agent' : client === 'voice' ? 'A voice request' : 'Chat'
 
 /** B55.10 — a prepared request in one line, its hint and its total, as Approvals and Home list it. */
