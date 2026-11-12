@@ -230,6 +230,7 @@
   "src/bundleScan.test.ts": 3,
   "src/CardHeaderHeading.test.tsx": 61,
   "src/cards/cardArt.test.ts": 18,
+  "src/cards/TalyvorCard.test.tsx": 63,
   "src/caseAudit.test.tsx": 28,
   "src/caseCallSites.test.ts": 9,
   "src/checkoutRefusalSurface.test.tsx": 5,

@@ -30,6 +30,9 @@ import {
   showToast,
 } from '@talyvor/ui/pocket'
 
+import { cardArt } from '../../../src/cards/cardArt'
+import { TalyvorCard } from '../../../src/cards/TalyvorCard'
+
 const ico = 'h-5 w-5 fill-none stroke-current'
 const stroke = { strokeWidth: 1.9, strokeLinecap: 'round', strokeLinejoin: 'round' } as const
 const Pause = () => (
@@ -299,12 +302,44 @@ function Frames() {
   )
 }
 
+// B57.122 — the 15 card faces, each drawn by the one Card component with the sample account's names: the owner's
+// name or team on owner cards, the agent's own name and job line on agent cards (layout/Card.dc.html's sub lines and
+// the handoff's helper jobs). The last card carries a 24-character agent name to show it stays clear of the corner.
+const ownerSub = { personal: 'Your everyday account', corporate: 'For your team and its agents', stablecoin: 'Spends from your own wallet' } as const
+const agentLine: Record<string, [string, string]> = {
+  Remy: ['Research', 'Research · pays in dollars'],
+  Sunny: ['Sales', 'Sales · pays in euros'],
+  Penny: ['Bookkeeping', 'Bookkeeping · pays in USDC'],
+  Max: ['Ads', 'Ads · pays in pounds'],
+  Nova: ['Travel', 'Travel · pays in euros'],
+  Ollie: ['Quartermaster Atlas Bell', 'Support · pays in dollars'],
+}
+
+// The art is the same in either theme, so the faces show once.
+function Cards() {
+  return (
+    <section data-theme="light" data-design="pocket" aria-label="Cards" className="grid content-start gap-6 bg-page p-6 text-ink wide:col-span-2">
+      <PageHeading line="Every card face, drawn from its art.">Cards</PageHeading>
+      <div className="grid gap-4 wide:grid-cols-3">
+        {cardArt.map((c) =>
+          c.family === 'agent' ? (
+            <TalyvorCard key={c.id} card={c} holder={agentLine[c.helper][0]} sub={agentLine[c.helper][1]} />
+          ) : (
+            <TalyvorCard key={c.id} card={c} holder={c.family === 'corporate' ? 'Nick’s team' : 'Nick'} sub={ownerSub[c.family]} />
+          ),
+        )}
+      </div>
+    </section>
+  )
+}
+
 export function Story() {
   return (
     <main className="grid wide:grid-cols-2">
       <Specimens theme="light" />
       <Specimens theme="dark" />
       <Frames />
+      <Cards />
     </main>
   )
 }
