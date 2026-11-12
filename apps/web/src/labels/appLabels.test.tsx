@@ -121,21 +121,44 @@ describe('labels on the signed-in money screens (B56.11)', () => {
   })
 })
 
-describe('the sidebar’s one chip (B56.11)', () => {
-  const sidebarChip = () => within(screen.getByRole('navigation', { name: /sections/i })).queryAllByText(/^(Live|Sandbox|Building)$/)
+describe('the top bar’s label (B57.118)', () => {
+  // The launch pack's design (W2 to W5): the label sits in the top bar, top right on every signed-in screen, before
+  // Pause every agent; the sidebar's workspace tile carries none.
+  const header = () => document.querySelector('header') as HTMLElement
+  const barLabel = () => within(header()).queryAllByText(/^(Live|Sandbox|Building|Status unknown)$/).map((el) => el.textContent)
 
-  it('says Sandbox under the workspace name while every money capability is sandbox', async () => {
+  it('says Sandbox before Pause every agent while every money capability is sandbox, and the sidebar says nothing', async () => {
     await at('/', 'sandbox')
-    expect(sidebarChip().map((el) => el.getAttribute('data-status-label'))).toEqual(['sandbox'])
+    expect(barLabel()).toEqual(['Sandbox'])
+    const label = within(header()).getByText('Sandbox')
+    const pause = within(header()).getByRole('button', { name: /pause every agent/i })
+    expect(label.compareDocumentPosition(pause) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(screen.getByRole('navigation', { name: /sections/i })).queryAllByText(/^(Live|Sandbox|Building)$/)).toEqual([])
   })
 
-  it('says nothing once any one is live, or while Lens has not said', async () => {
-    await at('/', 'sandbox', { payments_out: 'live' })
-    expect(sidebarChip()).toEqual([])
+  it('stays Sandbox while any one is, and says Live once every one is live', async () => {
+    await at('/approvals', 'sandbox', { payments_out: 'live' })
+    expect(barLabel()).toEqual(['Sandbox'])
     vi.restoreAllMocks()
     cleanup()
     queryClient.clear()
+    await at('/settings', 'live')
+    expect(barLabel()).toEqual(['Live'])
+  })
+
+  it('says nothing while Lens gives no label, and Status unknown when the read failed', async () => {
     await at('/', 'unread')
-    expect(sidebarChip()).toEqual([])
+    expect(barLabel()).toEqual([])
+    vi.restoreAllMocks()
+    cleanup()
+    queryClient.clear()
+    populatedBff((impl) => void vi.spyOn(globalThis, 'fetch').mockImplementation(impl as never), {
+      '/api/wallets/capabilities': undefined,
+    })
+    window.history.pushState({}, '', '/')
+    render(<App />)
+    await screen.findByRole('navigation', { name: /sections/i })
+    await settleQueries(queryClient, waitFor)
+    await waitFor(() => expect(barLabel()).toEqual(['Status unknown']))
   })
 })
