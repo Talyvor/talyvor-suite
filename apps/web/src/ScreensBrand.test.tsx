@@ -60,7 +60,9 @@ describe('the remaining signed-in screens in the brand', () => {
     expect(tangerineOffenders(main).map((e) => e.outerHTML), `tangerine on ${address} is only the brand and your move`).toEqual([])
     expect(statusWithoutWords(main).map((e) => e.outerHTML), `a status colour on ${address} without words`).toEqual([])
 
-    expect(within(main).queryAllByTestId('region-label').length, `${address} has no eyebrow`).toBeGreaterThan(0)
+    // B57.55 — a page drawn in Pocket names itself with the kit's Eyebrow (pocket.css .eyebrow), not today's region label.
+    const eyebrows = within(main).queryAllByTestId('region-label').length + main.querySelectorAll('.text-pocket-eyebrow').length
+    expect(eyebrows, `${address} has no eyebrow`).toBeGreaterThan(0)
   })
 
   it('Settings names each section with an eyebrow and shows the stored choice on the accent tint', async () => {

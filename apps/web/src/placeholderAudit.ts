@@ -33,7 +33,7 @@ import { onCommit } from './auditScope'
  * ── WHY IT READS THE DOM ─────────────────────────────────────────────────────────────────────
  *
  * A source rule would have to decide, at each `placeholder=` site, whether the element is a raw
- * `<input>` or an `<Input>` that spreads the prop through to one — `Keys.tsx:115` passes
+ * `<input>` or an `<Input>` that spreads the prop through to one — `Keys.tsx:101` passes
  * `placeholder={k.key_prefix}` to the component, so the attribute and the class list are written
  * in two different files. Measured: 5 `placeholder=` sites in the source, 2 of them on the
  * component. The DOM is where the attribute and the class meet, which is the same argument
@@ -155,7 +155,6 @@ export function takePlaceholderOffenders(): UnstyledPlaceholder[] {
  * this table, and C8 now deletes both so it tests the claim actually being made.
  */
 export const MUST_RENDER_PLACEHOLDER: Record<string, string> = {
-  'src/Legal.test.tsx': "the Keys surface's create-key name field",
   'src/SessionExpired.test.tsx': 'the create fields on Keys, Track and Docs',
   'src/areas/docs/DocsArea.test.tsx': 'the create-space and create-page title fields',
   'src/areas/lens/Keys.test.tsx': "the create-key name field and each row's key-prefix field",
