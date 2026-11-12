@@ -26,6 +26,15 @@ describe('statement-pdf', () => {
     expect(v.pass).toBe(true)
   })
 
+  it('reads past the empty WITH and AMOUNT cells Lens draws on an opening or closing row', () => {
+    // Lens's table PDF (B48.14) draws every cell, so an opening row is its date, account, word, two empty cells, then
+    // the balance — the cells the 2026-11-10 run read as "".
+    const drawn = pdf().replaceAll(/\((opening|closing)\) Tj /g, '($1) Tj () Tj () Tj ')
+    const v = statementPDFVerdict({ name: 's.pdf', text: drawn }, json, agent)
+    expect(v.detail).toContain('2 account(s)')
+    expect(v.pass).toBe(true)
+  })
+
   it("fails when the PDF closes an account at a figure that is not the JSON's", () => {
     const v = statementPDFVerdict({ name: 's.pdf', text: pdf('1.65 LXC') }, json, agent)
     expect(v.pass).toBe(false)
