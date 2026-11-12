@@ -114,12 +114,12 @@ const SAMPLE: Record<string, unknown> = {
   '/api/money/accounts/macc_company_usd/statement': {
     account_id: 'macc_company_usd', currency: 'USD', from: '2026-10-01T00:00:00Z', to: '2026-10-21T00:00:00Z',
     opening_minor: 365_000, in_minor: 0, out_minor: 45_000, closing_minor: 320_000,
-    lines: [{ entry_id: 'ment_kite', line: 1, at: '2026-10-01T09:00:00Z', kind: 'payment_out', amount_minor: -45_000, funding: 'test', counterparty: 'Kite Accounting', balance_after_minor: 320_000 }],
+    lines: [{ entry_id: 'ment_kite', line: 1, at: '2026-10-01T09:00:00Z', kind: 'payment_out', amount_minor: -45_000, funding: 'test', counterparty: 'Kite Accounting', memo: 'October bookkeeping', balance_after_minor: 320_000 }],
   },
   '/api/money/accounts/macc_research_usd/statement': {
     account_id: 'macc_research_usd', agent_id: 'agt_research', currency: 'USD', from: '2026-10-01T00:00:00Z', to: '2026-10-21T00:00:00Z',
     opening_minor: 0, in_minor: 40_000, out_minor: 0, closing_minor: 40_000,
-    lines: [{ entry_id: 'ment_fennel', line: 1, at: '2026-10-12T09:00:00Z', kind: 'payment_in', amount_minor: 40_000, funding: 'test', counterparty: 'Fennel Labs', balance_after_minor: 40_000 }],
+    lines: [{ entry_id: 'ment_fennel', line: 1, at: '2026-10-12T14:20:00Z', kind: 'invoice_payment', amount_minor: 40_000, funding: 'test', counterparty: 'Fennel Labs', memo: 'INV-000001', balance_after_minor: 40_000 }],
   },
   '/api/money/accounts/macc_room_usd/statement': {
     account_id: 'macc_room_usd', agent_id: 'agt_room', currency: 'USD', from: '2026-10-01T00:00:00Z', to: '2026-10-21T00:00:00Z',

@@ -8,7 +8,7 @@ import { isSessionExpired } from '../../lib/productState'
 import { APPROVALS_KEY, Approvals, BOOK_KEY, PREPARED_KEY, Statement } from './AgentBank'
 import { AgentStatement, DownloadFailed, useMonthCsv } from './AgentStatement'
 import { agentBankApi, type Agent, type CurrencyAccount } from './agentBankApi'
-import { AccountStatement, MarketplaceBill, accountTitle } from './AccountStatement'
+import { AccountStatement, MarketplaceBill, accountTitle, useAccountMonthCsv } from './AccountStatement'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { CurrencyPicker } from './money'
 import { DESIGN_ATTR } from '../../pocketPending'
@@ -87,10 +87,12 @@ export function StatementsScreen() {
     ...(accounts.data?.accounts ?? []).map((a) => ({ id: a.id, title: accountTitle(a, agents), account: a })),
   ]
   const tab = tabs.find((t) => t.id === params.get('wallet')) ?? tabs[0] ?? null
-  // B57.24 — an agent's tab is its statement as a document; the room's wallet and the currency accounts are B57.25's.
+  // B57.24 — an agent's tab is its statement as a document; B57.25 — so is a currency account's.
   const agentTab = tab?.agent && tab.agent.kind !== 'room' ? tab.agent : null
+  const accountTab = tab?.account ?? null
   const everyAgent = useMonthCsv(null)
   const thisAgent = useMonthCsv(agentTab)
+  const thisAccount = useAccountMonthCsv(accountTab, tab?.title ?? '')
   // Pocket's tabs choose by their words, so two wallets of one name take the first's tab.
   const titles = [...new Set(tabs.map((t) => t.title))]
   return (
@@ -119,10 +121,15 @@ export function StatementsScreen() {
                 <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAgent.isPending} onClick={() => thisAgent.mutate()}>
                   Download CSV
                 </PocketButton>
+              ) : accountTab ? (
+                <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAccount.isPending} onClick={() => thisAccount.mutate()}>
+                  Download CSV
+                </PocketButton>
               ) : null}
             </div>
             {everyAgent.isError ? <DownloadFailed error={everyAgent.error} /> : null}
             {thisAgent.isError ? <DownloadFailed error={thisAgent.error} /> : null}
+            {thisAccount.isError ? <DownloadFailed error={thisAccount.error} /> : null}
           </div>
         )}
         {accounts.isError ? <p className="text-body text-muted">{readFailure(accounts.error, 'The currency accounts')}</p> : null}
@@ -141,16 +148,18 @@ export function StatementsScreen() {
             <AgentStatement key={agentTab.id} agent={agentTab} nameOf={nameOf} />
             <MarketplaceBill key={`bill-${agentTab.id}`} agent={agentTab} />
           </>
+        ) : accountTab ? (
+          <AccountStatement
+            key={accountTab.id}
+            account={accountTab}
+            agent={accountTab.purpose === 'agent' ? (agents.find((a) => a.id === accountTab.agent_id) ?? null) : null}
+          />
         ) : null}
       </Region>
       {tab?.agent && !agentTab ? (
         <Region index="01" label={tab.title} className="flex max-w-2xl flex-col gap-3">
           <Statement key={tab.id} agent={tab.agent} nameOf={nameOf} />
           <MarketplaceBill key={`bill-${tab.id}`} agent={tab.agent} />
-        </Region>
-      ) : tab?.account ? (
-        <Region index="01" label={tab.title} className="flex max-w-2xl flex-col gap-3">
-          <AccountStatement key={tab.id} account={tab.account} title={tab.title} />
         </Region>
       ) : null}
     </RegionScreen>
