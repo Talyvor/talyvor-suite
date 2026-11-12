@@ -9,7 +9,7 @@ import { App, queryClient } from '../../App'
 
 function mockBff() {
   const sent: Array<{ method: string; url: string; body: unknown }> = []
-  const agent = { id: 'agt_1', name: 'Researcher', balance_ulxc: 50_000_000, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true }
+  const agent = { id: 'agt_1', name: 'Researcher', description: 'Research', colour: 'cobalt', balance_ulxc: 50_000_000, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true }
   let issued = false
   const purchase = (id: string, approved: boolean, pence: number, reason: string, ulxc?: number) => ({
     id,
@@ -93,6 +93,10 @@ describe("an agent's card on Agent Wallets", () => {
     expect(card.textContent).toContain('•••• 4242')
     expect(card.textContent).toContain('expires 09/29 · GBP')
     expect(card.textContent).not.toMatch(/test mode/i)
+    // B57.125 — the issued card is drawn as the agent's own: Remy for cobalt, named for the agent, not the helper.
+    const face = screen.getByRole('img', { name: "Researcher, Research's agent card" })
+    expect(face.getAttribute('data-card')).toBe('agent-remy')
+    expect(face).not.toHaveTextContent(/\d/)
 
     const rows = within(screen.getByTestId('agent-card-purchases')).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(2)

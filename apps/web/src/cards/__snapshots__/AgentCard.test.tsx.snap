@@ -1,0 +1,340 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AgentCard (B57.125) > a cobalt agent matches its snapshot 1`] = `
+<div
+  aria-label="Atlas, Research's agent card"
+  class="relative w-full overflow-hidden font-sans"
+  data-card="agent-remy"
+  role="img"
+  style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+>
+  <img
+    alt=""
+    class="absolute inset-0 h-full w-full object-cover"
+    src="/cards/agent-remy.jpg"
+  />
+  <div
+    class="absolute inset-0"
+    style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+  />
+  <img
+    alt=""
+    class="absolute h-auto"
+    data-card-part="logo"
+    src="/brand/logo/talyvor-logo-on-dark.svg"
+    style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+  />
+  <div
+    class="absolute"
+    style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+  >
+    <div
+      class="font-display"
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+    >
+      Atlas
+    </div>
+    <div
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+    >
+      Research
+    </div>
+  </div>
+</div>
+`;
+
+exports[`AgentCard (B57.125) > a lemon agent matches its snapshot 1`] = `
+<div
+  aria-label="Atlas, Research's agent card"
+  class="relative w-full overflow-hidden font-sans"
+  data-card="agent-max"
+  role="img"
+  style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+>
+  <img
+    alt=""
+    class="absolute inset-0 h-full w-full object-cover"
+    src="/cards/agent-max.jpg"
+  />
+  <div
+    class="absolute inset-0"
+    style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+  />
+  <img
+    alt=""
+    class="absolute h-auto"
+    data-card-part="logo"
+    src="/brand/logo/talyvor-logo-on-light.svg"
+    style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+  />
+  <div
+    class="absolute"
+    style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+  >
+    <div
+      class="font-display"
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+    >
+      Atlas
+    </div>
+    <div
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+    >
+      Research
+    </div>
+  </div>
+</div>
+`;
+
+exports[`AgentCard (B57.125) > a lime agent matches its snapshot 1`] = `
+<div
+  aria-label="Atlas, Research's agent card"
+  class="relative w-full overflow-hidden font-sans"
+  data-card="agent-plain"
+  role="img"
+  style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: var(--agent-lime); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+>
+  <img
+    alt=""
+    class="absolute h-auto"
+    data-card-part="logo"
+    src="/brand/logo/talyvor-logo-on-light.svg"
+    style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+  />
+  <div
+    aria-hidden="true"
+    class="absolute"
+    style="right: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(16.8224299065421cqw); height: calc(16.8224299065421cqw);"
+  >
+    <span
+      aria-label="Atlas agent"
+      class="relative inline-block shrink-0 !h-full !w-full [&>svg]:h-full [&>svg]:w-full"
+      data-face="lime circle happy"
+      role="img"
+      style="width: 72px; height: 72px;"
+    >
+      <svg
+        aria-hidden="true"
+        class="block"
+        height="72"
+        viewBox="0 0 100 100"
+        width="72"
+      >
+        <circle
+          cx="50"
+          cy="50"
+          fill="#8EDC4E"
+          r="50"
+        />
+        <circle
+          cx="37"
+          cy="45"
+          fill="#111216"
+          r="6.6"
+        />
+        <circle
+          cx="63"
+          cy="45"
+          fill="#111216"
+          r="6.6"
+        />
+        <path
+          d="M37 60 Q50 72 63 60"
+          fill="none"
+          stroke="#111216"
+          stroke-linecap="round"
+          stroke-width="5.8"
+        />
+      </svg>
+    </span>
+  </div>
+  <div
+    class="absolute"
+    style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+  >
+    <div
+      class="font-display"
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+    >
+      Atlas
+    </div>
+    <div
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+    >
+      Research
+    </div>
+  </div>
+</div>
+`;
+
+exports[`AgentCard (B57.125) > a mint agent matches its snapshot 1`] = `
+<div
+  aria-label="Atlas, Research's agent card"
+  class="relative w-full overflow-hidden font-sans"
+  data-card="agent-penny"
+  role="img"
+  style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+>
+  <img
+    alt=""
+    class="absolute inset-0 h-full w-full object-cover"
+    src="/cards/agent-penny.jpg"
+  />
+  <div
+    class="absolute inset-0"
+    style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+  />
+  <img
+    alt=""
+    class="absolute h-auto"
+    data-card-part="logo"
+    src="/brand/logo/talyvor-logo-on-light.svg"
+    style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+  />
+  <div
+    class="absolute"
+    style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+  >
+    <div
+      class="font-display"
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+    >
+      Atlas
+    </div>
+    <div
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+    >
+      Research
+    </div>
+  </div>
+</div>
+`;
+
+exports[`AgentCard (B57.125) > a orchid agent matches its snapshot 1`] = `
+<div
+  aria-label="Atlas, Research's agent card"
+  class="relative w-full overflow-hidden font-sans"
+  data-card="agent-sunny"
+  role="img"
+  style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+>
+  <img
+    alt=""
+    class="absolute inset-0 h-full w-full object-cover"
+    src="/cards/agent-sunny.jpg"
+  />
+  <div
+    class="absolute inset-0"
+    style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+  />
+  <img
+    alt=""
+    class="absolute h-auto"
+    data-card-part="logo"
+    src="/brand/logo/talyvor-logo-on-dark.svg"
+    style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+  />
+  <div
+    class="absolute"
+    style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+  >
+    <div
+      class="font-display"
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+    >
+      Atlas
+    </div>
+    <div
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+    >
+      Research
+    </div>
+  </div>
+</div>
+`;
+
+exports[`AgentCard (B57.125) > a rose agent matches its snapshot 1`] = `
+<div
+  aria-label="Atlas, Research's agent card"
+  class="relative w-full overflow-hidden font-sans"
+  data-card="agent-ollie"
+  role="img"
+  style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+>
+  <img
+    alt=""
+    class="absolute inset-0 h-full w-full object-cover"
+    src="/cards/agent-ollie.jpg"
+  />
+  <div
+    class="absolute inset-0"
+    style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+  />
+  <img
+    alt=""
+    class="absolute h-auto"
+    data-card-part="logo"
+    src="/brand/logo/talyvor-logo-on-light.svg"
+    style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+  />
+  <div
+    class="absolute"
+    style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+  >
+    <div
+      class="font-display"
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+    >
+      Atlas
+    </div>
+    <div
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+    >
+      Research
+    </div>
+  </div>
+</div>
+`;
+
+exports[`AgentCard (B57.125) > a sky agent matches its snapshot 1`] = `
+<div
+  aria-label="Atlas, Research's agent card"
+  class="relative w-full overflow-hidden font-sans"
+  data-card="agent-nova"
+  role="img"
+  style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+>
+  <img
+    alt=""
+    class="absolute inset-0 h-full w-full object-cover"
+    src="/cards/agent-nova.jpg"
+  />
+  <div
+    class="absolute inset-0"
+    style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+  />
+  <img
+    alt=""
+    class="absolute h-auto"
+    data-card-part="logo"
+    src="/brand/logo/talyvor-logo-on-light.svg"
+    style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+  />
+  <div
+    class="absolute"
+    style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+  >
+    <div
+      class="font-display"
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+    >
+      Atlas
+    </div>
+    <div
+      style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+    >
+      Research
+    </div>
+  </div>
+</div>
+`;
