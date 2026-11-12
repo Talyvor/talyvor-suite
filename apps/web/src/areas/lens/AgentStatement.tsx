@@ -65,28 +65,44 @@ function lineWhat(l: StatementLine, nameOf: (id: string) => string, modelOf: (id
 /** The file's stem: the agent's name in lower case, its words joined by hyphens. */
 const stem = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'agent'
 
-/** B57.112 — the file types Statements offers, as the choice names them. */
-export const MONTH_FILE_TYPES: Array<{ format: Extract<StatementFormat, 'csv' | 'json' | 'pdf'>; words: string }> = [
+/** B57.112 — the file types Statements offers, as the choice names them (B57.113: and the journal, as B28.56 does). */
+export const MONTH_FILE_TYPES: Array<{ format: StatementFormat; words: string }> = [
   { format: 'csv', words: 'CSV' },
   { format: 'json', words: 'JSON' },
   { format: 'pdf', words: 'PDF' },
+  { format: 'journal', words: 'Journal for Xero or QuickBooks' },
 ]
+
+/** B57.113 — the sentence under the downloads, B28.56's words. */
+export const JOURNAL_SENTENCE = 'The journal imports into Xero or QuickBooks: each entry one balanced journal, each agent its cost centre.'
+
+/** The download button's words for a file type: Download CSV, JSON or PDF, or Download journal. */
+export const downloadWords = (format: StatementFormat) => (format === 'journal' ? 'Download journal' : `Download ${format.toUpperCase()}`)
 
 /**
  * This month so far, for one agent (or with none every agent), as the file Lens writes: the CSV one row per posting,
- * or (B57.112) its JSON or PDF.
+ * or (B57.112) its JSON or PDF, or (B57.113) the journal CSV for Xero or QuickBooks, saved as B28.56 names it.
  */
 export function useMonthFile(agent: Agent | null) {
   return useMutation({
     mutationFn: async (format: StatementFormat = 'csv') => {
       const { from, through } = monthPeriod('this')
-      const name = `${agent ? stem(agent.name) : 'agent-wallets'}-statement-${from}-to-${through}.${format}`
+      const who = agent ? stem(agent.name) : 'agent-wallets'
+      const name = format === 'journal' ? `${who}-journal-${from}-to-${through}.csv` : `${who}-statement-${from}-to-${through}.${format}`
       saveFile(name, await agentBankApi.statementFile(agent?.id ?? null, from, dayAfter(through), format))
       return name
     },
     onSuccess: (_name, format = 'csv') => {
       const month = new Date().toLocaleDateString('en-GB', { month: 'long' })
       const type = format.toUpperCase()
+      if (format === 'journal') {
+        showToast(
+          agent
+            ? `Downloading ${agent.name}’s journal for ${month}, for Xero or QuickBooks`
+            : `Downloading the workspace’s journal for ${month}: every agent’s entries in one file for Xero or QuickBooks`,
+        )
+        return
+      }
       showToast(
         agent
           ? `Downloading ${agent.name}’s statement for ${month} as a ${type} file`
