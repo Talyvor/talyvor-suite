@@ -1,7 +1,8 @@
 // B28.441 — Features (/features) opens on Agent Wallets. A person creates an agent on Agent Wallets and
 // funds it; Lens's statement for that agent must hold the fund line. Then Features: its first capability
 // row is Agent Wallets, whose "See it working" line names the agents and the LXC they hold as Lens's book
-// has them, and a Marketplace row counts the catalogue's listings as Lens lists them.
+// has them (read without the dollar figure beside each amount), and a Marketplace row counts the
+// catalogue's listings as Lens lists them.
 
 import type { AgentBook } from './lens.ts'
 import { ACTION_TIMEOUT_MS, agentIn, bookOf, fail, lxcText, openAgent, withBank } from './bank.ts'
@@ -9,6 +10,13 @@ import type { Scenario } from './scenarios.ts'
 
 /** The app's formatULXC (apps/web/src/areas/lens/agentBankApi.ts): "12.5 LXC". */
 export const lxcShown = (ulxc: number): string => `${(ulxc / 1_000_000).toLocaleString('en-US', { maximumFractionDigits: 6 })} LXC`
+
+/**
+ * B17.385 — the line as LXC alone: the app writes each amount beside its value in the person's currency
+ * (money.tsx lxcText, B55.38), "$1.25 (12.5 LXC)" or "12.5 LXC ($1.25)"; the LXC figure is Lens's.
+ */
+export const withoutFiat = (text: string): string =>
+  text.replace(/[<-]?[$£€][\d,.]+ \(([^)]*LXC)\)/g, '$1').replace(/ \([<-]?[$£€][\d,.]+\)/g, '')
 
 /** What Features showed: its rows' names in page order, and two rows' "See it working" lines. */
 export interface FeaturesSeen {
@@ -28,7 +36,7 @@ export function featuresVerdict(seen: FeaturesSeen, books: readonly AgentBook[],
     const n = b.agents.length
     return n === 0 ? 'No agent has a wallet yet' : `${n.toLocaleString('en-US')} ${n === 1 ? 'agent holds' : 'agents hold'} ${lxcShown(b.allocated_ulxc)} of this workspace`
   })
-  if (!wants.some((w) => seen.wallets.startsWith(w))) return { pass: false, detail: `the Agent Wallets row says "${seen.wallets}"; Lens's book says "${wants[wants.length - 1]}…"` }
+  if (!wants.some((w) => withoutFiat(seen.wallets).startsWith(w))) return { pass: false, detail: `the Agent Wallets row says "${seen.wallets}"; Lens's book says "${wants[wants.length - 1]}…"` }
   if (!seen.rows.includes('Marketplace')) return { pass: false, detail: `Features has no Marketplace row: ${seen.rows.join(', ')}` }
   const m = /^No listing is published yet/.test(seen.market) ? ['', '0'] : /^([\d,]+) listings? (?:is|are) open to use/.exec(seen.market)
   if (m === null) return { pass: false, detail: `the Marketplace row names no listing count: "${seen.market}"` }
