@@ -114,12 +114,7 @@ function PlanCard({ id, gate, pricing }: { id: string; gate: PlanGate; pricing: 
           <PlanRow
             label="FX margin over the reference rate"
             chip={
-              contracted || fx ? (
-                <>
-                  <StatusLabel capability="fx" labels={pricing.labels} />
-                  {fees.charged?.fx_margin_bps ? null : <StatusLabel building="fx_margin" />}
-                </>
-              ) : null
+              contracted || fx ? <StatusLabel capability="fx" labels={pricing.labels} /> : null
             }
           >
             {contracted ? 'Agreed' : fx ? <span className="font-figure">{formatBPS(fx)}</span> : 'Not offered'}
@@ -237,12 +232,7 @@ export function MoneyFeatureFees({ fees, planIds, labels }: { fees: Fees; planId
       {fx.length > 0 ? (
         <FeeRow
           label="FX margin over the reference rate"
-          chips={
-            <>
-              <StatusLabel capability="fx" labels={labels} />
-              {fees.charged?.fx_margin_bps ? null : <StatusLabel building="fx_margin" />}
-            </>
-          }
+          chips={<StatusLabel capability="fx" labels={labels} />}
         >
           <span className="font-figure">{fx.join(' · ')}</span>
         </FeeRow>

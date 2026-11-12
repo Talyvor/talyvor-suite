@@ -140,12 +140,7 @@ export function CompanyCard({
         {fees ? (
           <Row label="FX margin over the reference rate">
             {contracted ? 'Agreed' : fx ? <span className="font-figure">{formatBPS(fx)}</span> : 'None'}
-            {contracted || fx ? (
-              <>
-                <StatusLabel capability="fx" labels={pricing.labels} />
-                {fees.charged?.fx_margin_bps ? null : <StatusLabel building="fx_margin" />}
-              </>
-            ) : null}
+            {contracted || fx ? <StatusLabel capability="fx" labels={pricing.labels} /> : null}
           </Row>
         ) : null}
         <Row label="Slack and Teams approvals">
