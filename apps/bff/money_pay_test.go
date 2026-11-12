@@ -194,3 +194,40 @@ func TestPaymentSignatureReachesLensUnchanged(t *testing.T) {
 		t.Fatalf("Lens received\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
 	}
 }
+
+// B58.6 — approving a payout batch goes up with its signature exactly as the browser or the phone sent it (Lens B58.5),
+// and the challenge it is signed over, naming the batch as it stands, is relayed with no body of the browser's.
+func TestPayoutApprovalSignatureReachesLensUnchanged(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" "+string(raw))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"challenge":"Y2g","allow_credentials":["c"],"payout":{"id":"pob_1","rows_total":2,"rows_valid":2,"totals_minor":{"GBP":700}}}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	if rec := doJSON(a, http.MethodPost, "/api/money/payouts/pob_1/approve/challenge", `{"rows_valid":1}`); rec.Code != http.StatusOK {
+		t.Fatalf("challenge = %d %s", rec.Code, rec.Body.String())
+	}
+	passkey := `{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}`
+	phone := `{"device_id":"dev_1","challenge":"Y2g","signature":"MEUCIQ","user_handle":"u"}`
+	for _, assertion := range []string{passkey, phone} {
+		if rec := doJSON(a, http.MethodPost, "/api/money/payouts/pob_1/approve", `{"assertion":`+assertion+`,"by":"someone"}`); rec.Code != http.StatusOK {
+			t.Fatalf("signed approval = %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	want := []string{
+		`POST /v1/money/payouts/pob_1/approve/challenge `,
+		`POST /v1/money/payouts/pob_1/approve {"assertion":` + passkey + `}`,
+		`POST /v1/money/payouts/pob_1/approve {"assertion":` + phone + `}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("Lens received\n  %s\nwant\n  %s", strings.Join(got, "\n  "), strings.Join(want, "\n  "))
+	}
+}
