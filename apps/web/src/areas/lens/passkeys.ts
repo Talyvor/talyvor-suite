@@ -8,6 +8,8 @@
 import {
   agentBankApi,
   type EnrolmentWaiting,
+  type Mandate,
+  type MandateGrant,
   type OutsidePayment,
   type OutsidePaymentRequest,
   type PasskeyAssertion,
@@ -144,6 +146,21 @@ export async function payOutsideSigned(body: OutsidePaymentRequest): Promise<Out
 export async function approvePayoutSigned(batchID: string): Promise<PayoutBatch> {
   const c = await agentBankApi.payoutChallenge(batchID)
   return agentBankApi.approvePayout(batchID, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
+/**
+ * B55.56 — the owner's mandate is signed as a payment is (Lens B55.24): once the workspace has a passkey, Face ID asks
+ * here over the challenge naming exactly this grant, and nothing is granted without it. With none, it grants as before.
+ */
+export async function grantMandateSigned(grant: MandateGrant): Promise<Mandate> {
+  const c = await agentBankApi.mandateChallenge({ grant })
+  return agentBankApi.grantMandate(grant, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
+/** B55.56 — an agent's requested mandate is approved signed the same way, over the challenge naming that request. */
+export async function approveMandateSigned(mandateID: string): Promise<Mandate> {
+  const c = await agentBankApi.mandateChallenge({ mandate_id: mandateID })
+  return agentBankApi.approveMandate(mandateID, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
 }
 
 /**

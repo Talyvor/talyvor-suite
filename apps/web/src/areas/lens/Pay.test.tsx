@@ -13,6 +13,9 @@ let ACCOUNTS: Record<string, unknown>[] = [
   { id: 'macc_agt', agent_id: 'agt_1', currency: 'GBP', purpose: 'agent', status: 'open', name: 'GBP account', balance_minor: 10000, test_minor: 10000, live_minor: 0 },
 ]
 
+// B55.56 — the workspace's mandates as Lens holds them; the mock grants, approves and declines in place.
+let MANDATES: Record<string, unknown>[] = []
+
 function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<string, unknown>[] = [], payments: unknown[] = [], passkeys: string[] = [], prepared: unknown[] = []) {
   const sent: Array<{ url: string; headers: Record<string, string>; body: unknown }> = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -27,7 +30,25 @@ function mockBff(asked: unknown[] = [], bills: unknown[] = [], payees: Record<st
     if (url === '/api/agents/approvals') return json({ approvals: [] })
     if (url === '/api/agents/passkeys') return json({ passkeys: [] })
     if (url === '/api/agents/schedules') return json({ schedules: [] })
-    if (url === '/api/money/mandates') return json({ granted: [], received: [] })
+    if (url === '/api/money/mandates/challenge') {
+      sent.push({ url, headers: init?.headers as Record<string, string>, body: JSON.parse(String(init?.body)) })
+      return json({ challenge: 'Y2g0', allow_credentials: passkeys, user_verification: 'required' })
+    }
+    if (url === '/api/money/mandates' && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body)) as { grant: Record<string, unknown> }
+      sent.push({ url, headers: init.headers as Record<string, string>, body })
+      const m = { id: 'mdt_new', agent_id: 'agt_1', currency: 'GBP', ...body.grant, pulled_this_month_minor: 0, status: 'active', created_at: '2026-11-10T09:00:00Z' }
+      MANDATES.unshift(m)
+      return json(m, 201)
+    }
+    if (url.startsWith('/api/money/mandates/')) {
+      sent.push({ url, headers: init?.headers as Record<string, string>, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      const [, id, move] = /mandates\/([^/]+)\/(\w+)$/.exec(url) ?? []
+      const m = MANDATES.find((x) => x.id === id) as Record<string, unknown>
+      m.status = move === 'approve' ? 'active' : 'declined'
+      return json(m)
+    }
+    if (url === '/api/money/mandates') return json({ granted: MANDATES, received: [] })
     if (url === '/api/money/payouts' && init?.method === 'POST') {
       sent.push({ url, headers: init.headers as Record<string, string>, body: init.body })
       return json({ id: 'mpob_1', funding: 'test', status: 'awaiting_approval', rows_total: 2, rows_valid: 1, rows_invalid: 1, totals_minor: { GBP: 500 }, created_at: '2026-10-11T09:00:00Z',
@@ -151,6 +172,7 @@ function onlyThePhoneKey(extra: Record<string, unknown> = {}) {
 }
 
 afterEach(() => {
+  MANDATES = []
   cleanup()
   vi.restoreAllMocks()
   queryClient.clear()
@@ -392,6 +414,61 @@ describe('the Pay screen', () => {
       expect.objectContaining({ url: '/api/money/payments', body: { ...payment, assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } } }),
     ])
     expect(bff.sent[2].body).toEqual({ ...(bff.sent[1].body as object), assertion: expect.anything() }) // signed over exactly what it pays
+  })
+
+  // B55.56 — Lens grants the owner's mandate only with the passkey's signature over that grant's own challenge (B55.24).
+  it('grants a mandate only once the workspace’s passkey signs that grant’s own challenge', async () => {
+    const bff = mockBff([], [], [], [], ['Y3JlZDE'])
+    const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
+      response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+
+    const form = await screen.findByTestId('new-mandate')
+    fireEvent.change(within(form).getByLabelText('Mandate payee kind'), { target: { value: 'company' } })
+    fireEvent.change(within(form).getByLabelText('Payee’s workspace id'), { target: { value: 'ws_kite' } })
+    fireEvent.change(within(form).getByLabelText('Payee’s name'), { target: { value: 'Kite' } })
+    fireEvent.change(within(form).getByLabelText('Most per pull'), { target: { value: '5.00' } })
+    fireEvent.change(within(form).getByLabelText('Most per month'), { target: { value: '20.00' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Grant mandate' }))
+    await within(form).findByText('Granted to Kite.')
+    const grant = { account_id: 'macc_agt', payee_workspace_id: 'ws_kite', payee_business_id: '', payee_id: '', payee_name: 'Kite',
+      max_per_pull_minor: 500, max_per_month_minor: 2000, expires_at: expect.stringMatching(/T23:59:59Z$/) }
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(bff.sent).toEqual([
+      expect.objectContaining({ url: '/api/money/mandates/challenge', body: { grant } }),
+      expect.objectContaining({ url: '/api/money/mandates', body: { grant, assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } } }),
+    ])
+    expect((bff.sent[1].body as { grant: unknown }).grant).toEqual((bff.sent[0].body as { grant: unknown }).grant) // signed over exactly what it grants
+  })
+
+  it('shows a mandate an agent asked for with Approve, signed, and Decline', async () => {
+    MANDATES = ['mdt_a', 'mdt_b'].map((id, i) => ({ id, agent_id: 'agt_1', account_id: 'macc_agt', currency: 'GBP', payee_workspace_id: 'ws_kite',
+      payee_name: i === 0 ? 'Kite' : 'Orbit', max_per_pull_minor: 500, max_per_month_minor: 2000, pulled_this_month_minor: 0,
+      expires_at: '2027-11-10T23:59:59Z', status: 'requested', created_at: '2026-11-10T09:00:00Z' }))
+    const bff = mockBff([], [], [], [], ['Y3JlZDE'])
+    const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
+      response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+
+    const asked = await screen.findByTestId('mandate-mdt_a')
+    expect(asked.textContent).toContain('Kite pulls from Researcher')
+    expect(asked.textContent).toContain('Researcher asked for this mandate. Nothing is pulled until you approve it.')
+    expect(within(asked).getByText('Asked')).toBeTruthy()
+    fireEvent.click(within(asked).getByRole('button', { name: 'Approve' }))
+    await within(screen.getByTestId('mandate-mdt_a')).findByText('Active')
+    fireEvent.click(within(screen.getByTestId('mandate-mdt_b')).getByRole('button', { name: 'Decline' }))
+    await within(screen.getByTestId('mandate-mdt_b')).findByText('Declined')
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(bff.sent).toEqual([
+      expect.objectContaining({ url: '/api/money/mandates/challenge', body: { mandate_id: 'mdt_a' } }),
+      expect.objectContaining({ url: '/api/money/mandates/mdt_a/approve', body: { assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } } }),
+      expect.objectContaining({ url: '/api/money/mandates/mdt_b/decline', body: {} }),
+    ])
+    expect(within(screen.getByTestId('mandate-mdt_a')).queryByRole('button', { name: 'Approve' })).toBeNull()
   })
 
   it('asks two scam questions before a first payment: a yes warns and needs a second confirmation, and a second payment asks nothing', async () => {

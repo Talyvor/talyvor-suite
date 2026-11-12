@@ -592,6 +592,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/physical-cards/{id}/replace", a.requireTenant(a.handlePhysicalCardReplace))
 
 	a.mux.HandleFunc("/api/money/mandates", a.requireTenant(a.handleMoneyMandates))
+	a.mux.HandleFunc("/api/money/mandates/challenge", a.requireTenant(a.handleMoneyMandateChallenge))
+	a.mux.HandleFunc("/api/money/mandates/{id}/approve", a.requireTenant(a.handleMoneyMandateDecide(true)))
+	a.mux.HandleFunc("/api/money/mandates/{id}/decline", a.requireTenant(a.handleMoneyMandateDecide(false)))
 	a.mux.HandleFunc("/api/money/mandates/{id}/revoke", a.requireTenant(a.handleMoneyMandateRevoke))
 	// B41.1 — the bills inbox: an uploaded invoice becomes a bill (Lens B41.101). See money_bills.go.
 	a.mux.HandleFunc("/api/money/bills", a.requireTenant(a.handleMoneyBills))
