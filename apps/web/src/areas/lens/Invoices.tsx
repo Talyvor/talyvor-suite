@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { Button, CardHeader, Input, Pill, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
@@ -122,9 +123,10 @@ function OpenAccount({ accounts }: { accounts: CurrencyAccount[] }) {
           <ul className="flex flex-col gap-1" aria-label="Currency accounts">
             {accounts.map((a) => (
               <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 text-caption text-ink">
-                <span>
+                {/* B57.25 — each account opens its statement, in its own currency. */}
+                <Link className={inlineLink} to={`/statements?wallet=${encodeURIComponent(a.id)}`}>
                   {a.purpose === 'agent' ? (agents.find((x) => x.id === a.agent_id)?.name ?? a.name) : 'The company'} · {a.currency}
-                </span>
+                </Link>
                 <span className="font-figure">{formatMinor(a.live_minor, a.currency)}</span>
               </li>
             ))}

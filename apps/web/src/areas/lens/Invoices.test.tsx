@@ -112,6 +112,19 @@ describe('the Invoices screen', () => {
     expect(list.textContent).not.toContain('1.50')
   })
 
+  // B57.25 — each account on Invoices opens its statement, in its own currency.
+  it('links each account to its statement', async () => {
+    mockBff()
+    window.history.pushState({}, '', '/money/invoices')
+    render(<App />)
+    const list = await screen.findByRole('list', { name: 'Currency accounts' })
+    const links = await within(list).findAllByRole('link')
+    expect(links.map((l) => [l.textContent, l.getAttribute('href')])).toEqual([
+      ['The company · GBP', '/statements?wallet=macc_co'],
+      [expect.stringMatching(/ · GBP$/), '/statements?wallet=macc_agt'],
+    ])
+  })
+
   // B55.26 — Lens opens every crypto agent a USDC wallet: Intl refused the code and the whole screen with it.
   it('draws with an agent’s USDC wallet, lists it to six decimals, and never offers it as Paid into', async () => {
     const before = ACCOUNTS
