@@ -47,12 +47,15 @@ func (a *app) handleMobileSession(w http.ResponseWriter, r *http.Request) {
 		AccountType string `json:"account_type"`
 		MoneyKind   string `json:"money_kind"`
 		Name        string `json:"name"`
+		// B59.41: the profile, as the web sends it; either may be left out.
+		Country            string `json:"country"`
+		RegistrationNumber string `json:"registration_number"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&in); err != nil || in.IDToken == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `send {"id_token": "…"}`})
 		return
 	}
-	signup, err := parseSignupAccount(in.AccountType, in.MoneyKind, in.Name)
+	signup, err := parseSignupAccount(in.AccountType, in.MoneyKind, in.Name, in.Country, in.RegistrationNumber)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

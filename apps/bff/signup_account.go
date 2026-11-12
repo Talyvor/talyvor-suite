@@ -19,29 +19,46 @@ type signupAccount struct {
 	accountType string // business or personal
 	moneyKind   string // fiat, stablecoin or hybrid
 	name        string // the person's name or the company's: the workspace's name
+	// B59.41: the profile Lens keeps with the workspace (talyvor-lens B59.40); either may be "".
+	country            string // ISO 3166-1 alpha-2, upper-case
+	registrationNumber string // a business's alone
 }
 
 // signupNameMax is Lens's limit on a workspace's name (B46.15).
 const signupNameMax = 80
 
-var errSignupAccount = errors.New("sign-up needs who the account is for (business or personal), the kind of money " +
-	"(fiat, stablecoin or hybrid) and a name of at most 80 characters")
+// signupRegistrationNumberMax is Lens's limit on a registration number (B59.40).
+const signupRegistrationNumberMax = 64
 
-// parseSignupAccount reads the three answers. None at all is a sign-in; any one of them is a sign-up, which needs all
-// three, so a sign-up cannot finish without both the type and the kind.
-func parseSignupAccount(accountType, moneyKind, name string) (signupAccount, error) {
+var errSignupAccount = errors.New("sign-up needs who the account is for (business or personal), the kind of money " +
+	"(fiat, stablecoin or hybrid) and a name of at most 80 characters; a country is a two-letter code, like GB, and " +
+	"only a business has a registration number, of at most 64 characters")
+
+// parseSignupAccount reads the answers. None at all is a sign-in; any one of them is a sign-up, which needs the type,
+// the kind and the name, so a sign-up cannot finish without both the type and the kind. The country and the
+// registration number are optional, and checked here as Lens checks them so a bad one is refused before the identity
+// provider rather than at the callback; Lens still checks the country is a real one.
+func parseSignupAccount(accountType, moneyKind, name, country, registrationNumber string) (signupAccount, error) {
 	name = strings.TrimSpace(name)
-	if accountType == "" && moneyKind == "" && name == "" {
+	country = strings.ToUpper(strings.TrimSpace(country))
+	registrationNumber = strings.TrimSpace(registrationNumber)
+	if accountType == "" && moneyKind == "" && name == "" && country == "" && registrationNumber == "" {
 		return signupAccount{}, nil
+	}
+	unsafe := func(s string) bool {
+		return strings.IndexFunc(s, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r) }) >= 0
 	}
 	switch {
 	case accountType != "business" && accountType != "personal",
 		moneyKind != "fiat" && moneyKind != "stablecoin" && moneyKind != "hybrid",
-		name == "", utf8.RuneCountInString(name) > signupNameMax,
-		strings.IndexFunc(name, func(r rune) bool { return unicode.IsControl(r) || unicode.Is(unicode.Bidi_Control, r) }) >= 0:
+		name == "", utf8.RuneCountInString(name) > signupNameMax, unsafe(name),
+		country != "" && (len(country) != 2 || strings.Trim(country, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") != ""),
+		registrationNumber != "" && accountType != "business",
+		utf8.RuneCountInString(registrationNumber) > signupRegistrationNumberMax, unsafe(registrationNumber):
 		return signupAccount{}, errSignupAccount
 	}
-	return signupAccount{accountType: accountType, moneyKind: moneyKind, name: name}, nil
+	return signupAccount{accountType: accountType, moneyKind: moneyKind, name: name, country: country,
+		registrationNumber: registrationNumber}, nil
 }
 
 // signupFromAnotherSite reports a browser's sign-up that started on another site: a link elsewhere that would choose,

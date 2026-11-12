@@ -56,11 +56,13 @@ type strangerLens struct {
 	// B59.8: what each workspace was made as — the provision body's account_type, money_kind and display_name, as
 	// sent (empty when left out), recorded on the call that made it.
 	accounts map[string][3]string
+	// B59.41: the sign-up profile each workspace was made with — country and registration_number, as sent.
+	profiles map[string][2]string
 }
 
 func newStrangerLens(t *testing.T) *strangerLens {
 	t.Helper()
-	l := &strangerLens{created: map[string]bool{}, poolable: map[string]bool{}, accounts: map[string][3]string{}}
+	l := &strangerLens{created: map[string]bool{}, poolable: map[string]bool{}, accounts: map[string][3]string{}, profiles: map[string][2]string{}}
 	l.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		l.mu.Lock()
 		l.paths = append(l.paths, r.URL.Path)
@@ -123,6 +125,8 @@ func (l *strangerLens) serveProvision(w http.ResponseWriter, r *http.Request) {
 		AccountType   string `json:"account_type"`
 		MoneyKind     string `json:"money_kind"`
 		DisplayName   string `json:"display_name"`
+		Country       string `json:"country"`
+		Registration  string `json:"registration_number"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&in)
 	if in.Identity == "" {
@@ -137,6 +141,7 @@ func (l *strangerLens) serveProvision(w http.ResponseWriter, r *http.Request) {
 		l.created[ws] = true
 		l.poolable[ws] = in.CachePoolable == nil || *in.CachePoolable
 		l.accounts[ws] = [3]string{in.AccountType, in.MoneyKind, in.DisplayName}
+		l.profiles[ws] = [2]string{in.Country, in.Registration}
 	}
 	poolable := l.poolable[ws]
 	l.mu.Unlock()

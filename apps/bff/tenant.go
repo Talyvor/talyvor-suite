@@ -87,7 +87,8 @@ func (a *app) provision(ctx context.Context, identity string, cachePoolable *boo
 	// display_name, account_type and money_kind are sign-up's answers (B59.8), off the wire on a
 	// sign-in. Lens sets them only on the call that makes the workspace. A renamed account_type or
 	// money_kind upstream is SILENT: lens reads the key as left out and makes the workspace business
-	// and hybrid, whatever the person picked.
+	// and hybrid, whatever the person picked. country and registration_number are sign-up's profile
+	// (B59.41), the same: a renamed one upstream is silent and the workspace keeps none.
 	//
 	// ⚠⚠ ttl_hours IS SILENT AND IT IS A CREDENTIAL LIFETIME. MEASURED against lens f09348d1 by
 	// driving the real newProvisionHandler: a renamed key yields 0, auth.ClampTTL(0) returns
@@ -104,8 +105,11 @@ func (a *app) provision(ctx context.Context, identity string, cachePoolable *boo
 		TTLHours      int    `json:"ttl_hours"`
 		AccountType   string `json:"account_type,omitempty"`
 		MoneyKind     string `json:"money_kind,omitempty"`
+		Country       string `json:"country,omitempty"`
+		Registration  string `json:"registration_number,omitempty"`
 	}{Identity: identity, DisplayName: signup.name, CachePoolable: cachePoolable, TTLHours: sessionTokenTTLHours,
-		AccountType: signup.accountType, MoneyKind: signup.moneyKind})
+		AccountType: signup.accountType, MoneyKind: signup.moneyKind, Country: signup.country,
+		Registration: signup.registrationNumber})
 	if err != nil {
 		return out, err
 	}

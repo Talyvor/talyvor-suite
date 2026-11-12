@@ -394,7 +394,7 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	signup, err := parseSignupAccount(q.Get("account_type"), q.Get("money_kind"), q.Get("name"))
+	signup, err := parseSignupAccount(q.Get("account_type"), q.Get("money_kind"), q.Get("name"), q.Get("country"), q.Get("registration_number"))
 	if err == nil && signup != (signupAccount{}) && signupFromAnotherSite(r) {
 		err = errors.New("start sign-up at /signup")
 	}

@@ -35,8 +35,8 @@ import {
 // makes the workspace. Step 2's Continue is a link to the BFF's /auth/login with the answers in its query: the BFF holds them with the login in progress and sends them to Lens's POST /v1/provision at the callback, and it
 // refuses a sign-up without both. The callback lands on step 3, /signup/key, with a session.
 //
-// The name is the workspace's name. Country and the registration number are asked as the spec says, and kept on
-// this page only: Lens has nowhere to hold them yet.
+// The name is the workspace's name. Country and a business's registration number ride the same query (B59.41), and
+// Lens keeps them with the workspace as its sign-up profile (talyvor-lens B59.40).
 
 /** Why Continue waits: nothing is picked yet. */
 const PICK_TYPE = 'Pick who this account is for.'
@@ -45,8 +45,11 @@ const PICK_KIND = 'Pick the kind of money.'
 export const SIGNUP_KEY_PATH = '/signup/key'
 
 /** The BFF's sign-up entry: /auth/login with the answers, landing on step 3. */
-function signupLoginHref(type: AccountType, kind: MoneyKind, name: string): string {
-  const q = new URLSearchParams({ account_type: type, money_kind: kind, name, return_to: SIGNUP_KEY_PATH })
+function signupLoginHref(type: AccountType, kind: MoneyKind, profile: Profile): string {
+  const name = (type === 'personal' ? profile.name : profile.companyName).trim()
+  const q = new URLSearchParams({ account_type: type, money_kind: kind, name, country: profile.country })
+  if (type === 'business') q.set('registration_number', profile.registrationNumber.trim())
+  q.set('return_to', SIGNUP_KEY_PATH)
   return `/auth/login?${q.toString()}`
 }
 
@@ -271,13 +274,14 @@ function StepWho({ type, setType, profile, setProfile, onContinue }: {
 }
 
 /** Step 2 (W1's words): the kind of money. Continue goes to the identity provider with every answer. */
-function StepKind({ type, name, kind, setKind, onBack }: {
+function StepKind({ type, profile, kind, setKind, onBack }: {
   type: AccountType
-  name: string
+  profile: Profile
   kind: MoneyKind | null
   setKind: (k: MoneyKind) => void
   onBack: () => void
 }) {
+  const name = (type === 'personal' ? profile.name : profile.companyName).trim()
   return (
     <div className="grid gap-5">
       <Stepper at={2} />
@@ -305,7 +309,7 @@ function StepKind({ type, name, kind, setKind, onBack }: {
           </Button>
           {kind ? (
             <Button asChild>
-              <a href={signupLoginHref(type, kind, name)}>Continue</a>
+              <a href={signupLoginHref(type, kind, profile)}>Continue</a>
             </Button>
           ) : (
             <Button disabledReason={PICK_KIND}>Continue</Button>
@@ -339,7 +343,7 @@ export function SignUp() {
       ) : (
         <StepKind
           type={type}
-          name={(type === 'personal' ? profile.name : profile.companyName).trim()}
+          profile={profile}
           kind={kind}
           setKind={setKind}
           onBack={() => setStep(1)}
