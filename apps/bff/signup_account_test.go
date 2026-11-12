@@ -149,3 +149,72 @@ func TestB598_SignUpStartsOnlyFromThisSite(t *testing.T) {
 		t.Errorf("a sign-in from another site: %d, want 302", got)
 	}
 }
+
+func (s *strangerSuite) profileOf(sub string) [2]string {
+	ws := deriveWorkspaceIDLikeLens(provisionIdentity(s.idp.srv.URL, sub))
+	s.lens.mu.Lock()
+	defer s.lens.mu.Unlock()
+	return s.lens.profiles[ws]
+}
+
+// B59.41: sign-up's country and a business's registration number reach Lens's POST /v1/provision with the other
+// answers, from the web and from the phone, the country upper-case and both trimmed as Lens keeps them (B59.40).
+func TestB5941_CountryAndRegistrationNumberReachLens(t *testing.T) {
+	s := startStrangerSuiteWith(t, []string{"*"}, func(c *config) { c.oidcMobileClientIDs = []string{"phone-ios"} })
+	for _, tc := range []struct {
+		sub, typ, name, country, number string
+		want                            [2]string
+	}{
+		{"b5941-personal", "personal", "Maya Lind", " gb ", "", [2]string{"GB", ""}},
+		{"b5941-business", "business", "Northwind Studio", "DE", " HRB 12345 ", [2]string{"DE", "HRB 12345"}},
+	} {
+		cb, body := s.signUpAs(tc.sub, url.Values{"account_type": {tc.typ}, "money_kind": {"fiat"}, "name": {tc.name},
+			"country": {tc.country}, "registration_number": {tc.number}})
+		if cb.StatusCode != http.StatusFound {
+			t.Fatalf("%s: callback %d (%s)", tc.typ, cb.StatusCode, body)
+		}
+		if got := s.profileOf(tc.sub); got != tc.want {
+			t.Errorf("web %s: Lens was sent %q, want %q", tc.typ, got, tc.want)
+		}
+	}
+
+	s.idp.sub, s.idp.email, s.idp.aud = "b5941-phone", "b5941-phone@example.org", "phone-ios"
+	resp, err := s.ts.Client().Post(s.ts.URL+mobileSessionPath, "application/json", strings.NewReader(`{"id_token":"`+
+		s.idp.mintIDToken("")+`","account_type":"business","money_kind":"hybrid","name":"Northwind Studio","country":"FR","registration_number":"552 100 554"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("phone sign-up: %d", resp.StatusCode)
+	}
+	if got, want := s.profileOf("b5941-phone"), [2]string{"FR", "552 100 554"}; got != want {
+		t.Errorf("phone: Lens was sent %q, want %q", got, want)
+	}
+}
+
+// A country that is not two letters, a registration number on a personal account, and one past Lens's 64 characters
+// are refused before the identity provider, as the other answers are.
+func TestB5941_ABadProfileIsRefusedBeforeTheIdentityProvider(t *testing.T) {
+	s := startStrangerSuite(t, []string{"*"})
+	business := func(country, number string) url.Values {
+		return url.Values{"account_type": {"business"}, "money_kind": {"fiat"}, "name": {"Northwind Studio"},
+			"country": {country}, "registration_number": {number}}
+	}
+	for _, q := range []url.Values{
+		business("GBR", "123"),
+		business("G1", "123"),
+		business("GB", strings.Repeat("1", 65)),
+		business("GB", "12\n34"),
+		{"account_type": {"personal"}, "money_kind": {"fiat"}, "name": {"Maya Lind"}, "country": {"GB"}, "registration_number": {"123"}},
+		{"country": {"GB"}},
+	} {
+		resp, body := s.signUpAs("b5941-refused", q)
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%v: got %d (%s), want 400", q, resp.StatusCode, body)
+		}
+	}
+	if _, ok := s.accountOf("b5941-refused"); ok {
+		t.Fatal("a refused sign-up made a workspace")
+	}
+}

@@ -114,7 +114,7 @@ describe('step 2: pick the kind of money', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Who is this account for?' })).toBeInTheDocument()
   })
 
-  it('sends each of the six choices to the BFF’s sign-up as its type and kind, landing on step 3', async () => {
+  it('sends each of the six choices to the BFF’s sign-up as its type and kind, with the country and a business’s registration number, landing on step 3', async () => {
     for (const kind of ['Personal', 'Business'] as const) {
       for (const [money, value] of [['Fiat only', 'fiat'], ['Stablecoin and crypto only', 'stablecoin'], ['Hybrid', 'hybrid']] as const) {
         mockFetch()
@@ -128,6 +128,8 @@ describe('step 2: pick the kind of money', () => {
           money_kind: value,
           account_type: kind.toLowerCase(),
           name: kind === 'Personal' ? 'Maya Lind' : 'Northwind Studio',
+          country: 'GB',
+          ...(kind === 'Business' ? { registration_number: '12345678' } : {}),
           return_to: '/signup/key',
         })
         cleanup()
