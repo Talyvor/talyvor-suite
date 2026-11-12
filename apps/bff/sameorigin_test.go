@@ -200,6 +200,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/features/deletion-requests", body: `{}`},
 		{method: http.MethodPut, path: "/api/workspace/name", body: `{"name":"a"}`},                          // B46.16
 		{method: http.MethodPost, path: "/api/workspace/requests", body: `{"kind":"support","message":"a"}`}, // B59.28
+		{method: http.MethodPut, path: "/api/workspace/business", body: `{"company_name":"a"}`},              // B59.31
 		{method: http.MethodPost, path: "/api/agents", body: `{"name":"a"}`},
 		{method: http.MethodPost, path: "/api/agents/x1/fund", body: `{"amount_ulxc":1}`},
 		{method: http.MethodPost, path: "/api/agents/x1/withdraw", body: `{"amount_ulxc":1}`},

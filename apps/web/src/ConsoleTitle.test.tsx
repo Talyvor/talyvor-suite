@@ -137,6 +137,7 @@ const PINNED: Readonly<Record<string, string>> = {
   '/settings/webhooks': 'Webhooks',
   '/settings/email-branding': 'Email branding',
   '/settings/connect': 'Connect your AI',
+  '/settings/company': 'Company details',
   '/settings/help': 'Help and complaints',
   '/settings/close': 'Close this account',
   '/settings/data': 'Your data',

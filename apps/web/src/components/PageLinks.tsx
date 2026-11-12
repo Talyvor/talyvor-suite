@@ -65,11 +65,15 @@ export function SettingsLinks() {
   const operator = me.data?.operator === true
   // B59.2 — no link to a hidden area's page; B59.10 — Members only for a Business.
   const areas = useWorkspaceAreas()
-  const team = useAccount().shows?.team !== false
+  const { account, shows } = useAccount()
+  const team = shows?.team !== false
+  // B59.31 — the company details only once the account is known to be a Business.
+  const business = account?.account_type === 'business'
   const links: PageLink[] = [
     { to: '/settings/connect', title: 'Connect your AI', line: 'Use Talyvor from Claude, ChatGPT and others' },
     ...(team ? [{ to: '/members', title: 'Members' }] : []),
     { to: '/billing', title: 'Billing and plan' },
+    ...(business ? [{ to: '/settings/company', title: 'Company details', line: 'Company name, number and country, and the people with control' }] : []),
     { to: '/settings/verification', title: 'Verification', line: 'What Talyvor has checked about you' },
     { to: '/settings/terms', title: 'Capability terms', line: 'The terms each money feature asks you to accept' },
     { to: '/settings/webhooks', title: 'Webhooks', line: 'Docs tells your server about approvals and comments' },
