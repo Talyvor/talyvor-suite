@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Logo, ThemeToggle, cn } from '@talyvor/ui'
-import { Button, Field, Icon, Input, Select, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Button, Field, Icon, Input, KindTile, Select, pocketFocusRing } from '@talyvor/ui/pocket'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Waitlist } from '../../components/Waitlist'
 import { SharedAnswersFact } from '../../components/StoredAnswersFacts'
 import { StatusLabel } from '../../labels/StatusLabel'
+import { WorkspaceStatus } from '../../labels/workspace'
 import { useAuthMeReader } from '../../lib/authMe'
 import { useSignupProbe } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
@@ -62,8 +63,9 @@ function SandboxLabel() {
   return keys.length > 0 ? <StatusLabel capability={keys} labels={labels} /> : null
 }
 
-/** The web sign-up's page (W1): the logo and the Sandbox label across the top, the step under it. */
-function SignUpFrame({ children }: { children: React.ReactNode }) {
+/** The web sign-up's page (W1): the logo and the Sandbox label across the top, the step under it. Step 3 has a
+ *  workspace, so it passes that workspace's own label (B57.133), which says Status unknown when its read fails (S-06). */
+function SignUpFrame({ children, label = <SandboxLabel /> }: { children: React.ReactNode; label?: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-page text-ink">
       <header className="flex items-center justify-between gap-4 border-b border-line px-gutter py-4 wide:px-10">
@@ -71,7 +73,7 @@ function SignUpFrame({ children }: { children: React.ReactNode }) {
           <Logo width={144} />
         </a>
         <div className="flex items-center gap-3">
-          <SandboxLabel />
+          {label}
           <ThemeToggle />
         </div>
       </header>
@@ -84,10 +86,25 @@ function SignUpFrame({ children }: { children: React.ReactNode }) {
 }
 
 /** W1's stepper: numbered dots, tangerine when done or current, a tick when done, every step in words. The disc is
- *  tangerine-50 with tangerine ink, as Pocket's Steps draws it: ink on full tangerine is not a scored pair. */
+ *  tangerine-50 with tangerine ink, as Pocket's Steps draws it: ink on full tangerine is not a scored pair.
+ *  B57.133 — a narrow screen gets P1's step bars instead: three bars, tangerine once reached, then "Step n of 3". */
 function Stepper({ at }: { at: 1 | 2 | 3 }) {
   return (
-    <ol aria-label="Sign-up steps" className="flex flex-wrap items-center gap-x-6 gap-y-2">
+    <>
+      <p className="flex items-center gap-1.5 text-body font-semibold text-ink-2 wide:hidden">
+        {SIGNUP_STEPS.map((title, i) => (
+          <span key={title} aria-hidden="true" data-step-bar={i < at ? 'reached' : 'ahead'} className={cn('h-1.5 w-7 rounded-pill', i < at ? 'bg-tangerine' : 'bg-cloud-2')} />
+        ))}
+        <span className="ml-2.5">{`Step ${at} of ${SIGNUP_STEPS.length}`}</span>
+      </p>
+      <StepDots at={at} />
+    </>
+  )
+}
+
+function StepDots({ at }: { at: 1 | 2 | 3 }) {
+  return (
+    <ol aria-label="Sign-up steps" className="hidden flex-wrap items-center gap-x-6 gap-y-2 wide:flex">
       {SIGNUP_STEPS.map((title, i) => {
         const n = i + 1
         const reached = n <= at
@@ -364,7 +381,7 @@ export function SignUp() {
 export function SignUpKey() {
   const me = useAuthMeReader()
   useDocumentTitle(SIGNUP_STEPS[2])
-  if (me.isLoading) return <SignUpFrame>{null}</SignUpFrame>
+  if (me.isLoading) return <SignUpFrame label={null}>{null}</SignUpFrame>
   if (me.data?.mode === 'oidc' && !me.data.authenticated) {
     return (
       <EntryFrame>
@@ -373,7 +390,7 @@ export function SignUpKey() {
     )
   }
   return (
-    <SignUpFrame>
+    <SignUpFrame label={<WorkspaceStatus />}>
       <Stepper at={3} />
       <StepTitle id="signup-key">{SIGNUP_STEPS[2]}</StepTitle>
       <KeyChoices>
@@ -381,6 +398,41 @@ export function SignUpKey() {
         <CompanyDetailsSection titled />
       </KeyChoices>
     </SignUpFrame>
+  )
+}
+
+/** One way to sign, drawn as W1's kind option: a tile where W1 has card art, the title and its line, then under a
+ *  hairline what to do or that it is done. A key that is here turns its card on: white with the ink ring. */
+function KeyOption({ id, icon, title, line, done, children }: {
+  id: string
+  icon: 'key' | 'phone'
+  title: string
+  line: string
+  done: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <section
+      aria-labelledby={id}
+      className={cn('grid content-start gap-1.5 rounded-card p-5', done ? 'bg-page shadow-pocket ring-2 ring-inset ring-ink' : 'bg-cloud')}
+    >
+      <KindTile icon={<Icon name={icon} size={20} />} on={done ? 'white' : 'cloud'} className="mb-3" />
+      <h2 id={id} className="font-display text-bar font-bold text-ink">
+        {title}
+      </h2>
+      <p className="text-body text-ink-2">{line}</p>
+      <div className="mt-3 grid gap-3 border-t border-line pt-4">{children}</div>
+    </section>
+  )
+}
+
+/** A key that is here: the word and a tick, never the colour alone. */
+function KeyDone({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="flex items-center gap-1.5 text-body font-semibold text-success">
+      <Icon name="check" size={16} />
+      {children}
+    </p>
   )
 }
 
@@ -404,48 +456,47 @@ function KeyChoices({ children }: { children?: React.ReactNode }) {
   return (
     <div className="grid gap-5">
       <div className="grid gap-4 wide:grid-cols-2">
-        <section aria-labelledby="key-passkey" className="grid content-start gap-3 rounded-card bg-cloud p-5">
-          <h2 id="key-passkey" className="font-display text-bar font-bold text-ink">
-            With your passkey
-          </h2>
-          <p className="text-body text-ink-2">This browser makes a passkey. From then on, Face ID, Touch ID or this device’s PIN asks each time you approve or decline.</p>
+        <KeyOption
+          id="key-passkey"
+          icon="key"
+          title="With your passkey"
+          line="This browser makes a passkey. From then on, Face ID, Touch ID or this device’s PIN asks each time you approve or decline."
+          done={hasPasskey}
+        >
           {hasPasskey ? (
-            <p className="flex items-center gap-1.5 text-body font-semibold text-success">
-              <Icon name="check" size={16} />
-              This browser now signs approvals.
-            </p>
+            <KeyDone>This browser now signs approvals.</KeyDone>
           ) : supported ? (
             <Button className="justify-self-start" icon={<Icon name="key" size={18} />} disabled={make.isPending || !passkeys.isSuccess} onClick={() => make.mutate()}>
               {make.isPending ? 'Saving…' : 'Make a passkey'}
             </Button>
           ) : null}
           {said ? <FieldError id="key-passkey-error">{said}</FieldError> : null}
-        </section>
-        <section aria-labelledby="key-phone" className="grid content-start gap-3 rounded-card bg-cloud p-5">
-          <h2 id="key-phone" className="font-display text-bar font-bold text-ink">
-            On your phone
-          </h2>
-          <p className="text-body text-ink-2">On your phone, the Talyvor app keeps a key in its secure chip that only Face ID can use, and signs your approvals with it.</p>
+        </KeyOption>
+        <KeyOption
+          id="key-phone"
+          icon="phone"
+          title="On your phone"
+          line="On your phone, the Talyvor app keeps a key in its secure chip that only Face ID can use, and signs your approvals with it."
+          done={hasPhone}
+        >
           {hasPhone ? (
-            <p className="flex items-center gap-1.5 text-body font-semibold text-success">
-              <Icon name="check" size={16} />
-              Your phone now signs approvals.
-            </p>
+            <KeyDone>Your phone now signs approvals.</KeyDone>
           ) : (
             <p className="text-body text-ink">Open Talyvor on your phone, sign in with this account and turn on Approve with Face ID.</p>
           )}
-        </section>
+        </KeyOption>
       </div>
       {children}
-      <div className="flex flex-wrap items-center gap-4">
+      {/* W1's foot: the step's buttons at the right; on a narrow screen one full-width button, as P1 and P2 draw it. */}
+      <div className="grid wide:flex wide:justify-end">
         {done ? (
           <Button asChild>
             <a href="/">Open the app</a>
           </Button>
         ) : (
-          <a href="/" className={cn('text-reading font-semibold text-ink', pocketFocusRing)}>
-            Do this later
-          </a>
+          <Button asChild variant="outline">
+            <a href="/">Do this later</a>
+          </Button>
         )}
       </div>
     </div>
