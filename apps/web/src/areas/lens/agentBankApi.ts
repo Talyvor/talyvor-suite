@@ -37,6 +37,8 @@ export interface Agent {
   archived_at?: string
   /** B32.32 — "room" for a room's wallet, which Lens keeps as an agent account named "Room: <title>"; else "agent". */
   kind?: string
+  /** B57.10 — its face's colour, which B57.124's helper follows; absent from a Lens older than B57.10. */
+  colour?: string
 }
 
 /** Lens economy.AgentArchive (B28.21): what archiving an agent did. */
@@ -1055,7 +1057,8 @@ export const agentBankApi = {
       spent_ulxc: 'number',
       agents: 'array',
     }),
-  create: (name: string) => send<Agent>('POST', '/api/agents', { name }),
+  /** B57.124 — with the colour of the helper its owner picked; without one, Lens picks. */
+  create: (name: string, colour?: string) => send<Agent>('POST', '/api/agents', colour ? { name, colour } : { name }),
   /** B46.16 — the workspace's name (Lens B46.15): asked at sign-up on Home's first-agent card, shown in the sidebar. */
   workspaceName: () => getJSON<{ id: string; name: string }>('/api/workspace/name', { name: 'string' }),
   setWorkspaceName: (name: string) => send<{ id: string; name: string }>('PUT', '/api/workspace/name', { name }),
@@ -1120,8 +1123,8 @@ export const agentBankApi = {
   /** B28.360 — every purchase on the agent's card refused until it is unfrozen; Lens answers the card. */
   freezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/freeze`),
   unfreezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/unfreeze`),
-  /** B28.21 — renames the agent and/or sets what it is for; Lens answers the agent. */
-  update: (id: string, change: { name?: string; description?: string }) => send<Agent>('PATCH', `/api/agents/${e(id)}`, change),
+  /** B28.21 — renames the agent and/or sets what it is for, and (B57.124) its helper's colour; Lens answers the agent. */
+  update: (id: string, change: { name?: string; description?: string; colour?: string }) => send<Agent>('PATCH', `/api/agents/${e(id)}`, change),
   /** B28.21 — retires the agent: its balance back to the workspace, its keys revoked, its top-up and schedules stopped. */
   archive: (id: string) => send<AgentArchive>('POST', `/api/agents/${e(id)}/archive`),
   /** B19.23 — the signed-in person becomes the owner of an agent that has none. */

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
-import { Icon, Button as PocketButton, Row as PocketRow, RoomBadge } from '@talyvor/ui/pocket'
+import { Icon, Button as PocketButton, Row as PocketRow, RoomBadge, faceOf, type FaceColour } from '@talyvor/ui/pocket'
 import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { useLinked } from '../../components/LinkedItem'
@@ -16,6 +16,7 @@ import { AgentAnalytics } from './AgentAnalytics'
 import { AlertChannels } from './AlertChannels'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
+import { HelperPicker } from '../../cards/HelperPicker'
 import { categoryWords } from './Budgets'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { AgentCredentialCard } from './AgentCredential'
@@ -598,9 +599,10 @@ function CreateAgent({ first = false, onCreated }: { first?: boolean; onCreated:
   const qc = useQueryClient()
   const [name, setName] = useState('')
   const [template, setTemplate] = useState<RuleTemplate | null>(null)
+  const [colour, setColour] = useState<FaceColour | null>(null)
   const create = useMutation({
     mutationFn: async () => {
-      const a = await agentBankApi.create(name.trim())
+      const a = await agentBankApi.create(name.trim(), colour ?? undefined)
       if (template === null) return { a, unsaved: null }
       try {
         qc.setQueryData(rulesKey(a.id), await agentBankApi.setRules(a.id, template.rules))
@@ -611,6 +613,7 @@ function CreateAgent({ first = false, onCreated }: { first?: boolean; onCreated:
     },
     onSuccess: ({ a }) => {
       setName('')
+      setColour(null)
       onCreated(a)
     },
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
@@ -649,6 +652,7 @@ function CreateAgent({ first = false, onCreated }: { first?: boolean; onCreated:
         ))}
       </div>
       {template ? <p className="text-caption text-muted">{template.summary}</p> : null}
+      <HelperPicker label="Its helper" value={colour} onChange={setColour} />
       {create.isError ? <Note ok={false}>{refusalText(create.error)}</Note> : null}
       {create.data?.unsaved ? <Note ok={false}>{create.data.unsaved}</Note> : null}
     </form>
@@ -820,16 +824,20 @@ function Ownership({ agent }: { agent: Agent }) {
   )
 }
 
-/** B28.21 — the agent's name and what it is for, in its owner's words (Lens keeps up to 500 characters). */
+/** B28.21 — the agent's name and what it is for, in its owner's words (Lens keeps up to 500 characters); B57.124, its helper. */
 function AgentDetails({ agent }: { agent: Agent }) {
   const qc = useQueryClient()
   const [name, setName] = useState(agent.name)
   const [description, setDescription] = useState(agent.description ?? '')
+  // B57.124 — the helper it wears now; its colour is sent only when the owner picks another, so Lens keeps it.
+  const current = faceOf(agent).colour
+  const [colour, setColour] = useState<FaceColour>(current)
   const save = useMutation({
-    mutationFn: () => agentBankApi.update(agent.id, { name: name.trim(), description: description.trim() }),
+    mutationFn: () =>
+      agentBankApi.update(agent.id, { name: name.trim(), description: description.trim(), ...(colour !== current ? { colour } : {}) }),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
-  const changed = name.trim() !== agent.name || description.trim() !== (agent.description ?? '')
+  const changed = name.trim() !== agent.name || description.trim() !== (agent.description ?? '') || colour !== current
   return (
     <Card>
       <CardHeader>Name and description</CardHeader>
@@ -850,6 +858,7 @@ function AgentDetails({ agent }: { agent: Agent }) {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
+        <HelperPicker label={`Helper for ${agent.name}`} value={colour} onChange={setColour} />
         <div>
           <Button type="submit" disabled={!changed || name.trim() === '' || save.isPending}>
             Save
