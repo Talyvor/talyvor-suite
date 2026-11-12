@@ -294,11 +294,14 @@ export function homeCards(): Scenario {
 
 /**
  * B29.9 — the wallet screens in the brand, as the browser paints them in the dark theme: each screen's one
- * teal action (Fund on Agent Wallets, Approve on Approvals, Download on Statements, Open Setup on Royalties while nothing
+ * filled action (Fund on Agent Wallets, Approve on Approvals, Download on Statements, Open Setup on Royalties while nothing
  * has earned, none elsewhere), its
- * cards on the raised plane, every LXC amount in IBM Plex Mono with tabular figures, and a pill on each
+ * cards on the raised plane, every LXC amount on the figure face with tabular figures, and a pill on each
  * waiting approval and each statement line. Runs after wallet-home, whose agent is funded and waiting; when the
  * user's spend cap skipped wallet-home, Lens has nothing pending and Approvals holds no Approve to fill (B17.141).
+ *
+ * B17.379 — the colours and the figure face are read from the page's own tokens, as chat-brand reads them: Pocket
+ * (B57.2) fills the action in --accent, not the 4 Oct board's teal, and sets figures in its UI face, not IBM Plex Mono.
  */
 export const WALLET_SCREENS = [
   { path: '/agents', title: 'Agents', teal: 'Fund' },
@@ -309,13 +312,12 @@ export const WALLET_SCREENS = [
   { path: '/ledger', title: 'Ledger', teal: null },
   { path: '/spend', title: 'Spend and routing', teal: null },
 ] as const
-export const DARK_WALLET = { teal: 'rgb(58, 214, 192)', raised: 'rgb(14, 26, 42)' } as const
 
 export function walletBrand(): Scenario {
   return {
     id: 'wallet-brand',
     owner: 'talyvor-suite',
-    title: 'the wallet screens carry one teal action each, raised cards, mono amounts and status pills',
+    title: 'the wallet screens carry one filled action each, raised cards, figure-face amounts and status pills',
     run: async (ctx) => {
       const wrong: string[] = []
       const seenAll: string[] = []
@@ -332,14 +334,29 @@ export function walletBrand(): Scenario {
           await page
             .waitForFunction(() => !Array.from(document.querySelectorAll('main p')).some((p) => (p.textContent ?? '').trim() === 'Reading…'), undefined, { timeout: HEADING_TIMEOUT_MS })
             .catch(() => undefined)
-          // The theme first, then a pause: a Button's colour eases over 200ms, and read mid-ease it is neither theme's teal.
+          // The theme first, then a pause: a Button's colour eases over 200ms, and read mid-ease it is neither theme's accent.
           await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'))
           await page.waitForTimeout(400)
-          const seen = await page.evaluate((want) => {
+          // B17.379 — and under ten browsers at once 400ms can end mid-ease, so it waits for every colour transition to land.
+          await page
+            .waitForFunction(() => document.getAnimations().every((a) => !(a instanceof CSSTransition) || a.playState !== 'running'), undefined, { timeout: SETTLE_TIMEOUT_MS })
+            .catch(() => undefined)
+          const seen = await page.evaluate(() => {
             const main = document.querySelector('main')
             if (!main) return null
+            // The token as this theme computes it, and the figure face as a font-figure span computes it.
+            const probe = document.createElement('span')
+            probe.className = 'font-figure'
+            main.appendChild(probe)
+            probe.style.backgroundColor = 'var(--accent)'
+            const filled = getComputedStyle(probe).backgroundColor
+            probe.style.backgroundColor = 'var(--raised)'
+            const plane = getComputedStyle(probe).backgroundColor
+            const figure = getComputedStyle(probe).fontFamily
+            probe.remove()
+            const want = { filled, raised: plane, figure }
             const teal = Array.from(main.querySelectorAll('button, a'))
-              .filter((b) => getComputedStyle(b).backgroundColor === want.teal)
+              .filter((b) => getComputedStyle(b).backgroundColor === want.filled)
               .map((b) => (b.textContent ?? '').trim())
             const cards = Array.from(main.querySelectorAll('.rounded-card')).map((c) => getComputedStyle(c).backgroundColor)
             const amounts: string[] = []
@@ -350,7 +367,7 @@ export function walletBrand(): Scenario {
               if (!el || !/^\s*LXC\b/.test(n.textContent ?? '') || !/\d\s+LXC\b/.test(el.textContent ?? '')) continue
               const st = getComputedStyle(el)
               amounts.push((el.textContent ?? '').trim())
-              if (!st.fontFamily.includes('IBM Plex Mono') || !st.fontFeatureSettings.includes('tnum')) notMono.push(`"${(el.textContent ?? '').trim()}" in ${st.fontFamily}`)
+              if (st.fontFamily !== want.figure || !st.fontFeatureSettings.includes('tnum')) notMono.push(`"${(el.textContent ?? '').trim()}" in ${st.fontFamily} ${st.fontFeatureSettings}`)
             }
             const lines = Array.from(main.querySelectorAll('[data-testid="agent-statement"] tbody tr'))
             const pilled = lines.filter((tr) => tr.querySelector('span.rounded-pill') !== null).length
@@ -358,20 +375,20 @@ export function walletBrand(): Scenario {
             const unread = Array.from(main.querySelectorAll('p'))
               .map((p) => (p.textContent ?? '').trim())
               .find((t) => /^Reading…$|could not be read|can’t be read/.test(t))
-            return { teal, cards, amounts: amounts.length, notMono, lines: lines.length, pilled, waiting, unread }
-          }, DARK_WALLET)
+            return { teal, raised: want.raised, cards, amounts: amounts.length, notMono, lines: lines.length, pilled, waiting, unread }
+          })
           if (seen === null) {
             wrong.push(`${screen.path} has no main`)
             continue
           }
-          seenAll.push(`${screen.path}: teal [${seen.teal.join(', ')}], ${seen.cards.length} cards, ${seen.amounts} LXC amounts, ${seen.pilled}/${seen.lines} statement lines pilled, ${seen.waiting} waiting`)
+          seenAll.push(`${screen.path}: filled [${seen.teal.join(', ')}], ${seen.cards.length} cards, ${seen.amounts} LXC amounts, ${seen.pilled}/${seen.lines} statement lines pilled, ${seen.waiting} waiting`)
           // Approve reads "Approve with Face ID" once the workspace signs its approvals.
           const one = teal === null ? seen.teal.length === 0 : seen.teal.length === 1 && seen.teal[0].startsWith(teal)
-          if (!one) wrong.push(`${screen.path} fills [${seen.teal.join(', ')}] teal; want ${teal ?? 'nothing'}${screen.path === '/approvals' ? ` (Lens has ${pending} pending)` : ''}`)
+          if (!one) wrong.push(`${screen.path} fills [${seen.teal.join(', ')}] in the accent; want ${teal ?? 'nothing'}${screen.path === '/approvals' ? ` (Lens has ${pending} pending)` : ''}`)
           if (seen.cards.length === 0) wrong.push(`${screen.path} shows no card${seen.unread ? ` ("${seen.unread}")` : ''}`)
           else if (seen.unread === 'Reading…') wrong.push(`${screen.path} still says "Reading…" after ${HEADING_TIMEOUT_MS / 1000}s`)
-          const flat = seen.cards.filter((c) => c !== DARK_WALLET.raised)
-          if (flat.length > 0) wrong.push(`${screen.path}: ${flat.length} card(s) not on raised ${DARK_WALLET.raised}: ${flat.join(', ')}`)
+          const flat = seen.cards.filter((c) => c !== seen.raised)
+          if (flat.length > 0) wrong.push(`${screen.path}: ${flat.length} card(s) not on raised ${seen.raised}: ${flat.join(', ')}`)
           if (seen.notMono.length > 0) wrong.push(`${screen.path}: amounts off the figure face: ${seen.notMono.slice(0, 3).join('; ')}`)
           if (seen.pilled !== seen.lines) wrong.push(`${screen.path}: ${seen.lines - seen.pilled} statement line(s) without a pill`)
           if (screen.path === '/approvals' && pending > 0 && seen.waiting === 0) wrong.push(`Lens has ${pending} approval(s) pending; Approvals shows no Waiting pill`)
