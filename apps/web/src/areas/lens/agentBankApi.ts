@@ -1001,9 +1001,18 @@ export interface DayStatementPage {
 /**
  * B57.24 — a page of the agent's statement from `from`, read by model and day: each model's questions on a day one
  * line, its platform fee the line under it. `after` is the first page's `to` and the page before's next_cursor.
+ * B57.110: with `search`, Lens keeps only the lines of those kinds whose words hold q.
  */
-function statementByDay(agentID: string, from: string, limit: number, after?: { to?: string; cursor: string }): Promise<DayStatementPage> {
+function statementByDay(
+  agentID: string,
+  from: string,
+  limit: number,
+  after?: { to?: string; cursor: string },
+  search?: StatementSearch,
+): Promise<DayStatementPage> {
   const query = new URLSearchParams({ from, group: 'day', limit: String(limit) })
+  if (search && search.kinds.length > 0) query.set('kind', search.kinds.join(','))
+  if (search && search.q.trim() !== '') query.set('q', search.q.trim())
   if (after) {
     if (after.to) query.set('to', after.to)
     query.set('cursor', after.cursor)

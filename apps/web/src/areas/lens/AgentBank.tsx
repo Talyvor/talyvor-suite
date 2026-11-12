@@ -2003,7 +2003,7 @@ function lineStatus(l: StatementLine): { status: PillStatus; label: string } {
 }
 
 /** B28.51 — the kinds the Statement can be filtered to, in the words its lines use. */
-const STATEMENT_KINDS: ReadonlyArray<{ label: string; kinds: readonly PostingKind[] }> = [
+export const STATEMENT_KINDS: ReadonlyArray<{ label: string; kinds: readonly PostingKind[] }> = [
   { label: 'Every kind', kinds: [] },
   { label: 'Funded', kinds: ['fund'] },
   { label: 'Taken back', kinds: ['withdraw'] },

@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react'
-import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Logo } from '@talyvor/ui'
-import { Button, Card, Money, pocketFocusRing, showToast } from '@talyvor/ui/pocket'
+import { Button, Card, Input, Money, Select, pocketFocusRing, showToast } from '@talyvor/ui/pocket'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { AGENT_CREDIT } from '../../labels/capabilities'
 import { fetchModels } from '../chat/chatApi'
-import { Note, dayAfter, lineText, monthPeriod, readFailure, saveFile } from './AgentBank'
+import { Note, STATEMENT_KINDS, dayAfter, lineText, monthPeriod, readFailure, saveFile } from './AgentBank'
 import { AgentFace } from './AgentFace'
-import { AgentBankError, agentBankApi, refusalText, type Agent, type StatementLine } from './agentBankApi'
+import { AgentBankError, STATEMENT_PAGE_LINES, agentBankApi, refusalText, type Agent, type StatementLine } from './agentBankApi'
 
 // B57.24 — an agent's statement on Statements as the reference draws it (w-stmt-research): a document card with the
 // agent's face and name, this month so far, the band of Opening, Money in, Money out and Balance now, and its lines
 // newest first by model and day (Lens B57.13), each model's platform fee the line under it. Show all pages to the
 // month's first line. The CSV is Lens's, one row per posting.
+// B57.110 — B28.51's search and kind filter on it, in Pocket's fields: Lens keeps the month's lines of those kinds
+// whose words hold the search, the newest 100 first, and Show older lines puts the next 100 under them.
 
 /** How many of the newest lines the card opens with, and how many each page of Show all reads. */
 export const NEWEST_LINES = 20
@@ -92,20 +94,34 @@ export function DownloadFailed({ error }: { error: unknown }) {
 export function AgentStatement({ agent, nameOf }: { agent: Agent; nameOf: (id: string) => string }) {
   const { from } = monthPeriod('this')
   const [all, setAll] = useState(false)
+  const [typed, setTyped] = useState('')
+  const [q, setQ] = useState('')
+  const [kindAt, setKindAt] = useState(0)
+  useEffect(() => {
+    const t = setTimeout(() => setQ(typed.trim()), 300)
+    return () => clearTimeout(t)
+  }, [typed])
+  const kinds = STATEMENT_KINDS[kindAt].kinds
+  const searching = kinds.length > 0 || q !== ''
   const st = useInfiniteQuery({
-    queryKey: [STATEMENT_DOC_KEY, agent.id, from],
-    queryFn: ({ pageParam }) => agentBankApi.statementByDay(agent.id, from, pageParam ? ALL_LINES_PAGE : NEWEST_LINES, pageParam),
+    queryKey: [STATEMENT_DOC_KEY, agent.id, from, kinds.join(','), q],
+    queryFn: ({ pageParam }) =>
+      searching
+        ? agentBankApi.statementByDay(agent.id, from, STATEMENT_PAGE_LINES, pageParam, { kinds, q })
+        : agentBankApi.statementByDay(agent.id, from, pageParam ? ALL_LINES_PAGE : NEWEST_LINES, pageParam),
     initialPageParam: undefined as { to?: string; cursor: string } | undefined,
     getNextPageParam: (last, pages) => (last.next_cursor ? { to: pages[0].to, cursor: last.next_cursor } : undefined),
+    // A new search keeps the lines on screen until Lens answers, so the fields stay where the person is typing.
+    placeholderData: keepPreviousData,
   })
   // The catalog only names the models: a read that fails shows each model as Lens names it, and raises nothing.
   const catalog = useQuery({ queryKey: [STATEMENT_DOC_KEY, 'models'], queryFn: () => fetchModels().catch(() => []), retry: false })
   const modelOf = (id: string) => catalog.data?.find((m) => m.id === id)?.display_name ?? id
-  // Show all reads every page after the first, one at a time, to the month's first line.
+  // Show all reads every page after the first, one at a time, to the month's first line; a search pages by hand.
   const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = st
   useEffect(() => {
-    if (all && hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage()
-  }, [all, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage])
+    if (all && !searching && hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage()
+  }, [all, searching, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage])
 
   const first = st.data?.pages[0]
   const account = first?.accounts?.find((a) => a.account === `agent:${agent.id}`)
@@ -143,26 +159,54 @@ export function AgentStatement({ agent, nameOf }: { agent: Agent; nameOf: (id: s
       ) : st.isPending ? (
         <p className="text-body text-ink-2">Reading…</p>
       ) : (
+        <dl className="grid grid-cols-2 gap-4 rounded-card-tight bg-cloud px-4 py-3.5 wide:grid-cols-4" data-testid="statement-band">
+          {(
+            [
+              [`Opening, ${dayMonth(opened)}`, account?.opening_ulxc ?? 0, false, ''],
+              ['Money in', account?.in_ulxc ?? 0, true, 'text-success'],
+              ['Money out', -(account?.out_ulxc ?? 0), false, ''],
+              ['Balance now', account?.closing_ulxc ?? 0, false, ''],
+            ] as const
+          ).map(([label, ulxc, signed, tone]) => (
+            <div key={label} className="grid content-end gap-0.5">
+              <dt className="text-micro font-semibold text-ink-3">{label}</dt>
+              <dd>
+                <Money ulxc={ulxc} signed={signed} className={`grid justify-items-start gap-0.5 font-display text-head font-bold ${tone}`} />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          type="search"
+          aria-label={`Search ${agent.name}’s statement`}
+          placeholder="Search"
+          className="w-full wide:w-64"
+          maxLength={200}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+        />
+        <Select
+          aria-label={`Kind of line in ${agent.name}’s statement`}
+          className="w-full wide:w-56"
+          value={kindAt}
+          onChange={(e) => setKindAt(Number(e.target.value))}
+        >
+          {STATEMENT_KINDS.map((k, i) => (
+            <option key={k.label} value={i}>
+              {k.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+      {/* The failure and Reading… are said above the fields; the lines wait for them. */}
+      {(st.isError && st.data === undefined) || st.isPending ? null : (
         <>
-          <dl className="grid grid-cols-2 gap-4 rounded-card-tight bg-cloud px-4 py-3.5 wide:grid-cols-4" data-testid="statement-band">
-            {(
-              [
-                [`Opening, ${dayMonth(opened)}`, account?.opening_ulxc ?? 0, false, ''],
-                ['Money in', account?.in_ulxc ?? 0, true, 'text-success'],
-                ['Money out', -(account?.out_ulxc ?? 0), false, ''],
-                ['Balance now', account?.closing_ulxc ?? 0, false, ''],
-              ] as const
-            ).map(([label, ulxc, signed, tone]) => (
-              <div key={label} className="grid content-end gap-0.5">
-                <dt className="text-micro font-semibold text-ink-3">{label}</dt>
-                <dd>
-                  <Money ulxc={ulxc} signed={signed} className={`grid justify-items-start gap-0.5 font-display text-head font-bold ${tone}`} />
-                </dd>
-              </div>
-            ))}
-          </dl>
           {lines.length === 0 ? (
-            <p className="text-body text-ink-2">Nothing has moved in this wallet yet. Fund it under Money to start.</p>
+            <p className="text-body text-ink-2">
+              {searching ? 'No line on this statement matches.' : 'Nothing has moved in this wallet yet. Fund it under Money to start.'}
+            </p>
           ) : (
             <table className="w-full border-collapse text-body" data-testid="statement-lines">
               <thead>
@@ -199,7 +243,13 @@ export function AgentStatement({ agent, nameOf }: { agent: Agent; nameOf: (id: s
           {isFetchNextPageError ? <Note ok={false}>{readFailure(st.error, 'The older lines')}</Note> : null}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="text-micro text-ink-3">The newest lines. Requests to one model on one day are shown together.</span>
-            {hasNextPage ? (
+            {searching ? (
+              hasNextPage ? (
+                <Button variant="secondary" size="sm" disabled={isFetchingNextPage} onClick={() => void fetchNextPage()}>
+                  {isFetchingNextPage ? 'Reading…' : 'Show older lines'}
+                </Button>
+              ) : null
+            ) : hasNextPage ? (
               <Button
                 variant="secondary"
                 size="sm"
