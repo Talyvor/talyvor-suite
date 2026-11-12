@@ -666,14 +666,17 @@ export class AgentBankScreen {
     const older = statement.getByRole('button', { name: 'Show older lines', exact: true })
     if (!(await older.isVisible())) return `the Statement shows ${first.length} line(s) and no Show older lines`
     await older.click()
-    const settle = async (want: (n: number) => boolean) => {
+    const settle = async (want: (n: number) => boolean | Promise<boolean>) => {
       const end = Date.now() + ACTION_TIMEOUT_MS
-      while (!want(await rows.count()) && Date.now() < end) await this.page.waitForTimeout(250)
+      while (!(await want(await rows.count())) && Date.now() < end) await this.page.waitForTimeout(250)
     }
     await settle((n) => n > first.length)
     const all = await read()
     await statement.getByRole('combobox', { name: `Kind of line in ${agent.name}’s statement` }).selectOption({ label: kind })
-    await settle((n) => n < all.length)
+    // B17.420 — a new kind is read afresh: until Lens answers the card says Reading… and draws no rows, which is fewer
+    // than before but is not the filtered statement.
+    const reading = statement.getByText('Reading…', { exact: true })
+    await settle(async (n) => n < all.length && !(await reading.isVisible()))
     const filtered = await read()
     return { first, all, filtered }
   }
