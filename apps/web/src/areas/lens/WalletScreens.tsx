@@ -7,7 +7,7 @@ import { Region, RegionScreen } from '../../components/Region'
 import { ApiError } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
 import { APPROVALS_KEY, Approvals, BOOK_KEY, PREPARED_KEY, Statement } from './AgentBank'
-import { AgentStatement, DownloadFailed, MONTH_FILE_TYPES, useMonthFile } from './AgentStatement'
+import { AgentStatement, DownloadFailed, JOURNAL_SENTENCE, MONTH_FILE_TYPES, downloadWords, useMonthFile } from './AgentStatement'
 import { agentBankApi, type Agent, type CurrencyAccount, type StatementFormat } from './agentBankApi'
 import { AccountStatement, MarketplaceBill, accountTitle, useAccountMonthCsv } from './AccountStatement'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
@@ -129,7 +129,7 @@ export function StatementsScreen() {
               </PocketButton>
               {agentTab ? (
                 <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAgent.isPending} onClick={() => thisAgent.mutate(format)}>
-                  Download {format.toUpperCase()}
+                  {downloadWords(format)}
                 </PocketButton>
               ) : accountTab ? (
                 <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAccount.isPending} onClick={() => thisAccount.mutate()}>
@@ -137,6 +137,8 @@ export function StatementsScreen() {
                 </PocketButton>
               ) : null}
             </div>
+            {/* B57.113 — B28.56's sentence for the journal, under the downloads it rides with. */}
+            <p className="text-right text-micro text-ink-3">{JOURNAL_SENTENCE}</p>
             {everyAgent.isError ? <DownloadFailed error={everyAgent.error} /> : null}
             {thisAgent.isError ? <DownloadFailed error={thisAgent.error} /> : null}
             {thisAccount.isError ? <DownloadFailed error={thisAccount.error} /> : null}
