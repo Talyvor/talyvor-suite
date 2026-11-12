@@ -306,7 +306,8 @@ export function homeCards(): Scenario {
 export const WALLET_SCREENS = [
   { path: '/agents', title: 'Agents', teal: 'Fund' },
   { path: '/approvals', title: 'Approvals', teal: 'Approve' },
-  { path: '/statements', title: 'Statements', teal: 'Download' },
+  // B57.24 — Statements' two downloads are Pocket's secondary buttons, as w-stmt-research draws them: nothing is filled.
+  { path: '/statements', title: 'Statements', teal: null },
   // B34.1 — nothing has earned on this user's work, so Royalties' one action is Open Setup, where poolable work is consented to.
   { path: '/statements/royalties', title: 'Royalties', teal: 'Open Setup' },
   { path: '/ledger', title: 'Ledger', teal: null },

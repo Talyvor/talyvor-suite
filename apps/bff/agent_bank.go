@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -416,7 +417,8 @@ func (a *app) handleAgentRuleBoostEnd(w http.ResponseWriter, r *http.Request, t 
 
 // handleAgentStatement — GET /api/agents/{id}/statement: the agent's last 100 lines. With ?from=, ?to=
 // or ?format= (B19.22) it is the agent's statement for that period instead, as JSON, a CSV, (B28.55) a PDF or (B28.56) a journal; with ?kind=,
-// ?q= or ?cursor= (B28.51) too, so a search, a filter or a page past the newest lines reads the period statement.
+// ?q= or ?cursor= (B28.51) too, so a search, a filter or a page past the newest lines reads the period statement; and
+// with ?group=day (B57.24), the lines by model and day.
 func (a *app) handleAgentStatement(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -426,7 +428,7 @@ func (a *app) handleAgentStatement(w http.ResponseWriter, r *http.Request, t ten
 	if !ok {
 		return
 	}
-	if q := r.URL.Query(); q.Has("from") || q.Has("to") || q.Has("format") || q.Has("kind") || q.Has("q") || q.Has("cursor") {
+	if q := r.URL.Query(); q.Has("from") || q.Has("to") || q.Has("format") || q.Has("kind") || q.Has("q") || q.Has("cursor") || q.Has("group") {
 		a.agentStatementRelay(w, r, t, suffix)
 		return
 	}
@@ -474,10 +476,26 @@ const maxStatementBytes = 32 << 20
 // agentStatementRelay asks Lens for a period statement (Lens B19.5) and answers with it: JSON, or the
 // CSV file (or, B28.55, the PDF; B28.56, the journal CSV) with Lens's filename. Only from, to and format are sent up, and (B28.51) kind, q, limit and cursor, with
 // which Lens keeps the lines of those kinds holding q and pages them newest first; Lens reads the dates (a
-// YYYY-MM-DD date is midnight UTC, the period is [from, to)) and its sentence on a bad one is relayed.
+// YYYY-MM-DD date is midnight UTC, the period is [from, to)) and its sentence on a bad one is relayed. B57.24: group
+// too, which may only be day (Lens B57.13: each model's questions on a day one line), and a limit of 1 to 500; any
+// other is refused here.
 func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tenant, suffix string) {
-	a.statementRelay(w, r, t, lensWorkspacePath(t, suffix), "from", "to", "format", "kind", "q", "limit", "cursor")
+	q := r.URL.Query()
+	if g := q.Get("group"); g != "" && g != "day" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "group must be day"})
+		return
+	}
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err != nil || n < 1 || n > maxStatementLines {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be between 1 and 500"})
+			return
+		}
+	}
+	a.statementRelay(w, r, t, lensWorkspacePath(t, suffix), "from", "to", "format", "kind", "q", "group", "limit", "cursor")
 }
+
+// maxStatementLines is the most lines one page of a statement asks Lens for (B57.24).
+const maxStatementLines = 500
 
 // statementRelay is agentStatementRelay for any Lens statement path, sending up only the query keys named (B56.15: a
 // currency account's statement, /v1/money/accounts/{id}/statement, takes from, to and format).

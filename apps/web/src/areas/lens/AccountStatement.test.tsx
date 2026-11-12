@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { StatementsScreen } from './WalletScreens'
+import { AppMoney } from './money'
 
 // B56.15 — Statements has a tab per wallet: each agent's credits, the room's wallet, then every currency account the
 // company or an agent holds, each in its own currency with the opening, in, out and balance band and Download CSV.
@@ -55,7 +56,9 @@ function show(at = '/statements') {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter initialEntries={[at]}>
-        <StatementsScreen />
+        <AppMoney>
+          <StatementsScreen />
+        </AppMoney>
       </MemoryRouter>
     </QueryClientProvider>,
   )

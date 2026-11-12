@@ -71,7 +71,8 @@ const AGENT_CREDIT = 'spend_on_talyvor move_between_own_agents'
 const PLACEMENTS: [string, string[]][] = [
   ['/agents', [AGENT_CREDIT, AGENT_CREDIT, 'payments_out', 'pay_another_owner', 'currency_accounts account_details', 'pay_another_owner', 'pay_another_owner', 'pay_another_owner', 'loans_between_companies', 'escrow', 'invest_and_trade', 'cash_out', 'agent_card', AGENT_CREDIT, 'pay_another_owner', 'company_credit_line', 'loans_between_companies', 'escrow', 'cash_out']],
   ['/approvals', ['payments_out', 'pay_another_owner']],
-  ['/statements', [AGENT_CREDIT, AGENT_CREDIT]],
+  // B57.24 — one chip, on the agent's statement document.
+  ['/statements', [AGENT_CREDIT]],
   ['/approve/:id', ['payments_out']],
   ['/money/pay', ['payments_out']],
   ['/money/invoices', ['payments_in']],

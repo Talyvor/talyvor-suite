@@ -701,6 +701,12 @@ export interface StatementLine {
   model?: string
   /** B28.93 — on a call's lines: where the call came from, in Lens's words. Chat's Recent calls shows it as it is. */
   source?: string
+  /** B57.24 — what the posting was for, in Lens's words: under a model's day, its fee line's "On those requests". */
+  memo?: string
+  /** B57.24 — on a statement read by day (Lens B57.13): the day a model's line covers in the statement's time zone,
+   *  and how many questions it is. */
+  day?: string
+  requests?: number
 }
 
 /** Lens economy.AgentPayment. */
@@ -972,6 +978,39 @@ function statementPage(agentID: string, from: string, search: StatementSearch, a
   return getJSON<StatementPage>(`/api/agents/${e(agentID)}/statement?${query}`, { lines: 'list' })
 }
 
+/** Lens economy.StatementAccount: one account's totals over the period, opening + in − out = closing. */
+export interface StatementAccount {
+  account: string
+  opening_ulxc: number
+  in_ulxc: number
+  out_ulxc: number
+  closing_ulxc: number
+}
+
+/** B57.24 — one page of an agent's statement read by model and day (Lens B57.13), newest first. Its accounts are the
+ *  whole period's on every page; `to` is the period's end, the same on every page. */
+export interface DayStatementPage {
+  to?: string
+  accounts?: StatementAccount[] | null
+  lines: StatementLine[] | null
+  /** The zone the days are counted in: the agent's rules', else UTC. */
+  time_zone?: string
+  next_cursor?: string
+}
+
+/**
+ * B57.24 — a page of the agent's statement from `from`, read by model and day: each model's questions on a day one
+ * line, its platform fee the line under it. `after` is the first page's `to` and the page before's next_cursor.
+ */
+function statementByDay(agentID: string, from: string, limit: number, after?: { to?: string; cursor: string }): Promise<DayStatementPage> {
+  const query = new URLSearchParams({ from, group: 'day', limit: String(limit) })
+  if (after) {
+    if (after.to) query.set('to', after.to)
+    query.set('cursor', after.cursor)
+  }
+  return getJSON<DayStatementPage>(`/api/agents/${e(agentID)}/statement?${query}`, { lines: 'list' })
+}
+
 /** B28.53 — what one agent sent to one destination for one model on one day (Lens B28.326), in µLXC. */
 export interface SpendBucket {
   /** YYYY-MM-DD in the analytics' time zone. */
@@ -1041,6 +1080,7 @@ export const agentBankApi = {
   endBoost: (id: string, rule: string) => send<void>('DELETE', `/api/agents/${e(id)}/rules/boosts/${e(rule)}`),
   statement: (id: string) => getJSON<{ lines: StatementLine[] | null }>(`/api/agents/${e(id)}/statement`, { lines: 'list' }),
   statementPage,
+  statementByDay,
   /** B28.53 — the agent's spend from `from` (YYYY-MM-DD) to now, by day, model and destination. */
   analytics: (id: string, from: string) =>
     getJSON<SpendAnalytics>(`/api/agents/${e(id)}/analytics?${new URLSearchParams({ from })}`, { buckets: 'list', out_ulxc: 'number', returned_ulxc: 'number', spent_ulxc: 'number' }),

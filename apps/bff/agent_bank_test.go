@@ -477,7 +477,51 @@ func TestAgentStatementSearchFilterAndPageReachLens(t *testing.T) {
 	want := []string{
 		"/agents/agt_1/statement?kind=withdraw&limit=100",
 		"/agents/agt_1/statement?q=rent",
-		"/agents/agt_1/statement?cursor=1.2.0&from=2026-11-01&kind=spend%2Chold&limit=100&q=claude&to=2026-11-09T04%3A00%3A00Z",
+		"/agents/agt_1/statement?cursor=1.2.0&from=2026-11-01&group=day&kind=spend%2Chold&limit=100&q=claude&to=2026-11-09T04%3A00%3A00Z",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Lens got %v, want %v", got, want)
+	}
+	for i := range want {
+		if !strings.HasSuffix(got[i], want[i]) {
+			t.Fatalf("Lens got %v, want %v", got, want)
+		}
+	}
+}
+
+// B57.24 — Statements reads an agent's lines by model and day (Lens B57.13): group=day, a limit of 1 to 500 and the
+// cursor reach Lens's period statement, on the agent's and the workspace's; any other group or limit is refused here
+// and never reaches Lens.
+func TestAgentStatementByDayReachesLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		got = append(got, r.URL.Path+"?"+r.URL.RawQuery)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"group":"day","lines":[],"next_cursor":"1.2.1"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, path := range []string{"/api/agents/agt_1/statement?group=day", "/api/agents/agt_1/statement?from=2026-11-01&group=day&limit=500&cursor=1.2.1", "/api/agents/statement?group=day&limit=1"} {
+		rec := doJSON(a, http.MethodGet, path, "")
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"next_cursor":"1.2.1"`) {
+			t.Fatalf("%s = %d %s", path, rec.Code, rec.Body.String())
+		}
+	}
+	for _, query := range []string{"group=week", "group=day&limit=0", "group=day&limit=501", "group=day&limit=ten"} {
+		rec := doJSON(a, http.MethodGet, "/api/agents/agt_1/statement?"+query, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s = %d %s", query, rec.Code, rec.Body.String())
+		}
+	}
+	want := []string{
+		"/agents/agt_1/statement?group=day",
+		"/agents/agt_1/statement?cursor=1.2.1&from=2026-11-01&group=day&limit=500",
+		"/agents/statement?group=day&limit=1",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Lens got %v, want %v", got, want)

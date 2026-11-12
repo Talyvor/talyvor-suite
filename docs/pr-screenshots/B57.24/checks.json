@@ -1,0 +1,5 @@
+[
+  { "route": "/statements", "screen": "w-stmt-research" },
+  { "route": "/statements?wallet=agt_sales", "screen": "w-stmt-sales" },
+  { "route": "/statements?wallet=agt_ops", "screen": "w-stmt-ops" }
+]
