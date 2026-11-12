@@ -549,6 +549,81 @@ describe('the Pay screen', () => {
   })
 })
 
+// B58.6 — a payout batch awaiting approval, answered over mockBff's stub: its challenge, and Lens's answers to Approve in turn.
+const BATCH = { id: 'mpob_1', funding: 'test', status: 'awaiting_approval', rows_total: 2, rows_valid: 1, rows_invalid: 1, totals_minor: { GBP: 500 }, created_at: '2026-10-11T09:00:00Z' }
+const BATCH_ROWS = [{ line: 2, payee_id: 'payee_1', payee_name: 'Acme Ltd', amount_minor: 500, currency: 'GBP', reference: 'May', status: 'valid' },
+  { line: 3, payee_id: 'nobody', amount_minor: 100, currency: 'GBP', reference: '', status: 'invalid', detail: 'no such payee' }]
+function awaitingBatch(passkeys: unknown[], approvals: Array<[number, unknown]>) {
+  const inner = vi.mocked(fetch).getMockImplementation()!
+  const posts: Array<{ url: string; body: unknown }> = []
+  let now: unknown = { ...BATCH, rows: BATCH_ROWS } // what Lens holds, read back after each approval
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
+    if ((init?.method ?? 'GET') !== 'GET') posts.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+    if (url === '/api/agents/passkeys') return json({ passkeys })
+    if (url === '/api/money/payouts') return json({ payouts: [now] })
+    if (url === '/api/money/payouts/mpob_1') return json(now)
+    if (url === '/api/money/payouts/mpob_1/approve/challenge')
+      return json({ challenge: 'Y2g0', allow_credentials: ['Y3JlZDE'], user_verification: 'required', payout: { id: 'mpob_1', rows_total: 2, rows_valid: 1, totals_minor: { GBP: 500 } } })
+    if (url === '/api/money/payouts/mpob_1/approve') {
+      const [status, body] = approvals.shift()!
+      if (status === 200) now = body
+      return json(body, status)
+    }
+    return inner(input, init)
+  })
+  return posts
+}
+
+describe('a payout batch’s approval (B58.6)', () => {
+  it('shows the rows and totals it signs, asks for the passkey over the batch’s challenge, and a refusal pays nothing', async () => {
+    mockBff()
+    const posts = awaitingBatch([{ id: 'pk_1', name: 'MacBook' }], [
+      [403, { error: 'a payment by a person needs the passkey or the phone key’s signature' }],
+      [200, { ...BATCH, status: 'approved', approved_at: '2026-10-11T09:05:00Z', totals_minor: { GBP: 500 }, rows: [{ ...BATCH_ROWS[0], status: 'completed' }, BATCH_ROWS[1]] }],
+    ])
+    const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
+      response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+
+    const batch = await screen.findByTestId('payout-mpob_1')
+    expect((await within(batch).findByTestId('payout-row-2')).textContent).toContain('Acme Ltd')
+    expect((await within(batch).findByTestId('payout-signs')).textContent).toBe('Your passkey signs these 1 valid row and £5.00. If the batch changes after you sign, nothing is paid.')
+
+    fireEvent.click(within(batch).getByRole('button', { name: 'Approve and pay 1 row' }))
+    await within(batch).findByText('A payment by a person needs the passkey or the phone key’s signature.')
+    expect(within(batch).getByText('Awaiting approval')).toBeTruthy()
+    expect(within(within(batch).getByTestId('payout-row-2')).getByText('valid')).toBeTruthy()
+
+    fireEvent.click(within(batch).getByRole('button', { name: 'Approve and pay 1 row' }))
+    await within(batch).findByText('Approved')
+    expect(within(within(batch).getByTestId('payout-row-2')).getByText('completed')).toBeTruthy()
+    expect(get).toHaveBeenCalledTimes(2)
+    expect(new Uint8Array(get.mock.calls[0][0].publicKey.challenge)).toEqual(new Uint8Array([0x63, 0x68, 0x34]))
+    const signed = { assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } }
+    expect(posts).toEqual([
+      { url: '/api/money/payouts/mpob_1/approve/challenge', body: {} },
+      { url: '/api/money/payouts/mpob_1/approve', body: signed },
+      { url: '/api/money/payouts/mpob_1/approve/challenge', body: {} },
+      { url: '/api/money/payouts/mpob_1/approve', body: signed },
+    ])
+  })
+
+  it('with only the phone’s key, sends nothing and says to approve on the phone', async () => {
+    mockBff()
+    const posts = onlyThePhoneKey({ '/api/money/payouts': { payouts: [BATCH] }, '/api/money/payouts/mpob_1': { ...BATCH, rows: BATCH_ROWS } })
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+    const batch = await screen.findByTestId('payout-mpob_1')
+    expect(await within(batch).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
+    expect(within(batch).queryByRole('button', { name: /Approve/ })).toBeNull()
+    expect(posts).toEqual([])
+  })
+})
+
 describe('an agent’s payment waiting on Pay when only the phone holds a key (B55.2)', () => {
   it('sends no decision and says to approve on the phone', async () => {
     mockBff()

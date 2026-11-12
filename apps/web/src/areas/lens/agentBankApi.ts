@@ -1376,7 +1376,12 @@ export const agentBankApi = {
     }
     return (await res.json()) as PayoutBatch
   },
-  approvePayout: (id: string) => send<PayoutBatch>('POST', `/api/money/payouts/${e(id)}/approve`),
+  /** B58.6 — the challenge approving a batch is signed over, naming it as it stands: its id, its rows and its totals (Lens B58.5). */
+  payoutChallenge: (id: string) =>
+    send<{ challenge: string; allow_credentials: string[] | null; payout: { id: string; rows_total: number; rows_valid: number; totals_minor: Record<string, number> | null } }>(
+      'POST', `/api/money/payouts/${e(id)}/approve/challenge`),
+  approvePayout: (id: string, assertion?: PasskeyAssertion) =>
+    send<PayoutBatch>('POST', `/api/money/payouts/${e(id)}/approve`, assertion ? { assertion } : {}),
   // B41.1 — the bills inbox (Lens B41.101): an invoice uploaded as it is, read into a bill; created is false when it was there already.
   bills: () => getJSON<{ bills: Bill[] | null }>('/api/money/bills', { bills: 'list' }),
   uploadBill: async (file: File) => {

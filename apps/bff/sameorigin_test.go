@@ -289,6 +289,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/bills", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/bills/pay", body: `{"bill_ids":["bill_1"]}`},
 		{method: http.MethodPost, path: "/api/money/payouts/x1/approve", body: `{}`},
+		{method: http.MethodPost, path: "/api/money/payouts/x1/approve/challenge", body: `{}`}, // B58.6
 		{method: http.MethodPost, path: "/api/admin/platform-reports", body: `{"year":2026}`},
 		{method: http.MethodDelete, path: "/api/agents/x1/topup", body: `{}`},
 		{method: http.MethodPost, path: "/api/marketplace/listings/x1/reports", body: `{"reason":"other"}`},
