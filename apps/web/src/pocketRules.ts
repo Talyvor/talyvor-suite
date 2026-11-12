@@ -15,14 +15,15 @@ export function cardOnItsPlane(el: Element): boolean {
 }
 
 /** The class list without variants: `hover:bg-tangerine` paints tangerine too. `except` is left out before the strip. */
-function utilities(el: Element, except = ''): string[] {
+function utilities(el: Element, except: readonly string[] = []): string[] {
   return (el.getAttribute('class') ?? '')
     .split(/\s+/)
-    .filter((c) => c && c !== except)
+    .filter((c) => c && !except.includes(c))
     .map((c) => c.slice(c.lastIndexOf(':') + 1))
 }
 
-const FOCUS_RING = 'focus-visible:outline-tangerine'
+// B57.110 — Pocket's Input and Select draw the same ring round their box while the field inside has focus.
+const FOCUS_RING = ['focus-visible:outline-tangerine', 'focus-within:outline-tangerine']
 
 /**
  * The primary (ink) fills in a view, as a button or a link, by Pocket's name and today's alias. The
