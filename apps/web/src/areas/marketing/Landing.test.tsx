@@ -102,7 +102,7 @@ describe('Landing', () => {
   // the "near-zero" ninety-day bill were a projected shape, and no ledger row supports either.
   it('leads with wallets, and makes no price-curve claim', () => {
     const { container } = render(<Landing />)
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('The financial ecosystem for the AI agent economy.')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('An account for every AI agent.')
     const text = container.textContent ?? ''
     // B59.5: wallets, then the close; Chat, the Marketplace and pooling are hidden areas.
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
@@ -139,6 +139,18 @@ describe('Landing', () => {
     )
     expect(text).toContain('A payment above the line you set waits for a person, unless you always allow that payee or a mandate covers it.')
     expect(text).not.toMatch(/anything outside waiting|Next we.re building Hey Taly|Nothing moves until someone approves it/)
+  })
+
+  // B58.17 (Nick, 10 Nov 2026): the hero is the agent accounts story, always with who owns the account, and the page
+  // says nothing about running on your own infrastructure, which Talyvor does not offer.
+  it('leads with an account for every AI agent, owned by you and run by your agent, and has no Sovereign tile', () => {
+    const { container } = render(<Landing />)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^An account for every AI agent\.$/)
+    const hero = container.querySelector('#hero-heading')!.closest('section')!
+    expect(hero.textContent).toContain('You own it. Your agent runs it.')
+    const text = container.textContent ?? ''
+    expect(text).not.toMatch(/the financial ecosystem for the AI agent economy\./i)
+    expect(text).not.toMatch(/sovereign|own infrastructure/i)
   })
 
   it('writes positioning.ts with no em or en dash', () => {

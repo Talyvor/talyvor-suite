@@ -1,10 +1,10 @@
 import { Button, inlineLink } from '@talyvor/ui'
-import { useSignupProbe } from '../../lib/signupOpen'
+import { ACCESS_LINE, useSignupProbe } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
 import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
 import { COMPANY_CONTACT } from '../../company'
 import { Waitlist } from '../../components/Waitlist'
-import { ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from '../../positioning'
+import { ON_ITS_WAY, OWNER_LINE, POSITIONING_LINE, POSITIONING_SENTENCES } from '../../positioning'
 import { LabelsMeaning, StatusLabel } from '../../labels/StatusLabel'
 import { WALLETS } from '../../labels/capabilities'
 import { usePricing } from './pricingApi'
@@ -193,12 +193,13 @@ export function Landing() {
           <div className="relative z-10 mx-auto w-full max-w-6xl px-gutter pb-12 pt-14 wide:pb-28 wide:pt-24">
             <div className="wide:w-1/2 wide:pr-12">
               <div className="tal-stagger">
-                {/* Positioning v2 (23 Oct 2026, B44.4): the line, then the two sentences, as written. The old
-                    headline stays only as this supporting eyebrow. */}
+                {/* B58.17 (Nick, 10 Nov 2026): the line and who owns the account, then positioning v2's two sentences
+                    (B44.4). The old headline stays only as this supporting eyebrow. */}
                 <p className="text-eyebrow uppercase text-label">Money and markets for AI agents</p>
                 <h1 id="hero-heading" className="mt-6 text-display-1 text-ink">
                   {POSITIONING_LINE}
                 </h1>
+                <p className="mt-4 text-display-3 text-ink">{OWNER_LINE}</p>
                 <p className="mt-7 text-lede text-muted">{POSITIONING_SENTENCES[0]}</p>
                 <p className="mt-4 text-body text-muted">{POSITIONING_SENTENCES[1]}</p>
                 {/* B56.1: what works, then what is on its way, never as live (Landing.test.tsx pins both). */}
@@ -245,16 +246,10 @@ export function Landing() {
                   able to notice. This renders what the BFF reports, and renders NOTHING while the
                   answer is unknown (first paint, BFF unreachable, older BFF): an unverified promise
                   is not printed in either direction. */}
-              {signup === 'closed' ? (
-                <p className="mt-5 max-w-xl text-body text-muted">
-                  We’re letting the first companies in one at a time. Start at sign-up and we’ll
-                  come back to you.
-                </p>
-              ) : null}
-              {signup === 'open' ? (
-                <p className="mt-5 max-w-xl text-body text-muted">
-                  No invitation needed. Sign in with an account you already have and you’ll have your
-                  own workspace in a few seconds.
+              {/* B58.17: one sign-up door, so these are /signup's words (ACCESS_LINE), never a second version. */}
+              {signup !== 'unknown' ? (
+                <p data-access-line className="mt-5 max-w-xl text-body text-muted">
+                  {ACCESS_LINE[signup]}
                 </p>
               ) : null}
             </div>

@@ -72,7 +72,7 @@ describe('the waitlist on /marketing follows the sign-up state', () => {
   it('open: Get started is the way in — no email box and no "place opens"', async () => {
     stranger(true)
     render(<Landing />)
-    expect(await screen.findByText(/No invitation needed/)).toBeInTheDocument()
+    expect(await screen.findByText(/no invitation needed/i)).toBeInTheDocument()
     expect(screen.queryByLabelText('Email address')).toBeNull()
     expect(document.body.textContent).not.toMatch(/place opens|Join the waitlist/)
     expect(screen.getAllByRole('link', { name: 'Get started' })[0]).toHaveAttribute('href', '/signup')
@@ -91,7 +91,25 @@ describe('the waitlist on /marketing follows the sign-up state', () => {
     render(<Landing />)
     await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
     expect(screen.queryByLabelText('Email address')).toBeNull()
-    expect(document.body.textContent).not.toMatch(/place opens|No invitation needed|one at a time/)
+    expect(document.body.textContent).not.toMatch(/place opens|no invitation needed|one at a time/i)
+  })
+})
+
+// B58.17: one sign-up door. The homepage and /signup say the same sentence about who may start, in both states.
+describe('the homepage and /signup say the same words about getting in', () => {
+  const accessLine = (root: HTMLElement) =>
+    [...root.querySelectorAll('[data-access-line]')].map((el) => el.textContent ?? '')
+
+  it.each([true, false])('signup_open %s', async (open) => {
+    stranger(open)
+    const home = render(<Landing />)
+    await vi.waitFor(() => expect(accessLine(home.container)).toHaveLength(1))
+    const said = accessLine(home.container)[0]
+    home.unmount()
+    const signup = await at('/signup')
+    await vi.waitFor(() => expect(accessLine(signup.container)).toHaveLength(1))
+    expect(accessLine(signup.container)[0]).toContain(said)
+    expect(said).toMatch(open ? /no invitation needed/i : /first companies in one at a time/)
   })
 })
 
