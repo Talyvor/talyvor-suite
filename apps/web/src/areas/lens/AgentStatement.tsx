@@ -9,7 +9,8 @@ import { AGENT_CREDIT } from '../../labels/capabilities'
 import { fetchModels } from '../chat/chatApi'
 import { Note, STATEMENT_KINDS, dayAfter, lineText, monthPeriod, readFailure, saveFile } from './AgentBank'
 import { AgentFace } from './AgentFace'
-import { AgentBankError, STATEMENT_PAGE_LINES, agentBankApi, refusalText, type Agent, type StatementFormat, type StatementLine } from './agentBankApi'
+import { AgentBankError, STATEMENT_PAGE_LINES, agentBankApi, refusalText, type Agent, type StatementLine } from './agentBankApi'
+import type { StatementFormat } from './agentBankApi'
 
 // B57.24 — an agent's statement on Statements as the reference draws it (w-stmt-research): a document card with the
 // agent's face and name, this month so far, the band of Opening, Money in, Money out and Balance now, and its lines
