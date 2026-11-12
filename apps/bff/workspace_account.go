@@ -7,10 +7,12 @@ import (
 
 // workspace_account.go — B59.10: the session's workspace's type and kind of money.
 //
-//	GET /api/workspace/account → GET /v1/workspaces/{ws}/account   {"account_type", "money_kind"}, as Lens answers it (B59.6)
+//	GET /api/workspace/account → GET /v1/workspaces/{ws}/account
+//	    {"workspace_id", "account_type", "money_kind", "country", "registration_number"}, as Lens answers it (B59.6, B59.40)
 //
-// The web renders Home, Pay, Cards, Wallets and Settings by these two words (SPEC 3.3 and 3.4). Changing the kind is
-// not here: this route only reads.
+// The web renders Home, Pay, Cards, Wallets and Settings by these two words (SPEC 3.3 and 3.4), and the phone picks the
+// owner card's face by them (B59.43). The country and registration number are the sign-up profile, "" when not given.
+// Changing the kind is not here: this route only reads.
 //
 // The workspace is the session's (lensWorkspacePath), never one the request names. A type or kind Lens does not name
 // is a failed read, never passed on: the web must not draw a screen by a word it has no rule for.
@@ -26,8 +28,11 @@ func (a *app) handleWorkspaceAccount(w http.ResponseWriter, r *http.Request, t t
 		return
 	}
 	var got struct {
-		AccountType string `json:"account_type"`
-		MoneyKind   string `json:"money_kind"`
+		WorkspaceID        string `json:"workspace_id"`
+		AccountType        string `json:"account_type"`
+		MoneyKind          string `json:"money_kind"`
+		Country            string `json:"country"`
+		RegistrationNumber string `json:"registration_number"`
 	}
 	if err := json.Unmarshal(raw, &got); err != nil ||
 		(got.AccountType != "business" && got.AccountType != "personal") ||
@@ -35,5 +40,5 @@ func (a *app) handleWorkspaceAccount(w http.ResponseWriter, r *http.Request, t t
 		writeJSON(w, http.StatusBadGateway, failed)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"account_type": got.AccountType, "money_kind": got.MoneyKind})
+	writeJSON(w, http.StatusOK, got)
 }

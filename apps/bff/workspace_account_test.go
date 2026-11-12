@@ -45,7 +45,7 @@ func TestWorkspaceAccountAnswersTheSessionsOwnTypeAndKind(t *testing.T) {
 	req.Header.Set("X-Talyvor-Workspace", "SOMEBODY-ELSE")
 	a.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK || rec.Body.String() != "{\"account_type\":\"personal\",\"money_kind\":\"stablecoin\"}\n" {
+	if rec.Code != http.StatusOK || rec.Body.String() != "{\"workspace_id\":\"ws_own\",\"account_type\":\"personal\",\"money_kind\":\"stablecoin\",\"country\":\"\",\"registration_number\":\"\"}\n" {
 		t.Fatalf("GET /api/workspace/account = %d %q, want 200 with Lens's type and kind", rec.Code, rec.Body.String())
 	}
 	want := "GET /v1/workspaces/" + deriveWorkspaceIDLikeLens(devIdentity) + "/account"
@@ -65,5 +65,17 @@ func TestWorkspaceAccountRefusesAnUnknownTypeOrKind(t *testing.T) {
 	var paths []string
 	if rec := doJSON(fakeLensAccount(t, `{}`, &paths), http.MethodPost, "/api/workspace/account", "{}"); rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("POST /api/workspace/account = %d, want 405", rec.Code)
+	}
+}
+
+// B59.43 — the phone reads the same route, and a business's sign-up profile with it (Lens B59.40): the country and
+// registration number pass through as Lens answers them, "" when not given.
+func TestWorkspaceAccountAnswersTheSignUpProfile(t *testing.T) {
+	var paths []string
+	a := fakeLensAccount(t, `{"workspace_id":"ws_own","account_type":"business","money_kind":"hybrid","country":"GB","registration_number":"17299143"}`, &paths)
+	rec := doJSON(a, http.MethodGet, "/api/workspace/account", "")
+	want := "{\"workspace_id\":\"ws_own\",\"account_type\":\"business\",\"money_kind\":\"hybrid\",\"country\":\"GB\",\"registration_number\":\"17299143\"}\n"
+	if rec.Code != http.StatusOK || rec.Body.String() != want {
+		t.Fatalf("GET /api/workspace/account = %d %q, want 200 %q", rec.Code, rec.Body.String(), want)
 	}
 }
