@@ -1707,6 +1707,35 @@ export function walletDocs(): Scenario {
  *  charge recurs (a paid plan, BYOK with it, bills monthly), and privacy does not say the product beats going direct.
  *  B28.16 — privacy and terms cover Agent Wallets and the Marketplace, and neither says deletion or
  *  cash-out does not exist (Features deletes stored answers; Agent Wallets cashes LXC out). */
+const HONEST_PAGES = [
+  // B32.14 — BYOK is Team's add-on, billed with the plan. B57.61 dropped the monthly-billing sentence for
+  // Pocket's plan cards, so each paid price saying "a month" is how the page says a plan recurs (B17.449).
+  ['/pricing', /nothing\s+recurs|only charge is the requests you run|self-hosted/i, /\$[\d,]+(?:\.\d{2})?\s*a month/],
+  [
+    '/privacy',
+    /cheaper than going direct|no self-service data deletion|test-mode cards/i,
+    /charged less than its list price/i,
+    /What Agent Wallets stores/,
+    /Passkeys\./,
+    // B49.2 — cards are named plainly, with no test-mode line (B17.300).
+    /Virtual cards\./,
+    /What the Marketplace stores and shows/,
+  ],
+  ['/terms', /no mechanism to convert|no self-service deletion/i, /LXC can be cashed out/, /Agent Wallets/, /The Marketplace/],
+] as const
+
+/** What one honest page still says that it should not, or lacks; empty when the page keeps its word. */
+export function honestPageFaults(path: string, text: string): string[] {
+  const page = HONEST_PAGES.find(([p]) => p === path)
+  if (!page) return [`${path} is not an honest page`]
+  const [, banned, ...wanted] = page
+  const faults: string[] = []
+  const hit = text.match(banned)
+  if (hit) faults.push(`${path} still says "${hit[0]}"`)
+  for (const w of wanted) if (!w.test(text)) faults.push(`${path} lacks ${w}`)
+  return faults
+}
+
 export function honestPages(): Scenario {
   return {
     id: 'honest-pages',
@@ -1715,34 +1744,18 @@ export function honestPages(): Scenario {
     title: 'pricing, privacy and terms make no claim the product does not keep',
     run: async (ctx) => {
       const missing: string[] = []
-      for (const [path, banned, ...wanted] of [
-        // B32.14 — BYOK is Team's add-on, billed with the plan.
-        ['/pricing', /nothing\s+recurs|only charge is the requests you run|self-hosted/i, /a paid plan, if you choose one, is billed every month/i],
-        [
-          '/privacy',
-          /cheaper than going direct|no self-service data deletion|test-mode cards/i,
-          /charged less than its list price/i,
-          /What Agent Wallets stores/,
-          /Passkeys\./,
-          // B49.2 — cards are named plainly, with no test-mode line (B17.300).
-          /Virtual cards\./,
-          /What the Marketplace stores and shows/,
-        ],
-        ['/terms', /no mechanism to convert|no self-service deletion/i, /LXC can be cashed out/, /Agent Wallets/, /The Marketplace/],
-      ] as const) {
+      for (const [path] of HONEST_PAGES) {
         const page = await ctx.app.tab(path)
         try {
           const text = await page.locator('body').innerText()
           ctx.evidence.push({ note: `${path}: ${text.length} chars read` })
-          const hit = text.match(banned)
-          if (hit) missing.push(`${path} still says "${hit[0]}"`)
-          for (const w of wanted) if (!w.test(text)) missing.push(`${path} lacks ${w}`)
+          missing.push(...honestPageFaults(path, text))
         } finally {
           await page.close()
         }
       }
       return missing.length === 0
-        ? { pass: true, detail: 'pricing says plans and BYOK recur; privacy and terms cover wallets and the Marketplace, and deny no deletion or cash-out' }
+        ? { pass: true, detail: 'pricing says each paid plan is a month; privacy and terms cover wallets and the Marketplace, and deny no deletion or cash-out' }
         : { pass: false, detail: missing.join('; ') }
     },
   }
