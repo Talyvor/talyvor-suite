@@ -315,10 +315,11 @@ const agentLine: Record<string, [string, string]> = {
   Ollie: ['Quartermaster Atlas Bell', 'Support · pays in dollars'],
 }
 
-// The art is the same in either theme, so the faces show once.
-function Cards() {
+// The art is the same in either theme, so the faces show once. They have no controls, so story.tsx draws them beside
+// Story and the press check (src/test/storyPress.test.tsx), which draws Story again for every press, leaves them out.
+export function Cards() {
   return (
-    <section data-theme="light" data-design="pocket" aria-label="Cards" className="grid content-start gap-6 bg-page p-6 text-ink wide:col-span-2">
+    <section data-theme="light" data-design="pocket" aria-label="Cards" className="grid content-start gap-6 bg-page p-6 text-ink">
       <PageHeading line="Every card face, drawn from its art.">Cards</PageHeading>
       <div className="grid gap-4 wide:grid-cols-3">
         {cardArt.map((c) =>
@@ -339,7 +340,6 @@ export function Story() {
       <Specimens theme="light" />
       <Specimens theme="dark" />
       <Frames />
-      <Cards />
     </main>
   )
 }
