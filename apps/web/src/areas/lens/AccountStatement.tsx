@@ -9,6 +9,7 @@ import { lineWhen } from './AgentStatement'
 import { AgentBankError, agentBankApi, refusalText, type Agent, type CurrencyAccount, type MoneyStatementLine } from './agentBankApi'
 import { formatWhen } from './format'
 import { Lxc } from './money'
+import { DisputePayment } from './CardDisputes'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { CURRENCY_ACCOUNT } from '../../labels/capabilities'
@@ -44,6 +45,9 @@ const KIND_WORDS: Record<string, string> = {
   invoice_payment: 'Invoice paid',
   mandate_pull: 'Collected under a mandate',
   card_charge: 'Card payment',
+  // B59.25 — what came back of a card payment: a merchant's refund, or a dispute the issuer decided for the owner.
+  card_refund: 'Refund',
+  card_dispute_won: 'Dispute won',
   payout: 'Paid out',
   return: 'Returned',
   test_money: 'Paid in',
@@ -176,6 +180,12 @@ export function AccountStatement({ account, agent }: { account: CurrencyAccount;
                         </span>
                         {/* On a phone the time goes under the words, so the line keeps its width. */}
                         <span className="block text-micro text-ink-3 wide:hidden">{lineWhen(l.at, now)}</span>
+                        {/* B59.25 — a card payment is disputed from its line, and says where its dispute stands. */}
+                        {l.kind === 'card_charge' && l.partner_ref ? (
+                          <span className="mt-1 block">
+                            <DisputePayment paymentID={l.partner_ref} />
+                          </span>
+                        ) : null}
                       </td>
                       <td className="py-2.5 pl-4 text-right">
                         <Money minor={l.amount_minor} currency={account.currency} signed className={l.amount_minor > 0 ? 'text-success' : ''} />

@@ -13,6 +13,7 @@ import { AccountStatement, MarketplaceBill, accountTitle, useAccountMonthCsv } f
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { CurrencyPicker } from './money'
 import { DESIGN_ATTR } from '../../pocketPending'
+import { CardExport } from './CardDisputes'
 
 // B28.7 — the sidebar is wallet-first: Approvals and Statements are destinations of their own, not
 // regions a person scrolls to inside Agent Wallets. Both read the same cache as Agent Wallets and Home,
@@ -143,6 +144,10 @@ export function StatementsScreen() {
             {everyAgent.isError ? <DownloadFailed error={everyAgent.error} /> : null}
             {thisAgent.isError ? <DownloadFailed error={thisAgent.error} /> : null}
             {thisAccount.isError ? <DownloadFailed error={thisAccount.error} /> : null}
+            {/* B59.25 — every card payment, dispute and refund of a date range, as one file. */}
+            <div className="flex justify-end">
+              <CardExport />
+            </div>
           </div>
         )}
         {accounts.isError ? <p className="text-body text-muted">{readFailure(accounts.error, 'The currency accounts')}</p> : null}

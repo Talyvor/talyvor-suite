@@ -190,6 +190,17 @@ const BODIES: Record<string, unknown> = {
       { name: 'Grace Hopper', role: 'shareholder', share_bps: 4000 },
     ],
   },
+  // B59.25 — one card payment disputed and won, and one merchant's refund.
+  '/api/money/card-disputes': {
+    card_disputes: [
+      { id: 'cdsp_1', payment_id: 'iauth_1', agent_id: 'agt_research', card_id: 'mcard_1', merchant: 'Map Tiles', amount_minor: 3000, currency: 'GBP', reason: 'Charged twice', status: 'won', credited_minor: 3000, decided_at: '2026-10-12T09:00:00Z', created_at: '2026-10-11T09:00:00Z' },
+    ],
+  },
+  '/api/money/card-refunds': {
+    card_refunds: [
+      { id: 'cref_1', payment_id: 'iauth_2', agent_id: 'agt_research', card_id: 'mcard_1', merchant: 'Print Shop', amount_minor: 1000, currency: 'GBP', credited_minor: 1000, created_at: '2026-10-13T09:00:00Z' },
+    ],
+  },
   // B59.28 — one complaint answered and one data export ready to download.
   '/api/workspace/requests': {
     requests: [

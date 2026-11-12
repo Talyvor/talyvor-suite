@@ -95,6 +95,7 @@
   "src/areas/lens/Budgets.test.tsx": 3,
   "src/areas/lens/byokJourney.test.tsx": 2,
   "src/areas/lens/CapabilityTerms.test.tsx": 2,
+  "src/areas/lens/CardDisputes.test.tsx": 5,
   "src/areas/lens/CompanyDetails.test.tsx": 5,
   "src/areas/lens/connectAI.test.tsx": 2,
   "src/areas/lens/Convert.test.tsx": 12,
