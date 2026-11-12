@@ -94,4 +94,21 @@ describe('the helper picker', () => {
     await waitFor(() => expect(sent).toHaveLength(2))
     expect(sent[1]).toEqual({ method: 'PATCH', url: '/api/agents/agt_1', body: { name: 'Books', description: '', colour: 'rose' } })
   })
+
+  // B57.141 — in Pocket, both places draw the helpers as Pocket draws a choice of several (pocket.css .pill.pick):
+  // a cloud pill 34 tall with the portrait 22 across, and the picked one on the page inside a 2px ink ring.
+  it('draws each helper as a Pocket pick, where the agent is created and on its Name and description card', async () => {
+    mockBff({ name: 'Ledger', colour: 'mint' })
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    for (const name of ['Its helper', 'Helper for Ledger']) {
+      const choices = within(await screen.findByRole('group', { name })).getAllByRole('button')
+      expect(choices.map((b) => b.textContent)).toEqual(['Remy', 'Sunny', 'Penny', 'Max', 'Nova', 'Ollie', 'Lime'])
+      for (const b of choices) {
+        expect(b.className.split(' ')).toEqual(expect.arrayContaining(['h-8.5', 'rounded-pill', 'bg-cloud', 'aria-pressed:bg-page', 'aria-pressed:shadow-pick']))
+        expect(b.firstElementChild?.className.split(' ')).toContain('size-5.5')
+      }
+    }
+  })
 })
