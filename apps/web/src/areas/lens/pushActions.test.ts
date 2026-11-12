@@ -1,4 +1,4 @@
-// B28.38 — Approve and Deny in the push notification. public/sw.js runs here in a service worker's
+// B28.38 — Approve and Decline (B55.19) in the push notification. public/sw.js runs here in a service worker's
 // shape: its listeners, the registration's notifications, the window clients and fetch.
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -12,7 +12,7 @@ type Keys = { passkeys: unknown[]; devices: { revoked_at?: string }[] } | null
 
 function worker(fetchStatus: number, keys: Keys = { passkeys: [], devices: [] }) {
   const listeners: Record<string, (e: unknown) => void> = {}
-  const shown: { title: string; options: { tag?: string; data?: unknown; icon?: string; badge?: string; actions?: { action: string }[] } }[] = []
+  const shown: { title: string; options: { tag?: string; data?: unknown; icon?: string; badge?: string; actions?: { action: string; title: string }[] } }[] = []
   const fetch = vi.fn(async (url: string) => {
     if (url === '/api/agents/passkeys' || url === '/api/money/devices')
       return keys ? { ok: true, status: 200, json: async () => keys } : { ok: false, status: 502, json: async () => ({}) }
@@ -41,11 +41,12 @@ function worker(fetchStatus: number, keys: Keys = { passkeys: [], devices: [] })
 const LENS_PUSH = { type: 'agent_approval', approval_id: 'apr_7', agent_name: 'Researcher', amount_lxc: '2', reason: 'a request to gpt-5' }
 
 describe('the approval push (B28.38)', () => {
-  it('carries Approve and Deny', async () => {
+  it('carries Approve and Decline', async () => {
     const sw = worker(200)
     await sw.push(LENS_PUSH)
     expect(sw.shown[0].title).toBe('Researcher asks you to approve 2 LXC')
     expect(sw.shown[0].options.actions?.map((a) => a.action)).toEqual(['approve', 'deny'])
+    expect(sw.shown[0].options.actions?.map((a) => a.title)).toEqual(['Approve', 'Decline'])
   })
 
   it('Approve decides the approval from the service worker, without opening the app', async () => {
@@ -91,7 +92,7 @@ describe('the approval push reads Lens’s sentence (B55.49)', () => {
     const sw = worker(200)
     await sw.push({ ...LENS_PUSH, agent_name: 'Research', body: 'Research wants to spend 3,400 LXC ($340.00)' })
     await sw.tap('deny')
-    expect(sw.shown[1].title).toBe('Denied: Research, 3,400 LXC ($340.00)')
+    expect(sw.shown[1].title).toBe('Declined: Research, 3,400 LXC ($340.00)')
   })
 
   it('a push from an older Lens, with no body, reads as before', async () => {
@@ -125,7 +126,7 @@ describe('the approval push in a workspace that signs (B55.2)', () => {
 })
 
 describe('the morning briefing push (B41.207)', () => {
-  it('shows "This morning" and its line, with no Approve or Deny, and a tap opens Home', async () => {
+  it('shows "This morning" and its line, with no Approve or Decline, and a tap opens Home', async () => {
     const sw = worker(200)
     await sw.push({ type: 'daily_briefing', workspace_id: 'ws_1', line: 'Research spent £12.40 yesterday.', quiet: false })
     expect(sw.shown[0]).toMatchObject({ title: 'This morning', options: { body: 'Research spent £12.40 yesterday.', tag: 'daily-briefing', actions: [] } })
@@ -137,7 +138,7 @@ describe('the morning briefing push (B41.207)', () => {
 describe('a spending notice push (B55.43)', () => {
   const NOTICE = { type: 'spend_notice', kind: 'budget', notice_id: 'ntc_4', workspace_id: 'ws_1', title: 'Food is at 80%', body: '£160 of £200 spent this month.' }
 
-  it('shows Lens’s own title and body, with no Approve or Deny, and a tap opens Spending', async () => {
+  it('shows Lens’s own title and body, with no Approve or Decline, and a tap opens Spending', async () => {
     const sw = worker(200)
     await sw.push(NOTICE)
     expect(sw.shown[0]).toMatchObject({ title: 'Food is at 80%', options: { body: '£160 of £200 spent this month.', tag: 'spend-notice-ntc_4', actions: [] } })

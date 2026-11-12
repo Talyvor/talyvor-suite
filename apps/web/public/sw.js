@@ -1,7 +1,7 @@
 // sw.js — B19.10: shows the push Lens sends when an agent's request or payment waits for approval,
 // and opens Agent Wallets when it is tapped. The payload is decrypted by the browser (RFC 8291).
 //
-// B28.38: the push carries Approve and Deny. Either one decides the approval from here, with the
+// B28.38: the push carries Approve and Decline (B55.19; its action is still "deny", the route's name). Either one decides the approval from here, with the
 // session cookie, exactly as the Approvals screen does — the app does not open. Once a workspace has a
 // passkey, Lens takes a decision only signed with one, which a notification cannot ask for; then, and on
 // any other refusal, the app opens on Approvals so the person finishes it there.
@@ -40,7 +40,7 @@ async function showApproval(d) {
   const id = d.approval_id || ''
   const signs = id ? await workspaceSigns() : false
   return self.registration.showNotification(said ? d.body : `${who} asks you to approve ${amount}`, {
-    body: signs ? 'Open Talyvor to approve or decline it with your passkey or your phone.' : d.reason || 'Open Agent Wallets to approve or deny it.',
+    body: signs ? 'Open Talyvor to approve or decline it with your passkey or your phone.' : d.reason || 'Open Agent Wallets to approve or decline it.',
     icon: ICON,
     badge: ICON,
     tag: id || 'agent-approval',
@@ -49,7 +49,7 @@ async function showApproval(d) {
     actions: id && !signs
       ? [
           { action: 'approve', title: 'Approve' },
-          { action: 'deny', title: 'Deny' },
+          { action: 'deny', title: 'Decline' },
         ]
       : [],
   })
@@ -121,7 +121,7 @@ function openApp(url) {
 }
 
 /**
- * Approve or Deny on the notification: sends the decision to the same route the Approvals screen uses,
+ * Approve or Decline on the notification: sends the decision to the same route the Approvals screen uses,
  * then replaces the notification with what happened. A decision Lens refuses opens the app instead.
  */
 async function decideFromNotification(notification, action) {
@@ -140,8 +140,8 @@ async function decideFromNotification(notification, action) {
   }
   if (!res || !res.ok) return openApp(url)
   const approved = action === 'approve'
-  return self.registration.showNotification(`${approved ? 'Approved' : 'Denied'}: ${data.who}, ${data.amount}`, {
-    body: approved ? 'Its next identical request goes through, once.' : 'Its request will be refused.',
+  return self.registration.showNotification(`${approved ? 'Approved' : 'Declined'}: ${data.who}, ${data.amount}`, {
+    body: approved ? 'Its next identical request goes through, once.' : 'Its request is refused, and the same request is refused without asking you for 24 hours.',
     icon: ICON,
     badge: ICON,
     tag: data.approval_id,

@@ -43,7 +43,7 @@ import (
 //	POST /api/agents/{id}/card          {cardholder}   B19.24: issue it one, the cardholder's name and billing address
 //	POST /api/agents/{id}/pay           {"to_agent_id", "amount_ulxc", "memo"}   pay another of this workspace's agents
 //	GET  /api/agents/approvals                         what the agents' rules sent to a person, newest first
-//	POST /api/agents/approvals/{id}/approve, …/deny    decide one; approve {"always_allow": {"amount_ulxc", "per"}} also saves it for the payee (B41.4)
+//	POST /api/agents/approvals/{id}/approve, …/deny    decide one; approve {"always_allow": {"amount_ulxc", "per"}} also saves it for the payee (B41.4); deny {"reason"} says why (B55.19)
 //
 // Lens decides who may move money (the workspace's owner or an admin) and judges every rule. A
 // refusal comes back with Lens's status AND its sentence — which rule, what the agent holds, which
@@ -805,9 +805,11 @@ func (a *app) handleAgentDecision(decision string) func(http.ResponseWriter, *ht
 		// B19.10: once the workspace has a passkey, Lens takes the decision only with an assertion over
 		// this approval's challenge. A decision without one is sent as before — Lens says whether it may.
 		// B41.4: always_allow (Lens B41.104) approves and saves an allowance for the payee; Lens judges it.
+		// B55.19: reason (Lens B55.18) is why the owner declined, shown to the agent; Lens takes it on deny only.
 		var in struct {
 			Assertion   *passkeyAssertion `json:"assertion,omitempty"`
 			AlwaysAllow *payeeAllowance   `json:"always_allow,omitempty"`
+			Reason      *string           `json:"reason,omitempty"`
 		}
 		if r.ContentLength != 0 {
 			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil && err != io.EOF {
@@ -815,8 +817,11 @@ func (a *app) handleAgentDecision(decision string) func(http.ResponseWriter, *ht
 				return
 			}
 		}
+		if decision != "deny" {
+			in.Reason = nil
+		}
 		var body []byte
-		if in.Assertion != nil || in.AlwaysAllow != nil {
+		if in.Assertion != nil || in.AlwaysAllow != nil || in.Reason != nil {
 			// UPSTREAM-BINDS-ONLY lensApprovalDecisionBody: none
 			body, _ = json.Marshal(in)
 		}

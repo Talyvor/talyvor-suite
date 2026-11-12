@@ -110,6 +110,55 @@ func TestDeviceAssertionReachesLensOnEveryDecisionRoute(t *testing.T) {
 	}
 }
 
+// B55.19 — a decline can say why: the BFF forwards "reason" to Lens on deny, beside the assertion, and never on approve.
+func TestDeclineReasonReachesLensOnDenyOnly(t *testing.T) {
+	var mu sync.Mutex
+	got := map[string]string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		got[r.URL.Path] = string(raw)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"denied"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, path := range []string{"/api/agents/approvals/ap_1/deny", "/api/agents/approvals/ap_2/deny", "/api/agents/approvals/ap_3/approve"} {
+		body := `{"reason":"not this month"}`
+		if strings.HasSuffix(path, "ap_2/deny") {
+			body = `{"reason":"not this month","assertion":{"credential_id":"c","signature":"s"}}`
+		}
+		if rec := doJSON(a, http.MethodPost, path, body); rec.Code != http.StatusOK {
+			t.Fatalf("%s = %d %s", path, rec.Code, rec.Body.String())
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	bodies := map[string]string{}
+	for p, b := range got {
+		for _, id := range []string{"ap_1", "ap_2", "ap_3"} {
+			if strings.Contains(p, "/approvals/"+id+"/") {
+				bodies[id] = b
+			}
+		}
+	}
+	if bodies["ap_1"] != `{"reason":"not this month"}` {
+		t.Errorf("deny: Lens got %q, want the reason", bodies["ap_1"])
+	}
+	if !strings.Contains(bodies["ap_2"], `"reason":"not this month"`) || !strings.Contains(bodies["ap_2"], `"signature":"s"`) {
+		t.Errorf("signed deny: Lens got %q, want the reason beside the assertion", bodies["ap_2"])
+	}
+	if strings.Contains(bodies["ap_3"], "reason") {
+		t.Errorf("approve: Lens got %q, want no reason", bodies["ap_3"])
+	}
+}
+
 // B40.39 — the phone's Bills due list reaches Lens's B40.38 list under the session's token with only the status, and
 // Lens's {"requests": […]} comes back as it was sent.
 func TestPendingPaymentRequestsListRelaysStatusOnly(t *testing.T) {

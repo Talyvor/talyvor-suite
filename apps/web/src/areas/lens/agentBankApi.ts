@@ -1230,10 +1230,11 @@ export const agentBankApi = {
   resumeChallenge: (id: string) => send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/${e(id)}/resume-challenge`),
   /** B19.10: once the workspace has a passkey, a decision carries an assertion over the approval's challenge. */
   /** B41.4 — approving with always_allow also saves that allowance for the approval's payee. */
-  decide: (approvalID: string, decision: 'approve' | 'deny', assertion?: PasskeyAssertion, alwaysAllow?: PayeeAllowance) =>
+  /** B55.19 — declining can say why (Lens B55.18); the agent sees it. */
+  decide: (approvalID: string, decision: 'approve' | 'deny', assertion?: PasskeyAssertion, alwaysAllow?: PayeeAllowance, reason?: string) =>
     decision === 'approve'
       ? send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/approve`, { ...(assertion ? { assertion } : {}), ...(alwaysAllow ? { always_allow: alwaysAllow } : {}) })
-      : send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/deny`, assertion ? { assertion } : {}),
+      : send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/deny`, { ...(assertion ? { assertion } : {}), ...(reason ? { reason } : {}) }),
   // B19.10 — passkeys and push, kept by Lens (B19.16).
   passkeys: () => getJSON<{ passkeys: Passkey[] | null }>('/api/agents/passkeys', { passkeys: 'list' }),
   // B55.2 — the phone keys Lens holds for the workspace (revoked ones included): the phone signs approvals too.

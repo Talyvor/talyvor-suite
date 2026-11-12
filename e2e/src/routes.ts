@@ -515,7 +515,7 @@ export function agentApprovalDenied(seed: number, partner: number): Scenario {
     owner: 'talyvor-lens',
     agents: 1,
     partners: [partner],
-    title: "a send above the approval amount waits; its challenge asked and denied in the app, nothing moves on either side; a rule template applied on Lens, a boost ended in the app, a push device added and removed",
+    title: "a send above the approval amount waits; its challenge asked and declined in the app with a reason Lens keeps, nothing moves on either side; a rule template applied on Lens, a boost ended in the app, a push device added and removed",
     run: async (ctx) => {
       const { env } = ctx
       const a = await appAgent(ctx, `Approver ${seed}`, 3e6)
@@ -533,11 +533,13 @@ export function agentApprovalDenied(seed: number, partner: number): Scenario {
       const ch = await bff<{ challenge: string; allow_credentials: string[] }>(ctx, 'POST', `/api/agents/approvals/${approval.id}/challenge`)
       ctx.evidence.push({ note: `its challenge in the app: ${said(ch)}` })
       if (!ch.ok || ch.value.challenge === '') return fail(`asking the approval's passkey challenge in the app: ${said(ch)}`)
-      const denied = await bff<{ status: string }>(ctx, 'POST', `/api/agents/approvals/${approval.id}/deny`, {})
-      ctx.evidence.push({ note: `denied in the app: ${said(denied)}` })
-      if (!denied.ok) return fail(`denying in the app was refused: ${denied.status} ${denied.error}`)
+      // B55.19 — the app forwards why the owner declined; Lens keeps it on the approval for the agent.
+      const denied = await bff<{ status: string }>(ctx, 'POST', `/api/agents/approvals/${approval.id}/deny`, { reason: 'not this month' })
+      ctx.evidence.push({ note: `declined in the app, "not this month": ${said(denied)}` })
+      if (!denied.ok) return fail(`declining in the app was refused: ${denied.status} ${denied.error}`)
       const after = (await env.lens.agentApprovals(a.user)).find((x) => x.id === approval.id)
-      if (after?.status !== 'denied') return fail(`denied in the app, Lens holds the approval ${after?.status ?? 'missing'}`)
+      if (after?.status !== 'denied') return fail(`declined in the app, Lens holds the approval ${after?.status ?? 'missing'}`)
+      if (after.deny_reason !== 'not this month') return fail(`declined in the app with "not this month", Lens kept the reason ${JSON.stringify(after.deny_reason ?? null)}`)
       const wrong = await movedBy(ctx, sides, before, [0, 0], 'an approval denied')
       if (wrong !== undefined) return fail(wrong)
 

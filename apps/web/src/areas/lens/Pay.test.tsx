@@ -634,7 +634,7 @@ describe('an agent’s payment waiting on Pay when only the phone holds a key (B
     render(<App />)
     const card = await screen.findByTestId('approval-apr_9')
     expect(await within(card).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
-    expect(within(card).queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(within(card).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
     expect(posts).toEqual([])
   })
 })

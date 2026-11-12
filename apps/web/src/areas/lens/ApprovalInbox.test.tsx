@@ -23,6 +23,7 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
     ...decided,
   ].slice(0, only)
   const decisions: Array<{ id: string; decision: string }> = []
+  const bodies: Record<string, unknown>[] = []
   const challenges: string[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -47,6 +48,7 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
     const decision = /^\/api\/agents\/approvals\/([^/]+)\/(approve|deny)$/.exec(url)
     if (decision) {
       decisions.push({ id: decision[1], decision: decision[2] })
+      bodies.push(init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {})
       const a = approvals.find((x) => x.id === decision[1])!
       if (a.status !== 'pending') return json({ error: 'already decided' }, 409)
       a.status = decision[2] === 'approve' ? 'approved' : 'denied'
@@ -54,7 +56,7 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
     }
     return new Response('null', { status: 404 })
   })
-  return { decisions, challenges }
+  return { decisions, bodies, challenges }
 }
 
 const inbox = async () => {
@@ -109,7 +111,7 @@ describe('the approvals inbox (B41.33)', () => {
     await waitFor(() => expect(screen.getByText('Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount, or when Chat or an assistant prepares a payment.')).toBeInTheDocument())
   })
 
-  it('moves with j and k and approves with a, denies with d', async () => {
+  it('moves with j and k and approves with a, declines with d', async () => {
     const bff = mockBff()
     const list = await inbox()
     const rows = list.getAllByRole('checkbox').map((c) => c.closest<HTMLElement>('[data-approval]')!)
@@ -120,7 +122,30 @@ describe('the approvals inbox (B41.33)', () => {
     await waitFor(() => expect(bff.decisions).toEqual([{ id: 'apr_2', decision: 'approve' }]))
     const first = (await list.findAllByRole('checkbox'))[0].closest<HTMLElement>('[data-approval]')!
     fireEvent.keyDown(first, { key: 'd' })
+    // d opens the decline form on that row, its reason field focused; Decline sends it.
+    expect(document.activeElement).toBe(screen.getByLabelText('Why (optional, the agent sees it)'))
+    expect(bff.decisions).toHaveLength(1)
+    fireEvent.click(within(first).getByRole('button', { name: 'Decline' }))
     await waitFor(() => expect(bff.decisions).toEqual([{ id: 'apr_2', decision: 'approve' }, { id: 'apr_1', decision: 'deny' }]))
+  })
+
+  // B55.19 — Decline asks why (optional, the agent sees it); the reason goes with the decline, and the note says it holds for 24 hours.
+  it('declines with a reason, cancels without sending, and says what declining does', async () => {
+    const bff = mockBff()
+    const list = await inbox()
+    expect(screen.getByText(/decline it and the request is refused, and asking again the same way is refused for 24 hours\./)).toBeInTheDocument()
+    const row = list.getByText(/Acme Hosting/).closest<HTMLElement>('[data-approval]')!
+    fireEvent.click(within(row).getByRole('button', { name: 'Decline' }))
+    fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }))
+    expect(bff.decisions).toEqual([])
+    fireEvent.click(within(row).getByRole('button', { name: 'Decline' }))
+    fireEvent.change(within(row).getByLabelText('Why (optional, the agent sees it)'), { target: { value: 'not this month' } })
+    fireEvent.click(within(row).getByRole('button', { name: 'Decline' }))
+    expect(await screen.findByText('Declined. Researcher’s payment is refused, and the same request is refused without asking you for 24 hours.')).toBeInTheDocument()
+    expect(bff.decisions).toEqual([{ id: 'apr_1', decision: 'deny' }])
+    expect(bff.bodies).toEqual([{ reason: 'not this month' }])
+    expect(await screen.findByText('Declined')).toBeInTheDocument()
+    expect(document.body.textContent).not.toMatch(/Deny|Denied|denies/)
   })
 
   it('approves a request swiped right, and nothing on a short or leftward swipe', async () => {
@@ -226,7 +251,7 @@ describe('the approvals inbox when only the phone holds a key (B55.2)', () => {
     const posts = onlyThePhoneKey()
     const list = await inbox()
     expect(await list.findAllByText('Approve this on your phone: it is waiting in Talyvor there.')).toHaveLength(5)
-    expect(list.queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(list.queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
     expect(list.queryByRole('checkbox')).toBeNull()
     const row = document.querySelector<HTMLElement>('[data-approval="apr_1"]')!
     fireEvent.keyDown(row, { key: 'a' })
@@ -246,7 +271,7 @@ describe('the approvals inbox when only the phone holds a key (B55.2)', () => {
     const posts = onlyThePhoneKey([{ id: 'dk_1', platform: 'ios', name: 'Old iPhone', revoked_at: '2026-10-30T09:00:00Z' }])
     const list = await inbox()
     expect(await list.findAllByText('Every key of this workspace was removed, so nothing can approve.')).toHaveLength(5)
-    expect(list.queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(list.queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
     fireEvent.keyDown(document.querySelector<HTMLElement>('[data-approval="apr_1"]')!, { key: 'a' })
     expect(bff.decisions).toEqual([])
     expect(posts).toEqual([])
@@ -257,7 +282,7 @@ describe('the approvals inbox when only the phone holds a key (B55.2)', () => {
     const posts = onlyThePhoneKey(null)
     const list = await inbox()
     await waitFor(() => expect(queryClient.getQueryState(['money-devices'])?.status).toBe('error'))
-    expect(list.queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(list.queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
     expect(list.queryByRole('checkbox')).toBeNull()
     expect(screen.queryByRole('button', { name: /Add this device|Approve with Face ID from now on/ })).toBeNull()
     fireEvent.keyDown(document.querySelector<HTMLElement>('[data-approval="apr_1"]')!, { key: 'a' })
