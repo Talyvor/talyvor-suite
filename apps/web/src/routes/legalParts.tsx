@@ -5,6 +5,7 @@ import { useDocumentTitle } from '../documentTitle'
 import { inlineLink } from '@talyvor/ui'
 import { Eyebrow } from '@talyvor/ui/pocket'
 import { PublicFooter, PublicHeader } from '../components/SiteChrome'
+import { HelpLinks } from '../components/HelpLinks'
 
 // legalParts — the shared furniture for /privacy and /terms.
 //
@@ -207,6 +208,8 @@ export function LegalPage({
             {sections.length > 0 && <Contents titles={sections.map((s) => s.props.title)} />}
             {kids.slice(first).map((k) => (isSection(k) ? <Numbered key={k.key} n={sections.indexOf(k) + 1} section={k} /> : k))}
             <EndOf title={title} updated={updated} />
+            {/* B59.28 — where to ask for help, complain, close the account or ask for its data. */}
+            <HelpLinks className="mt-6" />
           </div>
         </div>
       </main>

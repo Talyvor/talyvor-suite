@@ -74,6 +74,9 @@ export function SettingsLinks() {
     { to: '/settings/terms', title: 'Capability terms', line: 'The terms each money feature asks you to accept' },
     { to: '/settings/webhooks', title: 'Webhooks', line: 'Docs tells your server about approvals and comments' },
     { to: '/settings/email-branding', title: 'Email branding', line: 'How Docs email looks: its name, colour and logo' },
+    { to: '/settings/help', title: 'Help and complaints', line: 'Ask us something, or make a complaint' },
+    { to: '/settings/data', title: 'Your data', line: 'A copy of your data, or ask for it to be deleted' },
+    { to: '/settings/close', title: 'Close this account', line: 'What must be empty first, and asking to close' },
     ...(operator ? [{ to: '/operator', title: 'Talyvor operators', line: 'Workspaces, tax, compliance and the review queue' }] : []),
   ].filter((l) => areas.shows(l.to))
   return (

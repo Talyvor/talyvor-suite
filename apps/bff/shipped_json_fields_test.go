@@ -112,6 +112,7 @@ var decodedFromUpstream = map[string]string{
 	"lensWorkspaceRecord":    "Lens's GET /v1/workspaces/{id} reply, decoded in lensWorkspace() (B17.2)",
 	"passkeyAssertion":       "an approval's passkey assertion, decoded wholesale from the browser's approve/deny body and relayed to Lens as it came (B19.10)",
 	"cardAddress":            "a physical card's postal address, decoded from the browser's order body and relayed to Lens with only its own fields (B53.12)",
+	"workspaceRequest":       "Lens's B59.27 request record, decoded from its GET and POST /v1/workspaces/{id}/requests replies and shown without its workspace or filer (B59.28)",
 	"pricedPlan":             "Lens's public GET /v1/billing/plans reply, decoded in readPlans() and served on /api/pricing (B28.5)",
 	"routingRecommendation":  "Lens's GET /v1/workspaces/{id}/routing/recommendation reply, decoded in handleRoutingRecommendation() and served on /api/routing/recommendation (B28.364)",
 	"planCard":               "Lens's public GET /v1/billing/plans reply, decoded in readPlans() and served on /api/pricing (B32.14)",

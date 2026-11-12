@@ -181,6 +181,9 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/settings/email-branding': 0,
   // B40.8 — one card per assistant.
   '/settings/connect': 8,
+  '/settings/help': 0, // B59.28: Pocket's own section titles, no CardHeader
+  '/settings/close': 0,
+  '/settings/data': 0,
   // B30.97 — the accounts, the new invoice form, and the invoices issued.
   '/money/invoices': 3,
   // B30.96 — payees, send, payments out, standing orders, mandates and bulk payouts.

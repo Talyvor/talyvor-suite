@@ -416,6 +416,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B59.38 — which areas the workspace has; the phone shows an area only when it is listed. See workspace_areas.go.
 	a.mux.HandleFunc("/api/workspace/areas", a.requireTenant(a.handleWorkspaceAreas))
 	a.mux.HandleFunc("/api/workspace/account", a.requireTenant(a.handleWorkspaceAccount)) // B59.10 — the type and kind of money. See workspace_account.go.
+	// B59.28 — help and complaints, closing the account and the workspace's data. See workspace_requests.go.
+	a.mux.HandleFunc("/api/workspace/requests", a.requireTenant(a.handleWorkspaceRequests))
+	a.mux.HandleFunc("/api/workspace/requests/{id}/export", a.requireTenant(a.handleWorkspaceRequestExport))
 	a.mux.HandleFunc("/api/features/tare", a.requireTenant(a.handleFeatureTare))
 	a.mux.HandleFunc("/api/features/cost-optimize-routing", a.requireTenant(a.handleFeatureCostRouting))
 	// B11.2 — the shared-conversions switch Lens had and nothing called, and Tare's recorded savings.

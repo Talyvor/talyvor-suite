@@ -1087,6 +1087,17 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/physical-cards/{id}/replace", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPhysicalCardReplaceBody",
   },
+  // B59.28 — help and complaints, closing the account and the workspace's data, each a request (Lens B59.27).
+  {
+    route: "POST /v1/workspaces/{wsID}/requests",
+    file: "apps/bff/workspace_requests.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"kind": in.Kind, "message": in.Message})',
+    upstreamFile: "cmd/lens/support_requests_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/requests", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensWorkspaceRequestBody",
+  },
   {
     route: "POST /v1/money/payees/{id}/confirm",
     file: "apps/bff/money_pay.go",
