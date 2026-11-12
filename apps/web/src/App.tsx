@@ -38,6 +38,8 @@ import { Setup } from './areas/lens/Setup'
 import { Spend } from './areas/lens/Spend'
 import { Members } from './areas/lens/Members'
 import { Settings, TeamOnly } from './areas/lens/Sharing'
+import { CloseAccountScreen, HelpScreen, YourDataScreen } from './areas/lens/HelpAndAccount'
+import { SignedInFooter } from './components/HelpLinks'
 import { Features } from './areas/lens/Features'
 import { AgentBank } from './areas/lens/AgentBank'
 import { ApprovalsScreen, StatementsScreen, usePendingApprovals } from './areas/lens/WalletScreens'
@@ -231,6 +233,10 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/settings/email-branding', title: 'Email branding', element: <DocsEmailBranding /> },
   // B40.8 — the MCP address, how to add it to each assistant, and the assistants connected, each revocable.
   { path: '/settings/connect', title: 'Connect your AI', element: <ConnectAI /> },
+  // B59.28 — help and complaints, closing the account and the account's data, each answered by a person at Talyvor.
+  { path: '/settings/help', title: 'Help and complaints', element: <HelpScreen /> },
+  { path: '/settings/close', title: 'Close this account', element: <CloseAccountScreen /> },
+  { path: '/settings/data', title: 'Your data', element: <YourDataScreen /> },
   // B30.97 — invoices from an agent's currency account, each with its public pay link.
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.
@@ -580,6 +586,8 @@ function AppShell() {
         </Routes>
         </div>
       </ScreenBoundary>
+      {/* B59.28 — Help and complaints, Close this account and Your data at the foot of every page; Chat has the whole page. */}
+      {chat ? null : <SignedInFooter />}
       {/* B45.6 — Taly, on every signed-in page, told which page it is on. Today's design until B57.9. */}
       {/* B59.2 — Taly goes with Chat. */}
       <IfArea area="chat">

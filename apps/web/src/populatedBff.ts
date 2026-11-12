@@ -180,6 +180,13 @@ const BODIES: Record<string, unknown> = {
   // B46.16 — the sidebar shows the workspace's name on every address.
   '/api/workspace/name': { id: 'ws_1', name: 'Acme' },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B59.28 — one complaint answered and one data export ready to download.
+  '/api/workspace/requests': {
+    requests: [
+      { id: 2, kind: 'data_export', state: 'done', reference: '', message: '', answer: 'Your copy is ready.', filed_at: '2026-09-02T09:00:00Z', updated_at: '2026-09-03T09:00:00Z' },
+      { id: 1, kind: 'complaint', state: 'in_progress', reference: 'C-ABCD-EFGH', message: 'A card payment was taken twice.', answer: '', filed_at: '2026-09-01T09:00:00Z', updated_at: '2026-09-01T09:00:00Z' },
+    ],
+  },
   // B39.34 — Settings → Email branding, as a workspace that branded its Docs email.
   '/api/docs/email-branding': { from_name: 'Acme Robotics', header_color: '#1E40AF', logo_url: '' },
   // B40.8 — Settings → Connect your AI, with Claude connected and used.
