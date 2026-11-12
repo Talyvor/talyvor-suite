@@ -250,9 +250,10 @@ const preset = {
       borderRadius: { card: '24px', 'card-tight': '18px', control: '14px', sheet: '28px', pill: '9999px', tile: '12px', inset: '16px' },
       // `edge` is Pocket's 1.5px control edge on every field (pocket.css .input), 3:1 on the page.
       // `edge-current` is the danger button's ring (pocket.css .btn.danger): the same 1.5px in the button's own ink.
+      // `pick` is a picked choice's ring (pocket.css .pick.on): 2px of ink inside it (B57.141).
       boxShadow: {
         pocket: 'var(--shadow)', 'pocket-lg': 'var(--shadow-lg)', edge: 'inset 0 0 0 1.5px var(--control)',
-        'edge-current': 'inset 0 0 0 1.5px currentColor',
+        'edge-current': 'inset 0 0 0 1.5px currentColor', pick: 'inset 0 0 0 2px var(--ink)',
       },
       // B57.4 — Pocket's control sizes, as half steps of Tailwind's own quarter-rem scale (h-11 is 44 already):
       // 0.75 the switch's 3px inset, 5.25 its thumb's travel, 6.5 the switch and chip (26), 8.5 the small button (34),
