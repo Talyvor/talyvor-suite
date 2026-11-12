@@ -32,7 +32,7 @@ describe('Pill — the two neutral statuses (the StatusPill resolution)', () => 
 describe('FixtureNotice — sample data is never silent', () => {
   it('names what it awaits, in faint ink with a hueless dot', () => {
     render(<FixtureNotice awaiting="GET /api/example" />)
-    const el = screen.getByText(/sample data — awaiting get \/api\/example/i)
+    const el = screen.getByText(/sample data: awaiting get \/api\/example/i)
     expect(el.parentElement?.className).toContain('text-faint')
   })
 })

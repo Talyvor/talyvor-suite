@@ -63,9 +63,9 @@ export async function payInvoiceByCard(ctx: ScenarioCtx, token: string): Promise
     await pay.waitForURL((u) => u.origin !== appURL, { timeout: CHECKOUT_MS })
     await payWithTestCard(pay, 'funding@example.com')
     await pay.waitForURL((u) => u.origin === appURL && u.pathname === `/pay/${token}`, { timeout: CHECKOUT_MS })
-    await headline.filter({ hasText: 'Paid — thank you' }).waitFor({ timeout: CHECKOUT_MS }).catch(() => undefined)
+    await headline.filter({ hasText: 'Paid, thank you' }).waitFor({ timeout: CHECKOUT_MS }).catch(() => undefined)
     const read = ((await headline.textContent()) ?? '').trim()
-    if (read !== 'Paid — thank you') return `after the card payment the funding invoice’s pay page reads "${read}", not "Paid — thank you"`
+    if (read !== 'Paid, thank you') return `after the card payment the funding invoice’s pay page reads "${read}", not "Paid, thank you"`
   } finally {
     await stranger.close().catch(() => undefined)
   }
@@ -131,19 +131,21 @@ export function payScreen(): Scenario {
       const reference = `Nightly ${RUN_SALT}`
       const page = await ctx.app.tab('/money/pay')
       try {
-        await page.locator('header h1').filter({ hasText: 'Pay' }).waitFor({ timeout: TIMEOUT_MS })
+        await page.locator('main h1').filter({ hasText: 'Pay' }).waitFor({ timeout: TIMEOUT_MS })
         const onScreen = (await page.locator('body').innerText()).match(DISCLAIMER)
         if (onScreen) return fail(`the Pay screen carries a disclaimer line: "${onScreen[0]}"`)
         // The scam warning is role="alert" too, and stays up while the payment sends: it is not a refusal.
         const refusals = (form: ReturnType<typeof page.getByTestId>) => form.locator('[role="alert"]:not([data-testid="scam-warning"])')
         const refusalOf = async (form: ReturnType<typeof page.getByTestId>) => (await refusals(form).allTextContents()).join(' ').trim()
 
+        // B57.31: Add a payee opens its dialog; Save payee there checks the name and closes it.
+        await page.getByRole('button', { name: 'Add a payee' }).first().click({ timeout: TIMEOUT_MS })
         const payeeForm = page.getByTestId('new-payee')
         await payeeForm.waitFor({ timeout: TIMEOUT_MS })
-        await payeeForm.getByLabel('Payee’s name').fill(`Nightly Pay Payee ${RUN_SALT} Ltd`)
+        await payeeForm.getByLabel('Name on the account').fill(`Nightly Pay Payee ${RUN_SALT} Ltd`)
         await payeeForm.getByLabel('Sort code').fill('040004')
         await payeeForm.getByLabel('Account number').fill('12345678')
-        await payeeForm.getByRole('button', { name: 'Save payee' }).click()
+        await page.getByRole('dialog', { name: 'Add a payee' }).getByRole('button', { name: 'Save payee' }).click()
         const payeeRow = page.locator('[data-testid^="payee-"]').first()
         await payeeRow.or(payeeForm.getByRole('alert')).first().waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
         if (!(await payeeRow.isVisible())) return fail(`saving the payee on the screen: ${(await refusalOf(payeeForm)) || 'no payee row appeared'}`)
@@ -158,13 +160,14 @@ export function payScreen(): Scenario {
         await send.getByLabel('Amount in GBP').fill('20.00')
         await send.getByLabel('Reference').fill(reference)
         // B41.13: a first payment asks two scam questions; a yes shows the warning and Send waits for a second confirmation.
-        await send.getByRole('radiogroup', { name: 'Were you told to pay urgently?' }).getByLabel('No').check()
-        await send.getByRole('radiogroup', { name: 'Did the bank details arrive by email or chat?' }).getByLabel('Yes').check()
+        // B57.31: the answers are Pocket's choices, and Send names the amount ("Send £20.00").
+        await send.getByRole('radiogroup', { name: 'Were you told to pay urgently?' }).getByRole('radio', { name: 'No' }).click()
+        await send.getByRole('radiogroup', { name: 'Did the bank details arrive by email or chat?' }).getByRole('radio', { name: 'Yes' }).click()
         const warning = send.getByTestId('scam-warning')
         if (!(await warning.isVisible())) return fail('answering yes to "Did the bank details arrive by email or chat?" showed no scam warning')
-        if (await send.getByRole('button', { name: 'Send' }).isEnabled()) return fail('Send was enabled after a risky scam answer, before the second confirmation')
+        if (await send.getByRole('button', { name: /^Send/ }).isEnabled()) return fail('Send was enabled after a risky scam answer, before the second confirmation')
         await warning.getByRole('checkbox').check()
-        await send.getByRole('button', { name: 'Send' }).click()
+        await send.getByRole('button', { name: /^Send/ }).click()
         const paymentRow = page.locator('[data-testid^="payment-"]').first()
         await paymentRow.or(refusals(send)).first().waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
         if (!(await paymentRow.isVisible())) return fail(`sending £20.00 on the screen: ${(await refusalOf(send)) || 'no payment row appeared'}`)

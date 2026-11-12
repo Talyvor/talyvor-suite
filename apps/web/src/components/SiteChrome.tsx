@@ -16,15 +16,18 @@ type Width = 'max-w-5xl' | 'max-w-6xl'
 // B57.59 — Pocket's header and footer (design/pocket s-home, s-pricing, s-board): one header and one footer
 // on every public page, held to Pocket's rules (data-design) while the pages between them wait their turn.
 // The header is the logo home, then the site's links or, on a page shared by link, the product's name, then
-// Open the app. The footer is the same everywhere.
+// Open the app. The footer is the same everywhere. B57.62 adds Your money to both, after Pricing. B59.5: the
+// documentation is named in full, since Docs is the team wiki, which the public site no longer names.
 const HEADER_LINKS: SiteLink[] = [
   { href: '/marketing', label: 'How it works' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/documentation', label: 'Docs' },
+  { href: '/your-money', label: 'Your money' },
+  { href: '/documentation', label: 'Documentation' },
 ]
 const FOOTER_LINKS: SiteLink[] = [
   { href: '/pricing', label: 'Pricing' },
-  { href: '/documentation', label: 'Docs' },
+  { href: '/your-money', label: 'Your money' },
+  { href: '/documentation', label: 'Documentation' },
   { href: '/privacy', label: 'Privacy' },
   { href: '/terms', label: 'Terms' },
 ]

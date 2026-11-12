@@ -10,6 +10,7 @@
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type B28Report, b28Line, renderB28 } from './b28.ts'
+import { type BuildingLabelsReport, buildingLabelsLine, renderBuildingLabels } from './buildingLabels.ts'
 import { type CodeReport, codeLine, renderCode } from './code.ts'
 import { type CoverageMap, type Row, tallyLine } from './coverage.ts'
 import { type EdgeReport, edgeLine, renderEdge } from './edge.ts'
@@ -80,6 +81,8 @@ export interface ReportedRun {
   hostile?: HostileReport
   /** B28.293 — every DONE B28 feature in the queue, the scenarios that name it and their verdicts this run (b28.ts). */
   b28?: B28Report
+  /** B56.13 — building.json held to the queue and Lens, Lens's Live labels to its rails, and the public pages' chips (buildingLabels.ts). */
+  building_labels?: BuildingLabelsReport
   /** B28.292 — the rounds of the weekly deep red-team pass the run was to play; absent on a night without one. */
   deep_rounds?: number
   /** B28.294 — the run was the light pass between the nightly runs (light.ts). */
@@ -465,7 +468,7 @@ export function renderRun(run: ReportedRun): string {
     lines.push(`| \`${id}\` | ${n.PASS} | ${n.FAIL} | ${n.ERROR} | ${n.SKIP} | ${cell(os[0].title)} |`)
   }
   lines.push(...renderPlans(run), ...renderSecondAttempts(run), ...renderEnvironment(run), ...renderEdge(run.edge), ...renderCode(run.code), ...renderHostile(run.hostile),
-    ...renderB28(run.b28, run.filed), ...renderRaised(run.raised), ...renderPocket(run.pocket))
+    ...renderB28(run.b28, run.filed), ...renderBuildingLabels(run.building_labels), ...renderRaised(run.raised), ...renderPocket(run.pocket))
 
   // The features in the order the app mounts them, then any a scenario named for itself.
   const features = [...new Set([...(map?.screens.map((r) => r.feature) ?? []), ...run.outcomes.flatMap(featuresOf),
@@ -560,6 +563,7 @@ export function renderSummary(run: ReportedRun, report: string, newItems: string
     ...codeLine(run.code),
     ...hostileLine(run.hostile),
     ...b28Line(run.b28),
+    ...buildingLabelsLine(run.building_labels),
     ...pocketLine(run.pocket),
     `- **Cost**: $${run.spent_usd.toFixed(2)} of the $${run.cap_usd.toFixed(2)} cap${dayText(run)}${run.stopped_at_cap ? ' — stopped at the cap' : ''}` +
       `${run.stopped_by === undefined ? '' : ', spent before it stopped'}.`,

@@ -109,7 +109,7 @@ describe('Plans (B13.3)', () => {
     expect(screen.getByText(/of this month’s included usage/).textContent).toBe('62% of this month’s included usage')
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('62')
     expect(screen.getByText(/Your answers earned you/).textContent).toBe(
-      'Your answers earned you $6 this month — $6 of your $20 plan back.',
+      'Your answers earned you $6 this month: $6 of your $20 plan back.',
     )
     const pooled = await screen.findByText('Answered from the shared pool')
     expect(pooled.closest('div.flex')!.textContent).toContain('9')
@@ -206,8 +206,8 @@ describe('/plans reads the approved price card (B32.14)', () => {
     expect(business).toHaveTextContent('Seats40')
     // B56.2: the same card as /pricing, sign-on and audit export each on its own row.
     expect(business).toHaveTextContent('Single sign-onIncluded')
-    expect(business).toHaveTextContent('Audit export—')
-    expect(team).toHaveTextContent('Single sign-on—')
+    expect(business).toHaveTextContent('Audit exportNot included')
+    expect(team).toHaveTextContent('Single sign-onNot included')
     expect(screen.getByTestId('company-plan-enterprise')).toHaveTextContent('From$2,700a month')
     expect(screen.getByTestId('plan-price-byok')).toHaveTextContent('$211')
     expect(screen.getByTestId('plan-price-plus')).toHaveTextContent('$23')

@@ -62,8 +62,8 @@ describe('formatUsdPer1M', () => {
   // A price the deployment sends that is not a number must not render as "$NaN". The catalog is
   // proxied from Lens, so this client does not get to assume the field is present.
   it('refuses a non-finite value instead of rendering $NaN', () => {
-    expect(formatUsdPer1M(Number.NaN)).toBe('—')
-    expect(formatUsdPer1M(Number.POSITIVE_INFINITY)).toBe('—')
-    expect(formatUsdPer1M(undefined as unknown as number)).toBe('—')
+    expect(formatUsdPer1M(Number.NaN)).toBe('Not known')
+    expect(formatUsdPer1M(Number.POSITIVE_INFINITY)).toBe('Not known')
+    expect(formatUsdPer1M(undefined as unknown as number)).toBe('Not known')
   })
 })

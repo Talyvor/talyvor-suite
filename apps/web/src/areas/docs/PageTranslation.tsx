@@ -106,7 +106,7 @@ export function PageTranslation({ pageId, text, onSpent }: { pageId: string; tex
               // and a billed completion in English. Here it is a button that does not fire and a
               // reason a reader can act on.
               <span className="text-caption text-muted">
-                Name a language first — without one, Docs would translate this page into English
+                Name a language first. Without one, Docs would translate this page into English
                 and still charge for it.
               </span>
             ) : (
@@ -134,7 +134,7 @@ export function PageTranslation({ pageId, text, onSpent }: { pageId: string; tex
             {isAIUnavailable(translate.error) ? (
               aiNotConfiguredCopy
             ) : isSessionExpired(translate.error) ? null : (
-              <>Couldn’t translate this page — nothing was asked of the model. Try again.</>
+              <>Couldn’t translate this page. Nothing was asked of the model. Try again.</>
             )}
           </p>
         ) : translate.data ? (

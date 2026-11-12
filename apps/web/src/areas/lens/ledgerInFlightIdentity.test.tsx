@@ -149,7 +149,7 @@ describe('the ledger names the rows it is showing, not the ones it requested', (
 
     const { container } = renderLedger()
     expect(await screen.findByText('page one row 0')).toBeInTheDocument()
-    expect(container.textContent).toContain('Rows 1–20')
+    expect(container.textContent).toContain('Rows 1 to 20')
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     await settle()
@@ -158,8 +158,8 @@ describe('the ledger names the rows it is showing, not the ones it requested', (
     // so the caption must still say page one.
     expect(screen.getByText('page one row 0')).toBeInTheDocument()
     expect(screen.getByText('page one row 19')).toBeInTheDocument()
-    expect(container.textContent).toContain('Rows 1–20')
-    expect(container.textContent).not.toContain('Rows 21–40')
+    expect(container.textContent).toContain('Rows 1 to 20')
+    expect(container.textContent).not.toContain('Rows 21 to 40')
 
     page2.open()
     await settle()
@@ -167,6 +167,6 @@ describe('the ledger names the rows it is showing, not the ones it requested', (
     // And it DOES move when the rows do — the assertion above is not a constant.
     expect(await screen.findByText('page two row 0')).toBeInTheDocument()
     expect(screen.queryByText('page one row 0')).toBeNull()
-    expect(container.textContent).toContain('Rows 21–21')
+    expect(container.textContent).toContain('Rows 21 to 21')
   })
 })

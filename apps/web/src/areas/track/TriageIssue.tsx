@@ -65,7 +65,7 @@ export function TriageIssue({ issueId }: { issueId: string }) {
             answer. Track can apply a triage suggestion; this app does not offer that, and the
             request it sends carries no parameter that could ask for it. */}
         <p className="text-caption text-muted">
-          A suggestion only — nothing is changed on the issue, and this app never asks Track to
+          A suggestion only. Nothing is changed on the issue, and this app never asks Track to
           apply one.
         </p>
         <div>
@@ -155,7 +155,7 @@ function Suggestion({ s }: { s: TriageSuggestion }) {
             {s.priority === null ? (
               <span className="text-body text-muted">
                 {s.priorityAmbiguous
-                  ? 'not readable — see below'
+                  ? 'not readable, see below'
                   : 'not one of Track’s five priorities'}
               </span>
             ) : (
@@ -179,7 +179,7 @@ function Suggestion({ s }: { s: TriageSuggestion }) {
 
       {s.confidence === null ? null : (
         <p className="text-caption text-muted">
-          The model rated its own answer {Math.round(s.confidence * 100)}% — that figure is the
+          The model rated its own answer {Math.round(s.confidence * 100)}%. That figure is the
           model’s own claim about itself, not a measurement of anything.
         </p>
       )}
@@ -200,14 +200,14 @@ function ZeroNote({ priorityZero, confidenceZero }: { priorityZero: boolean; con
     <div className="flex flex-col gap-1">
       {priorityZero ? (
         <p className="text-caption text-muted">
-          Track sent priority 0, which is both its “None” value and the value a missing field gets —
+          Track sent priority 0, which is both its “None” value and the value a missing field gets,
           so whether the model said no priority or said nothing about priority cannot be told apart
           here.
         </p>
       ) : null}
       {confidenceZero ? (
         <p className="text-caption text-muted">
-          Track sent a confidence of 0, which is the same two things — so the model either did not
+          Track sent a confidence of 0, which is the same two things, so the model either did not
           say how sure it was, or said it was not sure at all.
         </p>
       ) : null}
@@ -222,7 +222,7 @@ function DroppedNote({ n }: { n: number }) {
   // literal scanner reads as a Tailwind class list. Prose belongs in the document.
   return (
     <p className="text-caption text-muted">
-      {n} suggested {n === 1 ? 'label' : 'labels'} arrived and could not be drawn — the response
+      {n} suggested {n === 1 ? 'label' : 'labels'} arrived and could not be drawn. The response
       carried an entry that was not a name.
     </p>
   )

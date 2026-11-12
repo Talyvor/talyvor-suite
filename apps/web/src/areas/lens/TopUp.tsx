@@ -19,6 +19,9 @@ import {
   topupApi,
   type CheckoutFailureKind,
 } from './topupApi'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { BUY_FROM_TALYVOR } from '../../labels/capabilities'
+import { BILLING_LINKS, PageLinks } from '../../components/PageLinks'
 
 // /billing — buying LXC. Until this screen there was no way for a customer to do
 // it at all: the Lens half (checkout, a signature-verified webhook, exactly-once
@@ -69,23 +72,23 @@ function failureText(kind: CheckoutFailureKind, detail: string): string {
       // ONE sentence, UI-owned: the customer needs the state, the operator needs
       // the flag. Echoing the BFF's wording as well would just say it twice.
       return (
-        'Top-up is turned off on this deployment — LXC can’t be bought here until Lens ' +
+        'Top-up is turned off on this deployment. LXC can’t be bought here until Lens ' +
         'is run with billing enabled (LENS_BILLING_ENABLED). Nothing was charged.'
       )
     case 'signed_out':
-      return 'Your session has expired. Sign in again, then choose an amount — nothing was charged.'
+      return 'Your session has expired. Sign in again, then choose an amount. Nothing was charged.'
     case 'origin_refused':
       return (
         'The request origin was rejected, so no payment was started. Reach this app at ' +
         'its configured address and try again.'
       )
     case 'amount_refused':
-      return detail || 'That amount can’t be bought here — nothing was charged.'
+      return detail || 'That amount can’t be bought here: nothing was charged.'
     case 'upstream':
       // The BFF's own words: it distinguishes an unreachable Lens from an
       // allow-list drift, and both sentences already end with the fact that
       // matters most — nothing was charged.
-      return detail || 'Couldn’t start the payment — nothing was charged. Please try again.'
+      return detail || 'Couldn’t start the payment: nothing was charged. Please try again.'
   }
 }
 
@@ -236,18 +239,18 @@ function OtherAmount({
 
   let note: React.ReactNode
   if (text.trim() === '') {
-    note = `Any amount from ${bounds}. The cap is the most one disputed card payment can cost — for more, top up more than once.`
+    note = `Any amount from ${bounds}. The cap is the most one disputed card payment can cost. For more, top up more than once.`
   } else if (cents === null) {
     note = 'Enter dollars, like 2500 or 2,500.00.'
   } else if (!inBounds) {
-    note = `A top-up is ${bounds} — the cap is the most one disputed card payment can cost, so for more, top up more than once.`
+    note = `A top-up is ${bounds}. The cap is the most one disputed card payment can cost, so for more, top up more than once.`
   } else {
     note = (
       <span className="font-figure">
         {(() => {
           const lxc = lxcForCents(cents, usdPerLXC)
           const charged = `Charged ${formatCents(cents)}${cents % 100 === 0 ? '' : ' (rounded up to the cent)'}`
-          return lxc === null ? `${charged}.` : `${charged} — buys ${formatLXC(lxc)}.`
+          return lxc === null ? `${charged}.` : `${charged}: buys ${formatLXC(lxc)}.`
         })()}
       </span>
     )
@@ -361,10 +364,11 @@ export function TopUp({
         sectionClassName="pb-10 pt-4 wide:pb-12"
         className="max-w-2xl"
       >
+        <WorkspaceLabel capability={BUY_FROM_TALYVOR} className="mb-3" />
         <p className="text-body text-muted">
           LXC is the usage credit every request through Lens is billed against.{' '}
           {billingOff
-            ? 'This deployment runs Lens without billing switched on, so nothing can be bought here — the balance is still live, and it can still be spent.'
+            ? 'This deployment runs Lens without billing switched on, so nothing can be bought here. The balance is still live, and it can still be spent.'
             : cards === 'live'
               ? 'You pay by card at Stripe and the credit is applied to this workspace.'
               : null}
@@ -419,7 +423,7 @@ export function TopUp({
             <>
               <CapabilityOff
                 name="Top up"
-                note="Top-up isn’t available on this deployment — no payment can be started here."
+                note="Top-up isn’t available on this deployment. No payment can be started here."
               />
               <div className="px-gutter py-3">
                 <p className="text-caption font-normal text-muted">
@@ -522,11 +526,13 @@ export function TopUp({
         <Region index="03" label="What happens when you pay">
           <p className="text-body text-muted">
             You’ll be sent to Stripe to pay, then returned here. The credit is applied by Stripe
-            notifying Lens, which usually takes a few seconds — the confirmation page waits for it
+            notifying Lens, which usually takes a few seconds. The confirmation page waits for it
             rather than assuming it.
           </p>
         </Region>
       )}
+      {/* B57.8 — Overview and Ledger left the sidebar; Billing links them. */}
+      <PageLinks label="Where the money went" links={BILLING_LINKS} />
     </RegionScreen>
   )
 }

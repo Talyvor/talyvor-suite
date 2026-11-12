@@ -86,6 +86,9 @@ import {
   selectClass,
   useRunnableModels,
 } from "./parts";
+import { WorkspaceLabel } from "../../labels/workspace";
+import { MARKETPLACE } from "../../labels/capabilities";
+import { MarketplaceLinks } from "../../components/PageLinks";
 
 // Marketplace.tsx — B20.3: the marketplace. Find what other teams published (agents, prompts, skills,
 // evaluations and pipelines — Lens B20.1; B32.61: on Discover.tsx, by Lens's search, trending and collections),
@@ -134,9 +137,9 @@ export const ARTIFACT: Record<
 type Visibility = "public" | "unlisted" | "private";
 
 const VISIBILITY: readonly [Visibility, string][] = [
-  ["public", "Public — anyone can find it"],
-  ["unlisted", "Unlisted — only people with the link"],
-  ["private", "Private — only this workspace"],
+  ["public", "Public: anyone can find it"],
+  ["unlisted", "Unlisted: only people with the link"],
+  ["private", "Private: only this workspace"],
 ];
 
 export function artifactOf(
@@ -402,7 +405,7 @@ function Publish() {
           </div>
           {micros === null ? (
             <Note ok={false}>
-              A price is an amount of LXC, like 0.5 — or empty for free.
+              A price is an amount of LXC, like 0.5, or empty for free.
             </Note>
           ) : null}
           <div className="flex flex-wrap items-end gap-3 border-t border-rule pt-4">
@@ -776,7 +779,7 @@ export function PayoutsCard({
         <span className="font-figure text-body text-ink">
           {!p.paid_this_week && p.available_usd_micros >= p.minimum_usd_micros
             ? formatUSD(p.quote.net_usd_micros)
-            : "—"}
+            : "Not yet"}
         </span>
       </Row>
       <Row
@@ -850,7 +853,7 @@ export function PayoutsCard({
                   {h.paid_at
                     ? formatWhen(h.paid_at)
                     : h.last_error
-                      ? "Stripe refused — retrying"
+                      ? "Stripe refused, retrying"
                       : "Sending"}
                 </td>
                 <td className="py-2">
@@ -894,6 +897,7 @@ function Selling() {
         sectionClassName="pb-10 pt-4 wide:pb-12"
         className="flex max-w-2xl flex-col gap-3"
       >
+        <WorkspaceLabel capability={MARKETPLACE} className="self-start" />
         <p data-testid="selling-split" className="text-body text-muted">
           {take !== undefined && (
             <>
@@ -1302,7 +1306,7 @@ function Bill() {
     >
       <p className="text-body text-muted">
         Every paid listing your workspace or its agents used, billed each
-        month — never taken from your credits.{cards === "off" ? ` ${CARDS_OFF}` : ""} The models a
+        month, never taken from your credits.{cards === "off" ? ` ${CARDS_OFF}` : ""} The models a
         listing calls are on your usual bill, not here.
       </p>
       {invoices.isError ? (
@@ -1324,6 +1328,8 @@ function Bill() {
 export function MarketplaceArea() {
   return (
     <RegionScreen>
+      {/* B57.8 — the Marketplace's own pages left the sidebar; the Marketplace links them. */}
+      <MarketplaceLinks />
       <Routes>
         <Route index element={<Discover />} />
         <Route path="listings/:id" element={<ListingPage />} />

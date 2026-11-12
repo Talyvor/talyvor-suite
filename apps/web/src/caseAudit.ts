@@ -9,7 +9,7 @@ import { onCommit } from './auditScope'
  *     µ (U+00B5) to Greek capital Mu, and µLENS/µLXC sit inside these labels. It is applied
  *     at the call site, where MuNumeral can keep its µ in a `normal-case` span.
  *
- * "It is applied at the call site" is true and is the whole problem: 131 uppercase class lists in
+ * "It is applied at the call site" is true and is the whole problem: 121 uppercase class lists in
  * the two packages apply it, against exactly ONE `normal-case` in the product (CaseSafe.tsx:85).
  * The rule was stated in the token that deliberately does NOT carry the transform, so the one
  * file that could not enforce it is the only file that documents it.
@@ -41,7 +41,7 @@ import { onCommit } from './auditScope'
  * ── WHY IT IS NOT A SOURCE RULE ──────────────────────────────────────────────────────────────
  *
  * The `uppercase` and the µ are in different places and neither knows about the other.
- * Landing.tsx:68 is `<span className="font-figure text-eyebrow uppercase text-label">`, and line 69
+ * Landing.tsx:71 was (at `a0bd22f`) `<span className="font-figure text-eyebrow uppercase text-label">`, and line 72
  * hands its {unit} to CaseSafe — no µ near either. The µ arrives as a PROP from six call sites
  * (`unit="µLXC list"`, `"µLXC charged"`, `"µLXC saved"`, `"µLENS earned"`, `"µLXC you pay"`,
  * `"µLXC kept"`). No grep for "µ near uppercase" connects a prop to the class list that will
@@ -89,7 +89,7 @@ import { onCommit } from './auditScope'
  * also REFUSES them: either appearing in a class list in either package fails until somebody
  * classifies it here, so narrowing this map cannot silently under-report.
  *
- * `uppercase` (131 class lists apply it) and `normal-case` (1) are spelled out because the product
+ * `uppercase` (121 class lists apply it) and `normal-case` (1) are spelled out because the product
  * renders both — CLASS LISTS, not occurrences of the word; the census is in caseCallSites.test.ts,
  * which also records why this sentence and the one at the top of this file used to disagree.
  *
@@ -250,7 +250,7 @@ export function protectedCharactersIn(root: ParentNode, ch: string): number {
 //
 // ⚠ AND A LIMIT OF THAT MECHANISM, MEASURED HERE RATHER THAN DISCOVERED LATER: a MutationObserver
 // callback is a MICROTASK, so a state this product renders and REPLACES inside one synchronous
-// block is never sampled. Landing's worked-hit stepper is exactly that shape. Clicking its four
+// block is never sampled. Landing's worked-hit stepper (gone with pooling, B59.5) was exactly that shape. Clicking its four
 // beats synchronously, with the fix reverted, the audit named FOUR offenders — beats 2 and 3
 // mounted and unmounted between checkpoints and `µLXC charged` and `µLXC saved` were invisible.
 // Yielding once per step (`await new Promise(r => setTimeout(r, 0))`) makes it six. So a test that

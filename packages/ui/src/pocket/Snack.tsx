@@ -57,6 +57,11 @@ export function showSnack(snack: Omit<SnackProps, 'className'>) {
   useConfirmations.setState({ snack: { ...snack, id: ++next } })
 }
 
+/** B57.8 — the confirmation taken away early, when what comes next sits where it is drawn (a sheet below 840). */
+export function hideSnack() {
+  useConfirmations.setState({ snack: null })
+}
+
 /** A short message that goes by itself, for a control that only explains itself. */
 export function showToast(text: string) {
   useConfirmations.setState({ toast: { text, id: ++next } })

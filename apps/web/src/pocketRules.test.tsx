@@ -48,6 +48,9 @@ describe('tangerine is only the brand and "your move"', () => {
 
   it('a variant prefix does not hide it', () => {
     expect(tangerineOffenders(dom('<button class="hover:bg-tangerine">Pay</button>'))).toHaveLength(1)
+    // B57.8 — Pocket's focus ring is tangerine on keyboard focus by design; any other focus paint still counts.
+    expect(tangerineOffenders(dom('<a class="focus-visible:outline focus-visible:outline-tangerine">Ledger</a>'))).toEqual([])
+    expect(tangerineOffenders(dom('<a class="focus-visible:bg-tangerine">Ledger</a>'))).toHaveLength(1)
   })
 })
 

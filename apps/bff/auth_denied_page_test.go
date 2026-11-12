@@ -65,28 +65,30 @@ func TestDeniedPage_StyledHTMLWithIdentityEchoInOrder(t *testing.T) {
 	}
 }
 
-// (1b) B29.14 — the page carries the brand: none of the old stone colours, the Obsidian canvas,
-// Frost text and teal action instead, and the logo's small symbol inline as the very kit file the web
-// app serves (apps/web/public/brand/logo, B57.79), not a redrawing of it.
+// (1b) B57.49 — the page is Pocket's auth card: the cloud page, a white card, ink words and one ink action, dark
+// when the browser is (none of the Obsidian, Frost or teal of B29.14, and none of the old stone colours), and the
+// logo's small drawing inline as the very kit file the web app serves (apps/web/public/brand/logo, B57.79), not a
+// redrawing of it.
 func TestDeniedPage_CarriesTheBrand(t *testing.T) {
 	_, body := deniedFlow(t, "mallory@example.com", nil, nil)
 	lower := strings.ToLower(body)
-	for _, old := range []string{"#fafaf9", "#1c1917", "#131110", "#e7e5e4"} {
+	for _, old := range []string{"#fafaf9", "#1c1917", "#131110", "#e7e5e4", "#060a12", "#e6eef7", "#3ad6c0", "#0f7a6c", "space grotesk"} {
 		if strings.Contains(lower, old) {
-			t.Errorf("denied page still uses the old colour %s", old)
+			t.Errorf("denied page still uses the old brand's %s", old)
 		}
 	}
-	for _, c := range []string{"#060A12", "#E6EEF7", "#3AD6C0"} {
+	// pocket.css: cloud, page, ink, ink-2 and the control edge in light; page, cloud and ink in dark; Figtree.
+	for _, c := range []string{"#F3F4F6", "#FFFFFF", "#111216", "#4A5061", "#0F1013", "#181A1F", "#F2F3F5", "Figtree"} {
 		if !strings.Contains(body, c) {
-			t.Errorf("denied page lacks the brand colour %s", c)
+			t.Errorf("denied page lacks Pocket's %s", c)
 		}
 	}
-	for _, f := range []string{"talyvor-symbol-small-on-dark.svg", "talyvor-symbol-small-on-light.svg"} {
-		mark, err := os.ReadFile("../web/public/brand/logo/" + f)
+	for _, f := range []string{"talyvor-logo-small-on-dark.svg", "talyvor-logo-small-on-light.svg"} {
+		logo, err := os.ReadFile("../web/public/brand/logo/" + f)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(body, string(mark)) {
+		if !strings.Contains(body, string(logo)) {
 			t.Errorf("denied page does not carry %s inline, byte for byte", f)
 		}
 	}

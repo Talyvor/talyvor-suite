@@ -21,6 +21,13 @@ describe("Features' wallet-first oracle (B28.441)", () => {
     expect(featuresVerdict(seen, [book, book], [1_203, 1_204]).pass).toBe(true)
   })
 
+  it('reads each amount without the dollar figure the app now writes first (B17.385)', () => {
+    const usdFirst = '2 agents hold $1.25 (12.5 LXC) of this workspace’s $5.00 (50 LXC) and have spent $0.00 (0 LXC) (measured).'
+    expect(featuresVerdict({ ...seen, wallets: usdFirst }, [book, book], [1_204, 1_204]).pass).toBe(true)
+    expect(featuresVerdict({ ...seen, wallets: '2 agents hold 12.5 LXC ($1.25) of this workspace’s 50 LXC ($5.00)' }, [book, book], [1_204, 1_204]).pass).toBe(true)
+    expect(featuresVerdict({ ...seen, wallets: '2 agents hold $1.25 (10 LXC) of this workspace’s $5.00 (50 LXC)' }, [book, book], [1_204, 1_204]).pass).toBe(false)
+  })
+
   it('fails when Agent Wallets is not the first row', () => {
     const v = featuresVerdict({ ...seen, rows: ['Spending limit', 'Agent Wallets', 'Chat', 'Marketplace'] }, [book, book], [1_204, 1_204])
     expect(v).toEqual({ pass: false, detail: expect.stringContaining('opens on Spending limit, not Agent Wallets') })

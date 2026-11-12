@@ -149,13 +149,13 @@ export function SelectionAI({
             </>
           ) : (
             <>
-              Each buys a metered Lens call billed to this workspace under its own tag —{' '}
+              Each buys a metered Lens call billed to this workspace under its own tag (
               {ON_SELECTION.map(([action]) => (
                 <span key={action}>
                   <code>{TAG[action]}</code>,{' '}
                 </span>
               ))}
-              <code>{TAG.translate}</code> — attributed to this page, so it moves this page&rsquo;s own AI cost.
+              <code>{TAG.translate}</code>), attributed to this page, so it moves this page&rsquo;s own AI cost.
             </>
           )}
         </p>
@@ -168,13 +168,13 @@ export function SelectionAI({
       ) : null}
       {ask.isError ? (
         <p className="mt-2 px-1 text-caption text-ink" role="alert">
-          Docs couldn&rsquo;t answer that — nothing in the page changed.
+          Docs couldn&rsquo;t answer that. Nothing in the page changed.
         </p>
       ) : null}
 
       {result !== null ? (
         <div className="mt-2 max-h-60 overflow-y-auto rounded-control border border-rule bg-canvas px-3 py-2">
-          <p className="text-caption text-muted">A suggestion — the page does not change until you apply it.</p>
+          <p className="text-caption text-muted">A suggestion: the page does not change until you apply it.</p>
           <p className="mt-1 whitespace-pre-wrap text-body text-ink" data-testid="ai-suggestion">
             {result.text}
           </p>

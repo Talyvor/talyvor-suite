@@ -102,9 +102,10 @@ export function sessionSignOut(seed: number): Scenario {
       ctx.evidence.push({ note: `${unknown} signed in: ${nf.status} ${nf.type} ${nf.text.slice(0, 200)}` })
       if (nf.status !== 404 || !nf.type.includes('application/json')) failures.push(`${unknown} answered ${nf.status} ${nf.type}, not a JSON 404`)
 
-      // A second browser, signed in as the same person, signs out with the button in the top bar.
+      // A second browser, signed in as the same person, signs out on Settings, where the avatar leads (B57.8).
       const other: AppUser = await env.signInUser(app.user.index)
       try {
+        await other.page.getByRole('banner').getByRole('link', { name: 'Settings and sign out' }).click()
         await other.page.getByRole('button', { name: 'Sign out', exact: true }).click()
         await other.page.getByRole('button', { name: 'Sign out', exact: true }).waitFor({ state: 'detached', timeout: 15_000 }).catch(() => undefined)
         const me = parsed<{ authenticated?: boolean }>((await from(other.page, 'GET', '/auth/me')).text)

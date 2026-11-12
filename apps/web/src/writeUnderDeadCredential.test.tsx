@@ -76,7 +76,8 @@ const SURFACES = [
     path: '/keys',
     outcome: /Couldn’t mint the key/,
     drive: async () => {
-      const input = await screen.findByLabelText('New key name')
+      fireEvent.click(await screen.findByRole('button', { name: 'New key' }))
+      const input = await screen.findByLabelText('Key name')
       fireEvent.change(input, { target: { value: 'my key' } })
       fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     },
@@ -165,7 +166,8 @@ describe('a write refused by a dead credential states the outcome and leaves the
     // message format, four lines from a sibling mutation reading `.status` off the same type.
     mockAllApi(403)
     at('/keys')
-    const input = await screen.findByLabelText('New key name')
+    fireEvent.click(await screen.findByRole('button', { name: 'New key' }))
+    const input = await screen.findByLabelText('Key name')
     fireEvent.change(input, { target: { value: 'my key' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await waitFor(() =>
@@ -319,7 +321,8 @@ describe('a write refused MID-SESSION, with the reads already satisfied', () => 
     }
     mockReadsOkWritesRefused(401)
     at('/keys')
-    const input = await screen.findByLabelText('New key name')
+    fireEvent.click(await screen.findByRole('button', { name: 'New key' }))
+    const input = await screen.findByLabelText('Key name')
     fireEvent.change(input, { target: { value: 'my key' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await waitFor(() => expect(screen.getByText(/Couldn’t mint the key/)).toBeInTheDocument())

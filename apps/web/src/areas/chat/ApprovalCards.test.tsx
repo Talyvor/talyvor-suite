@@ -18,7 +18,7 @@ function mockBff() {
       payee: { kind: 'agent', id: 'agt_2', name: 'Writer' }, memo: 'October drafts',
     },
   ]
-  const decisions: Array<{ id: string; body: Record<string, unknown> }> = []
+  const decisions: Array<{ id: string; decision: string; body: Record<string, unknown> }> = []
   const pays: Array<{ url: string; body: Record<string, unknown> }> = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -47,10 +47,10 @@ function mockBff() {
     if (url === '/api/agents/passkeys') return json({ passkeys: [{ credential_id: b64u(bytes('cred1')), name: 'iPhone', created_at: '2026-10-06T04:00:00Z' }] })
     const challenge = /^\/api\/agents\/approvals\/([^/]+)\/challenge$/.exec(url)
     if (challenge) return json({ challenge: b64u(bytes(`challenge-${challenge[1]}`)), allow_credentials: [b64u(bytes('cred1'))] })
-    const decision = /^\/api\/agents\/approvals\/([^/]+)\/approve$/.exec(url)
+    const decision = /^\/api\/agents\/approvals\/([^/]+)\/(approve|deny)$/.exec(url)
     if (decision) {
-      decisions.push({ id: decision[1], body })
-      approvals[0].status = 'approved'
+      decisions.push({ id: decision[1], decision: decision[2], body })
+      approvals[0].status = decision[2] === 'approve' ? 'approved' : 'denied'
       return json(approvals[0])
     }
     if (url === '/api/agents/agt_1/pay' && method === 'POST') {
@@ -105,7 +105,7 @@ describe('Chat approval cards (B28.84)', () => {
 
     // Read the moment the card first appears: its amount already carries its currency (B17.139).
     const card = (await screen.findAllByTestId('chat-approval'))[0]
-    expect(within(card).getByTestId('chat-approval-asks')).toHaveTextContent(/^Researcher wants to pay Writer \$0\.20 \(2 LXC\) — October drafts$/)
+    expect(within(card).getByTestId('chat-approval-asks')).toHaveTextContent(/^Researcher wants to pay Writer \$0\.20 \(2 LXC\) · October drafts$/)
     fireEvent.click(await within(card).findByRole('button', { name: 'Approve with Face ID' }))
 
     const said = await within(card).findByRole('status')
@@ -113,7 +113,7 @@ describe('Chat approval cards (B28.84)', () => {
     expect(within(said).getByRole('link')).toHaveAttribute('href', '/agents?agent=agt_1&entry=ent_9')
     expect(new TextDecoder().decode(get.mock.calls[0][0].publicKey!.challenge as Uint8Array)).toBe('challenge-apr_1')
     expect(bff.decisions).toEqual([
-      { id: 'apr_1', body: { assertion: {
+      { id: 'apr_1', decision: 'approve', body: { assertion: {
         credential_id: b64u(bytes('cred1')),
         client_data_json: b64u(bytes('{"type":"webauthn.get","challenge":"challenge-apr_1"}')),
         authenticator_data: b64u(bytes('authdata')),
@@ -121,7 +121,41 @@ describe('Chat approval cards (B28.84)', () => {
       } } },
     ])
     expect(bff.pays).toEqual([{ url: '/api/agents/agt_1/pay', body: { to_agent_id: 'agt_2', amount_ulxc: 2 * M, memo: 'October drafts' } }])
-    expect(within(card).queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(within(card).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
+  })
+})
+
+// B55.19 — Decline asks why; the reason is signed over with the passkey like any decision, and the card says it holds for 24 hours.
+describe('Chat approval cards: Decline (B55.19)', () => {
+  it('declines with a reason, signed with the passkey, and says what declining does', async () => {
+    const bff = mockBff()
+    const get = vi.fn(async (opts: CredentialRequestOptions) => {
+      const challenge = new TextDecoder().decode(opts.publicKey!.challenge as Uint8Array)
+      return {
+        rawId: bytes('cred1').buffer,
+        response: { clientDataJSON: bytes(`{"challenge":"${challenge}"}`).buffer, authenticatorData: bytes('ad').buffer, signature: bytes('sig').buffer },
+      }
+    })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/chat')
+    render(<App />)
+    const card = (await screen.findAllByTestId('chat-approval'))[0]
+    fireEvent.click(await within(card).findByRole('button', { name: 'Decline' }))
+    fireEvent.change(within(card).getByLabelText('Why (optional, the agent sees it)'), { target: { value: 'not this month' } })
+    fireEvent.click(within(card).getByRole('button', { name: 'Decline' }))
+    expect(await within(card).findByRole('status')).toHaveTextContent(
+      /^Declined\. Researcher’s payment is refused, and the same request is refused without asking you for 24 hours\.$/,
+    )
+    expect(bff.decisions).toEqual([
+      { id: 'apr_1', decision: 'deny', body: { reason: 'not this month', assertion: {
+        credential_id: b64u(bytes('cred1')),
+        client_data_json: b64u(bytes('{"challenge":"challenge-apr_1"}')),
+        authenticator_data: b64u(bytes('ad')),
+        signature: b64u(bytes('sig')),
+      } } },
+    ])
+    expect(bff.pays).toEqual([])
+    expect(document.body.textContent).not.toMatch(/Deny|Denied/)
   })
 })
 
@@ -134,7 +168,7 @@ describe('Chat approval cards when only the phone holds a key (B55.2)', () => {
     const card = (await screen.findAllByTestId('chat-approval'))[0]
     expect(await within(card).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
     expect(within(card).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
-    expect(within(card).queryByRole('button', { name: /Approve|Deny/ })).toBeNull()
+    expect(within(card).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
     expect(posts).toEqual([])
   })
 })

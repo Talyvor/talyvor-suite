@@ -3,29 +3,28 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { App, queryClient } from './App'
 import { PENDING_POLL_MS } from './areas/lens/WalletScreens'
-import { SIDEBAR_FOLD_KEY } from './sidebarFold'
 
-// B28.7 — the navigation is wallet-first. Drives the real <App /> as an operator, so every row the
-// sidebar can offer is on screen once every group is open.
+// B28.7 — the navigation is wallet-first. B57.8 — and it is Pocket's rows, with no folding groups: the wallet's own
+// screens, a rule, then the rest. Drives the real <App /> as an operator, which adds no row.
 
 const ORDER = [
   'Home',
   'Approvals',
-  'Agent Wallets',
+  'Agents',
   'Statements',
+  'Pay',
+  'Invoices',
+  'Spending',
   'Chat',
+  'Rooms',
   'Marketplace',
-  'Work',
-  'Track',
-  'Docs',
+  'Scan',
+  'Track and Docs',
   'Developers',
-  'Connect an agent',
-  'API keys',
-  'Spend & routing',
-  'Gateway features',
   'Billing',
   'Settings',
-  'Operator',
+  'Privacy',
+  'Terms',
 ]
 
 const APPROVALS = [
@@ -55,37 +54,47 @@ function mockBff() {
 async function sidebarAt(address: string): Promise<HTMLElement> {
   window.history.pushState({}, '', address)
   render(<App />)
-  const nav = await screen.findByRole('navigation', { name: /sections/i })
-  // The Operator group appears once /auth/me has said so.
-  await within(nav).findByRole('button', { name: 'Operator' })
-  fireEvent.click(within(nav).getByRole('button', { name: 'Open all' }))
-  return nav
+  return screen.findByRole('navigation', { name: /sections/i })
 }
 
 afterEach(() => {
   cleanup()
   queryClient.clear()
   vi.restoreAllMocks()
-  window.localStorage.removeItem(SIDEBAR_FOLD_KEY)
 })
 
 describe('the navigation is wallet-first (B28.7)', () => {
-  it('the sidebar shows Home, Approvals, Agent Wallets, Statements, Chat, Marketplace, Work, Developers, Billing, Settings, Operator — in that order', async () => {
+  it('the sidebar is the logo, the workspace, then Home, Approvals, Agents, Statements, Pay, Invoices, Spending, Chat, Rooms, Marketplace; a rule; Scan, Track and Docs, Developers, Billing, Settings; Privacy and Terms at its foot', async () => {
     mockBff()
     const nav = await sidebarAt('/')
     await within(nav).findByRole('link', { name: /^Approvals 2/ })
-    const named = Array.from(nav.querySelectorAll('a[href], button[aria-expanded]')).map((el) =>
-      (el.textContent ?? '').replace(/\d+ waiting$/, '').trim(),
+    // The logo leads, to Home; then every row is a link, and nothing in the sidebar folds.
+    const links = Array.from(nav.querySelectorAll<HTMLAnchorElement>('a[href]'))
+    expect(links[0].getAttribute('aria-label')).toBe('Talyvor, Home')
+    expect(links[0].getAttribute('href')).toBe('/')
+    expect(links.slice(1).map((el) => (el.textContent ?? '').replace(/\d+ waiting$/, '').trim())).toEqual(ORDER)
+    expect(nav.querySelectorAll('button[aria-expanded]')).toHaveLength(0)
+    // The rule sits between Marketplace and Scan.
+    const rule = nav.querySelector('[role="separator"]')!
+    expect(rule.previousElementSibling?.textContent).toBe('Marketplace')
+    expect(rule.nextElementSibling?.textContent).toBe('Scan')
+  })
+
+  it('the workspace’s name sits under the logo, never its id', async () => {
+    mockBff()
+    const lens = vi.mocked(globalThis.fetch).getMockImplementation()!
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) =>
+      String(input).split('?')[0] === '/api/workspace/name' ? Response.json({ id: 'ws_1', name: 'Nick’s team' }) : lens(input, init),
     )
-    // A group and its one same-named link (Settings, then Settings) are one entry in the order.
-    expect(named.filter((l, i) => ORDER.includes(l) && l !== named[i - 1])).toEqual(ORDER)
+    const nav = await sidebarAt('/')
+    expect((await within(nav).findByTestId('sidebar-workspace-name')).textContent).toBe('Nick’s team')
   })
 
   it('every link in the sidebar resolves to a page', async () => {
     mockBff()
     const nav = await sidebarAt('/')
     const hrefs = Array.from(nav.querySelectorAll<HTMLAnchorElement>('a[href]')).map((a) => a.getAttribute('href') ?? '')
-    expect(hrefs.length).toBeGreaterThanOrEqual(25)
+    expect(hrefs.length).toBe(ORDER.length + 1)
     for (const href of hrefs) {
       cleanup()
       queryClient.clear()
@@ -176,7 +185,7 @@ describe('the navigation is wallet-first (B28.7)', () => {
     fireEvent.click(link)
     expect(window.location.pathname).toBe('/approvals')
     const main = within(screen.getByRole('main'))
-    await waitFor(() => expect(main.getAllByRole('button', { name: 'Deny' })).toHaveLength(2))
+    await waitFor(() => expect(main.getAllByRole('button', { name: 'Decline' })).toHaveLength(2))
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Approvals')
   })
 })

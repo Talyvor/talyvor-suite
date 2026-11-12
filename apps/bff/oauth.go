@@ -898,7 +898,7 @@ var connectPageTmpl = template.Must(template.New("connect").Parse(`<!doctype htm
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#060A12">
-<title>{{if .Problem}}Could not connect{{else}}Connect {{.Client}}{{end}} — Talyvor</title>
+<title>{{if .Problem}}Could not connect{{else}}Connect {{.Client}}{{end}} | Talyvor</title>
 <style>
   :root { color-scheme: dark light;
           --tv-canvas: #060A12; --tv-surface: #081220; --tv-line: rgba(126,147,171,.18);

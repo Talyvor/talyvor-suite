@@ -5,16 +5,16 @@ import { Button, Card, CardHeader, Input, NavIcon, type NavIconName, Pill, Row, 
 import { Money } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
-import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, PREPARED_KEY, PauseEveryAgent, preparedWords, rulesKey, useKeys } from './AgentBank'
-import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText } from './agentBankApi'
+import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, PREPARED_KEY, PauseEveryAgent, PreparedRow, rulesKey, useKeys } from './AgentBank'
+import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, refusalText, useAccount } from './agentBankApi'
 import { RunsOut } from './RunsOut'
-import { formatWhen } from './format'
 import { Lxc } from './money'
 import { resumeAgent } from './passkeys'
 import { AgentFace } from './AgentFace'
 import { SafeAmount, SafeBreakdown } from './SafeToSpend'
 import { FirstAgent, NameWorkspace } from './Onboarding'
 import { SharingLine } from './Sharing'
+import { IfArea, useWorkspaceAreas } from '../../lib/workspaceAreas'
 
 // Home.tsx — B28.6: the first screen after sign-in is the wallet home. It answers, in order:
 //   1. What does the workspace hold, and how much of it have I not yet given to an agent?
@@ -57,9 +57,11 @@ export const PRODUCT_CARDS: readonly { title: string; to: string; icon: NavIconN
 
 /** The board's product cards: raised, a brand line icon, the product's name and one line, and an arrow. */
 function ProductCards() {
+  // B59.2 — a card for an area this workspace does not have is not drawn.
+  const areas = useWorkspaceAreas()
   return (
     <ul className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Products">
-      {PRODUCT_CARDS.map((p) => (
+      {PRODUCT_CARDS.filter((p) => areas.shows(p.to)).map((p) => (
         <li key={p.to} className="flex">
           <Link
             to={p.to}
@@ -89,7 +91,8 @@ function Muted({ children }: { children: React.ReactNode }) {
 const APPROVALS_SHOWN = 3
 
 /** B45.11 — the approvals waiting for a person, first; each opens its card on Approvals. B55.10: the payments Chat or an
- * assistant prepared come before them, each opening its own card at /approve/<id>, and the count is both. */
+ * assistant prepared come before them, each opening its own card at /approve/<id>, and the count is both. B57.116: each is
+ * drawn in Pocket's row with Review, as w-home draws it. */
 function ApprovalsFirst({ nameOf }: { nameOf: (id: string) => string }) {
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
@@ -120,25 +123,11 @@ function ApprovalsFirst({ nameOf }: { nameOf: (id: string) => string }) {
         <Muted>Nothing is waiting for you.</Muted>
       ) : (
         <ul data-testid="home-approvals">
-          {preparedShown.map((r) => {
-            const w = preparedWords(r, nameOf)
-            return (
-              <li key={r.id} className="border-b border-rule last:border-b-0">
-                <Link
-                  to={`/approve/${encodeURIComponent(r.id)}`}
-                  className={cn('flex min-h-row items-center justify-between gap-gutter px-gutter py-2', focusRing)}
-                >
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-body text-ink">{w.line}</span>
-                    <span className="truncate text-caption text-muted">
-                      {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
-                    </span>
-                  </span>
-                  <span className="shrink-0 font-figure text-body text-ink">{w.total}</span>
-                </Link>
-              </li>
-            )
-          })}
+          {preparedShown.map((r) => (
+            <li key={r.id} className="border-b border-rule px-gutter last:border-b-0">
+              <PreparedRow r={r} nameOf={nameOf} />
+            </li>
+          ))}
           {pending.slice(0, APPROVALS_SHOWN - preparedShown.length).map((a) => (
             <li key={a.id} className="border-b border-rule last:border-b-0">
               <Link
@@ -310,15 +299,16 @@ function AgentLine({
   )
 }
 
-/** B45.11 — one row per agent. */
+/** B45.11 — one row per agent. B59.10: under "Your agents", or a Business's "Your team’s agents". */
 function AgentLines({ agents }: { agents: Agent[] }) {
+  const { shows } = useAccount()
   const safe = useQuery({ queryKey: SAFE_TO_SPEND_KEY, queryFn: agentBankApi.safeToSpend })
   // The same query as the approvals card above, so the badge costs no request of its own.
   const approvals = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
   const waiting = new Set((approvals.data?.approvals ?? []).filter((p) => p.status === 'pending').map((p) => p.agent_id))
   return (
     <Card>
-      <CardHeader>Your agents</CardHeader>
+      <CardHeader>{shows?.agents ?? 'Your agents'}</CardHeader>
       {agents.map((a) => (
         <AgentLine key={a.id} agent={a} safe={safe} waiting={waiting.has(a.id)} />
       ))}
@@ -499,7 +489,9 @@ function FirstWallet({ book, onStarted, onFinished }: { book: AgentBook; onStart
         payment moves. This workspace holds {lxc(book.workspace_balance_ulxc)}; your first agent is one click away.
       </p>
       <FirstAgent book={book} onStarted={onStarted} onFinished={onFinished} />
-      <SharingLine />
+      <IfArea area="gateway">
+        <SharingLine />
+      </IfArea>
       <p className="text-caption text-muted">
         Already pointing tools at Lens with a workspace key?{' '}
         <Link to="/setup" className={inlineLink}>
@@ -552,7 +544,9 @@ export function Home() {
             <ApprovalsFirst nameOf={nameOf} />
             <Total book={book.data} />
             <AgentLines agents={agents} />
-            <AskTaly />
+            <IfArea area="chat">
+              <AskTaly />
+            </IfArea>
           </>
         )}
       </Region>

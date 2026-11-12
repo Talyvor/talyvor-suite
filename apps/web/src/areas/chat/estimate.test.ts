@@ -35,9 +35,9 @@ describe('the price range before sending (B28.99)', () => {
 
   it('rounds each end away from the middle, so the range shown is never narrower than the one estimated', () => {
     // 0.0004999 LXC shown as 0.00049, never 0.0005; 1.02835 LXC as 1.03, never 1.03 rounded down to 1.02.
-    expect(formatCostRange(0.00004999, 0.102835, 0.1)).toBe('≈ 0.00049–1.03 LXC')
+    expect(formatCostRange(0.00004999, 0.102835, 0.1)).toBe('≈ 0.00049 to 1.03 LXC')
     // A value already at two significant digits is kept, not pushed a step out by float error (0.0012 / 0.0001 = 11.999…).
-    expect(formatCostRange(0.00012, 0.012, 0.1)).toBe('≈ 0.0012–0.12 LXC')
-    expect(formatCostRange(0.00004999, 0.102835, undefined)).toBe('≈ $0.000049–0.11')
+    expect(formatCostRange(0.00012, 0.012, 0.1)).toBe('≈ 0.0012 to 0.12 LXC')
+    expect(formatCostRange(0.00004999, 0.102835, undefined)).toBe('≈ $0.000049 to 0.11')
   })
 })

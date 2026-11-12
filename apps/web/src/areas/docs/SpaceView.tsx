@@ -172,7 +172,7 @@ export function SpaceView() {
         {empty ? (
           <>
             <p className="mt-8 max-w-2xl text-body text-muted">
-              A page is anything worth writing down once and finding again — a runbook, a decision,
+              A page is anything worth writing down once and finding again: a runbook, a decision,
               the thing you explain to every new person.
             </p>
             <Button className="mt-8" onClick={() => titleRef.current?.focus()}>
@@ -195,7 +195,7 @@ export function SpaceView() {
           </p>
         ) : rows.length === 0 ? (
           <p className="max-w-2xl text-body text-muted">
-            No pages yet. The first title goes in “Add a page” — that is a region label, which is the
+            No pages yet. The first title goes in “Add a page”. That is a region label, which is the
             section&rsquo;s accessible name, so it is a place a rotor can actually go. It lands in
             your own workspace.
           </p>
@@ -251,7 +251,7 @@ export function SpaceView() {
             is the wrong place to answer it quietly. Recorded, not changed. */}
         {failed ? (
           <p className="mt-4 text-body text-muted">
-            Couldn’t create that page — nothing was saved. Try again.
+            Couldn’t create that page. Nothing was saved. Try again.
           </p>
         ) : null}
       </Region>

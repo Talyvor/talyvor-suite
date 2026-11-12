@@ -217,24 +217,29 @@ export class AgentBankScreen {
   async issueKey(agent: Agent): Promise<string> {
     await this.fresh(agent)
     await card(this.page, 'Key').getByRole('button', { name: 'Issue a key', exact: true }).click()
-    const shown = card(this.page, `${agent.name}’s key — shown once`)
+    const shown = card(this.page, `${agent.name}’s key (shown once)`)
     await shown.waitFor({ timeout: ACTION_TIMEOUT_MS })
     const key = (await shown.locator('.select-all').innerText()).trim()
-    await shown.getByRole('button', { name: 'Done — I stored it' }).click()
+    await shown.getByRole('button', { name: 'Done, I stored it' }).click()
     return key
   }
 
   async pauseAll(reason: string): Promise<string | undefined> {
     await this.fresh()
     await this.page.getByLabel('Why every agent is paused').fill(reason)
-    await this.page.getByRole('button', { name: 'Pause every agent' }).click()
+    // B57.8 — the page's own switch; the top bar and the kill banner carry ones with the same names.
+    await this.fleet().getByRole('button', { name: 'Pause every agent' }).click()
     return outcome(this.page.getByTestId('agents-all-paused'), this.page.locator('body'))
   }
 
   async resumeAll(): Promise<string | undefined> {
     await this.fresh()
-    await this.page.getByRole('button', { name: 'Start every agent again' }).click()
-    return outcome(this.page.getByRole('button', { name: 'Pause every agent' }), this.page.locator('body'))
+    await this.fleet().getByRole('button', { name: 'Start every agent again' }).click()
+    return outcome(this.fleet().getByRole('button', { name: 'Pause every agent' }), this.page.locator('body'))
+  }
+
+  private fleet() {
+    return this.page.getByTestId('pause-every-agent')
   }
 
   /** Pays `to` from `from` on Pay another agent; answers the line the card then shows. */
@@ -267,7 +272,7 @@ export class AgentBankScreen {
     }
     const row = (await label.innerText()).trim()
     await waiting.locator('div').filter({ hasText: asks }).getByRole('button', { name: 'Approve', exact: true }).last().click()
-    const said = this.page.getByRole('status').filter({ hasText: /^(Approved|Denied)/ })
+    const said = this.page.getByRole('status').filter({ hasText: /^(Approved|Declined)/ })
     try {
       await said.waitFor({ timeout: ACTION_TIMEOUT_MS })
     } catch {
@@ -279,7 +284,7 @@ export class AgentBankScreen {
 
   /**
    * B26.28 — `agent`'s row waiting for a person, on a 390px phone: saved as a screenshot at `file`, and
-   * what is wrong with it — undefined when Approve and Deny each sit full-width under the sentence.
+   * what is wrong with it — undefined when Approve and Decline each sit full-width under the sentence.
    */
   async phoneRow(agent: Agent, payee: Agent, file: string): Promise<string | undefined> {
     const was = this.page.viewportSize()
@@ -295,14 +300,14 @@ export class AgentBankScreen {
         row.boundingBox(),
         words.boundingBox(),
         row.getByRole('button', { name: /^Approve/ }).boundingBox(),
-        row.getByRole('button', { name: 'Deny', exact: true }).boundingBox(),
+        row.getByRole('button', { name: 'Decline', exact: true }).boundingBox(),
       ])
       if (!r || !w || !approve || !deny) return 'the row, its sentence or a button is not on the screen'
       const box = (b: { x: number; y: number; width: number }) => `${Math.round(b.width)}px wide at y=${Math.round(b.y)}`
-      const shown = `row ${Math.round(r.width)}px; sentence ${box(w)}, ${Math.round(w.height)}px tall; Approve ${box(approve)}; Deny ${box(deny)}`
+      const shown = `row ${Math.round(r.width)}px; sentence ${box(w)}, ${Math.round(w.height)}px tall; Approve ${box(approve)}; Decline ${box(deny)}`
       const full = 0.8 * r.width
       if (w.width < full) return `the sentence is squeezed beside the buttons: ${shown}`
-      for (const [name, b] of [['Approve', approve], ['Deny', deny]] as const) {
+      for (const [name, b] of [['Approve', approve], ['Decline', deny]] as const) {
         if (b.y < w.y + w.height - 1) return `${name} is not under the sentence: ${shown}`
         if (b.width < full) return `${name} is not full-width: ${shown}`
       }
@@ -661,14 +666,17 @@ export class AgentBankScreen {
     const older = statement.getByRole('button', { name: 'Show older lines', exact: true })
     if (!(await older.isVisible())) return `the Statement shows ${first.length} line(s) and no Show older lines`
     await older.click()
-    const settle = async (want: (n: number) => boolean) => {
+    const settle = async (want: (n: number) => boolean | Promise<boolean>) => {
       const end = Date.now() + ACTION_TIMEOUT_MS
-      while (!want(await rows.count()) && Date.now() < end) await this.page.waitForTimeout(250)
+      while (!(await want(await rows.count())) && Date.now() < end) await this.page.waitForTimeout(250)
     }
     await settle((n) => n > first.length)
     const all = await read()
     await statement.getByRole('combobox', { name: `Kind of line in ${agent.name}’s statement` }).selectOption({ label: kind })
-    await settle((n) => n < all.length)
+    // B17.420 — a new kind is read afresh: until Lens answers the card says Reading… and draws no rows, which is fewer
+    // than before but is not the filtered statement.
+    const reading = statement.getByText('Reading…', { exact: true })
+    await settle(async (n) => n < all.length && !(await reading.isVisible()))
     const filtered = await read()
     return { first, all, filtered }
   }
@@ -1673,7 +1681,7 @@ export function agentApproval(seed: number): Scenario {
       }
       const shot = join(ctx.env.outDir, `agent-approval-390px-user${ctx.app.user.index}.png`)
       const phone = await bank.phoneRow(payer, payee, shot)
-      ctx.evidence.push({ note: `on a 390px phone (${shot}): ${phone ?? 'Approve and Deny each sit full-width under the sentence'}` })
+      ctx.evidence.push({ note: `on a 390px phone (${shot}): ${phone ?? 'Approve and Decline each sit full-width under the sentence'}` })
       if (phone !== undefined) return fail(`on a 390px phone, ${phone}`)
       const { row, said: approved } = await bank.approve(payer, payee)
       ctx.evidence.push({ note: `Waiting for a person: ${row}` }, { note: `Approve: ${approved}` })
@@ -2052,7 +2060,8 @@ async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: st
 
 /** B28.271 — what Agent Wallets may not show a workspace with no agents: none of these has anything to act on yet. */
 const EMPTY_HIDDEN = [
-  { what: 'the pause-all switch', find: (p: Page) => p.getByRole('button', { name: 'Pause every agent' }) },
+  // B57.8 — the page's own; the top bar's Pause every agent is on every page.
+  { what: 'the pause-all switch', find: (p: Page) => p.getByTestId('pause-every-agent') },
   { what: 'the month-end forecast', find: (p: Page) => p.getByTestId('agents-forecast') },
   { what: 'the Approvals region', find: (p: Page) => p.getByRole('region', { name: 'Approvals' }) },
   { what: 'the Spending region', find: (p: Page) => p.getByRole('region', { name: 'Spending' }) },
@@ -3849,36 +3858,33 @@ async function giveBack(ctx: ScenarioCtx, name: string): Promise<void> {
 }
 
 /**
- * B28.7 — the navigation is wallet-first. With every group open, the sidebar reads top to bottom: Home,
- * Approvals, Agent Wallets, Statements, Chat, then Marketplace, Work (Track, Docs), Developers (Connect an
- * agent, API keys, Spend & routing, Gateway features), Billing and Settings. The Approvals badge is held to
- * Lens's own pending count, and every link the sidebar offers opens a page rather than the catch-all.
+ * B28.7 — the navigation is wallet-first. B57.8 — and it is Pocket's rows, with no folding groups: Home, Approvals,
+ * Agents, Statements, Pay, Invoices, Spending, Chat, Rooms, Marketplace; a rule; Scan, Track and Docs, Developers,
+ * Billing, Settings; Privacy and Terms at its foot. The Approvals badge is held to Lens's own pending count, and every
+ * link the sidebar offers opens a page rather than the catch-all.
  */
 export const WALLET_FIRST_NAV = [
-  'Home', 'Approvals', 'Agent Wallets', 'Statements', 'Chat', 'Marketplace', 'Work', 'Track', 'Docs',
-  'Developers', 'Connect an agent', 'API keys', 'Spend & routing', 'Gateway features', 'Billing', 'Settings',
+  'Home', 'Approvals', 'Agents', 'Statements', 'Pay', 'Invoices', 'Spending', 'Chat', 'Rooms', 'Marketplace',
+  'Scan', 'Track and Docs', 'Developers', 'Billing', 'Settings', 'Privacy', 'Terms',
 ] as const
 
 export function walletFirstNav(): Scenario {
   return {
     id: 'wallet-first-nav',
     owner: 'talyvor-suite',
-    items: ['B28.7'],
+    items: ['B28.7', 'B57.8'],
     title: 'the sidebar leads with the wallet, its Approvals badge is Lens’s pending count, and every link opens a page',
     run: async (ctx) => {
       const page = await ctx.app.tab('/')
       try {
         const nav = page.getByRole('navigation', { name: 'Sections' })
         await nav.getByRole('link', { name: 'Statements' }).waitFor({ timeout: ACTION_TIMEOUT_MS })
-        const fold = nav.getByRole('button', { name: 'Fold all' })
-        if ((await fold.count()) > 0) await fold.click()
-        await nav.getByRole('button', { name: 'Open all' }).click()
+        // The logo leads, to Home, and is named rather than a row; every row after it is a link.
         const rows = await nav
-          .locator('a[href], button[aria-expanded]')
+          .locator('a[href]:not([aria-label])')
           .evaluateAll((els) => els.map((e) => ({ text: (e.textContent ?? '').trim(), href: e.getAttribute('href') })))
         const named = rows.map((r) => r.text.replace(/\d+ waiting$/, '').trim())
-        // A group and its one same-named link (Settings, then Settings) read as one entry.
-        const order = named.filter((l, i) => (WALLET_FIRST_NAV as readonly string[]).includes(l) && l !== named[i - 1])
+        const order = named
         const pending = (await ctx.env.lens.agentApprovals(ctx.app.user)).filter((x) => x.status === 'pending').length
         // B34.1 — the badge is drawn once the page has read the approvals; read before that, it is none.
         const badge = await badgeReaches(page, pending, ACTION_TIMEOUT_MS)
@@ -3916,7 +3922,7 @@ export async function approveRow(page: Page, memo: string): Promise<string> {
   const row = page.locator('[data-approval]').filter({ hasText: memo }).first()
   await row.waitFor({ timeout: ACTION_TIMEOUT_MS })
   await row.getByRole('button', { name: 'Approve', exact: true }).click()
-  const said = page.getByRole('status').filter({ hasText: /^(Approved|Denied)/ }).or(page.getByRole('alert')).first()
+  const said = page.getByRole('status').filter({ hasText: /^(Approved|Declined)/ }).or(page.getByRole('alert')).first()
   await said.waitFor({ timeout: ACTION_TIMEOUT_MS })
   return (await said.innerText()).trim()
 }

@@ -2,8 +2,10 @@
 // with a fresh one, the catalog's price, or the ledger read back. A scenario returns a verdict; a thrown
 // CapReached makes it SKIP, anything else thrown makes it ERROR (run.ts).
 
+import { readFileSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { deflateSync } from 'node:zlib'
 import type { Locator, Page, Request, Response } from 'playwright'
 import { type AppUser, type Attachment, type ChargeBook, NetworkDropped, type Turn, chargeULXC } from './app.ts'
@@ -109,6 +111,7 @@ import { chatFirstMessage } from './chatFirstMessage.ts'
 import { chatPaymentCard } from './chatPaymentCard.ts'
 import { agentWallet } from './agentWallet.ts'
 import { oneSearch } from './oneSearch.ts'
+import { accountStatements } from './accountStatements.ts'
 import { alertChannels } from './alertChannels.ts'
 import { limitAlerts } from './limitAlerts.ts'
 import { subscriptionsView } from './subscriptionsView.ts'
@@ -1348,10 +1351,10 @@ export function socialPreview(): Scenario {
             `og:description="${meta('property', 'og:description')}" og:image="${image}" -> ${img?.status() ?? 'not fetched'} ${imgType}`,
         })
         const missing = [
-          title === 'Talyvor — the financial ecosystem for the AI agent economy' ? '' : '<title>',
+          title === 'Talyvor | the financial ecosystem for the AI agent economy' ? '' : '<title>',
           tab === title ? '' : 'the tab title after the app ran',
           meta('name', 'description') === '' ? 'meta description' : '',
-          meta('property', 'og:title') === 'Talyvor — the financial ecosystem for the AI agent economy' ? '' : 'og:title',
+          meta('property', 'og:title') === 'Talyvor | the financial ecosystem for the AI agent economy' ? '' : 'og:title',
           meta('property', 'og:description') === '' ? 'og:description' : '',
           img?.status() === 200 && imgType.startsWith('image/') ? '' : 'og:image that loads',
           meta('name', 'twitter:card') === 'summary_large_image' ? '' : 'twitter:card',
@@ -1366,8 +1369,20 @@ export function socialPreview(): Scenario {
   }
 }
 
-/** B29.1 — the brand package: the tab icon, the Home Screen icon and the install manifest, each
- *  fetched from the app under test at the path the page names, and each answered as itself. */
+/** B58.16 — the logo kit Nick chose on 4 Nov 2026, as this repo keeps it: each icon path and the kit file it must be. */
+const LOGO_KIT = resolve(dirname(fileURLToPath(import.meta.url)), '../../brand/logo')
+const KIT_ICONS: Record<string, string> = {
+  '/favicon.ico': 'png/favicon/favicon.ico',
+  '/favicon.svg': 'png/favicon/favicon.svg',
+  '/apple-touch-icon.png': 'png/app-icon/apple-touch-icon.png',
+  '/icon-192.png': 'png/app-icon/icon-192.png',
+  '/icon-512.png': 'png/app-icon/icon-512.png',
+  '/icon-maskable-512.png': 'png/app-icon/icon-maskable-512.png',
+}
+
+/** B29.1, B58.16 — the brand package: the tab icon, the Home Screen icon and the install manifest, each
+ *  fetched from the app under test at the path the page names, each answered as itself and byte for byte
+ *  the chosen kit's file, and brand-v4's old teal icons no longer served. */
 export function brandIcons(): Scenario {
   return {
     id: 'brand-icons',
@@ -1384,7 +1399,9 @@ export function brandIcons(): Scenario {
           const res = await at(path)
           const ct = res.headers()['content-type'] ?? ''
           seen.push(`${path} -> ${res.status()} ${ct}${linked ? '' : ' (not linked from the page)'}`)
+          const kit = KIT_ICONS[path]
           if (!linked || res.status() !== 200 || !ct.startsWith(type)) missing.push(path)
+          else if (kit !== undefined && !(await res.body()).equals(readFileSync(join(LOGO_KIT, kit)))) missing.push(`${path} as the kit's ${kit}`)
           return res
         }
         // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
@@ -1404,9 +1421,12 @@ export function brandIcons(): Scenario {
         // B57.59, B57.79: the logo kit's ink for an installed app, Pocket's dark page for the browser's bar.
         if (manifest.theme_color !== '#111216' || manifest.background_color !== '#111216') missing.push('manifest colours #111216')
         if (!/<meta name="theme-color" content="#0F1013"/.test(html)) missing.push('theme-color #0F1013')
+        // B58.16: the app falls back to its page for an unknown path, so an old icon is gone once it is not an image.
+        const old = await at('/brand/svg/icon-route-teal.svg')
+        if ((old.headers()['content-type'] ?? '').startsWith('image/')) missing.push('/brand/svg/icon-route-teal.svg gone')
         ctx.evidence.push({ note: `${seen.join('; ')}; manifest theme ${manifest.theme_color} background ${manifest.background_color}` })
         return missing.length === 0
-          ? { pass: true, detail: 'favicon (.ico and .svg), apple-touch-icon and three manifest icons all load; the kit\'s colours throughout' }
+          ? { pass: true, detail: 'favicon (.ico and .svg), apple-touch-icon and three manifest icons all load as the kit\'s own files; the kit\'s colours throughout' }
           : { pass: false, detail: `brand package is missing: ${missing.join(', ')}` }
       } finally {
         await page.close()
@@ -1432,11 +1452,14 @@ export function brandLogo(): Scenario {
         try {
           await page.locator('img[data-brand="logo"]').first().waitFor({ state: 'attached' })
           for (const theme of ['dark', 'light'] as const) {
-            const got = await page.evaluate((t) => {
+            const got = await page.evaluate(async (t) => {
               document.documentElement.dataset.theme = t
-              const shown = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
+              const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
                 .filter((i) => getComputedStyle(i).display !== 'none')
-                .map((i) => ({ src: new URL(i.src).pathname, loaded: i.complete && i.naturalWidth > 0 }))
+              // B58.16: judged the moment the <img> was attached, the file was still on its way and every page read
+              // "did not load". decode() settles once the file is in or has failed; only then is it judged.
+              await Promise.all(imgs.map((i) => i.decode().catch(() => undefined)))
+              const shown = imgs.map((i) => ({ src: new URL(i.src).pathname, loaded: i.complete && i.naturalWidth > 0 }))
               const old = Array.from(document.querySelectorAll<HTMLImageElement>('img'))
                 .map((i) => new URL(i.src, location.href).pathname)
                 .filter((s) => /\/brand\/svg\/(talyvor-|favicon)/.test(s))
@@ -1488,13 +1511,15 @@ export function walletHero(): Scenario {
           /where they do it safely: wallets and cards/i.test(text) ? '' : 'the wallet lead in the hero',
           ...[/a budget of its own/i, /spending rules/i, /approvals/i, /a live statement/i]
             .map((w) => (w.test(text) ? '' : `the wallet section's ${w}`)),
-          ...[/rules before the money moves/i, /console for your agents/i, /where agents spend/i, /repeated questions cost less/i]
-            .map((h) => (sections.some((s) => h.test(s)) ? '' : `a section heading ${h}`)),
+          /rules before the money moves/i.test(sections.join('\n')) ? '' : 'the wallet section heading',
+          // B59.5: Chat, the Marketplace and pooling are hidden areas, so the front door has no section for them.
+          ...[/console for your agents/i, /where agents spend/i, /repeated questions cost less/i]
+            .map((h) => (sections.some((s) => h.test(s)) ? `a hidden area's section ${h}` : '')),
           /toward zero|ninety\s+days|near-zero/i.test(text) ? 'the price-curve claim is still there' : '',
           /Talyvor Ltd · the financial ecosystem for the AI agent economy/i.test(footer) ? '' : 'the footer line',
         ].filter((m) => m !== '')
         return missing.length === 0
-          ? { pass: true, detail: 'leads with wallets; wallets, chat, marketplace and pooling sections present; no price curve' }
+          ? { pass: true, detail: 'leads with wallets; no chat, marketplace or pooling section; no price curve' }
           : { pass: false, detail: `/marketing: ${missing.join('; ')}` }
       } finally {
         await page.close()
@@ -1572,19 +1597,19 @@ export function marketingBoard(): Scenario {
   }
 }
 
-/** B29.6 — /signin and /signup in the brand, as a signed-out stranger sees them: at 1440 the lake photo
- *  fills the right half beside the card; at 390 the photo is not shown (nor fetched), the logo without
- *  the tagline (B32.1) sits above the card, and nothing scrolls sideways. One teal action on each page. */
+/** B57.49 — /signin and /signup are Pocket's auth card, as a signed-out stranger sees them: a white card on the cloud
+ *  page with the kit's logo in it, above the heading; at 1440 the logo's streams flow into the card from the left; at
+ *  390 the streams are not shown and nothing scrolls sideways. One ink action on each page, and it goes to /auth/login. */
 export function signinBoard(): Scenario {
   return {
     id: 'signin-board',
     owner: 'talyvor-suite',
-    title: '/signin and /signup show the brand split at 1440 and the logo without the tagline at 390, signed out',
+    title: '/signin and /signup are Pocket’s auth card, the streams flowing into it at 1440 and the card alone at 390, signed out',
     run: async (ctx) => {
       const browser = ctx.app.context.browser()
       if (browser === null) throw new CannotTest('no browser to open a signed-out context in')
       const origin = new URL(ctx.app.page.url()).origin
-      const context = await browser.newContext()
+      const context = await browser.newContext({ colorScheme: 'light' })
       const wrong: string[] = []
       try {
         for (const [path, action] of [['/signin', 'Sign in'], ['/signup', 'Continue']] as const) {
@@ -1593,51 +1618,47 @@ export function signinBoard(): Scenario {
           await page.locator('h1').waitFor({ state: 'visible' })
           for (const [width, height] of [[1440, 900], [390, 844]] as const) {
             await page.setViewportSize({ width, height })
-            // A page without the photo is a FAIL with its evidence, not a timeout that ERRORs.
-            if (width === 1440) await page.locator('figure img').waitFor({ state: 'visible', timeout: 10_000 }).catch(() => undefined)
             const got = await page.evaluate(async (label) => {
-              const photo = document.querySelector<HTMLImageElement>('figure img')
-              const shown = photo !== null && getComputedStyle(photo.parentElement!).display !== 'none'
-              if (shown && !photo.complete) await new Promise((r) => photo.addEventListener('load', r, { once: true }))
-              const logo = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]'))
-                .find((i) => getComputedStyle(i).display !== 'none' && getComputedStyle(i.parentElement!).display !== 'none')
-              if (logo !== undefined && !logo.complete) await new Promise((r) => logo.addEventListener('load', r, { once: true }))
-              const wordmark = document.querySelector('header svg[data-brand="wordmark"]')
-              const p = shown ? photo.getBoundingClientRect() : null
-              const h1 = document.querySelector('h1')!.getBoundingClientRect()
+              const loaded = async (img: HTMLImageElement | undefined) => {
+                if (img !== undefined && !img.complete) await new Promise((r) => img.addEventListener('load', r, { once: true }))
+              }
+              const visible = (el: Element) => (el as HTMLElement).checkVisibility()
+              const streams = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="streams"]')).find(visible)
+              const logo = Array.from(document.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]')).find(visible)
+              await loaded(streams)
+              await loaded(logo)
+              const h1 = document.querySelector('h1')!
+              const card = h1.parentElement!
+              const s = streams?.getBoundingClientRect()
+              const c = card.getBoundingClientRect()
               const primary = Array.from(document.querySelectorAll<HTMLAnchorElement>('main a')).filter((a) => a.textContent?.trim() === label)
-              const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()
-              const probe = document.createElement('i')
-              probe.style.color = accent
-              document.body.append(probe)
-              const accentRGB = getComputedStyle(probe).color
-              probe.remove()
+              const ink = Array.from(document.querySelectorAll('a, button')).filter((el) => getComputedStyle(el).backgroundColor === 'rgb(17, 18, 22)')
               return {
-                photo: shown && p !== null ? { left: p.left, right: p.right, loaded: photo.naturalWidth > 0, src: photo.currentSrc } : null,
+                streams: streams === undefined || s === undefined ? null : { left: s.left, right: s.right, loaded: streams.naturalWidth > 0, src: new URL(streams.src).pathname },
+                card: { bg: getComputedStyle(card).backgroundColor, page: getComputedStyle(document.querySelector('main')!.parentElement!).backgroundColor, left: c.left },
                 logo: logo === undefined ? '' : `${new URL(logo.src).pathname}${logo.naturalWidth > 0 ? '' : ' (not loaded)'}`,
-                logoAboveH1: logo !== undefined && logo.getBoundingClientRect().bottom <= h1.top,
-                wordmark: wordmark !== null && getComputedStyle(wordmark.parentElement!.parentElement!).display !== 'none',
-                teal: primary.length === 1 && getComputedStyle(primary[0]).backgroundColor === accentRGB,
-                tealCount: Array.from(document.querySelectorAll('a, button')).filter((el) => getComputedStyle(el).backgroundColor === accentRGB).length,
+                logoInCardAboveH1: logo !== undefined && card.contains(logo) && logo.getBoundingClientRect().bottom <= h1.getBoundingClientRect().top,
+                primary: primary.length === 1 ? primary[0].getAttribute('href') ?? '' : null,
+                inkCount: ink.length,
+                primaryIsInk: primary.length === 1 && ink.includes(primary[0]),
                 scroll: document.documentElement.scrollWidth,
                 client: document.documentElement.clientWidth,
               }
             }, action)
-            ctx.evidence.push({ note: `${path} ${width}: photo ${JSON.stringify(got.photo)}; logo ${got.logo || 'none'}; wordmark ${got.wordmark}; teal ${got.tealCount}; scroll ${got.scroll}/${got.client}` })
+            ctx.evidence.push({ note: `${path} ${width}: streams ${JSON.stringify(got.streams)}; card ${JSON.stringify(got.card)}; logo ${got.logo || 'none'}; ink ${got.inkCount}; "${action}" → ${got.primary}; scroll ${got.scroll}/${got.client}` })
             const at = `${path} ${width}px`
-            if (!got.teal || got.tealCount !== 1) wrong.push(`${at}: "${action}" is not the one teal action (${got.tealCount} teal)`)
+            if (got.card.bg !== 'rgb(255, 255, 255)') wrong.push(`${at}: the card is not white (${got.card.bg})`)
+            if (got.card.page !== 'rgb(243, 244, 246)') wrong.push(`${at}: the page is not Pocket's cloud (${got.card.page})`)
+            if (!/^\/brand\/logo\/talyvor-logo-small-on-light\.svg$/.test(got.logo)) wrong.push(`${at}: logo "${got.logo}"`)
+            else if (!got.logoInCardAboveH1) wrong.push(`${at}: the logo is not in the card above the heading`)
+            if (got.primary === null || !got.primary.startsWith('/auth/login')) wrong.push(`${at}: "${action}" is not one link to /auth/login (${got.primary})`)
+            if (!got.primaryIsInk || got.inkCount !== 1) wrong.push(`${at}: "${action}" is not the one ink action (${got.inkCount} ink)`)
             if (got.scroll > got.client) wrong.push(`${at}: scrolls sideways (${got.scroll} > ${got.client})`)
             if (width === 1440) {
-              if (got.photo === null || !got.photo.loaded) wrong.push(`${at}: the lake photo is not shown`)
-              else if (!/\/brand\/photos\/lake(-1200)?\.jpg$/.test(new URL(got.photo.src).pathname)) wrong.push(`${at}: photo ${got.photo.src}`)
-              else if (got.photo.left < width / 2 - 1 || got.photo.right < width - 1) wrong.push(`${at}: the photo is not the right half (${got.photo.left}–${got.photo.right})`)
-              if (!got.wordmark) wrong.push(`${at}: no mark and wordmark in the header`)
-              if (got.logo !== '') wrong.push(`${at}: the phone lockup shows on a wide screen`)
-            } else {
-              if (got.photo !== null) wrong.push(`${at}: the photo shows on a phone`)
-              if (!/^\/brand\/svg\/talyvor-logo-(dark|light)-notag\.svg$/.test(got.logo)) wrong.push(`${at}: lockup "${got.logo}"`)
-              else if (!got.logoAboveH1) wrong.push(`${at}: the lockup is not above the card`)
-            }
+              if (got.streams === null || !got.streams.loaded) wrong.push(`${at}: the streams are not shown`)
+              else if (got.streams.src !== '/brand/logo/talyvor-streams-on-light.svg') wrong.push(`${at}: streams ${got.streams.src}`)
+              else if (got.streams.left > 1 || got.streams.right > got.card.left + 40) wrong.push(`${at}: the streams do not flow into the card from the left (${got.streams.left}–${got.streams.right}, card at ${got.card.left})`)
+            } else if (got.streams !== null) wrong.push(`${at}: the streams show on a phone`)
           }
           await page.close()
         }
@@ -1645,7 +1666,7 @@ export function signinBoard(): Scenario {
         await context.close()
       }
       return wrong.length === 0
-        ? { pass: true, detail: 'signed out: the lake photo on the right half at 1440, the logo without the tagline above the card at 390, one teal action, no sideways scroll, on /signin and /signup' }
+        ? { pass: true, detail: 'signed out: Pocket’s white auth card on the cloud page with the logo above the heading, the streams flowing into it at 1440 and hidden at 390, one ink action to /auth/login, no sideways scroll, on /signin and /signup' }
         : { pass: false, detail: wrong.join('; ') }
     },
   }
@@ -1686,6 +1707,35 @@ export function walletDocs(): Scenario {
  *  charge recurs (a paid plan, BYOK with it, bills monthly), and privacy does not say the product beats going direct.
  *  B28.16 — privacy and terms cover Agent Wallets and the Marketplace, and neither says deletion or
  *  cash-out does not exist (Features deletes stored answers; Agent Wallets cashes LXC out). */
+const HONEST_PAGES = [
+  // B32.14 — BYOK is Team's add-on, billed with the plan. B57.61 dropped the monthly-billing sentence for
+  // Pocket's plan cards, so each paid price saying "a month" is how the page says a plan recurs (B17.449).
+  ['/pricing', /nothing\s+recurs|only charge is the requests you run|self-hosted/i, /\$[\d,]+(?:\.\d{2})?\s*a month/],
+  [
+    '/privacy',
+    /cheaper than going direct|no self-service data deletion|test-mode cards/i,
+    /charged less than its list price/i,
+    /What Agent Wallets stores/,
+    /Passkeys\./,
+    // B49.2 — cards are named plainly, with no test-mode line (B17.300).
+    /Virtual cards\./,
+    /What the Marketplace stores and shows/,
+  ],
+  ['/terms', /no mechanism to convert|no self-service deletion/i, /LXC can be cashed out/, /Agent Wallets/, /The Marketplace/],
+] as const
+
+/** What one honest page still says that it should not, or lacks; empty when the page keeps its word. */
+export function honestPageFaults(path: string, text: string): string[] {
+  const page = HONEST_PAGES.find(([p]) => p === path)
+  if (!page) return [`${path} is not an honest page`]
+  const [, banned, ...wanted] = page
+  const faults: string[] = []
+  const hit = text.match(banned)
+  if (hit) faults.push(`${path} still says "${hit[0]}"`)
+  for (const w of wanted) if (!w.test(text)) faults.push(`${path} lacks ${w}`)
+  return faults
+}
+
 export function honestPages(): Scenario {
   return {
     id: 'honest-pages',
@@ -1694,34 +1744,18 @@ export function honestPages(): Scenario {
     title: 'pricing, privacy and terms make no claim the product does not keep',
     run: async (ctx) => {
       const missing: string[] = []
-      for (const [path, banned, ...wanted] of [
-        // B32.14 — BYOK is Team's add-on, billed with the plan.
-        ['/pricing', /nothing\s+recurs|only charge is the requests you run|self-hosted/i, /a paid plan, if you choose one, is billed every month/i],
-        [
-          '/privacy',
-          /cheaper than going direct|no self-service data deletion|test-mode cards/i,
-          /charged less than its list price/i,
-          /What Agent Wallets stores/,
-          /Passkeys\./,
-          // B49.2 — cards are named plainly, with no test-mode line (B17.300).
-          /Virtual cards\./,
-          /What the Marketplace stores and shows/,
-        ],
-        ['/terms', /no mechanism to convert|no self-service deletion/i, /LXC can be cashed out/, /Agent Wallets/, /The Marketplace/],
-      ] as const) {
+      for (const [path] of HONEST_PAGES) {
         const page = await ctx.app.tab(path)
         try {
           const text = await page.locator('body').innerText()
           ctx.evidence.push({ note: `${path}: ${text.length} chars read` })
-          const hit = text.match(banned)
-          if (hit) missing.push(`${path} still says "${hit[0]}"`)
-          for (const w of wanted) if (!w.test(text)) missing.push(`${path} lacks ${w}`)
+          missing.push(...honestPageFaults(path, text))
         } finally {
           await page.close()
         }
       }
       return missing.length === 0
-        ? { pass: true, detail: 'pricing says plans and BYOK recur; privacy and terms cover wallets and the Marketplace, and deny no deletion or cash-out' }
+        ? { pass: true, detail: 'pricing says each paid plan is a month; privacy and terms cover wallets and the Marketplace, and deny no deletion or cash-out' }
         : { pass: false, detail: missing.join('; ') }
     },
   }
@@ -1753,7 +1787,7 @@ export function legalPagesWhole(): Scenario {
           if (listed.length === 0 || listed.join('|') !== headings.join('|')) {
             wrong.push(`${path} lists ${listed.length} sections but has ${headings.length}`)
           }
-          if (!(await main.getByText(/Draft — needs legal review/).isVisible())) wrong.push(`${path} lost its draft warning`)
+          if (!(await main.getByText(/Draft: needs legal review/).isVisible())) wrong.push(`${path} lost its draft warning`)
           const last = (await main.innerText()).trim().split('\n').filter((l) => l.trim() !== '').at(-1) ?? ''
           if (!last.startsWith(`End of ${title}.`)) wrong.push(`${path} ends with "${last.slice(-80)}"`)
         } finally {
@@ -1767,31 +1801,26 @@ export function legalPagesWhole(): Scenario {
   }
 }
 
-/** B28.4 — /pricing lists every offer once, at the price the signed-in /plans screen sells it at, and the Marketplace
- *  bill once. B32.14 — the offers are the approved price card: Free, Team, Business and Enterprise for companies;
- *  Plus, Pro and Max for individuals; BYOK as Team's add-on. The oracle is /plans itself: no price is typed in here. */
+/** B28.4 — /pricing lists every offer once, at the price the signed-in /plans screen sells it at. B32.14 — the offers
+ *  are the approved price card: Free, Team, Business and Enterprise for companies; BYOK as Team's add-on. B59.5: the
+ *  chat plans and the Marketplace bill are hidden areas, so /pricing lists neither. The oracle is /plans itself: no
+ *  price is typed in here. */
 export function pricingTruth(): Scenario {
   return {
     id: 'pricing-truth',
     owner: 'talyvor-suite',
     items: ['B28.4'],
-    title: 'pricing lists every company plan, every plan for individuals, BYOK and the marketplace bill once, at the prices /plans sells',
+    title: 'pricing lists every company plan and BYOK once, at the prices /plans sells, and no chat plan or marketplace bill',
     run: async (ctx) => {
       const money = /\$[\d,]+(?:\.\d\d)?/
       const pricing = await ctx.app.tab('/pricing')
-      const listed: { name: string; price: string }[] = []
+      let listed = 0
       const companies: Record<string, { cards: number; price: string }> = {}
       let byokOnTeam = ''
       let bills = 0
       try {
-        const cards = pricing.getByTestId('pricing-plan')
-        await cards.first().waitFor({ state: 'visible' })
-        for (const card of await cards.all()) {
-          listed.push({
-            name: (await card.getByTestId('pricing-plan-name').innerText()).trim(),
-            price: (await card.getByTestId('pricing-plan-price').innerText()).trim(),
-          })
-        }
+        await pricing.getByTestId('company-plan-team').waitFor({ state: 'visible' })
+        listed = await pricing.getByTestId('pricing-plan').count()
         for (const id of COMPANY_OFFERS) {
           const card = pricing.getByTestId(`company-plan-${id}`)
           const n = await card.count()
@@ -1806,11 +1835,6 @@ export function pricingTruth(): Scenario {
       const plans = await ctx.app.tab('/plans')
       const sold: Record<string, string> = {}
       try {
-        for (const [name, id] of [['Plus', 'plus'], ['Pro', 'pro'], ['Max', 'max']]) {
-          const price = plans.getByTestId(`plan-price-${id}`)
-          await price.waitFor({ state: 'visible' })
-          sold[name] = (await price.innerText()).match(money)?.[0] ?? '(no price)'
-        }
         for (const id of COMPANY_OFFERS.filter((c) => c !== 'free')) {
           const price = plans.getByTestId(`price-${id}`)
           await price.waitFor({ state: 'visible' })
@@ -1822,14 +1846,9 @@ export function pricingTruth(): Scenario {
       } finally {
         await plans.close()
       }
-      ctx.evidence.push({ note: `/pricing ${JSON.stringify(listed)}, companies ${JSON.stringify(companies)}, BYOK on Team "${byokOnTeam}"; /plans ${JSON.stringify(sold)}; marketplace bill headings ${bills}` })
+      ctx.evidence.push({ note: `/pricing chat plans ${listed}, companies ${JSON.stringify(companies)}, BYOK on Team "${byokOnTeam}"; /plans ${JSON.stringify(sold)}; marketplace bill headings ${bills}` })
       const wrong = [
-        ...['Plus', 'Pro', 'Max'].map((name) => {
-          const on = listed.filter((o) => o.name === name)
-          if (on.length !== 1) return `${name} listed ${on.length} times`
-          return on[0].price === sold[name] ? '' : `${name} is ${on[0].price} on /pricing but ${sold[name]} on /plans`
-        }),
-        listed.length === 3 ? '' : `${listed.length} plans for individuals listed, not 3`,
+        listed === 0 ? '' : `${listed} chat plans listed, not none`,
         ...COMPANY_OFFERS.map((id) => {
           const c = companies[id]
           if (c.cards !== 1) return `${id} listed ${c.cards} times`
@@ -1837,10 +1856,10 @@ export function pricingTruth(): Scenario {
           return c.price === want ? '' : `${id} is ${c.price} on /pricing but ${want} on /plans`
         }),
         byokOnTeam.includes(`${sold.BYOK} add-on`) ? '' : `Team's own provider keys read "${byokOnTeam}", not BYOK's ${sold.BYOK} add-on`,
-        bills === 1 ? '' : `the marketplace bill is listed ${bills} times`,
+        bills === 0 ? '' : `the marketplace bill is listed ${bills} times, not none`,
       ].filter((m) => m !== '')
       return wrong.length === 0
-        ? { pass: true, detail: `Free, Team ${sold.team}, Business ${sold.business}, Enterprise ${sold.enterprise}; Plus ${sold.Plus}, Pro ${sold.Pro}, Max ${sold.Max}; BYOK ${sold.BYOK} on Team; the marketplace bill — once each, as /plans sells them` }
+        ? { pass: true, detail: `Free, Team ${sold.team}, Business ${sold.business}, Enterprise ${sold.enterprise}; BYOK ${sold.BYOK} on Team — once each, as /plans sells them; no chat plan or marketplace bill` }
         : { pass: false, detail: `/pricing: ${wrong.join('; ')}` }
     },
   }
@@ -1849,21 +1868,20 @@ export function pricingTruth(): Scenario {
 /** B32.14 — the company plans, smallest first, as the price card draws them. */
 const COMPANY_OFFERS = ['free', 'team', 'business', 'enterprise'] as const
 
-/** B29.5 — /pricing in the brand, at 1440 and at 390: every plan card on the raised plane with one teal button
- *  (B51.3: while card_payments is "live"; none otherwise),
- *  Pro and only Pro outlined in accent, every price set in IBM Plex Mono (the font loaded, not just named), an
- *  eyebrow over each section, the H1 unchanged, nothing sideways. B32.14 — the cards are the approved price card:
- *  four company plans (Start free, Choose Team, Choose Business, Talk to us) and three for individuals (Choose …). */
+/** B57.61 — /pricing in Pocket (design/pocket s-pricing), at 1440 and at 390: Team and only Team highlighted (white with
+ *  the ink ring), every other plan card on cloud, each with one outlined button while card_payments is "live" (B51.3;
+ *  none otherwise), every price in Figtree (the font loaded, not just named), each of the reference's sections, the
+ *  H1 unchanged, one ink action (Create your workspace), nothing sideways. The cards are the approved price card: four
+ *  company plans (Start free, Choose Team, Choose Business, Talk to us); B59.5 took the chat plans off with Chat. */
 export function pricingBoard(): Scenario {
   return {
     id: 'pricing-board',
     owner: 'talyvor-suite',
-    title: '/pricing shows raised plan cards, one teal button each, Pro outlined and mono prices, at 1440 and 390',
+    title: '/pricing is Pocket’s: Team highlighted, the rest on cloud, one outlined button each, Figtree prices, every section, at 1440 and 390',
     run: async (ctx) => {
       const page = await ctx.app.tab('/pricing')
       const wrong: string[] = []
       try {
-        await page.getByTestId('pricing-plan').first().waitFor({ state: 'visible' })
         await page.getByTestId('company-plan-team').waitFor({ state: 'visible' })
         // B51.3: a plan has its button only while a card can be charged.
         const priced = await page.request.get(new URL('/api/pricing', page.url()).href)
@@ -1874,35 +1892,41 @@ export function pricingBoard(): Scenario {
           const got = await page.evaluate(async () => {
             await document.fonts.ready
             // A token's colour as the browser resolves it, so the check follows the theme in force.
-            const resolve = (prop: string, value: string) => {
+            const resolve = (value: string) => {
               const probe = document.createElement('div')
-              probe.style.setProperty(prop, value)
+              probe.style.setProperty('background-color', value)
               document.body.append(probe)
-              const c = getComputedStyle(probe).getPropertyValue(prop)
+              const c = getComputedStyle(probe).backgroundColor
               probe.remove()
               return c
             }
-            const raised = resolve('background-color', 'var(--raised)')
-            const accent = resolve('background-color', 'var(--accent)')
+            const cloud = resolve('var(--cloud)')
+            const white = resolve('var(--page)')
+            const primary = resolve('var(--primary)')
             const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="pricing-plan"], [data-testid^="company-plan-"]')).map((card) => {
               const price = card.querySelector<HTMLElement>('[data-testid="pricing-plan-price"], [data-testid^="price-"]')
-              const links = Array.from(card.querySelectorAll<HTMLAnchorElement>('a'))
               const style = getComputedStyle(card)
               return {
                 name: (card.querySelector('[data-testid="pricing-plan-name"]') ?? card.querySelector('p'))?.textContent?.trim() ?? '',
-                raised: style.backgroundColor === raised,
-                outlined: style.borderTopColor === accent,
-                buttons: links.map((a) => ({ text: a.innerText.trim(), href: a.getAttribute('href') ?? '', teal: getComputedStyle(a).backgroundColor === accent })),
-                mono: price !== null && /IBM Plex Mono/.test(getComputedStyle(price).fontFamily) && document.fonts.check(`28px "IBM Plex Mono"`),
+                plane: style.backgroundColor === cloud ? 'cloud' : style.backgroundColor === white ? 'white' : style.backgroundColor,
+                ringed: style.boxShadow.includes('inset'),
+                buttons: Array.from(card.querySelectorAll<HTMLAnchorElement>('a')).map((a) => ({
+                  text: a.innerText.trim(),
+                  href: a.getAttribute('href') ?? '',
+                  outlined: getComputedStyle(a).boxShadow.includes('inset') && getComputedStyle(a).backgroundColor !== primary,
+                })),
+                figtree: price !== null && /Figtree/.test(getComputedStyle(price).fontFamily) && document.fonts.check('28px "Figtree"'),
               }
             })
-            // Each eyebrow's label as drawn, in spaced caps (Landing.tsx Eyebrow).
-            const labels = Array.from(document.querySelectorAll<HTMLElement>('main .text-eyebrow')).map((e) => e.innerText.trim())
+            const headings = Array.from(document.querySelectorAll('main h1, main h2, main h3, main p')).map((e) => e.textContent?.trim() ?? '')
             return {
               cards,
               h1: document.querySelector('h1')!.textContent!.trim(),
-              eyebrows: ['PRICING', 'CREDIT FOR AGENTS', 'WHAT A REQUEST COSTS', 'PLANS', 'THE MARKETPLACE BILL', 'WHAT YOU ARE NOT CHARGED FOR']
-                .filter((e) => !labels.includes(e)),
+              missing: ['Credit for agents', 'What a request costs', 'Fees on any plan', 'What the labels mean']
+                .filter((h) => !headings.some((t) => t === h || t.startsWith(h))),
+              primaries: Array.from(document.querySelectorAll<HTMLAnchorElement>('main a, main button'))
+                .filter((a) => getComputedStyle(a).backgroundColor === primary)
+                .map((a) => a.innerText.trim()),
               scroll: document.documentElement.scrollWidth,
               client: document.documentElement.clientWidth,
             }
@@ -1913,40 +1937,42 @@ export function pricingBoard(): Scenario {
           if (names.join() !== PRICE_CARDS.map((c) => c.name).join()) wrong.push(`${at}: the plan cards are [${names.join(', ')}], not [${PRICE_CARDS.map((c) => c.name).join(', ')}]`)
           for (const c of got.cards) {
             const want = PRICE_CARDS.find((p) => p.name === c.name)
-            if (!c.raised) wrong.push(`${at}: ${c.name} is not on the raised plane`)
+            const plane = c.name === 'Team' ? 'white' : 'cloud'
+            if (c.plane !== plane) wrong.push(`${at}: ${c.name} is on ${c.plane}, not ${plane}`)
             const buttons = want === undefined ? '' : planButtonFault(c.name, c.buttons, want, cardPayments)
             if (buttons !== '') wrong.push(`${at}: ${buttons}`)
-            if (!c.mono) wrong.push(`${at}: ${c.name}'s price is not in IBM Plex Mono`)
+            if (!c.figtree) wrong.push(`${at}: ${c.name}'s price is not in Figtree`)
           }
-          const outlined = got.cards.filter((c) => c.outlined).map((c) => c.name)
-          if (outlined.join() !== 'Pro') wrong.push(`${at}: outlined in accent: [${outlined.join(', ')}], not [Pro]`)
+          const ringed = got.cards.filter((c) => c.ringed).map((c) => c.name)
+          if (ringed.join() !== 'Team') wrong.push(`${at}: highlighted: [${ringed.join(', ')}], not [Team]`)
+          if (got.primaries.join() !== 'Create your workspace') wrong.push(`${at}: the ink actions are [${got.primaries.join(', ')}], not [Create your workspace]`)
           if (got.h1 !== 'Credit for your agents. A plan for your people.') wrong.push(`${at}: the H1 reads "${got.h1}"`)
-          if (got.eyebrows.length > 0) wrong.push(`${at}: no eyebrow ${got.eyebrows.join(', ')}`)
+          if (got.missing.length > 0) wrong.push(`${at}: no section ${got.missing.join(', ')}`)
           if (got.scroll > got.client) wrong.push(`${at}: scrolls sideways (${got.scroll} > ${got.client})`)
         }
       } finally {
         await page.close()
       }
       return wrong.length === 0
-        ? { pass: true, detail: 'four company and three individual plan cards, raised, one teal button each while a card can be charged and none while it cannot, Pro outlined, mono prices, every eyebrow, at 1440 and 390' }
+        ? { pass: true, detail: 'four company plan cards, Team highlighted and the rest on cloud, one outlined button each while a card can be charged and none while it cannot, Figtree prices, every section, one ink action, at 1440 and 390' }
         : { pass: false, detail: `/pricing: ${wrong.join('; ')}` }
     },
   }
 }
 
-/** B51.3 — while card_payments is "live" a plan card carries one teal button to where it is chosen; otherwise none
- *  (the page's one action is then Create your workspace). '' when the card is right. */
+/** B51.3 — a plan card's buttons: one outlined button (B57.61; the page's one ink action is Create your workspace) to
+ *  the plan's place while a card can be charged, and none while it cannot. */
 export function planButtonFault(
   name: string,
-  buttons: { text: string; href: string; teal: boolean }[],
+  buttons: { text: string; href: string; outlined: boolean }[],
   want: { button: string; href: string },
   cardPayments: string | undefined,
 ): string {
   if (cardPayments !== 'live') {
     return buttons.length === 0 ? '' : `${name}'s buttons are ${JSON.stringify(buttons)} while card_payments is "${cardPayments ?? 'not served'}", not none`
   }
-  const ok = buttons.length === 1 && buttons[0].text === want.button && buttons[0].href.startsWith(want.href) && buttons[0].teal
-  return ok ? '' : `${name}'s buttons are ${JSON.stringify(buttons)}, not one teal "${want.button}" to ${want.href}`
+  const ok = buttons.length === 1 && buttons[0].text === want.button && buttons[0].href.startsWith(want.href) && buttons[0].outlined
+  return ok ? '' : `${name}'s buttons are ${JSON.stringify(buttons)}, not one outlined "${want.button}" to ${want.href}`
 }
 
 /** B32.14 — the price card's plans in the order /pricing draws them, each with its one button and where it goes. */
@@ -1955,9 +1981,6 @@ const PRICE_CARDS = [
   { name: 'Team', button: 'Choose Team', href: '/plans' },
   { name: 'Business', button: 'Choose Business', href: '/plans' },
   { name: 'Enterprise', button: 'Talk to us', href: 'mailto:' },
-  { name: 'Plus', button: 'Choose Plus', href: '/plans' },
-  { name: 'Pro', button: 'Choose Pro', href: '/plans' },
-  { name: 'Max', button: 'Choose Max', href: '/plans' },
 ] as const
 
 export function streamsProgressively(): Scenario {
@@ -2004,9 +2027,9 @@ const PREVIEW_QUESTIONS = [
   'Write a 200-word story about a lost umbrella.',
 ]
 
-/** The range Chat shows under the box before sending, read as it reads: "Sending this ≈ 0.0004–1.03 LXC · …". */
+/** The range Chat shows under the box before sending, read as it reads: "Sending this ≈ 0.0004 to 1.03 LXC · …". */
 export function shownRange(text: string): { low: number; high: number; unit: 'USD' | 'LXC' } | undefined {
-  const m = /≈ (\$?)([\d,.]+)(?:–([\d,.]+))?( LXC)?/.exec(text.replace(/\s+/g, ' '))
+  const m = /≈ (\$?)([\d,.]+)(?: to ([\d,.]+))?( LXC)?/.exec(text.replace(/\s+/g, ' '))
   if (m === null || (m[1] === '$') === (m[4] === ' LXC')) return undefined
   const low = Number(m[2].replaceAll(',', ''))
   return { low, high: m[3] === undefined ? low : Number(m[3].replaceAll(',', '')), unit: m[1] === '$' ? 'USD' : 'LXC' }
@@ -3327,7 +3350,7 @@ export function tareTraining(seed: number): Scenario {
           const text = (await section.count()) === 1 ? await section.innerText() : ''
           ctx.evidence.push({ note: `${path}: ${text.slice(0, 400)}` })
           if (!/improve how Tare shortens prompts/.test(text)) wrong.push(`${path} has no "${heading}" paragraph saying what is kept and why`)
-          else if (!text.includes('Draft — for legal review')) wrong.push(`${path}'s "${heading}" paragraph is not marked "Draft — for legal review"`)
+          else if (!text.includes('Draft: for legal review')) wrong.push(`${path}'s "${heading}" paragraph is not marked "Draft: for legal review"`)
         }
         return verdictOf(wrong, `on from the screen and Lens read it on; refused signed out (${out}) and to another company (${theirs?.status ?? 'none this run'}); off read back off; Privacy and Terms carry the draft paragraph`)
       } finally {
@@ -5570,6 +5593,8 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B28.66 — where alerts go, once a run, on a workspace of its own: with push and a signed webhook added and email refused, a
   // budget's 50% and 80% alerts queue one delivery per channel, the same four when read again, and Agent Wallets lists them.
   if (i === 7) list.push(alertChannels())
+  // B56.15 — a currency account's statement on Statements, once a run, on a workspace of its own.
+  if (i === 7) list.push(accountStatements())
   // B41.20 — the Subscriptions view, once a run, on a workspace of its own: a monthly standing order and a monthly listing
   // subscription each show their next charge, monthly cost and a reminder three days before.
   if (i === 7) list.push(subscriptionsView())

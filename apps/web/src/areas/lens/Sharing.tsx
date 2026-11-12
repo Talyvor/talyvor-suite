@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import { Button, Card, CardHeader, focusRing, inlineLink } from '@talyvor/ui'
 import { ApiError } from '../../lib/api'
 import { useAuthMeReader } from '../../lib/authMe'
 import { DocumentFacts, DistillChoice } from './Documents'
 import { StoredAnswersFacts } from '../../components/StoredAnswersFacts'
+import { IfArea } from '../../lib/workspaceAreas'
 import { ProviderKeysCard } from './ProviderKeys'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Region, RegionScreen } from '../../components/Region'
+import { SettingsLinks } from '../../components/PageLinks'
 import { pressed } from './walletBrand'
+import { KIND_LABEL, KIND_LINE, TYPE_LABEL, useAccount, usePersonal } from './agentBankApi'
 
 // Sharing.tsx — cross-tenant answer sharing: the explanation, and the control.
 //
@@ -42,7 +45,7 @@ export function SharingFacts() {
       <p className="text-body">
         Shared answers save on repeated questions. When another company has already asked a
         near-identical question, this workspace can be served their answer instead of paying a
-        model for a new one — and an answer produced here may be served to them the same way.
+        model for a new one, and an answer produced here may be served to them the same way.
       </p>
 
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -201,11 +204,64 @@ export function SharingLine() {
   )
 }
 
+/** B59.10 — Team, roles and a second approver are a Business's (SPEC 3.4): a Personal account at /members is sent to
+ * Settings. Drawn once in the shell; it renders nothing. */
+export function TeamOnly() {
+  const personal = usePersonal()
+  const { pathname } = useLocation()
+  return personal && pathname === '/members' ? <Navigate to="/settings" replace /> : null
+}
+
+/** B59.10 — the account's type and kind of money (SPEC 3.5's card), and for a Business its team. */
+function AccountCards() {
+  const { account, shows } = useAccount()
+  return (
+    <>
+      {account ? (
+        <Region index="03" label="Account">
+          <Card raised>
+            <CardHeader>Kind of money</CardHeader>
+            <div className="flex flex-col gap-1 px-gutter py-4" data-testid="settings-money-kind">
+              <span className="text-body text-ink">{KIND_LABEL[account.money_kind]}</span>
+              <span className="text-body text-muted">{KIND_LINE[account.money_kind]}</span>
+            </div>
+          </Card>
+          <Card raised className="mt-3">
+            <CardHeader>Account type</CardHeader>
+            <div className="flex flex-col gap-1 px-gutter py-4" data-testid="settings-account-type">
+              <span className="text-body text-ink">{TYPE_LABEL[account.account_type]}</span>
+              <span className="text-body text-muted">The type can’t be changed. You can hold several accounts and switch between them.</span>
+            </div>
+          </Card>
+        </Region>
+      ) : null}
+      {shows?.team ? (
+        <Region index="04" label="Team">
+          <Card raised>
+            <CardHeader>Your team</CardHeader>
+            <p className="px-gutter py-4 text-body text-muted" data-testid="settings-team">
+              Who is in your team and the role each one has are on{' '}
+              <Link to="/members" className={inlineLink}>
+                Members
+              </Link>
+              .
+            </p>
+          </Card>
+        </Region>
+      ) : null}
+    </>
+  )
+}
+
 /** Settings — the standing control, reachable any time from the nav. */
 export function Settings() {
   // B29.12 — the board's pattern: an eyebrow names each section and its card sits on the raised plane.
   return (
     <RegionScreen>
+      {/* B57.8 — Sign out moved here from the top bar, and the settings pages that left the sidebar are linked. */}
+      <SettingsLinks />
+      {/* B59.2 — shared answers and document conversion are the gateway's, and go with it. */}
+      <IfArea area="gateway">
       <Region index="00" label="Sharing">
         <Card raised>
           <CardHeader>Shared answers (saves on repeated questions)</CardHeader>
@@ -228,11 +284,14 @@ export function Settings() {
           </div>
         </Card>
       </Region>
+      </IfArea>
 
       {/* B27.27 — BYOK's keys: added, replaced and removed here, only their last four ever shown. */}
       <Region index="02" label="Provider keys">
         <ProviderKeysCard />
       </Region>
+
+      <AccountCards />
 
       <CompanyLine className="px-gutter pb-10" />
     </RegionScreen>

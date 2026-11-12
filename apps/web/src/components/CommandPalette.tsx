@@ -6,6 +6,7 @@ import { Input, cn, focusRing, useTheme } from '@talyvor/ui'
 
 import { type ChatAction, chatActionHref } from '../areas/chat/chatActions'
 import { ApiError } from '../lib/api'
+import { useWorkspaceAreas } from '../lib/workspaceAreas'
 import { type SearchKind, type SearchResult, agentBankApi, formatMinor } from '../areas/lens/agentBankApi'
 
 // B28.135 — THE COMMAND PALETTE AND THE KEYBOARD SHORTCUTS, on every screen behind the gate.
@@ -46,6 +47,9 @@ export const SHORTCUTS: readonly Shortcut[] = [
 ]
 
 const HANDLED: ReadonlySet<ShortcutId> = new Set(['palette', 'new-chat', 'search', 'shortcuts'])
+
+/** B59.2 — Chat's own shortcuts, which go with Chat. */
+const CHAT_SHORTCUTS: ReadonlySet<ShortcutId> = new Set(['new-chat', 'rail'])
 
 /** A key as the shortcut table names it, in the words this platform uses. */
 function keyLabel(key: string): string {
@@ -115,13 +119,24 @@ interface Command {
   run: () => void
 }
 
-export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
+export function CommandPalette({
+  pages,
+  trigger,
+}: {
+  pages: readonly PalettePage[]
+  /** B57.8 — the control that opens it; the shell's top bar draws Pocket's search button here. */
+  trigger?: (open: () => void) => React.ReactNode
+}) {
   const [shown, setShown] = useState<'palette' | 'shortcuts' | null>(null)
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const theme = useTheme((s) => s.theme)
   const toggleTheme = useTheme((s) => s.toggle)
   const close = useCallback(() => setShown(null), [])
+  // B59.2 — Chat's actions, its conversations and Marketplace listings are offered only to a workspace that has them.
+  const areas = useWorkspaceAreas()
+  const chat = areas.has('chat')
+  const marketplace = areas.has('marketplace')
 
   const toChat = useCallback(
     (action: ChatAction, q = '') => {
@@ -135,7 +150,7 @@ export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return
-      const hit = SHORTCUTS.find((s) => HANDLED.has(s.id) && pressed(s, e))
+      const hit = SHORTCUTS.find((s) => HANDLED.has(s.id) && (chat || !CHAT_SHORTCUTS.has(s.id)) && pressed(s, e))
       if (hit === undefined || (!hit.keys.includes('Mod') && typing(e.target))) return
       e.preventDefault()
       if (hit.id === 'palette') setShown((s) => (s === 'palette' ? null : 'palette'))
@@ -145,13 +160,17 @@ export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [toChat])
+  }, [toChat, chat])
 
   const commands = useMemo<Command[]>(
     () => [
-      { id: 'new-chat', label: 'New chat', group: 'Actions', words: 'start conversation', shortcut: 'new-chat', run: () => toChat('new') },
-      { id: 'search', label: 'Search conversations', group: 'Actions', words: 'find history', run: () => toChat('search') },
-      { id: 'model', label: 'Switch model', group: 'Actions', words: 'change choose pick', run: () => toChat('model') },
+      ...(chat
+        ? ([
+            { id: 'new-chat', label: 'New chat', group: 'Actions', words: 'start conversation', shortcut: 'new-chat', run: () => toChat('new') },
+            { id: 'search', label: 'Search conversations', group: 'Actions', words: 'find history', run: () => toChat('search') },
+            { id: 'model', label: 'Switch model', group: 'Actions', words: 'change choose pick', run: () => toChat('model') },
+          ] satisfies Command[])
+        : []),
       {
         id: 'theme',
         label: theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
@@ -174,11 +193,12 @@ export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
         },
       })),
     ],
-    [pages, theme, toChat, toggleTheme, navigate],
+    [pages, theme, toChat, toggleTheme, navigate, chat],
   )
 
   return (
     <>
+      {trigger ? trigger(() => setShown('palette')) : (
       <button
         type="button"
         onClick={() => setShown('palette')}
@@ -197,10 +217,14 @@ export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
           <path d="m16 16 4.5 4.5" />
         </svg>
       </button>
+      )}
+      {/* B57.97 — the palette is still today's design until B57.9 draws it, so it is held to today's rules. */}
+      <div className="contents" data-design="today">
       {shown === 'palette' ? (
         <Palette
           commands={commands}
-          onSearch={(q) => toChat('search', q)}
+          found={marketplace ? FOUND : FOUND.filter((f) => f.kind !== 'listing')}
+          onSearch={chat ? (q) => toChat('search', q) : undefined}
           onOpen={(href) => {
             setShown(null)
             navigate(href)
@@ -208,8 +232,9 @@ export function CommandPalette({ pages }: { pages: readonly PalettePage[] }) {
           onClose={close}
         />
       ) : shown === 'shortcuts' ? (
-        <ShortcutList onClose={close} />
+        <ShortcutList shortcuts={chat ? SHORTCUTS : SHORTCUTS.filter((s) => !CHAT_SHORTCUTS.has(s.id))} onClose={close} />
       ) : null}
+      </div>
     </>
   )
 }
@@ -246,12 +271,16 @@ function Keys({ keys }: { keys: readonly string[] }) {
 
 function Palette({
   commands,
+  found: kinds,
   onSearch,
   onOpen,
   onClose,
 }: {
   commands: readonly Command[]
-  onSearch: (q: string) => void
+  /** The kinds of search result this workspace is shown. */
+  found: typeof FOUND
+  /** Searches Chat's conversations; absent when the workspace has no Chat. */
+  onSearch?: (q: string) => void
   onOpen: (href: string) => void
   onClose: () => void
 }) {
@@ -279,7 +308,7 @@ function Palette({
     const hits = commands.filter((c) => words.every((w) => `${c.label} ${c.words ?? ''}`.toLowerCase().includes(w)))
     if (q === '') return hits
     const results = search.data?.query === asked ? search.data.groups ?? [] : []
-    const inWorkspace = FOUND.flatMap((f) =>
+    const inWorkspace = kinds.flatMap((f) =>
       (results.find((g) => g.kind === f.kind)?.results ?? []).map<Command>((r) => ({
         id: `${r.kind}:${r.id}`,
         label: r.title,
@@ -289,8 +318,9 @@ function Palette({
         run: () => onOpen(f.href(r)),
       })),
     )
+    if (onSearch === undefined) return [...hits, ...inWorkspace]
     return [...hits, ...inWorkspace, { id: 'search-for', label: `Search conversations for “${q}”`, group: 'Conversations', run: () => onSearch(q) }]
-  }, [commands, query, search.data, asked, onSearch, onOpen])
+  }, [commands, query, search.data, asked, onSearch, onOpen, kinds])
   const at = Math.min(active, found.length - 1)
   const groups = GROUPS.map((g) => ({ group: g, rows: found.filter((c) => c.group === g) })).filter((g) => g.rows.length > 0)
   // A member who is not the owner or an admin may not search the workspace: for them the box is commands and pages only.
@@ -374,7 +404,7 @@ function Palette({
   )
 }
 
-function ShortcutList({ onClose }: { onClose: () => void }) {
+function ShortcutList({ shortcuts, onClose }: { shortcuts: readonly Shortcut[]; onClose: () => void }) {
   const headingId = useId()
   const closeRef = useRef<HTMLButtonElement | null>(null)
   useEffect(() => {
@@ -401,7 +431,7 @@ function ShortcutList({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <ul aria-labelledby={headingId} className="divide-y divide-rule">
-        {SHORTCUTS.map((s) => (
+        {shortcuts.map((s) => (
           <li key={s.id} className="flex items-center justify-between gap-4 px-4 py-2.5 text-body text-ink">
             <span className="min-w-0">{s.label}</span>
             <Keys keys={s.keys} />

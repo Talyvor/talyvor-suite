@@ -1,0 +1,126 @@
+[
+  {
+    "route": "/agents?agent=agt_research&card=cobalt",
+    "answers": {
+      "/api/agents": {
+        "workspace_balance_ulxc": 124800000000,
+        "allocated_ulxc": 33900000000,
+        "unallocated_ulxc": 90900000000,
+        "spent_ulxc": 28000000000,
+        "agents": [
+          {
+            "id": "agt_research",
+            "name": "Atlas",
+            "description": "Research",
+            "colour": "cobalt",
+            "face": "circle",
+            "balance_ulxc": 16500000000,
+            "spent_ulxc": 12400000000,
+            "keys": [
+              "key_research"
+            ],
+            "created_at": "2026-09-14T09:00:00Z",
+            "owner_user_id": "usr_nick",
+            "verified": true
+          }
+        ]
+      },
+      "/api/agents/agt_research/card": {
+        "card": {
+          "id": "ic_1",
+          "agent_id": "agt_research",
+          "last4": "4242",
+          "exp_month": 9,
+          "exp_year": 2029,
+          "currency": "gbp",
+          "livemode": false,
+          "created_at": "2026-09-28T09:00:00Z"
+        },
+        "authorizations": []
+      }
+    }
+  },
+  {
+    "route": "/agents?agent=agt_research&card=mint",
+    "dark": true,
+    "answers": {
+      "/api/agents": {
+        "workspace_balance_ulxc": 124800000000,
+        "allocated_ulxc": 33900000000,
+        "unallocated_ulxc": 90900000000,
+        "spent_ulxc": 28000000000,
+        "agents": [
+          {
+            "id": "agt_research",
+            "name": "Atlas",
+            "description": "Bookkeeping",
+            "colour": "mint",
+            "face": "circle",
+            "balance_ulxc": 16500000000,
+            "spent_ulxc": 12400000000,
+            "keys": [
+              "key_research"
+            ],
+            "created_at": "2026-09-14T09:00:00Z",
+            "owner_user_id": "usr_nick",
+            "verified": true
+          }
+        ]
+      },
+      "/api/agents/agt_research/card": {
+        "card": {
+          "id": "ic_1",
+          "agent_id": "agt_research",
+          "last4": "4242",
+          "exp_month": 9,
+          "exp_year": 2029,
+          "currency": "gbp",
+          "livemode": false,
+          "created_at": "2026-09-28T09:00:00Z"
+        },
+        "authorizations": []
+      }
+    }
+  },
+  {
+    "route": "/agents?agent=agt_research&card=lime",
+    "answers": {
+      "/api/agents": {
+        "workspace_balance_ulxc": 124800000000,
+        "allocated_ulxc": 33900000000,
+        "unallocated_ulxc": 90900000000,
+        "spent_ulxc": 28000000000,
+        "agents": [
+          {
+            "id": "agt_research",
+            "name": "Atlas",
+            "description": "Research",
+            "colour": "lime",
+            "face": "circle",
+            "balance_ulxc": 16500000000,
+            "spent_ulxc": 12400000000,
+            "keys": [
+              "key_research"
+            ],
+            "created_at": "2026-09-14T09:00:00Z",
+            "owner_user_id": "usr_nick",
+            "verified": true
+          }
+        ]
+      },
+      "/api/agents/agt_research/card": {
+        "card": {
+          "id": "ic_1",
+          "agent_id": "agt_research",
+          "last4": "4242",
+          "exp_month": 9,
+          "exp_year": 2029,
+          "currency": "gbp",
+          "livemode": false,
+          "created_at": "2026-09-28T09:00:00Z"
+        },
+        "authorizations": []
+      }
+    }
+  }
+]

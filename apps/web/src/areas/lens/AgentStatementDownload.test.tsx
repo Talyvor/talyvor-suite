@@ -53,10 +53,23 @@ function mockBff() {
       return new Response(CSV(account), { status: 200, headers: { 'Content-Type': 'text/csv; charset=utf-8' } })
     }
     if (url === '/api/agents/agt_1/statement?from=2026-08-01&to=2026-09-01&format=csv') return csv('agent:agt_1')
+    // B57.24 — Statements' two downloads are this month so far.
+    if (url === '/api/agents/agt_1/statement?from=2026-09-01&to=2026-09-29&format=csv') return csv('agent:agt_1')
+    if (url === '/api/agents/statement?from=2026-09-01&to=2026-09-29&format=csv') return csv('workspace')
     if (url === '/api/agents/statement?from=2026-08-01&to=2026-09-01&format=csv') return csv('workspace')
+    // B57.112 — and as a PDF when the file type says so.
+    if (url === '/api/agents/agt_1/statement?from=2026-09-01&to=2026-09-29&format=pdf' || url === '/api/agents/statement?from=2026-09-01&to=2026-09-29&format=pdf') {
+      asked.push(url)
+      return new Response(PDF, { status: 200, headers: { 'Content-Type': 'application/pdf' } })
+    }
     if (url === '/api/agents/agt_1/statement?from=2026-08-01&to=2026-09-01&format=pdf') {
       asked.push(url)
       return new Response(PDF, { status: 200, headers: { 'Content-Type': 'application/pdf' } })
+    }
+    // B57.113 — and as the journal for Xero or QuickBooks.
+    if (url === '/api/agents/agt_1/statement?from=2026-09-01&to=2026-09-29&format=journal' || url === '/api/agents/statement?from=2026-09-01&to=2026-09-29&format=journal') {
+      asked.push(url)
+      return new Response(JOURNAL, { status: 200, headers: { 'Content-Type': 'text/csv; charset=utf-8' } })
     }
     if (url === '/api/agents/statement?from=2026-08-01&to=2026-09-01&format=journal') {
       asked.push(url)
@@ -152,5 +165,110 @@ describe('downloading a statement for a period on the Agent Bank', () => {
     expect(asked).toEqual(['/api/agents/statement?from=2026-08-01&to=2026-09-01&format=journal'])
     expect(saved[0].name).toBe('agent-wallets-journal-2026-08-01-to-2026-08-31.csv')
     expect(await saved[0].text).toBe(JOURNAL)
+  })
+})
+
+// B57.24 — on Statements, Download CSV saves the open agent's statement for this month so far, and Statement for every
+// agent beside it the workspace's: Lens's files, one row per posting.
+describe('the two downloads on Statements', () => {
+  it('Download CSV saves this month so far for the agent whose tab is open', async () => {
+    const { asked, saved } = mockBff()
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Download CSV' }))
+    await waitFor(() => expect(saved[0]?.name).toBe('researcher-statement-2026-09-01-to-2026-09-28.csv'))
+    expect(asked).toEqual(['/api/agents/agt_1/statement?from=2026-09-01&to=2026-09-29&format=csv'])
+    expect(await saved[0].text).toContain('agent:agt_1,closing,,,,5000000')
+    expect(await screen.findByText('Downloading Researcher’s statement for September as a CSV file')).toBeTruthy()
+  })
+
+  it('Statement for every agent saves this month so far for the whole workspace', async () => {
+    const { asked, saved } = mockBff()
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Statement for every agent' }))
+    await waitFor(() => expect(saved[0]?.name).toBe('agent-wallets-statement-2026-09-01-to-2026-09-28.csv'))
+    expect(asked).toEqual(['/api/agents/statement?from=2026-09-01&to=2026-09-29&format=csv'])
+    expect(await saved[0].text).toContain('workspace,closing')
+  })
+
+  // B57.112 — the file type choice beside them, in Pocket's Select: CSV, JSON or PDF (B57.113: or the journal), and the
+  // buttons save that file.
+  it('offers CSV, JSON and PDF, and Download PDF saves the open agent’s statement as a PDF', async () => {
+    const { asked, saved } = mockBff()
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    const type = (await screen.findByLabelText('File type')) as HTMLSelectElement
+    expect(type.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    expect([...type.options].map((o) => o.text).slice(0, 3)).toEqual(['CSV', 'JSON', 'PDF'])
+    fireEvent.change(type, { target: { value: 'pdf' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Download PDF' }))
+
+    await waitFor(() => expect(saved[0]?.name).toBe('researcher-statement-2026-09-01-to-2026-09-28.pdf'))
+    expect(asked).toEqual(['/api/agents/agt_1/statement?from=2026-09-01&to=2026-09-29&format=pdf'])
+    expect(await saved[0].text).toBe(PDF)
+    expect(await screen.findByText('Downloading Researcher’s statement for September as a PDF file')).toBeTruthy()
+  })
+
+  it('Statement for every agent saves the PDF when PDF is chosen', async () => {
+    const { asked, saved } = mockBff()
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    fireEvent.change(await screen.findByLabelText('File type'), { target: { value: 'pdf' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Statement for every agent' }))
+
+    await waitFor(() => expect(saved[0]?.name).toBe('agent-wallets-statement-2026-09-01-to-2026-09-28.pdf'))
+    expect(asked).toEqual(['/api/agents/statement?from=2026-09-01&to=2026-09-29&format=pdf'])
+    expect(await saved[0].text).toBe(PDF)
+  })
+
+  // B57.113 — the journal for Xero or QuickBooks in the same choice, with the journal's sentence under the downloads.
+  it('offers the journal for Xero or QuickBooks, and Download journal saves the open agent’s journal', async () => {
+    const { asked, saved } = mockBff()
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    const type = (await screen.findByLabelText('File type')) as HTMLSelectElement
+    expect([...type.options].map((o) => o.text)).toEqual(['CSV', 'JSON', 'PDF', 'Journal for Xero or QuickBooks'])
+    const sentence = screen.getByText('The journal imports into Xero or QuickBooks: each entry one balanced journal, each agent its cost centre.')
+    expect(sentence.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    fireEvent.change(type, { target: { value: 'journal' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Download journal' }))
+
+    await waitFor(() => expect(saved[0]?.name).toBe('researcher-journal-2026-09-01-to-2026-09-28.csv'))
+    expect(asked).toEqual(['/api/agents/agt_1/statement?from=2026-09-01&to=2026-09-29&format=journal'])
+    expect(await saved[0].text).toBe(JOURNAL)
+    expect(await screen.findByText('Downloading Researcher’s journal for September, for Xero or QuickBooks')).toBeTruthy()
+  })
+
+  it('Statement for every agent saves the workspace’s journal when the journal is chosen', async () => {
+    const { asked, saved } = mockBff()
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    fireEvent.change(await screen.findByLabelText('File type'), { target: { value: 'journal' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Statement for every agent' }))
+
+    await waitFor(() => expect(saved[0]?.name).toBe('agent-wallets-journal-2026-09-01-to-2026-09-28.csv'))
+    expect(asked).toEqual(['/api/agents/statement?from=2026-09-01&to=2026-09-29&format=journal'])
+    expect(await saved[0].text).toBe(JOURNAL)
+  })
+
+  it('says so under the buttons when Lens cannot write the file', async () => {
+    const { saved } = mockBff()
+    const bff = vi.mocked(globalThis.fetch).getMockImplementation()!
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) =>
+      String(input) === '/api/agents/statement?from=2026-09-01&to=2026-09-29&format=csv' ? new Response('{}', { status: 502 }) : bff(input, init),
+    )
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Statement for every agent' }))
+    expect(await screen.findByText('The statement could not be read just now.')).toBeTruthy()
+    expect(saved).toEqual([])
   })
 })

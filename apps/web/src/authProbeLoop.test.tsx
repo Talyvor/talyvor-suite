@@ -251,8 +251,8 @@ describe('the enumeration reads the whole tree', () => {
 
 describe('the seam, enumerated', () => {
   /**
-   * ⚠ THE BEHAVIOURAL CASES ABOVE REACH ONE OF THE FOUR READERS — `SessionChip`, which is in the
-   * shell on every console route. `Setup`, `Sharing` and `legalParts` hold the same observer on
+   * ⚠ THE BEHAVIOURAL CASES ABOVE REACH ONE OF THE FOUR READERS — the shell's own (`SessionChip` until B57.8 moved
+   * Sign out to Settings; the top bar's avatar since), on every console route. `Setup`, `Sharing` and `legalParts` hold the same observer on
    * their own routes and would restart the same probe; rendering three more routes to say so
    * would be three more slow cases asserting one fact. This says it once, structurally: apart
    * from the OWNER in AuthGate, no file may declare this query itself.

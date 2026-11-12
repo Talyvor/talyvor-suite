@@ -77,10 +77,10 @@ describe('the provisional leaderboard', () => {
   it('after a third accepted contribution by two people, both are listed with shares that add up to 100% of the pool', async () => {
     mockBff({ me: OWNER })
     open()
-    await waitFor(() => expect(rows()).toEqual(['Northwind40050%', 'You40050%', 'GlobexShares once its owner is identity-checked400–']))
+    await waitFor(() => expect(rows()).toEqual(['Northwind40050%', 'You40050%', 'GlobexShares once its owner is identity-checked400Not yet']))
     const card = (await screen.findAllByTestId('contribution-card')).find((c) => within(c).queryByText('Pricing prompt'))!
     fireEvent.click(within(card).getByRole('button', { name: 'Accept' }))
-    await waitFor(() => expect(rows()).toEqual(['Northwind80066.67%', 'You40033.33%', 'GlobexShares once its owner is identity-checked400–']))
+    await waitFor(() => expect(rows()).toEqual(['Northwind80066.67%', 'You40033.33%', 'GlobexShares once its owner is identity-checked400Not yet']))
     expect(screen.getByTestId('room-leaderboard-note').textContent).toBe('Nothing is final until the Gate.')
   })
 

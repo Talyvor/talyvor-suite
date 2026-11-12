@@ -35,7 +35,7 @@ export function ChatSharing({
         {workspaceOff
           ? 'Off for your workspace'
           : off
-            ? 'Off — this chat’s answers are never shared with another workspace'
+            ? 'Off: this chat’s answers are never shared with another workspace'
             : 'On'}
       </span>
     </div>

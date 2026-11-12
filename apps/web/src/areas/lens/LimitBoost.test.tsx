@@ -4,8 +4,10 @@ import { App, queryClient } from '../../App'
 
 // B28.32 — a limit boost on Agent Wallets. The mock BFF keeps boosts the way Lens B28.308 does: one per limit, raised
 // from the rules' value until a time, listed while in force and ended early by a DELETE on that limit.
+// B55.14 — a boost always loosens the rules (Lens B55.13): once the workspace has a passkey it is signed over its
+// challenge, and Lens refuses it unsigned, as here.
 
-function mockBff() {
+function mockBff(passkey = false) {
   const sent: Array<{ method: string; url: string; body?: unknown }> = []
   const agents = [
     { id: 'agt_1', name: 'Researcher', balance_ulxc: 10_000_000, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true },
@@ -21,7 +23,13 @@ function mockBff() {
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 20_000_000, allocated_ulxc: 10_000_000, unallocated_ulxc: 10_000_000, spent_ulxc: 0, agents })
+    if (url === '/api/agents/agt_1/rules-challenge') {
+      return json({ looser: true, changes: ['Daily limit: was 10 LXC, now 50 LXC until 2030-01-01T18:00:00Z'], challenge: 'Y2gx', allow_credentials: passkey ? ['Y3JlZDE'] : [] })
+    }
     if (url === '/api/agents/agt_1/rules/boosts' && method === 'POST') {
+      if (passkey && (body as { assertion?: unknown }).assertion === undefined) {
+        return json({ error: "loosening an agent's rules is signed with your passkey or your phone: sign this change's challenge" }, 403)
+      }
       const { rule, value, until } = body as { rule: string; value: number; until: string }
       const b = { rule, raised_from: 10_000_000, value, until, created_by: 'jwt:user:ws_1', created_at: '2026-10-06T09:00:00Z' }
       boosts = [b]
@@ -40,7 +48,8 @@ function mockBff() {
     if (url === '/api/agents/forecast') return json({ at: '', month_start: '', month_end: '', spent_ulxc: 0, forecast_ulxc: 0, agents: [] })
     if (url === '/api/agents/alerts') return json({ alerts: [], rule: 'the rule' })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
-    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/agents/passkeys') return json({ passkeys: passkey ? [{ credential_id: 'Y3JlZDE', name: 'iPhone', created_at: '2026-10-06T04:00:00Z' }] : [] })
+    if (url === '/api/money/devices') return json({ devices: [] })
     if (url === '/api/marketplace/listings') return json({ listings: [] })
     return new Response('null', { status: 404 })
   })
@@ -72,9 +81,38 @@ describe('a limit boost', () => {
     fireEvent.click(screen.getByRole('button', { name: 'End the boost on Researcher’s daily limit now' }))
     await waitFor(() => expect(screen.queryByTestId('boost-daily_limit_ulxc')).toBeNull())
 
+    const boost = { rule: 'daily_limit_ulxc', value: 50_000_000, until: new Date('2030-01-01T18:00').toISOString() }
     expect(sent).toEqual([
-      { method: 'POST', url: '/api/agents/agt_1/rules/boosts', body: { rule: 'daily_limit_ulxc', value: 50_000_000, until: new Date('2030-01-01T18:00').toISOString() } },
+      { method: 'POST', url: '/api/agents/agt_1/rules-challenge', body: { boost } },
+      { method: 'POST', url: '/api/agents/agt_1/rules/boosts', body: boost },
       { method: 'DELETE', url: '/api/agents/agt_1/rules/boosts/daily_limit_ulxc', body: {} },
+    ])
+  })
+
+  it('says what a raise loosens and raises only with the passkey, over the challenge for exactly that boost', async () => {
+    const sent = mockBff(true)
+    const ASSERTION = { rawId: new Uint8Array([1]).buffer, response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } }
+    const get = vi.fn().mockResolvedValue(ASSERTION)
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    fireEvent.change(await screen.findByLabelText('Raise Researcher’s limit to'), { target: { value: '50' } })
+    fireEvent.change(screen.getByLabelText('Raise Researcher’s limit until'), { target: { value: '2030-01-01T18:00' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Raise until then' }))
+    const card = await screen.findByTestId('rules-loosen')
+    expect(card.textContent).toBe('This loosens Researcher’s rules:Daily limit: was 10 LXC, now 50 LXC until 2030-01-01T18:00:00ZIt needs your passkey. Tightening is saved at once.')
+    expect(get).not.toHaveBeenCalled()
+    expect(sent.some((s) => s.url === '/api/agents/agt_1/rules/boosts')).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raise with your passkey' }))
+    await screen.findByTestId('boost-daily_limit_ulxc')
+    expect(get).toHaveBeenCalledTimes(1)
+    const boost = { rule: 'daily_limit_ulxc', value: 50_000_000, until: new Date('2030-01-01T18:00').toISOString() }
+    expect(sent).toEqual([
+      { method: 'POST', url: '/api/agents/agt_1/rules-challenge', body: { boost } },
+      { method: 'POST', url: '/api/agents/agt_1/rules-challenge', body: { boost } },
+      { method: 'POST', url: '/api/agents/agt_1/rules/boosts', body: { ...boost, assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } } },
     ])
   })
 })

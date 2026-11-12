@@ -1,7 +1,9 @@
-import { render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../App'
 import { longDate, sectionId } from './legalParts'
+import { BUILDING } from '../labels/StatusLabel'
+import { pressEverything } from '../test/pressEverything'
 
 // B28.274 — Privacy and Terms are read whole and dated: each says the day its words last changed,
 // lists every section before the first, and ends with a line saying it has ended.
@@ -38,7 +40,7 @@ describe('the legal pages', () => {
   })
 
   it.each([
-    ['Terms', '2026-11-08', '8 November 2026'], // B56.3: approvals as the rules make them, no investing
+    ['Terms', '2026-11-10', '10 November 2026'], // B56.10: paying earnings out in money is building
     ['Privacy', '2026-11-08', '8 November 2026'], // B56.3: the six wallet records it left out
   ])('%s is dated, lists every section, and says where it ends', async (title, day, long) => {
     const { container } = at(`/${title.toLowerCase()}`)
@@ -62,12 +64,25 @@ describe('the legal pages', () => {
     // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     const end = screen.getByText(new RegExp(`^End of ${title}\\.`))
     expect(end).toHaveTextContent(`End of ${title}. Last updated ${long}. Back to the contents`)
-    expect(screen.getByText(/Draft — needs legal review/)).toBeInTheDocument()
+    expect(screen.getByText(/Draft: needs legal review/)).toBeInTheDocument()
     // B27.38 — each says what Tare training keeps and why, in a paragraph marked as a draft.
     const tare = screen.getByRole('heading', { level: 2, name: /Tare training|Learning from your prose/ }).closest('section')!
     expect(tare).toHaveTextContent(/keep.*prose.*improve how Tare shortens prompts/)
-    expect(within(tare).getByText('Draft — for legal review')).toBeInTheDocument()
+    expect(within(tare).getByText('Draft: for legal review')).toBeInTheDocument()
   })
+
+  // B57.63 — both are drawn in Pocket (the reference's s-privacy and s-terms) with their words unchanged, and every
+  // control on them does something.
+  it.each(['/privacy', '/terms'])('%s is held to Pocket’s rules and every control on it does something', async (path) => {
+    const { container } = at(path)
+    await screen.findByRole('heading', { level: 1 })
+    expect(container.querySelector('main')?.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    cleanup()
+    vi.restoreAllMocks()
+    const report = await pressEverything(path)
+    expect(report.dead).toEqual([])
+    expect(report.pressed).toBeGreaterThan(15)
+  }, 120_000)
 
   // B56.3 — they say only what the code does: investing is not offered, so neither page mentions it.
   it.each(['/terms', '/privacy'])('%s puts no investing on a public page', async (path) => {
@@ -94,5 +109,16 @@ describe('the legal pages', () => {
       expect(records).toContain(name)
     }
     expect(section).toHaveTextContent(/the account Talyvor pays you to: the holder.s name and the account.s details/i)
+  })
+})
+
+// B56.10 — Terms says in words, from the Building registry, that paying earnings out in money is still being built.
+describe('Terms and the Building registry', () => {
+  it('says payouts in money are building while building.json has money_payouts', async () => {
+    expect(BUILDING.some((e) => e.key === 'money_payouts')).toBe(true)
+    at('/terms')
+    expect(
+      await screen.findByText(/Paying earnings out in money is building; until then they are taken as Talyvor credits\./),
+    ).toBeTruthy()
   })
 })

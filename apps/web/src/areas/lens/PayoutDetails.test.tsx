@@ -54,4 +54,12 @@ describe('Payout details', () => {
     expect(within(row).getByText('Checking')).toBeTruthy()
     expect(screen.getByText('Payouts held for you are paid once these are verified.')).toBeTruthy()
   })
+
+  it('is one of Settings’ pages', async () => {
+    mockBff()
+    window.history.pushState({}, '', '/settings')
+    render(<App />)
+    fireEvent.click(await screen.findByRole('link', { name: /Payout details/ }))
+    expect(await screen.findByRole('form', { name: 'Payout details' })).toBeTruthy()
+  })
 })

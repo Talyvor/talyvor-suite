@@ -5,7 +5,7 @@ import { App, queryClient } from '../../App'
 // B28.66 — where alerts go, on Agent Wallets: an owner adds a signed webhook, sees its secret once, and sees each alert
 // Lens queued for each channel with its status (Lens B28.338). Email is not offered, and says why.
 
-function mockBff() {
+function mockBff(withAgent = true) {
   const agent = { id: 'agt_1', name: 'Researcher', balance_ulxc: 5_000_000, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true }
   const channels: unknown[] = [{ id: 'ach_1', kind: 'slack', url: 'https://hooks.slack.com/…abcd', created_at: '2026-11-08T09:00:00Z' }]
   const posted: unknown[] = []
@@ -14,7 +14,7 @@ function mockBff() {
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
-    if (url === '/api/agents') return json({ workspace_balance_ulxc: 20_000_000, allocated_ulxc: 5_000_000, unallocated_ulxc: 15_000_000, spent_ulxc: 0, agents: [agent] })
+    if (url === '/api/agents') return json({ workspace_balance_ulxc: 20_000_000, allocated_ulxc: 5_000_000, unallocated_ulxc: 15_000_000, spent_ulxc: 0, agents: withAgent ? [agent] : [] })
     if (url === '/api/money/budgets/alerts') return json({ alerts: [] })
     if (url === '/api/agents/forecast') return json({ at: '', month_start: '', month_end: '', spent_ulxc: 0, forecast_ulxc: 0, agents: [] })
     if (url === '/api/agents/alerts') return json({ alerts: [], rule: 'the rule' })
@@ -69,7 +69,19 @@ describe('where alerts go (B28.66)', () => {
     expect(await within(card).findByText('whsec_shown_once')).toBeTruthy()
     expect(posted).toEqual([{ kind: 'webhook', url: 'https://ops.example/alerts' }])
     await waitFor(() => expect(within(card).getByTestId('alert-channel-ach_2').textContent).toContain('Webhook, signed'))
-    fireEvent.click(within(card).getByRole('button', { name: 'Done — I stored it' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Done, I stored it' }))
     expect(within(card).queryByText('whsec_shown_once')).toBeNull()
+  })
+
+  // B17.425 — channels added and alerts queued before the first agent exists still show: the card is where they are read.
+  it('lists the channels and their deliveries before the first agent exists', async () => {
+    mockBff(false)
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    const card = await screen.findByTestId('alert-channels')
+    expect((await within(card).findByTestId('alert-channel-ach_1')).textContent).toContain('Slack')
+    expect((await within(card).findByTestId('alert-delivery-adl_1')).textContent).toContain('Sent')
+    expect(within(card).getByTestId('alert-delivery-adl_2').textContent).toContain('Failed')
   })
 })

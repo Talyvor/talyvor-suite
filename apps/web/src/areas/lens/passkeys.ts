@@ -5,7 +5,20 @@
 // on every approve or deny is signed with it over a challenge Lens issues for that one approval.
 // Pushes arrive through /sw.js, subscribed with the key Lens serves.
 
-import { agentBankApi, type EnrolmentWaiting, type OutsidePayment, type OutsidePaymentRequest, type PasskeyAssertion, type PayeeAllowance, type PayeeDetails } from './agentBankApi'
+import {
+  agentBankApi,
+  type EnrolmentWaiting,
+  type Mandate,
+  type MandateGrant,
+  type OutsidePayment,
+  type OutsidePaymentRequest,
+  type PasskeyAssertion,
+  type PayeeAllowance,
+  type PayeeDetails,
+  type PayoutBatch,
+  type RecoveryPasskey,
+} from './agentBankApi'
+import { showRecoveryCode } from './recoveryCodeStore'
 
 export function b64u(buf: ArrayBuffer | Uint8Array): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
@@ -40,6 +53,15 @@ export async function registerThisDevice(name: string): Promise<EnrolmentWaiting
   const { challenge, rp_id, credential_ids } = await agentBankApi.passkeyChallenge()
   // B50.22: once the workspace has a passkey, one of them signs the new key's own challenge first (Lens B50.20).
   const assertion = (credential_ids ?? []).length > 0 ? await assertOver({ challenge, allow_credentials: credential_ids ?? [] }) : undefined
+  const registered = await agentBankApi.registerPasskey({ ...(await makePasskey(challenge, rp_id, name)), ...(assertion ? { assertion } : {}) })
+  if ('enrolment' in registered) return registered.enrolment
+  // B55.54: the workspace's first key comes with its recovery code, shown this once.
+  if (registered.recovery_code) showRecoveryCode(registered.recovery_code)
+  return null
+}
+
+/** Makes a passkey on this device over a registration challenge Lens issued; nothing is sent yet. */
+async function makePasskey(challenge: string, rp_id: string, name: string): Promise<RecoveryPasskey> {
   const cred = (await navigator.credentials.create({
     publicKey: {
       challenge: fromB64u(challenge),
@@ -57,15 +79,30 @@ export async function registerThisDevice(name: string): Promise<EnrolmentWaiting
   if (!spki || res.getPublicKeyAlgorithm() !== -7) {
     throw new Error('This device made a passkey Lens cannot check (it needs ES256).')
   }
-  const registered = await agentBankApi.registerPasskey({
+  return {
     credential_id: b64u(cred.rawId),
     name,
     public_key: b64u(spki),
     client_data_json: b64u(res.clientDataJSON),
     authenticator_data: b64u(res.getAuthenticatorData()),
-    ...(assertion ? { assertion } : {}),
-  })
-  return 'enrolment' in registered ? registered.enrolment : null
+  }
+}
+
+/**
+ * B55.54 — every key of the workspace was removed: a passkey made here is added at once with the recovery code (Lens
+ * B55.48), or, without it, once the 72 hours of a recovery this person started have passed. Lens answers a new code.
+ */
+export async function getAKeyBack(name: string, code?: string): Promise<void> {
+  const { challenge, rp_id } = await agentBankApi.passkeyChallenge()
+  const passkey = await makePasskey(challenge, rp_id, name)
+  const got = code === undefined ? await agentBankApi.completeRecovery(passkey) : await agentBankApi.recoverWithCode(code, passkey)
+  showRecoveryCode(got.recovery_code)
+}
+
+/** B55.54 — a new recovery code, signed with a key of this workspace as any key change is; the old one stops working. */
+export async function makeNewRecoveryCode(): Promise<void> {
+  const { recovery_code } = await agentBankApi.newRecoveryCode(await assertOver(await agentBankApi.recoveryCodeChallenge()))
+  showRecoveryCode(recovery_code)
 }
 
 /** B55.3 — lets in a key waiting on another device: a passkey of this workspace signs its enrolment challenge here. */
@@ -100,6 +137,30 @@ export async function signPayeeDetails(payeeID: string, details: PayeeDetails): 
 export async function payOutsideSigned(body: OutsidePaymentRequest): Promise<OutsidePayment> {
   const c = await agentBankApi.paymentChallenge(body)
   return agentBankApi.payOutside(body, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
+/**
+ * B58.6 — a payout batch is approved signed (Lens B58.5): once the workspace has a passkey, Face ID asks here over the
+ * challenge naming the batch as it stands, and nothing is paid without it. With none, it is approved as before.
+ */
+export async function approvePayoutSigned(batchID: string): Promise<PayoutBatch> {
+  const c = await agentBankApi.payoutChallenge(batchID)
+  return agentBankApi.approvePayout(batchID, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
+/**
+ * B55.56 — the owner's mandate is signed as a payment is (Lens B55.24): once the workspace has a passkey, Face ID asks
+ * here over the challenge naming exactly this grant, and nothing is granted without it. With none, it grants as before.
+ */
+export async function grantMandateSigned(grant: MandateGrant): Promise<Mandate> {
+  const c = await agentBankApi.mandateChallenge({ grant })
+  return agentBankApi.grantMandate(grant, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
+/** B55.56 — an agent's requested mandate is approved signed the same way, over the challenge naming that request. */
+export async function approveMandateSigned(mandateID: string): Promise<Mandate> {
+  const c = await agentBankApi.mandateChallenge({ mandate_id: mandateID })
+  return agentBankApi.approveMandate(mandateID, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
 }
 
 /**

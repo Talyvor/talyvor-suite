@@ -1,0 +1,5 @@
+[
+  { "route": "/keys", "screen": "w-dev-keys" },
+  { "route": "/keys", "screen": "w-connect+revoke-claude", "steps": ["Revoke Claude"], "frame": true },
+  { "route": "/keys", "screen": "w-security+remove-key-3", "steps": ["Remove Phone iPhone, Talyvor app"], "frame": true }
+]

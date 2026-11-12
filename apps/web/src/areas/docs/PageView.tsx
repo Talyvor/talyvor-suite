@@ -259,7 +259,7 @@ export function PageView() {
                   ? // True of BOTH readings of a 404, because the upstream refuses to say which.
                     'Either it never existed, or it belongs to a space this session cannot read. Docs answers the same way for both, on purpose.'
                   : page.isError
-                    ? 'This is a fault, not a missing page — Docs answered with an error, so nothing is drawn rather than something stale.'
+                    ? 'This is a fault, not a missing page. Docs answered with an error, so nothing is drawn rather than something stale.'
                     : 'Reading it from Docs…'}
           </p>
           <div className="mt-8">{wayBack}</div>
@@ -294,7 +294,7 @@ export function PageView() {
           <>
             <p className="mt-8 max-w-2xl text-body text-muted">
               Nothing has been written on this page yet. A page is worth writing down once and
-              finding again — a runbook, a decision, the thing you explain to every new person.
+              finding again: a runbook, a decision, the thing you explain to every new person.
             </p>
             <Button className="mt-8" onClick={() => editorRef.current?.focus()}>
               Write the first words
@@ -344,7 +344,7 @@ export function PageView() {
           </Button>
           <span className="text-caption text-muted" role="status">
             {save.isError
-              ? 'Couldn’t save — nothing was changed. Try again.'
+              ? 'Couldn’t save. Nothing was changed. Try again.'
               : draft !== null
                 ? 'Unsaved changes'
                 : save.isSuccess

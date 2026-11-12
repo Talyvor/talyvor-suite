@@ -8,10 +8,13 @@ import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH } from './areas/documentation
 // (23 Oct 2026) names words that never appear on a public page; this fails on any of them, on an old
 // headline back in the title or an h1, on a missing line, and on any address but hello@. B46.1 (Nick, 24 Oct
 // 2026): the site is in plain words, so the old status line and every disclaimer phrase now fail it too.
+// B56.9 (Nick, 1 Nov 2026: "yes to labels") reverses B46.1 for StatusLabel alone: Live, Sandbox and Building may
+// be drawn by it and by nothing else, and every disclaimer phrase below still fails.
 
-const PUBLIC_ROUTES = ['/marketing', '/pricing', '/signup', '/signin', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms']
-// The pages that name the product carry the line; /signin is a door with nothing to pitch.
-const NAMES_THE_PRODUCT = new Set(['/marketing', '/pricing', '/signup', DOCUMENTATION_PATH, '/privacy', '/terms'])
+const PUBLIC_ROUTES = ['/marketing', '/pricing', '/your-money', '/signup', '/signin', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms']
+// The pages that name the product carry the line; /signin is a door with nothing to pitch, and so is /signup since
+// B59.8 made it the launch pack's form (who the account is for, the kind of money, then a key).
+const NAMES_THE_PRODUCT = new Set(['/marketing', '/pricing', '/your-money', DOCUMENTATION_PATH, '/privacy', '/terms'])
 
 const FORBIDDEN: [string, RegExp][] = [
   ['MIXT', /\bmixt\b/i],
@@ -32,6 +35,21 @@ const FORBIDDEN: [string, RegExp][] = [
   ['100% of', /100% of/i],
 ]
 const OLD_LINE = /^\s*(talyvor\s*—\s*)?money and markets for ai agents\.?\s*$/i
+
+/** B56.9 — each Live, Sandbox or Building drawn as a chip (a pill) that StatusLabel did not draw. A word in a table
+ *  cell or a select's option is not a label. */
+function labelsOutsideStatusLabel(container: HTMLElement): string[] {
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+  const stray: string[] = []
+  while (walker.nextNode()) {
+    const node = walker.currentNode
+    const word = node.textContent!.trim()
+    const el = node.parentElement
+    if (/^(live|sandbox|building)$/i.test(word) && el?.closest('.rounded-pill, .rounded-full') && !el.closest('[data-status-label]'))
+      stray.push(word)
+  }
+  return stray
+}
 
 function signedOut() {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -60,11 +78,12 @@ describe('every public page speaks positioning v2', () => {
     const text = container.textContent ?? ''
 
     for (const [word, re] of FORBIDDEN) expect(text, `${path} says "${word}"`).not.toMatch(re)
+    expect(labelsOutsideStatusLabel(container), `${path} draws a label outside StatusLabel`).toEqual([])
     expect(document.title, `${path}'s title is the old line`).not.toMatch(OLD_LINE)
     expect(h1.textContent, `${path}'s h1 is the old line`).not.toMatch(OLD_LINE)
 
     if (NAMES_THE_PRODUCT.has(path))
-      expect(text, `${path} does not carry the line`).toMatch(/the financial ecosystem for the AI agent economy/i)
+      expect(text, `${path} does not carry the line`).toMatch(/the financial ecosystem for the AI agent economy|An account for every AI agent/i)
 
     // Per text node: textContent joins neighbours, so an address runs into the next word.
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
@@ -78,7 +97,8 @@ describe('every public page speaks positioning v2', () => {
 })
 
 // B46.2 (Nick, 24 Oct 2026): the app drops the disclosure layer too. Every signed-in address, populated the
-// way populatedBffCoverage proves it is, says none of the disclaimer phrases; "bank" alone is allowed.
+// way populatedBffCoverage proves it is, says none of the disclaimer phrases; "bank" alone is allowed. B56.9
+// reverses it for StatusLabel alone, as on the public pages.
 const SIGNED_IN_FORBIDDEN: [string, RegExp][] = [
   ['banking', /banking/i],
   ['test money', /test money/i],
@@ -109,6 +129,7 @@ describe('no signed-in address carries a disclaimer label', () => {
       await new Promise((done) => setTimeout(done, 80))
       const text = container.textContent ?? ''
       for (const [word, re] of SIGNED_IN_FORBIDDEN) if (re.test(text)) said.push(`${address} says "${word}"`)
+      for (const word of labelsOutsideStatusLabel(container)) said.push(`${address} draws ${word} outside StatusLabel`)
       vi.restoreAllMocks()
       cleanup()
       queryClient.clear()

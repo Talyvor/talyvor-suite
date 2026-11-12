@@ -71,7 +71,7 @@ describe('Taly’s button', () => {
     const asked = mockBff()
     window.history.pushState({}, '', address)
     render(<App />)
-    await screen.findByRole('navigation')
+    await screen.findByRole('navigation', { name: 'Sections' })
     // Wait for the page's own data, so Taly is told the screen rather than its spinner.
     if (address !== '/') await screen.findAllByText(object, { selector: 'main *' })
     const answer = await ask('what is this?')
@@ -94,7 +94,7 @@ describe('Taly’s button', () => {
     act(() => window.history.pushState({}, '', '/chat'))
     cleanup()
     render(<App />)
-    await screen.findByRole('navigation')
+    await screen.findByRole('navigation', { name: 'Sections' })
     expect(screen.queryByRole('button', { name: 'Ask Taly' })).toBeNull()
 
     cleanup()

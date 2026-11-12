@@ -75,7 +75,7 @@ export function YourPlan() {
       </Row>
       <Row
         label="Allowance left"
-        hint="When it runs out, chat draws the LXC balance above — the plan never bills an overage"
+        hint="When it runs out, chat draws the LXC balance above. The plan never bills an overage"
       >
         <MuNumeral micros={a.remaining_ulxc} unit="lxc" />
       </Row>

@@ -2,6 +2,7 @@ import { LegalPage, LawyerReview, Section } from './legalParts'
 import { COMPANY_CONTACT, COMPANY_NAME, COMPANY_NUMBER, REGISTERED_OFFICE } from '../company'
 import { inlineLink } from '@talyvor/ui'
 import { SharedAnswersFact, StoredAnswersFacts } from '../components/StoredAnswersFacts'
+import { buildingWords } from '../labels/StatusLabel'
 
 // Terms — what the service actually is and is not, written from the code.
 //
@@ -9,8 +10,8 @@ import { SharedAnswersFact, StoredAnswersFacts } from '../components/StoredAnswe
 // interest, so they are stated in terms of what the code does (a balance decremented against
 // usage) rather than in terms of what we would prefer them to be.
 
-/** The day these words last changed (B56.3: approvals as the rules make them, no investing). Change it with them. */
-const UPDATED = '2026-11-08'
+/** The day these words last changed (B56.10: paying earnings out in money is building). Change it with them. */
+const UPDATED = '2026-11-10'
 
 export function Terms() {
   return (
@@ -79,7 +80,7 @@ export function Terms() {
           what stand between an agent and its wallet, so set them to what you are prepared to have
           spent. Pausing an agent, or every agent at once, stops it until you resume it.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           An agent can pay other agents, including another company&rsquo;s, hold money in escrow and
           pots, and lend to or borrow from another company. None of these moves real money until our
           first money partner is switched on, and an agent&rsquo;s virtual card can&rsquo;t make
@@ -104,11 +105,12 @@ export function Terms() {
           Anyone who can see a listing can report it; Talyvor reviews reported and held listings and
           can take one down for good, which refunds every use of it still inside the 14-day holdback.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           Only a workspace&rsquo;s owner or an admin can publish. Sellers earn 85% of every paid use,
           rental and purchase, from the first sale; Talyvor keeps 15%. Earnings are held for 14 days for refunds, then paid once a week to a
-          Stripe account the seller connects, less Stripe&rsquo;s fees at cost — or taken at once as
-          Talyvor credits, with no fees and no minimum. Each weekly payout has a statement of its sales,
+          Stripe account the seller connects, less Stripe&rsquo;s fees at cost, or taken at once as
+          Talyvor credits, with no fees and no minimum. {buildingWords('money_payouts', 'until then they are taken as Talyvor credits')}{' '}
+          Each weekly payout has a statement of its sales,
           fees, royalties and refunds. A seller gives Talyvor their tax details before they are paid;
           payouts to a seller whose details are still incomplete after three requests are held until
           they are complete. A refund after the seller was paid is recovered from their next earnings.
@@ -125,13 +127,13 @@ export function Terms() {
           switched off or under evaluation. A contribution can be genuine and produce no ledger
           entry.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           Where a mechanism is under evaluation, what it <em>would</em> have paid is recorded for
-          our own checking and never credited — it does not reach your balance. Your balance and
+          our own checking and never credited: it does not reach your balance. Your balance and
           ledger show only what you have actually been paid. This is the same statement the app
           makes on the sharing screen, and it is deliberately the same words.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           Rates, caps and eligibility can change, including to zero. Nothing here is a promise of
           future earnings.
         </p>
@@ -148,10 +150,10 @@ export function Terms() {
           <strong>During that period the payout can be reversed.</strong> If we determine that an
           earning was gamed, or that the shared answer it was paid for was bad, an operator can
           revoke it and the held amount is removed before it ever becomes spendable. That is what
-          the holding period is for — it is the window in which a payout can still be contested.
+          the holding period is for: it is the window in which a payout can still be contested.
           Once it settles, it is not clawed back.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           We do not fix the length here on purpose. It is an operator setting, not a term of this
           document, and this same page ships with self-hosted installations whose operator may have
           chosen a different one. Your balance screen shows the held amount and says that it settles
@@ -162,7 +164,7 @@ export function Terms() {
         <LawyerReview compact>
           This is a delay and a discretionary reversal on amounts already described to the user as
           earned. Who decides, on what evidence, whether the user is told, and whether they can
-          contest it are all undefined in the code — the revocation is an operator action with no
+          contest it are all undefined in the code. The revocation is an operator action with no
           notice mechanism and no appeal path. That needs a position before anything of value
           depends on it.
         </LawyerReview>
@@ -172,14 +174,14 @@ export function Terms() {
         <p className="text-reading">
           When you attach a document, we convert it to Markdown before the model sees it. The model
           reads the converted text, not your original file. This is on unless you turn it off, and
-          it is on because the converted text is smaller — you are charged for the smaller thing.
+          it is on because the converted text is smaller: you are charged for the smaller thing.
         </p>
         <p className="mt-3 text-reading">
-          <strong>If a file has no text to extract</strong> — a scan, a photograph, an image-only
-          PDF — it is sent to a <strong>vision model</strong> to be read. That is an extra model
+          <strong>If a file has no text to extract</strong> (a scan, a photograph, an image-only
+          PDF), it is sent to a <strong>vision model</strong> to be read. That is an extra model
           call on your document, and it costs tokens rather than saving them.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           The converted text is what everything downstream treats as your prompt, so what{' '}
           <a className={inlineLink} href="/privacy">Privacy</a> says about prompts applies to your
           documents' contents too. You can turn conversion off in settings.
@@ -211,7 +213,7 @@ export function Terms() {
           it off deletes what was kept from your workspace. What is kept, and what never is, is set out
           in <a className={inlineLink} href="/privacy#learning-from-your-prose-only-if-you-allow-it">Privacy</a>.
         </p>
-        <LawyerReview compact label="Draft — for legal review">
+        <LawyerReview compact label="Draft: for legal review">
           This permission, and what Talyvor may do with what it learned once a workspace turns it off,
           need review before this is relied on.
         </LawyerReview>
@@ -246,7 +248,7 @@ export function Terms() {
           workspace&rsquo;s data and shows that request until it is done. In Track, a
           workspace&rsquo;s owner can delete it and restore it within 14 days.
         </p>
-        <p className="mt-3 text-reading text-muted">
+        <p className="mt-3 text-reading text-ink-2">
           Deleting all of your data is carried out by an operator, not automatically, and no
           turnaround is promised. Billing and ledger records, agent wallet statements included, are
           kept, because the law requires them. The full account is in{' '}

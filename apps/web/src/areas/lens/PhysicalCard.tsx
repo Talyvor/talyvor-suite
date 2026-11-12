@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Chip, Dialog, EmptyState, Field, Icon, Input, KindTile, Row, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, Dialog, EmptyState, Field, Icon, Input, KindTile, Row, Tabs, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { cn } from '@talyvor/ui'
+import { TalyvorCard } from '../../cards/TalyvorCard'
+import { OWNER_HOLDER, OWNER_SUB, ownerFaces, ownerFamily, setOwnerTier, useOwnerFace } from '../../cards/ownerCard'
 import { readFailure } from './WalletMoney'
-import { type CardAddress, type PhysicalCard, agentBankApi, refusalText } from './agentBankApi'
+import { type CardAddress, type PhysicalCard, type WorkspaceAccount, WORKSPACE_NAME_KEY, agentBankApi, refusalText, useAccount } from './agentBankApi'
 
 // PhysicalCard.tsx — B53.12: order the physical Talyvor Card in the partner's standard design, follow its delivery,
 // activate it on arrival, open the partner's own screen for the PIN, and replace one that is lost (the old card frozen
@@ -35,6 +37,29 @@ function stateOf(c: PhysicalCard): { line: string; chip: React.ReactNode } {
   return { line, chip: <Chip tone="wait">Not yet active</Chip> }
 }
 
+/**
+ * B57.127 — the owner's own card in its tier art, the account's default until the owner picks another tier beside it.
+ * The pick changes only the picture: it stays in this browser and nothing else on the page reads it. Drawn once the
+ * account's type is known, so a face never claims a type the read did not give.
+ */
+function OwnerCardFace({ account }: { account: WorkspaceAccount }) {
+  const family = ownerFamily(account)
+  const card = useOwnerFace(family)
+  const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
+  const named = workspace.data && workspace.data.name !== workspace.data.id ? workspace.data.name : null
+  return (
+    <div data-testid="owner-card-face" className="flex flex-col gap-4 wide:flex-row wide:items-center">
+      <div className="w-full max-w-md">
+        <TalyvorCard card={card} holder={named ?? OWNER_HOLDER[family]} sub={OWNER_SUB[card.id]} />
+      </div>
+      <div className="grid gap-2">
+        <Tabs label="Card tier" tabs={ownerFaces(family).map((c) => c.tier)} value={card.tier} onChange={setOwnerTier} />
+        <p className="text-body text-ink-3">Shows your card in another tier. Only the picture changes.</p>
+      </div>
+    </div>
+  )
+}
+
 function Refused({ error }: { error: unknown }) {
   return (
     <p role="alert" className="text-body text-danger">
@@ -46,6 +71,7 @@ function Refused({ error }: { error: unknown }) {
 export function PhysicalCardScreen() {
   const qc = useQueryClient()
   const cards = useQuery({ queryKey: PHYSICAL_CARDS_KEY, queryFn: agentBankApi.physicalCards })
+  const { account } = useAccount()
   const refresh = () => void qc.invalidateQueries({ queryKey: PHYSICAL_CARDS_KEY })
 
   const [order, setOrder] = useState({ name_on_card: '', line1: '', line2: '', city: '', postcode: '', country: 'GB' })
@@ -114,6 +140,8 @@ export function PhysicalCardScreen() {
           four digits printed on it. Your PIN is set and shown only in the card partner’s own screens.
         </p>
       </div>
+
+      {account ? <OwnerCardFace account={account} /> : null}
 
       <div className="grid items-start gap-4 wide:grid-cols-12">
         <Card tone="white" className="wide:col-span-7">

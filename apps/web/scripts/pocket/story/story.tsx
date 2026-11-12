@@ -3,7 +3,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
-import { Story } from './Specimens'
+import { Cards, Story } from './Specimens'
 
 import '@talyvor/ui/theme.css'
 import '../../../src/styles.css'
@@ -11,5 +11,6 @@ import '../../../src/styles.css'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Story />
+    <Cards />
   </StrictMode>,
 )

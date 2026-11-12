@@ -110,7 +110,7 @@ export function SearchIssues() {
           {isSessionExpired(run.error) ? null : isUnconfigured(run.error) ? (
             <>Track is not configured on this deployment, so there is nothing to search.</>
           ) : (
-            <>Couldn’t search — nothing was read, so nothing is shown. Try again.</>
+            <>Couldn’t search. Nothing was read, so nothing is shown. Try again.</>
           )}
         </div>
       ) : view === null ? null : view.kind === 'unrecognised' ? (
@@ -126,7 +126,7 @@ export function SearchIssues() {
               both when nothing matched and when no search backend is wired at all, and the two are
               indistinguishable from here. */}
           <p className="text-body text-muted">
-            Track returned no issues for that. Widen the query — fewer words, or different ones.
+            Track returned no issues for that. Widen the query: fewer words, or different ones.
           </p>
           {view.dropped > 0 ? <DroppedNote n={view.dropped} /> : null}
         </div>
@@ -196,7 +196,7 @@ function DroppedNote({ n }: { n: number }) {
   // literal scanner reads as a Tailwind class list. Prose belongs in the document.
   return (
     <p className="text-caption text-muted">
-      {n} {n === 1 ? 'result' : 'results'} arrived and could not be drawn — the response carried a
+      {n} {n === 1 ? 'result' : 'results'} arrived and could not be drawn. The response carried a
       row with no id or no title, which is a line with nothing written on it.
     </p>
   )

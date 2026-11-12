@@ -250,9 +250,10 @@ const preset = {
       borderRadius: { card: '24px', 'card-tight': '18px', control: '14px', sheet: '28px', pill: '9999px', tile: '12px', inset: '16px' },
       // `edge` is Pocket's 1.5px control edge on every field (pocket.css .input), 3:1 on the page.
       // `edge-current` is the danger button's ring (pocket.css .btn.danger): the same 1.5px in the button's own ink.
+      // `pick` is a picked choice's ring (pocket.css .pick.on): 2px of ink inside it (B57.141).
       boxShadow: {
         pocket: 'var(--shadow)', 'pocket-lg': 'var(--shadow-lg)', edge: 'inset 0 0 0 1.5px var(--control)',
-        'edge-current': 'inset 0 0 0 1.5px currentColor',
+        'edge-current': 'inset 0 0 0 1.5px currentColor', pick: 'inset 0 0 0 2px var(--ink)',
       },
       // B57.4 — Pocket's control sizes, as half steps of Tailwind's own quarter-rem scale (h-11 is 44 already):
       // 0.75 the switch's 3px inset, 5.25 its thumb's travel, 6.5 the switch and chip (26), 8.5 the small button (34),
@@ -262,13 +263,15 @@ const preset = {
         0.75: '0.1875rem', 5.25: '1.3125rem', 6.5: '1.625rem', 8.5: '2.125rem', 9.5: '2.375rem', 11.5: '2.875rem', 13.5: '3.375rem',
         // B57.5 — the sheet's 7px tangerine edge (1.75) and its 22px foot (5.5), the sheet 420 wide (105), a dialog 480 (120).
         1.75: '0.4375rem', 5.5: '1.375rem', 105: '26.25rem', 120: '30rem',
+        // B57.8 — the shell: the sidebar 232 wide (58) with its 18px padding (4.5), and the top bar 72 tall (`header`).
+        4.5: '1.125rem', 58: '14.5rem', header: '4.5rem',
       },
       // Pocket's focus ring is 3px of tangerine (B57.4).
       outlineWidth: { 3: '3px' },
-      // `below-header` — the viewport under the console's sticky header (`top-12`, a 32px control +
-      // py-2). B10.3's chat fills exactly that, so its composer sits at the bottom of the screen.
-      height: { row: '38px', 'below-header': 'calc(100dvh - 3rem)' },
-      minHeight: { row: '38px', 'below-header': 'calc(100dvh - 3rem)' },
+      // `below-header` — the viewport under the console's sticky top bar (`top-header`, Pocket's 72px, B57.8).
+      // B10.3's chat fills exactly that, so its composer sits at the bottom of the screen.
+      height: { row: '38px', 'below-header': 'calc(100dvh - 4.5rem)' },
+      minHeight: { row: '38px', 'below-header': 'calc(100dvh - 4.5rem)' },
       outlineColor: { accent: 'var(--accent)' },
       ringColor: { accent: 'var(--accent)' },
     },

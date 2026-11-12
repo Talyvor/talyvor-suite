@@ -107,7 +107,7 @@ function ReadyView({ ready, onFinished }: { ready: Ready; onFinished: () => void
         ) : (
           <>The workspace had no credit to give {ready.agent.name}; add some on Billing, then fund it on Agent Wallets. </>
         )}
-        Its key is shown once — copy it now:
+        Its key is shown once. Copy it now:
       </p>
       <div data-testid="onboarding-key">
         <CopyBlock text={ready.key.key} label="the key" />

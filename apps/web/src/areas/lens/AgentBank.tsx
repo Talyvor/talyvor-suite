@@ -2,20 +2,26 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
+import { Icon, Button as PocketButton, Row as PocketRow, RoomBadge, faceOf, type FaceColour } from '@talyvor/ui/pocket'
 import { Card, pressed } from './walletBrand'
+import { LAST_KEY, RemoveKeyDialog } from './RemoveKey'
 import { Region, RegionScreen } from '../../components/Region'
 import { useLinked } from '../../components/LinkedItem'
 import { isSessionExpired } from '../../lib/productState'
+import { IfArea } from '../../lib/workspaceAreas'
 import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
-import { letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
+import { assertOver, letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
+import { GetAKeyBack, NoLiveKey, RecoveryCodeRow } from './KeyRecovery'
 import { AgentAnalytics } from './AgentAnalytics'
 import { AlertChannels } from './AlertChannels'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
+import { HelperPicker } from '../../cards/HelperPicker'
 import { categoryWords } from './Budgets'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
+import { DeclineForm, declinedText } from './Decline'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
 import { CurrencyPicker, Lxc, useLxcText } from './money'
@@ -28,6 +34,7 @@ import { CashOutCard, CashOuts, Escrows, PayIntoEscrow, Portfolios, Pots } from 
 import {
   type Agent,
   type AgentApproval,
+  type ApprovalKey,
   type PayeeAllowance,
   type AgentArchive,
   type ApprovalPayee,
@@ -40,8 +47,10 @@ import {
   type AgentSchedule,
   type AgentTopUp as AgentTopUpValue,
   type LimitAlert,
+  type PasskeyAssertion,
   type PaymentRequest,
   type PostingKind,
+  type RulesChange,
   type StatementFormat,
   type StatementLine,
   AgentBankError,
@@ -54,6 +63,9 @@ import {
   refusalText,
   retryMoveThroughRestart,
 } from './agentBankApi'
+import { WorkspaceLabel, approvalCapability, paymentRequestCapabilities } from '../../labels/workspace'
+import { DESIGN_ATTR } from '../../pocketPending'
+import { AGENT_CREDIT } from '../../labels/capabilities'
 
 // AgentBank.tsx — B19.4: Agent Wallets (named so by B21.6). Each AI agent a workspace runs has a wallet of its own on
 // Lens's double-entry ledger (B19.1): the workspace funds it and takes funds back, the agent spends
@@ -90,7 +102,7 @@ interface HeldPayment {
 // full digit wide, so "Payee 3 1 LXC" read with a double gap before LXC.
 const lxc = (micros: number) => <Lxc ulxc={micros} />
 
-function Note({ ok, children }: { ok: boolean; children: React.ReactNode }) {
+export function Note({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
     <p role={ok ? 'status' : 'alert'} className="text-caption text-ink">
       {children}
@@ -98,7 +110,7 @@ function Note({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   )
 }
 
-function readFailure(err: unknown, what: string): string {
+export function readFailure(err: unknown, what: string): string {
   return isSessionExpired(err) ? `${what} can’t be read until you sign in again.` : `${what} could not be read just now.`
 }
 
@@ -126,11 +138,11 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" data-testid="pause-every-agent">
       {book.all_paused_at ? (
         <>
           <p role="status" className="text-body text-ink" data-testid="agents-all-paused">
-            Every agent is paused{book.all_paused_reason ? ` — ${book.all_paused_reason}` : ''}. Lens refuses each one’s
+            Every agent is paused{book.all_paused_reason ? `: ${book.all_paused_reason}` : ''}. Lens refuses each one’s
             next request or payment until you start them again.
           </p>
           {onlyThePhone ? (
@@ -176,7 +188,7 @@ function PauseAgent({ agent }: { agent: Agent }) {
         {agent.paused_at ? (
           <>
             <p className="text-body text-ink" data-testid="agent-paused">
-              {agent.name} is paused{agent.paused_reason ? ` — ${agent.paused_reason}` : ''}.
+              {agent.name} is paused{agent.paused_reason ? `: ${agent.paused_reason}` : ''}.
             </p>
             {onlyThePhone ? (
               <OnThePhone>Resume {agent.name} on your phone with Face ID.</OnThePhone>
@@ -317,20 +329,27 @@ function LimitAlerts({ nameOf }: { nameOf: (id: string) => string }) {
       ) : (
         <p className="px-gutter py-3 text-body text-muted">
           No limit reached yet. An alert appears here when spending reaches 50, 80 or 100% of a budget, a card’s cap or an
-          agent’s limit — once each period. Open an agent below to choose its limits.
+          agent’s limit, once each period. Open an agent below to choose its limits.
         </p>
       )}
     </Card>
   )
 }
 
-/** B17.364 — a budget on a company account raises alerts before any agent exists: they show then, and nothing else does. */
+/**
+ * B17.364 — a budget on a company account raises alerts before any agent exists: they show then, and nothing else does.
+ * B17.425 — so do the channels they go to, once one is added: the Where alerts go card is where its deliveries are read.
+ */
 function AlertsBeforeAgents({ nameOf }: { nameOf: (id: string) => string }) {
   const alerts = useQuery({ queryKey: ['limit-alerts'], queryFn: agentBankApi.limitAlerts })
-  if (!alerts.data?.alerts?.length) return null
+  const channels = useQuery({ queryKey: ['alert-channels'], queryFn: agentBankApi.alertChannels })
+  const raised = (alerts.data?.alerts?.length ?? 0) > 0
+  const added = (channels.data?.channels?.length ?? 0) > 0
+  if (!raised && !added) return null
   return (
-    <Region index="02" label="Limit alerts">
-      <LimitAlerts nameOf={nameOf} />
+    <Region index="02" label="Limit alerts" className="flex flex-col gap-3">
+      {raised ? <LimitAlerts nameOf={nameOf} /> : null}
+      {added ? <AlertChannels /> : null}
     </Region>
   )
 }
@@ -468,7 +487,7 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
           <Input
             aria-label={`Scheduled amount in LXC for ${agent.name}`}
             inputMode="decimal"
-            placeholder={toListing ? 'At most — its price' : 'LXC'}
+            placeholder={toListing ? 'At most its price' : 'LXC'}
             className="w-32 font-figure"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -586,9 +605,10 @@ function CreateAgent({ first = false, onCreated }: { first?: boolean; onCreated:
   const qc = useQueryClient()
   const [name, setName] = useState('')
   const [template, setTemplate] = useState<RuleTemplate | null>(null)
+  const [colour, setColour] = useState<FaceColour | null>(null)
   const create = useMutation({
     mutationFn: async () => {
-      const a = await agentBankApi.create(name.trim())
+      const a = await agentBankApi.create(name.trim(), colour ?? undefined)
       if (template === null) return { a, unsaved: null }
       try {
         qc.setQueryData(rulesKey(a.id), await agentBankApi.setRules(a.id, template.rules))
@@ -599,6 +619,7 @@ function CreateAgent({ first = false, onCreated }: { first?: boolean; onCreated:
     },
     onSuccess: ({ a }) => {
       setName('')
+      setColour(null)
       onCreated(a)
     },
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
@@ -637,6 +658,7 @@ function CreateAgent({ first = false, onCreated }: { first?: boolean; onCreated:
         ))}
       </div>
       {template ? <p className="text-caption text-muted">{template.summary}</p> : null}
+      <HelperPicker label="Its helper" value={colour} onChange={setColour} />
       {create.isError ? <Note ok={false}>{refusalText(create.error)}</Note> : null}
       {create.data?.unsaved ? <Note ok={false}>{create.data.unsaved}</Note> : null}
     </form>
@@ -786,7 +808,7 @@ function Ownership({ agent }: { agent: Agent }) {
       {agent.owner_user_id === '' ? (
         <>
           <Pill status="held">No owner</Pill>
-          <span className="text-caption text-muted">Nobody owns {agent.name} yet — claim it under Money.</span>
+          <span className="text-caption text-muted">Nobody owns {agent.name} yet. Claim it under Money.</span>
         </>
       ) : agent.verified ? (
         <>
@@ -808,16 +830,20 @@ function Ownership({ agent }: { agent: Agent }) {
   )
 }
 
-/** B28.21 — the agent's name and what it is for, in its owner's words (Lens keeps up to 500 characters). */
+/** B28.21 — the agent's name and what it is for, in its owner's words (Lens keeps up to 500 characters); B57.124, its helper. */
 function AgentDetails({ agent }: { agent: Agent }) {
   const qc = useQueryClient()
   const [name, setName] = useState(agent.name)
   const [description, setDescription] = useState(agent.description ?? '')
+  // B57.124 — the helper it wears now; its colour is sent only when the owner picks another, so Lens keeps it.
+  const current = faceOf(agent).colour
+  const [colour, setColour] = useState<FaceColour>(current)
   const save = useMutation({
-    mutationFn: () => agentBankApi.update(agent.id, { name: name.trim(), description: description.trim() }),
+    mutationFn: () =>
+      agentBankApi.update(agent.id, { name: name.trim(), description: description.trim(), ...(colour !== current ? { colour } : {}) }),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
-  const changed = name.trim() !== agent.name || description.trim() !== (agent.description ?? '')
+  const changed = name.trim() !== agent.name || description.trim() !== (agent.description ?? '') || colour !== current
   return (
     <Card>
       <CardHeader>Name and description</CardHeader>
@@ -838,6 +864,7 @@ function AgentDetails({ agent }: { agent: Agent }) {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
+        <HelperPicker label={`Helper for ${agent.name}`} value={colour} onChange={setColour} />
         <div>
           <Button type="submit" disabled={!changed || name.trim() === '' || save.isPending}>
             Save
@@ -990,36 +1017,39 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
   )
   const badRate = parseRate(rate) === null
   const bad = badAmount || badRate
+  const proposed: AgentRules = {
+    max_per_request_ulxc: parseLXC(limits.max_per_request_ulxc) ?? 0,
+    hourly_limit_ulxc: parseLXC(limits.hourly_limit_ulxc) ?? 0,
+    daily_limit_ulxc: parseLXC(limits.daily_limit_ulxc) ?? 0,
+    weekly_limit_ulxc: parseLXC(limits.weekly_limit_ulxc) ?? 0,
+    monthly_limit_ulxc: parseLXC(limits.monthly_limit_ulxc) ?? 0,
+    approval_above_ulxc: parseLXC(limits.approval_above_ulxc) ?? 0,
+    requests_per_minute: parseRate(rate) ?? 0,
+    model_daily_limits_ulxc: Object.fromEntries(
+      modelLimits.map(([m, t]) => [m, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
+    ),
+    allowed_models: models,
+    allowed_providers: providers,
+    allowed_listings: listings,
+    allowed_payees: payees.allowed,
+    blocked_payees: payees.blocked,
+    payee_daily_limits_ulxc: Object.fromEntries(
+      Object.entries(payees.caps).map(([id, t]) => [id, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
+    ),
+    payee_monthly_limits_ulxc: Object.fromEntries(
+      Object.entries(payees.monthCaps).map(([id, t]) => [id, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
+    ),
+    active_from: from.trim(),
+    active_until: until.trim(),
+    timezone: timezone.trim(),
+    pause_on_unusual_spend: pauseOnUnusual,
+  }
+  const change = useRulesChange(agent.id)
+  const judged = change.judgedFor({ rules: proposed })
   const save = useMutation({
-    mutationFn: () =>
-      agentBankApi.setRules(agent.id, {
-        max_per_request_ulxc: parseLXC(limits.max_per_request_ulxc) ?? 0,
-        hourly_limit_ulxc: parseLXC(limits.hourly_limit_ulxc) ?? 0,
-        daily_limit_ulxc: parseLXC(limits.daily_limit_ulxc) ?? 0,
-        weekly_limit_ulxc: parseLXC(limits.weekly_limit_ulxc) ?? 0,
-        monthly_limit_ulxc: parseLXC(limits.monthly_limit_ulxc) ?? 0,
-        approval_above_ulxc: parseLXC(limits.approval_above_ulxc) ?? 0,
-        requests_per_minute: parseRate(rate) ?? 0,
-        model_daily_limits_ulxc: Object.fromEntries(
-          modelLimits.map(([m, t]) => [m, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
-        ),
-        allowed_models: models,
-        allowed_providers: providers,
-        allowed_listings: listings,
-        allowed_payees: payees.allowed,
-        blocked_payees: payees.blocked,
-        payee_daily_limits_ulxc: Object.fromEntries(
-          Object.entries(payees.caps).map(([id, t]) => [id, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
-        ),
-        payee_monthly_limits_ulxc: Object.fromEntries(
-          Object.entries(payees.monthCaps).map(([id, t]) => [id, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0),
-        ),
-        active_from: from.trim(),
-        active_until: until.trim(),
-        timezone: timezone.trim(),
-        pause_on_unusual_spend: pauseOnUnusual,
-      }),
+    mutationFn: () => change.run({ rules: proposed }, (assertion) => agentBankApi.setRules(agent.id, proposed, assertion)),
     onSuccess: (saved) => {
+      if (saved === null) return
       qc.setQueryData(rulesKey(agent.id), saved)
       void qc.invalidateQueries({ queryKey: rulesHistoryKey(agent.id) })
     },
@@ -1102,12 +1132,13 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
       <div className="flex flex-col gap-2 px-gutter py-3">
         <div>
           <Button type="submit" disabled={bad || save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save rules'}
+            {save.isPending ? 'Saving…' : judged?.signs ? 'Save with your passkey' : 'Save rules'}
           </Button>
         </div>
+        <RulesLoosen agent={agent.name} judged={judged} />
         {badAmount ? <Note ok={false}>A limit is an amount of LXC with at most six decimals, or empty.</Note> : null}
         {badRate ? <Note ok={false}>Requests per minute is a whole number, or empty.</Note> : null}
-        {save.isSuccess ? <Note ok>Saved. Lens applies these rules to the next request or payment.</Note> : null}
+        {save.isSuccess && save.data !== null ? <Note ok>Saved. Lens applies these rules to the next request or payment.</Note> : null}
         {save.isError ? <Note ok={false}>{refusalText(save.error)}</Note> : null}
       </div>
     </form>
@@ -1136,7 +1167,7 @@ function ListingsPicker({ agent, chosen, onChange }: { agent: Agent; chosen: str
           catalog.isError
             ? 'The marketplace could not be read just now; the listings already chosen are kept.'
             : chosen.length > 0
-              ? 'Only the listings marked Allowed — Lens refuses any other.'
+              ? 'Only the listings marked Allowed. Lens refuses any other.'
               : 'Any listing. Mark some Allowed to allow only those.'
         }
       />
@@ -1219,7 +1250,7 @@ function PayeesPicker({ agent, agents, payees, onChange }: { agent: Agent; agent
         label="Who it may pay"
         hint={`${
           payees.allowed.length > 0
-            ? 'Only the payees marked Allowed — Lens refuses a payment to any other.'
+            ? 'Only the payees marked Allowed. Lens refuses a payment to any other.'
             : payees.blocked.length > 0
               ? 'Anyone but the payees marked Blocked.'
               : 'Anyone. Mark a payee Blocked to refuse it, or Allowed to allow only those.'
@@ -1457,13 +1488,25 @@ function ruleChanges(was: AgentRules, now: AgentRules, payeeName: (id: string) =
 function RulesHistory({ agent, agents, onRolledBack }: { agent: Agent; agents: Agent[]; onRolledBack: (rules: AgentRules) => void }) {
   const qc = useQueryClient()
   const history = useQuery({ queryKey: rulesHistoryKey(agent.id), queryFn: () => agentBankApi.rulesHistory(agent.id) })
+  // B55.14 — a rollback asks first, with what it changes; one that loosens the rules is signed (Lens B55.13).
+  const change = useRulesChange(agent.id)
+  const [asking, setAsking] = useState<number | null>(null)
+  const ask = useMutation({
+    mutationFn: (version: number) => change.judge({ rollback_to: version }),
+    onMutate: (version) => {
+      setAsking(version)
+      rollback.reset()
+    },
+  })
   const rollback = useMutation({
-    mutationFn: (version: number) => agentBankApi.rollbackRules(agent.id, version),
+    mutationFn: (version: number) => change.commit({ rollback_to: version }, (assertion) => agentBankApi.rollbackRules(agent.id, version, assertion)),
     onSuccess: (back) => {
+      setAsking(null)
       onRolledBack(back)
       void qc.invalidateQueries({ queryKey: rulesHistoryKey(agent.id) })
     },
   })
+  const judged = asking === null ? null : change.judgedFor({ rollback_to: asking })
   const versions: AgentRulesVersion[] = history.data?.versions ?? []
   const payeeName = (id: string) => agents.find((a) => a.id === id)?.name ?? id
   return (
@@ -1494,9 +1537,9 @@ function RulesHistory({ agent, agents, onRolledBack }: { agent: Agent; agents: A
                   {i > 0 ? (
                     <Button
                       className="ml-auto"
-                      disabled={rollback.isPending}
+                      disabled={rollback.isPending || ask.isPending}
                       aria-label={`Roll ${agent.name}’s rules back to version ${v.version}`}
-                      onClick={() => rollback.mutate(v.version)}
+                      onClick={() => ask.mutate(v.version)}
                     >
                       Roll back to this
                     </Button>
@@ -1520,6 +1563,41 @@ function RulesHistory({ agent, agents, onRolledBack }: { agent: Agent; agents: A
           })}
         </ol>
       )}
+      {asking !== null && judged !== null ? (
+        <div className="flex flex-col gap-2 px-gutter pb-3" data-testid="rules-rollback-ask">
+          <p className="text-body text-ink">
+            Roll {agent.name}’s rules back to version <span className="font-figure">{asking}</span>?
+          </p>
+          <ul className="flex list-disc flex-col gap-0.5 pl-6 text-caption text-ink">
+            {judged.changes.map((c) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+          {judged.phone ? <RulesLoosen agent={agent.name} judged={judged} /> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {judged.phone ? null : (
+              <Button disabled={rollback.isPending} onClick={() => rollback.mutate(asking)}>
+                {rollback.isPending ? 'Rolling back…' : judged.signs ? 'Roll back with your passkey' : 'Roll back'}
+              </Button>
+            )}
+            <Button
+              disabled={rollback.isPending}
+              onClick={() => {
+                setAsking(null)
+                change.reset()
+                rollback.reset()
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {ask.isError ? (
+        <div className="px-gutter pb-3">
+          <Note ok={false}>{refusalText(ask.error)}</Note>
+        </div>
+      ) : null}
       {rollback.isSuccess || rollback.isError ? (
         <div className="px-gutter pb-3">
           {rollback.isSuccess ? (
@@ -1583,9 +1661,13 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
   const rate = rule?.[0] === 'requests_per_minute'
   const raisedTo = rate ? (/^\s*\d+\s*$/.test(value) && Number(value) > 0 ? Number(value) : null) : parseLXC(value)
   const at = new Date(until)
+  // B55.14 — a boost always loosens the rules, so once the workspace has a passkey it is signed (Lens B55.13).
+  const asked = rule !== undefined && raisedTo !== null && !Number.isNaN(at.getTime()) ? { rule: rule[0], value: raisedTo, until: at.toISOString() } : null
+  const change = useRulesChange(agent.id)
+  const judged = change.judgedFor(asked && { boost: asked })
   const raise = useMutation({
-    mutationFn: () => agentBankApi.boost(agent.id, { rule: rule?.[0] ?? '', value: raisedTo ?? 0, until: at.toISOString() }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: boostsKey(agent.id) }),
+    mutationFn: (b: { rule: string; value: number; until: string }) => change.run({ boost: b }, (assertion) => agentBankApi.boost(agent.id, b, assertion)),
+    onSuccess: (b) => b !== null && void qc.invalidateQueries({ queryKey: boostsKey(agent.id) }),
   })
   const end = useMutation({
     mutationFn: (r: string) => agentBankApi.endBoost(agent.id, r),
@@ -1596,7 +1678,7 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
   })
   const label = (r: string) => BOOSTABLE.find(([field]) => field === r)?.[1] ?? r
   const inForce: AgentRuleBoost[] = boosts.data?.boosts ?? []
-  const ready = rule !== undefined && raisedTo !== null && !Number.isNaN(at.getTime()) && !raise.isPending
+  const ready = asked !== null && !raise.isPending
   return (
     <Card>
       <CardHeader>Limit boost</CardHeader>
@@ -1637,7 +1719,7 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
           className="flex flex-col gap-2 px-gutter py-3"
           onSubmit={(e) => {
             e.preventDefault()
-            if (ready) raise.mutate()
+            if (ready && asked !== null) raise.mutate(asked)
           }}
         >
           <p className="text-body text-muted">
@@ -1678,10 +1760,11 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
               onChange={(e) => setUntil(e.target.value)}
             />
             <Button type="submit" disabled={!ready}>
-              {raise.isPending ? 'Raising…' : 'Raise until then'}
+              {raise.isPending ? 'Raising…' : judged?.signs ? 'Raise with your passkey' : 'Raise until then'}
             </Button>
           </div>
-          {raise.isSuccess ? (
+          <RulesLoosen agent={agent.name} judged={judged} />
+          {raise.isSuccess && raise.data !== null ? (
             <Note ok>
               {agent.name}’s {label(raise.data.rule).toLowerCase()} is {boostFigure(raise.data.rule, raise.data.value)} until{' '}
               <span className="font-figure">{formatWhen(raise.data.until)}</span>, then{' '}
@@ -1913,7 +1996,7 @@ function IssueKey({ agent }: { agent: Agent }) {
   if (issued) {
     return (
       <RevealOnce
-        title={`${agent.name}’s key — shown once`}
+        title={`${agent.name}’s key (shown once)`}
         secret={issued.key}
         copyLabel="Copy key"
         identifier={issued.prefix}
@@ -1957,7 +2040,7 @@ export function lineText(l: StatementLine, nameOf: (id: string) => string): stri
       return 'Covered by the credit line'
     case 'pay': {
       const what = out ? `Paid ${other}` : `Received from ${other}`
-      return l.ref ? `${what} — ${l.ref}` : what
+      return l.ref ? `${what} · ${l.ref}` : what
     }
     case 'transfer':
       return out ? `Transferred to ${other}` : `Transfer from ${other}`
@@ -1998,7 +2081,7 @@ function lineStatus(l: StatementLine): { status: PillStatus; label: string } {
 }
 
 /** B28.51 — the kinds the Statement can be filtered to, in the words its lines use. */
-const STATEMENT_KINDS: ReadonlyArray<{ label: string; kinds: readonly PostingKind[] }> = [
+export const STATEMENT_KINDS: ReadonlyArray<{ label: string; kinds: readonly PostingKind[] }> = [
   { label: 'Every kind', kinds: [] },
   { label: 'Funded', kinds: ['fund'] },
   { label: 'Taken back', kinds: ['withdraw'] },
@@ -2047,7 +2130,7 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
   }, [found])
   return (
     <Card>
-      <CardHeader>Statement</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability={AGENT_CREDIT} />}>Statement</CardHeader>
       <div className="flex flex-wrap items-center gap-2 border-b border-rule px-gutter py-3">
         <Input
           type="search"
@@ -2151,7 +2234,7 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
 const utcDay = (d: Date) => d.toISOString().slice(0, 10)
 
 /** Last month, or this month so far, as its first and last UTC day. */
-function monthPeriod(which: 'last' | 'this', now = new Date()): { from: string; through: string } {
+export function monthPeriod(which: 'last' | 'this', now = new Date()): { from: string; through: string } {
   const y = now.getUTCFullYear()
   const m = now.getUTCMonth()
   return which === 'last'
@@ -2160,13 +2243,13 @@ function monthPeriod(which: 'last' | 'this', now = new Date()): { from: string; 
 }
 
 /** The day after a YYYY-MM-DD day: Lens's period ends before `to`, and the screen names the last day it covers. */
-function dayAfter(d: string): string {
+export function dayAfter(d: string): string {
   const t = new Date(`${d}T00:00:00Z`)
   t.setUTCDate(t.getUTCDate() + 1)
   return utcDay(t)
 }
 
-function saveFile(name: string, blob: Blob) {
+export function saveFile(name: string, blob: Blob) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -2280,7 +2363,7 @@ const DECIDED: Record<AgentApproval['status'], { status: PillStatus; label: stri
   pending: { status: 'held', label: 'Waiting' },
   approved: { status: 'settled', label: 'Approved' },
   used: { status: 'settled', label: 'Approved and used' },
-  denied: { status: 'slashed', label: 'Denied' },
+  denied: { status: 'slashed', label: 'Declined' },
   expired: { status: 'parked', label: 'Expired' },
 }
 // B55.7 — a status Lens adds before this screen knows it reads Closed instead of blanking the screen.
@@ -2303,17 +2386,88 @@ export function useKeys() {
   const passkeys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
   const devices = useQuery({ queryKey: DEVICES_KEY, queryFn: agentBankApi.devices })
   const passkeyCount = (passkeys.data?.passkeys ?? []).length
-  const thisBrowserSigns = passkeyCount > 0
-  const signed = thisBrowserSigns || (devices.data?.devices ?? []).length > 0
   const isSuccess = passkeys.isSuccess && devices.isSuccess
+  // B55.54 — keys, but every one revoked (Lens lists revoked passkeys and phone keys): nothing can approve until one is
+  // got back (KeyRecovery.tsx), so nothing that needs a signature is offered here, as with the phone's key alone.
+  const live = [...(passkeys.data?.passkeys ?? []), ...(devices.data?.devices ?? [])].filter((k) => !k.revoked_at).length
+  const noLiveKey = isSuccess && passkeyCount + (devices.data?.devices ?? []).length > 0 && live === 0
+  const thisBrowserSigns = passkeyCount > 0 && !noLiveKey
+  const signed = passkeyCount > 0 || (devices.data?.devices ?? []).length > 0
   const onlyThePhone = isSuccess && signed && !thisBrowserSigns
-  return { signed, thisBrowserSigns, onlyThePhone, hold: !isSuccess || onlyThePhone, passkeyCount, isSuccess }
+  return { signed, thisBrowserSigns, onlyThePhone, noLiveKey, hold: !isSuccess || onlyThePhone, passkeyCount, isSuccess }
+}
+
+/** B55.14 — what Lens said a change to an agent's rules does, for the change it was asked about. */
+interface RulesJudged {
+  change: string
+  changes: string[]
+  /** looser, and this browser's passkey signs it */
+  signs: boolean
+  /** looser, and only the phone's key could sign it */
+  phone: boolean
+}
+
+/**
+ * B55.14 — loosening an agent's rules is signed, as resuming it is; tightening is saved at once (Lens B55.13). judge asks
+ * Lens what a change does; commit saves it, signed over a fresh challenge for exactly that change when it loosens the
+ * rules and the workspace has a passkey. A form's save (run) judges first: tighter, or a workspace with no key, saves
+ * there and then; looser shows what it loosens and waits for the person to save again. With only the phone's key
+ * nothing is sent from here.
+ */
+export function useRulesChange(agentID: string) {
+  const { onlyThePhone } = useKeys()
+  const [judged, setJudged] = useState<RulesJudged | null>(null)
+  const judge = async (change: RulesChange): Promise<RulesJudged> => {
+    const j = await agentBankApi.rulesChallenge(agentID, change)
+    const signs = j.looser && (j.allow_credentials ?? []).length > 0
+    const next = { change: JSON.stringify(change), changes: j.changes ?? [], signs, phone: j.looser && !signs && onlyThePhone }
+    setJudged(next)
+    return next
+  }
+  async function commit<T>(change: RulesChange, save: (assertion?: PasskeyAssertion) => Promise<T>, known = judged): Promise<T> {
+    let assertion: PasskeyAssertion | undefined
+    if (known?.change !== JSON.stringify(change) || known.signs) {
+      // A fresh challenge: the one judged may have run out, and Lens signs over exactly this change.
+      const j = await agentBankApi.rulesChallenge(agentID, change)
+      if (j.looser && j.challenge && (j.allow_credentials ?? []).length > 0) assertion = await assertOver({ challenge: j.challenge, allow_credentials: j.allow_credentials })
+    }
+    const saved = await save(assertion)
+    setJudged(null)
+    return saved
+  }
+  async function run<T>(change: RulesChange, save: (assertion?: PasskeyAssertion) => Promise<T>): Promise<T | null> {
+    if (judged?.change === JSON.stringify(change) && judged.signs) return commit(change, save)
+    const j = await judge(change)
+    return j.signs || j.phone ? null : commit(change, save, j)
+  }
+  /** What Lens said this change does, while it is the change last asked about. */
+  const judgedFor = (change: RulesChange | null) => (change !== null && judged?.change === JSON.stringify(change) ? judged : null)
+  return { judge, commit, run, judged, judgedFor, reset: () => setJudged(null) }
+}
+
+/** B55.14 — said before a looser change is saved: what it loosens and that it needs the passkey, or where to add one. */
+export function RulesLoosen({ agent, judged }: { agent: string; judged: RulesJudged | null }) {
+  if (judged === null || (!judged.signs && !judged.phone)) return null
+  if (judged.phone) return <OnThePhone>Loosen {agent}’s rules with a passkey on this browser: add this browser first.</OnThePhone>
+  return (
+    <div className="flex flex-col gap-1 text-body text-ink" data-testid="rules-loosen">
+      <p>This loosens {agent}’s rules:</p>
+      <ul className="flex list-disc flex-col gap-0.5 pl-6 text-caption">
+        {judged.changes.map((c) => (
+          <li key={c}>{c}</li>
+        ))}
+      </ul>
+      <p>It needs your passkey. Tightening is saved at once.</p>
+    </div>
+  )
 }
 
 /** B55.2 — said in place of a button this browser cannot sign for: where to do it, and how to sign here too (B55.3). */
 export function OnThePhone({ children }: { children: React.ReactNode }) {
   // On Approvals itself the link would lead back to the same page.
   const here = useLocation().pathname === '/approvals'
+  // B55.54 — with no live key there is no phone to do it on either: say so, and where to get a key back.
+  if (useKeys().noLiveKey) return <NoLiveKey here={here} />
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-ink" data-testid="on-the-phone">
       <span>{children}</span>
@@ -2329,27 +2483,79 @@ export function OnThePhone({ children }: { children: React.ReactNode }) {
 /** What went wrong on this device, in words: Lens's sentence, a cancelled prompt, or our own message. */
 export function deviceText(err: unknown, fallback: string): string {
   if (err instanceof AgentBankError) return refusalText(err)
-  if (err instanceof DOMException && err.name === 'NotAllowedError') return 'Cancelled — nothing changed.'
+  if (err instanceof DOMException && err.name === 'NotAllowedError') return 'Cancelled. Nothing changed.'
   if (err instanceof DOMException && err.name === 'NotSupportedError') return fallback
   return err instanceof Error && err.message ? err.message : fallback
+}
+
+export const APPROVAL_KEYS_KEY = ['approval-keys']
+
+/** B55.16 — "Passkey · added 14 Oct · last used yesterday", or "Phone key · …". */
+function keyFacts(k: ApprovalKey): string {
+  return [
+    k.kind === 'phone' ? 'Phone key' : 'Passkey',
+    `added ${formatDecided(k.created_at)}`,
+    k.last_used_at ? `last used ${formatDecided(k.last_used_at)}` : 'never used',
+  ].join(' · ')
+}
+
+/** B55.16 — the card's line: "2 passkeys and your phone’s key are registered. You approve with one of them; …". */
+function keysLine(keys: ApprovalKey[]): string {
+  const phones = keys.filter((k) => k.kind === 'phone').length
+  const passkeys = keys.length - phones
+  const what = [
+    passkeys === 0 ? '' : `${passkeys} passkey${passkeys === 1 ? '' : 's'}`,
+    phones === 0 ? '' : phones === 1 ? 'your phone’s key' : `${phones} phone keys`,
+  ]
+    .filter((x) => x !== '')
+    .join(' and ')
+  const head = `${what.charAt(0).toUpperCase()}${what.slice(1)} ${keys.length === 1 ? 'is' : 'are'} registered.`
+  return keys.length === 1
+    ? `${head} You approve with it; nothing is approved without it.`
+    : `${head} You approve with one of them; nothing is approved without one.`
 }
 
 /**
  * B19.10 — the phone half: a passkey made here signs every approval from now on, and this device can
  * be told when one is filed. Lens keeps both (B19.16); nothing is kept in the browser but the passkey.
  * B55.3: with only the phone's key, a passkey made here waits until the phone lets it in (Lens B55.1).
+ * B55.16 — every passkey and phone key is listed by name, and any but the last can be removed.
  */
 function FaceID({ signed, ready, passkeyCount }: { signed: boolean; ready: boolean; passkeyCount: number }) {
   const qc = useQueryClient()
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
   const [waiting, setWaiting] = useState<{ id: string; code: string } | null>(null)
+  // Lens lets only the owner or an admin read the keys; anyone else keeps the line below without the list.
+  const keys = useQuery({ queryKey: APPROVAL_KEYS_KEY, queryFn: agentBankApi.approvalKeys })
+  const list = keys.data?.keys ?? []
+  const [asking, setAsking] = useState<ApprovalKey | null>(null)
+  const remove = useMutation({
+    // Removing needs no signature: stopping a key is instant, and Lens refuses the last one.
+    mutationFn: async (k: ApprovalKey) => {
+      await (k.kind === 'phone' ? agentBankApi.revokeDevice(k.id) : agentBankApi.removePasskey(k.id))
+    },
+    onSuccess: (_, k) => {
+      setAsking(null)
+      setSaid({ ok: true, text: `Removed: ${k.name}. It can no longer approve anything.` })
+    },
+    onSettled: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: APPROVAL_KEYS_KEY }),
+        qc.invalidateQueries({ queryKey: PASSKEYS_KEY }),
+        qc.invalidateQueries({ queryKey: DEVICES_KEY }),
+      ]),
+  })
+  const ask = (k: ApprovalKey | null) => {
+    remove.reset()
+    setAsking(k)
+  }
   const register = useMutation({
     mutationFn: () => registerThisDevice(navigator.userAgent.includes('iPhone') ? 'iPhone' : 'This device'),
     onSuccess: (enrolment) => {
       if (enrolment) {
         setSaid(null)
         setWaiting(enrolment)
-      } else setSaid({ ok: true, text: 'This device now signs approvals. Face ID asks each time you approve or deny.' })
+      } else setSaid({ ok: true, text: 'This device now signs approvals. Face ID asks each time you approve or decline.' })
     },
     onError: (err) => setSaid({ ok: false, text: deviceText(err, 'No passkey was made.') }),
     onSettled: () => qc.invalidateQueries({ queryKey: PASSKEYS_KEY }),
@@ -2388,12 +2594,36 @@ function FaceID({ signed, ready, passkeyCount }: { signed: boolean; ready: boole
       <CardHeader>Face ID and notifications</CardHeader>
       <div className="flex flex-col gap-2 px-gutter py-3">
         <p className="text-body text-muted">
-          {signed && passkeyCount === 0
+          {keys.isSuccess && list.length > 0
+            ? keysLine(list)
+            : signed && passkeyCount === 0
             ? 'Approvals are signed on your phone. Nothing is approved without it.'
             : signed
             ? `Approvals are signed with a passkey (${passkeyCount} registered). Nothing is approved without one.`
             : 'Approvals are not signed yet. Make a passkey on your phone and every approval asks for Face ID.'}
         </p>
+        {list.length > 0 ? (
+          <div className="-mx-gutter" data-testid="approval-keys">
+            {list.map((k) => (
+              <Row key={`${k.kind}-${k.id}`} stack label={k.name || (k.kind === 'phone' ? 'Phone key' : 'Passkey')} hint={keyFacts(k)}>
+                {list.length === 1 ? (
+                  <span className="text-caption text-muted">{LAST_KEY}</span>
+                ) : (
+                  <Button className="h-12 wide:h-8" aria-label={`Remove ${k.name}`} onClick={() => ask(k)}>
+                    Remove
+                  </Button>
+                )}
+              </Row>
+            ))}
+          </div>
+        ) : null}
+        <RemoveKeyDialog
+          name={asking?.name ?? null}
+          pending={remove.isPending}
+          error={remove.error}
+          onKeep={() => ask(null)}
+          onRemove={() => asking && remove.mutate(asking)}
+        />
         {waiting ? (
           <Note ok>Waiting for your phone. Open Talyvor on your phone and let this browser in. The code there should be <span className="font-figure">{waiting.code}</span>.</Note>
         ) : said ? (
@@ -2424,7 +2654,7 @@ function FaceID({ signed, ready, passkeyCount }: { signed: boolean; ready: boole
 }
 
 /** B55.10 — who prepared it: Lens names the client "chat", "voice", "mcp:<client id>" or "key:<key id>" (B40.3). */
-const preparedBy = (client: string) =>
+export const preparedBy = (client: string) =>
   client.startsWith('mcp:') ? 'Your assistant' : client.startsWith('key:') ? 'An agent' : client === 'voice' ? 'A voice request' : 'Chat'
 
 /** B55.10 — a prepared request in one line, its hint and its total, as Approvals and Home list it. */
@@ -2442,28 +2672,45 @@ export function preparedWords(r: PaymentRequest, nameOf: (id: string) => string)
   }
 }
 
-/** B55.10 — one prepared request on Approvals: what it is, the total, and Review, which opens its card. */
-function PreparedRow({ r, nameOf }: { r: PaymentRequest; nameOf: (id: string) => string }) {
+/**
+ * B55.10 — one prepared request: what it is, the total, and Review, which opens its card. B57.116: Approvals and Home
+ * draw it in Pocket's row as w-approvals and w-home draw a waiting request: Chat's mark, the line over its hint, the
+ * total over its currency, and Review. Approvals also says whether the payment is sandbox or live (B56.11).
+ */
+export function PreparedRow({ r, nameOf, labelled = false }: { r: PaymentRequest; nameOf: (id: string) => string; labelled?: boolean }) {
   const w = preparedWords(r, nameOf)
   return (
-    <Row
-      stack
-      data-prepared={r.id}
-      label={
-        <span className="whitespace-normal">
-          {w.line} · <span className="font-figure">{w.total}</span>
-        </span>
-      }
-      hint={
-        <span>
-          {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
-        </span>
-      }
-    >
-      <Button asChild className="h-12 w-full wide:h-8 wide:w-auto">
-        <Link to={`/approve/${encodeURIComponent(r.id)}`}>Review</Link>
-      </Button>
-    </Row>
+    // Each row sits in its own wrapper, so the hairline between rows is the wrapper's, as pocket.css .li draws it. The
+    // wrapper is marked Pocket, as StatusLabel is, so the design guards hold the row to Pocket's rules on a page still
+    // drawn in today's.
+    <div data-prepared={r.id} {...{ [DESIGN_ATTR]: 'pocket' }} className="border-t border-line first:border-t-0">
+      <PocketRow
+        wrap
+        leading={<RoomBadge icon={<Icon name="chat" />} />}
+        title={w.line}
+        line={
+          <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+            {labelled ? <WorkspaceLabel capability={paymentRequestCapabilities(r)} /> : null}
+            <span>
+              {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
+            </span>
+          </span>
+        }
+        amount={
+          <>
+            <span className="block">{w.total}</span>
+            <span className="block text-caption font-normal text-ink-3">{Object.keys(r.totals ?? {}).join(', ')}</span>
+          </>
+        }
+        action={
+          // Secondary, as the reference's briefing draws Review, so the screen's one ink primary stays its own (B57.3).
+          // A payment waiting for the person is their move, so Pocket's tangerine focus ring has its reason.
+          <PocketButton asChild variant="secondary" size="sm" data-tangerine="your-move">
+            <Link to={`/approve/${encodeURIComponent(r.id)}`}>Review</Link>
+          </PocketButton>
+        }
+      />
+    </div>
   )
 }
 
@@ -2528,6 +2775,8 @@ export function Approvals({
 }) {
   const qc = useQueryClient()
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
+  const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
+  const ownAgent = (id: string) => (book.data?.agents ?? []).some((x) => x.id === id)
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
   const keys = useKeys()
   const { signed, onlyThePhone, hold } = keys
@@ -2545,12 +2794,14 @@ export function Approvals({
     if (list.isSuccess && hash.startsWith('#approval-')) document.getElementById(hash.slice(1))?.focus()
   }, [list.isSuccess, hash])
   const [swiping, setSwiping] = useState<{ id: string; dx: number } | null>(null)
-  const decideOne = async (a: AgentApproval, decision: 'approve' | 'deny', allow?: PayeeAllowance): Promise<React.ReactNode> => {
+  // B55.19 — the waiting row whose Decline form is open.
+  const [declining, setDeclining] = useState<string | null>(null)
+  const decideOne = async (a: AgentApproval, decision: 'approve' | 'deny', allow?: PayeeAllowance, reason?: string): Promise<React.ReactNode> => {
     // B19.10: once the workspace has a passkey, Lens takes a decision only signed with one — Face ID
     // (or Touch ID, or the device's PIN) asks here, over a challenge naming this approval alone.
-    await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id, allow) : undefined, allow)
+    await agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id, allow) : undefined, allow, reason)
     const p = held[a.id]
-    if (decision === 'deny') return <>Denied. {nameOf(a.agent_id)}’s request will be refused.</>
+    if (decision === 'deny') return declinedText(nameOf(a.agent_id), a)
     // B41.4 — the rule saved with the approval.
     const rule = allow ? (
       <>
@@ -2575,11 +2826,14 @@ export function Approvals({
       qc.invalidateQueries({ queryKey: ['agent-statement'] }),
     ])
   const decide = useMutation({
-    mutationFn: async ({ a, decision, allow }: { a: AgentApproval; decision: 'approve' | 'deny'; allow?: PayeeAllowance }) => ({
+    mutationFn: async ({ a, decision, allow, reason }: { a: AgentApproval; decision: 'approve' | 'deny'; allow?: PayeeAllowance; reason?: string }) => ({
       ok: true,
-      text: await decideOne(a, decision, allow),
+      text: await decideOne(a, decision, allow, reason),
     }),
-    onSuccess: setOutcome,
+    onSuccess: (o) => {
+      setOutcome(o)
+      setDeclining(null)
+    },
     onError: (err) => setOutcome({ ok: false, text: refusalText(err) }),
     onSettled: settled,
   })
@@ -2590,7 +2844,7 @@ export function Approvals({
       const n = chosen.length
       return {
         ok: true,
-        text: decision === 'approve' ? `Approved ${n}. Each agent’s next identical request goes through, once.` : `Denied ${n}. Those requests will be refused.`,
+        text: decision === 'approve' ? `Approved ${n}. Each agent’s next identical request goes through, once.` : `Declined ${n}. Those requests are refused, and the same requests are refused without asking you for 24 hours.`,
       }
     },
     onSuccess: (o) => {
@@ -2614,7 +2868,7 @@ export function Approvals({
       if (!next.delete(id)) next.add(id)
       return next
     })
-  // j/k or the arrows move between waiting rows; a approves, d denies, x ticks — only while focus is in the list.
+  // j/k or the arrows move between waiting rows; a approves, d opens Decline, x ticks — only while focus is in the list.
   const onKeys = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const t = e.target as HTMLElement
     // B41.4 — nor inside a row's always-allow form, whose own buttons and fields take the keys.
@@ -2626,7 +2880,7 @@ export function Approvals({
     if (e.key === 'j' || e.key === 'ArrowDown') rows[Math.min(at + 1, rows.length - 1)]?.focus()
     else if (e.key === 'k' || e.key === 'ArrowUp') rows[Math.max(at - 1, 0)]?.focus()
     else if (a && !busy && !hold && e.key === 'a') decide.mutate({ a, decision: 'approve' })
-    else if (a && !busy && !hold && e.key === 'd') decide.mutate({ a, decision: 'deny' })
+    else if (a && !busy && !hold && e.key === 'd') setDeclining(a.id)
     else if (a && pickable && e.key === 'x') toggle(a.id)
     else return
     e.preventDefault()
@@ -2640,7 +2894,7 @@ export function Approvals({
     a.payee ? (
       <span className="whitespace-normal">
         {nameOf(a.agent_id)} wants to pay {a.payee.name || a.payee.id} {lxc(a.amount_ulxc)}
-        {a.memo ? ` — ${a.memo}` : ''}
+        {a.memo ? ` · ${a.memo}` : ''}
       </span>
     ) : (
       <>
@@ -2649,7 +2903,8 @@ export function Approvals({
     )
   return (
     <div className="flex flex-col gap-3">
-      <FaceID signed={signed} ready={keys.isSuccess} passkeyCount={keys.passkeyCount} />
+      {keys.noLiveKey ? <GetAKeyBack /> : <FaceID signed={signed} ready={keys.isSuccess} passkeyCount={keys.passkeyCount} />}
+      {keys.thisBrowserSigns ? <RecoveryCodeRow /> : null}
       {outcome ? <Note ok={outcome.ok}>{outcome.text}</Note> : null}
       {list.isError ? (
         <p className="text-body text-muted">{readFailure(list.error, 'The approvals')}</p>
@@ -2698,13 +2953,13 @@ export function Approvals({
                     Approve {chosen.length}
                   </Button>
                   <Button className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'deny' })}>
-                    Deny {chosen.length}
+                    Decline {chosen.length}
                   </Button>
                 </div>
               ) : null}
               {hold ? null : (
                 <>
-                  <p className="hidden text-caption text-muted wide:block">Keys: j and k move, a approves, d denies{signed ? '' : ', x selects'}.</p>
+                  <p className="hidden text-caption text-muted wide:block">Keys: j and k move, a approves, d declines{signed ? '' : ', x selects'}.</p>
                   <p className="text-caption text-muted wide:hidden">Swipe a request right to approve it.</p>
                 </>
               )}
@@ -2713,9 +2968,9 @@ export function Approvals({
           {prepared.isError ? (
             <p className="border-b border-rule px-gutter py-3 text-body text-muted">{readFailure(prepared.error, 'The prepared payments')}</p>
           ) : preparedShown.length > 0 ? (
-            <div role="group" aria-label="Prepared payments" className="border-b border-rule">
+            <div role="group" aria-label="Prepared payments" className="border-b border-rule px-gutter">
               {preparedShown.map((r) => (
-                <PreparedRow key={r.id} r={r} nameOf={nameOf} />
+                <PreparedRow key={r.id} r={r} nameOf={nameOf} labelled />
               ))}
             </div>
           ) : null}
@@ -2752,7 +3007,7 @@ export function Approvals({
                     swipeFrom.current = null
                     setSwiping(null)
                     const dx = e.changedTouches[0].clientX - (s?.x ?? 0)
-                    // Right only: a swipe approves (with Face ID once the workspace signs), never denies by accident.
+                    // Right only: a swipe approves (with Face ID once the workspace signs), never declines by accident.
                     if (s?.id === a.id && !busy && !hold && dx >= SWIPE_PX && dx > Math.abs(e.changedTouches[0].clientY - s.y)) decide.mutate({ a, decision: 'approve' })
                   }}
                   label={
@@ -2775,6 +3030,7 @@ export function Approvals({
                     <span className="flex flex-col gap-2">
                       <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                         <Pill status={DECIDED.pending.status}>{DECIDED.pending.label}</Pill>
+                        <WorkspaceLabel capability={approvalCapability(a, ownAgent)} />
                         <span>
                           {what(a)}, asked <span className="font-figure">{formatWhen(a.created_at)}</span>
                         </span>
@@ -2794,7 +3050,9 @@ export function Approvals({
                   {/* One-handed on a phone: two full-width buttons under the sentence and the thumb; side by side on a wide screen. */}
                   {onlyThePhone ? (
                     <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
-                  ) : hold ? null : (
+                  ) : hold ? null : declining === a.id ? (
+                    <DeclineForm disabled={busy} onDecline={(reason) => decide.mutate({ a, decision: 'deny', reason })} onCancel={() => setDeclining(null)} />
+                  ) : (
                   <div className="flex w-full flex-col gap-2 wide:w-auto wide:flex-row wide:items-center">
                     {/* B17.325 — one teal action per screen: the first waiting request's Approve, or Approve {n} once some are picked. */}
                     <Button
@@ -2805,8 +3063,8 @@ export function Approvals({
                     >
                       {signed ? 'Approve with Face ID' : 'Approve'}
                     </Button>
-                    <Button className="h-12 w-full wide:h-8 wide:w-auto" disabled={busy} onClick={() => decide.mutate({ a, decision: 'deny' })}>
-                      Deny
+                    <Button className="h-12 w-full wide:h-8 wide:w-auto" disabled={busy} onClick={() => setDeclining(a.id)}>
+                      Decline
                     </Button>
                   </div>
                   )}
@@ -2877,6 +3135,7 @@ export function AgentBank() {
         sectionClassName="pb-10 pt-4 wide:pb-12"
         className="flex max-w-2xl flex-col gap-3"
       >
+        <WorkspaceLabel capability={AGENT_CREDIT} className="self-start" />
         <p className="text-body text-muted">
           Give every AI agent a wallet of its own. Fund it from the workspace, set what it may spend and when a
           person must approve, and read every movement on its statement. Lens checks the rules before a provider is
@@ -2890,7 +3149,7 @@ export function AgentBank() {
             {hasAgents || book.data.all_paused_at ? <PauseEveryAgent book={book.data} /> : null}
             {hasAgents ? (
               <Card>
-                <CardHeader>Statement for every agent</CardHeader>
+                <CardHeader aside={<WorkspaceLabel capability={AGENT_CREDIT} />}>Statement for every agent</CardHeader>
                 <StatementDownload agent={null} />
               </Card>
             ) : null}
@@ -3006,7 +3265,10 @@ export function AgentBank() {
         <Region index="05" label="Between owners" className="flex flex-col gap-gutter">
           <MoneyRequests agents={agents} />
           <CreditLinePanel />
-          <Loans agents={agents} />
+          {/* B59.2 — lending between owners is credit's, and goes with it. */}
+          <IfArea area="credit">
+            <Loans agents={agents} />
+          </IfArea>
         </Region>
       ) : null}
 

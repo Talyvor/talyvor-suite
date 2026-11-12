@@ -114,7 +114,7 @@ export function Board() {
       <Region index="01" label="Share it read-only">
         <p className="max-w-2xl text-body text-muted">
           A board link opens this board for anyone who has it, without signing in. They see each
-          issue’s reference, title, status and priority — nothing else, and they cannot change
+          issue’s reference, title, status and priority, nothing else, and they cannot change
           anything. Turn a link off and it stops working at once.
         </p>
         <div className="mt-6 flex flex-wrap items-end gap-3">
@@ -141,8 +141,8 @@ export function Board() {
         {publish.isError ? (
           <p className="mt-4 text-caption text-muted" role="status">
             {publish.error instanceof ApiError && publish.error.status === 403
-              ? 'Only a workspace owner can publish a board — nothing was published.'
-              : 'Couldn’t publish the board — nothing was published. Try again.'}
+              ? 'Only a workspace owner can publish a board, so nothing was published.'
+              : 'Couldn’t publish the board. Nothing was published. Try again.'}
           </p>
         ) : null}
 
@@ -181,8 +181,8 @@ export function Board() {
           {turnOff.isError ? (
             <p className="text-caption text-muted" role="status">
               {turnOff.error instanceof ApiError && turnOff.error.status === 403
-                ? 'Only a workspace owner can turn a board link off — it is still on.'
-                : 'Couldn’t turn that link off — it is still on. Try again.'}
+                ? 'Only a workspace owner can turn a board link off, so it is still on.'
+                : 'Couldn’t turn that link off. It is still on. Try again.'}
             </p>
           ) : null}
         </div>

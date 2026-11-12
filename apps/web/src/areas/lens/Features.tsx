@@ -127,25 +127,25 @@ const UNREAD = 'Could not be read'
 function reducerState(p: ReducerPolicy | null | undefined, header?: string): string {
   if (p == null) return UNREAD
   if (p === 'always') return 'On'
-  if (p === 'disabled') return 'Off — switch it on here'
+  if (p === 'disabled') return 'Off: switch it on here'
   return header ? `On only for requests that send ${header}` : 'On only for requests that ask for it'
 }
 
 function switchable(v: boolean | null | undefined): string {
-  return v == null ? UNREAD : v ? 'On' : 'Off — switch it on here'
+  return v == null ? UNREAD : v ? 'On' : 'Off: switch it on here'
 }
 
 /** The prose model runs only where Tare runs, so "On" with Tare off says when it takes effect. */
 function tareModelState(model: boolean | null | undefined, tare: ReducerPolicy | null | undefined): string {
-  if (model && tare === 'disabled') return 'On — takes effect once Tare is on'
+  if (model && tare === 'disabled') return 'On: takes effect once Tare is on'
   if (model && tare === 'opt_in') return 'On for requests that send X-Talyvor-Tare: true'
   return switchable(model)
 }
 
 const LOGGING: Record<LoggingPolicy, string> = {
-  full: 'Full — the prompt text is kept',
-  metadata: 'Cost, tokens and model only — never the prompt text',
-  none: 'Nothing is kept — not even for the cache',
+  full: 'Full: the prompt text is kept',
+  metadata: 'Cost, tokens and model only: never the prompt text',
+  none: 'Nothing is kept, not even for the cache',
 }
 
 const count = (n: number) => <span className="font-figure">{n.toLocaleString('en-US')}</span>
@@ -185,7 +185,7 @@ function useSettingWrite(alsoInvalidate?: string[]) {
     <span className="text-caption text-muted">Saving…</span>
   ) : failed ? (
     <span role="status" className="text-caption text-muted">
-      {isSessionExpired(failed) ? 'Not saved — sign in again.' : 'Not saved. You can try again.'}
+      {isSessionExpired(failed) ? 'Not saved. Sign in again.' : 'Not saved. You can try again.'}
     </span>
   ) : null
   return { busy, run, note }
@@ -234,23 +234,23 @@ const PERIOD: Record<'monthly' | 'weekly' | 'total', string> = { monthly: 'a mon
 function budgetState(r: { isPending: boolean; isError: boolean; data?: BudgetReading }): string {
   if (r.isPending) return 'Checking…'
   if (r.isError || !r.data) return UNREAD
-  if (r.data.several) return 'Several limits are set through Lens’s API — change them there'
+  if (r.data.several) return 'Several limits are set through Lens’s API. Change them there'
   const b = r.data.budget
-  if (b == null) return 'No limit — set one here'
+  if (b == null) return 'No limit: set one here'
   const limit = `${dollars(b.limit_usd)} ${PERIOD[b.period]}`
-  if (b.enforcement === 'off') return `Off — the limit of ${limit} is kept but not applied`
-  if (b.enforcement === 'alert') return `On — ${limit}; past it you are alerted, nothing is refused`
-  return `On — ${limit}; requests past it are refused`
+  if (b.enforcement === 'off') return `Off: the limit of ${limit} is kept but not applied`
+  if (b.enforcement === 'alert') return `On: ${limit}; past it you are alerted, nothing is refused`
+  return `On: ${limit}; requests past it are refused`
 }
 
 function walletState(r: { isPending: boolean; isError: boolean; data?: AgentBook }, pending: number | null): string {
   if (r.isPending) return 'Checking…'
   if (r.isError || !r.data) return UNREAD
-  if (r.data.all_paused_at) return 'Paused — every agent is paused; resume them on Agent Wallets'
+  if (r.data.all_paused_at) return 'Paused: every agent is paused; resume them on Agent Wallets'
   const n = r.data.agents.length
-  if (n === 0) return 'On — no agent yet; create one on Agent Wallets'
+  if (n === 0) return 'On: no agent yet; create one on Agent Wallets'
   const waiting = pending ? `; ${pending} ${pending === 1 ? 'approval' : 'approvals'} waiting` : ''
-  return `On — ${n} ${n === 1 ? 'agent' : 'agents'}${waiting}`
+  return `On: ${n} ${n === 1 ? 'agent' : 'agents'}${waiting}`
 }
 
 /** The workspace's spending limit: an amount to save, and a switch that applies it or not. */
@@ -389,7 +389,7 @@ function WaitingModels({ read }: { read: { isPending: boolean; isError: boolean;
     )
   return (
     <>
-      {models.length === 1 ? <>One model is</> : <>{count} models are</>} waiting for a price — not offered, and never
+      {models.length === 1 ? <>One model is</> : <>{count} models are</>} waiting for a price: not offered, and never
       charged at zero, until one is confirmed.{' '}
       <details className="mt-1">
         <summary className="cursor-pointer text-ink">Show {models.length === 1 ? <>it</> : <>all {count}</>}</summary>
@@ -604,7 +604,7 @@ export function Features() {
           />
           <Feature
             name="Request logging"
-            does="How much Lens keeps about each request. Set to none, nothing of a request is kept — not the prompt, not the answer, and not a cached copy — so this workspace’s repeats go to the model again. Security checks run whatever this is set to."
+            does="How much Lens keeps about each request. Set to none, nothing of a request is kept (not the prompt, not the answer, and not a cached copy), so this workspace’s repeats go to the model again. Security checks run whatever this is set to."
             where="Every request."
             evidence={
               <>
@@ -693,7 +693,7 @@ export function Features() {
         <ul className={featureList}>
           <Feature
             name="Answer cache"
-            does="An identical question, or a nearly identical one, is answered from this workspace’s earlier answer instead of calling the model again — instantly, and without paying for the model twice."
+            does="An identical question, or a nearly identical one, is answered from this workspace’s earlier answer instead of calling the model again: instantly, and without paying for the model twice."
             where="Every chat request in this workspace, unless request logging is set to none."
             evidence={reading(usage, () => (
               <>
@@ -704,7 +704,7 @@ export function Features() {
             ))}
             state={stateOf(
               f?.logging_policy === 'none'
-                ? 'Paused — request logging is none, so nothing is kept to answer from'
+                ? 'Paused: request logging is none, so nothing is kept to answer from'
                 : 'On',
             )}
           />
@@ -734,12 +734,12 @@ export function Features() {
               f?.cache_poolable == null
                 ? UNREAD
                 : !f.cache_poolable
-                  ? 'Off — no new answer of yours is shared. Answers shared before stay available, and keep earning, until you delete them below. Switch it on here'
+                  ? 'Off: no new answer of yours is shared. Answers shared before stay available, and keep earning, until you delete them below. Switch it on here'
                   : // B15.7 — Lens shares nothing from a workspace whose prompts are not checked for
                     // personal data, whatever this consent says. Unread guardrails keep today's reading.
                     f.guardrails?.pii === false
-                    ? 'Paused — personal-data detection is off, so no new answer of yours is shared. Turn it back on (Lens’s guardrail settings) and sharing resumes with your next answer'
-                    : 'On — your answers earn when someone else is served one',
+                    ? 'Paused: personal-data detection is off, so no new answer of yours is shared. Turn it back on (Lens’s guardrail settings) and sharing resumes with your next answer'
+                    : 'On: your answers earn when someone else is served one',
             )}
             control={
               readable && f?.cache_poolable != null ? (
@@ -813,7 +813,7 @@ export function Features() {
           />
           <Feature
             name="Routing pattern sharing"
-            does="Shares the shape of this workspace’s requests — which kind of feature, model and provider, token and latency ranges, quality and cache hit rate — so rare patterns earn LENS. Never a prompt or an answer."
+            does="Shares the shape of this workspace’s requests (which kind of feature, model and provider, token and latency ranges, quality and cache hit rate), so rare patterns earn LENS. Never a prompt or an answer."
             where="Requests routed through Lens after it is switched on. Switching it off stops new patterns being shared; ones already shared stay in the pool."
             evidence={
               f?.pattern_mining == null
@@ -828,10 +828,10 @@ export function Features() {
                 : !f.pattern_mining.enabled
                   ? f.pattern_mining.opted_in
                     ? 'Opted in, but pattern mining is off for this deployment, so nothing is shared'
-                    : 'Off for this deployment — its operator has not switched pattern mining on'
+                    : 'Off for this deployment: its operator has not switched pattern mining on'
                   : f.pattern_mining.opted_in
-                    ? 'On — the shape of your requests is shared and earns LENS'
-                    : 'Off — switch it on here',
+                    ? 'On: the shape of your requests is shared and earns LENS'
+                    : 'Off: switch it on here',
             )}
             control={
               readable && f?.pattern_mining?.enabled ? (
@@ -851,7 +851,7 @@ export function Features() {
             does="Shrinks the newest message before it is sent: JSON tool output keeps one row per shape, Go and TypeScript code keep their signatures and types but drop function bodies. Anything it cannot shrink safely is sent unchanged, and earlier messages are never touched, so the provider’s prompt cache still hits."
             where={
               <>
-                Requests through the gateway with an API key, streamed or not — large tool output and code.
+                Requests through the gateway with an API key, streamed or not: large tool output and code.
                 A short typed question has nothing to reduce. <To to="/setup">Set up a tool</To> ·{' '}
                 <To to="/features/try/tare">Try it on your own content</To>
               </>
@@ -860,7 +860,7 @@ export function Features() {
               tare.data!.requests > 0 ? (
                 <>
                   {count(tare.data!.requests)} requests reduced from {count(tare.data!.tokens_before)} to{' '}
-                  {count(tare.data!.tokens_after)} tokens, about {usd(tare.data!.cost_saved_usd)} saved — estimated,
+                  {count(tare.data!.tokens_after)} tokens, about {usd(tare.data!.cost_saved_usd)} saved, estimated,
                   from Lens&rsquo;s token estimates at each model&rsquo;s input rate.
                 </>
               ) : (
@@ -881,7 +881,7 @@ export function Features() {
           />
           <Feature
             name="Tare prose model"
-            does="Shortens prose that Tare would otherwise send unchanged — explanations, notes, pasted documents — by dropping the words a small compression model judges the reply does not need. Unlike the rest of Tare it changes the wording, so it is off until you switch it on. Code and JSON are never touched."
+            does="Shortens prose that Tare would otherwise send unchanged (explanations, notes, pasted documents) by dropping the words a small compression model judges the reply does not need. Unlike the rest of Tare it changes the wording, so it is off until you switch it on. Code and JSON are never touched."
             where={
               <>
                 The same requests as Tare, only on prose Tare could not shrink. <To to="/features/try/tare">Try it on your own prose</To>
@@ -981,7 +981,7 @@ export function Features() {
             does="Write pages in an editor; write, shorten, lengthen, fix, summarise or translate with AI; ask questions answered from your pages."
             where={
               <>
-                <To to="/docs">Docs</To> — any page&rsquo;s editor, and Ask AI.
+                <To to="/docs">Docs</To>: any page&rsquo;s editor, and Ask AI.
               </>
             }
             evidence="Each page’s toolbar shows what AI on that page has cost (measured)."
@@ -994,7 +994,7 @@ export function Features() {
         <ul className={featureList}>
           <Feature
             name="Talyvor Code"
-            does="AI in your editor and terminal — completions, chat, tests, reviews, agent tasks — with every call’s cost recorded against the issue you are working on."
+            does="AI in your editor and terminal (completions, chat, tests, reviews, agent tasks), with every call’s cost recorded against the issue you are working on."
             where={
               <>
                 Your editor or terminal, through a key from <To to="/setup">Setup</To>.
@@ -1015,7 +1015,7 @@ export function Features() {
           <Feature
             id="byok"
             name="Bring your own keys (BYOK)"
-            does={`With BYOK — Team's add-on, included in Business — this workspace stores its own API keys for OpenAI, Anthropic, Google, Mistral and Groq. A request to one of those providers goes upstream on your key and Talyvor charges it no tokens — your provider bills you. Keys are encrypted at rest, sent only to their own provider, and only their last four characters are ever shown.`}
+            does={`With BYOK (Team's add-on, included in Business), this workspace stores its own API keys for OpenAI, Anthropic, Google, Mistral and Groq. A request to one of those providers goes upstream on your key and Talyvor charges it no tokens. Your provider bills you. Keys are encrypted at rest, sent only to their own provider, and only their last four characters are ever shown.`}
             where={
               <>
                 Chat and every API request to a provider you hold a key for; a provider you hold none for runs on
@@ -1040,10 +1040,10 @@ export function Features() {
                   : !byok
                     ? 'Not available on this deployment'
                     : !byok.byok
-                      ? 'Off — not on the BYOK plan. Choose it on Plans'
+                      ? 'Off: not on the BYOK plan. Choose it on Plans'
                       : byok.keys.length
-                        ? `On — requests to ${ownKeyNames} go on your keys`
-                        : 'On the plan — add a key in Settings'
+                        ? `On: requests to ${ownKeyNames} go on your keys`
+                        : 'On the plan: add a key in Settings'
             }
             control={
               byok ? (

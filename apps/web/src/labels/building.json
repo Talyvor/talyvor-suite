@@ -1,0 +1,13 @@
+[
+  { "key": "slack_teams_approvals", "feature": "Approvals in Slack and Teams", "item": "B56.17" },
+  { "key": "sso", "feature": "Single sign-on", "item": "B56.19" },
+  { "key": "edge", "feature": "Talyvor Edge in your own cluster", "item": "B56.30" },
+  { "key": "merchant_fees", "feature": "The fees for accepting payments", "item": "B56.21" },
+  { "key": "lending_fee", "feature": "The fee on a loan arranged", "item": "B56.22" },
+  { "key": "money_payouts", "feature": "Paying earnings out in money", "item": "B56.24" },
+  { "key": "payments_for_everyone", "feature": "Payments for everyone, not only businesses", "item": "B53.20" },
+  { "key": "agent_wallet_kinds", "feature": "Agents that hold currency accounts, a crypto wallet or both", "item": "B48.18" },
+  { "key": "apple_pay_google_pay", "feature": "Apple Pay and Google Pay", "item": "B53.11" },
+  { "key": "counter", "feature": "Counter, which negotiates for you inside the limits you sign", "item": "B52.15" },
+  { "key": "connect_in_assistants", "feature": "Talyvor in Claude’s and ChatGPT’s directories", "item": "B52.8" }
+]

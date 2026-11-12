@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App, queryClient } from './App'
@@ -70,55 +70,46 @@ afterEach(() => {
   queryClient.clear()
 })
 
-const header = () => document.querySelector('header')!
+const header = () => screen.findByRole('banner')
 
+/**
+ * B57.8 — POCKET'S TOP BAR, SAME RULE. The page title left the bar for the top of the content, and the signed-in
+ * address and Sign out moved to Settings, so the bar holds Menu (below 840), the search, Pause every agent, the theme
+ * switch and the avatar. The search is the one item that may shrink, its words ellipsising; the controls may not, and
+ * below 840 the search and Pause every agent keep only their icons, their words staying their names, so the bar fits 320
+ * (Menu 36 + the search's pill 44 + Pause 44 + the switch 32 + the avatar 36 + four 12px gaps = 240 of the 288 px a 320
+ * screen leaves inside the bar's padding).
+ */
 describe('the sticky header may narrow to the viewport', () => {
-  // B28.267 — it wraps instead of ellipsising: at 390, measured in Chrome, "How to use Talyvor Chat" was
-  // painted as "H…"; wrapped it is two lines, and no route scrolls sideways at 320, 390 or 1440.
-  it('lets the page title shrink and wrap rather than push', async () => {
+  it('lets the search shrink, its words ellipsising at 840 and up and leaving the bar below it, still its name', async () => {
     render(<App />)
-    await waitFor(() => expect(document.body.textContent ?? '').toContain('Home'))
-    const title = [...header().children].find((el) => el.textContent?.trim() === 'Home')
-    const cls = title?.getAttribute('class') ?? ''
-    expect(cls, 'the page title is a flex item with min-width:auto — it cannot go below its own text').toContain(
-      'min-w-0',
-    )
-    expect(cls, 'without break-words a word wider than the title keeps its full width').toContain('break-words')
-    expect(cls, 'truncate cut a phone title to its first letter').not.toContain('truncate')
+    const search = await within(await header()).findByRole('button', { name: 'Search agents, payees, bills… or type a command' })
+    expect(search.getAttribute('class') ?? '', 'the search is a flex item with min-width:auto — it cannot go below its own text').toContain('min-w-0')
+    const words = search.querySelector('span.truncate')
+    expect(words, 'without truncate the search’s words are the floor nothing can shrink past').not.toBeNull()
+    expect(words?.getAttribute('class') ?? '').toContain('hidden')
+    expect(words?.getAttribute('class') ?? '').toContain('wide:block')
   })
 
-  it('lets the actions block shrink', async () => {
+  it('does NOT let Pause every agent or the avatar shrink — only the search may', async () => {
     render(<App />)
-    await waitFor(() => expect(document.body.textContent ?? '').toContain('Home'))
-    const actions = [...header().children].find((el) => el.querySelector('button'))
-    expect(
-      actions?.getAttribute('class') ?? '',
-      'the actions block measured 274px and never shrank — this is the flex item that set the ' +
-        '380px floor the whole console could not go below',
-    ).toContain('min-w-0')
+    const pause = await within(await header()).findByRole('button', { name: 'Pause every agent' })
+    expect(pause.getAttribute('class') ?? '', 'a squeezed hit target is a worse answer than an ellipsised search').toContain('shrink-0')
+    expect(within(await header()).getByRole('link', { name: 'Settings and sign out' }).getAttribute('class') ?? '').toContain('shrink-0')
   })
 
-  it('lets the signed-in email ellipsise, and keeps it readable in full on hover', async () => {
+  it('below 840 Pause every agent keeps its icon, and its words stay its name', async () => {
     render(<App />)
-    const email = await screen.findByText('operator@example.com')
-    expect(
-      email.getAttribute('class') ?? '',
-      'the email is one unbreakable token — without truncate it is the intrinsic width nothing ' +
-        'else can shrink past',
-    ).toContain('truncate')
-    expect(
-      email.getAttribute('title'),
-      'a truncated address that cannot be read in full anywhere is information removed, not laid out',
-    ).toBe('operator@example.com')
+    const pause = await within(await header()).findByRole('button', { name: 'Pause every agent' })
+    expect(pause.querySelector('span.sr-only')?.getAttribute('class') ?? '').toContain('wide:not-sr-only')
   })
 
-  it('does NOT let the sign-out control shrink — only the text may', async () => {
+  it('on Settings the signed-in email ellipsises, and stays readable in full on hover', async () => {
+    window.history.pushState({}, '', '/settings')
     render(<App />)
-    const button = await screen.findByRole('button', { name: /sign out/i })
-    expect(
-      button.getAttribute('class') ?? '',
-      'a squeezed hit target is a worse answer than an ellipsised address; the shrink belongs to ' +
-        'the text, and this is the half that says which',
-    ).toContain('shrink-0')
+    const email = await screen.findByText('Signed in as operator@example.com.')
+    expect(email.getAttribute('class') ?? '', 'the email is one unbreakable token — without truncate nothing else can shrink past it').toContain('truncate')
+    expect(email.getAttribute('title')).toBe('operator@example.com')
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
   })
 })

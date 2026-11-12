@@ -50,7 +50,7 @@ export function SharePage({ spaceId, pageId }: { spaceId: string; pageId: string
       </button>
       {state.kind === 'failed' ? (
         <span className="text-caption text-ink" role="alert">
-          {state.status === 403 ? 'Only an admin of this page can share it.' : 'The link wasn’t made — try again.'}
+          {state.status === 403 ? 'Only an admin of this page can share it.' : 'The link wasn’t made. Try again.'}
         </span>
       ) : null}
     </>

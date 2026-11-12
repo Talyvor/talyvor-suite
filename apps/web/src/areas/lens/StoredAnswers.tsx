@@ -52,7 +52,7 @@ const day = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
 function refusal(err: unknown, what: string): string {
-  if (isSessionExpired(err)) return `Nothing was ${what} — sign in again.`
+  if (isSessionExpired(err)) return `Nothing was ${what}. Sign in again.`
   if (err instanceof ApiError && err.status === 403)
     return `Only this workspace’s owner or an admin can do this. Nothing was ${what}.`
   if (err instanceof ApiError && err.status === 400) return `That is not this workspace’s name. Nothing was ${what}.`
@@ -164,11 +164,11 @@ function requestLine(r: DeletionRequest): React.ReactNode {
   if (r.status === 'done' && r.completed_at)
     return (
       <>
-        Asked {day(r.requested_at)} — done {day(r.completed_at)}. Everything Talyvor held for this workspace was
+        Asked {day(r.requested_at)}. Done {day(r.completed_at)}. Everything Talyvor held for this workspace was
         deleted; billing and ledger records are kept, because the law requires them.
       </>
     )
-  return <>Asked {day(r.requested_at)} — waiting for Talyvor to delete it.</>
+  return <>Asked {day(r.requested_at)}. Waiting for Talyvor to delete it.</>
 }
 
 function AskForDeletion() {

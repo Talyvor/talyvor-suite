@@ -89,7 +89,7 @@ const HEADLINE_FAILED = 'The roster could not be read.'
  * The membership join key, compared the way the upstream compared it.
  *
  * The BFF sends `X-User-Email: sess.email` and calls it "the workspace-membership join key"
- * (apps/bff/lens.go:1238); /auth/me serves that SAME `s.email` (apps/bff/auth.go:835); Track
+ * (apps/bff/lens.go:1290); /auth/me serves that SAME `s.email` (apps/bff/auth.go:857); Track
  * authorizes and lists from `members.email` with SQL `=`.
  *
  * ⚠ SO THE COMPARISON IS EXACT, DELIBERATELY. Case-folding here would be a DIFFERENT rule from
@@ -283,7 +283,7 @@ export function Members() {
               className="space-y-2 px-gutter py-3 text-body text-muted"
             >
               <p className="text-ink">
-                Track answered, and listed nobody — including you. That should not be possible.
+                Track answered, and listed nobody, including you. That should not be possible.
               </p>
               <p>
                 Reading this roster requires being a member of it: Track authorises the request
@@ -318,7 +318,7 @@ export function Members() {
         {served && roster.length > 0 ? (
           <p data-testid="roster-provenance" className="mt-4 text-caption font-normal text-muted">
             Live from Track via the BFF. The workspace is the one your session resolved at login,
-            server-side — a workspace named by the browser is ignored.
+            server-side. A workspace named by the browser is ignored.
           </p>
         ) : null}
       </Region>
@@ -333,7 +333,7 @@ export function Members() {
             Two variables on the BFF wire this upstream, and they go together:{' '}
             <span className="font-mono text-caption text-ink">TRACK_BASE_URL</span> and{' '}
             <span className="font-mono text-caption text-ink">TRACK_GATEWAY_SECRET</span>. Set both
-            or neither — with one of them alone the BFF refuses to start, naming the one that is
+            or neither: with one of them alone the BFF refuses to start, naming the one that is
             missing.
           </p>
           <p className="mt-3 text-caption font-normal text-muted">

@@ -40,6 +40,7 @@ Every path, line width and position is identical in the two versions; only the c
 | Link previews | `png/social/og-image-dark-1200x630.png`, `og-image-light-1200x630.png` |
 | Emails (Track, Docs, receipts) | `png/email/talyvor-email-logo-on-light-400.png`, shown 200 px wide (email apps do not show SVG) |
 | Lens status page, receipts, reports | `svg/talyvor-symbol-on-light.svg` and `-on-dark.svg` in browsers; the PNGs where a PDF or image renderer draws the page |
+| Sign up and sign in, behind the card (decorative) | `svg/talyvor-streams-on-light.svg`, `svg/talyvor-streams-on-dark.svg`: the logo's streams on their own, as the Pocket design kit draws them |
 
 For the build queue's logo swap (the five "Swap the logo everywhere" items): web app, favicons and website (1 of 5), the phone (2 of 5), Lens (3 of 5), Track's emails (4 of 5), Docs' emails (5 of 5). Every PNG and ICO here is made from the SVGs by `build/export.py`, so keep that script with the files.
 

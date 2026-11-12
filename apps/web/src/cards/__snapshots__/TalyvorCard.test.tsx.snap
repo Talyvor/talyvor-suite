@@ -1,0 +1,2173 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TalyvorCard (B57.122) > agent-max in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-max"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-max.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > agent-max in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-max"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-max.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > agent-nova in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-nova"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-nova.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > agent-nova in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-nova"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-nova.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > agent-ollie in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-ollie"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-ollie.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > agent-ollie in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-ollie"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-ollie.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > agent-penny in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-penny"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-penny.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > agent-penny in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-penny"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-penny.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > agent-remy in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-remy"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-remy.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > agent-remy in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-remy"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-remy.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > agent-sunny in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-sunny"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-sunny.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > agent-sunny in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Atlas, agent card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="agent-sunny"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/agent-sunny.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(6.0747663551402cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Atlas
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Research · pays in dollars
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > business in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Nick Gaborac, Business corporate card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="business"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/business.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Business
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(210, 214, 222); margin-top: calc(0.7009345794393cqw);"
+      >
+        Corporate
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Talyvor Ltd
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > business in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Nick Gaborac, Business corporate card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="business"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/business.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Business
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(210, 214, 222); margin-top: calc(0.7009345794393cqw);"
+      >
+        Corporate
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Talyvor Ltd
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > daily in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Nick Gaborac, Daily personal card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="daily"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/daily.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Daily
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(62, 68, 82); margin-top: calc(0.7009345794393cqw);"
+      >
+        Personal
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > daily in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Nick Gaborac, Daily personal card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="daily"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/daily.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Daily
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(62, 68, 82); margin-top: calc(0.7009345794393cqw);"
+      >
+        Personal
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > enterprise in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Nick Gaborac, Enterprise corporate card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="enterprise"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/enterprise.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Enterprise
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(210, 214, 222); margin-top: calc(0.7009345794393cqw);"
+      >
+        Corporate
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Talyvor Ltd
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > enterprise in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Nick Gaborac, Enterprise corporate card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="enterprise"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/enterprise.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Enterprise
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(210, 214, 222); margin-top: calc(0.7009345794393cqw);"
+      >
+        Corporate
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Talyvor Ltd
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > platinum in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Nick Gaborac, Platinum personal card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="platinum"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/platinum.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Platinum
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(62, 68, 82); margin-top: calc(0.7009345794393cqw);"
+      >
+        Personal
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > platinum in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Nick Gaborac, Platinum personal card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="platinum"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/platinum.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Platinum
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(62, 68, 82); margin-top: calc(0.7009345794393cqw);"
+      >
+        Personal
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > premium in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Nick Gaborac, Premium personal card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="premium"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/premium.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Premium
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(210, 214, 222); margin-top: calc(0.7009345794393cqw);"
+      >
+        Personal
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > premium in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Nick Gaborac, Premium personal card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="premium"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/premium.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Premium
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(210, 214, 222); margin-top: calc(0.7009345794393cqw);"
+      >
+        Personal
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > stable in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Nick Gaborac, Daily stablecoin card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="stable"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/stable.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Daily
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(62, 68, 82); margin-top: calc(0.7009345794393cqw);"
+      >
+        Stablecoin
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute flex items-center rounded-pill"
+      data-card-part="badge"
+      style="left: calc(5.1401869158879cqw); top: calc(34.5794392523364cqw); height: calc(5.1401869158879cqw); padding: 0px calc(2.3364485981308cqw); font-size: calc(2.6869158878505cqw); font-weight: 650; background: rgb(17, 18, 22); color: rgb(255, 255, 255);"
+    >
+      USDC · EURC
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > stable in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Nick Gaborac, Daily stablecoin card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="stable"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/stable.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Daily
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(62, 68, 82); margin-top: calc(0.7009345794393cqw);"
+      >
+        Stablecoin
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute flex items-center rounded-pill"
+      data-card-part="badge"
+      style="left: calc(5.1401869158879cqw); top: calc(34.5794392523364cqw); height: calc(5.1401869158879cqw); padding: 0px calc(2.3364485981308cqw); font-size: calc(2.6869158878505cqw); font-weight: 650; background: rgb(17, 18, 22); color: rgb(255, 255, 255);"
+    >
+      USDC · EURC
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > stable-platinum in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Nick Gaborac, Platinum stablecoin card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="stable-platinum"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/stable-platinum.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Platinum
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(62, 68, 82); margin-top: calc(0.7009345794393cqw);"
+      >
+        Stablecoin
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute flex items-center rounded-pill"
+      data-card-part="badge"
+      style="left: calc(5.1401869158879cqw); top: calc(34.5794392523364cqw); height: calc(5.1401869158879cqw); padding: 0px calc(2.3364485981308cqw); font-size: calc(2.6869158878505cqw); font-weight: 650; background: rgb(17, 18, 22); color: rgb(255, 255, 255);"
+    >
+      USDC · EURC
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > stable-platinum in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Nick Gaborac, Platinum stablecoin card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="stable-platinum"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(17, 18, 22); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/stable-platinum.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-light.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Platinum
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(62, 68, 82); margin-top: calc(0.7009345794393cqw);"
+      >
+        Stablecoin
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute flex items-center rounded-pill"
+      data-card-part="badge"
+      style="left: calc(5.1401869158879cqw); top: calc(34.5794392523364cqw); height: calc(5.1401869158879cqw); padding: 0px calc(2.3364485981308cqw); font-size: calc(2.6869158878505cqw); font-weight: 650; background: rgb(17, 18, 22); color: rgb(255, 255, 255);"
+    >
+      USDC · EURC
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(62, 68, 82); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > stable-premium in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Nick Gaborac, Premium stablecoin card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="stable-premium"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/stable-premium.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Premium
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(210, 214, 222); margin-top: calc(0.7009345794393cqw);"
+      >
+        Stablecoin
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute flex items-center rounded-pill"
+      data-card-part="badge"
+      style="left: calc(5.1401869158879cqw); top: calc(34.5794392523364cqw); height: calc(5.1401869158879cqw); padding: 0px calc(2.3364485981308cqw); font-size: calc(2.6869158878505cqw); font-weight: 650; background: rgb(22, 199, 154); color: rgb(17, 18, 22);"
+    >
+      USDC · EURC
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > stable-premium in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Nick Gaborac, Premium stablecoin card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="stable-premium"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/stable-premium.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Premium
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(210, 214, 222); margin-top: calc(0.7009345794393cqw);"
+      >
+        Stablecoin
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute flex items-center rounded-pill"
+      data-card-part="badge"
+      style="left: calc(5.1401869158879cqw); top: calc(34.5794392523364cqw); height: calc(5.1401869158879cqw); padding: 0px calc(2.3364485981308cqw); font-size: calc(2.6869158878505cqw); font-weight: 650; background: rgb(22, 199, 154); color: rgb(17, 18, 22);"
+    >
+      USDC · EURC
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Your everyday account
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > team in dark mode matches its snapshot 1`] = `
+<div
+  data-theme="dark"
+>
+  <div
+    aria-label="Nick Gaborac, Team corporate card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="team"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/team.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Team
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(210, 214, 222); margin-top: calc(0.7009345794393cqw);"
+      >
+        Corporate
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Talyvor Ltd
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`TalyvorCard (B57.122) > team in light mode matches its snapshot 1`] = `
+<div
+  data-theme="light"
+>
+  <div
+    aria-label="Nick Gaborac, Team corporate card"
+    class="relative w-full overflow-hidden font-sans"
+    data-card="team"
+    role="img"
+    style="aspect-ratio: 428 / 270; container-type: inline-size; border-radius: 4.206% / 6.667%; background: rgb(17, 18, 22); color: rgb(255, 255, 255); box-shadow: 0 1px 2px rgba(17, 18, 22, 0.08), 0 14px 34px rgba(17, 18, 22, 0.18);"
+  >
+    <img
+      alt=""
+      class="absolute inset-0 h-full w-full object-cover"
+      src="/cards/team.jpg"
+    />
+    <div
+      class="absolute inset-0"
+      style="background: linear-gradient(90deg, rgba(10,11,14,0.45) 0%, rgba(10,11,14,0) 55%);"
+    />
+    <img
+      alt=""
+      class="absolute h-auto"
+      data-card-part="logo"
+      src="/brand/logo/talyvor-logo-on-dark.svg"
+      style="left: calc(5.1401869158879cqw); top: calc(5.1401869158879cqw); width: calc(26.1682242990654cqw);"
+    />
+    <div
+      class="absolute text-right"
+      data-card-part="tier"
+      style="right: calc(5.1401869158879cqw); top: calc(4.2056074766355cqw);"
+    >
+      <div
+        class="font-display"
+        style="font-weight: 750; font-size: calc(4.2056074766355cqw); letter-spacing: -0.01em; line-height: 1.1;"
+      >
+        Team
+      </div>
+      <div
+        class="uppercase"
+        style="font-size: calc(2.4532710280374cqw); font-weight: 650; letter-spacing: 0.08em; color: rgb(210, 214, 222); margin-top: calc(0.7009345794393cqw);"
+      >
+        Corporate
+      </div>
+    </div>
+    <div
+      class="absolute overflow-hidden"
+      data-card-part="chip"
+      style="left: calc(5.607476635514cqw); top: calc(23.3644859813084cqw); width: calc(10.2803738317757cqw); height: calc(7.9439252336449cqw); border-radius: calc(100cqw * 7 / 428); background: linear-gradient(135deg, #F1E7C8, #C9B47E); box-shadow: inset 0 0 0 1px rgba(17, 18, 22, 0.2);"
+    >
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(2.5700934579439cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-x-0"
+        style="top: calc(5.1401869158879cqw); height: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(3.7383177570093cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+      <div
+        class="absolute inset-y-0"
+        style="left: calc(6.5420560747664cqw); width: 1px; background: rgba(17, 18, 22, 0.22);"
+      />
+    </div>
+    <div
+      class="absolute"
+      style="left: calc(5.1401869158879cqw); bottom: calc(4.6728971962617cqw); max-width: calc(100cqw * 310 / 428);"
+    >
+      <div
+        class="font-display"
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 750; font-size: calc(3.5046728971963cqw); letter-spacing: -0.01em; line-height: 1.05;"
+      >
+        Nick Gaborac
+      </div>
+      <div
+        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: calc(2.803738317757cqw); font-weight: 600; color: rgb(210, 214, 222); margin-top: calc(0.9345794392523cqw);"
+      >
+        Talyvor Ltd
+      </div>
+    </div>
+  </div>
+</div>
+`;

@@ -6,12 +6,18 @@ import { isSessionExpired } from '../../lib/productState'
 import { formatWhen } from './format'
 import { type Agent, type AgentCard, type CardAuthorization, type Cardholder, agentBankApi, refusalText } from './agentBankApi'
 import { Lxc } from './money'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { AgentCard as AgentCardFace } from '../../cards/AgentCard'
+import { CardDisputesAndRefunds, CardExport } from './CardDisputes'
+import { DESIGN_ATTR } from '../../pocketPending'
 
 // AgentCardPanel.tsx — B19.24: an agent's card on Agent Wallets. Lens (B19.12) issues an agent a virtual
 // card through Stripe Issuing, in TEST MODE ONLY — cards are class RED, test money until a licensed partner
 // exists — and decides every purchase on it in real time by the agent's rules and balance, converting it
 // from pounds at the day's European Central Bank reference rate. This shows the card and each purchase
 // with Lens's own reason and the rate; issuing one asks for the cardholder Stripe needs.
+// B57.125 — an issued card is drawn as the agent's own card: its helper, its name and its job line, with the number's
+// last four and the expiry in the line under it, never on the face.
 
 export const cardKey = (id: string) => ['agent-card', id]
 
@@ -69,7 +75,7 @@ function Purchases({ auths }: { auths: CardAuthorization[] }) {
               </td>
               <td className="py-2 text-right font-figure">{moneyText(a.amount_minor, a.currency)}</td>
               <td className="px-gutter py-2 text-right font-figure">
-                {a.approved && a.amount_ulxc ? <Lxc ulxc={a.amount_ulxc} sign="−" /> : '—'}
+                {a.approved && a.amount_ulxc ? <Lxc ulxc={a.amount_ulxc} sign="−" /> : 'None'}
               </td>
             </tr>
           )
@@ -130,8 +136,8 @@ function IssueCard({ agent }: { agent: Agent }) {
     >
       <p className="text-body text-muted">
         Give {agent.name} a virtual card. Each purchase is paid from its wallet only if its rules
-        allow it, converted from pounds at the day’s European Central Bank rate. Stripe issues the card to a person —
-        the cardholder — and a merchant may ask for their billing address. Their phone number is optional.
+        allow it, converted from pounds at the day’s European Central Bank rate. Stripe issues the card to a person
+        (the cardholder), and a merchant may ask for their billing address. Their phone number is optional.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {FIELDS.map((f) => (
@@ -171,7 +177,7 @@ export function AgentCardPanel({ agent }: { agent: Agent }) {
   const q = useQuery({ queryKey: cardKey(agent.id), queryFn: () => agentBankApi.card(agent.id) })
   return (
     <Card>
-      <CardHeader>Card</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability="agent_card" />}>Card</CardHeader>
       {q.isError ? (
         <p className="px-gutter py-3 text-body text-muted">
           {isSessionExpired(q.error)
@@ -182,6 +188,9 @@ export function AgentCardPanel({ agent }: { agent: Agent }) {
         <p className="px-gutter py-3 text-body text-muted">Reading…</p>
       ) : q.data ? (
         <>
+          <div className="px-gutter pt-3">
+            <AgentCardFace agent={agent} className="max-w-sm" />
+          </div>
           <CardFace card={q.data.card} />
           <div className="border-t border-rule">
             {(q.data.authorizations ?? []).length === 0 ? (
@@ -192,6 +201,13 @@ export function AgentCardPanel({ agent }: { agent: Agent }) {
             ) : (
               <Purchases auths={q.data.authorizations ?? []} />
             )}
+          </div>
+          {/* B59.25 — what came back of its payments, and every card payment of a date range as a file. */}
+          <div {...{ [DESIGN_ATTR]: 'pocket' }}>
+            <CardDisputesAndRefunds agentID={agent.id} />
+            <div className="border-t border-rule px-gutter py-3">
+              <CardExport />
+            </div>
           </div>
         </>
       ) : (

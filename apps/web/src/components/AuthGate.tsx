@@ -1,11 +1,9 @@
 import { useEffect, useRef } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Button, Card } from '@talyvor/ui'
 import { api } from '../lib/api'
-import { useAuthMeReader } from '../lib/authMe'
 import { useDocumentTitle } from '../documentTitle'
-import { SignInCard } from '../areas/auth/Entry'
+import { AuthCard, SignInCard } from '../areas/auth/Entry'
 
 // The auth gate: one probe (/auth/me) decides whether the app or the sign-in
 // card renders. ONLY an oidc-mode BFF reporting "no session" gates — disabled
@@ -98,37 +96,11 @@ function SignedOut() {
     // address-shaped sweep in this repo is structurally blind to it, which is how it stayed that
     // way while twelve addresses were swept for headings twice. Zero-pixel: no rule in the built
     // stylesheet names a sectioning element. LandmarkCoverage.test.tsx asserts it as a state.
-    <main className="flex min-h-screen items-center justify-center bg-canvas px-gutter">
-      <Card className="w-full max-w-sm">
+    // B57.49 — Pocket's auth card on the cloud page, held to Pocket's rules at whichever address it stands in for.
+    <main data-design="pocket" className="flex min-h-screen items-center justify-center bg-cloud px-gutter">
+      <AuthCard>
         <SignInCard returnTo={returnTo} />
-      </Card>
+      </AuthCard>
     </main>
-  )
-}
-
-// SessionChip: who is signed in + the way out. Renders nothing when there is no
-// session to show (disabled mode, or the gate is about to take over anyway).
-export function SessionChip() {
-  const q = useAuthMeReader()
-  const qc = useQueryClient()
-  if (!q.data?.authenticated || !q.data.user) return null
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      {/* B28.267 — off on a phone, where the page title needs the width more than the address does. */}
-      <span className="hidden truncate text-caption text-muted wide:block" title={q.data.user.email}>
-        {q.data.user.email}
-      </span>
-      <Button
-        className="shrink-0"
-        onClick={() => {
-          void fetch('/auth/logout', { method: 'POST' }).then(() => {
-            // The session is dead server-side; re-probe so the gate re-renders.
-            void qc.invalidateQueries({ queryKey: ['auth-me'] })
-          })
-        }}
-      >
-        Sign out
-      </Button>
-    </div>
   )
 }

@@ -179,6 +179,35 @@ const BODIES: Record<string, unknown> = {
   '/api/docs/membership': { member: true },
   // B46.16 — the sidebar shows the workspace's name on every address.
   '/api/workspace/name': { id: 'ws_1', name: 'Acme' },
+  '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B59.31 — Settings → Company details, as a company with two people with control.
+  '/api/workspace/business': {
+    company_name: 'Acme Robotics Ltd',
+    registration_number: '12345678',
+    country: 'GB',
+    people: [
+      { name: 'Ada Lovelace', role: 'director', share_bps: 6000 },
+      { name: 'Grace Hopper', role: 'shareholder', share_bps: 4000 },
+    ],
+  },
+  // B59.25 — one card payment disputed and won, and one merchant's refund.
+  '/api/money/card-disputes': {
+    card_disputes: [
+      { id: 'cdsp_1', payment_id: 'iauth_1', agent_id: 'agt_research', card_id: 'mcard_1', merchant: 'Map Tiles', amount_minor: 3000, currency: 'GBP', reason: 'Charged twice', status: 'won', credited_minor: 3000, decided_at: '2026-10-12T09:00:00Z', created_at: '2026-10-11T09:00:00Z' },
+    ],
+  },
+  '/api/money/card-refunds': {
+    card_refunds: [
+      { id: 'cref_1', payment_id: 'iauth_2', agent_id: 'agt_research', card_id: 'mcard_1', merchant: 'Print Shop', amount_minor: 1000, currency: 'GBP', credited_minor: 1000, created_at: '2026-10-13T09:00:00Z' },
+    ],
+  },
+  // B59.28 — one complaint answered and one data export ready to download.
+  '/api/workspace/requests': {
+    requests: [
+      { id: 2, kind: 'data_export', state: 'done', reference: '', message: '', answer: 'Your copy is ready.', filed_at: '2026-09-02T09:00:00Z', updated_at: '2026-09-03T09:00:00Z' },
+      { id: 1, kind: 'complaint', state: 'in_progress', reference: 'C-ABCD-EFGH', message: 'A card payment was taken twice.', answer: '', filed_at: '2026-09-01T09:00:00Z', updated_at: '2026-09-01T09:00:00Z' },
+    ],
+  },
   // B39.34 — Settings → Email branding, as a workspace that branded its Docs email.
   '/api/docs/email-branding': { from_name: 'Acme Robotics', header_color: '#1E40AF', logo_url: '' },
   // B40.8 — Settings → Connect your AI, with Claude connected and used.
@@ -481,6 +510,9 @@ const BY_PATH: Record<string, unknown> = {
   },
   // B19.10 — no passkey yet, so approvals are sent unsigned, as B19.4 sends them.
   '/api/agents/passkeys': { passkeys: [] },
+  // B55.54 — no key recovery waits.
+  '/api/agents/keys/recover': { recovery: null },
+  '/api/agents/keys': { keys: [] }, // B55.16
   // B55.2 — nor a phone key: with one, the web leaves approving and resuming to the phone.
   '/api/money/devices': { devices: [] },
   // B19.21 — a weekly payment from the Researcher to the Writer, and the Researcher's top-up.
@@ -707,17 +739,17 @@ const BY_PATH: Record<string, unknown> = {
     timezone: '',
   },
   // B22.10 — money between owners: the classes, a transfer each way, an incoming request, a company credit line
-  // and a loan being repaid.
+  // and a loan being repaid. B56.11: each money capability Sandbox for this workspace, as Lens answers today.
   '/api/wallets/capabilities': {
     capabilities: [
-      { capability: 'spend_on_talyvor', name: 'Spending on Talyvor', class: 'GREEN', real_money: true, level_needed: 'L0' },
-      { capability: 'pay_another_owner', name: 'Sending and requesting money between different owners', class: 'AMBER', real_money: false, level_needed: 'L2' },
-      { capability: 'company_credit_line', name: 'Talyvor’s credit line to companies, for Talyvor services', class: 'GREEN', real_money: true, level_needed: 'L0' },
-      { capability: 'loans_between_companies', name: 'Loans between companies', class: 'AMBER', real_money: false, level_needed: 'L3' },
+      { capability: 'spend_on_talyvor', name: 'Spending on Talyvor', class: 'GREEN', real_money: true, level_needed: 'L0', label: 'sandbox' },
+      { capability: 'pay_another_owner', name: 'Sending and requesting money between different owners', class: 'AMBER', real_money: false, level_needed: 'L2', label: 'sandbox' },
+      { capability: 'company_credit_line', name: 'Talyvor’s credit line to companies, for Talyvor services', class: 'GREEN', real_money: true, level_needed: 'L0', label: 'sandbox' },
+      { capability: 'loans_between_companies', name: 'Loans between companies', class: 'AMBER', real_money: false, level_needed: 'L3', label: 'sandbox' },
       { capability: 'rules_approvals_statements_pots', name: 'Rules, approvals, statements and pots', class: 'GREEN', real_money: true, level_needed: 'L0' },
-      { capability: 'escrow', name: 'Escrow between agents', class: 'AMBER', real_money: false, level_needed: 'L2' },
-      { capability: 'cash_out', name: 'Cashing credits out as money', class: 'RED', real_money: false, level_needed: 'L2' },
-      { capability: 'invest_and_trade', name: 'Investing and trading real assets', class: 'RED', real_money: false, level_needed: 'L2' },
+      { capability: 'escrow', name: 'Escrow between agents', class: 'AMBER', real_money: false, level_needed: 'L2', label: 'sandbox' },
+      { capability: 'cash_out', name: 'Cashing credits out as money', class: 'RED', real_money: false, level_needed: 'L2', label: 'sandbox' },
+      { capability: 'invest_and_trade', name: 'Investing and trading real assets', class: 'RED', real_money: false, level_needed: 'L2', label: 'sandbox' },
     ],
   },
   // B30.116 — the owner's verification: L2 on the Test provider's checks, so the live level is still L0.

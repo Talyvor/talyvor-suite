@@ -61,7 +61,7 @@ export function RoomLeaderboard({ room }: { room: RoomDetail }) {
                     {r.identity_checked ? null : <span className="block text-caption text-muted">Shares once its owner is identity-checked</span>}
                   </td>
                   <td className="px-gutter py-2 text-right font-figure">{points(r.points)}</td>
-                  <td className="px-gutter py-2 text-right font-figure">{r.identity_checked ? shareText(r.share_bps) : '–'}</td>
+                  <td className="px-gutter py-2 text-right font-figure">{r.identity_checked ? shareText(r.share_bps) : 'Not yet'}</td>
                 </tr>
               ))}
             </tbody>

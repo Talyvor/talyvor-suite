@@ -66,15 +66,17 @@ describe('the marketplace review queue (B20.12)', () => {
     expect(await screen.findByText(/^Nothing is waiting for review\./)).toBeTruthy()
   })
 
-  it('the sidebar offers the queue to an operator and to nobody else', async () => {
+  it('the Marketplace offers the queue to an operator and to nobody else (B57.8: its own pages left the sidebar)', async () => {
     mockBff(true)
-    const nav = await at('/marketplace')
-    expect(await within(nav).findByRole('link', { name: 'Review queue' })).toBeTruthy()
+    await at('/marketplace')
+    const pages = await screen.findByRole('navigation', { name: 'Marketplace pages' })
+    expect(await within(pages).findByRole('link', { name: 'Review queue' })).toBeTruthy()
     cleanup()
     queryClient.clear()
     mockBff(false)
-    const nav2 = await at('/marketplace')
-    await within(nav2).findByRole('link', { name: 'Your bill' })
-    expect(within(nav2).queryByRole('link', { name: 'Review queue' })).toBeNull()
+    await at('/marketplace')
+    const pages2 = await screen.findByRole('navigation', { name: 'Marketplace pages' })
+    await within(pages2).findByRole('link', { name: 'Your bill' })
+    expect(within(pages2).queryByRole('link', { name: 'Review queue' })).toBeNull()
   })
 })

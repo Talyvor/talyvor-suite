@@ -1,4 +1,5 @@
 import { getJSON, getJSONArray } from '../../lib/api'
+import { unlessHeld } from '../../lib/held'
 import { isSessionExpired } from '../../lib/productState'
 import { type ListingKind, MarketError } from '../marketplace/marketApi'
 
@@ -328,7 +329,7 @@ export const spendPolicyText = (p: string) => SPEND_POLICIES.find(([v]) => v ===
 
 /** Where a room's text is kept, said before its first message (B32.30). */
 export const STORED_NOTICE =
-  'Messages in a room are stored by Talyvor and visible to its members — to everyone, in a public room.'
+  'Messages in a room are stored by Talyvor and visible to its members (to everyone, in a public room).'
 
 /** `12.5` → 1,250 basis points; empty is none. Null for anything that is not a share from 0 to 100 with two decimals at most. */
 export function parseShare(text: string): number | null {
@@ -622,7 +623,9 @@ export const roomsApi = {
     post<Contribution>(`/api/rooms/${e(id)}/contributions/${e(cid)}/vote`, { value }, 'PUT'),
   decide: (id: string, cid: string, status: 'accepted' | 'rejected') =>
     post<Contribution>(`/api/rooms/${e(id)}/contributions/${e(cid)}`, { status }, 'PATCH'),
-  run: (id: string, req: RunRequest) => post<RunResult>(`/api/rooms/${e(id)}/runs`, req),
+  run: (id: string, req: RunRequest) =>
+    unlessHeld(post<RunResult>(`/api/rooms/${e(id)}/runs`, req), (h) =>
+      new MarketError(202, `/api/rooms/${e(id)}/runs`, h.message ?? '', h.approval_id)),
   // B41.60 — the room's AI, whose context is the room's latest messages, its spec among them.
   ask: (id: string, req: { question: string; model: string; pay: 'room' | 'self' }) => post<RunResult>(`/api/rooms/${e(id)}/ask`, req),
   // B32.55 — room settings.
@@ -707,7 +710,7 @@ export const roomsApi = {
  * any other loses Lens's "rooms: …:" prefix. A fault says nothing happened.
  */
 export function roomRefusal(err: unknown): string {
-  if (isSessionExpired(err)) return 'Nothing happened — sign in again.'
+  if (isSessionExpired(err)) return 'Nothing happened. Sign in again.'
   if (err instanceof MarketError && err.sentence && err.status < 500) {
     if (err.sentence.startsWith('rooms_plan_limits')) return err.sentence
     const s = err.sentence.replace(/^rooms: (invalid request: |not allowed: |conflict: |not found: )?/, '')

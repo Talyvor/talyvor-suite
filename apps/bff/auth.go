@@ -76,6 +76,10 @@ type session struct {
 	// synthetic marks a B17.2 test user's session (synthetic.go). Its workspace came from Lens's
 	// synthetic routes, not from provisioning, so it is never re-provisioned (tenant.go).
 	synthetic bool
+
+	// signedInAt is when this person signed in (B55.54): getting a key back needs a sign-in within the last 10
+	// minutes, so it goes to Lens with the recovery routes (key_recovery.go).
+	signedInAt time.Time
 }
 
 func (s session) expiresAt() time.Time { return s.expires }
@@ -83,10 +87,11 @@ func (s session) expiresAt() time.Time { return s.expires }
 // pendingLogin is the state of one in-flight OIDC flow, bound to one browser via
 // the pending cookie. Single-use: consumed on the first callback that presents it.
 type pendingLogin struct {
-	state    string // CSRF token, round-trips via the IdP
-	verifier string // PKCE code verifier; its S256 hash went to the IdP
-	nonce    string // binds the id_token to this flow
-	returnTo string // sanitised same-app path to land on
+	state    string        // CSRF token, round-trips via the IdP
+	verifier string        // PKCE code verifier; its S256 hash went to the IdP
+	nonce    string        // binds the id_token to this flow
+	returnTo string        // sanitised same-app path to land on
+	signup   signupAccount // B59.8: sign-up's answers, empty on a sign-in
 	expires  time.Time
 }
 
@@ -392,6 +397,15 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if a.handleAuthUnavailable(w) {
 		return
 	}
+	q := r.URL.Query()
+	signup, err := parseSignupAccount(q.Get("account_type"), q.Get("money_kind"), q.Get("name"), q.Get("country"), q.Get("registration_number"))
+	if err == nil && signup != (signupAccount{}) && signupFromAnotherSite(r) {
+		err = errors.New("start sign-up at /signup")
+	}
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
 	state, err1 := randomToken()
 	nonce, err2 := randomToken()
 	pendingID, err3 := randomToken()
@@ -404,7 +418,8 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		state:    state,
 		verifier: verifier,
 		nonce:    nonce,
-		returnTo: sanitizeReturnTo(r.URL.Query().Get("return_to")),
+		returnTo: sanitizeReturnTo(q.Get("return_to")),
+		signup:   signup,
 		expires:  time.Now().Add(pendingTTL),
 	})
 	setCookie(w, pendingCookieName, pendingID, int(pendingTTL.Seconds()))
@@ -412,7 +427,7 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// The denied page's "sign in with a different account" restart. Gated to this
 	// ONE literal — arbitrary client input never reaches the IdP URL. Standard
 	// OIDC prompt value; providers that don't support it ignore it harmlessly.
-	if r.URL.Query().Get("prompt") == "select_account" {
+	if q.Get("prompt") == "select_account" {
 		opts = append(opts, oauth2.SetAuthURLParam("prompt", "select_account"))
 	}
 	http.Redirect(w, r, a.auth.oauth.AuthCodeURL(state, opts...), http.StatusFound)
@@ -535,7 +550,7 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 	if old, err := r.Cookie(sessionCookieName); err == nil {
 		a.auth.endSession(old.Value)
 	}
-	s, perr := a.provisionSession(ctx, idt.Subject, claims.Email)
+	s, perr := a.provisionSession(ctx, idt.Subject, claims.Email, p.signup)
 	if perr != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{
 			"error": "could not provision your workspace — try again shortly"})
@@ -551,13 +566,13 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 }
 
 // provisionSession turns an identity the allowlist admitted into a session, not yet stored: the
-// browser callback and the phone sign-in (mobile_session.go) both come through here.
-func (a *app) provisionSession(ctx context.Context, sub, email string) (session, error) {
+// browser callback and the phone sign-in (mobile_session.go) both come through here, with sign-up's answers (B59.8).
+func (a *app) provisionSession(ctx context.Context, sub, email string, signup signupAccount) (session, error) {
 	// PROVISION: turn this identity into a tenant before the session exists. The workspace id is
 	// derived by LENS from the identity we present — the BFF never names a workspace, so no bug
 	// here can aim at another tenant. A provisioning failure is a hard stop: falling back to a
 	// shared workspace is the exact state this replaced, so there is no fallback path at all.
-	prov, perr := a.provisionForSession(ctx, provisionIdentity(a.cfg.oidcIssuer, sub))
+	prov, perr := a.provision(ctx, provisionIdentity(a.cfg.oidcIssuer, sub), nil, signup)
 	if perr != nil {
 		log.Printf("bff: provisioning FAILED for sub=%s: %s", sub, redactSecret(perr.Error()))
 		return session{}, perr
@@ -623,6 +638,9 @@ func (a *app) startSession(w http.ResponseWriter, r *http.Request, s session, ma
 func (auth *authenticator) storeSession(s session) (string, error) {
 	var sid string
 	var err error
+	if s.signedInAt.IsZero() {
+		s.signedInAt = time.Now()
+	}
 	if auth.sealer != nil {
 		sid, err = auth.sealer.seal(s)
 	} else {
@@ -651,54 +669,53 @@ func (auth *authenticator) storeSession(s session) (string, error) {
 // not-on-list, empty list, issuer-unverified email — renders this same page, so a refused
 // stranger learns only that they were refused. The precise cause stays in the server log.
 //
-// IN THE BRAND (B29.14): Obsidian canvas, Frost text, a Surface panel, the teal rule and one teal
-// button, with the logo's small symbol inline (B57.79) — the kit's files themselves, embedded, never
-// redrawn. Dark is primary; a light-scheme browser gets the light tokens and the on-light symbol.
+// IN POCKET (B57.49): the sign-in pages' auth card — a white card with its large shadow on the cloud page, ink words
+// and one ink pill action, Figtree — with the logo's small drawing at the top (B57.79), the kit's files themselves,
+// embedded, never redrawn. Light is primary, as Pocket's is; a dark-scheme browser gets Pocket's dark tokens and the
+// on-dark logo.
 var deniedPageTmpl = template.Must(template.New("denied").Parse(`<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#060A12">
-<title>Access not granted — Talyvor</title>
+<meta name="theme-color" content="#F3F4F6">
+<title>Access not granted | Talyvor</title>
 <style>
-  :root { color-scheme: dark light;
-          --tv-canvas: #060A12; --tv-surface: #081220; --tv-line: rgba(126,147,171,.18);
-          --tv-ink: #E6EEF7; --tv-ink-muted: #7E93AB;
-          --tv-accent: #3AD6C0; --tv-accent-hover: #55DFCC; --tv-on-accent: #060A12; }
+  :root { color-scheme: light dark;
+          --pk-page: #FFFFFF; --pk-cloud: #F3F4F6; --pk-ink: #111216; --pk-ink-2: #4A5061;
+          --pk-primary: #111216; --pk-on-primary: #FFFFFF; --pk-control: #7A8192;
+          --pk-shadow-lg: 0 2px 6px rgba(17,18,22,.08), 0 24px 60px rgba(17,18,22,.14); }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center;
-         font: 15px/24px "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
-         background: var(--tv-canvas); color: var(--tv-ink); }
-  main { box-sizing: border-box; width: calc(100% - 2rem); max-width: 28rem; padding: 2rem 1.75rem;
-         background: var(--tv-surface); border: 1px solid var(--tv-line); border-radius: 10px; }
-  .mark-dark, .mark-light { width: 56px; margin: 0 0 1.5rem; }
-  .mark-light { display: none; }
-  .mark-dark svg, .mark-light svg { display: block; width: 56px; height: auto; }
-  h1 { font-size: 28px; line-height: 34px; font-weight: 500; letter-spacing: -0.01em; margin: 0; }
-  .rule { width: 32px; height: 2px; background: var(--tv-accent); margin: 1rem 0 1.25rem; }
-  p { margin: 0 0 0.85rem; }
-  .muted { color: var(--tv-ink-muted); }
-  strong { font-weight: 600; overflow-wrap: anywhere; }
-  a.switch { display: inline-block; margin-top: 0.75rem; padding: 10px 18px; border-radius: 6px;
-             background: var(--tv-accent); color: var(--tv-on-accent);
-             font-size: 14px; line-height: 20px; font-weight: 600; text-decoration: none; }
-  a.switch:hover { background: var(--tv-accent-hover); }
-  a.switch:focus-visible { outline: 2px solid var(--tv-accent); outline-offset: 2px; }
-  /* last, so the light scheme wins the cascade */
-  @media (prefers-color-scheme: light) {
-    :root { --tv-canvas: #F4F7FB; --tv-surface: #FFFFFF; --tv-line: rgba(6,10,18,.10);
-            --tv-ink: #060A12; --tv-ink-muted: #46586E;
-            --tv-accent: #0F7A6C; --tv-accent-hover: #0A5F54; --tv-on-accent: #FFFFFF; }
-    .mark-dark { display: none; }
-    .mark-light { display: block; }
+         font: 15px/1.45 "Figtree", "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased;
+         background: var(--pk-cloud); color: var(--pk-ink); }
+  main { box-sizing: border-box; width: calc(100% - 2.5rem); max-width: 28rem; padding: 32px;
+         display: grid; gap: 14px; justify-items: start;
+         background: var(--pk-page); border-radius: 28px; box-shadow: var(--pk-shadow-lg); }
+  .logo-dark { display: none; }
+  .logo-dark svg, .logo-light svg { display: block; width: 144px; height: auto; margin: 9px; }
+  h1 { font-family: "Bricolage Grotesque", "Figtree", "Helvetica Neue", Arial, sans-serif;
+       font-size: 24px; line-height: 1.2; font-weight: 750; letter-spacing: -0.015em; margin: 16px 0 0; }
+  p { margin: 0; }
+  .muted { color: var(--pk-ink-2); }
+  strong { font-weight: 650; overflow-wrap: anywhere; }
+  a.switch { justify-self: stretch; display: flex; align-items: center; justify-content: center; height: 54px;
+             padding: 0 26px; border-radius: 999px; background: var(--pk-primary); color: var(--pk-on-primary);
+             font: 650 17px/1 "Figtree", "Helvetica Neue", Arial, sans-serif; text-decoration: none; }
+  a.switch:focus-visible { outline: 2px solid var(--pk-ink); outline-offset: 3px; }
+  /* last, so the dark scheme wins the cascade */
+  @media (prefers-color-scheme: dark) {
+    :root { --pk-page: #0F1013; --pk-cloud: #181A1F; --pk-ink: #F2F3F5; --pk-ink-2: #A6ACB9;
+            --pk-primary: #F2F3F5; --pk-on-primary: #111216; --pk-control: #6E7482;
+            --pk-shadow-lg: 0 2px 6px rgba(0,0,0,.5), 0 24px 60px rgba(0,0,0,.55); }
+    .logo-light { display: none; }
+    .logo-dark { display: block; }
   }
 </style>
 <main>
-  <div class="mark-dark">{{.MarkDark}}</div>
-  <div class="mark-light">{{.MarkLight}}</div>
+  <div class="logo-light">{{.LogoLight}}</div>
+  <div class="logo-dark">{{.LogoDark}}</div>
   <h1>Access not granted</h1>
-  <div class="rule"></div>
-  {{if .Email}}<p>You are signed in as <strong>{{.Email}}</strong> — the sign-in itself worked.</p>
+  {{if .Email}}<p>You are signed in as <strong>{{.Email}}</strong>. The sign-in itself worked.</p>
   {{else}}<p>Your sign-in itself worked.</p>{{end}}
   <p>This workspace has not granted you access.</p>
   <p class="muted">If you believe you should have access, contact the person who runs this
@@ -708,13 +725,18 @@ var deniedPageTmpl = template.Must(template.New("denied").Parse(`<!doctype html>
 </html>
 `))
 
-// The logo's small symbol, both versions, copied byte for byte from brand/logo/svg (their ids differ, so
-// both can sit in one page). Embedded, so the page still needs no asset request.
+// The logo's small drawing for this page and the small symbol for the OAuth consent page (oauth.go), both versions of
+// each, copied byte for byte from brand/logo/svg (their ids differ, so both can sit in one page). Embedded, so neither
+// page needs an asset request.
 var (
 	//go:embed brand/talyvor-symbol-small-on-dark.svg
 	markDark string
 	//go:embed brand/talyvor-symbol-small-on-light.svg
 	markLight string
+	//go:embed brand/talyvor-logo-small-on-dark.svg
+	logoDark string
+	//go:embed brand/talyvor-logo-small-on-light.svg
+	logoLight string
 )
 
 // writeDeniedPage renders the refusal. 403 stays 403 — the page is for the human, the status for
@@ -727,8 +749,8 @@ func writeDeniedPage(w http.ResponseWriter, email string) {
 	w.WriteHeader(http.StatusForbidden)
 	data := struct {
 		Email               string
-		MarkDark, MarkLight template.HTML
-	}{Email: email, MarkDark: template.HTML(markDark), MarkLight: template.HTML(markLight)} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
+		LogoDark, LogoLight template.HTML
+	}{Email: email, LogoDark: template.HTML(logoDark), LogoLight: template.HTML(logoLight)} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
 	if err := deniedPageTmpl.Execute(w, data); err != nil {
 		log.Printf("bff: denied page render: %v", err)
 	}

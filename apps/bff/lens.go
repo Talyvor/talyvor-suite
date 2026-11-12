@@ -60,6 +60,9 @@ type app struct {
 
 	// trackSpendSynced is when each Track workspace last asked Track to credit its Chat spend (track_spend.go).
 	trackSpendSynced sync.Map
+
+	// areas reads which areas a workspace has (areas.go); newApp sets it from areasReader.
+	areas func(context.Context, tenant) ([]string, error)
 }
 
 func newApp(cfg config, auth *authenticator) *app {
@@ -74,6 +77,7 @@ func newApp(cfg config, auth *authenticator) *app {
 		connectorOut: newConnectorTransport(),
 		oauth:        newOAuthServer(),
 	}
+	a.areas = areasReader(a)
 
 	// Talyvor Connect (B40.6, oauth.go): an outside assistant signs in as a person and reaches /mcp.
 	a.mux.HandleFunc("/.well-known/oauth-protected-resource", a.oauthOn(a.handleProtectedResourceMetadata))
@@ -399,17 +403,22 @@ func newApp(cfg config, auth *authenticator) *app {
 	// is created DECLINED and the person is asked whether to turn sharing on, so nobody's answers
 	// can be served to another company before they have been told. See tenant.go.
 	a.mux.HandleFunc("/api/pooling", a.requireTenant(a.handlePoolingChoice))
-
 	// DOCUMENT CONVERSION (distill) — the disclosure's control and evidence. Lens defaults every
 	// workspace to distill_policy='always', so this is already happening to every customer; the
 	// route to stop it has been live and uncalled. Same posture as /api/pooling: session-gated,
 	// same-Origin on the write, key attached server-side, and the response states what Lens
 	// RECORDED. See distill.go — distill_poolable is deliberately NOT exposed here.
 	a.mux.HandleFunc("/api/distill", a.requireTenant(a.handleDistill))
-
 	// B8.2 — the Features screen: every capability setting on the workspace (read), and the two
 	// switches Lens already had a route for and nothing called. See features.go.
 	a.mux.HandleFunc("/api/features", a.requireTenant(a.handleFeatures))
+	// B59.38 — which areas the workspace has; the phone shows an area only when it is listed. See workspace_areas.go.
+	a.mux.HandleFunc("/api/workspace/areas", a.requireTenant(a.handleWorkspaceAreas))
+	a.mux.HandleFunc("/api/workspace/account", a.requireTenant(a.handleWorkspaceAccount)) // B59.10 — the type and kind of money. See workspace_account.go.
+	// B59.28 — help and complaints, closing the account and the workspace's data. See workspace_requests.go.
+	a.mux.HandleFunc("/api/workspace/requests", a.requireTenant(a.handleWorkspaceRequests))
+	a.mux.HandleFunc("/api/workspace/requests/{id}/export", a.requireTenant(a.handleWorkspaceRequestExport))
+	a.mux.HandleFunc("/api/workspace/business", a.requireTenant(a.handleWorkspaceBusiness)) // B59.31 — a Business workspace's company details and people with control. See workspace_business.go.
 	a.mux.HandleFunc("/api/features/tare", a.requireTenant(a.handleFeatureTare))
 	a.mux.HandleFunc("/api/features/cost-optimize-routing", a.requireTenant(a.handleFeatureCostRouting))
 	// B11.2 — the shared-conversions switch Lens had and nothing called, and Tare's recorded savings.
@@ -449,6 +458,14 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/keys/enrolments/{id}/challenge", a.requireTenant(a.handleKeyEnrolmentAction("challenge")))
 	a.mux.HandleFunc("/api/agents/keys/enrolments/{id}/approve", a.requireTenant(a.handleKeyEnrolmentAction("approve")))
 	a.mux.HandleFunc("/api/agents/keys/enrolments/{id}/decline", a.requireTenant(a.handleKeyEnrolmentAction("decline")))
+	// B55.54 — a recovery code, and a key back when every key of the workspace was removed (Lens B55.48).
+	a.mux.HandleFunc("/api/agents/keys/recovery-code/challenge", a.requireTenant(a.handleRecoveryCode("/challenge")))
+	a.mux.HandleFunc("/api/agents/keys/recovery-code", a.requireTenant(a.handleRecoveryCode("")))
+	a.mux.HandleFunc("/api/agents/keys/recover", a.requireTenant(a.handleKeyRecover))
+	a.mux.HandleFunc("/api/agents/keys/recover/start", a.requireTenant(a.handleKeyRecoverAction("start")))
+	a.mux.HandleFunc("/api/agents/keys/recover/cancel", a.requireTenant(a.handleKeyRecoverAction("cancel")))
+	a.mux.HandleFunc("/api/agents/keys/recover/complete", a.requireTenant(a.handleKeyRecoverAction("complete")))
+	a.mux.HandleFunc("/api/agents/keys", a.requireTenant(a.handleApprovalKeys)) // B55.16
 	a.mux.HandleFunc("/api/agents/push/public-key", a.requireTenant(a.handlePushPublicKey))
 	a.mux.HandleFunc("/api/agents/push/subscriptions", a.requireTenant(a.handlePushSubscriptions))
 	a.mux.HandleFunc("/api/agents/{id}/fund", a.requireTenant(a.handleAgentMove("fund")))
@@ -459,6 +476,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/{id}/rules/simulate", a.requireTenant(a.handleAgentRulesSimulate))     // B28.30
 	a.mux.HandleFunc("/api/agents/{id}/rules/history", a.requireTenant(a.handleAgentRulesHistory))       // B28.31
 	a.mux.HandleFunc("/api/agents/{id}/rules/rollback", a.requireTenant(a.handleAgentRulesRollback))     // B28.31
+	a.mux.HandleFunc("/api/agents/{id}/rules-challenge", a.requireTenant(a.handleAgentRulesChallenge))   // B55.14
 	a.mux.HandleFunc("/api/agents/{id}/rules/boosts", a.requireTenant(a.handleAgentRuleBoosts))          // B28.32
 	a.mux.HandleFunc("/api/agents/{id}/rules/boosts/{rule}", a.requireTenant(a.handleAgentRuleBoostEnd)) // B28.32
 	a.mux.HandleFunc("/api/agents/{id}/wallet", a.requireTenant(a.handleAgentWallet))                    // B46.9
@@ -533,6 +551,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/kya/verify", a.requireTenant(a.handleKYAVerify))
 	// B30.97 — invoices from an agent's currency account and their public pay page (Lens B30.20). See money_invoices.go.
 	a.mux.HandleFunc("/api/money/accounts", a.requireTenant(a.handleMoneyAccounts))
+	a.mux.HandleFunc("/api/money/accounts/{id}/statement", a.requireTenant(a.handleMoneyAccountStatement)) // B56.15
 	a.mux.HandleFunc("/api/money/invoices", a.requireTenant(a.handleMoneyInvoices))
 	a.mux.HandleFunc("/api/money/invoices/{id}/send", a.requireTenant(a.handleMoneyInvoiceMove("send")))
 	a.mux.HandleFunc("/api/money/invoices/{id}/void", a.requireTenant(a.handleMoneyInvoiceMove("void")))
@@ -571,8 +590,15 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/physical-cards", a.requireTenant(a.handlePhysicalCards))
 	a.mux.HandleFunc("/api/money/physical-cards/{id}/activate", a.requireTenant(a.handlePhysicalCardActivate))
 	a.mux.HandleFunc("/api/money/physical-cards/{id}/replace", a.requireTenant(a.handlePhysicalCardReplace))
+	// B59.25 — card disputes, merchant refunds and the card export (Lens B59.24). See money_card_disputes.go.
+	a.mux.HandleFunc("/api/money/card-disputes", a.requireTenant(a.handleMoneyCardDisputes))
+	a.mux.HandleFunc("/api/money/card-refunds", a.requireTenant(a.handleMoneyCardRefunds))
+	a.mux.HandleFunc("/api/money/card-exports", a.requireTenant(a.handleMoneyCardExport))
 
 	a.mux.HandleFunc("/api/money/mandates", a.requireTenant(a.handleMoneyMandates))
+	a.mux.HandleFunc("/api/money/mandates/challenge", a.requireTenant(a.handleMoneyMandateChallenge))
+	a.mux.HandleFunc("/api/money/mandates/{id}/approve", a.requireTenant(a.handleMoneyMandateDecide(true)))
+	a.mux.HandleFunc("/api/money/mandates/{id}/decline", a.requireTenant(a.handleMoneyMandateDecide(false)))
 	a.mux.HandleFunc("/api/money/mandates/{id}/revoke", a.requireTenant(a.handleMoneyMandateRevoke))
 	// B41.1 — the bills inbox: an uploaded invoice becomes a bill (Lens B41.101). See money_bills.go.
 	a.mux.HandleFunc("/api/money/bills", a.requireTenant(a.handleMoneyBills))
@@ -597,7 +623,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/permission-mandates/{id}/revoke", a.requireTenant(a.handleMoneyPermissionMandateRevoke))
 	a.mux.HandleFunc("/api/money/payouts", a.requireTenant(a.handleMoneyPayouts))
 	a.mux.HandleFunc("/api/money/payouts/{id}", a.requireTenant(a.handleMoneyPayout))
-	a.mux.HandleFunc("/api/money/payouts/{id}/approve", a.requireTenant(a.handleMoneyPayoutApprove))
+	a.mux.HandleFunc("/api/money/payouts/{id}/approve", a.requireTenant(a.handleMoneyPayoutApprove(false)))
+	a.mux.HandleFunc("/api/money/payouts/{id}/approve/challenge", a.requireTenant(a.handleMoneyPayoutApprove(true))) // B58.6
 	// B22.12 — escrow, pots, simulated investing and cash-out. See wallet_holdings.go.
 	a.mux.HandleFunc("/api/agents/{id}/escrows", a.requireTenant(a.handleAgentEscrow))
 	a.mux.HandleFunc("/api/wallets/escrows", a.requireTenant(a.handleEscrows))
@@ -866,6 +893,11 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !a.sameOriginWriteAllowed(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": "cross-origin write refused: the Origin header must be the app origin"})
+		return
+	}
+	// B59.2 — a route of an area this workspace does not have is not there (areas.go).
+	if a.areaHidden(r) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such endpoint"})
 		return
 	}
 	a.mux.ServeHTTP(w, r)
@@ -1148,6 +1180,26 @@ func (a *app) wsProxyGated(suffix, capability string) http.HandlerFunc {
 	})
 }
 
+// maxUpstreamReadBytes bounds an upstream response the BFF buffers before answering (the gated
+// read and the product transform path). A streamed pass-through is not buffered and not capped.
+const maxUpstreamReadBytes = 8 << 20
+
+// errUpstreamTooLarge is readUpstreamCapped's refusal: the upstream sent more than the cap.
+var errUpstreamTooLarge = errors.New("upstream response exceeds maxUpstreamReadBytes")
+
+// readUpstreamCapped reads at most one byte past maxUpstreamReadBytes, so an oversized upstream
+// is refused without being held in memory.
+func readUpstreamCapped(r io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxUpstreamReadBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxUpstreamReadBytes {
+		return nil, errUpstreamTooLarge
+	}
+	return body, nil
+}
+
 func (a *app) forwardGated(w http.ResponseWriter, r *http.Request, t tenant, upstreamPath, capability string) {
 	resp, err := a.doGet(r.Context(), t, upstreamPath, "")
 	if err != nil {
@@ -1161,7 +1213,7 @@ func (a *app) forwardGated(w http.ResponseWriter, r *http.Request, t tenant, ups
 	case http.StatusNotFound:
 		writeJSON(w, http.StatusOK, map[string]any{"capability": capability, "enabled": false})
 	case http.StatusOK:
-		body, err := io.ReadAll(resp.Body)
+		body, err := readUpstreamCapped(resp.Body)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "lens upstream read"})
 			return
@@ -1255,7 +1307,7 @@ func (a *app) forwardProductWith(w http.ResponseWriter, r *http.Request, product
 	defer resp.Body.Close()
 
 	if transform != nil && resp.StatusCode == http.StatusOK {
-		body, err := io.ReadAll(resp.Body)
+		body, err := readUpstreamCapped(resp.Body)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": product + " upstream read"})
 			return

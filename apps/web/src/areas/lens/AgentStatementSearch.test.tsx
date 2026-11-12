@@ -1,7 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Statement } from './AgentBank'
+import { AgentStatement, NEWEST_LINES } from './AgentStatement'
+import { AppMoney } from './money'
+import { DESIGN_ATTR } from '../../pocketPending'
 import type { PostingKind, StatementLine } from './agentBankApi'
 
 // B28.51 — the DONE line: page 2 continues below page 1, and a filter by kind returns only that kind. Lens searches,
@@ -88,5 +92,90 @@ describe('the agent statement, searched, filtered and paged', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search Researcher’s statement' }), { target: { value: 'nothing like it' } })
     expect(await screen.findByText('No line on this statement matches.')).toBeInTheDocument()
     expect(asked[asked.length - 1].get('q')).toBe('nothing like it')
+  })
+})
+
+// B57.110 — the same search, kind filter, empty match and Show older lines on the Pocket statement B57.24 draws: Lens
+// reads the month by model and day (group=day) and keeps the lines of those kinds holding q; while a search or a filter
+// is on, the newest 100 come first and Show older lines puts the next 100 below them.
+
+function renderPocketStatement() {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = new URL(String(input), 'http://app')
+    const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url.pathname === '/api/models' || url.pathname === '/api/lxc/topup-options') return json([])
+    if (url.pathname !== '/api/agents/agt_1/statement') return new Response('null', { status: 404 })
+    const q = url.searchParams
+    asked.push(q)
+    const kinds = q.get('kind')?.split(',') ?? []
+    const words = (q.get('q') ?? '').toLowerCase()
+    const kept = all.filter((l) => (kinds.length === 0 || kinds.includes(l.kind)) && (words === '' || l.kind.includes(words)))
+    const start = q.has('cursor') ? kept.findIndex((l) => l.entry_id === q.get('cursor')) + 1 : 0
+    const page = kept.slice(start, start + Number(q.get('limit')))
+    const more = start + page.length < kept.length
+    return json({ to: TO, group: 'day', time_zone: 'UTC', accounts: [], lines: page, ...(more ? { next_cursor: page[page.length - 1].entry_id } : {}) })
+  })
+  const agent = { id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-01T09:00:00Z' }
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter>
+        <AppMoney>
+          <AgentStatement agent={agent} nameOf={() => 'an agent'} />
+        </AppMoney>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+const docLines = () => within(screen.getByTestId('statement-lines')).getAllByRole('row').slice(1)
+const kindBox = () => screen.getByRole('combobox', { name: 'Kind of line in Researcher’s statement' }) as HTMLSelectElement
+const searchBox = () => screen.getByRole('searchbox', { name: 'Search Researcher’s statement' }) as HTMLInputElement
+
+describe('the Pocket statement, searched, filtered and paged (B57.110)', () => {
+  it('draws the search and the kind filter in Pocket’s fields on the statement, every kind B28.51 names', async () => {
+    renderPocketStatement()
+    await screen.findByTestId('statement-lines')
+    const doc = screen.getByTestId('statement-doc')
+    expect(doc.getAttribute(DESIGN_ATTR)).toBe('pocket')
+    expect(doc.contains(searchBox()) && doc.contains(kindBox())).toBe(true)
+    // Pocket's Input and Select: the 46-tall box with the 1.5px control edge, the same as every Pocket field.
+    for (const field of [searchBox(), kindBox()]) expect(field.parentElement!.className).toMatch(/\bshadow-edge\b.*\brounded-control\b|\brounded-control\b.*\bshadow-edge\b/)
+    expect([...kindBox().options].map((o) => o.text)).toEqual([
+      'Every kind', 'Funded', 'Taken back', 'Top-ups', 'Requests', 'Platform fees', 'Payments', 'Transfers', 'Card', 'Escrow', 'Pots', 'Cash-outs', 'Credit line',
+    ])
+  })
+
+  it('a filter by kind asks Lens for that kind by model and day, and shows only it', async () => {
+    renderPocketStatement()
+    await screen.findByTestId('statement-lines')
+    fireEvent.change(kindBox(), { target: { value: (screen.getByRole('option', { name: 'Card' }) as HTMLOptionElement).value } })
+    await waitFor(() => expect(docLines()).toHaveLength(13))
+    const last = asked[asked.length - 1]
+    expect([last.get('kind'), last.get('group')]).toEqual(['card', 'day'])
+    expect(new Set(docLines().map((r) => within(r).getByTestId('statement-doc-what').textContent))).toEqual(new Set(['Card charge · Settled']))
+  })
+
+  it('a search is sent to Lens, and says so when nothing matches', async () => {
+    renderPocketStatement()
+    await screen.findByTestId('statement-lines')
+    fireEvent.change(searchBox(), { target: { value: 'nothing like it' } })
+    expect(await screen.findByText('No line on this statement matches.')).toBeInTheDocument()
+    expect(asked[asked.length - 1].get('q')).toBe('nothing like it')
+    expect(screen.queryByText('Nothing has moved in this wallet yet. Fund it under Money to start.')).toBeNull()
+  })
+
+  it('while searching, the newest 100 come first and Show older lines puts the next page below them', async () => {
+    renderPocketStatement()
+    await screen.findByTestId('statement-lines')
+    expect(docLines()).toHaveLength(NEWEST_LINES)
+    fireEvent.change(searchBox(), { target: { value: 'fund' } })
+    await waitFor(() => expect(docLines()).toHaveLength(100))
+    expect(asked[asked.length - 1].get('limit')).toBe('100')
+    expect(screen.queryByRole('button', { name: 'Show all' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show older lines' }))
+    await waitFor(() => expect(docLines()).toHaveLength(117))
+    const fund = all.filter((l) => l.kind === 'fund')
+    expect([asked[asked.length - 1].get('cursor'), asked[asked.length - 1].get('to')]).toEqual([fund[99].entry_id, TO])
+    expect(screen.queryByRole('button', { name: 'Show older lines' })).toBeNull()
   })
 })

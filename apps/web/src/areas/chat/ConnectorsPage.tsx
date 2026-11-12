@@ -34,7 +34,7 @@ function ConnectorCard({ connector, onRemove }: { connector: Connector; onRemove
           {tools.data.tools.map((t) => (
             <li key={t.name} className="min-w-0 text-caption text-muted">
               <span className="font-figure text-ink">{t.name}</span>
-              {t.description !== '' ? <> — {t.description}</> : null}
+              {t.description !== '' ? <>: {t.description}</> : null}
             </li>
           ))}
         </ul>
@@ -140,7 +140,7 @@ export function ConnectorsPage() {
                 {TEST_TOOLS_NAME}
               </h2>
               <p className="text-caption text-muted">
-                A connector to try this with. Its one tool, fingerprint, gives the first 12 hex digits of a text’s SHA-256 —
+                A connector to try this with. Its one tool, fingerprint, gives the first 12 hex digits of a text’s SHA-256,
                 something no model can work out by itself. Ask Chat for the fingerprint of a word, allow the call, and see
                 what it cost.
               </p>
@@ -168,11 +168,11 @@ export function ConnectorsPage() {
               <Input className="font-figure" type="url" placeholder="https://mcp.example.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-caption text-muted">Name (optional — the server’s own name if left empty)</span>
+              <span className="text-caption text-muted">Name (optional: the server’s own name if left empty)</span>
               <Input placeholder="Weather" value={name} maxLength={64} onChange={(e) => setName(e.target.value)} />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-caption text-muted">Token (optional — sent to this server only, as a bearer token)</span>
+              <span className="text-caption text-muted">Token (optional: sent to this server only, as a bearer token)</span>
               <Input className="font-figure" type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} />
             </label>
             <div className="flex flex-wrap items-center gap-2">

@@ -36,6 +36,11 @@ import (
 //     charges, as lens.env sets it (B32.8). Each OMITTED when Lens will not state it.
 //   - card_payments (B51.3) is Lens's public GET /v1/pricing (talyvor-lens B51.2): whether a card can be charged,
 //     "live", "test" or "off". OMITTED for any other answer; the pages offer a card only on "live".
+//   - labels (B56.9) is Lens's public GET /v1/public/labels (talyvor-lens B56.7): each money capability "live" or
+//     "sandbox", for StatusLabel. A capability Lens gave any other answer for is left out, and so is labels when
+//     Lens will not say. plan_gates.built and fees.charged (talyvor-lens B56.8) say which gates Lens enforces and
+//     which fees it charges, each OMITTED when Lens does not state it. These three change with the facts, so they
+//     are reused for publicLabelTTL, not publicPegTTL, and the reply may be kept no longer than that.
 func (a *app) handlePricing(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -63,16 +68,19 @@ func (a *app) handlePricing(w http.ResponseWriter, r *http.Request) {
 			out["enterprise_from_usd_cents"] = card.EnterpriseFromUSDCents
 		}
 	}
-	if gates, ok := a.public.gates.get(func() (planGates, bool) { return a.readPlanGates(r) }); ok {
+	if gates, ok := a.public.gates.getWithin(publicLabelTTL, func() (planGates, bool) { return a.readPlanGates(r) }); ok {
 		out["plan_gates"] = gates
 	}
-	if fees, ok := a.public.fees.get(func() (publicFees, bool) { return a.readFees(r) }); ok {
+	if fees, ok := a.public.fees.getWithin(publicLabelTTL, func() (publicFees, bool) { return a.readFees(r) }); ok {
 		out["fees"] = fees
 	}
 	if cards, ok := a.public.cards.get(func() (string, bool) { return a.readCardPayments(r) }); ok {
 		out["card_payments"] = cards
 	}
-	w.Header().Set("Cache-Control", "public, max-age=300")
+	if labels, ok := a.public.labels.getWithin(publicLabelTTL, func() (map[string]string, bool) { return a.readLabels(r) }); ok {
+		out["labels"] = labels
+	}
+	w.Header().Set("Cache-Control", "public, max-age=60")
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -131,6 +139,8 @@ func (a *app) readPlans(r *http.Request) (planCard, bool) {
 type planGates struct {
 	Order []string            `json:"order"`
 	Plans map[string]planGate `json:"plans"`
+	// Built is, by each gate's name, whether Lens enforces it today (talyvor-lens B56.8); absent when Lens does not say.
+	Built map[string]bool `json:"built,omitempty"`
 }
 
 type planGate struct {
@@ -170,6 +180,8 @@ type publicFees struct {
 	IntlPaymentFeeMinor map[string]int64 `json:"intl_payment_fee_minor"`
 	MerchantFeeBPS      int64            `json:"merchant_fee_bps"`
 	MerchantA2AFeeBPS   int64            `json:"merchant_a2a_fee_bps"`
+	// Charged is, by each fee's name, whether Lens charges it today (talyvor-lens B56.8); absent when Lens does not say.
+	Charged map[string]bool `json:"charged,omitempty"`
 }
 
 // readFees reads the fees with no credential. ok=false unless the per-plan and per-currency fees are stated.
@@ -200,6 +212,27 @@ func (a *app) readCardPayments(r *http.Request) (string, bool) {
 	return "", false
 }
 
+// publicLabels is Lens's GET /v1/public/labels (talyvor-lens B56.7): each money capability's label.
+type publicLabels struct {
+	Labels map[string]string `json:"labels"`
+}
+
+// readLabels reads the labels with no credential. Only "live" and "sandbox" are kept: StatusLabel draws nothing for a
+// capability Lens did not answer, so an answer it cannot draw is left out. ok=false when no label is left.
+func (a *app) readLabels(r *http.Request) (map[string]string, bool) {
+	var body publicLabels
+	if !a.readPublic(r, "/v1/public/labels", &body) {
+		return nil, false
+	}
+	out := map[string]string{}
+	for capability, label := range body.Labels {
+		if capability != "" && (label == "live" || label == "sandbox") {
+			out[capability] = label
+		}
+	}
+	return out, len(out) > 0
+}
+
 // readPublic GETs one of Lens's public reads with no credential and decodes a 200 into `into`.
 func (a *app) readPublic(r *http.Request, path string, into any) bool {
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, a.cfg.lensBaseURL+path, nil)
@@ -224,13 +257,18 @@ func (a *app) readPublic(r *http.Request, path string, into any) bool {
 // public rate limit from this BFF's address, and the signed-in /billing read shares that address.
 const publicPegTTL = 5 * time.Minute
 
+// publicLabelTTL — how long the labels, the gates (with built) and the fees (with charged) are reused (B56.9). A label
+// says whether money is real, so it may run behind Lens by a minute and no more.
+const publicLabelTTL = time.Minute
+
 // pricingReads are /api/pricing's Lens reads, each cached on its own.
 type pricingReads struct {
-	peg   publicCache[float64]
-	plans publicCache[planCard]
-	gates publicCache[planGates]
-	fees  publicCache[publicFees]
-	cards publicCache[string]
+	peg    publicCache[float64]
+	plans  publicCache[planCard]
+	gates  publicCache[planGates]
+	fees   publicCache[publicFees]
+	cards  publicCache[string]
+	labels publicCache[map[string]string]
 }
 
 // publicCache holds the last CONFIRMED answer to one public read. A failure is never cached, so a
@@ -242,9 +280,14 @@ type publicCache[T any] struct {
 }
 
 func (c *publicCache[T]) get(read func() (T, bool)) (T, bool) {
+	return c.getWithin(publicPegTTL, read)
+}
+
+// getWithin is get with the answer reused for ttl.
+func (c *publicCache[T]) getWithin(ttl time.Duration, read func() (T, bool)) (T, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !c.at.IsZero() && time.Since(c.at) < publicPegTTL {
+	if !c.at.IsZero() && time.Since(c.at) < ttl {
 		return c.val, true
 	}
 	v, ok := read()

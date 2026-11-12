@@ -48,6 +48,8 @@ function mockBff(split = 'equal') {
     const json = (v: unknown, status = 200) =>
       new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, user: { sub: 'u1', email: 'u1@example.com' } })
+    // B55.14: Lens judges a change to an agent's rules first; these do not loosen them.
+    if (url.endsWith('/rules-challenge')) return json({ looser: false, changes: [], allow_credentials: [] })
     if (url === '/api/rooms') return json({ rooms: [], joined: [], invited: null })
     if (url === '/api/rooms/room_1') {
       return json({

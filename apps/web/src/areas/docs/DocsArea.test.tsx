@@ -102,7 +102,8 @@ describe('space list (LIVE /api/docs/spaces)', () => {
   })
 
   it('shows the empty state on a workspace with no spaces', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    // A fresh body per read: the Docs home asks for the pins too (B57.8), and a body is read once.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
       new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }),
     )
     renderAt('/docs')
@@ -528,7 +529,8 @@ describe('W1.1.9 — the space list reads as one screen, in regions', () => {
   })
 
   it('an EMPTY workspace says so, and the way in is PERFORMED rather than pointed at', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    // A fresh body per read: the Docs home asks for the pins too (B57.8), and a body is read once.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
       new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }),
     )
     renderAt('/docs')
@@ -800,7 +802,8 @@ describe('W1.1.9b — the page reader reads as one screen, in regions', () => {
 
 // B3.4 — the space list's own empty state has a control too, not only the region's name.
 it('the empty space list goes where it points: Start a space puts the caret in the name', async () => {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+  // A fresh body per read: the Docs home asks for the pins too (B57.8), and a body is read once.
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
     new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }),
   )
   renderAt('/docs')
