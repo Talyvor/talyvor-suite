@@ -116,6 +116,8 @@ var decodedFromUpstream = map[string]string{
 	"mandateGrant":           "a mandate grant, decoded field by field from the Pay screen's grant or challenge body and relayed to Lens as it came (B55.56)",
 	"cardAddress":            "a physical card's postal address, decoded from the browser's order body and relayed to Lens with only its own fields (B53.12)",
 	"workspaceRequest":       "Lens's B59.27 request record, decoded from its GET and POST /v1/workspaces/{id}/requests replies and shown without its workspace or filer (B59.28)",
+	"businessDetails":        "a Business workspace's company details, decoded from the browser's PUT body and from Lens's B59.30 GET and PUT /v1/workspaces/{id}/business replies, and passed on with only its own fields (B59.31)",
+	"businessPerson":         "one person with control inside businessDetails, decoded with it (B59.31)",
 	"pricedPlan":             "Lens's public GET /v1/billing/plans reply, decoded in readPlans() and served on /api/pricing (B28.5)",
 	"routingRecommendation":  "Lens's GET /v1/workspaces/{id}/routing/recommendation reply, decoded in handleRoutingRecommendation() and served on /api/routing/recommendation (B28.364)",
 	"planCard":               "Lens's public GET /v1/billing/plans reply, decoded in readPlans() and served on /api/pricing (B32.14)",

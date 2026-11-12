@@ -181,6 +181,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/settings/email-branding': 0,
   // B40.8 — one card per assistant.
   '/settings/connect': 8,
+  '/settings/company': 0, // B59.31: Pocket's own section title, no CardHeader
   '/settings/help': 0, // B59.28: Pocket's own section titles, no CardHeader
   '/settings/close': 0,
   '/settings/data': 0,

@@ -39,6 +39,7 @@ import { Spend } from './areas/lens/Spend'
 import { Members } from './areas/lens/Members'
 import { Settings, TeamOnly } from './areas/lens/Sharing'
 import { CloseAccountScreen, HelpScreen, YourDataScreen } from './areas/lens/HelpAndAccount'
+import { CompanyDetailsScreen } from './areas/lens/CompanyDetails'
 import { SignedInFooter } from './components/HelpLinks'
 import { Features } from './areas/lens/Features'
 import { AgentBank } from './areas/lens/AgentBank'
@@ -238,6 +239,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/settings/help', title: 'Help and complaints', element: <HelpScreen /> },
   { path: '/settings/close', title: 'Close this account', element: <CloseAccountScreen /> },
   { path: '/settings/data', title: 'Your data', element: <YourDataScreen /> },
+  // B59.31 — a Business account's company details and the people with control.
+  { path: '/settings/company', title: 'Company details', element: <CompanyDetailsScreen /> },
   // B30.97 — invoices from an agent's currency account, each with its public pay link.
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.

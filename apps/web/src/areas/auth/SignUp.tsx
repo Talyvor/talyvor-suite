@@ -13,6 +13,7 @@ import { usePricing } from '../marketing/pricingApi'
 import { agentBankApi } from '../lens/agentBankApi'
 import { DEVICES_KEY, PASSKEYS_KEY, deviceText } from '../lens/AgentBank'
 import { passkeysSupported, registerThisDevice } from '../lens/passkeys'
+import { CompanyDetailsSection } from '../lens/CompanyDetails'
 import { AccessLine, AlreadyIn, EntryFrame, PrivacyTerms, SignInCard } from './Entry'
 import {
   ACCOUNT_TYPES,
@@ -243,7 +244,7 @@ function StepWho({ type, setType, profile, setProfile, onContinue }: {
             </>
           )}
           <ProfileField field="country" value={profile.country} error={errors.country} onChange={set('country')}>
-            <option value="" disabled>
+            <option value="" hidden>
               {PROFILE_LABELS.country}
             </option>
             {COUNTRIES.map(([code, name]) => (
@@ -375,12 +376,15 @@ export function SignUpKey() {
     <SignUpFrame>
       <Stepper at={3} />
       <StepTitle id="signup-key">{SIGNUP_STEPS[2]}</StepTitle>
-      <KeyChoices />
+      <KeyChoices>
+        {/* B59.31 — a Business adds its company details and the people with control here, or later in Settings. */}
+        <CompanyDetailsSection titled />
+      </KeyChoices>
     </SignUpFrame>
   )
 }
 
-function KeyChoices() {
+function KeyChoices({ children }: { children?: React.ReactNode }) {
   const qc = useQueryClient()
   const passkeys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
   // Asked every 3 seconds until a key is here, so the phone's key shows up the moment the app makes it.
@@ -432,6 +436,7 @@ function KeyChoices() {
           )}
         </section>
       </div>
+      {children}
       <div className="flex flex-wrap items-center gap-4">
         {done ? (
           <Button asChild>

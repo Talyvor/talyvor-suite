@@ -1133,6 +1133,16 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/physical-cards/{id}/replace", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPhysicalCardReplaceBody",
   },
+  // B59.31 — a Business workspace's company details and the people with control (Lens B59.30).
+  {
+    route: "PUT /v1/workspaces/{wsID}/business",
+    file: "apps/bff/workspace_business.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]any{"company_name": in.CompanyName,',
+    upstreamFile: "internal/economy/business_details.go",
+    upstreamAnchor: "type BusinessDetails struct",
+    subject: "lensWorkspaceBusinessBody",
+  },
   // B59.28 — help and complaints, closing the account and the workspace's data, each a request (Lens B59.27).
   {
     route: "POST /v1/workspaces/{wsID}/requests",

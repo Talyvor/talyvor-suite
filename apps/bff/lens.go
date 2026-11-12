@@ -403,7 +403,6 @@ func newApp(cfg config, auth *authenticator) *app {
 	// is created DECLINED and the person is asked whether to turn sharing on, so nobody's answers
 	// can be served to another company before they have been told. See tenant.go.
 	a.mux.HandleFunc("/api/pooling", a.requireTenant(a.handlePoolingChoice))
-
 	// DOCUMENT CONVERSION (distill) — the disclosure's control and evidence. Lens defaults every
 	// workspace to distill_policy='always', so this is already happening to every customer; the
 	// route to stop it has been live and uncalled. Same posture as /api/pooling: session-gated,
@@ -419,6 +418,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B59.28 — help and complaints, closing the account and the workspace's data. See workspace_requests.go.
 	a.mux.HandleFunc("/api/workspace/requests", a.requireTenant(a.handleWorkspaceRequests))
 	a.mux.HandleFunc("/api/workspace/requests/{id}/export", a.requireTenant(a.handleWorkspaceRequestExport))
+	a.mux.HandleFunc("/api/workspace/business", a.requireTenant(a.handleWorkspaceBusiness)) // B59.31 — a Business workspace's company details and people with control. See workspace_business.go.
 	a.mux.HandleFunc("/api/features/tare", a.requireTenant(a.handleFeatureTare))
 	a.mux.HandleFunc("/api/features/cost-optimize-routing", a.requireTenant(a.handleFeatureCostRouting))
 	// B11.2 — the shared-conversions switch Lens had and nothing called, and Tare's recorded savings.

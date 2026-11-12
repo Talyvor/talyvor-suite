@@ -180,6 +180,16 @@ const BODIES: Record<string, unknown> = {
   // B46.16 — the sidebar shows the workspace's name on every address.
   '/api/workspace/name': { id: 'ws_1', name: 'Acme' },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B59.31 — Settings → Company details, as a company with two people with control.
+  '/api/workspace/business': {
+    company_name: 'Acme Robotics Ltd',
+    registration_number: '12345678',
+    country: 'GB',
+    people: [
+      { name: 'Ada Lovelace', role: 'director', share_bps: 6000 },
+      { name: 'Grace Hopper', role: 'shareholder', share_bps: 4000 },
+    ],
+  },
   // B59.28 — one complaint answered and one data export ready to download.
   '/api/workspace/requests': {
     requests: [
