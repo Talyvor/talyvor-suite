@@ -1156,6 +1156,26 @@ func (a *app) wsProxyGated(suffix, capability string) http.HandlerFunc {
 	})
 }
 
+// maxUpstreamReadBytes bounds an upstream response the BFF buffers before answering (the gated
+// read and the product transform path). A streamed pass-through is not buffered and not capped.
+const maxUpstreamReadBytes = 8 << 20
+
+// errUpstreamTooLarge is readUpstreamCapped's refusal: the upstream sent more than the cap.
+var errUpstreamTooLarge = errors.New("upstream response exceeds maxUpstreamReadBytes")
+
+// readUpstreamCapped reads at most one byte past maxUpstreamReadBytes, so an oversized upstream
+// is refused without being held in memory.
+func readUpstreamCapped(r io.Reader) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(r, maxUpstreamReadBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxUpstreamReadBytes {
+		return nil, errUpstreamTooLarge
+	}
+	return body, nil
+}
+
 func (a *app) forwardGated(w http.ResponseWriter, r *http.Request, t tenant, upstreamPath, capability string) {
 	resp, err := a.doGet(r.Context(), t, upstreamPath, "")
 	if err != nil {
@@ -1169,7 +1189,7 @@ func (a *app) forwardGated(w http.ResponseWriter, r *http.Request, t tenant, ups
 	case http.StatusNotFound:
 		writeJSON(w, http.StatusOK, map[string]any{"capability": capability, "enabled": false})
 	case http.StatusOK:
-		body, err := io.ReadAll(resp.Body)
+		body, err := readUpstreamCapped(resp.Body)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "lens upstream read"})
 			return
@@ -1263,7 +1283,7 @@ func (a *app) forwardProductWith(w http.ResponseWriter, r *http.Request, product
 	defer resp.Body.Close()
 
 	if transform != nil && resp.StatusCode == http.StatusOK {
-		body, err := io.ReadAll(resp.Body)
+		body, err := readUpstreamCapped(resp.Body)
 		if err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": product + " upstream read"})
 			return
