@@ -152,6 +152,8 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/billing/cancel': 'Billing',
   '/keys': 'API keys',
   '/agents': 'Agents',
+  '/agents/:id': 'Agents',
+  '/agents/:id/rules': 'Agents',
   // B28.7 — the wallet's own destinations in the sidebar.
   '/approvals': 'Approvals',
   '/statements': 'Statements',

@@ -106,13 +106,14 @@ export class AgentBankScreen {
     await open.waitFor()
   }
 
-  /** Funds the agent from the workspace, or takes LXC back, as Money does. */
+  /** Funds the agent from the workspace, or takes LXC back, in Money's Move LXC dialog (B57.16); its snack says it moved. */
   async move(agent: Agent, ulxc: number, how: 'Fund' | 'Take back'): Promise<string | undefined> {
     await this.fresh(agent)
-    const money = card(this.page, 'Money')
-    await money.getByLabel(`Amount in LXC for ${agent.name}`).fill(lxcText(ulxc))
-    await money.getByRole('button', { name: how, exact: true }).click()
-    return outcome(money.getByRole('status').filter({ hasText: `${agent.name} now holds` }), money)
+    await card(this.page, 'Money').getByRole('button', { name: 'Move LXC', exact: true }).click()
+    const dialog = this.page.getByRole('dialog', { name: `Move LXC: ${agent.name}` })
+    await dialog.getByLabel('Amount in LXC').fill(lxcText(ulxc))
+    await dialog.getByRole('button', { name: how === 'Fund' ? `Fund ${agent.name}` : how, exact: true }).click()
+    return outcome(this.page.getByRole('status').filter({ hasText: `${agent.name} now holds` }), dialog)
   }
 
   /** Sets one of the agent's limits (the label the Rules card gives it) and saves its rules. */
@@ -2031,8 +2032,8 @@ export function homeDailyBriefing(seed: number): Scenario {
 async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: string): Promise<string | undefined> {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.evaluate(() => window.scrollTo(0, 0))
-  const row = page.getByTestId(`home-agent-${a.id}`)
-  const safeShown = (await row.getByTestId(`home-safe-${a.id}`).innerText({ timeout: ACTION_TIMEOUT_MS })).replace(/\s+/g, ' ')
+  const row = page.getByTestId(`agent-card-${a.id}`)
+  const safeShown = (await row.getByTestId(`agent-card-safe-${a.id}`).innerText({ timeout: ACTION_TIMEOUT_MS })).replace(/\s+/g, ' ')
   const totalShown = (await page.getByTestId('home-total').innerText({ timeout: ACTION_TIMEOUT_MS })).replace(/\s+/g, ' ')
   const book = await bookOf(ctx)
   const safe = (await ctx.env.lens.agentSafeToSpend(ctx.app.user)).agents?.find((x) => x.agent_id === a.id)?.figures?.find((f) => f.currency === 'LXC')
@@ -2051,10 +2052,12 @@ async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: st
   const box = async (l: Locator) => (await l.boundingBox()) ?? { y: Infinity, height: 0 }
   const approvals = await box(page.getByRole('heading', { name: /^Waiting for you/ }))
   const total = await box(page.getByTestId('home-total'))
-  const first = await box(page.locator('[data-testid^="home-agent-"]').first())
+  const first = await box(page.locator('[data-testid^="agent-card-"]').first())
   const ask = await box(page.getByRole('textbox', { name: 'Ask Taly' }))
   if (!(approvals.y < total.y && total.y < first.y && first.y < ask.y)) return `Home's order at 390 is not approvals, total, agents, Taly: ${approvals.y}, ${total.y}, ${first.y}, ${ask.y}`
-  if (first.y + first.height > 844) return `at 390×844 the first agent row ends at ${Math.round(first.y + first.height)}px, below the fold`
+  // B57.16 — the first agent card is taller than the row it replaced; its face, name and balance are what must be seen.
+  const held = await box(page.getByTestId(`agent-card-balance-${a.id}`))
+  if (held.y + held.height > 844) return `at 390×844 ${a.name}'s balance on its card ends at ${Math.round(held.y + held.height)}px, below the fold`
   return undefined
 }
 

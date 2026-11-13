@@ -262,11 +262,11 @@ describe('Home — the wallet home (B28.6)', () => {
     expect(total).toHaveTextContent('16 LXC')
     expect(screen.getByTestId('home-unallocated')).toHaveTextContent('34 LXC')
 
-    // A row per agent: balance, and safe to spend as Lens reports it.
-    const researcher = screen.getByTestId('home-agent-agt_1')
-    expect(researcher).toHaveTextContent('6 LXC')
-    expect(await within(researcher).findByTestId('home-safe-agt_1')).toHaveTextContent('4 LXC safe to spend')
-    expect(screen.getByTestId('home-safe-agt_2')).toHaveTextContent('4 LXC safe to spend')
+    // A card per agent (B57.16): balance, and safe to spend as Lens reports it.
+    const researcher = screen.getByTestId('agent-card-agt_1')
+    expect(within(researcher).getByTestId('agent-card-balance-agt_1')).toHaveTextContent('6 LXC')
+    await waitFor(() => expect(within(researcher).getByTestId('agent-card-safe-agt_1')).toHaveTextContent('4 LXC safe to spend'))
+    expect(screen.getByTestId('agent-card-safe-agt_2')).toHaveTextContent('4 LXC safe to spend')
     // B41.5 — the company's safe to spend, per currency, its bills due taken off.
     const pounds = await screen.findByTestId('home-company-safe-GBP')
     expect(pounds).toHaveTextContent('£458.00')
@@ -278,13 +278,8 @@ describe('Home — the wallet home (B28.6)', () => {
     // …and the product cards come after all of it.
     expect(ask.compareDocumentPosition(screen.getByRole('list', { name: 'Products' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
-    // The switch asks before it changes anything.
-    fireEvent.click(within(researcher).getByRole('switch', { name: 'Researcher running' }))
-    expect(writes).toEqual([])
-    fireEvent.click(within(researcher).getByRole('button', { name: 'Cancel' }))
-    expect(within(researcher).queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
-    fireEvent.click(within(researcher).getByRole('switch', { name: 'Researcher running' }))
-    fireEvent.click(within(researcher).getByRole('button', { name: 'Pause' }))
+    // B57.16 — switching off pauses at once; only resuming asks first, and signs.
+    fireEvent.click(within(researcher).getByRole('switch', { name: 'Pause Researcher' }))
     await waitFor(() => expect(writes).toEqual(['/api/agents/agt_1/pause']))
 
     // Taly's input takes the question to Chat.
@@ -304,12 +299,13 @@ describe('Home — the wallet home (B28.6)', () => {
     )
     window.history.pushState({}, '', '/')
     render(<App />)
-    const researcher = await screen.findByTestId('home-agent-agt_1')
+    const researcher = await screen.findByTestId('agent-card-agt_1')
     await waitFor(() => expect(queryClient.getQueryState(['money-devices'])?.status).toBe('success'))
-    fireEvent.click(within(researcher).getByRole('switch', { name: 'Researcher running' }))
-    expect(within(researcher).getByTestId('on-the-phone')).toHaveTextContent('Resume Researcher on your phone with Face ID.')
-    expect(within(researcher).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
-    expect(within(researcher).queryByRole('button', { name: 'Resume' })).toBeNull()
+    fireEvent.click(within(researcher).getByRole('switch', { name: 'Resume Researcher' }))
+    const resume = await screen.findByRole('dialog', { name: 'Resume Researcher?' })
+    expect(within(resume).getByTestId('on-the-phone')).toHaveTextContent('Resume Researcher on your phone with Face ID.')
+    expect(within(resume).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
+    expect(within(resume).queryByRole('button', { name: 'Resume with your passkey' })).toBeNull()
     expect(writes).toEqual([])
   })
 

@@ -115,7 +115,8 @@ function cardHeaderTitles(root: ParentNode): Element[] {
  */
 const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B28.6 — `/` is the wallet home; B45.11: waiting for you, your agents, budgets, forecast. Overview's six moved to /overview.
-  '/': 4,
+  // B57.16: "Your agents" is a heading over Pocket's agent cards, no longer a card header.
+  '/': 3,
   // B28.7 — Approvals (waiting, decided). B57.24: Statements opens on an agent's statement, a Pocket document whose
   // name is its own heading, so it has no card header.
   '/approvals': 2,
@@ -156,6 +157,9 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/billing/cancel': 0,
   '/keys': 0,
   // B19.4 — Waiting for a person, Agents, and the open agent's Money, Rules, Pay, Key and Statement.
+  // B57.16 — an agent's page and its rules are today's agent view with that agent open.
+  '/agents/:id': 38,
+  '/agents/:id/rules': 38,
   '/agents': 38, // B46.9 "Wallet"; B30.103 "Know Your Agent credential"; B19.10 added "Face ID and notifications"; B19.20 "Month-end forecast" and "Unusual spend"; B19.21 "Scheduled payments" and "Automatic top-up"; B19.22 "Statement for every agent"; B19.24 "Card" (B57.142 drew it in Pocket, so its title is no longer a card header); B22.10 "Address", "Send or request", "Transfers", "Recurring transfer", "Offer a loan", "Requests", "Credit line" and "Loans"; B22.12 "Pay into escrow", "Pots", "Investing, simulated", "Cash out", "Escrow" and "Cash-outs"; B28.21 "Name and description" and "Archive"; B28.30 "Would it pass?"; B28.31 "Rules history"; B28.32 "Limit boost"; B28.62 "Limit alerts"; B28.53 "Spend by day, model and destination"; B28.66 "Where alerts go" and "Sent alerts"
   // B20.3 — the catalog's Listings card. 1 → 0 at B29.11: the listings are cards of their own, a list
   // named Listings in the Browse region, and no card header.
