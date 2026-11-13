@@ -493,8 +493,8 @@ function AppShell() {
   // B47.2 — Chat has the whole page: the suite's sidebar waits off to the left until Menu asks for it.
   const chat = pathname === '/chat' || pathname.startsWith('/chat/')
   return (
-    // B57.8 — Pocket's shell: the sidebar, the top bar, the kill banner and the page's heading. Taly, the palette and the
-    // theme switch are still today's design until B57.9 and B57.42 draw them, and carry their own marker.
+    // B57.8 — Pocket's shell: the sidebar, the top bar, the kill banner and the page's heading. B57.9 drew the ⌘K bar;
+    // Taly and the theme switch are still today's design until B57.159 and B57.42 draw them, and carry their own marker.
     <div className="contents" data-design="pocket">
     <PocketShell
       drawer={chat}
@@ -513,6 +513,7 @@ function AppShell() {
                 aria-keyshortcuts={ariaKeys('palette')}
                 className={cn(
                   'flex h-10 min-w-0 flex-1 items-center gap-2 rounded-pill bg-cloud px-3.5 text-left text-body text-ink-3 wide:max-w-md',
+                  'transition-colors duration-200 active:scale-98',
                   pocketFocusRing,
                 )}
               >
@@ -602,7 +603,7 @@ function AppShell() {
       </ScreenBoundary>
       {/* B59.28 — Help and complaints, Close this account and Your data at the foot of every page; Chat has the whole page. */}
       {chat ? null : <SignedInFooter />}
-      {/* B45.6 — Taly, on every signed-in page, told which page it is on. Today's design until B57.9. */}
+      {/* B45.6 — Taly, on every signed-in page, told which page it is on. Today's design until B57.159. */}
       {/* B59.2 — Taly goes with Chat. */}
       <IfArea area="chat">
         <div className="contents" data-design="today">

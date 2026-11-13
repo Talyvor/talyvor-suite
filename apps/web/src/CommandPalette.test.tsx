@@ -3,11 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App, queryClient } from './App'
 import { historyKey } from './areas/chat/history'
-import { SHORTCUTS } from './components/CommandPalette'
-import { populatedBff } from './populatedBff'
+import { SHORTCUTS_LINE } from './components/CommandPalette'
+import { populatedBff, settleQueries } from './populatedBff'
+import { pressAll } from './test/pressEverything'
 
 // B28.135 — the command palette and the keyboard shortcuts. Drives the real <App />: the keys are pressed on the page,
-// and what is asserted is the screen a person is left on.
+// and what is asserted is the screen a person is left on. B57.9 — the bar in Pocket: every agent, payee and page in it.
 
 const CATALOG = [
   { id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, release_date: '2026-07-24', tier: 'frontier' },
@@ -105,15 +106,10 @@ describe('the command palette (B28.135)', () => {
 })
 
 describe('the keyboard shortcuts (B28.135)', () => {
-  it('Ctrl+/ lists every shortcut, and Esc closes the list', async () => {
+  it('Ctrl+/ says the shortcuts in a message', async () => {
     await mountAt('/settings')
     press('/', 'Slash', { ctrlKey: true })
-    const list = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })
-    const rows = within(list).getAllByRole('listitem').map((li) => li.textContent)
-    expect(rows).toHaveLength(SHORTCUTS.length)
-    for (const s of SHORTCUTS) expect(rows.some((r) => r?.startsWith(s.label))).toBe(true)
-    press('Escape', 'Escape')
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).toBeNull())
+    expect(await screen.findByText(SHORTCUTS_LINE)).toBeInTheDocument()
   })
 
   it('Ctrl+Shift+O opens Chat on a new chat from another screen', async () => {
@@ -137,25 +133,112 @@ describe('the keyboard shortcuts (B28.135)', () => {
   })
 })
 
+async function mountPopulated(address: string): Promise<string[]> {
+  vi.restoreAllMocks()
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+  const { asked } = populatedBff((impl) => vi.spyOn(globalThis, 'fetch').mockImplementation(impl))
+  await mountAt(address)
+  return asked
+}
+
+const group = (bar: HTMLElement, name: string) => within(within(bar).getByRole('group', { name }))
+
 describe('the one search box (B41.7)', () => {
   it('a supplier’s name finds its payee, its payment and its bill, grouped, and the bill opens on its own row', async () => {
-    vi.restoreAllMocks()
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
-    const asked = populatedBff((impl) => vi.spyOn(globalThis, 'fetch').mockImplementation(impl))
-    await mountAt('/settings')
+    const asked = await mountPopulated('/settings')
     const palette = await openPalette()
     fireEvent.change(within(palette).getByRole('combobox', { name: 'Search, or type a command' }), { target: { value: 'acme' } })
-    const bills = await within(palette).findByRole('group', { name: 'Bills' }, { timeout: 2000 })
-    expect(asked.asked).toContain('/api/money/search?q=acme')
-    expect(within(palette).getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual(['Payees', 'Payments', 'Bills', 'Conversations'])
-    expect(within(within(palette).getByRole('group', { name: 'Payees' })).getByRole('option')).toHaveTextContent('Acme Hosting Ltd · GB')
-    expect(within(within(palette).getByRole('group', { name: 'Payments' })).getByRole('option')).toHaveTextContent('Acme Hosting Ltd · October hosting')
+    const bills = await within(palette).findByRole('group', { name: 'Bills and invoices' }, { timeout: 2000 })
+    expect(asked).toContain('/api/money/search?q=acme')
+    expect(within(palette).getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual(['Payees', 'Bills and invoices', 'Payments', 'Conversations'])
+    expect(group(palette, 'Payees').getAllByRole('option').map((o) => o.textContent)).toEqual(['Acme Hosting Ltd'])
+    expect(group(palette, 'Payments').getByRole('option')).toHaveTextContent('Acme Hosting Ltd · October hosting · £20.00')
     const bill = within(bills).getByRole('option')
-    expect(bill).toHaveTextContent('Acme Hosting Ltd · INV-2041')
+    expect(bill).toHaveTextContent('Acme Hosting Ltd · INV-2041 · £120.00')
     fireEvent.click(bill)
     expect(window.location.pathname).toBe('/money/pay')
     expect(window.location.hash).toBe('#bill-bill_1')
     await waitFor(() => expect(screen.getByTestId('bill-bill_1')).toHaveAttribute('data-linked', 'true'))
     expect(screen.getByTestId('payee-payee_1')).not.toHaveAttribute('data-linked')
   })
+})
+
+describe('the ⌘K bar in Pocket (B57.9)', () => {
+  it('lists Actions, every agent, every saved payee and every page before a word is typed', async () => {
+    await mountPopulated('/settings')
+    const bar = await openPalette()
+    await within(bar).findByRole('group', { name: 'Payees' })
+    await within(bar).findByRole('group', { name: 'Agents' })
+    expect(within(bar).getByRole('combobox')).toHaveAttribute('placeholder', 'Search agents, payees, bills… or type a command')
+    expect(within(bar).getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual(['Actions', 'Agents', 'Payees', 'Pages'])
+    expect(group(bar, 'Actions').getAllByRole('option').map((o) => o.textContent)).toContain('Keyboard shortcuts')
+    expect(group(bar, 'Agents').getAllByRole('option').map((o) => o.textContent)).toEqual(['Researcher', 'Writer'])
+    expect(group(bar, 'Payees').getAllByRole('option').map((o) => o.textContent)).toEqual(['Acme Hosting Ltd', 'Nord Research GmbH'])
+    const pages = group(bar, 'Pages').getAllByRole('option').map((o) => o.textContent)
+    for (const page of ['Home', 'Approvals', 'Agents', 'Statements', 'Pay', 'Invoices', 'Settings', 'Ledger']) expect(pages).toContain(page)
+    expect(screen.getByText('Enter to choose · Esc to close')).toBeInTheDocument()
+  })
+
+  it('an agent chosen opens its own page', async () => {
+    await mountPopulated('/settings')
+    const bar = await openPalette()
+    fireEvent.click(await within(bar).findByRole('option', { name: 'Writer' }))
+    expect(window.location.pathname).toBe('/agents/agt_writer')
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull()
+  })
+
+  it('a payee chosen lands on Pay with that payee filled in', async () => {
+    await mountPopulated('/settings')
+    const bar = await openPalette()
+    fireEvent.click(await within(bar).findByRole('option', { name: 'Nord Research GmbH' }))
+    expect(window.location.pathname).toBe('/money/pay')
+    const form = await screen.findByTestId('send-payment')
+    await waitFor(() => expect((within(form).getByLabelText('To') as HTMLSelectElement).value).toBe('payee_2'))
+  })
+
+  it('the arrows move down the bar as it reads, Enter chooses and Esc closes', async () => {
+    await mountPopulated('/settings')
+    const bar = await openPalette()
+    await within(bar).findByRole('group', { name: 'Payees' })
+    const box = within(bar).getByRole('combobox')
+    fireEvent.change(box, { target: { value: 'r' } })
+    const options = within(bar).getAllByRole('option')
+    expect(options[0]).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(box, { key: 'ArrowDown' })
+    expect(options[1]).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(box, { key: 'ArrowUp' })
+    fireEvent.keyDown(box, { key: 'ArrowUp' })
+    expect(options[options.length - 1]).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(box, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull())
+    expect(window.location.pathname).toBe('/settings')
+  })
+
+  it('Keyboard shortcuts shows its message and closes the bar', async () => {
+    await mountPopulated('/settings')
+    const bar = await openPalette()
+    fireEvent.click(within(bar).getByRole('option', { name: 'Keyboard shortcuts' }))
+    expect(await screen.findByText(SHORTCUTS_LINE)).toBeInTheDocument()
+    expect(SHORTCUTS_LINE).toMatch(/^(⌘K|Ctrl\+K) opens this bar · \/ searches when you are not typing · Esc closes$/)
+    expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull()
+  })
+
+  it('every control on the open bar does something', async () => {
+    vi.restoreAllMocks()
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    const { asked } = populatedBff((impl) => vi.spyOn(globalThis, 'fetch').mockImplementation(impl))
+    const report = await pressAll(
+      async () => {
+        queryClient.clear()
+        window.history.pushState({}, '', '/settings')
+        render(<App />)
+        await screen.findByRole('navigation', { name: /sections/i })
+        await openPalette()
+        await settleQueries(queryClient, waitFor)
+      },
+      () => asked.length,
+    )
+    expect(report.pressed).toBeGreaterThan(0)
+    expect(report.dead).toEqual([])
+  }, 60_000)
 })
