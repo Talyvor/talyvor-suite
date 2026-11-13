@@ -28,6 +28,11 @@ overrides:
   rollup: 4.62.2
   # B40.25 — zod <4.6.6 (GHSA-mrhx-c7xc-m3w5) reaches e2e through @modelcontextprotocol/sdk, which takes zod ^3.25 || ^4.0.
   zod@<4.6.6: ^4.6.7
+  # B50.50 — @hono/node-server <2.1.6 (GHSA-qv5m-9pm6-hqp3, GHSA-jpvv-r467-5p4w) and the hono it brings, <4.13.16
+  # (GHSA-4m76-xfj5-7975, GHSA-h7mg-cq63-vhpq, GHSA-3gg2-335m-rxc6), reach e2e through @modelcontextprotocol/sdk, whose
+  # ranges (^2.0.5, ^4.11.4) already take the fixed releases.
+  '@hono/node-server@<2.1.6': ^2.1.6
+  hono@<4.13.16: ^4.13.16
 # Each ignore is an advisory with no fix to take. Drop the line when its condition stops holding.
 auditConfig:
   ignoreGhsas:

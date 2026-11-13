@@ -166,7 +166,7 @@ function mockBff(refusals: Array<[string, number]> = []) {
  */
 const ADDRESS_ROUTES: Record<string, string[]> = {
   // B28.6 — `/` is the wallet home; Overview moved to /overview with the same reads. B28.22 — and the LXC peg, for dollars.
-  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/agents/passkeys', '/api/agents/safe-to-spend', '/api/lxc/topup-options', '/api/money/devices', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/': ['/api/agents', '/api/agents/agt_1/card', '/api/agents/agt_1/rules', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/agents/passkeys', '/api/agents/safe-to-spend', '/api/lxc/topup-options', '/api/money/devices', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/overview': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/bonds', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/ledger': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/billing': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/billing/allowance', '/api/lxc/balance', '/api/lxc/topup-options', '/api/money/mandates', '/api/money/payment-requests', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
@@ -271,8 +271,9 @@ describe('the swept set', () => {
     const pairs = Object.values(ADDRESS_ROUTES).reduce((n, r) => n + r.length, 0)
     // 97 → 108 at B59.10: the sidebar reads the account's type and kind on every address, for its chip.
     // 108 → 119 at B55.54: the shell reads whether a key recovery waits, on every address, to show it on every page.
-    // 119 → 130 at B55.40: and an agent's mandate requests, which its Approvals badge counts, on every address.
-    expect(pairs).toBe(130)
+    // 119 → 120 at B57.16: `/` reads each agent's card, for the agent card's Card frozen chip.
+    // 120 → 131 at B55.40: and an agent's mandate requests, which its Approvals badge counts, on every address.
+    expect(pairs).toBe(131)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {
