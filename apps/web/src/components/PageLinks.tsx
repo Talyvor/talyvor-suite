@@ -85,6 +85,23 @@ export function SettingsCards({ links }: { links: readonly SettingsLink[] }) {
   )
 }
 
+/** Each settings page's tile. */
+const SETTINGS_ICON: Record<string, IconName> = {
+  '/settings/connect': 'model',
+  '/members': 'rooms',
+  '/billing': 'billing',
+  '/settings/company': 'statements',
+  '/settings/verification': 'shield',
+  '/settings/payout-details': 'coin',
+  '/settings/terms': 'check',
+  '/settings/webhooks': 'send',
+  '/settings/email-branding': 'bell',
+  '/settings/help': 'phone',
+  '/settings/data': 'download',
+  '/settings/close': 'x',
+  '/operator': 'key',
+}
+
 /** "1 person" or "3 people". */
 const people = (n: number) => (n === 1 ? `${n} person` : `${n} people`)
 
@@ -112,95 +129,23 @@ export function useSettingsLinks(): SettingsLink[] {
   })
   const st = sub.data?.enabled ? sub.data.data : null
   const plan = st ? planName(st.subscribed && st.plan ? st.plan : 'free') : undefined
-  const links: SettingsLink[] = [
-    {
-      to: '/settings/connect',
-      icon: 'model',
-      title: 'Connect your AI',
-      line: 'Use Talyvor from Claude, ChatGPT and others',
-    },
-    ...(team
-      ? [
-          {
-            to: '/members',
-            icon: 'rooms' as const,
-            title: 'Members',
-            line: roster.data ? people(roster.data.length) : undefined,
-          },
-        ]
-      : []),
-    { to: '/billing', icon: 'billing', title: 'Billing and plan', line: plan },
-    ...(business
-      ? [
-          {
-            to: '/settings/company',
-            icon: 'statements' as const,
-            title: 'Company details',
-            line: 'Company name, number and country, and the people with control',
-          },
-        ]
-      : []),
+  const links: PageLink[] = [
+    { to: '/settings/connect', title: 'Connect your AI', line: 'Use Talyvor from Claude, ChatGPT and others' },
+    ...(team ? [{ to: '/members', title: 'Members', line: roster.data ? people(roster.data.length) : undefined }] : []),
+    { to: '/billing', title: 'Billing and plan', line: plan },
+    ...(business ? [{ to: '/settings/company', title: 'Company details', line: 'Company name, number and country, and the people with control' }] : []),
+    { to: '/settings/verification', title: 'Verification', line: 'What Talyvor has checked about you' },
     // B55.28 — where the workspace is paid its earnings.
-    {
-      to: '/settings/payout-details',
-      icon: 'coin',
-      title: 'Payout details',
-      line: 'Where Talyvor pays you: room shares, sales and royalties',
-    },
-    {
-      to: '/settings/verification',
-      icon: 'shield',
-      title: 'Verification',
-      line: 'What Talyvor has checked about you',
-    },
-    {
-      to: '/settings/terms',
-      icon: 'check',
-      title: 'Capability terms',
-      line: 'The terms each money feature asks you to accept',
-    },
-    {
-      to: '/settings/webhooks',
-      icon: 'send',
-      title: 'Webhooks',
-      line: 'Docs tells your server about approvals and comments',
-    },
-    {
-      to: '/settings/email-branding',
-      icon: 'bell',
-      title: 'Email branding',
-      line: 'How Docs email looks: its name, colour and logo',
-    },
-    {
-      to: '/settings/help',
-      icon: 'phone',
-      title: 'Help and complaints',
-      line: 'Ask us something, or make a complaint',
-    },
-    {
-      to: '/settings/data',
-      icon: 'download',
-      title: 'Your data',
-      line: 'A copy of your data, or ask for it to be deleted',
-    },
-    {
-      to: '/settings/close',
-      icon: 'x',
-      title: 'Close this account',
-      line: 'What must be empty first, and asking to close',
-    },
-    ...(operator
-      ? [
-          {
-            to: '/operator',
-            icon: 'key' as const,
-            title: 'Talyvor operators',
-            line: 'Workspaces, tax, compliance and the review queue. Shown only to Talyvor’s operators',
-          },
-        ]
-      : []),
+    { to: '/settings/payout-details', title: 'Payout details', line: 'Where Talyvor pays you' },
+    { to: '/settings/terms', title: 'Capability terms', line: 'The terms each money feature asks you to accept' },
+    { to: '/settings/webhooks', title: 'Webhooks', line: 'Docs tells your server about approvals and comments' },
+    { to: '/settings/email-branding', title: 'Email branding', line: 'How Docs email looks: its name, colour and logo' },
+    { to: '/settings/help', title: 'Help and complaints', line: 'Ask us something, or make a complaint' },
+    { to: '/settings/data', title: 'Your data', line: 'A copy of your data, or ask for it to be deleted' },
+    { to: '/settings/close', title: 'Close this account', line: 'What must be empty first, and asking to close' },
+    ...(operator ? [{ to: '/operator', title: 'Talyvor operators', line: 'Workspaces, tax, compliance and the review queue. Shown only to Talyvor’s operators' }] : []),
   ]
-  return links.filter((l) => areas.shows(l.to))
+  return links.filter((l) => areas.shows(l.to)).map((l) => ({ ...l, icon: SETTINGS_ICON[l.to] ?? 'settings' }))
 }
 
 /** Who is signed in, to which workspace and as what, and the way out (moved here from the top bar by B57.8). */
