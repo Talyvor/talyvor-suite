@@ -13,7 +13,7 @@ export function CopyButton({ text, label, className }: { text: string; label: st
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle')
   const resetTimer = useRef<number | undefined>(undefined)
   useEffect(() => () => window.clearTimeout(resetTimer.current), [])
-  const failedNote = 'Couldn’t copy — select the text and copy it yourself.'
+  const failedNote = 'Couldn’t copy. Select the text and copy it yourself.'
   return (
     <>
       <button

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, focusRing } from '@talyvor/ui'
-import { formatULXC } from '../lens/agentBankApi'
 import { formatUSD } from '../lens/format'
 import { Lxc } from '../lens/money'
 import {
@@ -28,7 +27,7 @@ import { Card, Note, selectClass, useRunnableModels } from './parts'
 const CHARGED: Record<ListingUse['charge'], (u: ListingUse) => React.ReactNode> = {
   billed: (u) => (
     <>
-      <span className="font-figure">{formatULXC(u.price_ulxc)}</span> is on your marketplace bill for this month.
+      <span className="font-figure"><Lxc ulxc={u.price_ulxc} /></span> is on your marketplace bill for this month.
     </>
   ),
   free: () => 'This listing is free.',
@@ -140,7 +139,7 @@ export function UseListing({ listing, own, held }: { listing: Listing; own: bool
             {held.included_uses ? (
               <>
                 {' '}
-                — its first <span className="font-figure">{held.included_uses}</span>
+                (its first <span className="font-figure">{held.included_uses}</span>)
               </>
             ) : null}
             : nothing new goes on your bill. The models it calls are billed to you as usual.
@@ -184,7 +183,7 @@ export function UseListing({ listing, own, held }: { listing: Listing; own: bool
         ) : null}
         {listing.kind === 'prompt' && !needs && !(vars.length > 0) ? (
           <p className="text-caption text-muted">
-            If this prompt needs values filled in, Lens names them the first time you use it — nothing runs or is
+            If this prompt needs values filled in, Lens names them the first time you use it. Nothing runs or is
             charged until they are there.
           </p>
         ) : null}
@@ -230,7 +229,7 @@ export function UseListing({ listing, own, held }: { listing: Listing; own: bool
               'Try it'
             ) : paid ? (
               <>
-                Use it · <span className="font-figure">{formatULXC(listing.price_per_use_ulxc)}</span>
+                Use it · <span className="font-figure"><Lxc ulxc={listing.price_per_use_ulxc} /></span>
               </>
             ) : (
               'Use it'

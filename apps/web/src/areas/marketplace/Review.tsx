@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { Button, CardHeader, Pill, Row, focusRing, inlineLink } from '@talyvor/ui'
 import { Region } from '../../components/Region'
 import { isSessionExpired } from '../../lib/productState'
-import { formatULXC } from '../lens/agentBankApi'
+import { Lxc } from '../lens/money'
 import { formatUSD, formatWhen } from '../lens/format'
 import { TRAIL_KEY } from '../lens/OperatorTrail'
 import {
@@ -214,7 +214,7 @@ function TakenDown({ t }: { t: Takedown }) {
           }
         >
           <span className="font-figure text-body text-ink">
-            {formatULXC(r.price_ulxc)} · {formatUSD(r.gross_usd_micros)}
+            <Lxc ulxc={r.price_ulxc} /> · {formatUSD(r.gross_usd_micros)}
           </span>
         </Row>
       ))}

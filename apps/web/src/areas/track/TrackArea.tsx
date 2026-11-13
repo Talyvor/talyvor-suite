@@ -47,7 +47,7 @@ function WorkspaceStrip() {
       <Card raised>
         <CardHeader>Track is not configured on this deployment</CardHeader>
         <p className="px-gutter py-3 text-body text-muted">
-          The BFF has no Track upstream wired (its TRACK_* trio is unset) — off, not broken.
+          The BFF has no Track upstream wired (its TRACK_* trio is unset): off, not broken.
         </p>
       </Card>
     ) : isSessionExpired(q.error) ? (
@@ -61,7 +61,7 @@ function WorkspaceStrip() {
       <Card raised>
         <CardHeader>Couldn’t load workspaces</CardHeader>
         <p className="px-gutter py-3 text-body text-muted">
-          The Track proxy answered with an error — nothing is shown rather than something stale.
+          The Track proxy answered with an error. Nothing is shown rather than something stale.
         </p>
       </Card>
     )
@@ -131,6 +131,10 @@ export function TrackArea() {
         </Link>
         <Link className={inlineLink} to="/track/settings">
           Workspace settings
+        </Link>
+        {/* B57.8 — the sidebar's one row is Track and Docs, so Track links Docs. */}
+        <Link className={inlineLink} to="/docs">
+          Docs
         </Link>
       </nav>
       <Routes>

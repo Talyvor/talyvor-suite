@@ -1,35 +1,23 @@
 import type { ReactNode } from 'react'
 import { Button } from '@talyvor/ui'
 import { COMPANY_CONTACT } from '../../company'
-import { formatULXC } from '../lens/agentBankApi'
 import { formatCents } from '../lens/topupApi'
-import { formatBPS, formatLimit, formatMinor, planName, type Fees, type PlanGate, type Pricing } from './pricingApi'
+import { formatBPS, formatLimit, planName, type PlanGate, type Pricing } from './pricingApi'
+import { StatusLabel } from '../../labels/StatusLabel'
+import { MONEY_FEATURES } from '../../labels/capabilities'
 
-// B32.14 — the approved price card (Nicolai's decision of 5 Oct 2026), drawn on /pricing from GET /api/pricing.
+// B32.14 — the approved price card (Nicolai's decision of 5 Oct 2026), drawn on /plans from GET /api/pricing. Since
+// B57.61 /pricing draws the same figures in Pocket (PricingPlans.tsx), with the helpers exported here.
 //
 // ⚠ EVERY FIGURE IS SERVED. Team's and Business's prices, BYOK's as Team's add-on and where Enterprise starts
 // are Lens's public plans read; Plus, Pro and Max with their included usage the same read; what each company
 // plan unlocks is Lens's plan gates (B32.12); every fee is Lens's GET /v1/public/fees (B32.8). A figure Lens did
 // not state is not printed. The only figure written here is Free's: it is the plan with no price.
 //
-// B46.1 (Nick, 24 Oct 2026): no preview or test-money labels on the public page; the fees are stated plainly.
-
-/** "a, b or c". */
-function either(items: string[]): string {
-  return items.length > 1 ? `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}` : items.join('')
-}
-
-/** Pounds, euros, dollars, then any other currency Lens states. */
-const CURRENCY_ORDER = ['GBP', 'EUR', 'USD']
-
-function intlPaymentFees(fees: Fees): string {
-  const codes = Object.keys(fees.intl_payment_fee_minor).sort((a, b) => {
-    const i = CURRENCY_ORDER.indexOf(a)
-    const j = CURRENCY_ORDER.indexOf(b)
-    return (i < 0 ? 99 : i) - (j < 0 ? 99 : j) || a.localeCompare(b)
-  })
-  return either(codes.map((c) => formatMinor(fees.intl_payment_fee_minor[c], c)))
-}
+// B46.1 (Nick, 24 Oct 2026): no preview or test-money labels on the public page; the fees are stated plainly. The
+// one label is StatusLabel (B56.9), Live or Sandbox from Lens and Building from the registry. B56.10 places them: Live
+// or Sandbox on the Money features row and every money fee row; Building on each switch Lens does not enforce yet and
+// each fee it does not charge yet, and on no row once Lens says it is built or charged.
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -41,7 +29,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** Contracted plans have no Stripe Price and agree their own fees. */
-const CONTRACTED = 'enterprise'
+export const CONTRACTED = 'enterprise'
 
 function CompanyPrice({ id, pricing }: { id: string; pricing: Pricing }) {
   const listed = pricing.company_plans?.find((p) => p.id === id)
@@ -61,9 +49,9 @@ function CompanyPrice({ id, pricing }: { id: string; pricing: Pricing }) {
   )
 }
 
-function ownKeys(g: PlanGate, pricing: Pricing): ReactNode {
+export function ownKeys(g: PlanGate, pricing: Pricing): ReactNode {
   if (g.own_provider_keys === 'included') return 'Included'
-  if (g.own_provider_keys === 'none') return '—'
+  if (g.own_provider_keys === 'none') return 'Not included'
   return pricing.byok_add_on_usd_cents ? (
     <>
       <span className="font-figure">{formatCents(pricing.byok_add_on_usd_cents)}</span> add-on
@@ -73,8 +61,18 @@ function ownKeys(g: PlanGate, pricing: Pricing): ReactNode {
   )
 }
 
-function included(on: boolean): string {
-  return on ? 'Included' : '—'
+export function included(on: boolean): string {
+  return on ? 'Included' : 'Not included'
+}
+
+/** B56.10 — a switch the plan includes that Lens does not enforce yet carries Building; "—" carries nothing. */
+function Gate({ on, built, children }: { on: boolean; built: boolean | undefined; children: ReactNode }) {
+  return (
+    <>
+      {included(on)}
+      {on && built !== true ? children : null}
+    </>
+  )
 }
 
 /** One company plan: its price, what it unlocks and its fees. /plans passes its own action (a checkout, or
@@ -96,6 +94,7 @@ export function CompanyCard({
   const fees = pricing.fees
   const contracted = id === CONTRACTED
   const fx = fees?.fx_margin_bps[id]
+  const built = pricing.plan_gates?.built
   return (
     <div
       data-testid={`company-plan-${id}`}
@@ -136,180 +135,32 @@ export function CompanyCard({
         <Row label="Own provider keys">{ownKeys(gate, pricing)}</Row>
         <Row label="Money features">
           {gate.live_money ? 'Included as our money partners switch on' : 'Not included'}
+          {gate.live_money ? <StatusLabel capability={MONEY_FEATURES} labels={pricing.labels} /> : null}
         </Row>
         {fees ? (
           <Row label="FX margin over the reference rate">
-            {contracted ? 'Agreed' : fx ? <span className="font-figure">{formatBPS(fx)}</span> : '—'}
+            {contracted ? 'Agreed' : fx ? <span className="font-figure">{formatBPS(fx)}</span> : 'None'}
+            {contracted || fx ? <StatusLabel capability="fx" labels={pricing.labels} /> : null}
           </Row>
         ) : null}
-        <Row label="Slack and Teams approvals">{included(gate.slack_teams_approvals)}</Row>
-        <Row label="SSO and audit export">{included(gate.sso && gate.audit_export)}</Row>
-        <Row label="Talyvor Edge">{included(gate.edge)}</Row>
+        <Row label="Slack and Teams approvals">
+          <Gate on={gate.slack_teams_approvals} built={built?.slack_teams_approvals}>
+            <StatusLabel building="slack_teams_approvals" />
+          </Gate>
+        </Row>
+        <Row label="Single sign-on">
+          <Gate on={gate.sso} built={built?.sso}>
+            <StatusLabel building="sso" />
+          </Gate>
+        </Row>
+        <Row label="Audit export">{included(gate.audit_export)}</Row>
+        <Row label="Talyvor Edge">
+          <Gate on={gate.edge} built={built?.edge}>
+            <StatusLabel building="edge" />
+          </Gate>
+        </Row>
       </dl>
     </div>
-  )
-}
-
-/** For companies: each plan Lens gates, from the smallest up. B51.3 — no plan's button while a card cannot be charged:
- *  the page's one action is then Create your workspace. */
-export function CompanyPlans({ pricing }: { pricing: Pricing }) {
-  const gates = pricing.plan_gates
-  if (!gates) {
-    return (
-      <p className="max-w-xl text-body text-muted">
-        What each plan includes could not be read from this deployment just now, so no plan is printed here.
-      </p>
-    )
-  }
-  return (
-    <div className="grid gap-3 wide:grid-cols-4">
-      {gates.order.map((id) => (
-        <CompanyCard
-          key={id}
-          id={id}
-          gate={gates.plans[id]}
-          pricing={pricing}
-          action={pricing.card_payments === 'live' ? undefined : null}
-        />
-      ))}
-    </div>
-  )
-}
-
-/** The plan outlined in accent. Nothing measures which plan sells most, so the outline is the only mark. */
-const OUTLINED_PLAN = 'pro'
-
-/** For individuals: the chat plans, each with the usage it includes this month. */
-export function IndividualPlans({ pricing }: { pricing: Pricing }) {
-  const plans = pricing.plans
-  if (!plans?.length) {
-    return (
-      <p className="max-w-xl text-body text-muted">
-        This deployment did not state its plans for individuals just now, so none is printed here.
-      </p>
-    )
-  }
-  const base = plans[0]
-  return (
-    <div className="grid gap-3 wide:grid-cols-3">
-      {plans.map((p) => {
-        const name = planName(p.id)
-        // A multiple is computed from the two figures Lens states, never written down.
-        const times = p.id === base.id ? 0 : Math.floor(p.included_ulxc / base.included_ulxc)
-        const outlined = p.id === OUTLINED_PLAN
-        return (
-          <div
-            key={p.id}
-            data-testid="pricing-plan"
-            data-outlined={outlined ? 'true' : undefined}
-            className={`flex flex-col gap-3 rounded-card border bg-raised p-6 ${outlined ? 'border-accent' : 'border-rule'}`}
-          >
-            <p className="text-head text-ink" data-testid="pricing-plan-name">
-              {name}
-            </p>
-            <p className="flex items-baseline gap-2">
-              <span data-testid="pricing-plan-price" className="font-figure text-page text-ink">
-                {formatCents(p.usd_cents)}
-              </span>
-              <span className="text-body text-muted">a month</span>
-            </p>
-            <ul className="flex list-disc flex-col gap-1 pl-5 text-body text-muted">
-              <li>Every model from every provider</li>
-              <li>
-                <span className="font-figure text-ink" data-testid={`pricing-included-${p.id}`}>
-                  {formatULXC(p.included_ulxc)}
-                </span>{' '}
-                of usage included this month
-              </li>
-              {times > 0 ? (
-                <li>
-                  <span className="font-figure">{times}×</span> the included usage of {planName(base.id)}
-                </li>
-              ) : null}
-            </ul>
-            {pricing.card_payments === 'live' ? (
-              <div className="mt-auto pt-3">
-                <Button asChild variant="primary" className="h-10 px-5">
-                  <a href="/plans">Choose {name}</a>
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-/** The fees on any plan, each as Lens states it. */
-export function FeesOnAnyPlan({ fees }: { fees: Fees | undefined }) {
-  if (!fees) {
-    return (
-      <p className="max-w-xl text-body text-muted">
-        The fees could not be read from this deployment just now, so none is printed here.
-      </p>
-    )
-  }
-  const take = fees.market_take_bps
-  return (
-    <dl data-testid="fees-any-plan" className="grid gap-x-12 wide:grid-cols-2">
-      <Row label="Selling on the Marketplace">
-        <span>
-          Sellers earn <span className="font-figure">{formatBPS(10_000 - take)}</span>; Talyvor keeps{' '}
-          <span className="font-figure">{formatBPS(take)}</span>
-        </span>
-      </Row>
-      {fees.services_take_bps === fees.compute_take_bps ? (
-        <Row label="Services and compute">
-          <span className="font-figure">{formatBPS(fees.services_take_bps)}</span>
-        </Row>
-      ) : (
-        <>
-          <Row label="Services">
-            <span className="font-figure">{formatBPS(fees.services_take_bps)}</span>
-          </Row>
-          <Row label="Compute">
-            <span className="font-figure">{formatBPS(fees.compute_take_bps)}</span>
-          </Row>
-        </>
-      )}
-    </dl>
-  )
-}
-
-/**
- * B51.1 — the fees of the money features (/status.json reports them not cleared yet), apart from the two that apply
- * today, under the plan table's own words for them. The FX margin is each plan's, as the plan cards show it.
- */
-export function MoneyFeatureFees({ fees, planIds }: { fees: Fees; planIds: string[] }) {
-  const fx = planIds
-    .filter((id) => id !== 'free')
-    .map((id) => `${planName(id)} ${id === CONTRACTED ? 'agreed' : formatBPS(fees.fx_margin_bps[id] ?? 0)}`)
-  return (
-    <dl data-testid="fees-money-features" className="grid gap-x-12 wide:grid-cols-2">
-      <Row label="Loans arranged">
-        <span className="font-figure">{formatBPS(fees.lending_fee_bps)}</span>
-      </Row>
-      <Row label="International payments">
-        <span>
-          <span className="font-figure">{intlPaymentFees(fees)}</span> plus the partner’s cost
-        </span>
-      </Row>
-      <Row label="Agent cards">
-        Free to issue
-      </Row>
-      <Row label="Accepting payments">
-        <span>
-          <span className="font-figure">{formatBPS(fees.merchant_fee_bps)}</span> plus card processing, or{' '}
-          <span className="font-figure">{formatBPS(fees.merchant_a2a_fee_bps)}</span> from an account
-        </span>
-      </Row>
-      {fx.length > 0 ? (
-        <Row label="FX margin over the reference rate">
-          <span className="font-figure">{fx.join(' · ')}</span>
-        </Row>
-      ) : null}
-    </dl>
   )
 }
 

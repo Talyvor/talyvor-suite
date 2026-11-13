@@ -2,8 +2,9 @@
 // company's GBP account, puts £3,000.00 of test money in it and saves a payee: it reads cooling off for 24 hours from when it
 // was saved. A £2,000.00 payment to it is refused naming the wait, and nothing moves: no payment to it is listed and the
 // account still holds £3,000.00. Through the web app's own BFF calls the owner registers a passkey; "I called them" with no
-// signature is refused and the payee still cools off; signed over its challenge, the cooling-off ends, and the same £2,000.00
-// pays once: the payment listed on its way or completed and the account £2,000.00 down.
+// signature is refused and the payee still cools off; signed over its challenge, the cooling-off ends. B54.35: the workspace now
+// has a passkey, so the same £2,000.00 unsigned is refused 403 and nothing moves; signed over its own challenge through the
+// BFF, it pays once: the payment listed on its way or completed and the account £2,000.00 down.
 
 import { randomBytes } from 'node:crypto'
 import { fail } from './bank.ts'
@@ -68,8 +69,8 @@ export function payeeCoolingOff(post: Post = throughApp): Scenario {
         const p = await step<{ payments: Payment[] | null }>('GET', '/v1/money/payments', undefined, `the payments ${note}`)
         return { holds: (a.value?.accounts ?? []).find((x) => x.id === acct)?.test_minor, paid: (p.value?.payments ?? []).filter((x) => x.payee_id === payee.id) }
       }
-      const pay = (note: string) => step<Payment>('POST', '/v1/money/payments', { account_id: acct, payee_id: payee.id, amount_minor: PAY_MINOR, currency: 'GBP',
-        reference: `Cooling ${RUN_SALT}`, idempotency_key: key() }, note)
+      const payment = () => ({ account_id: acct, payee_id: payee.id, amount_minor: PAY_MINOR, currency: 'GBP', reference: `Cooling ${RUN_SALT}`, idempotency_key: key() })
+      const pay = (note: string) => step<Payment>('POST', '/v1/money/payments', payment(), note)
 
       // £2,000.00 now: refused for the cooling-off, and nothing moves.
       const early = await pay(`GBP 2,000.00 to ${supplier}, saved moments ago`)
@@ -96,9 +97,20 @@ export function payeeCoolingOff(post: Post = throughApp): Scenario {
         return fail(`"I called them" signed with the passkey must end the cooling-off; it answered ${signed.status} called_at ${signed.value.called_at ?? 'absent'}, cooling_off_until ${signed.value.cooling_off_until ?? 'absent'}`)
       }
 
-      // The same £2,000.00 now pays, once.
-      const paid = await pay(`GBP 2,000.00 to ${supplier}, once the owner called them`)
-      if (paid.status !== 201) return fail(`once the owner confirmed they called ${supplier}, the GBP 2,000.00 payment answered ${said(paid)}`)
+      // B54.35: the workspace has a passkey now, so the owner's payment unsigned is refused and nothing moves.
+      const bare = await pay(`GBP 2,000.00 to ${supplier}, unsigned, once the workspace has a passkey`)
+      if (bare.status !== 403) return fail(`once the workspace has a passkey, the owner's payment with no signature must be refused 403; Lens answered ${said(bare)}`)
+      const unpaid = await ledger('after the unsigned payment')
+      if (unpaid.holds !== FUND_MINOR || unpaid.paid.length > 0) {
+        return fail(`after the unsigned payment the account holds ${unpaid.holds} minor and ${unpaid.paid.length} payments to ${supplier} are listed, not ${FUND_MINOR} and none`)
+      }
+
+      // The same £2,000.00 signed with the passkey over its own challenge, as web Pay sends it: it pays, once.
+      const body = payment()
+      const pch = await bff<{ challenge: string }>('/api/money/payments/challenge', body, `the GBP 2,000.00 payment's challenge`)
+      if (pch.status !== 200 || !pch.value.challenge) return fail(`the payment's challenge answered ${pch.status}`)
+      const paid = await bff<Payment>('/api/money/payments', { ...body, assertion: pk.assert(pch.value.challenge) }, `GBP 2,000.00 to ${supplier}, signed, once the owner called them`)
+      if (paid.status !== 201) return fail(`once the owner confirmed they called ${supplier}, the GBP 2,000.00 payment signed with the passkey answered ${paid.status}`)
       const after = await ledger('after the payment')
       const landed = after.paid.length === 1 && after.paid[0].amount_minor === PAY_MINOR && ['pending', 'sent', 'completed'].includes(after.paid[0].status)
       if (after.holds !== FUND_MINOR - PAY_MINOR || !landed) {
@@ -106,7 +118,8 @@ export function payeeCoolingOff(post: Post = throughApp): Scenario {
           `not ${FUND_MINOR - PAY_MINOR} and one of ${PAY_MINOR} on its way or completed`)
       }
       return { pass: true, detail: `the GBP 2,000.00 payment to ${supplier}, saved moments ago, was refused for its 24-hour cooling-off and nothing moved; ` +
-        `"I called them" unsigned was refused (${unsigned.status}); signed, the wait ended and the payment landed once, the account ${FUND_MINOR - PAY_MINOR} minor` }
+        `"I called them" unsigned was refused (${unsigned.status}); signed, the wait ended; the payment unsigned was refused (403) and nothing moved; ` +
+        `signed over its own challenge it landed once, the account ${FUND_MINOR - PAY_MINOR} minor` }
     },
   }
 }

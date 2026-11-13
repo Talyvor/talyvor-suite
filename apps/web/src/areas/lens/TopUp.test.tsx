@@ -482,7 +482,7 @@ describe('TopUp — any amount (B5.1)', () => {
     renderTopUp(redirect)
 
     fireEvent.change(await screen.findByRole('textbox', { name: /other amount/i }), { target: { value: '2,500' } })
-    expect(screen.getByText('Charged $2,500 — buys 25,000 LXC.')).toBeInTheDocument()
+    expect(screen.getByText('Charged $2,500: buys 25,000 LXC.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Top up $2,500' }))
 
     await waitFor(() => expect(redirect).toHaveBeenCalledWith(SESSION_URL))
@@ -505,7 +505,7 @@ describe('TopUp — any amount (B5.1)', () => {
     renderTopUp()
 
     fireEvent.change(await screen.findByRole('textbox', { name: /other amount/i }), { target: { value: '10000.01' } })
-    expect(screen.getByText(/A top-up is \$10 to \$10,000 — the cap is the most one disputed card/)).toBeInTheDocument()
+    expect(screen.getByText(/A top-up is \$10 to \$10,000\. The cap is the most one disputed card/)).toBeInTheDocument()
     const button = screen.getByRole('button', { name: 'Top up' })
     expect(button).toBeDisabled()
     fireEvent.click(button)

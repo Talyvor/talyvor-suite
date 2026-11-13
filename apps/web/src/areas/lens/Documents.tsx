@@ -26,18 +26,18 @@ export function DocumentFacts() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-body">
-        When you attach a document — a PDF, a spreadsheet, a slide deck — Talyvor{' '}
+        When you attach a document (a PDF, a spreadsheet, a slide deck), Talyvor{' '}
         <strong>converts it to Markdown before the model sees it</strong>. The model reads the
         converted text, not your original file.
       </p>
       <p className="text-body">
         This is <strong>on for this workspace unless you turn it off</strong>. It is on because the
-        converted text is smaller than the original, and you are charged for the smaller thing — so
+        converted text is smaller than the original, and you are charged for the smaller thing, so
         leaving it on lowers what you are charged for the same question.
       </p>
       <p className="text-body">
-        <strong>A scanned document is different.</strong> If a file has no text to extract — a scan,
-        a photograph, an image-only PDF — it is sent to a <strong>vision model</strong> to be read.
+        <strong>A scanned document is different.</strong> If a file has no text to extract (a scan,
+        a photograph, an image-only PDF), it is sent to a <strong>vision model</strong> to be read.
         That is an extra model call on your document, and it costs tokens rather than saving them.
       </p>
       <p className="text-body text-muted">

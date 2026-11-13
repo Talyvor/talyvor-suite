@@ -198,7 +198,9 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/waitlist", body: `{"email":"a@example.com"}`}, // B44.1
 		{method: http.MethodPost, path: "/api/features/stored-answers/delete", body: `{"scope":"shared","confirm":"ws"}`},
 		{method: http.MethodPost, path: "/api/features/deletion-requests", body: `{}`},
-		{method: http.MethodPut, path: "/api/workspace/name", body: `{"name":"a"}`}, // B46.16
+		{method: http.MethodPut, path: "/api/workspace/name", body: `{"name":"a"}`},                          // B46.16
+		{method: http.MethodPost, path: "/api/workspace/requests", body: `{"kind":"support","message":"a"}`}, // B59.28
+		{method: http.MethodPut, path: "/api/workspace/business", body: `{"company_name":"a"}`},              // B59.31
 		{method: http.MethodPost, path: "/api/agents", body: `{"name":"a"}`},
 		{method: http.MethodPost, path: "/api/agents/x1/fund", body: `{"amount_ulxc":1}`},
 		{method: http.MethodPost, path: "/api/agents/x1/withdraw", body: `{"amount_ulxc":1}`},
@@ -226,6 +228,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/agents/x1/pause", body: `{"reason":"r"}`},
 		{method: http.MethodPost, path: "/api/agents/x1/resume", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/x1/resume-challenge", body: `{}`}, // B41.8
+		{method: http.MethodPost, path: "/api/agents/x1/rules-challenge", body: `{}`},  // B55.14
 		{method: http.MethodPost, path: "/api/agents/resume-all/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/x1/schedules", body: `{"to_agent_id":"agt_2","amount_ulxc":1,"every":"day"}`},
 		{method: http.MethodPost, path: "/api/agents/schedules/x1/stop", body: `{}`},
@@ -256,6 +259,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/payees/x1/called/challenge", body: `{}`},                                                            // B41.11
 		{method: http.MethodPut, path: "/api/money/budgets", body: `{"category":"ai_software","period":"month","amount_minor":10000,"currency":"GBP"}`}, // B41.39
 		{method: http.MethodDelete, path: "/api/money/budgets/x1"},
+		{method: http.MethodPost, path: "/api/money/alerts/channels", body: `{"kind":"push"}`}, // B28.66
+		{method: http.MethodDelete, path: "/api/money/alerts/channels/x1"},
 		{method: http.MethodPost, path: "/api/agents/x1/scan-watches", body: `{"series":["eia.stocks.cushing-crude"],"rule":"range"}`},                                   // B52.28
 		{method: http.MethodDelete, path: "/api/scan/watches/x1"},                                                                                                        // B52.28                                                                                      // B41.39
 		{method: http.MethodPut, path: "/api/money/spending/merchants", body: `{"merchant":"m","category":"eating_out"}`},                                                // B53.8
@@ -264,6 +269,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/physical-cards", body: `{"name_on_card":"A","address":{"line1":"1","city":"L","postcode":"N1 9GU","country":"GB"}}`}, // B53.12
 		{method: http.MethodPost, path: "/api/money/physical-cards/x1/activate", body: `{"last4":"4242"}`},                                                               // B53.12
 		{method: http.MethodPost, path: "/api/money/physical-cards/x1/replace", body: `{"reason":"lost"}`},                                                               // B53.12
+		{method: http.MethodPost, path: "/api/money/card-disputes", body: `{"payment_id":"x1","reason":"a"}`},                                                            // B59.25
 		{method: http.MethodPost, path: "/api/money/payees/x1/called", body: `{"assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
 		{method: http.MethodPost, path: "/api/money/payees/x1/details/challenge", body: `{"sort_code":"400000","account_number":"12345678"}`}, // B41.12
 		{method: http.MethodPost, path: "/api/money/payees/x1/details", body: `{"sort_code":"400000","account_number":"12345678","assertion":{"credential_id":"c","client_data_json":"a","authenticator_data":"b","signature":"s"}}`},
@@ -279,12 +285,17 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/permission-mandates/x1/revoke", body: `{}`}, // B41.15
 		{method: http.MethodPost, path: "/api/money/devices/x1/push-token", body: `{"push_token":"t"}`},
 		{method: http.MethodPost, path: "/api/money/payments", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`},
-		{method: http.MethodPost, path: "/api/money/mandates", body: `{"account_id":"x1","payee_business_id":"b","payee_id":"x1","payee_name":"n","max_per_pull_minor":1,"max_per_month_minor":1,"expires_at":"2099-01-01T00:00:00Z"}`},
+		{method: http.MethodPost, path: "/api/money/payments/challenge", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`}, // B54.35
+		{method: http.MethodPost, path: "/api/money/mandates", body: `{"grant":{"account_id":"x1","payee_business_id":"b","payee_id":"x1","payee_name":"n","max_per_pull_minor":1,"max_per_month_minor":1,"expires_at":"2099-01-01T00:00:00Z"}}`},
+		{method: http.MethodPost, path: "/api/money/mandates/challenge", body: `{"mandate_id":"x1"}`},                  // B55.56
+		{method: http.MethodPost, path: "/api/money/mandates/x1/approve", body: `{"assertion":{"credential_id":"c"}}`}, // B55.56
+		{method: http.MethodPost, path: "/api/money/mandates/x1/decline", body: `{}`},                                  // B55.56
 		{method: http.MethodPost, path: "/api/money/mandates/x1/revoke", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/payouts", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/bills", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/bills/pay", body: `{"bill_ids":["bill_1"]}`},
 		{method: http.MethodPost, path: "/api/money/payouts/x1/approve", body: `{}`},
+		{method: http.MethodPost, path: "/api/money/payouts/x1/approve/challenge", body: `{}`}, // B58.6
 		{method: http.MethodPost, path: "/api/admin/platform-reports", body: `{"year":2026}`},
 		{method: http.MethodDelete, path: "/api/agents/x1/topup", body: `{}`},
 		{method: http.MethodPost, path: "/api/marketplace/listings/x1/reports", body: `{"reason":"other"}`},
@@ -338,6 +349,11 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/marketplace/listings/x1/versions", body: `{"artifact":{"template":"x"},"changelog":"x"}`}, // B28.162
 		// B32.60 — saving the seller's tax details.
 		{method: http.MethodPut, path: "/api/marketplace/seller-tax", body: `{"seller_type":"individual"}`},
+		// B41.85 — a seller's relabel, the workspace's content filter, and a block and its undo.
+		{method: http.MethodPut, path: "/api/marketplace/listings/x1/content-labels", body: `{"age_rating":"all"}`},
+		{method: http.MethodPut, path: "/api/marketplace/content-filter", body: `{"max_age_rating":"all"}`},
+		{method: http.MethodPut, path: "/api/marketplace/blocked-listings/x1"},
+		{method: http.MethodDelete, path: "/api/marketplace/blocked-listings/x1"},
 		// B32.53 — opening a room and joining one.
 		{method: http.MethodPost, path: "/api/rooms", body: `{"title":"t","visibility":"public"}`},
 		{method: http.MethodPost, path: "/api/rooms/x1/join", body: `{"terms_version":1}`},
@@ -363,9 +379,41 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodDelete, path: "/api/rooms/x1/takeover"},
 		{method: http.MethodPut, path: "/api/rooms/x1/takeover/vote", body: `{"candidate_workspace_id":"x1"}`},
 		{method: http.MethodPost, path: "/api/rooms/x1/fork"},
+		// B41.41 — the owner sets shared ownership.
+		{method: http.MethodPut, path: "/api/rooms/x1/shared-ownership", body: `{"enabled":true}`},
+		// B41.42 — the owner publishes the rate card; a contribution claims a size.
+		{method: http.MethodPut, path: "/api/rooms/x1/rate-card", body: `{"pool_points":1}`},
+		{method: http.MethodPut, path: "/api/rooms/x1/contributions/x1/size", body: `{"size":"M"}`},
+		// B41.44 — a contribution's reviewers are drawn, and a drawn reviewer scores it.
+		{method: http.MethodPost, path: "/api/rooms/x1/contributions/x1/reviewers"},
+		{method: http.MethodPut, path: "/api/rooms/x1/contributions/x1/review", body: `{"score_bps":10000}`},
+		// B41.46 — the owner raises the room's Gate thresholds.
+		{method: http.MethodPut, path: "/api/rooms/x1/gate-thresholds", body: `{"used_people":150}`},
+		// B41.50 — a member signs the contributor agreement.
+		{method: http.MethodPost, path: "/api/rooms/x1/agreement", body: `{"version":"draft-1","signed_name":"A"}`},
+		// B41.47 — the owner freezes the leaderboard, a member objects, a panelist votes.
+		{method: http.MethodPost, path: "/api/rooms/x1/leaderboard/freeze"},
+		{method: http.MethodPost, path: "/api/rooms/x1/objections", body: `{"contribution_id":"x1","points":-1,"reason":"r"}`},
+		{method: http.MethodPut, path: "/api/rooms/x1/objections/x1/vote", body: `{"uphold":true}`},
+		// B41.52 — the owner posts a task, a member claims it and lets it go.
+		{method: http.MethodPost, path: "/api/rooms/x1/tasks", body: `{"title":"t","description":"","size":"M"}`},
+		{method: http.MethodPost, path: "/api/rooms/x1/tasks/x1/claim"},
+		{method: http.MethodDelete, path: "/api/rooms/x1/tasks/x1/claim"},
 		{method: http.MethodPost, path: "/api/agents/approvals/x1/challenge", body: `{}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys/challenge", body: `{}`},
+		// B55.3 — a key waiting from another device is let in or turned away.
+		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/challenge", body: `{}`},
+		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/approve", body: `{"assertion":{"credential_id":"c","client_data_json":"j","authenticator_data":"a","signature":"s"}}`},
+		{method: http.MethodPost, path: "/api/agents/keys/enrolments/x1/decline", body: `{}`},
+		// B55.54 — a new recovery code, and a key back when every key was removed.
+		{method: http.MethodPost, path: "/api/agents/keys/recovery-code/challenge", body: `{}`},
+		{method: http.MethodPost, path: "/api/agents/keys/recovery-code", body: `{"assertion":{"credential_id":"c","client_data_json":"j","authenticator_data":"a","signature":"s"}}`},
+		{method: http.MethodPost, path: "/api/agents/keys/recover", body: `{"code":"c","passkey":{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}}`},
+		{method: http.MethodPost, path: "/api/agents/keys/recover/start", body: `{}`},
+		{method: http.MethodPost, path: "/api/agents/keys/recover/cancel", body: `{}`},
+		{method: http.MethodPost, path: "/api/agents/keys/recover/complete", body: `{"passkey":{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}}`},
 		{method: http.MethodPost, path: "/api/agents/passkeys", body: `{"credential_id":"c","name":"n","public_key":"p","client_data_json":"j","authenticator_data":"a"}`},
+		{method: http.MethodDelete, path: "/api/agents/passkeys", body: `{"credential_id":"c"}`}, // B55.16
 		{method: http.MethodPost, path: "/api/agents/push/subscriptions", body: `{"endpoint":"https://fcm.googleapis.com/fcm/send/x","keys":{"p256dh":"p","auth":"a"}}`},
 		{method: http.MethodDelete, path: "/api/agents/push/subscriptions", body: `{"endpoint":"https://fcm.googleapis.com/fcm/send/x"}`},
 		{method: http.MethodPost, path: "/api/features/tare/preview", body: `{"content":"{\"a\":1}","kind":"json"}`},

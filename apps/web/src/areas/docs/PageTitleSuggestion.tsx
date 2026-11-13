@@ -126,7 +126,7 @@ export function PageTitleSuggestion({
             {isAIUnavailable(suggest.error) ? (
               aiNotConfiguredCopy
             ) : isSessionExpired(suggest.error) ? null : (
-              <>Couldn’t suggest a title — nothing was asked of the model. Try again.</>
+              <>Couldn’t suggest a title. Nothing was asked of the model. Try again.</>
             )}
           </p>
         ) : suggest.isSuccess ? (
@@ -134,7 +134,7 @@ export function PageTitleSuggestion({
             {suggested === '' ? (
               // MEASURED, REACHABLE, AND NOT AN ERROR. See the header: the completion is bought.
               <p className="text-body text-muted">
-                The model returned no title. Nothing was changed — and the call was still billed.
+                The model returned no title. Nothing was changed, and the call was still billed.
               </p>
             ) : (
               <>
@@ -149,7 +149,7 @@ export function PageTitleSuggestion({
                     // The failure names what did NOT happen. A refused write leaves the suggestion
                     // on screen, which is the only place it exists.
                     <span className="text-caption text-muted">
-                      Couldn’t apply it — this page’s title is unchanged. Try again.
+                      Couldn’t apply it. This page’s title is unchanged. Try again.
                     </span>
                   ) : (
                     // ⚠ NOT "Nothing is renamed until you press this." That wording tripped

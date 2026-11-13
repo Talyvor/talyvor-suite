@@ -19,7 +19,7 @@ interface Call {
   at: string
 }
 
-interface Connected {
+export interface Connected {
   id: string
   name: string
   scopes: string[]
@@ -36,7 +36,7 @@ const RESULT_WORDS: Record<Call['result'], string> = {
 }
 
 /** What one connected assistant did, newest first. */
-function CallList({ calls }: { calls: Call[] | null | undefined }) {
+export function CallList({ calls }: { calls: Call[] | null | undefined }) {
   if (!calls) return <p className="text-caption text-muted">This server keeps no record of what assistants did.</p>
   if (!calls.length) return <p className="text-caption text-muted">It has not used a tool yet.</p>
   return (
@@ -60,10 +60,10 @@ function CallList({ calls }: { calls: Call[] | null | undefined }) {
 const KEY = ['connected-assistants']
 const PATH = '/api/connect/assistants'
 /** Go's zero time: the assistant has not called Talyvor since it connected. */
-const NEVER = '0001-01-01T00:00:00Z'
+export const NEVER = '0001-01-01T00:00:00Z'
 
 /** The scopes in the words the consent screen showed (apps/bff/oauth.go oauthScopes). */
-const SCOPE_WORDS: Record<string, string> = {
+export const SCOPE_WORDS: Record<string, string> = {
   'wallets:read': 'See your wallets and bills',
   'invoices:draft': 'Draft invoices and payees',
   'payments:prepare': 'Prepare payments for you to approve',
@@ -142,7 +142,7 @@ export const ASSISTANTS: Assistant[] = [
   },
 ]
 
-async function revoke(id: string): Promise<void> {
+export async function revokeAssistant(id: string): Promise<void> {
   const path = `${PATH}/${encodeURIComponent(id)}/revoke`
   const res = await fetch(path, { method: 'POST', headers: { Accept: 'application/json' } })
   if (!res.ok) throw new ApiError(res.status, path)
@@ -167,17 +167,24 @@ function AssistantCard({ a, url }: { a: Assistant; url: string }) {
   )
 }
 
-/** The assistants this person has connected, each revoked by its own button. Also drawn on Keys (B41.15). */
-export function ConnectedList() {
-  const qc = useQueryClient()
-  const [cutName, setCutName] = useState('')
-  const list = useQuery({
+/** The assistants this person has connected; Keys draws them as Pocket rows from the same read (B57.94). */
+export function useConnectedAssistants() {
+  return useQuery({
     queryKey: KEY,
     queryFn: async () =>
       readable<{ assistants: Connected[] }>(PATH, await getJSON<unknown>(PATH), { assistants: 'array' }).assistants,
   })
+}
+
+export const CONNECTED_KEY = KEY
+
+/** The assistants this person has connected, each revoked by its own button. */
+export function ConnectedList() {
+  const qc = useQueryClient()
+  const [cutName, setCutName] = useState('')
+  const list = useConnectedAssistants()
   const cut = useMutation({
-    mutationFn: revoke,
+    mutationFn: revokeAssistant,
     onSuccess: (_, id) => setCutName(list.data?.find((c) => c.id === id)?.name ?? 'That assistant'),
     onSettled: () => qc.invalidateQueries({ queryKey: KEY }),
   })
@@ -288,7 +295,7 @@ export function ConnectAI() {
       <Region index="00" label="Connect your AI" heading="Connect your AI" sectionClassName="pb-10 pt-4 wide:pb-12">
         <p className="max-w-2xl text-body text-muted">
           Add Talyvor to the assistant you already use. It can read your balances and bills, draft invoices and prepare
-          payments — every payment waits for you to approve it here.
+          payments. Every payment waits for you to approve it here.
         </p>
         <div className="mt-4 max-w-2xl">
           <CopyBlock text={url} label="the address" />

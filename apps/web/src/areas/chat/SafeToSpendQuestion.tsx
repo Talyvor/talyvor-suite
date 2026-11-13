@@ -115,7 +115,7 @@ export function SafeToSpendCard({ question, onClose }: { question: string; onClo
                   </option>
                 ))}
               </select>
-              <p className="text-caption text-muted">No agent is called “{typed}” — pick one.</p>
+              <p className="text-caption text-muted">No agent is called “{typed}”. Pick one.</p>
             </>
           ) : (
             <div role="status" className="flex flex-col gap-2" data-testid="chat-safe-answer">

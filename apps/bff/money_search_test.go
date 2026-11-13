@@ -70,6 +70,64 @@ func TestMoneyBudgetAlertsReachLens(t *testing.T) {
 	}
 }
 
+// B28.66 — alert channels are added, listed and removed, and their deliveries read, through Lens's /v1/money/alerts routes:
+// only {kind, url} goes up, and an email channel Lens refuses comes back in Lens's words.
+func TestMoneyAlertChannelsReachLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		got = append(got, strings.TrimSpace(r.Method+" "+r.URL.RequestURI()+" "+string(raw)))
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && strings.Contains(string(raw), `"email"`):
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"economy: alert channel: email alerts need an email integration, which is not connected yet"}`))
+		case r.Method == http.MethodPost:
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"id":"ach_1","kind":"webhook","url":"https://example.com/hook","secret":"whsec_x"}`))
+		case r.Method == http.MethodDelete:
+			_, _ = w.Write([]byte(`{"deleted":"ach_1"}`))
+		case r.URL.Path == "/v1/money/alerts/deliveries":
+			_, _ = w.Write([]byte(`{"deliveries":[{"id":"adl_1","channel_id":"ach_1","channel_kind":"webhook","status":"sent"}]}`))
+		default:
+			_, _ = w.Write([]byte(`{"channels":[]}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	if rec := doJSON(a, http.MethodPost, "/api/money/alerts/channels", `{"kind":"webhook","url":"https://example.com/hook","by":"x"}`); rec.Code != http.StatusCreated ||
+		!strings.Contains(rec.Body.String(), `"secret":"whsec_x"`) {
+		t.Fatalf("add = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/money/alerts/channels", `{"kind":"email","url":""}`); rec.Code != http.StatusBadRequest ||
+		!strings.Contains(rec.Body.String(), "email integration, which is not connected yet") {
+		t.Fatalf("email = %d %s; want 400 in Lens's words", rec.Code, rec.Body.String())
+	}
+	for _, p := range []string{"/api/money/alerts/channels?workspace_id=ws_other", "/api/money/alerts/deliveries?workspace_id=ws_other"} {
+		if rec := doJSON(a, http.MethodGet, p, ""); rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d %s", p, rec.Code, rec.Body.String())
+		}
+	}
+	if rec := doJSON(a, http.MethodDelete, "/api/money/alerts/channels/ach_1", ""); rec.Code != http.StatusOK {
+		t.Fatalf("delete = %d %s", rec.Code, rec.Body.String())
+	}
+	want := []string{
+		`POST /v1/money/alerts/channels {"kind":"webhook","url":"https://example.com/hook"}`,
+		`POST /v1/money/alerts/channels {"kind":"email","url":""}`,
+		"GET /v1/money/alerts/channels",
+		"GET /v1/money/alerts/deliveries",
+		"DELETE /v1/money/alerts/channels/ach_1",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("Lens got %q; want %q", got, want)
+	}
+}
+
 // B41.20 — the subscriptions reach Lens's GET /v1/money/spending/subscriptions with nothing of the caller's query.
 func TestMoneySubscriptionsReachLens(t *testing.T) {
 	var got []string

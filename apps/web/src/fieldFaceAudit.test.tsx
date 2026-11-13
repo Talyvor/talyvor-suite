@@ -147,3 +147,47 @@ describe('the field the product actually ships', () => {
     expect(container.querySelector('input')!.className).toContain('font-figure')
   })
 })
+
+// B57.3 — on a page held to Pocket's rules, every field has the 1.5px control edge (`shadow-edge`,
+// the control colour, 3:1 on the page in both themes — contrast.test.ts measures it), and a
+// numeric field's value is on Pocket's figure face.
+describe('Pocket: every field has the control edge', () => {
+  const pocket = (html: string) => dom(`<div data-design="pocket">${html}</div>`)
+
+  it('a text field without the edge is an offender, and the report says why', () => {
+    const found = unfacedFieldsIn(pocket('<input type="text" aria-label="Name" class="rounded-control">'))
+    expect(found).toHaveLength(1)
+    expect(found[0].declaredBy).toBe('no control edge')
+    expect(found[0].label).toBe('Name')
+  })
+
+  it('a select and a textarea are held to it too', () => {
+    expect(unfacedFieldsIn(pocket('<select aria-label="Agent"></select><textarea aria-label="Memo"></textarea>'))).toHaveLength(2)
+  })
+
+  it('a field wearing shadow-edge is not', () => {
+    expect(unfacedFieldsIn(pocket('<input type="text" class="rounded-control shadow-edge">'))).toEqual([])
+  })
+
+  it('a field that paints no box is not asked: hidden, range, checkbox, radio, file', () => {
+    expect(
+      unfacedFieldsIn(
+        pocket('<input type="hidden"><input type="range"><input type="checkbox"><input type="radio"><input type="file">'),
+      ),
+    ).toEqual([])
+  })
+
+  it('a numeric field with the edge but its value in IBM Plex Mono is an offender', () => {
+    const found = unfacedFieldsIn(pocket('<input inputmode="decimal" class="shadow-edge font-mono">'))
+    expect(found).toHaveLength(1)
+    expect(found[0].declaredBy).toBe('inputmode="decimal"')
+  })
+
+  it('a numeric field with the edge on the figure face is not', () => {
+    expect(unfacedFieldsIn(pocket('<input inputmode="decimal" class="shadow-edge font-figure">'))).toEqual([])
+  })
+
+  it('outside a Pocket page a text field is not asked for the edge, as today', () => {
+    expect(unfacedFieldsIn(dom('<input type="text" class="rounded-control">'))).toEqual([])
+  })
+})

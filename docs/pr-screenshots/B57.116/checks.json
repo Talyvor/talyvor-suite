@@ -1,0 +1,4 @@
+[
+  { "route": "/approvals", "screen": "w-approvals", "state": { "pr": 1, "nw": 0 } },
+  { "route": "/", "screen": "w-home", "state": { "pr": 1, "nw": 0 } }
+]

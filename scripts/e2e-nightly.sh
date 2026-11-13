@@ -179,6 +179,12 @@ to_main() {
   return 0
 }
 
+# B55.52 — "Pocket problems: not run, <why>" at the top of TESTERS.md, for a night whose Pocket pass wrote nothing.
+pocket_not_run() {
+  node --experimental-strip-types --no-warnings e2e/src/held.ts --pocket --why "$1" >>"$state/nightly.log" 2>&1 ||
+    log "could not write the Pocket problems line into TESTERS.md (e2e/src/held.ts --pocket); this log is its only record"
+}
+
 run_once() {
   local code
   if [ ! -f "$env_file" ]; then
@@ -205,14 +211,18 @@ run_once() {
         log "could not write the held night into TESTERS.md (e2e/src/held.ts); this log is its only record"
       exit 2
     fi
-    pnpm install --frozen-lockfile >>"$state/nightly.log" 2>&1 || { log "pnpm install failed — skipped"; exit 2; }
+    pnpm install --frozen-lockfile >>"$state/nightly.log" 2>&1 || { log "pnpm install failed — skipped"; pocket_not_run "pnpm install failed"; exit 2; }
     pnpm --filter @talyvor/e2e exec playwright install chromium >>"$state/nightly.log" 2>&1
     [ "$light" = 1 ] && log "light pass starting at $(git rev-parse --short HEAD): the core money and auth paths, under what is left of the day's \$$E2E_DAY_CAP_USD cap"
     # B55.44 — Pocket's 25 app problems first, before the nightly run; its verdicts never change the night's exit code.
-    if [ "$light" != 1 ]; then
-      log "Pocket problems pass starting at $(git rev-parse --short HEAD): 25 users, one problem each"
-      E2E_POCKET=1 node --experimental-strip-types --no-warnings e2e/src/run.ts >>"$state/nightly.log" 2>&1
-      log "Pocket problems pass finished: exit $?"
+    # B55.52 — every night and every light pass, under the day's cap; a pass that writes no section says why in TESTERS.md.
+    log "Pocket problems pass starting at $(git rev-parse --short HEAD): 25 users, one problem each"
+    E2E_POCKET=1 node --experimental-strip-types --no-warnings e2e/src/run.ts 2>&1 | tee "$state/pocket-pass.log" >>"$state/nightly.log"
+    pcode=$?
+    log "Pocket problems pass finished: exit $pcode"
+    if ! grep -q '^summary: ' "$state/pocket-pass.log"; then
+      perr=$(grep -m1 -E '^[A-Za-z]*Error: ' "$state/pocket-pass.log" | cut -c1-300)
+      pocket_not_run "the pass exited $pcode without writing its section${perr:+: $perr}"
     fi
     [ "$light" = 1 ] || log "run starting at $(git rev-parse --short HEAD): ${E2E_USERS:-100} users, $E2E_EXPLORERS explorers, cap \$${E2E_CAP_USD:-5}$([ "$E2E_DEEP_ROUNDS" != 0 ] && echo ", the deep red-team pass: $E2E_DEEP_ROUNDS round(s)")"
     node --experimental-strip-types --no-warnings e2e/src/run.ts >>"$state/nightly.log" 2>&1
@@ -245,9 +255,16 @@ log "nightly started (pid $$): runs at $at each night; settings from $env_file"
 self=$(cksum <"$0")
 while :; do
   if [ "$(date +%F)" != "$(cat "$state/nightly-last" 2>/dev/null)" ] && ! [ "$(date +%H:%M)" \< "$at" ]; then
-    date +%F >"$state/nightly-last"
     # B28.294 — a light pass still going finishes first.
     while since=$(in_run); do sleep 30; done
+    # B55.52 — tonight runs under main's copy of this script. On 7 Nov the copy from before the Pocket pass ran the night
+    # and the new one took over only after it, so the night had no Pocket section.
+    (cd "$repo" && to_main)
+    if [ "$(cksum <"$0")" != "$self" ]; then
+      log "scripts/e2e-nightly.sh changed with main; tonight's run goes on under the new one"
+      exec "$BASH" "$0"
+    fi
+    date +%F >"$state/nightly-last"
     run_once
     # A night that brought in a new copy of this script goes on under it, in the same pid.
     if [ "$(cksum <"$0")" != "$self" ]; then

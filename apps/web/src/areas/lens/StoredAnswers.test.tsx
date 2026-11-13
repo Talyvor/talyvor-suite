@@ -80,7 +80,7 @@ describe('Features → Stored answers', () => {
     fireEvent.click(ask)
 
     await waitFor(() =>
-      expect(screen.getByTestId('deletion-requests')).toHaveTextContent(/Asked \d+ Sept 2026 — waiting for Talyvor to delete it\./),
+      expect(screen.getByTestId('deletion-requests')).toHaveTextContent(/Asked \d+ Sept 2026\. Waiting for Talyvor to delete it\./),
     )
     expect(screen.getByRole('button', { name: 'Ask Talyvor to delete all my data' })).toBeDisabled()
     expect(posts).toEqual([{ url: '/api/features/deletion-requests', body: {} }])

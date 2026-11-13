@@ -20,6 +20,7 @@ import {
 } from "@talyvor/ui";
 import { Region, RegionScreen } from "../../components/Region";
 import { formatULXC } from "../lens/agentBankApi";
+import { Lxc } from "../lens/money";
 import { formatUSD, formatWhen } from "../lens/format";
 import { parseShare } from "../rooms/roomsApi";
 import { CollectionPage, Discover } from "./Discover";
@@ -37,13 +38,17 @@ import { ReviewQueue } from "./Review";
 import { SellerStatementsCard } from "./SellerStatements";
 import { SellerTaxCard, SellerTaxNotice } from "./SellerTax";
 import { BuyerProtection } from "./BuyerProtection";
+import { ContentFilterPage, ContentPicker, contentReady } from "./ContentLabels";
 import {
   CARDS_OFF,
   cardPayments,
+  formatBPS,
   usePricing,
 } from "../marketing/pricingApi";
 import {
+  type AgeRating,
   type BillLine,
+  type ContentLabel,
   type Listing,
   type MarketBill,
   type MarketInvoice,
@@ -81,6 +86,9 @@ import {
   selectClass,
   useRunnableModels,
 } from "./parts";
+import { WorkspaceLabel } from "../../labels/workspace";
+import { MARKETPLACE } from "../../labels/capabilities";
+import { MarketplaceLinks } from "../../components/PageLinks";
 
 // Marketplace.tsx — B20.3: the marketplace. Find what other teams published (agents, prompts, skills,
 // evaluations and pipelines — Lens B20.1; B32.61: on Discover.tsx, by Lens's search, trending and collections),
@@ -129,9 +137,9 @@ export const ARTIFACT: Record<
 type Visibility = "public" | "unlisted" | "private";
 
 const VISIBILITY: readonly [Visibility, string][] = [
-  ["public", "Public — anyone can find it"],
-  ["unlisted", "Unlisted — only people with the link"],
-  ["private", "Private — only this workspace"],
+  ["public", "Public: anyone can find it"],
+  ["unlisted", "Unlisted: only people with the link"],
+  ["private", "Private: only this workspace"],
 ];
 
 export function artifactOf(
@@ -214,6 +222,9 @@ function Publish() {
   const [parents, setParents] = useState<ParentChoice[]>(
     prefill?.parents ?? [],
   );
+  // B41.85 — no listing publishes without the seller choosing its age rating.
+  const [rating, setRating] = useState<AgeRating | null>(null);
+  const [labels, setLabels] = useState<ContentLabel[]>([]);
   // B32.46 — a publish Lens held as a near-copy of a listing it does not declare: shown here, with the way on.
   const [held, setHeld] = useState<{
     listing: Listing;
@@ -234,6 +245,8 @@ function Publish() {
         remix_policy: remixPolicy,
         remix_share_bps: shareBPS ?? 0,
         parents: ps.map(({ listing_id, version }) => ({ listing_id, version })),
+        age_rating: rating ?? "18+",
+        content_labels: labels,
       }),
     onSuccess: (l) => {
       void qc.invalidateQueries({ queryKey: MINE_KEY });
@@ -259,7 +272,8 @@ function Publish() {
     body.trim() !== "" &&
     micros !== null &&
     shareBPS !== null &&
-    (remixPolicy !== "royalty" || shareBPS > 0);
+    (remixPolicy !== "royalty" || shareBPS > 0) &&
+    contentReady(rating, labels);
   const kindLabelID = useId();
   return (
     <Region
@@ -391,7 +405,7 @@ function Publish() {
           </div>
           {micros === null ? (
             <Note ok={false}>
-              A price is an amount of LXC, like 0.5 — or empty for free.
+              A price is an amount of LXC, like 0.5, or empty for free.
             </Note>
           ) : null}
           <div className="flex flex-wrap items-end gap-3 border-t border-rule pt-4">
@@ -435,6 +449,14 @@ function Publish() {
             )
           ) : null}
           <ParentsPicker parents={parents} onChange={setParents} />
+          <div className="border-t border-rule pt-4">
+            <ContentPicker
+              rating={rating}
+              labels={labels}
+              onRating={setRating}
+              onLabels={setLabels}
+            />
+          </div>
           <div className="flex flex-col gap-1.5 border-t border-rule pt-4">
             <span className="font-figure text-eyebrow uppercase text-label">
               How it shows in the marketplace
@@ -757,7 +779,7 @@ export function PayoutsCard({
         <span className="font-figure text-body text-ink">
           {!p.paid_this_week && p.available_usd_micros >= p.minimum_usd_micros
             ? formatUSD(p.quote.net_usd_micros)
-            : "—"}
+            : "Not yet"}
         </span>
       </Row>
       <Row
@@ -802,7 +824,7 @@ export function PayoutsCard({
             </span>{" "}
             is now{" "}
             <span className="font-figure">
-              {formatULXC(credits.data.credits_ulxc ?? 0)}
+              <Lxc ulxc={credits.data.credits_ulxc ?? 0} />
             </span>{" "}
             in your workspace’s credits.
           </Note>
@@ -831,7 +853,7 @@ export function PayoutsCard({
                   {h.paid_at
                     ? formatWhen(h.paid_at)
                     : h.last_error
-                      ? "Stripe refused — retrying"
+                      ? "Stripe refused, retrying"
                       : "Sending"}
                 </td>
                 <td className="py-2">
@@ -844,7 +866,7 @@ export function PayoutsCard({
                 </td>
                 <td className="px-gutter py-2 text-right font-figure">
                   {h.method === "credits"
-                    ? formatULXC(h.credits_ulxc ?? 0)
+                    ? <Lxc ulxc={h.credits_ulxc ?? 0} />
                     : formatUSD(h.net_usd_micros)}
                 </td>
               </tr>
@@ -862,6 +884,10 @@ export function PayoutsCard({
 
 function Selling() {
   const mine = useQuery({ queryKey: MINE_KEY, queryFn: marketApi.mine });
+  // B56.4: the split as Lens serves it; none stated, none printed.
+  const pricing = usePricing();
+  const take =
+    pricing.status === "ok" ? pricing.pricing.fees?.market_take_bps : undefined;
   return (
     <>
       <Region
@@ -871,10 +897,17 @@ function Selling() {
         sectionClassName="pb-10 pt-4 wide:pb-12"
         className="flex max-w-2xl flex-col gap-3"
       >
-        <p className="text-body text-muted">
-          A buyer’s use, rental or purchase of your listing earns you 85% of its
-          price once their bill is paid; Talyvor keeps 15%. Your own uses, and
-          uses by a workspace linked to yours, earn nothing.
+        <WorkspaceLabel capability={MARKETPLACE} className="self-start" />
+        <p data-testid="selling-split" className="text-body text-muted">
+          {take !== undefined && (
+            <>
+              Sellers earn{" "}
+              <span className="font-figure">{formatBPS(10_000 - take)}</span> of
+              every paid use, rental and purchase, from the first sale; Talyvor
+              keeps <span className="font-figure">{formatBPS(take)}</span>.{" "}
+            </>
+          )}
+          Your own uses, and uses by a workspace linked to yours, earn nothing.
         </p>
         <SellerTaxNotice />
         <EarningsCard />
@@ -1273,7 +1306,7 @@ function Bill() {
     >
       <p className="text-body text-muted">
         Every paid listing your workspace or its agents used, billed each
-        month — never taken from your credits.{cards === "off" ? ` ${CARDS_OFF}` : ""} The models a
+        month, never taken from your credits.{cards === "off" ? ` ${CARDS_OFF}` : ""} The models a
         listing calls are on your usual bill, not here.
       </p>
       {invoices.isError ? (
@@ -1295,6 +1328,8 @@ function Bill() {
 export function MarketplaceArea() {
   return (
     <RegionScreen>
+      {/* B57.8 — the Marketplace's own pages left the sidebar; the Marketplace links them. */}
+      <MarketplaceLinks />
       <Routes>
         <Route index element={<Discover />} />
         <Route path="listings/:id" element={<ListingPage />} />
@@ -1305,6 +1340,7 @@ export function MarketplaceArea() {
         <Route path="bill" element={<Bill />} />
         <Route path="licences" element={<Licences />} />
         <Route path="review" element={<ReviewQueue />} />
+        <Route path="content-filter" element={<ContentFilterPage />} />
         {/* Anything else under /marketplace/* lands on Discover rather than a dead end. */}
         <Route path="*" element={<Discover />} />
       </Routes>

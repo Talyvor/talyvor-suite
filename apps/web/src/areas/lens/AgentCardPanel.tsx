@@ -1,16 +1,24 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Input, Pill } from '@talyvor/ui'
-import { Card } from './walletBrand'
+import { Button, Card, Chip, Input, Row } from '@talyvor/ui/pocket'
 import { isSessionExpired } from '../../lib/productState'
 import { formatWhen } from './format'
-import { type Agent, type AgentCard, type CardAuthorization, type Cardholder, agentBankApi, formatULXC, refusalText } from './agentBankApi'
+import { type Agent, type AgentCard, type CardAuthorization, type Cardholder, agentBankApi, refusalText } from './agentBankApi'
+import { Lxc } from './money'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { AgentCard as AgentCardFace } from '../../cards/AgentCard'
+import { CardDisputesAndRefunds, CardExport } from './CardDisputes'
+import { DESIGN_ATTR } from '../../pocketPending'
 
 // AgentCardPanel.tsx — B19.24: an agent's card on Agent Wallets. Lens (B19.12) issues an agent a virtual
 // card through Stripe Issuing, in TEST MODE ONLY — cards are class RED, test money until a licensed partner
 // exists — and decides every purchase on it in real time by the agent's rules and balance, converting it
 // from pounds at the day's European Central Bank reference rate. This shows the card and each purchase
 // with Lens's own reason and the rate; issuing one asks for the cardholder Stripe needs.
+// B57.125 — an issued card is drawn as the agent's own card: its helper, its name and its job line, with the number's
+// last four and the expiry in the line under it, never on the face.
+// B57.142 — the panel is drawn in Pocket, as the launch pack's W4 draws an agent's card on its page: the card art 312
+// wide on a white card, the last-four line under it, each purchase a row with its decision in words.
 
 export const cardKey = (id: string) => ['agent-card', id]
 
@@ -33,48 +41,47 @@ export function rateText(a: CardAuthorization): string | null {
 
 function CardFace({ card }: { card: AgentCard }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 px-gutter py-3" data-testid="agent-card">
-      <span className="font-figure text-body text-ink">•••• {card.last4}</span>
-      <span className="text-caption text-muted">
+    <div className="flex flex-wrap items-center gap-2 text-body" data-testid="agent-card">
+      <span className="font-figure font-semibold text-ink">•••• {card.last4}</span>
+      <span className="text-ink-3">
         expires {String(card.exp_month).padStart(2, '0')}/{String(card.exp_year).slice(-2)} · {card.currency.toUpperCase()}
       </span>
-      {card.frozen ? <Pill status="slashed">Frozen</Pill> : null}
+      {card.frozen ? <Chip tone="paused">Frozen</Chip> : null}
     </div>
   )
 }
 
 function Purchases({ auths }: { auths: CardAuthorization[] }) {
   return (
-    <table className="w-full text-body" data-testid="agent-card-purchases">
-      <thead>
-        <tr className="text-left text-caption text-muted">
-          <th className="px-gutter py-2 font-normal">When</th>
-          <th className="py-2 font-normal">Purchase</th>
-          <th className="py-2 text-right font-normal">Amount</th>
-          <th className="px-gutter py-2 text-right font-normal">Charged</th>
-        </tr>
-      </thead>
-      <tbody>
-        {auths.map((a) => {
-          const rate = rateText(a)
-          return (
-            <tr key={a.id} className="border-t border-rule align-top text-ink">
-              <td className="px-gutter py-2 font-figure text-caption text-muted">{formatWhen(a.created_at)}</td>
-              <td className="py-2">
-                <span className="mr-2">{a.merchant_name || 'A merchant'}</span>
-                <Pill status={a.approved ? 'settled' : 'slashed'}>{a.approved ? 'Approved' : 'Declined'}</Pill>
-                {a.reason ? <p className="text-caption text-muted">{a.reason}</p> : null}
-                {rate ? <p className="font-figure text-caption text-muted">{rate}</p> : null}
-              </td>
-              <td className="py-2 text-right font-figure">{moneyText(a.amount_minor, a.currency)}</td>
-              <td className="px-gutter py-2 text-right font-figure">
-                {a.approved && a.amount_ulxc ? `−${formatULXC(a.amount_ulxc)}` : '—'}
-              </td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
+    <div data-testid="agent-card-purchases">
+      {auths.map((a) => {
+        const rate = rateText(a)
+        return (
+          <div key={a.id} data-testid="agent-card-purchase" className="border-t border-line first:border-t-0">
+            <Row
+              wrap
+              title={
+                <span className="flex flex-wrap items-center gap-2">
+                  {a.merchant_name || 'A merchant'}
+                  <Chip tone={a.approved ? 'good' : 'bad'}>{a.approved ? 'Approved' : 'Declined'}</Chip>
+                </span>
+              }
+              line={<span className="font-figure">{formatWhen(a.created_at)}</span>}
+              amount={
+                <span className="grid justify-items-end">
+                  <span>{moneyText(a.amount_minor, a.currency)}</span>
+                  <span className="text-body font-normal text-ink-3">
+                    {a.approved && a.amount_ulxc ? <Lxc ulxc={a.amount_ulxc} sign="−" /> : 'None'}
+                  </span>
+                </span>
+              }
+            />
+            {a.reason ? <p className="pb-1 text-body text-ink-3">{a.reason}</p> : null}
+            {rate ? <p className="pb-2.5 font-figure text-body text-ink-3">{rate}</p> : null}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -121,18 +128,20 @@ function IssueCard({ agent }: { agent: Agent }) {
   })
   return (
     <form
-      className="flex flex-col gap-2 px-gutter py-3"
+      className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault()
         if (ready && !issue.isPending) issue.mutate()
       }}
     >
-      <p className="text-body text-muted">
+      <p className="text-body text-ink-2">
         Give {agent.name} a virtual card. Each purchase is paid from its wallet only if its rules
-        allow it, converted from pounds at the day’s European Central Bank rate. Stripe issues the card to a person —
-        the cardholder — and a merchant may ask for their billing address. Their phone number is optional.
+        allow it, converted from pounds at the day’s European Central Bank rate. Stripe issues the card to a person
+        (the cardholder), and a merchant may ask for their billing address. Their phone number is optional.
       </p>
       <div className="flex flex-wrap items-center gap-2">
+        {/* Named by aria-label and its placeholder, not a Field's label: nine labels on /agents doubled the time every
+            test of that page takes to find a control (B57.142, measured), and the words are the form's own. */}
         {FIELDS.map((f) => (
           <Input
             key={f.key}
@@ -148,7 +157,7 @@ function IssueCard({ agent }: { agent: Agent }) {
         ))}
       </div>
       {phone === null ? (
-        <p className="text-caption text-ink">
+        <p className="text-body text-ink">
           The phone number needs its country code, like +44 7700 900123.
         </p>
       ) : null}
@@ -158,7 +167,7 @@ function IssueCard({ agent }: { agent: Agent }) {
         </Button>
       </div>
       {issue.isError ? (
-        <p role="alert" className="text-caption text-ink">
+        <p role="alert" className="text-body text-ink">
           {refusalText(issue.error)}
         </p>
       ) : null}
@@ -169,28 +178,42 @@ function IssueCard({ agent }: { agent: Agent }) {
 export function AgentCardPanel({ agent }: { agent: Agent }) {
   const q = useQuery({ queryKey: cardKey(agent.id), queryFn: () => agentBankApi.card(agent.id) })
   return (
-    <Card>
-      <CardHeader>Card</CardHeader>
+    <Card tone="white" data-testid="agent-card-panel" {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-display text-reading font-bold text-ink">Card</h3>
+        <WorkspaceLabel capability="agent_card" />
+      </div>
       {q.isError ? (
-        <p className="px-gutter py-3 text-body text-muted">
+        <p className="text-body text-ink-2">
           {isSessionExpired(q.error)
             ? 'Its card can’t be read until you sign in again.'
             : 'Its card could not be read just now.'}
         </p>
       ) : q.isPending ? (
-        <p className="px-gutter py-3 text-body text-muted">Reading…</p>
+        <p className="text-body text-ink-2">Reading…</p>
       ) : q.data ? (
         <>
-          <CardFace card={q.data.card} />
-          <div className="border-t border-rule">
+          <div className="grid gap-3">
+            <AgentCardFace agent={agent} className="max-w-78" />
+            <CardFace card={q.data.card} />
+          </div>
+          <div className="border-t border-line pt-1">
             {(q.data.authorizations ?? []).length === 0 ? (
-              <p className="px-gutter py-3 text-body text-muted">
+              <p className="py-2.5 text-body text-ink-2">
                 No purchases yet. Each one appears here when the agent pays with this card, with what its rules
                 decided and why.
               </p>
             ) : (
               <Purchases auths={q.data.authorizations ?? []} />
             )}
+          </div>
+          {/* B59.25 — what came back of its payments, and every card payment of a date range as a file. */}
+          {/* Full width rules, with the two parts' own gutter plus 4 meeting the card's 20. */}
+          <div className="-mx-5 border-t border-line px-1">
+            <CardDisputesAndRefunds agentID={agent.id} />
+            <div className="border-t border-line px-gutter py-3">
+              <CardExport />
+            </div>
           </div>
         </>
       ) : (

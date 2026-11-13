@@ -107,7 +107,7 @@ export function AskAI() {
           {isAIUnavailable(ask.error) ? (
             aiNotConfiguredCopy
           ) : isSessionExpired(ask.error) ? null : (
-            <>Couldn’t get an answer — nothing was asked of the model. Try again.</>
+            <>Couldn’t get an answer. Nothing was asked of the model. Try again.</>
           )}
         </div>
       ) : answer ? (
@@ -117,7 +117,7 @@ export function AskAI() {
             // NOT an error, and not silence either: it means the corpus had nothing matching (or
             // nothing this reader may open), which changes how much the answer above is worth.
             <p className="text-caption text-muted">
-              No pages were cited — the answer is not grounded in anything in this workspace you
+              No pages were cited: the answer is not grounded in anything in this workspace you
               can open.
             </p>
           ) : (

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -21,16 +22,27 @@ import (
 //	POST /api/money/payees/{id}/details {the same details, assertion}   change them with a passkey: Lens checks the name
 //	                          afresh and holds every payment to it for 24 hours (held_until), with its notice
 //	GET  /api/money/payments                        the payments out, newest first
-//	POST /api/money/payments {account_id, payee_id, amount_minor, currency, reference, idempotency_key}   pay a saved payee
-//	GET  /api/money/mandates                        the mandates granted and, for the owner, received
-//	POST /api/money/mandates {account_id, payee_workspace_id | payee_business_id + payee_id, payee_name, max_per_pull_minor,
-//	                          max_per_month_minor, expires_at}   grant one from an agent's account
+//	POST /api/money/payments {account_id, payee_id, amount_minor, currency, reference, idempotency_key, assertion}   pay a
+//	                          saved payee; B54.35: "assertion" is the passkey's or the phone's signature over the challenge
+//	POST /api/money/payments/challenge {the payment, as it will be sent}   B54.35: the challenge it is signed over
+//	GET  /api/money/mandates ?status=               the mandates granted and, for the owner, received; with status
+//	                          (requested, active, revoked, expired, declined) only the granted ones in it
+//	POST /api/money/mandates {grant: {account_id, payee_workspace_id | payee_business_id + payee_id, payee_name,
+//	                          max_per_pull_minor, max_per_month_minor, expires_at}, assertion}   grant one from an agent's
+//	                          account; B55.56: once the workspace has a passkey or device key, Lens grants the owner's
+//	                          only with "assertion", that key's signature over the grant's own challenge (Lens B55.24)
+//	POST /api/money/mandates/challenge {grant} | {mandate_id}   the challenge a grant, or an approval, is signed over
+//	POST /api/money/mandates/{id}/approve {assertion}   the owner approves an agent's requested mandate, signed
+//	POST /api/money/mandates/{id}/decline           the owner declines it: it never pulls
 //	POST /api/money/mandates/{id}/revoke            revoke it, for good
 //	GET  /api/money/payouts                         the payout batches, newest first
 //	POST /api/money/payouts  (text/csv)             up to 1,000 payouts, validated row by row and held for one approval; the
 //	                                                Idempotency-Key header goes up with the file
 //	GET  /api/money/payouts/{id}                    one batch with every row's result
-//	POST /api/money/payouts/{id}/approve            pay every valid row, once
+//	POST /api/money/payouts/{id}/approve {assertion}   pay every valid row, once; B58.6: "assertion" is the passkey's or
+//	                          the phone's signature over the batch's challenge, sent up exactly as it came
+//	POST /api/money/payouts/{id}/approve/challenge  B58.6: the challenge approving the batch is signed over, and the batch
+//	                          it names (Lens B58.5): its id, its rows and its totals by currency
 //
 // Lens decides everything: who may pay from which account, the agent's rules, screening, what each row is worth and what
 // posts. A refusal comes back with its sentence (lensRelay). Funding is never named here: Lens takes test money until its
@@ -170,57 +182,136 @@ func (a *app) handleMoneyPayeeDetails(challenge bool) func(http.ResponseWriter, 
 	}
 }
 
-// handleMoneyPayments — GET /api/money/payments lists the payments out; POST pays a saved payee.
-func (a *app) handleMoneyPayments(w http.ResponseWriter, r *http.Request, t tenant) {
+// handleMoneyPayments — GET /api/money/payments lists the payments out; POST pays a saved payee. B54.35: once the
+// workspace has a passkey or a device key, Lens pays a person's payment only with "assertion", that key's signature over
+// the payment's own challenge (Lens B54.33), so it goes up exactly as sent, a passkey's or the phone's; and
+// POST /api/money/payments/challenge relays the payment as it will be sent for that challenge.
+func (a *app) handleMoneyPayments(challenge bool) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		switch {
+		case r.Method == http.MethodGet && !challenge:
+			a.agentBankRelayPath(w, r, t, http.MethodGet, "/v1/money/payments", nil)
+		case r.Method == http.MethodPost:
+			var in struct {
+				AccountID      string          `json:"account_id"`
+				PayeeID        string          `json:"payee_id"`
+				AmountMinor    int64           `json:"amount_minor"`
+				Currency       string          `json:"currency"`
+				Reference      string          `json:"reference"`
+				IdempotencyKey string          `json:"idempotency_key"`
+				Assertion      json.RawMessage `json:"assertion,omitempty"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+				return
+			}
+			path := "/v1/money/payments"
+			if challenge {
+				in.Assertion, path = nil, path+"/challenge"
+			}
+			// UPSTREAM-BINDS-ONLY lensMoneyPaymentBody: agent_id, created_at, detail, funding, id, partner, partner_ref, payee_name, status, updated_at, value_ulxc, workspace_id
+			body, _ := json.Marshal(in)
+			a.agentBankRelayPath(w, r, t, http.MethodPost, path, body)
+		case challenge:
+			methodNotAllowed(w, http.MethodPost)
+		default:
+			methodNotAllowed(w, "GET, POST")
+		}
+	}
+}
+
+// mandateGrant is a mandate as the owner grants it (Lens economy.MandateGrant), relayed field by field.
+type mandateGrant struct {
+	AccountID        string `json:"account_id"`
+	PayeeWorkspaceID string `json:"payee_workspace_id"`
+	PayeeBusinessID  string `json:"payee_business_id"`
+	PayeeID          string `json:"payee_id"`
+	PayeeName        string `json:"payee_name"`
+	MaxPerPullMinor  int64  `json:"max_per_pull_minor"`
+	MaxPerMonthMinor int64  `json:"max_per_month_minor"`
+	ExpiresAt        string `json:"expires_at"`
+}
+
+// mandateStatuses are the statuses Lens lists mandates by (economy/money_mandates.go).
+var mandateStatuses = map[string]bool{"requested": true, "active": true, "revoked": true, "expired": true, "declined": true}
+
+// handleMoneyMandates — GET /api/money/mandates lists those granted and received, by status if asked; POST grants one,
+// beside the signature exactly as the browser or the phone sent it (B55.56).
+func (a *app) handleMoneyMandates(w http.ResponseWriter, r *http.Request, t tenant) {
 	switch r.Method {
 	case http.MethodGet:
-		a.agentBankRelayPath(w, r, t, http.MethodGet, "/v1/money/payments", nil)
+		path := "/v1/money/mandates"
+		if status := r.URL.Query().Get("status"); status != "" {
+			if !mandateStatuses[status] {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "status is requested, active, revoked, expired or declined"})
+				return
+			}
+			path += "?status=" + url.QueryEscape(status)
+		}
+		a.agentBankRelayPath(w, r, t, http.MethodGet, path, nil)
 	case http.MethodPost:
 		var in struct {
-			AccountID      string `json:"account_id"`
-			PayeeID        string `json:"payee_id"`
-			AmountMinor    int64  `json:"amount_minor"`
-			Currency       string `json:"currency"`
-			Reference      string `json:"reference"`
-			IdempotencyKey string `json:"idempotency_key"`
+			Grant     *mandateGrant   `json:"grant"`
+			Assertion json.RawMessage `json:"assertion,omitempty"`
 		}
-		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil || in.Grant == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": `body must be {"grant", "assertion"}`})
 			return
 		}
-		// UPSTREAM-BINDS-ONLY lensMoneyPaymentBody: agent_id, created_at, detail, funding, id, partner, partner_ref, payee_name, status, updated_at, value_ulxc, workspace_id
+		// UPSTREAM-BINDS-ONLY lensMandateGrantBody: account_id, expires_at, mandate_id, max_per_month_minor, max_per_pull_minor, payee_business_id, payee_id, payee_name, payee_workspace_id
 		body, _ := json.Marshal(in)
-		a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/payments", body)
+		a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/mandates", body)
 	default:
 		methodNotAllowed(w, "GET, POST")
 	}
 }
 
-// handleMoneyMandates — GET /api/money/mandates lists those granted and received; POST grants one.
-func (a *app) handleMoneyMandates(w http.ResponseWriter, r *http.Request, t tenant) {
-	switch r.Method {
-	case http.MethodGet:
-		a.agentBankRelayPath(w, r, t, http.MethodGet, "/v1/money/mandates", nil)
-	case http.MethodPost:
-		var in struct {
-			AccountID        string `json:"account_id"`
-			PayeeWorkspaceID string `json:"payee_workspace_id"`
-			PayeeBusinessID  string `json:"payee_business_id"`
-			PayeeID          string `json:"payee_id"`
-			PayeeName        string `json:"payee_name"`
-			MaxPerPullMinor  int64  `json:"max_per_pull_minor"`
-			MaxPerMonthMinor int64  `json:"max_per_month_minor"`
-			ExpiresAt        string `json:"expires_at"`
+// handleMoneyMandateChallenge — POST /api/money/mandates/challenge: the challenge the owner signs, over the grant as it
+// will be sent or over the approval of the requested mandate mandate_id.
+func (a *app) handleMoneyMandateChallenge(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	var in struct {
+		Grant     *mandateGrant `json:"grant,omitempty"`
+		MandateID string        `json:"mandate_id,omitempty"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil || (in.Grant == nil) == (in.MandateID == "") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `body must be {"grant"} or {"mandate_id"}`})
+		return
+	}
+	// UPSTREAM-BINDS-ONLY lensMandateChallengeBody: account_id, assertion, expires_at, max_per_month_minor, max_per_pull_minor, payee_business_id, payee_id, payee_name, payee_workspace_id
+	body, _ := json.Marshal(in)
+	a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/mandates/challenge", body)
+}
+
+// handleMoneyMandateDecide — POST /api/money/mandates/{id}/approve {assertion} approves an agent's requested mandate,
+// signed once the workspace has a passkey or device key (Lens refuses it unsigned then); POST /api/money/mandates/{id}/decline declines it, which moves nothing and so is not signed.
+func (a *app) handleMoneyMandateDecide(approve bool) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
 		}
-		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+		id, ok := pathID(w, "mandate id", r.PathValue("id"))
+		if !ok {
+			return
+		}
+		if !approve {
+			a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/mandates/"+url.PathEscape(id)+"/decline", nil)
+			return
+		}
+		var in struct {
+			Assertion json.RawMessage `json:"assertion,omitempty"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 			return
 		}
-		// UPSTREAM-BINDS-ONLY lensMandateGrantBody: none
+		// UPSTREAM-BINDS-ONLY lensMandateApproveBody: none
 		body, _ := json.Marshal(in)
-		a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/mandates", body)
-	default:
-		methodNotAllowed(w, "GET, POST")
+		a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/mandates/"+url.PathEscape(id)+"/approve", body)
 	}
 }
 
@@ -269,15 +360,34 @@ func (a *app) handleMoneyPayout(w http.ResponseWriter, r *http.Request, t tenant
 	a.agentBankRelayPath(w, r, t, http.MethodGet, "/v1/money/payouts/"+url.PathEscape(id), nil)
 }
 
-// handleMoneyPayoutApprove — POST /api/money/payouts/{id}/approve: every valid row is paid, once.
-func (a *app) handleMoneyPayoutApprove(w http.ResponseWriter, r *http.Request, t tenant) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
+// handleMoneyPayoutApprove — POST /api/money/payouts/{id}/approve: every valid row is paid, once. B58.6: once the
+// workspace has a passkey or a device key, Lens pays a batch only with "assertion", that key's signature over the batch's
+// own challenge (Lens B58.5), so it goes up exactly as sent, a passkey's or the phone's; and
+// POST /api/money/payouts/{id}/approve/challenge relays the challenge, which Lens builds from the batch as it stands.
+func (a *app) handleMoneyPayoutApprove(challenge bool) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		id, ok := pathID(w, "batch id", r.PathValue("id"))
+		if !ok {
+			return
+		}
+		path := "/v1/money/payouts/" + url.PathEscape(id) + "/approve"
+		if challenge {
+			a.agentBankRelayPath(w, r, t, http.MethodPost, path+"/challenge", nil)
+			return
+		}
+		var in struct {
+			Assertion json.RawMessage `json:"assertion,omitempty"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		// UPSTREAM-BINDS-ONLY lensPayoutApproveBody: none
+		body, _ := json.Marshal(in)
+		a.agentBankRelayPath(w, r, t, http.MethodPost, path, body)
 	}
-	id, ok := pathID(w, "batch id", r.PathValue("id"))
-	if !ok {
-		return
-	}
-	a.agentBankRelayPath(w, r, t, http.MethodPost, "/v1/money/payouts/"+url.PathEscape(id)+"/approve", nil)
 }

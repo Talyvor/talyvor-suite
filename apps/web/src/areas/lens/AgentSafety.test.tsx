@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -17,6 +17,7 @@ function mockBff(passkey = false) {
     const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
     if (init?.method === 'POST') posts.push({ url, body: init.body ? JSON.parse(String(init.body)) : null })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents')
       return json({
         workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0,
@@ -58,11 +59,32 @@ function mockBff(passkey = false) {
   return posts
 }
 
+// B55.2 — no passkey and the phone's key, answered over mockBff's stub; every POST from here is counted.
+function onlyThePhoneKey(extra: Record<string, unknown> = {}) {
+  const inner = vi.mocked(fetch).getMockImplementation()!
+  const posts: string[] = []
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] })
+    if (url in extra) return json(extra[url])
+    if ((init?.method ?? 'GET') !== 'GET') posts.push(url)
+    return inner(input, init)
+  })
+  return posts
+}
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   queryClient.clear()
 })
+
+/** B57.8 — the page's own switch: the top bar and the kill banner carry ones with the same names. */
+async function fleet() {
+  return within(await screen.findByTestId('pause-every-agent'))
+}
 
 describe('the Agent Bank stops every agent or one, and shows what they are spending', () => {
   it('pauses every agent with a reason, starts them again, pauses one, and shows the forecast and an alert', async () => {
@@ -74,14 +96,14 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
     expect(screen.getByText(/spent/, { selector: 'div' }).textContent).toContain('Researcher spent 0.6 LXC in an hour')
 
     fireEvent.change(await screen.findByLabelText('Why every agent is paused'), { target: { value: 'audit' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Pause every agent' }))
-    expect((await screen.findByTestId('agents-all-paused')).textContent).toContain('Every agent is paused — audit.')
+    fireEvent.click((await fleet()).getByRole('button', { name: 'Pause every agent' }))
+    expect((await screen.findByTestId('agents-all-paused')).textContent).toContain('Every agent is paused: audit.')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start every agent again' }))
-    await screen.findByRole('button', { name: 'Pause every agent' })
+    fireEvent.click((await fleet()).getByRole('button', { name: 'Start every agent again' }))
+    await (await fleet()).findByRole('button', { name: 'Pause every agent' })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
-    expect((await screen.findByTestId('agent-paused')).textContent).toBe('Researcher is paused — paused from Agent Wallets.')
+    expect((await screen.findByTestId('agent-paused')).textContent).toBe('Researcher is paused: paused from Agent Wallets.')
     expect(screen.getByText('Paused')).toBeTruthy()
 
     expect(posts.map((p) => [p.url, p.body])).toEqual([
@@ -113,9 +135,9 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
     fireEvent.click(screen.getByRole('button', { name: 'Resume Researcher' }))
     await screen.findByRole('button', { name: 'Pause Researcher' })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pause every agent' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Start every agent again' }))
-    await screen.findByRole('button', { name: 'Pause every agent' })
+    fireEvent.click((await fleet()).getByRole('button', { name: 'Pause every agent' }))
+    fireEvent.click(await (await fleet()).findByRole('button', { name: 'Start every agent again' }))
+    await (await fleet()).findByRole('button', { name: 'Pause every agent' })
 
     const assertion = { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' }
     expect(posts.map((p) => [p.url, p.body])).toEqual([
@@ -128,5 +150,25 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
       ['/api/agents/resume-all', { assertion }],
     ])
     expect(get.mock.calls[1][0].publicKey.userVerification).toBe('required')
+  })
+})
+
+describe('starting agents again when only the phone holds a key (B55.2)', () => {
+  it('pauses from here, but sends no resume and says to start them on the phone', async () => {
+    const posts = mockBff()
+    onlyThePhoneKey()
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
+    expect(await screen.findByText('Resume Researcher on your phone with Face ID.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resume Researcher' })).toBeNull()
+
+    fireEvent.click((await fleet()).getByRole('button', { name: 'Pause every agent' }))
+    expect(await screen.findByText('Start your agents again on your phone with Face ID.')).toBeInTheDocument()
+    expect((await fleet()).queryByRole('button', { name: 'Start every agent again' })).toBeNull()
+    expect(screen.getAllByRole('link', { name: 'Add this browser' }).length).toBeGreaterThan(0)
+
+    expect(posts.map((p) => p.url)).toEqual(['/api/agents/agt_1/pause', '/api/agents/pause-all'])
   })
 })

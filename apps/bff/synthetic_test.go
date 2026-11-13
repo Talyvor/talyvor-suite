@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -290,6 +291,64 @@ func TestSyntheticSessionIsNeverReprovisioned(t *testing.T) {
 	}
 	if lens.provisionCalls != 0 {
 		t.Fatalf("a synthetic session called /v1/provision %d time(s) — that creates a real workspace", lens.provisionCalls)
+	}
+}
+
+// B54.32 — every synthetic sign-in attempt, on either door, writes exactly one log line naming its
+// outcome and its door, and never the operator key or the Lens token.
+func TestSyntheticSignInLogsEveryAttemptWithItsDoor(t *testing.T) {
+	past := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+	cases := []struct {
+		name, outcome, bffKey, method, sentKey, body string
+	}{
+		{"key unset on the BFF", "not-enabled", "", http.MethodPost, testSyntheticKey, ""},
+		{"wrong method", "wrong-method", testSyntheticKey, http.MethodGet, testSyntheticKey, ""},
+		{"wrong key", "bad-key", testSyntheticKey, http.MethodPost, "not-the-key", ""},
+		{"bad body", "bad-body", testSyntheticKey, http.MethodPost, testSyntheticKey, `{"workspace_id":`},
+		{"a real account", "refused-by-lens", testSyntheticKey, http.MethodPost, testSyntheticKey,
+			fmt.Sprintf(`{"workspace_id":%q,"token":"jwt-real"}`, testRealWS)},
+		{"an expired token", "expired", testSyntheticKey, http.MethodPost, testSyntheticKey,
+			fmt.Sprintf(`{"workspace_id":%q,"token":"jwt-synthetic","expires_at":%q}`, testSyntheticWS, past)},
+		{"signed in", "created", testSyntheticKey, http.MethodPost, testSyntheticKey,
+			fmt.Sprintf(`{"workspace_id":%q,"token":"jwt-synthetic"}`, testSyntheticWS)},
+	}
+	for _, door := range []struct{ name, path string }{{"browser", "/auth/synthetic"}, {"phone", syntheticMobilePath}} {
+		for _, tc := range cases {
+			t.Run(tc.name+"/"+door.name, func(t *testing.T) {
+				lens := newSyntheticLens(t)
+				ts := httptest.NewServer(syntheticApp(t, lens, tc.bffKey))
+				defer ts.Close()
+				req, _ := http.NewRequest(tc.method, ts.URL+door.path, strings.NewReader(tc.body))
+				req.Header.Set("Origin", "https://app.talyvor.com")
+				req.Header.Set(syntheticKeyHeader, tc.sentKey)
+
+				var logs strings.Builder
+				prev := log.Writer()
+				log.SetOutput(&logs)
+				resp, err := ts.Client().Do(req)
+				log.SetOutput(prev)
+				if err != nil {
+					t.Fatal(err)
+				}
+				resp.Body.Close()
+
+				var lines []string
+				for _, l := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+					if strings.Contains(l, "synthetic sign-in") {
+						lines = append(lines, l)
+					}
+				}
+				want := "synthetic sign-in " + tc.outcome + " door=" + door.name
+				if len(lines) != 1 || !strings.Contains(lines[0], want) {
+					t.Fatalf("log lines = %q, want exactly one containing %q", lines, want)
+				}
+				for _, secret := range []string{testSyntheticKey, "not-the-key", "jwt-real", "jwt-synthetic"} {
+					if strings.Contains(logs.String(), secret) {
+						t.Errorf("the log carries %q: %q", secret, logs.String())
+					}
+				}
+			})
+		}
 	}
 }
 

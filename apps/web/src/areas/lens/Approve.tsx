@@ -6,9 +6,10 @@ import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
-import { BOOK_KEY } from './AgentBank'
+import { BOOK_KEY, OnThePhone, PREPARED_KEY, useKeys } from './AgentBank'
 import { BILLS_KEY, PAYEES_KEY, PAYMENTS_KEY } from './Pay'
 import { assertOver } from './passkeys'
+import { WorkspaceLabel, paymentRequestCapabilities } from '../../labels/workspace'
 import { AgentBankError, type AgentTrust, type ApprovalStatement, type PaymentRequest, type PaymentRequestItem, agentBankApi, formatMinor, refusalText } from './agentBankApi'
 
 // Approve.tsx — B40.9: /approve/<id>, the page a prepared request's approval link opens (Lens B40.3) — from Chat, an
@@ -20,9 +21,43 @@ export const paymentRequestKey = (id: string) => ['money-payment-request', id]
 
 const DECIDED: Record<string, string> = {
   approved: 'Approved. Each payment you approved is paid once.',
-  cancelled: 'This request was cancelled. Nothing will be paid.',
-  auto: 'Nothing here needs your approval: each payment is inside a mandate you signed.',
+  auto: 'Paid without asking you: each payment is inside a permission you signed.',
   blocked: 'Nothing here can be paid: every payment was blocked.',
+  // B55.10 — Lens reads a request nobody answered within its approval life as expired (B55.9).
+  expired: 'This request expired: nobody approved it within 24 hours. Nothing waiting was paid.',
+}
+
+/** B55.33 — a decided request in one line; a status Lens adds later reads as closed, never as its code. */
+export const decidedLine = (status: string) => DECIDED[status] ?? 'This request is closed.'
+
+/** B55.33 — each item's payment in words, as on the phone (B55.11); a status Lens adds later is "Not paid yet". */
+export function payWords(it: PaymentRequestItem): string {
+  switch (it.pay_status) {
+    case 'pending':
+      return 'On its way'
+    case 'sent':
+      return 'Sent'
+    case 'completed':
+      return 'Paid'
+    case 'failed':
+      return 'Not paid: it failed'
+    case 'returned':
+      return 'Came back'
+    case 'refused':
+      return it.pay_detail ? `Not paid: ${it.pay_detail}` : 'Not paid'
+    case 'not_approved':
+      return 'Not paid: you left it out'
+    case 'not_paid':
+      return 'Not paid: a marketplace purchase is not paid from here yet'
+    default:
+      return 'Not paid yet'
+  }
+}
+
+/** B55.22 — Decline cancels only what waits: a covered item paid when it was prepared (B55.21) stays paid, and is said. */
+export function declined(r: PaymentRequest): string {
+  const n = r.items.filter((it) => it.decision === 'auto' && it.payment_id).length
+  return `Declined. Nothing that waited for you will be paid.${n > 0 ? ` ${n} inside a permission you signed ${n === 1 ? 'was' : 'were'} paid.` : ''}`
 }
 
 /** Who prepared it, in words: Lens names the client "chat", "voice", "mcp:<client id>" or "key:<key id>" (B40.3). */
@@ -93,6 +128,8 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
   const payees = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees })
   const payments = useQuery({ queryKey: PAYMENTS_KEY, queryFn: agentBankApi.payments })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
+  // B55.2 — with the phone's key alone no passkey here can sign the statement, so nothing is asked of this browser.
+  const { hold, onlyThePhone } = useKeys()
   const asked = r.items.filter((it) => it.decision === 'needs_approval')
   const [unticked, setUnticked] = useState<Set<number>>(new Set())
   const [ticksOf, setTicksOf] = useState(id)
@@ -117,12 +154,16 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
       // B41.2 — a request made of bills marks each bill it paid as paid.
       void qc.invalidateQueries({ queryKey: BILLS_KEY })
       void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
+      void qc.invalidateQueries({ queryKey: PREPARED_KEY })
     },
   })
-  // B45.2 — declined: Lens cancels the request, so none of it is paid.
+  // B45.2 — declined: Lens cancels what waits, so none of that is paid (a covered item paid at prepare stays paid, B55.21).
   const decline = useMutation({
     mutationFn: () => agentBankApi.cancelRequest(r.id),
-    onSuccess: (done) => qc.setQueryData(paymentRequestKey(r.id), done),
+    onSuccess: (done) => {
+      qc.setQueryData(paymentRequestKey(r.id), done)
+      void qc.invalidateQueries({ queryKey: PREPARED_KEY })
+    },
   })
 
   // Known and verified are read from the payees and past payments; unread, they are not claimed either way.
@@ -136,7 +177,7 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
 
   return (
     <Card>
-      <CardHeader>{r.summary || 'Payments waiting for your approval'}</CardHeader>
+      <CardHeader aside={<WorkspaceLabel capability={paymentRequestCapabilities(r)} />}>{r.summary || 'Payments waiting for your approval'}</CardHeader>
       <div className="flex flex-col gap-3 px-gutter py-3" data-testid="approve-card">
         <p className="flex flex-wrap items-center gap-2 text-caption text-ink">
           <span>
@@ -160,14 +201,14 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
             ) : null}
           </p>
         ) : (
-          <Note ok={r.status === 'approved'}>{DECIDED[r.status] ?? r.status}</Note>
+          <Note ok={r.status === 'approved'}>{r.status === 'cancelled' ? declined(r) : decidedLine(r.status)}</Note>
         )}
         {unread ? <p className="text-caption text-muted">Whether each payee is new or verified could not be read just now.</p> : null}
         <ul className="flex flex-col divide-y divide-rule">
           {r.items.map((it) => {
             const payee = saved.find((p) => p.id === it.payee_id)
             const verified = payee ? payee.check === 'exact_match' || !!payee.confirmed_at : false
-            const choosable = pending && it.decision === 'needs_approval'
+            const choosable = pending && !hold && it.decision === 'needs_approval'
             return (
               <li key={it.position} className="flex gap-3 py-3" data-testid={`approve-item-${it.position}`}>
                 {choosable ? (
@@ -192,11 +233,14 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
                         <Pill status={verified ? 'settled' : 'held'}>{verified ? 'Verified' : 'Not verified'}</Pill>
                       </>
                     ) : null}
-                    {(it.flags ?? []).map((f) => (
-                      <Pill key={f.code} status={FLAGS[f.code]?.needsReason ? 'slashed' : 'held'}>
-                        {FLAGS[f.code]?.label ?? f.code}
-                      </Pill>
-                    ))}
+                    {/* B55.33 — a flag Lens adds later draws no pill: its words still show below. */}
+                    {(it.flags ?? []).map((f) =>
+                      FLAGS[f.code] ? (
+                        <Pill key={f.code} status={FLAGS[f.code].needsReason ? 'slashed' : 'held'}>
+                          {FLAGS[f.code].label}
+                        </Pill>
+                      ) : null,
+                    )}
                     {it.reference ? <span className="break-all">Reference: {it.reference}</span> : null}
                   </div>
                   {(it.flags ?? []).map((f) => (
@@ -206,11 +250,10 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
                   ))}
                   <p className="text-caption text-muted">
                     {it.decision === 'auto'
-                      ? 'Inside a mandate you signed: paid with this request, no approval needed.'
+                      ? 'Inside a permission you signed: paid without asking you.'
                       : it.decision === 'blocked'
                         ? `Blocked: ${it.reason}.`
                         : `Asks for approval: ${it.reason}.`}
-                    {it.rule ? <span className="font-figure"> ({it.rule})</span> : null}
                   </p>
                   {it.pay_status === 'held' ? (
                     <p className="text-caption text-ink">
@@ -220,14 +263,14 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
                       </Link>
                     </p>
                   ) : it.pay_status ? (
-                    <p className="text-caption text-ink">Payment: {it.pay_status}</p>
+                    <p className="text-caption text-ink">{payWords(it)}</p>
                   ) : null}
                 </div>
               </li>
             )
           })}
         </ul>
-        {pending && reasonNeeded ? (
+        {pending && !hold && reasonNeeded ? (
           <label className="flex flex-col gap-1 text-caption text-ink">
             A payment you ticked may be a duplicate or has changed bank details. Say why you are paying it: your reason is signed with the approval.
             <textarea
@@ -240,7 +283,8 @@ export function ApprovalCard({ id, request: r }: { id: string; request: PaymentR
             />
           </label>
         ) : null}
-        {pending ? (
+        {pending && onlyThePhone ? <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone> : null}
+        {pending && !hold ? (
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="primary" disabled={ticked.length === 0 || (reasonNeeded && !reason) || approve.isPending || decline.isPending} onClick={() => approve.mutate()}>
               {approve.isPending ? 'Approving…' : `Approve ${ticked.length === 1 ? '1 payment' : `${ticked.length} payments`} with a passkey`}

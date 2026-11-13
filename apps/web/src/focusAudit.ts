@@ -1,4 +1,5 @@
 import { onCommit } from './auditScope'
+import { inPocket } from './pocketPending'
 
 /**
  * THE FOCUS AUDIT — the accent is the product's focus signal, and it must be the ONLY one.
@@ -112,9 +113,26 @@ export function isKeyboardFocusable(el: Element): boolean {
 }
 
 /** Does this element carry the WHOLE system ring? A partial ring is not the ring. */
+/**
+ * B57.4 — POCKET'S RING, on pages held to Pocket's rules (pocketPending.ts): 3px of tangerine
+ * (`pocketFocusRing` in packages/ui/src/pocket/focus.ts). A field's ring is drawn on the box around
+ * it (`focus-within`), so the unit beside the value sits inside the ring.
+ */
+export const POCKET_FOCUS_RING_CLASSES = [
+  'outline-none',
+  'focus-visible:outline',
+  'focus-visible:outline-3',
+  'focus-visible:outline-offset-2',
+  'focus-visible:outline-tangerine',
+] as const
+const POCKET_BOX_RING_CLASSES = ['focus-within:outline', 'focus-within:outline-3', 'focus-within:outline-tangerine'] as const
+
 export function carriesFocusRing(el: Element): boolean {
   const cs = classesOf(el)
-  return FOCUS_RING_CLASSES.every((c) => cs.includes(c))
+  if (FOCUS_RING_CLASSES.every((c) => cs.includes(c))) return true
+  if (!inPocket(el)) return false
+  const box = el.parentElement ? classesOf(el.parentElement) : []
+  return POCKET_FOCUS_RING_CLASSES.every((c) => cs.includes(c)) || POCKET_BOX_RING_CLASSES.every((c) => box.includes(c))
 }
 
 /** An underlined <a> — a link in prose, exempt with its reason recorded above. */
@@ -172,7 +190,7 @@ function ringedByRawAttribute(root: ParentNode): number {
   let n = 0
   for (const el of Array.from(root.querySelectorAll('*'))) {
     const raw = el.getAttribute('class') ?? ''
-    if (raw.includes('focus-visible:outline-accent')) n++
+    if (raw.includes('focus-visible:outline-accent') || raw.includes('outline-tangerine')) n++
   }
   return n
 }

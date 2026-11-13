@@ -1,26 +1,28 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, CardHeader, Input, RevealOnce, Row, inlineLink } from '@talyvor/ui'
+import { Button, Card, Dialog, EmptyState, Eyebrow, Field, Icon, Input, Row as PocketRow, showSnack } from '@talyvor/ui/pocket'
 import { keysApi, type MintResult, type WorkspaceAPIKey } from './keysApi'
 import { formatWhen } from './format'
 import { ApiError, getJSON, readable } from '../../lib/api'
-import { ConnectedList } from './ConnectAI'
+import { CallList, CONNECTED_KEY, NEVER, SCOPE_WORDS, revokeAssistant, useConnectedAssistants, type Connected } from './ConnectAI'
 import { isSessionExpired } from '../../lib/productState'
 import { PanelFailure } from '../../components/SessionExpiredBar'
-import { Region, RegionScreen } from '../../components/Region'
+import { CodeCopy } from './Setup'
+import { DESIGN_ATTR } from '../../pocketPending'
+import { DevelopersHead } from './Developers'
 
 // API keys — LIVE. This screen exists because of one real failure: Lens's mint
 // response returns `key` and `prefix` ADJACENT in one line of JSON, they look
 // nearly identical, and the wrong one got copied — ten minutes of "invalid API
 // key". The design makes that mistake structurally impossible:
 //
-//   · The CREDENTIAL appears exactly once, in a RevealOnce card, with one
-//     primary action — Copy key — that copies the key and nothing else. On
-//     dismissal it leaves the DOM and the mutation cache; there is no way back.
-//   · The PREFIX never sits beside the key at equal weight — a labeled,
-//     separated "not a credential" block — and in the list rows, where a
-//     credential never appears at all.
+//   · The CREDENTIAL appears exactly once, in the New key dialog, with one Copy
+//     that copies the key and nothing else. On Done, or on closing the dialog, it
+//     leaves the DOM and the mutation cache; there is no way back.
+//   · The PREFIX never sits beside the key at equal weight — a labeled "not a
+//     credential" line under it — and in the list rows, where a credential never
+//     appears at all.
 //
 // WIRED to the real BFF routes (apps/bff/keys.go), which hold the workspace key
 // server-side:
@@ -29,23 +31,11 @@ import { Region, RegionScreen } from '../../components/Region'
 //     write, guarded by the BFF's Origin check — satisfied automatically because
 //     keysApi.mint posts to a same-origin relative path (see keysApi.ts).
 //
-// ── W1.1.5 — WHAT THIS REPLACED ─────────────────────────────────────────────
-//
-// ONE card holding four different ideas — where to learn what a key is FOR, how to mint one, what
-// went wrong, and the keys that exist — with no heading of the screen's own and no marking between
-// them. The sticky banner wrote "Keys" and everything under it was one anonymous panel, so a reader
-// moving by region got exactly one stop on the screen that hands out credentials and revokes them.
-//
-// ⚠ AND ITS EMPTY STATE WAS A ROW IN A LIST. "No keys yet. Create one above." is a sentence about
-// the LIST. The state a new signup is in is a WORKSPACE with no credential at all, and the thing
-// that state most needs said — that a key on its own does nothing until a tool is pointed at Lens
-// — was a caption in the corner of the card. It is the screen's own state now, at page scale, with
-// the two steps that end it. The list-level sentence is GONE rather than kept beside it: naming
-// one absence twice is what W1.1.4 found on /billing one directory over.
-//
-// The region marking is components/Region.tsx's, shared with Overview, Setup and Billing.
+// B57.55 — drawn as Pocket's w-dev-keys: the keys as rows in one card, New key in a dialog
+// (w-dev-keys+new-key) and revoking in another that asks first (w-dev-keys+revoke-key).
+
 /**
- * KeyRow — one key, with the way to destroy it.
+ * RevokeKey — the dialog that destroys one key.
  *
  * ⚠ WHAT THE CONFIRM IS FOR, ARGUED. The obvious confirm is "Are you sure?", and it guards the
  * wrong thing. Nobody revokes a key by accidentally pressing a button they did not mean to press;
@@ -58,21 +48,16 @@ import { Region, RegionScreen } from '../../components/Region'
  * looking at the row, and it fails closed against the specific mistake — reaching for the wrong row
  * — that a yes/no dialog waves straight through. It is the same standard used for deleting a
  * repository or a database, for the same reason: irreversible, and the damage is silent.
- *
- * The cost is real: cleaning up three dead keys means typing three identifiers. That is accepted
- * deliberately. The dangerous case is revoking a LIVE key by mistake, and that is exactly the case
- * that should be slow.
  */
-function KeyRow({ k }: { k: WorkspaceAPIKey }) {
+function RevokeKey({ k, onClose, onRevoked }: { k: WorkspaceAPIKey; onClose: () => void; onRevoked: () => void }) {
   const qc = useQueryClient()
-  const [confirming, setConfirming] = useState(false)
   const [typed, setTyped] = useState('')
 
   const revoke = useMutation({
     mutationFn: () => keysApi.revoke(k.id),
     onSuccess: async () => {
-      setConfirming(false)
-      setTyped('')
+      showSnack({ title: `${k.key_prefix} is revoked`, line: 'Treat it as gone in 5 minutes.' })
+      onRevoked()
       await qc.invalidateQueries({ queryKey: ['keys'] })
     },
   })
@@ -82,71 +67,54 @@ function KeyRow({ k }: { k: WorkspaceAPIKey }) {
   const armed = typed.trim() === k.key_prefix
 
   return (
-    <>
-      <Row stack label={k.name} hint={keyFacts(k)}>
-        <span className="font-mono text-caption text-muted">{k.key_prefix}</span>
-        {!confirming ? (
-          // The accessible name carries the identifier, so the control names WHICH key it destroys
-          // rather than being one of several identical "Revoke" buttons.
-          <Button variant="default" onClick={() => setConfirming(true)} aria-label={`Revoke ${k.key_prefix}`}>
-            Revoke
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Revoke ${k.key_prefix}?`}
+      actions={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Keep it
           </Button>
-        ) : null}
-      </Row>
-      {confirming ? (
-        <div className="space-y-2 border-t border-rule px-gutter py-3">
-          <p className="text-body text-ink">
-            Revoking <span className="font-mono">{k.key_prefix}</span> cannot be undone, and anything
-            still using it stops working without warning.
-          </p>
-          {/* ⚠ THIS SENTENCE IS LOAD-BEARING AND WAS READ FROM SOURCE. Lens caches validated keys
-              in-process for 5 minutes (internal/auth/apikeys.go, cacheTTL) and the revoke route
-              deletes the row without purging that cache, so a key in active use keeps working for
-              up to the TTL. An operator killing a LEAKED key has to know that; "revoked" implying
-              "dead now" would be the most dangerous sentence on this screen. */}
-          <p className="text-caption text-muted">
-            Traffic already using this key can keep working for up to 5 minutes — Lens caches key
-            checks for that long. Treat it as revoked in 5 minutes, not immediately.
-          </p>
-          <div className="flex items-center gap-2">
-            <Input
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              placeholder={k.key_prefix}
-              aria-label={`Type ${k.key_prefix} to confirm`}
-              className="w-52 font-mono"
-            />
-            <Button variant="danger" onClick={() => revoke.mutate()} disabled={!armed || revoke.isPending}>
-              {revoke.isPending ? 'Revoking…' : 'Revoke key'}
-            </Button>
-            <Button
-              variant="default"
-              onClick={() => {
-                setConfirming(false)
-                setTyped('')
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-          {revoke.isError ? (
-            <p className="text-body text-muted">
-              {revoke.error instanceof ApiError && revoke.error.status === 404
-                ? 'That key is already gone, or does not belong to this workspace. Nothing was changed.'
-                : 'Couldn’t revoke that key — nothing was changed. Try again.'}
-            </p>
-          ) : null}
-        </div>
+          <Button
+            variant="danger"
+            onClick={() => revoke.mutate()}
+            disabled={revoke.isPending}
+            disabledReason={armed ? undefined : `Type ${k.key_prefix} above first.`}
+          >
+            {revoke.isPending ? 'Revoking…' : 'Revoke key'}
+          </Button>
+        </>
+      }
+    >
+      {/* ⚠ THE 5 MINUTES ARE LOAD-BEARING AND WERE READ FROM SOURCE. Lens caches validated keys
+          in-process for 5 minutes (internal/auth/apikeys.go, cacheTTL) and the revoke route deletes
+          the row without purging that cache, so a key in active use keeps working for up to the TTL.
+          An operator killing a LEAKED key has to know that; "revoked" implying "dead now" would be
+          the most dangerous sentence on this screen. */}
+      <p>
+        It cannot be undone, and anything still using it stops working. Traffic already using it can keep working for up to
+        5 minutes.
+      </p>
+      <Field label={`Type ${k.key_prefix} to confirm`}>
+        <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={k.key_prefix} className="font-mono" />
+      </Field>
+      {revoke.isError ? (
+        <p role="alert" className="text-body text-ink">
+          {revoke.error instanceof ApiError && revoke.error.status === 404
+            ? 'That key is already gone, or does not belong to this workspace. Nothing was changed.'
+            : 'Couldn’t revoke that key. Nothing was changed. Try again.'}
+        </p>
       ) : null}
-    </>
+    </Dialog>
   )
 }
 
-// B28.266 — what tells one key from another: three keys minted a minute apart read identically as
-// "proxy · created Oct 4, 03:29". Lens stamps last_used_at on every key check it passes, so whether a
+// B28.266 — what tells one key from another: three keys made a minute apart read identically as
+// "proxy · made Oct 4, 03:29". Lens stamps last_used_at on every key check it passes, so whether a
 // key is in use is the fact a reader revoking one most needs; expiry is drawn only when one is set.
 function keyFacts(k: WorkspaceAPIKey): string {
-  const facts = [k.scopes.join(', '), `created ${formatWhen(k.created_at)}`]
+  const facts = [k.scopes.join(', '), `made ${formatWhen(k.created_at)}`]
   facts.push(k.last_used_at ? `last used ${formatWhen(k.last_used_at)}` : 'never used')
   if (k.expires_at) facts.push(`expires ${formatWhen(k.expires_at)}`)
   return facts.join(' · ')
@@ -154,8 +122,8 @@ function keyFacts(k: WorkspaceAPIKey): string {
 
 // B41.15 — everything else allowed to act for the workspace, from Lens's GET /v1/money/access (B41.115): the
 // permission mandates its owner signed for assistants and agents, the phones' device keys and the passkeys. Each row
-// says what it may do, when it was last used and when it expires, and is revoked in one tap — no typed confirm, since
-// a mandate or a device is named in words, not by one of many look-alike identifiers.
+// says what it may do, when it was last used and when it expires. B57.94: each is drawn as a Pocket row, named in words,
+// and revoking or removing one asks first in a dialog that names it (w-dev-keys, w-security+remove-key).
 interface AccessItem {
   kind: 'mandate' | 'device' | 'passkey'
   id: string
@@ -177,6 +145,18 @@ const STATUS_WORD: Record<AccessItem['status'], string> = {
   revoked: 'Revoked',
 }
 
+/**
+ * The row's name in words. The BFF names a mandate by the assistant it was signed for (B55.42) and says "A permission
+ * you signed" when it cannot; a client id it passed through anyway ("mcp:…", "key:…") is never printed.
+ */
+function nameOf(it: AccessItem): string {
+  const words = it.name
+    .split(', ')
+    .filter((n) => n && !/^[a-z]+:/.test(n))
+    .join(', ')
+  return words || (it.kind === 'mandate' ? 'A permission you signed' : KIND_WORD[it.kind])
+}
+
 function accessFacts(it: AccessItem): string {
   const facts = [KIND_WORD[it.kind], `may ${it.may}`, `added ${formatWhen(it.created_at)}`]
   facts.push(it.last_used_at ? `last used ${formatWhen(it.last_used_at)}` : 'never used')
@@ -190,119 +170,257 @@ const REVOKE_PATH: Partial<Record<AccessItem['kind'], (id: string) => string>> =
   device: (id) => `/api/money/devices/${encodeURIComponent(id)}/revoke`,
 }
 
+/** Lens's 409 in its own words: the last key, or a key that owns an agent's account (B55.15). */
+class Refusal extends ApiError {
+  constructor(
+    path: string,
+    /** Lens's sentence. Never invented — absent stays absent. */
+    readonly reason: string,
+  ) {
+    super(409, path)
+    this.name = 'Refusal'
+  }
+}
+
 async function revokeAccess(it: AccessItem): Promise<void> {
   const path = REVOKE_PATH[it.kind]!(it.id)
   const res = await fetch(path, { method: 'POST', headers: { Accept: 'application/json' } })
+  if (res.status === 409) {
+    const said = ((await res.json().catch(() => null)) as { error?: unknown } | null)?.error
+    if (typeof said === 'string' && said) throw new Refusal(path, said)
+  }
   if (!res.ok) throw new ApiError(res.status, path)
 }
 
-function AccessList() {
+/** A passkey or a phone key: what approves payments. */
+const approves = (it: AccessItem) => it.kind !== 'mandate'
+
+/**
+ * RevokeAccess — the dialog that asks before a permission is revoked or a phone or passkey removed. Unlike an API key,
+ * each is named in words, so the dialog names it rather than asking for an identifier typed. The last key that can
+ * approve offers no Remove: with none, nobody could approve. Lens refuses that too (B55.15); this only says it first.
+ */
+function RevokeAccess({ it, last, onClose }: { it: AccessItem; last: boolean; onClose: () => void }) {
   const qc = useQueryClient()
+  const name = nameOf(it)
+  const removing = approves(it)
+  const cut = useMutation({
+    mutationFn: () => revokeAccess(it),
+    onSuccess: () => {
+      showSnack(
+        removing
+          ? { title: `Removed: ${name}`, line: 'It can no longer approve anything.' }
+          : { title: `Revoked: ${name}`, line: `It can no longer ${it.may}.` },
+      )
+      onClose()
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ACCESS_KEY }),
+  })
+  const verb = removing ? 'Remove it' : 'Revoke'
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`${removing ? 'Remove' : 'Revoke'} “${name}”?`}
+      actions={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Keep it
+          </Button>
+          {removing && last ? null : (
+            <Button variant="danger" onClick={() => cut.mutate()} disabled={cut.isPending}>
+              {cut.isPending ? (removing ? 'Removing…' : 'Revoking…') : verb}
+            </Button>
+          )}
+        </>
+      }
+    >
+      <p>{removing ? 'It can no longer approve anything.' : `It can no longer ${it.may}.`}</p>
+      {removing && last ? <p>It is your last key. With none, nobody could approve, so add another first.</p> : null}
+      {cut.isError ? (
+        <p role="alert" className="text-body text-ink">
+          {cut.error instanceof Refusal ? cut.error.reason : 'That was not revoked. Nothing was changed. Try again.'}
+        </p>
+      ) : null}
+    </Dialog>
+  )
+}
+
+function AccessList() {
+  const [asking, setAsking] = useState<AccessItem | null>(null)
   const list = useQuery({
     queryKey: ACCESS_KEY,
     queryFn: async () =>
       readable<{ items: AccessItem[] }>('/api/money/access', await getJSON<unknown>('/api/money/access'), { items: 'array' })
         .items,
   })
-  const cut = useMutation({ mutationFn: revokeAccess, onSettled: () => qc.invalidateQueries({ queryKey: ACCESS_KEY }) })
 
-  if (list.isPending) return <div className="px-gutter py-3 text-body text-muted">Loading…</div>
+  if (list.isPending) return <p className="text-body text-ink-2">Loading…</p>
   if (list.isError)
     return (
-      <div className="px-gutter py-3 text-body text-muted">
+      <p className="text-body text-ink-2">
         {list.error instanceof ApiError && list.error.status === 403
           ? 'Only the workspace’s owner or an admin sees the permissions, phones and passkeys that act for it.'
           : 'The permissions, phones and passkeys that act for this workspace were not read. This is a fault, not an empty list.'}
-      </div>
+      </p>
     )
   if (!list.data.length)
-    return <div className="px-gutter py-3 text-body text-muted">No permission, phone or passkey acts for this workspace yet. They appear here when you sign one or add a phone.</div>
+    return <p className="text-body text-ink-2">No permission, phone or passkey acts for this workspace yet. They appear here when you sign one or add a phone.</p>
+  const keys = list.data.filter((it) => approves(it) && it.status === 'active')
   return (
-    <>
+    <div>
       {list.data.map((it) => {
-        const label = `${KIND_WORD[it.kind]} ${it.name}`
-        const pending = cut.isPending && cut.variables?.id === it.id
+        const name = nameOf(it)
         return (
-          <Row key={`${it.kind}-${it.id}`} stack label={it.name || KIND_WORD[it.kind]} hint={accessFacts(it)}>
-            {it.status !== 'active' ? (
-              <span className="text-caption text-muted">{STATUS_WORD[it.status]}</span>
-            ) : it.revoke && REVOKE_PATH[it.kind] ? (
-              <Button variant="default" aria-label={`Revoke ${label}`} disabled={pending} onClick={() => cut.mutate(it)}>
-                {pending ? 'Revoking…' : 'Revoke'}
-              </Button>
-            ) : null}
-          </Row>
+          <PocketRow
+            key={`${it.kind}-${it.id}`}
+            wrap
+            title={name}
+            line={accessFacts(it)}
+            action={
+              it.status !== 'active' ? (
+                <span className="text-body text-ink-3">{STATUS_WORD[it.status]}</span>
+              ) : it.revoke && REVOKE_PATH[it.kind] ? (
+                <Button variant="outline" size="sm" aria-label={`${approves(it) ? 'Remove' : 'Revoke'} ${KIND_WORD[it.kind]} ${name}`} onClick={() => setAsking(it)}>
+                  {approves(it) ? 'Remove' : 'Revoke'}
+                </Button>
+              ) : undefined
+            }
+          />
         )
       })}
-      {cut.isError ? (
-        <div role="alert" className="px-gutter py-3 text-body text-ink">
-          That was not revoked — nothing was changed. Try again.
-        </div>
+      {asking ? (
+        <RevokeAccess it={asking} last={keys.length === 1 && keys[0].id === asking.id} onClose={() => setAsking(null)} />
       ) : null}
-    </>
+    </div>
   )
 }
 
-// The three headlines. Written out together so the screen's one page-scale claim is readable in
-// one place and the empty-state wording cannot drift from the predicate below it.
-//
-// ⚠ THE REVEAL HEADLINE IS THE POINT OF THE WHOLE SCREEN. There is exactly one moment when a
-// credential is on this page and exactly one thing the reader must do about it, and the file
-// header records what happens when that is not said loudly enough: `key` and `prefix` sit adjacent
-// in Lens's JSON, look alike, and the wrong one gets copied. The page-scale claim belongs to that
-// moment while it lasts.
-const HEADLINE = 'Mint and revoke the keys that reach Lens.'
-const HEADLINE_EMPTY = 'This workspace has no keys.'
-const HEADLINE_REVEAL = 'Copy your key now — it is not shown again.'
+/** What a connected assistant may do and when it last acted, in the words its consent screen used. */
+function assistantFacts(c: Connected): string {
+  const facts = c.scopes.map((s) => SCOPE_WORDS[s] ?? s)
+  facts.push(c.last_used_at === NEVER ? 'never used' : `last used ${formatWhen(c.last_used_at)}`)
+  facts.push(`connected ${formatWhen(c.connected_at)}`)
+  return facts.join(' · ')
+}
+
+/** RevokeAssistant — asks before an assistant is disconnected (w-connect+revoke-claude). */
+function RevokeAssistant({ c, onClose, onRevoked }: { c: Connected; onClose: () => void; onRevoked: () => void }) {
+  const qc = useQueryClient()
+  const cut = useMutation({
+    mutationFn: () => revokeAssistant(c.id),
+    onSuccess: () => {
+      showSnack({ title: `${c.name} can no longer reach Talyvor`, line: 'Add it again with your Talyvor address.' })
+      onRevoked()
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: CONNECTED_KEY }),
+  })
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Revoke ${c.name}?`}
+      actions={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Keep it
+          </Button>
+          <Button variant="danger" onClick={() => cut.mutate()} disabled={cut.isPending}>
+            {cut.isPending ? 'Revoking…' : 'Revoke'}
+          </Button>
+        </>
+      }
+    >
+      <p>{c.name} can no longer reach Talyvor. You can add it again at any time.</p>
+      {cut.isError ? (
+        <p role="alert" className="text-body text-ink">
+          That assistant was not revoked. Try again.
+        </p>
+      ) : null}
+    </Dialog>
+  )
+}
+
+/** The assistants this person has connected, as Pocket rows; Revoke asks first. */
+function AssistantList() {
+  const [asking, setAsking] = useState<Connected | null>(null)
+  const [cutName, setCutName] = useState('')
+  const list = useConnectedAssistants()
+  // B41.15 — the revocation stays said after its row is gone: the assistant's next request is refused.
+  const cutDone = cutName ? (
+    <p role="status" className="text-body text-ink">
+      {cutName} is disconnected. Its next request to Talyvor is refused as not connected.
+    </p>
+  ) : null
+
+  if (list.isError)
+    return (
+      <p className="text-body text-ink-2">
+        {list.error instanceof ApiError && list.error.status === 404
+          ? 'Assistants cannot sign in to Talyvor on this server, so none are connected.'
+          : 'Your connected assistants could not be read. This is a fault, not an empty list.'}
+      </p>
+    )
+  if (list.isPending) return <p className="text-body text-ink-2">Reading your connected assistants…</p>
+  return (
+    <div>
+      {cutDone}
+      {list.data.length ? (
+        list.data.map((c) => (
+          <PocketRow
+            key={c.id}
+            wrap
+            title={c.name}
+            line={
+              <>
+                {assistantFacts(c)}
+                <CallList calls={c.calls} />
+              </>
+            }
+            action={
+              <Button variant="outline" size="sm" aria-label={`Revoke ${c.name}`} onClick={() => setAsking(c)}>
+                Revoke
+              </Button>
+            }
+          />
+        ))
+      ) : (
+        <p className="text-body text-ink-2">No assistant is connected yet. Add one from Settings › Connect your AI.</p>
+      )}
+      {asking ? (
+        <RevokeAssistant
+          c={asking}
+          onClose={() => setAsking(null)}
+          onRevoked={() => {
+            setCutName(asking.name)
+            setAsking(null)
+          }}
+        />
+      ) : null}
+    </div>
+  )
+}
 
 /**
- * What ends the empty state. Two steps, and the second is the one this screen never made:
- * a key on its own does nothing.
+ * NewKey — the dialog that makes a key and shows it once.
  *
- * ⚠ THE FIRST STEP HAS NO LINK BECAUSE THE ACTION IS ON THIS PAGE — offering a destination for
- * something two regions down would be a control that points at itself. The second names Setup,
- * which is where the two environment variables live (`areas/lens/Setup.tsx`, the screen first run
- * already routes to).
+ * ⚠ CLOSING IT IS ONE-WAY AND TOTAL, HOWEVER IT IS CLOSED: Done, the close x, Esc or the scrim.
+ * The credential leaves local state AND the mutation cache (mint.reset), so no copy of it survives
+ * anywhere on the page. The list refetches — the new key returns from the server BY PREFIX, never
+ * as a value the client kept.
  */
-function WaysToGetAKey() {
-  return (
-    <ol className="mt-8 grid gap-px overflow-hidden rounded-card border border-rule bg-rule wide:grid-cols-2">
-      <li className="flex flex-col items-start bg-raised px-gutter py-5">
-        <span className="font-figure text-eyebrow uppercase text-label">Step 01</span>
-        <p className="mt-3 text-body text-ink">Mint one below.</p>
-        <p className="mt-1 text-caption font-normal text-muted">
-          It is minted server-side with the proxy scope and shown once, here. Afterwards only its
-          identifier remains, which is what the list and every error message use.
-        </p>
-      </li>
-      <li className="flex flex-col items-start bg-raised px-gutter py-5">
-        <span className="font-figure text-eyebrow uppercase text-label">Step 02</span>
-        <p className="mt-3 text-body text-ink">Point a tool at it.</p>
-        <p className="mt-1 text-caption font-normal text-muted">
-          A key on its own does nothing. Setup has the two environment variables that send Claude
-          Code, Cursor and anything on the OpenAI SDK through Lens instead of the provider.
-        </p>
-        <Button asChild className="mt-5">
-          <Link to="/setup">Open Setup</Link>
-        </Button>
-      </li>
-    </ol>
-  )
-}
-
-export function Keys() {
+function NewKey({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
   const [name, setName] = useState('')
   const [minted, setMinted] = useState<MintResult | null>(null)
-
-  const list = useQuery({ queryKey: ['keys'], queryFn: keysApi.list })
 
   const mint = useMutation({
     mutationFn: () => keysApi.mint(name.trim(), ['proxy']),
     onSuccess: (result) => {
       setMinted(result) // held in local state only; rendered once
       setName('') // B28.266 — the name went with the key; the next one starts empty
-      // The list refetches NOW, not on dismiss: a reveal left open used to hold "The keys that
+      showSnack({ title: 'Here it is, once', line: 'Copy it now: Talyvor keeps a hash, not the key.' })
+      // The list refetches NOW, not on close: a reveal left open used to hold "The keys that
       // exist" on Loading… (B26.23). The row comes back BY PREFIX — no credential in it.
       void qc.invalidateQueries({ queryKey: ['keys'] })
     },
@@ -313,178 +431,198 @@ export function Keys() {
     mint.mutate()
   }
 
-  // Consuming the reveal is one-way and total: the credential leaves local state
-  // AND the mutation cache (mint.reset), so no copy of it survives anywhere on
-  // the page. The list refetches — the new key returns from the server BY PREFIX,
-  // never as a value the client kept.
-  const dismiss = () => {
+  const close = (stored: boolean) => {
+    if (minted)
+      showSnack(
+        stored
+          ? { title: 'Stored', line: `${minted.prefix} is in the list.` }
+          : { title: 'Closed', line: `${minted.prefix} is in the list. Its secret is not shown again.` },
+      )
     setMinted(null)
-    setName('')
     mint.reset()
     void qc.invalidateQueries({ queryKey: ['keys'] })
+    onClose()
   }
 
+  return (
+    <Dialog
+      open
+      onClose={() => close(false)}
+      title="New key"
+      actions={
+        minted ? (
+          <Button onClick={() => close(true)}>Done, I stored it</Button>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={() => close(false)}>
+              Cancel
+            </Button>
+            <Button onClick={submit} disabled={mint.isPending} disabledReason={name.trim() === '' ? 'Name the key first.' : undefined}>
+              {mint.isPending ? 'Creating…' : 'Create key'}
+            </Button>
+          </>
+        )
+      }
+    >
+      {minted ? (
+        // ⚠ THE REVEAL IS THE POINT OF THE WHOLE SCREEN. There is exactly one moment when a
+        // credential is on this page and exactly one thing the reader must do about it: `key` and
+        // `prefix` sit adjacent in Lens's JSON, look alike, and the wrong one gets copied.
+        <>
+          <p>Copy it now: Talyvor keeps a hash, not the key, so nobody can show it to you again.</p>
+          <CodeCopy text={minted.key} label="key" copied="Copied. Store it now: it will not be shown again" />
+          <p className="text-caption text-ink-3">
+            Identifier, not a credential: <span className="font-mono">{minted.prefix}</span>. Safe to share; this is how the key
+            appears in lists.
+          </p>
+        </>
+      ) : (
+        <>
+          <p>Made with the proxy scope and shown once, here. Afterwards only its identifier remains.</p>
+          <Field label="Key name">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') submit()
+              }}
+              disabled={mint.isPending}
+            />
+          </Field>
+          {mint.isError ? (
+            <p role="alert" className="text-body text-ink">
+              {/* ⚠ THE STATUS, NOT THE MESSAGE: a 403 is the BFF's Origin check, read off ApiError's
+                  `.status` rather than a substring of its message. ⚠ AND A 401 GETS NO RETRY ADVICE:
+                  the session bar already says signing in again fixes it, so ONLY THE ADVICE MOVES. */}
+              {mint.error instanceof ApiError && mint.error.status === 403
+                ? 'Couldn’t mint the key. The request origin was rejected. Reach this app at its configured address.'
+                : isSessionExpired(mint.error)
+                  ? 'Couldn’t mint the key. Nothing was changed.'
+                  : 'Couldn’t mint the key. Please try again.'}
+            </p>
+          ) : null}
+        </>
+      )}
+    </Dialog>
+  )
+}
+
+const cardHeading = 'font-display text-reading font-bold text-ink'
+
+export function Keys() {
+  const [making, setMaking] = useState(false)
+  const [revoking, setRevoking] = useState<WorkspaceAPIKey | null>(null)
+  const [revoked, setRevoked] = useState<string | null>(null)
+
+  const list = useQuery({ queryKey: ['keys'], queryFn: keysApi.list })
   const keys: WorkspaceAPIKey[] = list.data ?? []
+  // Each card is a named region, so a reader moving by landmark gets the keys and what else may act as two stops.
+  const keysHeading = useId()
+  const actHeading = useId()
 
   // ⚠ THE EMPTY STATE IS A MEASUREMENT, NOT A DEFAULT, and the direction that matters is the one
   // this is FALSE for: it is claimed only when the list read ANSWERED and the answer was an empty
   // array. A read that FAILED is not a workspace with no keys — told wrongly HERE it tells an
   // operator whose keys are live and serving traffic that they have none, on the screen whose
-  // other control is REVOKE.
-  //
-  // ⚠ IT IS COMPUTED HERE, FROM THE QUERY OBJECT, AND MY FIRST DRAFT WAS A HELPER THAT TOOK THE
-  // BARE ARRAY and asked whether it was an array holding nothing. That predicate is CORRECT —
-  // `data` is undefined both while loading and on error — and `emptyVsFault.test.ts` refused it
-  // anyway, for
-  // a reason better than the one I had: its rule is that a failure state must be TESTED before an
-  // empty-collection branch, and a helper handed an array has nothing to test. The distinction
-  // belongs where the read still exists. It is the same argument ConvertLens.tsx's header makes
-  // about a number prop, and all three states are now named in one line instead of one of them
-  // being inferable from a type.
+  // other control is REVOKE. `emptyVsFault.test.ts` holds the failure branch ahead of this one.
   const empty = !list.isError && !list.isLoading && list.data !== undefined && list.data.length === 0
 
   return (
-    <RegionScreen>
-      <Region
-        index="00"
-        label="Keys"
-        heading={minted ? HEADLINE_REVEAL : empty ? HEADLINE_EMPTY : HEADLINE}
-        sectionClassName="pb-10 pt-4 wide:pb-12"
-        className="max-w-2xl"
-      >
-        <p className="text-body text-muted">
-          A workspace key is what a tool presents to Lens. It is minted here, shown once, and from
-          then on identified only by its prefix — the list below, and every message about a key,
-          use that.
-        </p>
-        {/* ⚠ THE STEPS RENDER ONLY WHEN THE WORKSPACE HAS NOTHING, and the branch is a RENDER
-            rather than a `hidden` class: copy about a workspace with no credential must not sit in
-            the DOM of one that has three. */}
-        {empty && !minted ? <WaysToGetAKey /> : null}
-        {/* The pointer a workspace that ALREADY has keys still needs — the same fact the empty
-            state's step 02 makes, so it is drawn only in the state where that step is not. Two
-            copies of one sentence on one screen is how the five docs cost sentences drifted. */}
-        {!empty && !minted ? (
-          <p className="mt-4 text-caption font-normal text-muted">
-            Got a key and not sure what to do with it?{' '}
-            <Link className={inlineLink} to="/setup">
-              Setup
-            </Link>{' '}
-            has the two lines for Claude Code, Cursor, and anything on the OpenAI SDK.
-          </p>
-        ) : null}
-      </Region>
+    <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-5 px-gutter py-4 wide:py-6">
+      <DevelopersHead
+        heading="Make and revoke the keys that reach Talyvor."
+        line="A workspace key is what a tool presents to Talyvor. It is made here, shown once, and from then on known only by its identifier."
+      />
 
-      <Region index="01" label="Create a key">
-        {/* ⚠ THE REVEAL LIVES IN THE REGION THAT PRODUCED IT. It is the RESULT of the control
-            below, so putting it anywhere else would separate the action from its outcome — and
-            the heading above is already the page-scale claim about it while it exists. */}
-        {minted ? (
-          <div className="mb-gutter">
-            <RevealOnce
-              title="Workspace key — shown once"
-              secret={minted.key}
-              copyLabel="Copy key"
-              identifier={minted.prefix}
-              identifierNote="Safe to share; this is how the key appears in lists."
-              onDone={dismiss}
-            />
-          </div>
-        ) : null}
-
-        <Card raised>
-          <CardHeader>New key</CardHeader>
-          <Row
-            stack
-            label="Create a key"
-            hint="Minted server-side with the proxy scope; the key is shown once, then only its identifier remains"
-          >
-            <div className="flex items-center gap-2">
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') submit()
-                }}
-                placeholder="Key name"
-                aria-label="New key name"
-                className="w-44"
-                disabled={minted !== null || mint.isPending}
-              />
-              <Button variant="primary" onClick={submit} disabled={minted !== null || mint.isPending || name.trim() === ''}>
-                {mint.isPending ? 'Creating…' : 'Create key'}
+      <div className="grid items-start gap-4 wide:grid-cols-12">
+        <div className="grid gap-4 wide:col-span-8">
+          <Card tone="white" role="region" aria-labelledby={keysHeading} className="grid gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 id={keysHeading} className={cardHeading}>
+                The keys that exist
+              </h3>
+              <Button size="sm" icon={<Icon name="plus" size={16} />} onClick={() => setMaking(true)}>
+                New key
               </Button>
             </div>
-          </Row>
-
-          {mint.isError ? (
-            <div className="px-gutter py-2 text-body text-muted">
-              {/* ⚠ THE STATUS, NOT THE MESSAGE. This read `mint.error.message.includes('403')` — a
-                  substring match on ApiError's message format ("path -> HTTP status"), four lines
-                  from a sibling mutation (revoke, above) reading `.status` off the same type. It
-                  happens to be right today only because this path is a constant with no digits in
-                  it; the diagnosis was coupled to a string nobody guards.
-                  ⚠ AND A 401 GOT THE RETRY SENTENCE. Measured, real <App/>, /auth/me authenticated
-                  and /api/* 401 — the live condition, since the BFF session outlives the workspace
-                  token by four hours: the bar said "Signing in again fixes it" and this line said
-                  "Please try again." two rows below it. Documents.tsx already decided what to do —
-                  the OUTCOME still has to be stated, because the reader pressed a button and needs
-                  to know it did not take, so ONLY THE ADVICE MOVES. */}
-              {mint.error instanceof ApiError && mint.error.status === 403
-                ? 'Couldn’t mint the key — the request origin was rejected. Reach this app at its configured address.'
-                : isSessionExpired(mint.error)
-                  ? 'Couldn’t mint the key. Nothing was changed.'
-                  : 'Couldn’t mint the key. Please try again.'}
-            </div>
-          ) : null}
-        </Card>
-      </Region>
-
-      {/* ⚠ NOT DRAWN WHEN THE WORKSPACE ANSWERED THAT IT HAS NONE. A region titled "The keys that
-          exist" holding a sentence saying none do is the absence named a second time, three
-          hundred pixels under the page-scale claim that already named it. A read that FAILED or is
-          still loading is a different matter entirely and IS drawn — the reader has to be told the
-          list is missing rather than shown nothing where their keys should be. */}
-      {empty && !minted ? null : (
-        <Region index="02" label="The keys that exist">
-          <Card raised>
-            <CardHeader>API keys</CardHeader>
             {list.isLoading ? (
-              <div className="px-gutter py-3 text-body text-muted">Loading…</div>
+              <p className="text-body text-ink-2">Loading…</p>
             ) : list.isError ? (
               <PanelFailure error={list.error} what="your keys" />
-            ) : keys.length === 0 ? (
-              // Reached between a mint and its refetch, where `minted` holds the reveal open over a
-              // list not yet re-served. B28.266 — it said "Loading…" after that refetch had answered
-              // too, so a list served empty read to every explorer as one stuck loading.
-              <div className="px-gutter py-3 text-body text-muted">
-                {list.isFetching ? 'Loading…' : 'Lens lists no keys for this workspace yet.'}
-              </div>
+            ) : empty ? (
+              // A key on its own does nothing, so the empty state names the second step too: it is
+              // the one this screen never made, and Connect an agent is where the two lines live.
+              <EmptyState
+                icon={<Icon name="key" />}
+                title="This workspace has no keys."
+                line={
+                  <>
+                    Make one with New key, then point a tool at it: Connect an agent has the lines for Claude Code, Cursor and
+                    anything on the OpenAI SDK.
+                  </>
+                }
+                action={
+                  <Button asChild variant="secondary" size="sm">
+                    <Link to="/setup">Connect an agent</Link>
+                  </Button>
+                }
+              />
             ) : (
-              keys.map((k) => <KeyRow key={k.id} k={k} />)
+              <div>
+                {keys.map((k) => (
+                  <PocketRow
+                    key={k.id}
+                    wrap
+                    title={k.name}
+                    line={keyFacts(k)}
+                    action={
+                      <>
+                        <span className="font-mono text-body text-ink-2">{k.key_prefix}</span>
+                        {/* The accessible name carries the identifier, so the control names WHICH key
+                            it destroys rather than being one of several identical "Revoke" buttons. */}
+                        <Button variant="outline" size="sm" aria-label={`Revoke ${k.key_prefix}`} onClick={() => setRevoking(k)}>
+                          Revoke
+                        </Button>
+                      </>
+                    }
+                  />
+                ))}
+              </div>
             )}
+            {revoked ? (
+              <p className="text-caption text-ink-3">
+                {revoked} is revoked. Traffic using it can keep working for up to 5 minutes.
+              </p>
+            ) : null}
           </Card>
-        </Region>
-      )}
 
-      <Region index="03" label="What may act for this workspace">
-        <p className="mb-4 max-w-2xl text-body text-muted">
-          Assistants you connected, the permissions you signed for them and your agents, and the phones and passkeys
-          that approve payments. Revoking one stops it at once.
-        </p>
-        <Card raised>
-          <CardHeader>Connected assistants</CardHeader>
-          <div className="px-gutter py-3">
-            <ConnectedList />
-          </div>
-        </Card>
-        <div className="mt-gutter">
-          <Card raised>
-            <CardHeader>Permissions, phones and passkeys</CardHeader>
+          <Card tone="white" role="region" aria-labelledby={actHeading} className="grid gap-2">
+            <h3 id={actHeading} className={cardHeading}>
+              What may act for this workspace
+            </h3>
+            <p className="text-body text-ink-2">
+              Assistants you connected, the permissions you signed for them and your agents, and the phones and passkeys that
+              approve payments. Revoking or removing one stops it at once; the last one that can approve is never removed.
+            </p>
+            <Eyebrow className="mt-2">Connected assistants</Eyebrow>
+            <AssistantList />
+            <Eyebrow className="mt-2">Permissions, phones and passkeys</Eyebrow>
             <AccessList />
           </Card>
         </div>
-      </Region>
-    </RegionScreen>
+      </div>
+
+      {making ? <NewKey onClose={() => setMaking(false)} /> : null}
+      {revoking ? (
+        <RevokeKey
+          k={revoking}
+          onClose={() => setRevoking(null)}
+          onRevoked={() => {
+            setRevoked(revoking.key_prefix)
+            setRevoking(null)
+          }}
+        />
+      ) : null}
+    </div>
   )
 }

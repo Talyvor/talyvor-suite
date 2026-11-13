@@ -157,18 +157,24 @@ describe('the sweeps read the whole tree', () => {
   })
 })
 
-describe('the faces are declared', () => {
-  it('--sans leads with Space Grotesk', () => {
-    const m = /--sans:\s*([^;]+);/.exec(css)
-    expect(m?.[1].trim().startsWith('"Space Grotesk"'), `--sans is ${m?.[1]}`).toBe(true)
+describe('the faces are declared — Pocket\'s (B57.2)', () => {
+  const stack = (name: string) => new RegExp(`--${name}:\\s*([^;]+);`).exec(css)?.[1].trim() ?? ''
+  it('--display leads with Bricolage Grotesque, for headings and large money', () => {
+    expect(stack('display').startsWith('"Bricolage Grotesque"'), `--display is ${stack('display')}`).toBe(true)
   })
-  it('--mono leads with IBM Plex Mono', () => {
-    const m = /--mono:\s*([^;]+);/.exec(css)
-    expect(m?.[1].trim().startsWith('"IBM Plex Mono"'), `--mono is ${m?.[1]}`).toBe(true)
+  it('--sans leads with Figtree, for everything else', () => {
+    expect(stack('sans').startsWith('"Figtree"'), `--sans is ${stack('sans')}`).toBe(true)
   })
-  it('both keep a system fallback — a font that fails to load must not take the text with it', () => {
-    expect(/--sans:[^;]*system-ui[^;]*;/.test(css)).toBe(true)
-    expect(/--mono:[^;]*ui-monospace[^;]*;/.test(css)).toBe(true)
+  it('--mono leads with IBM Plex Mono, for code', () => {
+    expect(stack('mono').startsWith('"IBM Plex Mono"'), `--mono is ${stack('mono')}`).toBe(true)
+  })
+  it('every stack keeps a generic fallback — a font that fails to load must not take the text with it', () => {
+    expect(stack('display')).toMatch(/sans-serif$/)
+    expect(stack('sans')).toMatch(/sans-serif$/)
+    expect(stack('mono')).toMatch(/monospace$/)
+  })
+  it('headings are set in the display face', () => {
+    expect(css).toMatch(/h1, h2, h3, h4 \{ font-family: var\(--display\); \}/)
   })
   it('every face is served locally — no third-party font host on an authenticated console', () => {
     expect(/fonts\.googleapis\.com|fonts\.gstatic\.com|https?:\/\//.test(css), 'theme.css reaches off-origin').toBe(
@@ -180,9 +186,10 @@ describe('the faces are declared', () => {
 describe('the font files exist and are fonts', () => {
   const urls = [...css.matchAll(/url\(['"]?([^'")]+)['"]?\)/g)].map((m) => m[1])
 
-  it('theme.css declares @font-face for both families', () => {
-    expect((css.match(/@font-face/g) ?? []).length).toBeGreaterThanOrEqual(2)
-    expect(css).toContain("font-family: 'Space Grotesk'")
+  it('theme.css declares @font-face for all three families', () => {
+    expect((css.match(/@font-face/g) ?? []).length).toBeGreaterThanOrEqual(3)
+    expect(css).toContain("font-family: 'Bricolage Grotesque'")
+    expect(css).toContain("font-family: 'Figtree'")
     expect(css).toContain("font-family: 'IBM Plex Mono'")
   })
 
@@ -202,17 +209,22 @@ describe('the font files exist and are fonts', () => {
   it('no font file ships without its licence beside it', () => {
     const fontsDir = resolve(uiSrc, 'fonts')
     const files = readdirSync(fontsDir)
-    expect(files.some((f) => /^LICENCE|^LICENSE/i.test(f) && /grotesk/i.test(f))).toBe(true)
-    expect(files.some((f) => /^LICENCE|^LICENSE/i.test(f) && /plex/i.test(f))).toBe(true)
+    for (const face of [/bricolage/i, /figtree/i, /plex/i]) {
+      expect(files.some((f) => /^LICENCE|^LICENSE/i.test(f) && face.test(f)), `no licence for ${face}`).toBe(true)
+    }
+    // and no woff2 whose family has no licence beside it
+    const licensed = files.filter((f) => /^LICENCE/i.test(f)).map((f) => f.replace(/^LICENCE-|\.txt$/g, ''))
+    const orphans = files.filter((f) => f.endsWith('.woff2') && !licensed.some((l) => f.startsWith(l)))
+    expect(orphans, `font files without a licence: ${orphans.join(', ')}`).toEqual([])
   })
 })
 
 describe('numerals are set in the figure face', () => {
   const families = preset.theme!.extend!.fontFamily as Record<string, unknown[]>
 
-  it('the preset names a figure face, and it is the mono var carrying tabular figures', () => {
+  it('the preset names a figure face, and it is Figtree carrying tabular figures', () => {
     expect(families.figure, 'no `figure` fontFamily in the preset').toBeTruthy()
-    expect(families.figure[0]).toBe('var(--mono)')
+    expect(families.figure[0]).toBe('var(--sans)')
     expect(JSON.stringify(families.figure[1])).toContain('tnum')
   })
 
@@ -250,12 +262,19 @@ describe('numerals are set in the figure face', () => {
     expect(codeOnly("const s = 'tabular-nums' /* gone */")).toContain('tabular-nums')
   })
 
-  it('no `tabular-nums` survives in code anywhere — the face carries the figures now', () => {
+  // B57.3 — Pocket draws large money in Bricolage Grotesque with tabular figures, so `tabular-nums`
+  // comes back for exactly that: on a line that also sets `font-display`. Anywhere else a figure is
+  // on `font-figure`. figureAudit.ts names the class because it is the rule that recognises it.
+  const TABULAR_RULE = 'apps/web/src/figureAudit.ts'
+  const strayTabular = (code: string) => code.split('\n').some((l) => /\btabular-nums\b/.test(l) && !/\bfont-display\b/.test(l))
+
+  it('no `tabular-nums` survives in code except beside Pocket’s display face — the face carries the figures', () => {
     // ⚠ THE POPULATION IS `productionSources()` AND IT IS GUARDED, which the case below is not a
     // substitute for: that one proves the PREDICATE still matches, this one is only as wide as the
     // walk. See THE TWO CODE SWEEPS' OTHER INPUT at the top of this file.
     const offenders = productionSources()
-      .filter((p) => /\btabular-nums\b/.test(codeOnly(readFileSync(p, 'utf8'))))
+      .filter((p) => !p.endsWith(TABULAR_RULE))
+      .filter((p) => strayTabular(codeOnly(readFileSync(p, 'utf8'))))
       .map((p) => p.slice(p.indexOf('/src/') + 1))
     expect(offenders, `still setting numerals in the old face: ${offenders.join(', ')}`).toEqual([])
   })
@@ -265,6 +284,8 @@ describe('numerals are set in the figure face', () => {
     // does carry the class in code. If this ever stops failing, the sweep above is
     // reporting "clean" for a reason that has nothing to do with the codebase.
     expect(/\btabular-nums\b/.test(codeOnly('<span className="tabular-nums" />'))).toBe(true)
+    expect(strayTabular('<span className="tabular-nums" />')).toBe(true)
+    expect(strayTabular('<span className="font-display text-figure tabular-nums" />')).toBe(false)
   })
 })
 

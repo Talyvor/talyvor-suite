@@ -9,6 +9,8 @@ import { STORED_NOTICE } from './roomsApi'
 // version, and a Free workspace's fourth public room is refused 402 with Lens's rooms_plan_limits sentence.
 
 const ME = 'ws_me'
+// B55.34 — Lens names every member by its workspace.
+const NAMES: Record<string, string> = { ws_me: 'Northwind', ws_ana: 'Ana’s studio', ws_ben: 'Ben’s lab' }
 const REFUSAL =
   'rooms_plan_limits (LENS_ROOMS_PLAN_LIMITS): your free plan allows 3 public rooms — the team plan allows 25'
 
@@ -48,9 +50,9 @@ function mockBff(seed: Rm[] = []) {
     const detail = (r: Rm) => ({
       ...view(r),
       terms,
-      members: r.members.map((ws) => ({ workspace_id: ws, role: ws === r.owner_workspace_id ? 'owner' : 'member', may_spend: false, terms_version: 1, terms_current: true, joined_at: '' })),
+      members: r.members.map((ws) => ({ workspace_id: ws, workspace_name: NAMES[ws] ?? 'A workspace not named yet', role: ws === r.owner_workspace_id ? 'owner' : 'member', may_spend: false, terms_version: 1, terms_current: true, joined_at: '' })),
       agents: null,
-      me: r.members.includes(ME) ? { workspace_id: ME, role: ME === r.owner_workspace_id ? 'owner' : 'member', may_spend: false, terms_version: 1, terms_current: true, joined_at: '' } : null,
+      me: r.members.includes(ME) ? { workspace_id: ME, workspace_name: NAMES[ME], role: ME === r.owner_workspace_id ? 'owner' : 'member', may_spend: false, terms_version: 1, terms_current: true, joined_at: '' } : null,
     })
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, user: { sub: 'u1', email: 'u1@example.com' } })
     if (url === '/api/rooms' && method === 'POST') {
@@ -180,5 +182,15 @@ describe('rooms', () => {
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.click(joinButton)
     expect((await screen.findByRole('status')).textContent).toBe('You are in this room as a member.')
+  })
+
+  // B55.35 — a room's members read by their workspace's name, never its id.
+  it('lists a room’s members by name', async () => {
+    mockBff([{ ...room('room_x', 'ws_ana', 'Open-source evals', 'evaluation'), members: ['ws_ana', 'ws_ben'] }])
+    await at('/rooms/room_x')
+    const members = await screen.findByRole('list', { name: 'Members' })
+    expect(within(members).getByText('Ana’s studio')).toBeTruthy()
+    expect(within(members).getByText('Ben’s lab')).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/ws_ana|ws_ben/)
   })
 })

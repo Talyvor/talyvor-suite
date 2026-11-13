@@ -265,12 +265,12 @@ export const LENS_BODIES: LensBody[] = [
       'r.Put("/v1/workspaces/{wsID}/name", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensWorkspaceNameBody",
   },
-  // B19.4 — the Agent Bank: creating an agent, issuing it a key, moving LXC, its rules, paying.
+  // B19.4 — the Agent Bank: creating an agent (B57.124: with its helper's colour), issuing it a key, moving LXC, its rules, paying.
   {
     route: "POST /v1/workspaces/{wsID}/agents",
     file: "apps/bff/agent_bank.go",
     kind: "map-literal",
-    anchor: 'json.Marshal(map[string]string{"name": in.Name})',
+    anchor: 'json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour})',
     upstreamFile: "cmd/lens/agent_accounts_handler.go",
     upstreamAnchor:
       'r.Post("/v1/workspaces/{wsID}/agents", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
@@ -300,11 +300,34 @@ export const LENS_BODIES: LensBody[] = [
     route: "PUT /v1/workspaces/{wsID}/agents/{agentID}/rules",
     file: "apps/bff/agent_bank.go",
     kind: "anon-struct",
-    fn: "func (a *app) handleAgentRules(",
+    fn: "func agentRulesFields(",
     anchor: "var in struct {",
     upstreamFile: "internal/economy/agent_rules.go",
     upstreamAnchor: "type AgentRules struct {",
     subject: "lensAgentRulesBody",
+  },
+  // B55.14 — a looser save carries its assertion beside the rules (Lens B55.13).
+  {
+    route: "PUT /v1/workspaces/{wsID}/agents/{agentID}/rules",
+    file: "apps/bff/agent_bank.go",
+    kind: "map-literal",
+    anchor:
+      'json.Marshal(map[string]any{"rules": json.RawMessage(rules), "assertion": signed.Assertion})',
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/workspaces/{wsID}/agents/{agentID}/rules", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAgentRulesSignedBody",
+  },
+  // B55.14 — what a change would do to an agent's rules, and the challenge a looser one is signed over.
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/rules/challenge",
+    file: "apps/bff/agent_bank.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleAgentRulesChallenge(",
+    anchor: "var in struct {",
+    upstreamFile: "internal/economy/agent_rules_loosen.go",
+    upstreamAnchor: "type RulesProposal struct {",
+    subject: "lensAgentRulesChallengeBody",
   },
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/pay",
@@ -467,6 +490,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/marketplace/listings/{listingID}/versions", marketOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensMarketVersionBody",
   },
+  // B41.85 — a seller rates and labels their listing, and a workspace saves its content filter.
+  {
+    route: "PUT /v1/workspaces/{wsID}/marketplace/listings/{listingID}/content-labels",
+    file: "apps/bff/marketplace.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMarketContentLabels(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/market_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/workspaces/{wsID}/marketplace/listings/{listingID}/content-labels", marketOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensMarketContentLabelsBody",
+  },
+  {
+    route: "PUT /v1/workspaces/{wsID}/marketplace/content-filter",
+    file: "apps/bff/marketplace.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMarketContentFilter(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/market_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/workspaces/{wsID}/marketplace/content-filter", marketOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensMarketContentFilterBody",
+  },
   // B32.60 — a seller saves their tax details.
   {
     route: "PUT /v1/workspaces/{wsID}/marketplace/seller-tax",
@@ -535,6 +581,53 @@ export const LENS_BODIES: LensBody[] = [
     upstreamFile: "cmd/lens/agent_accounts_handler.go",
     upstreamAnchor: "decide := func(approve bool) http.HandlerFunc {",
     subject: "lensApprovalDecisionBody",
+  },
+  // B54.34 — approving with always allow asks for a challenge over that allowance too (Lens B54.29).
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/approvals/{approvalID}/challenge",
+    file: "apps/bff/agent_bank.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleApprovalChallenge(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/agent_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/approvals/{approvalID}/challenge", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensApprovalChallengeBody",
+  },
+  // B55.3 — a key waiting from another device, let in by a key the workspace has (Lens B55.1).
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/keys/enrolments/{id}/approve",
+    file: "apps/bff/agent_bank.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleKeyEnrolmentAction(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/key_enrolments_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/keys/enrolments/{id}/approve", keyOwnerOnly(ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensKeyEnrolmentApproveBody",
+  },
+  // B55.54 — a new recovery code signed with a key the workspace has, and a key got back when every key was removed
+  // (Lens B55.48). The recover row's body is also what …/keys/recover/complete is sent, without the code.
+  {
+    route: "POST /v1/workspaces/{wsID}/keys/recovery-code",
+    file: "apps/bff/key_recovery.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleRecoveryCode(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/key_recovery_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/keys/recovery-code", keyOwnerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensRecoveryCodeBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/keys/recover",
+    file: "apps/bff/key_recovery.go",
+    kind: "anon-struct",
+    fn: "func (a *app) relayRecoveryKey(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/key_recovery_handler.go",
+    upstreamAnchor: "type recoveryKeyBody struct",
+    subject: "lensKeyRecoverBody",
   },
   // B41.8 — resuming an agent, or every agent, signed with Face ID once the workspace has a passkey (Lens B41.108).
   {
@@ -708,7 +801,7 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/cash-outs", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensAgentCashOutBody",
   },
-  // B28.21 — renaming and describing an agent.
+  // B28.21 — renaming and describing an agent; B57.124: choosing its helper.
   {
     route: "PATCH /v1/workspaces/{wsID}/agents/{agentID}",
     file: "apps/bff/agent_bank.go",
@@ -946,6 +1039,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Put("/v1/money/budgets", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensSpendBudgetBody",
   },
+  // B28.66 — where alerts go, added on Agent Wallets (Lens B28.338).
+  {
+    route: "POST /v1/money/alerts/channels",
+    file: "apps/bff/money_search.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyAlertChannels(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/alert_channels_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/alerts/channels", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAlertChannelBody",
+  },
   // B52.28 — a Scan agent's watch, set on Scan agents (Lens B52.27).
   {
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/scan-watches",
@@ -1028,6 +1133,38 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/physical-cards/{id}/replace", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensPhysicalCardReplaceBody",
   },
+  // B59.31 — a Business workspace's company details and the people with control (Lens B59.30).
+  {
+    route: "PUT /v1/workspaces/{wsID}/business",
+    file: "apps/bff/workspace_business.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]any{"company_name": in.CompanyName,',
+    upstreamFile: "internal/economy/business_details.go",
+    upstreamAnchor: "type BusinessDetails struct",
+    subject: "lensWorkspaceBusinessBody",
+  },
+  // B59.25 — a card payment disputed with a reason (Lens B59.24).
+  {
+    route: "POST /v1/money/card-disputes",
+    file: "apps/bff/money_card_disputes.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"payment_id": in.PaymentID, "reason": in.Reason})',
+    upstreamFile: "cmd/lens/card_disputes_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/card-disputes", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensCardDisputeOpenBody",
+  },
+  // B59.28 — help and complaints, closing the account and the workspace's data, each a request (Lens B59.27).
+  {
+    route: "POST /v1/workspaces/{wsID}/requests",
+    file: "apps/bff/workspace_requests.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"kind": in.Kind, "message": in.Message})',
+    upstreamFile: "cmd/lens/support_requests_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/requests", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensWorkspaceRequestBody",
+  },
   {
     route: "POST /v1/money/payees/{id}/confirm",
     file: "apps/bff/money_pay.go",
@@ -1082,6 +1219,41 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor:
       'r.Post("/v1/money/mandates", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensMandateGrantBody",
+  },
+  // B58.6 — a payout batch approved with the owner's passkey or phone key over its own challenge (Lens B58.5).
+  {
+    route: "POST /v1/money/payouts/{id}/approve",
+    file: "apps/bff/money_pay.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPayoutApprove(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_payouts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/payouts/{id}/approve", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPayoutApproveBody",
+  },
+  // B55.56 — the challenge the owner's grant, or approval of an agent's request, is signed over, and the signed approval (Lens B55.24).
+  {
+    route: "POST /v1/money/mandates/challenge",
+    file: "apps/bff/money_pay.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyMandateChallenge(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_mandates_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/mandates/challenge", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensMandateChallengeBody",
+  },
+  {
+    route: "POST /v1/money/mandates/{id}/approve",
+    file: "apps/bff/money_pay.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyMandateDecide(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_mandates_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/mandates/{id}/approve", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensMandateApproveBody",
   },
   // B40.7 — the MCP server at /mcp: an assistant drafts an invoice (Lens B30.20) and prepares payment requests (Lens B40.3).
   {

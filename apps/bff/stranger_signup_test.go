@@ -53,11 +53,16 @@ type strangerLens struct {
 	auths    []string
 	created  map[string]bool
 	poolable map[string]bool
+	// B59.8: what each workspace was made as — the provision body's account_type, money_kind and display_name, as
+	// sent (empty when left out), recorded on the call that made it.
+	accounts map[string][3]string
+	// B59.41: the sign-up profile each workspace was made with — country and registration_number, as sent.
+	profiles map[string][2]string
 }
 
 func newStrangerLens(t *testing.T) *strangerLens {
 	t.Helper()
-	l := &strangerLens{created: map[string]bool{}, poolable: map[string]bool{}}
+	l := &strangerLens{created: map[string]bool{}, poolable: map[string]bool{}, accounts: map[string][3]string{}, profiles: map[string][2]string{}}
 	l.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		l.mu.Lock()
 		l.paths = append(l.paths, r.URL.Path)
@@ -117,6 +122,11 @@ func (l *strangerLens) serveProvision(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Identity      string `json:"identity"`
 		CachePoolable *bool  `json:"cache_poolable"`
+		AccountType   string `json:"account_type"`
+		MoneyKind     string `json:"money_kind"`
+		DisplayName   string `json:"display_name"`
+		Country       string `json:"country"`
+		Registration  string `json:"registration_number"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&in)
 	if in.Identity == "" {
@@ -130,6 +140,8 @@ func (l *strangerLens) serveProvision(w http.ResponseWriter, r *http.Request) {
 	if created {
 		l.created[ws] = true
 		l.poolable[ws] = in.CachePoolable == nil || *in.CachePoolable
+		l.accounts[ws] = [3]string{in.AccountType, in.MoneyKind, in.DisplayName}
+		l.profiles[ws] = [2]string{in.Country, in.Registration}
 	}
 	poolable := l.poolable[ws]
 	l.mu.Unlock()
@@ -214,6 +226,12 @@ type strangerSuite struct {
 // session in these tests is created by actually logging in.
 func startStrangerSuite(t *testing.T, allowed []string) *strangerSuite {
 	t.Helper()
+	return startStrangerSuiteWith(t, allowed, nil)
+}
+
+// startStrangerSuiteWith is startStrangerSuite with one change to the BFF's config first (nil: none).
+func startStrangerSuiteWith(t *testing.T, allowed []string, mod func(*config)) *strangerSuite {
+	t.Helper()
 	s := &strangerSuite{
 		t:       t,
 		lens:    newStrangerLens(t),
@@ -250,6 +268,9 @@ func startStrangerSuite(t *testing.T, allowed []string) *strangerSuite {
 
 		trackBaseURL:       s.track.srv.URL,
 		trackGatewaySecret: testTrackGatewaySecret,
+	}
+	if mod != nil {
+		mod(&cfg)
 	}
 	auth, err := newAuthenticator(t.Context(), cfg)
 	if err != nil {

@@ -893,7 +893,7 @@ export async function streamChat(
   }
   // B28.379 — the relay refuses a larger request with a sentence that names no cause; the images are the cause.
   if (new Blob([init.body as string]).size > STREAM_REQUEST_MAX_BYTES) {
-    handlers.onError('The images in this conversation are too large to send together — at most 4 MB in all. Start a new chat to ask about another image.')
+    handlers.onError('The images in this conversation are too large to send together: at most 4 MB in all. Start a new chat to ask about another image.')
     return
   }
 
@@ -1326,7 +1326,7 @@ export function refusal(status: number, detail: string): Refusal {
   if (status === 401) return { text: 'This session is no longer signed in. Sign in again to continue.' }
   if (status === 402) return { text: 'This workspace cannot cover the estimated cost of that request. Top up on Billing.', remedy: BILLING }
   if (status === 429) return { text: 'The provider is rate limiting this workspace. Try again shortly.' }
-  if (sessionCheckFailed(status, detail)) return { text: 'Lens could not check this session just now. You are still signed in — send it again in a moment.' }
+  if (sessionCheckFailed(status, detail)) return { text: 'Lens could not check this session just now. You are still signed in. Send it again in a moment.' }
   if (status === 503 && /not configured/i.test(detail)) return { text: 'Chat is not configured on this deployment.' }
   if (status === 503) return { text: 'The model’s provider is unavailable right now. Send it again in a moment, or pick another model.' }
   const trimmed = detail.trim()

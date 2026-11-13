@@ -83,6 +83,11 @@
 //   request-id  — an answer carries no X-Talyvor-Request-ID, so the report cannot say which request served it (B28.458)
 //   reconciliation-missing — yesterday's pounds run has a payment the partner's statement does not show, and the £7.00
 //                 shortfall it leaves in the safeguarding view (B30.123)
+//   label-built — /v1/public/plan-gates reports sso built while building.json still labels it Building (B56.13)
+//   label-charged — /v1/public/fees reports fx_margin_bps charged while building.json still labels it Building (B56.13)
+//   label-live  — /v1/public/labels labels fx live while /status.json's fx rail is in test (B56.13)
+//   pool-off    — pooling is off for the deployment: GET /v1/pooling says so and why, and the pool serves nothing (B58.15)
+//   pool-dead   — GET /v1/pooling says pooling is on, and the pool serves nothing (B58.15)
 //
 // B17.6 adds the Agent Bank and the marketplace (stub-bank.ts): agents with keys of their own, whose
 // requests through the proxy are judged by their rules and spent from their own balance.
@@ -641,7 +646,8 @@ setInterval(() => bank.tick(), 2000)
 const physicalCards = new PhysicalCardDesk(json, read, broke)
 // B32.85 — a room's wallet is an agent of its owner's in the Bank: funded, listed and posted as any agent (stub-rooms.ts).
 setRoomWallets({ open: (ws, agentID, name) => bank.openRoomWallet(ws, agentID, name), balance: (agentID) => bank.agentBalance(agentID),
-  use: (u) => bank.roomUse(u), billed: (agentID) => bank.agentBilledThisMonth(agentID), prize: (u) => bank.prizeUse(u) })
+  use: (u) => bank.roomUse(u), billed: (agentID) => bank.agentBilledThisMonth(agentID), prize: (u) => bank.prizeUse(u),
+  linked: (a, b) => bank.cardLinked(a, b), identityChecked: (ws) => bank.identityChecked(ws) })
 // B32.88 — and an agent's room_* tools over /mcp, on its own key.
 bank.roomTool = roomAgentTool
 
@@ -769,6 +775,13 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   if (provider === 'vllm' && VLLM !== '') return vllm(req, res, path, raw)
   if (!CONFIGURED.has(provider)) return json(res, 503, { error: `provider ${provider} not configured` })
   const body = JSON.parse(raw || '{}') as { model?: string; stream?: boolean; max_tokens?: number; messages?: Msg[]; tools?: { name?: string; function?: { name?: string } }[] }
+  // talyvor-lens B41.79 — model "listing/<listing id>" is a use of that listing, answered by the listing's own model.
+  const listingAsModel = body.model?.startsWith('listing/') === true ? body.model.slice('listing/'.length).trim() : ''
+  if (listingAsModel !== '') {
+    const own = bank.listingModel(listingAsModel)
+    if (own === undefined) return json(res, 404, { error: 'market: no such listing' })
+    body.model = own
+  }
   // talyvor-lens B28.103 — model "auto" is served by the provider's cheapest chat model, and the stream names it.
   const auto = body.model === 'auto'
   const requested = auto
@@ -823,7 +836,9 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   }
   // B28.426 — talyvor-lens B28.186: a question asked through a marketplace listing (X-Talyvor-Listing) is one use of it, charged
   // as a marketplace use, and the answer says how.
-  const listing = header('x-talyvor-listing')
+  // STUB_BREAK=listing-model-stream (B41.208) — a streamed call naming a listing as its model is answered and never charged,
+  // as a streaming copy of the proxy that forgot the listing would.
+  const listing = header('x-talyvor-listing') || (broke('listing-model-stream') && body.stream === true ? '' : listingAsModel)
   if (listing !== '') {
     const charge = bank.chatListingUse(ws.id, listing)
     if (charge === undefined) return json(res, 404, { error: 'market: no such listing' })
@@ -934,7 +949,7 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   let cut = false
   const own = personal || tooled ? undefined
     : ws.answers.get(key) ?? (converted > 0 && messages.length === 1 ? alikeDocument(ws.answers, model.id, text(messages[0])) : undefined)
-  const shared = messages.length === 1 && !personal && !tooled ? pool.get(key) ?? (broke('pool-negation') ? looseMatch(model.id, said) : undefined) : undefined
+  const shared = messages.length === 1 && !personal && !tooled && !broke('pool-off') && !broke('pool-dead') ? pool.get(key) ?? (broke('pool-negation') ? looseMatch(model.id, said) : undefined) : undefined
   if (broke('pool-tells') && [...workspaces.values()].some((w) => w.id !== ws.id && w.answers.has(key))) headers['X-Talyvor-Pool-Seen'] = 'elsewhere'
   const inTok = tokens(messages.map(text).join(' ')) + 8
   // B28.358 — what an answer costs at list price, which a replay saves whole and a pooled serve in part.
@@ -1184,6 +1199,10 @@ function reconciliationRuns(): unknown[] {
   })
 }
 
+/** talyvor-lens B56.7 — the money capabilities /v1/public/labels labels (economy capabilityRails, those that move money). */
+const PUBLIC_LABELLED = ['spend_on_talyvor', 'buy_marketplace_listings', 'rent_and_subscribe_listings', 'move_between_own_agents', 'pay_another_owner',
+  'escrow', 'cash_out', 'agent_card', 'currency_accounts', 'account_details', 'payments_in', 'payments_out', 'fx', 'stablecoins', 'merchant_acceptance']
+
 // talyvor-lens's /status.json (B37.3's documented keys): Lens's own components up, the rails answering their probes (B37.2).
 function statusJSON(): unknown {
   const at = new Date().toISOString()
@@ -1341,7 +1360,14 @@ createServer(async (req, res) => {
       const gate = (agents: number, seats: number, keys: string, live: boolean, sso: boolean, edge: boolean) =>
         ({ agents, seats, own_provider_keys: keys, live_money: live, slack_teams_approvals: live, sso, audit_export: sso, edge })
       return json(res, 200, { order: ['free', 'team', 'business', 'enterprise'], plans: { free: gate(3, 1, 'none', false, false, false),
-        team: gate(25, 5, 'add_on', true, false, false), business: gate(-1, 25, 'included', true, true, false), enterprise: gate(-1, -1, 'included', true, true, true) } })
+        team: gate(25, 5, 'add_on', true, false, false), business: gate(-1, 25, 'included', true, true, false), enterprise: gate(-1, -1, 'included', true, true, true) },
+        // talyvor-lens B56.8 — plans.Built, as Lens's main has it.
+        built: { agents: true, seats: true, own_provider_keys: true, live_money: true, slack_teams_approvals: false, sso: broke('label-built'), audit_export: true, edge: false } })
+    }
+    // talyvor-lens B56.7 — every money capability's label: sandbox, card payments and every partner rail being in test.
+    if (p === '/v1/public/labels') {
+      return json(res, 200, { card_payments: 'test', updated_at: new Date().toISOString(),
+        labels: Object.fromEntries(PUBLIC_LABELLED.map((c) => [c, c === 'fx' && broke('label-live') ? 'live' : 'sandbox'])) })
     }
     // B52.28 — every published Scan report's range and outcome (stub-scan.ts).
     if (p === '/v1/public/scan/track-record') return bank.scan.trackRecord(res)
@@ -1352,7 +1378,10 @@ createServer(async (req, res) => {
     if (p === '/v1/public/fees') {
       return json(res, 200, { market_take_bps: 1500, services_take_bps: 500, compute_take_bps: 500, lending_fee_bps: 100,
         platform_fee_bps: { ...PLATFORM_FEE_BPS, enterprise: 100 }, fx_margin_bps: { free: 0, team: 50, business: 25, enterprise: 15 },
-        intl_payment_fee_minor: { GBP: 500, EUR: 600, USD: 700 }, merchant_fee_bps: 75, merchant_a2a_fee_bps: 100 })
+        intl_payment_fee_minor: { GBP: 500, EUR: 600, USD: 700 }, merchant_fee_bps: 75, merchant_a2a_fee_bps: 100,
+        // talyvor-lens B56.8 — fees.Charged, as Lens's main has it.
+        charged: { market_take_bps: true, services_take_bps: true, compute_take_bps: true, lending_fee_bps: false, platform_fee_bps: true,
+          fx_margin_bps: broke('label-charged'), intl_payment_fee_minor: true, merchant_fee_bps: false, merchant_a2a_fee_bps: false } })
     }
     // B28.127 — a shared chat, read with no credential: its title, turns and when it was shared, or 404.
     const sharedChat = /^\/v1\/public\/chat-shares\/([A-Za-z0-9_-]+)$/.exec(p)
@@ -1517,6 +1546,10 @@ createServer(async (req, res) => {
         created_by: '', created_at: now, updated_at: now }
       prompts.set(name, prompt)
       return json(res, 201, prompt)
+    }
+    // B58.15 — whether cross-workspace pooling is on for the deployment, and why not (Lens B58.14 poolStateHandler).
+    if (p === '/v1/pooling' && req.method === 'GET') {
+      return json(res, 200, broke('pool-off') ? { pooling: 'off', cause: 'flag', reason: 'LENS_CACHE_POOLABLE_ENABLED is off on this deployment' } : { pooling: 'on' })
     }
     // B34.5 — an answer marked wrong (Lens B15.4): its stored copy and its pooled copy go, and it is never served again.
     if (p === '/v1/feedback' && req.method === 'POST') {

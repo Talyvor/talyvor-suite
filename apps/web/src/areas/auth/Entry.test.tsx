@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { pressEverything } from '../../test/pressEverything'
 
 // Entry.test.tsx — THE TWO FRONT DOORS.
 //
@@ -31,6 +32,8 @@ import { App, queryClient } from '../../App'
 // must be positive-controlled the same way before it is believed.
 
 type MeOverrides = {
+  /** B57.49 — /api/pricing's labels (B56.9); omitted, /api/pricing is not answered. */
+  labels?: Record<string, string>
   signup_open?: boolean
   authenticated?: boolean
   /** Simulate an unreachable/failed probe: the page must claim NOTHING either way. */
@@ -51,6 +54,12 @@ function mockMe(o: MeOverrides = {}) {
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
+    }
+    if (url === '/api/pricing' && o.labels) {
+      return new Response(JSON.stringify({ min_usd_cents: 500, max_usd_cents: 50000, preset_usd_cents: [], labels: o.labels }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
     }
     return new Response('null', { status: 404 })
   })
@@ -79,9 +88,7 @@ describe('/signup and /signin are public routes', () => {
     at('/signup')
     // The gate's card would be the failure: a signup page you must already be signed in to
     // read is not a signup page.
-    expect(
-      await screen.findByRole('heading', { name: /create your (talyvor )?workspace/i }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Who is this account for?' })).toBeInTheDocument()
     expect(screen.queryByText(/this workspace requires authentication/i)).toBeNull()
   })
 
@@ -103,42 +110,18 @@ describe('/signup and /signin are public routes', () => {
     expect(signupHeading).not.toEqual(signinHeading)
   })
 
-  it('both end at the SAME mechanism — /auth/login', async () => {
-    // Each page's PRIMARY action, by its own exact label. (The pages also cross-link to each
-    // other, which is why a loose /sign in/i matches two elements on the signup page.)
-    for (const [path, label] of [
-      ['/signup', /^continue$/i],
-      ['/signin', /^sign in$/i],
-    ] as const) {
-      mockMe({ signup_open: true })
-      at(path)
-      const action = await screen.findByRole('link', { name: label })
-      expect(action.getAttribute('href')).toMatch(/^\/auth\/login/)
-      cleanup()
-      queryClient.clear()
-      vi.restoreAllMocks()
-    }
+  // B59.8: /signup reaches /auth/login from its step 2, with its answers (SignUp.test.tsx).
+  it('sign-in ends at /auth/login', async () => {
+    mockMe({ signup_open: true })
+    at('/signin')
+    const action = await screen.findByRole('link', { name: /^sign in$/i })
+    expect(action.getAttribute('href')).toMatch(/^\/auth\/login/)
   })
 })
 
 // ─── the words a stranger reads ─────────────────────────────────────────────
 
 describe('the signup page is written for someone who has never heard of us', () => {
-  it('says what Talyvor is, what happens next, and what they get', async () => {
-    mockMe({ signup_open: true })
-    at('/signup')
-    await screen.findByRole('heading', { level: 1 })
-    const text = document.body.textContent ?? ''
-
-    // 1. what it is — in one line, on the page, before they commit to anything.
-    expect(text).toMatch(/Talyvor is the financial ecosystem for the AI agent economy/i)
-    expect(text).not.toMatch(/self-hosted/i) // B28.3: nothing self-hosts Lens
-    // 2. what happens when they continue — no surprise redirect.
-    expect(text).toMatch(/you[’']ll be (sent|taken)/i)
-    // 3. what they get — the thing on the other side.
-    expect(text).toMatch(/your own workspace/i)
-  })
-
   it('does NOT use enterprise-SSO language', async () => {
     mockMe({ signup_open: true })
     at('/signup')
@@ -149,13 +132,6 @@ describe('the signup page is written for someone who has never heard of us', () 
     // Both apostrophe forms, both spellings — see the apostrophe warning at the top.
     expect(text).not.toMatch(/organi[sz]ation[’']?s identity provider/i)
     expect(text).not.toMatch(/\bSSO\b/)
-  })
-
-  it('promises no new password, because there is none', async () => {
-    mockMe({ signup_open: true })
-    at('/signup')
-    await screen.findByRole('heading', { level: 1 })
-    expect(document.body.textContent ?? '').toMatch(/no (new )?password/i)
   })
 
   // B27.22 — sharing is on by default, so the page says so before Continue, and links to the
@@ -208,7 +184,7 @@ describe('what the page promises tracks the actual gate', () => {
     // sentence is available, so neither is printed.
     expect(text).not.toMatch(/no invitation needed|anyone can start/i)
     expect(text).not.toMatch(/closed trial|invitation only/i)
-    expect(screen.getByRole('link', { name: /^continue$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^continue$/i })).toBeInTheDocument()
   })
 
   it('an OLDER BFF that does not report signup_open is treated as unknown, not as open', async () => {
@@ -242,35 +218,52 @@ describe('an already-signed-in person is not asked to sign up again', () => {
   })
 })
 
-// ─── B29.6: the brand's split ───────────────────────────────────────────────
+// ─── B57.49: Pocket's auth card ─────────────────────────────────────────────
 
-describe('both pages wear the brand', () => {
-  it('the lake photo, the logo without the tagline per theme, the teal rule and one teal action', async () => {
-    for (const [path, action] of [
-      ['/signin', /^sign in$/i],
-      ['/signup', /^continue$/i],
-    ] as const) {
+// B59.8: /signup is its own wide page now (SignUp.test.tsx).
+describe('the sign-in page is Pocket’s auth card', () => {
+  it('the streams behind a white card on the cloud page, the logo to the website, one ink action', async () => {
+    for (const [path, action] of [['/signin', /^sign in$/i]] as const) {
       mockMe({ signup_open: true })
       const { container } = at(path)
       const h1 = await screen.findByRole('heading', { level: 1 })
-      // The photograph is the board's file, decorative, and lazy so a phone (where it is hidden)
-      // never fetches it.
-      const photo = container.querySelector('figure.tal-entry-photo img')!
-      expect(photo.getAttribute('srcset')).toBe('/brand/photos/lake-1200.jpg 1200w, /brand/photos/lake.jpg 2400w')
-      expect(photo.getAttribute('loading')).toBe('lazy')
-      expect(container.querySelector('figure.tal-entry-photo')).toHaveAttribute('data-theme', 'dark')
-      // The logo WITHOUT the tagline (retired 5 Oct 2026), the drawn file, one per theme — never
-      // the name in a font.
-      const logos = Array.from(container.querySelectorAll('img[data-brand="logo"]')).map((i) => i.getAttribute('src'))
-      expect(logos).toEqual(['/brand/svg/talyvor-logo-dark-notag.svg', '/brand/svg/talyvor-logo-light-notag.svg'])
-      // The teal rule straight under the heading, and the page's one primary action in accent.
-      expect(h1.nextElementSibling).toHaveClass('h-0.5', 'w-8', 'bg-accent')
-      expect(container.querySelectorAll('a.bg-accent')).toHaveLength(1)
-      expect(screen.getByRole('link', { name: action })).toHaveClass('bg-accent')
+      // Held to Pocket's design rules, not today's.
+      expect(h1.closest('[data-design]')).toHaveAttribute('data-design', 'pocket')
+      expect(container.querySelector('.bg-cloud')).not.toBeNull()
+      // The logo's streams, the kit's own files, one per theme, decorative and hidden from a screen reader.
+      const streams = Array.from(container.querySelectorAll('img[data-brand="streams"]'))
+      expect(streams.map((i) => i.getAttribute('src'))).toEqual(['/brand/logo/talyvor-streams-on-light.svg', '/brand/logo/talyvor-streams-on-dark.svg'])
+      for (const img of streams) {
+        expect(img).toHaveAttribute('alt', '')
+        expect(img.closest('[aria-hidden="true"]')).not.toBeNull()
+      }
+      // The card: white, its large shadow, the sheet's corners; the kit's small logo in it, which goes to the website.
+      const card = h1.closest('.bg-page')!
+      expect(card).toHaveClass('shadow-pocket-lg', 'rounded-sheet')
+      const logo = within(card as HTMLElement).getByRole('link', { name: 'Talyvor website' })
+      expect(logo).toHaveAttribute('href', '/marketing')
+      expect(Array.from(logo.querySelectorAll('img[data-brand="logo"]')).map((i) => i.getAttribute('src'))).toEqual([
+        '/brand/logo/talyvor-logo-small-on-light.svg',
+        '/brand/logo/talyvor-logo-small-on-dark.svg',
+      ])
+      // No teal and no lake any more, and the page's one primary action is Pocket's ink pill.
+      expect(container.querySelector('figure.tal-entry-photo, .bg-accent')).toBeNull()
+      expect(container.querySelectorAll('a.bg-primary')).toHaveLength(1)
+      expect(screen.getByRole('link', { name: action })).toHaveClass('bg-primary', 'rounded-pill')
       cleanup()
       queryClient.clear()
       vi.restoreAllMocks()
     }
+  })
+})
+
+// ─── B57.1: every control on both pages does something ──────────────────────
+
+describe('every control on both pages does something', () => {
+  it.each(['/signup', '/signin'])('%s', async (route) => {
+    const report = await pressEverything(route, { '/auth/me': { mode: 'oidc', authenticated: false, user: null, signup_open: true } })
+    expect(report.dead).toEqual([])
+    expect(report.pressed).toBeGreaterThan(4)
   })
 })
 

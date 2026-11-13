@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Input, NavIcon, cn, focusRing } from '@talyvor/ui'
 import { Region } from '../../components/Region'
-import { formatULXC } from '../lens/agentBankApi'
+import { Lxc } from '../lens/money'
 import { formatWhen } from '../lens/format'
 import { ARTIFACT, artifactOf } from '../marketplace/Marketplace'
 import { KINDS, type ListingKind, kindLabel, marketApi, parsePrice, variablesNamedIn } from '../marketplace/marketApi'
@@ -21,8 +21,18 @@ import {
   upsertMessage,
   usdText,
 } from './roomsApi'
+import { RoomAgreement } from './RoomAgreement'
+import { RoomGate } from './RoomGate'
 import { RoomLead } from './RoomLead'
+import { RoomLeaderboard } from './RoomLeaderboard'
+import { RoomObjections } from './RoomObjections'
+import { RoomPoints, pointsKey } from './RoomPoints'
+import { ContributionSize, RoomRateCard } from './RoomRateCard'
+import { ContributionReviews } from './RoomReviews'
+import { RoomSharedOwnership } from './RoomSharedOwnership'
 import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
+import { RoomTasks } from './RoomTasks'
+import { WorkspaceLabel } from '../../labels/workspace'
 
 // Room.tsx — B32.54: the room screen, for a member under the room's current terms. The conversation is fed by the
 // room's event stream (Lens B32.30 through apps/bff/rooms.go), so another member's message appears as it is posted;
@@ -30,7 +40,15 @@ import { RoomSpec, SpecMessage, currentSpec } from './RoomSpec'
 // marketplace listing on the room's budget or the member's own (B32.33), whose run message — what it cost and who
 // paid — reaches everyone in the room. The room wallet's spend this month against its budget sits at the top. B41.60:
 // the room's spec, a Docs page kept current in the conversation, and asking the room's AI, which reads it (RoomSpec.tsx).
-// B41.48: who leads the room, and the takeover vote when its owner is away (RoomLead.tsx).
+// B41.48: who leads the room, and the takeover vote when its owner is away (RoomLead.tsx). B41.41: shared ownership,
+// intent only — the owner sets the pool for contributors (RoomSharedOwnership.tsx). B41.42: the rate card, points for
+// each size of work, and a contribution's size, fixed before the work (RoomRateCard.tsx). B41.43: the points ledger, what
+// each accepted contribution earned (RoomPoints.tsx). B41.44: two reviewers drawn at random score a contribution's quality
+// (RoomReviews.tsx). B41.45: the provisional leaderboard, each holder's points and estimated share of the pool
+// (RoomLeaderboard.tsx). B41.46: the Gate tracker, shipped, used and paid, with thresholds that only rise (RoomGate.tsx).
+// B41.50: the contributor agreement, e-signed before the member's points count (RoomAgreement.tsx). B41.47: objections to
+// the frozen leaderboard, decided by three members Lens draws at random (RoomObjections.tsx). B41.52: the open tasks board,
+// tasks sized from the rate card that any member claims for itself (RoomTasks.tsx).
 //
 // Lens decides everything — who may post, contribute, vote, accept and spend — and its sentence is shown on a refusal.
 
@@ -38,13 +56,11 @@ const messagesKey = (id: string) => [...ROOMS_KEY, 'messages', id]
 const contributionsKey = (id: string) => [...ROOMS_KEY, 'contributions', id]
 
 /** Who wrote something, as this member reads it: "You", or the workspace by its id. */
-function Author({ ws, me }: { ws: string; me: string }) {
+function Author({ ws, name, me }: { ws: string; name: string; me: string }) {
   return ws === me ? (
     <span className="text-ink">You</span>
   ) : (
-    <span className="inline-block max-w-xs truncate align-bottom font-figure text-ink" title={ws}>
-      {ws}
-    </span>
+    <span className="inline-block max-w-xs truncate align-bottom text-ink">{name}</span>
   )
 }
 
@@ -57,14 +73,17 @@ export function RoomBudget({ wallet }: { wallet: RoomWallet }) {
   const share = limit > 0 ? Math.min(100, Math.round((spent / limit) * 100)) : 0
   return (
     <div className="flex flex-col gap-2 rounded-card border border-rule bg-raised p-4" data-testid="room-budget">
-      <span className="font-figure text-eyebrow uppercase text-label">The room’s budget this month</span>
+      <span className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-figure text-eyebrow uppercase text-label">The room’s budget this month</span>
+        <WorkspaceLabel capability="spend_on_talyvor" />
+      </span>
       <span className="flex flex-wrap items-baseline gap-x-2">
         <span className="font-figure text-title text-ink" data-testid="room-budget-spent">
-          {formatULXC(spent)}
+          <Lxc ulxc={spent} />
         </span>
         {limit > 0 ? (
           <span className="text-body text-muted">
-            spent of <span className="font-figure text-ink">{formatULXC(limit)}</span>
+            spent of <span className="font-figure text-ink"><Lxc ulxc={limit} /></span>
           </span>
         ) : (
           <span className="text-body text-muted">spent · no monthly limit set</span>
@@ -83,7 +102,7 @@ export function RoomBudget({ wallet }: { wallet: RoomWallet }) {
         </span>
       ) : null}
       <span className="text-caption text-muted">
-        Balance <span className="font-figure text-ink">{formatULXC(wallet.balance_ulxc)}</span> ·{' '}
+        Balance <span className="font-figure text-ink"><Lxc ulxc={wallet.balance_ulxc} /></span> ·{' '}
         {wallet.may_spend ? 'You may run things on the room.' : (wallet.why_not ?? 'You may not spend the room’s money.')}
       </span>
     </div>
@@ -93,14 +112,14 @@ export function RoomBudget({ wallet }: { wallet: RoomWallet }) {
 // ── The conversation ───────────────────────────────────────────────────────────────────────────────
 
 /** What a run cost and who paid, from its message's refs. */
-export function RunCost({ refs, me }: { refs: RunRefs; me: string }) {
+export function RunCost({ refs, payer, me }: { refs: RunRefs; payer: string; me: string }) {
   const cost =
     refs.run === 'ask'
       ? 'Model calls'
       : refs.charge === 'billed'
         ? usdText(refs.price_usd_micros ?? 0)
         : refs.charge === 'own'
-          ? 'No charge — the payer’s own work'
+          ? 'No charge: the payer’s own work'
           : refs.charge === 'licensed'
             ? 'Covered by a licence'
             : refs.charge === 'trial'
@@ -119,7 +138,7 @@ export function RunCost({ refs, me }: { refs: RunRefs; me: string }) {
           'Paid by you'
         ) : (
           <>
-            Paid by <Author ws={refs.payer_workspace_id} me={me} />
+            Paid by <Author ws={refs.payer_workspace_id} name={payer} me={me} />
           </>
         )}
       </span>
@@ -137,7 +156,7 @@ function MessageItem({ m, me, room }: { m: RoomMessage; me: string; room?: RoomD
   return (
     <li className={cn('flex flex-col gap-1', run && 'rounded-card border border-rule bg-raised p-3')} data-testid="room-message">
       <span className="flex items-baseline gap-2 text-caption text-muted">
-        <Author ws={m.author_workspace_id} me={me} />
+        <Author ws={m.author_workspace_id} name={m.author_workspace_name} me={me} />
         {run ? <span className="font-figure text-eyebrow uppercase text-label">Run</span> : null}
         {m.kind === 'contribution' ? <span className="font-figure text-eyebrow uppercase text-label">Contribution</span> : null}
         {spec ? <span className="font-figure text-eyebrow uppercase text-label">Spec</span> : null}
@@ -151,7 +170,7 @@ function MessageItem({ m, me, room }: { m: RoomMessage; me: string; room?: RoomD
       ) : (
         <span className="whitespace-pre-wrap break-words text-body text-ink">{m.body}</span>
       )}
-      {run ? <RunCost refs={m.refs} me={me} /> : null}
+      {run ? <RunCost refs={m.refs} payer={m.author_workspace_name} me={me} /> : null}
     </li>
   )
 }
@@ -181,7 +200,10 @@ function Conversation({ room, me }: { room: RoomDetail; me: string }) {
       (ev) => {
         if (!ev.message) return
         upsert(ev.message)
-        if (ev.message.kind === 'contribution') void qc.invalidateQueries({ queryKey: contributionsKey(id) })
+        if (ev.message.kind === 'contribution') {
+          void qc.invalidateQueries({ queryKey: contributionsKey(id) })
+          void qc.invalidateQueries({ queryKey: pointsKey(id) })
+        }
         if (isRun(ev.message) && ev.message.refs.pay === 'room')
           void qc.invalidateQueries({ queryKey: [...ROOMS_KEY, 'room', id] })
       },
@@ -312,7 +334,7 @@ function ContributionForm({
         </label>
       </div>
       <label className="flex flex-col gap-1 text-caption text-muted">
-        {fork ? `${what.label} — empty keeps the original’s` : what.label}
+        {fork ? `${what.label} (empty keeps the original’s)` : what.label}
         <textarea className={`min-h-20 w-full rounded-control border border-rule bg-surface p-3 text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`} value={text} placeholder={what.hint} onChange={(e) => setText(e.target.value)} />
       </label>
       <label className="text-caption text-muted">
@@ -325,7 +347,7 @@ function ContributionForm({
           onChange={(e) => setPrice(e.target.value)}
         />
       </label>
-      {micros === null ? <Note ok={false}>A price is an amount of dollars, like 0.10 — or empty for the room’s default.</Note> : null}
+      {micros === null ? <Note ok={false}>A price is an amount of dollars, like 0.10, or empty for the room’s default.</Note> : null}
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={!ok || pending}>
           {pending ? (fork ? 'Forking…' : 'Proposing…') : fork ? 'Fork it' : 'Propose'}
@@ -401,7 +423,7 @@ function ContributionCard({
         <span className="flex flex-col gap-1">
           <span className="text-head text-ink">{c.title}</span>
           <span className="text-caption text-muted">
-            by <Author ws={c.author_workspace_id} me={me} /> · <span className="font-figure">{formatWhen(c.created_at)}</span>
+            by <Author ws={c.author_workspace_id} name={c.author_workspace_name} me={me} /> · <span className="font-figure">{formatWhen(c.created_at)}</span>
           </span>
           {c.forked_from ? (
             <span className="text-caption text-muted" data-testid="contribution-original">
@@ -409,12 +431,14 @@ function ContributionCard({
               {original ? (
                 <>
                   {' '}
-                  by <Author ws={original.author_workspace_id} me={me} />
+                  by <Author ws={original.author_workspace_id} name={original.author_workspace_name} me={me} />
                 </>
               ) : null}
             </span>
           ) : null}
         </span>
+        <ContributionSize room={room} c={c} me={me} update={update} />
+        <ContributionReviews room={room} c={c} me={me} />
         <span className="flex flex-wrap items-center gap-2 border-t border-rule pt-3">
           <Button
             aria-pressed={c.my_vote === 1}
@@ -476,8 +500,10 @@ function Board({ room, me }: { room: RoomDetail; me: string }) {
   const id = room.id
   const list = useQuery({ queryKey: contributionsKey(id), queryFn: () => roomsApi.contributions(id) })
   const [proposing, setProposing] = useState(false)
-  const update = (c: Contribution) =>
+  const update = (c: Contribution) => {
     qc.setQueryData<Contribution[]>(contributionsKey(id), (l) => (l ?? []).map((x) => (x.id === c.id ? c : x)))
+    void qc.invalidateQueries({ queryKey: pointsKey(id) })
+  }
   const propose = useMutation({
     mutationFn: (d: { kind: ListingKind; title: string; text: string; micros: number | undefined }) =>
       roomsApi.propose(id, {
@@ -498,7 +524,7 @@ function Board({ room, me }: { room: RoomDetail; me: string }) {
     <Region index="02" label="Contributions" fullWidth className="flex flex-col gap-4">
       <div className="flex max-w-3xl flex-wrap items-center gap-3">
         <p className="grow text-body text-muted">
-          Work proposed to the room. Fork one to build on it — its author earns the room’s remix share — and vote for the
+          Work proposed to the room. Fork one to build on it (its author earns the room’s remix share) and vote for the
           ones the room should keep.
         </p>
         <Button aria-expanded={proposing} onClick={() => setProposing((p) => !p)}>
@@ -661,6 +687,14 @@ export function RoomLive({ room }: { room: RoomDetail }) {
       <RunPanel room={room} me={me} />
       <RoomSpec room={room} me={me} messagesKey={messagesKey(room.id)} />
       <RoomLead room={room} />
+      <RoomSharedOwnership room={room} />
+      <RoomRateCard room={room} />
+      <RoomPoints room={room} />
+      <RoomLeaderboard room={room} />
+      <RoomGate room={room} />
+      <RoomAgreement room={room} />
+      <RoomObjections room={room} />
+      <RoomTasks room={room} />
     </>
   )
 }

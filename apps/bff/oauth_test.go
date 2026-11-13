@@ -163,7 +163,7 @@ func TestOAuthFlowAsClaudeRunsIt(t *testing.T) {
 			"redirect_uris": []string{claudeReturn}, "token_endpoint_auth_method": "none"})
 	}))
 	defer doc.Close()
-	cimdID = doc.URL + "/oauth/claude-client.json"
+	cimdID = "https://claude.example.com/oauth/claude-client.json" // doc.Client() dials example.com at the test server
 	a.connectorOut = doc.Client().Transport
 	byCIMD := connect(t, a, ck, cimdID)
 

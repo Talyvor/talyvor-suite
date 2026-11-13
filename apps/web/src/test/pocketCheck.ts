@@ -165,7 +165,7 @@ export function controlName(el: Element): string {
 
 /**
  * Why a control is not pressed, or '' to press it: a link that leaves the app (another site, a new tab,
- * a download, mail), the link to the page you are on, or a disabled control, which passes only when it
+ * a download, mail), the link to the page you are on, the tab that is on, or a disabled control, which passes only when it
  * says why in words beside it (its aria-describedby, or words in a box it has to itself).
  */
 export function notPressed(el: HTMLElement): string {
@@ -175,6 +175,8 @@ export function notPressed(el: HTMLElement): string {
     if (a.target === '_blank' || a.hasAttribute('download') || /^(mailto|tel):/.test(a.href) || new URL(a.href, doc.baseURI).origin !== doc.location.origin) return 'leaves the app'
     if (a.getAttribute('aria-current') === 'page' || a.href === doc.location.href) return 'the page you are on'
   }
+  // B57.4 — the tab that is on is the tab you are on, as the reference draws it (a.tab.on): pressing it again is no press.
+  if (el.getAttribute('role') === 'tab' && el.getAttribute('aria-selected') === 'true') return 'the tab you are on'
   if ((el as HTMLButtonElement).disabled || el.getAttribute('aria-disabled') === 'true') {
     const own = (el.textContent || '').replace(/\s+/g, ' ').trim()
     const described = (el.getAttribute('aria-describedby') || '').split(/\s+/).map((id) => (id && doc.getElementById(id)?.textContent) || '').join('').trim()

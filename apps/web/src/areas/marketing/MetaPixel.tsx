@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { Button, focusRing, inlineLink } from '@talyvor/ui'
+import { Button, Card, CloseX, pocketFocusRing } from '@talyvor/ui/pocket'
 import { WAITLIST_JOINED_EVENT } from '../../components/Waitlist'
 import { signupStateOf } from '../../lib/signupOpen'
 import { META_DATASET_ID, type Consent, isPublicPath, readConsent, revokePixel, startPixel, track, writeConsent } from './pixel'
@@ -67,29 +67,23 @@ export function MetaPixel() {
 
   if (!live || !open) return null
   return (
-    <div role="dialog" aria-label="Cookies" className="fixed inset-x-0 bottom-0 z-50 border-t border-rule bg-surface">
-      <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-3 px-gutter py-4">
-        <p className="min-w-0 flex-1 basis-64 text-body text-ink">
+    // B57.59: Pocket's white card, floating over the page's foot; Accept and Reject drawn alike.
+    <div role="dialog" aria-label="Cookies" data-design="pocket" className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-3xl">
+      <Card tone="white" className="flex flex-wrap items-center gap-3">
+        <p className="min-w-0 flex-1 basis-64 text-reading text-ink">
           We use one advertising cookie, Meta’s, to measure our ads. Only if you accept.
         </p>
-        <div className="flex items-center gap-2">
-          <Button className="h-10 w-28" onClick={() => choose('accepted')}>
+        <div className="flex items-center gap-2.5">
+          <Button variant="secondary" onClick={() => choose('accepted')}>
             Accept
           </Button>
-          <Button className="h-10 w-28" onClick={() => choose('rejected')}>
+          <Button variant="secondary" onClick={() => choose('rejected')}>
             Reject
           </Button>
           {/* Closing it counts as Reject. */}
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={() => choose('rejected')}
-            className={`h-10 w-10 text-body text-muted ${focusRing}`}
-          >
-            ×
-          </button>
+          <CloseX onClose={() => choose('rejected')} />
         </div>
-      </div>
+      </Card>
     </div>
   )
 }
@@ -98,11 +92,12 @@ export function MetaPixel() {
 export function CookieSettingsLink() {
   if (META_DATASET_ID === '' || !isPublicPath(window.location.pathname)) return null
   return (
-    <>
-      {' · '}
-      <button type="button" className={inlineLink} onClick={() => window.dispatchEvent(new Event(COOKIE_SETTINGS_EVENT))}>
-        Cookie settings
-      </button>
-    </>
+    <button
+      type="button"
+      className={`font-semibold text-ink-2 ${pocketFocusRing}`}
+      onClick={() => window.dispatchEvent(new Event(COOKIE_SETTINGS_EVENT))}
+    >
+      Cookie settings
+    </button>
   )
 }

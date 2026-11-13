@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { receipt } from './PaymentCards'
 
 // B45.2 — a payment the assistant prepares in Chat (Lens's prepare_payment, through /api/chat/tools/call) is B40.9's card
 // right in the conversation: payee, amount, why, the rule that asked, and Approve / Decline. Approve is the same passkey
@@ -26,14 +27,16 @@ const SAYS = sse(
 const ITEM = { position: 1, payee_id: 'payee_1', payee_name: 'Acme Ltd', currency: 'GBP', amount_minor: 12000, reference: 'INV-7', decision: 'needs_approval',
   reason: 'above the £100.00 the mandate pays without asking', rule: 'requires_approval_above' }
 
-function mockBff() {
+function mockBff(items: Record<string, unknown>[] = [ITEM]) {
   const sent: string[] = []
-  let request: Record<string, unknown> = { id: 'preq_1', status: 'pending_approval', summary: '1 payment to Acme Ltd', client: 'chat', totals: { GBP: 12000 }, items: [ITEM], created_at: '2026-10-24T09:00:00Z' }
+  let request: Record<string, unknown> = { id: 'preq_1', status: 'pending_approval', summary: 'Pay Acme Ltd £120.00', client: 'chat', totals: { GBP: 12000 }, items, created_at: '2026-10-24T09:00:00Z' }
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
     const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/models') return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, tier: 'frontier' }])
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
     if (url === '/api/chat/tools')
@@ -102,7 +105,7 @@ describe('payment cards in the conversation (B45.2)', () => {
     expect(card.textContent).toContain('£120.00')
     expect(card.textContent).toContain('Reference: INV-7')
     expect(card.textContent).toContain('Asks for approval: above the £100.00 the mandate pays without asking.')
-    expect(card.textContent).toContain('requires_approval_above')
+    expect(card.textContent).not.toContain('requires_approval_above')
     expect(within(card).getByRole('button', { name: 'Decline' })).toBeTruthy()
     expect(bff.sent).toEqual([`tool ${JSON.stringify({ name: 'prepare_payment', arguments: ARGS })}`])
 
@@ -135,8 +138,37 @@ describe('payment cards in the conversation (B45.2)', () => {
     const card = await prepareInChat()
     fireEvent.click(within(card).getByRole('button', { name: 'Decline' }))
     const receipt = await screen.findByTestId('chat-pay-receipt')
-    expect(receipt.textContent).toBe('Declined. Nothing was paid (£120.00 to Acme Ltd).')
+    expect(receipt.textContent).toBe('Declined. Nothing that waited for you will be paid.')
     expect(bff.sent.slice(1)).toEqual(['cancel'])
     expect(bff.get).not.toHaveBeenCalled()
+  })
+})
+
+// B55.22 — a payment inside a permission is paid when the assistant prepares it, and Chat says so.
+describe('a covered payment the assistant prepared', () => {
+  it('reads as paid without asking you', () => {
+    const r = { id: 'preq_1', status: 'auto', summary: '', client: 'chat', totals: { GBP: 12000 }, created_at: '2026-10-24T09:00:00Z',
+      items: [{ ...ITEM, decision: 'auto', payment_id: 'mpay_1', pay_status: 'completed' }] }
+    expect(receipt(r)).toBe('Paid without asking you: £120.00 to Acme Ltd, inside a permission you signed.')
+  })
+})
+
+// B55.33 — Chat's card is the same card, in words: an item's payment status, no rule code, no pill for a flag without words.
+describe('the payment card in words (B55.33)', () => {
+  it('says each payment in words and shows no code', async () => {
+    mockBff([{ ...ITEM, flags: [{ code: 'velocity_spike', detail: 'three payments to Acme Ltd in an hour' }] },
+      { ...ITEM, position: 2, listing_id: 'lst_1', payee_id: '', payee_name: 'Weather data', decision: 'auto', reason: '', rule: 'mandate', pay_status: 'not_paid' }])
+    const card = await prepareInChat()
+    expect(within(card).getByTestId('approve-item-2').textContent).toContain('Not paid: a marketplace purchase is not paid from here yet')
+    const text = card.textContent ?? ''
+    expect(text).not.toMatch(/\([a-z_.]+\)/)
+    expect(text).not.toContain('not_')
+    expect(text).not.toContain('item(s)')
+    expect(text).not.toContain('velocity_spike')
+  })
+
+  it('says a request in a state it does not know is closed', () => {
+    const r = { id: 'preq_1', status: 'superseded', summary: '', client: 'chat', totals: { GBP: 12000 }, created_at: '2026-10-24T09:00:00Z', items: [ITEM] }
+    expect(receipt(r)).toBe('This request is closed.')
   })
 })

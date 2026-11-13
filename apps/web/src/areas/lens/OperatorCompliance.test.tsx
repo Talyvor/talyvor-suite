@@ -58,7 +58,8 @@ describe('the operator’s Compliance page (B30.104)', () => {
   it('shows each capability’s class and clearance, the shortfall, and a missing statement line as a break with its amount', async () => {
     mockBff()
     const nav = await at('/operator/compliance')
-    expect(within(nav).getByRole('link', { name: 'Compliance' })).toHaveAttribute('href', '/operator/compliance')
+    // B57.8 — the operator's pages are under Settings in the sidebar.
+    expect(within(nav).getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
     expect(screen.queryByTestId('compliance-preview')).toBeNull()
 
     const caps = await screen.findAllByTestId('compliance-capability')

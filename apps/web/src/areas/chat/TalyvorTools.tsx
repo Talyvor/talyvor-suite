@@ -66,7 +66,7 @@ export function ToolConfirmCard({ ask, onAnswer }: { ask: ToolConfirm; onAnswer:
             {others.map(([k, v]) => (
               <div key={k} className="flex min-w-0 flex-wrap gap-x-2">
                 <dt className="text-muted">{k}</dt>
-                <dd className="min-w-0 break-words font-figure text-ink">{said(v) ?? '—'}</dd>
+                <dd className="min-w-0 break-words font-figure text-ink">{said(v) ?? 'None'}</dd>
               </div>
             ))}
           </dl>

@@ -6,8 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { blankComments } from '../../../packages/ui/src/lib/sourceText'
 import { App, CONSOLE_ROUTES, queryClient } from './App'
-import { SIDEBAR_FOLD_KEY } from './sidebarFold'
-import { openEveryGroup, revealLink } from './sidebarTestKit'
 
 /**
  * ConsoleNavLinks.test.tsx — TEN OF THE TWELVE DESTINATIONS IN THE CONSOLE'S PRIMARY NAVIGATION
@@ -75,80 +73,29 @@ import { openEveryGroup, revealLink } from './sidebarTestKit'
  * keep true, so it is gone rather than incremented.)
  */
 
-/** Every destination the sidebar offers, pinned. A literal, so a deletion moves it too. */
+/** Every destination the sidebar offers, pinned. A literal, so a deletion moves it too. B57.8 — Pocket's rows. */
 const SIDEBAR_DESTINATIONS = [
+  // The logo, to Home, and Home's own row: one destination, two links.
   '/',
   // B28.7 — the wallet's own destinations, under Home.
   '/approvals',
-  '/statements',
-  // B28.10 — Earnings became Royalties, indented under Statements.
-  '/statements/royalties',
-  // B28.6 — Home took `/`; Overview moved one address over, still in the sidebar.
-  '/overview',
-  '/ledger',
-  // B8.1 — every screen the console mounts, grouped by product.
-  '/chat',
-  // B32.53 — rooms, indented under Chat.
-  '/rooms',
-  '/track/board',
-  '/track/cycles',
-  '/track/projects',
-  '/pricing',
-  '/features',
-  '/billing',
-  // B13.3 — the three plans, the usage meter and the earnings card.
-  '/plans',
-  '/setup',
-  '/keys',
-  // B19.4 — Agent Wallets (B21.6), beside the keys an agent spends through.
   '/agents',
-  // B20.3 — the marketplace: browse, publish, and what your listings earned; B32.59 — your licences.
-  '/marketplace',
-  '/marketplace/publish',
-  '/marketplace/selling',
-  '/marketplace/licences',
-  '/marketplace/bill',
-  '/spend',
-  '/members',
-  '/settings',
-  '/settings/verification',
-  '/settings/terms',
-  '/settings/webhooks',
-  '/settings/email-branding',
-  '/settings/connect',
-  // B30.97 — the first Money item: invoices and their pay links.
-  '/money/invoices',
+  '/statements',
   '/money/pay',
-  '/money/subscriptions',
+  '/money/invoices',
   '/money/spending',
-  '/money/budgets',
+  '/chat',
+  '/rooms',
+  '/marketplace',
+  // Below the rule.
   '/scan/reports',
-  '/scan/agents',
-  '/scan/track-record',
   '/track',
-  '/docs',
+  '/setup',
+  '/billing',
+  '/settings',
+  // At the foot.
   '/privacy',
   '/terms',
-] as const
-
-/** B20.12, B18.25, B32.63 — offered only when /auth/me says this person is an operator, so absent from every render
- *  below (they sign in as nobody). Review.test.tsx, OperatorWorkspaces.test.tsx and OperatorTax.test.tsx render them as
- *  links for an operator. */
-const OPERATOR_DESTINATIONS = ['/marketplace/review', '/operator', '/operator/tax', '/operator/compliance'] as const
-
-/**
- * B24.1 — the sidebar folds to its group titles. These are its only COMMANDS: each group's title
- * opens and closes that group, and the one at the top folds or opens them all. They go nowhere, so
- * they are <button>s, and they are the ONLY href-less affordances the sweep below allows, by name.
- */
-const FOLD_CONTROLS = [
-  'Fold all <button NO-HREF>',
-  'Marketplace <button NO-HREF>',
-  'Work <button NO-HREF>',
-  'Developers <button NO-HREF>',
-  'Billing <button NO-HREF>',
-  'Money <button NO-HREF>',
-  'Settings <button NO-HREF>',
 ] as const
 
 /**
@@ -197,8 +144,6 @@ afterEach(() => {
   vi.restoreAllMocks()
   queryClient.clear()
   document.body.replaceChildren()
-  // Pressing a title is remembered; the next case starts from a fresh load, not from this one.
-  window.localStorage.removeItem(SIDEBAR_FOLD_KEY)
 })
 
 const addressOf = (routePath: string) => routePath.replace(/\/\*$/, '')
@@ -248,7 +193,7 @@ describe('every destination in the console navigation is a link', () => {
       [...new Set(declared)].sort(),
       'App.tsx offers a sidebar destination this file does not pin (or no longer offers one it ' +
         'does) — a thirteenth destination could otherwise be added as a button and never be swept',
-    ).toEqual([...SIDEBAR_DESTINATIONS, ...OPERATOR_DESTINATIONS].sort())
+    ).toEqual([...SIDEBAR_DESTINATIONS].sort())
   })
 
   for (const route of CONSOLE_ROUTES) {
@@ -257,26 +202,25 @@ describe('every destination in the console navigation is a link', () => {
       window.history.pushState({}, '', address)
       render(<App />)
       await screen.findByRole('navigation', { name: /sections/i })
-      // B24.1 — a folded group's links are not rendered at all, so every group is opened first.
-      openEveryGroup(sectionsNav())
 
       const found = affordances(sectionsNav())
+      // One more link than destinations: the logo and Home's row both go to `/`.
       expect(
         found.length,
         `the sidebar at ${address} offered ${found.length} focusable affordances, not ` +
-          `${SIDEBAR_DESTINATIONS.length} destinations and ${FOLD_CONTROLS.length} fold controls — ` +
+          `the logo and ${SIDEBAR_DESTINATIONS.length} destinations — ` +
           'a sidebar that drew nothing has no href-less destination either, so the assertion ' +
           'below would be a fact about an empty box',
-      ).toBe(SIDEBAR_DESTINATIONS.length + FOLD_CONTROLS.length)
+      ).toBe(SIDEBAR_DESTINATIONS.length + 1)
       expect(
-        found.filter((f) => f.includes('NO-HREF') && !(FOLD_CONTROLS as readonly string[]).includes(f)),
+        found.filter((f) => f.includes('NO-HREF')),
         `${address}: these destinations in the primary navigation carry no href. They cannot be ` +
           'cmd-clicked into a new tab, cannot be middle-clicked at all, have no "copy link ' +
           'address", and are announced as buttons — so the links list behind the gate does not ' +
           'contain the product.',
       ).toEqual([])
       expect(
-        linkPaths(sectionsNav()).sort(),
+        [...new Set(linkPaths(sectionsNav()))].sort(),
         `${address}: the sidebar's links do not address the destinations it offers`,
       ).toEqual([...SIDEBAR_DESTINATIONS].sort())
     })
@@ -286,23 +230,26 @@ describe('every destination in the console navigation is a link', () => {
 describe('the capability, not the tag: activation is what the reader gets', () => {
   beforeEach(mockBff)
 
-  /** Mount at `/` and hand back the sidebar link for `to` — pressing its group's title, then the link. */
+  /** Mount at `/` and hand back the sidebar's row for `to`. B57.8 — nothing folds, so it is on screen. */
   async function sidebarLink(to: string): Promise<HTMLAnchorElement> {
     window.history.pushState({}, '', '/')
     render(<App />)
     await screen.findByRole('navigation', { name: /sections/i })
-    return revealLink(sectionsNav(), to)
+    const rows = Array.from(sectionsNav().querySelectorAll<HTMLAnchorElement>('a[href]:not([aria-label])'))
+    const row = rows.find((a) => new URL(a.href, window.location.origin).pathname === to)
+    if (!row) throw new Error(`the sidebar has no row to ${to}`)
+    return row
   }
 
-  it('B28.7 — the agents destination is called Agent Wallets, the title of the page it opens', async () => {
+  it('B57.8 — the agents destination is called Agents, the title of the page it opens', async () => {
     const link = await sidebarLink('/agents')
-    expect(link.textContent?.trim()).toBe('Agent Wallets')
+    expect(link.textContent?.trim()).toBe('Agents')
   })
 
   it('a plain click navigates, and does it inside the app rather than reloading', async () => {
-    const link = await sidebarLink('/ledger')
+    const link = await sidebarLink('/money/pay')
     fireEvent.click(link, { button: 0 })
-    expect(window.location.pathname, 'a plain click did not navigate').toBe('/ledger')
+    expect(window.location.pathname, 'a plain click did not navigate').toBe('/money/pay')
     expect(
       document.querySelector('nav[aria-label="Sections"]'),
       'the shell was torn down by the click — this became a full page load, which is what the ' +
@@ -311,7 +258,7 @@ describe('the capability, not the tag: activation is what the reader gets', () =
   })
 
   it('a cmd/ctrl-clicked destination is left to the browser, not stolen by the app', async () => {
-    const link = await sidebarLink('/ledger')
+    const link = await sidebarLink('/money/pay')
     fireEvent.click(link, { button: 0, metaKey: true })
     expect(
       window.location.pathname,
@@ -327,15 +274,15 @@ describe('the capability, not the tag: activation is what the reader gets', () =
   })
 
   it('the destination is on the element itself, where the browser and the rotor read it', async () => {
-    const link = await sidebarLink('/keys')
-    expect(link.getAttribute('href')).toBe('/keys')
+    const link = await sidebarLink('/setup')
+    expect(link.getAttribute('href')).toBe('/setup')
     expect(
       link.getAttribute('target'),
       'a target would take the same-tab navigation away again',
     ).toBeNull()
   })
 
-  it('the active destination still announces itself as the current page', async () => {
+  it('the active destination still announces itself as the current page, and a page that left the sidebar marks its row', async () => {
     window.history.pushState({}, '', '/keys')
     render(<App />)
     await screen.findByRole('navigation', { name: /sections/i })
@@ -344,6 +291,6 @@ describe('the capability, not the tag: activation is what the reader gets', () =
       current.map((el) => (el.textContent ?? '').trim()),
       'aria-current moved off the destination when it stopped being a button — the selected row ' +
         'is then a tick a sighted reader sees and nothing else',
-    ).toEqual(['API keys'])
+    ).toEqual(['Developers'])
   })
 })

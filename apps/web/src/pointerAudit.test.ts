@@ -200,12 +200,12 @@ const PINS: Record<string, Pin> = {
     fragment: 'text-eyebrow uppercase',
     why: 'the element that OPENS the eyebrow, quoted to show CaseSafe sits inside it rather than on it',
   },
-  'apps/web/src/placeholderAudit.ts:36|apps/web/src/areas/lens/Keys.tsx:115': {
+  'apps/web/src/placeholderAudit.ts:36|apps/web/src/areas/lens/Keys.tsx:100': {
     kind: 'LIVE',
     fragment: 'placeholder={k.key_prefix}',
     why: 'the site that passes a placeholder THROUGH a component, the whole argument for reading the DOM',
   },
-  'apps/web/src/motion.test.tsx:154|packages/ui/src/preset.ts:214': {
+  'apps/web/src/motion.test.tsx:154|packages/ui/src/preset.ts:232': {
     kind: 'LIVE',
     fragment: 'active:scale-[0.98]',
     why: 'the comment that writes the press one way, half of the pair the motion lock exists to keep apart',
@@ -250,7 +250,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'error={ledger.error}',
     why: 'the CORRECT copy of the seam Spend.tsx had backwards — the whole positive control for that finding is that this line reads `ledger.error` while its guard is `ledger.isError`',
   },
-  'apps/web/src/PanelReportsItsOwnQuery.test.tsx:348|apps/web/src/areas/lens/Overview.tsx:326': {
+  'apps/web/src/PanelReportsItsOwnQuery.test.tsx:356|apps/web/src/areas/lens/Overview.tsx:326': {
     kind: 'LIVE',
     fragment: '<Failed what="the mint ledger" error={ledger.error} />',
     why: 'the same line quoted VERBATIM beside the must-stay-green control that asserts its wording, so the quote and the assertion cannot drift apart',
@@ -260,31 +260,31 @@ const PINS: Record<string, Pin> = {
     fragment: 'normal-case',
     why: 'the ONE applied `normal-case` in the product; the sentence says "exactly ONE ... in the product" in the present tense',
   },
-  'apps/web/src/caseAudit.ts:44|apps/web/src/areas/marketing/Landing.tsx:68': {
-    kind: 'LIVE',
+  'apps/web/src/caseAudit.ts:44|apps/web/src/areas/marketing/Landing.tsx:71': {
+    kind: 'HISTORICAL',
     fragment: 'font-figure text-eyebrow uppercase text-label',
-    why: 'the uppercase label whose µ arrives as a prop from 130 lines away — the reason the rule cannot be a source rule',
+    why: 'the uppercase label whose µ arrived as a prop from 130 lines away AS AT `a0bd22f`, quoted with that SHA — B59.5 took the pooled stepper and its Figure off the home page'
   },
-  'apps/web/src/test-setup.ts:208|packages/ui/src/components/CaseSafe.tsx:85': {
+  'apps/web/src/test-setup.ts:209|packages/ui/src/components/CaseSafe.tsx:85': {
     kind: 'LIVE',
     fragment: 'normal-case',
     why: 'a DEVELOPER-FACING FAILURE MESSAGE naming the shape to copy — read exactly when somebody is already confused',
   },
 
-  'apps/web/src/areas/lens/Overview.tsx:340|apps/web/src/areas/marketing/Landing.tsx:168': {
-    kind: 'LIVE',
+  'apps/web/src/areas/lens/Overview.tsx:340|apps/web/src/areas/marketing/Landing.tsx:184': {
+    kind: 'HISTORICAL',
     fragment: 'transition-colors duration-200',
-    why: "the SITE's motion shape, quoted where the console copies it — W1.1.0's rule is that a console link moves the way the public page moves, so the call site names the line it is imitating rather than inventing a fifth hover shape",
+    why: "the SITE's motion shape, quoted where the console copies it — W1.1.0's rule is that a console link moves the way the public page moves, so the call site names the line it is imitating rather than inventing a fifth hover shape. AS AT `a0bd22f`, quoted with that SHA: B59.5 took the pooled stepper off the home page",
   },
-  'apps/web/src/areas/lens/CacheCard.tsx:58|apps/web/src/areas/marketing/Landing.tsx:168': {
-    kind: 'LIVE',
+  'apps/web/src/areas/lens/CacheCard.tsx:58|apps/web/src/areas/marketing/Landing.tsx:184': {
+    kind: 'HISTORICAL',
     fragment: 'transition-colors duration-200',
-    why: 'the same shape on the card Overview renders in region 04 — this card is on BOTH /overview and /spend, so the pointer is what says the affordance is one component having one answer',
+    why: 'the same shape on the card Overview renders in region 04 — this card is on BOTH /overview and /spend, so the pointer is what says the affordance is one component having one answer. AS AT `a0bd22f`, quoted with that SHA: B59.5 took the pooled stepper off the home page',
   },
-  'apps/web/src/areas/lens/Overview.test.tsx:392|apps/web/src/areas/marketing/Landing.tsx:168': {
-    kind: 'LIVE',
+  'apps/web/src/areas/lens/Overview.test.tsx:392|apps/web/src/areas/marketing/Landing.tsx:184': {
+    kind: 'HISTORICAL',
     fragment: 'transition-colors duration-200',
-    why: "the failure message of Overview's motion sweep, naming the line a developer should copy — read exactly when somebody is already confused, the same argument motion.test.tsx:154 makes",
+    why: "the failure message of Overview's motion sweep, naming the line a developer should copy — read exactly when somebody is already confused, the same argument motion.test.tsx:154 makes. AS AT `a0bd22f`, quoted with that SHA: B59.5 took the pooled stepper off the home page",
   },
   'apps/web/src/pinnedClock.test.ts:13|apps/web/src/areas/lens/lxcSplitCoverage.test.tsx:136': {
     kind: 'HISTORICAL',
@@ -367,7 +367,7 @@ const PINS: Record<string, Pin> = {
   // the error's CLASS, and the argument is only as good as the three siblings it contrasts with.
   // Each of these three is quoted as gating on `isError`; if one of them is ever narrowed to an
   // `instanceof` the way TopUp was, that sentence stops being true and this pin says so.
-  'apps/web/src/checkoutRefusalSurface.test.tsx:22|apps/web/src/areas/lens/Keys.tsx:132': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:22|apps/web/src/areas/lens/Keys.tsx:102': {
     kind: 'LIVE',
     fragment: '.isError ?',
     why: 'the sibling with the same fallback shape — revoke gates on isError and picks its 404 words inside',
@@ -401,7 +401,7 @@ const PINS: Record<string, Pin> = {
     fragment: '!body.url',
     why: 'the reason a 200 with no url is NOT the finding — it is already converted, so the gate lets it through',
   },
-  'apps/web/src/checkoutRefusalSurface.test.tsx:59|apps/web/src/App.tsx:107': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:59|apps/web/src/App.tsx:115': {
     kind: 'LIVE',
     fragment: 'onError',
     why: 'the app\'s only global error handler, quoted to show it hangs off the QUERY cache and cannot see a mutation',
@@ -424,7 +424,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'ApiError, NOT a bare Error',
     why: 'the census quoting the one place the repo recorded the class, so its list of four is checkable',
   },
-  'apps/web/src/checkoutRefusalSurface.test.tsx:65|apps/web/src/areas/lens/TopUp.tsx:30': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:65|apps/web/src/areas/lens/TopUp.tsx:33': {
     kind: 'LIVE',
     fragment: 'The payment happens THERE',
     why: 'why "nothing was charged" is honest for a call that never completed — the charge happens after the redirect',
@@ -434,7 +434,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the BFF half of the same parenthesis — the sentence promises this line says the payment happens at Stripe AFTER the redirect',
   },
-  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:955': {
+  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:1017': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'the first of the TWO independent clamps the page ceiling rests on, quoted verbatim by the sentence that cites it',
@@ -444,17 +444,17 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the example that paragraph gives of a citation checkable from here — now checked, which is what it asked for',
   },
-  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:955': {
+  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:1017': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'its second example, pinned for the same reason',
   },
-  'apps/web/src/upstreamCitations.test.ts:62|apps/web/src/areas/lens/TopUp.tsx:30': {
+  'apps/web/src/upstreamCitations.test.ts:62|apps/web/src/areas/lens/TopUp.tsx:33': {
     kind: 'LIVE',
     fragment: 'The payment happens THERE',
     why: 'the citation that WAS pinned, named in the account of why its neighbour was not — so that account cannot rot either',
   },
-  'apps/web/src/checkoutRefusalSurface.test.tsx:177|apps/web/src/areas/lens/TopUp.tsx:320': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:177|apps/web/src/areas/lens/TopUp.tsx:323': {
     kind: 'LIVE',
     fragment: 'must not leave a pending marker behind',
     why: 'the rule the marker test asserts, quoted from the code that states it rather than restated',
@@ -487,7 +487,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'one configured workspace credential',
     why: 'the "cosmetic, not blocking" note that auth.go still describes the old one-workspace model — the only in-repo runbook pointer that was accurate',
   },
-  'apps/web/src/areas/docs/BFF-GAPS.md:14|apps/bff/lens.go:190': {
+  'apps/web/src/areas/docs/BFF-GAPS.md:14|apps/bff/lens.go:194': {
     kind: 'LIVE',
     fragment: '"/api/docs/spaces"',
     why: 'the Docs proxy mechanics are "same as the existing route"; it cited lens.go:74, which is /api/bonds — three more Docs routes were mounted above it',
@@ -501,12 +501,12 @@ const PINS: Record<string, Pin> = {
   // in THIS repository can move without touching the screen. That is exactly the rot this file
   // was written for: `billing.go:180` moved and the sentence explaining "nothing was charged"
   // ended up pointing at the one function that cannot charge.
-  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/lens.go:1205': {
+  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/lens.go:1287': {
     kind: 'LIVE',
     fragment: 'X-User-Email',
     why: 'the screen marks YOUR row by comparing /auth/me\'s email to the roster; the claim that this header is the membership join key is the whole basis for that being a join rather than a guess',
   },
-  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/auth.go:835': {
+  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/auth.go:857': {
     kind: 'LIVE',
     fragment: 's.email',
     why: 'the other half of the same argument — the browser may only mark a row if /auth/me serves the SAME value the BFF forwards upstream',
@@ -531,17 +531,17 @@ const PINS: Record<string, Pin> = {
     fragment: 'TRACK_BASE_URL',
     why: 'the same claim at the case that asserts it, so the case and the header cannot drift apart',
   },
-  'apps/web/src/areas/lens/Members.test.tsx:51|apps/bff/auth.go:835': {
+  'apps/web/src/areas/lens/Members.test.tsx:51|apps/bff/auth.go:857': {
     kind: 'LIVE',
     fragment: 's.email',
     why: 'the fixture claims to serve /auth/me "in the exact shape" — a fixture more generous than the real handler is how the docs translate probe went green in English',
   },
-  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/lens.go:1205': {
+  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/lens.go:1287': {
     kind: 'LIVE',
     fragment: 'X-User-Email',
     why: 'the case that argues the comparison must be EXACT rests on this being the key the upstream joined on',
   },
-  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/auth.go:835': {
+  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/auth.go:857': {
     kind: 'LIVE',
     fragment: 's.email',
     why: 'same sentence, the /auth/me half',

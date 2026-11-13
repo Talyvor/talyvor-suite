@@ -150,7 +150,7 @@ export function useIssueListKeys() {
               setNotice(`${target.name} closed.`)
               refocusIssue(target.id)
             })
-            .catch(() => setNotice(`Couldn’t close ${target.name} — nothing was changed.`))
+            .catch(() => setNotice(`Couldn’t close ${target.name}. Nothing was changed.`))
           return
         }
       }

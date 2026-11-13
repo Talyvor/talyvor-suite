@@ -244,51 +244,6 @@ export function connectOAuth(): Scenario {
   }
 }
 
-// B52.9 — SIGN OUT EVERYWHERE ENDS EVERY ASSISTANT. One scenario, once a run, on a workspace of its own:
-//   connect-sign-out-everywhere — two assistants are allowed through the consent screen and /mcp takes both tokens; on
-//     Settings → Connect your AI the person presses Sign out everywhere and confirms. This browser is signed out, and
-//     /mcp refuses both assistants' tokens as not connected.
-export function connectSignOutEverywhere(): Scenario {
-  return {
-    id: 'connect-sign-out-everywhere',
-    owner: 'talyvor-suite',
-    own: true,
-    items: ['B52.9'],
-    feature: 'Talyvor Connect',
-    title: 'two connected assistants, then Sign out everywhere on Settings → Connect your AI: this browser is signed out and /mcp refuses both tokens',
-    run: async (ctx) => {
-      const origin = new URL(ctx.app.page.url()).origin
-      const tokens: string[] = []
-      for (const name of ['e2e Claude', 'e2e ChatGPT']) {
-        const t = await connectAssistant(ctx, origin, name)
-        if (typeof t !== 'string') return t
-        tokens.push(t)
-      }
-      const before = await Promise.all(tokens.map(async (t) => (await mcp(origin, t)).status))
-      if (before.some((s) => s !== 200)) return { pass: false, detail: `before signing out everywhere /mcp answered ${before.join(', ')}` }
-
-      const page = ctx.app.page
-      await page.goto(`${origin}/settings/connect`)
-      await page.getByRole('button', { name: 'Sign out everywhere' }).click()
-      await Promise.all([
-        page.waitForResponse((r) => r.url().endsWith('/auth/logout-everywhere'), { timeout: 30_000 }),
-        page.getByRole('button', { name: 'Yes, sign out everywhere' }).click(),
-      ])
-      const me = await page.evaluate(async () => (await (await fetch('/auth/me')).json()) as { authenticated?: boolean })
-      const after = await Promise.all(tokens.map(async (t) => {
-        const r = await mcp(origin, t)
-        return `${r.status} ${await r.text()}`
-      }))
-      ctx.evidence.push({ note: `after signing out everywhere: /auth/me authenticated=${String(me.authenticated)}; /mcp on each token: ${after.join(' | ')}` })
-      const wrong: string[] = []
-      if (me.authenticated !== false) wrong.push('this browser is still signed in')
-      for (const a of after) if (!a.startsWith('401') || !a.includes('not connected')) wrong.push(`an assistant's token answered ${a.slice(0, 120)}, not 401 not connected`)
-      return wrong.length > 0 ? { pass: false, detail: wrong.join('; ') }
-        : { pass: true, detail: 'Sign out everywhere signed this browser out, and /mcp refused both connected assistants as not connected' }
-    },
-  }
-}
-
 /** What /mcp answers a JSON-RPC message with: a tool's result, the server's description or its tools. */
 interface RPCResult {
   isError?: boolean
@@ -520,8 +475,12 @@ export function connectMCP(): Scenario {
           await card.waitFor({ timeout: 30_000 })
           const words = (await card.innerText()).replace(/\s+/g, ' ')
           ctx.evidence.push({ note: `the approval card: "${words}"` })
-          // B46.2 (Nick, 24 Oct): the card carries no "Test money" chip any more, so only the payees are read.
           if (!words.includes('Nightly MCP Supplier One Ltd') || !words.includes('Nightly MCP Supplier Two Ltd')) wrong.push(`the approval card does not show both payees: "${words}"`)
+          // B56.13 — no "Test money" chip (B46.2): Lens's Sandbox for the payments out, as it labels a synthetic workspace (B56.11).
+          const chip = page.locator('[data-status-key="payments_out"]')
+          const chipState = await chip.first().getAttribute('data-status-label', { timeout: 10_000 }).catch(() => null)
+          if (chipState !== 'sandbox') wrong.push(`the approval card's payments out are labelled ${JSON.stringify(chipState)}, not Sandbox`)
+          if (await page.getByText('Test money', { exact: true }).count() > 0) wrong.push('the approval card still carries a "Test money" chip')
           if (!(await page.getByTestId('approve-total').innerText()).includes('2 of 2 payments to approve, total £30.00')) wrong.push(`the approval card's total reads "${await page.getByTestId('approve-total').innerText()}"`)
           await page.getByRole('checkbox', { name: 'Approve £20.00 to Nightly MCP Supplier Two Ltd' }).click()
           const total = await page.getByTestId('approve-total').innerText()

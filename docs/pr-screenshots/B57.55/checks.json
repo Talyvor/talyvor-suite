@@ -1,0 +1,6 @@
+[
+  { "route": "/setup", "screen": "w-dev" },
+  { "route": "/keys", "screen": "w-dev-keys" },
+  { "route": "/keys", "screen": "w-dev-keys+new-key", "steps": ["New key"] },
+  { "route": "/keys", "screen": "w-dev-keys+revoke-key", "steps": ["Revoke tlv_ws_c21d7e90"] }
+]

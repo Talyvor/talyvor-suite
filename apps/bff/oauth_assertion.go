@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -35,7 +36,7 @@ func (a *app) oauthClientAuth(ctx context.Context, f url.Values, clientID string
 	raw := f.Get("client_assertion")
 	if raw == "" && f.Get("client_assertion_type") == "" {
 		if isCIMDClientID(clientID) {
-			c, err := a.oauthClientFor(ctx, clientID)
+			c, err := a.oauthTokenClient(ctx, clientID)
 			if err != nil {
 				return "", err
 			}
@@ -66,7 +67,7 @@ func (a *app) oauthClientAuth(ctx context.Context, f url.Values, clientID string
 	if !isCIMDClientID(clientID) {
 		return "", errors.New("only a client with a metadata document can authenticate with private_key_jwt")
 	}
-	c, err := a.oauthClientFor(ctx, clientID)
+	c, err := a.oauthTokenClient(ctx, clientID)
 	if err != nil {
 		return "", err
 	}
@@ -108,6 +109,24 @@ func (a *app) oauthClientAuth(ctx context.Context, f url.Values, clientID string
 	}
 	a.oauth.jtis.put(key, oauthToken{expires: claims.Expiry.Time().Add(30 * time.Second)})
 	return clientID, nil
+}
+
+// oauthTokenClient is the client a token request is judged by: its document when that can be read, else the row
+// stored when it last was (unreachable, slow, 429, 5xx or not JSON; any other answer is the client's own refusal),
+// so a slow or unreachable document host never signs an assistant out. A document that is read always wins, so one
+// that has become stricter is refused at once.
+func (a *app) oauthTokenClient(ctx context.Context, id string) (oauthClient, error) {
+	c, err := a.oauthClientFor(ctx, id)
+	if !errors.Is(err, errCIMDUnreadable) || ctx.Err() != nil {
+		return c, err
+	}
+	// refetch stays where it is, so the next request reads the document again and /oauth/authorize never sees this row.
+	stored, ok := a.oauth.clients.get(id)
+	if !ok {
+		return c, err
+	}
+	log.Printf("bff: oauth cimd client %q judged by its stored row: %v", id, err)
+	return stored, nil
 }
 
 // oauthJWKS fetches the client's published keys the way its metadata document was fetched.

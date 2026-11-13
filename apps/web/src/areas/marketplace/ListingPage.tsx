@@ -3,16 +3,19 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { CardHeader, Row, inlineLink } from '@talyvor/ui'
 import { Region } from '../../components/Region'
 import { ApiError } from '../../lib/api'
+import { BlockListing, ContentLine, Relabel } from './ContentLabels'
 import { formatWhen } from '../lens/format'
 import { LICENCES_KEY } from './Licences'
 import { ListingOffers } from './ListingOffers'
 import { FamilyTree, TrustPanel } from './ListingTrust'
-import { kindLabel, marketApi } from './marketApi'
+import { kindLabel, marketApi, type ListingPrivacy } from './marketApi'
 import { NewVersion } from './NewVersion'
 import { Card, Price, readFailure } from './parts'
 import { SimilarHold, republishPrefill } from './Remix'
 import { ReportListing } from './Report'
 import { UseListing } from './UseListing'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { MARKETPLACE } from '../../labels/capabilities'
 
 // ListingPage.tsx — B20.3: one listing — what it is, what a use costs, using it, and its versions.
 // Lens shows a version's artifact to the listing's owner and nobody else, which is how this page
@@ -26,6 +29,19 @@ import { UseListing } from './UseListing'
 // Declare it as a parent, which opens Publish on everything it was published with and that original as its parent.
 //
 // B28.162 — and to its seller, a form for the next version with a changelog; the earlier versions stay runnable.
+//
+// B41.93 — and its privacy label: every model its latest version calls, the tools it uses and the data it keeps.
+
+/** A version's privacy label, as Lens reads it from the version's own artifact (B41.193). */
+function PrivacyLine({ privacy }: { privacy: ListingPrivacy }) {
+  const { models, tools, keeps } = privacy
+  return (
+    <p className="text-caption text-muted" data-testid="listing-privacy">
+      Calls {models.length > 0 ? models.join(', ') : 'the model you choose'} · uses{' '}
+      {tools.length > 0 ? tools.join(', ') : 'no tools'} · keeps {privacy.keeps_nothing ? 'nothing' : keeps.join(', ')}
+    </p>
+  )
+}
 
 export function ListingPage() {
   const { id = '' } = useParams()
@@ -74,6 +90,7 @@ export function ListingPage() {
         sectionClassName="pb-10 pt-4 wide:pb-12"
         className="flex max-w-2xl flex-col gap-3"
       >
+        <WorkspaceLabel capability={MARKETPLACE} className="self-start" />
         <p className="text-caption text-muted">
           <Link className={`text-ink ${inlineLink}`} to="/marketplace">
             Marketplace
@@ -82,6 +99,8 @@ export function ListingPage() {
           published <span className="font-figure">{formatWhen(l.created_at)}</span>
           {own ? ` · yours, ${l.visibility}` : null}
         </p>
+        <ContentLine listing={l} />
+        {latest?.privacy ? <PrivacyLine privacy={latest.privacy} /> : null}
         {l.description ? <p className="whitespace-pre-wrap text-body text-ink">{l.description}</p> : null}
         {/* B20.11 — only the seller sees a listing that is not approved, so only the seller reads why. */}
         {similar && latest ? (
@@ -101,7 +120,14 @@ export function ListingPage() {
             Taken down by Talyvor{l.review_reason ? `: ${l.review_reason}` : ''}. Nobody can find or use it.
           </p>
         ) : null}
-        {own ? null : <ReportListing key={l.id} listing={l} />}
+        {/* B41.85 — the seller changes who it is for; anyone else may block it from their marketplace. */}
+        {own ? <Relabel key={l.id} listing={l} /> : null}
+        {own ? null : (
+          <div className="flex flex-wrap items-start gap-2">
+            <ReportListing key={l.id} listing={l} />
+            <BlockListing key={`block-${l.id}`} listing={l} />
+          </div>
+        )}
       </Region>
       {(l.offers ?? []).length > 0 ? (
         <Region index="01" label="Offers">

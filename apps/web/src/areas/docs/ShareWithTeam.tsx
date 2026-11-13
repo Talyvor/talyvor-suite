@@ -68,7 +68,7 @@ function TeamsPanel({ spaceId, pageId }: { spaceId: string; pageId: string }) {
       </form>
       {create.isError ? (
         <p role="alert" className="text-caption text-ink">
-          {status(create.error) === 409 ? 'There is already a team with that name.' : 'The team wasn’t made — try again.'}
+          {status(create.error) === 409 ? 'There is already a team with that name.' : 'The team wasn’t made. Try again.'}
         </p>
       ) : null}
       {teams.isError ? (
@@ -161,7 +161,7 @@ function TeamRow({ team, spaceId, pageId, roster, grant }: {
       )}
       {member.isError ? (
         <p role="alert" className="text-caption text-ink">
-          {status(member.error) === 400 ? 'They aren’t in Docs yet — add them on Members first.' : 'Who is on the team didn’t change — try again.'}
+          {status(member.error) === 400 ? 'They aren’t in Docs yet. Add them on Members first.' : 'Who is on the team didn’t change. Try again.'}
         </p>
       ) : null}
       <div className="flex flex-wrap items-center gap-2">
@@ -176,7 +176,7 @@ function TeamRow({ team, spaceId, pageId, roster, grant }: {
       </div>
       {give.isError ? (
         <p role="alert" className="text-caption text-ink">
-          {status(give.error) === 403 ? 'Only an admin of this page can share it.' : 'The access wasn’t given — try again.'}
+          {status(give.error) === 403 ? 'Only an admin of this page can share it.' : 'The access wasn’t given. Try again.'}
         </p>
       ) : null}
     </li>

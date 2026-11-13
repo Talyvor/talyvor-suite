@@ -34,7 +34,7 @@
 
 /** The label the untagged bucket carries, so the empty string never reaches a screen as a blank
  *  row a reader would take for a rendering fault. */
-export const UNTAGGED = 'Untagged — no feature header'
+export const UNTAGGED = 'Untagged (no feature header)'
 
 export interface FeatureSpendRow {
   /** Lens's tag, or {@link UNTAGGED} when the caller sent no `X-Talyvor-Feature`. */

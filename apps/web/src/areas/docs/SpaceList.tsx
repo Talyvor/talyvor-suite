@@ -8,6 +8,7 @@ import { Region, RegionScreen } from '../../components/Region'
 import { ApiError } from '../../lib/api'
 import { AskAI } from './AskAI'
 import { SearchDocs } from './SearchDocs'
+import { PinnedRecent } from './PinnedRecent'
 import { docsApi, type DocsSpace } from './api'
 import { Chip } from './components'
 import { DOCS_MEMBERSHIP_KEY, readDocsMembership } from './docsNav'
@@ -105,11 +106,11 @@ function CreateSpaceForm({ nameRef }: { nameRef: React.MutableRefObject<HTMLInpu
           onChange={(e) => setPrivate(e.target.checked)}
           className={`transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
         />
-        Private — only people and teams you share it with can open it
+        Private: only people and teams you share it with can open it
       </label>
       {create.isError ? (
         <p className="text-caption text-muted">
-          Couldn’t create that space — nothing was saved. Try again.
+          Couldn’t create that space. Nothing was saved. Try again.
         </p>
       ) : null}
     </div>
@@ -218,7 +219,7 @@ export function SpaceList() {
         {empty ? (
           <>
             <p className="max-w-2xl text-body text-muted">
-              A space keeps pages that belong together — a team, a product, a decision you will
+              A space keeps pages that belong together: a team, a product, a decision you will
               come back to. It stays in your own workspace.
             </p>
             {/* ⚠ THE NEXT ACTION IS PERFORMED, NOT DESCRIBED. The copy this replaces read "Create
@@ -232,6 +233,7 @@ export function SpaceList() {
             </Button>
           </>
         ) : null}
+        <PinnedRecent />
       </Region>
 
       <Region index="01" label="What this workspace has">
@@ -239,19 +241,19 @@ export function SpaceList() {
           <p className="text-body text-muted">Loading…</p>
         ) : off ? (
           <p className="max-w-2xl text-body text-muted">
-            The BFF has no Docs upstream wired (its DOCS_* trio is unset) — off, not broken. Nothing
+            The BFF has no Docs upstream wired (its DOCS_* trio is unset): off, not broken. Nothing
             is shown because nothing is being served.
           </p>
         ) : refused ? (
           <div className="flex max-w-2xl flex-col gap-3">
             <p className="text-body text-muted">
               Docs hasn’t been told yet that you belong to this workspace. It learns its members from
-              Track, and that normally lands shortly after you sign in — there is nothing you need to do.
+              Track, and that normally lands shortly after you sign in. There is nothing you need to do.
             </p>
             <p className="text-body text-muted">
               This screen keeps checking and lists your spaces by itself the moment Docs lets you in. If
-              it still says this after a few minutes, Docs is not receiving its member list from Track —
-              tell whoever runs this deployment.
+              it still says this after a few minutes, Docs is not receiving its member list from Track.
+              Tell whoever runs this deployment.
             </p>
           </div>
         ) : q.isError ? (
@@ -271,7 +273,7 @@ export function SpaceList() {
                 app already owns that sentence. */}
             {isSessionExpired(q.error) ? null : (
               <p className="mt-3 max-w-2xl text-body text-muted">
-                The Docs proxy answered with an error — this screen shows nothing rather than
+                The Docs proxy answered with an error. This screen shows nothing rather than
                 something stale or invented.
               </p>
             )}
@@ -279,7 +281,7 @@ export function SpaceList() {
         ) : spaces.length === 0 ? (
           <div className="flex flex-col items-start gap-3">
             <p className="max-w-2xl text-body text-muted">
-              No spaces in this workspace yet. The first one is named in “Start a space” — that is a
+              No spaces in this workspace yet. The first one is named in “Start a space”. That is a
               region label, which is the section&rsquo;s accessible name, so it is a place a rotor can
               actually go. It lands in your own workspace.
             </p>
@@ -313,7 +315,7 @@ export function SpaceList() {
             predicate, in the component that owns the sentence, instead of two agreeing by hand. */}
         {q.isSuccess ? (
           <p className="mt-6 text-body text-muted">
-            Live from the BFF’s Docs proxy — the workspace is pinned server-side.
+            Live from the BFF’s Docs proxy. The workspace is pinned server-side.
           </p>
         ) : null}
       </Region>

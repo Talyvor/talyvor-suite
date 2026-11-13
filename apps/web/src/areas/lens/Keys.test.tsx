@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Keys } from './Keys'
 import type { WorkspaceAPIKey } from './keysApi'
+import { pressEverything } from '../../test/pressEverything'
 
 // /keys is LIVE — wired to the BFF's GET + POST /api/keys (apps/bff/keys.go). The
 // screen exists because the mint response has `key` and `prefix` ADJACENT and
@@ -57,12 +58,18 @@ function renderKeys() {
   // here rather than dropping the link — someone who mints a key on this screen and is told
   // nothing about using it is the exact gap /setup exists to close.
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/keys']}>
       <QueryClientProvider client={client}>
         <Keys />
       </QueryClientProvider>
     </MemoryRouter>,
   )
+}
+
+/** B57.55 — a key is made in the New key dialog: open it and hand back its name field. */
+async function openNewKey(): Promise<HTMLElement> {
+  fireEvent.click(await screen.findByRole('button', { name: 'New key' }))
+  return screen.findByLabelText('Key name')
 }
 
 beforeEach(() => {
@@ -101,19 +108,19 @@ describe('B28.266 — Keys tells one key from another, and the name field starts
     })
     renderKeys()
     await screen.findByText('CI pipeline')
-    expect(screen.getByText(/proxy · created .* · last used Jul 21, 00:05/)).toBeInTheDocument()
-    expect(screen.getByText(/proxy · created .* · never used · expires Dec 31, 14:00/)).toBeInTheDocument()
+    expect(screen.getByText(/proxy · made .* · last used Jul 21, 00:05/)).toBeInTheDocument()
+    expect(screen.getByText(/proxy · made .* · never used · expires Dec 31, 14:00/)).toBeInTheDocument()
   })
 
-  it('the "New key name" field is cleared once the key is created', async () => {
+  it('the name field starts empty again for the next key', async () => {
     mockKeys()
     renderKeys()
     await screen.findByText('CI pipeline')
-    const field = screen.getByLabelText(/new key name/i)
-    fireEvent.change(field, { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
-    expect(field).toHaveValue('')
+    fireEvent.click(screen.getByRole('button', { name: 'Done, I stored it' }))
+    expect(await openNewKey()).toHaveValue('')
   })
 })
 
@@ -123,13 +130,13 @@ describe('Keys — mint is a one-time reveal', () => {
     renderKeys()
     await screen.findByText('CI pipeline')
 
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
 
     expect(await screen.findByText(MINTED.key)).toBeInTheDocument()
-    expect(screen.getByText(/will not be shown again/i)).toBeInTheDocument()
-    // Scoped to the reveal's region: the list refetches on mint, so its new row carries the prefix too.
-    expect(within(screen.getByRole('region', { name: /create a key/i })).getByText(MINTED.prefix)).toBeInTheDocument()
+    expect(screen.getByText(/nobody can show it to you again/i)).toBeInTheDocument()
+    // Scoped to the dialog: the list refetches on mint, so its new row carries the prefix too.
+    expect(within(screen.getByRole('dialog', { name: 'New key' })).getByText(MINTED.prefix)).toBeInTheDocument()
     expect(screen.getByText(/not a credential/i)).toBeInTheDocument()
   })
 
@@ -138,8 +145,8 @@ describe('Keys — mint is a one-time reveal', () => {
     renderKeys()
     await screen.findByText('CI pipeline')
 
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
 
     expect(post).toHaveBeenCalledTimes(1)
@@ -152,8 +159,8 @@ describe('Keys — mint is a one-time reveal', () => {
     mockKeys()
     renderKeys()
     await screen.findByText('CI pipeline')
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
 
     fireEvent.click(screen.getByRole('button', { name: /copy key/i }))
@@ -161,14 +168,16 @@ describe('Keys — mint is a one-time reveal', () => {
     expect(writeText).toHaveBeenCalledWith(MINTED.key)
     expect(writeText).not.toHaveBeenCalledWith(MINTED.prefix)
     expect(await screen.findByRole('button', { name: /^copied$/i })).toBeInTheDocument()
+    // Said where it is seen, as well as to a screen reader.
+    expect(screen.getAllByText('Copied. Store it now: it will not be shown again').filter((e) => !e.closest('.sr-only'))).toHaveLength(1)
   })
 
   it('dismissing removes the key from the DOM permanently; the refetched list gains it BY PREFIX', async () => {
     mockKeys()
     renderKeys()
     await screen.findByText('CI pipeline')
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
 
     fireEvent.click(screen.getByRole('button', { name: /i stored it/i }))
@@ -188,8 +197,8 @@ describe('Keys — mint is a one-time reveal', () => {
     mockKeys({ existing: [] })
     renderKeys()
     await screen.findByText(/has no keys/i)
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
 
     const list = screen.getByRole('region', { name: /the keys that exist/i })
@@ -205,8 +214,8 @@ describe('Keys — mint is a one-time reveal', () => {
     mockKeys({ postStatus: 500 })
     renderKeys()
     await screen.findByText('CI pipeline')
-    fireEvent.change(screen.getByLabelText(/new key name/i), { target: { value: 'Laptop' } })
-    fireEvent.click(screen.getByRole('button', { name: /create key/i }))
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
 
     expect(await screen.findByText(/Couldn’t mint the key/)).toBeInTheDocument()
     expect(screen.queryByText(MINTED.key)).not.toBeInTheDocument()
@@ -293,7 +302,7 @@ describe('revoking a key', () => {
 
     await screen.findByText('tlv_ws_ff66ef1f')
     fireEvent.click(screen.getByRole('button', { name: /revoke tlv_ws_ff66ef1f/i }))
-    fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }))
 
     expect(screen.queryByLabelText(/type tlv_ws_ff66ef1f/i)).toBeNull()
     expect(deleted).toEqual([])
@@ -343,28 +352,28 @@ describe('W1.1.5 — the screen has a shape a reader can navigate', () => {
     mockKeys()
     renderKeys()
     await screen.findByText('CI pipeline')
-    const pageScale = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6')).filter((h) =>
-      h.className.includes('text-page'),
-    )
     expect(
-      pageScale.map((h) => h.tagName),
+      screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent),
       'the screen writes ONE page-scale claim about what this page is; the shell already writes ' +
         'the only h1',
-    ).toEqual(['H2'])
+    ).toEqual(['Make and revoke the keys that reach Talyvor.'])
   })
 
-  it('every section of the screen is a NAMED landmark — none is anonymous', async () => {
+  it('sits under the Developers tab row, on API keys', async () => {
+    mockKeys()
+    renderKeys()
+    const tabs = within(await screen.findByRole('tablist', { name: 'Developers' })).getAllByRole('tab')
+    expect(tabs.filter((t) => t.getAttribute('aria-selected') === 'true').map((t) => t.textContent)).toEqual(['API keys'])
+  })
+
+  it('every card of the screen is a NAMED landmark — none is anonymous', async () => {
     mockKeys()
     renderKeys()
     await screen.findByText('CI pipeline')
-    const sections = Array.from(document.querySelectorAll('section'))
-    expect(
-      sections.length,
-      'the screen draws no sections at all — it is the single anonymous panel the rebuild replaces',
-    ).toBeGreaterThan(2)
-    // A <section> is a `region` landmark ONLY when it has an accessible name, so the two counts
-    // must agree. A floor on getAllByRole('region') alone passes an unnamed sibling.
-    expect(screen.getAllByRole('region')).toHaveLength(sections.length)
+    expect(screen.getAllByRole('region').map((r) => r.getAttribute('aria-labelledby') && document.getElementById(r.getAttribute('aria-labelledby')!)?.textContent)).toEqual([
+      'The keys that exist',
+      'What may act for this workspace',
+    ])
   })
 })
 
@@ -376,7 +385,7 @@ describe('W1.1.5 — a workspace with no key is told what a key is FOR', () => {
     // The next action after minting is not on this screen, and it never was: Setup holds the two
     // environment variables. The empty state names that destination instead of implying the key
     // does something by existing.
-    expect(screen.getByRole('link', { name: /setup/i })).toHaveAttribute('href', '/setup')
+    expect(screen.getByRole('link', { name: 'Connect an agent' })).toHaveAttribute('href', '/setup')
   })
 
   it('a list that could NOT be read is never drawn as a workspace with no keys', async () => {
@@ -389,64 +398,145 @@ describe('W1.1.5 — a workspace with no key is told what a key is FOR', () => {
     expect(screen.queryByText(/has no keys/i)).toBeNull()
   })
 
-  it('the reveal state says at page scale that the credential will not be shown again', async () => {
+  it('the reveal says, in the dialog that holds the key, that it will not be shown again', async () => {
     mockKeys()
     renderKeys()
-    fireEvent.change(await screen.findByLabelText('New key name'), { target: { value: 'Laptop' } })
+    fireEvent.change(await openNewKey(), { target: { value: 'Laptop' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create key' }))
     await screen.findByText(MINTED.key)
-    const pageScale = document.querySelector('h2.text-page')
     expect(
-      pageScale?.textContent ?? '',
-      'the one moment this screen has a credential on it is the one moment its page-scale claim ' +
-        'should be about the credential',
-    ).toMatch(/again/i)
+      within(screen.getByRole('dialog', { name: 'New key' })).getByText(/nobody can show it to you again/i),
+      'the one moment this screen has a credential on it is the one moment it must say so beside it',
+    ).toBeInTheDocument()
   })
 })
 
-// B41.15's DONE on the page: Claude's connection, a mandate, a phone and a passkey are listed together with what
-// each may do, last use and expiry; revoking Claude says so on the page, and a revoked phone reads Revoked.
-describe('B41.15 — what may act for this workspace, revoked in one tap', () => {
+// B41.15's DONE on the page, asked first since B57.94: Claude's connection, a mandate, a phone and a passkey are listed
+// together with what each may do, last use and expiry; revoking Claude says so on the page, and a removed phone reads
+// Revoked.
+describe('B41.15 — what may act for this workspace, revoked after asking', () => {
   it('lists assistants, mandates, phones and passkeys and revokes them through the BFF', async () => {
-    let assistants = [
-      { id: 'g-1', name: 'Claude', scopes: ['payments:prepare'], connected_at: '2026-10-20T09:00:00Z', last_used_at: '2026-10-23T08:15:00Z' },
-    ]
-    let deviceStatus = 'active'
-    const posts: string[] = []
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-      const url = String(input)
-      const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
-      if ((init?.method ?? 'GET').toUpperCase() === 'POST') {
-        posts.push(url)
-        if (url === '/api/connect/assistants/g-1/revoke') assistants = []
-        if (url === '/api/money/devices/dk_1/revoke') deviceStatus = 'revoked'
-        return new Response(null, { status: 204 })
-      }
-      if (url === '/api/keys') return json(EXISTING)
-      if (url === '/api/connect/assistants') return json({ assistants })
-      if (url === '/api/money/access')
-        return json({
-          items: [
-            { kind: 'mandate', id: 'pm_1', name: 'claude', may: 'prepare payments in GBP', created_at: '2026-10-20T09:00:00Z', last_used_at: null, expires_at: '2026-12-31T00:00:00Z', status: 'active', revoke: '/v1/money/permission-mandates/pm_1/revoke' },
-            { kind: 'device', id: 'dk_1', name: 'Work iPhone', may: 'sign approvals and mandates', created_at: '2026-10-01T09:00:00Z', last_used_at: '2026-10-22T09:00:00Z', expires_at: null, status: deviceStatus, revoke: '/v1/money/devices/dk_1/revoke' },
-            { kind: 'passkey', id: 'cred_1', name: 'MacBook', may: 'sign approvals and mandates', created_at: '2026-09-01T09:00:00Z', last_used_at: null, expires_at: null, status: 'active', revoke: '' },
-          ],
-        })
-      return new Response('null', { status: 404 })
-    })
+    const posts = mockAccess()
     renderKeys()
 
     expect(await screen.findByText(/Permission · may prepare payments in GBP · .* · never used · expires Dec 31/)).toBeInTheDocument()
     expect(screen.getByText(/Phone · may sign approvals and mandates · .* · last used Oct 22/)).toBeInTheDocument()
     expect(screen.getByText('MacBook')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Revoke Passkey MacBook' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Remove Passkey MacBook' })).toBeNull()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke Claude' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Claude is disconnected. Its next request to Talyvor is refused as not connected.')
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Revoke' }))
+    expect(await screen.findByText('Claude is disconnected. Its next request to Talyvor is refused as not connected.')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Revoke Phone Work iPhone' }))
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Revoke Phone Work iPhone' })).toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Phone Work iPhone' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove it' }))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove Phone Work iPhone' })).toBeNull())
     expect(screen.getByText('Revoked')).toBeInTheDocument()
     expect(posts).toEqual(['/api/connect/assistants/g-1/revoke', '/api/money/devices/dk_1/revoke'])
   })
+})
+
+/** B57.94 — the assistants and what else may act, as the BFF answers them. Returns the POSTs sent, in order. */
+function mockAccess({ items }: { items?: unknown[] } = {}): string[] {
+  let assistants = [
+    { id: 'g-1', name: 'Claude', scopes: ['payments:prepare'], connected_at: '2026-10-20T09:00:00Z', last_used_at: '2026-10-23T08:15:00Z' },
+  ]
+  let deviceStatus = 'active'
+  const posts: string[] = []
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if ((init?.method ?? 'GET').toUpperCase() === 'POST') {
+      posts.push(url)
+      if (url === '/api/connect/assistants/g-1/revoke') assistants = []
+      if (url === '/api/money/devices/dk_1/revoke') deviceStatus = 'revoked'
+      return new Response(null, { status: 204 })
+    }
+    if (url === '/api/keys') return json(EXISTING)
+    if (url === '/api/connect/assistants') return json({ assistants })
+    if (url === '/api/money/access')
+      return json({
+        items: items ?? [
+          { kind: 'mandate', id: 'pm_1', name: 'claude', may: 'prepare payments in GBP', created_at: '2026-10-20T09:00:00Z', last_used_at: null, expires_at: '2026-12-31T00:00:00Z', status: 'active', revoke: '/v1/money/permission-mandates/pm_1/revoke' },
+          { kind: 'device', id: 'dk_1', name: 'Work iPhone', may: 'sign approvals and mandates', created_at: '2026-10-01T09:00:00Z', last_used_at: '2026-10-22T09:00:00Z', expires_at: null, status: deviceStatus, revoke: '/v1/money/devices/dk_1/revoke' },
+          { kind: 'passkey', id: 'cred_1', name: 'MacBook', may: 'sign approvals and mandates', created_at: '2026-09-01T09:00:00Z', last_used_at: null, expires_at: null, status: 'active', revoke: '' },
+        ],
+      })
+    return new Response('null', { status: 404 })
+  })
+  return posts
+}
+
+describe('B57.94 — what may act for this workspace, every name in words, every revoke asked first', () => {
+  it('no row prints an mcp: name: a permission whose assistant is not named reads as one you signed', async () => {
+    mockAccess({
+      items: [
+        { kind: 'mandate', id: 'pm_2', name: 'mcp:client_9f2, key:tlv_ws_1a2b3c4d', may: 'prepare payments in GBP', created_at: '2026-10-20T09:00:00Z', last_used_at: null, expires_at: null, status: 'active', revoke: '/v1/money/permission-mandates/pm_2/revoke' },
+      ],
+    })
+    renderKeys()
+    const region = await screen.findByRole('region', { name: 'What may act for this workspace' })
+    expect(await within(region).findByText('A permission you signed')).toBeInTheDocument()
+    expect(region.textContent).not.toMatch(/mcp:|key:/)
+    for (const b of within(region).getAllByRole('button')) expect(b.getAttribute('aria-label') ?? '').not.toMatch(/mcp:|key:/)
+  })
+
+  it('revoking an assistant asks first, and Keep it sends nothing', async () => {
+    const posts = mockAccess()
+    renderKeys()
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke Claude' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Revoke Claude?' })
+    expect(dialog).toHaveTextContent('Claude can no longer reach Talyvor. You can add it again at any time.')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(posts).toEqual([])
+  })
+
+  it('revoking a permission asks first, and Keep it sends nothing', async () => {
+    const posts = mockAccess()
+    renderKeys()
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke Permission claude' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Revoke “claude”?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(posts).toEqual([])
+  })
+
+  it('the last key that can approve is never removed: its dialog says why and offers no Remove it', async () => {
+    const posts = mockAccess({
+      items: [
+        { kind: 'device', id: 'dk_1', name: 'Work iPhone', may: 'sign approvals and mandates', created_at: '2026-10-01T09:00:00Z', last_used_at: null, expires_at: null, status: 'active', revoke: '/v1/money/devices/dk_1/revoke' },
+        { kind: 'passkey', id: 'cred_1', name: 'MacBook', may: 'sign approvals and mandates', created_at: '2026-09-01T09:00:00Z', last_used_at: null, expires_at: null, status: 'revoked', revoke: '' },
+      ],
+    })
+    renderKeys()
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Phone Work iPhone' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Remove “Work iPhone”?' })
+    expect(dialog).toHaveTextContent('It is your last key. With none, nobody could approve, so add another first.')
+    expect(within(dialog).queryByRole('button', { name: 'Remove it' })).toBeNull()
+    expect(posts).toEqual([])
+  })
+
+  it('a removal Talyvor refuses says why in its own words, and nothing changes', async () => {
+    mockAccess()
+    const fetch = vi.mocked(globalThis.fetch)
+    const answer = fetch.getMockImplementation()!
+    fetch.mockImplementation(async (input, init) =>
+      String(input) === '/api/money/devices/dk_1/revoke'
+        ? new Response(JSON.stringify({ error: 'This key owns an agent’s account, so it cannot be removed.' }), { status: 409, headers: { 'Content-Type': 'application/json' } })
+        : answer(input, init),
+    )
+    renderKeys()
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Phone Work iPhone' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove it' }))
+    expect(await within(screen.getByRole('dialog')).findByRole('alert')).toHaveTextContent('This key owns an agent’s account, so it cannot be removed.')
+  })
+})
+
+describe('B57.94 — every control on Keys does something', () => {
+  it('pressEverything finds no dead control on /keys', async () => {
+    const report = await pressEverything('/keys')
+    expect(report.pressed).toBeGreaterThan(0)
+    expect(report.dead).toEqual([])
+  }, 120_000)
 })

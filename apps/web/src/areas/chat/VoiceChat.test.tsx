@@ -62,6 +62,8 @@ function mockBff() {
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/models')
       return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, release_date: '2026-07-24', tier: 'frontier' }])
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
@@ -184,11 +186,11 @@ describe('talking to Talyvor in Chat (B40.12)', () => {
     await say('£120')
 
     const readback = await screen.findByTestId('chat-pay-readback')
-    expect(readback).toHaveTextContent('Pay ACME Ltd £120.00 from Main for the ACME invoice — look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.')
+    expect(readback).toHaveTextContent('Pay ACME Ltd £120.00 from Main for the ACME invoice. Look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.')
     expect(bff.prepared).toEqual([
       { body: { voice: true, items: [{ payee_id: 'payee_acme', currency: 'GBP', amount_minor: 12000, reference: 'ACME invoice' }] }, key: expect.any(String) },
     ])
-    await waitFor(() => expect(bff.spoken.at(-1)).toBe('Pay ACME Ltd £120.00 from Main for the ACME invoice — look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.'))
+    await waitFor(() => expect(bff.spoken.at(-1)).toBe('Pay ACME Ltd £120.00 from Main for the ACME invoice. Look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.'))
     // The account number is never shown or said; the question was never sent to the model.
     expect(document.body).not.toHaveTextContent('12345678')
     expect(bff.spoken.join(' ')).not.toContain('12345678')
@@ -209,7 +211,7 @@ describe('talking to Talyvor in Chat (B40.12)', () => {
     await openChat()
     await say('Pay ACME £1,240 for invoice 4471.')
 
-    const words = 'Pay ACME Ltd £1,240.00 from Main for invoice 4471 — look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.'
+    const words = 'Pay ACME Ltd £1,240.00 from Main for invoice 4471. Look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.'
     expect(await screen.findByTestId('chat-pay-readback')).toHaveTextContent(words)
     await waitFor(() => expect(bff.spoken.at(-1)).toBe(`You’re talking to an AI. ${words}`))
     expect(bff.prepared).toEqual([
@@ -366,9 +368,9 @@ describe('Hey Taly (B45.27)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
 
     const readback = await screen.findByTestId('chat-pay-readback')
-    expect(readback).toHaveTextContent('Pay ACME Ltd £120.00 from Main — look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.')
+    expect(readback).toHaveTextContent('Pay ACME Ltd £120.00 from Main. Look at your phone, or approve below, to confirm. Nothing is paid until you approve it with your passkey.')
     expect(bff.prepared).toEqual([{ body: { voice: true, items: [{ payee_id: 'payee_acme', currency: 'GBP', amount_minor: 12000, reference: '' }] }, key: expect.any(String) }])
-    await waitFor(() => expect(bff.spoken.at(-1)).toMatch(/Pay ACME Ltd £120\.00 from Main — look at your phone, or approve below, to confirm\. Nothing is paid until you approve it with your passkey\.$/))
+    await waitFor(() => expect(bff.spoken.at(-1)).toMatch(/Pay ACME Ltd £120\.00 from Main\. Look at your phone, or approve below, to confirm\. Nothing is paid until you approve it with your passkey\.$/))
     // Heard on the device: no recording went anywhere to be transcribed.
     expect(bff.transcribed).toHaveLength(0)
 

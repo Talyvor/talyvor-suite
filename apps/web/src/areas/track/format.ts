@@ -133,7 +133,7 @@ export const PRIORITY_VALUES = Object.keys(PRIORITY_LABELS).map(Number) as Issue
  */
 export const meteredCallCopy =
   'It is a metered AI call. The charge is attributed to this issue, but it reaches the AI cost ' +
-  'above out-of-band — when Lens reports the spend — so that figure does not move with this answer.'
+  'above out-of-band (when Lens reports the spend), so that figure does not move with this answer.'
 
 export function formatCost(usd: number, tokens = 0): string {
   if (usd <= 0) return tokens > 0 ? '$0.00 recorded' : 'No AI spend recorded'

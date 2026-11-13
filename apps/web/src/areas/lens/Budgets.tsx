@@ -36,11 +36,12 @@ export const categoryName = (c: string) => CATEGORIES.find(([v]) => v === c)?.[1
 /** A category's name inside a sentence: "eating out", but "AI and software". */
 export const categoryWords = (c: string) => categoryName(c).replace(/^(?!AI\b)./, (f) => f.toLowerCase())
 
-/** B55.42 — Lens's budget refusals list every category id and its own limits; these say what to do instead. */
+/** B55.42 — Lens's budget refusals list every category id and its own limits; these say what to do instead.
+ *  B55.57 — matched in any case, so Lens's sentence with or without its "economy: spending: " prefix reads the same. */
 function budgetRefusal(err: unknown): string {
   const s = err instanceof AgentBankError ? (err.sentence ?? '') : ''
-  if (s.includes('category must be')) return 'Choose a category from the list.'
-  const most = /at most (\d+) budgets/.exec(s)
+  if (/category must be/i.test(s)) return 'Choose a category from the list.'
+  const most = /at most (\d+) budgets/i.exec(s)
   return most ? `A workspace can have at most ${most[1]} budgets.` : refusalText(err)
 }
 const select = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
@@ -96,7 +97,7 @@ export function BudgetsScreen() {
         className="flex max-w-2xl flex-col gap-3"
       >
         <p className="text-body text-muted">
-          A weekly or monthly budget for a kind of spending — AI and software, travel, eating out — on your own wallet, one
+          A weekly or monthly budget for a kind of spending (AI and software, travel, eating out) on your own wallet, one
           agent’s, or every wallet together. You get an alert when spending reaches 50, 80 and 100% of it, once each period.
         </p>
       </Region>

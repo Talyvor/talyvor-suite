@@ -45,7 +45,7 @@ export function InstructionsPage() {
       {/* The page's name is the console banner's <h1> (CONSOLE_ROUTES' title), so no second one here. */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="text-body text-muted">
-          What to tell the model in every chat — how to answer, in which language, what to know about you. Every question
+          What to tell the model in every chat: how to answer, in which language, what to know about you. Every question
           you ask in Chat is sent with them, in a new chat or one you carry on. A project’s own instructions come after them.
         </p>
         <Link className={`text-body text-ink ${inlineLink}`} to="/chat">

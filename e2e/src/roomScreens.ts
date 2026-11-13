@@ -8,7 +8,8 @@
 //   room-invite-screen — the owner saves new terms on settings; another company, without the link, asks the BFF to join
 //                        the room by its id and is refused with nothing joined; with it, the link's screen shows the
 //                        room and the terms Lens holds, Join room joins on those terms and uses the link up, and the
-//                        link opened again says it admits no one.
+//                        link opened again says it admits no one; the owner's settings then list the new member by
+//                        the workspace name Lens gives it, never its id (B55.35).
 //   room-decide-run    — the owner accepts a contribution on the room screen and runs it on themselves without the
 //                        variable its template needs: refused naming the variable, the screen asks for it, and the
 //                        ledger and the room gain nothing.
@@ -26,7 +27,7 @@ const FEATURE = 'Rooms'
 /** How long a refused run is given for anything it wrongly wrote to reach Lens's reads. */
 const REFUSED_WAIT_MS = 5_000
 
-interface Member { workspace_id: string; role: string; terms_version?: number }
+interface Member { workspace_id: string; workspace_name?: string; role: string; terms_version?: number }
 interface Terms { version: number; default_price_usd_micros: number }
 interface Detail { id: string; terms: Terms; members: Member[] | null }
 interface Invite { id: string; token?: string; max_uses: number; uses: number; live: boolean }
@@ -151,6 +152,16 @@ export function roomInviteScreen(i: number): Scenario {
         if (member.terms_version !== undefined && member.terms_version !== terms.version) return fail(`${joiner.workspaceID} joined on terms version ${member.terms_version}, not the ${terms.version} its screen showed`)
         if (used === undefined || used.uses !== 1 || used.live) return fail(`after its one use, Lens holds the invite as ${JSON.stringify(used)}, not used once and no longer live`)
 
+        // B55.35 — the owner's settings list the new member by Lens's name for its workspace, never by its id.
+        await page.goto(`${origin}/rooms/${encodeURIComponent(id)}/settings`)
+        const list = page.getByRole('list', { name: 'Members' })
+        const named = member.workspace_name ? await list.getByText(member.workspace_name, { exact: true }).first().waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS }).then(() => true, () => false) : false
+        const listed = await list.innerText().catch(() => '')
+        ctx.evidence.push({ note: `the owner's settings, Members: ${listed.replace(/\s+/g, ' ').slice(0, 300)}; Lens names ${joiner.workspaceID} "${member.workspace_name ?? ''}"` })
+        if (!member.workspace_name) return fail(`Lens gives ${joiner.workspaceID}'s membership of room ${id} no workspace_name`)
+        if (!named) return fail(`the owner's settings do not list the new member as "${member.workspace_name}": ${listed.slice(0, 300)}`)
+        if (listed.includes(joiner.workspaceID)) return fail(`the owner's settings show the new member's workspace id ${joiner.workspaceID}: ${listed.slice(0, 300)}`)
+
         // The used link, opened again, admits no one.
         await other.page.goto(`${origin}${link}`)
         const gone = await other.page.getByText('This invite link no longer admits anyone', { exact: false }).waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS }).then(() => true, () => false)
@@ -159,7 +170,7 @@ export function roomInviteScreen(i: number): Scenario {
         if (preview.status !== 404) return fail(`a used-up invite link still opens on Lens: ${preview.status} ${preview.body.slice(0, 200)}`)
         if (!gone) return fail(`a used-up invite link's screen does not say it admits no one: ${(await other.page.locator('body').innerText()).slice(0, 300)}`)
         return { pass: true, detail: `room ${id}'s terms saved on settings are Lens's version ${terms.version}; ${joiner.workspaceID} was refused ${uninvited.status} joining by the room's id, ` +
-          `joined through the link's screen on version ${terms.version}, the link was used up and opened again admits no one` }
+          `joined through the link's screen on version ${terms.version}, is listed on the owner's settings as "${member.workspace_name}", the link was used up and opened again admits no one` }
       } finally {
         await other.close()
         await page.setViewportSize(viewport)

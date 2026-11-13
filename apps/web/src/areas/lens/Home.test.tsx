@@ -31,16 +31,28 @@ const BUSY = {
   line: '1 approval waiting, 1 bill due this week, 2 payments yesterday, spent yesterday 0.075 LXC.',
 }
 
+// B55.10 — a payment an assistant (client mcp:) prepared, and the briefing's line for it, as Lens lists it with its preq_ id.
+const PREPARED = {
+  id: 'preq_1', status: 'pending_approval', summary: '1 payment', client: 'mcp:tlv_oc_claude', agent_id: 'agt_1', totals: { GBP: 12000 }, created_at: '2026-10-04T08:20:00Z',
+  items: [{ position: 1, payee_id: 'payee_1', payee_name: 'Acme Hosting', currency: 'GBP', amount_minor: 12000, reference: 'INV-7', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking' }],
+}
+const PREPARED_BRIEFING = {
+  ...BUSY,
+  items: [{ kind: 'approval', id: 'preq_1', name: 'Acme Hosting', amount: 12000, currency: 'GBP', text: 'A payment of £120.00 to Acme Hosting waits for your approval' }, ...BUSY.items],
+}
+
 function mockBff({
   agents,
   newWorkspace = false,
   briefing = QUIET,
   workspaceName = 'Acme',
+  prepared = [],
 }: {
-  agents: typeof AGENTS
+  agents: Array<(typeof AGENTS)[number] & { paused_at?: string }>
   newWorkspace?: boolean
-  briefing?: typeof QUIET | typeof BUSY
+  briefing?: typeof QUIET | typeof BUSY | typeof PREPARED_BRIEFING
   workspaceName?: string
+  prepared?: object[]
 }) {
   const writes: string[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -88,6 +100,7 @@ function mockBff({
         ],
       })
     if (url === '/api/agents/briefing') return json(briefing)
+    if (url === '/api/money/payment-requests?status=pending_approval') return json({ requests: prepared })
     if (url === '/api/workspace/name' && init?.method === 'PUT') {
       workspaceName = JSON.parse(String(init.body)).name
       writes.push(`PUT ${url} ${init.body}`)
@@ -104,7 +117,17 @@ function mockBff({
         month_end: '2026-11-01T00:00:00Z',
         spent_ulxc: 3 * M,
         forecast_ulxc: 25 * M,
-        agents: agents.map((a) => ({ agent_id: a.id, name: a.name, spent_ulxc: a.id === 'agt_1' ? 3 * M : 0, forecast_ulxc: 0 })),
+        // B28.57 — Researcher, in Sydney, runs out at 17:00 UTC on 27 October: 28 October in its own zone (Lens B28.330).
+        // Buyer does not run out at its pace.
+        agents: agents.map((a) => ({
+          agent_id: a.id,
+          name: a.name,
+          spent_ulxc: a.id === 'agt_1' ? 3 * M : 0,
+          forecast_ulxc: 0,
+          ...(a.id === 'agt_1'
+            ? { runs_out_at: '2026-10-28T04:00:00+11:00', runs_out_on: '2026-10-28', timezone: 'Australia/Sydney' }
+            : { runs_out_at: null, runs_out_on: null, timezone: 'UTC' }),
+        })),
       })
     const rules = /^\/api\/agents\/([^/]+)\/rules$/.exec(url)
     if (rules)
@@ -163,6 +186,30 @@ describe('Home — the 30-second daily briefing (B41.6)', () => {
   })
 })
 
+describe('Home — payments prepared for the person (B55.10)', () => {
+  it('lists a payment an assistant prepared first, counts it, and the briefing opens its card', async () => {
+    mockBff({ agents: AGENTS, briefing: PREPARED_BRIEFING, prepared: [PREPARED] })
+    render(<App />)
+
+    const list = within(await screen.findByTestId('home-approvals'))
+    // B57.116 — drawn as w-home draws a waiting request: Chat's mark, the line over its hint, the total over its
+    // currency, and Pocket's Review opening the request's card.
+    const row = list.getByText('Your assistant prepared a payment to Acme Hosting').closest<HTMLElement>('[data-prepared]')!
+    expect(row).toHaveAttribute('data-prepared', 'preq_1')
+    expect(row.querySelector('[data-icon="chat"]')).not.toBeNull()
+    expect(row).toHaveTextContent('INV-7 · from Researcher’s account · asked')
+    expect(within(row).getByText('£120.00')).toBeInTheDocument()
+    expect(within(row).getByText('GBP')).toBeInTheDocument()
+    const review = within(row).getByRole('link', { name: 'Review' })
+    expect(review).toHaveAttribute('href', '/approve/preq_1')
+    expect(review).toHaveClass('rounded-pill')
+    expect(screen.getByTestId('home-approvals-waiting')).toHaveTextContent('3')
+    await waitFor(() => expect(screen.getByTestId('home-briefing-line')).toHaveTextContent(BUSY.line))
+    const items = within(screen.getByTestId('home-briefing-items')).getAllByRole('listitem')
+    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/approve/preq_1')
+  })
+})
+
 describe('Home — the wallet home (B28.6)', () => {
   it('a returning user lands on Home and sees each agent’s budget used and the approvals waiting', async () => {
     mockBff({ agents: AGENTS })
@@ -171,7 +218,7 @@ describe('Home — the wallet home (B28.6)', () => {
 
     expect(await screen.findByRole('heading', { level: 2, name: 'Welcome to Talyvor' })).toBeInTheDocument()
     expect(await screen.findByText('Your agents’ wallets, at a glance.')).toBeInTheDocument()
-    expect(screen.getByRole('banner')).toHaveTextContent('Home')
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Home')
 
 
     // Researcher spent 3 of its 12 LXC monthly budget: 25%. Buyer has no budget, so it is offered one.
@@ -183,11 +230,21 @@ describe('Home — the wallet home (B28.6)', () => {
 
     // The rest of the home: the forecast, and pause-all.
     expect(await screen.findByTestId('home-forecast')).toHaveTextContent('25 LXC')
-    expect(screen.getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('pause-every-agent')).getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
   })
 
   // B45.11 — DONE reads: "the approvals, the total and the first agent rows are visible without scrolling; every
   // figure matches the API". jsdom has no fold, so this pins the order and the figures; the 390px screenshot the fold.
+  it('each agent’s row says the day it runs out in its own time zone, not UTC’s, or that it does not run out (B28.57)', async () => {
+    mockBff({ agents: AGENTS })
+    render(<App />)
+
+    const researcher = await screen.findByTestId('runs-out-agt_1')
+    expect(researcher).toHaveTextContent('runs out on 28 October 2026 (Australia/Sydney)')
+    expect(within(researcher).getByText('28 October 2026')).toHaveAttribute('dateTime', '2026-10-28')
+    expect(screen.getByTestId('runs-out-agt_2')).toHaveTextContent('does not run out at this pace')
+  })
+
   it('Home in one glance: approvals first, then one total, then a row per agent, then Taly’s input', async () => {
     const writes = mockBff({ agents: AGENTS })
     window.history.pushState({}, '', '/')
@@ -235,6 +292,25 @@ describe('Home — the wallet home (B28.6)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
     expect(window.location.pathname).toBe('/chat')
     expect(await screen.findByDisplayValue('Which agent spent most?')).toBeInTheDocument()
+  })
+
+  // B55.2 — with only the phone's key Lens refuses an unsigned resume, so Home sends none and says where to do it.
+  it('with only the phone’s key, the switch on a paused agent sends nothing and says to resume it on the phone', async () => {
+    const writes = mockBff({ agents: [{ ...AGENTS[0], paused_at: '2026-10-04T09:00:00Z' }, AGENTS[1]] })
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    const keys: Record<string, unknown> = { '/api/agents/passkeys': { passkeys: [] }, '/api/money/devices': { devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] } }
+    vi.mocked(fetch).mockImplementation(async (input, init) =>
+      String(input) in keys ? new Response(JSON.stringify(keys[String(input)]), { status: 200, headers: { 'Content-Type': 'application/json' } }) : inner(input, init),
+    )
+    window.history.pushState({}, '', '/')
+    render(<App />)
+    const researcher = await screen.findByTestId('home-agent-agt_1')
+    await waitFor(() => expect(queryClient.getQueryState(['money-devices'])?.status).toBe('success'))
+    fireEvent.click(within(researcher).getByRole('switch', { name: 'Researcher running' }))
+    expect(within(researcher).getByTestId('on-the-phone')).toHaveTextContent('Resume Researcher on your phone with Face ID.')
+    expect(within(researcher).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
+    expect(within(researcher).queryByRole('button', { name: 'Resume' })).toBeNull()
+    expect(writes).toEqual([])
   })
 
   it('a workspace with no agents opens Home in onboarding mode', async () => {
@@ -401,7 +477,7 @@ describe('Home — the product cards (B29.8)', () => {
       expect(window.location.pathname).toBe(card.to)
       const route = CONSOLE_ROUTES.find((r) => (r.path.endsWith('/*') ? card.to === r.path.slice(0, -2) : r.path === card.to))
       expect(route, `${card.to} is not a console route`).toBeDefined()
-      expect(screen.getByRole('banner')).toHaveTextContent(route!.title)
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(route!.title)
       cleanup()
       queryClient.clear()
     }

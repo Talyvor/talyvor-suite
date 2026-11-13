@@ -1,0 +1,7 @@
+[
+  {"route": "/documentation", "screen": "s-docs"},
+  {"route": "/documentation/claude", "screen": "s-claude"},
+  {"route": "/privacy", "screen": "s-privacy"},
+  {"route": "/terms", "screen": "s-terms"},
+  {"route": "/pay/:token", "screen": "s-pay-invoice", "answers": {"/api/pricing": {"usd_per_lxc": 0.1, "min_usd_cents": 1000, "max_usd_cents": 1000000, "preset_usd_cents": [1000], "labels": {"payments_in": "sandbox"}}}}
+]

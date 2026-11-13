@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useQuery, type Query } from '@tanstack/react-query'
 import { api } from '../../lib/api'
-import { formatULXC } from '../lens/agentBankApi'
+import { Lxc } from '../lens/money'
 import { planApi, usedPercent } from '../lens/planApi'
 
 // B28.104 — the plan's allowance used and the prepaid balance, in Chat under the box. Both are Lens's figures, from
@@ -89,7 +89,7 @@ export function AllowanceMeter({ answering }: { answering: boolean }) {
           <span>
             Plan <span className="font-figure text-ink">{pct}%</span> used ·{' '}
             <span className="whitespace-nowrap font-figure text-ink" data-testid="allowance-left">
-              {formatULXC(a.remaining_ulxc)}
+              <Lxc ulxc={a.remaining_ulxc} />
             </span>{' '}
             left
           </span>
@@ -101,7 +101,7 @@ export function AllowanceMeter({ answering }: { answering: boolean }) {
         <span>
           Prepaid balance{' '}
           <span className="whitespace-nowrap font-figure text-ink" data-testid="prepaid-balance">
-            {formatULXC(prepaid)}
+            <Lxc ulxc={prepaid} />
           </span>
         </span>
       ) : null}

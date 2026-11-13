@@ -27,7 +27,8 @@ interface Watch { id: string; ws: string; agent_id: string; series: string[]; ru
 
 /** Lens internal/scan Families: the series prefixes (and suffix) Scan has a model for. */
 const MODELLED: readonly [string, string][] = [['eia.stocks.', ''], ['gie.agsi.', '.full'], ['entsog.flow.', ''], ['crop.nass.', '']]
-const CUSHING = 'eia.stocks.cushing-crude'
+/** Lens internal/scan RehearsalSeries: the one series Lens holds recorded data for. */
+const RECORDED = 'eia.stocks.us-distillate'
 const modelled = (s: string) => MODELLED.some(([p, x]) => s.length > p.length + x.length && s.startsWith(p) && s.endsWith(x))
 
 export class ScanDesk {
@@ -81,18 +82,18 @@ export class ScanDesk {
     if (m === null) return false
     const [, ws, what, id, act] = m
     if (what === 'track-record' && req.method === 'GET' && id === undefined) {
-      const records = this.rehearsals.filter((r) => r.ws === ws && r.status === 'approved').map((r) => ({ report_id: r.id, series: CUSHING,
-        title: r.report.title, sources: r.report.sources, published_at: now, observed_at: '2026-09-26T00:00:00Z', value: 21_000, unit: 'thousand barrels',
-        normal_low: 24_000, normal_high: 30_000, outlook_at: '2026-10-24T00:00:00Z', outlook_low: 20_000, outlook_high: 25_000,
-        ...(r.outcome === undefined ? {} : { outcome: r.outcome, outcome_at: '2026-10-24T00:00:00Z', hit: r.outcome >= 20_000 && r.outcome <= 25_000, scored_at: now }) }))
+      const records = this.rehearsals.filter((r) => r.ws === ws && r.status === 'approved').map((r) => ({ report_id: r.id, series: RECORDED,
+        title: r.report.title, sources: r.report.sources, published_at: now, observed_at: '2026-09-26T00:00:00Z', value: 112_000, unit: 'thousand barrels',
+        normal_low: 120_000, normal_high: 140_000, outlook_at: '2026-10-24T00:00:00Z', outlook_low: 108_000, outlook_high: 118_000,
+        ...(r.outcome === undefined ? {} : { outcome: r.outcome, outcome_at: '2026-10-24T00:00:00Z', hit: r.outcome >= 108_000 && r.outcome <= 118_000, scored_at: now }) }))
       return this.json(res, 200, { records, hits: records.filter((r) => r.hit === true).length, misses: records.filter((r) => r.hit === false).length,
         waiting: records.filter((r) => r.hit === undefined).length }), true
     }
     if (what !== 'reports' || req.method !== 'POST') return false
     if (id === undefined) {
       const b = await this.body<{ series?: string; plant?: string }>(req)
-      if (b.series !== CUSHING) return this.json(res, 400, { error: `scan: no recorded data for "${b.series ?? ''}"` }), true
-      const report = this.cushing(b.plant ?? '')
+      if (b.series !== RECORDED) return this.json(res, 400, { error: `scan: Lens holds recorded data only for ${RECORDED}` }), true
+      const report = this.distillate(b.plant ?? '')
       const said = [report.title, report.what_changed, report.why_it_matters, report.confidence, report.what_would_change].join('\n').match(ADVICE)
       const refused = said !== null && !this.broken('scan-check-bypassed')
       const r: Rehearsal = { id: 1000 + this.rehearsals.length, ws, status: refused ? 'refused' : 'pending', report, ...(refused ? { refusal: `advice or trading wording: ${said.join(', ')}` } : {}) }
@@ -111,22 +112,22 @@ export class ScanDesk {
     return this.json(res, 200, { scored: 1 }), true
   }
 
-  /** The writer's draft on the recorded Cushing weeks, `plant` added to "why it may matter". */
-  private cushing(plant: string): Record<string, unknown> {
-    return { series: CUSHING, title: 'US oil stocks: crude at Cushing',
-      what_changed: 'Crude at Cushing read 21000 thousand barrels, against a normal of 24000 to 30000 thousand barrels for the same weeks of past years.',
-      why_it_matters: `A gap to the normal like this one tends to carry on: the model's likely range is 20000 to 25000 thousand barrels.${plant === '' ? '' : ` ${plant}`}`,
+  /** The writer's draft on the recorded US distillate weeks, `plant` added to "why it may matter". */
+  private distillate(plant: string): Record<string, unknown> {
+    return { series: RECORDED, title: 'US oil stocks: us distillate',
+      what_changed: 'US distillate stocks read 112000 thousand barrels, against a normal of 120000 to 140000 thousand barrels for the same weeks of past years.',
+      why_it_matters: `A gap to the normal like this one tends to carry on: the model's likely range is 108000 to 118000 thousand barrels.${plant === '' ? '' : ` ${plant}`}`,
       confidence: 'Tested on 120 past outlooks from its own history, the model put the outcome on the right side of the normal 71% of the time.',
       what_would_change: 'The view would change if the coming readings moved back towards the normal.',
       sources: ['U.S. Energy Information Administration'],
-      figures: [['value', 21_000], ['normal_low', 24_000], ['normal_high', 30_000], ['outlook_low', 20_000], ['outlook_high', 25_000]].map(([name, v]) => ({ name, text: String(v) })),
+      figures: [['value', 112_000], ['normal_low', 120_000], ['normal_high', 140_000], ['outlook_low', 108_000], ['outlook_high', 118_000]].map(([name, v]) => ({ name, text: String(v) })),
       box: { made_by: "Talyvor's agents wrote this report from Talyvor Scan's figures, and a person checked it before it was published.",
         data: ['U.S. Energy Information Administration (public domain)'], method: 'Normal: the same weeks of the past five years.', backtest: 'Backtested on 3 Nov 2026: passed.',
         conflicts: 'Talyvor holds no position in what this report covers.', track_record: '/v1/public/scan/track-record' } }
   }
 
   private queued(r: Rehearsal, now: string): unknown {
-    return { id: r.id, series: CUSHING, finding_at: '2026-09-26T00:00:00Z', report: r.report, writer: 'template', model_check: 'passed', status: r.status,
+    return { id: r.id, series: RECORDED, finding_at: '2026-09-26T00:00:00Z', report: r.report, writer: 'template', model_check: 'passed', status: r.status,
       ...(r.refusal === undefined ? {} : { refusal: r.refusal }), created_at: now, ...(r.reviewed_by === undefined ? {} : { reviewed_by: r.reviewed_by, reviewed_at: now }) }
   }
 

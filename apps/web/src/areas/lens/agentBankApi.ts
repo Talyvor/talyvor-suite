@@ -1,5 +1,8 @@
+import { useQuery } from '@tanstack/react-query'
 import { ApiError, getJSON } from '../../lib/api'
+import { approvalInSentence, unlessHeld } from '../../lib/held'
 import { isSessionExpired } from '../../lib/productState'
+import { currencyText } from './money'
 
 // agentBankApi.ts — B19.4: the Agent Bank screen's reads and writes, through the BFF's /api/agents
 // routes (apps/bff/agent_bank.go) to Lens's agent accounts (B19.1), rules and approvals (B19.2) and
@@ -32,6 +35,10 @@ export interface Agent {
   description?: string
   /** B28.21 — set once it is archived: swept to zero, its keys revoked, refused every movement of its own. */
   archived_at?: string
+  /** B32.32 — "room" for a room's wallet, which Lens keeps as an agent account named "Room: <title>"; else "agent". */
+  kind?: string
+  /** B57.10 — its face's colour, which B57.124's helper follows; absent from a Lens older than B57.10. */
+  colour?: string
 }
 
 /** Lens economy.AgentArchive (B28.21): what archiving an agent did. */
@@ -96,6 +103,21 @@ export interface AgentRuleBoost {
   /** the credential that set it, as a rules version names it; empty when unknown */
   created_by: string
   created_at: string
+}
+
+/** B55.14 — one change to an agent's rules, as Lens judges it (economy.RulesProposal, B55.13). */
+export type RulesChange =
+  | { rules: AgentRules }
+  | { rollback_to: number }
+  | { template: string }
+  | { boost: { rule: string; value: number; until: string } }
+
+/** Lens economy.RulesJudgement (B55.13): whether a change loosens the rules, each rule it changes in words, and the challenge a looser one is signed over. */
+export interface RulesJudgement {
+  looser: boolean
+  changes: string[] | null
+  challenge?: string
+  allow_credentials: string[] | null
 }
 
 /** Lens economy.AgentBook: workspace = allocated + unallocated; spent is what the agents spent. */
@@ -447,6 +469,34 @@ export interface ScanTrackRecord {
   waiting: number
 }
 
+/** B28.66 — one place the workspace's alerts are sent (Lens B28.338). */
+export interface AlertChannel {
+  id: string
+  kind: 'push' | 'webhook' | 'slack'
+  /** a webhook's url; a Slack hook's with all but its last four characters hidden; none for push */
+  url?: string
+  /** a webhook's signing secret, only in the answer that added it */
+  secret?: string
+  added_by?: string
+  created_at: string
+}
+
+/** B28.66 — one alert sent, or to be sent, to one channel. */
+export interface AlertDelivery {
+  id: string
+  channel_id: string
+  channel_kind: AlertChannel['kind']
+  alert_kind: string
+  alert_id: string
+  title: string
+  body: string
+  status: 'queued' | 'sent' | 'failed'
+  attempts: number
+  last_error?: string
+  created_at: string
+  sent_at?: string
+}
+
 /** B28.62 — spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335). */
 export interface LimitAlert {
   id: string
@@ -546,6 +596,10 @@ export interface SpendForecast {
          * time zone, so its date is the agent's date; null when it does not run out at that pace.
          */
         runs_out_at?: string | null
+        /** B28.330 — runs_out_at's date in the agent's own time zone, YYYY-MM-DD; null when it does not run out. */
+        runs_out_on?: string | null
+        /** B28.330 — the agent's IANA time zone, "UTC" when none is set. */
+        timezone?: string
       }[]
     | null
 }
@@ -664,6 +718,12 @@ export interface StatementLine {
   model?: string
   /** B28.93 — on a call's lines: where the call came from, in Lens's words. Chat's Recent calls shows it as it is. */
   source?: string
+  /** B57.24 — what the posting was for, in Lens's words: under a model's day, its fee line's "On those requests". */
+  memo?: string
+  /** B57.24 — on a statement read by day (Lens B57.13): the day a model's line covers in the statement's time zone,
+   *  and how many questions it is. */
+  day?: string
+  requests?: number
 }
 
 /** Lens economy.AgentPayment. */
@@ -789,6 +849,8 @@ export class AgentBankError extends ApiError {
     status: number,
     path: string,
     readonly sentence: string,
+    /** B58.1: the approval a payment waits on, when Lens answered it held */
+    readonly approvalID = '',
   ) {
     super(status, path)
   }
@@ -855,13 +917,21 @@ export function retryMoveThroughRestart(failures: number, err: unknown): boolean
 }
 
 /**
+ * B28.55 — a statement file's type: the CSV, the JSON or the PDF Lens writes (Lens B28.328), or (B28.56) the period as
+ * a CSV of double-entry journal lines Xero and QuickBooks import, each agent its cost centre (Lens B28.329).
+ */
+export type StatementFormat = 'csv' | 'json' | 'pdf' | 'journal'
+
+const STATEMENT_ACCEPT: Record<StatementFormat, string> = { csv: 'text/csv', json: 'application/json', pdf: 'application/pdf', journal: 'text/csv' }
+
+/**
  * B19.22 — a statement for the period [from, to) (YYYY-MM-DD, midnight UTC) as the file Lens writes:
  * one agent's account, or with no agent every account in the bank. A refusal carries Lens's sentence.
  */
-async function statementFile(agentID: string | null, from: string, to: string, format: 'csv' | 'json'): Promise<Blob> {
+async function statementFile(agentID: string | null, from: string, to: string, format: StatementFormat): Promise<Blob> {
   const query = new URLSearchParams({ from, to, format })
   const path = agentID ? `/api/agents/${e(agentID)}/statement?${query}` : `/api/agents/statement?${query}`
-  const res = await fetch(path, { headers: { Accept: format === 'csv' ? 'text/csv' : 'application/json' } })
+  const res = await fetch(path, { headers: { Accept: STATEMENT_ACCEPT[format] } })
   if (!res.ok) {
     let sentence = ''
     try {
@@ -874,6 +944,140 @@ async function statementFile(agentID: string | null, from: string, to: string, f
   return res.blob()
 }
 
+/**
+ * B56.15 — a currency account's statement for [from, to) as the CSV Lens writes (Lens B56.14). A refusal carries
+ * Lens's sentence.
+ */
+async function accountStatementFile(accountID: string, from: string, to: string): Promise<Blob> {
+  const path = `/api/money/accounts/${e(accountID)}/statement?${new URLSearchParams({ from, to, format: 'csv' })}`
+  const res = await fetch(path, { headers: { Accept: 'text/csv' } })
+  if (!res.ok) {
+    let sentence = ''
+    try {
+      sentence = ((await res.json()) as { error?: string }).error ?? ''
+    } catch {
+      // a body that is not JSON carries no sentence
+    }
+    throw new AgentBankError(res.status, path, sentence)
+  }
+  return res.blob()
+}
+
+/** B59.25 — the card payments, disputes and refunds made from one day to another, both included, as Lens's CSV (Lens B59.24). */
+async function cardExportFile(from: string, through: string): Promise<Blob> {
+  const path = `/api/money/card-exports?${new URLSearchParams({ from, to: through })}`
+  const res = await fetch(path, { headers: { Accept: 'text/csv' } })
+  if (!res.ok) {
+    let sentence = ''
+    try {
+      sentence = ((await res.json()) as { error?: string }).error ?? ''
+    } catch {
+      // a body that is not JSON carries no sentence
+    }
+    throw new AgentBankError(res.status, path, sentence)
+  }
+  return res.blob()
+}
+
+/** B28.51 — what a statement page is read for: the lines of these kinds whose words hold q, any case. */
+export interface StatementSearch {
+  kinds: readonly PostingKind[]
+  q: string
+}
+
+/** B28.51 — one page of an agent's statement, newest first: `to` is the period's end, the same on every page. */
+export interface StatementPage {
+  to?: string
+  lines: StatementLine[] | null
+  /** The cursor of the page after this one; absent on the last. */
+  next_cursor?: string
+}
+
+/** B28.51 — how many lines one page of the Statement card holds. */
+export const STATEMENT_PAGE_LINES = 100
+
+/**
+ * B28.51 — a page of the agent's statement from `from` (its first day) to `to` (now, on the first page; the first
+ * page's `to` after it), searched and filtered by Lens, newest first. `cursor` is the page before's next_cursor.
+ */
+function statementPage(agentID: string, from: string, search: StatementSearch, after?: { to?: string; cursor: string }): Promise<StatementPage> {
+  const query = new URLSearchParams({ from, limit: String(STATEMENT_PAGE_LINES) })
+  if (search.kinds.length > 0) query.set('kind', search.kinds.join(','))
+  if (search.q.trim() !== '') query.set('q', search.q.trim())
+  if (after) {
+    if (after.to) query.set('to', after.to)
+    query.set('cursor', after.cursor)
+  }
+  return getJSON<StatementPage>(`/api/agents/${e(agentID)}/statement?${query}`, { lines: 'list' })
+}
+
+/** Lens economy.StatementAccount: one account's totals over the period, opening + in − out = closing. */
+export interface StatementAccount {
+  account: string
+  opening_ulxc: number
+  in_ulxc: number
+  out_ulxc: number
+  closing_ulxc: number
+}
+
+/** B57.24 — one page of an agent's statement read by model and day (Lens B57.13), newest first. Its accounts are the
+ *  whole period's on every page; `to` is the period's end, the same on every page. */
+export interface DayStatementPage {
+  to?: string
+  accounts?: StatementAccount[] | null
+  lines: StatementLine[] | null
+  /** The zone the days are counted in: the agent's rules', else UTC. */
+  time_zone?: string
+  next_cursor?: string
+}
+
+/**
+ * B57.24 — a page of the agent's statement from `from`, read by model and day: each model's questions on a day one
+ * line, its platform fee the line under it. `after` is the first page's `to` and the page before's next_cursor.
+ * B57.110: with `search`, Lens keeps only the lines of those kinds whose words hold q.
+ */
+function statementByDay(
+  agentID: string,
+  from: string,
+  limit: number,
+  after?: { to?: string; cursor: string },
+  search?: StatementSearch,
+): Promise<DayStatementPage> {
+  const query = new URLSearchParams({ from, group: 'day', limit: String(limit) })
+  if (search && search.kinds.length > 0) query.set('kind', search.kinds.join(','))
+  if (search && search.q.trim() !== '') query.set('q', search.q.trim())
+  if (after) {
+    if (after.to) query.set('to', after.to)
+    query.set('cursor', after.cursor)
+  }
+  return getJSON<DayStatementPage>(`/api/agents/${e(agentID)}/statement?${query}`, { lines: 'list' })
+}
+
+/** B28.53 — what one agent sent to one destination for one model on one day (Lens B28.326), in µLXC. */
+export interface SpendBucket {
+  /** YYYY-MM-DD in the analytics' time zone. */
+  day: string
+  /** Empty for a movement that was not a request. */
+  model: string
+  /** The account the money went to, as the statement names it: spend, held, workspace, agent:<id>, escrow:<id>, pot:<id>. */
+  destination: string
+  out_ulxc: number
+  /** A hold's unused part, back on the day it came back. */
+  returned_ulxc: number
+  spent_ulxc: number
+  postings: number
+}
+
+/** B28.53 — one agent's spend for a period: the buckets' out_ulxc sum to its statement's out_ulxc for the same period. */
+export interface SpendAnalytics {
+  agent_id: string
+  time_zone: string
+  out_ulxc: number
+  returned_ulxc: number
+  spent_ulxc: number
+  buckets: SpendBucket[] | null
+}
+
 export const WORKSPACE_NAME_KEY = ['workspace-name']
 
 export const agentBankApi = {
@@ -884,7 +1088,8 @@ export const agentBankApi = {
       spent_ulxc: 'number',
       agents: 'array',
     }),
-  create: (name: string) => send<Agent>('POST', '/api/agents', { name }),
+  /** B57.124 — with the colour of the helper its owner picked; without one, Lens picks. */
+  create: (name: string, colour?: string) => send<Agent>('POST', '/api/agents', colour ? { name, colour } : { name }),
   /** B46.16 — the workspace's name (Lens B46.15): asked at sign-up on Home's first-agent card, shown in the sidebar. */
   workspaceName: () => getJSON<{ id: string; name: string }>('/api/workspace/name', { name: 'string' }),
   setWorkspaceName: (name: string) => send<{ id: string; name: string }>('PUT', '/api/workspace/name', { name }),
@@ -901,25 +1106,53 @@ export const agentBankApi = {
       monthly_limit_ulxc: 'number',
       approval_above_ulxc: 'number',
     }),
-  setRules: (id: string, rules: AgentRules) => send<AgentRules>('PUT', `/api/agents/${e(id)}/rules`, rules),
+  /** B55.14: a looser save carries the passkey's assertion beside the rules (Lens B55.13). */
+  setRules: (id: string, rules: AgentRules, assertion?: PasskeyAssertion) =>
+    send<AgentRules>('PUT', `/api/agents/${e(id)}/rules`, assertion ? { rules, assertion } : rules),
+  /** B55.14 — what a change would do to the agent's rules, and the challenge a looser one is signed over; saves nothing. */
+  rulesChallenge: (id: string, change: RulesChange) => send<RulesJudgement>('POST', `/api/agents/${e(id)}/rules-challenge`, change),
   /** B28.30 — would the agent's rules let this request through? Lens judges it and moves nothing. */
   simulate: (id: string, req: SimulatedRequest) => send<RuleSimulation>('POST', `/api/agents/${e(id)}/rules/simulate`, req),
   /** B28.31 — every version of the agent's rules, newest first: the first is the rules in force. */
   rulesHistory: (id: string) =>
     getJSON<{ versions: AgentRulesVersion[] | null }>(`/api/agents/${e(id)}/rules/history`, { versions: 'list' }),
   /** B28.31 — put the agent's rules back exactly as they were at version; Lens records that as a new version. */
-  rollbackRules: (id: string, version: number) => send<AgentRules>('POST', `/api/agents/${e(id)}/rules/rollback`, { version }),
+  rollbackRules: (id: string, version: number, assertion?: PasskeyAssertion) =>
+    send<AgentRules>('POST', `/api/agents/${e(id)}/rules/rollback`, { version, ...(assertion ? { assertion } : {}) }),
   /** B28.32 — the agent's limits raised for now, the soonest to end first. */
   boosts: (id: string) => getJSON<{ boosts: AgentRuleBoost[] | null }>(`/api/agents/${e(id)}/rules/boosts`, { boosts: 'list' }),
   /** B28.32 — raise one of the agent's limits to value until a time; from then on it is the rules' limit again by itself. */
-  boost: (id: string, b: { rule: string; value: number; until: string }) =>
-    send<AgentRuleBoost>('POST', `/api/agents/${e(id)}/rules/boosts`, b),
+  boost: (id: string, b: { rule: string; value: number; until: string }, assertion?: PasskeyAssertion) =>
+    send<AgentRuleBoost>('POST', `/api/agents/${e(id)}/rules/boosts`, { ...b, ...(assertion ? { assertion } : {}) }),
   /** B28.32 — end the agent's boost on that limit now, before its time. */
   endBoost: (id: string, rule: string) => send<void>('DELETE', `/api/agents/${e(id)}/rules/boosts/${e(rule)}`),
   statement: (id: string) => getJSON<{ lines: StatementLine[] | null }>(`/api/agents/${e(id)}/statement`, { lines: 'list' }),
+  statementPage,
+  statementByDay,
+  /** B28.53 — the agent's spend from `from` (YYYY-MM-DD) to now, by day, model and destination. */
+  analytics: (id: string, from: string) =>
+    getJSON<SpendAnalytics>(`/api/agents/${e(id)}/analytics?${new URLSearchParams({ from })}`, { buckets: 'list', out_ulxc: 'number', returned_ulxc: 'number', spent_ulxc: 'number' }),
   /** B46.9 — the agent's wallet on the money layer (Lens B46.4): its balance and how to pay into it. */
   wallet: (id: string) => getSaid<AgentMoneyWallet>(`/api/agents/${e(id)}/wallet`),
   statementFile,
+  /** B56.15 — what the agent put on its company's marketplace bill in [from, to) (Lens B56.14); its balance moves not. */
+  marketplaceBill: (id: string, from: string, to: string) =>
+    getJSON<{ marketplace_bill?: MarketplaceBillLine[] | null }>(`/api/agents/${e(id)}/statement?${new URLSearchParams({ from, to, format: 'json' })}`),
+  /** B56.15 — a currency account's statement for [from, to) (YYYY-MM-DD): opening, in, out, closing and every posting; a
+   *  refusal (only the owner or an admin reads the company's accounts) carries Lens's sentence. */
+  accountStatement: (id: string, from: string, to: string) =>
+    getSaid<MoneyStatement>(`/api/money/accounts/${e(id)}/statement?${new URLSearchParams({ from, to })}`),
+  accountStatementFile,
+  /** B59.25 — the workspace's card disputes, newest first, and where each stands (Lens B59.24). */
+  cardDisputes: async (): Promise<CardDispute[]> =>
+    (await getSaid<{ card_disputes: CardDispute[] | null }>('/api/money/card-disputes')).card_disputes ?? [],
+  /** B59.25 — disputes a card payment, named by the issuer's id for it, with the owner's reason. Lens answers the dispute. */
+  openCardDispute: (paymentID: string, reason: string) =>
+    send<CardDispute>('POST', '/api/money/card-disputes', { payment_id: paymentID, reason }),
+  /** B59.25 — the merchants' refunds on the workspace's card payments, newest first. */
+  cardRefunds: async (): Promise<CardRefund[]> =>
+    (await getSaid<{ card_refunds: CardRefund[] | null }>('/api/money/card-refunds')).card_refunds ?? [],
+  cardExportFile,
   /** B19.24 — the agent's test-mode card and every purchase on it; null when it has none (Lens answers 404). */
   card: async (id: string): Promise<{ card: AgentCard; authorizations: CardAuthorization[] | null } | null> => {
     try {
@@ -936,14 +1169,15 @@ export const agentBankApi = {
   /** B28.360 — every purchase on the agent's card refused until it is unfrozen; Lens answers the card. */
   freezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/freeze`),
   unfreezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/unfreeze`),
-  /** B28.21 — renames the agent and/or sets what it is for; Lens answers the agent. */
-  update: (id: string, change: { name?: string; description?: string }) => send<Agent>('PATCH', `/api/agents/${e(id)}`, change),
+  /** B28.21 — renames the agent and/or sets what it is for, and (B57.124) its helper's colour; Lens answers the agent. */
+  update: (id: string, change: { name?: string; description?: string; colour?: string }) => send<Agent>('PATCH', `/api/agents/${e(id)}`, change),
   /** B28.21 — retires the agent: its balance back to the workspace, its keys revoked, its top-up and schedules stopped. */
   archive: (id: string) => send<AgentArchive>('POST', `/api/agents/${e(id)}/archive`),
   /** B19.23 — the signed-in person becomes the owner of an agent that has none. */
   claim: (id: string) => send<{ agent_id: string; owner_user_id: string }>('POST', `/api/agents/${e(id)}/claim`),
   pay: (id: string, to_agent_id: string, amount_ulxc: number, memo: string) =>
-    send<AgentPayment>('POST', `/api/agents/${e(id)}/pay`, { to_agent_id, amount_ulxc, memo }),
+    unlessHeld(send<AgentPayment>('POST', `/api/agents/${e(id)}/pay`, { to_agent_id, amount_ulxc, memo }),
+      (h) => new AgentBankError(202, `/api/agents/${e(id)}/pay`, h.message ?? '', h.approval_id)),
   approvals: () => getJSON<{ approvals: AgentApproval[] | null }>('/api/agents/approvals', { approvals: 'list' }),
   // B19.21 — scheduled payments and automatic top-ups.
   schedules: () => getJSON<{ schedules: AgentSchedule[] | null }>('/api/agents/schedules', { schedules: 'list' }),
@@ -971,6 +1205,10 @@ export const agentBankApi = {
   alerts: () => getJSON<{ alerts: AgentSpendAlert[] | null; rule: string }>('/api/agents/alerts', { alerts: 'list' }),
   subscriptions: () => getJSON<{ subscriptions: SpendSubscription[] | null }>('/api/money/spending/subscriptions', { subscriptions: 'list' }),
   limitAlerts: () => getJSON<{ alerts: LimitAlert[] | null }>('/api/money/budgets/alerts', { alerts: 'list' }),
+  alertChannels: () => getJSON<{ channels: AlertChannel[] | null }>('/api/money/alerts/channels', { channels: 'list' }),
+  addAlertChannel: (kind: AlertChannel['kind'], url: string) => send<AlertChannel>('POST', '/api/money/alerts/channels', { kind, url }),
+  removeAlertChannel: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/alerts/channels/${e(id)}`),
+  alertDeliveries: () => getJSON<{ deliveries: AlertDelivery[] | null }>('/api/money/alerts/deliveries', { deliveries: 'list' }),
   budgets: () => getJSON<{ budgets: SpendBudget[] | null }>('/api/money/budgets', { budgets: 'list' }),
   setBudget: (b: SpendBudgetRequest) => send<SpendBudget>('PUT', '/api/money/budgets', b),
   deleteBudget: (id: string) => send<{ deleted: string }>('DELETE', `/api/money/budgets/${e(id)}`),
@@ -1018,16 +1256,44 @@ export const agentBankApi = {
   resumeChallenge: (id: string) => send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/${e(id)}/resume-challenge`),
   /** B19.10: once the workspace has a passkey, a decision carries an assertion over the approval's challenge. */
   /** B41.4 — approving with always_allow also saves that allowance for the approval's payee. */
-  decide: (approvalID: string, decision: 'approve' | 'deny', assertion?: PasskeyAssertion, alwaysAllow?: PayeeAllowance) =>
+  /** B55.19 — declining can say why (Lens B55.18); the agent sees it. */
+  decide: (approvalID: string, decision: 'approve' | 'deny', assertion?: PasskeyAssertion, alwaysAllow?: PayeeAllowance, reason?: string) =>
     decision === 'approve'
       ? send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/approve`, { ...(assertion ? { assertion } : {}), ...(alwaysAllow ? { always_allow: alwaysAllow } : {}) })
-      : send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/deny`, assertion ? { assertion } : {}),
+      : send<AgentApproval>('POST', `/api/agents/approvals/${e(approvalID)}/deny`, { ...(assertion ? { assertion } : {}), ...(reason ? { reason } : {}) }),
   // B19.10 — passkeys and push, kept by Lens (B19.16).
   passkeys: () => getJSON<{ passkeys: Passkey[] | null }>('/api/agents/passkeys', { passkeys: 'list' }),
+  // B55.2 — the phone keys Lens holds for the workspace (revoked ones included): the phone signs approvals too.
+  devices: () => getJSON<{ devices: DeviceKey[] | null }>('/api/money/devices', { devices: 'list' }),
   passkeyChallenge: () => send<{ challenge: string; rp_id: string; credential_ids?: string[] | null }>('POST', '/api/agents/passkeys/challenge'),
-  registerPasskey: (body: PasskeyRegistration) => send<Passkey>('POST', '/api/agents/passkeys', body),
-  approvalChallenge: (approvalID: string) =>
-    send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/approvals/${e(approvalID)}/challenge`),
+  // B55.3: with a key on the phone alone, Lens keeps an unsigned passkey waiting (202) until the phone lets it in (Lens B55.1).
+  registerPasskey: (body: PasskeyRegistration) => send<Passkey | { enrolment: EnrolmentWaiting }>('POST', '/api/agents/passkeys', body),
+  enrolments: () => getJSON<{ enrolments: KeyEnrolment[] | null }>('/api/agents/keys/enrolments', { enrolments: 'list' }),
+  enrolment: (id: string) => getJSON<KeyEnrolment>(`/api/agents/keys/enrolments/${e(id)}`, { status: 'string' }),
+  enrolmentChallenge: (id: string) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/keys/enrolments/${e(id)}/challenge`),
+  approveEnrolment: (id: string, assertion: PasskeyAssertion) => send<KeyEnrolment>('POST', `/api/agents/keys/enrolments/${e(id)}/approve`, { assertion }),
+  declineEnrolment: (id: string) => send<KeyEnrolment>('POST', `/api/agents/keys/enrolments/${e(id)}/decline`),
+  // B55.54 — a recovery code, and a key back when every key of the workspace was removed (Lens B55.48).
+  recoveryCodeChallenge: () => send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/agents/keys/recovery-code/challenge'),
+  newRecoveryCode: (assertion: PasskeyAssertion) => send<{ recovery_code: string }>('POST', '/api/agents/keys/recovery-code', { assertion }),
+  waitingRecovery: () => getJSON<{ recovery: KeyRecovery | null }>('/api/agents/keys/recover'),
+  recoverWithCode: (code: string, passkey: RecoveryPasskey) => send<RecoveredKey>('POST', '/api/agents/keys/recover', { code, passkey }),
+  startRecovery: () => send<{ recovery: KeyRecovery }>('POST', '/api/agents/keys/recover/start'),
+  cancelRecovery: () => send<{ recovery: KeyRecovery }>('POST', '/api/agents/keys/recover/cancel'),
+  completeRecovery: (passkey: RecoveryPasskey) => send<RecoveredKey>('POST', '/api/agents/keys/recover/complete', { passkey }),
+  // B55.16 — every active passkey and phone key by name (Lens B55.15); removing one needs no signature, and Lens
+  // refuses the workspace's last key in its own words (409).
+  approvalKeys: () => getJSON<{ keys: ApprovalKey[] | null }>('/api/agents/keys', { keys: 'list' }),
+  removePasskey: (credentialID: string) => send<{ removed: boolean }>('DELETE', '/api/agents/passkeys', { credential_id: credentialID }),
+  revokeDevice: (id: string) => send<DeviceKey>('POST', `/api/money/devices/${e(id)}/revoke`),
+  /** B54.34 — approving with always_allow signs that allowance too, so the challenge is asked for with it (Lens B54.29). */
+  approvalChallenge: (approvalID: string, alwaysAllow?: PayeeAllowance) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>(
+      'POST',
+      `/api/agents/approvals/${e(approvalID)}/challenge`,
+      alwaysAllow ? { always_allow: alwaysAllow } : undefined,
+    ),
   pushPublicKey: () => getJSON<{ public_key: string }>('/api/agents/push/public-key', { public_key: 'string' }),
   subscribePush: (sub: PushSubscriptionBody) => send<{ endpoint: string }>('POST', '/api/agents/push/subscriptions', sub),
   // B22.10 — money between owners (Lens B22.1, B22.3, B22.4, B22.5).
@@ -1123,7 +1389,11 @@ export const agentBankApi = {
   payments: () => getJSON<{ payments: OutsidePayment[] | null }>('/api/money/payments', { payments: 'list' }),
   // B41.7 — one search box across agents, payees, payments, bills, invoices, rules and listings (Lens B41.107).
   search: (q: string) => getJSON<SearchResults>(`/api/money/search?q=${e(q)}`, { groups: 'list' }),
-  payOutside: (body: OutsidePaymentRequest) => send<OutsidePayment>('POST', '/api/money/payments', body),
+  /** B54.35 — the challenge a person's payment is signed over, naming exactly this payment (Lens B54.33). */
+  paymentChallenge: (body: OutsidePaymentRequest) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/money/payments/challenge', body),
+  payOutside: (body: OutsidePaymentRequest, assertion?: PasskeyAssertion) =>
+    send<OutsidePayment>('POST', '/api/money/payments', assertion ? { ...body, assertion } : body),
   // B40.35 — payees and permission mandates an assistant asked for, saved or signed only by the person.
   assistantRequests: () => getJSON<{ requests: AssistantRequest[] | null }>('/api/money/assistant-requests', { requests: 'list' }),
   dismissAssistantRequest: (id: string) => send<void>('POST', `/api/money/assistant-requests/${e(id)}/dismiss`),
@@ -1136,6 +1406,9 @@ export const agentBankApi = {
   prepareRequest: (body: { voice: boolean; items: { payee_id: string; currency: string; amount_minor: number; reference: string }[] }, key: string) =>
     send<PaymentRequest>('POST', '/api/money/payment-requests', body, { 'Idempotency-Key': key }),
   paymentRequest: (id: string) => getSaid<PaymentRequest>(`/api/money/payment-requests/${e(id)}`),
+  /** B55.10 — every prepared request still waiting for the person (Lens B40.39; an expired one is left out, B55.9). */
+  pendingPaymentRequests: () =>
+    getJSON<{ requests: PaymentRequest[] | null }>('/api/money/payment-requests?status=pending_approval', { requests: 'list' }),
   /** B41.3 — `reason` is why ticked items flagged a duplicate or changed bank details are paid; Lens signs it into the statement. */
   requestApproval: (id: string, positions: number[], reason = '') =>
     send<{ statement: string; challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payment-requests/${e(id)}/approval`,
@@ -1145,7 +1418,14 @@ export const agentBankApi = {
   /** B45.2 — declined: Lens cancels the request and pays none of it. */
   cancelRequest: (id: string) => send<PaymentRequest>('POST', `/api/money/payment-requests/${e(id)}/cancel`),
   mandates: () => getJSON<{ granted: Mandate[] | null; received: Mandate[] | null }>('/api/money/mandates', { granted: 'list', received: 'list' }),
-  grantMandate: (body: MandateGrant) => send<Mandate>('POST', '/api/money/mandates', body),
+  /** B55.56 — the challenge the owner's grant, or approval of an agent's request, is signed over (Lens B55.24). */
+  mandateChallenge: (body: { grant: MandateGrant } | { mandate_id: string }) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/money/mandates/challenge', body),
+  grantMandate: (grant: MandateGrant, assertion?: PasskeyAssertion) =>
+    send<Mandate>('POST', '/api/money/mandates', assertion ? { grant, assertion } : { grant }),
+  approveMandate: (id: string, assertion?: PasskeyAssertion) =>
+    send<Mandate>('POST', `/api/money/mandates/${e(id)}/approve`, assertion ? { assertion } : {}),
+  declineMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/decline`),
   revokeMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/revoke`),
   payouts: () => getJSON<{ payouts: PayoutBatch[] | null }>('/api/money/payouts', { payouts: 'list' }),
   payout: (id: string) => getSaid<PayoutBatch>(`/api/money/payouts/${e(id)}`),
@@ -1163,7 +1443,12 @@ export const agentBankApi = {
     }
     return (await res.json()) as PayoutBatch
   },
-  approvePayout: (id: string) => send<PayoutBatch>('POST', `/api/money/payouts/${e(id)}/approve`),
+  /** B58.6 — the challenge approving a batch is signed over, naming it as it stands: its id, its rows and its totals (Lens B58.5). */
+  payoutChallenge: (id: string) =>
+    send<{ challenge: string; allow_credentials: string[] | null; payout: { id: string; rows_total: number; rows_valid: number; totals_minor: Record<string, number> | null } }>(
+      'POST', `/api/money/payouts/${e(id)}/approve/challenge`),
+  approvePayout: (id: string, assertion?: PasskeyAssertion) =>
+    send<PayoutBatch>('POST', `/api/money/payouts/${e(id)}/approve`, assertion ? { assertion } : {}),
   // B41.1 — the bills inbox (Lens B41.101): an invoice uploaded as it is, read into a bill; created is false when it was there already.
   bills: () => getJSON<{ bills: Bill[] | null }>('/api/money/bills', { bills: 'list' }),
   uploadBill: async (file: File) => {
@@ -1287,6 +1572,8 @@ export interface PaymentRequestItem {
   decision: string
   reason: string
   rule?: string
+  /** The payment out that paid it, once one did. */
+  payment_id?: string
   pay_status?: string
   pay_detail?: string
   /** B41.3 (Lens B41.103) — duplicate | bank_details_changed | first_payment | unusual_amount, each with Lens's words. */
@@ -1388,9 +1675,11 @@ export interface Mandate {
   max_per_month_minor: number
   pulled_this_month_minor: number
   expires_at: string
-  /** active | revoked */
+  /** requested (an agent's own key asked; B55.24) | active | revoked | expired | declined */
   status: string
   revoked_at?: string
+  approved_at?: string
+  declined_at?: string
   created_at: string
   /** an outside business's key, answered once, when granted */
   pull_key?: string
@@ -1564,6 +1853,8 @@ export interface WalletCapability {
   }
   /** B30.4: the verification level its live money needs, "L0" to "L3". */
   level_needed?: string
+  /** B56.9: live or sandbox for this workspace (talyvor-lens B56.7), on each capability that moves money. For StatusLabel. */
+  label?: string
 }
 
 /** Lens economy.VerificationCheck (B30.4): one check, as the provider that made it answered. */
@@ -1769,6 +2060,63 @@ export interface Passkey {
   name: string
   created_at: string
   last_used_at?: string
+  /** B41.116: revoked by a lockdown, it signs nothing. */
+  revoked_at?: string
+  /** B55.54: answered once, with the workspace's first key (Lens B55.48). */
+  recovery_code?: string
+}
+
+/** B55.54 — a recovery started without the code (Lens economy.KeyRecovery): a key can be added from ready_at. */
+export interface KeyRecovery {
+  id: string
+  status: 'waiting' | 'cancelled' | 'completed' | 'expired'
+  created_at: string
+  ready_at: string
+  expires_at: string
+  /** started by the person asking, who alone adds its key */
+  mine: boolean
+}
+
+/** B55.54 — the new passkey a recovery adds, as POST /api/agents/passkeys takes it. */
+export type RecoveryPasskey = Omit<PasskeyRegistration, 'assertion'>
+
+/** B55.54 — the key a recovery added and the workspace's new recovery code, shown this once. */
+export interface RecoveredKey {
+  key: { kind: 'passkey' | 'device'; id: string; name: string }
+  recovery_code: string
+}
+
+/** B55.2 — a phone's key (Lens GET /v1/money/devices); one revoked signs nothing. */
+export interface DeviceKey {
+  id: string
+  platform: string
+  name: string
+  revoked_at?: string
+}
+
+/** B55.3 — a key registered on one device, waiting for a key on the other to let it in (Lens B55.1). */
+export interface EnrolmentWaiting {
+  id: string
+  code: string
+  expires_at: string
+}
+
+export interface KeyEnrolment extends EnrolmentWaiting {
+  kind: 'passkey' | 'device'
+  name: string
+  platform?: string
+  status: 'waiting' | 'approved' | 'declined' | 'expired'
+  created_at: string
+}
+
+/** B55.16 — a key that approves for the workspace (Lens GET /v1/workspaces/{ws}/agents/keys): a passkey or a phone's key. */
+export interface ApprovalKey {
+  kind: 'passkey' | 'phone'
+  id: string
+  name: string
+  platform: string
+  created_at: string
+  last_used_at?: string
 }
 
 /** A new passkey, as the browser's ceremony gives it — all base64url. */
@@ -1814,14 +2162,14 @@ export function limitText(micros: number): string {
   return micros > 0 ? String(micros / 1_000_000) : ''
 }
 
-/** The approval a payment filed, named in Lens's refusal: "… approval apr_… must be approved …". */
+/** The approval a payment filed: Lens's held answer names it (B58.2), or its refusal's sentence does, in any case. */
 export function approvalNamedIn(err: unknown): string | null {
-  return err instanceof AgentBankError ? (/approval (apr_[\w-]+)/.exec(err.sentence)?.[1] ?? null) : null
+  return err instanceof AgentBankError ? err.approvalID || approvalInSentence(err.sentence) : null
 }
 
 /** Why a write did not happen, in Lens's words where Lens gave some. */
 export function refusalText(err: unknown): string {
-  if (isSessionExpired(err)) return 'Nothing changed — sign in again.'
+  if (isSessionExpired(err)) return 'Nothing changed. Sign in again.'
   if (err instanceof AgentBankError && err.status < 500 && err.sentence) {
     const s = err.sentence.replace(/^economy: (spending: )?/, '')
     return `${s.charAt(0).toUpperCase()}${s.slice(1)}${s.endsWith('.') ? '' : '.'}`
@@ -1841,6 +2189,85 @@ export interface CurrencyAccount {
   balance_minor: number
   test_minor: number
   live_minor: number
+}
+
+/** B59.25 — where a card dispute stands (Lens economy.CardDispute*). */
+export type CardDisputeStatus = 'opened' | 'with_issuer' | 'won' | 'lost'
+
+/** B59.25 — Lens economy.CardDispute: one dispute of a card payment, named by the issuer's id for the payment. */
+export interface CardDispute {
+  id: string
+  payment_id: string
+  agent_id?: string
+  card_id: string
+  merchant: string
+  amount_minor: number
+  currency: string
+  reason: string
+  status: CardDisputeStatus
+  /** what came back of the payment: the payment once won, else 0 */
+  credited_minor: number
+  decided_at?: string
+  created_at: string
+}
+
+/** B59.25 — Lens economy.CardPaymentRefund: a merchant's refund of a card payment, and what it credited. */
+export interface CardRefund {
+  id: string
+  payment_id: string
+  agent_id?: string
+  card_id: string
+  merchant: string
+  /** what the merchant refunded */
+  amount_minor: number
+  currency: string
+  /** what came back: no more than was left of the payment */
+  credited_minor: number
+  created_at: string
+}
+
+/** B56.15 — one posting to a currency account (Lens economy.MoneyStatementLine): money in positive, out negative. */
+export interface MoneyStatementLine {
+  entry_id: string
+  line: number
+  at: string
+  /** the entry's: payment_in, invoice_payment, mandate_pull, card_charge, … */
+  kind: string
+  amount_minor: number
+  funding: string
+  /** who an outside payment was from or to; else the other account, or "workspace:<id>" */
+  counterparty: string
+  memo?: string
+  partner_ref?: string
+  balance_after_minor: number
+}
+
+/** B56.15 — a currency account over [from, to) (Lens economy.MoneyStatement): opening + in − out = closing. */
+export interface MoneyStatement {
+  account_id: string
+  agent_id?: string
+  currency: string
+  from: string
+  to: string
+  opening_minor: number
+  in_minor: number
+  out_minor: number
+  closing_minor: number
+  lines: MoneyStatementLine[] | null
+}
+
+/** B56.15 — one use or payment an agent put on its company's monthly marketplace bill (Lens economy.MarketplaceBillLine). */
+export interface MarketplaceBillLine {
+  use_id: string
+  at: string
+  /** pay, for a payment to another company's agent; else use, buy, rent, subscribe or renewal */
+  kind: string
+  listing_id?: string
+  payee_agent_id?: string
+  amount_ulxc: number
+  memo?: string
+  /** "on the marketplace bill" */
+  label: string
 }
 
 /** One line of an invoice (Lens economy.InvoiceLine): a quantity at a unit price in minor units, with its VAT rate in basis points. */
@@ -1934,7 +2361,7 @@ export const FIATS: readonly string[] = ['GBP', 'EUR', 'USD']
 export function formatMinor(minor: number, currency: string): string {
   if (currency === 'USDC') return `${(minor / 1e6).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`
   if (!FIATS.includes(currency)) return `${(minor / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(minor / 100)
+  return currencyText(minor / 100, currency)
 }
 
 /** "12.50" → 1250: an amount typed in the currency's major units, to the minor unit; null when it is not a positive amount. */
@@ -1943,4 +2370,105 @@ export function minorOf(text: string): number | null {
   if (m === null) return null
   const minor = Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0'))
   return Number.isSafeInteger(minor) && minor > 0 ? minor : null
+}
+
+// B59.10 — a workspace is Business or Personal, and Fiat only, Stablecoin and crypto only, or Hybrid (Lens
+// B59.6), and each screen renders only what its type and kind have — SPEC 3.3 and 3.4, the launch pack's two tables.
+// Hidden means not rendered, never greyed out. Lens refuses a money route of the wrong kind on its own (B59.7); this is
+// what the screens draw.
+
+export type AccountType = 'business' | 'personal'
+export type MoneyKind = 'fiat' | 'stablecoin' | 'hybrid'
+export interface WorkspaceAccount {
+  account_type: AccountType
+  money_kind: MoneyKind
+}
+
+export const ACCOUNT_KEY = ['workspace-account'] as const
+
+/** GET /api/workspace/account — the workspace's type and kind of money (Lens B59.6). */
+export function readWorkspaceAccount(): Promise<WorkspaceAccount> {
+  return getJSON<WorkspaceAccount>('/api/workspace/account', { account_type: 'string', money_kind: 'string' })
+}
+
+/** What a workspace's type and kind show. */
+export interface Shows {
+  /** Bank transfers in and out: payees by their bank details, IBANs to pay in. Not for Stablecoin. */
+  bankTransfers: boolean
+  /** Wallet addresses, on-chain send and receive. Not for Fiat. */
+  onChain: boolean
+  /** Convert between the two sides. Hybrid only. */
+  convert: boolean
+  /** Instant transfer. Hybrid only. */
+  instantTransfer: boolean
+  /** Team, roles and a second approver. Business only. */
+  team: boolean
+  /** Payout batches. Business only. */
+  payoutBatches: boolean
+  /** The owner's card tiers, lowest first. */
+  cardTiers: readonly string[]
+  /** The agents' heading: "Your agents", or "Your team’s agents". */
+  agents: string
+  /** The owner's own account, where a payment names it: "Your account", or "The company". */
+  owner: string
+}
+
+export function shows({ account_type, money_kind }: WorkspaceAccount): Shows {
+  const business = account_type === 'business'
+  return {
+    bankTransfers: money_kind !== 'stablecoin',
+    onChain: money_kind !== 'fiat',
+    convert: money_kind === 'hybrid',
+    instantTransfer: money_kind === 'hybrid',
+    team: business,
+    payoutBatches: business,
+    cardTiers: business ? ['Team', 'Business', 'Enterprise'] : ['Daily', 'Premium', 'Platinum'],
+    agents: business ? 'Your team’s agents' : 'Your agents',
+    owner: business ? 'The company' : 'Your account',
+  }
+}
+
+export const TYPE_LABEL: Record<AccountType, string> = { business: 'Business', personal: 'Personal' }
+export const KIND_LABEL: Record<MoneyKind, string> = { fiat: 'Fiat only', stablecoin: 'Stablecoin and crypto only', hybrid: 'Hybrid' }
+export const KIND_LINE: Record<MoneyKind, string> = {
+  fiat: 'Your agents pay ordinary bills with cards and bank transfers.',
+  stablecoin: 'Your agents work on chain.',
+  hybrid: 'Both side by side, under one set of rules.',
+}
+const KIND_CHIP: Record<MoneyKind, string> = { fiat: 'Fiat', stablecoin: 'Stablecoin', hybrid: 'Hybrid' }
+
+/** The account's chip, as the switcher shows it: "Business · Hybrid". */
+export const accountChip = (a: WorkspaceAccount) => `${TYPE_LABEL[a.account_type]} · ${KIND_CHIP[a.money_kind]}`
+
+/** Every workspace Lens had before B59.6 became Business and Hybrid, so nothing it used disappeared. */
+const AS_MIGRATED: WorkspaceAccount = { account_type: 'business', money_kind: 'hybrid' }
+
+/**
+ * The session's workspace's type and kind, and what they show. While the read is in flight `shows` is null and a
+ * screen renders nothing that depends on it. A read that failed draws the screens as every existing workspace was
+ * migrated, Business and Hybrid, so a failed read never empties someone's money screens; `account` stays null, so
+ * nothing claims to know the type or kind.
+ */
+export function useAccount(): { account: WorkspaceAccount | null; shows: Shows | null } {
+  const q = useQuery({ queryKey: ACCOUNT_KEY, queryFn: readWorkspaceAccount, staleTime: 60_000, retry: false })
+  if (q.isPending) return { account: null, shows: null }
+  if (q.isError) return { account: null, shows: shows(AS_MIGRATED) }
+  return { account: q.data, shows: shows(q.data) }
+}
+
+/**
+ * Whether the account is known to be Personal: false while it is read and when the read fails. It re-renders its caller
+ * once at most, when a Personal account's answer arrives, so the shell and every route can ask it.
+ */
+export function usePersonal(): boolean {
+  return (
+    useQuery({
+      queryKey: ACCOUNT_KEY,
+      queryFn: readWorkspaceAccount,
+      staleTime: 60_000,
+      retry: false,
+      select: (a) => a.account_type === 'personal',
+      notifyOnChangeProps: ['data'],
+    }).data === true
+  )
 }

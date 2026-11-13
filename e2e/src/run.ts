@@ -15,6 +15,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { type Browser, chromium } from 'playwright'
 import { AppUser, ChargeBook } from './app.ts'
 import { type B28Report, b28Report } from './b28.ts'
+import { type BuildingLabelsReport, readBuildingLabels } from './buildingLabels.ts'
 import { CapReached, SpendCap } from './budget.ts'
 import { type RunConfig, parseConfig } from './config.ts'
 import { type DayBudget, dayBudget, leftOf } from './day.ts'
@@ -23,7 +24,7 @@ import { type CoverageMap, type Inventory, Matcher, Recorder, type Tag, buildMap
 import { type CodeReport, codeSkipped, runCode } from './code.ts'
 import { type EdgeReport, readEdge } from './edge.ts'
 import { type ExplorerSummary, type Finding, Notebook, explore } from './explore.ts'
-import { fileB28Items, fileCodeItems, fileEdgeItems, fileHostileItems, fileItems, filePocketItems } from './filing.ts'
+import { fileB28Items, fileBuildingLabelItems, fileCodeItems, fileEdgeItems, fileHostileItems, fileItems, filePocketItems } from './filing.ts'
 import { type HostileReport, type Repo, runHostile } from './hostile.ts'
 import { LensClient, type SyntheticUser, describe } from './lens.ts'
 import { lightJourneys } from './light.ts'
@@ -111,6 +112,8 @@ export interface RunResult {
   hostile?: HostileReport
   /** B28.293 — every DONE B28 feature in the queue, the scenarios that name it and their verdicts this run (b28.ts). */
   b28?: B28Report
+  /** B56.13 — building.json held to the queue and Lens, Lens's Live labels to its rails, and the public pages' chips (buildingLabels.ts). */
+  building_labels?: BuildingLabelsReport
   /** B28.292 — the rounds of the weekly deep red-team pass this run was to play; absent on a night without one. */
   deep_rounds?: number
   /** B28.294 — this run was the light pass between the nightly runs (light.ts). */
@@ -774,6 +777,17 @@ async function main(): Promise<number> {
       console.log(`B28 features: no queue to read at ${cfg.buildMd} (${describe(e)})`)
     }
   }
+  // B56.13 — every Building label held to the queue and Lens, and Lens's Live labels to its rails.
+  if (!cfg.light && !cfg.pocket) {
+    try {
+      result.building_labels = await readBuildingLabels({ appURL: cfg.appURL, lensURL: cfg.lensURL, buildMd: cfg.buildMd })
+      const r = result.building_labels
+      console.log(`Building labels: ${r.faults.length === 0 ? `PASS, ${r.entries.length} entries` : `FAIL ${r.faults.map((f) => `${f.kind} ${f.key}`).join(', ')}`}` +
+        (r.unread.length === 0 ? '' : `; not read: ${r.unread.join('; ')}`))
+    } catch (e) {
+      console.error(`e2e: could not read the Building labels: ${describe(e)}`)
+    }
+  }
   const attempt = async (what: string, write: () => Promise<void>): Promise<void> => {
     try {
       await write()
@@ -882,6 +896,16 @@ async function main(): Promise<number> {
         (f.covered.length > 0 ? `; already open: ${f.covered.map((x) => `${x.scenario} → ${x.by}`).join(', ')}` : ''))
     })
   }
+  const labels = result.building_labels
+  if (cfg.buildMd !== 'none' && labels !== undefined) {
+    await attempt(`the untrue labels' build items to ${cfg.buildMd}`, async () => {
+      const f = await fileBuildingLabelItems(cfg.buildMd, labels, shown)
+      if (f === undefined) return
+      for (const x of f.filed) newItems.push(x.id)
+      console.log(`Building label build items: ${f.filed.map((x) => `${x.id} (${x.scenario})`).join(', ') || 'none new'}` +
+        (f.covered.length > 0 ? `; already open: ${f.covered.map((x) => `${x.scenario} → ${x.by}`).join(', ')}` : ''))
+    })
+  }
   await attempt('the report', async () => {
     console.log(`report: ${await writeReport(reportDir, { ...result, filed })}`)
   })
@@ -891,7 +915,8 @@ async function main(): Promise<number> {
       console.log(`summary: ${cfg.testersMd}`)
     })
   }
-  return c.FAIL + c.ERROR > 0 || result.stopped_by !== undefined ? 1 : 0
+  // B56.13 — an untrue label fails the night as a scenario's FAIL does.
+  return c.FAIL + c.ERROR > 0 || result.stopped_by !== undefined || (labels?.faults.length ?? 0) > 0 ? 1 : 0
 }
 
 // B26.25 — Node loads this file by its real path, so started through a symlink (/tmp on macOS) the path it was

@@ -230,7 +230,7 @@ export function Discover() {
               </select>
             </label>
             <label className="text-caption text-muted">
-              Most a use may cost, in US$
+              Most a use may cost, in $
               <Input
                 className="mt-1 w-full font-figure"
                 inputMode="decimal"
@@ -254,7 +254,7 @@ export function Discover() {
           </div>
           {maxMicros === null && maxText.trim() !== '' ? (
             <p role="alert" className="text-body text-ink">
-              A price is a number of US dollars, such as 0.05 — this one is not used.
+              A price is a number of US dollars, such as 0.05. This one is not used.
             </p>
           ) : null}
         </form>
@@ -400,7 +400,7 @@ function Collections() {
         <p className="text-body text-muted">Reading…</p>
       ) : list.data.length === 0 ? (
         <p className="text-body text-muted">
-          No collection is public yet — one appears here when a workspace publishes it.
+          No collection is public yet. One appears here when a workspace publishes it.
         </p>
       ) : (
         <ul className="grid gap-3 wide:grid-cols-2 xl:grid-cols-3" aria-label="Collections">

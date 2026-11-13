@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@talyvor/ui'
 import { Region } from '../../components/Region'
-import { formatULXC } from '../lens/agentBankApi'
+import { Lxc } from '../lens/money'
 import { formatWhen } from '../lens/format'
 import { TRAIL_KEY } from '../lens/OperatorTrail'
 import { MarketError, type ParkedUse, marketApi, refusalText } from './marketApi'
@@ -84,7 +84,7 @@ function ParkedRow({ p, onRetried }: { p: ParkedUse; onRetried: (id: string) => 
         <div className="font-mono text-caption text-muted">{p.listing_id}</div>
       </td>
       <td className="px-gutter py-2 font-mono text-caption text-muted">{p.buyer_workspace_id}</td>
-      <td className="whitespace-nowrap px-gutter py-2 text-right font-figure text-body text-ink">{formatULXC(p.price_ulxc)}</td>
+      <td className="whitespace-nowrap px-gutter py-2 text-right font-figure text-body text-ink"><Lxc ulxc={p.price_ulxc} /></td>
       <td className="whitespace-nowrap px-gutter py-2 text-right font-figure text-body text-muted">
         {p.refusals} {p.refusals === 1 ? 'time' : 'times'}
       </td>

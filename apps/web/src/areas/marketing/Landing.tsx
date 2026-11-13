@@ -1,12 +1,13 @@
-import { useState } from 'react'
-import { Button, CaseSafe, focusRing, inlineLink } from '@talyvor/ui'
-import { useSignupProbe } from '../../lib/signupOpen'
+import { Button, inlineLink } from '@talyvor/ui'
+import { ACCESS_LINE, useSignupProbe } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
-import { HOLDBACK_HOURS, LEDGER_HIT, SAVED_MICRO_LXC, micro } from './economics'
 import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
 import { COMPANY_CONTACT } from '../../company'
 import { Waitlist } from '../../components/Waitlist'
-import { HEY_TALY, ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from '../../positioning'
+import { ON_ITS_WAY, OWNER_LINE, POSITIONING_LINE, POSITIONING_SENTENCES } from '../../positioning'
+import { LabelsMeaning, StatusLabel } from '../../labels/StatusLabel'
+import { WALLETS } from '../../labels/capabilities'
+import { usePricing } from './pricingApi'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). It must render with no
 // session, no router context, and no providers: Landing.test.tsx renders <Landing /> bare, so
@@ -18,7 +19,7 @@ import { HEY_TALY, ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from '.
 //
 // The brand board's WEBSITE HERO tile (brand-v4 BRAND.md, "The marketing page"; B29.4): the drawn
 // mark and wordmark in the site header (B51.1: every public page shares it), an eyebrow over every headline, one teal rule per section, raised
-// panels with a 1px line border instead of shadows, the four brand icons, and every money figure in
+// panels with a 1px line border instead of shadows, and every money figure in
 // IBM Plex Mono with tabular figures. The hero photograph bleeds off the right edge behind a gradient
 // from the canvas; on a phone it moves under the text. The
 // copy is unchanged — only the look moved. Display sizes are still the preset's; anything the
@@ -27,14 +28,13 @@ import { HEY_TALY, ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from '.
 //
 // The one thing a visitor should remember is the PRODUCT: every AI agent gets a wallet, and the
 // rules on it are enforced before the model call or the payment, not reconciled afterwards.
-// Pooling is one cost-saving feature with one section, never the pitch (B28.2).
+// B59.5: the page names only the launch pack. Chat, the Marketplace, Rooms, pooling and the gateway are hidden areas
+// (LAUNCH-PACK.md section 2), so they have no section, band or sentence here.
 //
 // ── COPY STANCE ──────────────────────────────────────────────────────────────────────────────────
 //
-// Every figure on this page is MEASURED — the settled pooled hit in economics.ts, from one real
-// ledger row, labelled as real. The one percentage (the pooled discount) is DERIVED from that row
-// below rather than typed, so it cannot disagree with the figures printed beside it. There is no
-// projected curve and no "toward zero": a shape drawn from a claim is not a measurement.
+// The page prints no figure: there is no projected curve and no "toward zero", because a shape drawn from a claim is
+// not a measurement.
 
 // ── THE CONTACT ADDRESS ──────────────────────────────────────────────────────────────────────────
 //
@@ -50,41 +50,11 @@ import { HEY_TALY, ON_ITS_WAY, POSITIONING_LINE, POSITIONING_SENTENCES } from '.
 export const CONTACT_EMAIL: string = import.meta.env.VITE_CONTACT_EMAIL || COMPANY_CONTACT
 const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}`
 
-/** A measured figure. Mono and tabular, with the unit set quieter than the value.
- *
- *  ⚠ THE UNIT GOES THROUGH `CaseSafe` AND MUST. Every unit this page quotes is a µ-prefixed ledger
- *  amount — `µLXC list`, `µLENS earned` — and `uppercase` maps µ (U+00B5) to Μ (U+039C), so the
- *  label painted `MLXC`: the mega prefix on a micro figure, on the four numbers this page offers as
- *  checkable against the ledger. It is fixed HERE rather than at the call sites because the
- *  µ arrives as a prop from 130 lines away and no future caller should have to know. */
-export function Figure({ value, unit, tone = 'ink' }: { value: string; unit: string; tone?: 'ink' | 'muted' }) {
-  return (
-    <span className="inline-flex items-baseline gap-1.5">
-      <span
-        className={`font-figure text-figure ${tone === 'ink' ? 'text-ink' : 'text-muted'}`}
-      >
-        {value}
-      </span>
-      <span className="font-figure text-eyebrow uppercase text-label">
-        <CaseSafe>{unit}</CaseSafe>
-      </span>
-    </span>
-  )
-}
-
-/** The pooled discount, as a whole percentage of list — DERIVED from the settled row, so the
- *  "30% off" in the copy and the figures in the stepper are one number, not two. */
-export const POOLED_DISCOUNT_PERCENT = Math.round((SAVED_MICRO_LXC / LEDGER_HIT.listMicroLXC) * 100)
-
-/** The brand icons, copied as drawn from brand-v4 svg/ into public/brand/svg (B29.1). */
-type BrandIcon = 'route' | 'prove' | 'reuse' | 'compound'
-
-/** A section's eyebrow, the board's way: the brand icon, the mono index, the spaced-caps label.
- *  /pricing (B29.5) and /documentation (B29.13) use it with no icon. */
-export function Eyebrow({ index, icon, children }: { index: string; icon?: BrandIcon; children: React.ReactNode }) {
+/** A section's eyebrow: the mono index and the spaced-caps label. B58.16: brand-v4's teal icons are gone
+ *  with the rest of that kit; the chosen logo kit draws no section icons. */
+export function Eyebrow({ index, children }: { index: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3">
-      {icon ? <img src={`/brand/svg/icon-${icon}-teal.svg`} alt="" width={24} height={24} className="shrink-0" /> : null}
       <span className="font-figure text-caption text-faint">{index}</span>
       <span className="text-eyebrow uppercase text-label">{children}</span>
     </div>
@@ -96,14 +66,6 @@ export function TealRule({ className = '' }: { className?: string }) {
   return <span className={`block h-0.5 w-8 bg-accent ${className}`} aria-hidden="true" />
 }
 
-/** The board's four-column positioning band, after section 01. */
-const BAND: Array<{ eyebrow: string; line: string }> = [
-  { eyebrow: 'Sovereign', line: 'Designed to run on your own infrastructure.' },
-  { eyebrow: 'Measurable', line: 'Every call and payment on a statement.' },
-  { eyebrow: 'Integrated', line: 'Wallets, cards, gateway and marketplace in one.' },
-  { eyebrow: 'Compounding', line: 'Savings and earnings build over time.' },
-]
-
 /** The hero photograph — brand-v4 photos/hero.jpg (2400w) and hero-1200.jpg for phones. index.html
  *  preloads the same srcset and sizes on /marketing, so the bytes it fetches are the ones used. */
 const HERO_SRCSET = '/brand/photos/hero-1200.jpg 1200w, /brand/photos/hero.jpg 2400w'
@@ -114,11 +76,11 @@ const HERO_SIZES = '(min-width: 840px) 50vw, 100vw'
 const WALLET: Array<{ title: string; body: string }> = [
   {
     title: 'A budget of its own',
-    body: 'Fund each agent from the workspace balance. It spends its own money, and when the money runs out the next call is refused rather than billed to you, unless your company has a Talyvor credit line, which covers it and bills you once a month.',
+    body: 'Fund each agent from the workspace balance. It spends its own money, and when the money runs out the next call is refused rather than billed to you.',
   },
   {
     title: 'Spending rules',
-    body: 'Caps per request, per day and per month, the models it may call and the hours it may work — checked before the model is called, not reconciled after.',
+    body: 'Caps per request, per day and per month, the models it may call and the hours it may work, checked before the model is called, not reconciled after.',
   },
   {
     title: 'Approvals',
@@ -130,68 +92,30 @@ const WALLET: Array<{ title: string; body: string }> = [
   },
 ]
 
-/** The worked pooled hit, stepped. The visitor advances it themselves — four beats, each one a real
- *  figure from the settled row, so the mechanism arrives as a sequence rather than a paragraph. */
-function WorkedHit() {
-  const [step, setStep] = useState(0)
-  const beats = [
-    {
-      label: 'An agent asks',
-      figure: <Figure value={micro(LEDGER_HIT.listMicroLXC)} unit="µLXC list" />,
-      body: 'Another workspace has already paid to have this answered. Billed straight to the provider, it would cost list price.',
-    },
-    {
-      label: 'It is served from the pool',
-      figure: <Figure value={micro(LEDGER_HIT.chargedMicroLXC)} unit="µLXC charged" />,
-      body: `The answer is reused instead of generated again, and charged ${POOLED_DISCOUNT_PERCENT}% under list.`,
-    },
-    {
-      label: 'The wallet keeps the difference',
-      figure: <Figure value={micro(SAVED_MICRO_LXC)} unit="µLXC saved" />,
-      body: 'Not a discount anyone funds. The saving is a generation cost nobody had to pay a second time.',
-    },
-    {
-      label: 'The contributor is paid half',
-      figure: <Figure value={micro(LEDGER_HIT.contributorEarnedMicroLENS)} unit="µLENS earned" />,
-      body: `Half of what was charged is minted to the workspace whose answer was reused, spendable once the ${HOLDBACK_HOURS}-hour holdback elapses.`,
-    },
-  ]
+/** B57.129 — the approved card faces (talyvor-cards-final/deck, Nick, 10 Nov 2026): one owner card of each family, then
+ *  the six agents. Each is a 768-wide WebP with a PNG fallback in /card-faces, under 300 KB (Landing.test.tsx). The
+ *  faces carry no network mark: that corner stays empty until the issuer gives the artwork. */
+const CARD_FACES: Array<{ id: string; alt: string }> = [
+  { id: 'premium', alt: 'Premium personal owner card' },
+  { id: 'business', alt: 'Business corporate card' },
+  { id: 'stable-premium', alt: 'Premium stablecoin owner card' },
+  { id: 'agent-remy', alt: 'Remy, Research’s agent card' },
+  { id: 'agent-sunny', alt: 'Sunny, Sales’s agent card' },
+  { id: 'agent-penny', alt: 'Penny, Bookkeeping’s agent card' },
+  { id: 'agent-max', alt: 'Max, Ads’s agent card' },
+  { id: 'agent-nova', alt: 'Nova, Travel’s agent card' },
+  { id: 'agent-ollie', alt: 'Ollie, Support’s agent card' },
+]
+
+/** B56.10 — a section's eyebrow with Live or Sandbox beside it, as Lens labels the money it describes. */
+function LabelledEyebrow({ labels, capability, ...eyebrow }: Parameters<typeof Eyebrow>[0] & {
+  labels: Record<string, string> | undefined
+  capability: readonly string[]
+}) {
   return (
-    <div className="overflow-hidden rounded-card border border-rule bg-raised">
-      <div className="flex flex-wrap gap-px border-b border-rule bg-rule">
-        {beats.map((b, i) => (
-          <button
-            key={b.label}
-            type="button"
-            onClick={() => setStep(i)}
-            aria-current={i === step ? 'step' : undefined}
-            className={`flex-1 whitespace-nowrap px-4 py-2.5 text-left text-caption transition-colors duration-200 active:scale-98 ${focusRing} ${
-              i === step ? 'bg-raised text-ink' : 'bg-surface text-muted hover:text-ink'
-            }`}
-          >
-            <span className="font-figure text-label">{String(i + 1).padStart(2, '0')}</span>
-            <span className="ml-2">{b.label}</span>
-          </button>
-        ))}
-      </div>
-      <div className="px-gutter py-6">
-        <div key={step} className="tal-rise">
-          {beats[step].figure}
-          <p className="mt-3 max-w-xl text-body text-muted">{beats[step].body}</p>
-        </div>
-        <div className="mt-6 flex gap-1" aria-hidden="true">
-          {beats.map((b, i) => (
-            <span
-              key={b.label}
-              className={`h-0.5 flex-1 transition-colors duration-200 ${i <= step ? 'bg-accent' : 'bg-rule'}`}
-            />
-          ))}
-        </div>
-      </div>
-      <p className="border-t border-rule px-gutter py-3 text-caption text-label">
-        Real figures from one settled transaction — list, charge, saving and mint exactly as the
-        ledger recorded them.
-      </p>
+    <div className="flex flex-wrap items-center gap-3">
+      <Eyebrow {...eyebrow} />
+      <StatusLabel capability={capability} labels={labels} />
     </div>
   )
 }
@@ -201,6 +125,9 @@ export function Landing() {
   // bare-fetch hook rather than react-query — this page renders with no providers at all, and a
   // probe that failed to answer leaves the page saying nothing about access rather than guessing.
   const { signup } = useSignupProbe()
+  // B56.10: Lens's Live or Sandbox for the money sections, from the same public read /pricing makes; none until it answers.
+  const pricing = usePricing()
+  const labels = pricing.status === 'ok' ? pricing.pricing.labels : undefined
   // THE FRONT DOOR TAKES THE BRAND LINE — `null`, not a page name. That is what the marketing
   // site does with its own home page, while every inner page is `<page> | TALYVOR`, and this
   // page's own h1 is a sentence, not a name. See documentTitle.test.tsx for the fetched titles.
@@ -281,17 +208,20 @@ export function Landing() {
           <div className="relative z-10 mx-auto w-full max-w-6xl px-gutter pb-12 pt-14 wide:pb-28 wide:pt-24">
             <div className="wide:w-1/2 wide:pr-12">
               <div className="tal-stagger">
-                {/* Positioning v2 (23 Oct 2026, B44.4): the line, then the two sentences, as written. The old
-                    headline stays only as this supporting eyebrow. */}
+                {/* B58.17 (Nick, 10 Nov 2026): the line and who owns the account, then positioning v2's two sentences
+                    (B44.4). The old headline stays only as this supporting eyebrow. */}
                 <p className="text-eyebrow uppercase text-label">Money and markets for AI agents</p>
                 <h1 id="hero-heading" className="mt-6 text-display-1 text-ink">
                   {POSITIONING_LINE}
                 </h1>
+                <p className="mt-4 text-display-3 text-ink">{OWNER_LINE}</p>
                 <p className="mt-7 text-lede text-muted">{POSITIONING_SENTENCES[0]}</p>
                 <p className="mt-4 text-body text-muted">{POSITIONING_SENTENCES[1]}</p>
                 {/* B56.1: what works, then what is on its way, never as live (Landing.test.tsx pins both). */}
-                <p className="mt-4 text-body text-muted">{HEY_TALY}</p>
-                <p className="mt-4 text-body text-muted">{ON_ITS_WAY}</p>
+                <p className="mt-4 flex flex-wrap items-center gap-2 text-body text-muted">
+                  {ON_ITS_WAY}
+                  <StatusLabel building="payments_for_everyone" />
+                </p>
                 {/* ⚠ THE PRIMARY ACTION POINTS AT /signup, NOT /auth/login, AND NOT AT A MAILTO.
                     Preserved from the previous version because the reasoning is easy to "simplify"
                     away: an earlier draft sent people to sign-in on the theory that a stranger could
@@ -331,16 +261,10 @@ export function Landing() {
                   able to notice. This renders what the BFF reports, and renders NOTHING while the
                   answer is unknown (first paint, BFF unreachable, older BFF): an unverified promise
                   is not printed in either direction. */}
-              {signup === 'closed' ? (
-                <p className="mt-5 max-w-xl text-body text-muted">
-                  We’re letting the first companies in one at a time — start at sign-up and we’ll
-                  come back to you.
-                </p>
-              ) : null}
-              {signup === 'open' ? (
-                <p className="mt-5 max-w-xl text-body text-muted">
-                  No invitation needed — sign in with an account you already have and you’ll have your
-                  own workspace in a few seconds.
+              {/* B58.17: one sign-up door, so these are /signup's words (ACCESS_LINE), never a second version. */}
+              {signup !== 'unknown' ? (
+                <p data-access-line className="mt-5 max-w-xl text-body text-muted">
+                  {ACCESS_LINE[signup]}
                 </p>
               ) : null}
             </div>
@@ -367,9 +291,9 @@ export function Landing() {
           className="scroll-mt-16 border-b border-rule"
         >
           <div className="mx-auto w-full max-w-6xl px-gutter py-16 wide:py-20">
-            <Eyebrow index="01" icon="prove">
+            <LabelledEyebrow index="01" labels={labels} capability={WALLETS}>
               Wallets
-            </Eyebrow>
+            </LabelledEyebrow>
             {/* THE ONE HEADING THAT NAMES THE PRODUCT. Landing.test.tsx asserts exactly one heading
                 matches /talyvor/i, so nothing else on this page may put the name in a heading. */}
             <h2
@@ -380,9 +304,9 @@ export function Landing() {
             </h2>
             <TealRule className="mt-5" />
             <p className="mt-5 max-w-xl text-body text-muted">
-              Every model call and every payment an agent makes passes through the gateway first.
-              The wallet is consulted there — so a rule that says no stops the call, instead of
-              showing up as a line on next month’s invoice.
+              Every model call and every payment an agent makes is checked against its wallet first,
+              so a rule that says no stops the call, instead of showing up as a line on next month’s
+              invoice.
             </p>
             <ol className="mt-10 grid gap-3 wide:grid-cols-2">
               {WALLET.map((w, i) => (
@@ -397,103 +321,24 @@ export function Landing() {
                 </li>
               ))}
             </ol>
-          </div>
-        </section>
-
-        {/* ── The board's positioning band ─────────────────────────────────── */}
-        <div className="border-b border-rule bg-surface">
-          <ul className="mx-auto grid w-full max-w-6xl grid-cols-2 gap-x-6 gap-y-8 px-gutter py-10 wide:grid-cols-4">
-            {BAND.map((b) => (
-              <li key={b.eyebrow}>
-                <div className="text-eyebrow uppercase text-accent">{b.eyebrow}</div>
-                <p className="mt-2 text-body text-muted">{b.line}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* ── 02 · Chat ────────────────────────────────────────────────────── */}
-        <section aria-labelledby="chat-heading" className="border-b border-rule bg-canvas">
-          <div className="mx-auto w-full max-w-6xl px-gutter py-16 wide:py-20">
-            <Eyebrow index="02" icon="route">
-              Chat
-            </Eyebrow>
-            <h2
-              id="chat-heading"
-              className="mt-6 max-w-3xl text-display-3 text-ink"
-            >
-              A chat app for you, and the console for your agents.
-            </h2>
-            <TealRule className="mt-5" />
-            <div className="mt-8 grid gap-3 wide:grid-cols-2">
-              <p className="rounded-card border border-rule bg-raised p-6 text-body text-muted">
-                Ask the models your workspace allows, attach documents, and keep your
-                conversations. Your own messages go through the same gateway as your agents’
-                calls.
-              </p>
-              <p className="rounded-card border border-rule bg-raised p-6 text-body text-muted">
-                The same app is where you fund an agent, set its rules, approve what it asked to
-                spend and read its statement — the wallet console sits beside the conversation
-                rather than in a separate admin product.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* ── 03 · Marketplace ─────────────────────────────────────────────── */}
-        <section aria-labelledby="marketplace-heading" className="border-b border-rule">
-          <div className="mx-auto w-full max-w-6xl px-gutter py-16 wide:py-20">
-            <Eyebrow index="03" icon="compound">
-              Marketplace
-            </Eyebrow>
-            <h2
-              id="marketplace-heading"
-              className="mt-6 max-w-3xl text-display-3 text-ink"
-            >
-              Where agents spend.
-            </h2>
-            <TealRule className="mt-5" />
-            <div className="mt-8 grid gap-3 wide:grid-cols-2">
-              <p className="rounded-card border border-rule bg-raised p-6 text-body text-muted">
-                Browse and use agents, prompts, skills, evaluations and pipelines that other
-                workspaces have published, instead of building every one yourself.
-              </p>
-              <p className="rounded-card border border-rule bg-raised p-6 text-body text-muted">
-                Publish your own, and the Marketplace shows you what each listing earned. Or build one
-                together in a Room, where the members agree up front how its earnings are split.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* ── 04 · Repeated questions cost less ────────────────────────────── */}
-        <section
-          id="pooling"
-          aria-labelledby="pooling-heading"
-          className="scroll-mt-16 border-b border-rule bg-canvas"
-        >
-          <div className="mx-auto w-full max-w-6xl px-gutter py-16 wide:py-20">
-            <Eyebrow index="04" icon="reuse">
-              Pooling
-            </Eyebrow>
-            <h2
-              id="pooling-heading"
-              className="mt-6 max-w-2xl text-display-3 text-ink"
-            >
-              Repeated questions cost less.
-            </h2>
-            <TealRule className="mt-5" />
-            <p className="mt-5 max-w-xl text-body text-muted">
-              When an agent asks something another workspace has already paid to have answered, the
-              answer is served from the pool at{' '}
-              <span className="font-figure">{POOLED_DISCOUNT_PERCENT}%</span> off list, and the
-              workspace whose answer it was is paid half of the charge. Only answers cross between
-              workspaces — never the prompt that produced them. Step through one real settled
-              transaction:
-            </p>
-            <div className="mt-8">
-              <WorkedHit />
-            </div>
+            <ul className="mt-10 grid grid-cols-2 gap-3 wide:grid-cols-3">
+              {CARD_FACES.map((c) => (
+                <li key={c.id}>
+                  <picture>
+                    <source type="image/webp" srcSet={`/card-faces/${c.id}.webp`} />
+                    <img
+                      src={`/card-faces/${c.id}.png`}
+                      width={768}
+                      height={485}
+                      loading="lazy"
+                      decoding="async"
+                      alt={c.alt}
+                      className="block h-auto w-full"
+                    />
+                  </picture>
+                </li>
+              ))}
+            </ul>
           </div>
         </section>
 
@@ -507,6 +352,7 @@ export function Landing() {
               Give your first agent a wallet.
             </h2>
             <TealRule className="mt-6" />
+            <LabelsMeaning className="mt-8" />
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button asChild variant="primary" className="h-10 px-5">
                 <a href="/signup">Create your workspace</a>

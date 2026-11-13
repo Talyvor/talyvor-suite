@@ -36,6 +36,54 @@ func (a *app) handleMoneyBudgetAlerts(w http.ResponseWriter, r *http.Request, t 
 	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/budgets/alerts", nil, "limit alerts")
 }
 
+// B28.66 — where alerts go, on this session's own token (Lens B28.338).
+//
+//	GET    /api/money/alerts/channels        the channels, oldest first, without their secrets
+//	POST   /api/money/alerts/channels        {kind, url} — push, webhook (its signing secret comes back this once) or slack;
+//	                                         Lens refuses email in its own words until an email integration exists
+//	DELETE /api/money/alerts/channels/{id}   remove one
+//	GET    /api/money/alerts/deliveries      each alert queued or sent to each channel, newest first, with its status
+func (a *app) handleMoneyAlertChannels(w http.ResponseWriter, r *http.Request, t tenant) {
+	switch r.Method {
+	case http.MethodGet:
+		a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/alerts/channels", nil, "alert channels")
+	case http.MethodPost:
+		var in struct {
+			Kind string `json:"kind"`
+			URL  string `json:"url"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		// UPSTREAM-BINDS-ONLY lensAlertChannelBody: added_by, created_at, id, secret
+		body, _ := json.Marshal(in)
+		a.lensRelay(w, r, t.token, http.MethodPost, "/v1/money/alerts/channels", body, "alert channels")
+	default:
+		methodNotAllowed(w, "GET, POST")
+	}
+}
+
+func (a *app) handleMoneyAlertChannel(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodDelete {
+		methodNotAllowed(w, http.MethodDelete)
+		return
+	}
+	id, ok := pathID(w, "channel id", r.PathValue("id"))
+	if !ok {
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodDelete, "/v1/money/alerts/channels/"+url.PathEscape(id), nil, "alert channel")
+}
+
+func (a *app) handleMoneyAlertDeliveries(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.lensRelay(w, r, t.token, http.MethodGet, "/v1/money/alerts/deliveries", nil, "alert deliveries")
+}
+
 // B41.20 — the payments that recur, on this session's own token.
 //
 //	GET /api/money/spending/subscriptions   each card payment or payment out that recurs weekly or monthly, with its next date,

@@ -13,21 +13,17 @@ import {
   type AgentKey,
   type StatementLine,
   agentBankApi,
-  formatULXC,
   newMoveKey,
   refusalText,
 } from './agentBankApi'
+import { Lxc } from './money'
 
 // Onboarding.tsx — B46.2 (B45.8's flow): a new workspace's first agent in one click on Home. Sign up, then
 // "Your first agent is ready": the agent is made, given the workspace's free credit, and its key is shown
 // once with a copy button; then Home. No budget, funding or identity forms on the way — the agent's rules
 // are Agent Wallets' to set later. B46.16: the workspace is named in the same click, before the agent is made. No disclaimer sentence, here or anywhere in the app (B46.14, Nick, 24 Oct 2026).
 
-const lxc = (micros: number) => (
-  <>
-    <span className="font-figure">{formatULXC(micros).replace(/ LXC$/, '')}</span> LXC
-  </>
-)
+const lxc = (micros: number) => <Lxc ulxc={micros} />
 
 const REQUEST_KINDS: readonly StatementLine['kind'][] = ['spend', 'hold', 'settle', 'release']
 
@@ -111,7 +107,7 @@ function ReadyView({ ready, onFinished }: { ready: Ready; onFinished: () => void
         ) : (
           <>The workspace had no credit to give {ready.agent.name}; add some on Billing, then fund it on Agent Wallets. </>
         )}
-        Its key is shown once — copy it now:
+        Its key is shown once. Copy it now:
       </p>
       <div data-testid="onboarding-key">
         <CopyBlock text={ready.key.key} label="the key" />
