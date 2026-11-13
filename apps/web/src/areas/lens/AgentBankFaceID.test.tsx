@@ -88,7 +88,7 @@ describe('Agent Bank approvals with Face ID', () => {
 
     expect(await screen.findByText(/October hosting/)).toBeInTheDocument()
     await screen.findByText(/Approvals are signed with a passkey \(1 registered\)/)
-    const approveButtons = await screen.findAllByRole('button', { name: 'Approve with Face ID' })
+    const approveButtons = await screen.findAllByRole('button', { name: 'Approve with your passkey' })
     fireEvent.click(approveButtons[0])
     await waitFor(() => expect(bff.decisions).toHaveLength(1))
 

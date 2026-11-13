@@ -684,6 +684,8 @@ const BY_PATH: Record<string, unknown> = {
       {
         id: 'apr_1', agent_id: 'agt_research', amount_ulxc: 3_000_000, model: '', status: 'pending', created_at: '2026-09-27T12:30:00Z',
         payee: { kind: 'company', id: 'ws_acme', name: 'Acme Hosting' }, memo: 'October invoice',
+        paid_from: { kind: 'lxc', account_id: 'agt_research', name: 'Researcher’s LXC balance', currency: 'LXC', amount_minor: 3_000_000, balance_minor: 10_000_000 },
+        asks_above_ulxc: 2_000_000, budget_left_after_ulxc: null,
       },
     ],
   },
