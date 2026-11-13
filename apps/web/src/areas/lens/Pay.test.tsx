@@ -701,6 +701,27 @@ describe('a payout batch’s approval (B58.6)', () => {
   })
 })
 
+// B57.144 — the batch awaiting approval in Pocket, as w-approvals draws a signed approval: held to Pocket's rules, its status
+// and each row's in words (never Lens's own), the signing line, and Approve as Pocket's primary button.
+describe('a payout batch’s signed approval in Pocket (B57.144)', () => {
+  it('draws the batch, its rows in words, the signing line and Approve in Pocket', async () => {
+    mockBff()
+    awaitingBatch([{ id: 'pk_1', name: 'MacBook' }], [])
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+    const batch = await screen.findByTestId('payout-mpob_1')
+    expect(batch.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    expect(screen.getByRole('heading', { name: 'Upload a file' }).closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    expect(within(batch).getByText('Awaiting approval')).toBeTruthy()
+    const valid = await within(batch).findByTestId('payout-row-2')
+    expect(within(valid).getByText('Valid')).toBeTruthy()
+    expect(within(within(batch).getByTestId('payout-row-3')).getByText('Invalid')).toBeTruthy()
+    expect(within(batch).getByTestId('payout-row-3').textContent).toContain('No such payee')
+    expect((await within(batch).findByTestId('payout-signs')).textContent).toBe('Your passkey signs these 1 valid row and £5.00. If the batch changes after you sign, nothing is paid.')
+    expect(within(batch).getByRole('button', { name: 'Approve and pay 1 row' }).closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+  })
+})
+
 describe('an agent’s payment waiting on Pay when only the phone holds a key (B55.2)', () => {
   it('sends no decision and says to approve on the phone', async () => {
     mockBff()
