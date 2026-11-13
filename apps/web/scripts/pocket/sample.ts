@@ -45,6 +45,14 @@ const SAMPLE: Record<string, unknown> = {
   },
   '/api/workspace/name': { id: 'ws_nicks_team', name: 'Nick’s team' },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B57.139 — what was sent from Help and complaints and Your data, so their lists draw rows rather than the empty state.
+  '/api/workspace/requests': {
+    requests: [
+      { id: 3, kind: 'complaint', state: 'in_progress', reference: 'C-7KQ2-M4XD', message: 'A card payment was taken twice.', answer: '', filed_at: '2026-11-11T09:12:00Z', updated_at: '2026-11-11T09:12:00Z' },
+      { id: 2, kind: 'data_export', state: 'done', reference: '', message: '', answer: 'Your copy is ready.', filed_at: '2026-11-09T14:30:00Z', updated_at: '2026-11-10T10:05:00Z' },
+      { id: 1, kind: 'support', state: 'done', reference: '', message: 'How do I add an agent?', answer: 'From Agents, press New agent.', filed_at: '2026-11-08T16:40:00Z', updated_at: '2026-11-09T08:15:00Z' },
+    ],
+  },
   // B55.38 — Lens's peg, so the shots draw each LXC figure with its dollars first.
   '/api/lxc/topup-options': { allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 },
   '/api/agents': {
