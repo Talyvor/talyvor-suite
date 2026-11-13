@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { cn, focusRing, inlineLink, useTheme, type ThemeChoice } from '@talyvor/ui'
-import { Card, Eyebrow, Switch, Tabs } from '@talyvor/ui/pocket'
+import { Card, Switch, Tabs } from '@talyvor/ui/pocket'
 import { ApiError } from '../../lib/api'
 import { useAuthMeReader } from '../../lib/authMe'
 import { IfArea } from '../../lib/workspaceAreas'
@@ -11,7 +11,8 @@ import { CompanyLine } from '../../components/CompanyLine'
 import { SettingsCards, SignedIn, useSettingsLinks } from '../../components/PageLinks'
 import { STORED_KEY, readStored } from './StoredAnswers'
 import { setFiat, useFiat, type Fiat } from './money'
-import { KIND_LABEL, KIND_LINE, TYPE_LABEL, useAccount, usePersonal } from './agentBankApi'
+import { usePersonal } from './agentBankApi'
+import { AccountCards } from './AccountSettings'
 
 // Sharing.tsx — cross-tenant answer sharing: the explanation, and the control.
 //
@@ -227,48 +228,6 @@ export function TeamOnly() {
   const personal = usePersonal()
   const { pathname } = useLocation()
   return personal && pathname === '/members' ? <Navigate to="/settings" replace /> : null
-}
-
-/** B59.10 — the account's type and kind of money (SPEC 3.5's card), and for a Business its team. */
-function AccountCards() {
-  const { account, shows } = useAccount()
-  return (
-    <>
-      {account ? (
-        <>
-          <Eyebrow className="mt-1.5">Account</Eyebrow>
-          <Card tone="white">
-            <h2 className="font-display text-reading font-bold text-ink">Kind of money</h2>
-            <div className="mt-1 grid gap-0.5" data-testid="settings-money-kind">
-              <span className="text-body font-semibold text-ink">{KIND_LABEL[account.money_kind]}</span>
-              <span className="text-body text-ink-2">{KIND_LINE[account.money_kind]}</span>
-            </div>
-          </Card>
-          <Card tone="white">
-            <h2 className="font-display text-reading font-bold text-ink">Account type</h2>
-            <div className="mt-1 grid gap-0.5" data-testid="settings-account-type">
-              <span className="text-body font-semibold text-ink">{TYPE_LABEL[account.account_type]}</span>
-              <span className="text-body text-ink-2">
-                The type can’t be changed. You can hold several accounts and switch between them.
-              </span>
-            </div>
-          </Card>
-        </>
-      ) : null}
-      {shows?.team ? (
-        <Card tone="white">
-          <h2 className="font-display text-reading font-bold text-ink">Your team</h2>
-          <p className="mt-1 text-body text-ink-2" data-testid="settings-team">
-            Who is in your team and the role each one has are on{' '}
-            <Link to="/members" className={cn(inlineLink, 'font-semibold text-ink')}>
-              Members
-            </Link>
-            .
-          </p>
-        </Card>
-      ) : null}
-    </>
-  )
 }
 
 /** Settings — B57.42: every setting on one page (Pocket's w-settings): the pages as cards, the choices beside them. */
