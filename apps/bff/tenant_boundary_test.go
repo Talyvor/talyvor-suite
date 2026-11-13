@@ -318,6 +318,7 @@ func seedProvisionedSession(auth *authenticator, sid, sub, email, ws string) {
 	auth.sessions.put(sid, session{
 		sub: sub, email: email, expires: time.Now().Add(time.Hour),
 		workspaceID: ws, lensToken: "jwt-for-" + ws,
+		signedInAt: time.Now(), // just signed in, as storeSession records it (B55.54)
 	})
 }
 

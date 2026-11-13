@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -57,9 +57,9 @@ function mockBff() {
       return json({
         capabilities: [
           { capability: 'rules_approvals_statements_pots', name: 'Rules, approvals, statements and pots', class: 'GREEN', real_money: true },
-          { capability: 'escrow', name: 'Escrow between agents', class: 'AMBER', real_money: false },
-          { capability: 'cash_out', name: 'Cashing credits out as money', class: 'RED', real_money: false },
-          { capability: 'invest_and_trade', name: 'Investing and trading real assets', class: 'RED', real_money: false },
+          { capability: 'escrow', name: 'Escrow between agents', class: 'AMBER', real_money: false, label: 'sandbox' },
+          { capability: 'cash_out', name: 'Cashing credits out as money', class: 'RED', real_money: false, label: 'sandbox' },
+          { capability: 'invest_and_trade', name: 'Investing and trading real assets', class: 'RED', real_money: false, label: 'sandbox' },
         ],
       })
     if (url === '/api/wallets/escrows/esc_1/confirm' && method === 'POST') {
@@ -123,11 +123,14 @@ afterEach(() => {
 })
 
 describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
-  it('carries no test-money label on escrow, cash-out or investing (B46.2)', async () => {
+  it('labels escrow, cash-out and investing with Lens’s Sandbox, and no test-money line (B46.2, B56.11)', async () => {
     mockBff()
     window.history.pushState({}, '', '/agents')
     render(<App />)
     await screen.findByTestId('portfolio')
+    await waitFor(() => expect(document.querySelectorAll('[data-status-key="invest_and_trade"]')).toHaveLength(1))
+    for (const [key, cards] of [['escrow', 2], ['cash_out', 2]] as const)
+      expect([...document.querySelectorAll(`[data-status-key="${key}"]`)].map((el) => el.textContent), key).toEqual(Array(cards).fill('Sandbox'))
     expect(screen.queryByTestId(/^test-money-only-/)).toBeNull()
     expect(document.body.textContent).not.toMatch(/test money|test credits|licensed partner/i)
     // Never the word bank — but for the European Central Bank, whose rates the simulator and card panel name.
@@ -184,7 +187,7 @@ describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
     fireEvent.change(await screen.findByLabelText('Instrument for FX test'), { target: { value: 'EUR' } })
     fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '1000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Place order' }))
-    expect((await screen.findByText(/^Filled:/)).textContent).toBe('Filled: Buy 1,000 EUR at market — filled at $1.08 (2026-09-28 rate).')
+    expect((await screen.findByText(/^Filled:/)).textContent).toBe('Filled: Buy 1,000 EUR at market, filled at $1.08 (2026-09-28 rate).')
     expect(sent).toContainEqual({ method: 'POST', url: '/api/agents/agt_1/portfolios/pf_1/orders', body: { instrument: 'EUR', side: 'buy', type: 'market', quantity_micros: 1_000_000_000 } })
     const shown = await within(screen.getByTestId('portfolio')).findByText('1,000 EUR')
     expect(shown).toBeTruthy()

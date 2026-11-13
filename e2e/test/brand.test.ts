@@ -3,7 +3,7 @@ import { COMPANY_LINE, type Look, type ReportLook, brandFaults, companyFaults, d
 
 const brand: Look = {
   scroll: 390, client: 390, logos: ['svg mark', 'svg wordmark'], tiles: [], amberCount: 0, amber: [], inter: [],
-  canvas: 'rgb(244, 247, 251)', brightCount: 0, bright: [],
+  canvas: 'rgb(255, 255, 255)', brightCount: 0, bright: [],
 }
 
 describe("the brand-visual oracle (B29.21)", () => {
@@ -26,14 +26,14 @@ describe("the brand-visual oracle (B29.21)", () => {
   })
 })
 
-describe('the light pass (B29.15)', () => {
-  it('passes a light view on #F4F7FB with no bright Teal outside the logo', () => {
+describe('the light pass (B29.15; the page is Pocket\'s #FFFFFF since B57.2)', () => {
+  it('passes a light view on #FFFFFF with no bright Teal outside the logo', () => {
     expect(brandFaults(brand, 'light')).toEqual([])
   })
 
   it('names a light view on another canvas, or with bright Teal as text or a fill', () => {
-    expect(brandFaults({ ...brand, canvas: 'rgb(243, 246, 250)', brightCount: 2, bright: ['a.link color', 'button.primary background-color'] }, 'light')).toEqual([
-      'a light canvas other than #F4F7FB (rgb(243, 246, 250))',
+    expect(brandFaults({ ...brand, canvas: 'rgb(244, 247, 251)', brightCount: 2, bright: ['a.link color', 'button.primary background-color'] }, 'light')).toEqual([
+      'a light canvas other than #FFFFFF (rgb(244, 247, 251))',
       'bright Teal #3AD6C0 in the light theme on 2 element(s): a.link color, button.primary background-color',
     ])
   })
@@ -145,7 +145,7 @@ describe('the reading-pages oracle (B29.13)', () => {
       'no eyebrow over the title',
       'no teal rule under the title',
       'lines of 89 characters, not near 65',
-      'no footer with the mark and the company line',
+      'no footer with the logo and the company line',
     ])
   })
 })

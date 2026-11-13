@@ -255,7 +255,7 @@ func (a *app) mcpCreateAgent(ctx context.Context, t tenant, g oauthGrant, args m
 		}
 		limits[k] = n
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentCreateBody: none
+	// UPSTREAM-BINDS-ONLY lensAgentCreateBody: colour, face, fiat_currency, owner_user_id, template, wallet_kind
 	nameBody, _ := json.Marshal(map[string]string{"name": name})
 	raw, err := a.lensOK(ctx, t, lensCall{method: http.MethodPost, path: lensWorkspacePath(t, "/agents"), body: nameBody})
 	var agent map[string]any
@@ -270,7 +270,7 @@ func (a *app) mcpCreateAgent(ctx context.Context, t tenant, g oauthGrant, args m
 		return nil, fmt.Errorf("lens created an agent with no id: %v", agent)
 	}
 	path := lensWorkspacePath(t, "/agents/"+url.PathEscape(id))
-	// UPSTREAM-BINDS-ONLY lensAgentUpdateBody: name
+	// UPSTREAM-BINDS-ONLY lensAgentUpdateBody: colour, face, name
 	described, _ := json.Marshal(map[string]string{"description": purpose})
 	_, err = a.lensOK(ctx, t, lensCall{method: http.MethodPatch, path: path, body: described})
 	if err == nil {

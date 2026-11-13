@@ -37,6 +37,10 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/pay"):
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "economy: the agent's spending rules refuse this request: the agent has spent 0 LXC of its daily limit of 5 LXC, and this payment would cost up to 6 LXC"})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_held/pay"): // B58.1: Lens's answer for a payment held for the owner (B58.2)
+			w.WriteHeader(http.StatusAccepted)
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": "pending_approval", "approval_id": "apr_x", "amount_ulxc": 6_000_000,
+				"message": "economy: payment of 6 LXC is above the agent's approval amount. Approval apr_x must be approved before it is sent"})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/fund"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"agent_id": "agt_1", "balance_ulxc": 10_000_000})
 		case strings.HasSuffix(r.URL.Path, "/resume/challenge"), strings.HasSuffix(r.URL.Path, "/agents/resume-all/challenge"):
@@ -72,6 +76,8 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 				{"version": 2, "rules": map[string]any{"daily_limit_ulxc": 1_000_000}, "changed_by": "jwt:user:ws_1", "change": "template researcher", "created_at": "2026-10-05T09:01:00Z"},
 				{"version": 1, "rules": map[string]any{"daily_limit_ulxc": 5_000_000}, "changed_by": "jwt:user:ws_1", "change": "set", "created_at": "2026-10-05T09:00:00Z"},
 			}})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules/challenge"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"looser": true, "changes": []string{"Daily limit: was 5 LXC, now 9 LXC"}, "challenge": "ch_rules", "allow_credentials": []string{"cred_1"}, "user_verification": "required"})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules/rollback"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"daily_limit_ulxc": 5_000_000})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules/boosts") && r.Method == http.MethodPost:
@@ -174,6 +180,20 @@ func TestAgentBankRelaysLensRefusalSentence(t *testing.T) {
 	rec = doJSON(a, http.MethodGet, "/api/agents/approvals", "")
 	if rec.Code != http.StatusBadGateway || strings.Contains(rec.Body.String(), "internal server error") {
 		t.Fatalf("a Lens 500 = %d %s, want a 502 of the BFF's own", rec.Code, rec.Body.String())
+	}
+}
+
+// B58.1 — a payment Lens holds for the owner answers 202, and the browser gets that status with the hold's fields, so
+// the web can say it waits in Approvals and never that it was paid.
+func TestAgentBankRelaysAHeldPayment(t *testing.T) {
+	a, _ := newFakeLensAgentBank(t)
+	rec := doJSON(a, http.MethodPost, "/api/agents/agt_held/pay", `{"to_agent_id":"agt_2","amount_ulxc":6000000}`)
+	var got struct {
+		Status     string `json:"status"`
+		ApprovalID string `json:"approval_id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil || rec.Code != http.StatusAccepted || got.Status != "pending_approval" || got.ApprovalID != "apr_x" {
+		t.Fatalf("a held pay = %d %s, want 202 with status pending_approval and approval_id apr_x", rec.Code, rec.Body.String())
 	}
 }
 
@@ -375,6 +395,172 @@ func TestAgentStatementDownloadsForAPeriod(t *testing.T) {
 	}
 }
 
+// B28.55 — a period statement asked for as a PDF (Lens B28.328) comes back as Lens wrote it: the PDF, under
+// application/pdf, with Lens's filename, byte for byte.
+func TestAgentStatementDownloadsAsPDF(t *testing.T) {
+	pdf := "%PDF-1.4\n(opening) Tj (15.500001 LXC) Tj\n%%EOF\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		if r.URL.Query().Get("format") != "pdf" {
+			http.Error(w, "not asked for a PDF", http.StatusTeapot)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", `attachment; filename="agent-statement-2026-09-01-2026-10-01.pdf"`)
+		_, _ = w.Write([]byte(pdf))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, path := range []string{"/api/agents/agt_1/statement", "/api/agents/statement"} {
+		rec := doJSON(a, http.MethodGet, path+"?from=2026-09-01&to=2026-10-01&format=pdf", "")
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/pdf" ||
+			rec.Header().Get("Content-Disposition") != `attachment; filename="agent-statement-2026-09-01-2026-10-01.pdf"` || rec.Body.String() != pdf {
+			t.Fatalf("%s = %d %v %q", path, rec.Code, rec.Header(), rec.Body.String())
+		}
+	}
+}
+
+// B28.56 — a period statement asked for as a journal (Lens B28.329) comes back as Lens wrote it: the journal CSV,
+// under text/csv, with Lens's filename, byte for byte.
+func TestAgentStatementDownloadsAsJournal(t *testing.T) {
+	journal := "journal_no,date,account,description,debit_lxc,credit_lxc,cost_centre,ref\r\n" +
+		"ent_1,2026-09-03,agent:agt_1,fund,2.000000,,agt_1,\r\nent_1,2026-09-03,workspace,fund,,2.000000,agt_1,\r\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		if r.URL.Query().Get("format") != "journal" {
+			http.Error(w, "not asked for a journal", http.StatusTeapot)
+			return
+		}
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="agent-journal-2026-09-01-2026-10-01.csv"`)
+		_, _ = w.Write([]byte(journal))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, path := range []string{"/api/agents/agt_1/statement", "/api/agents/statement"} {
+		rec := doJSON(a, http.MethodGet, path+"?from=2026-09-01&to=2026-10-01&format=journal", "")
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/csv; charset=utf-8" ||
+			rec.Header().Get("Content-Disposition") != `attachment; filename="agent-journal-2026-09-01-2026-10-01.csv"` || rec.Body.String() != journal {
+			t.Fatalf("%s = %d %v %q", path, rec.Code, rec.Header(), rec.Body.String())
+		}
+	}
+}
+
+// B28.51 — a search, a filter by kind or a page past the newest lines reaches Lens's period statement with its kind,
+// q, limit and cursor, and nothing else the browser sent.
+func TestAgentStatementSearchFilterAndPageReachLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		got = append(got, r.URL.Path+"?"+r.URL.RawQuery)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"to":"2026-11-09T04:00:00Z","lines":[],"next_cursor":"1.2.0"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, query := range []string{"kind=withdraw&limit=100", "q=rent&workspace_id=ws_other", "from=2026-11-01&to=2026-11-09T04:00:00Z&kind=spend,hold&q=claude&limit=100&cursor=1.2.0&group=day"} {
+		rec := doJSON(a, http.MethodGet, "/api/agents/agt_1/statement?"+query, "")
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"next_cursor":"1.2.0"`) {
+			t.Fatalf("%s = %d %s", query, rec.Code, rec.Body.String())
+		}
+	}
+	want := []string{
+		"/agents/agt_1/statement?kind=withdraw&limit=100",
+		"/agents/agt_1/statement?q=rent",
+		"/agents/agt_1/statement?cursor=1.2.0&from=2026-11-01&group=day&kind=spend%2Chold&limit=100&q=claude&to=2026-11-09T04%3A00%3A00Z",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Lens got %v, want %v", got, want)
+	}
+	for i := range want {
+		if !strings.HasSuffix(got[i], want[i]) {
+			t.Fatalf("Lens got %v, want %v", got, want)
+		}
+	}
+}
+
+// B57.24 — Statements reads an agent's lines by model and day (Lens B57.13): group=day, a limit of 1 to 500 and the
+// cursor reach Lens's period statement, on the agent's and the workspace's; any other group or limit is refused here
+// and never reaches Lens.
+func TestAgentStatementByDayReachesLens(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		got = append(got, r.URL.Path+"?"+r.URL.RawQuery)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"group":"day","lines":[],"next_cursor":"1.2.1"}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	for _, path := range []string{"/api/agents/agt_1/statement?group=day", "/api/agents/agt_1/statement?from=2026-11-01&group=day&limit=500&cursor=1.2.1", "/api/agents/statement?group=day&limit=1"} {
+		rec := doJSON(a, http.MethodGet, path, "")
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"next_cursor":"1.2.1"`) {
+			t.Fatalf("%s = %d %s", path, rec.Code, rec.Body.String())
+		}
+	}
+	for _, query := range []string{"group=week", "group=day&limit=0", "group=day&limit=501", "group=day&limit=ten"} {
+		rec := doJSON(a, http.MethodGet, "/api/agents/agt_1/statement?"+query, "")
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s = %d %s", query, rec.Code, rec.Body.String())
+		}
+	}
+	want := []string{
+		"/agents/agt_1/statement?group=day",
+		"/agents/agt_1/statement?cursor=1.2.1&from=2026-11-01&group=day&limit=500",
+		"/agents/statement?group=day&limit=1",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Lens got %v, want %v", got, want)
+	}
+	for i := range want {
+		if !strings.HasSuffix(got[i], want[i]) {
+			t.Fatalf("Lens got %v, want %v", got, want)
+		}
+	}
+}
+
+// B28.53 — an agent's spend by day, model and destination reaches Lens's analytics with its period, and nothing else
+// the browser sent; Lens's buckets come back as they are.
+func TestAgentAnalyticsReachLensWithItsPeriod(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		got = append(got, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"agent_id":"agt_1","out_ulxc":7,"buckets":[{"day":"2026-11-09","model":"m","destination":"spend","out_ulxc":7}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	rec := doJSON(a, http.MethodGet, "/api/agents/agt_1/analytics?from=2026-11-02&to=2026-11-09T04:00:00Z&workspace_id=ws_other&format=csv", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"destination":"spend","out_ulxc":7`) {
+		t.Fatalf("analytics = %d %s", rec.Code, rec.Body.String())
+	}
+	if len(got) != 1 || !strings.HasPrefix(got[0], "GET /v1/workspaces/") ||
+		!strings.HasSuffix(got[0], "/agents/agt_1/analytics?from=2026-11-02&to=2026-11-09T04%3A00%3A00Z") {
+		t.Fatalf("Lens got %v", got)
+	}
+}
+
 // B19.23 — claiming an ownerless agent reaches Lens as a POST with no body: Lens names the owner from
 // the session's credential, so nothing a browser sends can name someone else.
 func TestAgentClaimReachesLens(t *testing.T) {
@@ -417,6 +603,22 @@ func TestAgentRenameAndArchiveReachLens(t *testing.T) {
 	}
 }
 
+// B57.124 — the helper the owner picks reaches Lens as the agent's colour, on create and on edit; an edit that
+// leaves the helper alone sends no colour, so Lens keeps the one it has.
+func TestAgentHelperColourReachesLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	doJSON(a, http.MethodPost, "/api/agents", `{"name":"Atlas","colour":"cobalt"}`) // the fake has no create answer: what Lens got is the check
+	if rec := doJSON(a, http.MethodPatch, "/api/agents/agt_1", `{"colour":"rose"}`); rec.Code != http.StatusOK {
+		t.Fatalf("pick Ollie = %d %s", rec.Code, rec.Body.String())
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	want := []string{`/agents {"colour":"cobalt","name":"Atlas"}`, `/agents/agt_1 {"name":null,"description":null,"colour":"rose"}`}
+	if len(f.got) != 2 || !strings.HasSuffix(f.got[0], want[0]) || !strings.HasSuffix(f.got[1], want[1]) {
+		t.Fatalf("Lens got %q; want …%q", f.got, want)
+	}
+}
+
 // B28.30 — "would this pass my rules?" reaches Lens's simulator with only the request's fields (a browser's
 // workspace id goes nowhere) and answers Lens's verdict and reason.
 func TestRuleSimulationReachesLens(t *testing.T) {
@@ -440,17 +642,22 @@ func TestAlwaysAllowReachesLens(t *testing.T) {
 	a, f := newFakeLensAgentBank(t)
 	doJSON(a, http.MethodPost, "/api/agents/agt_1/rules/simulate",
 		`{"amount_ulxc":1000000,"payee":{"kind":"agent","id":"agt_bea"},"always_allow":{"amount_ulxc":3000000,"per":"month","x":1}}`)
+	// B54.34: Lens signs the allowance too (B54.29), so the challenge is asked for with the one the approval saves.
+	doJSON(a, http.MethodPost, "/api/agents/approvals/apr_1/challenge", `{"always_allow":{"amount_ulxc":3000000,"per":"month","x":1},"workspace_id":"ws_other"}`)
 	doJSON(a, http.MethodPost, "/api/agents/approvals/apr_1/approve", `{"always_allow":{"amount_ulxc":3000000,"per":"month"},"workspace_id":"ws_other"}`)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if len(f.got) != 2 {
-		t.Fatalf("Lens got %q; want the preview and the approval", f.got)
+	if len(f.got) != 3 {
+		t.Fatalf("Lens got %q; want the preview, the challenge and the approval", f.got)
 	}
 	if want := `"always_allow":{"amount_ulxc":3000000,"per":"month"}}`; !strings.HasSuffix(f.got[0], want) {
 		t.Fatalf("Lens got %q; want the simulation to end %s", f.got[0], want)
 	}
-	if want := `/agents/approvals/apr_1/approve {"always_allow":{"amount_ulxc":3000000,"per":"month"}}`; !strings.HasSuffix(f.got[1], want) {
+	if want := `/agents/approvals/apr_1/challenge {"always_allow":{"amount_ulxc":3000000,"per":"month"}}`; !strings.HasSuffix(f.got[1], want) || strings.Contains(f.got[1], "ws_other") {
 		t.Fatalf("Lens got %q; want POST …%s", f.got[1], want)
+	}
+	if want := `/agents/approvals/apr_1/approve {"always_allow":{"amount_ulxc":3000000,"per":"month"}}`; !strings.HasSuffix(f.got[2], want) {
+		t.Fatalf("Lens got %q; want POST …%s", f.got[2], want)
 	}
 }
 
@@ -486,6 +693,58 @@ func TestRulesHistoryAndRollbackReachLens(t *testing.T) {
 		!strings.HasPrefix(f.got[1], "POST /v1/workspaces/") || !strings.HasSuffix(f.got[1], `/agents/agt_1/rules/rollback {"version":1}`) ||
 		strings.Contains(f.got[1], "ws_other") {
 		t.Fatalf("Lens got %q; want GET …/rules/history and POST …/rules/rollback {\"version\":1}", f.got)
+	}
+}
+
+// B55.14 — what a change would do reaches Lens's rules/challenge with exactly one of the rules (field by field), a version,
+// a template or a boost; a looser save, rollback or boost then carries its assertion, and a browser's extra fields go nowhere.
+func TestRulesChallengeAndSignedChangesReachLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	const as = `{"credential_id":"cred_1","client_data_json":"cd","authenticator_data":"ad","signature":"sig"}`
+	rec := doJSON(a, http.MethodPost, "/api/agents/agt_1/rules-challenge", `{"rules":{"daily_limit_ulxc":9000000,"junk":1},"workspace_id":"ws_other"}`)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"looser":true`) || !strings.Contains(rec.Body.String(), `"challenge":"ch_rules"`) {
+		t.Fatalf("challenge = %d %s", rec.Code, rec.Body.String())
+	}
+	for _, body := range []string{`{"rollback_to":3,"x":1}`, `{"template":"researcher"}`, `{"boost":{"rule":"daily_limit_ulxc","value":50000000,"until":"2026-10-06T18:00:00Z","x":1}}`} {
+		if rec := doJSON(a, http.MethodPost, "/api/agents/agt_1/rules-challenge", body); rec.Code != http.StatusOK {
+			t.Fatalf("challenge %s = %d %s", body, rec.Code, rec.Body.String())
+		}
+	}
+	for _, c := range []struct{ method, path, body string }{
+		{http.MethodPut, "/api/agents/agt_1/rules", `{"rules":{"daily_limit_ulxc":9000000},"assertion":` + as + `,"workspace_id":"ws_other"}`},
+		{http.MethodPost, "/api/agents/agt_1/rules/rollback", `{"version":1,"assertion":` + as + `}`},
+		{http.MethodPost, "/api/agents/agt_1/rules/boosts", `{"rule":"daily_limit_ulxc","value":50000000,"until":"2026-10-06T18:00:00Z","assertion":` + as + `}`},
+	} {
+		if rec := doJSON(a, c.method, c.path, c.body); rec.Code >= 300 {
+			t.Fatalf("%s %s = %d %s", c.method, c.path, rec.Code, rec.Body.String())
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.got) != 7 {
+		t.Fatalf("Lens got %q; want four challenges and three signed changes", f.got)
+	}
+	ends := []string{
+		`/agents/agt_1/rules/challenge {"rules":{"max_per_request_ulxc":0,"daily_limit_ulxc":9000000,`,
+		`/agents/agt_1/rules/challenge {"rollback_to":3}`,
+		`/agents/agt_1/rules/challenge {"template":"researcher"}`,
+		`/agents/agt_1/rules/challenge {"boost":{"rule":"daily_limit_ulxc","value":50000000,"until":"2026-10-06T18:00:00Z"}}`,
+		`/agents/agt_1/rules {"assertion":` + as + `,"rules":{"max_per_request_ulxc":0,"daily_limit_ulxc":9000000,`,
+		`/agents/agt_1/rules/rollback {"version":1,"assertion":` + as + `}`,
+		`/agents/agt_1/rules/boosts {"rule":"daily_limit_ulxc","value":50000000,"until":"2026-10-06T18:00:00Z","assertion":` + as + `}`,
+	}
+	for i, want := range ends {
+		got := f.got[i]
+		if i == 0 || i == 4 {
+			if _, after, ok := strings.Cut(got, "/agents/agt_1/rules"); !ok || !strings.HasPrefix("/agents/agt_1/rules"+after, want) {
+				t.Fatalf("Lens got %q; want it to start %q", got, want)
+			}
+		} else if !strings.HasSuffix(got, want) {
+			t.Fatalf("Lens got %q; want it to end %q", got, want)
+		}
+		if strings.Contains(got, "ws_other") || strings.Contains(got, "junk") || strings.Contains(got, `"x"`) {
+			t.Fatalf("Lens got %q; a browser's extra field went up", got)
+		}
 	}
 }
 

@@ -76,7 +76,7 @@ export function Spend({ now = new Date() }: { now?: Date }) {
             request would have cost at the model it asked for with no Talyvor cache and what it was
             charged. No rate is multiplied and nothing is projected, so it is shown as the sum it is. */}
         <Card>
-          <CardHeader>Saved — measured</CardHeader>
+          <CardHeader>Saved · measured</CardHeader>
           {saved.isLoading ? (
             <div className="px-gutter py-3 text-body text-muted">Loading…</div>
           ) : saved.isError || !saved.data ? (
@@ -89,7 +89,7 @@ export function Spend({ now = new Date() }: { now?: Date }) {
               </div>
               <div data-testid="saved-basis" className="px-gutter pb-3 text-caption text-muted">
                 {saved.data.requests === 0 ? (
-                  'No measured requests yet this month — it starts adding up with your first request through Lens.'
+                  'No measured requests yet this month. It starts adding up with your first request through Lens.'
                 ) : (
                   <>
                     What your {saved.data.requests} request{saved.data.requests === 1 ? '' : 's'} this month would have
@@ -110,8 +110,8 @@ export function Spend({ now = new Date() }: { now?: Date }) {
 
       <Region index="01" label="Earned">
         <Card>
-          <CardHeader>Earned by model — LENS mint attribution</CardHeader>
-          <Row label="Window" hint="Mint credits by model (copper — the mined token, not provider spend)">
+          <CardHeader>Earned by model · LENS mint attribution</CardHeader>
+          <Row label="Window" hint="Mint credits by model (copper: the mined token, not provider spend)">
             <div className="flex items-center gap-2">
               {([7, 30] as const).map((d) => (
                 <Button
@@ -167,7 +167,7 @@ export function Spend({ now = new Date() }: { now?: Date }) {
                 <div data-testid="lens-unattributed" className="px-gutter py-3 text-body text-muted">
                   {mintTruncated ? 'At least ' : ''}
                   {windowRows.length} ledger row{windowRows.length === 1 ? '' : 's'} landed in this
-                  window, and none of them records which model it came from — so there is nothing to
+                  window, and none of them records which model it came from, so there is nothing to
                   split by model. The rows themselves are on the{' '}
                   <Link className={inlineLink} to="/ledger">
                     ledger
@@ -182,7 +182,7 @@ export function Spend({ now = new Date() }: { now?: Date }) {
                 <div className="px-gutter py-3 text-body text-muted">
                   No ledger rows in this window. A row appears when your traffic answers a question
                   another company later asks
-                  {days === 7 ? ', so try the 30-day window above first' : ''} —{' '}
+                  {days === 7 ? ', so try the 30-day window above first' : ''}:{' '}
                   <Link className={inlineLink} to="/setup">
                     point a tool at Lens
                   </Link>{' '}
@@ -207,7 +207,7 @@ export function Spend({ now = new Date() }: { now?: Date }) {
         <FeatureSpendCard days={days} />
 
         <Card>
-          <CardHeader>Spent — LXC</CardHeader>
+          <CardHeader>Spent · LXC</CardHeader>
           <Row label="This month, in US dollars" hint="roughly what your AI calls have cost since the 1st">
             {month.isLoading ? (
               <span className="text-body text-muted">Loading…</span>
@@ -218,7 +218,7 @@ export function Spend({ now = new Date() }: { now?: Date }) {
             )}
           </Row>
           <Row
-            label={`Inference debits — ${days}d`}
+            label={`Inference debits · ${days}d`}
             hint={totalHint(fees)}
           >
             {lxc.isLoading ? (

@@ -28,6 +28,12 @@ export const FINISH_HORIZON_MS = 1200
 export const MIN_CPS = 120
 /** The pace of a complete answer — about what a fast model streams at. */
 export const FINISHED_CPS = 600
+/**
+ * B17.365 — the most time one frame counts for. A busy page (three answers streaming side by side) draws its frames
+ * late, and a quarter of a second between two of them showed a short answer in one piece; capped, a late frame shows
+ * only what about three frames would, and the answer still grows on screen.
+ */
+export const MAX_FRAME_MS = 50
 
 /** The pacer, separate from React so its arithmetic can be tested frame by frame. */
 export class Reveal {
@@ -54,7 +60,7 @@ export class Reveal {
 
   /** Advances the display by `ms` and returns how many characters to show. */
   step(ms: number): number {
-    this.shown = Math.min(this.received, this.shown + this.perMs * ms)
+    this.shown = Math.min(this.received, this.shown + this.perMs * Math.min(ms, MAX_FRAME_MS))
     return Math.floor(this.shown)
   }
 

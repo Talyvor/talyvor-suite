@@ -13,6 +13,7 @@ import { REQUESTS_KEY } from '../lens/WalletMoney'
 import { Card } from '../lens/walletBrand'
 import { PENDING_POLL_MS } from '../lens/WalletScreens'
 import { isSessionExpired } from '../../lib/productState'
+import { WorkspaceLabel } from '../../labels/workspace'
 
 // B28.355 — money waiting on a person, in the conversation. Another agent — of this workspace or any other company —
 // asking one of the workspace's agents for credits is a card here, accepted (paid at once, from the asked agent) or
@@ -145,13 +146,14 @@ export function MoneyCards() {
               <div className="flex flex-col gap-2 px-4 py-3">
                 <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
                   {waiting ? <Pill status="held">Asks you</Pill> : null}
+                  <WorkspaceLabel capability={mine.has(r.from_agent_id) ? 'move_between_own_agents' : 'pay_another_owner'} />
                   <span>
                     Asked <span className="font-figure">{formatWhen(r.created_at)}</span>
                   </span>
                 </p>
                 <p className="text-body text-ink" data-testid="chat-money-asks">
                   {nameOf(r.from_agent_id)} asks {nameOf(r.to_agent_id)} for <Lxc ulxc={r.amount_ulxc} />
-                  {r.memo ? ` — ${r.memo}` : ''}
+                  {r.memo ? ` · ${r.memo}` : ''}
                 </p>
                 {waiting ? (
                   <>
@@ -177,13 +179,14 @@ export function MoneyCards() {
             <div className="flex flex-col gap-2 px-4 py-3">
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-muted">
                 {waiting ? <Pill status="held">Held in escrow</Pill> : null}
+                <WorkspaceLabel capability="escrow" />
                 <span>
                   Paid in <span className="font-figure">{formatWhen(e.created_at)}</span>
                 </span>
               </p>
               <p className="text-body text-ink" data-testid="chat-escrow-holds">
                 {nameOf(e.payer_agent_id)} holds <Lxc ulxc={e.amount_ulxc} /> for {nameOf(e.payee_agent_id)}
-                {e.memo ? ` — ${e.memo}` : ''}
+                {e.memo ? ` · ${e.memo}` : ''}
               </p>
               {waiting ? (
                 <>

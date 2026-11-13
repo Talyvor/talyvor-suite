@@ -102,9 +102,10 @@ export function sessionSignOut(seed: number): Scenario {
       ctx.evidence.push({ note: `${unknown} signed in: ${nf.status} ${nf.type} ${nf.text.slice(0, 200)}` })
       if (nf.status !== 404 || !nf.type.includes('application/json')) failures.push(`${unknown} answered ${nf.status} ${nf.type}, not a JSON 404`)
 
-      // A second browser, signed in as the same person, signs out with the button in the top bar.
+      // A second browser, signed in as the same person, signs out on Settings, where the avatar leads (B57.8).
       const other: AppUser = await env.signInUser(app.user.index)
       try {
+        await other.page.getByRole('banner').getByRole('link', { name: 'Settings and sign out' }).click()
         await other.page.getByRole('button', { name: 'Sign out', exact: true }).click()
         await other.page.getByRole('button', { name: 'Sign out', exact: true }).waitFor({ state: 'detached', timeout: 15_000 }).catch(() => undefined)
         const me = parsed<{ authenticated?: boolean }>((await from(other.page, 'GET', '/auth/me')).text)
@@ -196,7 +197,7 @@ export function walletFX(seed: number): Scenario {
           await picker.selectOption(fiat)
           await balance.filter({ hasText: symbol }).waitFor({ timeout: 15_000 }).catch(() => undefined)
           const shown = (await balance.innerText()).replace(/\s+/g, ' ').trim()
-          const want = `12.5 LXC (${fiatShown(value, fiat)})`
+          const want = `${fiatShown(value, fiat)} (12.5 LXC)`
           ctx.evidence.push({ note: `in ${fiat}: "${shown}"` })
           if (shown !== want) failures.push(`in ${fiat} ${a.name} reads "${shown}"; $${usd.toFixed(4)} at ${rates.usd_per_eur} USD and ${rates.gbp_per_eur} GBP per euro (${rates.rate_date}) is "${want}"`)
         }
@@ -204,7 +205,7 @@ export function walletFX(seed: number): Scenario {
         await picker.selectOption('USD').catch(() => undefined)
       }
       const back = (await bank.balanceShown(a))
-      if (back !== `12.5 LXC ${usdShown(amount, ctx.env.usdPerLXC)}`) failures.push(`back in dollars ${a.name} reads "${back}"`)
+      if (back !== usdShown('12.5 LXC', amount, ctx.env.usdPerLXC)) failures.push(`back in dollars ${a.name} reads "${back}"`)
       return failures.length === 0
         ? { pass: true, detail: `12.5 LXC read in pounds and euros at the ECB's ${rates.rate_date} rates (${rates.usd_per_eur} USD, ${rates.gbp_per_eur} GBP per euro), as /api/fx states them; back in dollars "${back}"` }
         : fail(failures.join('; '))

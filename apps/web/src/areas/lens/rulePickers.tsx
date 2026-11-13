@@ -50,7 +50,7 @@ export function ChoicePicker({
   const all = groups.flatMap((g) => g.options)
   const name = (v: string) => all.find((o) => o.value === v)?.label ?? v
   return (
-    <Row label={label} hint={hint ?? (chosen.length > 0 ? `Only these — Lens refuses any other` : anyText)}>
+    <Row label={label} hint={hint ?? (chosen.length > 0 ? `Only these. Lens refuses any other` : anyText)}>
       <div className="flex max-w-md flex-wrap items-center justify-end gap-2">
         {chosen.map((v) => (
           <Button key={v} type="button" aria-label={`Remove ${name(v)} from ${label.toLowerCase()} for ${agentName}`} onClick={() => onChange(chosen.filter((x) => x !== v))}>
@@ -240,7 +240,7 @@ export function RulesInWords({ agentName, rules, payeeName = (id) => id }: { age
             .
           </>
         ) : (
-          <>{agentName} may spend everything its wallet holds — no limit is set.</>
+          <>{agentName} may spend everything its wallet holds. No limit is set.</>
         )}
       </li>
       {(rules.requests_per_minute ?? 0) > 0 ? (

@@ -145,7 +145,7 @@ describe('/spend — an unattributable window is not an empty one', () => {
     // negative assertion on a screen that has not resolved is satisfied by the absence of
     // the whole screen.
     await settled()
-    expect(screen.getByText('Earned by model — LENS mint attribution')).toBeTruthy()
+    expect(screen.getByText('Earned by model · LENS mint attribution')).toBeTruthy()
     expect(screen.queryByText(/No ledger rows in this window/)).toBeNull()
     // The COUNT, not just the branch: a sentence that says "0 ledger rows landed in this
     // window" is the same false claim in different words, and `agg.length` is right there

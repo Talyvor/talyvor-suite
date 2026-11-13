@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -214,7 +214,9 @@ async function withCopyButtons(which: 'keys' | 'setup'): Promise<HTMLButtonEleme
   renderScreen(which)
   const mintLabel = which === 'keys' ? 'Create key' : 'Create a key for setup'
   if (which === 'keys') {
-    const name = await screen.findByLabelText(/new key name/i)
+    // B57.55 — a key is made in the New key dialog.
+    fireEvent.click(await screen.findByRole('button', { name: 'New key' }))
+    const name = await screen.findByLabelText(/key name/i)
     fireEvent.change(name, { target: { value: 'Laptop' } })
   }
   const mint = await screen.findByRole('button', { name: mintLabel })
@@ -227,6 +229,8 @@ async function withCopyButtons(which: 'keys' | 'setup'): Promise<HTMLButtonEleme
 
 afterEach(() => {
   vi.restoreAllMocks()
+  // Unmount first: /keys draws its key in a dialog portalled into body, which React must take out itself.
+  cleanup()
   document.body.replaceChildren()
 })
 

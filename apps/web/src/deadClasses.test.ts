@@ -201,7 +201,9 @@ async function generatedClassNames(extraContent?: string): Promise<Set<string>> 
   // lone backslash in `.w-1\.5` matches it, the following `.` then ends the match, and the
   // class is read as `w-1` — every escaped class (`w-1.5`, `wide:w-60`, `hover:bg-*`) scores
   // as dead. That was the first version of this regex, and it reported 40 false positives.
-  for (const m of css.css.matchAll(/\.((?:\\.|[^\s{,:.>+~()])+)/g)) {
+  // B57.141 — an unescaped `[` ends it too: `aria-pressed:` emits `.aria-pressed\:shadow-pick[aria-pressed="true"]`,
+  // whose class is everything before the attribute selector.
+  for (const m of css.css.matchAll(/\.((?:\\.|[^\s{,:.>+~()[])+)/g)) {
     names.add(m[1].replace(/\\(.)/g, '$1'))
   }
   return names
@@ -223,8 +225,9 @@ describe('the generator is asked, not a table', () => {
   })
 
   it('variants survive the unescaping — a prefixed class is not read as dead', async () => {
-    const names = await generatedClassNames('<div class="hover:bg-accent-tint wide:w-60 last:border-b-0"></div>')
+    const names = await generatedClassNames('<div class="hover:bg-accent-tint wide:w-60 last:border-b-0 aria-pressed:shadow-pick"></div>')
     expect(names.has('hover:bg-accent-tint')).toBe(true)
+    expect(names.has('aria-pressed:shadow-pick')).toBe(true)
     expect(names.has('wide:w-60')).toBe(true)
     expect(names.has('last:border-b-0')).toBe(true)
   })

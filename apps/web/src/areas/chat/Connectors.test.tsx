@@ -136,7 +136,7 @@ describe('External MCP connectors in Chat (B28.122)', () => {
     fireEvent.click(screen.getByRole('button', { name: `Add ${TEST_TOOLS_NAME}` }))
     const added = await screen.findByTestId('connector-card')
     expect(within(added).getByText(TEST_TOOLS_NAME)).toBeTruthy()
-    expect((await within(added).findByTestId('connector-tools')).textContent).toBe('fingerprint — The fingerprint of a text.')
+    expect((await within(added).findByTestId('connector-tools')).textContent).toBe('fingerprint: The fingerprint of a text.')
     expect(JSON.parse(window.localStorage.getItem(connectorsKey('local')) ?? '[]')).toMatchObject([{ name: TEST_TOOLS_NAME, url: testToolsURL() }])
   })
 })

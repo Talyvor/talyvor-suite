@@ -36,11 +36,11 @@ const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 export const figureText = (text: string): string => text.replace(/\s+/g, ' ').trim()
 export const lxcText = (ulxc: number): string => String(ulxc / 1e6)
 
-/** B28.22 — what the wallet screens show beside an LXC amount, in dollars at the peg: "($1.25)" (apps/web money.tsx). */
-export function usdShown(ulxc: number, usdPerLXC: number): string {
+/** B55.38 — an LXC amount as the wallet screens show it, dollars at the peg first: "$1.25 (12.5 LXC)" (apps/web money.tsx). */
+export function usdShown(lxc: string, ulxc: number, usdPerLXC: number): string {
   const usd = (ulxc / 1e6) * usdPerLXC
   const fmt = (v: number) => v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return `(${usd > 0 && usd < 0.005 ? `<${fmt(0.01)}` : fmt(usd)})`
+  return `${usd > 0 && usd < 0.005 ? `<${fmt(0.01)}` : fmt(usd)} (${lxc})`
 }
 
 /** The card under an `h2` heading (packages/ui CardHeader). */
@@ -217,24 +217,29 @@ export class AgentBankScreen {
   async issueKey(agent: Agent): Promise<string> {
     await this.fresh(agent)
     await card(this.page, 'Key').getByRole('button', { name: 'Issue a key', exact: true }).click()
-    const shown = card(this.page, `${agent.name}’s key — shown once`)
+    const shown = card(this.page, `${agent.name}’s key (shown once)`)
     await shown.waitFor({ timeout: ACTION_TIMEOUT_MS })
     const key = (await shown.locator('.select-all').innerText()).trim()
-    await shown.getByRole('button', { name: 'Done — I stored it' }).click()
+    await shown.getByRole('button', { name: 'Done, I stored it' }).click()
     return key
   }
 
   async pauseAll(reason: string): Promise<string | undefined> {
     await this.fresh()
     await this.page.getByLabel('Why every agent is paused').fill(reason)
-    await this.page.getByRole('button', { name: 'Pause every agent' }).click()
+    // B57.8 — the page's own switch; the top bar and the kill banner carry ones with the same names.
+    await this.fleet().getByRole('button', { name: 'Pause every agent' }).click()
     return outcome(this.page.getByTestId('agents-all-paused'), this.page.locator('body'))
   }
 
   async resumeAll(): Promise<string | undefined> {
     await this.fresh()
-    await this.page.getByRole('button', { name: 'Start every agent again' }).click()
-    return outcome(this.page.getByRole('button', { name: 'Pause every agent' }), this.page.locator('body'))
+    await this.fleet().getByRole('button', { name: 'Start every agent again' }).click()
+    return outcome(this.fleet().getByRole('button', { name: 'Pause every agent' }), this.page.locator('body'))
+  }
+
+  private fleet() {
+    return this.page.getByTestId('pause-every-agent')
   }
 
   /** Pays `to` from `from` on Pay another agent; answers the line the card then shows. */
@@ -267,7 +272,7 @@ export class AgentBankScreen {
     }
     const row = (await label.innerText()).trim()
     await waiting.locator('div').filter({ hasText: asks }).getByRole('button', { name: 'Approve', exact: true }).last().click()
-    const said = this.page.getByRole('status').filter({ hasText: /^(Approved|Denied)/ })
+    const said = this.page.getByRole('status').filter({ hasText: /^(Approved|Declined)/ })
     try {
       await said.waitFor({ timeout: ACTION_TIMEOUT_MS })
     } catch {
@@ -279,7 +284,7 @@ export class AgentBankScreen {
 
   /**
    * B26.28 — `agent`'s row waiting for a person, on a 390px phone: saved as a screenshot at `file`, and
-   * what is wrong with it — undefined when Approve and Deny each sit full-width under the sentence.
+   * what is wrong with it — undefined when Approve and Decline each sit full-width under the sentence.
    */
   async phoneRow(agent: Agent, payee: Agent, file: string): Promise<string | undefined> {
     const was = this.page.viewportSize()
@@ -295,14 +300,14 @@ export class AgentBankScreen {
         row.boundingBox(),
         words.boundingBox(),
         row.getByRole('button', { name: /^Approve/ }).boundingBox(),
-        row.getByRole('button', { name: 'Deny', exact: true }).boundingBox(),
+        row.getByRole('button', { name: 'Decline', exact: true }).boundingBox(),
       ])
       if (!r || !w || !approve || !deny) return 'the row, its sentence or a button is not on the screen'
       const box = (b: { x: number; y: number; width: number }) => `${Math.round(b.width)}px wide at y=${Math.round(b.y)}`
-      const shown = `row ${Math.round(r.width)}px; sentence ${box(w)}, ${Math.round(w.height)}px tall; Approve ${box(approve)}; Deny ${box(deny)}`
+      const shown = `row ${Math.round(r.width)}px; sentence ${box(w)}, ${Math.round(w.height)}px tall; Approve ${box(approve)}; Decline ${box(deny)}`
       const full = 0.8 * r.width
       if (w.width < full) return `the sentence is squeezed beside the buttons: ${shown}`
-      for (const [name, b] of [['Approve', approve], ['Deny', deny]] as const) {
+      for (const [name, b] of [['Approve', approve], ['Decline', deny]] as const) {
         if (b.y < w.y + w.height - 1) return `${name} is not under the sentence: ${shown}`
         if (b.width < full) return `${name} is not full-width: ${shown}`
       }
@@ -427,6 +432,40 @@ export class AgentBankScreen {
     const [download] = await Promise.all([
       this.page.waitForEvent('download', { timeout: ACTION_TIMEOUT_MS }),
       c.getByRole('button', { name: 'Download', exact: true }).click(),
+    ])
+    return { name: download.suggestedFilename(), text: await readFile(await download.path(), 'utf8') }
+  }
+
+  /**
+   * B28.55 — downloads `agent`'s statement (or, with none, every agent's) from `from` through `through` (YYYY-MM-DD, the
+   * last day included) as a PDF, on the card a person uses; the file's name and its bytes as text.
+   */
+  async statementPDF(agent: Agent | undefined, from: string, through: string): Promise<{ name: string; text: string }> {
+    await this.fresh(agent)
+    const form = this.page.getByTestId(agent === undefined ? 'bank-statement-download' : 'agent-statement-download')
+    await form.getByLabel(/^First day of/).fill(from)
+    await form.getByLabel(/^Last day of/).fill(through)
+    await form.getByLabel(/^File type of/).selectOption('pdf')
+    const [download] = await Promise.all([
+      this.page.waitForEvent('download', { timeout: ACTION_TIMEOUT_MS }),
+      form.getByRole('button', { name: 'Download', exact: true }).click(),
+    ])
+    return { name: download.suggestedFilename(), text: await readFile(await download.path(), 'latin1') }
+  }
+
+  /**
+   * B28.56 — downloads `agent`'s journal (or, with none, every agent's) from `from` through `through` (YYYY-MM-DD, the
+   * last day included) for Xero or QuickBooks, on the card a person uses; the file's name and its text.
+   */
+  async statementJournal(agent: Agent | undefined, from: string, through: string): Promise<{ name: string; text: string }> {
+    await this.fresh(agent)
+    const form = this.page.getByTestId(agent === undefined ? 'bank-statement-download' : 'agent-statement-download')
+    await form.getByLabel(/^First day of/).fill(from)
+    await form.getByLabel(/^Last day of/).fill(through)
+    await form.getByLabel(/^File type of/).selectOption('journal')
+    const [download] = await Promise.all([
+      this.page.waitForEvent('download', { timeout: ACTION_TIMEOUT_MS }),
+      form.getByRole('button', { name: 'Download', exact: true }).click(),
     ])
     return { name: download.suggestedFilename(), text: await readFile(await download.path(), 'utf8') }
   }
@@ -605,6 +644,68 @@ export class AgentBankScreen {
     }
     return shown
   }
+
+  /**
+   * B28.51 — Statement read three ways: its first page, the same after Show older lines, and then filtered to the kind
+   * the filter names. Each row as the screen shows it, top to bottom: its words, its amount and the balance after it.
+   */
+  async statementPaged(agent: Agent, kind: string): Promise<{ first: StatementRow[]; all: StatementRow[]; filtered: StatementRow[] } | string> {
+    await this.fresh(agent)
+    const statement = card(this.page, 'Statement')
+    const rows = statement.getByTestId('agent-statement').locator('tbody tr')
+    const read = async (): Promise<StatementRow[]> => {
+      const shown: StatementRow[] = []
+      for (const row of await rows.all()) {
+        const cells = row.locator('td')
+        shown.push({ what: figureText(await row.getByTestId('statement-what').innerText()), amount: figureText(await cells.nth(2).innerText()), balance: figureText(await cells.nth(3).innerText()) })
+      }
+      return shown
+    }
+    await rows.first().waitFor({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
+    const first = await read()
+    const older = statement.getByRole('button', { name: 'Show older lines', exact: true })
+    if (!(await older.isVisible())) return `the Statement shows ${first.length} line(s) and no Show older lines`
+    await older.click()
+    const settle = async (want: (n: number) => boolean | Promise<boolean>) => {
+      const end = Date.now() + ACTION_TIMEOUT_MS
+      while (!(await want(await rows.count())) && Date.now() < end) await this.page.waitForTimeout(250)
+    }
+    await settle((n) => n > first.length)
+    const all = await read()
+    await statement.getByRole('combobox', { name: `Kind of line in ${agent.name}’s statement` }).selectOption({ label: kind })
+    // B17.420 — a new kind is read afresh: until Lens answers the card says Reading… and draws no rows, which is fewer
+    // than before but is not the filtered statement.
+    const reading = statement.getByText('Reading…', { exact: true })
+    await settle(async (n) => n < all.length && !(await reading.isVisible()))
+    const filtered = await read()
+    return { first, all, filtered }
+  }
+
+  /** B28.53 — the agent's Spend by day, model and destination card, for its first period (the last 30 days). */
+  async analyticsShown(agent: Agent): Promise<AnalyticsShown | string> {
+    await this.fresh(agent)
+    const c = card(this.page, 'Spend by day, model and destination')
+    const out = c.getByTestId('agent-analytics-out')
+    await out.or(c.getByTestId('agent-analytics-none')).first().waitFor({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
+    if (!(await out.isVisible())) return `Spend by day, model and destination shows no Out: "${figureText(await c.innerText())}"`
+    const rows = async (view: string) => (await c.getByTestId(`agent-analytics-${view}-row`).allInnerTexts()).map(figureText)
+    return { out: figureText(await out.innerText()), days: await rows('day'), models: await rows('model'), destinations: await rows('destination') }
+  }
+}
+
+/** B28.53 — Spend by day, model and destination as the screen draws it: the Out figure and each view's rows. */
+export interface AnalyticsShown {
+  out: string
+  days: string[]
+  models: string[]
+  destinations: string[]
+}
+
+/** B28.51 — one row of an agent's Statement as the screen draws it. */
+export interface StatementRow {
+  what: string
+  amount: string
+  balance: string
 }
 
 /** The note a card shows once its form was sent: what was done, or "Refused …"/"Not …" and why. */
@@ -741,7 +842,7 @@ async function oneCharge(ctx: ScenarioCtx, fresh: readonly LedgerRow[]): Promise
  * An agent asks one question with its own key. Its worst case is held against the cap first; a served
  * answer is booked, as every charged answer is, for the ledger read-back.
  */
-async function agentAsks(ctx: ScenarioCtx, key: string, prompt: string, note: string, modelID = ctx.env.judgeModel, headers: Record<string, string> = {}): Promise<Answered<JudgeReply>> {
+export async function agentAsks(ctx: ScenarioCtx, key: string, prompt: string, note: string, modelID = ctx.env.judgeModel, headers: Record<string, string> = {}): Promise<Answered<JudgeReply>> {
   const { env, app } = ctx
   const model = env.catalog.find((m) => m.id === modelID)
   if (model === undefined) throw new Error(`the catalog has no model ${modelID}`)
@@ -1580,11 +1681,11 @@ export function agentApproval(seed: number): Scenario {
       }
       const shot = join(ctx.env.outDir, `agent-approval-390px-user${ctx.app.user.index}.png`)
       const phone = await bank.phoneRow(payer, payee, shot)
-      ctx.evidence.push({ note: `on a 390px phone (${shot}): ${phone ?? 'Approve and Deny each sit full-width under the sentence'}` })
+      ctx.evidence.push({ note: `on a 390px phone (${shot}): ${phone ?? 'Approve and Decline each sit full-width under the sentence'}` })
       if (phone !== undefined) return fail(`on a 390px phone, ${phone}`)
       const { row, said: approved } = await bank.approve(payer, payee)
       ctx.evidence.push({ note: `Waiting for a person: ${row}` }, { note: `Approve: ${approved}` })
-      const asked = `1 LXC ${usdShown(1e6, ctx.env.usdPerLXC)} — ${memo}`
+      const asked = `${usdShown('1 LXC', 1e6, ctx.env.usdPerLXC)} — ${memo}`
       if (!row.endsWith(` ${asked}`)) return fail(`the row waiting for a person does not say ${asked}: "${row}"`)
       if (!/^Approved and paid/.test(approved)) return fail(`approving did not pay: "${approved}"`)
       const after = await bookOf(ctx)
@@ -1610,13 +1711,13 @@ interface ApprovalWorker {
  * push Lens sends for it is delivered to the app's service worker, which must show it with Approve and
  * Deny, and (B29.14) with the app icon as its icon and badge. Approve, run in the service worker on that
  * notification, must move Lens's approval row to approved with no page opened or moved and no money moved;
- * the payment sent again is then paid once.
+ * the payment sent again is then paid once. B55.49: the notification reads Lens's sentence, "$0.10 (1 LXC)".
  */
 export function agentApprovalPush(seed: number): Scenario {
   return {
     id: 'agent-approval-push',
     owner: 'talyvor-suite',
-    items: ['B28.38'],
+    items: ['B28.38', 'B55.49'],
     agents: 2,
     title: 'Approve on the approval push decides it from the service worker: Lens’s row is approved without opening the app',
     run: (ctx) => withBank(ctx, async (bank) => {
@@ -1654,7 +1755,9 @@ export function agentApprovalPush(seed: number): Scenario {
       if (sw === undefined) return fail('/sw.js registered, but no service worker runs it')
 
       // The push Lens sends for a waiting approval (talyvor-lens economy/agent_approval_auth.go), delivered as a push.
-      const push = { type: 'agent_approval', approval_id: id, agent_name: payer.name, amount_ulxc: 1e6, amount_lxc: '1', reason: memo }
+      // B55.49: body is Lens's sentence, dollars beside the LXC at the $0.10 peg (B55.30).
+      const sentence = `${payer.name} wants to pay ${payee.name} $0.10 (1 LXC)`
+      const push = { type: 'agent_approval', approval_id: id, agent_name: payer.name, amount_ulxc: 1e6, amount_lxc: '1', reason: memo, body: sentence }
       await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify(push) })
       const shown = await sw.evaluate(async ({ tag, ms }) => {
         const w = globalThis as unknown as ApprovalWorker
@@ -1668,6 +1771,7 @@ export function agentApprovalPush(seed: number): Scenario {
       if (shown.actions === undefined) return fail(`the push for approval ${id} showed no notification (notifications ${shown.permission}; showing ${JSON.stringify(shown.shown)})`)
       ctx.evidence.push({ note: `the push: "${shown.title}" with ${shown.actions.join(', ') || 'no actions'}` })
       if (shown.actions.join() !== 'approve,deny') return fail(`the push for approval ${id} does not carry Approve and Deny: ${JSON.stringify(shown)}`)
+      if (shown.title !== sentence) return fail(`the push for approval ${id} reads "${shown.title}", not Lens's sentence "${sentence}"`)
       // B29.14: the push carries the Talyvor app icon, as its picture and its badge.
       if (shown.icon !== `${origin}/icon-192.png` || shown.badge !== `${origin}/icon-192.png`) return fail(`the push for approval ${id} does not carry the app icon as icon and badge: ${JSON.stringify(shown)}`)
 
@@ -1691,7 +1795,7 @@ export function agentApprovalPush(seed: number): Scenario {
       if (pays.length !== 1 || pays[0].amount_ulxc !== -1e6) return fail(`${payer.name}'s account has ${pays.length} payment line(s): ${JSON.stringify(pays)}`)
       const used = (await ctx.env.lens.agentApprovals(ctx.app.user)).find((x) => x.id === id)?.status
       if (used !== 'used') return fail(`the payment was sent again and the approval is ${used ?? 'gone'}, not used`)
-      return { pass: true, detail: `the push showed Approve and Deny and the app icon; Approve in the service worker approved ${id} with no page opened; sent again, paid once (one pay line, the approval used)` }
+      return { pass: true, detail: `the push read "${sentence}" with Approve and Deny and the app icon; Approve in the service worker approved ${id} with no page opened; sent again, paid once (one pay line, the approval used)` }
     }),
   }
 }
@@ -1749,7 +1853,7 @@ export function chatApprovalFaceID(seed: number): Scenario {
         return fail(`no card in Chat reads "${asks}…"; it shows: ${(await page.getByTestId('chat-approval').allInnerTexts()).join(' | ') || 'no approval card'}`)
       }
       const row = (await approval.getByTestId('chat-approval-asks').innerText()).trim()
-      const wanted = `${asks}1 LXC ${usdShown(1e6, ctx.env.usdPerLXC)} — ${memo}`
+      const wanted = `${asks}${usdShown('1 LXC', 1e6, ctx.env.usdPerLXC)} — ${memo}`
       if (row !== wanted) return fail(`the card reads "${row}", not "${wanted}"`)
       await mkdir(ctx.env.outDir, { recursive: true })
       for (const [width, height] of [[1440, 900], [390, 844]] as const) {
@@ -1935,6 +2039,9 @@ async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: st
   ctx.evidence.push({ note: `Home at 390: total "${totalShown}", ${a.name} "${safeShown}"; Lens: ${book.allocated_ulxc} µLXC with agents, safe to spend ${safe?.safe_to_spend} µLXC` })
   if (safe === undefined) return `Lens lists no LXC safe to spend for ${a.name}`
   if (!totalShown.includes(shownLXC(book.allocated_ulxc))) return `Home's total reads "${totalShown}", not Lens's ${shownLXC(book.allocated_ulxc)} with agents`
+  // B57.7 — the total is a balance card's <Money>: dollars large first, LXC small after them.
+  const dollars = usdShown(shownLXC(book.allocated_ulxc), book.allocated_ulxc, ctx.env.usdPerLXC).split(' (')[0]
+  if (!totalShown.startsWith(`${dollars} `)) return `Home's total reads "${totalShown}", not ${dollars} first and its LXC after`
   if (!safeShown.includes(shownLXC(safe.safe_to_spend))) return `${a.name}'s safe to spend reads "${safeShown}", not Lens's ${shownLXC(safe.safe_to_spend)}`
   const link = page.locator(`a[href="/approvals#approval-${approvalID}"]`)
   if (approvalID === '' || (await link.count()) === 0) {
@@ -1953,7 +2060,8 @@ async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: st
 
 /** B28.271 — what Agent Wallets may not show a workspace with no agents: none of these has anything to act on yet. */
 const EMPTY_HIDDEN = [
-  { what: 'the pause-all switch', find: (p: Page) => p.getByRole('button', { name: 'Pause every agent' }) },
+  // B57.8 — the page's own; the top bar's Pause every agent is on every page.
+  { what: 'the pause-all switch', find: (p: Page) => p.getByTestId('pause-every-agent') },
   { what: 'the month-end forecast', find: (p: Page) => p.getByTestId('agents-forecast') },
   { what: 'the Approvals region', find: (p: Page) => p.getByRole('region', { name: 'Approvals' }) },
   { what: 'the Spending region', find: (p: Page) => p.getByRole('region', { name: 'Spending' }) },
@@ -2702,6 +2810,80 @@ export function chatForecastAnswer(seed: number): Scenario {
             ctx.evidence.push({ note: `the forecast answer at ${width}px: ${shot}` })
           }
           return { pass: true, detail: `"${question}" in Chat: "${said}" — the day ${shown} is Lens's /forecast runs_out_at ${now.runs_out_at} for ${spender.name}, which holds ${funded - paid} µLXC after one ${paid} µLXC pay line` }
+        } finally {
+          await page.close()
+        }
+      }),
+  }
+}
+
+/**
+ * B28.57 — Home says the day an agent runs out, in the agent's own time zone. The spender's rules put it in
+ * Pacific/Kiritimati (UTC+14), it is funded 5 LXC and pays 4.999 LXC away, so it runs out this month. The day Home shows
+ * is Lens's /forecast runs_out_on for it, and that is the day runs_out_at falls on in Kiritimati, recomputed here.
+ */
+export function agentRunsOutDate(seed: number): Scenario {
+  const [funded, paid, zone] = [5e6, 4_999_000, 'Pacific/Kiritimati']
+  return {
+    id: 'agent-runs-out-date',
+    owner: 'talyvor-suite',
+    items: ['B28.57', 'B28.330'],
+    agents: 2,
+    title: 'Home shows the day an agent runs out as Lens\'s /forecast runs_out_on, the date in the agent\'s own time zone (Pacific/Kiritimati)',
+    run: (ctx) =>
+      withBank(ctx, async (bank) => {
+        const { env, app } = ctx
+        const spender = await openAgent(ctx, bank, `Runs-out spender ${seed}`)
+        if (typeof spender === 'string') return fail(spender)
+        const payee = await openAgent(ctx, bank, `Runs-out payee ${seed}`)
+        if (typeof payee === 'string') return fail(payee)
+        const put = await env.lens.act<AgentRulesRead>(app.user, 'PUT', `/v1/workspaces/{ws}/agents/${spender.id}/rules`, { ...await env.lens.agentRules(app.user, spender.id), timezone: zone })
+        if (!put.ok) return fail(`putting ${spender.name} in ${zone} was refused: ${put.status} ${put.error}`)
+        const err = await bank.move(spender, funded, 'Fund')
+        if (err !== undefined) return fail(`funding ${spender.name} was refused: ${err}`)
+        const out = await bank.pay(spender, payee, paid, `run it down ${seed}`)
+        if (!/^Paid /.test(out)) return fail(`${spender.name} paying ${lxcText(paid)} LXC was not paid: "${out}"`)
+        // The ledger, not the screen: one pay line for what it paid, and what is left.
+        const lines = await env.lens.agentLines(app.user, spender.id)
+        const pays = lines.filter((l) => l.kind === 'pay')
+        if (pays.length !== 1 || pays[0].amount_ulxc !== -paid || lines[0]?.balance_after_ulxc !== funded - paid) {
+          return fail(`after paying ${paid} µLXC of ${funded}, ${spender.name}'s statement has pay line(s) ${JSON.stringify(pays)} and ends at ${lines[0]?.balance_after_ulxc}`)
+        }
+
+        const page = await app.tab('/')
+        try {
+          await page.setViewportSize({ width: 1440, height: 900 })
+          const row = page.getByTestId(`runs-out-${spender.id}`)
+          try {
+            await row.waitFor({ timeout: ACTION_TIMEOUT_MS })
+          } catch {
+            return fail(`Home shows no run-out day for ${spender.name}`)
+          }
+          const said = (await row.innerText()).trim()
+          const shown = await row.locator('time').getAttribute('datetime', { timeout: 2_000 }).catch(() => null)
+          const f = await env.lens.agentForecast(app.user)
+          const now = (f.agents ?? []).find((a) => a.agent_id === spender.id)
+          ctx.evidence.push({ note: `Home: "${said}" (${shown ?? 'no date'}); Lens's /forecast for ${spender.name}: ${JSON.stringify(now)}` })
+          if (now === undefined) return fail(`Lens's /forecast does not list ${spender.name}`)
+          if (typeof now.runs_out_at !== 'string' || typeof now.runs_out_on !== 'string') {
+            return fail(`${spender.name} holds ${lxcText(funded - paid)} LXC after paying ${lxcText(paid)} LXC, yet Lens's /forecast gives runs_out_at ${now.runs_out_at} and runs_out_on ${now.runs_out_on}`)
+          }
+          if (now.timezone !== zone) return fail(`Lens's /forecast puts ${spender.name} in ${now.timezone ?? 'no zone'}, not ${zone}`)
+          // The oracle: the day runs_out_at's instant falls on in Kiritimati, and the day it falls on in UTC for the note.
+          const dayIn = (tz: string) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(now.runs_out_at as string))
+          if (now.runs_out_on !== dayIn(zone)) return fail(`Lens's /forecast says ${spender.name} runs out on ${now.runs_out_on}, but ${now.runs_out_at} is ${dayIn(zone)} in ${zone}`)
+          if (shown !== now.runs_out_on) return fail(`Home states the day ${spender.name} runs out as ${shown ?? 'nothing'}; Lens's /forecast says ${now.runs_out_on}`)
+          if (!said.includes(`(${zone})`)) return fail(`Home's run-out line for ${spender.name} does not name its zone: "${said}"`)
+
+          await mkdir(env.outDir, { recursive: true })
+          for (const [width, height] of [[1440, 900], [390, 844]] as const) {
+            await page.setViewportSize({ width, height })
+            await row.scrollIntoViewIfNeeded()
+            const shot = join(env.outDir, `agent-runs-out-date-${width}px-user${app.user.index}.png`)
+            await page.screenshot({ path: shot })
+            ctx.evidence.push({ note: `the run-out day on Home at ${width}px: ${shot}` })
+          }
+          return { pass: true, detail: `Home: "${said}" — ${shown} is Lens's runs_out_on for ${spender.name}, the day ${now.runs_out_at} falls on in ${zone} (UTC: ${dayIn('UTC')}), after one ${paid} µLXC pay line of ${funded}` }
         } finally {
           await page.close()
         }
@@ -3676,36 +3858,33 @@ async function giveBack(ctx: ScenarioCtx, name: string): Promise<void> {
 }
 
 /**
- * B28.7 — the navigation is wallet-first. With every group open, the sidebar reads top to bottom: Home,
- * Approvals, Agent Wallets, Statements, Chat, then Marketplace, Work (Track, Docs), Developers (Connect an
- * agent, API keys, Spend & routing, Gateway features), Billing and Settings. The Approvals badge is held to
- * Lens's own pending count, and every link the sidebar offers opens a page rather than the catch-all.
+ * B28.7 — the navigation is wallet-first. B57.8 — and it is Pocket's rows, with no folding groups: Home, Approvals,
+ * Agents, Statements, Pay, Invoices, Spending, Chat, Rooms, Marketplace; a rule; Scan, Track and Docs, Developers,
+ * Billing, Settings; Privacy and Terms at its foot. The Approvals badge is held to Lens's own pending count, and every
+ * link the sidebar offers opens a page rather than the catch-all.
  */
 export const WALLET_FIRST_NAV = [
-  'Home', 'Approvals', 'Agent Wallets', 'Statements', 'Chat', 'Marketplace', 'Work', 'Track', 'Docs',
-  'Developers', 'Connect an agent', 'API keys', 'Spend & routing', 'Gateway features', 'Billing', 'Settings',
+  'Home', 'Approvals', 'Agents', 'Statements', 'Pay', 'Invoices', 'Spending', 'Chat', 'Rooms', 'Marketplace',
+  'Scan', 'Track and Docs', 'Developers', 'Billing', 'Settings', 'Privacy', 'Terms',
 ] as const
 
 export function walletFirstNav(): Scenario {
   return {
     id: 'wallet-first-nav',
     owner: 'talyvor-suite',
-    items: ['B28.7'],
+    items: ['B28.7', 'B57.8'],
     title: 'the sidebar leads with the wallet, its Approvals badge is Lens’s pending count, and every link opens a page',
     run: async (ctx) => {
       const page = await ctx.app.tab('/')
       try {
         const nav = page.getByRole('navigation', { name: 'Sections' })
         await nav.getByRole('link', { name: 'Statements' }).waitFor({ timeout: ACTION_TIMEOUT_MS })
-        const fold = nav.getByRole('button', { name: 'Fold all' })
-        if ((await fold.count()) > 0) await fold.click()
-        await nav.getByRole('button', { name: 'Open all' }).click()
+        // The logo leads, to Home, and is named rather than a row; every row after it is a link.
         const rows = await nav
-          .locator('a[href], button[aria-expanded]')
+          .locator('a[href]:not([aria-label])')
           .evaluateAll((els) => els.map((e) => ({ text: (e.textContent ?? '').trim(), href: e.getAttribute('href') })))
         const named = rows.map((r) => r.text.replace(/\d+ waiting$/, '').trim())
-        // A group and its one same-named link (Settings, then Settings) read as one entry.
-        const order = named.filter((l, i) => (WALLET_FIRST_NAV as readonly string[]).includes(l) && l !== named[i - 1])
+        const order = named
         const pending = (await ctx.env.lens.agentApprovals(ctx.app.user)).filter((x) => x.status === 'pending').length
         // B34.1 — the badge is drawn once the page has read the approvals; read before that, it is none.
         const badge = await badgeReaches(page, pending, ACTION_TIMEOUT_MS)
@@ -3743,7 +3922,7 @@ export async function approveRow(page: Page, memo: string): Promise<string> {
   const row = page.locator('[data-approval]').filter({ hasText: memo }).first()
   await row.waitFor({ timeout: ACTION_TIMEOUT_MS })
   await row.getByRole('button', { name: 'Approve', exact: true }).click()
-  const said = page.getByRole('status').filter({ hasText: /^(Approved|Denied)/ }).or(page.getByRole('alert')).first()
+  const said = page.getByRole('status').filter({ hasText: /^(Approved|Declined)/ }).or(page.getByRole('alert')).first()
   await said.waitFor({ timeout: ACTION_TIMEOUT_MS })
   return (await said.innerText()).trim()
 }
@@ -4409,7 +4588,7 @@ export function agentBalanceStored(seed: number): Scenario {
         return fail(`the book does not add up: ${after.workspace_balance_ulxc} ≠ ${after.allocated_ulxc} + ${after.unallocated_ulxc}`)
       }
       const shown = await bank.balanceShown(a)
-      const want = `${shownLXC(total)} ${usdShown(total, ctx.env.usdPerLXC)}`
+      const want = usdShown(shownLXC(total), total, ctx.env.usdPerLXC)
       if (shown !== want) return fail(`Agent Wallets shows ${a.name} holding "${shown}"; its postings sum to ${want}`)
       return { pass: true, detail: `${MANY_FUNDINGS} fundings at once, ${lxcText(total)} LXC: ${a.name}'s stored balance = its ${posted.length} postings = the screen's ${shown}, and the workspace's agents hold that much more` }
     }),
@@ -4417,7 +4596,7 @@ export function agentBalanceStored(seed: number): Scenario {
 }
 
 /**
- * B28.22 — an agent funded 12.5 LXC on Agent Wallets shows "12.5 LXC ($1.25)" — its dollar value at the
+ * B28.22 — an agent funded 12.5 LXC on Agent Wallets shows "$1.25 (12.5 LXC)" — its dollar value at the
  * peg beside it — and its allowed models are picked from the catalog, not typed: the Rules card's model
  * field is a select, the model picked is the one Lens stores, and the card says so in a sentence.
  */
@@ -4437,7 +4616,7 @@ export function walletCurrency(seed: number): Scenario {
       const held = agentIn(await bookOf(ctx), a.id)?.balance_ulxc
       if (held !== amount) return fail(`funded ${amount} µLXC; Lens's book has ${a.name} holding ${held}`)
       const shown = await bank.balanceShown(a)
-      const want = `12.5 LXC ${usdShown(amount, ctx.env.usdPerLXC)}`
+      const want = usdShown('12.5 LXC', amount, ctx.env.usdPerLXC)
       ctx.evidence.push({ note: `Agent Wallets shows ${a.name} holding "${shown}"` })
       if (shown !== want) return fail(`Agent Wallets shows ${a.name} holding "${shown}"; at $${ctx.env.usdPerLXC} per LXC it should read "${want}"`)
       const model = ctx.env.judgeModel

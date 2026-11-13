@@ -46,6 +46,7 @@ describe('the company line', () => {
   it.each([
     ['/marketing', SIGNED_OUT],
     ['/pricing', SIGNED_OUT],
+    ['/your-money', SIGNED_OUT],
     ['/documentation', SIGNED_OUT],
     ['/terms', SIGNED_OUT],
     ['/privacy', SIGNED_OUT],

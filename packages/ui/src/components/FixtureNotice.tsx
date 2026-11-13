@@ -10,7 +10,7 @@ export function FixtureNotice({ awaiting }: { awaiting: string }) {
   return (
     <div className="flex items-center gap-1.5 text-caption text-faint">
       <span className="h-1.5 w-1.5 shrink-0 rounded-pill bg-faint" aria-hidden="true" />
-      <span>Sample data — awaiting {awaiting}.</span>
+      <span>Sample data: awaiting {awaiting}.</span>
     </div>
   )
 }

@@ -56,7 +56,11 @@ describe('the operator screen (B18.25)', () => {
   it('an operator sees every workspace’s spend, held LENS and last activity', async () => {
     mockBff(true)
     const nav = await at('/operator')
-    expect(within(nav).getByRole('link', { name: 'Workspaces' })).toHaveAttribute('href', '/operator')
+    // B57.8 — the operator's pages are under Settings, and this one links the rest.
+    expect(within(nav).getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
+    const pages = within(screen.getByRole('navigation', { name: 'Operator pages' }))
+    expect(pages.getByRole('link', { name: 'Tax' })).toHaveAttribute('href', '/operator/tax')
+    expect(pages.getByRole('link', { name: 'Compliance' })).toHaveAttribute('href', '/operator/compliance')
     const rows = await screen.findAllByTestId('operator-workspace')
     expect(rows).toHaveLength(3)
     const [beta, acme, quiet] = rows
@@ -79,7 +83,7 @@ describe('the operator screen (B18.25)', () => {
     const row = await screen.findByTestId('parked-use')
     expect(row.textContent).toContain("resource_missing: No such customer: 'cus_gone'")
     expect(within(row).getByText('5 times')).toBeTruthy()
-    expect(within(row).getByText('0.5 LXC')).toBeTruthy()
+    expect(row.textContent).toContain('0.5 LXC')
     fireEvent.click(within(row).getByRole('button', { name: 'Retry use_9' }))
     expect((await screen.findByTestId('parked-retried')).textContent).toBe('use_9 will be tried again on the next metering run.')
     expect(await screen.findByText(/No use is parked/)).toBeTruthy()

@@ -172,7 +172,7 @@ function NothingSpendable({ heldMicros }: { heldMicros: number }) {
           is still held. Held LENS settles on its own after a holding period,
           during which it can still be revoked. That period is an operator
           setting this screen cannot read, so it is not stated here. There is
-          nothing to do but wait — the ledger carries the rows that credited it,
+          nothing to do but wait. The ledger carries the rows that credited it,
           each with its own status.
         </p>
         <Button asChild variant="default">
@@ -187,7 +187,7 @@ function NothingSpendable({ heldMicros }: { heldMicros: number }) {
         This workspace has not earned any LENS.
       </p>
       <p className="max-w-2xl text-caption text-muted">
-        LENS is earned, not bought — nothing in this product sells it. Answers
+        LENS is earned, not bought: nothing in this product sells it. Answers
         produced here earn LENS each time another company is served one, and
         that happens only while sharing is on. Settings carries that choice and
         reports what this workspace has recorded.
@@ -342,7 +342,7 @@ function ConvertPanel({
 
           {valid ? (
             <div className="text-caption text-muted">
-              Costs <MuNumeral micros={cost} unit="lens" /> — rounded up, the
+              Costs <MuNumeral micros={cost} unit="lens" />, rounded up, the
               way the server charges it.
             </div>
           ) : null}
@@ -366,7 +366,7 @@ function ConvertPanel({
                       this screen cannot verify it; and the window is precisely when a payout can
                       be REVOKED, which the sentence left out. Both corrected — see Overview. */}
                   <MuNumeral micros={heldMicros} unit="lens" /> is held and not
-                  yet spendable — it settles on its own after a holding period,
+                  yet spendable. It settles on its own after a holding period,
                   during which it can still be revoked. That period is an operator
                   setting this screen cannot read, so it is not stated here.
                 </>
@@ -385,7 +385,7 @@ function ConvertPanel({
         <p className="text-caption text-muted">
           {run.error instanceof ConvertError
             ? run.error.message
-            : "Couldn’t convert — nothing was converted."}
+            : "Couldn’t convert. Nothing was converted."}
         </p>
       ) : null}
       {/* ⚠ WHAT WAS ACTUALLY CHARGED — the one number this panel exists to be honest about, and
@@ -416,7 +416,7 @@ function ConvertPanel({
               {" "}
               at{" "}
               <span className="font-figure text-ink">{run.data.rate}</span> LENS
-              per LXC — the rate moved after this panel read{" "}
+              per LXC. The rate moved after this panel read{" "}
               <span className="font-figure text-ink">
                 {quote.data.lens_per_lxc}
               </span>

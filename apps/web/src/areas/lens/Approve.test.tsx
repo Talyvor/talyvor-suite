@@ -20,6 +20,8 @@ function mockBff(lie = false, ITEMS: Record<string, unknown>[] = BASE, extra: Re
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [{ id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-10T09:00:00Z' }] })
     if (url === '/api/money/payees') return json({ payees: [
       { id: 'payee_1', name: 'Acme Ltd', country: 'GB', check: 'exact_match', checked_by: 't', checked_at: '2026-10-01T09:00:00Z', needs_confirmation: false, created_at: '2026-10-01T09:00:00Z' },
@@ -46,6 +48,22 @@ function mockBff(lie = false, ITEMS: Record<string, unknown>[] = BASE, extra: Re
     response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
   Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
   return { sent, get }
+}
+
+// B55.2 — no passkey and the phone's key, answered over mockBff's stub; every POST from here is counted.
+function onlyThePhoneKey(extra: Record<string, unknown> = {}) {
+  const inner = vi.mocked(fetch).getMockImplementation()!
+  const posts: string[] = []
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    const url = String(input)
+    const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] })
+    if (url in extra) return json(extra[url])
+    if ((init?.method ?? 'GET') !== 'GET') posts.push(url)
+    return inner(input, init)
+  })
+  return posts
 }
 
 afterEach(() => {
@@ -93,8 +111,7 @@ describe('the approval screen', () => {
     window.history.pushState({}, '', '/approve/preq_1')
     render(<App />)
 
-    await screen.findByTestId('approve-card')
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Approve £45.50 to Brightline Studio' }))
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Approve £45.50 to Brightline Studio' }))
     fireEvent.click(screen.getByRole('button', { name: 'Approve 1 payment with a passkey' }))
     await screen.findByText('What you were asked to sign is not what is shown here, so nothing was signed. Reload the page.')
     expect(bff.get).not.toHaveBeenCalled()
@@ -143,5 +160,107 @@ describe('the approval screen', () => {
     expect(within(trust).getByText(who)).toBeTruthy()
     expect(trust.textContent).toMatch(detail)
     if (agent_trust.level !== 'verified') expect(screen.getByTestId('approve-card').textContent).not.toContain('Verified agent of')
+  })
+})
+
+// B55.22 — Lens pays a covered item when it is prepared (B55.21): the card says it was paid, and a Decline says what still was.
+describe('the approval screen for a covered payment (B55.22)', () => {
+  const PAID = { ...BASE[0], decision: 'auto', reason: '', rule: '', payment_id: 'mpay_1', pay_status: 'completed' }
+  it('says a covered payment was paid without asking, with its payment status', async () => {
+    mockBff(false, [PAID], { status: 'auto' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('Paid without asking you: each payment is inside a permission you signed.')).toBeInTheDocument()
+    const item = screen.getByTestId('approve-item-1')
+    expect(item.textContent).toContain('Inside a permission you signed: paid without asking you.')
+    expect(item.textContent).toContain('Paid')
+  })
+
+  it.each([
+    [[], 'Declined. Nothing that waited for you will be paid.'],
+    [[PAID], 'Declined. Nothing that waited for you will be paid. 1 inside a permission you signed was paid.'],
+    [[PAID, { ...PAID, position: 4, payment_id: 'mpay_2' }], 'Declined. Nothing that waited for you will be paid. 2 inside a permission you signed were paid.'],
+  ])('says what was paid when a request is declined (%#)', async (paid, line) => {
+    mockBff(false, [...paid, { ...BASE[1], pay_status: 'not_approved' }], { status: 'cancelled' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText(line)).toBeInTheDocument()
+  })
+})
+
+// B55.33 — every status, rule and flag on the card reads in words: no raw status, rule code or flag code.
+describe('the approval card in words (B55.33)', () => {
+  it.each([
+    ['pending', 'On its way'],
+    ['sent', 'Sent'],
+    ['completed', 'Paid'],
+    ['failed', 'Not paid: it failed'],
+    ['returned', 'Came back'],
+    ['not_approved', 'Not paid: you left it out'],
+    ['not_paid', 'Not paid: a marketplace purchase is not paid from here yet'],
+    ['queued_somewhere', 'Not paid yet'],
+  ])('says a payment that is %s as "%s"', async (pay_status, words) => {
+    mockBff(false, [{ ...BASE[0], pay_status }], { status: 'approved' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    const item = await screen.findByTestId('approve-item-1')
+    expect(within(item).getByText(words)).toBeInTheDocument()
+    expect(item.textContent).not.toContain('Payment:')
+  })
+
+  it('says a refused payment with the reason Lens gives', async () => {
+    mockBff(false, [{ ...BASE[0], pay_status: 'refused', pay_detail: 'the payee’s bank turned it down' }], { status: 'approved' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('Not paid: the payee’s bank turned it down')).toBeInTheDocument()
+  })
+
+  it('shows no rule code, no raw status, and no pill for a flag it has no words for', async () => {
+    mockBff(false, [{ ...BASE[0], flags: [{ code: 'velocity_spike', detail: 'three payments to Acme Ltd in an hour' }] }, { ...BASE[2], pay_status: 'not_paid' }],
+      { summary: 'Pay 2 payments, £129.00: 1 waits for you, 1 blocked' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    const card = await screen.findByTestId('approve-card')
+    const text = card.textContent ?? ''
+    expect(text).not.toMatch(/\([a-z_.]+\)/)
+    expect(text).not.toContain('requires_approval_above')
+    expect(text).not.toContain('not_')
+    expect(text).not.toContain('item(s)')
+    expect(text).not.toContain('velocity_spike')
+    expect(within(card).getByText('Three payments to Acme Ltd in an hour.')).toBeInTheDocument()
+  })
+
+  it('says a request in a state it does not know is closed', async () => {
+    mockBff(false, BASE, { status: 'superseded' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('This request is closed.')).toBeInTheDocument()
+    expect(screen.getByTestId('approve-card').textContent).not.toContain('superseded')
+  })
+})
+
+// B55.10 — Lens reads a request nobody answered within 24 hours as expired (B55.9): the card says so, and offers nothing.
+describe('the approval screen for an expired request (B55.10)', () => {
+  it('says the request expired and that nothing waiting was paid', async () => {
+    mockBff(false, BASE, { status: 'expired' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('This request expired: nobody approved it within 24 hours. Nothing waiting was paid.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Approve/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('the approval screen when only the phone holds a key (B55.2)', () => {
+  it('opens no passkey prompt, sends nothing, and says to approve on the phone', async () => {
+    const bff = mockBff()
+    const posts = onlyThePhoneKey()
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    expect(await screen.findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
+    const card = screen.getByTestId('approve-card')
+    expect(within(card).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
+    expect(within(card).queryByRole('checkbox')).toBeNull()
+    expect(bff.get).not.toHaveBeenCalled()
+    expect(posts).toEqual([])
   })
 })

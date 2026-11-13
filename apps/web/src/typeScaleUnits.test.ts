@@ -92,6 +92,13 @@ const CONSOLE_STEPS_PX: Record<string, number> = {
   caption: 12,
   micro: 12.5,
   eyebrow: 11,
+  // B57.3 — Pocket's eyebrow, new at 12px (pocket.css .eyebrow); rem from the start.
+  'pocket-eyebrow': 12,
+  // B57.5 — a dialog's heading (pocket.css .dialog h2) and the approval sheet's amount (.sheet .amount); rem from the start.
+  'pocket-dialog': 22,
+  'pocket-amount': 56,
+  'pocket-balance': 44,
+  'pocket-balance-sm': 40,
 }
 
 /**

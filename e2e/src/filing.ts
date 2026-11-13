@@ -14,6 +14,7 @@
 
 import { appendFile, readFile, writeFile } from 'node:fs/promises'
 import { type B28Report, untestedMarker } from './b28.ts'
+import { type BuildingLabelsReport, labelMarker } from './buildingLabels.ts'
 import { ASK_MARKER, type CodeReport } from './code.ts'
 import { type EdgeReport, edgeMarker, failedNow } from './edge.ts'
 import { type HostileReport, hostileMarker } from './hostile.ts'
@@ -519,5 +520,54 @@ export async function fileB28Items(path: string, b28: B28Report, reportFile: str
   if (f.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + withheld(f.append))
   const item = new Map([...f.filed, ...f.covered.map((c) => ({ id: c.by, scenario: c.scenario }))].map((x) => [x.scenario, x.id]))
   for (const x of b28.features.filter((y) => y.state === 'no scenario')) x.item = item.get(untestedMarker(x))
+  return f
+}
+
+// B56.13 — a Building label that is no longer true files one item, once: its building.json entry comes off (talyvor-suite),
+// or Lens stops labelling live a capability whose rail is in test (talyvor-lens).
+
+/** The items a night's untrue labels call for, against BUILD.md as it stands. Pure. */
+export function buildingLabelItemsFor(buildMd: string, labels: BuildingLabelsReport, reportFile: string): EdgeFiling {
+  const covered = coveredScenarios(buildMd)
+  const out: EdgeFiling = { append: '', filed: [], covered: [] }
+  let n = nextB17(buildMd)
+  for (const f of labels.faults) {
+    const marker = labelMarker(f)
+    const by = covered.get(marker)
+    if (by !== undefined) {
+      out.covered.push({ scenario: marker, by })
+      continue
+    }
+    const id = `B17.${n++}`
+    const live = f.kind === 'live-on-test'
+    out.append += [
+      '',
+      live ? `## ${id} — Take Live off ${f.feature}` : `## ${id} — Take Building off ${f.feature}`,
+      `repo: ${f.repo} · deps: none · status: OPEN`,
+      `Filed by the e2e run of ${labels.read_at.slice(0, 10)} (${reportFile}), its Building labels section (B56.13): ${oneLine(f.detail)}.`,
+      live ? `Lens labels a capability live only while every rail its money moves on is live (internal/economy/labels.go); find why it said live here.`
+        : f.kind === 'unknown-chip' ? 'Every Building chip is drawn by StatusLabel from apps/web/src/labels/building.json; draw this one from an entry there, or not at all.'
+        : `Take the \`${f.key}\` entry out of apps/web/src/labels/building.json, and its chip off every screen that drew it, or point it at the item that still builds it.`,
+      `e2e-scenario: ${marker}`,
+      `DONE = the next nightly's Building labels section has no ${f.kind} FAIL for \`${f.key}\`.`,
+      '',
+    ].join('\n')
+    out.filed.push({ id, scenario: marker })
+  }
+  return out
+}
+
+/** Appends the night's untrue labels' items to BUILD.md at `path` and notes each on its fault. A missing BUILD.md files nothing. */
+export async function fileBuildingLabelItems(path: string, labels: BuildingLabelsReport, reportFile: string): Promise<EdgeFiling | undefined> {
+  let buildMd: string
+  try {
+    buildMd = await readFile(path, 'utf8')
+  } catch {
+    return undefined
+  }
+  const f = buildingLabelItemsFor(buildMd, labels, reportFile)
+  if (f.append !== '') await appendFile(path, (buildMd.endsWith('\n') ? '' : '\n') + withheld(f.append))
+  const item = new Map([...f.filed, ...f.covered.map((c) => ({ id: c.by, scenario: c.scenario }))].map((x) => [x.scenario, x.id]))
+  for (const x of labels.faults) x.item = item.get(labelMarker(x))
   return f
 }

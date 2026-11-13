@@ -1,0 +1,449 @@
+[
+ {
+  "route": "/statements?wallet=macc_research_usd",
+  "answers": {
+   "/api/money/accounts/macc_research_usd/statement": {
+    "account_id": "macc_research_usd",
+    "agent_id": "agt_research",
+    "currency": "USD",
+    "from": "2026-10-01T00:00:00Z",
+    "to": "2026-10-23T00:00:00Z",
+    "opening_minor": 40000,
+    "in_minor": 4000,
+    "out_minor": 12000,
+    "closing_minor": 32000,
+    "lines": [
+     {
+      "entry_id": "ment_c1",
+      "line": 1,
+      "at": "2026-10-14T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Map Tiles",
+      "memo": "Map Tiles",
+      "partner_ref": "iauth_1",
+      "balance_after_minor": 37000
+     },
+     {
+      "entry_id": "ment_c2",
+      "line": 1,
+      "at": "2026-10-15T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Search API",
+      "memo": "Search API",
+      "partner_ref": "iauth_2",
+      "balance_after_minor": 34000
+     },
+     {
+      "entry_id": "ment_c3",
+      "line": 1,
+      "at": "2026-10-18T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Print Shop",
+      "memo": "Print Shop",
+      "partner_ref": "iauth_3",
+      "balance_after_minor": 31000
+     },
+     {
+      "entry_id": "ment_w1",
+      "line": 1,
+      "at": "2026-10-20T10:00:00Z",
+      "kind": "card_dispute_won",
+      "amount_minor": 3000,
+      "funding": "test",
+      "counterparty": "Map Tiles",
+      "memo": "Map Tiles",
+      "partner_ref": "iauth_1",
+      "balance_after_minor": 34000
+     },
+     {
+      "entry_id": "ment_c4",
+      "line": 1,
+      "at": "2026-10-21T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Cloud Host",
+      "memo": "Cloud Host",
+      "partner_ref": "iauth_4",
+      "balance_after_minor": 31000
+     },
+     {
+      "entry_id": "ment_r1",
+      "line": 1,
+      "at": "2026-10-21T15:00:00Z",
+      "kind": "card_refund",
+      "amount_minor": 1000,
+      "funding": "test",
+      "counterparty": "Print Shop",
+      "memo": "Print Shop",
+      "partner_ref": "iauth_3",
+      "balance_after_minor": 32000
+     }
+    ]
+   },
+   "/api/money/card-disputes": {
+    "card_disputes": [
+     {
+      "id": "cdsp_1",
+      "payment_id": "iauth_1",
+      "agent_id": "agt_research",
+      "card_id": "mcard_1",
+      "merchant": "Map Tiles",
+      "amount_minor": 3000,
+      "currency": "USD",
+      "reason": "Charged twice for one order",
+      "status": "won",
+      "credited_minor": 3000,
+      "created_at": "2026-10-19T09:00:00Z"
+     },
+     {
+      "id": "cdsp_2",
+      "payment_id": "iauth_2",
+      "agent_id": "agt_research",
+      "card_id": "mcard_1",
+      "merchant": "Search API",
+      "amount_minor": 3000,
+      "currency": "USD",
+      "reason": "The service was never delivered",
+      "status": "with_issuer",
+      "credited_minor": 0,
+      "created_at": "2026-10-19T09:00:00Z"
+     }
+    ]
+   },
+   "/api/money/card-refunds": {
+    "card_refunds": [
+     {
+      "id": "cref_1",
+      "payment_id": "iauth_3",
+      "agent_id": "agt_research",
+      "card_id": "mcard_1",
+      "merchant": "Print Shop",
+      "amount_minor": 1000,
+      "currency": "USD",
+      "credited_minor": 1000,
+      "created_at": "2026-10-21T15:00:00Z"
+     }
+    ]
+   },
+   "/api/agents/agt_research/card": {
+    "card": {
+     "id": "card_1",
+     "agent_id": "agt_research",
+     "last4": "4242",
+     "exp_month": 12,
+     "exp_year": 2029,
+     "currency": "usd",
+     "livemode": false,
+     "created_at": "2026-10-01T09:00:00Z"
+    },
+    "authorizations": []
+   }
+  }
+ },
+ {
+  "route": "/statements?wallet=macc_research_usd&dispute=open",
+  "steps": [
+   "Dispute this payment"
+  ],
+  "answers": {
+   "/api/money/accounts/macc_research_usd/statement": {
+    "account_id": "macc_research_usd",
+    "agent_id": "agt_research",
+    "currency": "USD",
+    "from": "2026-10-01T00:00:00Z",
+    "to": "2026-10-23T00:00:00Z",
+    "opening_minor": 40000,
+    "in_minor": 4000,
+    "out_minor": 12000,
+    "closing_minor": 32000,
+    "lines": [
+     {
+      "entry_id": "ment_c1",
+      "line": 1,
+      "at": "2026-10-14T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Map Tiles",
+      "memo": "Map Tiles",
+      "partner_ref": "iauth_1",
+      "balance_after_minor": 37000
+     },
+     {
+      "entry_id": "ment_c2",
+      "line": 1,
+      "at": "2026-10-15T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Search API",
+      "memo": "Search API",
+      "partner_ref": "iauth_2",
+      "balance_after_minor": 34000
+     },
+     {
+      "entry_id": "ment_c3",
+      "line": 1,
+      "at": "2026-10-18T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Print Shop",
+      "memo": "Print Shop",
+      "partner_ref": "iauth_3",
+      "balance_after_minor": 31000
+     },
+     {
+      "entry_id": "ment_w1",
+      "line": 1,
+      "at": "2026-10-20T10:00:00Z",
+      "kind": "card_dispute_won",
+      "amount_minor": 3000,
+      "funding": "test",
+      "counterparty": "Map Tiles",
+      "memo": "Map Tiles",
+      "partner_ref": "iauth_1",
+      "balance_after_minor": 34000
+     },
+     {
+      "entry_id": "ment_c4",
+      "line": 1,
+      "at": "2026-10-21T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Cloud Host",
+      "memo": "Cloud Host",
+      "partner_ref": "iauth_4",
+      "balance_after_minor": 31000
+     },
+     {
+      "entry_id": "ment_r1",
+      "line": 1,
+      "at": "2026-10-21T15:00:00Z",
+      "kind": "card_refund",
+      "amount_minor": 1000,
+      "funding": "test",
+      "counterparty": "Print Shop",
+      "memo": "Print Shop",
+      "partner_ref": "iauth_3",
+      "balance_after_minor": 32000
+     }
+    ]
+   },
+   "/api/money/card-disputes": {
+    "card_disputes": [
+     {
+      "id": "cdsp_1",
+      "payment_id": "iauth_1",
+      "agent_id": "agt_research",
+      "card_id": "mcard_1",
+      "merchant": "Map Tiles",
+      "amount_minor": 3000,
+      "currency": "USD",
+      "reason": "Charged twice for one order",
+      "status": "won",
+      "credited_minor": 3000,
+      "created_at": "2026-10-19T09:00:00Z"
+     },
+     {
+      "id": "cdsp_2",
+      "payment_id": "iauth_2",
+      "agent_id": "agt_research",
+      "card_id": "mcard_1",
+      "merchant": "Search API",
+      "amount_minor": 3000,
+      "currency": "USD",
+      "reason": "The service was never delivered",
+      "status": "with_issuer",
+      "credited_minor": 0,
+      "created_at": "2026-10-19T09:00:00Z"
+     }
+    ]
+   },
+   "/api/money/card-refunds": {
+    "card_refunds": [
+     {
+      "id": "cref_1",
+      "payment_id": "iauth_3",
+      "agent_id": "agt_research",
+      "card_id": "mcard_1",
+      "merchant": "Print Shop",
+      "amount_minor": 1000,
+      "currency": "USD",
+      "credited_minor": 1000,
+      "created_at": "2026-10-21T15:00:00Z"
+     }
+    ]
+   },
+   "/api/agents/agt_research/card": {
+    "card": {
+     "id": "card_1",
+     "agent_id": "agt_research",
+     "last4": "4242",
+     "exp_month": 12,
+     "exp_year": 2029,
+     "currency": "usd",
+     "livemode": false,
+     "created_at": "2026-10-01T09:00:00Z"
+    },
+    "authorizations": []
+   }
+  }
+ },
+ {
+  "route": "/agents?agent=agt_research",
+  "answers": {
+   "/api/money/accounts/macc_research_usd/statement": {
+    "account_id": "macc_research_usd",
+    "agent_id": "agt_research",
+    "currency": "USD",
+    "from": "2026-10-01T00:00:00Z",
+    "to": "2026-10-23T00:00:00Z",
+    "opening_minor": 40000,
+    "in_minor": 4000,
+    "out_minor": 12000,
+    "closing_minor": 32000,
+    "lines": [
+     {
+      "entry_id": "ment_c1",
+      "line": 1,
+      "at": "2026-10-14T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Map Tiles",
+      "memo": "Map Tiles",
+      "partner_ref": "iauth_1",
+      "balance_after_minor": 37000
+     },
+     {
+      "entry_id": "ment_c2",
+      "line": 1,
+      "at": "2026-10-15T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Search API",
+      "memo": "Search API",
+      "partner_ref": "iauth_2",
+      "balance_after_minor": 34000
+     },
+     {
+      "entry_id": "ment_c3",
+      "line": 1,
+      "at": "2026-10-18T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Print Shop",
+      "memo": "Print Shop",
+      "partner_ref": "iauth_3",
+      "balance_after_minor": 31000
+     },
+     {
+      "entry_id": "ment_w1",
+      "line": 1,
+      "at": "2026-10-20T10:00:00Z",
+      "kind": "card_dispute_won",
+      "amount_minor": 3000,
+      "funding": "test",
+      "counterparty": "Map Tiles",
+      "memo": "Map Tiles",
+      "partner_ref": "iauth_1",
+      "balance_after_minor": 34000
+     },
+     {
+      "entry_id": "ment_c4",
+      "line": 1,
+      "at": "2026-10-21T10:00:00Z",
+      "kind": "card_charge",
+      "amount_minor": -3000,
+      "funding": "test",
+      "counterparty": "Cloud Host",
+      "memo": "Cloud Host",
+      "partner_ref": "iauth_4",
+      "balance_after_minor": 31000
+     },
+     {
+      "entry_id": "ment_r1",
+      "line": 1,
+      "at": "2026-10-21T15:00:00Z",
+      "kind": "card_refund",
+      "amount_minor": 1000,
+      "funding": "test",
+      "counterparty": "Print Shop",
+      "memo": "Print Shop",
+      "partner_ref": "iauth_3",
+      "balance_after_minor": 32000
+     }
+    ]
+   },
+   "/api/money/card-disputes": {
+    "card_disputes": [
+     {
+      "id": "cdsp_1",
+      "payment_id": "iauth_1",
+      "agent_id": "agt_research",
+      "card_id": "mcard_1",
+      "merchant": "Map Tiles",
+      "amount_minor": 3000,
+      "currency": "USD",
+      "reason": "Charged twice for one order",
+      "status": "won",
+      "credited_minor": 3000,
+      "created_at": "2026-10-19T09:00:00Z"
+     },
+     {
+      "id": "cdsp_2",
+      "payment_id": "iauth_2",
+      "agent_id": "agt_research",
+      "card_id": "mcard_1",
+      "merchant": "Search API",
+      "amount_minor": 3000,
+      "currency": "USD",
+      "reason": "The service was never delivered",
+      "status": "with_issuer",
+      "credited_minor": 0,
+      "created_at": "2026-10-19T09:00:00Z"
+     }
+    ]
+   },
+   "/api/money/card-refunds": {
+    "card_refunds": [
+     {
+      "id": "cref_1",
+      "payment_id": "iauth_3",
+      "agent_id": "agt_research",
+      "card_id": "mcard_1",
+      "merchant": "Print Shop",
+      "amount_minor": 1000,
+      "currency": "USD",
+      "credited_minor": 1000,
+      "created_at": "2026-10-21T15:00:00Z"
+     }
+    ]
+   },
+   "/api/agents/agt_research/card": {
+    "card": {
+     "id": "card_1",
+     "agent_id": "agt_research",
+     "last4": "4242",
+     "exp_month": 12,
+     "exp_year": 2029,
+     "currency": "usd",
+     "livemode": false,
+     "created_at": "2026-10-01T09:00:00Z"
+    },
+    "authorizations": []
+   }
+  }
+ }
+]

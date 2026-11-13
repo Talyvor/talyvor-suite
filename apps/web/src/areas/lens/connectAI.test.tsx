@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ConnectAI } from './ConnectAI'
+import { AppMoney } from './money'
 
 // B40.8's DONE at the wire: the page shows the MCP address and each assistant's steps, and a connected client
 // appears below with its last use and is revoked by its own button.
@@ -12,7 +13,9 @@ afterEach(() => vi.restoreAllMocks())
 function renderScreen() {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <ConnectAI />
+      <AppMoney>
+        <ConnectAI />
+      </AppMoney>
     </QueryClientProvider>,
   )
 }

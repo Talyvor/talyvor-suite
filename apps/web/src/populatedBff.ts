@@ -64,6 +64,15 @@ const BODIES: Record<string, unknown> = {
     ],
   },
   // B40.9 — a prepared request at the address the console sweep visits (/approve/:id): two to approve, one blocked.
+  // B55.10 — the prepared requests still waiting, as Approvals, Home and the sidebar's badge read them.
+  '/api/money/payment-requests?status=pending_approval': {
+    requests: [
+      {
+        id: 'preq_1', status: 'pending_approval', summary: '1 payment for Researcher', client: 'mcp:tlv_oc_claude', agent_id: 'agt_research', totals: { GBP: 12000 }, created_at: '2026-10-23T09:00:00Z',
+        items: [{ position: 1, payee_id: 'payee_1', payee_name: 'Acme Hosting Ltd', currency: 'GBP', amount_minor: 12000, reference: 'November hosting', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking', rule: 'requires_approval_above' }],
+      },
+    ],
+  },
   '/api/money/payment-requests/%3Aid': {
     id: 'preq_1', status: 'pending_approval', summary: '3 payments for Researcher', client: 'mcp:tlv_oc_claude', agent_id: 'agt_research', totals: { GBP: 32050 }, created_at: '2026-10-23T09:00:00Z',
     items: [
@@ -170,6 +179,35 @@ const BODIES: Record<string, unknown> = {
   '/api/docs/membership': { member: true },
   // B46.16 — the sidebar shows the workspace's name on every address.
   '/api/workspace/name': { id: 'ws_1', name: 'Acme' },
+  '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B59.31 — Settings → Company details, as a company with two people with control.
+  '/api/workspace/business': {
+    company_name: 'Acme Robotics Ltd',
+    registration_number: '12345678',
+    country: 'GB',
+    people: [
+      { name: 'Ada Lovelace', role: 'director', share_bps: 6000 },
+      { name: 'Grace Hopper', role: 'shareholder', share_bps: 4000 },
+    ],
+  },
+  // B59.25 — one card payment disputed and won, and one merchant's refund.
+  '/api/money/card-disputes': {
+    card_disputes: [
+      { id: 'cdsp_1', payment_id: 'iauth_1', agent_id: 'agt_research', card_id: 'mcard_1', merchant: 'Map Tiles', amount_minor: 3000, currency: 'GBP', reason: 'Charged twice', status: 'won', credited_minor: 3000, decided_at: '2026-10-12T09:00:00Z', created_at: '2026-10-11T09:00:00Z' },
+    ],
+  },
+  '/api/money/card-refunds': {
+    card_refunds: [
+      { id: 'cref_1', payment_id: 'iauth_2', agent_id: 'agt_research', card_id: 'mcard_1', merchant: 'Print Shop', amount_minor: 1000, currency: 'GBP', credited_minor: 1000, created_at: '2026-10-13T09:00:00Z' },
+    ],
+  },
+  // B59.28 — one complaint answered and one data export ready to download.
+  '/api/workspace/requests': {
+    requests: [
+      { id: 2, kind: 'data_export', state: 'done', reference: '', message: '', answer: 'Your copy is ready.', filed_at: '2026-09-02T09:00:00Z', updated_at: '2026-09-03T09:00:00Z' },
+      { id: 1, kind: 'complaint', state: 'in_progress', reference: 'C-ABCD-EFGH', message: 'A card payment was taken twice.', answer: '', filed_at: '2026-09-01T09:00:00Z', updated_at: '2026-09-01T09:00:00Z' },
+    ],
+  },
   // B39.34 — Settings → Email branding, as a workspace that branded its Docs email.
   '/api/docs/email-branding': { from_name: 'Acme Robotics', header_color: '#1E40AF', logo_url: '' },
   // B52.6 — the most an assistant may give a new agent: 0.5 LXC a payment, 5 a day, 50 a month.
@@ -474,6 +512,11 @@ const BY_PATH: Record<string, unknown> = {
   },
   // B19.10 — no passkey yet, so approvals are sent unsigned, as B19.4 sends them.
   '/api/agents/passkeys': { passkeys: [] },
+  // B55.54 — no key recovery waits.
+  '/api/agents/keys/recover': { recovery: null },
+  '/api/agents/keys': { keys: [] }, // B55.16
+  // B55.2 — nor a phone key: with one, the web leaves approving and resuming to the phone.
+  '/api/money/devices': { devices: [] },
   // B19.21 — a weekly payment from the Researcher to the Writer, and the Researcher's top-up.
   '/api/agents/schedules': {
     schedules: [{ id: 'sch_1', from_agent_id: 'agt_research', to_agent_id: 'agt_writer', amount_ulxc: 1_000_000, memo: 'drafts', every: 'week', next_run_at: '2026-10-05T09:00:00Z', active: true, created_at: '2026-09-28T09:00:00Z' }],
@@ -619,6 +662,20 @@ const BY_PATH: Record<string, unknown> = {
         percent: 50, spent_minor: 25_000, limit_minor: 50_000, currency: 'GBP', created_at: '2026-09-20T08:00:00Z' },
     ],
   },
+  '/api/money/alerts/channels': {
+    channels: [
+      { id: 'ach_1', kind: 'push', created_at: '2026-09-18T09:00:00Z' },
+      { id: 'ach_2', kind: 'slack', url: 'https://hooks.slack.com/…k3Qz', created_at: '2026-09-18T09:05:00Z' },
+    ],
+  },
+  '/api/money/alerts/deliveries': {
+    deliveries: [
+      { id: 'adl_4', channel_id: 'ach_2', channel_kind: 'slack', alert_kind: 'limit', alert_id: 'sal_1', title: 'Budget',
+        body: 'Your spending is at 50% of this month’s budget: £250.00 of £500.00.', status: 'sent', attempts: 1, created_at: '2026-09-27T12:10:05Z', sent_at: '2026-09-27T12:10:40Z' },
+      { id: 'adl_3', channel_id: 'ach_1', channel_kind: 'push', alert_kind: 'limit', alert_id: 'sal_1', title: 'Budget',
+        body: 'Your spending is at 50% of this month’s budget: £250.00 of £500.00.', status: 'sent', attempts: 1, created_at: '2026-09-27T12:10:05Z', sent_at: '2026-09-27T12:10:38Z' },
+    ],
+  },
   '/api/agents/approvals': {
     approvals: [
       {
@@ -684,17 +741,17 @@ const BY_PATH: Record<string, unknown> = {
     timezone: '',
   },
   // B22.10 — money between owners: the classes, a transfer each way, an incoming request, a company credit line
-  // and a loan being repaid.
+  // and a loan being repaid. B56.11: each money capability Sandbox for this workspace, as Lens answers today.
   '/api/wallets/capabilities': {
     capabilities: [
-      { capability: 'spend_on_talyvor', name: 'Spending on Talyvor', class: 'GREEN', real_money: true, level_needed: 'L0' },
-      { capability: 'pay_another_owner', name: 'Sending and requesting money between different owners', class: 'AMBER', real_money: false, level_needed: 'L2' },
-      { capability: 'company_credit_line', name: 'Talyvor’s credit line to companies, for Talyvor services', class: 'GREEN', real_money: true, level_needed: 'L0' },
-      { capability: 'loans_between_companies', name: 'Loans between companies', class: 'AMBER', real_money: false, level_needed: 'L3' },
+      { capability: 'spend_on_talyvor', name: 'Spending on Talyvor', class: 'GREEN', real_money: true, level_needed: 'L0', label: 'sandbox' },
+      { capability: 'pay_another_owner', name: 'Sending and requesting money between different owners', class: 'AMBER', real_money: false, level_needed: 'L2', label: 'sandbox' },
+      { capability: 'company_credit_line', name: 'Talyvor’s credit line to companies, for Talyvor services', class: 'GREEN', real_money: true, level_needed: 'L0', label: 'sandbox' },
+      { capability: 'loans_between_companies', name: 'Loans between companies', class: 'AMBER', real_money: false, level_needed: 'L3', label: 'sandbox' },
       { capability: 'rules_approvals_statements_pots', name: 'Rules, approvals, statements and pots', class: 'GREEN', real_money: true, level_needed: 'L0' },
-      { capability: 'escrow', name: 'Escrow between agents', class: 'AMBER', real_money: false, level_needed: 'L2' },
-      { capability: 'cash_out', name: 'Cashing credits out as money', class: 'RED', real_money: false, level_needed: 'L2' },
-      { capability: 'invest_and_trade', name: 'Investing and trading real assets', class: 'RED', real_money: false, level_needed: 'L2' },
+      { capability: 'escrow', name: 'Escrow between agents', class: 'AMBER', real_money: false, level_needed: 'L2', label: 'sandbox' },
+      { capability: 'cash_out', name: 'Cashing credits out as money', class: 'RED', real_money: false, level_needed: 'L2', label: 'sandbox' },
+      { capability: 'invest_and_trade', name: 'Investing and trading real assets', class: 'RED', real_money: false, level_needed: 'L2', label: 'sandbox' },
     ],
   },
   // B30.116 — the owner's verification: L2 on the Test provider's checks, so the live level is still L0.
@@ -805,6 +862,15 @@ const BY_PATH: Record<string, unknown> = {
       { entry_id: 'e2', kind: 'spend', amount_ulxc: -1_250_000, counterparty: 'spend', ref: 'req_1', model: 'claude-sonnet-4', source: 'Chat', balance_after_ulxc: 10_000_000, at: '2026-09-27T11:00:00Z' },
       { entry_id: 'e1', kind: 'fund', amount_ulxc: 11_250_000, counterparty: 'workspace', balance_after_ulxc: 11_250_000, at: '2026-09-27T10:00:00Z' },
     ],
+  },
+  // B28.53 — the statement's one line out, as Lens's analytics bucket it.
+  '/api/agents/agt_research/analytics': {
+    agent_id: 'agt_research',
+    time_zone: 'UTC',
+    out_ulxc: 1_250_000,
+    returned_ulxc: 0,
+    spent_ulxc: 1_250_000,
+    buckets: [{ day: '2026-09-27', model: 'claude-sonnet-4', destination: 'spend', out_ulxc: 1_250_000, returned_ulxc: 0, spent_ulxc: 1_250_000, postings: 1 }],
   },
   '/api/usage': {
     period_days: 7,

@@ -4,13 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, CONSOLE_ROUTES, queryClient } from './App'
 import { Landing } from './areas/marketing/Landing'
 import lensRoutes from './areas/documentation/lens-routes.json'
-import { COMPANY_CONTACT, COMPANY_NAME } from './company'
+import { COMPANY_CONTACT, COMPANY_LINE, COMPANY_NAME } from './company'
+import { FOOTER_LINE } from './positioning'
 
 // B51.1 (Nick, 28 Oct 2026) — the site says what Talyvor does today, the same on every page: the waitlist only while
 // sign-up is closed, one header and one footer on every public page, Privacy built from what the code does, and no
 // link on a public page to an address the app doesn't serve or an anchor that isn't there.
 
-const PUBLIC_PAGES = ['/marketing', '/pricing', '/documentation', '/documentation/claude', '/privacy', '/terms']
+const PUBLIC_PAGES = ['/marketing', '/pricing', '/your-money', '/documentation', '/documentation/claude', '/privacy', '/terms']
 
 const PRICING = {
   usd_per_lxc: 0.1,
@@ -71,7 +72,7 @@ describe('the waitlist on /marketing follows the sign-up state', () => {
   it('open: Get started is the way in — no email box and no "place opens"', async () => {
     stranger(true)
     render(<Landing />)
-    expect(await screen.findByText(/No invitation needed/)).toBeInTheDocument()
+    expect(await screen.findByText(/no invitation needed/i)).toBeInTheDocument()
     expect(screen.queryByLabelText('Email address')).toBeNull()
     expect(document.body.textContent).not.toMatch(/place opens|Join the waitlist/)
     expect(screen.getAllByRole('link', { name: 'Get started' })[0]).toHaveAttribute('href', '/signup')
@@ -90,9 +91,36 @@ describe('the waitlist on /marketing follows the sign-up state', () => {
     render(<Landing />)
     await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
     expect(screen.queryByLabelText('Email address')).toBeNull()
-    expect(document.body.textContent).not.toMatch(/place opens|No invitation needed|one at a time/)
+    expect(document.body.textContent).not.toMatch(/place opens|no invitation needed|one at a time/i)
   })
 })
+
+// B58.17: one sign-up door. The homepage and /signup say the same sentence about who may start, in both states.
+describe('the homepage and /signup say the same words about getting in', () => {
+  const accessLine = (root: HTMLElement) =>
+    [...root.querySelectorAll('[data-access-line]')].map((el) => el.textContent ?? '')
+
+  it.each([true, false])('signup_open %s', async (open) => {
+    stranger(open)
+    const home = render(<Landing />)
+    await vi.waitFor(() => expect(accessLine(home.container)).toHaveLength(1))
+    const said = accessLine(home.container)[0]
+    home.unmount()
+    const signup = await at('/signup')
+    await vi.waitFor(() => expect(accessLine(signup.container)).toHaveLength(1))
+    expect(accessLine(signup.container)[0]).toContain(said)
+    expect(said).toMatch(open ? /no invitation needed/i : /first companies in one at a time/)
+  })
+})
+
+const FOOTER_LINKS = [
+  'Pricing /pricing',
+  'Your money /your-money',
+  'Documentation /documentation',
+  'Privacy /privacy',
+  'Terms /terms',
+  `${COMPANY_CONTACT} mailto:${COMPANY_CONTACT}`,
+]
 
 const linksOf = (el: HTMLElement) =>
   within(el)
@@ -105,24 +133,40 @@ describe.each(PUBLIC_PAGES)('%s', (path) => {
     await at(path)
     const header = screen.getAllByRole('banner')[0] // the legal pages' title block is a <header> in main too
     expect(header.textContent).not.toMatch(/suite/i)
+    // B57.59: Pocket's header — the logo home, the site's links (B57.62 added Your money) and one way into the app.
     expect(linksOf(header)).toEqual([
       ' /marketing',
+      'How it works /marketing',
       'Pricing /pricing',
+      'Your money /your-money',
       'Documentation /documentation',
       'Open the app /',
-      'Get started /signup',
     ])
-    expect(within(header).getByRole('button', { name: /theme|dark|light/i })).toBeInTheDocument()
+    expect(within(header).getAllByRole('img', { name: 'Talyvor' })[0]).toHaveAttribute('width', '168')
 
     const footer = screen.getByRole('contentinfo')
-    expect(linksOf(footer)).toEqual([
-      'Privacy /privacy',
-      'Terms /terms',
-      'Pricing /pricing',
-      'Documentation /documentation',
-      `${COMPANY_CONTACT} mailto:${COMPANY_CONTACT}`,
-    ])
-    expect(within(footer).getByText(new RegExp(COMPANY_NAME))).toBeInTheDocument()
+    expect(linksOf(footer)).toEqual(FOOTER_LINKS)
+    expect(within(footer).getByText(FOOTER_LINE)).toBeInTheDocument()
+    expect(within(footer).getByText(COMPANY_LINE)).toBeInTheDocument()
+  })
+})
+
+// B57.59: the shared pages a stranger opens by link wear the same footer, and a header that names the product.
+describe('a shared Track board', () => {
+  it('wears the product header and the one footer', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (url.startsWith('/auth/me')) return json({ mode: 'oidc', authenticated: false, user: null })
+      if (url === '/api/public/boards/tok_abcdefghijklmnop') return json({ workspace: 'Acme', project: 'Website', truncated: false, issues: [] })
+      return new Response('null', { status: 404 })
+    })
+    window.history.pushState({}, '', '/board/tok_abcdefghijklmnop')
+    render(<App />)
+    const header = (await screen.findAllByRole('banner'))[0]
+    expect(linksOf(header)).toEqual([' /marketing', 'Open the app /'])
+    expect(header.textContent).toContain('Track')
+    expect(linksOf(screen.getByRole('contentinfo'))).toEqual(FOOTER_LINKS)
   })
 })
 
@@ -167,14 +211,13 @@ describe('every link on every public page goes somewhere real', () => {
 })
 
 describe('/documentation lists only what Lens serves without a key under "No key needed"', () => {
-  it('puts /v1/tokens/rates and /v1/economy/stats with the routes that take a key', () => {
+  // B59.37 — both went with the shared-answers group, which the launch pack hides; neither comes back as public.
+  it('does not put /v1/tokens/rates or /v1/economy/stats under No key needed', () => {
     const publicGroup = lensRoutes.groups.find((g) => g.id === 'public')!
     expect(publicGroup.about).toBe('No key needed.')
     const paths = publicGroup.routes.map((r) => r.path)
     expect(paths).not.toContain('/v1/tokens/rates')
     expect(paths).not.toContain('/v1/economy/stats')
-    const keyed = lensRoutes.groups.filter((g) => g.id !== 'public').flatMap((g) => g.routes.map((r) => r.path))
-    expect(keyed).toEqual(expect.arrayContaining(['/v1/tokens/rates', '/v1/economy/stats']))
   })
 })
 
@@ -187,7 +230,7 @@ describe('/privacy says what the code does', () => {
     expect(document.body.textContent).toContain(`${COMPANY_NAME} (company number`)
     expect(document.body.textContent).not.toMatch(/does not identify a data controller/)
     expect(screen.getAllByText(/legal review/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('28 October 2026').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('8 November 2026').length).toBeGreaterThan(0)
   })
 
   it('the waitlist: past tense while sign-up is open, the current words while closed', async () => {

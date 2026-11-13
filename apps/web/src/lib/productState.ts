@@ -83,11 +83,11 @@ export function isAIUnavailable(err: unknown): boolean {
 
 /** The one sentence, so the AI states are worded identically wherever they appear. */
 export const aiNotConfiguredCopy =
-  'Docs is reachable, but its AI is not configured — the Docs service has no Lens credential, so there is nothing to ask. This app and its Docs upstream are both fine; the setting to change is on Docs.'
+  'Docs is reachable, but its AI is not configured: the Docs service has no Lens credential, so there is nothing to ask. This app and its Docs upstream are both fine; the setting to change is on Docs.'
 
 /** The one sentence, so every area words it identically. `product` is the display name. */
 export function notConfiguredCopy(product: string): string {
-  return `${product} is not configured on this deployment — no upstream is wired, so there is nothing to show.`
+  return `${product} is not configured on this deployment: no upstream is wired, so there is nothing to show.`
 }
 
 // "Your credential is no longer good" — the THIRD state, and the one that was missing.

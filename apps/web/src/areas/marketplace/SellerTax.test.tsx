@@ -255,9 +255,9 @@ describe("a seller's tax details and weekly statements", () => {
     await atSelling();
 
     const list = await screen.findByTestId("statements");
-    expect(within(list).getByText("Week 41 · 5–11 Oct 2026")).toBeTruthy();
+    expect(within(list).getByText("Week 41 · 5 to 11 Oct 2026")).toBeTruthy();
     fireEvent.click(
-      within(list).getByRole("button", { name: "Open the statement for Week 41 · 5–11 Oct 2026" }),
+      within(list).getByRole("button", { name: "Open the statement for Week 41 · 5 to 11 Oct 2026" }),
     );
 
     const st = await screen.findByTestId("statement");

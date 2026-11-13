@@ -187,7 +187,7 @@ export function Cycles() {
             ) : list.length === 0 ? (
               <div className="flex flex-col items-start gap-3">
                 <p className="max-w-2xl text-body text-muted">
-                  No cycles yet. Name one above and start it — then put this team’s issues in it.
+                  No cycles yet. Name one above and start it, then put this team’s issues in it.
                 </p>
                 {/* B3.4 — the empty state goes where it points: the caret lands in Name. */}
                 <Button onClick={() => document.getElementById('cycle-name')?.focus()}>
@@ -260,7 +260,7 @@ function CycleCard({ cycle }: { cycle: TrackCycle }) {
           <span className="font-figure text-eyebrow uppercase text-label">Cycle {cycle.number}</span>
           <p className="text-title text-ink">{cycle.name}</p>
           <p className="font-figure text-caption text-muted">
-            {shortDay(cycle.start_date)} – {shortDay(cycle.end_date)} · {cycle.status}
+            {shortDay(cycle.start_date)} to {shortDay(cycle.end_date)} · {cycle.status}
           </p>
         </div>
         <Button onClick={() => setOpen((o) => !o)} aria-expanded={open}>
@@ -276,7 +276,7 @@ function CycleCard({ cycle }: { cycle: TrackCycle }) {
         ) : p.total_issues === 0 ? (
           <div className="flex flex-wrap items-center gap-3">
             <p className="text-caption text-muted">
-              No issues in this cycle yet{open ? ' — add them from this team’s list below.' : '.'}
+              No issues in this cycle yet{open ? '. Add them from this team’s list below.' : '.'}
             </p>
             {open ? null : <Button onClick={() => setOpen(true)}>Add issues</Button>}
           </div>
@@ -309,7 +309,7 @@ function CycleCard({ cycle }: { cycle: TrackCycle }) {
             ) : inCycle.isPending ? (
               <p className="mt-2 text-caption text-muted">Reading…</p>
             ) : asList(inCycle.data).length === 0 ? (
-              <p className="mt-2 text-caption text-muted">Nothing in it yet — add issues from the list below.</p>
+              <p className="mt-2 text-caption text-muted">Nothing in it yet. Add issues from the list below.</p>
             ) : (
               <ul className="mt-2 flex flex-col gap-1">
                 {asList(inCycle.data).map((i) => (

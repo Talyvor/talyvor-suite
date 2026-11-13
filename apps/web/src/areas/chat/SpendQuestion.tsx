@@ -80,7 +80,7 @@ export function SpendCard({ question, onClose }: { question: string; onClose: ()
                   </option>
                 ))}
               </select>
-              <p className="text-caption text-muted">There is no category called “{asked.said}” — pick one.</p>
+              <p className="text-caption text-muted">There is no category called “{asked.said}”. Pick one.</p>
             </>
           ) : (
             <>

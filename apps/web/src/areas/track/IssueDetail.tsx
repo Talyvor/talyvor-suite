@@ -347,7 +347,7 @@ export function IssueDetail() {
                   ? // True of BOTH readings of a 404, because the upstream refuses to say which.
                     'Either it never existed, or it belongs to a workspace this session cannot read. Track answers the same way for both, on purpose.'
                   : issue.isError
-                    ? 'This is a fault, not a missing issue — Track answered with an error, so nothing is drawn rather than something stale.'
+                    ? 'This is a fault, not a missing issue. Track answered with an error, so nothing is drawn rather than something stale.'
                     : 'Reading it from Track…'}
           </p>
           <div className="mt-8">{wayBack}</div>

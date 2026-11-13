@@ -28,6 +28,12 @@ import type { AuthMe } from './api'
 // while unknown, and still offer the action — trying the door is always available.
 export type SignupState = 'unknown' | 'open' | 'closed'
 
+/** B58.17: one sign-up door. The homepage and /signup say the same sentence about who may start; unknown says nothing. */
+export const ACCESS_LINE = {
+  open: 'Open to anyone, no invitation needed.',
+  closed: 'We’re letting the first companies in one at a time.',
+} as const
+
 export interface SignupProbe {
   signup: SignupState
   /** Whether this browser already has a session, so an entry page can stop selling. */

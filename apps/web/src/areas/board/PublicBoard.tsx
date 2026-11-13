@@ -50,7 +50,7 @@ function Body({ token }: { token: string }) {
       <p className="mt-5 max-w-lg text-reading text-muted">
         {b.issues.length === 0
           ? 'Nothing is being tracked on this board yet.'
-          : `${b.issues.length} issue${b.issues.length === 1 ? '' : 's'}, by where each one stands. Shared from Talyvor Track — only the people in this workspace can change it.`}
+          : `${b.issues.length} issue${b.issues.length === 1 ? '' : 's'}, by where each one stands. Shared from Talyvor Track. Only the people in this workspace can change it.`}
         {b.truncated ? ' This shows the most recently updated; the board holds more.' : ''}
       </p>
       <div className="mt-8">
@@ -59,11 +59,6 @@ function Body({ token }: { token: string }) {
     </>
   )
 }
-
-const FOOTER_LINKS = [
-  { href: '/privacy', label: 'Privacy' },
-  { href: '/terms', label: 'Terms' },
-]
 
 export function PublicBoard() {
   useDocumentTitle('Board')
@@ -78,7 +73,7 @@ export function PublicBoard() {
         </div>
       </main>
 
-      <SiteFooter links={FOOTER_LINKS} width="max-w-6xl" />
+      <SiteFooter width="max-w-6xl" />
     </div>
   )
 }

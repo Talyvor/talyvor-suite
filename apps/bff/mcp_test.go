@@ -525,3 +525,27 @@ func TestMCPRecurringPlanWaitsForTheSignature(t *testing.T) {
 		t.Fatalf("signed twice: %d", rec.Code)
 	}
 }
+
+// TestMCPPreparedSaysWhatWasPaid is B55.22: Lens pays a covered item when it is prepared (B55.21), so the assistant's first line
+// follows the request — paid, partly paid and partly waiting, all blocked, or all waiting — and never says a paid one waits.
+func TestMCPPreparedSaysWhatWasPaid(t *testing.T) {
+	send := mcpTool{name: "prepare_batch", kind: mcpSends}
+	links := `"approval_url":"https://app.talyvor.com/approve/pr-1","deep_link":"talyvor://approve/pr-1"`
+	for _, c := range []struct{ raw, want string }{
+		{`{"status":"auto",` + links + `,"items":[{"decision":"auto"},{"decision":"auto"}]}`,
+			"Paid without asking the person: each payment is inside a permission they signed. See it in Talyvor at https://app.talyvor.com/approve/pr-1."},
+		{`{"status":"pending_approval",` + links + `,"items":[{"decision":"auto"},{"decision":"needs_approval"},{"decision":"needs_approval"},{"decision":"blocked"}]}`,
+			"1 paid inside a permission the person signed. 2 wait for the person to approve them in Talyvor at https://app.talyvor.com/approve/pr-1 (on their phone: talyvor://approve/pr-1)."},
+		{`{"status":"auto",` + links + `,"items":[{"decision":"auto"},{"decision":"blocked"},{"decision":"blocked"}]}`,
+			"1 paid inside a permission the person signed. 2 were blocked: each item says why. See it in Talyvor at https://app.talyvor.com/approve/pr-1."},
+		{`{"status":"blocked",` + links + `,"items":[{"decision":"blocked"}]}`,
+			"Nothing was paid: every payment was blocked. Each item says why."},
+		{`{"status":"pending_approval",` + links + `,"items":[{"decision":"needs_approval"}]}`,
+			"Nothing has been paid. The request waits for the person to approve it in Talyvor at https://app.talyvor.com/approve/pr-1 (on their phone: talyvor://approve/pr-1)."},
+	} {
+		content := mcpAnswer(json.RawMessage(`1`), send, "2025-06-18", []byte(c.raw)).Result.(map[string]any)["content"].([]map[string]any)
+		if got := content[0]["text"]; got != c.want {
+			t.Fatalf("%s\n got %q\nwant %q", c.raw, got, c.want)
+		}
+	}
+}

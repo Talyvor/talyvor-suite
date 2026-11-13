@@ -38,11 +38,11 @@ function RangeChart({ r }: { r: ScanReport }) {
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-pill bg-rule-strong" aria-hidden />
-          Normal <span className="font-figure text-ink">{text('normal_low')}</span>–<span className="font-figure text-ink">{text('normal_high')}</span>
+          Normal <span className="font-figure text-ink">{text('normal_low')}</span> to <span className="font-figure text-ink">{text('normal_high')}</span>
         </span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-1 w-3 rounded-pill bg-accent" aria-hidden />
-          Likely <span className="font-figure text-ink">{text('outlook_low')}</span>–<span className="font-figure text-ink">{text('outlook_high')}</span> by{' '}
+          Likely <span className="font-figure text-ink">{text('outlook_low')}</span> to <span className="font-figure text-ink">{text('outlook_high')}</span> by{' '}
           <span className="font-figure">{text('outlook_at')}</span>
         </span>
       </figcaption>

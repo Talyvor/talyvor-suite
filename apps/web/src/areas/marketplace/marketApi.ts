@@ -1,6 +1,6 @@
 import { ApiError, getJSON, readable } from "../../lib/api";
+import { unlessHeld } from "../../lib/held";
 import { isSessionExpired } from "../../lib/productState";
-import { formatULXC } from "../lens/agentBankApi";
 
 // marketApi.ts — B20.3: the marketplace screens' reads and writes, through the BFF's /api/marketplace
 // routes (apps/bff/marketplace.go) to Lens's catalog (B20.1) and its uses and earnings (B20.2).
@@ -78,6 +78,16 @@ export interface ListingVersion {
   artifact?: Record<string, unknown>;
   scan?: ListingScan;
   parents?: ListingParent[] | null;
+  /** B41.193 — every model it calls (a pipeline's steps' too), the tools it uses and the data it keeps. */
+  privacy?: ListingPrivacy;
+}
+
+/** Lens market.Privacy — a version's privacy label, read from its own artifact. */
+export interface ListingPrivacy {
+  models: string[];
+  tools: string[];
+  keeps: string[];
+  keeps_nothing: boolean;
 }
 
 /** Lens market.Listing. */
@@ -105,6 +115,43 @@ export interface Listing {
   remix_share_bps?: number;
   /** B32.50 — what it can do, from Lens's controlled list (market_capabilities). */
   capabilities?: string[] | null;
+  /** B41.85 — who it is for (Lens rates one published without a rating 18+), and what it gives. */
+  age_rating?: AgeRating;
+  content_labels?: ContentLabel[] | null;
+}
+
+// B41.85 — content labels and age ratings (Lens B41.185, Apple guideline 4.7). A workspace's content filter hides a
+// listing rated above its oldest rating, or carrying a label it hides; a family filter shows "all" only.
+export type AgeRating = "all" | "13+" | "16+" | "18+";
+
+export const AGE_RATINGS: readonly [AgeRating, string][] = [
+  ["all", "Everyone"],
+  ["13+", "13 and over"],
+  ["16+", "16 and over"],
+  ["18+", "18 and over"],
+];
+
+export type ContentLabel =
+  "adult" | "violence" | "medical_advice" | "financial_advice" | "legal_advice";
+
+export const CONTENT_LABELS: readonly [ContentLabel, string][] = [
+  ["adult", "Adult content"],
+  ["violence", "Violence"],
+  ["medical_advice", "Medical advice"],
+  ["financial_advice", "Financial advice"],
+  ["legal_advice", "Legal advice"],
+];
+
+export const ageRatingLabel = (r: string) =>
+  AGE_RATINGS.find(([v]) => v === r)?.[1] ?? r;
+export const contentLabelName = (l: string) =>
+  CONTENT_LABELS.find(([v]) => v === l)?.[1] ?? l;
+
+/** Lens market.ContentFilter (B41.185) — what this workspace is shown, and the listings it blocked, newest first. */
+export interface ContentFilter {
+  max_age_rating: AgeRating;
+  blocked_labels: ContentLabel[];
+  blocked_listings: string[];
 }
 
 /** Lens market.Display (B32.51) — an offer's price in the buyer's currency. The charge is still its US-dollar price. */
@@ -275,6 +322,9 @@ export interface ListingDraft {
   remix_share_bps: number;
   /** B32.24 — the listing versions it builds on; someone else's needs its remix licence accepted first (B32.25) */
   parents: ParentRef[];
+  /** B41.85 — the seller always chooses one; Publish waits for it */
+  age_rating: AgeRating;
+  content_labels: ContentLabel[];
 }
 
 export type RemixPolicy = "none" | "free" | "royalty";
@@ -690,6 +740,8 @@ export interface MarketLicence {
   source: "offer" | "rent_to_own";
   created_at: string;
   price_ulxc: number;
+  /** B41.176 — it renews but its listing has not been used for 30 days: worth cancelling */
+  idle?: boolean;
 }
 
 /** Lens market.ReceiptSummary (B32.40) — Talyvor's receipt for one paid marketplace bill. */
@@ -755,6 +807,8 @@ export class MarketError extends ApiError {
     status: number,
     path: string,
     readonly sentence: string,
+    /** B58.1: the approval a use or licence waits on, when Lens answered it held */
+    readonly approvalID = "",
   ) {
     super(status, path);
   }
@@ -763,6 +817,14 @@ export class MarketError extends ApiError {
 async function post<T>(path: string, body: object): Promise<T> {
   return send<T>(path, {
     method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+async function put<T>(path: string, body: object): Promise<T> {
+  return send<T>(path, {
+    method: "PUT",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
   });
@@ -784,6 +846,7 @@ async function send<T>(path: string, init: RequestInit): Promise<T> {
     }
     throw new MarketError(res.status, path, sentence);
   }
+  if (res.status === 204) return undefined as T; // a block and its undo answer nothing
   return (await res.json()) as T;
 }
 
@@ -791,7 +854,8 @@ const e = encodeURIComponent;
 
 /** Licenses one of a listing's offers. Lens requires the Idempotency-Key, so a retried click never buys twice. */
 function license(listingID: string, offerID: string, version: number, key: string) {
-  return send<MarketLicence>(`/api/marketplace/listings/${e(listingID)}/licences`, {
+  const path = `/api/marketplace/listings/${e(listingID)}/licences`;
+  const answer = send<MarketLicence>(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -800,6 +864,7 @@ function license(listingID: string, offerID: string, version: number, key: strin
     },
     body: JSON.stringify({ offer_id: offerID, version }),
   });
+  return unlessHeld(answer, (h) => new MarketError(202, path, h.message ?? "", h.approval_id));
 }
 
 export const marketApi = {
@@ -940,7 +1005,19 @@ export const marketApi = {
   remix: (id: string, version = 0) =>
     post<RemixOpened>(`/api/marketplace/listings/${e(id)}/remix`, { version }),
   use: (id: string, req: UseRequest) =>
-    post<ListingUse>(`/api/marketplace/listings/${e(id)}/use`, req),
+    unlessHeld(post<ListingUse>(`/api/marketplace/listings/${e(id)}/use`, req), (h) =>
+      new MarketError(202, `/api/marketplace/listings/${e(id)}/use`, h.message ?? "", h.approval_id),
+    ),
+  // B41.85 — a seller's relabel, and this workspace's content filter and blocks (Lens B41.185).
+  setContentLabels: (id: string, age_rating: AgeRating, content_labels: ContentLabel[]) =>
+    put<Listing>(`/api/marketplace/listings/${e(id)}/content-labels`, { age_rating, content_labels }),
+  contentFilter: () => read<ContentFilter>("/api/marketplace/content-filter"),
+  setContentFilter: (max_age_rating: AgeRating, blocked_labels: ContentLabel[]) =>
+    put<ContentFilter>("/api/marketplace/content-filter", { max_age_rating, blocked_labels }),
+  block: (id: string) =>
+    send<void>(`/api/marketplace/blocked-listings/${e(id)}`, { method: "PUT" }),
+  unblock: (id: string) =>
+    send<void>(`/api/marketplace/blocked-listings/${e(id)}`, { method: "DELETE" }),
   report: (id: string, reason: string, details: string) =>
     post<ListingReport>(`/api/marketplace/listings/${e(id)}/reports`, {
       reason,
@@ -1015,8 +1092,8 @@ export function formatDisplay(d: PriceDisplay): string {
 }
 
 /** A listing's price, in words. */
-export function priceText(micros: number): string {
-  return micros > 0 ? `${formatULXC(micros)} per use` : "Free";
+export function priceText(micros: number, lxc: (ulxc: number) => string): string {
+  return micros > 0 ? `${lxc(micros)} per use` : "Free";
 }
 
 /** `0.5` → 500,000 µLXC; empty is free (0). Null for anything that is not an amount with at most six decimals. */
@@ -1042,7 +1119,7 @@ export function variablesNamedIn(err: unknown): string[] {
 
 /** Why a write did not happen, in Lens's words where Lens gave some. */
 export function refusalText(err: unknown): string {
-  if (isSessionExpired(err)) return "Nothing happened — sign in again.";
+  if (isSessionExpired(err)) return "Nothing happened. Sign in again.";
   if (
     err instanceof MarketError &&
     err.sentence &&
@@ -1080,7 +1157,7 @@ export function recentMonths(now: Date): string[] {
 export function periodName(start: string, end: string): string {
   const across =
     new Date(start).getUTCFullYear() !== new Date(end).getUTCFullYear();
-  return `${dayName(start, across)} – ${dayName(end)}`;
+  return `${dayName(start, across)} to ${dayName(end)}`;
 }
 
 /** `2026-10-14T…` → `Oct 14, 2026` (UTC), or `Oct 14` without its year. */

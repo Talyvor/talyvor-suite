@@ -10,7 +10,7 @@ import { App, queryClient } from '../../App'
 
 const M = 1_000_000
 
-function mockBff() {
+function mockBff({ hold = 'sentence' }: { hold?: 'sentence' | 'accepted' } = {}) {
   const agents: Array<{ id: string; name: string; balance_ulxc: number; spent_ulxc: number; keys: string[]; created_at: string }> = []
   const rules: Record<string, Record<string, unknown>> = {}
   const approvals: Array<{ id: string; agent_id: string; amount_ulxc: number; model: string; status: string; created_at: string; fp: string; payee?: { kind: 'agent'; id: string; name: string }; memo?: string }> = []
@@ -27,6 +27,10 @@ function mockBff() {
       new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     const allocated = () => agents.reduce((s, a) => s + a.balance_ulxc, 0)
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    // B55.14: Lens judges a change to an agent's rules first; these do not loosen them.
+    if (url.endsWith('/rules-challenge')) return json({ looser: false, changes: [], allow_credentials: [] })
+    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents' && method === 'GET')
       return json({
         workspace_balance_ulxc: workspace,
@@ -47,7 +51,7 @@ function mockBff() {
       a.status = decision[2] === 'approve' ? 'approved' : 'denied'
       return json(a)
     }
-    const m = /^\/api\/agents\/([^/]+)\/(\w+)$/.exec(url)
+    const m = /^\/api\/agents\/([^/]+)\/(\w+)(?:\?|$)/.exec(url)
     const agent = agents.find((a) => a.id === m?.[1])
     if (!m || !agent) return new Response('null', { status: 404 })
     const r = rules[agent.id] ?? {}
@@ -91,6 +95,10 @@ function mockBff() {
                 payee: { kind: 'agent', id: payee.id, name: payee.name }, memo: String(body.memo) }
               approvals.push(open)
             }
+            // B58.2: Lens answers a held payment 202 with the approval as a field, and the same words as its message.
+            if (hold === 'accepted')
+              return json({ status: 'pending_approval', approval_id: open.id, amount_ulxc: amount,
+                message: `economy: payment of ${amount / M} LXC is above the agent's approval amount. Approval ${open.id} must be approved before it is sent` }, 202)
             return json({ error: `this request would cost up to ${amount / M} LXC, above the agent's approval amount — approval ${open.id} must be approved by the workspace's owner before it is retried` }, 403)
           }
         }
@@ -128,7 +136,8 @@ describe('Agent Bank', () => {
     render(<App />)
     const card = await screen.findByTestId('agent-first')
     expect(within(card).getByText('Create your first agent')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Pause every agent' })).toBeNull()
+    // B57.8 — the top bar's Pause every agent is on every page; the page draws none of its own.
+    expect(screen.queryByTestId('pause-every-agent')).toBeNull()
     expect(screen.queryByTestId('agents-forecast')).toBeNull()
     expect(screen.queryByTestId('agent-bank-totals')).toBeNull()
     for (const region of ['Approvals', 'Spending', 'Between owners', 'Held and cashed out'])
@@ -136,7 +145,7 @@ describe('Agent Bank', () => {
 
     await createAgent('First')
     expect(screen.queryByTestId('agent-first')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
+    expect(within(screen.getByTestId('pause-every-agent')).getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Approvals' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Spending' })).toBeInTheDocument()
   })
@@ -219,7 +228,7 @@ describe('Agent Bank', () => {
     expect(bff.approvals.map((a) => a.status)).toEqual(['pending'])
     // B27.21: the row reads single-spaced — the figure alone in the figure face, " LXC" in the sentence's.
     const asks = await screen.findByText(/wants to pay Writer/)
-    expect(asks.textContent).toBe('Researcher wants to pay Writer 3 LXC — draft')
+    expect(asks.textContent).toBe('Researcher wants to pay Writer 3 LXC · draft')
     expect(asks.querySelector('.font-figure')?.textContent).toBe('3 LXC')
 
     fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
@@ -230,5 +239,33 @@ describe('Agent Bank', () => {
     expect(screen.queryByRole('alert')).toBeNull()
     await waitFor(() => expect(screen.getByTestId('agent-balance-agt_2')).toHaveTextContent('7 LXC'))
     expect(screen.getByTestId('agent-balance-agt_1')).toHaveTextContent('3 LXC')
+  })
+
+  // B58.1 — Lens answers a held payment 202 {"status":"pending_approval","approval_id"} (B58.2): the screen says it
+  // waits in Approvals, the same as the sentence says it today, and never that it was paid.
+  it('shows a payment Lens answers as pending approval as waiting in Approvals, never as paid', async () => {
+    const bff = mockBff({ hold: 'accepted' })
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    await screen.findByTestId('agent-first')
+    await createAgent('Writer')
+    await createAgent('Researcher')
+    fireEvent.change(screen.getByLabelText('Amount in LXC for Researcher'), { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Fund' }))
+    await waitFor(() => expect(screen.getByTestId('agent-balance-agt_2')).toHaveTextContent('10 LXC'))
+    fireEvent.change(await screen.findByLabelText('Ask a person above for Researcher, in LXC'), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+    await screen.findByText(/Saved\. Lens applies these rules/)
+
+    fireEvent.click(within(screen.getByRole('group', { name: 'Pay to' })).getByRole('button', { name: 'Writer' }))
+    fireEvent.change(screen.getByLabelText('Payment in LXC from Researcher'), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Pay' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('It is waiting in Approvals'))
+    expect(screen.getByRole('alert')).toHaveTextContent('Approval apr_1 must be approved before it is sent.')
+    expect(screen.queryByText(/^Paid /)).toBeNull()
+    expect(bff.approvals.map((a) => a.status)).toEqual(['pending'])
+    expect(screen.getByTestId('agent-balance-agt_2')).toHaveTextContent('10 LXC')
+    expect(await screen.findByText(/wants to pay Writer/)).toHaveTextContent('Researcher wants to pay Writer 3 LXC')
   })
 })

@@ -181,7 +181,7 @@ export function TryTare() {
           {r.refused ? (
             <div className="space-y-2" data-testid="tare-refused">
               <p className="text-body text-ink">
-                Tare would send this unchanged — about {count(r.tokens_in_estimated)} tokens either way (estimated). No
+                Tare would send this unchanged: about {count(r.tokens_in_estimated)} tokens either way (estimated). No
                 saving.
               </p>
               {r.refusal_reasons?.length ? (
@@ -204,7 +204,7 @@ export function TryTare() {
           ) : (
             <div className="space-y-4" data-testid="tare-reduced">
               <p className="text-body text-ink">
-                About {count(r.tokens_in_estimated)} tokens become {count(r.tokens_out_estimated)} —{' '}
+                About {count(r.tokens_in_estimated)} tokens become {count(r.tokens_out_estimated)},{' '}
                 {count(r.tokens_saved_estimated)} fewer (estimated).
                 {r.saving_usd_estimated !== undefined ? (
                   <>
@@ -218,7 +218,7 @@ export function TryTare() {
               </p>
               {r.kind === 'prose' ? (
                 <p className="text-body text-ink" data-testid="tare-model-ran">
-                  The prose model shortened this by dropping words, so the wording changed — read it before relying on
+                  The prose model shortened this by dropping words, so the wording changed. Read it before relying on
                   it.
                 </p>
               ) : null}
@@ -326,9 +326,9 @@ export function TryConversion() {
                 The {r.format.toUpperCase()} file is about {count(r.savings.input_tokens_raw)} tokens; as text, about{' '}
                 {count(r.savings.input_tokens_distilled)}
                 {r.savings.tokens_saved > 0 ? (
-                  <> — {count(r.savings.tokens_saved)} fewer (estimated).</>
+                  <>, {count(r.savings.tokens_saved)} fewer (estimated).</>
                 ) : (
-                  <> — no saving on this file (estimated).</>
+                  <>, no saving on this file (estimated).</>
                 )}
               </p>
               {r.warnings?.length ? (

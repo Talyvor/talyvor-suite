@@ -191,7 +191,8 @@ afterEach(() => {
     )
     problems.push(
       `figure(s) rendered in the body sans — add font-figure:\n${lines.join('\n')}\n` +
-        '(the rule, and why it reads the DOM rather than the source, is in src/figureAudit.ts)',
+        '(the rule, and why it reads the DOM rather than the source, is in src/figureAudit.ts; on a ' +
+        'page held to Pocket\'s rules the nearest face wins and IBM Plex Mono is not a figure face — B57.3)',
     )
   }
 
@@ -259,7 +260,7 @@ afterEach(() => {
   if (uncased.length > 0) {
     const lines = uncased.map(
       (e) =>
-        `  <${e.tag} class="${e.className}"> renders ${JSON.stringify(e.text)}\n` +
+        `  [${e.problem}] <${e.tag} class="${e.className}"> renders ${JSON.stringify(e.text)}\n` +
         `    text-transform in effect: ${e.transform}` +
         (e.fromClassName ? ` (declared by class="${e.fromClassName}")` : ' (nothing declares one)'),
     )
@@ -267,7 +268,8 @@ afterEach(() => {
       'eyebrow(s) rendered without an uppercase transform in effect — 11px mono at 0.24em ' +
         `tracking is a label shape carrying text that is not in label case:\n${lines.join('\n')}\n` +
         '(the rule, why the token withholds the transform and why this reads the DOM are in ' +
-        'src/eyebrowAudit.ts)',
+        'src/eyebrowAudit.ts; on a page held to Pocket\'s rules [shape] is today\'s eyebrow where ' +
+        '`text-pocket-eyebrow` belongs and [face] is an eyebrow off Figtree — B57.3, pocketPending.ts)',
     )
   }
 
@@ -282,7 +284,8 @@ afterEach(() => {
       'numeric field(s) whose value is painted in the body sans — add `font-figure` to the field ' +
         `or to an ancestor:\n${lines.join('\n')}\n` +
         '(the Chrome measurement, why the face may be inherited here and why the predicate is the ' +
-        'declaration rather than the value are in src/fieldFaceAudit.ts)',
+        'declaration rather than the value are in src/fieldFaceAudit.ts; on a page held to Pocket\'s ' +
+        'rules a field reported with `no control edge` needs `shadow-edge` on itself — B57.3)',
     )
   }
 
@@ -303,7 +306,8 @@ afterEach(() => {
       'text scored against the plane it renders on and did not clear AA body (4.5:1) — or landed ' +
         `on a plane nobody classified:\n${lines.join('\n')}\n` +
         '(the four measured numbers and the classification are in @talyvor/ui planes.ts; the ' +
-        'ancestor walk and its limits are in src/planeAudit.ts)',
+        'ancestor walk and its limits are in src/planeAudit.ts; on a page held to Pocket\'s rules a ' +
+        '[card] is neither cloud on the page nor white with its shadow — B57.3, pocketPending.ts)',
     )
   }
 
@@ -430,4 +434,14 @@ afterAll(() => {
         'delete the entry to go green.',
     )
   }
+})
+
+import { areaSource } from './lib/workspaceAreas'
+
+// B59.2 — every area is open in these tests: each tests its screen as it behaves once the operator has switched its
+// area on. The hiding itself is tested in workspaceAreas.test.tsx, which reads the areas from the BFF.
+const ALL_AREAS = ['marketplace', 'rooms', 'chat', 'track', 'docs', 'code', 'edge', 'desktop', 'scan', 'counter', 'trading', 'credit', 'interest', 'prediction_markets', 'gateway']
+beforeEach(() => {
+  areaSource.read = () => Promise.resolve(ALL_AREAS)
+  areaSource.initial = ALL_AREAS
 })

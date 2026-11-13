@@ -3,8 +3,9 @@
 // the light one: sixteen views, each photographed into the day's report. A view fails on sideways
 // scroll, no drawn SVG logo on screen, the old CSS tile, any computed colour #f0a030 (the retired
 // amber), or a font stack that names Inter. B29.15: a light view also fails on a canvas other than
-// #F4F7FB, or on bright Teal #3AD6C0 as text, a fill or a border outside the logo and the photographs
-// (the light accent is the deep teal #0F7A6C).
+// the page colour, or on bright Teal #3AD6C0 as text, a fill or a border outside the logo and the photographs
+// (the light accent is the deep teal #0F7A6C). B17.388: the page colour is Pocket's `page`, #FFFFFF (B57.2,
+// the launch pack's DESIGN.md §3), not brand-v4's #F4F7FB, which the app stopped painting with B57.2.
 
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -44,8 +45,8 @@ export interface Look {
   bright: string[]
 }
 
-/** B29.15 — the light canvas, as the browser computes #F4F7FB. */
-const LIGHT_CANVAS = 'rgb(244, 247, 251)'
+/** B29.15, B17.388 — the light canvas, as the browser computes Pocket's `page` #FFFFFF. */
+const LIGHT_CANVAS = 'rgb(255, 255, 255)'
 
 /** The oracle: what is wrong with a view, in words; nothing when it is the brand. A light view is also
  *  held to the light canvas and to no bright Teal outside the logo. */
@@ -56,7 +57,7 @@ export function brandFaults(l: Look, theme?: 'dark' | 'light'): string[] {
   if (l.tiles.length > 0) faults.push(`the old CSS tile (${l.tiles.join(', ')})`)
   if (l.amberCount > 0) faults.push(`#f0a030 on ${l.amberCount} element(s): ${l.amber.join(', ')}`)
   if (l.inter.length > 0) faults.push(`a font stack with Inter: ${l.inter.join(' | ')}`)
-  if (theme === 'light' && l.canvas !== LIGHT_CANVAS) faults.push(`a light canvas other than #F4F7FB (${l.canvas})`)
+  if (theme === 'light' && l.canvas !== LIGHT_CANVAS) faults.push(`a light canvas other than #FFFFFF (${l.canvas})`)
   if (theme === 'light' && l.brightCount > 0) faults.push(`bright Teal #3AD6C0 in the light theme on ${l.brightCount} element(s): ${l.bright.join(', ')}`)
   return faults
 }
@@ -203,7 +204,7 @@ export function brandVisual(): Scenario {
         }
       }
       return wrong.length === 0
-        ? { pass: true, detail: '16 views photographed: no sideways scroll, a drawn SVG logo on screen, no CSS tile, no #f0a030 and no Inter in any; every light view on #F4F7FB with no bright Teal outside the logo' }
+        ? { pass: true, detail: '16 views photographed: no sideways scroll, a drawn SVG logo on screen, no CSS tile, no #f0a030 and no Inter in any; every light view on #FFFFFF with no bright Teal outside the logo' }
         : { pass: false, detail: wrong.join(' | '), where: [...where] }
     },
   }
@@ -211,7 +212,7 @@ export function brandVisual(): Scenario {
 
 /** B29.13 — what a reading page shows around its text, as the browser computed it. */
 export interface ReadingLook {
-  /** The drawn mark and wordmark on screen in the page's site header. */
+  /** The kit's logo on screen in the page's site header. */
   headerLogo: boolean
   /** The spaced-caps label right before the h1, if any. */
   eyebrow: string
@@ -219,7 +220,7 @@ export interface ReadingLook {
   rule: boolean
   /** Median characters on a full line of the page's prose; 0 when no paragraph runs past one line. */
   measure: number
-  /** The site footer carries the mark and the company line. */
+  /** The site footer carries the logo and the company line. */
   footer: boolean
 }
 
@@ -231,7 +232,7 @@ export function readingFaults(l: ReadingLook, wide: boolean): string[] {
   if (l.eyebrow === '') faults.push('no eyebrow over the title')
   if (!l.rule) faults.push('no teal rule under the title')
   if (wide && l.measure > 0 && (l.measure < 55 || l.measure > 75)) faults.push(`lines of ${l.measure} characters, not near 65`)
-  if (!l.footer) faults.push('no footer with the mark and the company line')
+  if (!l.footer) faults.push('no footer with the logo and the company line')
   return faults
 }
 
@@ -243,9 +244,8 @@ function readingInPage(companyLine: string): ReadingLook {
   }
   const site = (tag: string): Element | undefined => Array.from(document.querySelectorAll(tag)).find((el) => el.closest('main') === null)
   const header = site('header')
-  const headerLogo = header !== undefined &&
-    Array.from(header.querySelectorAll('svg[data-brand="mark"]')).some(onScreen) &&
-    Array.from(header.querySelectorAll('svg[data-brand="wordmark"]')).some(onScreen)
+  // B57.59: the kit's logo, one of its two drawings on screen for the page's theme.
+  const headerLogo = header !== undefined && Array.from(header.querySelectorAll('[data-brand="lockup"] img')).some(onScreen)
 
   const h1 = document.querySelector('main h1')
   const block = h1?.parentElement
@@ -292,7 +292,7 @@ function readingInPage(companyLine: string): ReadingLook {
     eyebrow,
     rule,
     measure: full.length === 0 ? 0 : full[Math.floor(full.length / 2)],
-    footer: footer !== undefined && footer.querySelector('svg[data-brand="mark"]') !== null &&
+    footer: footer !== undefined && footer.querySelector('[data-brand="lockup"] img') !== null &&
       (footer as HTMLElement).innerText.includes(companyLine),
   }
 }

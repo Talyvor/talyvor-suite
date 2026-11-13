@@ -64,7 +64,7 @@ function costLine(c: Column, usdPerLXC: number | undefined): string {
     return `${figure} · ${c.cost.model} · ${c.cost.input_tokens.toLocaleString('en-US')} in / ${c.cost.output_tokens.toLocaleString('en-US')} out tokens`
   }
   if (c.charged_ulxc !== undefined) return formatCharged(c.charged_ulxc)
-  return 'Price not known — the provider reported no token counts for this answer'
+  return 'Price not known: the provider reported no token counts for this answer'
 }
 
 /** One model's column: its answer as it arrives, and under it what it cost. */

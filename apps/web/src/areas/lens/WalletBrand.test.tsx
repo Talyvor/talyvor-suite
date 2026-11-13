@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { bodyFor, populatedBff, settleQueries } from '../../populatedBff'
+import { cardOnItsPlane, primaryActions, statusWithoutWords, tangerineOffenders } from '../../pocketRules'
 
 // B29.9 — Agent Wallets, Approvals, Statements, Royalties, Ledger and Spend in the brand, read off the populated
 // fixture: one teal action per screen, cards on the raised plane, every amount on the figure face, status pills.
@@ -15,7 +16,8 @@ async function at(address: string): Promise<HTMLElement> {
 }
 
 /** The teal-filled actions: the primary Button, as a button or a link. */
-const primaries = (main: HTMLElement) => Array.from(main.querySelectorAll('button.bg-accent, a.bg-accent')).map((b) => b.textContent?.trim())
+// B57.3 — the primary (ink) actions, by Pocket's name and today's.
+const primaries = primaryActions
 const pills = (root: HTMLElement) => Array.from(root.querySelectorAll('span.rounded-pill.border')).map((p) => p.textContent)
 
 beforeEach(() => {
@@ -34,7 +36,8 @@ describe('the wallet screens in the brand', () => {
   const SCREENS: Array<[string, string[]]> = [
     ['/agents', ['Fund']],
     ['/approvals', ['Approve']],
-    ['/statements', ['Download']],
+    // B57.24 — Statements' two downloads are Pocket's secondary buttons, as w-stmt-research draws them.
+    ['/statements', []],
     ['/statements/royalties', []],
     ['/ledger', []],
     ['/spend', []],
@@ -42,11 +45,16 @@ describe('the wallet screens in the brand', () => {
 
   it.each(SCREENS)('%s: at most one teal action, cards on raised, and every LXC amount on the figure face', async (address, teal) => {
     const main = await at(address)
+    // B56.15 — Statements' wallets are tabs, so its LXC amounts are the open statement's lines, read once they arrive.
+    if (address === '/statements') await screen.findByTestId('statement-lines')
     expect(primaries(main), 'the teal fill is the one primary action').toEqual(teal)
 
     const cards = Array.from(main.querySelectorAll('.rounded-card'))
     expect(cards.length, `no card rendered on ${address}`).toBeGreaterThan(0)
-    for (const c of cards) expect(c.className, `a card on ${address} is not on the raised plane`).toContain('bg-raised')
+    for (const c of cards) expect(cardOnItsPlane(c), `a card on ${address} is not on its plane: ${c.className}`).toBe(true)
+    // B57.3 — Pocket's rules: tangerine only for the brand and "your move", status colours always with words.
+    expect(tangerineOffenders(main).map((e) => e.outerHTML)).toEqual([])
+    expect(statusWithoutWords(main).map((e) => e.outerHTML)).toEqual([])
 
     // The figure audit already holds every numeral; this holds the unit beside it, so the amount is one face.
     let amounts = 0
@@ -57,6 +65,11 @@ describe('the wallet screens in the brand', () => {
         amounts++
         expect(n.parentElement?.closest('.font-figure'), `"${n.parentElement?.textContent}" is not on the figure face`).not.toBeNull()
       }
+    }
+    // B57.7 — Pocket's <Money> writes the figure and its unit as one text, dollars first: it is held the same way.
+    for (const m of Array.from(main.querySelectorAll('[data-money]'))) {
+      amounts++
+      expect(m.closest('.font-figure'), `"${m.textContent}" is not on the figure face`).not.toBeNull()
     }
     if (['/agents', '/approvals', '/statements'].includes(address)) expect(amounts, 'no LXC amount was read').toBeGreaterThan(0)
   })
@@ -83,8 +96,11 @@ describe('the wallet screens in the brand', () => {
     expect(pills(waiting)).toEqual(['Waiting'])
     document.body.replaceChildren()
 
+    // B57.24 — the statement document says each line's state in words after it, as the reference does.
     await at('/statements')
-    expect(pills(screen.getByTestId('agent-statement'))).toEqual(['Settled', 'Settled'])
+    const what = within(await screen.findByTestId('statement-lines')).getAllByTestId('statement-doc-what').map((w) => w.textContent)
+    expect(what.length).toBeGreaterThan(0)
+    for (const w of what) expect(w).toMatch(/ · (Settled|Held|On those requests|\d+ requests?( today)?)$/)
     document.body.replaceChildren()
 
     const royalties = await at('/statements/royalties')

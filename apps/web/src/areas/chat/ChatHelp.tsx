@@ -34,8 +34,8 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
         </p>
         <p>
           {/* B53.8 — SpendQuestion.tsx answers it from Lens's spending totals. */}
-          Ask <span className="font-mono">How much did I spend on eating out this month?</span> — or this week, or any other
-          category — and the answer is your spending as Talyvor counted it, not the model’s guess.
+          Ask <span className="font-mono">How much did I spend on eating out this month?</span> (or this week, or any other
+          category) and the answer is your spending as Talyvor counted it, not the model’s guess.
         </p>
         <p>
           {/* B53.16 — PlanQuestion.tsx answers it from Lens's month plan. */}
@@ -51,7 +51,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          Type <span className="font-mono">/agent</span>, its name and what it may spend — for example{' '}
+          Type <span className="font-mono">/agent</span>, its name and what it may spend, for example{' '}
           <span className="font-mono">/agent Researcher budget 20 LXC, 5 a day, ask me above 2</span>. That is not sent to
           the model: a card opens in the conversation with the name, the budget and the rules filled in, to check before
           anything moves.
@@ -71,7 +71,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          Say what an agent may spend, in LXC — for example{' '}
+          Say what an agent may spend, in LXC, for example{' '}
           <span className="font-mono">Cap Researcher at 5 LXC a day on Opus</span>, or{' '}
           <span className="font-mono">Limit Researcher to 50 LXC a month</span>. That is not sent to the model: a card opens in
           the conversation with the agent, the amount, how often and the model filled in, and the limit as it is now.
@@ -93,7 +93,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          Type <span className="font-mono">/task</span>, the agent&rsquo;s name, a colon and what it should do — for example{' '}
+          Type <span className="font-mono">/task</span>, the agent&rsquo;s name, a colon and what it should do, for example{' '}
           <span className="font-mono">/task Researcher: name three models that read PDFs, cheapest first</span>. That is not
           asked on the conversation&rsquo;s account: a card opens with the agent and the task, to check before it runs.
         </p>
@@ -111,7 +111,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          Type <span className="font-mono">/schedule</span>, the agent&rsquo;s name, a colon and what to ask — for example{' '}
+          Type <span className="font-mono">/schedule</span>, the agent&rsquo;s name, a colon and what to ask, for example{' '}
           <span className="font-mono">/schedule Researcher: summarise what my agents spent yesterday</span>. A card opens with
           the agent, the prompt, the time and how often: once, every day or every week.
         </p>
@@ -130,8 +130,8 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          Type <span className="font-mono">/freeze</span> and the agent&rsquo;s name — for example{' '}
-          <span className="font-mono">/freeze Researcher</span> — and a card opens with the agent&rsquo;s card. Freeze it and
+          Type <span className="font-mono">/freeze</span> and the agent&rsquo;s name (for example{' '}
+          <span className="font-mono">/freeze Researcher</span>) and a card opens with the agent&rsquo;s card. Freeze it and
           every purchase on it is refused: nothing leaves the agent&rsquo;s wallet.
         </p>
         <p>
@@ -147,8 +147,8 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          Type <span className="font-mono">/statement</span> and the agent&rsquo;s name — for example{' '}
-          <span className="font-mono">/statement Researcher</span> — and a card opens to download its statement for this
+          Type <span className="font-mono">/statement</span> and the agent&rsquo;s name (for example{' '}
+          <span className="font-mono">/statement Researcher</span>) and a card opens to download its statement for this
           month, or any period you choose, as a CSV or JSON file: the opening balance, every movement and the closing
           balance.
         </p>
@@ -232,7 +232,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
       <>
         <p>
           Run code sits beside Search the web. While it is on, the model may write code and run it in a sandbox to work
-          an answer out — a sum, a count, a list to sort. Under the answer, Code it ran shows each piece of code word
+          an answer out: a sum, a count, a list to sort. Under the answer, Code it ran shows each piece of code word
           for word and what it printed, so you can check the working. It stays on for every question until you turn it
           off.
         </p>
@@ -258,9 +258,9 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
       <>
         <p>
           Add your own MCP servers on Connectors, from Chat’s rail, by their address and the token they want if any.
-          Chat offers their tools to the model beside Talyvor’s own, in every chat, and asks you before every call —
+          Chat offers their tools to the model beside Talyvor’s own, in every chat, and asks you before every call:
           what the model sends goes to that server; Don’t allow tells it no. Under the answer, each call is listed with what it
-          cost — the request to the model that read the tool’s answer. To try it, add Talyvor test tools and ask for the
+          cost: the request to the model that read the tool’s answer. To try it, add Talyvor test tools and ask for the
           fingerprint of a word.
         </p>
       </>
@@ -313,7 +313,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     body: (
       <>
         <p>
-          Each question is sent with every earlier question and answer in its conversation — that is
+          Each question is sent with every earlier question and answer in its conversation. That is
           how the model knows what a follow-up like &ldquo;and of France?&rdquo; refers to. Nothing from
           any other conversation goes with it, and nothing is added to it.
         </p>
@@ -325,7 +325,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
           went with it.
         </p>
         <p>
-          Coming back to Chat — after a reload, or from another page — reopens your most recent
+          Coming back to Chat (after a reload, or from another page) reopens your most recent
           conversation, and a question asked there continues it. New chat starts one with nothing
           before it.
         </p>
@@ -336,7 +336,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     heading: 'Where conversations are kept',
     body: (
       <p>
-        In this browser only, for the account you are signed in with — not on Talyvor&rsquo;s servers.
+        In this browser only, for the account you are signed in with, not on Talyvor&rsquo;s servers.
         Another browser or device will not have them, and clearing this site&rsquo;s data removes them.
         Rename or delete a conversation from Conversation actions beside its name; New chat starts a fresh one.
       </p>
@@ -347,7 +347,7 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     body: (
       <p>
         Share, in the bar above a conversation, makes a link anyone can open without signing in. It shows the
-        conversation&rsquo;s questions and answers as they were when you shared it — nothing else of it — and that copy is
+        conversation&rsquo;s questions and answers as they were when you shared it (nothing else of it) and that copy is
         kept on Talyvor&rsquo;s servers while the link is on. Turn off link in the same place deletes the copy, and the link
         then finds nothing.
       </p>

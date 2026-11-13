@@ -6,15 +6,29 @@ import { RULE_TEMPLATES } from './ruleTemplates'
 // B28.305 — rule templates: a new agent created from one has the template saved as its rules in the same
 // click, and an agent's Rules card filled from one saves exactly the template — every list, cap and window
 // it held before replaced, not merged.
+// B55.14 — a save first asks Lens what it does (Lens B55.13): a tighter one is saved at once; a looser one says what it
+// loosens and, once the workspace has a key, is saved only with this browser's passkey.
 
 const M = 1_000_000
 const template = (id: string) => RULE_TEMPLATES.find((t) => t.id === id)!.rules
 
-function mockBff(existing?: { name: string; rules: Record<string, unknown> }) {
+const BUILDER = {
+  name: 'Builder',
+  rules: {
+    max_per_request_ulxc: 1 * M, hourly_limit_ulxc: 0, daily_limit_ulxc: 0, weekly_limit_ulxc: 9 * M, monthly_limit_ulxc: 0,
+    approval_above_ulxc: 0, model_daily_limits_ulxc: { 'gpt-4o': 2 * M }, allowed_models: ['gpt-4o'], allowed_providers: ['openai'],
+    allowed_listings: ['lst_1'], active_from: '09:00', active_until: '17:00', timezone: 'Europe/London', pause_on_unusual_spend: false,
+  },
+}
+const LOOSER = ['Weekly limit: was 9 LXC, now none', 'Allowed models: was gpt-4o, now any']
+const ASSERTION = { rawId: new Uint8Array([1]).buffer, response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } }
+
+function mockBff(existing?: { name: string; rules: Record<string, unknown> }, keys: { looser?: boolean; passkey?: boolean; phone?: boolean } = {}) {
   const agents: Array<{ id: string; name: string; balance_ulxc: number; spent_ulxc: number; keys: string[]; created_at: string }> = []
   const rules: Record<string, Record<string, unknown>> = {}
   const calls: string[] = []
   const saved: Record<string, unknown>[] = []
+  const assertions: unknown[] = []
   if (existing) {
     agents.push({ id: 'agt_1', name: existing.name, balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-01T09:00:00Z' })
     rules.agt_1 = existing.rules
@@ -37,10 +51,18 @@ function mockBff(existing?: { name: string; rules: Record<string, unknown> }) {
     if (url === '/api/models')
       return json([{ id: 'gpt-4o', provider: 'openai', display_name: 'GPT-4o', input_per_1m: 2.5, output_per_1m: 10 }])
     if (url === '/api/agents/approvals') return json({ approvals: [] })
+    if (url === '/api/agents/passkeys') return json({ passkeys: keys.passkey ? [{ credential_id: 'Y3JlZDE', name: 'iPhone', created_at: '2026-10-06T04:00:00Z' }] : [] })
+    if (url === '/api/money/devices') return json({ devices: keys.phone ? [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] : [] })
+    if (/^\/api\/agents\/[^/]+\/rules-challenge$/.test(url)) {
+      calls.push(`POST ${url}`)
+      return json({ looser: !!keys.looser, changes: keys.looser ? LOOSER : [], challenge: 'Y2gx', allow_credentials: keys.passkey ? ['Y3JlZDE'] : [] })
+    }
     const m = /^\/api\/agents\/([^/]+)\/rules$/.exec(url)
     if (m) {
       if (method === 'PUT') {
-        rules[m[1]] = JSON.parse(String(init?.body)) as Record<string, unknown>
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+        if (body.assertion !== undefined) assertions.push(body.assertion)
+        rules[m[1]] = (body.rules ?? body) as Record<string, unknown>
         saved.push(rules[m[1]])
         calls.push(`PUT ${url}`)
       }
@@ -48,7 +70,7 @@ function mockBff(existing?: { name: string; rules: Record<string, unknown> }) {
     }
     return new Response('null', { status: 404 })
   })
-  return { calls, saved }
+  return { calls, saved, assertions }
 }
 
 afterEach(() => {
@@ -78,14 +100,7 @@ describe('rule templates', () => {
   })
 
   it('fills an agent’s Rules card from the Coder template and saves exactly the template, replacing what it held', async () => {
-    const { saved } = mockBff({
-      name: 'Builder',
-      rules: {
-        max_per_request_ulxc: 1 * M, hourly_limit_ulxc: 0, daily_limit_ulxc: 0, weekly_limit_ulxc: 9 * M, monthly_limit_ulxc: 0,
-        approval_above_ulxc: 0, model_daily_limits_ulxc: { 'gpt-4o': 2 * M }, allowed_models: ['gpt-4o'], allowed_providers: ['openai'],
-        allowed_listings: ['lst_1'], active_from: '09:00', active_until: '17:00', timezone: 'Europe/London', pause_on_unusual_spend: false,
-      },
-    })
+    const { calls, saved } = mockBff(BUILDER)
     window.history.pushState({}, '', '/agents')
     render(<App />)
 
@@ -96,5 +111,62 @@ describe('rule templates', () => {
 
     await screen.findByText(/Saved\. Lens applies these rules/)
     expect(saved).toEqual([template('coder')])
+    expect(calls).toEqual(['POST /api/agents/agt_1/rules-challenge', 'PUT /api/agents/agt_1/rules'])
+  })
+
+  it('says what a looser template loosens and saves it only with the passkey; a cancelled prompt saves nothing', async () => {
+    const { calls, saved, assertions } = mockBff(BUILDER, { looser: true, passkey: true })
+    const get = vi.fn().mockRejectedValueOnce(new DOMException('The operation was cancelled.', 'NotAllowedError')).mockResolvedValue(ASSERTION)
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    fireEvent.click(within(await screen.findByRole('group', { name: 'Rule templates for Builder' })).getByRole('button', { name: 'Coder' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+    const card = await screen.findByTestId('rules-loosen')
+    expect(card.textContent).toContain('This loosens Builder’s rules:')
+    expect(within(card).getAllByRole('listitem').map((li) => li.textContent)).toEqual(LOOSER)
+    expect(card.textContent).toContain('It needs your passkey. Tightening is saved at once.')
+    expect(get).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save with your passkey' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('Nothing changed. You can try again.')
+    expect(saved).toEqual([])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save with your passkey' }))
+    await screen.findByText(/Saved\. Lens applies these rules/)
+    expect(saved).toEqual([template('coder')])
+    expect(assertions).toEqual([{ credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' }])
+    expect(calls.filter((c) => c.startsWith('PUT'))).toEqual(['PUT /api/agents/agt_1/rules'])
+  })
+
+  it('saves a tighter change at once, with no prompt, even once the workspace has a passkey', async () => {
+    const { calls, assertions } = mockBff(BUILDER, { passkey: true })
+    const get = vi.fn()
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    fireEvent.change(await screen.findByLabelText('Weekly limit for Builder, in LXC'), { target: { value: '5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+    await screen.findByText(/Saved\. Lens applies these rules/)
+    expect(get).not.toHaveBeenCalled()
+    expect(assertions).toEqual([])
+    expect(calls).toEqual(['POST /api/agents/agt_1/rules-challenge', 'PUT /api/agents/agt_1/rules'])
+  })
+
+  it('with only the phone’s key, a looser save says to add this browser and sends nothing', async () => {
+    const { calls, saved } = mockBff(BUILDER, { looser: true, phone: true })
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    fireEvent.click(within(await screen.findByRole('group', { name: 'Rule templates for Builder' })).getByRole('button', { name: 'Coder' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save rules' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+    expect((await screen.findByTestId('on-the-phone')).textContent).toBe(
+      'Loosen Builder’s rules with a passkey on this browser: add this browser first.Add this browser',
+    )
+    expect(saved).toEqual([])
+    expect(calls).toEqual(['POST /api/agents/agt_1/rules-challenge'])
   })
 })

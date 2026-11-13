@@ -43,8 +43,10 @@ func pricingApp(t *testing.T, status int) (*app, *string, map[string]int) {
 			body = lensFees
 		case "/v1/pricing":
 			body = `{"card_payments":"live"}`
+		case "/v1/public/labels":
+			body = lensLabels
 		default:
-			t.Errorf("/api/pricing dialled %s — it may read the public peg, plans, plan gates, fees and card payments and nothing else", r.URL.Path)
+			t.Errorf("/api/pricing dialled %s — it may read the public peg, plans, plan gates, fees, card payments and labels and nothing else", r.URL.Path)
 		}
 		hits[r.URL.Path]++
 		if auth := r.Header.Get("Authorization"); auth != "" {
@@ -181,7 +183,7 @@ func TestPricing_ServesThePriceCardLensStates(t *testing.T) {
 func TestPricing_OmitsGatesAndFeesLensWillNotState(t *testing.T) {
 	a, _, _ := pricingApp(t, http.StatusServiceUnavailable)
 	out := getPricing(t, a)
-	for _, k := range []string{"plan_gates", "fees", "company_plans", "byok_add_on_usd_cents", "enterprise_from_usd_cents", "card_payments"} {
+	for _, k := range []string{"plan_gates", "fees", "company_plans", "byok_add_on_usd_cents", "enterprise_from_usd_cents", "card_payments", "labels"} {
 		if _, ok := out[k]; ok {
 			t.Errorf("%s = %v from a Lens that answered 503 — want it omitted", k, out[k])
 		}

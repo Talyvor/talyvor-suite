@@ -116,9 +116,10 @@ function cardHeaderTitles(root: ParentNode): Element[] {
 const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B28.6 — `/` is the wallet home; B45.11: waiting for you, your agents, budgets, forecast. Overview's six moved to /overview.
   '/': 4,
-  // B28.7 — Approvals (waiting, decided) and Statements (every agent, the agents, one statement).
+  // B28.7 — Approvals (waiting, decided). B57.24: Statements opens on an agent's statement, a Pocket document whose
+  // name is its own heading, so it has no card header.
   '/approvals': 2,
-  '/statements': 3,
+  '/statements': 0,
   '/overview': 6,
   '/ledger': 1,
   // ⚠ 0 IS STRUCTURAL HERE, NOT THE 404-FIXTURE FLOOR W1.1.17b WARNS ABOUT. /chat renders no
@@ -153,15 +154,15 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // and the page says there is no payment to confirm — it draws no card.
   '/billing/success': 0,
   '/billing/cancel': 0,
-  '/keys': 4,
+  '/keys': 0,
   // B19.4 — Waiting for a person, Agents, and the open agent's Money, Rules, Pay, Key and Statement.
-  '/agents': 36, // B46.9 "Wallet"; B30.103 "Know Your Agent credential"; B19.10 added "Face ID and notifications"; B19.20 "Month-end forecast" and "Unusual spend"; B19.21 "Scheduled payments" and "Automatic top-up"; B19.22 "Statement for every agent"; B19.24 "Card"; B22.10 "Address", "Send or request", "Transfers", "Recurring transfer", "Offer a loan", "Requests", "Credit line" and "Loans"; B22.12 "Pay into escrow", "Pots", "Investing, simulated", "Cash out", "Escrow" and "Cash-outs"; B28.21 "Name and description" and "Archive"; B28.30 "Would it pass?"; B28.31 "Rules history"; B28.32 "Limit boost"; B28.62 "Limit alerts"
+  '/agents': 38, // B46.9 "Wallet"; B30.103 "Know Your Agent credential"; B19.10 added "Face ID and notifications"; B19.20 "Month-end forecast" and "Unusual spend"; B19.21 "Scheduled payments" and "Automatic top-up"; B19.22 "Statement for every agent"; B19.24 "Card" (B57.142 drew it in Pocket, so its title is no longer a card header); B22.10 "Address", "Send or request", "Transfers", "Recurring transfer", "Offer a loan", "Requests", "Credit line" and "Loans"; B22.12 "Pay into escrow", "Pots", "Investing, simulated", "Cash out", "Escrow" and "Cash-outs"; B28.21 "Name and description" and "Archive"; B28.30 "Would it pass?"; B28.31 "Rules history"; B28.32 "Limit boost"; B28.62 "Limit alerts"; B28.53 "Spend by day, model and destination"; B28.66 "Where alerts go" and "Sent alerts"
   // B20.3 — the catalog's Listings card. 1 → 0 at B29.11: the listings are cards of their own, a list
   // named Listings in the Browse region, and no card header.
   '/marketplace': 0,
   // 5 → 8 at W1.1.17b. THREE OF SETUP'S CARDS ARE GATED ON DATA and the census had never seen
   // them: it awaited the sidebar and counted, so every screen was measured mid-load.
-  '/setup': 8,
+  '/setup': 0,
   // 4, not 3: `1b58635` (#251) added `FeatureSpendCard` — "Spend by feature". The card arrived as
   // a NEW FILE that Spend.tsx renders, so `grep -c '<CardHeader' Spend.tsx` reads 2 before and
   // after and would have argued the opposite.
@@ -170,8 +171,8 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/operator': 0,
   '/operator/tax': 0,
   '/operator/compliance': 0,
-  // 2 → 3 at B27.27: "Your provider keys".
-  '/settings': 3,
+  // 2 → 3 at B27.27: "Your provider keys". 3 → 6 at B59.10: "Kind of money", "Account type" and a Business's "Your team".
+  '/settings': 6,
   // B30.116 — your level, the next check, the checks, and one card per level the capabilities need (L0, L2, L3).
   '/settings/verification': 6,
   // B30.103 — every capability with terms, in one card.
@@ -180,18 +181,22 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/settings/email-branding': 0,
   // B40.8 — one card per assistant.
   '/settings/connect': 8,
+  '/settings/company': 0, // B59.31: Pocket's own section title, no CardHeader
+  '/settings/help': 0, // B59.28: Pocket's own section titles, no CardHeader
+  '/settings/close': 0,
+  '/settings/data': 0,
   // B30.97 — the accounts, the new invoice form, and the invoices issued.
   '/money/invoices': 3,
   // B30.96 — payees, send, payments out, standing orders, mandates and bulk payouts.
   '/money/spending': 10, // B53.8: this week, this month, budgets, unusual, payments, subscriptions and the latest notices; B53.16: safe to spend, off plan and the payments due, under the populated fixture
-  '/money/card': 1, // B53.12: the populated fixture's one active card
+  '/money/card': 0, // B57.97: drawn in Pocket, whose cards head themselves with an h3
   '/scan/reports': 1, // B52.28: the library's one card, under the populated fixture's one report
   '/scan/reports/:id': 1, // B52.28: the report's card (the box is a header-less card)
   '/scan/agents': 1, // B52.28: the populated fixture's one Scan agent
   '/scan/track-record': 1, // B52.28: the Reports card
   '/money/budgets': 1, // B41.39: the Budgets card, under the populated fixture's one budget
   '/money/subscriptions': 1, // B41.20: the Subscriptions card, under the populated fixture's two found subscriptions
-  '/money/pay': 9, // B40.35: the assistant's payee requests and its drafted mandate, under the populated fixture; B41.1: the bills inbox
+  '/money/pay': 5, // B57.31: the top of Pay is drawn in Pocket, so only today's cards kept below it count; B41.1: the bills inbox
   // B40.9 — one card: the prepared request.
   '/approve/:id': 1,
   // B45.37 — one card: the plan the assistant prepared.
@@ -242,15 +247,16 @@ describe('a card header is a section title, so it is a heading element', () => {
   })
 
   it('h2 is the right LEVEL — it sits under the page name the shell already writes', async () => {
-    await at('/setup')
+    // B57.55 — /setup, which this case was first written against, is drawn in Pocket now; /overview has the most.
+    await at('/overview')
     const h1s = document.querySelectorAll('h1')
     expect(h1s.length, 'the shell writes exactly one h1 per address (#126, #127)').toBe(1)
     const titles = cardHeaderTitles(document.body)
-    expect(titles.length, '/setup renders nine cards; a sweep that found none would be vacuous').toBeGreaterThan(4)
+    expect(titles.length, '/overview renders six cards; a sweep that found none would be vacuous').toBeGreaterThan(4)
     for (const t of titles) {
       expect(
         t.tagName,
-        `"${t.textContent?.trim()}" on /setup is a section title under "${h1s[0].textContent?.trim()}" ` +
+        `"${t.textContent?.trim()}" on /overview is a section title under "${h1s[0].textContent?.trim()}" ` +
           'and must be a heading one level down — not two (a skipped level is its own defect) and ' +
           'not none',
       ).toBe('H2')
@@ -359,9 +365,9 @@ describe('a card header is a section title, so it is a heading element', () => {
         'means something that is not a section title has entered the headings rotor — a balance, ' +
         'a wordmark, a badge.',
     ).toHaveLength(1 + pageScale.length + titles.length)
-    // B29.3: the wordmark is the drawn brand SVG now, not a `text-head` div — so it is found by
-    // what it is, and the heading it must not be is any ancestor, not only its own tag.
-    const wordmark = document.querySelector('svg[data-brand="wordmark"]')
+    // B57.6: the wordmark is the kit's logo now, its files as <img>, not a `text-head` div — so it is found
+    // by what it is, and the heading it must not be is any ancestor, not only its own tag.
+    const wordmark = document.querySelector('[data-brand="lockup"]')
     expect(wordmark, 'the sidebar wordmark is gone — this case no longer measures anything').toBeTruthy()
     expect(
       wordmark!.closest('h1,h2,h3,h4,h5,h6')?.tagName ?? 'none',

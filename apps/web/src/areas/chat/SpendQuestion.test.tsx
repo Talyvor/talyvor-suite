@@ -51,7 +51,7 @@ function mockBff() {
     if (url === '/api/agents')
       return json({ workspace_balance_ulxc: 10 * M, allocated_ulxc: 0.77 * M, unallocated_ulxc: 9.23 * M, spent_ulxc: 1.23 * M,
         agents: [{ id: 'agt_1', name: 'Researcher', balance_ulxc: 0.77 * M, spent_ulxc: 1.23 * M, keys: [], created_at: '2026-10-01T09:00:00Z' }] })
-    if (url === '/api/agents/agt_1/statement')
+    if (url.split('?')[0] === '/api/agents/agt_1/statement')
       return json({ agent_id: 'agt_1', lines: [
         { entry_id: 'ent_9', kind: 'pay', amount_ulxc: -1.23 * M, counterparty: 'agent:agt_2', ref: 'research', balance_after_ulxc: 0.77 * M, at: '2026-10-05T06:00:00Z' },
         { entry_id: 'ent_8', kind: 'fund', amount_ulxc: 2 * M, counterparty: 'workspace', balance_after_ulxc: 2 * M, at: '2026-10-05T05:00:00Z' },

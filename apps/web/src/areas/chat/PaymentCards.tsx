@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { ApprovalCard, paymentRequestKey, totalsOf } from '../lens/Approve'
+import { ApprovalCard, decidedLine, declined, paymentRequestKey, totalsOf } from '../lens/Approve'
 import { type PaymentRequest, agentBankApi, formatMinor } from '../lens/agentBankApi'
 import { readFailure } from '../lens/WalletMoney'
 
-// B45.2 — a payment or batch the assistant prepared in Chat (Lens's prepare_payment / prepare_batch, which pay nothing) is
+// B45.2 — a payment or batch the assistant prepared in Chat (Lens's prepare_payment / prepare_batch, which pay only what a signed permission covers) is
 // B40.9's approval card right under the answer: payee, amount, reference, the rule that asked, Approve with the same
 // passkey step as /approve/<id>, or Decline. Chat never approves by itself. Decided, the card is a one-line receipt — read
 // from Lens each time, so a reload shows it too.
@@ -18,13 +18,13 @@ export function receipt(r: PaymentRequest): string {
     case 'approved':
       return `Approved with your passkey: ${what}.`
     case 'cancelled':
-      return `Declined. Nothing was paid (${what}).`
+      return declined(r)
     case 'auto':
-      return `Inside a mandate you signed, no approval needed: ${what}.`
+      return `Paid without asking you: ${what}, inside a permission you signed.`
     case 'blocked':
       return `Blocked, so nothing was paid (${what}).`
     default:
-      return `${what}: ${r.status}.`
+      return decidedLine(r.status)
   }
 }
 

@@ -1,15 +1,33 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Input, Pill, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { type UseQueryResult, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Button, CardHeader, Input, Pill, cn, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
+import {
+  Button as PocketButton,
+  Card as PocketCard,
+  Chip,
+  Dialog,
+  EmptyState,
+  Field,
+  Icon,
+  Input as PocketInput,
+  RoomBadge,
+  Row as PocketRow,
+  Select as PocketSelect,
+  pocketFocusRing,
+  type ChipTone,
+  type IconName,
+} from '@talyvor/ui/pocket'
 import { Card } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { LinkedItem } from '../../components/LinkedItem'
-import { formatWhen } from './format'
+import { formatDecided, formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
-import { APPROVALS_KEY, BOOK_KEY, PASSKEYS_KEY } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, OnThePhone, PREPARED_KEY, preparedBy, useKeys } from './AgentBank'
+import { DeclineForm, declinedText } from './Decline'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
-import { assertOver, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
+import { paymentRequestKey } from './Approve'
+import { approveMandateSigned, approvePayoutSigned, assertOver, grantMandateSigned, payOutsideSigned, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
 import {
   type AgentApproval,
   type AssistantRequest,
@@ -22,21 +40,30 @@ import {
   type PayeeDetails,
   type OutsidePayment,
   type PayeeRequest,
+  type PaymentRequest,
   type PayoutBatch,
   FIATS,
   agentBankApi,
   formatMinor,
-  formatULXC,
   minorOf,
   newMoveKey,
   refusalText,
+  useAccount,
 } from './agentBankApi'
+import { Lxc } from './money'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { PAY_OUT } from '../../labels/capabilities'
+import { DESIGN_ATTR } from '../../pocketPending'
 
 // Pay.tsx — B30.96: money out of an account. Saved payees outside Talyvor, each checked against its account by the account
 // partner (Lens B30.16); a payment to one, from the company's or an agent's account (B30.17), with an agent's requests that
 // wait for a person's approval shown here; standing orders (B30.18); mandates a payee pulls within (B30.19); and bulk
 // payouts from a CSV, validated row by row and paid on one approval (B30.21). Lens decides everything — which account may
 // pay, the agent's rules, screening, what posts — and a refusal shows its sentence. Every amount is Lens's minor units.
+// B59.10 — by the workspace's type and kind (account.ts): a Stablecoin and crypto account has no bank transfers, so none of
+// the above is rendered for it; payout batches are a Business's; a Personal account reads "your account", not the company's.
+// B57.31 — the top of Pay is the Pocket reference's w-pay: Pay a saved payee, Payments out, Saved payees (pressing one pays
+// it) and Add a payee's dialog; standing orders, mandates, bulk payouts and bills stay below in today's cards until B57.32.
 
 export const PAYEES_KEY = ['money-payees']
 export const PAYMENTS_KEY = ['money-payments']
@@ -47,19 +74,20 @@ export const ASSISTANT_REQUESTS_KEY = ['money-assistant-requests']
 export const BILLS_KEY = ['money-bills']
 const EVERY: AgentSchedule['every'][] = ['hour', 'day', 'week', 'month']
 
-const PAYMENT_STATUS: Record<string, { text: string; pill: PillStatus }> = {
-  pending: { text: 'Pending', pill: 'held' },
-  sent: { text: 'Sent', pill: 'held' },
-  completed: { text: 'Completed', pill: 'settled' },
-  failed: { text: 'Failed', pill: 'slashed' },
-  returned: { text: 'Returned', pill: 'slashed' },
+// B57.31 — a payment Lens's account partner failed is one it refused; the row says why beside it.
+const PAYMENT_STATUS: Record<string, { text: string; tone: ChipTone }> = {
+  pending: { text: 'Pending', tone: 'wait' },
+  sent: { text: 'Sent', tone: 'wait' },
+  completed: { text: 'Completed', tone: 'good' },
+  failed: { text: 'Refused', tone: 'bad' },
+  returned: { text: 'Returned', tone: 'bad' },
 }
 // B55.41 — a status Lens adds later is never shown as Lens's own word.
-const paymentStatus = (s: string) => PAYMENT_STATUS[s] ?? { text: 'We could not read this payment’s status', pill: 'held' as PillStatus }
-const CHECK: Record<string, { text: string; pill: PillStatus }> = {
-  exact_match: { text: 'Exact match', pill: 'settled' },
-  close_match: { text: 'Close match', pill: 'held' },
-  no_match: { text: 'No match', pill: 'slashed' },
+const paymentStatus = (s: string) => PAYMENT_STATUS[s] ?? { text: 'We could not read this payment’s status', tone: 'wait' as ChipTone }
+const CHECK: Record<string, { text: string; tone: ChipTone }> = {
+  exact_match: { text: 'Exact match', tone: 'good' },
+  close_match: { text: 'Close match', tone: 'wait' },
+  no_match: { text: 'No match', tone: 'bad' },
 }
 
 const select = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
@@ -68,7 +96,6 @@ const field = 'flex flex-col gap-1 text-caption text-muted'
 /** A date typed in the form, at nine in the morning UTC, as Lens wants a time. */
 const morningOf = (date: string) => `${date}T09:00:00Z`
 const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
-const status = (s: string, of: Record<string, { text: string; pill: PillStatus }>) => of[s] ?? { text: s, pill: 'idle' as PillStatus }
 
 /** The payee's account details, as it gave them. */
 function detailsOf(p: PayeeRequest): string {
@@ -83,6 +110,7 @@ export function PayScreen() {
   const payments = useQuery({ queryKey: PAYMENTS_KEY, queryFn: agentBankApi.payments })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const asked = useQuery({ queryKey: ASSISTANT_REQUESTS_KEY, queryFn: agentBankApi.assistantRequests })
+  const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
   const askedPayees = (asked.data?.requests ?? []).filter((r) => r.kind === 'payee')
   const askedMandates = (asked.data?.requests ?? []).filter((r) => r.kind === 'mandate')
   const askedPlans = (asked.data?.requests ?? []).filter((r) => r.kind === 'plan' && r.status !== 'signed')
@@ -91,105 +119,628 @@ export function PayScreen() {
   const agentAccounts = open.filter((a) => a.purpose === 'agent')
   const saved = payees.data?.payees ?? []
   const sent = payments.data?.payments ?? []
+  const waiting = prepared.data?.requests ?? []
   const agentName = (id: string | undefined) => book.data?.agents?.find((x) => x.id === id)?.name ?? id ?? ''
-  const accountName = (a: CurrencyAccount) => `${a.purpose === 'agent' ? agentName(a.agent_id) : 'The company'} · ${a.currency}`
+  const { shows } = useAccount()
+  const business = shows?.team === true
+  const accountName = (a: CurrencyAccount) => `${a.purpose === 'agent' ? agentName(a.agent_id) : (shows?.owner ?? 'The company')} · ${a.currency}`
   const payeeName = (id: string | undefined) => saved.find((p) => p.id === id)?.name ?? id ?? ''
   const reading = (q: { isError: boolean; isPending: boolean; error: unknown }, what: string) =>
     q.isError ? <p className="text-body text-muted">{readFailure(q.error, what)}</p> : q.isPending ? <p className="text-body text-muted">Reading…</p> : null
 
-  return (
-    <RegionScreen>
-      <Region index="00" label="Pay" heading="Send money from an account" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-2xl flex-col gap-3">
-        <p className="text-body text-muted">
-          Save the people and companies you pay, then send money from the company’s or an agent’s account in pounds, euros or dollars:
-          one payment, a standing order, a mandate the payee pulls within, or a file of payouts approved once. An agent’s own request
-          above its approval amount waits here for you.
-        </p>
-        {askedPayees.length + askedMandates.length > 0 ? (
-          <p className="text-body text-ink" data-testid="pay-asked">
-            Your assistant is waiting for you: <span className="font-figure">{askedPayees.length}</span> {askedPayees.length === 1 ? 'payee' : 'payees'} to save and{' '}
-            <span className="font-figure">{askedMandates.length}</span> {askedMandates.length === 1 ? 'mandate' : 'mandates'} to sign, below.
-          </p>
-        ) : null}
-        {askedPlans.map((r) => (
-          <p key={r.id} className="text-body text-ink">
-            {r.assistant} prepared recurring payments for you to sign:{' '}
-            <Link className={inlineLink} to={`/money/plans/${r.id}`}>
-              open the plan
-            </Link>
-            .
-          </p>
-        ))}
-        {payments.isSuccess ? (
-          <p className="text-body text-ink" data-testid="pay-count">
-            <span className="font-figure">{sent.length}</span> {sent.length === 1 ? 'payment' : 'payments'} out,{' '}
-            <span className="font-figure">{sent.filter((p) => p.status === 'completed').length}</span> completed
-          </p>
-        ) : null}
-      </Region>
-      <Region index="01" label="Payees" heading="People and companies you pay" className="flex max-w-2xl flex-col gap-3">
-        {askedPayees.length > 0 ? <AssistantPayees requests={askedPayees} /> : null}
-        {reading(payees, 'Your payees') ?? <Payees payees={saved} />}
-      </Region>
+  // B57.31 — the payee being paid: pressed in Saved payees, or named by the address ⌘K's Payees open (/money/pay#payee-<id>).
+  const [payeeID, setPayeeID] = useState('')
+  const [adding, setAdding] = useState(false)
+  const named = /^#payee-(.+)$/.exec(useLocation().hash)?.[1]
+  const namedID = named === undefined ? undefined : decodeURIComponent(named)
+  const known = namedID !== undefined && saved.some((p) => p.id === namedID)
+  const pick = (id: string) => {
+    setPayeeID(id)
+    document.getElementById('pay-form')?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+  }
+  useEffect(() => {
+    if (known && namedID !== undefined) pick(namedID)
+  }, [known, namedID])
 
-      <Region index="02" label="Send" heading="Pay a saved payee" className="flex max-w-2xl flex-col gap-3">
-        {reading(accounts, 'Your accounts') ??
-          (open.length === 0 ? (
-            <p className="text-body text-muted" data-testid="pay-no-account">No currency account yet: open the company’s account on Invoices, then pay from it here.</p>
-          ) : (
-            <SendPayment accounts={open} payees={saved} sent={sent} accountName={accountName} />
-          ))}
-        <Waiting agentName={agentName} />
-        {reading(payments, 'Your payments') ??
-          (sent.length > 0 ? (
-            <Card>
-              <CardHeader>Payments out</CardHeader>
-              <ul>
-                {sent.map((p) => (
-                  <PaymentRow key={p.id} p={p} />
-                ))}
-              </ul>
-            </Card>
-          ) : null)}
-      </Region>
-      <Region index="03" label="Standing orders" heading="Pay the same amount on a schedule" className="flex max-w-2xl flex-col gap-3">
-        {reading(accounts, 'Your accounts') ??
-          (agentAccounts.length === 0 ? (
-            <p className="text-body text-muted">A standing order runs from an agent’s account: open one on Invoices first.</p>
-          ) : (
-            <StandingOrders accounts={agentAccounts} payees={saved} accountName={accountName} payeeName={payeeName} agentName={agentName} />
-          ))}
-      </Region>
-      <Region index="04" label="Mandates" heading="Let a payee pull within limits you set" className="flex max-w-2xl flex-col gap-3">
-        {reading(accounts, 'Your accounts') ??
-          (agentAccounts.length === 0 ? (
-            <p className="text-body text-muted">A mandate is on an agent’s account: open one on Invoices first.</p>
-          ) : (
-            <Mandates accounts={agentAccounts} payees={saved} accountName={accountName} agentName={agentName} />
-          ))}
-      </Region>
-      <Region index="05" label="Bulk payouts" heading="Pay many at once from a file" className="flex max-w-2xl flex-col gap-3">
-        <Payouts />
-      </Region>
-      <Region index="06" label="Bills" heading="Bills you received" className="flex max-w-2xl flex-col gap-3">
-        <Bills payeeName={payeeName} />
-      </Region>
-      {askedMandates.length > 0 ? (
-        <Region index="07" label="Assistant permissions" heading="Sign what an assistant may pay for you" className="flex max-w-2xl flex-col gap-3">
-          <AssistantMandates requests={askedMandates} payeeName={payeeName} />
-        </Region>
-      ) : null}
-    </RegionScreen>
+  if (!shows) {
+    return (
+      <RegionScreen>
+        <p className="text-body text-muted">Reading…</p>
+      </RegionScreen>
+    )
+  }
+  if (!shows.bankTransfers) {
+    return (
+      <RegionScreen>
+        <p className="text-body text-muted" data-testid="pay-on-chain">
+          Your agents work on chain: each agent’s wallet address is on{' '}
+          <Link className={inlineLink} to="/agents">
+            Agent Wallets
+          </Link>
+          .
+        </p>
+      </RegionScreen>
+    )
+  }
+  // B57.31 — the assistant line says only what waits: "Claude is waiting for you: 1 payee to save, below."
+  const askers = [...new Set([...askedPayees, ...askedMandates].map((r) => r.assistant))]
+  const asks = [
+    askedPayees.length > 0 ? `${askedPayees.length} ${askedPayees.length === 1 ? 'payee' : 'payees'} to save` : '',
+    askedMandates.length > 0 ? `${askedMandates.length} ${askedMandates.length === 1 ? 'mandate' : 'mandates'} to sign` : '',
+  ].filter((x) => x !== '')
+  return (
+    <>
+      {/* B57.31 — the reference's w-pay, drawn in Pocket, flush with the page's heading. What B57.32 has not given its own
+          page yet is kept below it, in today's cards. */}
+      <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-4 pb-10">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="grid max-w-2xl gap-1">
+            <p className="text-reading text-ink-2" data-testid="pay-lead">
+              {business
+                ? 'Save the people and companies your company pays, then send money from your company’s account or one of your team’s agents’ accounts in pounds, euros or dollars.'
+                : 'Save the people and companies you pay, then send money from your account or one of your agents’ accounts in pounds, euros or dollars.'}
+            </p>
+            {asks.length > 0 ? (
+              <p className="text-body text-ink" data-testid="pay-asked">
+                <span className="font-semibold">{askers.length === 1 ? askers[0] : 'Your assistant'} is waiting for you:</span> {asks.join(' and ')}, below.
+              </p>
+            ) : null}
+            {askedPlans.map((r) => (
+              <p key={r.id} className="text-body text-ink">
+                {r.assistant} prepared recurring payments for you to sign:{' '}
+                <Link className={pocketLink} to={`/money/plans/${r.id}`}>
+                  open the plan
+                </Link>
+                .
+              </p>
+            ))}
+          </div>
+          <PocketButton type="button" variant="secondary" icon={<Icon name="plus" />} onClick={() => setAdding(true)}>
+            Add a payee
+          </PocketButton>
+        </div>
+        <div className="grid items-start gap-4 wide:grid-cols-5">
+          <div className="grid min-w-0 gap-4 wide:col-span-3">
+            {reading(accounts, 'Your accounts') ??
+              (open.length === 0 ? (
+                <p className="text-body text-muted" data-testid="pay-no-account">
+                  No currency account yet: open {business ? 'the company’s account' : 'your account'} on Invoices, then pay from it here.
+                </p>
+              ) : (
+                <PayForm accounts={open} payees={saved} sent={sent} waiting={waiting} payeeID={payeeID} setPayeeID={setPayeeID} accountName={accountName} agentName={agentName} business={business} />
+              ))}
+            <PaymentsOut payments={payments} waiting={waiting} />
+          </div>
+          <div className="grid min-w-0 gap-4 wide:col-span-2">
+            {askedPayees.length > 0 ? <AssistantPayees requests={askedPayees} /> : null}
+            <SavedPayees payees={payees} sent={sent} payeeID={payeeID} onPick={pick} onAdd={() => setAdding(true)} />
+            <AlsoOnPay payouts={shows.payoutBatches} />
+          </div>
+        </div>
+        <AddPayee open={adding} onClose={() => setAdding(false)} />
+      </div>
+      <RegionScreen>
+        <div className="px-gutter">
+          <Waiting agentName={agentName} />
+        </div>
+        <div id="standing-orders">
+          <Region index="02" label="Standing orders" heading="Pay the same amount on a schedule" className="flex max-w-2xl flex-col gap-3">
+            {reading(accounts, 'Your accounts') ??
+              (agentAccounts.length === 0 ? (
+                <p className="text-body text-muted">A standing order runs from an agent’s account: open one on Invoices first.</p>
+              ) : (
+                <StandingOrders accounts={agentAccounts} payees={saved} accountName={accountName} payeeName={payeeName} agentName={agentName} />
+              ))}
+          </Region>
+        </div>
+        <div id="mandates">
+          <Region index="03" label="Mandates" heading="Let a payee pull within limits you set" className="flex max-w-2xl flex-col gap-3">
+            {reading(accounts, 'Your accounts') ??
+              (agentAccounts.length === 0 ? (
+                <p className="text-body text-muted">A mandate is on an agent’s account: open one on Invoices first.</p>
+              ) : (
+                <Mandates accounts={agentAccounts} payees={saved} accountName={accountName} agentName={agentName} />
+              ))}
+          </Region>
+        </div>
+        {shows.payoutBatches ? (
+          <div id="bulk-payouts">
+            <Region index="04" label="Bulk payouts" heading="Pay many at once from a file" className="flex max-w-2xl flex-col gap-3">
+              <Payouts />
+            </Region>
+          </div>
+        ) : null}
+        <div id="bills">
+          <Region index={shows.payoutBatches ? '05' : '04'} label="Bills" heading="Bills you received" className="flex max-w-2xl flex-col gap-3">
+            <Bills payeeName={payeeName} />
+          </Region>
+        </div>
+        {askedMandates.length > 0 ? (
+          <Region index={shows.payoutBatches ? '06' : '05'} label="Assistant permissions" heading="Sign what an assistant may pay for you" className="flex max-w-2xl flex-col gap-3">
+            <AssistantMandates requests={askedMandates} payeeName={payeeName} />
+          </Region>
+        ) : null}
+      </RegionScreen>
+    </>
   )
 }
 
-/** Saved payees outside Talyvor, each with what its bank said of the name; a close or no match confirmed with a passkey (B30.16). */
-function Payees({ payees }: { payees: OutsidePayee[] }) {
+const pocketLink = `text-ink underline underline-offset-2 ${pocketFocusRing}`
+
+/** A payee's kind of account, in words: "sort code and account number", "IBAN" or "routing and account number". */
+function kindOf(p: PayeeRequest): string {
+  return p.iban ? 'IBAN' : p.routing_number ? 'routing and account number' : 'sort code and account number'
+}
+
+/** "1 Oct": the day a payment was made, as a payee's last payment says it. */
+const dayOf = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString()
+
+/** A payment out that money left in: one Lens refused or that came back paid nothing. */
+const paid = (p: OutsidePayment) => p.status === 'completed' || p.status === 'sent'
+
+/** A payee's last payment that moved money, newest first as Lens lists them, by date to be sure. */
+function lastPaid(payeeID: string, sent: OutsidePayment[]): OutsidePayment | undefined {
+  return sent.filter((p) => p.payee_id === payeeID && paid(p)).sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+}
+
+/** B57.31 — the request a payment may have come from: Lens pays item n of request preq_x under the key "preq:preq_x:n". The
+ *  key is only a hint, since a caller chooses its own key: a payment reads as prepared only once that request, read from
+ *  Lens, names this payment as the one that paid it. */
+const preparedRequestOf = (p: OutsidePayment) => /^preq:([^:]+):\d+$/.exec(p.idempotency_key)?.[1]
+
+/**
+ * B57.31 — one payment to a saved payee, from the company's or an agent's account (B30.17): From with what it holds, To,
+ * the amount in the account's currency, the reference, and Send with the amount. A payee whose payment an assistant
+ * prepared and that still waits is reviewed on its own page instead, so the same payment is not sent twice.
+ */
+function PayForm({
+  accounts,
+  payees,
+  sent,
+  waiting,
+  payeeID,
+  setPayeeID,
+  accountName,
+  agentName,
+  business,
+}: {
+  accounts: CurrencyAccount[]
+  payees: OutsidePayee[]
+  sent: OutsidePayment[]
+  waiting: PaymentRequest[]
+  payeeID: string
+  setPayeeID: (id: string) => void
+  accountName: (a: CurrencyAccount) => string
+  agentName: (id: string | undefined) => string
+  business: boolean
+}) {
+  const qc = useQueryClient()
+  const [accountID, setAccountID] = useState(accounts[0]?.id ?? '')
+  const [amount, setAmount] = useState('')
+  const [reference, setReference] = useState('')
+  const [key, setKey] = useState(newMoveKey)
+  const [made, setMade] = useState<OutsidePayment | null>(null)
+  const [answers, setAnswers] = useState<ScamAnswers>({})
+  const [stillPay, setStillPay] = useState(false)
+  const account = accounts.find((a) => a.id === accountID) ?? accounts[0]
+  const payee = payees.find((p) => p.id === payeeID)
+  const minor = minorOf(amount)
+  const currency = account?.currency ?? 'GBP'
+  // B41.13: before the first payment to a payee, both questions are answered; a yes to either needs a second confirmation.
+  const first = payee !== undefined && !sent.some((p) => p.payee_id === payee.id)
+  const risky = SCAM_QUESTIONS.some((q) => answers[q.key] === true)
+  const checked = !first || (SCAM_QUESTIONS.every((q) => answers[q.key] !== undefined) && (!risky || stillPay))
+  const complete = account !== undefined && payee !== undefined && !payee.needs_confirmation && minor !== null && checked
+  const preparedFor = payee === undefined ? undefined : waiting.find((r) => (r.items ?? []).some((i) => i.payee_id === payee.id))
+  // Reset per payee: the questions are about this payee's details.
+  useEffect(() => {
+    setAnswers({})
+    setStillPay(false)
+  }, [payeeID])
+  const pay = useMutation({
+    mutationFn: () => payOutsideSigned({ account_id: account?.id ?? '', payee_id: payeeID, amount_minor: minor ?? 0, currency, reference: reference.trim(), idempotency_key: key }),
+    onSuccess: (p) => {
+      setMade(p)
+      setAmount('')
+      setReference('')
+      setKey(newMoveKey())
+      setAnswers({})
+      setStillPay(false)
+      void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
+      void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
+    },
+  })
+  const why =
+    payee === undefined
+      ? 'Choose who to pay.'
+      : payee.needs_confirmation
+        ? `Confirm ${payee.name} with a passkey first.`
+        : minor === null
+          ? 'Add an amount.'
+          : !checked
+            ? risky
+              ? 'Confirm you checked the details first.'
+              : 'Answer both questions first.'
+            : undefined
+  return (
+    <PocketCard tone="white" id="pay-form" className="scroll-mt-24">
+      <form
+        className="grid gap-4"
+        data-testid="send-payment"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (complete && !pay.isPending) pay.mutate()
+        }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-head font-bold text-ink">Pay a saved payee</h2>
+          <WorkspaceLabel capability={PAY_OUT} />
+        </div>
+        <Field label="From">
+          {/* What the account holds sits inside the box, at its end, as the reference draws it. */}
+          <span className="relative block">
+            <PocketSelect aria-label="From" className="pr-36" value={account?.id ?? ''} onChange={(e) => setAccountID(e.target.value)}>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {accountName(a)}
+                </option>
+              ))}
+            </PocketSelect>
+            <span className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 text-body text-ink-3" data-testid="pay-holds">
+              holds <span className="font-figure">{formatMinor(account?.test_minor ?? 0, currency)}</span>
+            </span>
+          </span>
+        </Field>
+        <div className="grid gap-4 wide:grid-cols-2">
+          <Field label="To">
+            <PocketSelect aria-label="To" value={payeeID} onChange={(e) => setPayeeID(e.target.value)}>
+              <option value="">Choose a payee</option>
+              {payees.map((p) => (
+                <option key={p.id} value={p.id} disabled={p.needs_confirmation}>
+                  {p.name}
+                  {p.needs_confirmation ? ' (confirm first)' : ''}
+                </option>
+              ))}
+            </PocketSelect>
+          </Field>
+          <Field label={`Amount in ${currency}`}>
+            <PocketInput aria-label={`Amount in ${currency}`} inputMode="decimal" placeholder="20.00" unit={currency} value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Reference">
+          <PocketInput aria-label="Reference" placeholder="What the payee sees" className="font-sans" value={reference} onChange={(e) => setReference(e.target.value)} />
+        </Field>
+        <p className="text-body text-ink-3" data-testid="pay-approval">
+          {account?.purpose === 'agent'
+            ? `From ${agentName(account.agent_id)}’s account, its rules judge it at its LXC value, and above its approval amount it waits for you.`
+            : `From ${business ? 'the company’s' : 'your'} account, a payment needs no approval.`}
+        </p>
+        {first && preparedFor === undefined ? (
+          <fieldset className="grid gap-3 border-t border-line pt-4" data-testid="scam-check">
+            <legend className="mb-1 text-reading font-semibold text-ink">First payment to {payee.name}: two quick questions</legend>
+            {SCAM_QUESTIONS.map((q) => (
+              <div key={q.key} className="flex flex-wrap items-center justify-between gap-3">
+                <span className="min-w-0 flex-1 text-reading text-ink" id={`scam-${q.key}`}>
+                  {q.text}
+                </span>
+                <div role="radiogroup" aria-labelledby={`scam-${q.key}`} className="flex gap-2">
+                  {([true, false] as const).map((yes) => (
+                    <button
+                      key={String(yes)}
+                      type="button"
+                      role="radio"
+                      aria-checked={answers[q.key] === yes}
+                      className={cn(
+                        'h-8.5 rounded-pill px-3.5 text-body font-semibold transition-colors duration-200',
+                        answers[q.key] === yes ? 'bg-primary text-on-primary' : 'bg-cloud-2 text-ink',
+                        pocketFocusRing,
+                      )}
+                      onClick={() => {
+                        setAnswers((a) => ({ ...a, [q.key]: yes }))
+                        setStillPay(false)
+                      }}
+                    >
+                      {yes ? 'Yes' : 'No'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {risky ? (
+              <div role="alert" className="grid gap-2 rounded-control bg-danger-50 px-4 py-3" data-testid="scam-warning">
+                <p className="flex items-center gap-1.5 text-reading font-semibold text-danger">
+                  <Icon name="shield" size={16} />
+                  Stop and check. This could be a scam.
+                </p>
+                <p className="text-body text-ink">
+                  Fraudsters rush people into paying, and they send or change bank details by email or chat. Before you pay, call {payee.name} on a
+                  number you already have (not one from the message) and check the details. Money sent to a fraudster is often not recovered.
+                </p>
+                <label className="flex items-start gap-2 text-body text-ink">
+                  <input
+                    type="checkbox"
+                    className={`mt-0.5 h-4 w-4 shrink-0 accent-primary transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${pocketFocusRing}`}
+                    checked={stillPay}
+                    onChange={(e) => setStillPay(e.target.checked)}
+                  />
+                  <span>I have checked the details with {payee.name} directly and still want to pay.</span>
+                </label>
+              </div>
+            ) : null}
+          </fieldset>
+        ) : null}
+        {preparedFor !== undefined ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-control bg-tangerine-50 px-4 py-3" data-testid="pay-prepared">
+            <p className="min-w-0 flex-1 text-reading text-ink">{preparedBy(preparedFor.client)} prepared this payment, and it waits for your approval.</p>
+            <PocketButton asChild variant="primary" data-tangerine="your-move">
+              <Link to={`/approve/${encodeURIComponent(preparedFor.id)}`}>Review it</Link>
+            </PocketButton>
+          </div>
+        ) : (
+          <div>
+            <PocketButton type="submit" variant="primary" disabled={!complete || pay.isPending} disabledReason={pay.isPending ? undefined : why}>
+              {pay.isPending ? (
+                'Sending…'
+              ) : minor === null ? (
+                'Send'
+              ) : (
+                <>
+                  Send <span className="font-figure">{formatMinor(minor, currency)}</span>
+                </>
+              )}
+            </PocketButton>
+          </div>
+        )}
+        {pay.isError ? <Said ok={false}>{refusalText(pay.error)}</Said> : null}
+        {made !== null ? (
+          <Said ok>
+            <span className="font-figure">{formatMinor(made.amount_minor, made.currency)}</span> to {made.payee_name}: {paymentStatus(made.status).text.toLowerCase()}
+            {made.detail ? ` (${made.detail})` : ''}.
+          </Said>
+        ) : null}
+      </form>
+    </PocketCard>
+  )
+}
+
+/** What a press said: a sentence, or a refusal in red with its icon beside it. */
+function Said({ ok, children }: { ok: boolean; children: React.ReactNode }) {
+  return ok ? (
+    <p role="status" className="text-body text-ink-2">
+      {children}
+    </p>
+  ) : (
+    <p role="alert" className="flex items-center gap-1.5 text-body text-danger">
+      <Icon name="x" size={16} />
+      <span>{children}</span>
+    </p>
+  )
+}
+
+/**
+ * B57.31 — the payments out: each with its payee, amount, reference, date and status in words, why one was refused, and
+ * whether it was prepared; a prepared one still waiting reads Waiting for approval until it is decided.
+ */
+function PaymentsOut({ payments, waiting }: { payments: UseQueryResult<{ payments: OutsidePayment[] | null }>; waiting: PaymentRequest[] }) {
+  const sent = payments.data?.payments ?? []
+  const items = waiting.flatMap((r) => (r.items ?? []).filter((i) => !i.payment_id).map((i) => ({ r, i })))
+  const hinted = [...new Set(sent.map(preparedRequestOf).filter((id): id is string => id !== undefined))]
+  const requests = useQueries({ queries: hinted.map((id) => ({ queryKey: paymentRequestKey(id), queryFn: () => agentBankApi.paymentRequest(id) })) })
+  // Who prepared each payment, for the payments a request Lens holds says it paid.
+  const preparedFor = new Map<string, string>()
+  for (const q of requests) for (const i of q.data?.items ?? []) if (i.payment_id) preparedFor.set(i.payment_id, preparedBy(q.data?.client ?? ''))
+  return (
+    <PocketCard>
+      <h2 className="font-display text-head font-bold text-ink">Payments out</h2>
+      {payments.isError ? (
+        <Said ok={false}>We couldn’t read your payments. Nothing changed.</Said>
+      ) : payments.isPending ? (
+        <p className="mt-3 text-body text-ink-3">Reading…</p>
+      ) : sent.length + items.length === 0 ? (
+        <p className="mt-3 text-body text-ink-3">No payments yet.</p>
+      ) : (
+        <ul className="mt-3 border-t border-line">
+          {items.map(({ r, i }) => (
+            <li key={`${r.id}-${i.position}`} data-testid={`prepared-${r.id}`}>
+              <PocketRow
+                wrap
+                leading={<RoomBadge icon={<Icon name="clock" />} />}
+                title={`${i.payee_name} · ${formatMinor(i.amount_minor, i.currency)}`}
+                line={[i.reference, `prepared by ${preparedBy(r.client)}`].filter((x) => x !== '').join(' · ')}
+                action={
+                  <Link to={`/approve/${encodeURIComponent(r.id)}`} className={cn('rounded-pill', pocketFocusRing)}>
+                    <Chip tone="wait">Waiting for approval</Chip>
+                  </Link>
+                }
+              />
+            </li>
+          ))}
+          {sent.map((p) => {
+            const s = paymentStatus(p.status)
+            return (
+              <li key={p.id} id={`payment-${p.id}`} data-testid={`payment-${p.id}`}>
+                <PocketRow
+                  wrap
+                  leading={<RoomBadge icon={<Icon name={p.status === 'completed' ? 'check' : p.status === 'failed' || p.status === 'returned' ? 'x' : 'send'} />} />}
+                  title={`${p.payee_name} · ${formatMinor(p.amount_minor, p.currency)}`}
+                  line={
+                    <>
+                      {[p.reference, formatDecided(p.created_at), preparedFor.has(p.id) ? `prepared by ${preparedFor.get(p.id)}, approved by you` : ''].filter((x) => x !== '').join(' · ')}
+                      {p.detail ? <span className="block">{p.detail}</span> : null}
+                    </>
+                  }
+                  action={<Chip tone={s.tone}>{s.text}</Chip>}
+                />
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </PocketCard>
+  )
+}
+
+/**
+ * B57.31 — saved payees outside Talyvor (B30.16): pressing one pays it. Each says its country, its kind of account and its
+ * last payment, with what its bank said of the name; a close or no match is confirmed with a passkey, a new payee's first
+ * 24 hours are said with the call that ends them early (B41.11), and changed details hold its payments (B41.12).
+ */
+function SavedPayees({
+  payees,
+  sent,
+  payeeID,
+  onPick,
+  onAdd,
+}: {
+  payees: UseQueryResult<{ payees: OutsidePayee[] | null }>
+  sent: OutsidePayment[]
+  payeeID: string
+  onPick: (id: string) => void
+  onAdd: () => void
+}) {
+  const qc = useQueryClient()
+  const saved = payees.data?.payees ?? []
+  const refresh = () => void qc.invalidateQueries({ queryKey: PAYEES_KEY })
+  const confirm = useMutation({ mutationFn: async (id: string) => agentBankApi.confirmPayee(id, await signPayee(id)), onSuccess: refresh })
+  // B41.11: the payments the cooling-off held are paid as it ends, so the payments and balances are read again too.
+  const called = useMutation({
+    mutationFn: async (id: string) => agentBankApi.confirmPayeeCalled(id, await signPayeeCalled(id)),
+    onSuccess: () => {
+      refresh()
+      void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
+      void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
+    },
+  })
+  const paying = saved.find((p) => p.id === payeeID)
+  if (payees.isError || payees.isPending) {
+    return (
+      <PocketCard tone="white">
+        <h2 className="font-display text-head font-bold text-ink">People and companies you pay</h2>
+        {payees.isError ? (
+          <div className="mt-3 grid justify-items-start gap-3">
+            <Said ok={false}>We couldn’t read your payees. Nothing changed.</Said>
+            <PocketButton type="button" variant="secondary" onClick={() => void payees.refetch()}>
+              Try again
+            </PocketButton>
+          </div>
+        ) : (
+          <p className="mt-3 text-body text-ink-3">Reading…</p>
+        )}
+      </PocketCard>
+    )
+  }
+  if (saved.length === 0) {
+    return (
+      <PocketCard tone="white">
+        <EmptyState
+          icon={<Icon name="payments" />}
+          title="No payees yet"
+          line="Save the people and companies you pay."
+          action={
+            <PocketButton type="button" variant="primary" onClick={onAdd}>
+              Add a payee
+            </PocketButton>
+          }
+        />
+      </PocketCard>
+    )
+  }
+  return (
+    <PocketCard tone="white">
+      <h2 className="font-display text-head font-bold text-ink">People and companies you pay</h2>
+      <ul className="mt-3 border-t border-line" aria-label="Saved payees">
+        {saved.map((p) => {
+          const c = CHECK[p.check] ?? { text: 'Name not checked', tone: 'plain' as ChipTone }
+          const last = lastPaid(p.id, sent)
+          return (
+            <li key={p.id} className="grid gap-2 border-t border-line py-2.5 first:border-t-0" data-testid={`payee-${p.id}`}>
+              <Link
+                to={{ hash: `payee-${p.id}` }}
+                onClick={() => onPick(p.id)}
+                className={cn('flex items-center gap-3 rounded-control text-reading', pocketFocusRing)}
+                aria-current={p.id === payeeID ? 'true' : undefined}
+              >
+                <RoomBadge icon={<Icon name="payments" />} />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-ink">
+                    {p.name}
+                    {last !== undefined && isToday(last.created_at) ? (
+                      <>
+                        {' '}
+                        <span className="font-normal text-ink-3">·</span> <span className="font-normal text-ink-3">paid today</span>
+                      </>
+                    ) : null}
+                  </span>
+                  <span className="block text-body text-ink-3">
+                    {p.country} · {kindOf(p)} ·{' '}
+                    {last === undefined ? (
+                      'not paid yet'
+                    ) : (
+                      <>
+                        last paid <span className="font-figure">{formatMinor(last.amount_minor, last.currency)}</span> on {dayOf(last.created_at)}
+                      </>
+                    )}
+                    {p.suggested_name ? ` · the account is held by ${p.suggested_name}` : ''}
+                    {p.screening ? ` · ${p.screening}` : ''}
+                  </span>
+                </span>
+                <span className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                  {p.id === payeeID ? <Chip tone="wait">Paying</Chip> : <Chip tone={c.tone}>{c.text}</Chip>}
+                  {p.needs_confirmation ? <Chip tone="wait">Needs confirmation</Chip> : null}
+                  {p.cooling_off_until ? <Chip tone="wait">New payee</Chip> : null}
+                  {p.held_until ? <Chip tone="wait">Details changed</Chip> : null}
+                </span>
+              </Link>
+              {p.needs_confirmation ? (
+                <div className="pl-14">
+                  <PocketButton type="button" size="sm" variant="secondary" disabled={confirm.isPending} onClick={() => confirm.mutate(p.id)}>
+                    {confirm.isPending && confirm.variables === p.id ? 'Confirming…' : 'Confirm with a passkey'}
+                  </PocketButton>
+                </div>
+              ) : null}
+              {p.cooling_off_until ? (
+                <div className="grid gap-2 pl-14" data-testid={`cooling-off-${p.id}`}>
+                  <p className="text-body text-ink">
+                    A payment of more than <span className="font-figure">1,000</span> to {p.name} waits until{' '}
+                    <span className="font-figure">{formatWhen(p.cooling_off_until)}</span>. To pay it sooner, call {p.name} on a number you already
+                    had (not one from an email, an invoice or a message) and check the account details with them.
+                  </p>
+                  <div>
+                    <PocketButton type="button" size="sm" variant="secondary" disabled={called.isPending} onClick={() => called.mutate(p.id)}>
+                      {called.isPending && called.variables === p.id ? 'Confirming…' : 'I called them: confirm with a passkey'}
+                    </PocketButton>
+                  </div>
+                </div>
+              ) : null}
+              {p.held_until ? (
+                <p className="pl-14 text-body text-ink" data-testid={`details-held-${p.id}`}>
+                  {p.name}’s bank details changed, so every payment to them is held until <span className="font-figure">{formatWhen(p.held_until)}</span>.{' '}
+                  {p.notice}
+                </p>
+              ) : null}
+            </li>
+          )
+        })}
+      </ul>
+      {confirm.isError ? <Said ok={false}>{refusalText(confirm.error)}</Said> : null}
+      {called.isError ? <Said ok={false}>{refusalText(called.error)}</Said> : null}
+      {paying !== undefined ? <ChangeDetails key={paying.id} payee={paying} onChanged={refresh} /> : null}
+      <p className="mt-3 text-body text-ink-3">
+        Press a payee to pay it. A payee’s name is checked against its account before it can be paid. For its first{' '}
+        <span className="font-figure">24</span> hours, a new payee can be paid at most <span className="font-figure">1,000</span> in total in its
+        currency, unless you confirm with your passkey that you called them.
+      </p>
+    </PocketCard>
+  )
+}
+
+/** B57.31 — Add a payee: the name on the account, the account, and the name check before Save payee keeps it. */
+function AddPayee({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
   const [kind, setKind] = useState<'uk' | 'iban' | 'us'>('uk')
   const [form, setForm] = useState({ name: '', country: 'GB', sort_code: '', account_number: '', iban: '', bic: '', routing_number: '' })
   const [made, setMade] = useState<OutsidePayee | null>(null)
-  const refresh = () => void qc.invalidateQueries({ queryKey: PAYEES_KEY })
   const create = useMutation({
     mutationFn: () => {
       const body: PayeeRequest = { name: form.name.trim(), country: form.country.trim().toUpperCase() }
@@ -201,143 +752,140 @@ function Payees({ payees }: { payees: OutsidePayee[] }) {
     onSuccess: (p) => {
       setMade(p)
       setForm({ name: '', country: 'GB', sort_code: '', account_number: '', iban: '', bic: '', routing_number: '' })
-      refresh()
-    },
-  })
-  const confirm = useMutation({ mutationFn: async (id: string) => agentBankApi.confirmPayee(id, await signPayee(id)), onSuccess: refresh })
-  // B41.11: the payments the cooling-off held are paid as it ends, so the payments and balances are read again too.
-  const called = useMutation({
-    mutationFn: async (id: string) => agentBankApi.confirmPayeeCalled(id, await signPayeeCalled(id)),
-    onSuccess: () => {
-      refresh()
-      void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
-      void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
+      void qc.invalidateQueries({ queryKey: PAYEES_KEY })
+      onClose()
     },
   })
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
-  const complete = form.name.trim() !== '' && form.country.trim().length === 2 &&
+  const complete =
+    form.name.trim() !== '' &&
+    form.country.trim().length === 2 &&
     (kind === 'iban' ? form.iban.trim() !== '' : kind === 'us' ? form.routing_number.trim() !== '' && form.account_number.trim() !== '' : form.sort_code.trim() !== '' && form.account_number.trim() !== '')
+  const save = () => {
+    if (complete && !create.isPending) create.mutate()
+  }
   return (
-    <Card>
-      <CardHeader>Payees</CardHeader>
-      <div className="flex flex-col gap-3 px-gutter py-3">
-        {payees.length > 0 ? (
-          <ul className="flex flex-col gap-2" aria-label="Saved payees">
-            {payees.map((p) => {
-              const c = status(p.check, CHECK)
-              return (
-                <LinkedItem key={p.id} id={`payee-${p.id}`} className="flex flex-col gap-1 border-b border-rule pb-2 last:border-b-0 last:pb-0" data-testid={`payee-${p.id}`}>
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-body text-ink">
-                    <span>
-                      {p.name} · {p.country}
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <Pill status={c.pill}>{c.text}</Pill>
-                      {p.needs_confirmation ? <Pill status="held">Needs confirmation</Pill> : null}
-                      {p.cooling_off_until ? <Pill status="held">New payee</Pill> : null}
-                      {p.held_until ? <Pill status="held">Details changed</Pill> : null}
-                    </span>
-                  </div>
-                  <p className="text-caption text-muted">
-                    <span className="font-figure">{detailsOf(p)}</span>
-                    {p.suggested_name ? ` · the account is held by ${p.suggested_name}` : ''}
-                    {p.screening ? ` · ${p.screening}` : ''}
-                  </p>
-                  {p.needs_confirmation ? (
-                    <div>
-                      <Button type="button" disabled={confirm.isPending} onClick={() => confirm.mutate(p.id)}>
-                        {confirm.isPending && confirm.variables === p.id ? 'Confirming…' : 'Confirm with a passkey'}
-                      </Button>
-                    </div>
-                  ) : null}
-                  {p.cooling_off_until ? (
-                    <div className="flex flex-col gap-2" data-testid={`cooling-off-${p.id}`}>
-                      <p className="text-caption text-ink">
-                        A payment of more than <span className="font-figure">1,000</span> to {p.name} waits until{' '}
-                        <span className="font-figure">{formatWhen(p.cooling_off_until)}</span>. To pay it sooner, call {p.name} on a number you
-                        already had — not one from an email, an invoice or a message — and check the account details with them.
-                      </p>
-                      <div>
-                        <Button type="button" disabled={called.isPending} onClick={() => called.mutate(p.id)}>
-                          {called.isPending && called.variables === p.id ? 'Confirming…' : 'I called them — confirm with a passkey'}
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-                  {p.held_until ? (
-                    <p className="text-caption text-ink" data-testid={`details-held-${p.id}`}>
-                      {p.name}’s bank details changed, so every payment to them is held until{' '}
-                      <span className="font-figure">{formatWhen(p.held_until)}</span>. {p.notice}
-                    </p>
-                  ) : null}
-                  <ChangeDetails payee={p} onChanged={refresh} />
-                </LinkedItem>
-              )
-            })}
-          </ul>
-        ) : (
-          <p className="text-body text-muted">No payee saved yet. Save one below: its name is checked against the account before it can be paid.</p>
-        )}
-        {confirm.isError ? <Note ok={false}>{refusalText(confirm.error)}</Note> : null}
-        {called.isError ? <Note ok={false}>{refusalText(called.error)}</Note> : null}
+    <>
+      {made !== null ? (
+        <Said ok>
+          {made.name} saved: {(CHECK[made.check]?.text ?? 'name not checked').toLowerCase()}
+          {made.suggested_name ? `. The account is held by ${made.suggested_name}` : ''}
+          {made.needs_confirmation ? '. Confirm it with a passkey before the first payment.' : '.'}
+        </Said>
+      ) : null}
+      <Dialog
+        open={open}
+        onClose={onClose}
+        title="Add a payee"
+        actions={
+          <>
+            <PocketButton type="button" variant="secondary" onClick={onClose}>
+              Cancel
+            </PocketButton>
+            <PocketButton type="submit" form="new-payee" variant="primary" disabled={!complete || create.isPending} disabledReason={create.isPending ? undefined : complete ? undefined : 'Add the name and the account first.'}>
+              {create.isPending ? 'Checking…' : 'Save payee'}
+            </PocketButton>
+          </>
+        }
+      >
         <form
-          className="flex flex-col gap-3"
+          id="new-payee"
+          className="grid gap-3.5"
           data-testid="new-payee"
           onSubmit={(e) => {
             e.preventDefault()
-            if (complete && !create.isPending) create.mutate()
+            save()
           }}
         >
-          <div className="grid gap-3 wide:grid-cols-3">
-            <Input aria-label="Payee’s name" placeholder="Name on the account" className="wide:col-span-2" value={form.name} onChange={(e) => set({ name: e.target.value })} />
-            <Input aria-label="Country" placeholder="Country (GB)" className="font-figure" value={form.country} onChange={(e) => set({ country: e.target.value })} />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select aria-label="Account details" className={select} value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+          <Field label="Name on the account">
+            <PocketInput className="font-sans" value={form.name} onChange={(e) => set({ name: e.target.value })} />
+          </Field>
+          <Field label="Country">
+            <PocketInput placeholder="GB" value={form.country} onChange={(e) => set({ country: e.target.value })} />
+          </Field>
+          <Field label="Account">
+            <PocketSelect value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
               <option value="uk">Sort code and account number</option>
               <option value="iban">IBAN</option>
               <option value="us">Routing and account number</option>
-            </select>
-            {kind === 'iban' ? (
-              <>
-                <Input aria-label="IBAN" placeholder="IBAN" className="min-w-56 flex-1 font-figure" value={form.iban} onChange={(e) => set({ iban: e.target.value })} />
-                <Input aria-label="BIC" placeholder="BIC (optional)" className="w-36 font-figure" value={form.bic} onChange={(e) => set({ bic: e.target.value })} />
-              </>
-            ) : (
-              <>
-                {kind === 'us' ? (
-                  <Input aria-label="Routing number" placeholder="Routing number" className="w-36 font-figure" value={form.routing_number} onChange={(e) => set({ routing_number: e.target.value })} />
-                ) : (
-                  <Input aria-label="Sort code" placeholder="Sort code" className="w-28 font-figure" value={form.sort_code} onChange={(e) => set({ sort_code: e.target.value })} />
-                )}
-                <Input aria-label="Account number" placeholder="Account number" className="w-40 font-figure" value={form.account_number} onChange={(e) => set({ account_number: e.target.value })} />
-              </>
-            )}
-          </div>
-          <div>
-            <Button type="submit" disabled={!complete || create.isPending}>
-              {create.isPending ? 'Checking…' : 'Save payee'}
-            </Button>
-          </div>
-          {create.isError ? <Note ok={false}>{refusalText(create.error)}</Note> : null}
-          {made !== null ? (
-            <Note ok>
-              {made.name} saved: {status(made.check, CHECK).text.toLowerCase()}
-              {made.suggested_name ? ` — the account is held by ${made.suggested_name}` : ''}
-              {made.needs_confirmation ? '. Confirm it with a passkey before the first payment.' : '.'}
-            </Note>
-          ) : null}
+            </PocketSelect>
+          </Field>
+          {kind === 'iban' ? (
+            <div className="grid gap-3.5 wide:grid-cols-3">
+              <Field label="IBAN" className="wide:col-span-2">
+                <PocketInput value={form.iban} onChange={(e) => set({ iban: e.target.value })} />
+              </Field>
+              <Field label="BIC (optional)">
+                <PocketInput value={form.bic} onChange={(e) => set({ bic: e.target.value })} />
+              </Field>
+            </div>
+          ) : (
+            <div className="grid gap-3.5 wide:grid-cols-2">
+              {kind === 'us' ? (
+                <Field label="Routing number">
+                  <PocketInput inputMode="numeric" value={form.routing_number} onChange={(e) => set({ routing_number: e.target.value })} />
+                </Field>
+              ) : (
+                <Field label="Sort code">
+                  <PocketInput inputMode="numeric" value={form.sort_code} onChange={(e) => set({ sort_code: e.target.value })} />
+                </Field>
+              )}
+              <Field label="Account number">
+                <PocketInput inputMode="numeric" value={form.account_number} onChange={(e) => set({ account_number: e.target.value })} />
+              </Field>
+            </div>
+          )}
+          <p className="text-body text-ink-3">Its name is checked against the account before it can be paid.</p>
+          {create.isError ? <Said ok={false}>{refusalText(create.error)}</Said> : null}
         </form>
+      </Dialog>
+    </>
+  )
+}
+
+/** B57.31 — what else is on Pay, each scrolling to today's card below until B57.32 gives it its own page. */
+function AlsoOnPay({ payouts }: { payouts: boolean }) {
+  const bills = useQuery({ queryKey: BILLS_KEY, queryFn: agentBankApi.bills })
+  const all = bills.data?.bills ?? []
+  const due = all.filter((b) => b.status === 'due').length
+  const billsLine = bills.isError
+    ? 'We couldn’t read your bills'
+    : bills.isSuccess
+    ? all.length === 0
+      ? 'None yet'
+      : `${all.length} ${all.length === 1 ? 'bill' : 'bills'} · ${due === 0 ? 'paid' : `${due} due`}`
+    : 'Bills sent to you to pay'
+  const rows: { to: string; icon: IconName; title: string; line: string }[] = [
+    { to: 'standing-orders', icon: 'clock', title: 'Standing orders', line: 'The same amount on a schedule' },
+    { to: 'mandates', icon: 'key', title: 'Mandates', line: 'A payee pulls within limits you set' },
+    ...(payouts ? [{ to: 'bulk-payouts', icon: 'payments' as IconName, title: 'Bulk payouts', line: 'Pay many at once from a file' }] : []),
+    { to: 'bills', icon: 'invoices', title: 'Bills you received', line: billsLine },
+  ]
+  return (
+    <PocketCard>
+      <h2 className="font-display text-head font-bold text-ink">Also on Pay</h2>
+      <div className="mt-3 border-t border-line">
+        {rows.map((r) => (
+          <PocketRow key={r.to} href={`#${r.to}`} leading={<RoomBadge icon={<Icon name={r.icon} />} />} title={r.title} line={r.line} />
+        ))}
       </div>
-    </Card>
+      <p className="mt-3 text-body text-ink-3">
+        A payment an agent’s rules hold for you waits on{' '}
+        <Link className={pocketLink} to="/approvals">
+          Approvals
+        </Link>{' '}
+        and Home.
+      </p>
+    </PocketCard>
   )
 }
 
 // B41.12: the notice shown before a change is signed — Lens's PayeeDetailsNotice, the one it answers the change with.
-const CHANGE_NOTICE = 'Call them on a number you already know — not one from the message that asked for the change — to check the new details are theirs.'
+const CHANGE_NOTICE = 'Call them on a number you already know (not one from the message that asked for the change) to check the new details are theirs.'
 
 /** B41.12 — changing a saved payee's bank details (Lens B41.112): signed with a passkey over exactly the new details, the
- *  name checked afresh at the new account's bank, and every payment to the payee held for 24 hours after. */
+ *  name checked afresh at the new account's bank, and every payment to the payee held for 24 hours after. B57.31: in
+ *  Pocket, under Saved payees, for the payee being paid. */
 function ChangeDetails({ payee, onChanged }: { payee: OutsidePayee; onChanged: () => void }) {
   const [open, setOpen] = useState(false)
   const [kind, setKind] = useState<'uk' | 'iban' | 'us'>(payee.iban ? 'iban' : payee.routing_number ? 'us' : 'uk')
@@ -360,57 +908,57 @@ function ChangeDetails({ payee, onChanged }: { payee: OutsidePayee; onChanged: (
   const complete = kind === 'iban' ? form.iban.trim() !== '' : kind === 'us' ? form.routing_number.trim() !== '' && form.account_number.trim() !== '' : form.sort_code.trim() !== '' && form.account_number.trim() !== ''
   if (!open) {
     return (
-      <div>
-        <Button type="button" onClick={() => setOpen(true)}>
-          Change bank details
-        </Button>
-      </div>
+      <p className="mt-3">
+        <button type="button" className={cn('text-body', pocketLink)} onClick={() => setOpen(true)}>
+          Change {payee.name}’s bank details
+        </button>
+      </p>
     )
   }
   return (
     <form
-      className="flex flex-col gap-2"
+      className="mt-3 grid gap-3 border-t border-line pt-3"
       data-testid={`change-details-${payee.id}`}
       onSubmit={(e) => {
         e.preventDefault()
         if (complete && !change.isPending) change.mutate(details())
       }}
     >
-      <p className="text-caption text-ink">
+      <p className="text-body text-ink">
         Changed bank details are the most common way invoices are stolen. {CHANGE_NOTICE} The change needs your passkey, and every payment to{' '}
         {payee.name} is held for <span className="font-figure">24</span> hours after it.
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <select aria-label="New account details" className={select} value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+      <Field label="New account">
+        <PocketSelect aria-label="New account details" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
           <option value="uk">Sort code and account number</option>
           <option value="iban">IBAN</option>
           <option value="us">Routing and account number</option>
-        </select>
-        {kind === 'iban' ? (
-          <>
-            <Input aria-label="New IBAN" placeholder="IBAN" className="min-w-56 flex-1 font-figure" value={form.iban} onChange={(e) => set({ iban: e.target.value })} />
-            <Input aria-label="New BIC" placeholder="BIC (optional)" className="w-36 font-figure" value={form.bic} onChange={(e) => set({ bic: e.target.value })} />
-          </>
-        ) : (
-          <>
-            {kind === 'us' ? (
-              <Input aria-label="New routing number" placeholder="Routing number" className="w-36 font-figure" value={form.routing_number} onChange={(e) => set({ routing_number: e.target.value })} />
-            ) : (
-              <Input aria-label="New sort code" placeholder="Sort code" className="w-28 font-figure" value={form.sort_code} onChange={(e) => set({ sort_code: e.target.value })} />
-            )}
-            <Input aria-label="New account number" placeholder="Account number" className="w-40 font-figure" value={form.account_number} onChange={(e) => set({ account_number: e.target.value })} />
-          </>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={!complete || change.isPending}>
-          {change.isPending ? 'Confirming…' : 'Change with a passkey'}
-        </Button>
-        <Button type="button" onClick={() => setOpen(false)}>
+        </PocketSelect>
+      </Field>
+      {kind === 'iban' ? (
+        <div className="grid gap-3 wide:grid-cols-3">
+          <PocketInput aria-label="New IBAN" placeholder="IBAN" className="wide:col-span-2" value={form.iban} onChange={(e) => set({ iban: e.target.value })} />
+          <PocketInput aria-label="New BIC" placeholder="BIC (optional)" value={form.bic} onChange={(e) => set({ bic: e.target.value })} />
+        </div>
+      ) : (
+        <div className="grid gap-3 wide:grid-cols-2">
+          {kind === 'us' ? (
+            <PocketInput aria-label="New routing number" placeholder="Routing number" value={form.routing_number} onChange={(e) => set({ routing_number: e.target.value })} />
+          ) : (
+            <PocketInput aria-label="New sort code" placeholder="Sort code" value={form.sort_code} onChange={(e) => set({ sort_code: e.target.value })} />
+          )}
+          <PocketInput aria-label="New account number" placeholder="Account number" value={form.account_number} onChange={(e) => set({ account_number: e.target.value })} />
+        </div>
+      )}
+      <div className="flex flex-wrap justify-end gap-2.5">
+        <PocketButton type="button" variant="secondary" onClick={() => setOpen(false)}>
           Cancel
-        </Button>
+        </PocketButton>
+        <PocketButton type="submit" variant="primary" disabled={!complete || change.isPending} disabledReason={change.isPending || complete ? undefined : 'Add the new details first.'}>
+          {change.isPending ? 'Confirming…' : 'Change with a passkey'}
+        </PocketButton>
       </div>
-      {change.isError ? <Note ok={false}>{refusalText(change.error)}</Note> : null}
+      {change.isError ? <Said ok={false}>{refusalText(change.error)}</Said> : null}
     </form>
   )
 }
@@ -435,48 +983,55 @@ function AssistantPayees({ requests }: { requests: AssistantRequest[] }) {
     },
   })
   const dismiss = useMutation({ mutationFn: agentBankApi.dismissAssistantRequest, onSuccess: done })
+  const assistants = [...new Set(requests.map((r) => r.assistant))]
   return (
-    <Card>
-      <CardHeader>Payees your assistant asked to add</CardHeader>
-      <div className="flex flex-col gap-3 px-gutter py-3">
-        <p className="text-caption text-muted">Check each against what the payee told you. Nothing is saved, or can be paid, until you press Save.</p>
-        <ul className="flex flex-col gap-2" aria-label="Payees your assistant asked to add">
-          {requests.map((r) =>
-            r.kind === 'payee' ? (
-              <li key={r.id} className="flex flex-col gap-2 border-b border-rule pb-2 last:border-b-0 last:pb-0" data-testid={`asked-payee-${r.id}`}>
-                <div className="flex flex-wrap items-center justify-between gap-2 text-body text-ink">
-                  <span>
-                    {r.details.name} · {r.details.country}
-                  </span>
-                  <Pill status="held">Asked by {r.assistant}</Pill>
-                </div>
-                <p className="text-caption text-muted">
-                  <span className="font-figure">{detailsOf(r.details)}</span>
-                  {' · '}
-                  <span className="font-figure">{formatWhen(r.created_at)}</span>
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="primary" disabled={save.isPending} onClick={() => save.mutate(r)}>
-                    {save.isPending && save.variables?.id === r.id ? 'Checking…' : 'Save payee'}
-                  </Button>
-                  <Button type="button" disabled={dismiss.isPending} onClick={() => dismiss.mutate(r.id)}>
-                    Dismiss
-                  </Button>
-                </div>
-              </li>
-            ) : null,
-          )}
-        </ul>
-        {save.isError ? <Note ok={false}>{refusalText(save.error)}</Note> : null}
-        {dismiss.isError ? <Note ok={false}>{refusalText(dismiss.error)}</Note> : null}
-        {made !== null ? (
-          <Note ok>
-            {made.name} saved: {status(made.check, CHECK).text.toLowerCase()}
-            {made.needs_confirmation ? '. Confirm it with a passkey before the first payment.' : '.'}
-          </Note>
-        ) : null}
+    <PocketCard tone="white">
+      <h2 className="font-display text-head font-bold text-ink">Payees your assistant asked to add</h2>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {assistants.map((a) => (
+          <Chip key={a} tone="wait">
+            Asked by {a}
+          </Chip>
+        ))}
       </div>
-    </Card>
+      <p className="mt-2 text-body text-ink-2">Check each against what the payee told you. Nothing is saved, or can be paid, until you press Save.</p>
+      <ul className="mt-3 border-t border-line" aria-label="Payees your assistant asked to add">
+        {requests.map((r) =>
+          r.kind === 'payee' ? (
+            <li key={r.id} data-testid={`asked-payee-${r.id}`}>
+              <PocketRow
+                wrap
+                title={`${r.details.name} · ${r.details.country}`}
+                line={
+                  <>
+                    {kindOf(r.details).replace(/^./, (c) => c.toUpperCase())} · <span className="font-figure">{detailsOf(r.details)}</span> · asked{' '}
+                    {formatDecided(r.created_at)}
+                  </>
+                }
+                action={
+                  <>
+                    <PocketButton type="button" size="sm" variant="primary" disabled={save.isPending} onClick={() => save.mutate(r)}>
+                      {save.isPending && save.variables?.id === r.id ? 'Checking…' : 'Save payee'}
+                    </PocketButton>
+                    <PocketButton type="button" size="sm" variant="secondary" disabled={dismiss.isPending} onClick={() => dismiss.mutate(r.id)}>
+                      Dismiss
+                    </PocketButton>
+                  </>
+                }
+              />
+            </li>
+          ) : null,
+        )}
+      </ul>
+      {save.isError ? <Said ok={false}>{refusalText(save.error)}</Said> : null}
+      {dismiss.isError ? <Said ok={false}>{refusalText(dismiss.error)}</Said> : null}
+      {made !== null ? (
+        <Said ok>
+          {made.name} saved: {(CHECK[made.check]?.text ?? 'name not checked').toLowerCase()}
+          {made.needs_confirmation ? '. Confirm it with a passkey before the first payment.' : '.'}
+        </Said>
+      ) : null}
+    </PocketCard>
   )
 }
 
@@ -574,202 +1129,58 @@ const SCAM_QUESTIONS = [
 ] as const
 type ScamAnswers = Partial<Record<(typeof SCAM_QUESTIONS)[number]['key'], boolean>>
 
-/** One payment to a saved payee, from the company's or an agent's account (B30.17). */
-function SendPayment({
-  accounts,
-  payees,
-  sent,
-  accountName,
-}: {
-  accounts: CurrencyAccount[]
-  payees: OutsidePayee[]
-  sent: OutsidePayment[]
-  accountName: (a: CurrencyAccount) => string
-}) {
-  const qc = useQueryClient()
-  const [accountID, setAccountID] = useState(accounts[0]?.id ?? '')
-  const [payeeID, setPayeeID] = useState('')
-  const [amount, setAmount] = useState('')
-  const [reference, setReference] = useState('')
-  const [key, setKey] = useState(newMoveKey)
-  const [made, setMade] = useState<OutsidePayment | null>(null)
-  const [answers, setAnswers] = useState<ScamAnswers>({})
-  const [stillPay, setStillPay] = useState(false)
-  const account = accounts.find((a) => a.id === accountID) ?? accounts[0]
-  const payee = payees.find((p) => p.id === payeeID)
-  const minor = minorOf(amount)
-  // B41.13: before the first payment to a payee, both questions are answered; a yes to either needs a second confirmation.
-  const first = payee !== undefined && !sent.some((p) => p.payee_id === payee.id)
-  const risky = SCAM_QUESTIONS.some((q) => answers[q.key] === true)
-  const checked = !first || (SCAM_QUESTIONS.every((q) => answers[q.key] !== undefined) && (!risky || stillPay))
-  const complete = account !== undefined && payee !== undefined && !payee.needs_confirmation && minor !== null && checked
-  const pay = useMutation({
-    mutationFn: () =>
-      agentBankApi.payOutside({ account_id: account?.id ?? '', payee_id: payeeID, amount_minor: minor ?? 0, currency: account?.currency ?? '', reference: reference.trim(), idempotency_key: key }),
-    onSuccess: (p) => {
-      setMade(p)
-      setAmount('')
-      setReference('')
-      setKey(newMoveKey())
-      setAnswers({})
-      setStillPay(false)
-      void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
-      void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
-    },
-  })
-  return (
-    <Card>
-      <CardHeader>Send</CardHeader>
-      <form
-        className="flex flex-col gap-3 px-gutter py-3"
-        data-testid="send-payment"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (complete && !pay.isPending) pay.mutate()
-        }}
-      >
-        <div className="grid gap-3 wide:grid-cols-2">
-          <label className={field}>
-            From
-            <select aria-label="From" className={`${select} w-full`} value={account?.id ?? ''} onChange={(e) => setAccountID(e.target.value)}>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {accountName(a)}
-                </option>
-              ))}
-            </select>
-            <span>
-              Holds <span className="font-figure">{formatMinor(account?.test_minor ?? 0, account?.currency ?? 'GBP')}</span>
-            </span>
-          </label>
-          <label className={field}>
-            To
-            <select
-              aria-label="To"
-              className={`${select} w-full`}
-              value={payeeID}
-              onChange={(e) => {
-                setPayeeID(e.target.value)
-                setAnswers({})
-                setStillPay(false)
-              }}
-            >
-              <option value="">Choose a payee</option>
-              {payees.map((p) => (
-                <option key={p.id} value={p.id} disabled={p.needs_confirmation}>
-                  {p.name}
-                  {p.needs_confirmation ? ' (confirm first)' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={field}>
-            Amount in {account?.currency ?? 'GBP'}
-            <Input aria-label={`Amount in ${account?.currency ?? 'GBP'}`} inputMode="decimal" placeholder="20.00" className="font-figure" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </label>
-          <label className={field}>
-            Reference
-            <Input aria-label="Reference" placeholder="What the payee sees" value={reference} onChange={(e) => setReference(e.target.value)} />
-          </label>
-        </div>
-        {first ? (
-          <fieldset className="flex flex-col gap-2 border-t border-rule pt-3" data-testid="scam-check">
-            <legend className="text-body text-ink">First payment to {payee.name}: two quick questions</legend>
-            {SCAM_QUESTIONS.map((q) => (
-              <div key={q.key} role="radiogroup" aria-label={q.text} className="flex flex-wrap items-center gap-3 text-body text-ink">
-                <span className="min-w-0 flex-1">{q.text}</span>
-                {([true, false] as const).map((yes) => (
-                  <label key={String(yes)} className="flex items-center gap-1 text-caption text-muted">
-                    <input
-                      type="radio"
-                      name={`scam-${q.key}`}
-                      className={`h-4 w-4 accent-accent transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
-                      checked={answers[q.key] === yes}
-                      onChange={() => {
-                        setAnswers((a) => ({ ...a, [q.key]: yes }))
-                        setStillPay(false)
-                      }}
-                    />
-                    {yes ? 'Yes' : 'No'}
-                  </label>
-                ))}
-              </div>
-            ))}
-            {risky ? (
-              <div role="alert" className="flex flex-col gap-2 rounded-control border border-rule-strong px-3 py-2" data-testid="scam-warning">
-                <p className="flex flex-wrap items-center gap-2 text-body text-ink">
-                  <Pill status="slashed">Stop and check</Pill>
-                  <span>This could be a scam.</span>
-                </p>
-                <p className="text-caption text-ink">
-                  Fraudsters rush people into paying, and they send or change bank details by email or chat. Before you pay, call {payee.name} on a
-                  number you already have — not one from the message — and check the details. Money sent to a fraudster is often not recovered.
-                </p>
-                <label className="flex items-start gap-2 text-caption text-ink">
-                  <input
-                    type="checkbox"
-                    className={`mt-0.5 h-4 w-4 shrink-0 accent-accent transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
-                    checked={stillPay}
-                    onChange={(e) => setStillPay(e.target.checked)}
-                  />
-                  <span>I have checked the details with {payee.name} directly and still want to pay.</span>
-                </label>
-              </div>
-            ) : null}
-          </fieldset>
-        ) : null}
-        <div>
-          <Button type="submit" variant="primary" disabled={!complete || pay.isPending}>
-            {pay.isPending ? 'Sending…' : 'Send'}
-          </Button>
-        </div>
-        {pay.isError ? <Note ok={false}>{refusalText(pay.error)}</Note> : null}
-        {made !== null ? (
-          <Note ok>
-            <span className="font-figure">{formatMinor(made.amount_minor, made.currency)}</span> to {made.payee_name}: {paymentStatus(made.status).text.toLowerCase()}
-            {made.detail ? ` — ${made.detail}` : ''}.
-          </Note>
-        ) : null}
-      </form>
-    </Card>
-  )
-}
-
-/** An agent's own payments out that its rules sent to a person: approve or deny here, signed once the workspace has a passkey. */
+/** An agent's own payments out that its rules sent to a person: approve or decline here, signed once the workspace has a passkey. */
 function Waiting({ agentName }: { agentName: (id: string) => string }) {
   const qc = useQueryClient()
   const approvals = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
-  const keys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
-  const signed = (keys.data?.passkeys ?? []).length > 0
+  const { signed, onlyThePhone, hold } = useKeys()
   const waiting = (approvals.data?.approvals ?? []).filter((a) => a.status === 'pending' && a.payee?.kind === 'outside')
+  // B55.19 — the payment whose Decline form is open, and what the last decline did.
+  const [declining, setDeclining] = useState<string | null>(null)
+  const [declined, setDeclined] = useState('')
   const decide = useMutation({
-    mutationFn: async ({ a, decision }: { a: AgentApproval; decision: 'approve' | 'deny' }) =>
-      agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: APPROVALS_KEY }),
+    mutationFn: async ({ a, decision, reason }: { a: AgentApproval; decision: 'approve' | 'deny'; reason?: string }) =>
+      agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined, undefined, reason),
+    onSuccess: (_, { a, decision }) => {
+      setDeclining(null)
+      setDeclined(decision === 'deny' ? declinedText(agentName(a.agent_id), a) : '')
+      void qc.invalidateQueries({ queryKey: APPROVALS_KEY })
+    },
   })
   if (approvals.isError) return <p className="text-body text-muted">{readFailure(approvals.error, 'The agents’ requests')}</p>
-  if (waiting.length === 0) return null
+  if (waiting.length === 0) return declined ? <Note ok>{declined}</Note> : null
   return (
     <Card>
       <CardHeader>Waiting for your approval</CardHeader>
+      {declined ? (
+        <div className="px-gutter pt-3">
+          <Note ok>{declined}</Note>
+        </div>
+      ) : null}
       <ul>
         {waiting.map((a) => (
           <li key={a.id} className="flex flex-col gap-2 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`approval-${a.id}`}>
             <p className="text-body text-ink">
-              {agentName(a.agent_id)} asked to pay {a.payee?.name} <span className="font-figure">{formatULXC(a.amount_ulxc)}</span>
-              {a.memo ? ` — ${a.memo}` : ''}
+              {agentName(a.agent_id)} asked to pay {a.payee?.name} <Lxc ulxc={a.amount_ulxc} />
+              {a.memo ? ` · ${a.memo}` : ''}
             </p>
             <p className="text-caption text-muted">
               Asked <span className="font-figure">{formatWhen(a.created_at)}</span>. Approved, the agent’s next identical request goes through, once.
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'approve' })}>
-                Approve
-              </Button>
-              <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'deny' })}>
-                Deny
-              </Button>
-            </div>
+            {onlyThePhone ? (
+              <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
+            ) : hold ? null : declining === a.id ? (
+              <DeclineForm disabled={decide.isPending} onDecline={(reason) => decide.mutate({ a, decision: 'deny', reason })} onCancel={() => setDeclining(null)} />
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'approve' })}>
+                  Approve
+                </Button>
+                <Button type="button" disabled={decide.isPending} onClick={() => setDeclining(a.id)}>
+                  Decline
+                </Button>
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -779,26 +1190,6 @@ function Waiting({ agentName }: { agentName: (id: string) => string }) {
         </div>
       ) : null}
     </Card>
-  )
-}
-
-function PaymentRow({ p }: { p: OutsidePayment }) {
-  const s = paymentStatus(p.status)
-  return (
-    <LinkedItem id={`payment-${p.id}`} className="flex flex-col gap-1 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`payment-${p.id}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="min-w-0 text-body text-ink">{p.payee_name}</span>
-        <span className="flex items-center gap-2">
-          <span className="text-body font-figure text-ink">{formatMinor(p.amount_minor, p.currency)}</span>
-          <Pill status={s.pill}>{s.text}</Pill>
-        </span>
-      </div>
-      <p className="text-caption text-muted">
-        {p.reference ? `${p.reference} · ` : ''}
-        <span className="font-figure">{formatWhen(p.created_at)}</span>
-        {p.detail ? ` · ${p.detail}` : ''}
-      </p>
-    </LinkedItem>
   )
 }
 
@@ -968,7 +1359,20 @@ function StandingOrders({
   )
 }
 
-/** A mandate from an agent's account: a Talyvor company or an outside business pulls within it (B30.19). */
+/** What a mandate's status reads as, and its pill (B55.56: an agent's own key only asks; the owner decides). */
+const MANDATE_STATUS: Record<string, { text: string; pill: PillStatus }> = {
+  requested: { text: 'Asked', pill: 'held' },
+  active: { text: 'Active', pill: 'settled' },
+  declined: { text: 'Declined', pill: 'slashed' },
+  expired: { text: 'Expired', pill: 'idle' },
+  revoked: { text: 'Revoked', pill: 'slashed' },
+}
+const mandateStatus = (s: string) => MANDATE_STATUS[s] ?? MANDATE_STATUS.revoked
+
+/**
+ * A mandate from an agent's account: a Talyvor company or an outside business pulls within it (B30.19). B55.56: the
+ * owner's grant is signed as a payment is, and a mandate an agent asked for waits here for Approve (signed) or Decline.
+ */
 function Mandates({
   accounts,
   payees,
@@ -994,7 +1398,7 @@ function Mandates({
   const refresh = () => void qc.invalidateQueries({ queryKey: MANDATES_KEY })
   const grant = useMutation({
     mutationFn: () =>
-      agentBankApi.grantMandate({
+      grantMandateSigned({
         account_id: account?.id ?? '',
         payee_workspace_id: kind === 'company' ? form.workspace.trim() : '',
         payee_business_id: kind === 'business' ? form.business.trim() : '',
@@ -1011,6 +1415,10 @@ function Mandates({
     },
   })
   const revoke = useMutation({ mutationFn: (id: string) => agentBankApi.revokeMandate(id), onSuccess: refresh })
+  const decide = useMutation({
+    mutationFn: ({ id, approve }: { id: string; approve: boolean }) => (approve ? approveMandateSigned(id) : agentBankApi.declineMandate(id)),
+    onSuccess: refresh,
+  })
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
   const row = (m: Mandate, granted: boolean) => (
     <li key={m.id} className="flex flex-col gap-1 border-b border-rule pb-2 last:border-b-0 last:pb-0" data-testid={`mandate-${m.id}`}>
@@ -1019,12 +1427,25 @@ function Mandates({
           {granted ? `${m.payee_name} pulls from ${agentName(m.agent_id)}` : `${m.payee_name} lets you pull`} · up to <span className="font-figure">{formatMinor(m.max_per_pull_minor, m.currency)}</span> a pull,{' '}
           <span className="font-figure">{formatMinor(m.max_per_month_minor, m.currency)}</span> a month
         </span>
-        <Pill status={m.status === 'active' ? 'settled' : 'slashed'}>{m.status === 'active' ? 'Active' : 'Revoked'}</Pill>
+        <Pill status={mandateStatus(m.status).pill}>{mandateStatus(m.status).text}</Pill>
       </div>
       <p className="text-caption text-muted">
         Pulled this month <span className="font-figure">{formatMinor(m.pulled_this_month_minor, m.currency)}</span> · expires{' '}
         <span className="font-figure">{formatWhen(m.expires_at)}</span>
       </p>
+      {granted && m.status === 'requested' ? (
+        <>
+          <p className="text-caption text-muted">{agentName(m.agent_id)} asked for this mandate. Nothing is pulled until you approve it.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: true })}>
+              Approve
+            </Button>
+            <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: false })}>
+              Decline
+            </Button>
+          </div>
+        </>
+      ) : null}
       {granted && m.status === 'active' ? (
         <div>
           <Button type="button" disabled={revoke.isPending} onClick={() => revoke.mutate(m.id)}>
@@ -1058,6 +1479,7 @@ function Mandates({
           </>
         ) : null}
         {revoke.isError ? <Note ok={false}>{refusalText(revoke.error)}</Note> : null}
+        {decide.isError ? <Note ok={false}>{refusalText(decide.error)}</Note> : null}
           <form
             className="flex flex-col gap-3"
             data-testid="new-mandate"
@@ -1170,7 +1592,7 @@ function Payouts() {
           }}
         >
           <p className="text-caption text-muted">
-            A CSV with a header row — <span className="font-figure">payee_id,amount,currency,reference</span> — and up to 1,000 rows, each a saved payee’s id, an amount such as{' '}
+            A CSV with a header row (<span className="font-figure">payee_id,amount,currency,reference</span>) and up to 1,000 rows, each a saved payee’s id, an amount such as{' '}
             <span className="font-figure">12.34</span>, GBP, EUR or USD and a reference. Every row is checked before anything moves; one approval pays the valid ones from the company’s
             account.
           </p>
@@ -1199,13 +1621,18 @@ function Payouts() {
   )
 }
 
-/** One batch: its counts and totals, every row's result once read, and its one approval. */
+/**
+ * One batch: its counts and totals, every row's result once read, and its one approval. B58.6: a batch awaiting approval
+ * shows every row it pays, and once the workspace has a key, Approve asks for the passkey over the batch's own challenge
+ * (Lens B58.5); with only the phone's key, it says to approve there.
+ */
 function Batch({ b }: { b: PayoutBatch }) {
   const qc = useQueryClient()
-  const [shown, setShown] = useState(b.rows !== undefined && b.rows !== null)
+  const { signed, onlyThePhone, hold } = useKeys()
+  const [shown, setShown] = useState((b.rows !== undefined && b.rows !== null) || b.status === 'awaiting_approval')
   const detail = useQuery({ queryKey: [...PAYOUTS_KEY, b.id], queryFn: () => agentBankApi.payout(b.id), enabled: shown, initialData: b.rows ? b : undefined })
   const approve = useMutation({
-    mutationFn: () => agentBankApi.approvePayout(b.id),
+    mutationFn: () => approvePayoutSigned(b.id),
     onSuccess: (next) => {
       qc.setQueryData([...PAYOUTS_KEY, b.id], next)
       setShown(true)
@@ -1251,7 +1678,7 @@ function Batch({ b }: { b: PayoutBatch }) {
                 <span className="min-w-0">
                   <span className="font-figure">{r.line}</span> · {r.payee_name || r.payee_id}
                   {r.reference ? ` · ${r.reference}` : ''}
-                  {r.detail ? <span className="text-muted"> — {r.detail}</span> : null}
+                  {r.detail ? <span className="text-muted"> · {r.detail}</span> : null}
                 </span>
                 <span className="flex items-center gap-2">
                   <span className="font-figure">{formatMinor(r.amount_minor, r.currency)}</span>
@@ -1272,12 +1699,28 @@ function Batch({ b }: { b: PayoutBatch }) {
             Rows
           </Button>
         ) : null}
-        {batch.status === 'awaiting_approval' && batch.rows_valid > 0 ? (
+        {batch.status === 'awaiting_approval' && batch.rows_valid > 0 && !hold ? (
           <Button type="button" disabled={approve.isPending} onClick={() => approve.mutate()}>
             {approve.isPending ? 'Paying…' : `Approve and pay ${batch.rows_valid} ${batch.rows_valid === 1 ? 'row' : 'rows'}`}
           </Button>
         ) : null}
       </div>
+      {batch.status === 'awaiting_approval' && batch.rows_valid > 0 ? (
+        onlyThePhone ? (
+          <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
+        ) : signed && !hold ? (
+          <p className="text-caption text-muted" data-testid="payout-signs">
+            Your passkey signs these <span className="font-figure">{batch.rows_valid}</span> valid {batch.rows_valid === 1 ? 'row' : 'rows'}
+            {totals.length > 0 ? (
+              <>
+                {' '}
+                and <span className="font-figure">{totals.map(([c, n]) => formatMinor(n, c)).join(', ')}</span>
+              </>
+            ) : null}
+            . If the batch changes after you sign, nothing is paid.
+          </p>
+        ) : null
+      ) : null}
       {approve.isError ? <Note ok={false}>{refusalText(approve.error)}</Note> : null}
     </div>
   )
@@ -1330,7 +1773,7 @@ function Bills({ payeeName }: { payeeName: (id: string | undefined) => string })
           }}
         >
           <p className="text-caption text-muted">
-            Add an invoice you received — a PDF, Word, HTML or text file — and Talyvor reads its supplier, amount, due date and invoice number and finds the saved payee. Bank details
+            Add an invoice you received (a PDF, Word, HTML or text file) and Talyvor reads its supplier, amount, due date and invoice number and finds the saved payee. Bank details
             printed on an invoice are shown, never paid on their own: a bill is paid to a saved payee. The same invoice added twice is one bill.
           </p>
           <div className="flex flex-wrap items-center gap-2">

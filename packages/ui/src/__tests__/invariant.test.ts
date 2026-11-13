@@ -25,7 +25,9 @@ const roots = [
   resolve(import.meta.dirname, '..'),
   resolve(import.meta.dirname, '../../../../apps/web/src'),
 ]
-const forbidden = /\btext-(lens|lxc|tier[1-4]|settled|held|slashed)\b/
+// Pocket (B57.2): text is never tangerine or an agent colour. tangerine-ink is the one orange
+// that carries words, so it alone is allowed.
+const forbidden = /\btext-(lens|lxc|tier[1-4]|settled|held|slashed|tangerine(?!-ink\b)|agent-[a-z]+)\b/
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = []
@@ -54,6 +56,11 @@ describe('text is never a hue', () => {
     expect(forbidden.test(stripComments('// never write text-slashed here'))).toBe(false)
     // and it must not fire on the SANCTIONED affordance forms
     expect(forbidden.test(stripComments('<i className="border-l-slashed bg-held" />'))).toBe(false)
+    // Pocket's: tangerine and the agent colours are never text; tangerine-ink is the orange for words
+    expect(forbidden.test(stripComments('<b className="text-tangerine" />'))).toBe(true)
+    expect(forbidden.test(stripComments('<b className="text-tangerine-50" />'))).toBe(true)
+    expect(forbidden.test(stripComments('<b className="text-agent-cobalt" />'))).toBe(true)
+    expect(forbidden.test(stripComments('<b className="text-tangerine-ink bg-tangerine bg-agent-mint" />'))).toBe(false)
   })
 
   for (const f of files) {

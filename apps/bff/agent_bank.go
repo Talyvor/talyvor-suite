@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -16,29 +17,33 @@ import (
 // (B19.3), reached with this session's own token:
 //
 //	GET  /api/agents                                   the agents and their balances, reconciled with the workspace
-//	POST /api/agents                    {"name"}       create an agent
+//	POST /api/agents                    {"name", "colour"?}   create an agent; B57.124: its helper's colour
 //	POST /api/agents/{id}/fund          {"amount_ulxc"}   move the workspace's LXC to the agent
 //	POST /api/agents/{id}/withdraw      {"amount_ulxc"}   take it back
 //	POST /api/agents/{id}/keys          {"name"}       issue the agent a proxy key of its own, shown once
-//	GET  /api/agents/{id}/rules, PUT {rules}           the agent's spending rules
+//	GET  /api/agents/{id}/rules, PUT {rules}           the agent's spending rules; PUT {"rules", "assertion"} when looser (B55.14)
+//	POST /api/agents/{id}/rules-challenge {"rules"}|{"rollback_to"}|{"template"}|{"boost"}   B55.14: looser or not, the
+//	                                                   changes in words, and the challenge a looser save is signed over
 //	POST /api/agents/{id}/rules/simulate {"amount_ulxc", "model"?, "provider"?, "payee"?, "at"?}   B28.30: would they let it through? moves nothing
 //	GET  /api/agents/{id}/rules/history                B28.31: every version of the rules, newest first, who changed them and how
-//	POST /api/agents/{id}/rules/rollback {"version"}   B28.31: put the rules back exactly as they were at that version
+//	POST /api/agents/{id}/rules/rollback {"version", "assertion"?}   B28.31: put the rules back exactly as they were at that version
 //	GET  /api/agents/{id}/rules/boosts                 B28.32: the limits raised for now, and until when
-//	POST /api/agents/{id}/rules/boosts {"rule", "value", "until"}   B28.32: raise a limit until a time; it reverts by itself
+//	POST /api/agents/{id}/rules/boosts {"rule", "value", "until", "assertion"?}   B28.32: raise a limit until a time; it reverts by itself
 //	DELETE /api/agents/{id}/rules/boosts/{rule}        B28.32: end a boost before its time
 //	GET  /api/agents/{id}/wallet                       B46.9: its wallet on the money layer — balance and how to pay into it
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
-//	GET  /api/agents/{id}/statement?from=&to=&format=json|csv   B19.22: its statement for a period, to download
-//	GET  /api/agents/statement?from=&to=&format=json|csv        B19.22: every account in the bank, for a period
+//	GET  /api/agents/{id}/statement?from=&to=&format=json|csv|pdf|journal   B19.22: its statement for a period, to download (B28.55: PDF; B28.56: a journal for Xero or QuickBooks)
+//	GET  /api/agents/{id}/statement?kind=&q=&limit=&cursor=     B28.51: that statement searched, filtered and paged
+//	GET  /api/agents/{id}/analytics?from=&to=          B28.53: its spend for a period by day, model and destination
+//	GET  /api/agents/statement?from=&to=&format=json|csv|pdf|journal        B19.22: every account in the bank, for a period
 //	POST /api/agents/{id}/claim                        B19.23: the signed-in person becomes an ownerless agent's owner
-//	PATCH /api/agents/{id}              {"name"?, "description"?}   B28.21: rename it, describe it
+//	PATCH /api/agents/{id}              {"name"?, "description"?, "colour"?}   B28.21: rename it, describe it; B57.124: its helper
 //	POST /api/agents/{id}/archive                      B28.21: retire it — its balance back to the workspace, its keys revoked
 //	GET  /api/agents/{id}/card                         B19.24: its test-mode card and every purchase on it (404: none)
 //	POST /api/agents/{id}/card          {cardholder}   B19.24: issue it one, the cardholder's name and billing address
 //	POST /api/agents/{id}/pay           {"to_agent_id", "amount_ulxc", "memo"}   pay another of this workspace's agents
 //	GET  /api/agents/approvals                         what the agents' rules sent to a person, newest first
-//	POST /api/agents/approvals/{id}/approve, …/deny    decide one; approve {"always_allow": {"amount_ulxc", "per"}} also saves it for the payee (B41.4)
+//	POST /api/agents/approvals/{id}/approve, …/deny    decide one; approve {"always_allow": {"amount_ulxc", "per"}} also saves it for the payee (B41.4); deny {"reason"} says why (B55.19)
 //
 // Lens decides who may move money (the workspace's owner or an admin) and judges every rule. A
 // refusal comes back with Lens's status AND its sentence — which rule, what the agent holds, which
@@ -69,6 +74,12 @@ func (a *app) lensRelay(w http.ResponseWriter, r *http.Request, bearer, method, 
 
 // lensRelayTyped is lensRelay with the body's own Content-Type — text/csv for a payout batch uploaded as a file (B30.96).
 func (a *app) lensRelayTyped(w http.ResponseWriter, r *http.Request, bearer, method, path string, body []byte, contentType, shown string) {
+	a.lensRelayHeaders(w, r, bearer, method, path, body, contentType, shown, nil)
+}
+
+// lensRelayHeaders is lensRelayTyped with headers of the BFF's own for Lens: the session's sign-in time on the key
+// recovery routes (B55.54, key_recovery.go). Never a header the browser sent.
+func (a *app) lensRelayHeaders(w http.ResponseWriter, r *http.Request, bearer, method, path string, body []byte, contentType, shown string, extra http.Header) {
 	var rd io.Reader
 	if body != nil {
 		rd = bytes.NewReader(body)
@@ -87,6 +98,9 @@ func (a *app) lensRelayTyped(w http.ResponseWriter, r *http.Request, bearer, met
 	}
 	if k := r.Header.Get("Idempotency-Key"); k != "" && len(k) <= 128 {
 		req.Header.Set("Idempotency-Key", k)
+	}
+	for k, v := range extra {
+		req.Header[k] = v
 	}
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -124,7 +138,8 @@ func (a *app) handleAgents(w http.ResponseWriter, r *http.Request, t tenant) {
 		a.agentBankRelay(w, r, t, http.MethodGet, "/agents", nil)
 	case http.MethodPost:
 		var in struct {
-			Name string `json:"name"`
+			Name   string `json:"name"`
+			Colour string `json:"colour"` // B57.124: the helper the owner picked; Lens picks one when it is ""
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -134,8 +149,8 @@ func (a *app) handleAgents(w http.ResponseWriter, r *http.Request, t tenant) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "an agent needs a name"})
 			return
 		}
-		// UPSTREAM-BINDS-ONLY lensAgentCreateBody: none
-		body, _ := json.Marshal(map[string]string{"name": in.Name})
+		// UPSTREAM-BINDS-ONLY lensAgentCreateBody: face, fiat_currency, owner_user_id, template, wallet_kind
+		body, _ := json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour})
 		a.agentBankRelay(w, r, t, http.MethodPost, "/agents", body)
 	default:
 		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
@@ -217,6 +232,36 @@ func (a *app) handleAgentRules(w http.ResponseWriter, r *http.Request, t tenant)
 		a.agentBankRelay(w, r, t, http.MethodGet, suffix, nil)
 		return
 	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	// B55.14: a looser change comes as {"rules", "assertion"} (Lens B55.13); otherwise the rules alone, which have no
+	// "rules" field of their own.
+	var signed struct {
+		Rules     json.RawMessage   `json:"rules"`
+		Assertion *passkeyAssertion `json:"assertion"`
+	}
+	if json.Unmarshal(raw, &signed) == nil && signed.Rules != nil {
+		raw = signed.Rules
+	}
+	rules, ok := agentRulesFields(w, raw)
+	if !ok {
+		return
+	}
+	if signed.Rules == nil || signed.Assertion == nil {
+		a.agentBankRelay(w, r, t, http.MethodPut, suffix, rules)
+		return
+	}
+	// UPSTREAM-BINDS-ONLY lensAgentRulesSignedBody: none
+	body, _ := json.Marshal(map[string]any{"rules": json.RawMessage(rules), "assertion": signed.Assertion})
+	a.agentBankRelay(w, r, t, http.MethodPut, suffix, body)
+}
+
+// agentRulesFields rebuilds an agent's rules from raw, field by field, as Lens's economy.AgentRules reads them; a body
+// that is not rules is answered 400 here.
+func agentRulesFields(w http.ResponseWriter, raw []byte) ([]byte, bool) {
 	// Lens's economy.AgentRules. Lens decodes it with DisallowUnknownFields, so a field named here
 	// that Lens does not have is a 400, never a rule silently dropped.
 	var in struct {
@@ -253,13 +298,54 @@ func (a *app) handleAgentRules(w http.ResponseWriter, r *http.Request, t tenant)
 		// B19.6 — Lens replaces every other rule on a save, so this is carried back as it was read.
 		PauseOnUnusualSpend bool `json:"pause_on_unusual_spend"`
 	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return nil, false
+	}
+	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_licences, max_commitment_ulxc, may_subscribe, payee_allowances
+	body, _ := json.Marshal(in)
+	return body, true
+}
+
+// ruleBoostBody is a boost as Lens's economy.AgentRuleBoost is asked for one: the limit, raised to, until when.
+type ruleBoostBody struct {
+	Rule  string    `json:"rule"`
+	Value int64     `json:"value"`
+	Until time.Time `json:"until"`
+}
+
+// handleAgentRulesChallenge — POST /api/agents/{id}/rules-challenge (Lens: …/rules/challenge; B55.14): what a change would do to the agent's
+// rules — looser or not, and each rule it changes in the words rules history uses — and, when looser, the challenge its
+// save is signed over and the passkeys that may sign it. Lens (B55.13) judges a save, a rollback, a template or a boost
+// by the rules it puts in force, and saves nothing here.
+func (a *app) handleAgentRulesChallenge(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	suffix, ok := agentSuffix(w, r, "rules/challenge")
+	if !ok {
+		return
+	}
+	// Lens's economy.RulesProposal: exactly one is set, and Lens says so when not.
+	var in struct {
+		Rules      json.RawMessage `json:"rules,omitempty"`
+		RollbackTo int             `json:"rollback_to,omitempty"`
+		Template   string          `json:"template,omitempty"`
+		Boost      *ruleBoostBody  `json:"boost,omitempty"`
+	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_licences, max_commitment_ulxc, may_subscribe, payee_allowances
+	if in.Rules != nil {
+		if in.Rules, ok = agentRulesFields(w, in.Rules); !ok {
+			return
+		}
+	}
+	// UPSTREAM-BINDS-ONLY lensAgentRulesChallengeBody: none
 	body, _ := json.Marshal(in)
-	a.agentBankRelay(w, r, t, http.MethodPut, suffix, body)
+	a.agentBankRelay(w, r, t, http.MethodPost, suffix, body)
 }
 
 // simulatedPayee is Lens's economy.Payee: who a simulated payment goes to — an agent, a listing, a company or
@@ -352,6 +438,8 @@ func (a *app) handleAgentRulesRollback(w http.ResponseWriter, r *http.Request, t
 	}
 	var in struct {
 		Version int `json:"version"`
+		// B55.14: a rollback that loosens the rules is signed over its challenge (Lens B55.13).
+		Assertion *passkeyAssertion `json:"assertion,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -384,6 +472,8 @@ func (a *app) handleAgentRuleBoosts(w http.ResponseWriter, r *http.Request, t te
 		Rule  string    `json:"rule"`
 		Value int64     `json:"value"`
 		Until time.Time `json:"until"`
+		// B55.14: a boost always loosens the rules, so it is signed once the workspace has a key (Lens B55.13).
+		Assertion *passkeyAssertion `json:"assertion,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<10)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -413,7 +503,9 @@ func (a *app) handleAgentRuleBoostEnd(w http.ResponseWriter, r *http.Request, t 
 }
 
 // handleAgentStatement — GET /api/agents/{id}/statement: the agent's last 100 lines. With ?from=, ?to=
-// or ?format= (B19.22) it is the agent's statement for that period instead, as JSON or a CSV file.
+// or ?format= (B19.22) it is the agent's statement for that period instead, as JSON, a CSV, (B28.55) a PDF or (B28.56) a journal; with ?kind=,
+// ?q= or ?cursor= (B28.51) too, so a search, a filter or a page past the newest lines reads the period statement; and
+// with ?group=day (B57.24), the lines by model and day.
 func (a *app) handleAgentStatement(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -423,7 +515,7 @@ func (a *app) handleAgentStatement(w http.ResponseWriter, r *http.Request, t ten
 	if !ok {
 		return
 	}
-	if q := r.URL.Query(); q.Has("from") || q.Has("to") || q.Has("format") {
+	if q := r.URL.Query(); q.Has("from") || q.Has("to") || q.Has("format") || q.Has("kind") || q.Has("q") || q.Has("cursor") || q.Has("group") {
 		a.agentStatementRelay(w, r, t, suffix)
 		return
 	}
@@ -440,20 +532,69 @@ func (a *app) handleBankStatement(w http.ResponseWriter, r *http.Request, t tena
 	a.agentStatementRelay(w, r, t, "/agents/statement")
 }
 
-// maxStatementBytes bounds a period statement the BFF passes on; a longer one asks for a shorter period.
-const maxStatementBytes = 32 << 20
-
-// agentStatementRelay asks Lens for a period statement (Lens B19.5) and answers with it: JSON, or the
-// CSV file with Lens's filename. Only from, to and format are sent up; Lens reads the dates (a
-// YYYY-MM-DD date is midnight UTC, the period is [from, to)) and its sentence on a bad one is relayed.
-func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tenant, suffix string) {
+// handleAgentAnalytics — GET /api/agents/{id}/analytics (B28.53): the agent's spend for [from, to) by day, model
+// and destination (Lens B28.326), whose buckets' out_ulxc sum to its statement's for the same period. Only from and
+// to are sent up.
+func (a *app) handleAgentAnalytics(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	suffix, ok := agentSuffix(w, r, "analytics")
+	if !ok {
+		return
+	}
 	in, up := r.URL.Query(), url.Values{}
-	for _, k := range []string{"from", "to", "format"} {
+	for _, k := range []string{"from", "to"} {
 		if v := in.Get(k); v != "" {
 			up.Set(k, v)
 		}
 	}
-	target := a.cfg.lensBaseURL + lensWorkspacePath(t, suffix)
+	path := lensWorkspacePath(t, suffix)
+	if len(up) > 0 {
+		path += "?" + up.Encode()
+	}
+	a.agentBankRelayPath(w, r, t, http.MethodGet, path, nil)
+}
+
+// maxStatementBytes bounds a period statement the BFF passes on; a longer one asks for a shorter period.
+const maxStatementBytes = 32 << 20
+
+// agentStatementRelay asks Lens for a period statement (Lens B19.5) and answers with it: JSON, or the
+// CSV file (or, B28.55, the PDF; B28.56, the journal CSV) with Lens's filename. Only from, to and format are sent up, and (B28.51) kind, q, limit and cursor, with
+// which Lens keeps the lines of those kinds holding q and pages them newest first; Lens reads the dates (a
+// YYYY-MM-DD date is midnight UTC, the period is [from, to)) and its sentence on a bad one is relayed. B57.24: group
+// too, which may only be day (Lens B57.13: each model's questions on a day one line), and a limit of 1 to 500; any
+// other is refused here.
+func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tenant, suffix string) {
+	q := r.URL.Query()
+	if g := q.Get("group"); g != "" && g != "day" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "group must be day"})
+		return
+	}
+	if v := q.Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err != nil || n < 1 || n > maxStatementLines {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be between 1 and 500"})
+			return
+		}
+	}
+	a.statementRelay(w, r, t, lensWorkspacePath(t, suffix), "from", "to", "format", "kind", "q", "group", "limit", "cursor")
+}
+
+// maxStatementLines is the most lines one page of a statement asks Lens for (B57.24).
+const maxStatementLines = 500
+
+// statementRelay is agentStatementRelay for any Lens statement path, sending up only the query keys named (B56.15: a
+// currency account's statement, /v1/money/accounts/{id}/statement, takes from, to and format).
+func (a *app) statementRelay(w http.ResponseWriter, r *http.Request, t tenant, path string, keys ...string) {
+	suffix := strings.TrimPrefix(path, lensWorkspacePath(t, ""))
+	in, up := r.URL.Query(), url.Values{}
+	for _, k := range keys {
+		if v := in.Get(k); v != "" {
+			up.Set(k, v)
+		}
+	}
+	target := a.cfg.lensBaseURL + path
 	if len(up) > 0 {
 		target += "?" + up.Encode()
 	}
@@ -471,19 +612,19 @@ func (a *app) agentStatementRelay(w http.ResponseWriter, r *http.Request, t tena
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxStatementBytes+1))
-	asCSV := up.Get("format") == "csv"
+	asFile := map[string]string{"csv": "text/csv; charset=utf-8", "journal": "text/csv; charset=utf-8", "pdf": "application/pdf"}[up.Get("format")]
 	switch {
 	case err != nil:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Lens could not answer just now"})
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && len(raw) > maxStatementBytes:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "This statement is too long to download at once — choose a shorter period."})
-	case resp.StatusCode >= 200 && resp.StatusCode < 300 && asCSV:
-		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	case resp.StatusCode >= 200 && resp.StatusCode < 300 && asFile != "":
+		w.Header().Set("Content-Type", asFile)
 		if cd := resp.Header.Get("Content-Disposition"); cd != "" {
 			w.Header().Set("Content-Disposition", cd)
 		}
 		w.WriteHeader(resp.StatusCode)
-		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the statement CSV under text/csv, and every response carries nosniff (setSecurityHeaders)
+		// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- the statement CSV under text/csv or PDF under application/pdf, and every response carries nosniff (setSecurityHeaders)
 		_, _ = w.Write(raw)
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && json.Valid(raw):
 		w.Header().Set("Content-Type", "application/json")
@@ -515,8 +656,9 @@ func (a *app) handleAgentClaim(w http.ResponseWriter, r *http.Request, t tenant)
 	}
 }
 
-// handleAgent — PATCH /api/agents/{id} (B28.21): renames the agent and/or sets what it is for. Either field
-// or both; an absent one is sent as null, which Lens leaves as it is. Lens answers the agent.
+// handleAgent — PATCH /api/agents/{id} (B28.21): renames the agent and/or sets what it is for, and (B57.124) its
+// helper's colour. Any of them; an absent name or description is sent as null and an absent colour not at all,
+// which Lens leaves as it is. Lens answers the agent.
 func (a *app) handleAgent(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodPatch {
 		methodNotAllowed(w, http.MethodPatch)
@@ -529,16 +671,17 @@ func (a *app) handleAgent(w http.ResponseWriter, r *http.Request, t tenant) {
 	var in struct {
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
+		Colour      *string `json:"colour,omitempty"` // B57.124: its helper; left out, Lens keeps the colour it has
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	if in.Name == nil && in.Description == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send a new name, a description, or both"})
+	if in.Name == nil && in.Description == nil && in.Colour == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send a new name, a description, a colour, or any of them"})
 		return
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentUpdateBody: none
+	// UPSTREAM-BINDS-ONLY lensAgentUpdateBody: face
 	body, _ := json.Marshal(in)
 	a.agentBankRelay(w, r, t, http.MethodPatch, "/agents/"+url.PathEscape(id), body)
 }
@@ -662,9 +805,11 @@ func (a *app) handleAgentDecision(decision string) func(http.ResponseWriter, *ht
 		// B19.10: once the workspace has a passkey, Lens takes the decision only with an assertion over
 		// this approval's challenge. A decision without one is sent as before — Lens says whether it may.
 		// B41.4: always_allow (Lens B41.104) approves and saves an allowance for the payee; Lens judges it.
+		// B55.19: reason (Lens B55.18) is why the owner declined, shown to the agent; Lens takes it on deny only.
 		var in struct {
 			Assertion   *passkeyAssertion `json:"assertion,omitempty"`
 			AlwaysAllow *payeeAllowance   `json:"always_allow,omitempty"`
+			Reason      *string           `json:"reason,omitempty"`
 		}
 		if r.ContentLength != 0 {
 			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil && err != io.EOF {
@@ -672,8 +817,11 @@ func (a *app) handleAgentDecision(decision string) func(http.ResponseWriter, *ht
 				return
 			}
 		}
+		if decision != "deny" {
+			in.Reason = nil
+		}
 		var body []byte
-		if in.Assertion != nil || in.AlwaysAllow != nil {
+		if in.Assertion != nil || in.AlwaysAllow != nil || in.Reason != nil {
 			// UPSTREAM-BINDS-ONLY lensApprovalDecisionBody: none
 			body, _ = json.Marshal(in)
 		}
@@ -688,7 +836,10 @@ func (a *app) handleAgentDecision(decision string) func(http.ResponseWriter, *ht
 //	POST   /api/agents/passkeys/challenge          a registration challenge and the RP ID
 //	GET    /api/agents/passkeys                    the workspace's passkeys
 //	POST   /api/agents/passkeys                    {credential_id, name, public_key, client_data_json, authenticator_data, assertion?}
+//	DELETE /api/agents/passkeys                    {credential_id}: B55.16, removed at once unless it is the last key (409)
+//	GET    /api/agents/keys                        B55.16: every active passkey and phone key, by name
 //	POST   /api/agents/approvals/{id}/challenge    the challenge approving or denying one approval is signed over
+//	                                               {"always_allow"?}: approving with always allow signs it too (B54.34)
 //	GET    /api/agents/push/public-key             the key a browser subscribes to pushes with
 //	POST   /api/agents/push/subscriptions          {endpoint, keys: {p256dh, auth}}
 //	DELETE /api/agents/push/subscriptions          {endpoint}
@@ -737,9 +888,34 @@ func (a *app) handlePasskeys(w http.ResponseWriter, r *http.Request, t tenant) {
 		// UPSTREAM-BINDS-ONLY lensPasskeyRegisterBody: none
 		body, _ := json.Marshal(in)
 		a.agentBankRelay(w, r, t, http.MethodPost, "/agents/passkeys", body)
+	case http.MethodDelete:
+		// B55.16: the id rides in the body, as a push subscription's endpoint does, because /api/agents/passkeys/{id}
+		// would collide with every /api/agents/{id}/… route. Lens needs no signature (stopping is instant) and refuses
+		// the workspace's last key, or one that owns an agent's account, with its sentence.
+		var in struct {
+			CredentialID string `json:"credential_id"`
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		id, ok := pathID(w, "passkey id", in.CredentialID)
+		if !ok {
+			return
+		}
+		a.agentBankRelay(w, r, t, http.MethodDelete, "/agents/passkeys/"+url.PathEscape(id), nil)
 	default:
-		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost+", "+http.MethodDelete)
 	}
+}
+
+// handleApprovalKeys — GET /api/agents/keys (B55.16): Lens's active passkeys and phone keys, each by name.
+func (a *app) handleApprovalKeys(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, "/agents/keys", nil)
 }
 
 // handleApprovalChallenge — POST /api/agents/approvals/{id}/challenge.
@@ -752,7 +928,78 @@ func (a *app) handleApprovalChallenge(w http.ResponseWriter, r *http.Request, t 
 	if !ok {
 		return
 	}
-	a.agentBankRelay(w, r, t, http.MethodPost, "/agents/approvals/"+url.PathEscape(id)+"/challenge", nil)
+	// B54.34: approving with always_allow signs that allowance too (Lens B54.29), so its challenge is asked for with it.
+	var in struct {
+		AlwaysAllow *payeeAllowance `json:"always_allow,omitempty"`
+	}
+	if r.ContentLength != 0 {
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil && err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+	}
+	var body []byte
+	if in.AlwaysAllow != nil {
+		// UPSTREAM-BINDS-ONLY lensApprovalChallengeBody: none
+		body, _ = json.Marshal(in)
+	}
+	a.agentBankRelay(w, r, t, http.MethodPost, "/agents/approvals/"+url.PathEscape(id)+"/challenge", body)
+}
+
+// B55.3 — a key let in from another device (Lens B55.1). A passkey or phone key registered with no assertion in a workspace
+// that has a key answers 202 {"enrolment": {"id", "code", "expires_at"}} and waits for a key the workspace has to let it in.
+//
+//	GET  /api/agents/keys/enrolments                the keys waiting
+//	GET  /api/agents/keys/enrolments/{id}           one, whatever its status
+//	POST /api/agents/keys/enrolments/{id}/challenge the challenge letting it in is signed over
+//	POST /api/agents/keys/enrolments/{id}/approve   {assertion} by a passkey or phone key the workspace has
+//	POST /api/agents/keys/enrolments/{id}/decline   it can never be let in after
+
+// handleKeyEnrolments — GET /api/agents/keys/enrolments.
+func (a *app) handleKeyEnrolments(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, "/agents/keys/enrolments", nil)
+}
+
+// handleKeyEnrolment — GET /api/agents/keys/enrolments/{id}.
+func (a *app) handleKeyEnrolment(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	if id, ok := pathID(w, "enrolment id", r.PathValue("id")); ok {
+		a.agentBankRelay(w, r, t, http.MethodGet, "/agents/keys/enrolments/"+url.PathEscape(id), nil)
+	}
+}
+
+// handleKeyEnrolmentAction — POST /api/agents/keys/enrolments/{id}/challenge, …/approve and …/decline.
+func (a *app) handleKeyEnrolmentAction(action string) func(http.ResponseWriter, *http.Request, tenant) {
+	return func(w http.ResponseWriter, r *http.Request, t tenant) {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w, http.MethodPost)
+			return
+		}
+		id, ok := pathID(w, "enrolment id", r.PathValue("id"))
+		if !ok {
+			return
+		}
+		var body []byte
+		if action == "approve" {
+			var in struct {
+				Assertion *passkeyAssertion `json:"assertion"`
+			}
+			if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil || in.Assertion == nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "letting a key in needs a key the workspace has to sign it"})
+				return
+			}
+			// UPSTREAM-BINDS-ONLY lensKeyEnrolmentApproveBody: none
+			body, _ = json.Marshal(in)
+		}
+		a.agentBankRelay(w, r, t, http.MethodPost, "/agents/keys/enrolments/"+url.PathEscape(id)+"/"+action, body)
+	}
 }
 
 // handlePushPublicKey — GET /api/agents/push/public-key.

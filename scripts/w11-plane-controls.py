@@ -155,6 +155,38 @@ CONTROLS = [
         red='console', green='neutral-web',
         why='the ten rendered sites, seen through the console shell rather than through a fixture',
     ),
+    # ── B57.3: THE SAME DEFECTS, PLANTED IN POCKET'S RULE ──────────────────────────────────────
+    # Run them alone with `python3 scripts/w11-plane-controls.py P`.
+    Control(
+        'P1 Pocket: a white card needs no shadow',
+        'apps/web/src/planeAudit.ts',
+        "  if (plane === 'page') return bareUtilities(el).includes('shadow-pocket')",
+        "  if (plane === 'page') return true",
+        red='plane-test', green='neutral-web',
+        why='pocket.css draws .card.white with its shadow; without it a white card vanishes into the page',
+    ),
+    Control(
+        'P2 Pocket: a cloud card may sit on anything',
+        'apps/web/src/planeAudit.ts',
+        "  if (plane === 'cloud') return pocketName(el.parentElement ? planeOf(el.parentElement).token : DEFAULT_PLANE) === 'page'",
+        "  if (plane === 'cloud') return true",
+        red='plane-test', green='neutral-web',
+        why='cloud is a card on the PAGE; cloud on cloud is no card at all',
+    ),
+    Control(
+        'P3 Pocket: permit a pair that fails — ink-3 on the primary fill',
+        'packages/ui/src/planes.ts',
+        "  primary: ['on-primary'],", "  primary: ['on-primary', 'ink-3'],",
+        red='plane-test', green='tokens',
+        why='the PERMITTED direction on Pocket\'s table: every permitted pair must clear AA body',
+    ),
+    Control(
+        'P4 Pocket: no page is ever held to Pocket\'s rules',
+        'apps/web/src/pocketPending.ts',
+        "getAttribute(DESIGN_ATTR) === 'pocket'", "getAttribute(DESIGN_ATTR) === 'never'",
+        red='plane-test', green='neutral-web',
+        why='the marker read blinded: every Pocket rule goes silent and today\'s rule takes every page',
+    ),
 ]
 
 

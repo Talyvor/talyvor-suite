@@ -1,32 +1,55 @@
 // sw.js — B19.10: shows the push Lens sends when an agent's request or payment waits for approval,
 // and opens Agent Wallets when it is tapped. The payload is decrypted by the browser (RFC 8291).
 //
-// B28.38: the push carries Approve and Deny. Either one decides the approval from here, with the
+// B28.38: the push carries Approve and Decline (B55.19; its action is still "deny", the route's name). Either one decides the approval from here, with the
 // session cookie, exactly as the Approvals screen does — the app does not open. Once a workspace has a
 // passkey, Lens takes a decision only signed with one, which a notification cannot ask for; then, and on
 // any other refusal, the app opens on Approvals so the person finishes it there.
+//
+// B55.2: a workspace with a passkey or a phone key decides only signed, so its push carries no actions
+// and the tap opens the approval on Approvals.
 
 const APPROVALS_URL = '/approvals'
 
 // B29.14: every notification carries the Talyvor app icon, as its picture and as its status-bar badge.
 const ICON = '/icon-192.png'
 
-/** Shows the notification for one push from Lens: {approval_id, agent_name, amount_lxc, reason}. */
-function showApproval(d) {
+/** Whether the workspace signs its decisions: any passkey or phone key, revoked ones too as Lens counts them. A read that fails counts as yes. */
+async function workspaceSigns() {
+  try {
+    const read = (path) => fetch(path, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+    const [p, d] = await Promise.all([read('/api/agents/passkeys'), read('/api/money/devices')])
+    if (!p.ok || !d.ok) return true
+    const passkeys = (await p.json()).passkeys || []
+    const devices = (await d.json()).devices || []
+    return passkeys.length > 0 || devices.length > 0
+  } catch {
+    return true
+  }
+}
+
+// B55.49: the amount at the end of Lens's sentence, in either order LENS_MONEY_ORDER names: "$340.00 (3,400 LXC)" or "3,400 LXC ($340.00)".
+const LENS_AMOUNT = /(-?\$[\d,.]+ \(-?[\d,.]+ LXC\)|-?[\d,.]+ LXC \(-?\$[\d,.]+\))$/
+
+/** Shows the notification for one push from Lens: {approval_id, agent_name, amount_lxc, reason, body}. */
+async function showApproval(d) {
   const who = d.agent_name || 'An agent'
-  const amount = d.amount_lxc ? `${d.amount_lxc} LXC` : 'a payment'
+  // B55.49: from B55.30 Lens sends body, the sentence the phones show, with dollars beside the LXC; an older Lens does not.
+  const said = typeof d.body === 'string' ? d.body.match(LENS_AMOUNT) : null
+  const amount = said ? said[1] : d.amount_lxc ? `${d.amount_lxc} LXC` : 'a payment'
   const id = d.approval_id || ''
-  return self.registration.showNotification(`${who} asks you to approve ${amount}`, {
-    body: d.reason || 'Open Agent Wallets to approve or deny it.',
+  const signs = id ? await workspaceSigns() : false
+  return self.registration.showNotification(said ? d.body : `${who} asks you to approve ${amount}`, {
+    body: signs ? 'Open Talyvor to approve or decline it with your passkey or your phone.' : d.reason || 'Open Agent Wallets to approve or decline it.',
     icon: ICON,
     badge: ICON,
     tag: id || 'agent-approval',
-    data: { url: APPROVALS_URL, approval_id: id, who, amount },
-    // Only a push naming its approval can be decided from the notification.
-    actions: id
+    data: { url: id ? `${APPROVALS_URL}#approval-${id}` : APPROVALS_URL, approval_id: id, who, amount },
+    // Only a push naming its approval, in a workspace that signs nothing, can be decided from the notification.
+    actions: id && !signs
       ? [
           { action: 'approve', title: 'Approve' },
-          { action: 'deny', title: 'Deny' },
+          { action: 'deny', title: 'Decline' },
         ]
       : [],
   })
@@ -98,7 +121,7 @@ function openApp(url) {
 }
 
 /**
- * Approve or Deny on the notification: sends the decision to the same route the Approvals screen uses,
+ * Approve or Decline on the notification: sends the decision to the same route the Approvals screen uses,
  * then replaces the notification with what happened. A decision Lens refuses opens the app instead.
  */
 async function decideFromNotification(notification, action) {
@@ -117,8 +140,8 @@ async function decideFromNotification(notification, action) {
   }
   if (!res || !res.ok) return openApp(url)
   const approved = action === 'approve'
-  return self.registration.showNotification(`${approved ? 'Approved' : 'Denied'}: ${data.who}, ${data.amount}`, {
-    body: approved ? 'Its next identical request goes through, once.' : 'Its request will be refused.',
+  return self.registration.showNotification(`${approved ? 'Approved' : 'Declined'}: ${data.who}, ${data.amount}`, {
+    body: approved ? 'Its next identical request goes through, once.' : 'Its request is refused, and the same request is refused without asking you for 24 hours.',
     icon: ICON,
     badge: ICON,
     tag: data.approval_id,

@@ -166,11 +166,11 @@ describe('the inversion fix: earned is copper, spent is steel', () => {
     stubFetch()
     renderSpend()
     // the by-model table is EARNED (the mined token), never labelled spend
-    expect(await screen.findByText('Earned by model — LENS mint attribution')).toBeInTheDocument()
+    expect(await screen.findByText('Earned by model · LENS mint attribution')).toBeInTheDocument()
     // the spent card: LXC debits at window granularity, PLUS the per-model split the
     // screen used to say was impossible
-    expect(screen.getByText('Spent — LXC')).toBeInTheDocument()
-    expect(screen.getByText(/Inference debits — 7d/)).toBeInTheDocument()
+    expect(screen.getByText('Spent · LXC')).toBeInTheDocument()
+    expect(screen.getByText(/Inference debits · 7d/)).toBeInTheDocument()
     // await the SPLIT, not the card header: the header is static markup and resolves
     // before the LXC query lands, so asserting on it would race the data.
     expect(await screen.findByTestId('lxc-by-model')).toHaveTextContent('claude-haiku-4-5')

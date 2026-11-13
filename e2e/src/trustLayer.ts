@@ -186,7 +186,7 @@ export function trustLayer(): Scenario {
 
         // Forged: another key under the published key's id is refused, and lands nowhere.
         const forged = await ask(`TRUST-${RUN_SALT}-2`, 'forged', `the same request signed by another key under ${domain}'s keyid`)
-        if (forged.status !== 401 || !forged.text.includes('does not verify')) return fail(`a forged signature must be refused 401 "does not verify"; Lens answered ${forged.status} ${forged.text.slice(0, 300)}`)
+        if (forged.status !== 401 || !/does not verify/i.test(forged.text)) return fail(`a forged signature must be refused 401 "does not verify"; Lens answered ${forged.status} ${forged.text.slice(0, 300)}`)
         // Unsigned: it lands as an unverified agent.
         const unsigned = await ask(`TRUST-${RUN_SALT}-3`, 'no', 'the same request, unsigned')
         if (unsigned.status !== 201 || unsigned.value?.agent_trust?.level !== 'unverified') {

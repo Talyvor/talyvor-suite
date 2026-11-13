@@ -149,7 +149,7 @@ export function IssuePicker({
       </ul>
       {apply.isError ? (
         <p className="border-t border-rule px-3 py-2 text-caption text-muted" role="status">
-          Couldn’t change {target.name} — nothing was changed.
+          Couldn’t change {target.name}. Nothing was changed.
         </p>
       ) : null}
     </div>

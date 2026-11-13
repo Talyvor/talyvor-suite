@@ -12,7 +12,7 @@ export type Consent = 'accepted' | 'rejected'
 /** The public pages (B44 section). Never /auth/*, never "/", never a signed-in page. */
 export function isPublicPath(path: string): boolean {
   return (
-    ['/pricing', '/signup', '/privacy', '/terms'].includes(path) ||
+    ['/pricing', '/your-money', '/signup', '/privacy', '/terms'].includes(path) ||
     ['/marketing', '/documentation'].some((p) => path === p || path.startsWith(p + '/'))
   )
 }

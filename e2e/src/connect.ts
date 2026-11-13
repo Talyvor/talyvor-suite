@@ -254,8 +254,7 @@ interface RPCResult {
 }
 
 /** An assistant registered by DCR and allowed through the consent screen in the browser: its access token, or the failure. */
-export async function connectAssistant(ctx: ScenarioCtx, origin: string, name: string,
-  scope = 'wallets:read invoices:draft payments:prepare'): Promise<string | { pass: false; detail: string }> {
+async function connectAssistant(ctx: ScenarioCtx, origin: string, name: string): Promise<string | { pass: false; detail: string }> {
   const server = createServer((_req, res) => res.writeHead(200, { 'Content-Type': 'text/plain' }).end('back at the assistant'))
   await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok))
   const callback = `http://127.0.0.1:${(server.address() as AddressInfo).port}/callback`
@@ -266,7 +265,7 @@ export async function connectAssistant(ctx: ScenarioCtx, origin: string, name: s
     const verifier = randomBytes(32).toString('base64url')
     const q = new URLSearchParams({ response_type: 'code', client_id: reg.client_id, redirect_uri: callback, state: 's',
       code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
-      scope, resource: `${origin}/mcp` })
+      scope: 'wallets:read invoices:draft payments:prepare', resource: `${origin}/mcp` })
     await ctx.app.page.goto(`${origin}/oauth/authorize?${q}`)
     await Promise.all([ctx.app.page.waitForURL((u) => u.href.startsWith(callback), { timeout: 30_000 }), ctx.app.page.getByRole('button', { name: 'Allow' }).click()])
     const code = new URL(ctx.app.page.url()).searchParams.get('code') ?? ''
@@ -476,8 +475,12 @@ export function connectMCP(): Scenario {
           await card.waitFor({ timeout: 30_000 })
           const words = (await card.innerText()).replace(/\s+/g, ' ')
           ctx.evidence.push({ note: `the approval card: "${words}"` })
-          // B46.2 (Nick, 24 Oct): the card carries no "Test money" chip any more, so only the payees are read.
           if (!words.includes('Nightly MCP Supplier One Ltd') || !words.includes('Nightly MCP Supplier Two Ltd')) wrong.push(`the approval card does not show both payees: "${words}"`)
+          // B56.13 — no "Test money" chip (B46.2): Lens's Sandbox for the payments out, as it labels a synthetic workspace (B56.11).
+          const chip = page.locator('[data-status-key="payments_out"]')
+          const chipState = await chip.first().getAttribute('data-status-label', { timeout: 10_000 }).catch(() => null)
+          if (chipState !== 'sandbox') wrong.push(`the approval card's payments out are labelled ${JSON.stringify(chipState)}, not Sandbox`)
+          if (await page.getByText('Test money', { exact: true }).count() > 0) wrong.push('the approval card still carries a "Test money" chip')
           if (!(await page.getByTestId('approve-total').innerText()).includes('2 of 2 payments to approve, total £30.00')) wrong.push(`the approval card's total reads "${await page.getByTestId('approve-total').innerText()}"`)
           await page.getByRole('checkbox', { name: 'Approve £20.00 to Nightly MCP Supplier Two Ltd' }).click()
           const total = await page.getByTestId('approve-total').innerText()

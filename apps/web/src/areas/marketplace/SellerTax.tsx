@@ -413,7 +413,7 @@ function SellerTaxForm({ tax }: { tax: SellerTax }) {
 
       <div className="flex flex-col gap-2">
         <span className="text-caption text-muted">
-          Tax identification numbers — each with the country that issued it
+          Tax identification numbers, each with the country that issued it
         </span>
         {tins === null ? (
           <div className="flex flex-wrap items-center gap-3">
@@ -542,7 +542,7 @@ function SellerTaxForm({ tax }: { tax: SellerTax }) {
           />
         ) : (
           <label className="flex flex-col gap-1 text-caption text-muted">
-            Account you are paid to — IBAN or account number
+            Account you are paid to: IBAN or account number
             <Input
               className="font-figure"
               autoComplete="off"
@@ -574,7 +574,7 @@ function SellerTaxForm({ tax }: { tax: SellerTax }) {
         </label>
         <details className="text-caption text-muted">
           <summary className="cursor-pointer">
-            What self-billing means — draft, for legal review
+            What self-billing means (draft, for legal review)
           </summary>
           <div className="mt-2 flex flex-col gap-2">
             <p>

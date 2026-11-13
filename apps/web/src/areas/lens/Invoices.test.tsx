@@ -10,14 +10,14 @@ let ACCOUNTS: Record<string, unknown>[] = [
   { id: 'macc_agt', agent_id: 'agt_1', currency: 'GBP', purpose: 'agent', status: 'open', name: 'GBP account', balance_minor: 0, test_minor: 0, live_minor: 0 },
 ]
 
-function mockBff(invoices: Array<Record<string, unknown>> = []) {
+function mockBff(invoices: Array<Record<string, unknown>> = [], accounts: Array<Record<string, unknown>> = ACCOUNTS) {
   const sent: Array<{ url: string; body: unknown }> = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
-    if (url === '/api/money/accounts') return json({ accounts: ACCOUNTS })
+    if (url === '/api/money/accounts') return json({ accounts })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [{ id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-10T09:00:00Z' },
       { id: 'agt_2', name: 'Research', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-10T09:00:00Z' }] })
     if (url === '/api/wallets/capabilities') return json({ capabilities: [{ capability: 'payments_in', name: 'Money in', class: 'RED', real_money: false, level_needed: 'L2' }] })
@@ -101,13 +101,37 @@ describe('the Invoices screen', () => {
     expect(bff.sent).toHaveLength(1)
   })
 
+  // B54.31 — Lens's balance_minor is test plus live, so only live_minor is the account's balance.
+  it('shows each account’s live balance, never its test figure', async () => {
+    mockBff([], [{ ...ACCOUNTS[0], balance_minor: 150, test_minor: 150, live_minor: 0 }])
+    window.history.pushState({}, '', '/money/invoices')
+    render(<App />)
+
+    const list = await screen.findByRole('list', { name: 'Currency accounts' })
+    expect(list.textContent).toContain('£0.00')
+    expect(list.textContent).not.toContain('1.50')
+  })
+
+  // B57.25 — each account on Invoices opens its statement, in its own currency.
+  it('links each account to its statement', async () => {
+    mockBff()
+    window.history.pushState({}, '', '/money/invoices')
+    render(<App />)
+    const list = await screen.findByRole('list', { name: 'Currency accounts' })
+    const links = await within(list).findAllByRole('link')
+    expect(links.map((l) => [l.textContent, l.getAttribute('href')])).toEqual([
+      ['The company · GBP', '/statements?wallet=macc_co'],
+      [expect.stringMatching(/ · GBP$/), '/statements?wallet=macc_agt'],
+    ])
+  })
+
   // B55.26 — Lens opens every crypto agent a USDC wallet: Intl refused the code and the whole screen with it.
   it('draws with an agent’s USDC wallet, lists it to six decimals, and never offers it as Paid into', async () => {
     const before = ACCOUNTS
     ACCOUNTS = [
       { id: 'macc_co', agent_id: '', currency: 'USD', purpose: 'company', status: 'open', name: 'USD account', balance_minor: 0, test_minor: 0, live_minor: 0 },
       { id: 'macc_usd', agent_id: 'agt_1', currency: 'USD', purpose: 'agent', status: 'open', name: 'USD account', balance_minor: 0, test_minor: 0, live_minor: 0 },
-      { id: 'macc_usdc', agent_id: 'agt_2', currency: 'USDC', purpose: 'agent', status: 'open', name: 'USDC wallet', balance_minor: 1500000, test_minor: 1500000, live_minor: 0 },
+      { id: 'macc_usdc', agent_id: 'agt_2', currency: 'USDC', purpose: 'agent', status: 'open', name: 'USDC wallet', balance_minor: 1500000, test_minor: 0, live_minor: 1500000 },
     ]
     try {
       mockBff()

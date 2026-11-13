@@ -17,7 +17,7 @@ ARG SUITE_COMMIT
 ARG VITE_CONTACT_EMAIL
 RUN pnpm install --frozen-lockfile && SUITE_COMMIT="${SUITE_COMMIT}" scripts/build-release.sh web
 
-FROM golang:1.26.9-alpine AS bff
+FROM golang:1.26.11-alpine AS bff
 RUN apk add --no-cache bash
 WORKDIR /src
 COPY apps/bff/go.mod apps/bff/go.sum apps/bff/

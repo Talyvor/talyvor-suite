@@ -1,0 +1,5 @@
+[
+  { "route": "/money/pay#payee-payee_kite", "screen": "w-pay", "answers": { "/api/money/payment-requests": { "requests": [] } } },
+  { "route": "/money/pay", "screen": "w-pay+add-payee", "steps": ["Add a payee"], "frame": true, "answers": { "/api/money/payment-requests": { "requests": [] } } },
+  { "route": "/money/pay#payee-payee_northwind", "answers": { "/api/money/payment-requests": { "requests": [{ "id": "preq_nw", "status": "pending_approval", "summary": "", "client": "chat", "totals": { "USD": 18000 }, "created_at": "2026-10-22T09:31:00Z", "items": [{ "position": 1, "payee_id": "payee_northwind", "payee_name": "Northwind Data", "currency": "USD", "amount_minor": 18000, "reference": "Invoice 1042", "decision": "needs_approval", "reason": "no permission you signed covers it" }] }] } } }
+]

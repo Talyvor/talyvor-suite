@@ -42,7 +42,7 @@ export function operatorComplianceBoundary(): Scenario {
       }
       const page = await ctx.app.tab('/operator/compliance')
       try {
-        await page.locator('header h1').filter({ hasText: 'Compliance' }).waitFor({ timeout: TIMEOUT_MS })
+        await page.locator('main h1').filter({ hasText: 'Compliance' }).waitFor({ timeout: TIMEOUT_MS })
         const refusal = page.getByText(REFUSAL, { exact: true })
         await refusal.nth(OPERATOR_READS.length - 1).waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
         const rows = await page.locator('[data-testid="compliance-run"], [data-testid="compliance-break"], [data-testid="compliance-safeguarding"]').count()

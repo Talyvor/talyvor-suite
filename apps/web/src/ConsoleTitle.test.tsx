@@ -67,12 +67,11 @@ async function at(path: string) {
   await screen.findByRole('navigation', { name: /sections/i })
 }
 
-/** The string the sticky top bar paints. `<header>` outside main/article IS the banner
- *  landmark, so this reads the element assistive tech announces, not a class name. */
+/** The string the page's one heading paints. B57.8 moved it from the top bar to the top of the content, as
+ *  Pocket sets it; this reads the element assistive tech announces, not a class name. */
 function headerTitle(): string {
-  const banner = screen.getByRole('banner')
-  const title = banner.querySelector('h1')
-  if (!title) throw new Error('the banner rendered no title element')
+  const title = screen.getByRole('main').querySelector('h1')
+  if (!title) throw new Error('the page rendered no title element')
   return title.textContent ?? ''
 }
 
@@ -104,14 +103,14 @@ const PINNED: Readonly<Record<string, string>> = {
   '/overview': 'Overview',
   '/ledger': 'Ledger',
   '/chat': 'Chat',
-  '/chat/help': 'How to use Talyvor Chat',
+  '/chat/help': 'How to use Chat',
   // B28.369 — compare models side by side.
   '/chat/compare': 'Compare models',
   '/chat/instructions': 'Custom instructions',
-  '/chat/prompts': 'Prompt library',
+  '/chat/prompts': 'Prompts',
   '/chat/scheduled': 'Scheduled prompts',
   '/chat/memory': 'Memory',
-  '/chat/files': 'Uploaded files',
+  '/chat/files': 'Files',
   '/chat/connectors': 'Connectors',
   '/rooms/*': 'Rooms',
   // B28.10 — Earnings became Royalties, under Statements; /earnings redirects to it.
@@ -121,13 +120,13 @@ const PINNED: Readonly<Record<string, string>> = {
   '/billing/success': 'Billing',
   '/billing/cancel': 'Billing',
   '/keys': 'API keys',
-  '/agents': 'Agent Wallets',
+  '/agents': 'Agents',
   // B28.7 — the wallet's own destinations in the sidebar.
   '/approvals': 'Approvals',
   '/statements': 'Statements',
   '/marketplace/*': 'Marketplace',
-  '/setup': 'Setup',
-  '/spend': 'Spend & routing',
+  '/setup': 'Connect an agent',
+  '/spend': 'Spend and routing',
   '/members': 'Members',
   '/operator': 'Operator',
   '/operator/tax': 'Tax',
@@ -138,6 +137,10 @@ const PINNED: Readonly<Record<string, string>> = {
   '/settings/webhooks': 'Webhooks',
   '/settings/email-branding': 'Email branding',
   '/settings/connect': 'Connect your AI',
+  '/settings/company': 'Company details',
+  '/settings/help': 'Help and complaints',
+  '/settings/close': 'Close this account',
+  '/settings/data': 'Your data',
   '/money/invoices': 'Invoices',
   '/money/pay': 'Pay',
   '/money/subscriptions': 'Subscriptions',
@@ -149,8 +152,8 @@ const PINNED: Readonly<Record<string, string>> = {
   '/money/spending': 'Spending',
   '/money/card': 'Talyvor Card',
   '/approve/:id': 'Approve payments',
-  '/money/plans/:id': 'Recurring payments',
-  '/features': 'Features',
+  '/money/plans/:id': 'Sign recurring payments',
+  '/features': 'Gateway features',
   '/features/try/tare': 'Try Tare',
   '/features/try/conversion': 'Try document conversion',
   '/track/*': 'Track',

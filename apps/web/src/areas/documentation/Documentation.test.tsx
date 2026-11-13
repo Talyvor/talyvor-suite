@@ -5,6 +5,7 @@ import { matchRoutes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, CONSOLE_ROUTES, queryClient } from '../../App'
 import { Landing } from '../marketing/Landing'
+import { pressEverything } from '../../test/pressEverything'
 import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH, LICENCES } from './content'
 
 // B27.31 — /documentation opens signed out, and every link on it reaches a screen the app mounts.
@@ -79,9 +80,9 @@ describe('/documentation', () => {
     mockSignedOut()
     window.history.pushState({}, '', DOCUMENTATION_PATH)
     render(<App />)
-    expect(await screen.findByRole('heading', { level: 1, name: /what talyvor does today/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Documentation' })).toBeInTheDocument()
     const contents = screen.getByRole('navigation', { name: 'On this page' })
-    for (const name of ['Lens API', 'Chat', 'Docs', 'Track', 'Agent Wallets', 'Marketplace', 'Talyvor Code', 'Licences']) {
+    for (const name of ['Start here', 'Agent Wallets', 'Lens API', 'Licences']) {
       expect(within(contents).getByRole('link', { name })).toHaveAttribute('href', expect.stringMatching(/^#/))
     }
   })
@@ -90,15 +91,15 @@ describe('/documentation', () => {
     mockSignedOut()
     window.history.pushState({}, '', DOCUMENTATION_PATH)
     const { container } = render(<App />)
-    await screen.findByRole('heading', { level: 1, name: /what talyvor does today/i })
+    await screen.findByRole('heading', { level: 1, name: 'Documentation' })
     const steps = within(container.querySelector<HTMLElement>('#start')!).getAllByRole('link').map((a) => a.textContent)
     expect(steps).toEqual([
       'Sign up',
-      'Agent Wallets — Create agent',
-      'Agent Wallets — Fund',
-      'Agent Wallets — Issue a key',
+      'Agent Wallets: Create agent',
+      'Agent Wallets: Fund',
+      'Agent Wallets: Issue a key',
       'Setup',
-      'Agent Wallets — Statement',
+      'Agent Wallets: Statement',
       'Talyvor in Claude',
     ])
     const contents = within(screen.getByRole('navigation', { name: 'On this page' })).getAllByRole('link')
@@ -117,7 +118,7 @@ describe('/documentation', () => {
     mockSignedOut()
     window.history.pushState({}, '', DOCUMENTATION_PATH)
     const { container } = render(<App />)
-    await screen.findByRole('heading', { level: 1, name: /what talyvor does today/i })
+    await screen.findByRole('heading', { level: 1, name: 'Documentation' })
     const hrefs = [...container.querySelectorAll('a[href]')].map((a) => a.getAttribute('href') ?? '')
     const internal = hrefs.filter((h) => !/^(https?:\/\/|mailto:)/.test(h))
     expect(internal.length).toBeGreaterThan(30)
@@ -126,6 +127,27 @@ describe('/documentation', () => {
     )
     expect(broken).toEqual([])
   })
+
+  // B57.63 — the reference's s-docs: a card for each part of Talyvor, each opening its guide on the page, then the
+  // Claude connector; the page is held to Pocket's rules.
+  it('opens on a card for each part of Talyvor and one for the Claude connector (B57.63)', async () => {
+    mockSignedOut()
+    window.history.pushState({}, '', DOCUMENTATION_PATH)
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { level: 1, name: 'Documentation' })
+    expect(screen.getByText('How each part of Talyvor works, and every route of its API.')).toBeInTheDocument()
+    const parts = within(screen.getByRole('list', { name: 'Parts of Talyvor' })).getAllByRole('link')
+    // B59.37 — the launch pack's parts only.
+    expect(parts.map((a) => [a.querySelector('b')?.textContent, a.getAttribute('href')])).toEqual([['Agent Wallets', '#wallets']])
+    expect(screen.getByRole('link', { name: 'The Claude connector' })).toHaveAttribute('href', CLAUDE_CONNECTOR_PATH)
+    expect(container.querySelector('main')?.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+  })
+
+  it('every control on the page does something', async () => {
+    const report = await pressEverything(DOCUMENTATION_PATH)
+    expect(report.dead).toEqual([])
+    expect(report.pressed).toBeGreaterThan(20)
+  }, 120_000)
 
   it('names the suite’s licence exactly as its LICENSE file does', () => {
     const first = readFileSync(resolve(SRC, '../../../LICENSE'), 'utf8').split('\n')[0].trim()
@@ -138,5 +160,44 @@ describe('/documentation', () => {
     for (const region of [screen.getByRole('banner'), screen.getByRole('contentinfo')]) {
       expect(within(region).getByRole('link', { name: 'Documentation' })).toHaveAttribute('href', DOCUMENTATION_PATH)
     }
+  })
+
+  // B56.3 — it says only what the code does: past a limit is refused, above the approval amount
+  // waits; and investing, which is not offered, is on no public page, the route list included.
+  it('says what a spending rule does, and puts no investing on the page', async () => {
+    mockSignedOut()
+    window.history.pushState({}, '', DOCUMENTATION_PATH)
+    const { container } = render(<App />)
+    await screen.findByRole('heading', { level: 1, name: 'Documentation' })
+    expect(
+      screen.getByText(
+        'Set its spending rules: a payment past a limit is refused, and one above the approval amount waits in your approvals inbox, approved with a passkey once you have one.',
+      ),
+    ).toBeInTheDocument()
+    expect(container.querySelector('main')).not.toHaveTextContent(
+      /investing is simulated|simulated portfolio|simulated order|no order reaches a market/i,
+    )
+  })
+})
+
+// B56.10 — each claim that moves money carries Lens's label.
+describe('/documentation labels', () => {
+  it('labels the money claims as /api/pricing serves them', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const json = (b: unknown) => new Response(JSON.stringify(b), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      if (String(input).startsWith('/auth/me')) return json({ mode: 'oidc', authenticated: false, user: null, signup_open: true })
+      if (String(input) === '/api/pricing')
+        return json({ min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000], labels: {
+          move_between_own_agents: 'live', pay_another_owner: 'sandbox', escrow: 'live',
+        } })
+      return new Response('null', { status: 404 })
+    })
+    window.history.pushState({}, '', DOCUMENTATION_PATH)
+    render(<App />)
+    const claim = async (text: string) => (await screen.findByText(text, { exact: false })).closest('li')!
+    const chip = (li: Element) => [...li.querySelectorAll('[data-status-key]')].map((c) => c.textContent)
+    await vi.waitFor(async () => expect(chip(await claim('Create an agent, fund its wallet'))).toEqual(['Live']))
+    expect(chip(await claim('Agents pay each other'))).toEqual(['Sandbox'])
+    expect(chip(await claim('Read and download each wallet'))).toEqual([]) // statements carry no chip
   })
 })

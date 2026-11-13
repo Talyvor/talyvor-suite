@@ -21,6 +21,7 @@ function mockBff() {
     const url = String(input)
     const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents')
       return json({
         workspace_balance_ulxc: 100 * M, allocated_ulxc: 10 * M, unallocated_ulxc: 90 * M, spent_ulxc: 0,
@@ -37,14 +38,14 @@ function mockBff() {
       })
     if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], usd_per_lxc: 0.1 })
     if (url === '/api/agents/passkeys') return json({ passkeys: [{ credential_id: b64u(new TextEncoder().encode('c')), name: 'iPhone', created_at: '2026-10-06T04:00:00Z' }] })
-    if (url === '/api/agents/agt_1/statement')
+    if (url.split('?')[0] === '/api/agents/agt_1/statement')
       return json({
         agent_id: 'agt_1',
         lines: KINDS.map((kind, i) => ({
           entry_id: `ent_${i}`, kind, amount_ulxc: (i % 2 ? -1 : 1) * M, counterparty: 'agent:agt_2', ref: '', balance_after_ulxc: 5 * M, at: '2026-10-04T09:00:00Z',
         })),
       })
-    if (/^\/api\/agents\/agt_\d\/statement$/.test(url)) return json({ lines: [] })
+    if (/^\/api\/agents\/agt_\d\/statement(?:\?|$)/.test(url)) return json({ lines: [] })
     return new Response('null', { status: 404 })
   })
 }
@@ -73,7 +74,8 @@ afterEach(() => {
 describe('plain-language mode (B41.40)', () => {
   it('explains every line and column of the statement in one tap, and Statements has no critical accessibility issue', async () => {
     mockBff()
-    window.history.pushState({}, '', '/statements')
+    // B57.24 — Statements draws an agent's statement as Pocket's document, without the ?; the agent's own page keeps it.
+    window.history.pushState({}, '', '/agents?agent=agt_1')
     render(<App />)
     const table = await screen.findByTestId('agent-statement')
     const rows = within(table).getAllByRole('row').slice(1)
@@ -85,6 +87,12 @@ describe('plain-language mode (B41.40)', () => {
     }
     expect(explain(within(table).getByRole('button', { name: 'What does “LXC” mean?' }))).toMatch(/^LXC is the credit your agents spend/)
     expect(explain(within(table).getByRole('button', { name: 'What does “Balance” mean?' }))).toMatch(/^Balance is /)
+    expect(await critical()).toEqual([])
+    cleanup()
+
+    window.history.pushState({}, '', '/statements')
+    render(<App />)
+    await screen.findByTestId('statement-lines')
     expect(await critical()).toEqual([])
   })
 

@@ -49,7 +49,7 @@ export function WindowIncomplete({ days, pageSize, testId }: { days: number; pag
   return (
     <div data-testid={testId} className="px-gutter py-3 text-caption text-muted">
       The last {days} days hold more than {pageSize} ledger rows, and {pageSize} is the most one
-      read can return — so the figures above count the most recent {pageSize} and are floors, not
+      read can return, so the figures above count the most recent {pageSize} and are floors, not
       totals. The{' '}
       <Link className={inlineLink} to="/ledger">
         ledger

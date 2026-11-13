@@ -48,8 +48,8 @@ export function weekName(period: string): string {
   const to = new Date(from.getTime() + 6 * 86_400_000);
   const days =
     from.getUTCMonth() === to.getUTCMonth()
-      ? `${from.getUTCDate()}–${dayMonth(to, true)}`
-      : `${dayMonth(from, from.getUTCFullYear() !== to.getUTCFullYear())} – ${dayMonth(to, true)}`;
+      ? `${from.getUTCDate()} to ${dayMonth(to, true)}`
+      : `${dayMonth(from, from.getUTCFullYear() !== to.getUTCFullYear())} to ${dayMonth(to, true)}`;
   return `Week ${Number(period.slice(6))} · ${days}`;
 }
 
@@ -103,8 +103,8 @@ function SelfBilledInvoice({ bill }: { bill: SelfBill }) {
         <span className="font-figure">{bill.agreement_version}</span>.
       </p>
       <div className="grid gap-4 wide:grid-cols-2">
-        <Party role="From — you, the supplier" p={bill.supplier} />
-        <Party role="To — the customer" p={bill.customer} />
+        <Party role="From: you, the supplier" p={bill.supplier} />
+        <Party role="To: the customer" p={bill.customer} />
       </div>
       <dl className="flex flex-col gap-1 text-body">
         <div className="flex justify-between gap-4">

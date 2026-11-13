@@ -16,11 +16,13 @@
 //        questions as the contributor asked them are served from the pool. Whether a reworded question is served from
 //        the pool — whether Lens's similarity pool is live, the layer a direction or negation would slip through — is
 //        noted with the verdict.
+//   B58.15 — it reads whether pooling is on for the deployment first (Lens B58.14, GET /v1/pooling): off, it cannot test
+//     and says Lens's reason (SKIP), as a pool that is off and a miss look alike; on, a reader not served from the pool FAILs.
 
 import { fail } from './bank.ts'
 import { type Asked, ask, freshQuestion, judgeRoute, proxyKey, rowsText, servedRight, verdictOf } from './gateway.ts'
 import { RUN_SALT, statesNumber } from './oracles.ts'
-import type { Scenario, ScenarioCtx } from './scenarios.ts'
+import { CannotTest, type Scenario, type ScenarioCtx } from './scenarios.ts'
 import { call, ok, said, setSwitch } from './settings.ts'
 
 const pooledULXC = (a: Asked): string | null => a.headers.get('X-Talyvor-Pool-Charged-ULXC')
@@ -59,6 +61,11 @@ export function poolIsolation(): Scenario {
       const wrong: string[] = []
       const step = (w: string | undefined) => { if (w !== undefined) wrong.push(w) }
       const { route, model } = judgeRoute(ctx)
+      // Whether pooling is on for the deployment, and why not: off, nothing below could be seen to leak.
+      const state = await call<{ pooling?: string; cause?: string; reason?: string }>(ctx, 'GET', '/v1/pooling')
+      ctx.evidence.push({ note: `whether pooling is on for the deployment (GET /v1/pooling): ${said(state)}` })
+      if (ok(state.status) && state.value?.pooling === 'off') throw new CannotTest(`pooling is off on this deployment (${state.value.cause}): ${state.value.reason}`)
+      const lensSays = ok(state.status) && state.value?.pooling === 'on' ? 'Lens says pooling is on, and ' : `Lens did not say whether pooling is on (${said(state)}), and `
       const [other] = await ctx.env.lens.createUsers(1)
       const reader: ScenarioCtx = { ...ctx, app: { ...ctx.app, user: { ...other, index: ctx.app.user.index } } as ScenarioCtx['app'] }
       const kc = await proxyKey(ctx, `pool contributor ${RUN_SALT}`)
@@ -87,7 +94,7 @@ export function poolIsolation(): Scenario {
       const live = await read('the same question', q0)
       const spend = live.fresh.filter((r) => r.type === 'spend')
       if (pooledULXC(live) === null) {
-        return fail([...wrong, `the reader asking a question the contributor shared was ${how(live)}, not served from the pool, so nothing here could be seen to leak`].join('; '))
+        return fail([...wrong, `${lensSays}the reader asking a question the contributor shared was ${how(live)}, not served from the pool`].join('; '))
       }
       if (spend.length !== 1 || -spend[0].amount_ulxc !== Number(pooledULXC(live))) wrong.push(`the pooled answer says it was charged ${pooledULXC(live)} µLXC, and the reader's ledger gained ${rowsText(live.fresh)}`)
 

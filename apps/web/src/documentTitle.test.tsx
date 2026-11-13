@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -74,6 +75,9 @@ function mockBff(me: Record<string, unknown>) {
         headers: { 'Content-Type': 'application/json' },
       })
     }
+    // B53.12 — /money/card sends the person to Spending while Lens's physical-card switch is off (404), so its title is
+    // read with the switch on, as ConsoleTitle.test.tsx reads it.
+    if (url === '/api/money/physical-cards') return new Response(JSON.stringify({ cards: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
     return new Response('null', { status: 404 })
   })
 }
@@ -130,14 +134,14 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/overview': 'Overview',
   '/ledger': 'Ledger',
   '/chat': 'Chat',
-  '/chat/help': 'How to use Talyvor Chat',
+  '/chat/help': 'How to use Chat',
   // B28.369 — compare models side by side.
   '/chat/compare': 'Compare models',
   '/chat/instructions': 'Custom instructions',
-  '/chat/prompts': 'Prompt library',
+  '/chat/prompts': 'Prompts',
   '/chat/scheduled': 'Scheduled prompts',
   '/chat/memory': 'Memory',
-  '/chat/files': 'Uploaded files',
+  '/chat/files': 'Files',
   '/chat/connectors': 'Connectors',
   '/rooms/*': 'Rooms',
   // B28.10 — Earnings became Royalties, under Statements; /earnings redirects to it.
@@ -147,13 +151,13 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/billing/success': 'Billing',
   '/billing/cancel': 'Billing',
   '/keys': 'API keys',
-  '/agents': 'Agent Wallets',
+  '/agents': 'Agents',
   // B28.7 — the wallet's own destinations in the sidebar.
   '/approvals': 'Approvals',
   '/statements': 'Statements',
   '/marketplace/*': 'Marketplace',
-  '/setup': 'Setup',
-  '/spend': 'Spend & routing',
+  '/setup': 'Connect an agent',
+  '/spend': 'Spend and routing',
   '/members': 'Members',
   '/operator': 'Operator',
   '/operator/tax': 'Tax',
@@ -164,6 +168,10 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/settings/webhooks': 'Webhooks',
   '/settings/email-branding': 'Email branding',
   '/settings/connect': 'Connect your AI',
+  '/settings/company': 'Company details',
+  '/settings/help': 'Help and complaints',
+  '/settings/close': 'Close this account',
+  '/settings/data': 'Your data',
   '/money/invoices': 'Invoices',
   '/money/pay': 'Pay',
   '/money/subscriptions': 'Subscriptions',
@@ -175,8 +183,8 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/money/spending': 'Spending',
   '/money/card': 'Talyvor Card',
   '/approve/:id': 'Approve payments',
-  '/money/plans/:id': 'Recurring payments',
-  '/features': 'Features',
+  '/money/plans/:id': 'Sign recurring payments',
+  '/features': 'Gateway features',
   '/features/try/tare': 'Try Tare',
   '/features/try/conversion': 'Try document conversion',
   '/track/*': 'Track',
@@ -189,8 +197,8 @@ const NO_SUCH_PAGE = ['/admin', '/specimen', '/nonesuch', '/keys/extra', '/billi
 
 /** Public addresses and the WHOLE title each must carry. `/marketing` is the front door. */
 const PINNED_PUBLIC: ReadonlyArray<readonly [string, string]> = [
-  ['/marketing', 'Talyvor — the financial ecosystem for the AI agent economy'],
-  ['/marketing/pricing', 'Talyvor — the financial ecosystem for the AI agent economy'],
+  ['/marketing', 'Talyvor | the financial ecosystem for the AI agent economy'],
+  ['/marketing/pricing', 'Talyvor | the financial ecosystem for the AI agent economy'],
   ['/privacy', 'Privacy | Talyvor'],
   ['/terms', 'Terms | Talyvor'],
   ['/signup', 'Create a workspace | Talyvor'],
@@ -202,7 +210,7 @@ describe('the format, and the brand it ends in', () => {
     // Hardcoded on both sides. A guard that builds its expectation from the constant it is
     // checking passes for every value of that constant.
     expect(documentTitle('Ledger')).toBe('Ledger | Talyvor')
-    expect(documentTitle(null)).toBe('Talyvor — the financial ecosystem for the AI agent economy')
+    expect(documentTitle(null)).toBe('Talyvor | the financial ecosystem for the AI agent economy')
     expect(BRAND).toBe('Talyvor')
   })
 
@@ -227,7 +235,7 @@ describe('the format, and the brand it ends in', () => {
       'AI agents are starting to earn, spend and work for people and companies. Talyvor is where they do it safely.'
     expect(description.length, 'a search result shows about 160 characters').toBeLessThanOrEqual(160)
     expect(tag('name', 'description')).toBe(description)
-    expect(tag('property', 'og:title')).toBe('Talyvor — the financial ecosystem for the AI agent economy')
+    expect(tag('property', 'og:title')).toBe('Talyvor | the financial ecosystem for the AI agent economy')
     expect(tag('property', 'og:description')).toBe(description)
     expect(tag('property', 'og:image')).toBe('https://app.talyvor.com/og-image.png')
     expect(tag('name', 'twitter:card')).toBe('summary_large_image')
@@ -257,8 +265,9 @@ describe('the format, and the brand it ends in', () => {
 
     const manifest = JSON.parse(pub('manifest.webmanifest').toString('utf8'))
     expect(manifest.name).toBe('Talyvor')
-    expect(manifest.background_color).toBe(tokens.dark.canvas)
-    expect(manifest.theme_color).toBe(tokens.dark.canvas)
+    // B57.59: the kit's colours for an installed app.
+    expect(manifest.background_color).toBe('#111216')
+    expect(manifest.theme_color).toBe('#111216')
     expect(manifest.icons).toEqual([
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
       { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -268,6 +277,23 @@ describe('the format, and the brand it ends in', () => {
     for (const icon of manifest.icons as { src: string; sizes: string }[]) {
       const n = Number(icon.sizes.split('x')[0])
       expect(side(icon.src.slice(1)), icon.src).toEqual([n, n])
+    }
+  })
+
+  it('ships the logo kit’s icons and share image, byte for byte (B57.59)', () => {
+    // The kit is ~/talyvor-queue/design/logo/talyvor-logo/png; these are its files' SHA-256s.
+    const kit: Record<string, string> = {
+      'favicon.ico': '77c402810384ddcca272f53952eb981862b2cf172516b2c0f7cca8f71ee43716',
+      'favicon.svg': 'bbf01081a00680d9fb57b6f7493f0149f5790b8f072db90d8a14ad9d7a015cc5',
+      'apple-touch-icon.png': '8cee7a052aed4213505e4ae9c27c7d9f1c199a41eb4489ba9d09c541a96ee349',
+      'icon-192.png': '16ff82ff519b67223c00f44777c8e1ee6328ac303d880155a378091206b7726d',
+      'icon-512.png': '33a4271eaaa09e5e45808bc84aa28ea19c27784b4ad91ae4770e9533b92f2a36',
+      'icon-maskable-512.png': '9f71d049ea20787f7f6cbadc74d2835c5bf2ee240a8d9e962f503aa01cc40637',
+      'og-image.png': 'ef798c828a44b8bebbb13edafb6f33f2be5984533b97a52e4d8aa4e26f09b5dd', // B57.79: the dark share image
+    }
+    for (const [name, sha] of Object.entries(kit)) {
+      const bytes = readFileSync(resolve(__dirname, '../public', name))
+      expect(createHash('sha256').update(bytes).digest('hex'), name).toBe(sha)
     }
   })
 })

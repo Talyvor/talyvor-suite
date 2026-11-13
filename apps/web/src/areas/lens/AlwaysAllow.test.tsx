@@ -8,7 +8,7 @@ import { App, queryClient } from '../../App'
 
 const M = 1_000_000
 
-function mockBff() {
+function mockBff(passkey = false) {
   const approvals = [
     { id: 'apr_1', agent_id: 'agt_1', amount_ulxc: 3 * M, model: '', status: 'pending', created_at: '2026-10-28T06:01:00Z', payee: { kind: 'company', id: 'ws_a', name: 'Acme Hosting' } },
     { id: 'apr_2', agent_id: 'agt_1', amount_ulxc: 2 * M, model: '', status: 'pending', created_at: '2026-10-28T06:02:00Z', payee: { kind: 'outside', id: 'pye_1', name: 'Bolt Ltd' } },
@@ -22,13 +22,15 @@ function mockBff() {
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (method === 'POST') sent.push({ url, body })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents' && method === 'GET')
       return json({
         workspace_balance_ulxc: 100 * M, allocated_ulxc: 10 * M, unallocated_ulxc: 90 * M, spent_ulxc: 0,
         agents: [{ id: 'agt_1', name: 'Researcher', balance_ulxc: 10 * M, spent_ulxc: 0, keys: [], created_at: '2026-10-28T06:00:00Z' }],
       })
     if (url === '/api/agents/approvals') return json({ approvals })
-    if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    if (url === '/api/agents/passkeys') return json({ passkeys: passkey ? [{ credential_id: 'Y3JlZDE', name: 'iPhone', created_at: '2026-10-28T06:00:00Z' }] : [] })
+    if (url === '/api/agents/approvals/apr_1/challenge') return json({ challenge: 'Y2gx', allow_credentials: ['Y3JlZDE'] })
     if (url === '/api/agents/agt_1/rules/simulate') return json({ verdict: 'allowed', reason: '', amount_ulxc: 3 * M, at: '2026-10-28T06:05:00Z', balance_ulxc: 10 * M })
     if (url === '/api/agents/approvals/apr_1/approve') {
       approvals[0].status = 'approved'
@@ -71,5 +73,28 @@ describe('Approve and always allow this (B41.4)', () => {
     fireEvent.click(approve)
     expect(await screen.findByText(/From now on Researcher pays Acme Hosting up to/)).toHaveTextContent(/up to 50 LXC.* a month without asking you\./)
     expect(approvals().map((s) => s.body)).toEqual([{ always_allow: { amount_ulxc: 50 * M, per: 'month' } }])
+  })
+  // B54.34 — Lens signs the allowance too (B54.29): the challenge is asked for with the allowance the approval saves.
+  it('with a passkey, asks for the challenge with the allowance it approves with', async () => {
+    const sent = mockBff(true)
+    const sig = new TextEncoder().encode('sig').buffer
+    Object.defineProperty(navigator, 'credentials', {
+      value: { get: vi.fn(async () => ({ rawId: sig, response: { clientDataJSON: sig, authenticatorData: sig, signature: sig } })), create: vi.fn() },
+      configurable: true,
+    })
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+    const list = within(await screen.findByRole('group', { name: 'Waiting for a person' }))
+    fireEvent.click(list.getByRole('button', { name: 'Approve and always allow this…' }))
+    fireEvent.change(list.getByLabelText('Always allow Researcher to pay Acme Hosting up to, in LXC'), { target: { value: '50' } })
+    fireEvent.change(list.getByLabelText('Each'), { target: { value: 'day' } })
+    fireEvent.click(list.getByRole('button', { name: 'Preview' }))
+    await list.findByTestId('always-allow-preview')
+    fireEvent.click(await list.findByRole('button', { name: 'Approve and always allow with Face ID' }))
+    await screen.findByText(/From now on Researcher pays Acme Hosting up to/)
+
+    const allow = { amount_ulxc: 50 * M, per: 'day' }
+    expect(sent.filter((s) => s.url === '/api/agents/approvals/apr_1/challenge').map((s) => s.body)).toEqual([{ always_allow: allow }])
+    expect(sent.find((s) => s.url === '/api/agents/approvals/apr_1/approve')?.body.always_allow).toEqual(allow)
   })
 })

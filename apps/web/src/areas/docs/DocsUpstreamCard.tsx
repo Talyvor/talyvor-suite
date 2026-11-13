@@ -44,10 +44,10 @@ export function DocsUpstreamCard({ title, path, reads }: { title: string; path: 
         ) : isUnconfigured(q.error) ? (
           notConfiguredCopy('Docs')
         ) : q.isError ? (
-          'The Docs proxy answered with an error — nothing is shown rather than something stale or invented.'
+          'The Docs proxy answered with an error. Nothing is shown rather than something stale or invented.'
         ) : (
           <>
-            Docs is configured on this deployment, but this view does not read it yet — so
+            Docs is configured on this deployment, but this view does not read it yet, so
             nothing is shown here rather than a stand-in.{' '}
             <span className="font-mono text-caption">{reads}</span> is the read it needs.
           </>

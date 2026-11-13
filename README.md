@@ -1,11 +1,11 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/talyvor-logo-dark-notag.svg">
-    <img alt="Talyvor" src="docs/brand/talyvor-logo-light-notag.svg" width="360">
+    <source media="(prefers-color-scheme: dark)" srcset="brand/logo/svg/talyvor-logo-on-dark.svg">
+    <img alt="Talyvor" src="brand/logo/svg/talyvor-logo-on-light.svg" width="360">
   </picture>
 </p>
 
-<p align="center">Talyvor — the financial ecosystem for the AI agent economy.</p>
+<p align="center">Talyvor: the financial ecosystem for the AI agent economy.</p>
 
 # talyvor-suite
 
