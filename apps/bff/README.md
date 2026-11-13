@@ -84,6 +84,8 @@ without.
 | `BFF_CONNECT_MCP_PER_IP_MINUTE` | `600` | Connect: `/mcp` requests per IP per minute |
 | `BFF_CONNECT_MCP_PER_CONNECTION_MINUTE` | `120` | Connect: `/mcp` requests per connection per minute |
 | `BFF_CONNECT_REDIRECT_ORIGINS` | `https://claude.ai,https://chatgpt.com` | Connect (B54.11): the `scheme://host` origins open registration accepts as a `redirect_uri`, comma-separated, besides loopback http; set, it replaces the list; any other redirect is refused at `/oauth/register` |
+| `BFF_CONNECT_PREPARE_ONLY` | unset | `true` ⇒ Connect's `send_payment` pays nothing and points to Talyvor: the connector a public plugin directory lists (B52.6) |
+| `LENS_CONNECT_MINT_KEY` | — | the same value as Lens's `LENS_CONNECT_MINT_KEY`; set ⇒ Connect's `send_payment` pays from an agent inside its limits on a token Lens binds to that agent; unset ⇒ it pays nothing (B52.6). Never a Lens admin key |
 | `OPERATOR_SUBS` | — | OIDC `sub`s that may read every tenant. Unset means **nobody** |
 | `TRACK_BASE_URL` | — | optional pair with the secret below; `oidc` only |
 | `TRACK_GATEWAY_SECRET` | — | must equal Track's `GATEWAY_AUTH_SECRET` |

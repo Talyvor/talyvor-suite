@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ConnectAI } from './ConnectAI'
+import { AppMoney } from './money'
 
 // B40.8's DONE at the wire: the page shows the MCP address and each assistant's steps, and a connected client
 // appears below with its last use and is revoked by its own button.
@@ -12,7 +13,9 @@ afterEach(() => vi.restoreAllMocks())
 function renderScreen() {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <ConnectAI />
+      <AppMoney>
+        <ConnectAI />
+      </AppMoney>
     </QueryClientProvider>,
   )
 }
@@ -60,5 +63,28 @@ describe('Connect your AI', () => {
     await waitFor(() => expect(screen.queryByText('Test client')).not.toBeInTheDocument())
     expect(calls).toContain('POST /api/connect/assistants/g-1/revoke')
     expect(screen.getByText(/No assistant is connected yet/)).toBeInTheDocument()
+  })
+
+  // B52.6 — the most an assistant may give a new agent: unset, it says assistants cannot create agents; set in LXC, it
+  // goes to the BFF in µLXC and reads back.
+  it('sets the most an assistant may give a new agent', async () => {
+    let ceiling: Record<string, number> = {}
+    const puts: unknown[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input) !== '/api/connect/agent-ceiling') return new Response(JSON.stringify({ assistants: [] }))
+      if (init?.method === 'PUT') {
+        ceiling = JSON.parse(String(init.body)) as Record<string, number>
+        puts.push(ceiling)
+      }
+      return new Response(JSON.stringify(ceiling))
+    })
+    renderScreen()
+    expect(await screen.findByText(/Assistants cannot create agents/)).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('One payment, in LXC'), { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText('A day, in LXC'), { target: { value: '10' } })
+    fireEvent.change(screen.getByLabelText('A month, in LXC'), { target: { value: '50.5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    await waitFor(() => expect(screen.getByTestId('agent-ceiling')).toHaveTextContent('at most 2 LXC a payment, 10 LXC a day and 50.5 LXC a month'))
+    expect(puts).toEqual([{ max_per_request_ulxc: 2_000_000, daily_limit_ulxc: 10_000_000, monthly_limit_ulxc: 50_500_000 }])
   })
 })

@@ -560,7 +560,9 @@ var notSweptWrite = map[string]string{
 	"/oauth/revoke":          "B40.6 — exempt (oauthMachinePath): the token being revoked is its own credential",
 	"/auth/mobile/session":   "B40.24 — exempt (originExemptPath): the phone app sends no Origin, and its ID token is the credential",
 	"/auth/synthetic/mobile": "B57.86 — exempt (originExemptPath) only with no Origin: the phone harness sends none, and the operator key is the credential; another site's Origin is refused (B50.36, TestSyntheticPhoneSignInRefusesAnotherSite)",
-	"/mcp":                   "B40.6 — exempt (oauthMachinePath): an assistant's bearer token, never the cookie, is what it accepts",
+	"/api/connect/agent-ceiling": "B52.6 — Origin-GATED, but it is kept in the BFF and writes nothing upstream, so this table's arrival " +
+		"assertion cannot hold for it; TestConnectCreateAgentUnderTheCeiling puts one from another site and asserts the 403",
+	"/mcp": "B40.6 — exempt (oauthMachinePath): an assistant's bearer token, never the cookie, is what it accepts",
 	"/auth/logout": "a browser POST the app issues at itself; it is swept by TestLogout_RefusesCrossOrigin, " +
 		"which drives it directly rather than through this table because it has no JSON body and no upstream.",
 	"/api/admin/billing/purchases":   "operator read surface, adminNotWired — see the note above",

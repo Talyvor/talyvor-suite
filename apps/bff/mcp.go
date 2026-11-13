@@ -1,13 +1,13 @@
 package main
 
-// Talyvor Connect, part 2 (B40.7): the MCP server at https://app.talyvor.com/mcp, which prepares and never pays.
+// Talyvor Connect, part 2 (B40.7): the MCP server at https://app.talyvor.com/mcp. Every tool in this file prepares and
+// never pays; B52.6's send_payment (mcp_agents.go) pays from an agent, inside its owner's limits, on a token Lens binds to it.
 //
 // An assistant connected by part 1 (oauth.go) calls these tools as the person and workspace its token names, on that
 // person's own Lens credential. Each tool is one Lens route (prepare_payment_to_contact first reads the saved payees to find
 // the one the person named), and none of them moves money: the request tools prepare a
-// payment request (Lens B40.3) that waits for the person to approve it in the app, where B40.5 pays it. Anthropic does
-// not allow software that transfers money for its users, and OpenAI bans executing money transfers, so no tool here
-// approves, pays or pays out — TestMCPNoToolMovesMoney holds every tool's route to that.
+// payment request (Lens B40.3) that waits for the person to approve it in the app, where B40.5 pays it. No tool in this
+// file approves, pays or pays out — TestMCPNoToolMovesMoney holds every tool's route to that.
 //
 // Streamable HTTP with no stream and no session: every POST is one JSON-RPC message, answered as JSON. The versions and
 // the 2026-07-28 stateless rules are Lens's own (talyvor-lens internal/mcp/server.go).

@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, CardHeader } from '@talyvor/ui'
+import { Button, Card, CardHeader, Input } from '@talyvor/ui'
+import { Money } from '@talyvor/ui/pocket'
 
 import { Region, RegionScreen } from '../../components/Region'
 import { ApiError, getJSON, readable } from '../../lib/api'
+import { limitText, parseLXC } from './agentBankApi'
 import { formatWhen } from './format'
 import { CopyBlock } from './Setup'
 
 // B40.8 — Settings › Connect your AI: the address of Talyvor's MCP server (B40.7), how to add it to each assistant,
 // and the assistants this person has connected (B40.6 grants), each with its last use, what it did (B52.3) and a
-// revoke button.
+// revoke button. B52.6: the most an assistant may give a new agent it creates.
 
 /** One tool call, as the BFF's audit trail keeps it: the arguments by SHA-256 only. */
 interface Call {
@@ -67,6 +69,8 @@ export const SCOPE_WORDS: Record<string, string> = {
   'wallets:read': 'See your wallets and bills',
   'invoices:draft': 'Draft invoices and payees',
   'payments:prepare': 'Prepare payments for you to approve',
+  'payments:send': 'Pay from your agents within the limits you set',
+  'agents:write': 'Create and pause your agents, and lower their limits',
 }
 
 interface Assistant {
@@ -146,6 +150,92 @@ export async function revokeAssistant(id: string): Promise<void> {
   const path = `${PATH}/${encodeURIComponent(id)}/revoke`
   const res = await fetch(path, { method: 'POST', headers: { Accept: 'application/json' } })
   if (!res.ok) throw new ApiError(res.status, path)
+}
+
+/** B52.6 — the most an assistant may give a new agent (apps/bff/mcp_agents.go connectCeiling), in µLXC. */
+type Ceiling = Record<(typeof CEILING_FIELDS)[number][0], number>
+
+const CEILING_PATH = '/api/connect/agent-ceiling'
+const CEILING_FIELDS = [
+  ['max_per_request_ulxc', 'One payment'],
+  ['daily_limit_ulxc', 'A day'],
+  ['monthly_limit_ulxc', 'A month'],
+] as const
+
+async function saveCeiling(c: Ceiling): Promise<Ceiling> {
+  const res = await fetch(CEILING_PATH, {
+    method: 'PUT',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(c),
+  })
+  if (!res.ok) throw new ApiError(res.status, CEILING_PATH)
+  return (await res.json()) as Ceiling
+}
+
+/** The ceiling as it is, then a form to set or change it. */
+export function AgentCeiling() {
+  const read = useQuery({ queryKey: ['agent-ceiling'], queryFn: () => getJSON<Partial<Ceiling>>(CEILING_PATH) })
+  if (read.isError) return <p className="max-w-2xl text-body text-muted">The limit for new agents could not be read. Try again shortly.</p>
+  if (read.isPending) return <p className="text-body text-muted">Reading the limit for new agents…</p>
+  return <CeilingForm key={read.dataUpdatedAt} current={read.data.daily_limit_ulxc ? (read.data as Ceiling) : null} />
+}
+
+function CeilingForm({ current }: { current: Ceiling | null }) {
+  const qc = useQueryClient()
+  const [text, setText] = useState(() =>
+    Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, current ? limitText(current[k]) : ''])) as Record<keyof Ceiling, string>,
+  )
+  const micros = Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, parseLXC(text[k])])) as Record<keyof Ceiling, number | null>
+  const ready = CEILING_FIELDS.every(([k]) => micros[k] !== null)
+  const save = useMutation({
+    mutationFn: () => saveCeiling(micros as Ceiling),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['agent-ceiling'] }),
+  })
+  return (
+    <form
+      className="max-w-2xl space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (ready && !save.isPending) save.mutate()
+      }}
+    >
+      <p className="text-body text-ink" data-testid="agent-ceiling">
+        {current ? (
+          <>
+            An agent an assistant creates may spend at most <Money ulxc={current.max_per_request_ulxc} /> a
+            payment, <Money ulxc={current.daily_limit_ulxc} /> a day and{' '}
+            <Money ulxc={current.monthly_limit_ulxc} /> a month. Higher limits are yours to set, on Agent
+            Wallets.
+          </>
+        ) : (
+          'Assistants cannot create agents until you say how much a new one may spend.'
+        )}
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        {CEILING_FIELDS.map(([k, label]) => (
+          <label key={k} className="flex flex-col gap-1 text-caption text-muted">
+            {label}
+            <Input
+              aria-label={`${label}, in LXC`}
+              inputMode="decimal"
+              placeholder="LXC"
+              className="w-28 font-figure"
+              value={text[k]}
+              onChange={(e) => setText({ ...text, [k]: e.target.value })}
+            />
+          </label>
+        ))}
+        <Button type="submit" disabled={!ready || save.isPending}>
+          {current ? 'Change' : 'Set'}
+        </Button>
+      </div>
+      {save.isError ? (
+        <p role="alert" className="text-caption text-ink">
+          That limit was not saved. Try again.
+        </p>
+      ) : null}
+    </form>
+  )
 }
 
 function AssistantCard({ a, url }: { a: Assistant; url: string }) {
@@ -253,8 +343,8 @@ export function ConnectAI() {
     <RegionScreen>
       <Region index="00" label="Connect your AI" heading="Connect your AI" sectionClassName="pb-10 pt-4 wide:pb-12">
         <p className="max-w-2xl text-body text-muted">
-          Add Talyvor to the assistant you already use. It can read your balances and bills, draft invoices and prepare
-          payments. Every payment waits for you to approve it here.
+          Add Talyvor to the assistant you already use. It can read your balances and bills, draft invoices, prepare
+          payments, and pay from your agents within the limits you set. A payment above them waits for you to approve it here.
         </p>
         <div className="mt-4 max-w-2xl">
           <CopyBlock text={url} label="the address" />
@@ -269,7 +359,16 @@ export function ConnectAI() {
         </div>
       </Region>
 
-      <Region index="02" label="Connected assistants">
+      <Region index="02" label="New agents from an assistant">
+        <p className="mt-4 max-w-2xl text-body text-muted">
+          An assistant you allow to create agents gives each one limits no higher than these. A new agent starts with no money.
+        </p>
+        <div className="mt-4">
+          <AgentCeiling />
+        </div>
+      </Region>
+
+      <Region index="03" label="Connected assistants">
         <div className="mt-4">
           <ConnectedList />
         </div>

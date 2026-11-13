@@ -70,6 +70,41 @@ func (f *fakeLensForMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			`"payee_match":"matched","status":"due","missing":[]},{"id":"bill-0","supplier":"Old Co","amount_minor":900,"currency":"GBP","status":"paid","missing":[]}]}`)
 	case "GET /v1/workspaces/ws-ada/agents/safe-to-spend":
 		_, _ = io.WriteString(w, `{"company":[{"currency":"GBP","balance":125000,"scheduled":0,"bills_due":16550,"pending_approvals":0,"safe_to_spend":108450}],"agents":[]}`)
+	// B52.6: the Connect mint answers only the BFF's mint key, and the pay route only the Connect token it minted.
+	case "POST /v1/auth/connect-token":
+		if r.Header.Get("Authorization") != "Bearer mint-key" {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = io.WriteString(w, `{"error":"admin or Connect mint credentials required"}`)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"token":"jwt-connect","expires_at":"2099-01-01T00:00:00Z"}`)
+	case "POST /v1/workspaces/ws-ada/agents/agt-1/pay":
+		switch amount, _ := body["amount_ulxc"].(float64); {
+		case r.Header.Get("Authorization") != "Bearer jwt-connect":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = io.WriteString(w, `{"error":"only the paying agent's own key, the workspace's owner or an admin may pay from an agent"}`)
+		case amount > 1000:
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = io.WriteString(w, `{"status":"pending_approval","approval_id":"apr-1","amount_ulxc":5000,"message":"economy: this payment needs the owner's approval"}`)
+		default:
+			_, _ = io.WriteString(w, `{"id":"pay-1","from_agent_id":"agt-1","to_agent_id":"agt-2","amount_ulxc":400}`)
+		}
+	case "POST /v1/workspaces/ws-ada/agents":
+		w.WriteHeader(http.StatusCreated)
+		_, _ = io.WriteString(w, `{"id":"agt-new","name":"`+body["name"].(string)+`"}`)
+	case "GET /v1/workspaces/ws-ada/agents/agt-1/rules":
+		_, _ = io.WriteString(w, `{"max_per_request_ulxc":500,"hourly_limit_ulxc":0,"daily_limit_ulxc":2000,"weekly_limit_ulxc":0,"monthly_limit_ulxc":0,`+
+			`"approval_above_ulxc":300,"allowed_models":["gpt-4o"],`+rulesTheBFFDoesNotName+`}`)
+	case "GET /v1/workspaces/ws-ada/agents/agt-new/rules":
+		_, _ = io.WriteString(w, `{"max_per_request_ulxc":0,"daily_limit_ulxc":0,"monthly_limit_ulxc":0,`+rulesTheBFFDoesNotName+`}`)
+	case "GET /v1/workspaces/ws-ada/agents/agt-1/statement":
+		_, _ = io.WriteString(w, `{"agent_id":"agt-1","lines":[{"kind":"pay","amount_ulxc":-400}]}`)
+	case "GET /v1/workspaces/ws-ada/money-requests":
+		_, _ = io.WriteString(w, `{"requests":[`+
+			`{"id":"mr-in","from_workspace_id":"ws-bob","from_agent_id":"agt-b","to_workspace_id":"ws-ada","to_agent_id":"agt-1","amount_ulxc":700,"status":"pending"},`+
+			`{"id":"mr-out","from_workspace_id":"ws-ada","from_agent_id":"agt-1","to_workspace_id":"ws-bob","to_agent_id":"agt-b","amount_ulxc":900,"status":"pending"},`+
+			`{"id":"mr-done","from_workspace_id":"ws-bob","from_agent_id":"agt-b","to_workspace_id":"ws-ada","to_agent_id":"agt-1","amount_ulxc":100,"status":"accepted"}]}`)
 	default:
 		_, _ = io.WriteString(w, `{}`)
 	}
@@ -190,13 +225,14 @@ func TestMCPNoToolMovesMoney(t *testing.T) {
 	args := map[string]any{"name": "Acme Ltd", "country": "GB", "iban": "GB33BUKB20201555555555", "expires_at": "2027-01-31T00:00:00Z",
 		"scope": map[string]any{"payees": []any{"py-1"}, "currencies": []any{"GBP"}}, "new_payee": map[string]any{"policy": "always_ask"},
 		"idempotency_key": "k", "payee_id": "py-1", "currency": "GBP", "amount_minor": 1, "listing_id": "l-1", "contact": "Grace",
-		"request_id": "pr-1", "invoice_id": "inv-1", "items": []any{map[string]any{"payee_id": "py-1"}}}
+		"request_id": "pr-1", "invoice_id": "inv-1", "items": []any{map[string]any{"payee_id": "py-1"}}, "agent_id": "agt-1"}
 	allowed := map[string]bool{}
 	for _, r := range []string{"GET /v1/money/accounts", "GET /v1/workspaces/ws-ada/agents", "GET /v1/money/payees",
 		"GET /v1/money/permission-mandates", "GET /v1/marketplace/search", "GET /v1/marketplace/listings/l-1",
 		"GET /v1/money/payment-requests/pr-1", "POST /v1/money/invoices", "POST /v1/money/invoices/inv-1/send",
 		"POST /v1/money/payment-requests", "POST /v1/money/payment-requests/pr-1/cancel", "POST /v1/money/permission-mandates/prepare",
-		"GET /v1/money/bills", "GET /v1/workspaces/ws-ada/agents/safe-to-spend", "POST /v1/money/bills/pay", "GET /v1/money/payment-requests"} {
+		"GET /v1/money/bills", "GET /v1/workspaces/ws-ada/agents/safe-to-spend", "POST /v1/money/bills/pay", "GET /v1/money/payment-requests",
+		"POST /v1/workspaces/ws-ada/agents/agt-1/pause", "GET /v1/workspaces/ws-ada/agents/agt-1/statement"} {
 		allowed[r] = true
 	}
 	for _, tool := range mcpTools {
@@ -204,7 +240,7 @@ func TestMCPNoToolMovesMoney(t *testing.T) {
 			t.Fatalf("%s: a name of at most 64 characters and a description", tool.name)
 		}
 		if tool.run != nil {
-			continue // Taly and the microphone: TestMCPTalyForTheDesktopApp holds them to routes that never pay
+			continue // Taly and the microphone: TestMCPTalyForTheDesktopApp holds them to routes that never pay; B52.6's: mcp_agents_test.go
 		}
 		before := len(lens.calls)
 		if r := toolCall(t, a, token, tool.name, args); r["isError"] != false {
