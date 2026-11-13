@@ -108,6 +108,7 @@ const PINNED: Readonly<Record<string, string>> = {
   '/operator/compliance': 'Compliance',
   '/settings': 'Settings',
   '/settings/verification': 'Verification',
+  '/settings/payout-details': 'Payout details',
   '/settings/terms': 'Capability terms',
   '/settings/webhooks': 'Webhooks',
   '/settings/email-branding': 'Email branding',

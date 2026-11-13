@@ -1430,6 +1430,13 @@ export const agentBankApi = {
   requestedMandates: () =>
     getJSON<{ granted: Mandate[] | null; received: Mandate[] | null }>('/api/money/mandates?status=requested', { granted: 'list', received: 'list' }),
   revokeMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/revoke`),
+  // B55.28 — where this workspace is paid its earnings (Lens B46.11), what it made or was paid, and a room's payout.
+  payoutDetails: () => getJSON<{ payout_details: PayoutDetails[] | null }>('/api/money/payout-details', { payout_details: 'list' }),
+  savePayoutDetails: (body: PayoutDetailsRequest) => send<PayoutDetails>('PUT', '/api/money/payout-details', body),
+  earningsPayouts: () => getJSON<{ payouts: EarningsPayout[] | null }>('/api/money/earnings-payouts', { payouts: 'list' }),
+  /** The room's wallet pays its members by the room's terms, once under key however many times it is sent. */
+  payOutRoom: (roomID: string, body: RoomPayoutRequest, key: string) =>
+    send<{ agreement: string; payouts: EarningsPayout[] | null }>('POST', `/api/rooms/${e(roomID)}/payouts`, body, { 'Idempotency-Key': key }),
   payouts: () => getJSON<{ payouts: PayoutBatch[] | null }>('/api/money/payouts', { payouts: 'list' }),
   payout: (id: string) => getSaid<PayoutBatch>(`/api/money/payouts/${e(id)}`),
   /** The CSV as the person chose it, under one Idempotency-Key: Lens parses and validates every row. */
@@ -1728,6 +1735,44 @@ export interface Bill {
 }
 
 /** Lens economy.PayoutBatch (B30.21): rows only when one batch is read. */
+/** Lens economy.PayoutDetails — where the workspace is paid in one asset; status pending, verified or failed. */
+export interface PayoutDetails {
+  asset: 'USD' | 'GBP' | 'EUR' | 'USDC'
+  holder: string
+  iban?: string
+  bic?: string
+  network?: string
+  address?: string
+  status: 'pending' | 'verified' | 'failed'
+  updated_at: string
+}
+
+export type PayoutDetailsRequest =
+  | { asset: 'USD' | 'GBP' | 'EUR'; holder: string; iban: string; bic: string }
+  | { asset: 'USDC'; holder: string; network: 'base'; address: string }
+
+/** Lens economy.EarningsPayout — one recipient's part of a sale, a room's split or a royalty, in minor units. */
+export interface EarningsPayout {
+  id: string
+  kind: string
+  /** "room:{roomID}:{key}" for a room's payout */
+  source: string
+  recipient_workspace_id: string
+  share_bps?: number
+  amount_minor: number
+  currency: string
+  status: 'held' | 'pending' | 'completed' | 'failed' | 'returned'
+  detail?: string
+  created_at: string
+}
+
+/** POST /api/rooms/{id}/payouts — shares, in basis points by member workspace, only when the owner decides the split. */
+export interface RoomPayoutRequest {
+  amount_minor: number
+  currency: string
+  shares?: Record<string, number>
+}
+
 export interface PayoutBatch {
   id: string
   agent_id?: string

@@ -373,6 +373,9 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/rooms/x1/prizes", body: `{"title":"t","amount_usd_micros":1}`},
 		{method: http.MethodPost, path: "/api/rooms/x1/prizes/x1/award", body: `{"contribution_id":"x1"}`},
 		{method: http.MethodPost, path: "/api/room-invites/x1/join", body: `{"terms_version":1}`},
+		// B55.28 — a room's payout by its terms, and the workspace's payout details.
+		{method: http.MethodPost, path: "/api/rooms/x1/payouts", body: `{"amount_minor":1,"currency":"USD"}`},
+		{method: http.MethodPut, path: "/api/money/payout-details", body: `{"asset":"USD","holder":"x"}`},
 		// B41.48 — owner hand-over, the takeover notice, its answer, the vote for a lead and forking the room.
 		{method: http.MethodPost, path: "/api/rooms/x1/owner", body: `{"workspace_id":"x1"}`},
 		{method: http.MethodPost, path: "/api/rooms/x1/takeover"},

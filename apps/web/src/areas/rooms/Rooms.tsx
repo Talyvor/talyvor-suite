@@ -29,7 +29,7 @@ import {
   splitRuleText,
   usdText,
 } from './roomsApi'
-import { RoomBudget, RoomLive } from './Room'
+import { HeldForYou, RoomBudget, RoomLive } from './Room'
 import { RoomInvite } from './RoomInvite'
 import { RoomSettings } from './RoomSettings'
 
@@ -434,6 +434,7 @@ function RoomPage() {
           <span className="font-figure">{formatWhen(r.last_activity_at)}</span>
         </p>
         {inside && r.wallet ? <RoomBudget wallet={r.wallet} /> : null}
+        {r.me ? <HeldForYou room={r} /> : null}
         {inside && (r.me?.role === 'owner' || r.me?.role === 'editor') ? (
           <Link className={`text-body text-ink ${inlineLink}`} to={`${roomHref(r.id)}/settings`}>
             Room settings: members, invites, budget and prizes
