@@ -209,7 +209,6 @@ const NOT_YET = [
   'areas/pay/PayInvoice.tsx',
   'areas/rooms/Room.tsx',
   'areas/rooms/RoomSettings.tsx',
-  'components/CommandPalette.tsx',
   'figureAudit.ts',
 ]
 

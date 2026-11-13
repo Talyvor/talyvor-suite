@@ -1,0 +1,3 @@
+[
+  { "route": "/", "screen": "w-home+cmdk", "steps": ["Search agents, payees, bills… or type a command"], "frame": true }
+]
