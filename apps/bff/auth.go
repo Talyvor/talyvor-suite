@@ -725,14 +725,9 @@ var deniedPageTmpl = template.Must(template.New("denied").Parse(`<!doctype html>
 </html>
 `))
 
-// The logo's small drawing for this page and the small symbol for the OAuth consent page (oauth.go), both versions of
-// each, copied byte for byte from brand/logo/svg (their ids differ, so both can sit in one page). Embedded, so neither
-// page needs an asset request.
+// The logo's small drawing for this page and the OAuth consent page (oauth.go), both versions, copied byte for byte
+// from brand/logo/svg (their ids differ, so both can sit in one page). Embedded, so neither page needs an asset request.
 var (
-	//go:embed brand/talyvor-symbol-small-on-dark.svg
-	markDark string
-	//go:embed brand/talyvor-symbol-small-on-light.svg
-	markLight string
 	//go:embed brand/talyvor-logo-small-on-dark.svg
 	logoDark string
 	//go:embed brand/talyvor-logo-small-on-light.svg
