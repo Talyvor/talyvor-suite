@@ -602,8 +602,8 @@ const PRESS_SITES: Record<string, string> = {
     'B57.4 — Pocket\'s button, which screens move to one by one; it presses as today\'s does, through the same token',
   'packages/ui/src/components/ThemeToggle.tsx':
     'a hand-rolled <button>, not a Button, so it inherits nothing and must carry the press itself',
-  'apps/web/src/components/CommandPalette.tsx':
-    'B28.135 — the command palette button sits beside ThemeToggle in the top bar, drawn as it is, so it presses as it does',
+  'apps/web/src/App.tsx':
+    'B57.9 — the top bar\'s search, which opens the ⌘K bar, is a hand-rolled pill and presses as Pocket\'s button does',
 }
 
 // ════════════════════════════════════════════════════════════════════════════════════════
