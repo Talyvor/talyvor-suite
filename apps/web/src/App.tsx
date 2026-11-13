@@ -11,7 +11,7 @@ import {
   useLocation,
   useNavigationType,
 } from 'react-router-dom'
-import { Logo, ThemeToggle, cn, inlineLink } from '@talyvor/ui'
+import { Logo, cn, inlineLink } from '@talyvor/ui'
 import {
   Button as PocketButton,
   EmptyState,
@@ -530,10 +530,6 @@ function AppShell() {
           {/* B57.118 — the label, top right on every screen, before Pause every agent (the launch pack's W2 to W5). */}
           <WorkspaceStatus />
           <EveryAgentSwitch />
-          {/* B57.42 moves the theme switch to Settings as Appearance; until then it stays here, in today's design. */}
-          <div className="contents" data-design="today">
-            <ThemeToggle />
-          </div>
           <Avatar />
         </>
       }

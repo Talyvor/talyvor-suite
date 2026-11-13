@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from 'react'
 import { queryOptions, useQuery } from '@tanstack/react-query'
-import { focusRing } from '@talyvor/ui'
 import { type MoneyFigures, MoneyProvider } from '@talyvor/ui/pocket'
 import { ApiError, UnreadableError, readable } from '../../lib/api'
 import { MONEY_ORDER } from '../../moneyOrder'
@@ -193,24 +192,3 @@ export function Lxc({ ulxc, sign = '' }: { ulxc: number; sign?: '' | '+' | '−'
   )
 }
 
-/** Which currency the wallet screens show beside LXC. */
-export function CurrencyPicker() {
-  const fiat = useFiat()
-  return (
-    <label className="flex items-center gap-2 text-body text-muted">
-      Show amounts in
-      <select
-        aria-label="Show amounts in"
-        className={`h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`}
-        value={fiat}
-        onChange={(e) => setFiat(e.target.value as Fiat)}
-      >
-        {FIATS.map((f) => (
-          <option key={f.code} value={f.code}>
-            {f.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}

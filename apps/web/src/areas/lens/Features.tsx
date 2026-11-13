@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation } from 'react-router-dom'
-import { Button, Input, Switch, focusRing, inlineLink } from '@talyvor/ui'
+import { Button, Card, CardHeader, Input, Switch, focusRing, inlineLink } from '@talyvor/ui'
 import { Region, RegionScreen } from '../../components/Region'
 import { ApiError, api, getJSON, getJSONArray } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
@@ -11,6 +11,7 @@ import { BOOK_KEY } from './AgentBank'
 import { type AgentBook, agentBankApi } from './agentBankApi'
 import { Lxc } from './money'
 import { StoredAnswers } from './StoredAnswers'
+import { DocumentFacts, DistillChoice } from './Documents'
 import { usePendingApprovals } from './WalletScreens'
 import { BYOK_PROVIDERS } from './planApi'
 import { PROVIDER_KEYS_KEY, providerKeysApi } from './providerKeysApi'
@@ -945,6 +946,15 @@ export function Features() {
             }
           />
         </ul>
+        {/* B57.42 — moved here from Settings, beside Document conversion, its switch and words unchanged. Its own card,
+            not folded into sharing: they are different consents and a person may want one without the other. */}
+        <Card raised className="mt-4" data-testid="documents-you-attach">
+          <CardHeader>Documents you attach</CardHeader>
+          <div className="flex flex-col gap-4 px-gutter py-4">
+            <DocumentFacts />
+            <DistillChoice />
+          </div>
+        </Card>
       </Region>
 
       <Region index="07" label="Track">

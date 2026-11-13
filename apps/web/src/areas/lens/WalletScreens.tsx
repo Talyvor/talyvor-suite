@@ -11,7 +11,6 @@ import { AgentStatement, DownloadFailed, JOURNAL_SENTENCE, MONTH_FILE_TYPES, dow
 import { agentBankApi, type Agent, type CurrencyAccount, type StatementFormat } from './agentBankApi'
 import { AccountStatement, MarketplaceBill, accountTitle, useAccountMonthCsv } from './AccountStatement'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
-import { CurrencyPicker } from './money'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { CardExport } from './CardDisputes'
 
@@ -75,7 +74,6 @@ export function ApprovalsScreen() {
           identical request goes through, once; decline it and the request is refused, and asking again the same way is
           refused for 24 hours.
         </p>
-        <CurrencyPicker />
         <Approvals nameOf={nameOf} held={{}} onSent={() => {}} primary />
       </Region>
     </RegionScreen>
@@ -109,7 +107,6 @@ export function StatementsScreen() {
   return (
     <RegionScreen>
       <Region index="00" label="Statements" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-4xl flex-col gap-4">
-        <CurrencyPicker />
         {book.isError ? (
           <p className="text-body text-muted">{readFailure(book.error, 'The agents')}</p>
         ) : book.isPending ? (

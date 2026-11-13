@@ -174,7 +174,8 @@ const ADDRESS_ROUTES: Record<string, string[]> = {
   '/setup': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/context', '/api/keys', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/spend': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/members': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/distill', '/api/money/mandates', '/api/money/payment-requests', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  // B57.42 — Settings' cards read the plan and the members; Shared answers its counts; Documents you attach left for /features.
+  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/billing/subscription', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B8.1 made every gated address ask for /api/docs/spaces, for the sidebar's list of spaces. B10.6
   // replaced that list with the pages this browser pinned or opened, which needs no read — so only
   // Overview (its product status) and /docs itself still ask for it. B18.27 moved the pins to Docs,
@@ -272,8 +273,9 @@ describe('the swept set', () => {
     // 97 → 108 at B59.10: the sidebar reads the account's type and kind on every address, for its chip.
     // 108 → 119 at B55.54: the shell reads whether a key recovery waits, on every address, to show it on every page.
     // 119 → 120 at B57.16: `/` reads each agent's card, for the agent card's Card frozen chip.
-    // 120 → 131 at B55.40: and an agent's mandate requests, which its Approvals badge counts, on every address.
-    expect(pairs).toBe(131)
+    // 120 → 122 at B57.42: /settings reads the plan, the members and the stored-answer counts, and no longer /api/distill.
+    // 122 → 133 at B55.40: and an agent's mandate requests, which its Approvals badge counts, on every address.
+    expect(pairs).toBe(133)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {
@@ -364,7 +366,8 @@ describe('a 500 next to a 401 is still a 500', () => {
 
 // ─── the read that no session mechanism could see ───────────────────────────
 //
-// /settings' only read is areas/lens/Documents.tsx#readDistill. It threw
+// B57.42 — Documents you attach moved from /settings to /features, so these run there. Its read is
+// areas/lens/Documents.tsx#readDistill. It threw
 // `new Error(String(res.status))` while every other hand-rolled read in this app raises the
 // shared ApiError on purpose and says so in a comment (track/data.ts, docs/api.ts, keysApi,
 // topupApi, IssueList, DocsUpstreamCard, Sharing, Overview's probe). ALL THREE session
@@ -398,6 +401,8 @@ function mockDistill(readStatus: number | null, writeStatus: number | null) {
       if (refused !== null) return json({ error: 'refused' }, refused)
       return json({ distill_policy: 'always', converted: 0, vision_ocr: 0, days: 30 })
     }
+    // B57.42 — /features reads its switches until Lens names the guardrails; answered at once, so the page settles.
+    if (url === '/api/features') return json({ distill_policy: 'always', cache_poolable: true, guardrails: { injection: true, pii: true } })
     return json(bodyFor(url))
   })
 }
@@ -408,7 +413,7 @@ const RETRY_ADVICE = /You can try again/i
 describe('the document-setting read is a first-class citizen of the session machinery', () => {
   it('a 401 is a verdict, not a flake — /api/distill is asked ONCE', async () => {
     mockDistill(401, null)
-    at('/settings')
+    at('/features')
     await waitFor(() => expect(document.querySelector('[role="alert"]')).not.toBeNull(), { timeout: 5000 })
     await settled()
     const reads = requested.filter((r) => r.startsWith('GET /api/distill'))
@@ -420,7 +425,7 @@ describe('the document-setting read is a first-class citizen of the session mach
 
   it('the setting does not add a second diagnosis under the bar', async () => {
     mockDistill(401, null)
-    at('/settings')
+    at('/features')
     await waitFor(() => expect(document.querySelector('[role="alert"]')).not.toBeNull(), { timeout: 5000 })
     await settled()
     expect(pageText(), 'the bar has already said what happened; "the buttons still work" is both a second voice and false').not.toMatch(DISTILL_ADVICE)
@@ -431,7 +436,7 @@ describe('the document-setting read is a first-class citizen of the session mach
     // buttons really do still work and re-reading really is what happens, so the sentence is
     // correct and must not be traded away for a vaguer one.
     mockDistill(500, null)
-    at('/settings')
+    at('/features')
     await settled()
     await waitFor(() => expect(pageText()).toMatch(DISTILL_ADVICE), { timeout: 5000 })
     expect(document.querySelector('[role="alert"]'), 'a 500 is not a session problem').toBeNull()
@@ -442,7 +447,7 @@ describe('the document-setting read is a first-class citizen of the session mach
     // of "the buttons below still work": true of a blip, false of a dead credential, and a third
     // voice under a bar that has already given the remedy.
     mockDistill(null, 401)
-    at('/settings')
+    at('/features')
     await settled()
     fireEvent.click(await screen.findByRole('button', { name: /Do not convert my documents/i }))
     await waitFor(() => expect(pageText()).toMatch(/did not save/i), { timeout: 5000 })
@@ -451,7 +456,7 @@ describe('the document-setting read is a first-class citizen of the session mach
 
   it('and a genuine save failure DOES — must stay green', async () => {
     mockDistill(null, 500)
-    at('/settings')
+    at('/features')
     await settled()
     fireEvent.click(await screen.findByRole('button', { name: /Do not convert my documents/i }))
     await waitFor(() => expect(pageText()).toMatch(/did not save/i), { timeout: 5000 })

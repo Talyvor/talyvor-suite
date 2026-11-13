@@ -131,6 +131,8 @@ const NOT_AN_EMPTY_STATE: Record<string, string> = {}
 // by the same two rules. Left declared rather than deleted so the DISTINCTION between the two kinds
 // of exemption survives — the comment above says why collapsing them hides which is which.
 const NO_NEXT_ACTION: Record<string, string> = {
+  'No capability asks for terms on this deployment yet.':
+    'B57.42 — Capability terms (CapabilityTerms.tsx) when Talyvor has published no terms: terms are written and published by Talyvor, so there is nothing the owner can do to put one here.',
   'Nothing here.':
     'B27.30 — an empty STATUS COLUMN on a board (BoardColumns.tsx). On the public board the reader has no account and the board is read-only by design, so there is nothing for them to do; on the signed-in board an issue reaches a column by being moved, and the keys line under the board names `s` for that.',
 }

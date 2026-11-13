@@ -65,8 +65,8 @@ describe('the remaining signed-in screens in the brand', () => {
     expect(eyebrows, `${address} has no eyebrow`).toBeGreaterThan(0)
   })
 
-  it('Settings names each section with an eyebrow and shows the stored choice on the accent tint', async () => {
-    // This workspace does not share its answers and converts its documents.
+  it('Settings shows the stored sharing choice on its switch, and its account under its eyebrow (B57.42)', async () => {
+    // This workspace does not share its answers.
     vi.restoreAllMocks()
     queryClient.clear()
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -76,18 +76,15 @@ describe('the remaining signed-in screens in the brand', () => {
       },
       {
         '/auth/me': { mode: 'disabled', authenticated: false, user: null, cache_poolable: false },
-        '/api/distill': { converted: 12, vision_ocr: 3, days: 30, distill_policy: 'always' },
       },
     )
     const main = await at('/settings')
-    const eyebrows = within(main).getAllByTestId('region-label').map((l) => l.textContent)
     // B59.10 — the populated workspace is Business and Hybrid: its account, and its team.
-    expect(eyebrows).toEqual(['00Sharing', '01Documents', '02Provider keys', '03Account', '04Team'])
-
-    const keep = await within(main).findByRole('button', { name: 'Do not share my answers' })
-    expect(keep).toHaveAttribute('aria-pressed', 'true')
-    expect(keep.className).toContain('aria-pressed:bg-accent-tint')
-    expect(within(main).getByRole('button', { name: 'Share my answers' })).toHaveAttribute('aria-pressed', 'false')
-    expect(within(main).getByRole('button', { name: 'Convert my documents' })).toHaveAttribute('aria-pressed', 'true')
+    expect(Array.from(main.querySelectorAll('.text-pocket-eyebrow')).map((e) => e.textContent)).toEqual(['Account'])
+    expect(within(main).getByTestId('settings-team')).toBeInTheDocument()
+    const share = await within(main).findByRole('switch', { name: 'Share my answers' })
+    expect(share).toHaveAttribute('aria-checked', 'false')
+    // B57.42 — Documents you attach moved to Gateway features.
+    expect(within(main).queryByText('Documents you attach')).toBeNull()
   })
 })
