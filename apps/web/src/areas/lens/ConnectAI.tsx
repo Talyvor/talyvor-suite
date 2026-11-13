@@ -1,8 +1,8 @@
 import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Chip, CodeBox, Crumb, Dialog, Eyebrow, KindTile, Row, pocketFocusRing, showSnack, showToast } from '@talyvor/ui/pocket'
-import { cn } from '@talyvor/ui'
+import { Button, Card, Chip, CodeBox, Crumb, Dialog, Eyebrow, KindTile, Row, showSnack, showToast } from '@talyvor/ui/pocket'
+import { cn, inlineLink } from '@talyvor/ui'
 
 import { ApiError, getJSON, readable } from '../../lib/api'
 import { PREPARED_KEY } from './AgentBank'
@@ -340,7 +340,7 @@ function AssistantList({ url }: { url: string }) {
                       type="button"
                       aria-label={`How to add ${a.name}`}
                       onClick={() => setHowTo(a)}
-                      className={cn('text-body text-ink-2 underline underline-offset-2', pocketFocusRing)}
+                      className={cn(inlineLink, 'text-body text-ink-2')}
                     >
                       How to add it
                     </button>
