@@ -204,7 +204,9 @@ describe('BYOK in the app (B27.27)', () => {
   it('a workspace not on BYOK is offered the plan in Settings, never a key field', async () => {
     fakeTalyvor()
     renderAt('/settings', { '/settings': <Settings /> })
-    expect((await screen.findByTestId('provider-keys-plan')).textContent).toBe('Your own keys come with BYOK (Team’s add-on, included in Business). See Plans.')
+    expect((await screen.findByTestId('provider-keys-plan')).textContent).toBe('Using your own model providers’ keys is an add-on on Team, and included in Business.')
+    // B57.42 — the card leads to Plans.
+    expect(screen.getByRole('link', { name: 'See plans' }).getAttribute('href')).toBe('/plans')
     expect(screen.queryByRole('button', { name: /^Add .* key$/ })).toBeNull()
   })
 })

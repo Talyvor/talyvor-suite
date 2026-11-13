@@ -175,13 +175,11 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/operator': 0,
   '/operator/tax': 0,
   '/operator/compliance': 0,
-  // 2 → 3 at B27.27: "Your provider keys". 3 → 6 at B59.10: "Kind of money", "Account type" and a Business's "Your team".
-  '/settings': 6,
-  // B30.116 — your level, the next check, the checks, and one card per level the capabilities need (L0, L2, L3).
-  '/settings/verification': 6,
+  // 6 → 0 at B57.42: drawn in Pocket, whose cards head themselves with an h2 or h3.
+  '/settings': 0,
+  '/settings/verification': 0, // B57.42: drawn in Pocket
   '/settings/payout-details': 0,
-  // B30.103 — every capability with terms, in one card.
-  '/settings/terms': 1,
+  '/settings/terms': 0, // B57.42: drawn in Pocket
   '/settings/webhooks': 0,
   '/settings/email-branding': 0,
   // B40.8 — one card per assistant.
@@ -206,7 +204,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/approve/:id': 1,
   // B45.37 — one card: the plan the assistant prepared.
   '/money/plans/:id': 1,
-  '/features': 0,
+  '/features': 1, // B57.42: "Documents you attach", moved here from Settings beside Document conversion
   '/features/try/tare': 0,
   '/features/try/conversion': 0,
   '/track': 2,

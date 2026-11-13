@@ -1,18 +1,18 @@
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useLocation } from 'react-router-dom'
-import { Button, Card, CardHeader, focusRing, inlineLink } from '@talyvor/ui'
+import { cn, focusRing, inlineLink, useTheme, type ThemeChoice } from '@talyvor/ui'
+import { Card, Switch, Tabs } from '@talyvor/ui/pocket'
 import { ApiError } from '../../lib/api'
 import { useAuthMeReader } from '../../lib/authMe'
-import { DocumentFacts, DistillChoice } from './Documents'
-import { StoredAnswersFacts } from '../../components/StoredAnswersFacts'
 import { IfArea } from '../../lib/workspaceAreas'
 import { ProviderKeysCard } from './ProviderKeys'
 import { CompanyLine } from '../../components/CompanyLine'
-import { Region, RegionScreen } from '../../components/Region'
-import { SettingsLinks } from '../../components/PageLinks'
-import { pressed } from './walletBrand'
-import { KIND_LABEL, KIND_LINE, TYPE_LABEL, useAccount, usePersonal } from './agentBankApi'
+import { SettingsCards, SignedIn, useSettingsLinks } from '../../components/PageLinks'
+import { STORED_KEY, readStored } from './StoredAnswers'
+import { setFiat, useFiat, type Fiat } from './money'
+import { usePersonal } from './agentBankApi'
+import { AccountCards } from './AccountSettings'
 
 // Sharing.tsx — cross-tenant answer sharing: the explanation, and the control.
 //
@@ -38,59 +38,7 @@ import { KIND_LABEL, KIND_LINE, TYPE_LABEL, useAccount, usePersonal } from './ag
 // This matters more since sharing became ON by default: the screen is now the only thing standing
 // between a person and disclosure, so it has to be readable by someone who is not looking for it.
 
-/** SharingFacts — the whole description, used verbatim by both screens. */
-export function SharingFacts() {
-  return (
-    <div className="flex flex-col gap-4">
-      <p className="text-body">
-        Shared answers save on repeated questions. When another company has already asked a
-        near-identical question, this workspace can be served their answer instead of paying a
-        model for a new one, and an answer produced here may be served to them the same way.
-      </p>
-
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="flex-1">
-          <p className="text-body text-ink">If sharing is on</p>
-          <ul className="mt-1 flex list-disc flex-col gap-1 pl-5 text-body text-muted">
-            <li>Repeated questions are served instantly from shared answers, without paying a model.</li>
-            <li>The content of your answers leaves this workspace.</li>
-            <li>
-              When another company is served one of your answers, you earn a small royalty, shown on{' '}
-              <Link to="/statements/royalties" className={inlineLink}>
-                Royalties
-              </Link>
-              .
-            </li>
-          </ul>
-        </div>
-        <div className="flex-1">
-          <p className="text-body text-ink">If sharing is off</p>
-          <ul className="mt-1 flex list-disc flex-col gap-1 pl-5 text-body text-muted">
-            <li>You pay full price for repeated questions.</li>
-            <li>You are never served another company&rsquo;s answers.</li>
-            <li>New answers produced here are not shared, and earn no royalty.</li>
-          </ul>
-        </div>
-      </div>
-
-      <p className="text-body text-muted">
-        Your API keys, your balance and your ledger are never shared, in either setting.
-      </p>
-      <StoredAnswersFacts />
-    </div>
-  )
-}
-
-/**
- * SharingChoice — the control. Reads the RECORDED value from the session probe and writes through
- * POST /api/pooling, which the BFF forwards to Lens as PUT /v1/workspaces/{wsID}/cache-poolable
- * with this session's own token.
- *
- * It renders what is STORED, never what was requested: the BFF returns the consent Lens actually
- * recorded, and this re-probes after every write. If a write is refused or only partly applied,
- * the screen says so instead of showing an optimistic result.
- */
-/** Writes the choice; throws when it did not save. Both controls re-probe /auth/me after it. */
+/** Writes the choice; throws when it did not save. Every control re-probes /auth/me after it. */
 async function savePooling(cachePoolable: boolean): Promise<void> {
   // Relative path ⇒ same-origin ⇒ the browser supplies the Origin the BFF requires.
   const res = await fetch('/api/pooling', {
@@ -101,56 +49,126 @@ async function savePooling(cachePoolable: boolean): Promise<void> {
   if (!res.ok) throw new ApiError(res.status, '/api/pooling')
 }
 
-export function SharingChoice({ onDone }: { onDone?: () => void }) {
+/**
+ * B57.42 — Settings' Shared answers: what sharing means, its switch, and how much is stored. The switch draws what Lens
+ * RECORDED (the session probe), never what was pressed, and re-reads it after every write; a refused write says so.
+ * Every stored answer, and deleting them, is on Gateway features (StoredAnswers).
+ */
+function SharedAnswersCard() {
   const q = useAuthMeReader()
   const qc = useQueryClient()
-  const [busy, setBusy] = useState<'on' | 'off' | null>(null)
-  const [failed, setFailed] = useState<string | null>(null)
-
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
   const recorded = q.data?.cache_poolable
+  const stored = useQuery({
+    queryKey: STORED_KEY,
+    queryFn: readStored,
+    retry: false,
+  })
 
   async function choose(cachePoolable: boolean) {
-    setBusy(cachePoolable ? 'on' : 'off')
-    setFailed(null)
+    setBusy(true)
+    setFailed(false)
     try {
       await savePooling(cachePoolable)
       await qc.invalidateQueries({ queryKey: ['auth-me'] })
-      onDone?.()
     } catch {
-      setFailed('That did not save, so nothing changed. You can try again.')
+      setFailed(true)
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
 
+  const s = stored.data
+  const counts = s ? (
+    <>
+      {s.shared_answers === 0 ? 'No shared answers' : <>{n(s.shared_answers)} answers shared with others</>}, and {n(s.private_answers)}{' '}
+      kept to this workspace.{' '}
+    </>
+  ) : null
   return (
-    <div className="flex flex-col gap-4">
-      {/* The stored state, stated before the buttons — so the person is choosing against what is
-          actually true, not against what they last clicked. */}
-      {q.isLoading ? (
-        <p className="text-body text-muted">Checking this workspace&rsquo;s setting…</p>
-      ) : recorded === undefined ? (
-        <p className="text-body text-muted">
-          This workspace&rsquo;s sharing setting could not be read, so it is not shown. The buttons
-          below still work, and the result is re-read afterwards.
-        </p>
-      ) : (
-        <p className="text-body">
-          Sharing is currently <strong>{recorded ? 'on' : 'off'}</strong> for this workspace.
-        </p>
-      )}
-
-      {failed && <p className="border-l-2 border-l-slashed pl-2 text-body text-ink">{failed}</p>}
-
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Button aria-pressed={recorded === false} className={pressed} disabled={busy !== null} onClick={() => void choose(false)}>
-          {busy === 'off' ? 'Saving…' : 'Do not share my answers'}
-        </Button>
-        <Button aria-pressed={recorded === true} className={pressed} disabled={busy !== null} onClick={() => void choose(true)}>
-          {busy === 'on' ? 'Saving…' : 'Share my answers'}
-        </Button>
+    <Card tone="white" data-testid="settings-sharing">
+      <h2 className="font-display text-reading font-bold text-ink">Shared answers</h2>
+      <p className="mt-1 text-body text-ink-2">
+        An answer made here may be served to another company asking the same, so repeated questions cost less, and you earn a small royalty
+        when it is. Your keys, balance and ledger are never shared.
+      </p>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <span id="share-my-answers" className="text-body font-semibold text-ink">
+          Share my answers
+        </span>
+        <Switch
+          aria-labelledby="share-my-answers"
+          checked={recorded === true}
+          disabledReason={recorded === undefined && !q.isLoading ? 'This workspace’s setting could not be read.' : undefined}
+          disabled={busy || q.isLoading}
+          onCheckedChange={(on) => void choose(on)}
+        />
       </div>
-    </div>
+      {failed ? (
+        <p role="alert" className="mt-2 text-body text-ink">
+          That did not save, so nothing changed. You can try again.
+        </p>
+      ) : null}
+      <p className="mt-2 text-body text-ink-3" data-testid="settings-stored-counts">
+        {counts}Stored answers are kept until you delete them.
+      </p>
+      <Link to="/features#stored-answers" className={cn(inlineLink, 'mt-2 inline-block text-body font-semibold text-ink')}>
+        Every stored answer, and deleting them, on Developers
+      </Link>
+    </Card>
+  )
+}
+
+const n = (v: number) => <span className="font-figure">{v.toLocaleString('en-US')}</span>
+
+/** B57.42 — Appearance, moved here from the top bar: Light, Dark or Same as this device. */
+const APPEARANCE: Record<string, ThemeChoice> = {
+  Light: 'light',
+  Dark: 'dark',
+  'Same as this device': 'device',
+}
+
+function AppearanceCard() {
+  const choice = useTheme((s) => s.choice)
+  const choose = useTheme((s) => s.choose)
+  const tabs = Object.keys(APPEARANCE)
+  return (
+    <Card tone="white">
+      <h2 className="font-display text-reading font-bold text-ink">Appearance</h2>
+      <Tabs
+        label="Appearance"
+        className="mt-2"
+        tabs={tabs}
+        value={tabs.find((t) => APPEARANCE[t] === choice) ?? 'Same as this device'}
+        onChange={(t) => choose(APPEARANCE[t])}
+      />
+    </Card>
+  )
+}
+
+/** B57.42 — which currency leads beside LXC, moved here from the wallet screens (B57.7). */
+const SHOW_IN: Record<string, Fiat> = {
+  'US dollars': 'USD',
+  Pounds: 'GBP',
+  Euros: 'EUR',
+}
+
+function ShowAmountsCard() {
+  const fiat = useFiat()
+  const tabs = Object.keys(SHOW_IN)
+  return (
+    <Card tone="white">
+      <h2 className="font-display text-reading font-bold text-ink">Show amounts in</h2>
+      <p className="mt-1 text-body text-ink-2">LXC are always shown too. Dollars are the default; pounds and euros use the day’s rate.</p>
+      <Tabs
+        label="Show amounts in"
+        className="mt-2"
+        tabs={tabs}
+        value={tabs.find((t) => SHOW_IN[t] === fiat) ?? 'US dollars'}
+        onChange={(t) => setFiat(SHOW_IN[t])}
+      />
+    </Card>
   )
 }
 
@@ -212,88 +230,30 @@ export function TeamOnly() {
   return personal && pathname === '/members' ? <Navigate to="/settings" replace /> : null
 }
 
-/** B59.10 — the account's type and kind of money (SPEC 3.5's card), and for a Business its team. */
-function AccountCards() {
-  const { account, shows } = useAccount()
-  return (
-    <>
-      {account ? (
-        <Region index="03" label="Account">
-          <Card raised>
-            <CardHeader>Kind of money</CardHeader>
-            <div className="flex flex-col gap-1 px-gutter py-4" data-testid="settings-money-kind">
-              <span className="text-body text-ink">{KIND_LABEL[account.money_kind]}</span>
-              <span className="text-body text-muted">{KIND_LINE[account.money_kind]}</span>
-            </div>
-          </Card>
-          <Card raised className="mt-3">
-            <CardHeader>Account type</CardHeader>
-            <div className="flex flex-col gap-1 px-gutter py-4" data-testid="settings-account-type">
-              <span className="text-body text-ink">{TYPE_LABEL[account.account_type]}</span>
-              <span className="text-body text-muted">The type can’t be changed. You can hold several accounts and switch between them.</span>
-            </div>
-          </Card>
-        </Region>
-      ) : null}
-      {shows?.team ? (
-        <Region index="04" label="Team">
-          <Card raised>
-            <CardHeader>Your team</CardHeader>
-            <p className="px-gutter py-4 text-body text-muted" data-testid="settings-team">
-              Who is in your team and the role each one has are on{' '}
-              <Link to="/members" className={inlineLink}>
-                Members
-              </Link>
-              .
-            </p>
-          </Card>
-        </Region>
-      ) : null}
-    </>
-  )
-}
-
-/** Settings — the standing control, reachable any time from the nav. */
+/** Settings — B57.42: every setting on one page (Pocket's w-settings): the pages as cards, the choices beside them. */
 export function Settings() {
-  // B29.12 — the board's pattern: an eyebrow names each section and its card sits on the raised plane.
+  const links = useSettingsLinks()
   return (
-    <RegionScreen>
-      {/* B57.8 — Sign out moved here from the top bar, and the settings pages that left the sidebar are linked. */}
-      <SettingsLinks />
-      {/* B59.2 — shared answers and document conversion are the gateway's, and go with it. */}
-      <IfArea area="gateway">
-      <Region index="00" label="Sharing">
-        <Card raised>
-          <CardHeader>Shared answers (saves on repeated questions)</CardHeader>
-          <div className="flex flex-col gap-4 px-gutter py-4">
-            <SharingFacts />
-            <SharingChoice />
-          </div>
-        </Card>
-      </Region>
-
-      {/* Document conversion is ON for every workspace by default and had no control anywhere in
-          the product. Kept as its OWN card, not folded into sharing: they are different consents
-          and a person may reasonably want one without the other. */}
-      <Region index="01" label="Documents">
-        <Card raised>
-          <CardHeader>Documents you attach</CardHeader>
-          <div className="flex flex-col gap-4 px-gutter py-4">
-            <DocumentFacts />
-            <DistillChoice />
-          </div>
-        </Card>
-      </Region>
-      </IfArea>
-
-      {/* B27.27 — BYOK's keys: added, replaced and removed here, only their last four ever shown. */}
-      <Region index="02" label="Provider keys">
-        <ProviderKeysCard />
-      </Region>
-
-      <AccountCards />
-
-      <CompanyLine className="px-gutter pb-10" />
-    </RegionScreen>
+    <div data-design="pocket" className="grid gap-4.5">
+      {/* B57.8 — Sign out moved here from the top bar. */}
+      <SignedIn />
+      <div className="grid items-start gap-4.5 wide:grid-cols-12">
+        <div className="wide:col-span-7">
+          <SettingsCards links={links} />
+        </div>
+        <div className="grid gap-3 wide:col-span-5">
+          {/* B59.2 — shared answers are the gateway's, and go with it. */}
+          <IfArea area="gateway">
+            <SharedAnswersCard />
+          </IfArea>
+          <AppearanceCard />
+          <ShowAmountsCard />
+          {/* B27.27 — BYOK's keys: added, replaced and removed here, only their last four ever shown. */}
+          <ProviderKeysCard />
+          <AccountCards />
+        </div>
+      </div>
+      <CompanyLine className="pb-10" />
+    </div>
   )
 }

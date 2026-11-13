@@ -26,7 +26,7 @@ import { DeclineForm, declinedText } from './Decline'
 import { approvalSheetTo } from './ApprovalSheet'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
-import { CurrencyPicker, Lxc, useLxcText } from './money'
+import { Lxc, useLxcText } from './money'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
@@ -3085,7 +3085,6 @@ export function AgentBank() {
           person must approve, and read every movement on its statement. Lens checks the rules before a provider is
           called or a payment moves.
         </p>
-        {first ? null : <CurrencyPicker />}
         {book.isSuccess ? (
           <>
             {hasAgents ? <Totals book={book.data} /> : null}

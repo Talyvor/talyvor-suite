@@ -76,7 +76,7 @@ describe.each(TYPES.flatMap((t) => KINDS.map((k) => [t, k] as const)))('a %s acc
     // B57.8 — Members left the sidebar: Settings links it.
     const { main } = await at('/settings', account)
     const pages = within(main).getByRole('navigation', { name: 'Settings pages' })
-    expect(within(pages).queryByRole('link', { name: 'Members' }) !== null).toBe(business)
+    expect(within(pages).queryByRole('link', { name: /^Members/ }) !== null).toBe(business)
     expect(within(main).getByTestId('settings-money-kind').textContent).toContain(KIND_LABEL[kind])
     expect(within(main).getByTestId('settings-account-type').textContent).toContain(CHIP[type])
     expect(within(main).queryByTestId('settings-team') !== null).toBe(business)

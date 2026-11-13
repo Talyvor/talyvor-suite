@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, CardHeader, Input, Row, formatDay, inlineLink } from '@talyvor/ui'
+import { formatDay } from '@talyvor/ui'
+import { Button, Card, Input, Row } from '@talyvor/ui/pocket'
 import { isSessionExpired } from '../../lib/productState'
 import { BYOK_PROVIDERS } from './planApi'
 import { PROVIDER_KEYS_KEY, ProviderKeyError, providerKeysApi, type ProviderKey } from './providerKeysApi'
@@ -47,99 +48,110 @@ function ProviderKeyRow({ provider, stored, canAdd }: { provider: string; stored
       : null
 
   return (
-    <Row
-      stack
-      label={name}
-      hint={
-        stored ? (
-          <span data-testid={`provider-key-${provider}`}>
-            <span className="font-figure">•••• {stored.last4}</span>, added {formatDay(stored.updated_at)}
-          </span>
-        ) : (
-          'No key'
-        )
-      }
-    >
-      <div className="flex flex-col gap-2 wide:items-end">
-        {mode === 'editing' ? (
-          <form
-            className="flex flex-wrap items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (typed.trim()) save.mutate()
+    <div className="grid gap-2 border-t border-line py-2.5 first:border-t-0">
+      <Row
+        title={name}
+        line={
+          stored ? (
+            <span data-testid={`provider-key-${provider}`}>
+              <span className="font-figure">•••• {stored.last4}</span>, added {formatDay(stored.updated_at)}
+            </span>
+          ) : (
+            'No key'
+          )
+        }
+        className="py-0"
+        action={
+          mode === 'idle' ? (
+            <>
+              {canAdd ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    remove.reset()
+                    setMode('editing')
+                  }}
+                >
+                  {stored ? `Replace ${name} key` : `Add ${name} key`}
+                </Button>
+              ) : null}
+              {stored ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    save.reset()
+                    setMode('removing')
+                  }}
+                >
+                  Remove
+                </Button>
+              ) : null}
+            </>
+          ) : undefined
+        }
+      />
+      {mode === 'editing' ? (
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (typed.trim()) save.mutate()
+          }}
+        >
+          <Input
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            aria-label={`${name} API key`}
+            placeholder="Paste your key"
+            className="w-56 font-mono"
+            disabled={save.isPending}
+          />
+          <Button type="submit" size="sm" disabled={!typed.trim() || save.isPending}>
+            {save.isPending ? 'Saving…' : 'Save key'}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={save.isPending}
+            onClick={() => {
+              setTyped('')
+              save.reset()
+              setMode('idle')
             }}
           >
-            <Input
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              aria-label={`${name} API key`}
-              placeholder="Paste your key"
-              className="w-56 font-mono"
-              disabled={save.isPending}
-            />
-            <Button type="submit" variant="primary" disabled={!typed.trim() || save.isPending}>
-              {save.isPending ? 'Saving…' : 'Save key'}
-            </Button>
-            <Button
-              type="button"
-              disabled={save.isPending}
-              onClick={() => {
-                setTyped('')
-                save.reset()
-                setMode('idle')
-              }}
-            >
-              Cancel
-            </Button>
-          </form>
-        ) : mode === 'removing' ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-body text-ink">Requests to {name} then run on prepaid credits.</span>
-            <Button variant="danger" disabled={remove.isPending} onClick={() => remove.mutate()}>
-              {remove.isPending ? 'Removing…' : `Remove ${name} key`}
-            </Button>
-            <Button disabled={remove.isPending} onClick={() => setMode('idle')}>
-              Keep it
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            {canAdd ? (
-              <Button
-                onClick={() => {
-                  remove.reset()
-                  setMode('editing')
-                }}
-              >
-                {stored ? `Replace ${name} key` : `Add ${name} key`}
-              </Button>
-            ) : null}
-            {stored ? (
-              <Button
-                onClick={() => {
-                  save.reset()
-                  setMode('removing')
-                }}
-              >
-                Remove
-              </Button>
-            ) : null}
-          </div>
-        )}
-        {failed ? (
-          <p role="alert" className="text-body text-ink">
-            {failed}
-          </p>
-        ) : null}
-      </div>
-    </Row>
+            Cancel
+          </Button>
+        </form>
+      ) : mode === 'removing' ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-body text-ink">Requests to {name} then run on prepaid credits.</span>
+          <Button variant="danger" size="sm" disabled={remove.isPending} onClick={() => remove.mutate()}>
+            {remove.isPending ? 'Removing…' : `Remove ${name} key`}
+          </Button>
+          <Button variant="secondary" size="sm" disabled={remove.isPending} onClick={() => setMode('idle')}>
+            Keep it
+          </Button>
+        </div>
+      ) : null}
+      {failed ? (
+        <p role="alert" className="text-body text-ink">
+          {failed}
+        </p>
+      ) : null}
+    </div>
   )
 }
 
-/** Settings' card: the workspace's own provider keys, added, replaced and removed here. */
+/**
+ * Settings' card: the workspace's own provider keys. B57.42 — on a plan without them it is one line and the way to
+ * Plans; where the plan has them, the keys themselves, added, replaced and removed here.
+ */
 export function ProviderKeysCard() {
   const q = useQuery({
     queryKey: PROVIDER_KEYS_KEY,
@@ -150,45 +162,50 @@ export function ProviderKeysCard() {
   const providers = data?.providers.length ? data.providers : Object.keys(BYOK_PROVIDERS)
 
   return (
-    <Card raised>
-      <CardHeader>Your provider keys</CardHeader>
-      <div className="flex flex-col gap-3 border-b border-rule px-gutter py-4">
-        <p className="text-body">
-          On the BYOK plan, a request to a provider you hold a key for goes upstream on your key and Talyvor charges it
-          no tokens: your provider bills you. A key is encrypted when it is stored and sent only to its own provider.
-          It is never shown again: only its last four characters are.
+    <Card data-testid="provider-keys">
+      <h2 className="font-display text-reading font-bold text-ink">Your provider keys</h2>
+      {q.isPending ? (
+        <p className="mt-1 text-body text-ink-2">Reading your provider keys…</p>
+      ) : q.isError ? (
+        <p className="mt-1 text-body text-ink-2">
+          {isSessionExpired(q.error)
+            ? 'Your provider keys can’t be read until you sign in again.'
+            : 'Your provider keys couldn’t be read just now.'}
         </p>
-        {q.isPending ? (
-          <p className="text-body text-muted">Reading your provider keys…</p>
-        ) : q.isError ? (
-          <p className="text-body text-muted">
-            {isSessionExpired(q.error)
-              ? 'Your provider keys can’t be read until you sign in again.'
-              : 'Your provider keys couldn’t be read just now.'}
+      ) : !data ? (
+        <p className="mt-1 text-body text-ink-2">This deployment doesn’t hold provider keys, so BYOK isn’t available here.</p>
+      ) : !data.byok ? (
+        <>
+          <p className="mt-1 text-body text-ink-2" data-testid="provider-keys-plan">
+            Using your own model providers’ keys is an add-on on Team, and included in Business.
           </p>
-        ) : !data ? (
-          <p className="text-body text-ink">
-            This deployment doesn’t hold provider keys, so BYOK isn’t available here.
+          <div className="mt-3">
+            <Button asChild variant="secondary" size="sm">
+              <Link to="/plans">See plans</Link>
+            </Button>
+          </div>
+          {/* A key kept from a plan that had them can still be removed. */}
+          {data.keys.length ? (
+            <div className="mt-2 grid">
+              {data.keys.map((k) => (
+                <ProviderKeyRow key={k.provider} provider={k.provider} stored={k} canAdd={false} />
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <p className="mt-1 text-body text-ink-2" data-testid="provider-keys-plan">
+            You’re on BYOK. A request to a provider you hold a key for goes on your key, and your provider bills you. Only a key’s last four
+            characters are ever shown.
           </p>
-        ) : !data.byok ? (
-          <p className="text-body text-ink" data-testid="provider-keys-plan">
-            Your own keys come with BYOK (Team’s add-on, included in Business).{' '}
-            <Link to="/plans" className={inlineLink}>
-              See Plans
-            </Link>
-            .
-          </p>
-        ) : (
-          <p className="text-body text-ink" data-testid="provider-keys-plan">
-            You’re on BYOK. Add a key for each provider you want your requests sent on.
-          </p>
-        )}
-      </div>
-      {data
-        ? providers.map((p) => (
-            <ProviderKeyRow key={p} provider={p} stored={data.keys.find((k) => k.provider === p)} canAdd={data.byok} />
-          ))
-        : null}
+          <div className="mt-2 grid">
+            {providers.map((p) => (
+              <ProviderKeyRow key={p} provider={p} stored={data.keys.find((k) => k.provider === p)} canAdd={data.byok} />
+            ))}
+          </div>
+        </>
+      )}
     </Card>
   )
 }
