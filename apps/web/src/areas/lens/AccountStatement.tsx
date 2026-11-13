@@ -183,7 +183,10 @@ export function AccountStatement({ account, agent }: { account: CurrencyAccount;
                         {/* B59.25 — a card payment is disputed from its line, and says where its dispute stands. */}
                         {l.kind === 'card_charge' && l.partner_ref ? (
                           <span className="mt-1 block">
-                            <DisputePayment paymentID={l.partner_ref} />
+                            <DisputePayment
+                              paymentID={l.partner_ref}
+                              payment={{ what, when: lineWhen(l.at, now), minor: l.amount_minor, currency: account.currency }}
+                            />
                           </span>
                         ) : null}
                       </td>
