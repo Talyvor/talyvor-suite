@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -699,6 +700,9 @@ func TestLeakSweep_CoversEveryMountedWriteRoute(t *testing.T) {
 	if len(patterns) < 20 {
 		t.Fatalf("mounted patterns found = %d, want at least 20 — the route-table scan read almost nothing", len(patterns))
 	}
+
+	// B52.9: sign out everywhere ends every fixture's sessions and assistants, so it is swept after every other route.
+	patterns = append(slices.DeleteFunc(patterns, func(p string) bool { return p == "/auth/logout-everywhere" }), "/auth/logout-everywhere")
 
 	reached, succeeded := map[string]bool{}, map[string]bool{}
 	accepted := map[string]bool{}

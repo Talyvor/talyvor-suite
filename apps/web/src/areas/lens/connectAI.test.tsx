@@ -61,4 +61,18 @@ describe('Connect your AI', () => {
     expect(calls).toContain('POST /api/connect/assistants/g-1/revoke')
     expect(screen.getByText(/No assistant is connected yet/)).toBeInTheDocument()
   })
+
+  it('signs out everywhere after asking once', async () => {
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (init?.method === 'POST') return new Response(null, { status: 204 })
+      return new Response(JSON.stringify({ assistants: [] }))
+    })
+    renderScreen()
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out everywhere' }))
+    expect(calls).not.toContain('POST /auth/logout-everywhere')
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, sign out everywhere' }))
+    await waitFor(() => expect(calls).toContain('POST /auth/logout-everywhere'))
+  })
 })

@@ -66,3 +66,10 @@ ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS auth_methods text[] NOT NULL 
 ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS jwks_uri text NOT NULL DEFAULT '';
 ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS resource text NOT NULL DEFAULT '';
 ALTER TABLE oauth_grants ADD COLUMN IF NOT EXISTS resource text NOT NULL DEFAULT '';
+
+-- B52.9: when a person last signed out everywhere (signout_everywhere.go). A session sealed before it is never
+-- restored from its seal, so a restart cannot undo the sign-out. One row per person, overwritten.
+CREATE TABLE IF NOT EXISTS signed_out_everywhere (
+    sub text PRIMARY KEY,
+    at  timestamptz NOT NULL
+);
