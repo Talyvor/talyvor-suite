@@ -41,6 +41,8 @@ function stateOf(c: PhysicalCard): { line: string; chip: React.ReactNode } {
  * B57.127 — the owner's own card in its tier art, the account's default until the owner picks another tier beside it.
  * The pick changes only the picture: it stays in this browser and nothing else on the page reads it. Drawn once the
  * account's type is known, so a face never claims a type the read did not give.
+ * B57.143 — drawn in Pocket: a white card with the art 312 wide, as W4 draws a card, and beside it the choice under its
+ * own heading and line, as Settings draws "Show amounts in".
  */
 function OwnerCardFace({ account }: { account: WorkspaceAccount }) {
   const family = ownerFamily(account)
@@ -48,15 +50,16 @@ function OwnerCardFace({ account }: { account: WorkspaceAccount }) {
   const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
   const named = workspace.data && workspace.data.name !== workspace.data.id ? workspace.data.name : null
   return (
-    <div data-testid="owner-card-face" className="flex flex-col gap-4 wide:flex-row wide:items-center">
-      <div className="w-full max-w-md">
+    <Card tone="white" data-testid="owner-card-face" className="flex flex-col gap-5 wide:flex-row wide:items-center">
+      <div className="w-full max-w-78 shrink-0">
         <TalyvorCard card={card} holder={named ?? OWNER_HOLDER[family]} sub={OWNER_SUB[card.id]} />
       </div>
-      <div className="grid gap-2">
-        <Tabs label="Card tier" tabs={ownerFaces(family).map((c) => c.tier)} value={card.tier} onChange={setOwnerTier} />
-        <p className="text-body text-ink-3">Shows your card in another tier. Only the picture changes.</p>
+      <div className="grid min-w-0 gap-1">
+        <h3 className="font-display text-reading font-bold text-ink">Card tier</h3>
+        <p className="text-body text-ink-2">Shows your card in another tier. Only the picture changes.</p>
+        <Tabs label="Card tier" tabs={ownerFaces(family).map((c) => c.tier)} value={card.tier} onChange={setOwnerTier} className="mt-2" />
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -238,13 +241,13 @@ export function PhysicalCardScreen() {
                 <Input value={order.line2} onChange={(e) => set({ line2: e.target.value })} />
               </Field>
               <div className="grid gap-3 wide:grid-cols-3">
-                <Field label="Town or city" className="min-w-0">
+                <Field label="Town or city" className="min-w-0 grid-cols-1">
                   <Input value={order.city} onChange={(e) => set({ city: e.target.value })} />
                 </Field>
-                <Field label="Postcode" className="min-w-0">
+                <Field label="Postcode" className="min-w-0 grid-cols-1">
                   <Input value={order.postcode} onChange={(e) => set({ postcode: e.target.value })} />
                 </Field>
-                <Field label="Country" className="min-w-0">
+                <Field label="Country" className="min-w-0 grid-cols-1">
                   <Input placeholder="GB" maxLength={2} value={order.country} onChange={(e) => set({ country: e.target.value.toUpperCase() })} />
                 </Field>
               </div>
