@@ -68,7 +68,10 @@ describe('amounts in your own currency and plain-English rules', () => {
     await waitFor(() => expect(balanceRow().textContent).toBe('$1.25 (12.5 LXC)'))
     expect(within(balanceRow()).getByTestId('fiat').className).toContain('font-figure')
 
-    fireEvent.change(screen.getByLabelText('Show amounts in'), { target: { value: 'GBP' } })
+    // B57.42 — Show amounts in moved to Settings: chosen there, followed here.
+    fireEvent.click(screen.getByRole('link', { name: 'Settings' }))
+    fireEvent.click(within(await screen.findByRole('tablist', { name: 'Show amounts in' })).getByRole('tab', { name: 'Pounds' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Agents' }))
     // 1.25 USD ÷ 1.1672 USD per EUR × 0.8354 GBP per EUR = £0.8947
     await waitFor(() => expect(balanceRow().textContent).toBe('£0.89 (12.5 LXC)'))
     expect(window.localStorage.getItem(FIAT_KEY)).toBe('GBP')

@@ -25,7 +25,10 @@ function mockBFF(put: (body: Record<string, string>) => Response) {
 function renderScreen() {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <DocsEmailBranding />
+      {/* B57.42 — drawn in Pocket, as /settings/… is in the app. */}
+      <div data-design="pocket">
+        <DocsEmailBranding />
+      </div>
     </QueryClientProvider>,
   )
 }

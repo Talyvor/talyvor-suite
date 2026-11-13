@@ -232,6 +232,18 @@ describe('the Features screen', () => {
     expect(document.body.textContent).not.toMatch(/no budget screen|not on the Marketplace yet/)
   })
 
+  // B57.42 — Documents you attach left Settings for here, beside Document conversion, its switch and words unchanged.
+  it('Documents you attach sits in Cost savings beside Document conversion, with its choice', async () => {
+    mockBff([])
+    window.history.pushState({}, '', '/features')
+    render(<App />)
+    const card = await screen.findByTestId('documents-you-attach')
+    expect(within(card).getByRole('heading', { name: 'Documents you attach' })).toBeInTheDocument()
+    expect(card.closest('section')).toContainElement(row('Document conversion'))
+    await waitFor(() => expect(within(card).getByRole('button', { name: 'Convert my documents' })).toHaveAttribute('aria-pressed', 'true'))
+    expect(within(card).getByRole('button', { name: 'Do not convert my documents' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
   it('turning Tare on writes Lens’s policy and the row then reads On; off writes it back', async () => {
     const posts: Array<{ url: string; body: unknown }> = []
     mockBff(posts)
