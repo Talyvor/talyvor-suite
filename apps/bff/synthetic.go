@@ -142,6 +142,9 @@ func (a *app) syntheticSession(w http.ResponseWriter, r *http.Request) (session,
 		// Lens turned pooling on when it created the workspace; there is no question to ask.
 		cachePoolable: ws.CachePoolable,
 		synthetic:     true,
+		// A synthetic sign-in presents the workspace's own token each time, with no provider in between: now is when it
+		// signed in (B50.49).
+		signedInAt: time.Now(),
 	}, true
 }
 
