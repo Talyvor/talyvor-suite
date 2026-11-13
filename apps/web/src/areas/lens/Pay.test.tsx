@@ -503,7 +503,7 @@ describe('the Pay screen', () => {
   // B57.31 — every control on the redrawn Pay does something. The buttons below are today's cards kept under it, which B57.32
   // redraws on their own pages (its forms' buttons are disabled until filled, and say why only once drawn in Pocket).
   it('presses every control on Pay and each does something', async () => {
-    const today = ['Set up standing order', 'Grant mandate', 'Revoke', 'Upload and check', 'Rows', 'Add bill'].map((b) => `button “${b}”:`)
+    const today = ['Set up standing order', 'Grant mandate', 'Revoke', 'Add bill'].map((b) => `button “${b}”:`)
     const report = await pressEverything('/money/pay')
     expect(report.pressed).toBeGreaterThan(0)
     expect(report.dead.filter((d) => !today.some((t) => d.startsWith(t)))).toEqual([])
@@ -522,7 +522,7 @@ describe('the Pay screen', () => {
     expect(bff.sent[0].headers['Content-Type']).toBe('text/csv')
     expect(bff.sent[0].headers['Idempotency-Key'].length).toBeGreaterThan(8)
     expect(bff.sent[0].body).toBe(csv)
-    expect(within(batch).getByTestId('payout-row-3').textContent).toContain('no such payee')
+    expect(within(batch).getByTestId('payout-row-3').textContent).toContain('No such payee')
     expect(within(batch).getByRole('button', { name: 'Approve and pay 1 row' })).toBeTruthy()
   })
 
@@ -673,11 +673,11 @@ describe('a payout batch’s approval (B58.6)', () => {
     fireEvent.click(within(batch).getByRole('button', { name: 'Approve and pay 1 row' }))
     await within(batch).findByText('A payment by a person needs the passkey or the phone key’s signature.')
     expect(within(batch).getByText('Awaiting approval')).toBeTruthy()
-    expect(within(within(batch).getByTestId('payout-row-2')).getByText('valid')).toBeTruthy()
+    expect(within(within(batch).getByTestId('payout-row-2')).getByText('Valid')).toBeTruthy()
 
     fireEvent.click(within(batch).getByRole('button', { name: 'Approve and pay 1 row' }))
     await within(batch).findByText('Approved')
-    expect(within(within(batch).getByTestId('payout-row-2')).getByText('completed')).toBeTruthy()
+    expect(within(within(batch).getByTestId('payout-row-2')).getByText('Completed')).toBeTruthy()
     expect(get).toHaveBeenCalledTimes(2)
     expect(new Uint8Array(get.mock.calls[0][0].publicKey.challenge)).toEqual(new Uint8Array([0x63, 0x68, 0x34]))
     const signed = { assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } }
