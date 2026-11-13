@@ -45,6 +45,7 @@ import { SignedInFooter } from './components/HelpLinks'
 import { Features } from './areas/lens/Features'
 import { AgentPage, AgentRulesPage } from './areas/lens/AgentPageRoute'
 import { Agents } from './areas/lens/Agents'
+import { CardsScreen } from './areas/lens/Cards'
 import { ApprovalsScreen, StatementsScreen, usePendingApprovals } from './areas/lens/WalletScreens'
 import { ApprovalSheetHost } from './areas/lens/ApprovalSheet'
 import { MarketplaceArea } from './areas/marketplace/Marketplace'
@@ -231,6 +232,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   // B57.20 — an agent's page, from one read; today's agent view under it until B57.21 and B57.22 redraw the rest.
   { path: '/agents/:id', title: 'Agents', element: <AgentPage /> },
   { path: '/agents/:id/rules', title: 'Agents', element: <AgentRulesPage /> },
+  // B59.45 — every agent's card, Frozen or not, its limits, Freeze card, its purchases, and its details behind the passkey.
+  { path: '/cards', title: 'Cards', element: <CardsScreen /> },
   // B20.3 — browse, use and publish agents, prompts, skills, evaluations and pipelines; what they earned.
   { path: '/marketplace/*', title: 'Marketplace', element: <MarketplaceArea /> },
   { path: '/setup', title: 'Connect an agent', element: <Setup /> },
@@ -419,6 +422,7 @@ function Sidebar() {
         {item('/', 'Home', 'home', pathname === '/')}
         {item('/approvals', 'Approvals', 'approvals', under(pathname, '/approvals', '/approve', '/money/plans'), pending)}
         {item('/agents', 'Agents', 'agents', under(pathname, '/agents'))}
+        {item('/cards', 'Cards', 'card', under(pathname, '/cards'))}
         {item('/statements', 'Statements', 'statements', under(pathname, '/statements'))}
         {item('/money/pay', 'Pay', 'payments', under(pathname, '/money/pay'))}
         {item('/money/invoices', 'Invoices', 'invoices', under(pathname, '/money/invoices'))}
