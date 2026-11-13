@@ -4,7 +4,8 @@ import { Link, useParams } from 'react-router-dom'
 import { Button, Input, Pill, Row, type PillStatus, inlineLink } from '@talyvor/ui'
 import { Region } from '../../components/Region'
 import { Approvals, Rules, rulesKey } from '../lens/AgentBank'
-import { type Agent, type AgentRules, agentBankApi } from '../lens/agentBankApi'
+import { type Agent, type AgentRules, type EarningsPayout, agentBankApi, formatMinor, minorOf, newMoveKey } from '../lens/agentBankApi'
+import { MONEY_ACCOUNTS_KEY } from '../lens/Invoices'
 import { useLxcText } from '../lens/money'
 import { formatWhen } from '../lens/format'
 import { parsePrice } from '../marketplace/marketApi'
@@ -704,6 +705,190 @@ function Terms({ room, owner }: { room: RoomDetail; owner: boolean }) {
   )
 }
 
+// ── Pay out ──────────────────────────────────────────────────────────────────────────────────────────
+
+const PAYOUT_CURRENCIES = ['USD', 'GBP', 'EUR'] as const
+
+/** One member's part of a payout, in the words the owner reads after it. */
+export function payoutLine(p: EarningsPayout, me: string, members: Member[]): string {
+  const you = p.recipient_workspace_id === me
+  const member = members.find((m) => m.workspace_id === p.recipient_workspace_id)
+  const name = you ? 'You' : member ? memberName(member, members) : 'A member'
+  const amount = formatMinor(p.amount_minor, p.currency)
+  switch (p.status) {
+    case 'completed':
+      return `${name}: ${amount}, paid`
+    case 'pending':
+      return `${name}: ${amount}, on its way`
+    case 'held':
+      return `${name}: ${amount}, held until ${you ? 'you save' : `${name} saves`} payout details`
+    default:
+      return `${name}: ${amount}, not paid: ${p.detail || p.status}`
+  }
+}
+
+/** B55.28 — the owner pays the room's members out of the room wallet's account in a currency, by the room's terms:
+ *  equal, by votes, or a percent for each member the owner decides. Only members under the current terms are paid. */
+function PayOut({ room, me }: { room: RoomDetail; me: string }) {
+  const qc = useQueryClient()
+  const w = room.wallet
+  const [amount, setAmount] = useState('')
+  const [currency, setCurrency] = useState<string>('USD')
+  const [percents, setPercents] = useState<Record<string, string>>({})
+  const [key, setKey] = useState('')
+  const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts, enabled: !!w })
+  const open = useMutation({
+    mutationFn: () => agentBankApi.openMoneyAccount(currency, w!.agent_id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY }),
+  })
+  const pay = useMutation({
+    mutationFn: () => agentBankApi.payOutRoom(room.id, { amount_minor: minor!, currency, ...(decides ? { shares } : {}) }, key),
+    onSuccess: () => {
+      setKey('')
+      void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
+    },
+  })
+  if (!w) {
+    return (
+      <Region index="06" label="Pay out" className="flex max-w-2xl flex-col gap-3">
+        <p className="text-body text-muted">This room has no wallet yet.</p>
+      </Region>
+    )
+  }
+  const members = (room.members ?? []).filter((m) => m.role !== 'viewer')
+  const paid = members.filter((m) => m.terms_current)
+  const left = members.filter((m) => !m.terms_current)
+  const decides = room.terms.split_rule === 'owner_decides'
+  const minor = minorOf(amount)
+  const shares: Record<string, number> = {}
+  let total = 0
+  for (const m of paid) {
+    const bps = parseShare(percents[m.workspace_id] ?? '')
+    shares[m.workspace_id] = bps ?? 0
+    total += bps ?? Number.NaN
+  }
+  const ready = minor !== null && paid.length > 0 && (!decides || total === 10_000)
+  const account = accounts.data?.accounts?.find((a) => a.agent_id === w.agent_id && a.currency === currency)
+  const shown = minor === null ? '' : formatMinor(minor, currency)
+  const results = pay.data?.payouts ?? []
+  return (
+    <Region index="06" label="Pay out" className="flex max-w-2xl flex-col gap-3">
+      <Card>
+        <form
+          aria-label="Pay out"
+          className="flex flex-col gap-3 px-gutter py-3"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (ready) setKey(newMoveKey())
+          }}
+        >
+          <div className="flex flex-col gap-3 wide:flex-row">
+            <label className="text-caption text-muted">
+              Amount
+              <Input
+                className="mt-1 block w-32 font-figure"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={amount}
+                disabled={key !== ''}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </label>
+            <label className="text-caption text-muted">
+              Currency
+              <select className={`${selectClass} wide:w-32`} value={currency} disabled={key !== ''} onChange={(e) => setCurrency(e.target.value)}>
+                {PAYOUT_CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {accounts.isError ? (
+            <p className="text-body text-muted">{readFailure(accounts.error, 'The room’s accounts')}</p>
+          ) : accounts.isPending ? null : account ? (
+            <p className="text-body text-muted" data-testid="room-payout-account">
+              The room’s {currency} account holds <span className="font-figure text-ink">{formatMinor(account.balance_minor, currency)}</span>.
+            </p>
+          ) : (
+            <div>
+              <Button disabled={open.isPending} onClick={() => open.mutate()}>
+                Open the room’s {currency} account
+              </Button>
+            </div>
+          )}
+          {open.isError ? <Note ok={false}>{roomRefusal(open.error)}</Note> : null}
+          {decides ? (
+            <fieldset className="flex flex-col gap-2">
+              <legend className="text-caption text-muted">The owner decides</legend>
+              {paid.map((m) => (
+                <label key={m.workspace_id} className="flex items-center justify-between gap-3 text-body">
+                  <Who ws={m.workspace_id} name={memberName(m, members)} me={me} />
+                  <span className="flex items-center gap-1">
+                    <Input
+                      aria-label={`Percent for ${m.workspace_id === me ? 'you' : memberName(m, members)}`}
+                      className="block w-24 font-figure"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={percents[m.workspace_id] ?? ''}
+                      disabled={key !== ''}
+                      onChange={(e) => setPercents({ ...percents, [m.workspace_id]: e.target.value })}
+                    />
+                    <span className="text-muted">%</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+          ) : null}
+          {key === '' ? (
+            <div>
+              <Button type="submit" variant="primary" disabled={!ready || pay.isPending}>
+                Pay out {shown}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-body text-ink">
+                Pay {shown} to {paid.length} members by this room’s terms?
+              </p>
+              <div className="flex gap-2">
+                <Button variant="primary" disabled={pay.isPending} onClick={() => pay.mutate()}>
+                  Pay out
+                </Button>
+                <Button disabled={pay.isPending} onClick={() => setKey('')}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+          {pay.isError ? <Note ok={false}>{roomRefusal(pay.error)}</Note> : null}
+        </form>
+      </Card>
+      {results.length > 0 ? (
+        <Card>
+          <ul aria-label="Payout" className="px-gutter py-2">
+            {results.map((p) => (
+              <li key={p.id} className="border-b border-rule py-2 text-body text-ink last:border-b-0">
+                {payoutLine(p, me, members)}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+      {left.length > 0 ? (
+        <ul aria-label="Not in this payout" className="flex flex-col gap-1">
+          {left.map((m) => (
+            <li key={m.workspace_id} className="text-body text-muted">
+              <Who ws={m.workspace_id} name={memberName(m, members)} me={me} /> · Not in this payout: has not accepted the current terms.
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Region>
+  )
+}
+
 // ── The screen ─────────────────────────────────────────────────────────────────────────────────────
 
 export function RoomSettings() {
@@ -751,6 +936,7 @@ export function RoomSettings() {
       <Budget room={r} owner={owner} />
       <Prizes room={r} owner={owner} />
       <Terms room={r} owner={owner} />
+      {owner ? <PayOut room={r} me={me} /> : null}
     </Fragment>
   )
 }
