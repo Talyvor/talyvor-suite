@@ -8,6 +8,8 @@ import { AppMoney } from './money'
 
 // B59.25 — on a card payment's statement line, "Dispute this payment" with a reason, and where the dispute stands
 // afterwards; a merchant's refund as its own line; and Export, every card payment of a date range as Lens's CSV.
+// B57.151 — drawn in Pocket: the reason is asked in Pocket's dialog over the payment it disputes, and the card's
+// disputes and refunds are Pocket rows under the section's eyebrow.
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const charge = (n: number, merchant: string, minor: number) => ({
@@ -90,21 +92,33 @@ const row = async (merchant: string, kind = 'Card payment') => {
 }
 
 describe('card disputes and refunds on the statement', () => {
-  it('disputes a card payment with a reason, sends Lens the payment and the reason, and then says the issuer has it', async () => {
+  it('disputes a card payment with a reason in Pocket’s dialog, sends Lens the payment and the reason, and then says the issuer has it', async () => {
     show()
     const line = await row('Print Shop')
     fireEvent.click(await within(line).findByRole('button', { name: 'Dispute this payment' }))
-    const form = within(line).getByTestId('dispute-form')
-    const send = () => within(form).getByRole('button', { name: 'Send dispute' }) as HTMLButtonElement
+    const dialog = screen.getByRole('dialog', { name: 'Dispute this payment' })
+    // The payment it disputes, as the statement has it, heads the dialog.
+    expect(within(dialog).getByTestId('dispute-payment').textContent?.replace(/\u00a0/g, ' ')).toMatch(/^Print Shop.*−\$30\.00$/)
+    const form = within(dialog).getByTestId('dispute-form')
+    const send = () => within(dialog).getByRole('button', { name: 'Send dispute' }) as HTMLButtonElement
     expect(send().disabled).toBe(true)
-    expect(within(form).getByText('Say why you are disputing it first.')).toBeTruthy()
+    expect(within(dialog).getByText('Say why you are disputing it first.')).toBeTruthy()
     fireEvent.change(within(form).getByLabelText('Why are you disputing it?'), { target: { value: '  Never delivered  ' } })
     expect(send().disabled).toBe(false)
     fireEvent.click(send())
     expect(await within(line).findByText('With the card issuer')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
     const posted = asked.filter((a) => a.method === 'POST')
     expect(posted.map((a) => [a.url, JSON.parse(a.body)])).toEqual([['/api/money/card-disputes', { payment_id: 'iauth_5', reason: 'Never delivered' }]])
     expect(within(line).queryByRole('button', { name: 'Dispute this payment' })).toBeNull()
+  })
+
+  it('closes the dialog on Cancel and sends nothing', async () => {
+    show()
+    fireEvent.click(await within(await row('Print Shop')).findByRole('button', { name: 'Dispute this payment' }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Dispute this payment' })).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(asked.filter((a) => a.method === 'POST')).toEqual([])
   })
 
   it('shows each state of a dispute on its payment, with what came back once it was won', async () => {
@@ -137,9 +151,16 @@ describe('disputes and refunds on the agent’s card', () => {
       </QueryClientProvider>,
     )
     const box = await screen.findByTestId('card-disputes-refunds')
+    // Pocket's eyebrow names the section; each dispute and refund is a Pocket row: the merchant over its line, the amount.
+    expect(within(box).getByText('Disputes and refunds').className).toContain('text-pocket-eyebrow')
     expect(within(box).getAllByTestId('dispute-state').map((d) => d.textContent?.replace(/\u00a0/g, ' '))).toEqual(['Dispute opened', 'With the card issuer', 'Dispute won · $30.00 back', 'Dispute lost'])
+    const first = within(box).getAllByTestId('card-dispute')[0]
+    expect(within(first).getByText('Cloud Host').className).toContain('font-semibold')
+    expect(within(first).getByText(/Charged twice$/)).toBeTruthy()
+    expect(first.querySelector('[data-money]')?.textContent?.replace(/\u00a0/g, ' ')).toBe('$30.00')
     const refund = within(box).getByTestId('card-refund')
-    expect(refund.textContent).toMatch(/^Print Shop · Refund · /)
+    expect(within(refund).getByText('Print Shop').className).toContain('font-semibold')
+    expect(within(refund).getByText(/^Refund ·/)).toBeTruthy()
     expect(refund.querySelector('[data-money]')?.textContent?.replace(/\u00a0/g, ' ')).toBe('+$10.00')
     expect(within(screen.getByTestId('card-export')).getByRole('button', { name: 'Export' })).toBeTruthy()
   })

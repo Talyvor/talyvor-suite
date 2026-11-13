@@ -102,15 +102,17 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
     fireEvent.click((await fleet()).getByRole('button', { name: 'Start every agent again' }))
     await (await fleet()).findByRole('button', { name: 'Pause every agent' })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
-    expect((await screen.findByTestId('agent-paused')).textContent).toBe('Researcher is paused: paused from Agent Wallets.')
-    expect(screen.getByText('Paused')).toBeTruthy()
+    // B57.16 — the agent card's switch pauses at once, with no dialog, and says so in its note and its snack.
+    fireEvent.click(await screen.findByRole('switch', { name: 'Pause Researcher' }))
+    expect(await screen.findByText('Paused. Resuming needs your passkey or your phone.')).toBeInTheDocument()
+    expect(screen.getByText('Researcher is paused')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).toBeNull()
 
     expect(posts.map((p) => [p.url, p.body])).toEqual([
       ['/api/agents/pause-all', { reason: 'audit' }],
       ['/api/agents/resume-all/challenge', {}],
       ['/api/agents/resume-all', {}],
-      ['/api/agents/agt_1/pause', { reason: 'paused from Agent Wallets' }],
+      ['/api/agents/agt_1/pause', { reason: 'paused from its card' }],
     ])
   })
 
@@ -122,18 +124,22 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
     window.history.pushState({}, '', '/agents')
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
-    await screen.findByTestId('agent-paused')
+    fireEvent.click(await screen.findByRole('switch', { name: 'Pause Researcher' }))
+    // B57.16 — switching on opens Resume, which signs over the agent's resume challenge.
+    fireEvent.click(await screen.findByRole('switch', { name: 'Resume Researcher' }))
     expect(get).not.toHaveBeenCalled()
+    const resume = await screen.findByRole('dialog', { name: 'Resume Researcher?' })
+    expect(resume).toHaveTextContent('Its requests and payments are served again, within its rules.')
 
-    // Face ID cancelled: nothing is sent and Researcher stays paused.
-    fireEvent.click(screen.getByRole('button', { name: 'Resume Researcher' }))
+    // Face ID cancelled: nothing is sent, Researcher stays paused, and the dialog says why in words.
+    fireEvent.click(within(resume).getByRole('button', { name: 'Resume with your passkey' }))
     await waitFor(() => expect(get).toHaveBeenCalledTimes(1))
-    expect(screen.getByTestId('agent-paused')).toBeTruthy()
+    expect(await within(resume).findByRole('alert')).toHaveTextContent('Researcher is still paused. The passkey was not signed.')
     expect(posts.some((p) => p.url === '/api/agents/agt_1/resume')).toBe(false)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Resume Researcher' }))
-    await screen.findByRole('button', { name: 'Pause Researcher' })
+    fireEvent.click(within(resume).getByRole('button', { name: 'Resume with your passkey' }))
+    await screen.findByRole('switch', { name: 'Pause Researcher' })
+    expect(screen.getByText('Researcher is running again')).toBeInTheDocument()
 
     fireEvent.click((await fleet()).getByRole('button', { name: 'Pause every agent' }))
     fireEvent.click(await (await fleet()).findByRole('button', { name: 'Start every agent again' }))
@@ -141,7 +147,7 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
 
     const assertion = { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' }
     expect(posts.map((p) => [p.url, p.body])).toEqual([
-      ['/api/agents/agt_1/pause', { reason: 'paused from Agent Wallets' }],
+      ['/api/agents/agt_1/pause', { reason: 'paused from its card' }],
       ['/api/agents/agt_1/resume-challenge', {}],
       ['/api/agents/agt_1/resume-challenge', {}],
       ['/api/agents/agt_1/resume', { assertion }],
@@ -160,9 +166,12 @@ describe('starting agents again when only the phone holds a key (B55.2)', () => 
     window.history.pushState({}, '', '/agents')
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
-    expect(await screen.findByText('Resume Researcher on your phone with Face ID.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Resume Researcher' })).toBeNull()
+    fireEvent.click(await screen.findByRole('switch', { name: 'Pause Researcher' }))
+    fireEvent.click(await screen.findByRole('switch', { name: 'Resume Researcher' }))
+    const resume = await screen.findByRole('dialog', { name: 'Resume Researcher?' })
+    expect(within(resume).getByText('Resume Researcher on your phone with Face ID.')).toBeInTheDocument()
+    expect(within(resume).queryByRole('button', { name: 'Resume with your passkey' })).toBeNull()
+    fireEvent.click(within(resume).getByRole('button', { name: 'Cancel' }))
 
     fireEvent.click((await fleet()).getByRole('button', { name: 'Pause every agent' }))
     expect(await screen.findByText('Start your agents again on your phone with Face ID.')).toBeInTheDocument()

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useMatch, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Icon, Button as PocketButton, Row as PocketRow, RoomBadge, faceOf, type FaceColour } from '@talyvor/ui/pocket'
@@ -12,10 +12,11 @@ import { IfArea } from '../../lib/workspaceAreas'
 import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
-import { assertOver, letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
+import { assertOver, letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeEveryAgent, signApproval } from './passkeys'
 import { GetAKeyBack, NoLiveKey, RecoveryCodeRow } from './KeyRecovery'
 import { AgentAnalytics } from './AgentAnalytics'
 import { AlertChannels } from './AlertChannels'
+import { AgentCard, MoveLxc } from './AgentCard'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { HelperPicker } from '../../cards/HelperPicker'
@@ -58,10 +59,8 @@ import {
   approvalNamedIn,
   formatMinor,
   limitText,
-  newMoveKey,
   parseLXC,
   refusalText,
-  retryMoveThroughRestart,
 } from './agentBankApi'
 import { WorkspaceLabel, approvalCapability, paymentRequestCapabilities } from '../../labels/workspace'
 import { DESIGN_ATTR } from '../../pocketPending'
@@ -169,41 +168,6 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
           </Button>
         </div>
       )}
-      {change.isError ? <Note ok={false}>{refusalText(change.error)}</Note> : null}
-    </div>
-  )
-}
-
-/** B19.20 — pausing one agent (Lens B19.6): its every movement is refused until it is resumed. */
-function PauseAgent({ agent }: { agent: Agent }) {
-  const qc = useQueryClient()
-  const { hold, onlyThePhone } = useKeys()
-  const change = useMutation({
-    mutationFn: (pause: boolean) => (pause ? agentBankApi.pause(agent.id, 'paused from Agent Wallets') : resumeAgent(agent.id)),
-    onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
-  })
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-3">
-        {agent.paused_at ? (
-          <>
-            <p className="text-body text-ink" data-testid="agent-paused">
-              {agent.name} is paused{agent.paused_reason ? `: ${agent.paused_reason}` : ''}.
-            </p>
-            {onlyThePhone ? (
-              <OnThePhone>Resume {agent.name} on your phone with Face ID.</OnThePhone>
-            ) : hold ? null : (
-              <Button disabled={change.isPending} onClick={() => change.mutate(false)}>
-                Resume {agent.name}
-              </Button>
-            )}
-          </>
-        ) : (
-          <Button disabled={change.isPending} onClick={() => change.mutate(true)}>
-            Pause {agent.name}
-          </Button>
-        )}
-      </div>
       {change.isError ? <Note ok={false}>{refusalText(change.error)}</Note> : null}
     </div>
   )
@@ -720,28 +684,12 @@ function AgentList({ agents, selected, onSelect }: { agents: Agent[]; selected: 
 
 function Money({ agent, book }: { agent: Agent; book: AgentBook }) {
   const qc = useQueryClient()
-  const [amount, setAmount] = useState('')
-  const micros = parseLXC(amount)
-  // B17.26 — the amount and the Idempotency-Key are the mutation's own, so a retry through a deploy's
-  // restart repeats both and Lens moves the LXC once.
-  const move = useMutation({
-    mutationFn: ({ dir, ulxc, key }: { dir: 'fund' | 'withdraw'; ulxc: number; key: string }) =>
-      dir === 'fund' ? agentBankApi.fund(agent.id, ulxc, key) : agentBankApi.withdraw(agent.id, ulxc, key),
-    retry: retryMoveThroughRestart,
-    retryDelay: (failures) => Math.min(500 * 2 ** failures, 4_000),
-    onSuccess: () => setAmount(''),
-    onSettled: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: BOOK_KEY }),
-        qc.invalidateQueries({ queryKey: statementKey(agent.id) }),
-      ]),
-  })
+  const [moving, setMoving] = useState(false)
   // B19.23 — Lens B19.11 gives an agent with no owner no balance, so it is claimed before it is funded.
   const claim = useMutation({
     mutationFn: () => agentBankApi.claim(agent.id),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
-  const busy = move.isPending || micros === null
   if (agent.owner_user_id === '') {
     return (
       <Card>
@@ -761,6 +709,7 @@ function Money({ agent, book }: { agent: Agent; book: AgentBook }) {
       </Card>
     )
   }
+  // B57.16 — funding and taking back happen in Move LXC, the dialog the agent's page opens.
   return (
     <Card>
       <CardHeader>Money</CardHeader>
@@ -769,29 +718,12 @@ function Money({ agent, book }: { agent: Agent; book: AgentBook }) {
           {agent.name} holds {lxc(agent.balance_ulxc)}. The workspace has {lxc(book.unallocated_ulxc)} free to fund it.
         </p>
         {claim.isSuccess && claim.data.agent_id === agent.id ? <Note ok>You own {agent.name} now. Fund it here.</Note> : null}
-        <div className="flex items-center gap-2">
-          <Input
-            aria-label={`Amount in LXC for ${agent.name}`}
-            inputMode="decimal"
-            placeholder="LXC"
-            className="w-28 font-figure"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <Button variant="primary" disabled={busy} onClick={() => move.mutate({ dir: 'fund', ulxc: micros ?? 0, key: newMoveKey() })}>
-            Fund
-          </Button>
-          <Button disabled={busy} onClick={() => move.mutate({ dir: 'withdraw', ulxc: micros ?? 0, key: newMoveKey() })}>
-            Take back
+        <div>
+          <Button variant="primary" onClick={() => setMoving(true)}>
+            Move LXC
           </Button>
         </div>
-        {/* Said only while it is still true: a payment or a request moves the balance after it. */}
-        {move.isSuccess && move.data.balance_ulxc === agent.balance_ulxc ? (
-          <Note ok>
-            {agent.name} now holds {lxc(move.data.balance_ulxc)}.
-          </Note>
-        ) : null}
-        {move.isError ? <Note ok={false}>{refusalText(move.error)}</Note> : null}
+        <MoveLxc agent={agent} book={book} open={moving} onClose={() => setMoving(false)} />
       </div>
     </Card>
   )
@@ -3108,12 +3040,18 @@ export function AgentBank() {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   // B28.349 — /agents?agent=…&entry=… (a statement line a spend answer in Chat links to) opens that agent at that line.
   const [params] = useSearchParams()
-  const linkedAgent = params.get('agent')
+  // B57.16 — /agents/:id and /agents/:id/rules open that agent; on the second its rules card comes first.
+  const { id } = useParams()
+  const rulesFirst = useMatch('/agents/:id/rules') !== null
+  const linkedAgent = id ?? params.get('agent')
   const linkedEntry = params.get('entry') ?? undefined
   const [chosen, setChosen] = useState<string | null>(linkedAgent)
-  useEffect(() => {
+  // React Router keeps this screen mounted from one agent's address to the next, so a new one opens its agent here.
+  const [openedFor, setOpenedFor] = useState(linkedAgent)
+  if (openedFor !== linkedAgent) {
+    setOpenedFor(linkedAgent)
     if (linkedAgent !== null) setChosen(linkedAgent)
-  }, [linkedAgent])
+  }
   const [held, setHeld] = useState<Record<string, HeldPayment>>({})
   const [archived, setArchived] = useState<Record<string, AgentArchive>>({})
   const agents = book.data?.agents ?? []
@@ -3214,12 +3152,15 @@ export function AgentBank() {
             </>
           ) : (
             <>
+              {rulesFirst ? <Rules key={`rules-${agent.id}`} agent={agent} agents={live} /> : null}
               <Ownership agent={agent} />
-              <PauseAgent agent={agent} />
+              <div className="wide:max-w-sm">
+                <AgentCard agent={agent} book={book.data} />
+              </div>
               <AgentDetails key={`details-${agent.id}`} agent={agent} />
               <Money agent={agent} book={book.data} />
               <AgentMoneyWalletCard key={`wallet-${agent.id}`} agent={agent} />
-              <Rules key={`rules-${agent.id}`} agent={agent} agents={live} />
+              {rulesFirst ? null : <Rules key={`rules-${agent.id}`} agent={agent} agents={live} />}
               <TryRules key={`try-${agent.id}`} agent={agent} agents={live} />
               {live.length > 1 ? (
                 <Pay

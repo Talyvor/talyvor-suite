@@ -538,6 +538,11 @@ const BY_PATH: Record<string, unknown> = {
       { id: 'cauth_1', authorization_id: 'iauth_1', approved: true, reason: "within the agent's rules and balance", amount_minor: 100, currency: 'gbp', merchant_name: 'Compute shop', merchant_category: 'computer_software_stores', rate_date: '2026-09-25T00:00:00Z', ecb_usd_per_eur: '1.1672', ecb_currency_per_eur: '0.8354', amount_usd_micros: 1_397_176, amount_ulxc: 13_971_751, created_at: '2026-09-28T10:00:00Z' },
     ],
   },
+  // B57.16 — the writer's card, frozen, so its agent card shows the Card frozen chip.
+  '/api/agents/agt_writer/card': {
+    card: { id: 'ic_writer', agent_id: 'agt_writer', last4: '1881', exp_month: 3, exp_year: 2029, currency: 'gbp', livemode: false, created_at: '2026-10-01T09:00:00Z', frozen: true, frozen_at: '2026-10-20T09:00:00Z' },
+    authorizations: [],
+  },
   // B19.20 — this month's forecast, and one unusual-spend alert that paused an agent.
   '/api/agents/safe-to-spend': {
     company: [{ currency: 'LXC', balance: 87_500_000, scheduled: 0, bills_due: 0, pending_approvals: 0, safe_to_spend: 87_500_000 }],

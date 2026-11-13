@@ -220,6 +220,9 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/keys', title: 'API keys', element: <Keys /> },
   // B19.4 — each AI agent's own wallet: balance, rules, statement, payments and approvals. B57.8: Pocket's Agents.
   { path: '/agents', title: 'Agents', element: <AgentBank /> },
+  // B57.16 — an agent's page and its rules: today's agent view with that agent open, until B57.20 and B57.23 draw them.
+  { path: '/agents/:id', title: 'Agents', element: <AgentBank /> },
+  { path: '/agents/:id/rules', title: 'Agents', element: <AgentBank /> },
   // B20.3 — browse, use and publish agents, prompts, skills, evaluations and pipelines; what they earned.
   { path: '/marketplace/*', title: 'Marketplace', element: <MarketplaceArea /> },
   { path: '/setup', title: 'Connect an agent', element: <Setup /> },

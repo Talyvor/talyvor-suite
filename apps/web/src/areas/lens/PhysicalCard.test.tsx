@@ -234,6 +234,23 @@ describe('the owner’s own card face (B57.127)', () => {
     expect(await screen.findByRole('img', { name: 'Acme Labs, Enterprise corporate card' })).toHaveAttribute('data-card', 'enterprise')
   })
 
+  // B57.143 — drawn in Pocket, as W4 draws a card and Settings draws a display choice: the art 312 wide on a white
+  // Pocket card, and beside it the choice under its own heading with its line.
+  it('draws the card and its tier choice on a white Pocket card, the art 312 wide', async () => {
+    mockAccount({ account_type: 'personal', money_kind: 'fiat' })
+    await openCardPage()
+    const shown = await screen.findByRole('img', { name: 'Acme Labs, Daily personal card' })
+    expect(shown.parentElement!.className).toContain('max-w-78')
+
+    const panel = screen.getByTestId('owner-card-face')
+    expect(panel.className).toContain('bg-page')
+    expect(panel.className).toContain('shadow-pocket')
+    const heading = within(panel).getByRole('heading', { level: 3, name: 'Card tier' })
+    const choice = heading.parentElement!
+    expect(within(choice).getByText('Shows your card in another tier. Only the picture changes.')).toBeTruthy()
+    expect(within(choice).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Daily', 'Premium', 'Platinum'])
+  })
+
   async function openCardPage() {
     window.history.pushState({}, '', '/money/card')
     render(<App />)

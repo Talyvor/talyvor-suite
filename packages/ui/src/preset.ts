@@ -265,6 +265,8 @@ const preset = {
         1.75: '0.4375rem', 5.5: '1.375rem', 105: '26.25rem', 120: '30rem',
         // B57.8 — the shell: the sidebar 232 wide (58) with its 18px padding (4.5), and the top bar 72 tall (`header`).
         4.5: '1.125rem', 58: '14.5rem', header: '4.5rem',
+        // B57.142 — an agent's card art on its page, 312 wide (the launch pack's W4).
+        78: '19.5rem',
       },
       // Pocket's focus ring is 3px of tangerine (B57.4).
       outlineWidth: { 3: '3px' },
