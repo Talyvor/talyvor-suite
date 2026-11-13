@@ -13,11 +13,18 @@ const OTHER = 'ws_other'
 const NAMES: Record<string, string> = { [ME]: 'Ben’s lab', [OTHER]: 'Ana’s studio' }
 const PLAN_MAX_ULXC = 1_000_000_000 // Free's room_budget_max_usd, $100, at the peg
 
-function mockBff() {
+const LATE = 'ws_late'
+
+function mockBff(split = 'equal') {
   const members = [
     { workspace_id: ME, workspace_name: NAMES[ME], role: 'owner', may_spend: true, terms_version: 1, terms_current: true, joined_at: '2026-10-01T09:00:00Z' },
     { workspace_id: OTHER, workspace_name: NAMES[OTHER], role: 'member', may_spend: false, terms_version: 1, terms_current: true, joined_at: '2026-10-02T09:00:00Z' },
   ]
+  // B55.28: a member still under the first terms, whom a payout leaves out.
+  if (split === 'owner_decides') {
+    members.push({ workspace_id: LATE, workspace_name: 'Cal’s shop', role: 'member', may_spend: false, terms_version: 0, terms_current: false, joined_at: '2026-10-03T09:00:00Z' })
+  }
+  const keys: string[] = []
   let rules = {
     max_per_request_ulxc: 0, hourly_limit_ulxc: 0, daily_limit_ulxc: 0, weekly_limit_ulxc: 0, monthly_limit_ulxc: 200_000_000,
     approval_above_ulxc: 0, requests_per_minute: 0, allowed_models: null, allowed_providers: null, allowed_listings: null,
@@ -48,7 +55,7 @@ function mockBff() {
       return json({
         id: 'room_1', owner_workspace_id: ME, title: 'Agent pricing', topic: 'research', description: '', visibility: 'private',
         status: 'open', terms_version: 1, member_count: members.length, created_at: '', last_activity_at: '2026-10-07T10:00:00Z',
-        terms: { version: 1, split_rule: 'equal', remix_share_bps: 1000, default_price_usd_micros: 100_000, spend_policy: 'members_with_spend', created_at: '' },
+        terms: { version: 1, split_rule: split, remix_share_bps: 1000, default_price_usd_micros: 100_000, spend_policy: 'members_with_spend', created_at: '' },
         members, agents: null, me: members[0],
         wallet: {
           agent_id: 'ag_room', name: 'Room: Agent pricing', balance_ulxc: 50_000_000, monthly_limit_ulxc: 200_000_000,
@@ -101,6 +108,23 @@ function mockBff() {
       }
       return json({})
     }
+    if (url === '/api/money/accounts') {
+      return json({ accounts: [{ id: 'macc_room', agent_id: 'ag_room', currency: 'USD', purpose: 'agent', status: 'open', name: 'Room: Agent pricing',
+        balance_minor: 50_000, test_minor: 50_000, live_minor: 0 }] })
+    }
+    if (url === '/api/rooms/room_1/payouts' && method === 'POST') {
+      // B55.28: Lens pays the owner's half and holds the member's, who has no verified payout details.
+      keys.push(new Headers(init?.headers).get('Idempotency-Key') ?? '')
+      const half = Number(body.amount_minor) / 2
+      const p = (ws: string, status: string) => ({ id: `pay_${ws}`, kind: 'room_split', source: `room:room_1:${keys.at(-1)}`, recipient_workspace_id: ws,
+        amount_minor: half, currency: body.currency, status, created_at: '' })
+      return json({ agreement: 'room room_1 terms v1 equal', payouts: [p(ME, 'completed'), p(OTHER, 'held')] })
+    }
+    if (url === '/api/money/earnings-payouts') {
+      const held = (id: string, source: string, minor: number) => ({ id, kind: 'room_split', source, recipient_workspace_id: ME, amount_minor: minor,
+        currency: 'USD', status: 'held', created_at: '' })
+      return json({ payouts: [held('pay_1', 'room:room_1:k1', 3_000), held('pay_2', 'room:room_1:k2', 1_500), held('pay_3', 'room:room_9:k1', 99_900)] })
+    }
     if (url === '/api/room-invites/rinvtok_abc') {
       return json({
         room: { id: 'room_1', owner_workspace_id: ME, title: 'Agent pricing', topic: 'research', description: '', visibility: 'private',
@@ -114,7 +138,7 @@ function mockBff() {
     }
     return new Response('null', { status: 404 })
   })
-  return { sent, invites, members }
+  return { sent, keys, invites, members }
 }
 
 afterEach(() => {
@@ -216,6 +240,67 @@ describe('room settings', () => {
     expect(bff.sent.find((s) => s.url.endsWith('/award'))).toEqual({
       method: 'POST', url: '/api/rooms/room_1/prizes/rprz_1/award', body: { contribution_id: 'c_1' },
     })
+  })
+
+  // B55.28 — the owner pays the room's members by its terms from the room's dollar account.
+  it('pays out by equal shares under an Idempotency-Key, and shows each member’s result', async () => {
+    const bff = mockBff()
+    window.history.pushState({}, '', '/rooms/room_1/settings')
+    render(<App />)
+
+    const form = await screen.findByRole('form', { name: 'Pay out' })
+    expect((await within(form).findByTestId('room-payout-account')).textContent).toMatch(/^The room’s USD account holds (US)?\$500\.00\.$/)
+    fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '90' } })
+    fireEvent.click(within(form).getByRole('button', { name: /^Pay out (US)?\$90\.00$/ }))
+    expect(within(form).getByText(/^Pay (US)?\$90\.00 to 2 members by this room’s terms\?$/)).toBeTruthy()
+    fireEvent.click(within(form).getByRole('button', { name: 'Pay out' }))
+
+    const results = await screen.findByRole('list', { name: 'Payout' })
+    expect(within(results).getAllByRole('listitem').map((li) => li.textContent?.replace('US$', '$'))).toEqual([
+      'You: $45.00, paid',
+      `${NAMES[OTHER]}: $45.00, held until ${NAMES[OTHER]} saves payout details`,
+    ])
+    expect(bff.sent.filter((s) => s.url === '/api/rooms/room_1/payouts')).toEqual([
+      { method: 'POST', url: '/api/rooms/room_1/payouts', body: { amount_minor: 9000, currency: 'USD' } },
+    ])
+    expect(bff.keys).toHaveLength(1)
+    expect(bff.keys[0]).not.toBe('')
+  })
+
+  it('cannot pay out while the owner’s percents do not add to 100, and leaves out a member under old terms', async () => {
+    const bff = mockBff('owner_decides')
+    window.history.pushState({}, '', '/rooms/room_1/settings')
+    render(<App />)
+
+    const form = await screen.findByRole('form', { name: 'Pay out' })
+    fireEvent.change(within(form).getByLabelText('Amount'), { target: { value: '90' } })
+    fireEvent.change(within(form).getByLabelText('Percent for you'), { target: { value: '60' } })
+    fireEvent.change(within(form).getByLabelText(`Percent for ${NAMES[OTHER]}`), { target: { value: '30' } })
+    const pay = within(form).getByRole('button', { name: /^Pay out/ }) as HTMLButtonElement
+    expect(pay.disabled).toBe(true)
+    expect(within(form).queryByLabelText('Percent for Cal’s shop')).toBeNull()
+    expect(within(screen.getByRole('list', { name: 'Not in this payout' })).getByRole('listitem').textContent).toBe(
+      'Cal’s shop · Not in this payout: has not accepted the current terms.',
+    )
+
+    fireEvent.change(within(form).getByLabelText(`Percent for ${NAMES[OTHER]}`), { target: { value: '40' } })
+    expect(pay.disabled).toBe(false)
+    fireEvent.click(pay)
+    fireEvent.click(within(form).getByRole('button', { name: 'Pay out' }))
+    await screen.findByRole('list', { name: 'Payout' })
+    expect(bff.sent.find((s) => s.url === '/api/rooms/room_1/payouts')?.body).toEqual({
+      amount_minor: 9000, currency: 'USD', shares: { [ME]: 6000, [OTHER]: 4000 },
+    })
+  })
+
+  it('tells a member what this room holds for them, linking to Payout details', async () => {
+    mockBff()
+    window.history.pushState({}, '', '/rooms/room_1')
+    render(<App />)
+
+    const held = await screen.findByTestId('room-held-for-you')
+    expect(held.textContent?.replace('US$', '$')).toBe('$45.00 from this room is held for you. Add your payout details to receive it.')
+    expect(within(held).getByRole('link').getAttribute('href')).toBe('/settings/payout-details')
   })
 
   // B55.35 — members and named invites read by their workspace's name, never its id.

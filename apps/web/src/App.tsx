@@ -68,6 +68,7 @@ import { DocsArea } from './areas/docs/DocsArea'
 import { OperatorTax } from './areas/lens/OperatorTax'
 import { OperatorCompliance } from './areas/lens/OperatorCompliance'
 import { VerificationScreen } from './areas/lens/Verification'
+import { PayoutDetailsScreen } from './areas/lens/PayoutDetails'
 import { CapabilityTermsScreen } from './areas/lens/CapabilityTerms'
 import { ConnectAI } from './areas/lens/ConnectAI'
 import { DocsEmailBranding } from './areas/docs/DocsEmailBranding'
@@ -231,6 +232,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/settings', title: 'Settings', element: <Settings /> },
   // B30.116 — the owner's verification level, each check, and the level each capability needs for live money.
   { path: '/settings/verification', title: 'Verification', element: <VerificationScreen /> },
+  // B55.28 — where the workspace is paid its share of a room, its marketplace sales and royalties.
+  { path: '/settings/payout-details', title: 'Payout details', element: <PayoutDetailsScreen /> },
   // B30.103 — each money capability's terms, read and accepted before its first use.
   { path: '/settings/terms', title: 'Capability terms', element: <CapabilityTermsScreen /> },
   // B39.25 — a Docs workspace's owner adds, rotates and deletes its signed webhooks.

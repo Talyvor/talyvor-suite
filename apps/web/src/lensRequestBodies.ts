@@ -1390,6 +1390,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/devices/{id}/push-token", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensDevicePushTokenBody",
   },
+  // B55.28 — where a workspace is paid, and a room's payout by its terms (Lens B46.11).
+  {
+    route: "PUT /v1/money/payout-details",
+    file: "apps/bff/money_earnings.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPayoutDetails(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_earnings_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/payout-details", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPayoutDetailsBody",
+  },
+  {
+    route: "POST /v1/rooms/{roomID}/payouts",
+    file: "apps/bff/money_earnings.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleRoomPayouts(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_earnings_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/rooms/{roomID}/payouts", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensRoomPayoutBody",
+  },
 ];
 
 /**

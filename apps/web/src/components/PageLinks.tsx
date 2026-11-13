@@ -75,6 +75,8 @@ export function SettingsLinks() {
     { to: '/billing', title: 'Billing and plan' },
     ...(business ? [{ to: '/settings/company', title: 'Company details', line: 'Company name, number and country, and the people with control' }] : []),
     { to: '/settings/verification', title: 'Verification', line: 'What Talyvor has checked about you' },
+    // B55.28 — where the workspace is paid its earnings.
+    { to: '/settings/payout-details', title: 'Payout details', line: 'Where Talyvor pays you' },
     { to: '/settings/terms', title: 'Capability terms', line: 'The terms each money feature asks you to accept' },
     { to: '/settings/webhooks', title: 'Webhooks', line: 'Docs tells your server about approvals and comments' },
     { to: '/settings/email-branding', title: 'Email branding', line: 'How Docs email looks: its name, colour and logo' },
