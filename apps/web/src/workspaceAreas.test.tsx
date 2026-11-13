@@ -110,17 +110,18 @@ describe('a hidden area is not there (B59.2)', () => {
     expect(paletteOptions().some((o) => o.includes('New chat'))).toBe(true)
   })
 
-  it('gateway: Settings carries no shared-answers or document-conversion entry by default', async () => {
+  it('gateway: Settings carries no shared-answers entry by default, and document conversion is never on Settings (B57.42)', async () => {
     mockBff([])
     await openApp('/settings')
-    expect(await screen.findByText('Provider keys')).toBeTruthy()
-    expect(screen.queryByText('Shared answers (saves on repeated questions)')).toBeNull()
+    expect(await screen.findByText('Your provider keys')).toBeTruthy()
+    expect(screen.queryByText('Shared answers')).toBeNull()
     expect(screen.queryByText('Documents you attach')).toBeNull()
     cleanup()
     queryClient.clear()
 
     mockBff(['gateway'])
     await openApp('/settings')
-    expect(await screen.findByText('Shared answers (saves on repeated questions)')).toBeTruthy()
+    expect(await screen.findByText('Shared answers')).toBeTruthy()
+    expect(screen.queryByText('Documents you attach')).toBeNull()
   })
 })

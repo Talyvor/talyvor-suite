@@ -6,7 +6,7 @@ export { formatDay } from './lib/format'
 export { focusRing } from './lib/focus'
 export { inlineLink } from './lib/link'
 export { useTheme } from './lib/theme'
-export type { Theme } from './lib/theme'
+export type { Theme, ThemeChoice } from './lib/theme'
 export { tokens } from './tokens'
 export type { TokenName } from './tokens'
 export {

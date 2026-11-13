@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App, queryClient } from './App'
+import { FIAT_KEY } from './areas/lens/money'
 
 // Sharing.test.tsx — the consent surface.
 //
@@ -43,6 +44,19 @@ function mockBff(cachePoolable: boolean, needsChoice = false, writes: unknown[] 
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
     }
+    // B57.42 — who is signed in, and as what, for Settings' first line.
+    if (url === '/api/members') {
+      return new Response(JSON.stringify([{ id: 'm1', name: 'Alice', email: 'alice@example.com', role: 'owner', avatar_url: '' }]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
+    if (url === '/api/workspace/name') {
+      return new Response(JSON.stringify({ id: 'uabcdefghijklmnopqrstuvwxy', name: 'Alice’s team' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }
     if (url === '/api/pooling' && init?.method === 'POST') {
       writes.push(JSON.parse(String(init.body)))
       return new Response(JSON.stringify({ cache_poolable: true }), {
@@ -68,46 +82,89 @@ describe('sharing consent', () => {
     vi.restoreAllMocks()
   })
 
-  it('/settings resolves to the sharing control, so the signup promise is not stale', async () => {
-    mockBff(false)
-    window.history.pushState({}, '', '/settings')
-    render(<App />)
-    await waitFor(() => {
-      expect(screen.getByText(/Shared answers \(saves on repeated questions\)/i)).toBeInTheDocument()
-    })
-    // And it offers both directions, not just an off switch.
-    expect(screen.getByRole('button', { name: /^Share my answers$/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Do not share my answers$/i })).toBeInTheDocument()
-  })
-
-  it('renders the RECORDED state, not a requested one', async () => {
+  it('/settings resolves to the sharing switch, so the signup promise is not stale', async () => {
     mockBff(true)
     window.history.pushState({}, '', '/settings')
     render(<App />)
-    await waitFor(() => {
-      expect(screen.getByText(/Sharing is currently/i)).toBeInTheDocument()
-    })
-    // The stored value is rendered in a <strong> inside the sentence.
-    expect(screen.getByText(/Sharing is currently/i).closest('p')?.textContent).toMatch(/currently on/i)
+    const sw = await screen.findByRole('switch', { name: 'Share my answers' })
+    expect(screen.getByRole('heading', { name: 'Shared answers' })).toBeInTheDocument()
+    // Both sides of the trade, in one line: the saving and the royalty, and that the answer leaves for another company.
+    const card = screen.getByTestId('settings-sharing')
+    expect(card).toHaveTextContent(/served to another company/)
+    expect(card).toHaveTextContent(/repeated questions cost less/)
+    expect(card).toHaveTextContent(/never shared/)
+    expect(sw).toBeInTheDocument()
   })
 
-  it('states both sides of the trade — the gain and the disclosure', async () => {
-    mockBff(false)
+  it('renders the RECORDED state, not a pressed one', async () => {
+    const writes: unknown[] = []
+    // Lens recorded "off", and keeps saying so whatever is pressed: the switch follows Lens, not the press.
+    mockBff(false, false, writes)
     window.history.pushState({}, '', '/settings')
     render(<App />)
-    await waitFor(() => {
-      expect(screen.getByText(/If sharing is on/i)).toBeInTheDocument()
-    })
-    // The gain: repeated questions cost less — and, last, a small royalty (B28.10: savings first).
-    const saving = screen.getByText(/Repeated questions are served instantly/i)
-    const royalty = screen.getByText(/you earn a small royalty/i)
-    expect(saving.compareDocumentPosition(royalty) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(royalty.querySelector('a')).toHaveAttribute('href', '/statements/royalties')
-    // The cost: content leaves the workspace.
-    expect(screen.getByText(/leaves this workspace/i)).toBeInTheDocument()
-    // The other side stated with equal weight, so neither reads as the recommendation.
-    expect(screen.getByText(/If sharing is off/i)).toBeInTheDocument()
-    expect(screen.getByText(/never served another company/i)).toBeInTheDocument()
+    const sw = await screen.findByRole('switch', { name: 'Share my answers' })
+    await waitFor(() => expect(sw).not.toBeDisabled())
+    expect(sw).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(sw)
+    await waitFor(() => expect(writes).toEqual([{ cache_poolable: true }]))
+    await waitFor(() => expect(sw).not.toBeDisabled())
+    expect(sw).toHaveAttribute('aria-checked', 'false')
+  })
+
+  // B57.42 — one page that links every setting.
+  it('links every settings page, and Documents you attach is not among them', async () => {
+    mockBff(true)
+    window.history.pushState({}, '', '/settings')
+    render(<App />)
+    const pages = await screen.findByRole('navigation', { name: 'Settings pages' })
+    const hrefs = Array.from(pages.querySelectorAll('a')).map((a) => a.getAttribute('href'))
+    expect(hrefs).toEqual([
+      '/settings/connect',
+      '/members',
+      '/billing',
+      '/settings/payout-details',
+      '/settings/verification',
+      '/settings/terms',
+      '/settings/webhooks',
+      '/settings/email-branding',
+      '/settings/help',
+      '/settings/data',
+      '/settings/close',
+    ])
+    expect(await screen.findByText('Signed in as Alice, the owner of Alice’s team.')).toBeInTheDocument()
+    expect(within(pages).getByRole('link', { name: /^Members/ })).toHaveTextContent('1 person')
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+    expect(screen.queryByText('Documents you attach')).not.toBeInTheDocument()
+  })
+
+  it('Appearance: Light, Dark or Same as this device, moved here from the top bar', async () => {
+    mockBff(true)
+    window.history.pushState({}, '', '/settings')
+    render(<App />)
+    const appearance = await screen.findByRole('tablist', { name: 'Appearance' })
+    expect(screen.queryByRole('button', { name: /Switch to (dark|light) theme/ })).not.toBeInTheDocument()
+    fireEvent.click(within(appearance).getByRole('tab', { name: 'Dark' }))
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+    expect(window.localStorage.getItem('talyvor-theme')).toBe('dark')
+    expect(within(appearance).getByRole('tab', { name: 'Dark' })).toHaveAttribute('aria-selected', 'true')
+    // Same as this device keeps no choice, so every load asks the device.
+    fireEvent.click(within(appearance).getByRole('tab', { name: 'Same as this device' }))
+    expect(window.localStorage.getItem('talyvor-theme')).toBeNull()
+    expect(within(appearance).getByRole('tab', { name: 'Same as this device' })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.click(within(appearance).getByRole('tab', { name: 'Light' }))
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+  })
+
+  it('Show amounts in: pounds or euros beside LXC, dollars by default', async () => {
+    mockBff(true)
+    window.history.pushState({}, '', '/settings')
+    render(<App />)
+    const show = await screen.findByRole('tablist', { name: 'Show amounts in' })
+    expect(within(show).getByRole('tab', { name: 'US dollars' })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.click(within(show).getByRole('tab', { name: 'Pounds' }))
+    expect(window.localStorage.getItem(FIAT_KEY)).toBe('GBP')
+    expect(within(show).getByRole('tab', { name: 'Pounds' })).toHaveAttribute('aria-selected', 'true')
+    window.localStorage.removeItem(FIAT_KEY)
   })
 
   // B28.8 — the full-screen disclosure is gone. A new workspace opens the app, and sharing is one line
