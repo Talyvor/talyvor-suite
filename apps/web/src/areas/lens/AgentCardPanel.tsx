@@ -51,7 +51,7 @@ function CardFace({ card }: { card: AgentCard }) {
   )
 }
 
-function Purchases({ auths }: { auths: CardAuthorization[] }) {
+export function Purchases({ auths }: { auths: CardAuthorization[] }) {
   return (
     <div data-testid="agent-card-purchases">
       {auths.map((a) => {

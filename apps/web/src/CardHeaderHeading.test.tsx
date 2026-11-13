@@ -186,6 +186,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/settings/email-branding': 0,
   '/settings/connect': 0, // B57.45: drawn in Pocket
   '/settings/company': 0, // B59.31: Pocket's own section title, no CardHeader
+  '/cards': 0, // B59.45: Pocket's own eyebrows, no CardHeader
   '/settings/help': 0, // B59.28: Pocket's own section titles, no CardHeader
   '/settings/close': 0,
   '/settings/data': 0,

@@ -114,6 +114,7 @@ const PINNED: Readonly<Record<string, string>> = {
   '/settings/email-branding': 'Email branding',
   '/settings/connect': 'Connect your AI',
   '/settings/company': 'Company details',
+  '/cards': 'Cards',
   '/settings/help': 'Help and complaints',
   '/settings/close': 'Close this account',
   '/settings/data': 'Your data',
