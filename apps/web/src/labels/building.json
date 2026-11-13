@@ -9,5 +9,6 @@
   { "key": "agent_wallet_kinds", "feature": "Agents that hold currency accounts, a crypto wallet or both", "item": "B48.18" },
   { "key": "apple_pay_google_pay", "feature": "Apple Pay and Google Pay", "item": "B53.11" },
   { "key": "counter", "feature": "Counter, which negotiates for you inside the limits you sign", "item": "B52.15" },
-  { "key": "connect_in_assistants", "feature": "Talyvor in Claude’s and ChatGPT’s directories", "item": "B52.8" }
+  { "key": "connect_in_assistants", "feature": "Talyvor in Claude’s and ChatGPT’s directories", "item": "B52.8" },
+  { "key": "money_kind_change", "feature": "Changing the kind of money", "item": "B59.12" }
 ]
