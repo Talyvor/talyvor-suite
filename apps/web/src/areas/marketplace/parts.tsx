@@ -14,7 +14,7 @@ import { type Listing, type ListingKind, kindLabel } from './marketApi'
 // product card (its kind's line icon, its seller, its price in IBM Plex Mono and an arrow), and a seller's
 // figures as tiles under an eyebrow.
 
-export const selectClass = `mt-1 block h-8 w-full rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`
+export const selectClass = `mt-1 block h-8 w-full rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`
 
 export const CATALOG_KEY = ['market-catalog']
 export const DISCOVER_KEY = ['market-discover']

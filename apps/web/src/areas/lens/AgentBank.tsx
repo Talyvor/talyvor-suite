@@ -311,7 +311,7 @@ function AlertsBeforeAgents({ nameOf }: { nameOf: (id: string) => string }) {
 }
 
 const SCHEDULES_KEY = ['agent-schedules']
-const scheduleSelect = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
+const scheduleSelect = `h-8 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 const EVERY: readonly [AgentSchedule['every'], string][] = [
   ['hour', 'every hour'],
   ['day', 'every day'],
@@ -785,7 +785,7 @@ function AgentDetails({ agent }: { agent: Agent }) {
           maxLength={500}
           rows={3}
           placeholder="What it is for, e.g. answers support tickets overnight"
-          className={`w-full rounded-control border border-rule bg-surface p-3 text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+          className={`w-full rounded-control border border-rule-strong bg-surface p-3 text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
