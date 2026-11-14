@@ -21,9 +21,9 @@ const READ_FAILED = /Couldn’t (load|check|reach|read)|couldn’t read|could no
 // Asked on every address by the shell itself (the session, the approvals and prepared payments its Approvals badge
 // counts — B28.7, B55.10 — the workspace's name — B46.16 — the capabilities whose labels decide its Sandbox chip — B56.11 —
 // the agents' book, for Pause every agent and the kill banner — B57.8 — the account whose type and kind decide its
-// chip and its Members row — B59.10 — and a waiting key recovery, shown on every page — B55.54), so a screen that asks
-// for nothing else reads nothing of its own and has no read to fail.
-const SHELL_READS = new Set(['/auth/me', '/api/agents', '/api/agents/approvals', '/api/money/payment-requests', '/api/workspace/name', '/api/wallets/capabilities', '/api/workspace/account', '/api/agents/keys/recover'])
+// chip and its Members row — B59.10 — a waiting key recovery, shown on every page — B55.54 — and the mandate requests
+// its Approvals badge counts — B55.40), so a screen that asks for nothing else reads nothing of its own and has no read to fail.
+const SHELL_READS = new Set(['/auth/me', '/api/agents', '/api/agents/approvals', '/api/money/payment-requests', '/api/workspace/name', '/api/wallets/capabilities', '/api/workspace/account', '/api/agents/keys/recover', '/api/money/mandates'])
 
 const addressOf = (routePath: string) => routePath.replace(/\/\*$/, '') || '/'
 

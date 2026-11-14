@@ -7,7 +7,7 @@ import { Region, RegionScreen } from '../../components/Region'
 import { WorkspaceLabel, approvalCapability } from '../../labels/workspace'
 import { ApiError } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
-import { APPROVALS_KEY, BOOK_KEY, DECIDED, FaceIDCard, PAYEE_KIND, PREPARED_KEY, PreparedRow, Statement, useKeys } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, DECIDED, FaceIDCard, MANDATE_REQUESTS_KEY, MandateRequestRow, PAYEE_KIND, PREPARED_KEY, PreparedRow, Statement, useKeys } from './AgentBank'
 import { approvalDeclineTo, approvalSheetTo, expiresText } from './ApprovalSheet'
 import { AgentStatement, DownloadFailed, JOURNAL_SENTENCE, MONTH_FILE_TYPES, downloadWords, useMonthFile } from './AgentStatement'
 import { agentBankApi, type Agent, type AgentApproval, type CurrencyAccount, type StatementFormat } from './agentBankApi'
@@ -53,7 +53,13 @@ export function usePendingApprovals(): number | null {
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals, ...poll })
   // B55.10 — a payment Chat or an assistant prepared waits for a person too, so the badge counts it.
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests, ...poll })
-  return list.data ? (list.data.approvals ?? []).filter((a) => a.status === 'pending').length + (prepared.data?.requests ?? []).length : null
+  // B55.40 — and so does an agent's mandate request.
+  const mandates = useQuery({ queryKey: MANDATE_REQUESTS_KEY, queryFn: agentBankApi.requestedMandates, ...poll })
+  return list.data
+    ? (list.data.approvals ?? []).filter((a) => a.status === 'pending').length +
+        (prepared.data?.requests ?? []).length +
+        (mandates.data?.granted ?? []).filter((m) => m.status === 'requested').length
+    : null
 }
 
 /** B57.17 — Approvals in Pocket. */
@@ -154,6 +160,8 @@ function ApprovalsPage() {
   const location = useLocation()
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
+  // B55.40 — an agent's mandate request waits here too.
+  const mandateRequests = useQuery({ queryKey: MANDATE_REQUESTS_KEY, queryFn: agentBankApi.requestedMandates })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const keys = useKeys()
   const agents = book.data?.agents ?? []
@@ -163,8 +171,9 @@ function ApprovalsPage() {
   const all = list.data?.approvals ?? []
   const waiting = all.filter((a) => a.status === 'pending')
   const requests = prepared.data?.requests ?? []
-  // The sidebar's badge counts the same two lists (usePendingApprovals).
-  const count = waiting.length + requests.length
+  const asked = (mandateRequests.data?.granted ?? []).filter((m) => m.status === 'requested')
+  // The sidebar's badge counts the same three lists (usePendingApprovals).
+  const count = waiting.length + requests.length + asked.length
   const decided = all
     .filter((a) => a.status !== 'pending')
     .sort((x, y) => Date.parse(decidedAt(y)) - Date.parse(decidedAt(x)))
@@ -286,6 +295,16 @@ function ApprovalsPage() {
                     {requests.map((r) => (
                       <PreparedRow key={r.id} r={r} nameOf={nameOf} labelled />
                     ))}
+                    {asked.map((m) => (
+                      <MandateRequestRow
+                        key={m.id}
+                        m={m}
+                        nameOf={nameOf}
+                        onlyThePhone={keys.onlyThePhone}
+                        hold={keys.hold}
+                        onOutcome={(o) => showSnack({ title: o.text })}
+                      />
+                    ))}
                   </div>
                 ) : (
                   <p className="mt-2 text-body text-ink-3">
@@ -294,6 +313,7 @@ function ApprovalsPage() {
                   </p>
                 )}
                 {prepared.isError ? <p className="mt-2 text-body text-ink-2">The prepared payments could not be read just now.</p> : null}
+                {mandateRequests.isError ? <p className="mt-2 text-body text-ink-2">The mandate requests could not be read just now.</p> : null}
               </>
             )}
           </Card>
