@@ -71,7 +71,8 @@ const AGENT_CREDIT = 'spend_on_talyvor move_between_own_agents'
 const PLACEMENTS: [string, string[]][] = [
   // B57.19 — /agents is the list; today's agent view, with its chips, is the agent's own address. B57.20: the agent's
   // page above it says it once, on its balance.
-  ['/agents/agt_research', [AGENT_CREDIT, AGENT_CREDIT, AGENT_CREDIT, 'payments_out', 'pay_another_owner', 'currency_accounts account_details', 'pay_another_owner', 'pay_another_owner', 'pay_another_owner', 'loans_between_companies', 'escrow', 'invest_and_trade', 'cash_out', 'agent_card', AGENT_CREDIT, 'pay_another_owner', 'company_credit_line', 'loans_between_companies', 'escrow', 'cash_out']],
+  // B57.21 — its money features are panels of its Money card, each with its label (AgentMoney.test.tsx, WalletMoney.test.tsx).
+  ['/agents/agt_research', [AGENT_CREDIT, AGENT_CREDIT, AGENT_CREDIT, 'payments_out', 'pay_another_owner', 'agent_card', AGENT_CREDIT]],
   // B57.17 — the agents' requests first, then the prepared payments, as w-approvals lists them.
   ['/approvals', ['pay_another_owner', 'payments_out']],
   // B57.24 — one chip, on the agent's statement document.
