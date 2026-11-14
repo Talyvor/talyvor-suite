@@ -6,7 +6,8 @@ import { Button as PocketButton, Icon, Select, Tabs } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { ApiError } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
-import { APPROVALS_KEY, Approvals, BOOK_KEY, PREPARED_KEY, Statement } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, PREPARED_KEY, Statement } from './AgentBank'
+import { ApprovalsPage } from './ApprovalsPage'
 import { AgentStatement, DownloadFailed, JOURNAL_SENTENCE, MONTH_FILE_TYPES, downloadWords, useMonthFile } from './AgentStatement'
 import { agentBankApi, type Agent, type CurrencyAccount, type StatementFormat } from './agentBankApi'
 import { AccountStatement, MarketplaceBill, accountTitle, useAccountMonthCsv } from './AccountStatement'
@@ -52,26 +53,9 @@ export function usePendingApprovals(): number | null {
   return list.data ? (list.data.approvals ?? []).filter((a) => a.status === 'pending').length + (prepared.data?.requests ?? []).length : null
 }
 
+/** B57.17 — Approvals in Pocket (ApprovalsPage.tsx). */
 export function ApprovalsScreen() {
-  const { nameOf } = useAgentNames()
-  return (
-    <RegionScreen>
-      <Region
-        index="00"
-        label="Approvals"
-        heading="What your agents are waiting on"
-        sectionClassName="pb-10 pt-4 wide:pb-12"
-        className="flex max-w-2xl flex-col gap-3"
-      >
-        <p className="text-body text-muted">
-          A request or payment waits here when it is above an agent’s approval amount. Approve it and the agent’s next
-          identical request goes through, once; decline it and the request is refused, and asking again the same way is
-          refused for 24 hours.
-        </p>
-        <Approvals nameOf={nameOf} held={{}} onSent={() => {}} primary />
-      </Region>
-    </RegionScreen>
-  )
+  return <ApprovalsPage />
 }
 
 /** B56.15 — one tab on Statements: an agent's or the room's wallet in LXC, or a currency account in its own currency. */

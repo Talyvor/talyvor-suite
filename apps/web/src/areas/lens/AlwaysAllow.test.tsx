@@ -51,10 +51,11 @@ afterEach(() => {
 describe('Approve and always allow this (B41.4)', () => {
   it('previews the rule in the simulator, then approves with it; an outside payee is not offered it', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/approvals')
+    window.history.pushState({}, '', '/agents')
     render(<App />)
     const list = within(await screen.findByRole('group', { name: 'Waiting for a person' }))
-    expect(list.getAllByRole('button', { name: 'Approve and always allow this…' })).toHaveLength(1)
+    // B57.17 — the inbox with this form is Agent Wallets', which offers it once the keys are read.
+    expect(await list.findAllByRole('button', { name: 'Approve and always allow this…' })).toHaveLength(1)
 
     fireEvent.click(list.getByRole('button', { name: 'Approve and always allow this…' }))
     fireEvent.change(list.getByLabelText('Always allow Researcher to pay Acme Hosting up to, in LXC'), { target: { value: '50' } })
@@ -82,10 +83,10 @@ describe('Approve and always allow this (B41.4)', () => {
       value: { get: vi.fn(async () => ({ rawId: sig, response: { clientDataJSON: sig, authenticatorData: sig, signature: sig } })), create: vi.fn() },
       configurable: true,
     })
-    window.history.pushState({}, '', '/approvals')
+    window.history.pushState({}, '', '/agents')
     render(<App />)
     const list = within(await screen.findByRole('group', { name: 'Waiting for a person' }))
-    fireEvent.click(list.getByRole('button', { name: 'Approve and always allow this…' }))
+    fireEvent.click(await list.findByRole('button', { name: 'Approve and always allow this…' }))
     fireEvent.change(list.getByLabelText('Always allow Researcher to pay Acme Hosting up to, in LXC'), { target: { value: '50' } })
     fireEvent.change(list.getByLabelText('Each'), { target: { value: 'day' } })
     fireEvent.click(list.getByRole('button', { name: 'Preview' }))

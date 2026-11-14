@@ -119,7 +119,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/': 3,
   // B28.7 — Approvals (waiting, decided). B57.24: Statements opens on an agent's statement, a Pocket document whose
   // name is its own heading, so it has no card header.
-  '/approvals': 2,
+  '/approvals': 1,
   '/statements': 0,
   '/overview': 6,
   '/ledger': 1,

@@ -24,10 +24,12 @@ function useOpenApproval(): string | null {
   return null
 }
 
-/** The address that opens approval `id`'s sheet over the page at `pathname` and `search`. */
-export function approvalSheetTo({ pathname, search }: { pathname: string; search: string }, id: string): To {
+/** The address that opens approval `id`'s sheet over the page at `pathname` and `search`; with `decline`, on its Decline form (B57.17's d key). */
+export function approvalSheetTo({ pathname, search }: { pathname: string; search: string }, id: string, decline = false): To {
   const q = new URLSearchParams(search)
   q.set('approval', id)
+  if (decline) q.set('decline', '1')
+  else q.delete('decline')
   return { pathname, search: `?${q}` }
 }
 
@@ -40,10 +42,11 @@ export function ApprovalSheetHost() {
   const close = () => {
     const q = new URLSearchParams(search)
     q.delete('approval')
+    q.delete('decline')
     const rest = q.toString()
     navigate({ pathname, search: rest ? `?${rest}` : '' }, { replace: true })
   }
-  return <ApprovalSheet key={id} id={id} onClose={close} />
+  return <ApprovalSheet key={id} id={id} declining={new URLSearchParams(search).get('decline') === '1'} onClose={close} />
 }
 
 /** "Tomorrow at 09:17", "Today at 18:02" or "16 Nov at 09:17", on this device's clock. */
@@ -75,16 +78,16 @@ function SheetLine({ children, onClose }: { children: React.ReactNode; onClose: 
   )
 }
 
-function ApprovalSheet({ id, onClose }: { id: string; onClose: () => void }) {
+function ApprovalSheet({ id, declining, onClose }: { id: string; declining: boolean; onClose: () => void }) {
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
   const a = (list.data?.approvals ?? []).find((x) => x.id === id)
   if (list.isError) return <SheetLine onClose={onClose}>The approval could not be read just now. Close this and try again.</SheetLine>
   if (list.isPending) return <SheetLine onClose={onClose}>Reading…</SheetLine>
   if (!a) return <SheetLine onClose={onClose}>This workspace has no approval at this address.</SheetLine>
-  return <Sheet a={a} onClose={onClose} />
+  return <Sheet a={a} declineFirst={declining} onClose={onClose} />
 }
 
-function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
+function Sheet({ a, declineFirst, onClose }: { a: AgentApproval; declineFirst: boolean; onClose: () => void }) {
   const qc = useQueryClient()
   const titleId = useId()
   const keys = useKeys()
@@ -92,7 +95,7 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const budgetLeft = a.budget_left_after_ulxc ?? null
   const rules = useQuery({ queryKey: rulesKey(a.agent_id), queryFn: () => agentBankApi.rules(a.agent_id), enabled: budgetLeft !== null })
-  const [declining, setDeclining] = useState(false)
+  const [declining, setDeclining] = useState(declineFirst && a.status === 'pending')
   const [why, setWhy] = useState('')
 
   const agents = book.data?.agents ?? []
@@ -141,7 +144,8 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
     </p>
   ) : null
 
-  if (declining) {
+  // Only where this browser may decide: an address asking for Decline does not get round B55.2.
+  if (declining && !keys.onlyThePhone && !keys.noLiveKey) {
     const decline = () => decide.mutate({ decision: 'deny', reason: why.trim() || undefined })
     return (
       <Dialog
