@@ -293,9 +293,12 @@ func agentRulesFields(w http.ResponseWriter, raw []byte) ([]byte, bool) {
 		PayeeDailyLimitsULXC map[string]int64 `json:"payee_daily_limits_ulxc"`
 		// B41.4 — the same over the month (Lens B41.104); absent keeps, sent replaces whole.
 		PayeeMonthlyLimitsULXC map[string]int64 `json:"payee_monthly_limits_ulxc"`
-		ActiveFrom             string           `json:"active_from"`
-		ActiveUntil            string           `json:"active_until"`
-		Timezone               string           `json:"timezone"`
+		// B57.23 — the owner's "always allow" by payee (Lens B41.104), now a field on the rules page. Absent (null) keeps
+		// what Lens holds; sent, it replaces them whole. Lens judges an added or raised one as loosening.
+		PayeeAllowances map[string]payeeAllowance `json:"payee_allowances"`
+		ActiveFrom      string                    `json:"active_from"`
+		ActiveUntil     string                    `json:"active_until"`
+		Timezone        string                    `json:"timezone"`
 		// B19.6 — Lens replaces every other rule on a save, so this is carried back as it was read.
 		PauseOnUnusualSpend bool `json:"pause_on_unusual_spend"`
 		// B59.19 — "Can use Instant transfer" (Lens B59.15), off by default. Absent (null) keeps what Lens holds, so a
@@ -306,7 +309,7 @@ func agentRulesFields(w http.ResponseWriter, raw []byte) ([]byte, bool) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return nil, false
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_licences, max_commitment_ulxc, may_subscribe, payee_allowances
+	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_licences, max_commitment_ulxc, may_subscribe
 	body, _ := json.Marshal(in)
 	return body, true
 }

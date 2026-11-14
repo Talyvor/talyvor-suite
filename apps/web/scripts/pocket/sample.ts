@@ -324,6 +324,28 @@ SAMPLE['/api/agents/agt_research/rules'] = {
   allowed_payees: ['payee_acme', 'payee_northwind'],
   payee_allowances: { payee_northwind: { amount_ulxc: lxc(4_000), per: 'month' } },
 }
+/**
+ * B57.23 — Research's rules history, as w-rules draws it: version 1 the first rules (14 Sep), version 2 added Northwind
+ * Data, always allowed up to $400.00 a month (9 Oct), version 3 the daily limit from $400.00 to $500.00 (20 Oct), in force.
+ * Rolling back to version 2 tightens them (w-rules+rollback-2), so Lens answers no challenge for it.
+ */
+{
+  const v3 = SAMPLE['/api/agents/agt_research/rules'] as Record<string, unknown>
+  const v2 = { ...v3, daily_limit_ulxc: lxc(4_000) }
+  const v1 = { ...v2, allowed_payees: ['payee_acme'], payee_allowances: {} }
+  SAMPLE['/api/agents/agt_research/rules/history'] = {
+    versions: [
+      { version: 3, rules: v3, changed_by: 'jwt:user:usr_nick', change: 'set', created_at: '2026-10-20T09:00:00Z' },
+      { version: 2, rules: v2, changed_by: 'jwt:user:usr_nick', change: 'set', created_at: '2026-10-09T09:00:00Z' },
+      { version: 1, rules: v1, changed_by: 'jwt:user:usr_nick', change: 'set', created_at: '2026-09-14T09:00:00Z' },
+    ],
+  }
+  SAMPLE['/api/agents/agt_sales/rules/history'] = {
+    versions: [{ version: 1, rules: SAMPLE['/api/agents/agt_sales/rules'], changed_by: 'jwt:user:usr_nick', change: 'set', created_at: '2026-10-05T09:00:00Z' }],
+  }
+  SAMPLE['/api/agents/agt_research/rules-challenge'] = { looser: false, changes: ['Daily limit: was $500.00 (5,000 LXC), now $400.00 (4,000 LXC)'], allow_credentials: [] }
+  SAMPLE['/api/agents/agt_research/rules/simulate'] = { verdict: 'allowed', reason: '', amount_ulxc: lxc(30), at: SAMPLE_NOW, balance_ulxc: lxc(16_500) }
+}
 function agentSummary(
   id: string,
   { safe, waiting, spent, forecast, limit, lines, declined, accounts }: { safe: number; waiting: number; spent: number; forecast: number; limit: number; lines: object[][]; declined: object | null; accounts: object[] },

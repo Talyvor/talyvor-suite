@@ -96,7 +96,9 @@ export class AgentBankScreen {
    * action left on the screen can be read as this one's answer.
    */
   private async fresh(agent?: Agent): Promise<void> {
-    await this.page.reload()
+    // B57.23 — an agent's rules page is a page of its own: every action starts again from Agent Wallets.
+    if (/\/rules$/.test(new URL(this.page.url()).pathname)) await this.page.goto(new URL('/agents', this.page.url()).toString())
+    else await this.page.reload()
     await this.ready()
     if (agent === undefined) return
     // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
@@ -116,76 +118,115 @@ export class AgentBankScreen {
     return outcome(this.page.getByRole('status').filter({ hasText: `${agent.name} now holds` }), dialog)
   }
 
-  /** Sets one of the agent's limits (the label the Rules card gives it) and saves its rules. */
-  async setLimit(agent: Agent, label: string, ulxc: number): Promise<string | undefined> {
-    await this.fresh(agent)
-    const box = this.page.getByLabel(`${label} for ${agent.name}, in LXC`)
-    await box.waitFor()
-    await box.fill(lxcText(ulxc))
-    const form = this.page.locator('form').filter({ has: box })
-    await form.getByRole('button', { name: 'Save rules' }).click()
-    return outcome(form.getByRole('status').filter({ hasText: /^Saved\./ }), form)
+  /** B57.23 — the agent's rules page (apps/web RulesPage.tsx), opened afresh; its whole page. */
+  private async rulesPage(agent: Agent): Promise<Locator> {
+    await this.page.goto(new URL(`/agents/${encodeURIComponent(agent.id)}/rules`, this.page.url()).toString())
+    const scope = this.page.getByTestId('rules-page')
+    await scope.getByRole('heading', { level: 1, name: `${agent.name}’s rules`, exact: true }).waitFor({ timeout: ACTION_TIMEOUT_MS })
+    return scope
   }
 
-  /** B28.26 — sets how many requests a minute the agent may make on the Rules card, and saves its rules. */
+  /** B57.23 — a rule's switch on the rules page, turned on when it is off. */
+  private async ruleOn(scope: Locator, rule: string): Promise<void> {
+    const sw = scope.getByRole('switch', { name: rule, exact: true })
+    if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click()
+  }
+
+  /** B57.23 — opens one of More rules on the rules page. */
+  private async moreRule(scope: Locator, rule: string): Promise<void> {
+    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
+    const row = scope.getByTestId('more-rules').getByRole('link', { name: new RegExp(`^${esc(rule)}`) })
+    if ((await row.getAttribute('aria-expanded')) !== 'true') await row.click()
+  }
+
+  /** B57.23 — Save rules on the rules page: undefined once its snack says they are saved, or the refusal's words. */
+  private async saveRules(scope: Locator, agent: Agent): Promise<string | undefined> {
+    await scope.getByRole('button', { name: 'Save rules', exact: true }).click()
+    return outcome(this.page.getByRole('status').filter({ hasText: `${agent.name}’s rules are saved` }), scope)
+  }
+
+  /** B57.23 — the rules page's name for a limit the Rules card used to name, and whether it is under More rules. */
+  private static readonly LIMITS: Record<string, [string, boolean]> = {
+    'Limit per request': ['At most on one request', false],
+    'Hourly limit': ['At most an hour', true],
+    'Daily limit': ['At most a day', false],
+    'Weekly limit': ['At most a week', true],
+    'Monthly limit': ['At most a month', false],
+    'Ask a person above': ['Asks you above', false],
+  }
+
+  /** Sets one of the agent's limits (named as the Rules card named it) on its rules page and saves its rules. */
+  async setLimit(agent: Agent, label: string, ulxc: number): Promise<string | undefined> {
+    const [rule, more] = AgentBankScreen.LIMITS[label] ?? [label, false]
+    const scope = await this.rulesPage(agent)
+    if (more) await this.moreRule(scope, rule)
+    else await this.ruleOn(scope, rule)
+    await scope.getByLabel(`${rule} for ${agent.name}, in LXC`, { exact: true }).fill(lxcText(ulxc))
+    return this.saveRules(scope, agent)
+  }
+
+  /** B28.26 — sets how many requests a minute the agent may make on its rules page, and saves its rules. */
   async setRate(agent: Agent, perMinute: number): Promise<string | undefined> {
-    await this.fresh(agent)
-    const box = this.page.getByLabel(`Requests per minute for ${agent.name}`)
-    await box.waitFor()
-    await box.fill(String(perMinute))
-    const form = this.page.locator('form').filter({ has: box })
-    await form.getByRole('button', { name: 'Save rules' }).click()
-    return outcome(form.getByRole('status').filter({ hasText: /^Saved\./ }), form)
+    const scope = await this.rulesPage(agent)
+    await this.ruleOn(scope, 'At most requests a minute')
+    await scope.getByLabel(`Requests a minute for ${agent.name}`, { exact: true }).fill(String(perMinute))
+    return this.saveRules(scope, agent)
   }
 
   /**
-   * B28.27 — marks, on the Rules card, the payees `agent` may pay and those it may not (each one of the
-   * workspace's other agents), and saves its rules.
+   * B28.27 — names, on the agent's rules page, the payees `agent` may pay (Only these payees) and those it may not (Never
+   * these payees), each one of the workspace's other agents, and saves its rules.
    */
   async setPayees(agent: Agent, payees: { allow: Agent[]; block: Agent[] }): Promise<string | undefined> {
-    await this.fresh(agent)
-    const save = this.page.getByRole('button', { name: 'Save rules' })
-    await save.waitFor()
-    for (const p of payees.allow) await this.page.getByRole('button', { name: `${agent.name} may pay ${p.name}`, exact: true }).click()
-    for (const p of payees.block) await this.page.getByRole('button', { name: `${agent.name} may not pay ${p.name}`, exact: true }).click()
-    const form = this.page.locator('form').filter({ has: save })
-    await save.click()
-    return outcome(form.getByRole('status').filter({ hasText: /^Saved\./ }), form)
+    const scope = await this.rulesPage(agent)
+    if (payees.allow.length > 0) {
+      await this.ruleOn(scope, 'Only these payees')
+      for (const p of payees.allow) await scope.getByLabel(`Add to payees ${agent.name} may pay`, { exact: true }).selectOption(p.id)
+    }
+    if (payees.block.length > 0) {
+      await this.moreRule(scope, 'Never these payees')
+      for (const p of payees.block) await scope.getByLabel(`Add to payees ${agent.name} may never pay`, { exact: true }).selectOption(p.id)
+    }
+    return this.saveRules(scope, agent)
   }
 
   /**
-   * B28.28 — types, on the Rules card, what `agent` may pay each payee (one of the workspace's other agents) in a
+   * B28.28 — types, on the agent's rules page, what `agent` may pay each payee (one of the workspace's other agents) in a
    * day, and saves its rules.
    */
   async setPayeeDailyCaps(agent: Agent, caps: { payee: Agent; ulxc: number }[]): Promise<string | undefined> {
-    await this.fresh(agent)
-    const save = this.page.getByRole('button', { name: 'Save rules' })
-    await save.waitFor()
-    for (const c of caps) await this.page.getByLabel(`Daily limit on payments to ${c.payee.name} from ${agent.name}, in LXC`, { exact: true }).fill(lxcText(c.ulxc))
-    const form = this.page.locator('form').filter({ has: save })
-    await save.click()
-    return outcome(form.getByRole('status').filter({ hasText: /^Saved\./ }), form)
+    const scope = await this.rulesPage(agent)
+    await this.moreRule(scope, 'At most a day to one payee')
+    for (const c of caps) {
+      const box = scope.getByLabel(`A day to one payee from ${agent.name}: ${c.payee.name}, in LXC`, { exact: true })
+      if (!(await box.isVisible())) await scope.getByLabel(`Add to a day to one payee from ${agent.name}`, { exact: true }).selectOption(c.payee.id)
+      await box.fill(lxcText(c.ulxc))
+    }
+    return this.saveRules(scope, agent)
   }
 
-  /** B28.30 — asks Would it pass? whether `from`'s rules would let a payment of `ulxc` to `to` through; the card's answer. */
+  /**
+   * B28.30 — asks Would it pass?, on `from`'s rules page, whether its rules would let a payment of `ulxc` to `to` through;
+   * the answer as "Refused. <why> Nothing was spent." or "Allowed. <…>".
+   */
   async wouldPass(from: Agent, to: Agent, ulxc: number): Promise<string> {
-    await this.fresh(from)
-    const c = card(this.page, 'Would it pass?')
-    await c.getByRole('group', { name: 'What to try' }).getByRole('button', { name: 'A payment', exact: true }).click()
-    await c.getByLabel(`Who ${from.name} would pay`).selectOption(to.id)
-    await c.getByLabel(`Amount in LXC to try for ${from.name}`).fill(lxcText(ulxc))
+    const c = (await this.rulesPage(from)).getByTestId('would-it-pass')
+    await c.getByLabel(`What ${from.name} would do`, { exact: true }).selectOption(`agent:${to.id}`)
+    await c.getByLabel(`Amount in LXC to try for ${from.name}`, { exact: true }).fill(lxcText(ulxc))
     await c.getByRole('button', { name: 'Would it pass?', exact: true }).click()
-    const said = c.getByRole('status').or(c.getByRole('alert')).first()
+    const said = c.getByTestId('rule-verdict').or(c.getByRole('alert')).first()
     await said.waitFor({ timeout: ACTION_TIMEOUT_MS })
-    return (await said.innerText()).trim()
+    const parts = await said.locator(':scope > span').allInnerTexts()
+    return parts.length === 2 ? `${parts[0].trim()}. ${parts[1].trim()}` : (await said.innerText()).trim()
   }
 
-  /** B28.31 — rolls the agent's rules back to `version` on Rules history; undefined, or the refusal's words. */
+  /** B28.31 — rolls the agent's rules back to `version` from its rules page's history, past the confirm; undefined, or the refusal's words. */
   async rollBackRules(agent: Agent, version: number): Promise<string | undefined> {
-    await this.fresh(agent)
-    const c = card(this.page, 'Rules history')
-    await c.getByRole('button', { name: `Roll ${agent.name}’s rules back to version ${version}`, exact: true }).click()
-    return outcome(c.getByRole('status').filter({ hasText: `back as they were at version ${version}` }), c)
+    const scope = await this.rulesPage(agent)
+    await scope.getByTestId('rules-history').getByRole('button', { name: `Roll ${agent.name}’s rules back to version ${version}`, exact: true }).click()
+    const dialog = this.page.getByRole('dialog', { name: `Roll ${agent.name}’s rules back to version ${version}?` })
+    await dialog.getByRole('button', { name: /^Roll back/ }).click()
+    return outcome(this.page.getByRole('status').filter({ hasText: `back as they were at version ${version}` }), dialog)
   }
 
   /**
@@ -209,7 +250,7 @@ export class AgentBankScreen {
 
   /** B28.31 — what Rules history says of one version: how it came to be, by whom, and what it changed. */
   async rulesVersion(version: number): Promise<string> {
-    const row = card(this.page, 'Rules history').getByTestId(`rules-version-${version}`)
+    const row = this.page.getByTestId('rules-history').getByTestId(`rules-version-${version}`)
     await row.waitFor({ timeout: ACTION_TIMEOUT_MS })
     return (await row.innerText()).replace(/\s+/g, ' ').trim()
   }
@@ -329,41 +370,38 @@ export class AgentBankScreen {
   }
 
   /**
-   * B28.22 — allows `agent` only `model`, picked from the Rules card's model picker, and saves. Answers
+   * B28.22 — allows `agent` only `model`, picked from its rules page's model list (B57.23), and saves. Answers
    * what the control is (a SELECT, not a text box) and the save's outcome.
    */
   async allowOnlyModel(agent: Agent, model: string): Promise<{ tag: string; err?: string }> {
-    await this.fresh(agent)
-    const picker = this.page.getByLabel(`Allowed models for ${agent.name}`)
+    const scope = await this.rulesPage(agent)
+    await this.ruleOn(scope, 'Only these models')
+    const picker = scope.getByLabel(`Add to models ${agent.name} may use`, { exact: true })
     await picker.waitFor()
     const tag = await picker.evaluate((el) => el.tagName)
     if (tag !== 'SELECT') return { tag }
     await picker.locator(`option[value="${model}"]`).waitFor({ state: 'attached' })
     await picker.selectOption(model)
-    const form = this.page.locator('form').filter({ has: picker })
-    await form.getByRole('button', { name: 'Save rules' }).click()
-    return { tag, err: await outcome(form.getByRole('status').filter({ hasText: /^Saved\./ }), form) }
+    return { tag, err: await this.saveRules(scope, agent) }
   }
 
   /**
-   * B28.25 — gives each model its own daily cap on the Rules card: picked from the "Cap a model a day"
+   * B28.25 — gives each model its own daily cap on its rules page, under More rules: picked from its
    * select (or found already capped), its amount typed, and the rules saved.
    */
   async setModelLimits(agent: Agent, caps: { model: string; name: string; ulxc: number }[]): Promise<string | undefined> {
-    await this.fresh(agent)
-    const picker = this.page.getByLabel(`Cap a model a day for ${agent.name}`)
-    await picker.waitFor()
+    const scope = await this.rulesPage(agent)
+    await this.moreRule(scope, 'At most a day on one model')
     for (const c of caps) {
-      const box = this.page.getByLabel(`Daily limit on ${c.name} for ${agent.name}, in LXC`)
+      const box = scope.getByLabel(`A day on one model for ${agent.name}: ${c.name}, in LXC`, { exact: true })
       if (!(await box.isVisible())) {
+        const picker = scope.getByLabel(`Add to a day on one model for ${agent.name}`, { exact: true })
         await picker.locator(`option[value="${c.model}"]`).waitFor({ state: 'attached' })
         await picker.selectOption(c.model)
       }
       await box.fill(lxcText(c.ulxc))
     }
-    const form = this.page.locator('form').filter({ has: picker })
-    await form.getByRole('button', { name: 'Save rules' }).click()
-    return outcome(form.getByRole('status').filter({ hasText: /^Saved\./ }), form)
+    return this.saveRules(scope, agent)
   }
 
   /**
@@ -382,14 +420,12 @@ export class AgentBankScreen {
     return (await unsaved.isVisible()) ? (await unsaved.innerText()).trim() : undefined
   }
 
-  /** B28.305 — fills the agent's Rules card from a template and saves its rules. */
+  /** B28.305 — fills the agent's rules page from a template, under More rules, and saves its rules. */
   async applyTemplate(agent: Agent, template: string): Promise<string | undefined> {
-    await this.fresh(agent)
-    const group = this.page.getByRole('group', { name: `Rule templates for ${agent.name}` })
-    await group.getByRole('button', { name: template, exact: true }).click()
-    const form = this.page.locator('form').filter({ has: group })
-    await form.getByRole('button', { name: 'Save rules' }).click()
-    return outcome(form.getByRole('status').filter({ hasText: /^Saved\./ }), form)
+    const scope = await this.rulesPage(agent)
+    await this.moreRule(scope, 'Start from a template')
+    await scope.getByRole('group', { name: `Rule templates for ${agent.name}` }).getByRole('button', { name: template, exact: true }).click()
+    return this.saveRules(scope, agent)
   }
 
   /** B28.22 — the Rules card's plain-English sentences for `agent`, as the screen shows them after a reload. */
