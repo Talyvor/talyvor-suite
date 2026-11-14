@@ -28,7 +28,7 @@ const DELIVERY: Record<AlertDelivery['status'], [PillStatus, string]> = {
   sent: ['settled', 'Sent'],
   failed: ['slashed', 'Failed'],
 }
-const select = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
+const select = `h-8 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 
 export function AlertChannels() {
   const qc = useQueryClient()

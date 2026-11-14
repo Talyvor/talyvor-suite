@@ -195,7 +195,7 @@ function useSettingWrite(alsoInvalidate?: string[]) {
 /** B29.12 — a section's capabilities on one raised panel, a hairline between each. */
 const featureList = 'rounded-card border border-rule bg-raised px-gutter'
 
-const fieldClass = `rounded-control border border-rule bg-surface text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
+const fieldClass = `rounded-control border border-rule-strong bg-surface text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 
 /** One of several values, written the way a switch is: Lens's recorded value is what shows. */
 function SettingChoice<T extends string>({

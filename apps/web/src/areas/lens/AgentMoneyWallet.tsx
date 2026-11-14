@@ -87,7 +87,7 @@ function AddMoney({ agent, wallet, shows }: { agent: Agent; wallet: AgentMoneyWa
 }
 
 const currencyOf = (p: OutsidePayee) => (p.routing_number ? 'USD' : p.iban && !/^GB/i.test(p.iban) ? 'EUR' : 'GBP')
-const select = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
+const select = `h-8 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 
 /** Send: prepares the payment, pays nothing; the approval card under it approves it with one tap. */
 function Send({ agent }: { agent: Agent }) {

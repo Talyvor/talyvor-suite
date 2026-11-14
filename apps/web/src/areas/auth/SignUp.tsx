@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Logo, ThemeToggle, cn } from '@talyvor/ui'
+import { Logo, cn } from '@talyvor/ui'
 import { Button, Field, Icon, Input, KindTile, Select, pocketFocusRing } from '@talyvor/ui/pocket'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Waitlist } from '../../components/Waitlist'
@@ -72,10 +72,8 @@ function SignUpFrame({ children, label = <SandboxLabel /> }: { children: React.R
         <a href="/marketing" aria-label="Talyvor website" className={cn('rounded-control', pocketFocusRing)}>
           <Logo width={144} />
         </a>
-        <div className="flex items-center gap-3">
-          {label}
-          <ThemeToggle />
-        </div>
+        {/* B57.58 — no theme control: Settings' Appearance is the one, and before you sign in the page follows the device. */}
+        <div className="flex items-center gap-3">{label}</div>
       </header>
       <main className="mx-auto grid w-full max-w-5xl flex-1 content-start gap-5 px-gutter pb-16 pt-6 wide:px-10">
         {children}

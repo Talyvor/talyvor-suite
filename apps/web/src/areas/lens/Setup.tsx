@@ -82,7 +82,7 @@ export function CopyBlock({ text, label }: { text: string; label: string }) {
   const { copyState, copy } = useCopy(text)
   return (
     <div className="space-y-1">
-      <pre className="overflow-x-auto rounded-control border border-rule bg-canvas px-3 py-2 font-mono text-ink">
+      <pre className="overflow-x-auto rounded-control border border-rule-strong bg-canvas px-3 py-2 font-mono text-ink">
         {text}
       </pre>
       <TodayButton variant="default" onClick={copy}>

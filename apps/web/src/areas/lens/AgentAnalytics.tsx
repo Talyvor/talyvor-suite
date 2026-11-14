@@ -164,7 +164,7 @@ export function AgentAnalytics({ agent, nameOf }: { agent: Agent; nameOf: (id: s
       <div className="flex flex-wrap items-center gap-2 border-b border-rule px-gutter py-3">
         <select
           aria-label={`Period of ${agent.name}’s spend`}
-          className={`h-8 w-56 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`}
+          className={`h-8 w-56 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`}
           value={days}
           onChange={(e) => setDays(Number(e.target.value))}
         >
