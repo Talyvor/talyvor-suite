@@ -202,8 +202,8 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/money/pay': 4, // B57.31: the top of Pay is drawn in Pocket, so only today's cards kept below it count; B57.144: Bulk payouts is drawn in Pocket; B41.1: the bills inbox
   // B57.27 — the prepared request is drawn in Pocket, whose card has no header.
   '/approve/:id': 0,
-  // B45.37 — one card: the plan the assistant prepared.
-  '/money/plans/:id': 1,
+  // B57.98 — the plan is drawn in Pocket, whose cards have no header.
+  '/money/plans/:id': 0,
   '/features': 1, // B57.42: "Documents you attach", moved here from Settings beside Document conversion
   '/features/try/tare': 0,
   '/features/try/conversion': 0,

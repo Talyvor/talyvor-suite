@@ -400,10 +400,10 @@ function Sidebar() {
       )}
       <div className="grid gap-0.5">
         {item('/', 'Home', 'home', pathname === '/')}
-        {item('/approvals', 'Approvals', 'approvals', under(pathname, '/approvals', '/approve'), pending)}
+        {item('/approvals', 'Approvals', 'approvals', under(pathname, '/approvals', '/approve', '/money/plans'), pending)}
         {item('/agents', 'Agents', 'agents', under(pathname, '/agents'))}
         {item('/statements', 'Statements', 'statements', under(pathname, '/statements'))}
-        {item('/money/pay', 'Pay', 'payments', under(pathname, '/money/pay', '/money/plans'))}
+        {item('/money/pay', 'Pay', 'payments', under(pathname, '/money/pay'))}
         {item('/money/invoices', 'Invoices', 'invoices', under(pathname, '/money/invoices'))}
         {item('/money/spending', 'Spending', 'spending', under(pathname, '/money/spending', '/money/budgets', '/money/subscriptions', '/money/card'))}
         {item('/chat', 'Chat', 'chat', under(pathname, '/chat'))}

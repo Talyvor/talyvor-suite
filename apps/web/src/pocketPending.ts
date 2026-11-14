@@ -52,7 +52,6 @@ export const POCKET_PENDING: readonly string[] = [
   '/settings/payout-details',
   '/money/invoices',
   '/money/pay',
-  '/money/plans/:id',
   '/money/subscriptions',
   '/money/budgets',
   '/scan/reports',

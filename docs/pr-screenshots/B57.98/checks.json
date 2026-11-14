@@ -1,0 +1,186 @@
+[
+ {
+  "route": "/money/plans/ar_plan",
+  "screen": "w-recurring-plan",
+  "answers": {
+   "/api/money/assistant-requests": {
+    "requests": [
+     {
+      "id": "ar_plan",
+      "kind": "plan",
+      "assistant": "Claude",
+      "created_at": "2026-10-22T09:40:00Z",
+      "status": "pending_confirmation",
+      "details": {
+       "id": "rpp_kite",
+       "status": "awaiting_signature",
+       "created_at": "2026-10-22T09:40:00Z",
+       "mandate": {
+        "id": "pm_plan",
+        "canonical": "{\"id\":\"pm_plan\",\"clients\":[\"schedule:rpp_kite\"],\"scope\":{\"payees\":[\"payee_kite\",\"payee_northwind\"],\"currencies\":[\"USD\"]},\"limits\":{\"per_payment\":{\"USD\":45000},\"per_month\":{\"USD\":63000}},\"new_payee\":{\"policy\":\"always_ask\"},\"expires_at\":\"2027-10-22T00:00:00Z\"}",
+        "challenge": "Y2gx",
+        "credential_ids": [
+         "Y3JlZF9tYWM"
+        ]
+       },
+       "schedules": [
+        {
+         "id": "sch_kite",
+         "from_agent_id": "",
+         "to_agent_id": "",
+         "to_payee_id": "payee_kite",
+         "amount_minor": 45000,
+         "currency": "USD",
+         "amount_ulxc": 0,
+         "every": "month",
+         "next_run_at": "2026-11-01T09:00:00Z",
+         "active": false,
+         "created_at": "2026-10-22T09:40:00Z"
+        },
+        {
+         "id": "sch_northwind",
+         "from_agent_id": "",
+         "to_agent_id": "",
+         "to_payee_id": "payee_northwind",
+         "amount_minor": 18000,
+         "currency": "USD",
+         "amount_ulxc": 0,
+         "every": "month",
+         "next_run_at": "2026-11-01T09:00:00Z",
+         "active": false,
+         "created_at": "2026-10-22T09:40:00Z"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/money/plans/ar_plan",
+  "screen": "w-recurring-plan",
+  "answers": {
+   "/api/money/assistant-requests": {
+    "requests": [
+     {
+      "id": "ar_plan",
+      "kind": "plan",
+      "assistant": "Claude",
+      "created_at": "2026-10-22T09:40:00Z",
+      "status": "signed",
+      "details": {
+       "id": "rpp_kite",
+       "status": "signed",
+       "created_at": "2026-10-22T09:40:00Z",
+       "mandate": {
+        "id": "pm_plan",
+        "canonical": "{\"id\":\"pm_plan\",\"clients\":[\"schedule:rpp_kite\"],\"scope\":{\"payees\":[\"payee_kite\",\"payee_northwind\"],\"currencies\":[\"USD\"]},\"limits\":{\"per_payment\":{\"USD\":45000},\"per_month\":{\"USD\":63000}},\"new_payee\":{\"policy\":\"always_ask\"},\"expires_at\":\"2027-10-22T00:00:00Z\"}",
+        "challenge": "Y2gx",
+        "credential_ids": [
+         "Y3JlZF9tYWM"
+        ]
+       },
+       "schedules": [
+        {
+         "id": "sch_kite",
+         "from_agent_id": "",
+         "to_agent_id": "",
+         "to_payee_id": "payee_kite",
+         "amount_minor": 45000,
+         "currency": "USD",
+         "amount_ulxc": 0,
+         "every": "month",
+         "next_run_at": "2026-11-01T09:00:00Z",
+         "active": true,
+         "created_at": "2026-10-22T09:40:00Z"
+        },
+        {
+         "id": "sch_northwind",
+         "from_agent_id": "",
+         "to_agent_id": "",
+         "to_payee_id": "payee_northwind",
+         "amount_minor": 18000,
+         "currency": "USD",
+         "amount_ulxc": 0,
+         "every": "month",
+         "next_run_at": "2026-11-01T09:00:00Z",
+         "active": true,
+         "created_at": "2026-10-22T09:40:00Z"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "state": {
+   "rp": 1
+  }
+ },
+ {
+  "route": "/money/plans/ar_plan",
+  "screen": "w-recurring-plan",
+  "answers": {
+   "/api/money/assistant-requests": {
+    "requests": [
+     {
+      "id": "ar_plan",
+      "kind": "plan",
+      "assistant": "Claude",
+      "created_at": "2026-10-22T09:40:00Z",
+      "status": "pending_confirmation",
+      "details": {
+       "id": "rpp_kite",
+       "status": "awaiting_signature",
+       "created_at": "2026-10-22T09:40:00Z",
+       "mandate": {
+        "id": "pm_plan",
+        "canonical": "{\"id\":\"pm_plan\",\"clients\":[\"schedule:rpp_kite\"],\"scope\":{\"payees\":[\"payee_kite\",\"payee_northwind\"],\"currencies\":[\"USD\"]},\"limits\":{\"per_payment\":{\"USD\":45000},\"per_month\":{\"USD\":63000}},\"new_payee\":{\"policy\":\"always_ask\"},\"expires_at\":\"2027-10-22T00:00:00Z\"}",
+        "challenge": "Y2gx",
+        "credential_ids": [
+         "Y3JlZF9tYWM"
+        ]
+       },
+       "schedules": [
+        {
+         "id": "sch_kite",
+         "from_agent_id": "",
+         "to_agent_id": "",
+         "to_payee_id": "payee_kite",
+         "amount_minor": 45000,
+         "currency": "USD",
+         "amount_ulxc": 0,
+         "every": "month",
+         "next_run_at": "2026-11-01T09:00:00Z",
+         "active": false,
+         "created_at": "2026-10-22T09:40:00Z"
+        },
+        {
+         "id": "sch_northwind",
+         "from_agent_id": "",
+         "to_agent_id": "",
+         "to_payee_id": "payee_northwind",
+         "amount_minor": 18000,
+         "currency": "USD",
+         "amount_ulxc": 0,
+         "every": "month",
+         "next_run_at": "2026-11-01T09:00:00Z",
+         "active": false,
+         "created_at": "2026-10-22T09:40:00Z"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "/api/money/assistant-requests/ar_plan/dismiss": {}
+  },
+  "steps": [
+   "Decline"
+  ],
+  "state": {
+   "rp": 2
+  }
+ }
+]
