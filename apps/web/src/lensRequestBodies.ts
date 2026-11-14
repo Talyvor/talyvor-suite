@@ -1221,6 +1221,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payments", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensMoneyPaymentBody",
   },
+  // B59.19 — Instant transfer on the web: the quote, then the send from an agent's account (Lens B59.14, B59.15).
+  {
+    route: "POST /v1/workspaces/{wsID}/money/instant-transfers/quote",
+    file: "apps/bff/instant_transfer.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleInstantTransferQuote(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/instant_transfer_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/money/instant-transfers/quote", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensInstantQuoteBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/money/instant-transfers",
+    file: "apps/bff/instant_transfer.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleInstantTransferSend(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/instant_transfer_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/money/instant-transfers", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensInstantSendBody",
+  },
   {
     route: "POST /v1/money/mandates",
     file: "apps/bff/money_pay.go",

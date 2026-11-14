@@ -62,6 +62,8 @@ export const SHOT_ROUTES: Record<string, string> = {
   '/money/pay/standing-orders': '/money/pay/standing-orders',
   '/money/pay/mandates': '/money/pay/mandates',
   '/money/pay/bulk-payouts': '/money/pay/bulk-payouts',
+  '/money/pay/instant-transfer': '/money/pay/instant-transfer',
+  '/money/pay/instant-transfer/:id': '/money/pay/instant-transfer/itr_sample',
   '/money/pay/bills': '/money/pay/bills',
   '/money/plans/:id': '/money/plans/rpl_sample',
   '/money/subscriptions': '/money/subscriptions',
