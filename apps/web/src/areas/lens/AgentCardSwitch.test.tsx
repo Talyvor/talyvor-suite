@@ -74,7 +74,7 @@ afterEach(() => {
 describe('the agent card', () => {
   it('shows the balance, safe to spend, the month against its budget and the pace above it, and pauses at once', async () => {
     const { sent } = mockBff()
-    window.history.pushState({}, '', '/')
+    window.history.pushState({}, '', '/agents')
     render(<App />)
 
     const card = await screen.findByTestId('agent-card-agt_1')
@@ -91,14 +91,18 @@ describe('the agent card', () => {
 
   it('resuming while every agent is paused says it waits for every agent, and says so again after', async () => {
     const { sent } = mockBff({ allPaused: true, paused: true })
-    window.history.pushState({}, '', '/')
+    window.history.pushState({}, '', '/agents/agt_2')
     render(<App />)
 
     const writer = await screen.findByTestId('agent-card-agt_2')
     expect(within(writer).getByText('Paused with every agent.')).toBeInTheDocument()
     expect(within(writer).getByRole('switch', { name: 'Start every agent again' })).toBeInTheDocument()
 
-    fireEvent.click(within(screen.getByTestId('agent-card-agt_1')).getByRole('switch', { name: 'Resume Researcher' }))
+    // B57.18 — each agent's card is on its own page now that Home draws a table of the agents.
+    cleanup()
+    window.history.pushState({}, '', '/agents/agt_1')
+    render(<App />)
+    fireEvent.click(within(await screen.findByTestId('agent-card-agt_1')).getByRole('switch', { name: 'Resume Researcher' }))
     const dialog = await screen.findByRole('dialog', { name: 'Resume Researcher?' })
     expect(dialog).toHaveTextContent('Every agent is paused too, so Researcher waits until you start every agent again.')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Resume with your passkey' }))
