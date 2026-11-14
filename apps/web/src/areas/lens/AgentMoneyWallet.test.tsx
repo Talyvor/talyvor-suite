@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
+import { AppMoney } from './money'
 import type { Agent } from './agentBankApi'
 
 // B46.9 — the agent's wallet on the money layer: its balance, how to add money (an address with its QR code, or an IBAN
@@ -39,9 +40,13 @@ function mockBff(wallet: unknown) {
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter>
-        <AgentMoneyWalletCard agent={AGENT} />
-      </MemoryRouter>
+      <AppMoney>
+        <MemoryRouter>
+          <div data-design="pocket">
+            <AgentMoneyWalletCard agent={AGENT} />
+          </div>
+        </MemoryRouter>
+      </AppMoney>
     </QueryClientProvider>,
   )
   return { sent, writeText }
@@ -56,7 +61,7 @@ describe('the agent’s money-layer wallet', () => {
   it('on the sandbox shows the balance, no details and no notice, nothing to copy, and a send goes to approval', async () => {
     const { sent } = mockBff(SANDBOX)
     const card = await screen.findByTestId('agent-money-wallet')
-    await within(card).findByText('2.50 USDC')
+    await within(card).findByText(/^2\.50\sUSDC$/)
     expect(within(card).getByTestId('wallet-no-details').textContent).toBe('Researcher’s wallet has no details to pay into yet.')
     expect(within(card).queryByText('0xsandbox')).toBeNull()
     expect(within(card).queryByRole('button', { name: /copy/i })).toBeNull()
