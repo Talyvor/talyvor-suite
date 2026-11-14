@@ -107,10 +107,16 @@ describe('plain-language mode (B41.40)', () => {
     expect(await critical()).toEqual([])
     cleanup()
 
-    window.history.pushState({}, '', '/approvals')
+    // B57.17 — the inbox that explains its words is Agent Wallets'; Approvals is held to the same accessibility.
+    window.history.pushState({}, '', '/agents')
     render(<App />)
     const ask = await screen.findByRole('button', { name: 'What does “Waiting for a person” mean?' })
     expect(explain(ask)).toMatch(/Nothing moves until you approve/)
+    cleanup()
+
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+    await screen.findByRole('group', { name: 'Waiting for you' })
     expect(await critical()).toEqual([])
   })
 })

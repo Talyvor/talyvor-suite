@@ -24,7 +24,6 @@ export const POCKET_PENDING: readonly string[] = [
   '/docs/s/:token',
   // The console.
   '/',
-  '/approvals',
   '/statements',
   '/overview',
   '/ledger',

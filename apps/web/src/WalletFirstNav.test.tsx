@@ -125,10 +125,12 @@ describe('the navigation is wallet-first (B28.7)', () => {
     const nav = await sidebarAt('/approvals')
     await within(nav).findByRole('link', { name: 'Approvals 3 waiting' })
     const main = within(screen.getByRole('main'))
-    await waitFor(() => expect(main.getAllByRole('button', { name: 'Approve' })).toHaveLength(3))
-    fireEvent.click(main.getAllByRole('button', { name: 'Approve' })[0])
+    // B57.17 — each opens its sheet with Review; the sheet approves it.
+    await waitFor(() => expect(main.getAllByRole('link', { name: 'Review' })).toHaveLength(3))
+    fireEvent.click(main.getAllByRole('link', { name: 'Review' })[0])
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
     await within(nav).findByRole('link', { name: 'Approvals 2 waiting' })
-    expect(main.getAllByRole('button', { name: 'Approve' })).toHaveLength(2)
+    await waitFor(() => expect(main.getAllByRole('link', { name: 'Review' })).toHaveLength(2))
   })
 
   it('B28.45 — an approval an agent files while the page is open reaches the badge on its own', async () => {
@@ -185,7 +187,7 @@ describe('the navigation is wallet-first (B28.7)', () => {
     fireEvent.click(link)
     expect(window.location.pathname).toBe('/approvals')
     const main = within(screen.getByRole('main'))
-    await waitFor(() => expect(main.getAllByRole('button', { name: 'Decline' })).toHaveLength(2))
+    await waitFor(() => expect(main.getAllByRole('link', { name: 'Review' })).toHaveLength(2))
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Approvals')
   })
 })
