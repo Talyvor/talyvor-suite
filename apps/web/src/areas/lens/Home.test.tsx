@@ -420,6 +420,10 @@ describe('Home — the agents and the cards (B57.18)', () => {
     const buyer = screen.getByTestId('home-agent-agt_2')
     expect(buyer).toHaveTextContent('No account')
     expect(within(buyer).getByRole('link', { name: 'Set a budget' })).toHaveAttribute('href', '/agents/agt_2/rules')
+    // B57.114 — the day each agent runs out, in its own zone, or that it does not at this pace.
+    expect(within(researcher).getByTestId('home-runs-out-agt_1')).toHaveTextContent('runs out on 28 October 2026 (Australia/Sydney)')
+    expect(within(researcher).getByText('28 October 2026')).toHaveAttribute('dateTime', '2026-10-28')
+    expect(within(buyer).getByTestId('home-runs-out-agt_2')).toHaveTextContent('does not run out at this pace')
 
     // The cards: the company's own, then each agent's that Lens issued.
     const cards = within(await screen.findByTestId('home-card-list'))

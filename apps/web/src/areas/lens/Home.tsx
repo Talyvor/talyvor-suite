@@ -30,6 +30,7 @@ import { cardKey } from './AgentCardPanel'
 import { FirstAgent, NameWorkspace } from './Onboarding'
 import { TalyvorCard } from '../../cards/TalyvorCard'
 import { AgentCard as AgentCardFace } from '../../cards/AgentCard'
+import { RunsOut } from './RunsOut'
 import { OWNER_HOLDER, OWNER_SUB, ownerFamily, useOwnerFace } from '../../cards/ownerCard'
 import { IfArea } from '../../lib/workspaceAreas'
 import { SharingLine } from './Sharing'
@@ -741,15 +742,19 @@ function Month({
   if (forecast.isError || rules.isError) return <InlineFailure error={forecast.error ?? rules.error} className="text-body text-ink-3" />
   if (!forecast.data || !rules.data) return <span className="text-body text-ink-3">Reading…</span>
   // Lens's forecast lists every agent in the workspace; one created since it was read has spent nothing.
-  const spent = (forecast.data.agents ?? []).find((f) => f.agent_id === agent.id)?.spent_ulxc ?? 0
+  const month = (forecast.data.agents ?? []).find((f) => f.agent_id === agent.id)
+  const spent = month?.spent_ulxc ?? 0
   const limit = rules.data.monthly_limit_ulxc
   const text = (u: number) => <Money ulxc={u} />
+  // B57.114 — the day it runs out in its own zone, under its month.
+  const runsOut = <RunsOut forecast={month} testid="home-runs-out" />
   if (!(limit > 0))
     return (
       <span className="grid text-body text-ink-3">
         <span>
           {text(spent)} spent
         </span>
+        {runsOut}
         <Link to={`/agents/${encodeURIComponent(agent.id)}/rules`} className={inlineLink}>
           Set a budget
         </Link>
@@ -772,6 +777,7 @@ function Month({
           </Chip>
         ) : null}
       </span>
+      {month?.runs_out_on !== undefined ? <span className="text-body text-ink-3">{runsOut}</span> : null}
     </span>
   )
 }

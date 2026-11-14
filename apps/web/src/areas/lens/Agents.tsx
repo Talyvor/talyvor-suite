@@ -10,6 +10,7 @@ import { planName, usePricing } from '../marketing/pricingApi'
 import { BOOK_KEY, rulesKey } from './AgentBank'
 import { AgentCard } from './AgentCard'
 import { AgentFace } from './AgentFace'
+import { AlertChannelsCard } from './AlertChannelsCard'
 import { LimitAlertsCard } from './LimitAlertsCard'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
 import { type Agent, type WorkspacePlan, AgentBankError, PLAN_KEY, agentBankApi, readWorkspacePlan, refusalText } from './agentBankApi'
@@ -19,7 +20,7 @@ import { type Agent, type WorkspacePlan, AgentBankError, PLAN_KEY, agentBankApi,
 // which Lens keeps as an agent account but which takes none of the plan's agent places. New agent says the plan's limit
 // before you try (GET /api/plan, as Home's "2 of 3 on Free" reads it); below it, the create form. Lens still decides:
 // a 402 it answers anyway reads in words from its plan, gate, limit and allows fields, never its sentence. Below the room's
-// wallet, Limit alerts (B57.90).
+// wallet, Limit alerts (B57.90), and below them Where alerts go (B57.115).
 
 /** "Research", "Research and Sales", "Research, Sales and Ops". */
 function namesLine(names: string[]): string {
@@ -320,6 +321,7 @@ function AgentsList() {
       </IfArea>
 
       {book.data ? <LimitAlertsCard nameOf={(id) => all.find((a) => a.id === id)?.name ?? 'an agent'} /> : null}
+      {book.data ? <AlertChannelsCard /> : null}
 
       {archived.length > 0 ? (
         <p className="text-body text-ink-3" data-testid="agents-archived">

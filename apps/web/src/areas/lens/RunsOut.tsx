@@ -10,11 +10,11 @@ type AgentForecast = NonNullable<SpendForecast['agents']>[number]
 const DAY = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 
 /** "runs out on 14 April 2026 (Australia/Sydney)", or "does not run out at this pace"; nothing when Lens has not said. */
-export function RunsOut({ forecast }: { forecast: AgentForecast | undefined }) {
+export function RunsOut({ forecast, testid = 'runs-out' }: { forecast: AgentForecast | undefined; testid?: string }) {
   if (forecast === undefined || forecast.runs_out_on === undefined) return null
-  if (forecast.runs_out_on === null) return <span data-testid={`runs-out-${forecast.agent_id}`}>does not run out at this pace</span>
+  if (forecast.runs_out_on === null) return <span data-testid={`${testid}-${forecast.agent_id}`}>does not run out at this pace</span>
   return (
-    <span data-testid={`runs-out-${forecast.agent_id}`}>
+    <span data-testid={`${testid}-${forecast.agent_id}`}>
       runs out on{' '}
       <time dateTime={forecast.runs_out_on} className="font-figure">
         {DAY.format(Date.parse(`${forecast.runs_out_on}T00:00:00Z`))}
