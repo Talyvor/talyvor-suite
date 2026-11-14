@@ -169,7 +169,7 @@ describe('Home — the 30-second daily briefing (B41.6)', () => {
       '0.03 LXC was paid to Writer',
       '0.045 LXC was paid to Writer',
     ])
-    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/approvals#approval-apr_1')
+    expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/?approval=apr_1')
     // It sits above the approvals card, the first thing on Home.
     const waiting = screen.getByRole('heading', { name: /^Waiting for you/ })
     expect(screen.getByTestId('home-briefing').compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -254,7 +254,7 @@ describe('Home — the wallet home (B28.6)', () => {
     expect(await screen.findByTestId('home-approvals-waiting')).toHaveTextContent('2')
     const approvals = screen.getByTestId('home-approvals')
     const links = within(approvals).getAllByRole('link')
-    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/approvals#approval-apr_1', '/approvals#approval-apr_2'])
+    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/?approval=apr_1', '/?approval=apr_2'])
     expect(links[0]).toHaveTextContent(/Researcher.*2 LXC/)
 
     // One total: what the agents hold together (6 + 10), and what the workspace has not given out.

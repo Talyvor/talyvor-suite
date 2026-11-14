@@ -23,6 +23,7 @@ import { HelperPicker } from '../../cards/HelperPicker'
 import { categoryWords } from './Budgets'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { DeclineForm, declinedText } from './Decline'
+import { approvalSheetTo } from './ApprovalSheet'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
 import { Lxc, useLxcText } from './money'
@@ -2721,7 +2722,8 @@ export function Approvals({
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const swipeFrom = useRef<{ id: string; x: number; y: number } | null>(null)
   // B45.11 — Home links each approval to its card here, /approvals#approval-<id>: once the list is read, that card has focus.
-  const { hash } = useLocation()
+  const location = useLocation()
+  const { hash } = location
   useEffect(() => {
     if (list.isSuccess && hash.startsWith('#approval-')) document.getElementById(hash.slice(1))?.focus()
   }, [list.isSuccess, hash])
@@ -2986,6 +2988,10 @@ export function Approvals({
                     <DeclineForm disabled={busy} onDecline={(reason) => decide.mutate({ a, decision: 'deny', reason })} onCancel={() => setDeclining(null)} />
                   ) : (
                   <div className="flex w-full flex-col gap-2 wide:w-auto wide:flex-row wide:items-center">
+                    {/* B57.15 — Review opens the approval sheet over this page, with what pays it and the budget left after. */}
+                    <Button asChild className="h-12 w-full wide:h-8 wide:w-auto">
+                      <Link to={approvalSheetTo(location, a.id)}>Review</Link>
+                    </Button>
                     {/* B17.325 — one teal action per screen: the first waiting request's Approve, or Approve {n} once some are picked. */}
                     <Button
                       variant={primary && i === 0 && chosen.length === 0 ? 'primary' : 'default'}
@@ -2993,7 +2999,7 @@ export function Approvals({
                       disabled={busy}
                       onClick={() => decide.mutate({ a, decision: 'approve' })}
                     >
-                      {signed ? 'Approve with Face ID' : 'Approve'}
+                      {signed ? 'Approve with your passkey' : 'Approve'}
                     </Button>
                     <Button className="h-12 w-full wide:h-8 wide:w-auto" disabled={busy} onClick={() => setDeclining(a.id)}>
                       Decline

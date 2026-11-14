@@ -681,6 +681,24 @@ export interface AgentApproval {
   expires_at?: string
   /** The approver agent that approved it within its own limits (Lens B45.28); none when a person decided. */
   approved_by_agent_id?: string
+  /** B57.15 — what pays it, with its balance now (Lens B57.11); null on one filed before Lens kept it. */
+  paid_from?: ApprovalPaidFrom | null
+  /** The approval amount it was above, and the month's budget left after it (null with no monthly limit) (Lens B57.11). */
+  asks_above_ulxc?: number | null
+  budget_left_after_ulxc?: number | null
+}
+
+/** Lens economy.PaidFrom: the agent's LXC, one of its accounts, the monthly marketplace bill or its card. */
+export interface ApprovalPaidFrom {
+  kind: 'lxc' | 'account' | 'marketplace_bill' | 'card'
+  account_id: string
+  /** In words, as the sheet shows it: "Research’s US dollar account". */
+  name: string
+  currency: string
+  /** The amount in that one's currency (µLXC for lxc). */
+  amount_minor: number
+  /** Its balance now, in the same units; none for the bill or a card. */
+  balance_minor: number | null
 }
 
 /** Every kind of agent_postings row Lens writes on an agent's account. */

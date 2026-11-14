@@ -62,17 +62,25 @@ const SAMPLE: Record<string, unknown> = {
     spent_ulxc: lxc(28_000),
     agents: AGENTS,
   },
+  // B57.15 — the workspace's keys, as the sheet reads them: a passkey on this browser and the phone's key, so it signs here.
+  '/api/agents/passkeys': { passkeys: [{ credential_id: 'Y3JlZF9tYWM', name: 'This Mac', created_at: '2026-10-03T08:00:00Z' }] },
+  '/api/money/devices': { devices: [{ id: 'dk_iphone', name: 'iPhone, Talyvor app', created_at: '2026-10-04T09:00:00Z' }] },
   // The two requests waiting at 10:30.
   '/api/agents/approvals': {
     approvals: [
       {
         id: 'apr_acme', agent_id: 'agt_research', amount_ulxc: lxc(3_400), model: '', status: 'pending', created_at: '2026-10-22T08:17:00Z', expires_at: '2026-10-23T08:17:00Z',
         payee: { kind: 'outside', id: 'payee_acme', name: 'Acme Hosting' }, memo: 'October hosting invoice',
+        // B57.15 — what the sheet says, as w-home+sheet-A: Lens B57.11's paid_from, the amount it asks above and the budget left.
+        paid_from: { kind: 'account', account_id: 'acc_research_usd', name: 'Research’s US dollar account', currency: 'USD', amount_minor: 34_000, balance_minor: 40_000 },
+        asks_above_ulxc: lxc(2_500), budget_left_after_ulxc: lxc(4_200),
       },
       {
         id: 'apr_lead', agent_id: 'agt_sales', amount_ulxc: lxc(900), model: '', status: 'pending', created_at: '2026-10-22T07:41:00Z', expires_at: '2026-10-23T07:41:00Z',
         payee: { kind: 'listing', id: 'lst_lead_finder', name: 'Lead finder' },
         memo: 'One use of Lead finder (version 3), $90.00 (900 LXC) on your monthly marketplace bill',
+        paid_from: { kind: 'marketplace_bill', account_id: 'ws_1', name: 'Your monthly marketplace bill', currency: 'USD', amount_minor: 9_000, balance_minor: null },
+        asks_above_ulxc: lxc(500), budget_left_after_ulxc: lxc(3_100),
       },
     ],
   },
