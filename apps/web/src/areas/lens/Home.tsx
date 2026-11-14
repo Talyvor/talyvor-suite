@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Bar, Button, Card, Chip, EmptyState, Eyebrow, Face, Icon, Input, Money, Row, pocketFocusRing } from '@talyvor/ui/pocket'
 import { cn, focusRing, inlineLink } from '@talyvor/ui'
 import { InlineFailure } from '../../components/SessionExpiredBar'
-import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, PREPARED_KEY, PreparedRow, rulesKey } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, MANDATE_REQUESTS_KEY, PREPARED_KEY, PreparedRow, rulesKey } from './AgentBank'
 import {
   type Agent,
   type AgentApproval,
@@ -143,6 +143,8 @@ export function Home() {
   const forecast = useQuery({ queryKey: FORECAST_KEY, queryFn: agentBankApi.forecast })
   const approvals = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
+  // B55.40 — an agent's mandate request waits on Approvals too, so Home counts it and opens it there.
+  const mandates = useQuery({ queryKey: MANDATE_REQUESTS_KEY, queryFn: agentBankApi.requestedMandates })
   const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
   const { account, shows } = useAccount()
   // B28.8 — the first agent made here keeps its onboarding open after the book lists it, until the person is done with it.
@@ -153,7 +155,8 @@ export function Home() {
   const pending = (approvals.data?.approvals ?? []).filter((a) => a.status === 'pending')
   const requests = prepared.data?.requests ?? []
   const waitingKnown = approvals.isSuccess && prepared.isSuccess
-  const waiting = pending.length + requests.length
+  const asked = (mandates.data?.granted ?? []).filter((m) => m.status === 'requested').length
+  const waiting = pending.length + requests.length + asked
 
   // A Personal account's name is the person's own (sign-up step 1); a Business's is the company's, so it greets by the
   // time of day alone.
@@ -406,10 +409,10 @@ function Waiting({
           <RequestRow key={a.id} a={a} agent={agents.find((x) => x.id === a.agent_id)} />
         ))}
       </div>
-      {count > WAITING_SHOWN ? (
+      {count > preparedShown.length + requestsShown.length ? (
         <p className="border-t border-line pt-3 text-body">
           <Link to="/approvals" className={inlineLink}>
-            {count - WAITING_SHOWN} more waiting
+            {count - preparedShown.length - requestsShown.length} more waiting
           </Link>
         </p>
       ) : null}

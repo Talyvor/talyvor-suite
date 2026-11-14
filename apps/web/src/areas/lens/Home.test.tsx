@@ -47,6 +47,7 @@ function mockBff({
   briefing = QUIET,
   workspaceName = 'Acme',
   prepared = [],
+  mandates = [],
   account = { account_type: 'business', money_kind: 'hybrid' },
   accounts = [],
   wallets = {},
@@ -58,6 +59,7 @@ function mockBff({
   briefing?: typeof QUIET | typeof BUSY | typeof PREPARED_BRIEFING
   workspaceName?: string
   prepared?: object[]
+  mandates?: object[]
   account?: { account_type: string; money_kind: string }
   accounts?: object[]
   wallets?: Record<string, number>
@@ -120,6 +122,7 @@ function mockBff({
       })
     if (url === '/api/agents/briefing') return json(briefing)
     if (url === '/api/money/payment-requests?status=pending_approval') return json({ requests: prepared })
+    if (url === '/api/money/mandates?status=requested') return json({ granted: mandates, received: [] })
     if (url === '/api/workspace/name' && init?.method === 'PUT') {
       workspaceName = JSON.parse(String(init.body)).name
       writes.push(`PUT ${url} ${init.body}`)
@@ -302,6 +305,14 @@ describe('Home — waiting for your yes (B57.18)', () => {
     await waitFor(() => expect(screen.getByTestId('home-status')).toHaveTextContent('3 things are waiting for you.'))
     const rows = screen.getByTestId('home-approvals').querySelectorAll('[data-prepared], [data-approval]')
     expect([...rows].map((r) => r.getAttribute('data-prepared') ?? r.getAttribute('data-approval'))).toEqual(['preq_1', 'apr_1', 'apr_2'])
+  })
+
+  it('counts an agent’s mandate request as Approvals does (B55.40), and opens it there', async () => {
+    mockBff({ agents: AGENTS, mandates: [{ id: 'mdt_1', status: 'requested' }, { id: 'mdt_2', status: 'active' }] })
+    render(<App />)
+    expect(await screen.findByTestId('home-approvals-waiting')).toHaveTextContent('3')
+    await waitFor(() => expect(screen.getByTestId('home-status')).toHaveTextContent('3 things are waiting for you.'))
+    expect(screen.getByRole('link', { name: '1 more waiting' })).toHaveAttribute('href', '/approvals')
   })
 
   it('with nothing waiting there is no card: You’re all caught up, and See what you decided', async () => {
