@@ -62,7 +62,6 @@ export const POCKET_PENDING: readonly string[] = [
   '/scan/agents',
   '/scan/track-record',
   '/money/spending',
-  '/approve/:id',
   '/features',
   '/features/try/tare',
   '/features/try/conversion',

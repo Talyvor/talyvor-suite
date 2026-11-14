@@ -192,9 +192,9 @@ export function billsPayAllDue(): Scenario {
         const head = await page.getByTestId('approve-total').innerText()
         if (!head.includes('3 of 3 payments to approve, total £465.50')) return fail(`the approval card reads "${head}", not "3 of 3 payments to approve, total £465.50"`)
         for (const b of bills) {
-          if (!words.includes(b.supplier) || !words.includes(`Reference: ${b.number}`)) return fail(`the approval card does not show ${b.supplier} with reference ${b.number}: "${words.slice(0, 400)}"`)
+          if (!words.includes(b.supplier) || !words.includes(`Reference ${b.number}`)) return fail(`the approval card does not show ${b.supplier} with reference ${b.number}: "${words.slice(0, 400)}"`)
         }
-        if (!(await card.getByRole('button', { name: 'Approve 3 payments with a passkey' }).isVisible())) return fail('the approval card has no "Approve 3 payments with a passkey" button')
+        if (!(await card.getByRole('button', { name: 'Approve 3 payments with your passkey' }).isVisible())) return fail('the approval card has no "Approve 3 payments with your passkey" button')
         ctx.evidence.push({ note: `the one approval card, ${await screenshots(ctx, page, 'bills-pay-card')}` })
       } finally {
         await page.close()
@@ -385,20 +385,21 @@ export function billsDuplicateChangedDetails(): Scenario {
         const head = await page.getByTestId('approve-total').innerText()
         if (!head.includes('2 of 2 payments to approve, total £339.99')) return fail(`the approval card reads "${head}", not "2 of 2 payments to approve, total £339.99"`)
         for (const b of bills) {
-          if (!words.includes(b.supplier) || !words.includes(`Reference: ${b.number}`)) return fail(`the approval card does not show ${b.supplier} with reference ${b.number}: "${words.slice(0, 400)}"`)
+          if (!words.includes(b.supplier) || !words.includes(`Reference ${b.number}`)) return fail(`the approval card does not show ${b.supplier} with reference ${b.number}: "${words.slice(0, 400)}"`)
         }
         // B41.3 — each risk its own flag on its item, and the changed details hold the button until a reason is given. A Pill
         // shows its label in capitals, so innerText is read lower-cased.
         for (const [position, code, label] of [[1, 'first_payment', 'First payment'], [2, 'first_payment', 'First payment'], [2, 'bank_details_changed', 'Bank details changed']] as const) {
           const item = page.getByTestId(`approve-item-${position}`)
-          const flagged = (await item.getByTestId(`approve-flag-${position}-${code}`).count()) === 1 && (await item.innerText()).toLowerCase().includes(label.toLowerCase())
+          // B57.27 — a first payment is said in its To line alone; every other flag also has its own line.
+          const flagged = (code === 'first_payment' || (await item.getByTestId(`approve-flag-${position}-${code}`).count()) === 1) && (await item.innerText()).toLowerCase().includes(label.toLowerCase())
           if (!flagged) return fail(`item ${position} of the approval card does not show "${label}" (${code}): "${(await item.innerText()).replace(/\s+/g, ' ').slice(0, 300)}"`)
         }
         if ((await page.getByTestId('approve-item-1').innerText()).toLowerCase().includes('bank details changed')) return fail('the first bill, paid to its saved details, is flagged "Bank details changed" on the card')
-        const button = page.getByRole('button', { name: 'Approve 2 payments with a passkey' })
-        if (!(await button.isDisabled())) return fail('with the changed bank details ticked and no reason given, "Approve 2 payments with a passkey" can be pressed')
+        const button = page.getByRole('button', { name: 'Approve 2 payments with your passkey' })
+        if (!(await button.isDisabled())) return fail('with the changed bank details ticked and no reason given, "Approve 2 payments with your passkey" can be pressed')
         await page.getByRole('textbox', { name: /Say why you are paying it/ }).fill('The nightly checked the new details with the supplier.')
-        if (await button.isDisabled()) return fail('with a reason given, "Approve 2 payments with a passkey" still cannot be pressed')
+        if (await button.isDisabled()) return fail('with a reason given, "Approve 2 payments with your passkey" still cannot be pressed')
         ctx.evidence.push({ note: `the one approval card, ${await screenshots(ctx, page, 'bills-changed-details-card')}` })
       } finally {
         await page.close()

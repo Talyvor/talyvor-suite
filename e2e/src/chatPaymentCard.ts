@@ -162,9 +162,9 @@ export function chatPaymentCard(): Scenario {
         seen.card = {
           payee: seen.text.includes(payee),
           amount: seen.text.includes(AMOUNT),
-          reference: seen.text.includes(`Reference: ${reference}`),
+          reference: seen.text.includes(`Reference${reference}`),
           rule: rule?.[1] === RULE,
-          approve: await card.getByRole('button', { name: 'Approve 1 payment with a passkey' }).isVisible(),
+          approve: await card.getByRole('button', { name: 'Approve 1 payment with your passkey' }).isVisible(),
           decline: await card.getByRole('button', { name: 'Decline', exact: true }).isVisible(),
         }
         ctx.evidence.push({ note: 'the card under the answer', answer: seen.text })
