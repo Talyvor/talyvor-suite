@@ -181,7 +181,7 @@ const BODIES: Record<string, unknown> = {
   '/api/workspace/name': { id: 'ws_1', name: 'Acme' },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
   // B57.18 — Home's "2 of 3 on Free" (Lens's plan through GET /api/plan), and the ECB's rates its total is valued at.
-  '/api/plan': { plan: 'free', agents: 3, agents_used: 2 },
+  '/api/plan': { plan: 'free', agents: 3, agents_used: 2, seats: 1 },
   '/api/fx': { rate_date: '2026-10-09', usd_per_eur: 1.17, gbp_per_eur: 0.86 },
   // B59.31 — Settings → Company details, as a company with two people with control.
   '/api/workspace/business': {

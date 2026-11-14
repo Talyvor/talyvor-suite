@@ -38,6 +38,7 @@ import { Setup } from './areas/lens/Setup'
 import { Spend } from './areas/lens/Spend'
 import { Members } from './areas/lens/Members'
 import { Settings, TeamOnly } from './areas/lens/Sharing'
+import { WELCOME_PATH, Welcome, WelcomeRedirect } from './areas/auth/Welcome'
 import { CloseAccountScreen, HelpScreen, YourDataScreen } from './areas/lens/HelpAndAccount'
 import { CompanyDetailsScreen } from './areas/lens/CompanyDetails'
 import { SignedInFooter } from './components/HelpLinks'
@@ -486,7 +487,12 @@ function Palette({ pages, trigger }: { pages: PalettePage[]; trigger: (open: () 
   return <CommandPalette pages={offered} trigger={trigger} />
 }
 
+/** B57.50 — behind the gate: a new workspace's first page in its own layout, and every other address in the console's shell. */
 function AppShell() {
+  return useLocation().pathname === WELCOME_PATH ? <Welcome /> : <ConsoleShell />
+}
+
+function ConsoleShell() {
   const { pathname } = useLocation()
   const operator = useAuthMeReader().data?.operator === true
   // B59.2 — and no page of an area this workspace does not have.
@@ -501,8 +507,11 @@ function AppShell() {
   // B47.2 — Chat has the whole page: the suite's sidebar waits off to the left until Menu asks for it.
   const chat = pathname === '/chat' || pathname.startsWith('/chat/')
   return (
-    // B57.8 — Pocket's shell: the sidebar, the top bar, the kill banner and the page's heading. B57.9 drew the ⌘K bar;
-    // Taly and the theme switch are still today's design until B57.159 and B57.42 draw them, and carry their own marker.
+    <>
+    {/* B57.50 — an unnamed workspace's first page in a tab is /welcome. */}
+    <WelcomeRedirect />
+    {/* B57.8 — Pocket's shell: the sidebar, the top bar, the kill banner and the page's heading. B57.9 drew the ⌘K bar;
+        Taly and the theme switch are still today's design until B57.159 and B57.42 draw them, and carry their own marker. */}
     <div className="contents" data-design="pocket">
     <PocketShell
       drawer={chat}
@@ -620,6 +629,7 @@ function AppShell() {
       <ApprovalSheetHost />
     </PocketShell>
     </div>
+    </>
   )
 }
 

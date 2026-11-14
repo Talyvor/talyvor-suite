@@ -172,7 +172,8 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // a NEW FILE that Spend.tsx renders, so `grep -c '<CardHeader' Spend.tsx` reads 2 before and
   // after and would have argued the opposite.
   '/spend': 5,
-  '/members': 1,
+  // 1 → 0 at B57.44: drawn in Pocket, a white card of members with no header.
+  '/members': 0,
   '/operator': 0,
   '/operator/tax': 0,
   '/operator/compliance': 0,

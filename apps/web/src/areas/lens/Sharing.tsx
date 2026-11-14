@@ -50,21 +50,15 @@ async function savePooling(cachePoolable: boolean): Promise<void> {
 }
 
 /**
- * B57.42 — Settings' Shared answers: what sharing means, its switch, and how much is stored. The switch draws what Lens
+ * The Share my answers switch, on Settings' Shared answers and a new workspace's first page (B57.50). It draws what Lens
  * RECORDED (the session probe), never what was pressed, and re-reads it after every write; a refused write says so.
- * Every stored answer, and deleting them, is on Gateway features (StoredAnswers).
  */
-function SharedAnswersCard() {
+export function ShareMyAnswers() {
   const q = useAuthMeReader()
   const qc = useQueryClient()
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const recorded = q.data?.cache_poolable
-  const stored = useQuery({
-    queryKey: STORED_KEY,
-    queryFn: readStored,
-    retry: false,
-  })
 
   async function choose(cachePoolable: boolean) {
     setBusy(true)
@@ -79,21 +73,9 @@ function SharedAnswersCard() {
     }
   }
 
-  const s = stored.data
-  const counts = s ? (
-    <>
-      {s.shared_answers === 0 ? 'No shared answers' : <>{n(s.shared_answers)} answers shared with others</>}, and {n(s.private_answers)}{' '}
-      kept to this workspace.{' '}
-    </>
-  ) : null
   return (
-    <Card tone="white" data-testid="settings-sharing">
-      <h2 className="font-display text-reading font-bold text-ink">Shared answers</h2>
-      <p className="mt-1 text-body text-ink-2">
-        An answer made here may be served to another company asking the same, so repeated questions cost less, and you earn a small royalty
-        when it is. Your keys, balance and ledger are never shared.
-      </p>
-      <div className="mt-3 flex items-center justify-between gap-3">
+    <>
+      <div className="flex items-center justify-between gap-3">
         <span id="share-my-answers" className="text-body font-semibold text-ink">
           Share my answers
         </span>
@@ -110,6 +92,39 @@ function SharedAnswersCard() {
           That did not save, so nothing changed. You can try again.
         </p>
       ) : null}
+    </>
+  )
+}
+
+/**
+ * B57.42 — Settings' Shared answers: what sharing means, its switch, and how much is stored. The switch draws what Lens
+ * RECORDED (the session probe), never what was pressed, and re-reads it after every write; a refused write says so.
+ * Every stored answer, and deleting them, is on Gateway features (StoredAnswers).
+ */
+function SharedAnswersCard() {
+  const stored = useQuery({
+    queryKey: STORED_KEY,
+    queryFn: readStored,
+    retry: false,
+  })
+
+  const s = stored.data
+  const counts = s ? (
+    <>
+      {s.shared_answers === 0 ? 'No shared answers' : <>{n(s.shared_answers)} answers shared with others</>}, and {n(s.private_answers)}{' '}
+      kept to this workspace.{' '}
+    </>
+  ) : null
+  return (
+    <Card tone="white" data-testid="settings-sharing">
+      <h2 className="font-display text-reading font-bold text-ink">Shared answers</h2>
+      <p className="mt-1 text-body text-ink-2">
+        An answer made here may be served to another company asking the same, so repeated questions cost less, and you earn a small royalty
+        when it is. Your keys, balance and ledger are never shared.
+      </p>
+      <div className="mt-3">
+        <ShareMyAnswers />
+      </div>
       <p className="mt-2 text-body text-ink-3" data-testid="settings-stored-counts">
         {counts}Stored answers are kept until you delete them.
       </p>

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { greeting, pausedLine, planLine, waitingLine } from './Home'
 import { nameFromEmail } from './Onboarding'
+import { markWelcomed } from '../auth/Welcome'
 
 // B57.18 — Home as the launch pack's W2 draws it, with Lens's figures. The mock BFF answers the routes Home reads exactly
 // as Lens shapes them (economy.AgentBook, AgentRules, AgentApproval, SpendForecast, CurrencyAccount, the agent's wallet,
@@ -51,7 +52,7 @@ function mockBff({
   account = { account_type: 'business', money_kind: 'hybrid' },
   accounts = [],
   wallets = {},
-  plan = { plan: 'free', agents: 3, agents_used: 2 },
+  plan = { plan: 'free', agents: 3, agents_used: 2, seats: 1 },
   allPaused = false,
 }: {
   agents: Array<(typeof AGENTS)[number] & { paused_at?: string }>
@@ -175,6 +176,7 @@ afterEach(() => {
   cleanup()
   queryClient.clear()
   vi.restoreAllMocks()
+  sessionStorage.clear()
   window.history.pushState({}, '', '/')
 })
 
@@ -438,8 +440,8 @@ describe('Home — the agents and the cards (B57.18)', () => {
   })
 
   it('the plan line for a plan with no agent limit', () => {
-    expect(planLine({ plan: 'free', agents: 3, agents_used: 3 })).toBe('3 of 3 on Free')
-    expect(planLine({ plan: 'business', agents: -1, agents_used: 12 })).toBe('12 on Business')
+    expect(planLine({ plan: 'free', agents: 3, agents_used: 3, seats: 1 })).toBe('3 of 3 on Free')
+    expect(planLine({ plan: 'business', agents: -1, agents_used: 12, seats: 25 })).toBe('12 on Business')
   })
 
   it('a workspace with no agents opens Home in onboarding mode', async () => {
@@ -460,6 +462,8 @@ describe('Home — a new workspace is asked its name (B55.39)', () => {
 
   it('while the name is the id, Home asks for it first, Save name PUTs it, and the sidebar then shows it', async () => {
     const writes = mockBff({ agents: FIRST, workspaceName: 'ws_1' })
+    // B57.50 — this tab saw /welcome and pressed Go to Home with the workspace still unnamed: Home asks again.
+    markWelcomed()
     render(<App />)
 
     const card = await screen.findByTestId('name-workspace')

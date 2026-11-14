@@ -119,7 +119,7 @@ function bodyFor(url: string): unknown {
   // B57.18 — Home's balances, the Researcher's wallet and the plan.
   if (url.includes('/api/money/accounts')) return { accounts: [] }
   if (url.includes('/api/agents/agt_1/wallet')) return { account_id: 'macc_1', agent_id: 'agt_1', asset: 'USDC', partner: 'sandbox', balance_minor: 0, receive: { asset: 'USDC' }, mode: 'TEST' }
-  if (url.includes('/api/plan')) return { plan: 'free', agents: 3, agents_used: 1 }
+  if (url.includes('/api/plan')) return { plan: 'free', agents: 3, agents_used: 1, seats: 1 }
   if (url.includes('/api/agents/agt_1/rules'))
     return { max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 0, approval_above_ulxc: 0, allowed_models: null, allowed_providers: null, active_from: '', active_until: '', timezone: '' }
   if (url.includes('/api/agents'))

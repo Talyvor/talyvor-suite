@@ -61,6 +61,8 @@ describe('the remaining signed-in screens in the brand', () => {
     expect(statusWithoutWords(main).map((e) => e.outerHTML), `a status colour on ${address} without words`).toEqual([])
 
     // B57.55 — a page drawn in Pocket names itself with the kit's Eyebrow (pocket.css .eyebrow), not today's region label.
+    // B57.44 — Members is the exception: the reference draws it with the crumb Settings › Members and no eyebrow.
+    if (address === '/members') return
     const eyebrows = within(main).queryAllByTestId('region-label').length + main.querySelectorAll('.text-pocket-eyebrow').length
     expect(eyebrows, `${address} has no eyebrow`).toBeGreaterThan(0)
   })
