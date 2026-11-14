@@ -137,7 +137,7 @@
   "src/areas/lens/OperatorWorkspaces.test.tsx": 3,
   "src/areas/lens/Overview.test.tsx": 23,
   "src/areas/lens/passkeys.test.ts": 2,
-  "src/areas/lens/Pay.test.tsx": 38,
+  "src/areas/lens/Pay.test.tsx": 39,
   "src/areas/lens/PayoutDetails.test.tsx": 2,
   "src/areas/lens/PhysicalCard.test.tsx": 11,
   "src/areas/lens/PlainLanguage.test.tsx": 2,
