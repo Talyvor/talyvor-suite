@@ -211,7 +211,7 @@ export function PayScreen() {
           {askedPayees.length > 0 ? <AssistantPayees requests={askedPayees} /> : null}
           {askedMandates.length > 0 ? <AssistantMandates requests={askedMandates} payeeName={payeeName} /> : null}
           <SavedPayees payees={payees} sent={sent} payeeID={payeeID} onPick={pick} onAdd={() => setAdding(true)} />
-          <AlsoOnPay payouts={shows.payoutBatches} />
+          <AlsoOnPay payouts={shows.payoutBatches} instant={shows.instantTransfer} />
         </div>
       </div>
       <AddPayee open={adding} onClose={() => setAdding(false)} />
@@ -563,12 +563,14 @@ function PayForm({
             </PocketButton>
           </div>
         ) : keyFirst ? (
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-reading text-ink" data-testid="pay-key-first">
-            <span>Add a passkey or your phone before your first payment.</span>
-            <Link className={pocketLink} to="/approvals">
-              Approvals and devices
-            </Link>
-          </p>
+          // B57.163 — drawn as w-pay draws a line in place of its button: the sentence in bold, the next step a secondary button.
+          // The link goes to /approvals, where the Face ID card is, until B57.43 adds /settings/devices.
+          <div className="flex flex-wrap items-center gap-3" data-testid="pay-key-first">
+            <p className="text-body font-semibold text-ink">Add a passkey or your phone before your first payment.</p>
+            <PocketButton asChild variant="secondary">
+              <Link to="/approvals">Approvals and devices</Link>
+            </PocketButton>
+          </div>
         ) : (
           <div>
             <PocketButton type="submit" variant="primary" disabled={!complete || pay.isPending} disabledReason={pay.isPending ? undefined : why}>
@@ -936,7 +938,7 @@ function AddPayee({ open, onClose }: { open: boolean; onClose: () => void }) {
 }
 
 /** B57.31 — what else is on Pay. B57.32: each opens its own page under /money/pay. */
-function AlsoOnPay({ payouts }: { payouts: boolean }) {
+function AlsoOnPay({ payouts, instant }: { payouts: boolean; instant: boolean }) {
   const bills = useQuery({ queryKey: BILLS_KEY, queryFn: agentBankApi.bills })
   const all = bills.data?.bills ?? []
   const due = all.filter((b) => b.status === 'due').length
@@ -948,6 +950,8 @@ function AlsoOnPay({ payouts }: { payouts: boolean }) {
       : `${all.length} ${all.length === 1 ? 'bill' : 'bills'} · ${due === 0 ? 'paid' : `${due} due`}`
     : 'Bills sent to you to pay'
   const rows: { to: string; icon: IconName; title: string; line: string }[] = [
+    // B59.19 — a Hybrid account's Instant transfer: converted, moved on chain and landed in seconds.
+    ...(instant ? [{ to: 'instant-transfer', icon: 'send' as IconName, title: 'Instant transfer', line: 'Arrives in seconds, any day, any hour' }] : []),
     { to: 'standing-orders', icon: 'clock', title: 'Standing orders', line: 'The same amount on a schedule' },
     { to: 'mandates', icon: 'key', title: 'Mandates', line: 'A payee pulls within limits you set' },
     ...(payouts ? [{ to: 'bulk-payouts', icon: 'payments' as IconName, title: 'Bulk payouts', line: 'Pay many at once from a file' }] : []),

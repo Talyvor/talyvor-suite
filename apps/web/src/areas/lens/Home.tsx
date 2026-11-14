@@ -425,7 +425,8 @@ function Waiting({
 // ── The total ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 function Actions({ shows }: { shows: Shows }) {
-  // Only the actions with a screen to open: Withdraw, Receive, Send, Convert and Instant transfer join them with theirs.
+  // Only the actions with a screen to open: Withdraw, Receive, Send and Convert join them with theirs. B59.19: Instant
+  // transfer, for a Hybrid account.
   return (
     <div className="flex flex-wrap gap-2 wide:justify-end">
       {shows.bankTransfers ? (
@@ -436,6 +437,11 @@ function Actions({ shows }: { shows: Shows }) {
       <Button asChild variant={shows.bankTransfers ? 'white' : 'primary'}>
         <Link to="/money/pay">Pay</Link>
       </Button>
+      {shows.instantTransfer ? (
+        <Button asChild variant="white">
+          <Link to="/money/pay/instant-transfer">Instant transfer</Link>
+        </Button>
+      ) : null}
     </div>
   )
 }

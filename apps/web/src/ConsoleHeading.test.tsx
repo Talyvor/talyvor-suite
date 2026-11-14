@@ -122,6 +122,8 @@ const PINNED: Readonly<Record<string, string>> = {
   '/money/pay/standing-orders': 'Standing orders',
   '/money/pay/mandates': 'Mandates',
   '/money/pay/bulk-payouts': 'Bulk payouts',
+  '/money/pay/instant-transfer': 'Instant transfer',
+  '/money/pay/instant-transfer/:id': 'Instant transfer',
   '/money/pay/bills': 'Bills you received',
   '/money/plans/:id': 'Sign recurring payments',
   '/money/subscriptions': 'Subscriptions',

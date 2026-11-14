@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { CardHeader, Logo, inlineLink } from '@talyvor/ui'
@@ -10,6 +11,7 @@ import { AgentBankError, agentBankApi, refusalText, type Agent, type CurrencyAcc
 import { formatWhen } from './format'
 import { Lxc } from './money'
 import { DisputePayment } from './CardDisputes'
+import { InstantLegs, groupInstant } from './InstantTransferReceipt'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { CURRENCY_ACCOUNT } from '../../labels/capabilities'
@@ -168,7 +170,10 @@ export function AccountStatement({ account, agent }: { account: CurrencyAccount;
                 </tr>
               </thead>
               <tbody>
-                {lines.map((l) => {
+                {groupInstant(lines).map((row) => {
+                  // B59.19 — an Instant transfer is one line, which opens its legs.
+                  if ('transfer' in row) return <InstantRow key={row.transfer} row={row} currency={account.currency} when={lineWhen(row.lines[0].at, now)} />
+                  const l = row.line
                   const [what, detail] = lineWhat(l)
                   return (
                     <tr key={`${l.entry_id}-${l.line}`} className="border-t border-line text-ink">
@@ -212,6 +217,36 @@ export function AccountStatement({ account, agent }: { account: CurrencyAccount;
 }
 
 /** What an agent put on the company's marketplace bill this month: each line says so, and none moves its balance. */
+/** B59.19 — an Instant transfer's lines as one: "Instant transfer to Lumen Freight GmbH", its total, and its legs when opened. */
+function InstantRow({ row, currency, when }: { row: { transfer: string; to: string; amount_minor: number }; currency: string; when: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <tr className="border-t border-line text-ink" data-testid="account-statement-instant">
+      <td className="hidden whitespace-nowrap py-2.5 align-top text-ink-3 wide:table-cell">{when}</td>
+      <td className="py-2.5 wide:pl-4">
+        <button
+          type="button"
+          aria-expanded={open}
+          className={`inline-flex items-center gap-1.5 text-left font-semibold ${pocketFocusRing}`}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <Icon name="chev" size={14} className={open ? 'rotate-90' : ''} />
+          Instant transfer{row.to ? ` to ${row.to}` : ''}
+        </button>
+        <span className="block text-micro text-ink-3 wide:hidden">{when}</span>
+        {open ? (
+          <div className="mt-2 pl-5">
+            <InstantLegs transfer={row.transfer} />
+          </div>
+        ) : null}
+      </td>
+      <td className="py-2.5 pl-4 text-right align-top">
+        <Money minor={row.amount_minor} currency={currency} signed className={row.amount_minor > 0 ? 'text-success' : ''} />
+      </td>
+    </tr>
+  )
+}
+
 export function MarketplaceBill({ agent }: { agent: Agent }) {
   const period = monthPeriod('this')
   const to = dayAfter(period.through)

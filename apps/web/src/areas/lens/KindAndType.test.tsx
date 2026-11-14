@@ -75,6 +75,24 @@ describe.each(TYPES.flatMap((t) => KINDS.map((k) => [t, k] as const)))('a %s acc
     expect(within(main).queryByTestId('pay-on-chain') !== null).toBe(kind === 'stablecoin')
   })
 
+  // B59.19 — Instant transfer is Hybrid's alone: no Home action, no row on Pay, its page sends any other kind back to
+  // Pay, and an agent's rules have no "Can use Instant transfer" switch.
+  it('Instant transfer: an entry only for Hybrid', { timeout: 20_000 }, async () => {
+    const hybrid = kind === 'hybrid'
+    let { main } = await at('/', account)
+    expect(within(main).queryByRole('link', { name: 'Instant transfer' }) !== null).toBe(hybrid)
+    document.body.replaceChildren()
+    ;({ main } = await at('/money/pay', account))
+    expect(within(main).queryByRole('link', { name: /^Instant transfer/ }) !== null).toBe(hybrid)
+    document.body.replaceChildren()
+    ;({ main } = await at('/money/pay/instant-transfer', account))
+    expect(within(main).queryByTestId('instant-transfer-form') !== null).toBe(hybrid)
+    document.body.replaceChildren()
+    ;({ main } = await at('/agents/agt_research/rules', account))
+    await within(main).findByRole('button', { name: /Pause .* on unusual spend/ })
+    expect(within(main).queryByRole('switch', { name: 'Can use Instant transfer' }) !== null).toBe(hybrid)
+  })
+
   it('Cards: no owner card tier of the other type', async () => {
     const { main } = await at('/money/card', account)
     const other = TIERS[business ? 'personal' : 'business']

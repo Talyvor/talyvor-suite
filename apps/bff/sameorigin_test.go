@@ -286,6 +286,8 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/devices/x1/push-token", body: `{"push_token":"t"}`},
 		{method: http.MethodPost, path: "/api/money/payments", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`},
 		{method: http.MethodPost, path: "/api/money/payments/challenge", body: `{"account_id":"x1","payee_id":"x1","amount_minor":100,"currency":"GBP","reference":"r","idempotency_key":"k"}`}, // B54.35
+		{method: http.MethodPost, path: "/api/money/instant-transfers/quote", body: `{"send_minor":100,"send_currency":"USD","receive_currency":"EUR","to":"talyvor_account"}`},                 // B59.19
+		{method: http.MethodPost, path: "/api/agents/x1/instant-transfers", body: `{"quote_id":"itq_1","to_account_id":"macc_1"}`},                                                              // B59.19
 		{method: http.MethodPost, path: "/api/money/mandates", body: `{"grant":{"account_id":"x1","payee_business_id":"b","payee_id":"x1","payee_name":"n","max_per_pull_minor":1,"max_per_month_minor":1,"expires_at":"2099-01-01T00:00:00Z"}}`},
 		{method: http.MethodPost, path: "/api/money/mandates/challenge", body: `{"mandate_id":"x1"}`},                  // B55.56
 		{method: http.MethodPost, path: "/api/money/mandates/x1/approve", body: `{"assertion":{"credential_id":"c"}}`}, // B55.56

@@ -62,8 +62,8 @@ IdP refuses to start), sends the browser to its authorize endpoint (so the
 **browser** must be able to reach it — a loopback-only IdP on this box cannot
 work), exchanges the code as a **confidential client** (client id + secret;
 PKCE is added on top, it does not replace the secret), and takes the user's
-identity from the id_token's `email` claim (an email the issuer marks
-unverified is refused).
+identity from the id_token's `email` claim (it counts only when the id_token
+says `email_verified: true`; false or absent is refused, with `*` or a list).
 
 **The trial runs on Google as the issuer** (deployed and live). Not a provider
 you sign up for and not a container you run — an IdP you already have. The BFF
@@ -377,7 +377,7 @@ Every variable the BFF reads, and what happens without it:
 | `OIDC_ISSUER` | **yes** (oidc) | — | Discovery base (`https://accounts.google.com`). Missing → refuses to start. Reachable but wrong / IdP down → **boot-time discovery fails** and the process exits (systemd retries). Must be https (http only on loopback, dev). |
 | `OIDC_CLIENT_ID` | **yes** (oidc) | — | The client registered at the IdP. Missing → refuses to start. |
 | `OIDC_CLIENT_SECRET` | **yes** (oidc) | — | Confidential-client secret; PKCE supplements it, never replaces it. Missing → refuses to start. |
-| `OIDC_ALLOWED_EMAILS` | **yes** (oidc) | — | **`*` for a public trial; a comma-separated list for a closed one.** See "Which value goes here" directly below — this is the only thing gating signup, so it is a decision, not a formality. Lower-cased match against the id_token email; `*` alone admits every identity the issuer authenticates. Empty → refuses to start ("authorization must be stated, not implied"). Identities whose email the issuer marks unverified are refused by a list, not by `*`. **Read at boot: changing it needs a BFF restart.** |
+| `OIDC_ALLOWED_EMAILS` | **yes** (oidc) | — | **`*` for a public trial; a comma-separated list for a closed one.** See "Which value goes here" directly below — this is the only thing gating signup, so it is a decision, not a formality. Lower-cased match against the id_token email; `*` alone admits every identity the issuer authenticates. Empty → refuses to start ("authorization must be stated, not implied"). An identity whose email the id_token does not mark `email_verified: true` (false or absent) is refused, by a list and by `*` alike. **Read at boot: changing it needs a BFF restart.** |
 | `OPERATOR_SUBS` | no — but **unset means nobody, including you** | — none, deliberately | ⚠ **Also read by the BFF and named in no operator document** — it was missed even by a grep, because it is read through a named constant (`operatorSubsEnv`) rather than a literal. Comma-separated list of OIDC **`sub`** values (not emails) allowed to read **every tenant's** data — spend, purchases, royalties. Independent of `OIDC_ALLOWED_EMAILS`, which answers "who may sign in"; this answers "who may see everything", and neither reads the other. **Empty refuses every identity, including the deployment owner's** (`operator.go`: "a boundary whose default is open is not a boundary"), so a fresh deployment has no operator until someone is named — and an operator who never learns this variable exists can never get in. `sub` is opaque (`110248495…`): read yours out of `/auth/me` once and paste it here. **No `*` wildcard, deliberately.** Read at boot — changing it needs a restart. Changing Google account loses access until the new `sub` is added. |
 | `BFF_SESSION_TTL` | no | `12h` | Absolute session lifetime (Go duration). Unparseable or ≤0 → refuses to start. Sessions are **in-memory**: every BFF restart signs everyone out (they just re-login). |
 | `TRACK_BASE_URL` | no† | — | Track upstream base (reachable from this box). |
