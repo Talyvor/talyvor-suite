@@ -52,6 +52,20 @@ const SAMPLE: Record<string, unknown> = {
     signup_open: true,
   },
   '/api/workspace/name': { id: 'ws_nicks_team', name: 'Nick’s team' },
+  // B57.44 — Members: Nick alone, the owner, on Free's one seat; the plan gates as Lens's internal/plans sets them.
+  '/api/members': [{ id: 'mem_nick', name: 'Nick', email: 'nick@example.com', role: 'owner', avatar_url: '' }],
+  '/api/pricing': {
+    ...(bodyFor('/api/pricing') as object),
+    plan_gates: {
+      order: ['free', 'team', 'business', 'enterprise'],
+      plans: {
+        free: { agents: 3, seats: 1, own_provider_keys: 'none', live_money: false, slack_teams_approvals: false, sso: false, audit_export: false, edge: false },
+        team: { agents: 25, seats: 5, own_provider_keys: 'add_on', live_money: true, slack_teams_approvals: true, sso: false, audit_export: false, edge: false },
+        business: { agents: -1, seats: 25, own_provider_keys: 'included', live_money: true, slack_teams_approvals: true, sso: true, audit_export: true, edge: false },
+        enterprise: { agents: -1, seats: -1, own_provider_keys: 'included', live_money: true, slack_teams_approvals: true, sso: true, audit_export: true, edge: true },
+      },
+    },
+  },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
   // B57.139 — what was sent from Help and complaints and Your data, so their lists draw rows rather than the empty state.
   '/api/workspace/requests': {

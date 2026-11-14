@@ -2460,18 +2460,20 @@ export function readWorkspaceAccount(): Promise<WorkspaceAccount> {
   return getJSON<WorkspaceAccount>('/api/workspace/account', { account_type: 'string', money_kind: 'string' })
 }
 
-/** B57.18 — the workspace's plan as Lens has it: its name, the agents it takes (-1 is unlimited) and the agents it has. */
+/** B57.18 — the workspace's plan as Lens has it: its name, the agents it takes (-1 is unlimited) and the agents it has.
+ *  B57.44 — and the members it takes (-1 is unlimited), for Members' "Free has 1 seat". */
 export interface WorkspacePlan {
   plan: string
   agents: number
   agents_used: number
+  seats: number
 }
 
 export const PLAN_KEY = ['workspace-plan'] as const
 
 /** GET /api/plan — Lens's /v1/workspaces/{ws}/plan, as Home's "3 of 3 on Free" reads it. */
 export function readWorkspacePlan(): Promise<WorkspacePlan> {
-  return getJSON<WorkspacePlan>('/api/plan', { plan: 'string', agents: 'number', agents_used: 'number' })
+  return getJSON<WorkspacePlan>('/api/plan', { plan: 'string', agents: 'number', agents_used: 'number', seats: 'number' })
 }
 
 /** What a workspace's type and kind show. */
