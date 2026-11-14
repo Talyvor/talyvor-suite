@@ -87,6 +87,14 @@ const SAMPLE: Record<string, unknown> = {
   // B57.15 — the workspace's keys, as the sheet reads them: a passkey on this browser and the phone's key, so it signs here.
   '/api/agents/passkeys': { passkeys: [{ credential_id: 'Y3JlZF9tYWM', name: 'This Mac', created_at: '2026-10-03T08:00:00Z' }] },
   '/api/money/devices': { devices: [{ id: 'dk_iphone', name: 'iPhone, Talyvor app', created_at: '2026-10-04T09:00:00Z' }] },
+  // B57.43 — every key by name, as w-security lists them: two passkeys and the phone's key.
+  '/api/agents/keys': {
+    keys: [
+      { kind: 'passkey', id: 'Y3JlZF9pcGhvbmU', name: 'iPhone', platform: '', created_at: '2026-10-03T08:00:00Z', last_used_at: '2026-10-22T08:40:00Z' },
+      { kind: 'passkey', id: 'Y3JlZF9tYWM', name: 'This Mac', platform: '', created_at: '2026-10-03T08:00:00Z', last_used_at: '2026-10-20T09:00:00Z' },
+      { kind: 'phone', id: 'dk_iphone', name: 'iPhone, Talyvor app', platform: 'ios', created_at: '2026-10-04T09:00:00Z', last_used_at: '2026-10-22T08:45:00Z' },
+    ],
+  },
   // The two requests waiting at 10:30.
   '/api/agents/approvals': {
     approvals: [

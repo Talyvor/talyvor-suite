@@ -104,17 +104,17 @@ export function RecoveryCodeRow() {
   )
 }
 
-/** Said in place of an approve or resume control while no key is live, with the two ways back (on Approvals itself, below). */
+/** Said in place of an approve or resume control while no key is live, with the two ways back (on Approvals and devices itself, below). */
 export function NoLiveKey({ here }: { here: boolean }) {
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-ink" data-testid="no-live-key">
       <span>{NO_LIVE_KEY}</span>
       {here ? null : (
         <>
-          <Link className={inlineLink} to="/approvals#get-a-key-back">
+          <Link className={inlineLink} to="/settings/devices#get-a-key-back">
             Use your recovery code
           </Link>
-          <Link className={inlineLink} to="/approvals#get-a-key-back">
+          <Link className={inlineLink} to="/settings/devices#get-a-key-back">
             Wait 72 hours
           </Link>
         </>
