@@ -129,6 +129,10 @@ var defaultProbes = map[string]defaultProbe{
 		bootWithUnset(t, "BFF_CONNECT_MCP_PER_CONNECTION_MINUTE", minimalDisabled())
 		return strconv.Itoa(limitMCPGrant.max())
 	}},
+	"BFF_VOICE_KEY_PER_SESSION_HOUR": {canon: identityCanon, observe: func(t *testing.T) string {
+		bootWithUnset(t, "BFF_VOICE_KEY_PER_SESSION_HOUR", minimalDisabled())
+		return strconv.Itoa(limitVoiceKey.max())
+	}},
 	"BFF_CONNECT_REDIRECT_ORIGINS": {canon: identityCanon, observe: func(t *testing.T) string {
 		bootWithUnset(t, "BFF_CONNECT_REDIRECT_ORIGINS", minimalDisabled())
 		return redirectOrigins()
