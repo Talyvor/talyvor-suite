@@ -33,7 +33,7 @@ const QUOTES_KEY = ['wallet-quotes']
 const potsKey = (id: string) => ['agent-pots', id]
 const portfoliosKey = (id: string) => ['agent-portfolios', id]
 
-const selectClass = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
+const selectClass = `h-8 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 
 const lxc = (micros: number) => <Lxc ulxc={micros} />
 

@@ -112,7 +112,7 @@ function AddWebhook({ onSecret }: { onSecret: (s: string) => void }) {
                 onClick={() => setEvents(on ? events.filter((x) => x !== ev) : [...events, ev])}
                 className={cn(
                   'inline-flex h-8.5 items-center rounded-pill px-3.5 font-mono text-body transition-colors duration-200',
-                  on ? 'bg-ink text-page' : 'bg-cloud-2 text-ink-2',
+                  on ? 'bg-ink text-on-primary' : 'bg-cloud-2 text-ink-2',
                   pocketFocusRing,
                 )}
               >

@@ -3,6 +3,11 @@
  * B57.1 — pocket-shots: the app beside the Pocket reference, for every Pocket item.
  *
  *   pnpm --filter @talyvor/web pocket:shots <item> <checks.json>
+ *   pnpm --filter @talyvor/web pocket:shots <item> --dark [checks.json] [--no-press]
+ *
+ * B57.58 — --dark shoots every check in dark, and with no checks file every route it knows (scripts/pocket/routes.ts),
+ * and every dark shot also runs the contrast check: every text pair at 4.5:1, every field's and switch's edge at 3:1.
+ * --no-press leaves out the press check, which opens a fresh page for each control and is most of the time a sweep takes.
  *
  * checks.json is a list of { route, screen, steps?, dark?, frame?, answers?, state? }: the app's address, the reference's screen id
  * (README.md's tables; leave it out for a page with no reference, such as the story page), the words or aria-labels to press in the app to reach the screen as a person would
@@ -44,13 +49,14 @@ const SIZES = [
 ]
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' }
 
-const [item, checksArg] = process.argv.slice(2)
-if (!item || !checksArg || !/^[\w.-]+$/.test(item)) {
-  console.error('usage: pnpm --filter @talyvor/web pocket:shots <item> <checks.json>')
+const args = process.argv.slice(2)
+const DARK = args.includes('--dark')
+const PRESS = !args.includes('--no-press')
+const [item, checksArg] = args.filter((a) => !a.startsWith('--'))
+if (!item || (!checksArg && !DARK) || !/^[\w.-]+$/.test(item)) {
+  console.error('usage: pnpm --filter @talyvor/web pocket:shots <item> <checks.json> | <item> --dark [checks.json] [--no-press]')
   process.exit(2)
 }
-// pnpm runs the script in apps/web; a relative path means where the person typed it.
-const checks = JSON.parse(await readFile(resolve(process.env.INIT_CWD || process.cwd(), checksArg), 'utf8'))
 if (!existsSync(join(REFERENCE, 'index.html'))) {
   console.error(`no Pocket reference at ${REFERENCE}: set POCKET_REFERENCE`)
   process.exit(2)
@@ -61,6 +67,11 @@ const overrides = JSON.parse(await readFile(join(WEB, 'scripts/pocket/overrides.
 const loader = await createServer({ root: WEB, logLevel: 'error', server: { middlewareMode: true, hmr: false }, appType: 'custom', optimizeDeps: { noDiscovery: true } })
 const { sampleBodyFor, sampleReset, SAMPLE_NOW, SAMPLE_TIME_ZONE } = await loader.ssrLoadModule('/scripts/pocket/sample.ts')
 const check = await loader.ssrLoadModule('/src/test/pocketCheck.ts')
+const { SHOT_ROUTES } = await loader.ssrLoadModule('/scripts/pocket/routes.ts')
+// pnpm runs the script in apps/web; a relative path means where the person typed it.
+const checks = (checksArg ? JSON.parse(await readFile(resolve(process.env.INIT_CWD || process.cwd(), checksArg), 'utf8')) : Object.values(SHOT_ROUTES).map((route) => ({ route }))).map(
+  (c) => (DARK ? { ...c, dark: true } : c),
+)
 await loader.close()
 
 console.log('building the app and the story page…')
@@ -223,10 +234,11 @@ for (const c of checks) {
     const hay = await page.evaluate(`(${check.haystackOf})(document.body)`)
     if (ref) for (const m of check.wordsCheck(c.screen, ref.words, hay, overrides)) failures.push(`${label} at ${size.name}: missing ${m}`)
     if (size.name === '390') for (const p of await page.evaluate(`(${check.layoutProblems})(document)`)) failures.push(`${label} at 390: ${p}`)
+    if (c.dark) for (const p of await page.evaluate(`(${check.contrastProblems})(document)`)) failures.push(`${label} at ${size.name}: ${p}`)
     await ctx.close()
   }
   // A screen the steps could not reach has no controls of its own to press; the story page's specimens press nothing.
-  if (!c.route.startsWith('/__pocket-story/') && !failures.some((f) => f.startsWith(`${label} at `) && f.includes('nothing to press'))) for (const d of await deadControls(c)) failures.push(`${label}: ${d}`)
+  if (PRESS && !c.route.startsWith('/__pocket-story/') && !failures.some((f) => f.startsWith(`${label} at `) && f.includes('nothing to press'))) for (const d of await deadControls(c)) failures.push(`${label}: ${d}`)
 }
 
 await browser.close()
@@ -236,4 +248,4 @@ if (failures.length) {
   console.log(`\n${failures.length} problem${failures.length === 1 ? '' : 's'}:\n${failures.map((f) => `  ✗ ${f}`).join('\n')}`)
   process.exit(1)
 }
-console.log('\nevery word on every reference screen is on the app, the layout holds at 390, and every control does something')
+console.log(`\nevery word on every reference screen is on the app, the layout holds at 390${DARK ? ', every text pair reads in dark' : ''}${PRESS ? ', and every control does something' : ''}`)
