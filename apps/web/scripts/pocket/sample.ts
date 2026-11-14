@@ -33,6 +33,14 @@ const RULES = (r: { above: number; perRequest: number; daily: number; monthly: n
   timezone: r.hours ? SAMPLE_TIME_ZONE : '',
 })
 
+const NORTHWIND_REQUEST = {
+  id: 'preq_northwind', status: 'pending_approval', summary: 'Pay Northwind Data $180.00', client: 'chat', totals: { USD: 18_000 }, created_at: '2026-10-22T09:31:00Z',
+  items: [
+    { position: 1, payee_id: 'payee_northwind', payee_name: 'Northwind Data', currency: 'USD', amount_minor: 18_000, reference: 'Invoice 1042', decision: 'needs_approval',
+      reason: 'no permission you signed covers it', flags: [{ code: 'first_payment', detail: 'the first payment to Northwind Data' }] },
+  ],
+}
+
 const SAMPLE: Record<string, unknown> = {
   '/auth/me': {
     mode: 'oidc',
@@ -161,6 +169,14 @@ const SAMPLE: Record<string, unknown> = {
   ...agentStatement('agt_ops', { opening: 0, in: 10_000, out: 4_600 }, [
     modelDay('oh1', '2026-10-20T16:05:00Z', 'claude-haiku-4-5', 140, -40, -2.2),
   ], [modelDay('oh0', '2026-10-12T11:00:00Z', 'claude-haiku-4-5', 4_200, -4_320, -237.8), funded('of0', '2026-10-09T09:10:00Z', 10_000)]),
+  // B57.27 — README's "Prepared by Chat" (10:31): $180.00 to Northwind Data, invoice 1042, from the company's dollar account;
+  // no permission you signed covers it. Declined, Lens cancels it and says the payment was left out.
+  '/api/money/payment-requests/preq_northwind': NORTHWIND_REQUEST,
+  '/api/money/payment-requests/preq_northwind/cancel': {
+    ...NORTHWIND_REQUEST,
+    status: 'cancelled',
+    items: NORTHWIND_REQUEST.items.map((it) => ({ ...it, pay_status: 'not_approved' })),
+  },
   // B57.31 — README's payees: both by routing and account number, Kite last paid $450.00 on 1 Oct, Northwind not paid yet.
   '/api/money/payees': {
     payees: [
