@@ -575,8 +575,8 @@ describe('the Pay screen', () => {
     expect(pay[0].body).toEqual({ bill_ids: ['1', '2'] })
     expect(pay[0].headers['Idempotency-Key'].length).toBeGreaterThan(8)
     expect(within(card).getByTestId('approve-total').textContent).toBe('2 of 2 payments to approve, total £150.50')
-    for (const text of ['Acme Hosting Ltd', 'Brightline Studio Ltd', 'Reference: INV-1', 'Reference: INV-2']) expect(card.textContent).toContain(text)
-    expect(within(card).getByRole('button', { name: 'Approve 2 payments with a passkey' })).toBeTruthy()
+    for (const text of ['Acme Hosting Ltd', 'Brightline Studio Ltd', 'ReferenceINV-1', 'ReferenceINV-2']) expect(card.textContent).toContain(text)
+    expect(within(card).getByRole('button', { name: 'Approve 2 payments with your passkey' })).toBeTruthy()
   })
 
   // B40.35 — what an assistant asked for over /mcp waits here: a payee is saved only when the person presses Save, through the

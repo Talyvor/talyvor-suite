@@ -482,7 +482,7 @@ export function connectMCP(): Scenario {
           if (chipState !== 'sandbox') wrong.push(`the approval card's payments out are labelled ${JSON.stringify(chipState)}, not Sandbox`)
           if (await page.getByText('Test money', { exact: true }).count() > 0) wrong.push('the approval card still carries a "Test money" chip')
           if (!(await page.getByTestId('approve-total').innerText()).includes('2 of 2 payments to approve, total £30.00')) wrong.push(`the approval card's total reads "${await page.getByTestId('approve-total').innerText()}"`)
-          await page.getByRole('checkbox', { name: 'Approve £20.00 to Nightly MCP Supplier Two Ltd' }).click()
+          await page.getByRole('button', { name: 'Pay Nightly MCP Supplier Two Ltd, ticked' }).click()
           const total = await page.getByTestId('approve-total').innerText()
           if (!total.includes('1 of 2 payments to approve, total £10.00')) wrong.push(`after unticking the second payment the card reads "${total}"`)
         } catch (err) {

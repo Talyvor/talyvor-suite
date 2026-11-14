@@ -200,8 +200,8 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/money/budgets': 1, // B41.39: the Budgets card, under the populated fixture's one budget
   '/money/subscriptions': 1, // B41.20: the Subscriptions card, under the populated fixture's two found subscriptions
   '/money/pay': 4, // B57.31: the top of Pay is drawn in Pocket, so only today's cards kept below it count; B57.144: Bulk payouts is drawn in Pocket; B41.1: the bills inbox
-  // B40.9 — one card: the prepared request.
-  '/approve/:id': 1,
+  // B57.27 — the prepared request is drawn in Pocket, whose card has no header.
+  '/approve/:id': 0,
   // B45.37 — one card: the plan the assistant prepared.
   '/money/plans/:id': 1,
   '/features': 1, // B57.42: "Documents you attach", moved here from Settings beside Document conversion
