@@ -626,6 +626,23 @@ func TestAgentHelperColourReachesLens(t *testing.T) {
 	}
 }
 
+// B57.22 — the name-and-look picker's colour and face reach Lens on PATCH; a face alone is a change too.
+func TestAgentColourAndFaceReachLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	if rec := doJSON(a, http.MethodPatch, "/api/agents/agt_1", `{"name":"Research","description":"","colour":"lime","face":"hexagon"}`); rec.Code != http.StatusOK {
+		t.Fatalf("save the look = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPatch, "/api/agents/agt_1", `{"face":"flower"}`); rec.Code != http.StatusOK {
+		t.Fatalf("a face alone = %d %s", rec.Code, rec.Body.String())
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	want := []string{`/agents/agt_1 {"name":"Research","description":"","colour":"lime","face":"hexagon"}`, `/agents/agt_1 {"name":null,"description":null,"face":"flower"}`}
+	if len(f.got) != 2 || !strings.HasSuffix(f.got[0], want[0]) || !strings.HasSuffix(f.got[1], want[1]) {
+		t.Fatalf("Lens got %q; want …%q", f.got, want)
+	}
+}
+
 // B28.30 — "would this pass my rules?" reaches Lens's simulator with only the request's fields (a browser's
 // workspace id goes nowhere) and answers Lens's verdict and reason.
 func TestRuleSimulationReachesLens(t *testing.T) {

@@ -76,33 +76,41 @@ describe('the helper picker', () => {
     await waitFor(() => expect(sent.map((s) => s.body.colour)).toEqual([colour]))
   })
 
-  it('editing an agent shows its helper and keeps its colour unless the owner picks another', async () => {
+  // B57.22 — editing is the Settings row's name and look: the seven colours and four faces, each sent only once picked.
+  it('editing an agent shows its colour and face and keeps them unless the owner picks another; the page’s face follows', async () => {
     const { sent } = mockBff({ name: 'Ledger', colour: 'mint' })
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    const helpers = await screen.findByRole('group', { name: 'Helper for Ledger' })
-    expect(within(helpers).getByRole('button', { name: 'Penny' })).toHaveAttribute('aria-pressed', 'true')
-    fireEvent.change(screen.getByLabelText('Name of Ledger'), { target: { value: 'Books' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Name, description, colour and face')).getByRole('button'))
+    let look = await screen.findByRole('dialog', { name: 'Ledger’s name and look' })
+    expect(within(look).getByRole('radio', { name: 'mint' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.change(within(look).getByLabelText('Name'), { target: { value: 'Books' } })
+    fireEvent.click(within(look).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(sent).toHaveLength(1))
-    expect(sent[0].body).not.toHaveProperty('colour')
+    expect(sent[0].body).toEqual({ name: 'Books', description: '' })
 
-    const after = await screen.findByRole('group', { name: 'Helper for Books' })
-    fireEvent.click(within(after).getByRole('button', { name: 'Ollie' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Name, description, colour and face')).getByRole('button'))
+    look = await screen.findByRole('dialog', { name: 'Books’s name and look' })
+    fireEvent.click(within(look).getByRole('radio', { name: 'rose' }))
+    fireEvent.click(within(look).getByRole('radio', { name: 'A flower face' }))
+    fireEvent.click(within(look).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(sent).toHaveLength(2))
-    expect(sent[1]).toEqual({ method: 'PATCH', url: '/api/agents/agt_1', body: { name: 'Books', description: '', colour: 'rose' } })
+    expect(sent[1]).toEqual({ method: 'PATCH', url: '/api/agents/agt_1', body: { name: 'Books', description: '', colour: 'rose', face: 'flower' } })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.getAllByRole('img', { name: 'Books agent' })[0]).toHaveAttribute('data-face', 'rose flower happy'))
+    expect(screen.getByTestId('agent-setting-Name, description, colour and face')).toHaveTextContent('Books: rose, a flower face')
   })
 
   // B57.141 — in Pocket, both places draw the helpers as Pocket draws a choice of several (pocket.css .pill.pick):
   // a cloud pill 34 tall with the portrait 22 across, and the picked one on the page inside a 2px ink ring.
-  it('draws each helper as a Pocket pick, where the agent is created and on its Name and description card', async () => {
+  // B57.22: editing moved to the name-and-look dialog, which draws the seven colours as the reference does.
+  it('draws each helper as a Pocket pick where the agent is created', async () => {
     mockBff({ name: 'Ledger', colour: 'mint' })
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    for (const name of ['Its helper', 'Helper for Ledger']) {
+    for (const name of ['Its helper']) {
       const choices = within(await screen.findByRole('group', { name })).getAllByRole('button')
       expect(choices.map((b) => b.textContent)).toEqual(['Remy', 'Sunny', 'Penny', 'Max', 'Nova', 'Ollie', 'Lime'])
       for (const b of choices) {

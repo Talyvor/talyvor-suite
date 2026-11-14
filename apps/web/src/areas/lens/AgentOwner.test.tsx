@@ -59,7 +59,8 @@ describe("an agent's owner and verified badge on the Agent Bank", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Claim Researcher' }))
 
     expect(await screen.findByText('You own Researcher now. Fund it here.')).toBeTruthy()
-    expect(within(screen.getByTestId('agent-ownership')).getByText('Verified')).toBeTruthy()
+    // B57.22 — its Ownership row in Settings.
+    expect(screen.getByTestId('agent-setting-Ownership')).toHaveTextContent('Its owner is verified')
     // B57.16 — funding happens in Move LXC.
     fireEvent.click(screen.getByRole('button', { name: 'Move LXC' }))
     const move = await screen.findByRole('dialog', { name: 'Move LXC: Researcher' })
