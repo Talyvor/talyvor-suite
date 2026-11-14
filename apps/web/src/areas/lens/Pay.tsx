@@ -48,7 +48,7 @@ import {
   refusalText,
   useAccount,
 } from './agentBankApi'
-import { WorkspaceLabel } from '../../labels/workspace'
+import { WorkspaceLabel, useWorkspaceLabels } from '../../labels/workspace'
 import { PAY_OUT } from '../../labels/capabilities'
 import { DESIGN_ATTR } from '../../pocketPending'
 
@@ -412,6 +412,10 @@ function PayForm({
   const checked = !first || (SCAM_QUESTIONS.every((q) => answers[q.key] !== undefined) && (!risky || stillPay))
   const complete = account !== undefined && payee !== undefined && !payee.needs_confirmation && minor !== null && checked
   const preparedFor = payee === undefined ? undefined : waiting.find((r) => (r.items ?? []).some((i) => i.payee_id === payee.id))
+  // B58.8 — Lens pays live money at a person's word only once the workspace has a passkey or a phone key that can sign
+  // (Lens B58.7), so with none the step to add one stands where Send would. The Sandbox pays as before.
+  const keys = useKeys()
+  const keyFirst = useWorkspaceLabels()?.payments_out === 'live' && keys.isSuccess && (!keys.signed || keys.noLiveKey)
   // Reset per payee: the questions are about this payee's details.
   useEffect(() => {
     setAnswers({})
@@ -449,7 +453,7 @@ function PayForm({
         data-testid="send-payment"
         onSubmit={(e) => {
           e.preventDefault()
-          if (complete && !pay.isPending) pay.mutate()
+          if (complete && !keyFirst && !pay.isPending) pay.mutate()
         }}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -556,6 +560,13 @@ function PayForm({
               <Link to={`/approve/${encodeURIComponent(preparedFor.id)}`}>Review it</Link>
             </PocketButton>
           </div>
+        ) : keyFirst ? (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-reading text-ink" data-testid="pay-key-first">
+            <span>Add a passkey or your phone before your first payment.</span>
+            <Link className={pocketLink} to="/approvals">
+              Approvals and devices
+            </Link>
+          </p>
         ) : (
           <div>
             <PocketButton type="submit" variant="primary" disabled={!complete || pay.isPending} disabledReason={pay.isPending ? undefined : why}>
