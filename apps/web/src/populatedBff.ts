@@ -952,6 +952,10 @@ const BY_PATH: Record<string, unknown> = {
   },
 }
 
+// B57.23 — the console sweep opens /agents/:id/rules as it is written; its page reads the rules and their history at once.
+BY_PATH['/api/agents/%3Aid/rules'] = BY_PATH['/api/agents/agt_research/rules']
+BY_PATH['/api/agents/%3Aid/rules/history'] = BY_PATH['/api/agents/agt_research/rules/history']
+
 /**
  * Endpoints that legitimately answer with a JSON array.
  *

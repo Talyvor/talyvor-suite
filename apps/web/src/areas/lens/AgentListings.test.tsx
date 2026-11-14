@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -58,24 +58,28 @@ afterEach(() => {
 })
 
 describe('the rules editor names the marketplace listings an agent may use', () => {
+  // B57.23 — on the agent's rules page: Only these marketplace listings, switched on, with the listings it may use.
   it('allows one listing, and saving the other rules keeps it', async () => {
     const puts = mockBff()
-    window.history.pushState({}, '', '/agents/agt_1')
+    window.history.pushState({}, '', '/agents/agt_1/rules')
     render(<App />)
-    const fr = await screen.findByRole('button', { name: 'Researcher may use Translate to French' })
-    expect(screen.getByText('Any listing. Mark some Allowed to allow only those.')).toBeTruthy()
-    fireEvent.click(fr)
-    expect(screen.getByText('Only the listings marked Allowed. Lens refuses any other.')).toBeTruthy()
+    fireEvent.click(await screen.findByRole('switch', { name: 'Only these marketplace listings' }))
+    const add = await screen.findByLabelText('Add to marketplace listings Researcher may use')
+    await waitFor(() => expect(within(add).getByRole('option', { name: 'Translate to French' })).toBeTruthy())
+    fireEvent.change(add, { target: { value: 'lst_fr' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
     await waitFor(() => expect(puts).toHaveLength(1))
     expect(puts[0].allowed_listings).toEqual(['lst_fr'])
     expect(puts[0].pause_on_unusual_spend).toBe(true)
 
-    fireEvent.change(screen.getByLabelText('Daily limit for Researcher, in LXC'), { target: { value: '5' } })
+    window.history.pushState({}, '', '/agents/agt_1/rules')
+    cleanup()
+    render(<App />)
+    expect(await screen.findByRole('button', { name: 'Take Translate to French off' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('switch', { name: 'At most a day' }))
+    fireEvent.change(screen.getByLabelText('At most a day for Researcher, in LXC'), { target: { value: '5' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
     await waitFor(() => expect(puts).toHaveLength(2))
     expect(puts[1]).toMatchObject({ daily_limit_ulxc: 5_000_000, allowed_listings: ['lst_fr'], pause_on_unusual_spend: true })
-    expect(screen.getByRole('button', { name: 'Researcher may use Translate to French' }).getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('button', { name: 'Researcher may use Code reviewer' }).getAttribute('aria-pressed')).toBe('false')
   })
 })

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useMatch, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Icon, Button as PocketButton, Row as PocketRow, RoomBadge, faceOf, type FaceColour } from '@talyvor/ui/pocket'
@@ -1326,6 +1326,35 @@ export function Rules({ agent, agents }: { agent: Agent; agents: Agent[] }) {
   )
 }
 
+/**
+ * B57.23 — an agent's rules in words on today's agent view, the way to its rules page, where they are edited, kept in
+ * their history and tried with Would it pass?, and a boost. A room's wallet keeps the whole card above in its settings.
+ */
+function RulesSummary({ agent, agents }: { agent: Agent; agents: Agent[] }) {
+  const rules = useQuery({ queryKey: rulesKey(agent.id), queryFn: () => agentBankApi.rules(agent.id) })
+  useLinked('rules', rules.isSuccess) // B41.7 — a rule found by the one search opens here
+  return (
+    <>
+      <Card id="rules">
+        <CardHeader>Rules</CardHeader>
+        {rules.isSuccess ? (
+          <>
+            <RulesInWords agentName={agent.name} rules={rules.data} payeeName={(id) => agents.find((a) => a.id === id)?.name ?? id} />
+            <p className="px-gutter pb-3 text-body">
+              <Link className={inlineLink} to={`/agents/${encodeURIComponent(agent.id)}/rules`}>
+                Edit {agent.name}’s rules, see their history or ask whether a request would pass
+              </Link>
+            </p>
+          </>
+        ) : (
+          <p className="px-gutter py-3 text-body text-muted">{rules.isError ? readFailure(rules.error, 'This agent’s rules') : 'Reading…'}</p>
+        )}
+      </Card>
+      {rules.isSuccess ? <LimitBoost agent={agent} rules={rules.data} /> : null}
+    </>
+  )
+}
+
 /** B28.31 — how a version came to be, from Lens's change: set, template <id>, rollback to <n> or before history. */
 function changeText(change: string): string {
   if (change === 'set') return 'Saved'
@@ -1341,7 +1370,7 @@ function changeText(change: string): string {
  * B28.31 — who made a version, from the credential Lens names: the operator, a key (by its id), or a signed-in
  * session — on Talyvor that is the workspace's own, so "you". Lens names nobody for rules set before history.
  */
-function changedBy(by: string): string {
+export function changedBy(by: string): string {
   if (by === '') return ''
   if (by === 'operator') return ' by Talyvor support'
   const key = /:key:([^:]+)$/.exec(by)?.[1]
@@ -1724,118 +1753,6 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
           {end.isError ? <Note ok={false}>{refusalText(end.error)}</Note> : null}
         </form>
       )}
-    </Card>
-  )
-}
-
-/**
- * B28.30 — "would this request pass my rules?" (Lens B28.306). A question to a model, or a payment to another of
- * the workspace's agents, is judged by the agent's rules exactly as a real one is — against what it has really
- * spent — and nothing is spent, posted or sent for approval. The answer is Lens's: allowed, refused with the
- * rule's own sentence, or waiting for a person's approval.
- */
-function TryRules({ agent, agents }: { agent: Agent; agents: Agent[] }) {
-  const choices = useRuleChoices()
-  const others = agents.filter((a) => a.id !== agent.id)
-  const [kind, setKind] = useState<'question' | 'payment'>('question')
-  const [model, setModel] = useState('')
-  const [to, setTo] = useState<string | null>(null)
-  const [amount, setAmount] = useState('')
-  const micros = parseLXC(amount)
-  const payee = kind === 'payment' ? (others.find((a) => a.id === to) ?? null) : null
-  // The catalog's groups are its providers, so the model chosen names the provider Lens judges it by.
-  const provider = choices.providers[choices.models.findIndex((g) => g.options.some((o) => o.value === model))]?.value ?? ''
-  const sim = useMutation({
-    mutationFn: () =>
-      agentBankApi.simulate(
-        agent.id,
-        payee ? { amount_ulxc: micros ?? 0, payee: { kind: 'agent', id: payee.id } } : { amount_ulxc: micros ?? 0, model, provider },
-      ),
-  })
-  const ready = micros !== null && (kind === 'question' || payee !== null) && !sim.isPending
-  const answer = sim.data
-  const what = (k: 'question' | 'payment') => {
-    setKind(k)
-    sim.reset()
-  }
-  return (
-    <Card>
-      <CardHeader>Would it pass?</CardHeader>
-      <form
-        className="flex flex-col gap-2 px-gutter py-3"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (ready) sim.mutate()
-        }}
-      >
-        <p className="text-body text-muted">
-          Ask whether {agent.name}’s rules would let a request through, counting what it has really spent. Nothing is
-          spent, paid or sent for approval.
-        </p>
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="What to try">
-          <Button aria-pressed={kind === 'question'} className={pressed} onClick={() => what('question')}>
-            A question to a model
-          </Button>
-          {others.length > 0 ? (
-            <Button aria-pressed={kind === 'payment'} className={pressed} onClick={() => what('payment')}>
-              A payment
-            </Button>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {kind === 'question' ? (
-            <select aria-label={`Model ${agent.name} would ask`} className={`${scheduleSelect} w-56`} value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="">Any model</option>
-              {choices.models
-                .filter((g) => g.options.length > 0)
-                .map((g) => (
-                  <optgroup key={g.label} label={g.label}>
-                    {g.options.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-            </select>
-          ) : (
-            <select aria-label={`Who ${agent.name} would pay`} className={`${scheduleSelect} w-56`} value={to ?? ''} onChange={(e) => setTo(e.target.value || null)}>
-              <option value="">Choose an agent…</option>
-              {others.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <Input
-            aria-label={`Amount in LXC to try for ${agent.name}`}
-            inputMode="decimal"
-            placeholder="LXC"
-            className="w-28 font-figure"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <Button type="submit" disabled={!ready}>
-            {sim.isPending ? 'Asking…' : 'Would it pass?'}
-          </Button>
-        </div>
-        {answer ? (
-          <Note ok={answer.verdict === 'allowed'}>
-            <span data-testid="rule-verdict">
-              {answer.verdict === 'allowed' ? 'Allowed.' : answer.verdict === 'refused' ? 'Refused.' : 'Needs approval.'}
-            </span>{' '}
-            {answer.verdict === 'allowed'
-              ? `${agent.name}’s rules would let this through.`
-              : `${answer.reason.charAt(0).toUpperCase()}${answer.reason.slice(1)}${answer.reason.endsWith('.') ? '' : '.'}`}
-            {answer.verdict !== 'refused' && answer.amount_ulxc > answer.balance_ulxc ? (
-              <> It holds only {lxc(answer.balance_ulxc)}, so it could not pay this until it is funded.</>
-            ) : null}{' '}
-            Nothing was spent.
-          </Note>
-        ) : null}
-        {sim.isError ? <Note ok={false}>{refusalText(sim.error)}</Note> : null}
-      </form>
     </Card>
   )
 }
@@ -2351,6 +2268,8 @@ export function useKeys() {
 interface RulesJudged {
   change: string
   changes: string[]
+  /** B57.23 — it loosens the rules, whether or not anything signs it */
+  looser: boolean
   /** looser, and this browser's passkey signs it */
   signs: boolean
   /** looser, and only the phone's key could sign it */
@@ -2370,7 +2289,7 @@ export function useRulesChange(agentID: string) {
   const judge = async (change: RulesChange): Promise<RulesJudged> => {
     const j = await agentBankApi.rulesChallenge(agentID, change)
     const signs = j.looser && (j.allow_credentials ?? []).length > 0
-    const next = { change: JSON.stringify(change), changes: j.changes ?? [], signs, phone: j.looser && !signs && onlyThePhone }
+    const next = { change: JSON.stringify(change), changes: j.changes ?? [], looser: j.looser, signs, phone: j.looser && !signs && onlyThePhone }
     setJudged(next)
     return next
   }
@@ -2960,9 +2879,8 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   // B28.349 — /agents?agent=…&entry=… (a statement line a spend answer in Chat links to) opens that agent at that line.
   const [params] = useSearchParams()
-  // B57.16 — /agents/:id and /agents/:id/rules open that agent; on the second its rules card comes first.
+  // B57.16 — /agents/:id opens that agent; its rules have their own page (B57.23).
   const { id } = useParams()
-  const rulesFirst = useMatch('/agents/:id/rules') !== null
   const linkedAgent = id ?? params.get('agent')
   const linkedEntry = params.get('entry') ?? undefined
   const [chosen, setChosen] = useState<string | null>(linkedAgent)
@@ -3071,15 +2989,13 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
             </>
           ) : (
             <>
-              {rulesFirst ? <Rules key={`rules-${agent.id}`} agent={agent} agents={live} /> : null}
               <Ownership agent={agent} />
               <div className="wide:max-w-sm">
                 <AgentCard agent={agent} book={book.data} />
               </div>
               <AgentDetails key={`details-${agent.id}`} agent={agent} />
               <Money agent={agent} book={book.data} />
-              {rulesFirst ? null : <Rules key={`rules-${agent.id}`} agent={agent} agents={live} />}
-              <TryRules key={`try-${agent.id}`} agent={agent} agents={live} />
+              <RulesSummary key={`rules-${agent.id}`} agent={agent} agents={live} />
               {live.length > 1 ? (
                 <Pay
                   key={`pay-${agent.id}`}

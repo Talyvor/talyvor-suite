@@ -306,6 +306,28 @@ func TestAgentRulesCarryThePayeeDailyCaps(t *testing.T) {
 	}
 }
 
+// B57.23 — Always allow is a field on the rules page: the allowances a save names reach Lens (Lens B41.104 replaces them
+// whole, and judges an added one as loosening), and a save that does not name them sends null, which Lens reads as "keep
+// the allowances it holds". Before B57.23 the BFF dropped them, so only an approval could set one.
+func TestAgentRulesCarryThePayeeAllowances(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	doJSON(a, http.MethodPut, "/api/agents/agt_1/rules", `{"payee_allowances":{"agt_2":{"amount_ulxc":4000000000,"per":"month"}}}`)
+	doJSON(a, http.MethodPut, "/api/agents/agt_1/rules", `{"daily_limit_ulxc":5000000}`)
+	doJSON(a, http.MethodPost, "/api/agents/agt_1/rules-challenge", `{"rules":{"payee_allowances":{}}}`)
+	if len(f.got) != 3 {
+		t.Fatalf("Lens received %d requests, want 3: %q", len(f.got), f.got)
+	}
+	if !strings.Contains(f.got[0], `"payee_allowances":{"agt_2":{"amount_ulxc":4000000000,"per":"month"}}`) {
+		t.Fatalf("Lens received %q, want the payee's allowance", f.got[0])
+	}
+	if !strings.Contains(f.got[1], `"payee_allowances":null`) {
+		t.Fatalf("Lens received %q, want the allowances null when the save does not name them", f.got[1])
+	}
+	if !strings.Contains(f.got[2], `"payee_allowances":{}`) {
+		t.Fatalf("Lens received %q, want the challenge to carry the allowances it is asked about", f.got[2])
+	}
+}
+
 // B19.20 — pausing every agent, and one, reaches Lens on the session's workspace with only the reason;
 // resuming every agent sends nothing but the request.
 func TestAgentPauseSendsOnlyTheReason(t *testing.T) {
