@@ -34,7 +34,8 @@ afterEach(() => {
 
 describe('the wallet screens in the brand', () => {
   const SCREENS: Array<[string, string[]]> = [
-    ['/agents/agt_research', ['Move LXC']],
+    // B57.20 — the agent's page: Edit rules is its one primary action; Move LXC and Review are secondary, as w-agent-research draws them.
+    ['/agents/agt_research', ['Edit rules']],
     // B57.17 — Review is Pocket's secondary button, as w-approvals draws it; Approve is the sheet's.
     ['/approvals', []],
     // B57.24 — Statements' two downloads are Pocket's secondary buttons, as w-stmt-research draws them.

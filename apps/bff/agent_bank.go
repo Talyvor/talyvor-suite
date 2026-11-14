@@ -31,6 +31,7 @@ import (
 //	POST /api/agents/{id}/rules/boosts {"rule", "value", "until", "assertion"?}   B28.32: raise a limit until a time; it reverts by itself
 //	DELETE /api/agents/{id}/rules/boosts/{rule}        B28.32: end a boost before its time
 //	GET  /api/agents/{id}/wallet                       B46.9: its wallet on the money layer — balance and how to pay into it
+//	GET  /api/agents/{id}/summary                      B57.20: its page in one read (Lens B57.12), every figure from one moment
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
 //	GET  /api/agents/{id}/statement?from=&to=&format=json|csv|pdf|journal   B19.22: its statement for a period, to download (B28.55: PDF; B28.56: a journal for Xero or QuickBooks)
 //	GET  /api/agents/{id}/statement?kind=&q=&limit=&cursor=     B28.51: that statement searched, filtered and paged
@@ -406,6 +407,21 @@ func (a *app) handleAgentWallet(w http.ResponseWriter, r *http.Request, t tenant
 		return
 	}
 	suffix, ok := agentSuffix(w, r, "wallet")
+	if !ok {
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, suffix, nil)
+}
+
+// handleAgentSummary — GET /api/agents/{id}/summary (B57.20): everything the agent's page shows, as Lens B57.12 reads it
+// in one transaction — the agent, safe to spend, the month, what waits for approval, its newest statement lines, its rules
+// version, its card and last decline in words, and its currency accounts. Lens refuses another workspace's agent (404).
+func (a *app) handleAgentSummary(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	suffix, ok := agentSuffix(w, r, "summary")
 	if !ok {
 		return
 	}

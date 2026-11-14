@@ -401,7 +401,7 @@ const PINS: Record<string, Pin> = {
     fragment: '!body.url',
     why: 'the reason a 200 with no url is NOT the finding — it is already converted, so the gate lets it through',
   },
-  'apps/web/src/checkoutRefusalSurface.test.tsx:59|apps/web/src/App.tsx:121': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:59|apps/web/src/App.tsx:122': {
     kind: 'LIVE',
     fragment: 'onError',
     why: 'the app\'s only global error handler, quoted to show it hangs off the QUERY cache and cannot see a mutation',
@@ -434,7 +434,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the BFF half of the same parenthesis — the sentence promises this line says the payment happens at Stripe AFTER the redirect',
   },
-  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:1024': {
+  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:1025': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'the first of the TWO independent clamps the page ceiling rests on, quoted verbatim by the sentence that cites it',
@@ -444,7 +444,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the example that paragraph gives of a citation checkable from here — now checked, which is what it asked for',
   },
-  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:1024': {
+  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:1025': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'its second example, pinned for the same reason',
