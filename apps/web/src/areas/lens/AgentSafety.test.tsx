@@ -45,7 +45,11 @@ function mockBff(passkey = false) {
     }
     if (url === '/api/agents/agt_1/pause') { researcherPaused = true; return json({ agent_id: 'agt_1', paused: true }) }
     if (url === '/api/agents/forecast')
-      return json({ at: '', month_start: '', month_end: '', spent_ulxc: 1_000_000, forecast_ulxc: 3_000_000, agents: [{ agent_id: 'agt_1', name: 'Researcher', spent_ulxc: 1_000_000, forecast_ulxc: 3_000_000 }] })
+      return json({
+        at: '', month_start: '', month_end: '', spent_ulxc: 1_000_000, forecast_ulxc: 3_000_000,
+        // B28.57 — Researcher, in Sydney, runs out at 17:00 UTC on 27 October: 28 October in its own zone (Lens B28.330).
+        agents: [{ agent_id: 'agt_1', name: 'Researcher', spent_ulxc: 1_000_000, forecast_ulxc: 3_000_000, runs_out_at: '2026-10-28T04:00:00+11:00', runs_out_on: '2026-10-28', timezone: 'Australia/Sydney' }],
+      })
     if (url === '/api/agents/alerts')
       return json({ alerts: [{ id: 'al_1', agent_id: 'agt_1', last_hour_ulxc: 600_000, usual_per_hour_ulxc: 100_000, paused: false, created_at: '2026-09-28T09:30:00Z' }], rule: 'the rule' })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
@@ -93,6 +97,10 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
     render(<App />)
 
     await waitFor(() => expect(screen.getByTestId('agents-forecast').textContent).toBe('3 LXC'))
+    // B28.57 — the day it runs out in its own time zone, not UTC's (moved here from Home by B57.18).
+    const runsOut = screen.getByTestId('runs-out-agt_1')
+    expect(runsOut).toHaveTextContent('runs out on 28 October 2026 (Australia/Sydney)')
+    expect(within(runsOut).getByText('28 October 2026')).toHaveAttribute('dateTime', '2026-10-28')
     expect(screen.getByText(/spent/, { selector: 'div' }).textContent).toContain('Researcher spent 0.6 LXC in an hour')
 
     fireEvent.change(await screen.findByLabelText('Why every agent is paused'), { target: { value: 'audit' } })
