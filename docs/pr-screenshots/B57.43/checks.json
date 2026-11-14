@@ -1,0 +1,9 @@
+[
+  { "route": "/settings/devices", "screen": "w-security" },
+  { "route": "/settings/devices", "screen": "w-security+add-passkey", "steps": ["Add this device"] },
+  { "route": "/settings/devices", "screen": "w-security+remove-key-1", "steps": ["Remove iPhone"] },
+  { "route": "/settings/devices", "screen": "w-security+remove-key-2", "steps": ["Remove This Mac"] },
+  { "route": "/settings/devices", "screen": "w-security+remove-key-3", "steps": ["Remove iPhone, Talyvor app"] },
+  { "route": "/settings", "screen": "w-settings" },
+  { "route": "/approvals", "screen": "w-approvals" }
+]

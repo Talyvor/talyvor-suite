@@ -130,7 +130,7 @@ describe('Pause every agent, from the top bar of every page', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Start every agent again?' })
     expect(await within(dialog).findByText(/Start your agents again on your phone with Face ID\./)).toBeInTheDocument()
-    expect(within(dialog).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
+    expect(within(dialog).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/settings/devices')
     expect(within(dialog).queryByRole('button', { name: /^Start/ })).toBeNull()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('dialog')).toBeNull()

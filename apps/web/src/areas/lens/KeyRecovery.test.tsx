@@ -70,9 +70,10 @@ afterEach(() => {
 describe('Key recovery on the web (B55.54)', () => {
   it('the recovery code of the first key shows once, kept nowhere in the browser, and never again on reload', async () => {
     mockBff({ passkeys: [] })
-    window.history.pushState({}, '', '/approvals')
+    window.history.pushState({}, '', '/settings/devices')
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve with Face ID from now on' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Add this device' }))
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Add this device' })).getByRole('button', { name: 'Make a passkey' }))
 
     const sheet = await screen.findByRole('dialog', { name: 'Save your recovery code' })
     expect(sheet).toHaveTextContent('If you ever lose every passkey and phone, this code lets you add a new key at once. We show it only now.')
@@ -88,7 +89,7 @@ describe('Key recovery on the web (B55.54)', () => {
     // A reload reads the keys again; Lens answers the code only once, so nothing shows it.
     cleanup()
     queryClient.clear()
-    window.history.pushState({}, '', '/approvals')
+    window.history.pushState({}, '', '/settings/devices')
     render(<App />)
     await screen.findByText(/Approvals are signed with a passkey \(1 registered\)/)
     expect(screen.queryByRole('dialog', { name: 'Save your recovery code' })).toBeNull()
@@ -96,7 +97,7 @@ describe('Key recovery on the web (B55.54)', () => {
 
   it('with every key removed, a wrong recovery code shows Lens’s sentence', async () => {
     const { sent } = mockBff({ passkeys: [{ credential_id: 'old', name: 'iPhone', created_at: '2026-10-01T09:00:00Z', revoked_at: '2026-10-02T09:00:00Z' }] })
-    window.history.pushState({}, '', '/approvals')
+    window.history.pushState({}, '', '/settings/devices')
     render(<App />)
     expect(await screen.findByText('Every key of this workspace was removed, so nothing can approve.')).toBeInTheDocument()
     expect(screen.getByText('We wait 72 hours before you can add a new key, and tell everyone in your workspace. Anyone in it can cancel in that time.')).toBeInTheDocument()
@@ -113,12 +114,12 @@ describe('Key recovery on the web (B55.54)', () => {
 
   it('a sign-in too old to start a recovery links to a real sign-in, not the one the provider remembers (B50.49)', async () => {
     mockBff({ passkeys: [{ credential_id: 'old', name: 'iPhone', created_at: '2026-10-01T09:00:00Z', revoked_at: '2026-10-02T09:00:00Z' }] })
-    window.history.pushState({}, '', '/approvals')
+    window.history.pushState({}, '', '/settings/devices')
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Wait 72 hours' }))
 
     const again = await screen.findByRole('link', { name: 'Sign in again' })
-    expect(again).toHaveAttribute('href', '/auth/login?reauth=1&return_to=%2Fapprovals')
+    expect(again).toHaveAttribute('href', '/auth/login?reauth=1&return_to=%2Fsettings%2Fdevices')
   })
 
   it('an approve control says every key was removed and offers the two ways back', async () => {
@@ -131,7 +132,7 @@ describe('Key recovery on the web (B55.54)', () => {
     render(<App />)
     const said = await screen.findAllByTestId('no-live-key')
     expect(said[0]).toHaveTextContent('Every key of this workspace was removed, so nothing can approve.')
-    expect(within(said[0]).getByRole('link', { name: 'Use your recovery code' })).toHaveAttribute('href', '/approvals#get-a-key-back')
+    expect(within(said[0]).getByRole('link', { name: 'Use your recovery code' })).toHaveAttribute('href', '/settings/devices#get-a-key-back')
     expect(within(said[0]).getByRole('link', { name: 'Wait 72 hours' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull()
   })

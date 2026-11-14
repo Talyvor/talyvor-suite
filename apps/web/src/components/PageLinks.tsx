@@ -87,6 +87,7 @@ export function SettingsCards({ links }: { links: readonly SettingsLink[] }) {
 
 /** Each settings page's tile. */
 const SETTINGS_ICON: Record<string, IconName> = {
+  '/settings/devices': 'faceid',
   '/settings/connect': 'model',
   '/members': 'rooms',
   '/billing': 'billing',
@@ -130,6 +131,8 @@ export function useSettingsLinks(): SettingsLink[] {
   const st = sub.data?.enabled ? sub.data.data : null
   const plan = st ? planName(st.subscribed && st.plan ? st.plan : 'free') : undefined
   const links: PageLink[] = [
+    // B57.43 — the keys that approve, first, as w-settings draws it.
+    { to: '/settings/devices', title: 'Approvals and devices', line: 'Your passkeys, your phone, and notifications' },
     { to: '/settings/connect', title: 'Connect your AI', line: 'Use Talyvor from Claude, ChatGPT and others' },
     ...(team ? [{ to: '/members', title: 'Members', line: roster.data ? people(roster.data.length) : undefined }] : []),
     { to: '/billing', title: 'Billing and plan', line: plan },
