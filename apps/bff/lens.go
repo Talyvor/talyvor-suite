@@ -369,6 +369,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B40.12 — talking to Talyvor in Chat: the recording transcribed and the answer spoken, through Lens. See chat_voice.go.
 	a.mux.HandleFunc("/api/chat/voice/transcriptions", a.requireTenant(a.handleVoiceTranscription))
 	a.mux.HandleFunc("/api/chat/voice/speech", a.requireTenant(a.handleVoiceSpeech))
+	// B58.10 — "Hey Taly"'s voice key for a signed-in phone, so the app ships none. See voice_key.go.
+	a.mux.HandleFunc("/api/voice/key", a.requireTenant(a.handleVoiceKey))
 	a.mux.HandleFunc("/api/public/chats/{token}", a.publicChatShare())
 	a.mux.Handle("/share/{token}", a.sharePage())
 
