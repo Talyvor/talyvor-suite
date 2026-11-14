@@ -116,6 +116,10 @@ function bodyFor(url: string): unknown {
   if (url.includes('/api/money/payment-requests')) return { requests: [] }
   if (url.includes('/api/money/mandates')) return { granted: [], received: [] } // B55.40: the badge counts an agent's mandate request
   if (url.includes('/api/agents/briefing')) return { items: [], spent_yesterday: [], quiet: true, line: 'A quiet day: nothing was spent yesterday, and nothing is waiting for you.' }
+  // B57.18 — Home's balances, the Researcher's wallet and the plan.
+  if (url.includes('/api/money/accounts')) return { accounts: [] }
+  if (url.includes('/api/agents/agt_1/wallet')) return { account_id: 'macc_1', agent_id: 'agt_1', asset: 'USDC', partner: 'sandbox', balance_minor: 0, receive: { asset: 'USDC' }, mode: 'TEST' }
+  if (url.includes('/api/plan')) return { plan: 'free', agents: 3, agents_used: 1 }
   if (url.includes('/api/agents/agt_1/rules'))
     return { max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 0, approval_above_ulxc: 0, allowed_models: null, allowed_providers: null, active_from: '', active_until: '', timezone: '' }
   if (url.includes('/api/agents'))
@@ -166,7 +170,7 @@ function mockBff(refusals: Array<[string, number]> = []) {
  */
 const ADDRESS_ROUTES: Record<string, string[]> = {
   // B28.6 — `/` is the wallet home; Overview moved to /overview with the same reads. B28.22 — and the LXC peg, for dollars.
-  '/': ['/api/agents', '/api/agents/agt_1/card', '/api/agents/agt_1/rules', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/agents/passkeys', '/api/agents/safe-to-spend', '/api/lxc/topup-options', '/api/money/devices', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/agt_1/wallet', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/lxc/topup-options', '/api/money/accounts', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/overview': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/bonds', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/ledger': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/billing': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/billing/allowance', '/api/lxc/balance', '/api/lxc/topup-options', '/api/money/mandates', '/api/money/payment-requests', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
@@ -275,7 +279,9 @@ describe('the swept set', () => {
     // 119 → 120 at B57.16: `/` reads each agent's card, for the agent card's Card frozen chip.
     // 120 → 122 at B57.42: /settings reads the plan, the members and the stored-answer counts, and no longer /api/distill.
     // 122 → 133 at B55.40: and an agent's mandate requests, which its Approvals badge counts, on every address.
-    expect(pairs).toBe(133)
+    // 133 → 132 at B57.18: `/` drops the cards, passkeys, safe to spend and devices reads, and reads the balances, each
+    // agent's wallet and the plan.
+    expect(pairs).toBe(132)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {

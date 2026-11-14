@@ -415,6 +415,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B59.38 — which areas the workspace has; the phone shows an area only when it is listed. See workspace_areas.go.
 	a.mux.HandleFunc("/api/workspace/areas", a.requireTenant(a.handleWorkspaceAreas))
 	a.mux.HandleFunc("/api/workspace/account", a.requireTenant(a.handleWorkspaceAccount)) // B59.10 — the type and kind of money. See workspace_account.go.
+	a.mux.HandleFunc("/api/plan", a.requireTenant(a.handleWorkspacePlan))                 // B57.18 — Home's "3 of 3 on Free". See workspace_plan.go.
 	// B59.28 — help and complaints, closing the account and the workspace's data. See workspace_requests.go.
 	a.mux.HandleFunc("/api/workspace/requests", a.requireTenant(a.handleWorkspaceRequests))
 	a.mux.HandleFunc("/api/workspace/requests/{id}/export", a.requireTenant(a.handleWorkspaceRequestExport))

@@ -12,11 +12,11 @@ import { areaSource, readWorkspaceAreas } from './lib/workspaceAreas'
  * it has a sidebar row (B57.8 — Docs is reached from Track and Settings, and the gateway's features from Developers).
  */
 const AREAS = [
-  { area: 'chat', paths: ['/chat'], card: 'home-card-chat', page: 'Prompts', row: true },
+  { area: 'chat', paths: ['/chat'], card: null, page: 'Prompts', row: true },
   { area: 'rooms', paths: ['/rooms'], card: null, page: 'Rooms', row: true },
-  { area: 'marketplace', paths: ['/marketplace'], card: 'home-card-marketplace', page: 'Marketplace', row: true },
-  { area: 'track', paths: ['/track'], card: 'home-card-track', page: 'Track', row: true },
-  { area: 'docs', paths: ['/docs', '/settings/webhooks', '/settings/email-branding'], card: 'home-card-docs', page: 'Webhooks', row: false },
+  { area: 'marketplace', paths: ['/marketplace'], card: null, page: 'Marketplace', row: true },
+  { area: 'track', paths: ['/track'], card: null, page: 'Track', row: true },
+  { area: 'docs', paths: ['/docs', '/settings/webhooks', '/settings/email-branding'], card: null, page: 'Webhooks', row: false },
   { area: 'scan', paths: ['/scan/reports', '/scan/agents', '/scan/track-record'], card: null, page: 'Scan reports', row: true },
   { area: 'gateway', paths: ['/features'], card: null, page: 'Gateway features', row: false },
 ] as const

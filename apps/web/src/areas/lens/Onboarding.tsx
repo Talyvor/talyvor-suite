@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Input } from '@talyvor/ui'
+import { Button, Field, Input } from '@talyvor/ui/pocket'
 import { api } from '../../lib/api'
 import { useAuthMeReader } from '../../lib/authMe'
 import { BOOK_KEY } from './AgentBank'
@@ -63,24 +63,23 @@ export function NameWorkspace() {
   if (!current.data || current.data.name !== current.data.id) return null
   return (
     <form
-      className="flex flex-col items-start gap-3 border border-rule bg-surface px-gutter py-5"
+      className="flex flex-col items-start gap-3 rounded-card bg-page p-5 shadow-pocket"
       data-testid="name-workspace"
       onSubmit={(e) => {
         e.preventDefault()
         if (name.trim() && !save.isPending) save.mutate()
       }}
     >
-      <p className="text-head text-ink">Name your workspace</p>
-      <p className="text-body text-muted">It shows under the logo and on your invoices.</p>
-      <label className="flex w-full flex-col gap-1 text-caption text-ink">
-        Workspace name
+      <h3 className="font-display text-reading font-bold text-ink">Name your workspace</h3>
+      <p className="text-body text-ink-2">It shows under the logo and on your invoices.</p>
+      <Field label="Workspace name" className="w-full">
         <Input value={name} maxLength={80} onChange={(e) => setTyped(e.target.value)} />
-      </label>
-      <Button type="submit" variant="primary" disabled={!name.trim() || save.isPending}>
+      </Field>
+      <Button type="submit" disabled={!name.trim() || save.isPending}>
         Save name
       </Button>
       {save.isError ? (
-        <p role="alert" className="text-caption text-ink">
+        <p role="alert" className="text-body text-ink">
           {refusalText(save.error)}
         </p>
       ) : null}
@@ -169,7 +168,7 @@ export function FirstAgent({ book, onStarted, onFinished }: { book: AgentBook; o
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
   return (
-    <div className="flex flex-col items-start gap-3 border border-rule bg-surface px-gutter py-5" data-testid="wallet-onboarding">
+    <div className="flex flex-col items-start gap-3" data-testid="wallet-onboarding">
       {ready ? (
         <ReadyView ready={ready} onFinished={onFinished} />
       ) : (
@@ -180,21 +179,19 @@ export function FirstAgent({ book, onStarted, onFinished }: { book: AgentBook; o
             if ((named || workspace.trim()) && (agent || name.trim()) && !make.isPending) make.mutate()
           }}
         >
-          <label className="flex w-full flex-col gap-1 text-caption text-ink">
-            Workspace name
+          <Field label="Workspace name">
             <Input value={workspace} maxLength={80} disabled={named} onChange={(e) => setWorkspace(e.target.value)} />
-          </label>
-          <label className="flex w-full flex-col gap-1 text-caption text-ink">
-            Agent name
+          </Field>
+          <Field label="Agent name">
             <Input value={agent?.name ?? name} disabled={agent !== null} onChange={(e) => setName(e.target.value)} />
-          </label>
+          </Field>
           <div>
-            <Button type="submit" variant="primary" disabled={(!named && !workspace.trim()) || (!agent && !name.trim()) || make.isPending}>
+            <Button type="submit" disabled={(!named && !workspace.trim()) || (!agent && !name.trim()) || make.isPending}>
               {make.isPending ? 'Getting it ready…' : 'Create my first agent'}
             </Button>
           </div>
           {make.isError ? (
-            <p role="alert" className="text-caption text-ink">
+            <p role="alert" className="text-body text-ink">
               {refusalText(make.error)}
             </p>
           ) : null}

@@ -180,6 +180,9 @@ const BODIES: Record<string, unknown> = {
   // B46.16 — the sidebar shows the workspace's name on every address.
   '/api/workspace/name': { id: 'ws_1', name: 'Acme' },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B57.18 — Home's "2 of 3 on Free" (Lens's plan through GET /api/plan), and the ECB's rates its total is valued at.
+  '/api/plan': { plan: 'free', agents: 3, agents_used: 2 },
+  '/api/fx': { rate_date: '2026-10-09', usd_per_eur: 1.17, gbp_per_eur: 0.86 },
   // B59.31 — Settings → Company details, as a company with two people with control.
   '/api/workspace/business': {
     company_name: 'Acme Robotics Ltd',
@@ -701,6 +704,8 @@ const BY_PATH: Record<string, unknown> = {
     timezone: '',
   },
   // B46.9 — the Researcher's wallet on the money layer, served by the sandbox: nothing to pay into yet.
+  // B57.18 — the Writer's wallet, as Home reads every agent's in a workspace that holds coins.
+  '/api/agents/agt_writer/wallet': { account_id: 'macc_writer', agent_id: 'agt_writer', asset: 'USDC', partner: 'sandbox', balance_minor: 0, receive: { asset: 'USDC' }, mode: 'TEST' },
   '/api/agents/agt_research/wallet': {
     account_id: 'macc_research',
     agent_id: 'agt_research',

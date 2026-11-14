@@ -141,13 +141,13 @@ describe('first run opens Home in onboarding mode', () => {
     mockBff({ needsChoice: true })
     at('/ledger')
     // B28.8 — nothing blocks: the login that created the workspace is routed once to Home, which for a
-    // workspace with no agents is the three onboarding steps, Setup linked for a workspace key.
+    // workspace with no agents is the onboarding steps. B57.18: Setup is the sidebar's Developers, one link away.
     await waitFor(() => {
       expect(window.location.pathname).toBe('/')
     })
     expect(await screen.findByTestId('home-onboarding')).toBeInTheDocument()
     expect(screen.queryByText(/Share your answers, and earn from them/i)).not.toBeInTheDocument()
-    expect(within(screen.getByRole('main')).getByRole('link', { name: 'Setup' })).toHaveAttribute('href', '/setup')
+    expect(within(screen.getByRole('navigation', { name: /sections/i })).getByRole('link', { name: 'Developers' })).toHaveAttribute('href', '/setup')
   })
 
   it('does NOT trap them there — the whole app is reachable from Setup', async () => {

@@ -1,13 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { App, CONSOLE_ROUTES, queryClient } from '../../App'
-import { PRODUCT_CARDS } from './Home'
+import { App, queryClient } from '../../App'
+import { greeting, pausedLine, planLine, waitingLine } from './Home'
 import { nameFromEmail } from './Onboarding'
 
-// B28.6 — the first screen after sign-in is the wallet home. DONE reads: "after sign-in a returning
-// user lands on Home and sees per-agent budget-used and the approvals count". The mock BFF answers the
-// routes Home reads exactly as Lens shapes them (economy.AgentBook, AgentRules, AgentApproval,
-// SpendForecast), behind an oidc session that is signed in and not new.
+// B57.18 — Home as the launch pack's W2 draws it, with Lens's figures. The mock BFF answers the routes Home reads exactly
+// as Lens shapes them (economy.AgentBook, AgentRules, AgentApproval, SpendForecast, CurrencyAccount, the agent's wallet,
+// the plan through GET /api/plan), behind an oidc session that is signed in and not new.
 
 const M = 1_000_000
 
@@ -41,18 +40,29 @@ const PREPARED_BRIEFING = {
   items: [{ kind: 'approval', id: 'preq_1', name: 'Acme Hosting', amount: 12000, currency: 'GBP', text: 'A payment of £120.00 to Acme Hosting waits for your approval' }, ...BUSY.items],
 }
 
+
 function mockBff({
   agents,
   newWorkspace = false,
   briefing = QUIET,
   workspaceName = 'Acme',
   prepared = [],
+  account = { account_type: 'business', money_kind: 'hybrid' },
+  accounts = [],
+  wallets = {},
+  plan = { plan: 'free', agents: 3, agents_used: 2 },
+  allPaused = false,
 }: {
   agents: Array<(typeof AGENTS)[number] & { paused_at?: string }>
   newWorkspace?: boolean
   briefing?: typeof QUIET | typeof BUSY | typeof PREPARED_BRIEFING
   workspaceName?: string
   prepared?: object[]
+  account?: { account_type: string; money_kind: string }
+  accounts?: object[]
+  wallets?: Record<string, number>
+  plan?: object
+  allPaused?: boolean
 }) {
   const writes: string[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -77,7 +87,16 @@ function mockBff({
         unallocated_ulxc: 50 * M - allocated,
         spent_ulxc: 4 * M,
         agents,
+        ...(allPaused ? { all_paused_at: '2026-10-04T09:00:00Z' } : {}),
       })
+    if (url === '/api/workspace/account') return json(account)
+    if (url === '/api/money/accounts') return json({ accounts })
+    if (url === '/api/fx') return json({ rate_date: '2026-10-03', usd_per_eur: 1.2, gbp_per_eur: 0.8 })
+    if (url === '/api/plan') return json(plan)
+    const wallet = /^\/api\/agents\/([^/]+)\/wallet$/.exec(url)
+    if (wallet)
+      return json({ account_id: `macc_${wallet[1]}`, agent_id: wallet[1], asset: 'USDC', partner: 'sandbox', balance_minor: wallets[wallet[1]] ?? 0, receive: { asset: 'USDC' }, mode: 'TEST' })
+    if (/^\/api\/agents\/[^/]+\/card$/.test(url)) return url.includes('agt_1') ? json({ card: { id: 'ic_1', agent_id: 'agt_1', last4: '4242', exp_month: 9, exp_year: 2029, currency: 'usd', livemode: false, created_at: '2026-10-01T09:00:00Z' }, authorizations: [] }) : new Response('{}', { status: 404 })
     if (url === '/api/agents/approvals')
       return json({
         approvals: [
@@ -170,8 +189,8 @@ describe('Home — the 30-second daily briefing (B41.6)', () => {
       '0.045 LXC was paid to Writer',
     ])
     expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/?approval=apr_1')
-    // It sits above the approvals card, the first thing on Home.
-    const waiting = screen.getByRole('heading', { name: /^Waiting for you/ })
+    // It sits above the waiting card, under the greeting.
+    const waiting = screen.getByRole('heading', { name: 'Waiting for your yes' })
     expect(screen.getByTestId('home-briefing').compareDocumentPosition(waiting) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
@@ -210,116 +229,218 @@ describe('Home — payments prepared for the person (B55.10)', () => {
   })
 })
 
-describe('Home — the wallet home (B28.6)', () => {
-  it('a returning user lands on Home and sees each agent’s budget used and the approvals waiting', async () => {
+describe('Home — the greeting and what needs you (B57.18)', () => {
+  it('greets by the time of day and the person’s first name', () => {
+    expect(greeting(8, 'Maya')).toBe('Good morning, Maya')
+    expect(greeting(14, 'Maya')).toBe('Good afternoon, Maya')
+    expect(greeting(21, '')).toBe('Good evening')
+    expect(greeting(2, 'Nick')).toBe('Good evening, Nick')
+  })
+
+  it('says how many things wait, for none to three', () => {
+    expect([0, 1, 2, 3].map(waitingLine)).toEqual([
+      'You’re all caught up.',
+      '1 thing is waiting for you.',
+      '2 things are waiting for you.',
+      '3 things are waiting for you.',
+    ])
+  })
+
+  it('names the paused agents for every mix, and says when every agent is paused', () => {
+    const a = (name: string, paused = false) => ({ ...AGENTS[0], id: name, name, ...(paused ? { paused_at: '2026-10-04T09:00:00Z' } : {}) })
+    expect(pausedLine({ agents: [a('Ops'), a('Sales')] })).toBe('')
+    expect(pausedLine({ agents: [a('Ops', true), a('Sales')] })).toBe('Ops is paused.')
+    expect(pausedLine({ agents: [a('Ops', true), a('Sales', true), a('Ads')] })).toBe('Ops and Sales are paused.')
+    expect(pausedLine({ agents: [a('Ops', true), a('Sales', true), a('Ads', true), a('Max')] })).toBe('Ops, Sales and Ads are paused.')
+    expect(pausedLine({ agents: [a('Ops', true), a('Sales', true)] })).toBe('Every agent is paused.')
+    expect(pausedLine({ agents: [a('Ops')], all_paused_at: '2026-10-04T09:00:00Z' })).toBe('Every agent is paused.')
+    expect(pausedLine({ agents: [a('Ops', true)] })).toBe('Ops is paused.')
+    expect(pausedLine({ agents: [] })).toBe('')
+  })
+
+  it('a Personal account is greeted by its first name, with what waits and who is paused under it', async () => {
+    mockBff({
+      agents: [AGENTS[0], { ...AGENTS[1], paused_at: '2026-10-04T09:00:00Z' }],
+      account: { account_type: 'personal', money_kind: 'fiat' },
+      workspaceName: 'Maya Lind',
+    })
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { level: 2, name: /^Good (morning|afternoon|evening), Maya$/ })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('home-status')).toHaveTextContent('2 things are waiting for you. Buyer is paused.'))
+    // Its products are in the sidebar, not on Home.
+    expect(screen.queryByRole('list', { name: 'Products' })).toBeNull()
+  })
+
+  it('a Business is greeted by the time of day alone: its name is the company’s', async () => {
+    mockBff({ agents: AGENTS, workspaceName: 'Northwind Studio' })
+    render(<App />)
+    expect(await screen.findByRole('heading', { level: 2, name: /^Good (morning|afternoon|evening)$/ })).toBeInTheDocument()
+  })
+})
+
+describe('Home — waiting for your yes (B57.18)', () => {
+  it('lists the agents’ requests as Approvals does, each with Review, and the count opens Approvals', async () => {
     mockBff({ agents: AGENTS })
-    window.history.pushState({}, '', '/')
     render(<App />)
 
-    expect(await screen.findByRole('heading', { level: 2, name: 'Welcome to Talyvor' })).toBeInTheDocument()
-    expect(await screen.findByText('Your agents’ wallets, at a glance.')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Home')
-
-
-    // Researcher spent 3 of its 12 LXC monthly budget: 25%. Buyer has no budget, so it is offered one.
-    expect(await screen.findByTestId('home-budget-used-agt_1')).toHaveTextContent('25%')
-    expect(screen.getByRole('progressbar', { name: 'Researcher’s monthly budget used' })).toHaveAttribute('aria-valuenow', '25')
-    const buyer = screen.getByText(/no monthly budget set/).closest('div.flex.min-h-row') as HTMLElement
-    expect(within(buyer).getByText('Buyer')).toBeInTheDocument()
-    expect(within(buyer).getByRole('link', { name: 'Set a budget' })).toHaveAttribute('href', '/agents')
-
-    // The rest of the home: the forecast, and pause-all.
-    expect(await screen.findByTestId('home-forecast')).toHaveTextContent('25 LXC')
-    expect(within(screen.getByTestId('pause-every-agent')).getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
+    const card = (await screen.findByRole('heading', { name: 'Waiting for your yes' })).closest('div.rounded-card') as HTMLElement
+    expect(within(card).getByTestId('home-approvals-waiting')).toHaveTextContent('2')
+    expect(within(card).getByRole('link', { name: '2 waiting, open Approvals' })).toHaveAttribute('href', '/approvals')
+    const reviews = within(screen.getByTestId('home-approvals')).getAllByRole('link', { name: /^Review/ })
+    expect(reviews.map((l) => l.getAttribute('href'))).toEqual(['/?approval=apr_1', '/?approval=apr_2'])
+    expect(within(card).getByText(/Researcher wants to use gpt-4o, up to/)).toBeInTheDocument()
+    expect(card).toHaveTextContent('Anything outside your rules waits for your yes.')
+    fireEvent.click(reviews[0])
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
-  // B45.11 — DONE reads: "the approvals, the total and the first agent rows are visible without scrolling; every
-  // figure matches the API". jsdom has no fold, so this pins the order and the figures; the 390px screenshot the fold.
-  it('each agent’s row says the day it runs out in its own time zone, not UTC’s, or that it does not run out (B28.57)', async () => {
+  it('counts a prepared payment with the agents’ requests', async () => {
+    mockBff({ agents: AGENTS, prepared: [PREPARED] })
+    render(<App />)
+    expect(await screen.findByTestId('home-approvals-waiting')).toHaveTextContent('3')
+    await waitFor(() => expect(screen.getByTestId('home-status')).toHaveTextContent('3 things are waiting for you.'))
+    const rows = screen.getByTestId('home-approvals').querySelectorAll('[data-prepared], [data-approval]')
+    expect([...rows].map((r) => r.getAttribute('data-prepared') ?? r.getAttribute('data-approval'))).toEqual(['preq_1', 'apr_1', 'apr_2'])
+  })
+
+  it('with nothing waiting there is no card: You’re all caught up, and See what you decided', async () => {
     mockBff({ agents: AGENTS })
-    render(<App />)
-
-    const researcher = await screen.findByTestId('runs-out-agt_1')
-    expect(researcher).toHaveTextContent('runs out on 28 October 2026 (Australia/Sydney)')
-    expect(within(researcher).getByText('28 October 2026')).toHaveAttribute('dateTime', '2026-10-28')
-    expect(screen.getByTestId('runs-out-agt_2')).toHaveTextContent('does not run out at this pace')
-  })
-
-  it('Home in one glance: approvals first, then one total, then a row per agent, then Taly’s input', async () => {
-    const writes = mockBff({ agents: AGENTS })
-    window.history.pushState({}, '', '/')
-    render(<App />)
-
-    // Two pending, one decided: the pending two are listed, each opening its own card on Approvals.
-    expect(await screen.findByTestId('home-approvals-waiting')).toHaveTextContent('2')
-    const approvals = screen.getByTestId('home-approvals')
-    const links = within(approvals).getAllByRole('link')
-    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/?approval=apr_1', '/?approval=apr_2'])
-    expect(links[0]).toHaveTextContent(/Researcher.*2 LXC/)
-
-    // One total: what the agents hold together (6 + 10), and what the workspace has not given out.
-    const total = screen.getByTestId('home-total')
-    expect(total).toHaveTextContent('16 LXC')
-    expect(screen.getByTestId('home-unallocated')).toHaveTextContent('34 LXC')
-
-    // A card per agent (B57.16): balance, and safe to spend as Lens reports it.
-    const researcher = screen.getByTestId('agent-card-agt_1')
-    expect(within(researcher).getByTestId('agent-card-balance-agt_1')).toHaveTextContent('6 LXC')
-    await waitFor(() => expect(within(researcher).getByTestId('agent-card-safe-agt_1')).toHaveTextContent('4 LXC safe to spend'))
-    expect(screen.getByTestId('agent-card-safe-agt_2')).toHaveTextContent('4 LXC safe to spend')
-    // B41.5 — the company's safe to spend, per currency, its bills due taken off.
-    const pounds = await screen.findByTestId('home-company-safe-GBP')
-    expect(pounds).toHaveTextContent('£458.00')
-    expect(document.body).toHaveTextContent('£500.00 held, less £0.00 scheduled, £42.00 in bills due and £0.00 waiting for approval')
-
-    const ask = screen.getByRole('textbox', { name: 'Ask Taly' })
-    const order = [approvals, total, researcher, ask]
-    for (let i = 1; i < order.length; i++) expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // …and the product cards come after all of it.
-    expect(ask.compareDocumentPosition(screen.getByRole('list', { name: 'Products' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-
-    // B57.16 — switching off pauses at once; only resuming asks first, and signs.
-    fireEvent.click(within(researcher).getByRole('switch', { name: 'Pause Researcher' }))
-    await waitFor(() => expect(writes).toEqual(['/api/agents/agt_1/pause']))
-
-    // Taly's input takes the question to Chat.
-    fireEvent.change(ask, { target: { value: 'Which agent spent most?' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
-    expect(window.location.pathname).toBe('/chat')
-    expect(await screen.findByDisplayValue('Which agent spent most?')).toBeInTheDocument()
-  })
-
-  // B55.2 — with only the phone's key Lens refuses an unsigned resume, so Home sends none and says where to do it.
-  it('with only the phone’s key, the switch on a paused agent sends nothing and says to resume it on the phone', async () => {
-    const writes = mockBff({ agents: [{ ...AGENTS[0], paused_at: '2026-10-04T09:00:00Z' }, AGENTS[1]] })
     const inner = vi.mocked(fetch).getMockImplementation()!
-    const keys: Record<string, unknown> = { '/api/agents/passkeys': { passkeys: [] }, '/api/money/devices': { devices: [{ id: 'dk_1', platform: 'ios', name: 'Work iPhone' }] } }
     vi.mocked(fetch).mockImplementation(async (input, init) =>
-      String(input) in keys ? new Response(JSON.stringify(keys[String(input)]), { status: 200, headers: { 'Content-Type': 'application/json' } }) : inner(input, init),
+      String(input) === '/api/agents/approvals' ? new Response(JSON.stringify({ approvals: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }) : inner(input, init),
     )
-    window.history.pushState({}, '', '/')
     render(<App />)
-    const researcher = await screen.findByTestId('agent-card-agt_1')
-    await waitFor(() => expect(queryClient.getQueryState(['money-devices'])?.status).toBe('success'))
-    fireEvent.click(within(researcher).getByRole('switch', { name: 'Resume Researcher' }))
-    const resume = await screen.findByRole('dialog', { name: 'Resume Researcher?' })
-    expect(within(resume).getByTestId('on-the-phone')).toHaveTextContent('Resume Researcher on your phone with Face ID.')
-    expect(within(resume).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
-    expect(within(resume).queryByRole('button', { name: 'Resume with your passkey' })).toBeNull()
-    expect(writes).toEqual([])
+    await waitFor(() => expect(screen.getByTestId('home-status')).toHaveTextContent('You’re all caught up.'))
+    expect(within(screen.getByTestId('home-status')).getByRole('link', { name: 'See what you decided' })).toHaveAttribute('href', '/approvals')
+    expect(screen.queryByRole('heading', { name: 'Waiting for your yes' })).toBeNull()
+  })
+})
+
+// A Business, Hybrid workspace: $18,400.00 in the company's dollar account, €7,500.00 in the Researcher's euro account,
+// £4,000.00 in the company's pound account, 14,000 USDC in the company's USDC account and 1,500 USDC in the Researcher's
+// wallet. At $1.20 a euro and £0.80 a euro: €7,500.00 is $9,000.00 and £4,000.00 is $6,000.00.
+const HYBRID_ACCOUNTS = [
+  { id: 'macc_usd', agent_id: '', currency: 'USD', purpose: 'company', status: 'open', name: 'USD account', balance_minor: 1_840_000, test_minor: 1_840_000, live_minor: 0 },
+  { id: 'macc_eur', agent_id: 'agt_1', currency: 'EUR', purpose: 'agent', status: 'open', name: 'EUR account', balance_minor: 750_000, test_minor: 750_000, live_minor: 0 },
+  { id: 'macc_gbp', agent_id: '', currency: 'GBP', purpose: 'company', status: 'open', name: 'GBP account', balance_minor: 400_000, test_minor: 400_000, live_minor: 0 },
+  { id: 'macc_usdc', agent_id: '', currency: 'USDC', purpose: 'company', status: 'open', name: 'USDC account', balance_minor: 14_000_000_000, test_minor: 14_000_000_000, live_minor: 0 },
+  { id: 'macc_old', agent_id: '', currency: 'GBP', purpose: 'company', status: 'closed', name: 'GBP account', balance_minor: 999_999, test_minor: 0, live_minor: 0 },
+]
+
+describe('Home — the total (B57.18)', () => {
+  it('a Business, Hybrid account: the company’s total in dollars, split into Fiat and Stablecoin, each currency under it', async () => {
+    mockBff({ agents: AGENTS, accounts: HYBRID_ACCOUNTS, wallets: { agt_1: 1_500_000_000 } })
+    render(<App />)
+
+    expect(await screen.findByText('Your company’s total')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('home-total')).toHaveTextContent('$48,900.00'))
+    const fiat = screen.getByTestId('home-fiat')
+    expect(fiat).toHaveTextContent('Fiat$33,400.00')
+    expect(fiat).toHaveTextContent('US dollar$18,400.00Euro€7,500.00British pound£4,000.00')
+    // The company's US dollar account opens Invoices.
+    expect(within(fiat).getByRole('link', { name: /US dollar/ })).toHaveAttribute('href', '/money/invoices')
+    expect(screen.getByTestId('home-stablecoin')).toHaveTextContent('Stablecoin$15,500.00USDC15,500.00')
+    expect(screen.getByRole('img', { name: 'Fiat 68%, Stablecoin 32%' })).toBeInTheDocument()
+    // Only the actions with a screen behind them.
+    expect(screen.getByRole('link', { name: 'Top up' })).toHaveAttribute('href', '/billing')
+    expect(screen.getAllByRole('link', { name: 'Pay' }).some((l) => l.getAttribute('href') === '/money/pay')).toBe(true)
+
+    // What the agents hold in LXC, what is not yet given to one, and Lens's forecast.
+    expect(screen.getByTestId('home-agents-total')).toHaveTextContent('16 LXC')
+    expect(screen.getByTestId('home-unallocated')).toHaveTextContent('34 LXC')
+    await waitFor(() => expect(screen.getByTestId('home-spent')).toHaveTextContent('3 LXC'))
+    expect(screen.getByTestId('home-forecast')).toHaveTextContent('25 LXC')
+  })
+
+  it('a Personal, Fiat only account: its total and its currencies, with no stablecoin side and no split', async () => {
+    mockBff({ agents: AGENTS, account: { account_type: 'personal', money_kind: 'fiat' }, accounts: HYBRID_ACCOUNTS })
+    render(<App />)
+
+    expect(await screen.findByText('Your total')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('home-total')).toHaveTextContent('$33,400.00'))
+    expect(screen.queryByTestId('home-stablecoin')).toBeNull()
+    expect(screen.getByTestId('home-fiat')).not.toHaveTextContent('Fiat$')
+    expect(screen.queryByRole('img', { name: /^Fiat \d+%/ })).toBeNull()
+  })
+
+  it('a Stablecoin only account has no fiat side and no Top up; an empty one says how to start', async () => {
+    mockBff({ agents: AGENTS, account: { account_type: 'personal', money_kind: 'stablecoin' } })
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByTestId('home-total')).toHaveTextContent('$0.00'))
+    expect(screen.getByText('Receive stablecoins to get started.')).toBeInTheDocument()
+    expect(screen.queryByTestId('home-fiat')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Top up' })).toBeNull()
+  })
+
+  it('a balance read that failed says so and never draws a total', async () => {
+    mockBff({ agents: AGENTS })
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (input, init) => (String(input) === '/api/money/accounts' ? new Response('{}', { status: 502 }) : inner(input, init)))
+    render(<App />)
+
+    expect(await screen.findByText('We couldn’t read your balances. Nothing changed.')).toBeInTheDocument()
+    expect(screen.queryByTestId('home-total')).toBeNull()
+  })
+})
+
+describe('Home — the agents and the cards (B57.18)', () => {
+  it('“2 of 3 on Free” opens Plans; each agent’s balances and its month against its budget', async () => {
+    mockBff({ agents: AGENTS, accounts: HYBRID_ACCOUNTS, wallets: { agt_1: 1_500_000_000 } })
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Your team’s agents' })).toBeInTheDocument()
+    expect(await screen.findByTestId('home-plan')).toHaveTextContent('2 of 3 on Free')
+    expect(screen.getByTestId('home-plan')).toHaveAttribute('href', '/plans')
+
+    const researcher = screen.getByTestId('home-agent-agt_1')
+    await waitFor(() => expect(researcher).toHaveTextContent('€7,500.00'))
+    await waitFor(() => expect(researcher).toHaveTextContent('1,500.00 USDC'))
+    expect(within(researcher).getByRole('link', { name: /Researcher/ })).toHaveAttribute('href', '/agents/agt_1')
+    // Researcher spent 3 of its 12 LXC monthly budget: 25%.
+    await waitFor(() => expect(screen.getByTestId('home-budget-used-agt_1')).toHaveAttribute('data-used', '25%'))
+    expect(screen.getByRole('img', { name: /^25% of Researcher’s monthly budget used/ })).toBeInTheDocument()
+    expect(researcher).toHaveTextContent('3 LXC of 12 LXC')
+    expect(screen.queryByTestId('home-above-budget-agt_1')).toBeNull()
+    // Buyer has no budget, so it is offered one, on its rules.
+    const buyer = screen.getByTestId('home-agent-agt_2')
+    expect(buyer).toHaveTextContent('No account')
+    expect(within(buyer).getByRole('link', { name: 'Set a budget' })).toHaveAttribute('href', '/agents/agt_2/rules')
+
+    // The cards: the company's own, then each agent's that Lens issued.
+    const cards = within(await screen.findByTestId('home-card-list'))
+    await waitFor(() => expect(cards.getAllByRole('listitem')).toHaveLength(2))
+    expect(cards.getByRole('img', { name: "Researcher's agent card" })).toBeInTheDocument()
+  })
+
+  it('an agent above its budget wears the chip', async () => {
+    mockBff({ agents: AGENTS })
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input) !== '/api/agents/agt_1/rules') return inner(input, init)
+      const rules = await (await inner(input, init)).json()
+      return new Response(JSON.stringify({ ...rules, monthly_limit_ulxc: 2 * M }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    render(<App />)
+    expect(await screen.findByTestId('home-above-budget-agt_1')).toHaveTextContent('Above budget')
+  })
+
+  it('the plan line for a plan with no agent limit', () => {
+    expect(planLine({ plan: 'free', agents: 3, agents_used: 3 })).toBe('3 of 3 on Free')
+    expect(planLine({ plan: 'business', agents: -1, agents_used: 12 })).toBe('12 on Business')
   })
 
   it('a workspace with no agents opens Home in onboarding mode', async () => {
     mockBff({ agents: [] })
-    window.history.pushState({}, '', '/')
     render(<App />)
 
-    expect(await screen.findByText('Give every agent a wallet.')).toBeInTheDocument()
-    expect(screen.getByTestId('home-onboarding')).toHaveTextContent('your first agent is one click away')
+    expect(await screen.findByText('No agents yet')).toBeInTheDocument()
+    expect(screen.getByTestId('home-onboarding')).toHaveTextContent('Give an agent its own account, wallet and card.')
     expect(screen.getByRole('button', { name: 'Create my first agent' })).toBeEnabled()
-    expect(screen.queryByTestId('home-approvals-waiting')).not.toBeInTheDocument()
   })
 })
+
 
 // B55.39 — Lens names a new workspace by its id and makes "My first agent" at sign-up, so the book is never
 // empty and the onboarding card, which names the workspace, never shows. Home asks first instead.
@@ -357,6 +478,7 @@ describe('Home — a new workspace is asked its name (B55.39)', () => {
     expect(screen.queryByTestId('name-workspace')).not.toBeInTheDocument()
   })
 })
+
 
 // B46.2 — a brand-new workspace reaches Home with a funded, keyed first agent in one click, with no consent
 // page and no disclaimer sentence (B46.14). The BFF below keeps state the way Lens
@@ -421,9 +543,9 @@ describe('Home — the first agent in one click (B46.2)', () => {
     window.history.pushState({}, '', '/')
     render(<App />)
 
-    expect(await screen.findByText('Give every agent a wallet.')).toBeInTheDocument()
+    expect(await screen.findByText('No agents yet')).toBeInTheDocument()
+    expect(screen.getByTestId('home-onboarding')).toHaveTextContent('Give an agent its own account, wallet and card.')
     expect(screen.queryByText(/Share your answers, and earn from them/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('checkbox', { name: /Share answers with other companies/i })).toBeChecked()
     expect(await screen.findByTestId('wallet-onboarding')).not.toHaveTextContent(/real money|money partner/i)
 
     // B46.16 — the workspace's name, prefilled from the email's domain, saved in the same click.
@@ -447,36 +569,12 @@ describe('Home — the first agent in one click (B46.2)', () => {
 
     // Home hands back its wallets view.
     fireEvent.click(screen.getByRole('button', { name: 'Go to Home' }))
-    expect(await screen.findByText('Your agents’ wallets, at a glance.')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Your team’s agents' })).toBeInTheDocument()
+    expect(screen.getByTestId('home-agent-agt_new')).toHaveTextContent('Researcher')
   })
 
   it('a webmail address prefills no workspace name', () => {
     expect(nameFromEmail('ada@gmail.com')).toBe('')
     expect(nameFromEmail('ada@acme.co.uk')).toBe('Acme')
-  })
-})
-
-// B29.8 — DONE reads: "every card opens its existing route; every figure the home shows today is still
-// shown". The figures are the first describe's; this clicks each card from a freshly opened Home and reads
-// the address and the top bar's title, which is the route table's own name for the page it landed on.
-describe('Home — the product cards (B29.8)', () => {
-  it('every card opens its existing route', async () => {
-    mockBff({ agents: AGENTS })
-    for (const card of PRODUCT_CARDS) {
-      window.history.pushState({}, '', '/')
-      render(<App />)
-      const cards = await screen.findByRole('list', { name: 'Products' })
-      const link = within(cards).getByRole('link', { name: new RegExp(`^${card.title}`) })
-      expect(link).toHaveAttribute('href', card.to)
-      expect(link.querySelector('svg[data-icon]')).not.toBeNull()
-      fireEvent.click(link)
-      expect(window.location.pathname).toBe(card.to)
-      const route = CONSOLE_ROUTES.find((r) => (r.path.endsWith('/*') ? card.to === r.path.slice(0, -2) : r.path === card.to))
-      expect(route, `${card.to} is not a console route`).toBeDefined()
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(route!.title)
-      cleanup()
-      queryClient.clear()
-    }
-    expect(PRODUCT_CARDS.map((c) => c.title)).toEqual(['Agent Wallets', 'Approvals', 'Statements', 'Chat', 'Marketplace', 'Track', 'Docs', 'Developers'])
   })
 })
