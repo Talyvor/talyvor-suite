@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Card, Crumb, Dialog, Facts, Icon, KindTile, Row, showSnack } from '@talyvor/ui/pocket'
 import { StartEveryAgent, useAllPaused, usePauseEveryAgent } from '../../components/EveryAgent'
@@ -211,6 +211,7 @@ function AddThisDevice() {
   const { isSuccess, onlyThePhone, passkeyCount } = useKeys()
   const [open, setOpen] = useState(false)
   const [waiting, setWaiting] = useState<{ id: string; code: string } | null>(null)
+  const waitingID = useId()
   const register = useMutation({
     mutationFn: () => registerThisDevice(navigator.userAgent.includes('iPhone') ? 'iPhone' : 'This device'),
     onSuccess: (enrolment) => {
@@ -242,21 +243,31 @@ function AddThisDevice() {
   }, [waiting, status, qc])
   if (!passkeysSupported()) return <p className="text-body text-ink-3">This browser cannot make a passkey.</p>
   if (!isSuccess) return null
-  const waitingLine = waiting ? (
-    <>
-      Waiting for your phone. Open Talyvor on your phone and let this browser in. The code there should be <span className="font-figure">{waiting.code}</span>.
-    </>
-  ) : null
+  const waitingCode = waiting ? <span className="font-figure">{waiting.code}</span> : null
   const close = () => {
     register.reset()
     setOpen(false)
   }
   return (
     <>
-      <Button variant="secondary" icon={<Icon name="plus" size={16} />} disabled={waiting !== null} onClick={() => setOpen(true)}>
+      <Button
+        variant="secondary"
+        icon={<Icon name="plus" size={16} />}
+        disabled={waiting !== null}
+        aria-describedby={waiting && !open ? waitingID : undefined}
+        onClick={() => setOpen(true)}
+      >
         Add this device
       </Button>
-      {waiting && !open ? <p className="basis-full text-body text-ink">{waitingLine}</p> : null}
+      {/* B57.103 — closed, it still waits, in a small card as a phone waiting for the web draws it (p-approvals). */}
+      {waiting && !open ? (
+        <Card tight id={waitingID} data-testid="waiting-browser" className="order-last basis-full">
+          <h3 className="text-body font-semibold text-ink">Waiting for your phone</h3>{' '}
+          <p className="mt-1 text-body text-ink-3">
+            Open Talyvor on your phone and let this browser in. The code there should be {waitingCode}.
+          </p>
+        </Card>
+      ) : null}
       <Dialog
         open={open}
         onClose={close}
@@ -279,9 +290,9 @@ function AddThisDevice() {
         }
       >
         <p>
-          {waiting
-            ? waitingLine
-            : onlyThePhone
+          {waiting ? (
+            <>Waiting for your phone. Open Talyvor on your phone and let this browser in. The code there should be {waitingCode}.</>
+          ) : onlyThePhone
               ? 'This browser makes a passkey, and your phone lets it in: only your phone’s key can sign for it now.'
               : passkeyCount > 0
                 ? 'This browser makes a passkey, and one you already have signs for it. From then on, Face ID, Touch ID or this device’s PIN asks each time you approve or decline.'
@@ -383,12 +394,13 @@ function WaitingPhones() {
         </p>
       ) : null}
       {phones.map((en) => (
-        <div key={en.id} className="mt-3 grid gap-2">
-          <p className="text-body text-ink" data-testid="waiting-phone">
-            <b className="font-semibold">Your {en.name} asks to approve payments too.</b> Let it in only if you are adding it now and its code is{' '}
-            <span className="font-figure">{en.code}</span>.
+        // B57.103 — each in a small white card, as p-approvals draws a key joining: its title over its line, then the choice.
+        <Card key={en.id} tone="white" tight className="mt-3" data-testid="waiting-phone">
+          <h3 className="text-body font-semibold text-ink">Your {en.name} asks to approve payments too.</h3>{' '}
+          <p className="mt-1 text-body text-ink-3">
+            Let it in only if you are adding it now and its code is <span className="font-figure">{en.code}</span>.
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <Button size="sm" icon={<Icon name="key" size={16} />} disabled={decide.isPending} onClick={() => decide.mutate({ en, letIn: true })}>
               Let it approve
             </Button>
@@ -396,7 +408,7 @@ function WaitingPhones() {
               Not this one
             </Button>
           </div>
-        </div>
+        </Card>
       ))}
     </>
   )

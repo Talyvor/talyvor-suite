@@ -1,0 +1,297 @@
+[
+ {
+  "route": "/settings/devices",
+  "screen": "w-security",
+  "state": {
+   "pe": 1
+  },
+  "authenticator": true,
+  "answers": {
+   "/api/agents/keys/enrolments": {
+    "enrolments": [
+     {
+      "id": "enr_iphone",
+      "kind": "device",
+      "name": "iPhone",
+      "platform": "ios",
+      "code": "3958",
+      "status": "waiting",
+      "created_at": "2026-10-22T10:20:00Z",
+      "expires_at": "2026-10-22T10:30:00Z"
+     }
+    ]
+   },
+   "/api/agents/keys/enrolments/enr_iphone/challenge": {
+    "challenge": "ZW5yb2w",
+    "allow_credentials": []
+   },
+   "/api/agents/keys/enrolments/enr_iphone/approve": {
+    "id": "enr_iphone",
+    "status": "approved"
+   },
+   "/api/agents/keys/enrolments/enr_iphone/decline": {
+    "id": "enr_iphone",
+    "status": "declined"
+   }
+  }
+ },
+ {
+  "route": "/settings/devices",
+  "screen": "w-security",
+  "state": {
+   "pe": 3,
+   "r3": 0
+  },
+  "authenticator": true,
+  "answers": {
+   "/api/agents/keys/enrolments": {
+    "enrolments": [
+     {
+      "id": "enr_iphone",
+      "kind": "device",
+      "name": "iPhone",
+      "platform": "ios",
+      "code": "3958",
+      "status": "waiting",
+      "created_at": "2026-10-22T10:20:00Z",
+      "expires_at": "2026-10-22T10:30:00Z"
+     }
+    ]
+   },
+   "/api/agents/keys/enrolments/enr_iphone/challenge": {
+    "challenge": "ZW5yb2w",
+    "allow_credentials": []
+   },
+   "/api/agents/keys/enrolments/enr_iphone/approve": {
+    "id": "enr_iphone",
+    "status": "approved"
+   },
+   "/api/agents/keys/enrolments/enr_iphone/decline": {
+    "id": "enr_iphone",
+    "status": "declined"
+   }
+  },
+  "steps": [
+   "Let it approve"
+  ]
+ },
+ {
+  "route": "/settings/devices",
+  "screen": "w-security",
+  "state": {
+   "pe": 2
+  },
+  "authenticator": true,
+  "answers": {
+   "/api/agents/keys/enrolments": {
+    "enrolments": [
+     {
+      "id": "enr_iphone",
+      "kind": "device",
+      "name": "iPhone",
+      "platform": "ios",
+      "code": "3958",
+      "status": "waiting",
+      "created_at": "2026-10-22T10:20:00Z",
+      "expires_at": "2026-10-22T10:30:00Z"
+     }
+    ]
+   },
+   "/api/agents/keys/enrolments/enr_iphone/challenge": {
+    "challenge": "ZW5yb2w",
+    "allow_credentials": []
+   },
+   "/api/agents/keys/enrolments/enr_iphone/approve": {
+    "id": "enr_iphone",
+    "status": "approved"
+   },
+   "/api/agents/keys/enrolments/enr_iphone/decline": {
+    "id": "enr_iphone",
+    "status": "declined"
+   }
+  },
+  "steps": [
+   "Not this one"
+  ]
+ },
+ {
+  "route": "/settings/devices",
+  "screen": "w-security+add-passkey",
+  "state": {
+   "r1": 1,
+   "r2": 1,
+   "ae": 1
+  },
+  "authenticator": true,
+  "answers": {
+   "/api/agents/passkeys": {
+    "passkeys": [],
+    "enrolment": {
+     "id": "enr_web",
+     "code": "4721",
+     "expires_at": "2026-10-22T10:30:00Z"
+    }
+   },
+   "/api/agents/keys": {
+    "keys": [
+     {
+      "kind": "phone",
+      "id": "dk_iphone",
+      "name": "iPhone, Talyvor app",
+      "platform": "ios",
+      "created_at": "2026-10-04T09:00:00Z",
+      "last_used_at": "2026-10-22T09:00:00Z"
+     }
+    ]
+   },
+   "/api/agents/passkeys/challenge": {
+    "challenge": "cmVn",
+    "rp_id": "localhost",
+    "credential_ids": []
+   },
+   "/api/agents/keys/enrolments/enr_web": {
+    "id": "enr_web",
+    "kind": "passkey",
+    "status": "waiting"
+   }
+  },
+  "steps": [
+   "Add this device",
+   "Make a passkey"
+  ]
+ },
+ {
+  "route": "/settings/devices",
+  "screen": "w-security",
+  "state": {
+   "ae": 1
+  },
+  "authenticator": true,
+  "answers": {
+   "/api/agents/passkeys": {
+    "passkeys": [],
+    "enrolment": {
+     "id": "enr_web",
+     "code": "4721",
+     "expires_at": "2026-10-22T10:30:00Z"
+    }
+   },
+   "/api/agents/keys": {
+    "keys": [
+     {
+      "kind": "phone",
+      "id": "dk_iphone",
+      "name": "iPhone, Talyvor app",
+      "platform": "ios",
+      "created_at": "2026-10-04T09:00:00Z",
+      "last_used_at": "2026-10-22T09:00:00Z"
+     }
+    ]
+   },
+   "/api/agents/passkeys/challenge": {
+    "challenge": "cmVn",
+    "rp_id": "localhost",
+    "credential_ids": []
+   },
+   "/api/agents/keys/enrolments/enr_web": {
+    "id": "enr_web",
+    "kind": "passkey",
+    "status": "waiting"
+   }
+  },
+  "steps": [
+   "Add this device",
+   "Make a passkey",
+   "Close"
+  ]
+ },
+ {
+  "route": "/settings/devices",
+  "screen": "w-security",
+  "state": {
+   "dv": 1
+  },
+  "authenticator": true,
+  "answers": {
+   "/api/agents/passkeys": {
+    "passkeys": [],
+    "enrolment": {
+     "id": "enr_web",
+     "code": "4721",
+     "expires_at": "2026-10-22T10:30:00Z"
+    }
+   },
+   "/api/agents/keys": {
+    "keys": [
+     {
+      "kind": "phone",
+      "id": "dk_iphone",
+      "name": "iPhone, Talyvor app",
+      "platform": "ios",
+      "created_at": "2026-10-04T09:00:00Z",
+      "last_used_at": "2026-10-22T09:00:00Z"
+     }
+    ]
+   },
+   "/api/agents/passkeys/challenge": {
+    "challenge": "cmVn",
+    "rp_id": "localhost",
+    "credential_ids": []
+   },
+   "/api/agents/keys/enrolments/enr_web": {
+    "id": "enr_web",
+    "kind": "passkey",
+    "status": "approved"
+   }
+  },
+  "steps": [
+   "Add this device",
+   "Make a passkey"
+  ]
+ },
+ {
+  "route": "/settings/devices",
+  "screen": "w-security",
+  "state": {
+   "ae": 0,
+   "dv": 0
+  },
+  "authenticator": true,
+  "answers": {
+   "/api/agents/passkeys": {
+    "passkeys": [],
+    "enrolment": {
+     "id": "enr_web",
+     "code": "4721",
+     "expires_at": "2026-10-22T10:30:00Z"
+    }
+   },
+   "/api/agents/keys": {
+    "keys": [
+     {
+      "kind": "phone",
+      "id": "dk_iphone",
+      "name": "iPhone, Talyvor app",
+      "platform": "ios",
+      "created_at": "2026-10-04T09:00:00Z",
+      "last_used_at": "2026-10-22T09:00:00Z"
+     }
+    ]
+   },
+   "/api/agents/passkeys/challenge": {
+    "challenge": "cmVn",
+    "rp_id": "localhost",
+    "credential_ids": []
+   },
+   "/api/agents/keys/enrolments/enr_web": {
+    "id": "enr_web",
+    "kind": "passkey",
+    "status": "declined"
+   }
+  },
+  "steps": [
+   "Add this device",
+   "Make a passkey"
+  ]
+ }
+]

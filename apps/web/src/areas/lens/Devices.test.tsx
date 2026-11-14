@@ -228,12 +228,12 @@ describe('Approvals and devices (B57.43)', () => {
     await waitFor(() => expect(dialog).toHaveTextContent(waiting))
     fireEvent.click(within(dialog).getAllByRole('button', { name: 'Close' }).at(-1)!)
     // Closed, the card still says it waits, until the phone answers.
-    expect(await screen.findByText(/^Waiting for your phone/)).toHaveTextContent(waiting)
+    expect(await screen.findByTestId('waiting-browser')).toHaveTextContent(waiting.replace('phone. ', 'phone '))
     expect(screen.getByRole('button', { name: 'Add this device' })).toBeDisabled()
     expect(sent.find((s) => s.url === '/api/agents/passkeys' && s.method === 'POST')!.body).not.toHaveProperty('assertion')
     expect(get).not.toHaveBeenCalled()
     expect(await screen.findByText('This browser now signs approvals', {}, { timeout: 6000 })).toBeInTheDocument()
-    expect(screen.queryByText(/^Waiting for your phone/)).toBeNull()
+    expect(screen.queryByTestId('waiting-browser')).toBeNull()
     expect(polls).toEqual([])
   }, 10_000)
 
@@ -247,7 +247,7 @@ describe('Approvals and devices (B57.43)', () => {
 
     const phone = await screen.findByRole('region', { name: 'Your phone' })
     expect((await within(phone).findAllByTestId('waiting-phone'))[0]).toHaveTextContent(
-      /^Your iPhone asks to approve payments too\. Let it in only if you are adding it now and its code is 551203\.$/,
+      /^Your iPhone asks to approve payments too\. Let it in only if you are adding it now and its code is 551203\.Let it approveNot this one$/,
     )
     fireEvent.click(within(phone).getAllByRole('button', { name: 'Let it approve' })[0])
     expect(await screen.findByText('Your iPhone can approve now')).toBeInTheDocument()
@@ -304,4 +304,54 @@ describe('Approvals and devices (B57.43)', () => {
     expect(report.pressed).toBeGreaterThan(0)
     expect(report.dead).toEqual([])
   }, 120_000)
+})
+
+// B57.103 — adding this browser from the phone, and a phone waiting to be let in, drawn as Pocket draws a key joining
+// (p-approvals): a small card with its title over its line, the code in the figure face. The words are B55.3's.
+describe('Adding this browser from the phone, and letting a waiting phone in, in Pocket (B57.103)', () => {
+  /** A Pocket card (pocket.css .card.tight), as Card draws it. */
+  const isTightCard = (el: HTMLElement) => expect(el.className).toMatch(/\brounded-card-tight\b/)
+
+  it('waits for the phone in a small card with the code in the figure face, and says when the phone turns it away', async () => {
+    mockBff({ keys: [PHONE], polls: ['waiting', 'declined'] })
+    authenticator()
+    open()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add this device' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add this device' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Make a passkey' }))
+    await waitFor(() => expect(within(dialog).getByText('482913')).toHaveClass('font-figure'))
+    fireEvent.click(within(dialog).getAllByRole('button', { name: 'Close' }).at(-1)!)
+
+    const card = await screen.findByTestId('waiting-browser')
+    isTightCard(card)
+    expect(within(card).getByRole('heading', { name: 'Waiting for your phone' })).toBeInTheDocument()
+    expect(card).toHaveTextContent('Open Talyvor on your phone and let this browser in. The code there should be 482913.')
+    expect(within(card).getByText('482913')).toHaveClass('font-figure')
+    // Add this device waits too, and says why: the card is its description.
+    expect(screen.getByRole('button', { name: 'Add this device' })).toHaveAccessibleDescription(/^Waiting for your phone/)
+
+    expect(await screen.findByText('This browser was not added', {}, { timeout: 6000 })).toBeInTheDocument()
+    expect(screen.getByText('Nothing changed.')).toBeInTheDocument()
+    expect(screen.queryByTestId('waiting-browser')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Add this device' })).toBeEnabled()
+  }, 10_000)
+
+  it('shows each waiting phone in its own small card, its code in the figure face, with Let it approve and Not this one', async () => {
+    const en = { id: 'enr_1', kind: 'device', name: 'iPhone', platform: 'ios', code: '551203', status: 'waiting', created_at: '2026-11-08T06:00:00Z', expires_at: '2026-11-08T06:10:00Z' }
+    mockBff({ keys: [MAC], devices: [], enrolments: [en] })
+    authenticator()
+    open()
+
+    const card = await within(await screen.findByRole('region', { name: 'Your phone' })).findByTestId('waiting-phone')
+    isTightCard(card)
+    expect(card.className).toMatch(/\bshadow-pocket\b/)
+    expect(within(card).getByRole('heading', { name: 'Your iPhone asks to approve payments too.' })).toBeInTheDocument()
+    expect(card).toHaveTextContent('Let it in only if you are adding it now and its code is 551203.')
+    expect(within(card).getByText('551203')).toHaveClass('font-figure')
+    expect(within(card).getByRole('button', { name: 'Let it approve' })).toBeEnabled()
+    fireEvent.click(within(card).getByRole('button', { name: 'Not this one' }))
+    expect(await screen.findByText('Not let in')).toBeInTheDocument()
+    expect(screen.getByText('The phone was not added. Nothing changed.')).toBeInTheDocument()
+  })
 })
