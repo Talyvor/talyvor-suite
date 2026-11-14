@@ -1,0 +1,6 @@
+[
+  { "route": "/money/pay/mandates", "screen": "w-pay-mandates", "answers": { "/api/money/mandates": { "granted": [
+    { "id": "mdt_asked", "agent_id": "agt_research", "account_id": "macc_research_usd", "currency": "USD", "payee_business_id": "northwind", "payee_name": "Northwind Data",
+      "max_per_pull_minor": 500, "max_per_month_minor": 2000, "pulled_this_month_minor": 0, "expires_at": "2027-10-22T23:59:59Z", "status": "requested", "created_at": "2026-10-22T08:31:00Z" }
+  ], "received": [] } } }
+]
