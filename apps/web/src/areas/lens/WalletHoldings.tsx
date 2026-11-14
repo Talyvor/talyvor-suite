@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Input, Pill, Row, focusRing, type PillStatus } from '@talyvor/ui'
-import { Card, pressed } from './walletBrand'
+import { Button, Chip, Field, Input, Money, Row, Select, Tabs, type ChipTone } from '@talyvor/ui/pocket'
 import { formatUSD, formatWhen } from './format'
-import { Lxc } from './money'
 import {
   type Agent,
   type CashOut,
@@ -18,24 +16,21 @@ import {
   refusalText,
   retryMoveThroughRestart,
 } from './agentBankApi'
-import { Note, readFailure } from './WalletMoney'
+import { Note, PanelForm, readFailure } from './WalletMoney'
 import { WorkspaceLabel } from '../../labels/workspace'
 
 // WalletHoldings.tsx — B22.12: Agent Wallets' escrow (Lens B22.6), pots (B22.7), simulated portfolios and
 // orders (B22.8) and cash-out (B22.9). Each capability carries its class the way B22.10's screens show it:
 // an AMBER or RED one Talyvor has not cleared is marked beside it, with why, in one plain sentence.
-// Lens decides; the screen shows Lens's figures and, on a refusal, Lens's own sentence.
+// B57.21 — each is a panel in Pocket's fields, rows, chips and <Money>, opened from a row of the Money section on the
+// agent's page (AgentMoney.tsx). Lens decides; the screen shows Lens's figures and, on a refusal, Lens's own sentence.
 
 const BOOK_KEY = ['agent-book']
 export const ESCROWS_KEY = ['wallet-escrows']
-const CASH_OUTS_KEY = ['wallet-cash-outs']
+export const CASH_OUTS_KEY = ['wallet-cash-outs']
 const QUOTES_KEY = ['wallet-quotes']
-const potsKey = (id: string) => ['agent-pots', id]
+export const potsKey = (id: string) => ['agent-pots', id]
 const portfoliosKey = (id: string) => ['agent-portfolios', id]
-
-const selectClass = `h-8 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
-
-const lxc = (micros: number) => <Lxc ulxc={micros} />
 
 /** A date field's `YYYY-MM-DD` → the start of that day, here, as RFC 3339. Null for an empty or bad date. */
 function startOfDay(date: string): string | null {
@@ -56,6 +51,7 @@ const POT_KINDS: readonly [Pot['kind'], string][] = [
   ['budget', 'Budget'],
   ['reserve', 'Reserve'],
 ]
+const POT_WORDS = ['Goal', 'Budget', 'Reserve'] as const
 
 function PotRow({ agent, pot }: { agent: Agent; pot: Pot }) {
   const qc = useQueryClient()
@@ -78,37 +74,50 @@ function PotRow({ agent, pot }: { agent: Agent; pot: Pot }) {
     onSuccess: () => setUntil(''),
     onSettled: refresh,
   })
+  // A press with no amount says what it needs, rather than a press that does nothing.
+  const [unsaid, setUnsaid] = useState(false)
+  const moveBy = (dir: 'in' | 'out') => {
+    setUnsaid(micros === null)
+    if (micros !== null) move.mutate({ dir, ulxc: micros, key: newMoveKey() })
+  }
   const locked = pot.locked_until !== undefined && new Date(pot.locked_until).getTime() > Date.now()
   return (
-    <div className="flex flex-col gap-2 border-t border-rule px-gutter py-3" data-testid="pot">
-      <p className="flex flex-wrap items-center gap-2 text-body text-ink">
-        {pot.name}
-        <Pill status="idle">{POT_KINDS.find(([k]) => k === pot.kind)?.[1] ?? pot.kind}</Pill>
-        {lxc(pot.balance_ulxc)}
-        {pot.target_ulxc ? <> of {lxc(pot.target_ulxc)}</> : null}
-        {locked && pot.locked_until ? (
-          <Pill status="held">
-            Locked until <span className="font-figure">{formatWhen(pot.locked_until)}</span>
-          </Pill>
-        ) : null}
-      </p>
+    <div className="grid gap-2.5 border-t border-line py-3 first:border-t-0" data-testid="pot">
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          aria-label={`Amount in LXC to move for ${pot.name}`}
-          inputMode="decimal"
-          placeholder="LXC"
-          className="w-24 font-figure"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-        />
-        <Button disabled={micros === null || move.isPending} onClick={() => move.mutate({ dir: 'in', ulxc: micros ?? 0, key: newMoveKey() })}>
+        <span className="font-semibold text-ink">{pot.name}</span>
+        <Chip>{POT_KINDS.find(([k]) => k === pot.kind)?.[1] ?? 'Pot'}</Chip>
+        {locked && pot.locked_until ? (
+          <Chip tone="wait">
+            Locked until <span className="font-figure">{formatWhen(pot.locked_until)}</span>
+          </Chip>
+        ) : null}
+        <span className="ml-auto text-ink">
+          <Money ulxc={pot.balance_ulxc} />
+          {pot.target_ulxc ? (
+            <>
+              {' '}
+              of <Money ulxc={pot.target_ulxc} />
+            </>
+          ) : null}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label={`Amount in LXC to move for ${pot.name}`} className="min-w-0 flex-1">
+          <Input inputMode="decimal" placeholder="0" unit="LXC" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        <Button size="sm" disabled={move.isPending} onClick={() => moveBy('in')}>
           Move in
         </Button>
-        <Button disabled={micros === null || move.isPending} onClick={() => move.mutate({ dir: 'out', ulxc: micros ?? 0, key: newMoveKey() })}>
+        <Button size="sm" variant="secondary" disabled={move.isPending} onClick={() => moveBy('out')}>
           Move out
         </Button>
-        <Input type="date" aria-label={`Lock ${pot.name} until`} className="w-40 font-figure" value={until} onChange={(e) => setUntil(e.target.value)} />
-        <Button disabled={lockAt === null || lock.isPending} onClick={() => lock.mutate()}>
+      </div>
+      {unsaid ? <Note ok={false}>Type an amount in LXC first.</Note> : null}
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label={`Lock ${pot.name} until`} className="min-w-0 flex-1">
+          <Input type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+        </Field>
+        <Button size="sm" variant="secondary" disabled={lock.isPending} disabledReason={lockAt === null ? 'Choose a date first' : undefined} onClick={() => lock.mutate()}>
           {locked ? 'Lock for longer' : 'Lock'}
         </Button>
       </div>
@@ -123,7 +132,8 @@ export function Pots({ agent }: { agent: Agent }) {
   const qc = useQueryClient()
   const list = useQuery({ queryKey: potsKey(agent.id), queryFn: () => agentBankApi.pots(agent.id) })
   const [name, setName] = useState('')
-  const [kind, setKind] = useState<Pot['kind']>('goal')
+  const [kindWord, setKindWord] = useState<(typeof POT_WORDS)[number]>('Goal')
+  const kind = POT_KINDS.find(([, w]) => w === kindWord)?.[0] ?? 'goal'
   const [target, setTarget] = useState('')
   const [until, setUntil] = useState('')
   const targetMicros = target.trim() === '' ? 0 : parseLXC(target)
@@ -139,54 +149,46 @@ export function Pots({ agent }: { agent: Agent }) {
   })
   const pots = list.data?.pots ?? []
   return (
-    <Card>
-      <CardHeader>Pots</CardHeader>
-      <div className="flex flex-col gap-2 px-gutter py-3">
-        <p className="text-body text-muted">
-          Credits {agent.name} sets aside for a goal, a budget or a reserve. They stay {agent.name}’s, but neither it nor the
-          workspace can spend them until they are moved back out, and a locked pot keeps them until its date. Pots earn no
-          interest.
-        </p>
-      </div>
+    <div className="grid gap-3">
+      <p>
+        Credits {agent.name} sets aside for a goal, a budget or a reserve. They stay {agent.name}’s, but neither it nor the
+        workspace can spend them until they are moved back out, and a locked pot keeps them until its date. Pots earn no
+        interest.
+      </p>
       {list.isError ? (
-        <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The pots')}</p>
-      ) : list.isSuccess && pots.length === 0 ? (
-        <p className="px-gutter pb-3 text-body text-muted">{agent.name} has no pots yet.</p>
+        <p>{readFailure(list.error, 'The pots')}</p>
+      ) : list.isPending ? (
+        <p>Reading…</p>
+      ) : pots.length === 0 ? (
+        <p>{agent.name} has no pots yet.</p>
       ) : (
-        pots.map((p) => <PotRow key={p.id} agent={agent} pot={p} />)
+        <div>
+          {pots.map((p) => (
+            <PotRow key={p.id} agent={agent} pot={p} />
+          ))}
+        </div>
       )}
-      <form
-        className="flex flex-col gap-2 border-t border-rule px-gutter py-3"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (ready && !create.isPending) create.mutate()
-        }}
-      >
-        <div className="flex flex-wrap items-center gap-2">
-          <Input aria-label="New pot’s name" placeholder="Name" className="wide:w-40" value={name} onChange={(e) => setName(e.target.value)} />
-          <div className="flex items-center gap-1" role="group" aria-label="What the pot is for">
-            {POT_KINDS.map(([k, label]) => (
-              <Button key={k} aria-pressed={kind === k} className={pressed} onClick={() => setKind(k)}>
-                {label}
-              </Button>
-            ))}
-          </div>
-          <Input
-            aria-label="Target in LXC (optional)"
-            inputMode="decimal"
-            placeholder="target"
-            className="w-24 font-figure"
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-          />
-          <Input type="date" aria-label="Locked until (optional)" className="w-40 font-figure" value={until} onChange={(e) => setUntil(e.target.value)} />
-          <Button type="submit" disabled={!ready || create.isPending}>
+      <PanelForm className="border-t border-line pt-3" onSubmit={() => (ready && !create.isPending ? create.mutate() : undefined)}>
+        <Field label="New pot’s name">
+          <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Tabs label="What the pot is for" tabs={POT_WORDS} value={kindWord} onChange={setKindWord} />
+        <div className="grid gap-3 wide:grid-cols-2">
+          <Field label="Target in LXC (optional)">
+            <Input inputMode="decimal" placeholder="0" unit="LXC" value={target} onChange={(e) => setTarget(e.target.value)} />
+          </Field>
+          <Field label="Locked until (optional)">
+            <Input type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+          </Field>
+        </div>
+        <div>
+          <Button type="submit" disabled={create.isPending} disabledReason={ready ? undefined : 'Name the pot first'}>
             Create pot
           </Button>
         </div>
         {create.isError ? <Note ok={false}>Not created. {refusalText(create.error)}</Note> : null}
-      </form>
-    </Card>
+      </PanelForm>
+    </div>
   )
 }
 
@@ -211,52 +213,46 @@ export function PayIntoEscrow({ agent }: { agent: Agent }) {
     onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: ESCROWS_KEY }), qc.invalidateQueries({ queryKey: BOOK_KEY })]),
   })
   return (
-    <Card>
-      <CardHeader aside={<WorkspaceLabel capability="escrow" />}>Pay into escrow</CardHeader>
-      <form
-        className="flex flex-col gap-2 px-gutter py-3"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (ready && !pay.isPending) pay.mutate()
-        }}
-      >
-        <p className="text-body text-muted">
-          The credits leave {agent.name} now and are held, in neither side’s balance, until you confirm the work was
-          delivered or the release date passes with no dispute. A dispute holds them until Talyvor decides.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input aria-label="Hold for (wallet ID or @handle)" placeholder="@handle or wallet ID" className="wide:w-48" value={who} onChange={(e) => setWho(e.target.value)} />
-          <Input
-            aria-label="Amount in LXC to hold"
-            inputMode="decimal"
-            placeholder="LXC"
-            className="w-24 font-figure"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <Input type="date" aria-label="Release on" className="w-40 font-figure" value={release} onChange={(e) => setRelease(e.target.value)} />
-          <Input aria-label="What the escrow is for" placeholder="What it is for" className="wide:w-48" value={memo} onChange={(e) => setMemo(e.target.value)} />
-          <Button type="submit" disabled={!ready || pay.isPending}>
-            Pay into escrow
-          </Button>
-        </div>
-        {pay.isSuccess ? (
-          <Note ok>
-            Held {lxc(pay.data.amount_ulxc)} until{' '}
-            <span className="font-figure">{formatWhen(pay.data.release_at)}</span>. It is under Escrow.
-          </Note>
-        ) : null}
-        {pay.isError ? <Note ok={false}>Not paid in. {refusalText(pay.error)}</Note> : null}
-      </form>
-    </Card>
+    <PanelForm onSubmit={() => (ready && !pay.isPending ? pay.mutate() : undefined)}>
+      <WorkspaceLabel capability="escrow" className="justify-self-start" />
+      <p>
+        The credits leave {agent.name} now and are held, in neither side’s balance, until you confirm the work was
+        delivered or the release date passes with no dispute. A dispute holds them until Talyvor decides.
+      </p>
+      <Field label="Hold for (wallet ID or @handle)">
+        <Input placeholder="@handle or wallet ID" value={who} onChange={(e) => setWho(e.target.value)} />
+      </Field>
+      <div className="grid gap-3 wide:grid-cols-2">
+        <Field label="Amount in LXC to hold">
+          <Input inputMode="decimal" placeholder="0" unit="LXC" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        <Field label="Release on">
+          <Input type="date" value={release} onChange={(e) => setRelease(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="What the escrow is for">
+        <Input placeholder="What it is for" value={memo} onChange={(e) => setMemo(e.target.value)} />
+      </Field>
+      <div>
+        <Button type="submit" disabled={pay.isPending} disabledReason={ready ? undefined : 'Type who it is for, the amount and the release date first'}>
+          Pay into escrow
+        </Button>
+      </div>
+      {pay.isSuccess ? (
+        <Note ok>
+          Held <Money ulxc={pay.data.amount_ulxc} /> until <span className="font-figure">{formatWhen(pay.data.release_at)}</span>. It is under Escrow.
+        </Note>
+      ) : null}
+      {pay.isError ? <Note ok={false}>Not paid in. {refusalText(pay.error)}</Note> : null}
+    </PanelForm>
   )
 }
 
-const ESCROW_STATUS: Record<Escrow['status'], [string, PillStatus]> = {
-  held: ['Held', 'held'],
-  disputed: ['Disputed', 'slashed'],
-  released: ['Released', 'settled'],
-  returned: ['Returned', 'parked'],
+const ESCROW_STATUS: Record<Escrow['status'], [string, ChipTone]> = {
+  held: ['Held', 'wait'],
+  disputed: ['Disputed', 'bad'],
+  released: ['Released', 'good'],
+  returned: ['Returned', 'paused'],
 }
 
 function escrowEventText(e: Escrow['events'][number]): string {
@@ -286,34 +282,40 @@ function EscrowRow({ escrow, agents }: { escrow: Escrow; agents: Agent[] }) {
       action === 'confirm' ? agentBankApi.confirmEscrow(escrow.id) : agentBankApi.disputeEscrow(escrow.id, reason.trim()),
     onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: ESCROWS_KEY }), qc.invalidateQueries({ queryKey: BOOK_KEY })]),
   })
-  const [label, status] = ESCROW_STATUS[escrow.status]
+  const [label, tone] = ESCROW_STATUS[escrow.status]
   return (
-    <div className="flex flex-col gap-1 border-t border-rule px-gutter py-3" data-testid="escrow">
-      <p className="flex flex-wrap items-center gap-2 text-body text-ink">
+    <div className="grid gap-1.5 border-t border-line py-3 first:border-t-0" data-testid="escrow">
+      <p className="flex flex-wrap items-center gap-2 font-semibold text-ink">
         {paying
           ? `${nameOf(escrow.payer_agent_id)} holds for ${nameOf(escrow.payee_agent_id)}`
           : `${nameOf(escrow.payee_agent_id)} is owed by ${escrow.payer_agent_id}`}{' '}
-        {lxc(escrow.amount_ulxc)}
-        <Pill status={status}>{label}</Pill>
+        <Money ulxc={escrow.amount_ulxc} />
+        <Chip tone={tone}>{label}</Chip>
       </p>
-      <p className="text-caption text-muted">
+      <p className="text-body text-ink-3">
         Releases <span className="font-figure">{formatWhen(escrow.release_at)}</span> unless disputed
         {escrow.memo ? ` · ${escrow.memo}` : ''}
       </p>
       {escrow.events.map((e, i) => (
-        <p key={i} className="text-caption text-ink">
-          <span className="font-figure">{formatWhen(e.at)}</span> {escrowEventText(e)}
+        <p key={i} className="text-body text-ink-2">
+          <span className="font-figure text-ink-3">{formatWhen(e.at)}</span> {escrowEventText(e)}
         </p>
       ))}
       {paying && escrow.status === 'held' ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button disabled={act.isPending} onClick={() => act.mutate('confirm')}>
-            Confirm delivered
-          </Button>
-          <Input aria-label="Why you dispute it" placeholder="Why you dispute it" className="wide:w-56" value={reason} onChange={(e) => setReason(e.target.value)} />
-          <Button disabled={!reason.trim() || act.isPending} onClick={() => act.mutate('dispute')}>
-            Dispute
-          </Button>
+        <div className="grid gap-2">
+          <div>
+            <Button size="sm" disabled={act.isPending} onClick={() => act.mutate('confirm')}>
+              Confirm delivered
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Why you dispute it" className="min-w-0 flex-1">
+              <Input placeholder="Why you dispute it" value={reason} onChange={(e) => setReason(e.target.value)} />
+            </Field>
+            <Button size="sm" variant="danger" disabled={act.isPending} disabledReason={reason.trim() ? undefined : 'Say why first'} onClick={() => act.mutate('dispute')}>
+              Dispute
+            </Button>
+          </div>
         </div>
       ) : null}
       {act.isError ? <Note ok={false}>{refusalText(act.error)}</Note> : null}
@@ -321,33 +323,37 @@ function EscrowRow({ escrow, agents }: { escrow: Escrow; agents: Agent[] }) {
   )
 }
 
-/** Every escrow the workspace's agents paid into or are owed from. */
-export function Escrows({ agents }: { agents: Agent[] }) {
+/** Every escrow the workspace's agents paid into or are owed from; with `agentId`, only that agent's. */
+export function Escrows({ agents, agentId }: { agents: Agent[]; agentId?: string }) {
   const list = useQuery({ queryKey: ESCROWS_KEY, queryFn: agentBankApi.escrows })
-  const escrows = list.data?.escrows ?? []
+  const escrows = (list.data?.escrows ?? []).filter((e) => agentId === undefined || e.payer_agent_id === agentId || e.payee_agent_id === agentId)
   return (
-    <Card>
-      <CardHeader aside={<WorkspaceLabel capability="escrow" />}>Escrow</CardHeader>
+    <div className="grid gap-3">
+      <WorkspaceLabel capability="escrow" className="justify-self-start" />
       {list.isError ? (
-        <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The escrows')}</p>
-      ) : list.isSuccess && escrows.length === 0 ? (
-        <p className="px-gutter py-3 text-body text-muted">
-          Nothing in escrow. Open an agent to pay into escrow for any agent; what others hold for yours appears here too.
-        </p>
+        <p>{readFailure(list.error, 'The escrows')}</p>
+      ) : list.isPending ? (
+        <p>Reading…</p>
+      ) : escrows.length === 0 ? (
+        <p>Nothing in escrow. What others hold for your agents appears here too.</p>
       ) : (
-        escrows.map((e) => <EscrowRow key={e.id} escrow={e} agents={agents} />)
+        <div>
+          {escrows.map((e) => (
+            <EscrowRow key={e.id} escrow={e} agents={agents} />
+          ))}
+        </div>
       )}
-    </Card>
+    </div>
   )
 }
 
 // ── Investing, simulated ────────────────────────────────────────────────────────────────────────────
 
-const ORDER_STATUS: Record<SimOrder['status'], [string, PillStatus]> = {
-  open: ['Open', 'held'],
-  filled: ['Filled', 'settled'],
-  cancelled: ['Cancelled', 'parked'],
-  rejected: ['Rejected', 'slashed'],
+const ORDER_STATUS: Record<SimOrder['status'], [string, ChipTone]> = {
+  open: ['Open', 'wait'],
+  filled: ['Filled', 'good'],
+  cancelled: ['Cancelled', 'paused'],
+  rejected: ['Rejected', 'bad'],
 }
 
 function orderText(o: SimOrder): string {
@@ -362,11 +368,16 @@ function orderText(o: SimOrder): string {
   return `${what} ${how}${outcome}`
 }
 
+const SIDES = ['Buy', 'Sell'] as const
+const TYPES = ['At market', 'Limit'] as const
+
 function PortfolioView({ agent, portfolio, instruments }: { agent: Agent; portfolio: Portfolio; instruments: string[] }) {
   const qc = useQueryClient()
   const [instrument, setInstrument] = useState('')
-  const [side, setSide] = useState<SimOrderInput['side']>('buy')
-  const [type, setType] = useState<SimOrderInput['type']>('market')
+  const [sideWord, setSideWord] = useState<(typeof SIDES)[number]>('Buy')
+  const [typeWord, setTypeWord] = useState<(typeof TYPES)[number]>('At market')
+  const side: SimOrderInput['side'] = sideWord === 'Buy' ? 'buy' : 'sell'
+  const type: SimOrderInput['type'] = typeWord === 'At market' ? 'market' : 'limit'
   const [quantity, setQuantity] = useState('')
   const [limit, setLimit] = useState('')
   const qty = parseLXC(quantity)
@@ -392,57 +403,51 @@ function PortfolioView({ agent, portfolio, instruments }: { agent: Agent; portfo
   const positions = portfolio.positions ?? []
   const orders = portfolio.orders ?? []
   return (
-    <div className="flex flex-col gap-2 border-t border-rule px-gutter py-3" data-testid="portfolio">
-      <p className="flex flex-wrap items-center gap-2 text-body text-ink">
-        {portfolio.name}
-        <span>
-          worth <span className="font-figure">{formatUSD(portfolio.value_uusd)}</span>: <span className="font-figure">{formatUSD(portfolio.cash_uusd)}</span>{' '}
-          cash, started with <span className="font-figure">{formatUSD(portfolio.starting_cash_uusd)}</span>
-        </span>
+    <div className="grid gap-2.5 border-t border-line py-3 first:border-t-0" data-testid="portfolio">
+      <p className="text-ink">
+        <span className="font-semibold">{portfolio.name}</span> worth <span className="font-figure">{formatUSD(portfolio.value_uusd)}</span>:{' '}
+        <span className="font-figure">{formatUSD(portfolio.cash_uusd)}</span> cash, started with{' '}
+        <span className="font-figure">{formatUSD(portfolio.starting_cash_uusd)}</span>
       </p>
-      <p className="text-caption text-muted">{portfolio.notice}</p>
-      {positions.map((p) => (
-        <Row key={p.instrument} label={`${units(p.quantity_micros)} ${p.instrument}`} hint={`at ${price(p.price_usd)}`}>
-          <span className="font-figure">{formatUSD(p.value_uusd)}</span>
-        </Row>
-      ))}
-      <form
-        className="flex flex-wrap items-center gap-2"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (ready && !place.isPending) place.mutate()
-        }}
-      >
-        <select aria-label={`Instrument for ${portfolio.name}`} className={`${selectClass} w-28`} value={instrument} onChange={(e) => setInstrument(e.target.value)}>
-          <option value="">Currency…</option>
-          {instruments.map((i) => (
-            <option key={i} value={i}>
-              {i}
-            </option>
-          ))}
-        </select>
-        <div className="flex items-center gap-1" role="group" aria-label="Buy or sell">
-          {(['buy', 'sell'] as const).map((s) => (
-            <Button key={s} aria-pressed={side === s} className={pressed} onClick={() => setSide(s)}>
-              {s === 'buy' ? 'Buy' : 'Sell'}
-            </Button>
+      <p className="text-body text-ink-3">{portfolio.notice}</p>
+      {positions.length > 0 ? (
+        <div>
+          {positions.map((p) => (
+            <Row key={p.instrument} title={`${units(p.quantity_micros)} ${p.instrument}`} line={`at ${price(p.price_usd)}`} amount={formatUSD(p.value_uusd)} />
           ))}
         </div>
-        <div className="flex items-center gap-1" role="group" aria-label="Order type">
-          {(['market', 'limit'] as const).map((t) => (
-            <Button key={t} aria-pressed={type === t} className={pressed} onClick={() => setType(t)}>
-              {t === 'market' ? 'At market' : 'Limit'}
-            </Button>
-          ))}
+      ) : null}
+      <PanelForm onSubmit={() => (ready && !place.isPending ? place.mutate() : undefined)}>
+        <Field label={`Instrument for ${portfolio.name}`}>
+          <Select value={instrument} onChange={(e) => setInstrument(e.target.value)}>
+            <option value="">Currency…</option>
+            {instruments.map((i) => (
+              <option key={i} value={i}>
+                {i}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <div className="flex flex-wrap gap-3">
+          <Tabs label="Buy or sell" tabs={SIDES} value={sideWord} onChange={setSideWord} />
+          <Tabs label="Order type" tabs={TYPES} value={typeWord} onChange={setTypeWord} />
         </div>
-        <Input aria-label="Quantity" inputMode="decimal" placeholder="quantity" className="w-28 font-figure" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-        {type === 'limit' ? (
-          <Input aria-label="Limit price in US dollars" inputMode="decimal" placeholder="$ limit" className="w-28 font-figure" value={limit} onChange={(e) => setLimit(e.target.value)} />
-        ) : null}
-        <Button type="submit" disabled={!ready || place.isPending}>
-          Place order
-        </Button>
-      </form>
+        <div className="grid gap-3 wide:grid-cols-2">
+          <Field label="Quantity">
+            <Input inputMode="decimal" placeholder="quantity" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+          </Field>
+          {type === 'limit' ? (
+            <Field label="Limit price in US dollars">
+              <Input inputMode="decimal" placeholder="0" unit="$" value={limit} onChange={(e) => setLimit(e.target.value)} />
+            </Field>
+          ) : null}
+        </div>
+        <div>
+          <Button type="submit" size="sm" disabled={place.isPending} disabledReason={ready ? undefined : 'Choose a currency and type a quantity first'}>
+            Place order
+          </Button>
+        </div>
+      </PanelForm>
       {place.isSuccess ? (
         <Note ok={place.data.status !== 'rejected'}>
           {place.data.status === 'filled'
@@ -453,18 +458,28 @@ function PortfolioView({ agent, portfolio, instruments }: { agent: Agent; portfo
         </Note>
       ) : null}
       {place.isError ? <Note ok={false}>Not placed. {refusalText(place.error)}</Note> : null}
-      {orders.map((o) => (
-        <Row key={o.id} label={orderText(o)} hint={formatWhen(o.created_at)}>
-          <span className="flex items-center gap-2">
-            <Pill status={ORDER_STATUS[o.status][1]}>{ORDER_STATUS[o.status][0]}</Pill>
-            {o.status === 'open' ? (
-              <Button disabled={cancel.isPending} onClick={() => cancel.mutate(o.id)}>
-                Cancel
-              </Button>
-            ) : null}
-          </span>
-        </Row>
-      ))}
+      {orders.length > 0 ? (
+        <div>
+          {orders.map((o) => (
+            <Row
+              key={o.id}
+              wrap
+              title={orderText(o)}
+              line={formatWhen(o.created_at)}
+              action={
+                <>
+                  <Chip tone={ORDER_STATUS[o.status][1]}>{ORDER_STATUS[o.status][0]}</Chip>
+                  {o.status === 'open' ? (
+                    <Button size="sm" variant="secondary" disabled={cancel.isPending} onClick={() => cancel.mutate(o.id)}>
+                      Cancel
+                    </Button>
+                  ) : null}
+                </>
+              }
+            />
+          ))}
+        </div>
+      ) : null}
       {cancel.isError ? <Note ok={false}>Not cancelled. {refusalText(cancel.error)}</Note> : null}
     </div>
   )
@@ -489,44 +504,43 @@ export function Portfolios({ agent }: { agent: Agent }) {
   const portfolios = list.data?.portfolios ?? []
   const instruments = (quotes.data?.quotes ?? []).map((q) => q.instrument)
   return (
-    <Card>
-      <CardHeader aside={<WorkspaceLabel capability="invest_and_trade" />}>Investing, simulated</CardHeader>
-      <div className="flex flex-col gap-2 px-gutter py-3">
-        <p className="text-body text-muted">
-          Portfolios of simulated US dollars that buy and sell real currencies at real prices
-          {quotes.data?.market_data ? ` (${quotes.data.market_data})` : ''}. No credits move, and no order is ever sent to a
-          market.
-        </p>
-      </div>
+    <div className="grid gap-3">
+      <WorkspaceLabel capability="invest_and_trade" className="justify-self-start" />
+      <p>
+        Portfolios of simulated US dollars that buy and sell real currencies at real prices
+        {quotes.data?.market_data ? ` (${quotes.data.market_data})` : ''}. No credits move, and no order is ever sent to a
+        market.
+      </p>
       {list.isError ? (
-        <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The portfolios')}</p>
-      ) : list.isSuccess && portfolios.length === 0 ? (
-        <p className="px-gutter pb-3 text-body text-muted">{agent.name} has no portfolio yet.</p>
+        <p>{readFailure(list.error, 'The portfolios')}</p>
+      ) : list.isPending ? (
+        <p>Reading…</p>
+      ) : portfolios.length === 0 ? (
+        <p>{agent.name} has no portfolio yet.</p>
       ) : (
-        portfolios.map((p) => <PortfolioView key={p.id} agent={agent} portfolio={p} instruments={instruments} />)
+        <div>
+          {portfolios.map((p) => (
+            <PortfolioView key={p.id} agent={agent} portfolio={p} instruments={instruments} />
+          ))}
+        </div>
       )}
-      <form
-        className="flex flex-wrap items-center gap-2 border-t border-rule px-gutter py-3"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (name.trim() && cashMicros !== null && !open.isPending) open.mutate()
-        }}
-      >
-        <Input aria-label="New portfolio’s name" placeholder="Name" className="wide:w-40" value={name} onChange={(e) => setName(e.target.value)} />
-        <Input
-          aria-label="Starting simulated US dollars"
-          inputMode="decimal"
-          placeholder="simulated $"
-          className="w-32 font-figure"
-          value={cash}
-          onChange={(e) => setCash(e.target.value)}
-        />
-        <Button type="submit" disabled={!name.trim() || cashMicros === null || open.isPending}>
-          Open portfolio
-        </Button>
+      <PanelForm className="border-t border-line pt-3" onSubmit={() => (name.trim() && cashMicros !== null && !open.isPending ? open.mutate() : undefined)}>
+        <div className="grid gap-3 wide:grid-cols-2">
+          <Field label="New portfolio’s name">
+            <Input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label="Starting simulated US dollars">
+            <Input inputMode="decimal" placeholder="0" unit="$" value={cash} onChange={(e) => setCash(e.target.value)} />
+          </Field>
+        </div>
+        <div>
+          <Button type="submit" disabled={open.isPending} disabledReason={name.trim() && cashMicros !== null ? undefined : 'Name it and type its starting dollars first'}>
+            Open portfolio
+          </Button>
+        </div>
         {open.isError ? <Note ok={false}>Not opened. {refusalText(open.error)}</Note> : null}
-      </form>
-    </Card>
+      </PanelForm>
+    </div>
   )
 }
 
@@ -545,83 +559,73 @@ export function CashOutCard({ agent }: { agent: Agent }) {
     onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: CASH_OUTS_KEY }), qc.invalidateQueries({ queryKey: BOOK_KEY })]),
   })
   return (
-    <Card>
-      <CardHeader aside={<WorkspaceLabel capability="cash_out" />}>Cash out</CardHeader>
-      <form
-        className="flex flex-col gap-2 px-gutter py-3"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (ready && !ask.isPending) ask.mutate()
-        }}
-      >
-        <p className="text-body text-muted">
-          Turn {agent.name}’s credits back into money, paid to the account you name. The credits are held while Talyvor’s
-          payments partner pays it, and come back if the payment fails. Only the workspace’s owner can ask.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            aria-label="Amount in LXC to cash out"
-            inputMode="decimal"
-            placeholder="LXC"
-            className="w-24 font-figure"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <Input
-            aria-label="Pay to (a name for the account)"
-            placeholder="Pay to"
-            className="wide:w-56"
-            value={destination}
-            onChange={(e) => setDestination(e.target.value)}
-          />
-          <Button type="submit" disabled={!ready || ask.isPending}>
-            Ask to cash out
-          </Button>
-        </div>
-        {ask.isSuccess ? (
-          <Note ok>
-            Asked: {lxc(ask.data.amount_ulxc)} is held and is under Cash-outs until it is paid.
-          </Note>
-        ) : null}
-        {ask.isError ? <Note ok={false}>Not cashed out. {refusalText(ask.error)}</Note> : null}
-      </form>
-    </Card>
+    <PanelForm onSubmit={() => (ready && !ask.isPending ? ask.mutate() : undefined)}>
+      <WorkspaceLabel capability="cash_out" className="justify-self-start" />
+      <p>
+        Turn {agent.name}’s credits back into money, paid to the account you name. The credits are held while Talyvor’s
+        payments partner pays it, and come back if the payment fails. Only the workspace’s owner can ask.
+      </p>
+      <div className="grid gap-3 wide:grid-cols-2">
+        <Field label="Amount in LXC to cash out">
+          <Input inputMode="decimal" placeholder="0" unit="LXC" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        <Field label="Pay to (a name for the account)">
+          <Input placeholder="Pay to" value={destination} onChange={(e) => setDestination(e.target.value)} />
+        </Field>
+      </div>
+      <div>
+        <Button type="submit" disabled={ask.isPending} disabledReason={ready ? undefined : 'Type the amount and who to pay first'}>
+          Ask to cash out
+        </Button>
+      </div>
+      {ask.isSuccess ? (
+        <Note ok>
+          Asked: <Money ulxc={ask.data.amount_ulxc} /> is held and is under Cash-outs until it is paid.
+        </Note>
+      ) : null}
+      {ask.isError ? <Note ok={false}>Not cashed out. {refusalText(ask.error)}</Note> : null}
+    </PanelForm>
   )
 }
 
-const CASH_OUT_STATUS: Record<CashOut['status'], [string, PillStatus]> = {
-  held: ['Held', 'held'],
-  submitted: ['With the partner', 'idle'],
-  paid: ['Paid', 'settled'],
-  failed: ['Failed, credits back', 'slashed'],
+const CASH_OUT_STATUS: Record<CashOut['status'], [string, ChipTone]> = {
+  held: ['Held', 'wait'],
+  submitted: ['With the partner', 'wait'],
+  paid: ['Paid', 'good'],
+  failed: ['Failed, credits back', 'bad'],
 }
 
-/** Every cash-out the workspace asked for, and where it stands. */
-export function CashOuts({ agents }: { agents: Agent[] }) {
+/** Every cash-out the workspace asked for, and where it stands; with `agentId`, only that agent's. */
+export function CashOuts({ agents, agentId }: { agents: Agent[]; agentId?: string }) {
   const list = useQuery({ queryKey: CASH_OUTS_KEY, queryFn: agentBankApi.cashOuts })
   const nameOf = (id: string) => agents.find((a) => a.id === id)?.name ?? id
-  const cashOuts = list.data?.cash_outs ?? []
+  const cashOuts = (list.data?.cash_outs ?? []).filter((c) => agentId === undefined || c.agent_id === agentId)
   return (
-    <Card>
-      <CardHeader aside={<WorkspaceLabel capability="cash_out" />}>Cash-outs</CardHeader>
+    <div className="grid gap-3">
       {list.isError ? (
-        <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'The cash-outs')}</p>
-      ) : list.isSuccess && cashOuts.length === 0 ? (
-        <p className="px-gutter py-3 text-body text-muted">No cash-outs yet. Open an agent to ask for one.</p>
+        <p>{readFailure(list.error, 'The cash-outs')}</p>
+      ) : list.isPending ? (
+        <p>Reading…</p>
+      ) : cashOuts.length === 0 ? (
+        <p>{agentId === undefined ? 'No cash-outs yet. Open an agent to ask for one.' : 'No cash-outs yet. Ask for one above.'}</p>
       ) : (
-        cashOuts.map((c) => (
-          <Row
-            key={c.id}
-            label={`${nameOf(c.agent_id)} to ${c.destination}`}
-            hint={`${formatWhen(c.created_at)}${c.detail ? ` · ${c.detail}` : ''}`}
-          >
-            <span className="flex flex-wrap items-center gap-2" data-testid="cash-out">
-              {lxc(c.amount_ulxc)} = <span className="font-figure">{formatUSD(c.amount_uusd)}</span>
-              <Pill status={CASH_OUT_STATUS[c.status][1]}>{CASH_OUT_STATUS[c.status][0]}</Pill>
-            </span>
-          </Row>
-        ))
+        <div>
+          {cashOuts.map((c) => (
+            <Row
+              key={c.id}
+              wrap
+              title={`${nameOf(c.agent_id)} to ${c.destination}`}
+              line={`${formatWhen(c.created_at)}${c.detail ? ` · ${c.detail}` : ''}`}
+              amount={
+                <span data-testid="cash-out">
+                  <Money ulxc={c.amount_ulxc} /> = <span className="font-figure">{formatUSD(c.amount_uusd)}</span>
+                </span>
+              }
+              action={<Chip tone={CASH_OUT_STATUS[c.status][1]}>{CASH_OUT_STATUS[c.status][0]}</Chip>}
+            />
+          ))}
+        </div>
       )}
-    </Card>
+    </div>
   )
 }
