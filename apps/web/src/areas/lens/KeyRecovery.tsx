@@ -36,14 +36,17 @@ function readyWords(iso: string): { date: string; time: string } {
   }
 }
 
-/** What went wrong, in words; a sign-in too old for a recovery says so with the click that fixes it. */
+/**
+ * What went wrong, in words; a sign-in too old for a recovery says so with the click that fixes it. The click asks
+ * for a real sign-in (reauth=1), not the one the identity provider remembers (B50.49).
+ */
 function Refused({ error, fallback }: { error: unknown; fallback: string }) {
   if (error instanceof AgentBankError && error.sentence === SIGN_IN_AGAIN) {
     const returnTo = window.location.pathname + window.location.search
     return (
       <p role="alert" className="text-caption text-ink">
         {SIGN_IN_AGAIN}{' '}
-        <a className={inlineLink} href={`/auth/login?return_to=${encodeURIComponent(returnTo)}`}>
+        <a className={inlineLink} href={`/auth/login?reauth=1&return_to=${encodeURIComponent(returnTo)}`}>
           Sign in again
         </a>
       </p>

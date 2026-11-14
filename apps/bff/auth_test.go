@@ -240,9 +240,15 @@ type fakeIDP struct {
 	emailVerified *bool  // nil = omit the claim entirely
 	wrongNonce    bool   // mint the id_token with a corrupted nonce
 	aud           string // mint for this audience instead of clientID (the phone app's clients)
+	// authTime is when the person last signed in at this provider, sent as auth_time (nil = omit the claim). A login
+	// that asks for prompt=login or max_age=0 signs them in again, as a real provider does, and carries now.
+	authTime *time.Time
 }
 
-type idpCode struct{ challenge, nonce, redirectURI string }
+type idpCode struct {
+	challenge, nonce, redirectURI string
+	fresh                         bool // the login asked for a new sign-in
+}
 
 func newFakeIDP(t *testing.T) *fakeIDP {
 	t.Helper()
@@ -297,6 +303,7 @@ func (f *fakeIDP) authorize(w http.ResponseWriter, r *http.Request) {
 		challenge:   q.Get("code_challenge"),
 		nonce:       q.Get("nonce"),
 		redirectURI: q.Get("redirect_uri"),
+		fresh:       q.Get("prompt") == "login" || q.Get("max_age") == "0",
 	}
 	f.mu.Unlock()
 	u := q.Get("redirect_uri") + "?code=" + url.QueryEscape(code) + "&state=" + url.QueryEscape(q.Get("state"))
@@ -344,6 +351,11 @@ func (f *fakeIDP) token(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant", "error_description": "redirect_uri mismatch"})
 		return
 	}
+	authTime := f.authTime
+	if c.fresh {
+		now := time.Now()
+		authTime = &now
+	}
 	nonce := c.nonce
 	if f.wrongNonce {
 		nonce = "corrupted-" + nonce
@@ -352,11 +364,13 @@ func (f *fakeIDP) token(w http.ResponseWriter, r *http.Request) {
 		"access_token": "at-" + randHex(),
 		"token_type":   "Bearer",
 		"expires_in":   300,
-		"id_token":     f.mintIDToken(nonce),
+		"id_token":     f.mintIDTokenAt(nonce, authTime),
 	})
 }
 
-func (f *fakeIDP) mintIDToken(nonce string) string {
+func (f *fakeIDP) mintIDToken(nonce string) string { return f.mintIDTokenAt(nonce, f.authTime) }
+
+func (f *fakeIDP) mintIDTokenAt(nonce string, authTime *time.Time) string {
 	now := time.Now()
 	claims := map[string]any{
 		"iss": f.srv.URL, "sub": f.sub, "aud": f.clientID,
@@ -370,6 +384,9 @@ func (f *fakeIDP) mintIDToken(nonce string) string {
 	}
 	if f.emailVerified != nil {
 		claims["email_verified"] = *f.emailVerified
+	}
+	if authTime != nil {
+		claims["auth_time"] = authTime.Unix()
 	}
 	b64 := func(v any) string {
 		b, err := json.Marshal(v)

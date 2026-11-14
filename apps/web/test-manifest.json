@@ -113,7 +113,7 @@
   "src/areas/lens/HelpAndAccount.test.tsx": 7,
   "src/areas/lens/Home.test.tsx": 13,
   "src/areas/lens/Invoices.test.tsx": 5,
-  "src/areas/lens/KeyRecovery.test.tsx": 4,
+  "src/areas/lens/KeyRecovery.test.tsx": 5,
   "src/areas/lens/Keys.test.tsx": 27,
   "src/areas/lens/KindAndType.test.tsx": 30,
   "src/areas/lens/Ledger.test.tsx": 9,
