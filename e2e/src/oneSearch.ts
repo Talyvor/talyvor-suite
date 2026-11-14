@@ -88,8 +88,10 @@ export function oneSearch(): Scenario {
           const linked = await row.and(page.locator('[data-linked="true"]')).waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false)
           const at = new URL(page.url())
           ctx.evidence.push({ note: `the ${kind} result opened ${at.pathname}${at.hash}, its row marked=${linked}` })
-          if (at.pathname !== '/money/pay' || at.hash !== `#${kind}-${id}` || !linked) {
-            return fail(`the ${kind} result must open /money/pay#${kind}-${id} with its row marked; it opened ${at.pathname}${at.hash}, row marked=${linked}`)
+          // B57.32: a bill opens on Pay's Bills you received page.
+          const where = kind === 'bill' ? '/money/pay/bills' : '/money/pay'
+          if (at.pathname !== where || at.hash !== `#${kind}-${id}` || !linked) {
+            return fail(`the ${kind} result must open ${where}#${kind}-${id} with its row marked; it opened ${at.pathname}${at.hash}, row marked=${linked}`)
           }
           opened.push(`${kind} ${at.pathname}${at.hash}`)
         }

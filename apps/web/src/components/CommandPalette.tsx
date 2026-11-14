@@ -110,7 +110,7 @@ export const SHORTCUTS_LINE = `${MAC ? '⌘K' : 'Ctrl+K'} opens this bar · / se
  * payees are listed from the workspace itself when the bar opens, so the search adds the rest.
  */
 const FOUND: readonly { kind: SearchKind; group: string; href: (r: SearchResult) => string }[] = [
-  { kind: 'bill', group: 'Bills and invoices', href: (r) => `/money/pay#bill-${encodeURIComponent(r.id)}` },
+  { kind: 'bill', group: 'Bills and invoices', href: (r) => `/money/pay/bills#bill-${encodeURIComponent(r.id)}` },
   { kind: 'invoice', group: 'Bills and invoices', href: (r) => `/money/invoices#invoice-${encodeURIComponent(r.id)}` },
   { kind: 'payment', group: 'Payments', href: (r) => `/money/pay#payment-${encodeURIComponent(r.id)}` },
   { kind: 'rule', group: 'Rules', href: (r) => `/agents/${encodeURIComponent(r.agent_id || r.id)}/rules` },

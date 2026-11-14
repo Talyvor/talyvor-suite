@@ -156,10 +156,9 @@ describe('the one search box (B41.7)', () => {
     const bill = within(bills).getByRole('option')
     expect(bill).toHaveTextContent('Acme Hosting Ltd · INV-2041 · £120.00')
     fireEvent.click(bill)
-    expect(window.location.pathname).toBe('/money/pay')
+    expect(window.location.pathname).toBe('/money/pay/bills') // B57.32: bills have their own page under Pay
     expect(window.location.hash).toBe('#bill-bill_1')
     await waitFor(() => expect(screen.getByTestId('bill-bill_1')).toHaveAttribute('data-linked', 'true'))
-    expect(screen.getByTestId('payee-payee_1')).not.toHaveAttribute('data-linked')
   })
 })
 

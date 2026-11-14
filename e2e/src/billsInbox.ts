@@ -54,7 +54,7 @@ export function billsInbox(): Scenario {
       const number = `INV-${RUN_SALT}`
       const due = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
       const pdf = invoicePDF([supplier, 'INVOICE', `Invoice number: ${number}`, `Due date: ${due}`, 'Total due: GBP 123.45', 'Sort code: 04-00-04', 'Account number: 12345678'])
-      const page = await ctx.app.tab('/money/pay')
+      const page = await ctx.app.tab('/money/pay/bills')
       try {
         const form = page.getByTestId('bill-upload')
         await form.waitFor({ timeout: TIMEOUT_MS })
@@ -162,7 +162,7 @@ export function billsPayAllDue(): Scenario {
       }
 
       // 2. In the browser: three invoices added, each its saved payee's; "Pay 3 bills" opens one card.
-      const page = await ctx.app.tab('/money/pay')
+      const page = await ctx.app.tab('/money/pay/bills')
       let request = ''
       try {
         const form = page.getByTestId('bill-upload')
@@ -328,7 +328,7 @@ export function billsDuplicateChangedDetails(): Scenario {
         invoicePDF([b.supplier, 'INVOICE', `Invoice number: ${b.number}`, `Due date: ${due}`, `Total due: GBP ${b.shown}`, 'Sort code: 04-00-04', `Account number: ${b.printed}`, ...extra])
 
       // In the browser: the invoice, its copy, and the changed-details invoice; one bill each; one card for both.
-      const page = await ctx.app.tab('/money/pay')
+      const page = await ctx.app.tab('/money/pay/bills')
       let request = ''
       try {
         const form = page.getByTestId('bill-upload')
