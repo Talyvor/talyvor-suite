@@ -89,7 +89,7 @@ describe.each(TYPES.flatMap((t) => KINDS.map((k) => [t, k] as const)))('a %s acc
     expect(within(main).queryByTestId('instant-transfer-form') !== null).toBe(hybrid)
     document.body.replaceChildren()
     ;({ main } = await at('/agents/agt_research/rules', account))
-    await within(main).findByRole('button', { name: /Pause .* on unusual spend/ })
+    await within(main).findByRole('switch', { name: 'Pauses if its spending looks unusual' })
     expect(within(main).queryByRole('switch', { name: 'Can use Instant transfer' }) !== null).toBe(hybrid)
   })
 

@@ -78,31 +78,32 @@ describe('amounts in your own currency and plain-English rules', () => {
     expect(window.localStorage.getItem(FIAT_KEY)).toBe('GBP')
   })
 
+  // B57.23 — the rules are edited on their own page; today's agent view states them as sentences.
   it('picks allowed models from the catalog instead of typing them, and states the rules as sentences', async () => {
     const { saved } = mockBff()
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    const models = await screen.findByLabelText('Allowed models for Researcher')
-    expect(models.tagName).toBe('SELECT')
-    expect(screen.queryByRole('textbox', { name: /Allowed models/ })).toBeNull()
-    expect(screen.getByLabelText('Allowed providers for Researcher').tagName).toBe('SELECT')
-    expect(screen.getByLabelText('Time zone for Researcher').tagName).toBe('SELECT')
-    expect((screen.getByLabelText('Active from for Researcher') as HTMLInputElement).type).toBe('time')
+    const before = await screen.findByTestId('rules-in-words')
+    await waitFor(() => expect(before.textContent).toContain('Researcher may spend at most $2.00 (20 LXC) a day.'))
+    expect(before.textContent).toContain('A person must approve any request or payment above $0.50 (5 LXC).')
+    expect(before.textContent).toContain('It may use any model from any provider.')
 
-    const words = await screen.findByTestId('rules-in-words')
-    await waitFor(() =>
-      expect(words.textContent).toContain('Researcher may spend at most $2.00 (20 LXC) a day.'),
-    )
-    expect(words.textContent).toContain('A person must approve any request or payment above $0.50 (5 LXC).')
-    expect(words.textContent).toContain('It may use any model from any provider.')
+    await rulesPage()
+    fireEvent.click(screen.getByRole('switch', { name: 'Only these models' }))
+    const models = await screen.findByLabelText('Add to models Researcher may use')
+    expect(models.tagName).toBe('SELECT')
+    expect(screen.queryByRole('textbox', { name: /models/ })).toBeNull()
+    expect((screen.getByLabelText('Researcher works from') as HTMLInputElement).type).toBe('time')
+    more('Only these providers')
+    expect(screen.getByLabelText('Add to providers Researcher may use').tagName).toBe('SELECT')
+    more('Time zone')
+    expect(screen.getByLabelText('Time zone for Researcher').tagName).toBe('SELECT')
 
     await waitFor(() => expect(within(models).getByRole('option', { name: 'Claude Haiku 4.5' })).toBeTruthy())
     fireEvent.change(models, { target: { value: 'claude-haiku-4-5' } })
-    expect(screen.getByRole('button', { name: 'Remove Claude Haiku 4.5 from allowed models for Researcher' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-
-    await waitFor(() => expect(saved).toHaveLength(1))
+    expect(screen.getByRole('button', { name: 'Take Claude Haiku 4.5 off' })).toBeTruthy()
+    const words = await save(saved, 1)
     expect(saved[0].allowed_models).toEqual(['claude-haiku-4-5'])
     await waitFor(() => expect(words.textContent).toContain('It may use only Claude Haiku 4.5.'))
   })
@@ -110,16 +111,16 @@ describe('amounts in your own currency and plain-English rules', () => {
   // B28.24 — the hourly and weekly caps are typed like the others, saved, and read back as one sentence.
   it('saves an hourly and a weekly cap and states them with the daily one', async () => {
     const { saved } = mockBff()
-    window.history.pushState({}, '', '/agents/agt_1')
+    window.history.pushState({}, '', '/agents/agt_1/rules')
     render(<App />)
 
-    fireEvent.change(await screen.findByLabelText('Hourly limit for Researcher, in LXC'), { target: { value: '1' } })
-    fireEvent.change(screen.getByLabelText('Weekly limit for Researcher, in LXC'), { target: { value: '50' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-
-    await waitFor(() => expect(saved).toHaveLength(1))
+    await screen.findByRole('heading', { level: 1, name: 'Researcher’s rules' })
+    more('At most an hour')
+    fireEvent.change(screen.getByLabelText('At most an hour for Researcher, in LXC'), { target: { value: '1' } })
+    more('At most a week')
+    fireEvent.change(screen.getByLabelText('At most a week for Researcher, in LXC'), { target: { value: '50' } })
+    const words = await save(saved, 1)
     expect(saved[0]).toMatchObject({ hourly_limit_ulxc: 1 * M, daily_limit_ulxc: 20 * M, weekly_limit_ulxc: 50 * M })
-    const words = await screen.findByTestId('rules-in-words')
     await waitFor(() =>
       expect(words.textContent).toContain('Researcher may spend at most $0.10 (1 LXC) an hour, $2.00 (20 LXC) a day and $5.00 (50 LXC) a week.'),
     )
@@ -128,100 +129,114 @@ describe('amounts in your own currency and plain-English rules', () => {
   // B28.25 — a model is picked and given its own daily cap; the caps are saved as one map and stated.
   it('caps one model a day, saves the cap by the model, and states it', async () => {
     const { saved } = mockBff()
-    window.history.pushState({}, '', '/agents/agt_1')
+    window.history.pushState({}, '', '/agents/agt_1/rules')
     render(<App />)
 
-    const pick = await screen.findByLabelText('Cap a model a day for Researcher')
+    await screen.findByRole('heading', { level: 1, name: 'Researcher’s rules' })
+    more('At most a day on one model')
+    const pick = await screen.findByLabelText('Add to a day on one model for Researcher')
     expect(pick.tagName).toBe('SELECT')
     await waitFor(() => expect(within(pick).getByRole('option', { name: 'GPT-4o' })).toBeTruthy())
     fireEvent.change(pick, { target: { value: 'gpt-4o' } })
-    fireEvent.change(screen.getByLabelText('Daily limit on GPT-4o for Researcher, in LXC'), { target: { value: '0.5' } })
-    fireEvent.change(pick, { target: { value: 'claude-haiku-4-5' } })
-    fireEvent.change(screen.getByLabelText('Daily limit on Claude Haiku 4.5 for Researcher, in LXC'), { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-
-    await waitFor(() => expect(saved).toHaveLength(1))
+    fireEvent.change(screen.getByLabelText('A day on one model for Researcher: GPT-4o, in LXC'), { target: { value: '0.5' } })
+    fireEvent.change(screen.getByLabelText('Add to a day on one model for Researcher'), { target: { value: 'claude-haiku-4-5' } })
+    fireEvent.change(screen.getByLabelText('A day on one model for Researcher: Claude Haiku 4.5, in LXC'), { target: { value: '2' } })
+    const words = await save(saved, 1)
     expect(saved[0].model_daily_limits_ulxc).toEqual({ 'gpt-4o': 0.5 * M, 'claude-haiku-4-5': 2 * M })
-    const words = await screen.findByTestId('rules-in-words')
     await waitFor(() =>
       expect(words.textContent).toContain('On one model it may spend at most $0.05 (0.5 LXC) a day on GPT-4o and $0.20 (2 LXC) a day on Claude Haiku 4.5.'),
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Remove the daily limit on GPT-4o for Researcher' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-    await waitFor(() => expect(saved).toHaveLength(2))
+    await rulesPage()
+    more('At most a day on one model')
+    fireEvent.click(screen.getByRole('button', { name: 'Take GPT-4o off' }))
+    await save(saved, 2)
     expect(saved[1].model_daily_limits_ulxc).toEqual({ 'claude-haiku-4-5': 2 * M })
   })
 
   // B28.26 — the owner caps the agent's requests a minute: a whole number, saved and stated.
   it('saves a cap on requests a minute and states it', async () => {
     const { saved } = mockBff()
-    window.history.pushState({}, '', '/agents/agt_1')
+    window.history.pushState({}, '', '/agents/agt_1/rules')
     render(<App />)
 
-    const rate = await screen.findByLabelText('Requests per minute for Researcher')
+    fireEvent.click(await screen.findByRole('switch', { name: 'At most requests a minute' }))
+    const rate = screen.getByLabelText('Requests a minute for Researcher')
     fireEvent.change(rate, { target: { value: '6.5' } })
-    expect(screen.getByText('Requests per minute is a whole number, or empty.')).toBeTruthy()
+    expect(screen.getByText('Requests a minute is a whole number, or empty.')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Save rules' })).toHaveProperty('disabled', true)
     fireEvent.change(rate, { target: { value: '60' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-
-    await waitFor(() => expect(saved).toHaveLength(1))
+    const words = await save(saved, 1)
     expect(saved[0].requests_per_minute).toBe(60)
-    const words = await screen.findByTestId('rules-in-words')
     await waitFor(() => expect(words.textContent).toContain('It may make at most 60 requests a minute.'))
   })
+
   // B28.27 — the owner names who the agent may pay and who it may not: a payee is one or the other, saved
   // as Lens's two lists and stated.
   it('blocks one payee and allows another, saves both lists, and states them', async () => {
     const { saved } = mockBff()
-    window.history.pushState({}, '', '/agents/agt_1')
+    window.history.pushState({}, '', '/agents/agt_1/rules')
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Researcher may not pay Writer' }))
-    fireEvent.change(screen.getByLabelText('A payee’s id for Researcher'), { target: { value: ' ws_acme ' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Allow' }))
-    expect(screen.getByRole('button', { name: 'Researcher may pay ws_acme' }).getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-
-    await waitFor(() => expect(saved).toHaveLength(1))
+    await screen.findByRole('heading', { level: 1, name: 'Researcher’s rules' })
+    more('Never these payees')
+    fireEvent.change(screen.getByLabelText('Add to payees Researcher may never pay'), { target: { value: 'agt_2' } })
+    fireEvent.click(screen.getByRole('switch', { name: 'Only these payees' }))
+    fireEvent.change(screen.getByLabelText('A payee’s id to add to payees Researcher may pay'), { target: { value: ' ws_acme ' } })
+    fireEvent.click(within(screen.getByRole('group', { name: 'Payees Researcher may pay' })).getByRole('button', { name: 'Add' }))
+    const words = await save(saved, 1)
     expect(saved[0]).toMatchObject({ allowed_payees: ['ws_acme'], blocked_payees: ['agt_2'] })
-    const words = await screen.findByTestId('rules-in-words')
     await waitFor(() => expect(words.textContent).toContain('It may pay only ws_acme.'))
     expect(words.textContent).toContain('It may never pay Writer.')
 
     // Allowing a blocked payee unblocks it: Lens refuses a payee on both lists.
-    fireEvent.click(screen.getByRole('button', { name: 'Researcher may pay Writer' }))
-    expect(screen.getByRole('button', { name: 'Researcher may not pay Writer' }).getAttribute('aria-pressed')).toBe('false')
-    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-    await waitFor(() => expect(saved).toHaveLength(2))
+    await rulesPage()
+    fireEvent.change(screen.getByLabelText('Add to payees Researcher may pay'), { target: { value: 'agt_2' } })
+    await save(saved, 2)
     expect(saved[1]).toMatchObject({ allowed_payees: ['ws_acme', 'agt_2'], blocked_payees: [] })
   })
-  // B28.28 — the owner caps what the agent may pay one payee in a day: the workspace's own agent by its box, any
-  // other payee by its id; saved as Lens's map in µLXC, an emptied box leaving its payee out, and stated.
+
+  // B28.28 — the owner caps what the agent may pay one payee in a day: the workspace's own agent from the list, any
+  // other payee by its id; saved as Lens's map in µLXC, a payee taken off left out, and stated.
   it('caps what the agent may pay one payee a day, saves the caps, and states them', async () => {
     const { saved } = mockBff()
-    window.history.pushState({}, '', '/agents/agt_1')
+    window.history.pushState({}, '', '/agents/agt_1/rules')
     render(<App />)
 
-    fireEvent.change(await screen.findByLabelText('Daily limit on payments to Writer from Researcher, in LXC'), { target: { value: '0.5' } })
-    fireEvent.change(screen.getByLabelText('A payee’s id for Researcher'), { target: { value: 'merchant_9' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Cap a day' }))
-    fireEvent.change(screen.getByLabelText('Daily limit on payments to merchant_9 from Researcher, in LXC'), { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-
-    await waitFor(() => expect(saved).toHaveLength(1))
+    await screen.findByRole('heading', { level: 1, name: 'Researcher’s rules' })
+    more('At most a day to one payee')
+    fireEvent.change(screen.getByLabelText('Add to a day to one payee from Researcher'), { target: { value: 'agt_2' } })
+    fireEvent.change(screen.getByLabelText('A day to one payee from Researcher: Writer, in LXC'), { target: { value: '0.5' } })
+    fireEvent.change(screen.getByLabelText('A payee’s id to add to a day to one payee from Researcher'), { target: { value: 'merchant_9' } })
+    fireEvent.click(within(screen.getByRole('group', { name: 'A day to one payee from Researcher' })).getByRole('button', { name: 'Add' }))
+    fireEvent.change(screen.getByLabelText('A day to one payee from Researcher: merchant_9, in LXC'), { target: { value: '2' } })
+    const words = await save(saved, 1)
     expect(saved[0].payee_daily_limits_ulxc).toEqual({ agt_2: 0.5 * M, merchant_9: 2 * M })
-    const words = await screen.findByTestId('rules-in-words')
     await waitFor(() => expect(words.textContent).toContain('To one payee it may pay at most'))
     expect(words.textContent).toMatch(/0\.5 LXC.* a day to Writer and .*2 LXC.* a day to merchant_9\./)
 
-    fireEvent.change(screen.getByLabelText('Daily limit on payments to Writer from Researcher, in LXC'), { target: { value: '' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-    await waitFor(() => expect(saved).toHaveLength(2))
+    await rulesPage()
+    more('At most a day to one payee')
+    fireEvent.click(screen.getByRole('button', { name: 'Take Writer off' }))
+    await save(saved, 2)
     expect(saved[1].payee_daily_limits_ulxc).toEqual({ merchant_9: 2 * M })
   })
 })
+
+/** B57.23 — from today's agent view to the agent's rules page. */
+async function rulesPage() {
+  fireEvent.click(await screen.findByRole('link', { name: 'Edit Researcher’s rules, see their history or ask whether a request would pass' }))
+  await screen.findByRole('heading', { level: 1, name: 'Researcher’s rules' })
+}
+
+const more = (rule: string) => fireEvent.click(within(screen.getByTestId('more-rules')).getByRole('link', { name: new RegExp(`^${rule}`) }))
+
+/** Save rules, and the sentences today's agent view states them in once the page goes back to it. */
+async function save(saved: unknown[], n: number) {
+  fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+  await waitFor(() => expect(saved).toHaveLength(n))
+  return screen.findByTestId('rules-in-words')
+}
 
 // B35.6 — one failed read of Lens's peg no longer leaves every amount without its dollar figure.
 describe('the dollar figure survives a failed read of the peg', () => {
