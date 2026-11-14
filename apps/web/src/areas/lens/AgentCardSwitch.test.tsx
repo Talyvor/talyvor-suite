@@ -74,7 +74,7 @@ afterEach(() => {
 describe('the agent card', () => {
   it('shows the balance, safe to spend, the month against its budget and the pace above it, and pauses at once', async () => {
     const { sent } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const card = await screen.findByTestId('agent-card-agt_1')

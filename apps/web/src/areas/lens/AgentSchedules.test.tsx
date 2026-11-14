@@ -62,7 +62,7 @@ afterEach(() => {
 describe('scheduled payments and automatic top-ups on the Agent Bank', () => {
   it('schedules a weekly payment, shows its runs, stops it, and sets a top-up', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     expect(await screen.findByText('Researcher pays nothing on a schedule.')).toBeTruthy()

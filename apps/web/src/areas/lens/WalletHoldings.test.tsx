@@ -125,7 +125,7 @@ afterEach(() => {
 describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
   it('labels escrow, cash-out and investing with Lens’s Sandbox, and no test-money line (B46.2, B56.11)', async () => {
     mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     await screen.findByTestId('portfolio')
     await waitFor(() => expect(document.querySelectorAll('[data-status-key="invest_and_trade"]')).toHaveLength(1))
@@ -143,7 +143,7 @@ describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       mockBff()
-      window.history.pushState({}, '', '/agents')
+      window.history.pushState({}, '', '/agents/agt_1')
       render(<App />)
       fireEvent.change(await screen.findByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '1.2' } })
       fireEvent.click(screen.getByRole('button', { name: 'Move in' }))
@@ -165,7 +165,7 @@ describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
 
   it('completes an escrow, fills and locks a pot, and places a simulated order that shows in the portfolio', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const escrow = await screen.findByTestId('escrow')

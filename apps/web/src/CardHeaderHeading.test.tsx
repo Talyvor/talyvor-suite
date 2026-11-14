@@ -161,7 +161,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B57.16 — an agent's page and its rules are today's agent view with that agent open.
   '/agents/:id': 38,
   '/agents/:id/rules': 38,
-  '/agents': 38, // B46.9 "Wallet"; B30.103 "Know Your Agent credential"; B19.10 added "Face ID and notifications"; B19.20 "Month-end forecast" and "Unusual spend"; B19.21 "Scheduled payments" and "Automatic top-up"; B19.22 "Statement for every agent"; B19.24 "Card" (B57.142 drew it in Pocket, so its title is no longer a card header); B22.10 "Address", "Send or request", "Transfers", "Recurring transfer", "Offer a loan", "Requests", "Credit line" and "Loans"; B22.12 "Pay into escrow", "Pots", "Investing, simulated", "Cash out", "Escrow" and "Cash-outs"; B28.21 "Name and description" and "Archive"; B28.30 "Would it pass?"; B28.31 "Rules history"; B28.32 "Limit boost"; B28.62 "Limit alerts"; B28.53 "Spend by day, model and destination"; B28.66 "Where alerts go" and "Sent alerts"
+  '/agents': 0, // B57.19 drew /agents in Pocket: its cards are AgentCards, so today's card headers are on /agents/:id alone
   // B20.3 — the catalog's Listings card. 1 → 0 at B29.11: the listings are cards of their own, a list
   // named Listings in the Browse region, and no card header.
   '/marketplace': 0,
@@ -206,8 +206,8 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/money/pay/bills': 0,
   // B57.27 — the prepared request is drawn in Pocket, whose card has no header.
   '/approve/:id': 0,
-  // B45.37 — one card: the plan the assistant prepared.
-  '/money/plans/:id': 1,
+  // B57.98 — the plan is drawn in Pocket, whose cards have no header.
+  '/money/plans/:id': 0,
   '/features': 1, // B57.42: "Documents you attach", moved here from Settings beside Document conversion
   '/features/try/tare': 0,
   '/features/try/conversion': 0,

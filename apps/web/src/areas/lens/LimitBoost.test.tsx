@@ -65,7 +65,7 @@ afterEach(() => {
 describe('a limit boost', () => {
   it('raises a limit until a time, shows what it reverts to, and can be ended early', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const limit = (await screen.findByLabelText('Limit to raise for Researcher')) as HTMLSelectElement
@@ -94,7 +94,7 @@ describe('a limit boost', () => {
     const ASSERTION = { rawId: new Uint8Array([1]).buffer, response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } }
     const get = vi.fn().mockResolvedValue(ASSERTION)
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.change(await screen.findByLabelText('Raise Researcher’s limit to'), { target: { value: '50' } })

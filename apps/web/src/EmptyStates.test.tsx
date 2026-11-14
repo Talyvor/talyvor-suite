@@ -114,7 +114,10 @@ const TELLS_YOU_WHAT_TO_DO =
 // these disappear is how a detector stops finding the real ones too.
 // Empty since B28.10 reworded its one entry, Sharing's "Nothing new produced here is shared.", so it
 // no longer opens with the "Nothing" the detector keys on.
-const NOT_AN_EMPTY_STATE: Record<string, string> = {}
+const NOT_AN_EMPTY_STATE: Record<string, string> = {
+  // B57.98 — what a declined or expired recurring plan did, said after the person decided: an outcome, not an empty list.
+  'Nothing is set up, and nothing is paid.': 'the outcome of declining a plan, or of letting it expire (RecurringPlan.tsx)',
+}
 
 // (b) It IS an empty state and it genuinely has no next action to name.
 //

@@ -70,7 +70,7 @@ afterEach(() => {
 describe('an agent’s rules history', () => {
   it('shows who changed what, and rolling back puts the earlier rules back in the Rules card and its form', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const v2 = await screen.findByTestId('rules-version-2')
@@ -108,7 +108,7 @@ describe('an agent’s rules history', () => {
     const ASSERTION = { rawId: new Uint8Array([1]).buffer, response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } }
     const get = vi.fn().mockRejectedValueOnce(new DOMException('The operation was cancelled.', 'NotAllowedError')).mockResolvedValue(ASSERTION)
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Roll Researcher’s rules back to version 1' }))
@@ -127,7 +127,7 @@ describe('an agent’s rules history', () => {
 
   it('cancels a rollback without sending it', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Roll Researcher’s rules back to version 1' }))

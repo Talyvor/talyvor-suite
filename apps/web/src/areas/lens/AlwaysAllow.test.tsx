@@ -51,7 +51,7 @@ afterEach(() => {
 describe('Approve and always allow this (B41.4)', () => {
   it('previews the rule in the simulator, then approves with it; an outside payee is not offered it', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     const list = within(await screen.findByRole('group', { name: 'Waiting for a person' }))
     // B57.17 — the inbox with this form is Agent Wallets', which offers it once the keys are read.
@@ -83,7 +83,7 @@ describe('Approve and always allow this (B41.4)', () => {
       value: { get: vi.fn(async () => ({ rawId: sig, response: { clientDataJSON: sig, authenticatorData: sig, signature: sig } })), create: vi.fn() },
       configurable: true,
     })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     const list = within(await screen.findByRole('group', { name: 'Waiting for a person' }))
     fireEvent.click(await list.findByRole('button', { name: 'Approve and always allow this…' }))

@@ -43,6 +43,7 @@ import { CompanyDetailsScreen } from './areas/lens/CompanyDetails'
 import { SignedInFooter } from './components/HelpLinks'
 import { Features } from './areas/lens/Features'
 import { AgentBank } from './areas/lens/AgentBank'
+import { Agents } from './areas/lens/Agents'
 import { ApprovalsScreen, StatementsScreen, usePendingApprovals } from './areas/lens/WalletScreens'
 import { ApprovalSheetHost } from './areas/lens/ApprovalSheet'
 import { MarketplaceArea } from './areas/marketplace/Marketplace'
@@ -220,7 +221,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/billing/cancel', title: 'Billing', element: <BillingCancel /> },
   { path: '/keys', title: 'API keys', element: <Keys /> },
   // B19.4 — each AI agent's own wallet: balance, rules, statement, payments and approvals. B57.8: Pocket's Agents.
-  { path: '/agents', title: 'Agents', element: <AgentBank /> },
+  // B57.19 — the agents as Pocket's w-agents, and New agent with the plan's limit said first.
+  { path: '/agents', title: 'Agents', element: <Agents /> },
   // B57.16 — an agent's page and its rules: today's agent view with that agent open, until B57.20 and B57.23 draw them.
   { path: '/agents/:id', title: 'Agents', element: <AgentBank /> },
   { path: '/agents/:id/rules', title: 'Agents', element: <AgentBank /> },
@@ -405,10 +407,10 @@ function Sidebar() {
       )}
       <div className="grid gap-0.5">
         {item('/', 'Home', 'home', pathname === '/')}
-        {item('/approvals', 'Approvals', 'approvals', under(pathname, '/approvals', '/approve'), pending)}
+        {item('/approvals', 'Approvals', 'approvals', under(pathname, '/approvals', '/approve', '/money/plans'), pending)}
         {item('/agents', 'Agents', 'agents', under(pathname, '/agents'))}
         {item('/statements', 'Statements', 'statements', under(pathname, '/statements'))}
-        {item('/money/pay', 'Pay', 'payments', under(pathname, '/money/pay', '/money/plans'))}
+        {item('/money/pay', 'Pay', 'payments', under(pathname, '/money/pay'))}
         {item('/money/invoices', 'Invoices', 'invoices', under(pathname, '/money/invoices'))}
         {item('/money/spending', 'Spending', 'spending', under(pathname, '/money/spending', '/money/budgets', '/money/subscriptions', '/money/card'))}
         {item('/chat', 'Chat', 'chat', under(pathname, '/chat'))}

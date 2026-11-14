@@ -73,7 +73,7 @@ afterEach(() => {
 describe("an agent's card on Agent Wallets", () => {
   it('issues a card, then shows an approved and a declined purchase with the reason and the rate', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const issue = await screen.findByRole('button', { name: 'Issue a card' })
@@ -122,7 +122,7 @@ describe("an agent's card on Agent Wallets", () => {
   // art 312 wide on a white Pocket card, the last-four line under it, each purchase a row with its decision in words.
   it("draws the agent's card in Pocket, 312 wide, with the last four under it", async () => {
     mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const issue = await screen.findByRole('button', { name: 'Issue a card' })
@@ -154,7 +154,7 @@ describe("an agent's card on Agent Wallets", () => {
   // country code holds the card back and says why. Lens hands phone_number to Stripe's cardholder.
   it("sends the holder's phone in E.164, and holds a phone without its country code", async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const issue = await screen.findByRole('button', { name: 'Issue a card' })

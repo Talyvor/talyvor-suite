@@ -51,7 +51,7 @@ afterEach(() => {
 describe("an agent's owner and verified badge on the Agent Bank", () => {
   it('says why an ownerless agent cannot be funded, claims it, then funds it', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     expect((await screen.findByTestId('agent-ownerless')).textContent).toContain('Researcher has no owner, so it cannot be funded')

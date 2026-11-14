@@ -49,7 +49,7 @@ afterEach(() => {
 describe('where alerts go (B28.66)', () => {
   it('adds a signed webhook, shows its secret once, and lists each delivery with its status', async () => {
     const { posted } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const card = await screen.findByTestId('alert-channels')
@@ -76,7 +76,7 @@ describe('where alerts go (B28.66)', () => {
   // B17.425 — channels added and alerts queued before the first agent exists still show: the card is where they are read.
   it('lists the channels and their deliveries before the first agent exists', async () => {
     mockBff(false)
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const card = await screen.findByTestId('alert-channels')

@@ -111,7 +111,7 @@ describe('untrusted text is only ever text', () => {
         authorizations: [{ id: 'a', authorization_id: 'iauth_a', approved: true, reason: 'ok', amount_minor: 100, currency: 'gbp', merchant_name: PAYLOAD, merchant_category: 'x', rate_date: '2026-09-25T00:00:00Z', ecb_usd_per_eur: '1.1672', ecb_currency_per_eur: '0.8354', amount_ulxc: 1, created_at: '2026-09-28T10:00:00Z' }],
       },
     })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     const { container } = render(<App />)
     await within(await screen.findByTestId('agent-card-purchases')).findAllByText(/onerror=/)
     assertInert(container)
