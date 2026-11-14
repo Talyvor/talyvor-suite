@@ -1244,6 +1244,51 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/money/instant-transfers", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensInstantSendBody",
   },
+  // B59.52 — Wallets' top up, withdraw and convert, for the web and the phone (Lens B17.255 and B59.51).
+  {
+    route: "POST /v1/money/accounts/{id}/test-money",
+    file: "apps/bff/money_wallets.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyAccountTopUp(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/accounts/{id}/test-money", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensTestMoneyBody",
+  },
+  {
+    route: "POST /v1/money/accounts/{id}/withdraw",
+    file: "apps/bff/money_wallets.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyAccountWithdraw(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_wallets_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/accounts/{id}/withdraw", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensWithdrawBody",
+  },
+  {
+    route: "POST /v1/money/convert/quote",
+    file: "apps/bff/money_wallets.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyConvertQuote(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_wallets_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/convert/quote", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSideConvertQuoteBody",
+  },
+  {
+    route: "POST /v1/money/convert",
+    file: "apps/bff/money_wallets.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyConvert(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_wallets_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/convert", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSideConvertBody",
+  },
   {
     route: "POST /v1/money/mandates",
     file: "apps/bff/money_pay.go",
