@@ -39,6 +39,8 @@ export interface Agent {
   kind?: string
   /** B57.10 — its face's colour, which B57.124's helper follows; absent from a Lens older than B57.10. */
   colour?: string
+  /** B57.10 — its face's shape: circle, squircle, hexagon or flower; absent from a Lens older than B57.10. */
+  face?: string
 }
 
 /** Lens economy.AgentArchive (B28.21): what archiving an agent did. */
@@ -1230,7 +1232,7 @@ export const agentBankApi = {
   freezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/freeze`),
   unfreezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/unfreeze`),
   /** B28.21 — renames the agent and/or sets what it is for, and (B57.124) its helper's colour; Lens answers the agent. */
-  update: (id: string, change: { name?: string; description?: string; colour?: string }) => send<Agent>('PATCH', `/api/agents/${e(id)}`, change),
+  update: (id: string, change: { name?: string; description?: string; colour?: string; face?: string }) => send<Agent>('PATCH', `/api/agents/${e(id)}`, change),
   /** B28.21 — retires the agent: its balance back to the workspace, its keys revoked, its top-up and schedules stopped. */
   archive: (id: string) => send<AgentArchive>('POST', `/api/agents/${e(id)}/archive`),
   /** B19.23 — the signed-in person becomes the owner of an agent that has none. */

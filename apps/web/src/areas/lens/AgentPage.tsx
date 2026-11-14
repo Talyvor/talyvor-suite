@@ -396,7 +396,10 @@ function Header({ s }: { s: AgentSummary }) {
         <div className="grid gap-1">
           <h2 className="font-display text-title font-bold text-ink">{agent.name}</h2>
           <div className="flex flex-wrap items-center gap-2" data-testid="agent-page-state">
-            {agent.paused_at ? (
+            {agent.archived_at ? (
+              // B57.22 — an archived agent's page says so first: it can no longer be funded, spend or pay.
+              <Chip tone="plain">Archived</Chip>
+            ) : agent.paused_at ? (
               <Chip tone="paused" dot>
                 Paused
               </Chip>

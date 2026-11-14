@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from './App'
 import { Markdown } from './areas/chat/Markdown'
@@ -113,6 +113,7 @@ describe('untrusted text is only ever text', () => {
     })
     window.history.pushState({}, '', '/agents/agt_1')
     const { container } = render(<App />)
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Its card')).getByRole('button')) // B57.22: a row of its Settings
     await within(await screen.findByTestId('agent-card-purchases')).findAllByText(/onerror=/)
     assertInert(container)
   })
