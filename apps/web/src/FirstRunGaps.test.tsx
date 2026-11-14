@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { queryClient } from './App'
@@ -15,7 +15,7 @@ import { queryClient } from './App'
 //     was routed to — the instructions for using the product, behind a nav item.
 //  3. /specimen DOES NOT RESOLVE. The internal component gallery was unlinked but routable.
 
-function mockBff(opts: { needsChoice?: boolean; signupOpen?: boolean; agents?: object[] } = {}) {
+function mockBff(opts: { needsChoice?: boolean; signupOpen?: boolean; agents?: object[]; unnamed?: boolean } = {}) {
   // The choice is asked once: after the pooling write, /auth/me stops asking, as the BFF does.
   let chosen = false
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -53,8 +53,8 @@ function mockBff(opts: { needsChoice?: boolean; signupOpen?: boolean; agents?: o
       )
     }
     if (url === '/api/workspace/name') {
-      // Lens names a workspace by its id until someone names it (B55.39).
-      return new Response(JSON.stringify({ id: 'uabcdefghijklmnopqrstuvwxy', name: 'uabcdefghijklmnopqrstuvwxy' }), {
+      // Lens names a workspace by its id until someone names it (B55.39); a case about a new workspace says so.
+      return new Response(JSON.stringify({ id: 'uabcdefghijklmnopqrstuvwxy', name: opts.unnamed ? 'uabcdefghijklmnopqrstuvwxy' : 'New team' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -70,6 +70,7 @@ function at(path: string) {
 
 beforeEach(() => {
   queryClient.clear()
+  sessionStorage.clear()
   window.history.pushState({}, '', '/')
 })
 afterEach(() => {
@@ -137,16 +138,28 @@ describe('the marketing page offers a way in', () => {
 // ─── 2. a first-time user reaches Setup ─────────────────────────────────────
 
 describe('first run opens Home in onboarding mode', () => {
-  it('a new workspace lands on Home, onboarding, with no consent page — and Setup is one link away', async () => {
+  it('a new workspace lands on its first page, /welcome, with no consent page — and Home is one link away', async () => {
+    mockBff({ needsChoice: true, unnamed: true })
+    at('/ledger')
+    // B28.8 — nothing blocks: the login that created the workspace is routed once to Home, and B57.50 — while its name is
+    // still its id, the shell sends it on to /welcome, which names it. AuthGate does not send it back.
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/welcome')
+    })
+    expect(await screen.findByTestId('welcome-name')).toBeInTheDocument()
+    expect(screen.queryByText(/Share your answers, and earn from them/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Go to Home' })).toHaveAttribute('href', '/')
+    expect(window.location.pathname).toBe('/welcome')
+  })
+
+  it('a named workspace with no agents lands on Home, onboarding — and Setup is one link away', async () => {
     mockBff({ needsChoice: true })
     at('/ledger')
-    // B28.8 — nothing blocks: the login that created the workspace is routed once to Home, which for a
-    // workspace with no agents is the onboarding steps. B57.18: Setup is the sidebar's Developers, one link away.
     await waitFor(() => {
       expect(window.location.pathname).toBe('/')
     })
     expect(await screen.findByTestId('home-onboarding')).toBeInTheDocument()
-    expect(screen.queryByText(/Share your answers, and earn from them/i)).not.toBeInTheDocument()
+    // B57.18: Setup is the sidebar's Developers, one link away.
     expect(within(screen.getByRole('navigation', { name: /sections/i })).getByRole('link', { name: 'Developers' })).toHaveAttribute('href', '/setup')
   })
 
@@ -170,10 +183,15 @@ describe('first run opens Home in onboarding mode', () => {
 
   it('a new workspace that Lens gave "My first agent" is asked its name, and the sidebar never shows its id', async () => {
     // B55.39 — Lens makes the first agent at sign-up, so the book is not empty and the onboarding card never shows.
-    mockBff({ needsChoice: true, agents: [{ id: 'agt_first', name: 'My first agent', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-11-06T09:00:00Z' }] })
+    // B57.50 — it is asked on /welcome first; Go to Home, still unnamed, and Home asks again while the sidebar says "Your workspace".
+    mockBff({ needsChoice: true, unnamed: true, agents: [{ id: 'agt_first', name: 'My first agent', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-11-06T09:00:00Z' }] })
     at('/')
-    expect(await screen.findByText('Name your workspace')).toBeInTheDocument()
+    await waitFor(() => expect(window.location.pathname).toBe('/welcome'))
+    expect(await screen.findByTestId('welcome-name')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: 'Go to Home' }))
     expect(await screen.findByTestId('sidebar-workspace-name')).toHaveTextContent('Your workspace')
+    expect(await screen.findByTestId('name-workspace')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/')
     expect(screen.queryByText('uabcdefghijklmnopqrstuvwxy')).not.toBeInTheDocument()
   })
 

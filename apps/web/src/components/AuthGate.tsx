@@ -21,7 +21,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const newWorkspace = q.data?.authenticated === true && q.data.needs_pooling_choice === true
   const routed = useRef(false)
   useEffect(() => {
-    if (newWorkspace && !routed.current) {
+    // B57.50 — the shell sends an unnamed workspace on to /welcome, its first page, so it is not sent back. Read from
+    // the address bar, not this render: the shell's redirect can land in the same commit, before this effect runs.
+    if (newWorkspace && !routed.current && window.location.pathname !== '/welcome') {
       routed.current = true
       navigate('/', { replace: true })
     }

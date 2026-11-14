@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { greeting, pausedLine, planLine, waitingLine } from './Home'
 import { nameFromEmail } from './Onboarding'
+import { markWelcomed } from '../auth/Welcome'
 
 // B57.18 — Home as the launch pack's W2 draws it, with Lens's figures. The mock BFF answers the routes Home reads exactly
 // as Lens shapes them (economy.AgentBook, AgentRules, AgentApproval, SpendForecast, CurrencyAccount, the agent's wallet,
@@ -175,6 +176,7 @@ afterEach(() => {
   cleanup()
   queryClient.clear()
   vi.restoreAllMocks()
+  sessionStorage.clear()
   window.history.pushState({}, '', '/')
 })
 
@@ -460,6 +462,8 @@ describe('Home — a new workspace is asked its name (B55.39)', () => {
 
   it('while the name is the id, Home asks for it first, Save name PUTs it, and the sidebar then shows it', async () => {
     const writes = mockBff({ agents: FIRST, workspaceName: 'ws_1' })
+    // B57.50 — this tab saw /welcome and pressed Go to Home with the workspace still unnamed: Home asks again.
+    markWelcomed()
     render(<App />)
 
     const card = await screen.findByTestId('name-workspace')
