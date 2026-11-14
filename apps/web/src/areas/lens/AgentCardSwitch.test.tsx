@@ -50,7 +50,13 @@ function mockBff({ allPaused = false, paused = false } = {}) {
       return json({ agent_id: 'agt_1', balance_ulxc: state.researcher })
     }
     if (url === '/api/agents/forecast')
-      return json({ at: '', month_start: '', month_end: '', spent_ulxc: 1_500_000, forecast_ulxc: 3_000_000, agents: [{ agent_id: 'agt_1', name: 'Researcher', spent_ulxc: 1_500_000, forecast_ulxc: 3_000_000 }] })
+      return json({
+        at: '', month_start: '', month_end: '', spent_ulxc: 1_500_000, forecast_ulxc: 3_000_000,
+        agents: [
+          { agent_id: 'agt_1', name: 'Researcher', spent_ulxc: 1_500_000, forecast_ulxc: 3_000_000, runs_out_on: '2026-11-28', timezone: 'Pacific/Auckland' },
+          { agent_id: 'agt_2', name: 'Writer', spent_ulxc: 0, forecast_ulxc: 0, runs_out_on: null, timezone: 'UTC' },
+        ],
+      })
     if (url === '/api/agents/safe-to-spend')
       return json({ company: [], agents: [{ agent_id: 'agt_1', name: 'Researcher', figures: [{ currency: 'LXC', balance: state.researcher, scheduled: 0, bills_due: 0, pending_approvals: 0, safe_to_spend: 1_250_000 }] }] })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
@@ -87,6 +93,20 @@ describe('the agent card', () => {
     expect(await within(card).findByText('Paused. Resuming needs your passkey or your phone.')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(sent.map((s) => s.url)).toEqual(['/api/agents/agt_1/pause'])
+  })
+
+  it('says the day each agent runs out in its own zone, or that it does not at this pace (B57.114)', async () => {
+    mockBff()
+    window.history.pushState({}, '', '/agents')
+    render(<App />)
+
+    const researcher = await screen.findByTestId('agent-card-agt_1')
+    const runsOut = await within(researcher).findByTestId('agent-card-runs-out-agt_1')
+    expect(runsOut).toHaveTextContent('runs out on 28 November 2026 (Pacific/Auckland)')
+    expect(within(runsOut).getByText('28 November 2026')).toHaveAttribute('dateTime', '2026-11-28')
+    expect(within(researcher).getByTestId('agent-card-note-agt_1')).toHaveTextContent('On pace for about 3 LXC')
+    const writer = screen.getByTestId('agent-card-agt_2')
+    expect(await within(writer).findByTestId('agent-card-runs-out-agt_2')).toHaveTextContent('does not run out at this pace')
   })
 
   it('resuming while every agent is paused says it waits for every agent, and says so again after', async () => {

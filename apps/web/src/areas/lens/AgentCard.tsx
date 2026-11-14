@@ -6,6 +6,7 @@ import { isSessionExpired } from '../../lib/productState'
 import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, rulesKey, statementKey, useKeys } from './AgentBank'
 import { cardKey } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
+import { RunsOut } from './RunsOut'
 import { type Agent, type AgentBook, AgentBankError, agentBankApi, newMoveKey, parseLXC, retryMoveThroughRestart } from './agentBankApi'
 import { resumeAgent, resumeEveryAgent } from './passkeys'
 
@@ -106,12 +107,20 @@ export function AgentCard({ agent, book }: { agent: Agent; book: AgentBook }) {
             <span>Paused. Resuming needs your passkey or your phone.</span>
           ) : allPaused ? (
             <span>Paused with every agent.</span>
-          ) : month && month.forecast_ulxc > 0 ? (
+          ) : month ? (
             <>
-              <span>
-                On pace for about <Money ulxc={month.forecast_ulxc} />
-              </span>
+              {month.forecast_ulxc > 0 ? (
+                <span>
+                  On pace for about <Money ulxc={month.forecast_ulxc} />
+                </span>
+              ) : null}
               {budget > 0 && month.forecast_ulxc > budget ? <Chip tone="wait">Above its budget</Chip> : null}
+              {/* B57.114 — the day it runs out in its own zone, under its pace, as Lens's forecast gives it. */}
+              {month.runs_out_on !== undefined ? (
+                <span className="basis-full">
+                  <RunsOut forecast={month} testid="agent-card-runs-out" />
+                </span>
+              ) : null}
             </>
           ) : null}
           {frozen ? <Chip tone="paused">Card frozen</Chip> : null}
