@@ -2885,7 +2885,7 @@ function Framed({ title, children }: { title: string; children: React.ReactNode 
   )
 }
 
-/** `moneyOnPage`: under an agent's page, which draws its money features itself (B57.21). */
+/** `moneyOnPage`: under an agent's page, which draws its money features (B57.21) and its spend card (B57.111) itself. */
 export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {}) {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   // B28.349 — /agents?agent=…&entry=… (a statement line a spend answer in Chat links to) opens that agent at that line.
@@ -2996,7 +2996,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
             <>
               <Archived agent={agent} done={archived[agent.id]} />
               <AgentDetails key={`details-${agent.id}`} agent={agent} />
-              <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
+              {moneyOnPage ? null : <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />}
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
             </>
           ) : (
@@ -3009,7 +3009,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
               {rulesFirst ? null : <Rules key={`rules-${agent.id}`} agent={agent} agents={live} />}
               <TryRules key={`try-${agent.id}`} agent={agent} agents={live} />
               {moneyOnPage ? null : <AgentMoneySection key={`money-${agent.id}`} agent={agent} />}
-              <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
+              {moneyOnPage ? null : <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />}
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
               {/* B57.22 — its Settings: each row opens today's form for it, so each posts what it posted before. */}
               <AgentSettings

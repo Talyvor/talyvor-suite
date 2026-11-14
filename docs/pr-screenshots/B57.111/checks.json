@@ -1,0 +1,11 @@
+[
+ { "route": "/agents/agt_research", "screen": "w-agent-research" },
+ { "route": "/agents/agt_sales", "screen": "w-agent-sales" },
+ {
+  "route": "/agents/agt_ops",
+  "screen": "w-agent-ops",
+  "answers": {
+   "/api/agents/agt_ops/analytics": { "agent_id": "agt_ops", "time_zone": "Europe/London", "out_ulxc": 0, "returned_ulxc": 0, "spent_ulxc": 0, "buckets": [] }
+  }
+ }
+]
