@@ -460,16 +460,17 @@ const PINS: Record<string, Pin> = {
   // 120 → 121 at B57.122: the card face's family label (Personal, Corporate, Stablecoin) under its tier.
   // 121 → 120 at B57.60: /marketing's labels legend moves to Pocket's own, and StatusLabel's LabelsMeaning goes with it.
   // 120 → 118 at B57.18: Home's "This morning" and "Across your agents" eyebrows go; its total's eyebrow is Pocket's.
+  // 118 → 114 at B57.44: Members' role and "You" labels and its two form-field labels go; its roles are chips now.
   'apps/web/src/caseAudit.ts|<N> uppercase class lists': {
     kind: 'LIVE',
     of: 'TOTAL',
-    states: 118,
+    states: 114,
     why: "the argument for why the rule cannot live in the token — #99 wrote TWENTY here, the 'twenty other' figure with `other` dropped",
   },
   'apps/web/src/caseAudit.ts|uppercase (<N> class lists': {
     kind: 'LIVE',
     of: 'TOTAL',
-    states: 118,
+    states: 114,
     why: '#99 wrote 25 here: every occurrence of the WORD in non-test source with comments kept, which counts the paragraphs about the class',
   },
   'packages/ui/src/components/CaseSafe.tsx|<N> other uppercase class lists': {

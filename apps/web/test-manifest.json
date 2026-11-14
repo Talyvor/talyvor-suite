@@ -124,7 +124,7 @@
   "src/areas/lens/LimitAlerts.test.tsx": 3,
   "src/areas/lens/LimitBoost.test.tsx": 2,
   "src/areas/lens/lxcSplitCoverage.test.tsx": 5,
-  "src/areas/lens/Members.test.tsx": 22,
+  "src/areas/lens/Members.test.tsx": 11,
   "src/areas/lens/mintAttribution.test.tsx": 5,
   "src/areas/lens/ModelTier.test.tsx": 5,
   "src/areas/lens/money.test.ts": 7,

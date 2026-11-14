@@ -27,6 +27,8 @@ function mockBff({ agents, plan, create }: { agents: ReturnType<typeof agent>[];
     if (method !== 'GET') sent.push({ method, url, body })
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    // B57.44: /api/plan carries the plan's seats too; Agents reads none of them.
+    if (url === '/api/plan' && !('seats' in plan)) return json({ ...plan, seats: 1 })
     if (url === '/api/plan') return json(plan)
     if (url === '/api/pricing') return json(PRICING)
     if (url === '/api/agents' && method === 'GET') {
