@@ -902,6 +902,22 @@ describe('the first live payment, before the workspace has a key (B58.8)', () =>
     expect(posts).toEqual([])
   })
 
+  // B57.163 — w-pay draws a line in place of its button as a bold small sentence beside a secondary button.
+  it("draws the step as w-pay's line in place of its button: the sentence in bold, the link as a secondary button", async () => {
+    mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')], [PAYMENT('mpay_0', 'payee_1', 'Acme Ltd', 100, 'completed')])
+    labelled('live')
+    window.history.pushState({}, '', '/money/pay#payee-payee_1')
+    render(<App />)
+    const step = await within(await screen.findByTestId('send-payment')).findByTestId('pay-key-first')
+    const sentence = within(step).getByText('Add a passkey or your phone before your first payment.')
+    expect(sentence.className).toContain('font-semibold')
+    expect(sentence.className).toContain('text-body')
+    const link = within(step).getByRole('link', { name: 'Approvals and devices' })
+    expect(link.className).toContain('rounded-pill')
+    expect(link.className).toContain('bg-cloud-2')
+    expect(link.getAttribute('href')).toBe('/approvals')
+  })
+
   it('still offers Send in the Sandbox with no key', async () => {
     mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')], [PAYMENT('mpay_0', 'payee_1', 'Acme Ltd', 100, 'completed')])
     labelled('sandbox')

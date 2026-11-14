@@ -549,7 +549,7 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 			"address to OIDC_ALLOWED_EMAILS and RESTART the BFF (config is read at boot); "+
 			"or set OIDC_ALLOWED_EMAILS=* to admit every identity this issuer authenticates",
 			emailForLog(claims.Email), idt.Subject, reason)
-		writeDeniedPage(w, claims.Email)
+		writeDeniedPage(w, claims.Email, emailUnverified(claims.Email, claims.EmailVerified))
 		return
 	}
 
@@ -694,9 +694,11 @@ func (auth *authenticator) storeSession(s session) (string, error) {
 // broken password) → this workspace has not granted you access → contact whoever runs it (there is
 // no self-service path; pretending otherwise would be worse) → sign in with a different account.
 //
-// LEAKS NOTHING: no allowlist name, size, membership, or refusal cause. Every refusal cause —
-// not-on-list, empty list, issuer-unverified email — renders this same page, so a refused
-// stranger learns only that they were refused. The precise cause stays in the server log.
+// LEAKS NOTHING: no allowlist name, size, membership, or refusal cause. Not-on-list and an empty
+// list render this same page, so a refused stranger learns only that they were refused. An email
+// the provider has not confirmed gets its one sentence instead (B58.9) — that check runs before the
+// list is read, so the listed and the unlisted see the same page. The precise cause stays in the
+// server log.
 //
 // IN POCKET (B57.49): the sign-in pages' auth card — a white card with its large shadow on the cloud page, ink words
 // and one ink pill action, Figtree — with the logo's small drawing at the top (B57.79), the kit's files themselves,
@@ -746,9 +748,10 @@ var deniedPageTmpl = template.Must(template.New("denied").Parse(`<!doctype html>
   <h1>Access not granted</h1>
   {{if .Email}}<p>You are signed in as <strong>{{.Email}}</strong>. The sign-in itself worked.</p>
   {{else}}<p>Your sign-in itself worked.</p>{{end}}
-  <p>This workspace has not granted you access.</p>
+  {{if .Unverified}}<p>{{.Unverified}}</p>
+  {{else}}<p>This workspace has not granted you access.</p>
   <p class="muted">If you believe you should have access, contact the person who runs this
-  workspace and ask them to add you. There is no self-service signup.</p>
+  workspace and ask them to add you. There is no self-service signup.</p>{{end}}
   <a class="switch" href="/auth/login?prompt=select_account">Sign in with a different account</a>
 </main>
 </html>
@@ -767,14 +770,18 @@ var (
 // the tooling. No session was created and none of this response's headers may set one (the only
 // Set-Cookie a refusal carries is the pending-flow CLEAR the callback already wrote). no-store:
 // a shared machine must not cache someone else's identity echo.
-func writeDeniedPage(w http.ResponseWriter, email string) {
+func writeDeniedPage(w http.ResponseWriter, email string, unverified bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusForbidden)
 	data := struct {
 		Email               string
+		Unverified          string
 		LogoDark, LogoLight template.HTML
-	}{Email: email, LogoDark: template.HTML(logoDark), LogoLight: template.HTML(logoLight)} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
+	}{Email: email, LogoDark: template.HTML(logoDark), LogoLight: template.HTML(logoLight)}
+	if unverified {
+		data.Unverified = unverifiedEmailSentence
+	} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
 	if err := deniedPageTmpl.Execute(w, data); err != nil {
 		log.Printf("bff: denied page render: %v", err)
 	}
@@ -804,13 +811,30 @@ func emailForLog(email string) string {
 	return email
 }
 
+// unverifiedEmailSentence is the whole refusal a person sees when their provider has not
+// confirmed their email (B58.9): the browser's denied page and the phone's 403 both say it.
+const unverifiedEmailSentence = "Your sign-in provider has not confirmed this email address, so you cannot sign in with it."
+
+// emailUnverified reports whether the id_token carries an email its issuer has not said is
+// verified. Absent counts as unverified (B58.9): the BFF hands this address to Track and Docs as
+// X-User-Email and they decide membership by it, so an address nobody confirmed must never get in.
+func emailUnverified(email string, verified *bool) bool {
+	return email != "" && (verified == nil || !*verified)
+}
+
 // authorizeIdentity is OUR authorization on top of the IdP's authentication.
-// "*" delegates wholly to the issuer (any authenticated subject). Otherwise the
-// identity must carry an email on the allowlist, and an email the issuer itself
-// marks unverified never clears an email-keyed list. An absent email_verified
-// claim is accepted: the issuer asserted the email and did not dispute it, and
-// the issuer is the party the operator chose to trust.
+// An email counts only when the issuer says email_verified is true; an email it
+// marks unverified, or leaves unmarked, is refused before anything else, with
+// sign-up open or not, so the refusal says nothing about the list. "*" then
+// delegates to the issuer (any authenticated subject, with or without an email).
+// Otherwise the identity must carry an email on the allowlist.
 func authorizeIdentity(allowed []string, sub, email string, verified *bool) (reason string, ok bool) {
+	if emailUnverified(email, verified) {
+		if verified == nil {
+			return "the id_token does not say this email is verified (email_verified absent)", false
+		}
+		return "the issuer marks this email as unverified", false
+	}
 	if signupIsOpen(allowed) {
 		if sub == "" {
 			return "issuer returned an empty subject", false
@@ -819,9 +843,6 @@ func authorizeIdentity(allowed []string, sub, email string, verified *bool) (rea
 	}
 	if email == "" {
 		return "the id_token carries no email claim to match against OIDC_ALLOWED_EMAILS", false
-	}
-	if verified != nil && !*verified {
-		return "the issuer marks this email as unverified", false
 	}
 	e := strings.ToLower(email)
 	for _, a := range allowed {

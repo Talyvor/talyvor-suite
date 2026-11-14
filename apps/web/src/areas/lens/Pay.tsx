@@ -563,12 +563,14 @@ function PayForm({
             </PocketButton>
           </div>
         ) : keyFirst ? (
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-reading text-ink" data-testid="pay-key-first">
-            <span>Add a passkey or your phone before your first payment.</span>
-            <Link className={pocketLink} to="/approvals">
-              Approvals and devices
-            </Link>
-          </p>
+          // B57.163 — drawn as w-pay draws a line in place of its button: the sentence in bold, the next step a secondary button.
+          // The link goes to /approvals, where the Face ID card is, until B57.43 adds /settings/devices.
+          <div className="flex flex-wrap items-center gap-3" data-testid="pay-key-first">
+            <p className="text-body font-semibold text-ink">Add a passkey or your phone before your first payment.</p>
+            <PocketButton asChild variant="secondary">
+              <Link to="/approvals">Approvals and devices</Link>
+            </PocketButton>
+          </div>
         ) : (
           <div>
             <PocketButton type="submit" variant="primary" disabled={!complete || pay.isPending} disabledReason={pay.isPending ? undefined : why}>
