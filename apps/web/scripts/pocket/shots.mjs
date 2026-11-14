@@ -220,7 +220,9 @@ async function deadControls(c) {
 }
 
 for (const c of checks) {
-  const name = c.screen || c.route.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'home'
+  // B57.21 — a screen with no reference, reached by steps (an agent's money panel), is named by its steps too.
+  const steps = !c.screen && c.steps?.length ? `+${c.steps.join('-').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '')}` : ''
+  const name = (c.screen || c.route.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'home') + steps
   // B57.20 — one screen in several states keeps a file for each: w-agent-research@fR1.
   const label = `${name}${c.state ? `@${Object.entries(c.state).map(([k, v]) => `${k}${v}`).join('-')}` : ''}${c.dark ? '-dark' : ''}`
   console.log(`\n${label} — the app at ${c.route}${c.steps?.length ? `, after ${c.steps.map((s) => `“${s}”`).join(', ')}` : ''}`)

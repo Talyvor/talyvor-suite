@@ -1,10 +1,27 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
 // B22.10 — the DONE line: on Agent Wallets an owner sends test credits to another person's agent, accepts a
 // request, offers a loan to another company and sees its repayments, late and default, and sees each AMBER
 // capability marked test money only. The mock BFF answers the way Lens B22.1, B22.3, B22.4 and B22.5 do.
+// B57.21: each is a panel opened from its row on the agent's page.
+
+/** Lens B57.12's one read for the agent's page, so the page and its Money card (B57.21) draw. */
+const summaryOf = (agent: Record<string, unknown>) => ({
+  as_of: '2026-09-29T09:00:00Z', agent, made_at: '2026-09-01T09:00:00Z', owner_user_id: 'ws_1', safe_to_spend: null,
+  month: { start: '2026-09-01T00:00:00Z', end: '2026-10-01T00:00:00Z', spent_ulxc: 0, forecast_ulxc: 0, runs_out_at: null, runs_out_on: null, monthly_limit_ulxc: 0 },
+  approvals: null, statement: null, statement_time_zone: 'UTC', rules: null, card: { status: 'none', last_declined: null }, currency_accounts: null,
+})
+
+/** B57.21 — a feature is a row of the agent's Money card; pressing it opens its own panel. */
+async function openPanel(row: string) {
+  fireEvent.click(await screen.findByTestId(`money-row-${row}`))
+  return screen.findByRole('dialog')
+}
+const closePanel = () => fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }))
+/** An element's words, its figures' no-break spaces as spaces. */
+const words = (el: Element | null) => (el?.textContent ?? '').replace(/\u00a0/g, ' ')
 
 function mockBff({ received = false } = {}) {
   const sent: Array<{ method: string; url: string; body: unknown }> = []
@@ -52,6 +69,7 @@ function mockBff({ received = false } = {}) {
       const held = agent.balance_ulxc - (givenBack ? 1_500_000 : 0)
       return json({ workspace_balance_ulxc: held, allocated_ulxc: held, unallocated_ulxc: 0, spent_ulxc: 0, agents: [{ ...agent, balance_ulxc: held }] })
     }
+    if (url === '/api/agents/agt_1/summary') return json(summaryOf(agent))
     if (url === '/api/wallets/transfers/xfr_in/refund' && method === 'POST') {
       givenBack = true
       return json(refund)
@@ -108,11 +126,12 @@ describe('money between owners on Agent Wallets', () => {
     mockBff()
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
-    await screen.findByTestId('agent-address')
-    await waitFor(() => expect(document.querySelector('[data-status-key="company_credit_line"]')?.textContent).toBe('Sandbox'))
-    for (const key of ['pay_another_owner', 'loans_between_companies'])
-      expect([...document.querySelectorAll(`[data-status-key="${key}"]`)].every((el) => el.textContent === 'Sandbox'), key).toBe(true)
-    expect(document.querySelectorAll('[data-status-key="pay_another_owner"]').length).toBeGreaterThanOrEqual(4)
+    for (const [row, key] of [['send', 'pay_another_owner'], ['requests', 'pay_another_owner'], ['transfers', 'pay_another_owner'], ['recurring', 'pay_another_owner'], ['loans', 'loans_between_companies'], ['credit', 'company_credit_line']] as const) {
+      const panel = await openPanel(row)
+      await waitFor(() => expect([...panel.querySelectorAll(`[data-status-key="${key}"]`)].map((el) => el.textContent), row).toEqual(row === 'loans' ? ['Sandbox', 'Sandbox'] : ['Sandbox']))
+      expect(panel.textContent).not.toMatch(/test money|test credits|licensed partner|lawyer’s sign-off/i)
+      closePanel()
+    }
     expect(screen.queryByTestId(/^test-money-only-/)).toBeNull()
     expect(document.body.textContent).not.toMatch(/test money|test credits|licensed partner|lawyer’s sign-off/i)
     // Never the word bank — but for the European Central Bank, whose rate the card panel (B19.24) names.
@@ -124,37 +143,50 @@ describe('money between owners on Agent Wallets', () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    expect((await screen.findByTestId('agent-address')).textContent).toContain('@acme.buyer')
-    fireEvent.change(screen.getByLabelText('Send to (wallet ID or @handle)'), { target: { value: '@bea' } })
-    fireEvent.change(screen.getByLabelText('Amount in LXC to send'), { target: { value: '5' } })
-    fireEvent.change(screen.getByLabelText('What it is for'), { target: { value: 'design work' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send credits' }))
-    expect((await screen.findByText(/Sent/)).textContent).toMatch(/Sent 5 LXC\. It went to another owner’s agent\./)
+    expect((await screen.findByTestId('money-row-requests')).parentElement?.textContent).toContain('What other agents ask of Buyer, to accept or decline')
+    expect(within(await openPanel('address')).getByTestId('agent-address').textContent).toContain('@acme.buyer')
+    closePanel()
+
+    let panel = await openPanel('send')
+    fireEvent.click(within(panel).getByRole('button', { name: 'Send credits' }))
+    expect(sent).toEqual([]) // nothing to send yet, and it says what it needs
+    expect(within(panel).getByText('Type a wallet ID or @handle first')).toBeTruthy()
+    fireEvent.change(within(panel).getByLabelText('Send to (wallet ID or @handle)'), { target: { value: '@bea' } })
+    fireEvent.change(within(panel).getByLabelText('Amount in LXC to send'), { target: { value: '5' } })
+    fireEvent.change(within(panel).getByLabelText('What it is for'), { target: { value: 'design work' } })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Send credits' }))
+    expect(words(await within(panel).findByRole('status'))).toBe('Sent 5 LXC. It went to another owner’s agent.')
     expect(sent).toContainEqual({ method: 'POST', url: '/api/agents/agt_1/send', body: { to: '@bea', amount_ulxc: 5_000_000, memo: 'design work' } })
+    closePanel()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Accept' }))
-    expect(await screen.findByText('Accepted')).toBeTruthy()
+    panel = await openPanel('requests')
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Accept' }))
+    expect(await within(panel).findByText('Accepted')).toBeTruthy()
     expect(sent).toContainEqual({ method: 'POST', url: '/api/wallets/requests/mreq_1/accept', body: {} })
+    closePanel()
 
-    fireEvent.change(screen.getByLabelText('Lend to (wallet ID or @handle)'), { target: { value: '@other.co' } })
-    fireEvent.change(screen.getByLabelText('Loan amount in LXC'), { target: { value: '100' } })
-    fireEvent.change(screen.getByLabelText('Interest over the whole loan, in percent'), { target: { value: '10' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Offer' }))
-    expect(await screen.findByText(/Offered\./)).toBeTruthy()
+    panel = await openPanel('loans')
+    fireEvent.change(within(panel).getByLabelText('Lend to (wallet ID or @handle)'), { target: { value: '@other.co' } })
+    fireEvent.change(within(panel).getByLabelText('Loan amount in LXC'), { target: { value: '100' } })
+    fireEvent.change(within(panel).getByLabelText('Interest over the whole loan, in percent'), { target: { value: '10' } })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Offer' }))
+    expect(await within(panel).findByText(/Offered\./)).toBeTruthy()
     expect(sent).toContainEqual({
       method: 'POST',
       url: '/api/agents/agt_1/loans',
       body: { to: '@other.co', principal_ulxc: 100_000_000, interest_bps: 1000, instalments: 3, every: 'month', late_fee_ulxc: 0, memo: '' },
     })
 
-    const shown = (await screen.findByTestId('loan')).textContent ?? ''
+    const shown = (await within(panel).findByTestId('loan')).textContent ?? ''
     expect(shown).toContain('In default')
     expect(shown).toContain('2 of 3 repaid')
     expect(shown).toContain('Instalment 1 of 3 repaid: 33.333333 LXC + 3.333333 LXC interest')
     expect(shown).toContain('Instalment 2 of 3 repaid')
     expect(shown).toContain('The loan is late')
     expect(shown).toContain('Missed again: the loan is in default')
-    expect((await screen.findByTestId('no-credit-line')).textContent).toContain('no credit line')
+    closePanel()
+    expect((await screen.findByTestId('money-row-credit')).parentElement?.textContent).toContain('This workspace has no credit line')
+    expect((await within(await openPanel('credit')).findByTestId('no-credit-line')).textContent).toContain('no credit line')
   })
 
   it('gives back a received transfer, asked twice: the refund shows, the original is marked, and the balance falls by it', async () => {
@@ -163,16 +195,17 @@ describe('money between owners on Agent Wallets', () => {
     render(<App />)
 
     expect((await screen.findByTestId('agent-balance-agt_1')).textContent).toContain('50')
-    expect(await screen.findByText('Received from agt_bea · overpaid')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Give back' }))
+    const panel = await openPanel('transfers')
+    expect(await within(panel).findByText('Received from agt_bea · overpaid')).toBeTruthy()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Give back' }))
     expect(sent).toEqual([]) // the first press only asks
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, give it back' }))
+    fireEvent.click(within(panel).getByRole('button', { name: 'Yes, give it back' }))
 
-    expect((await screen.findByText(/^Gave .*back to agt_bea\.$/)).textContent).toMatch(/^Gave 1\.5 LXC.* back to agt_bea\.$/)
+    expect(words(await within(panel).findByRole('status'))).toBe('Gave 1.5 LXC back to agt_bea.')
     expect(sent).toContainEqual({ method: 'POST', url: '/api/wallets/transfers/xfr_in/refund', body: {} })
-    expect(await screen.findByText('Gave back to agt_bea · refund: overpaid')).toBeTruthy()
-    expect(screen.getByText('Given back')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Give back' })).toBeNull()
+    expect(await within(panel).findByText('Gave back to agt_bea · refund: overpaid')).toBeTruthy()
+    expect(within(panel).getByText('Given back')).toBeTruthy()
+    expect(within(panel).queryByRole('button', { name: 'Give back' })).toBeNull()
     await vi.waitFor(() => expect(screen.getByTestId('agent-balance-agt_1').textContent).toContain('48.5'))
   })
 })

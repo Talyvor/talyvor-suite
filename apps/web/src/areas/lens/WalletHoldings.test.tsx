@@ -4,7 +4,23 @@ import { App, queryClient } from '../../App'
 
 // B22.12 — the DONE line: on Agent Wallets an owner completes an escrow, fills and locks a pot, places a
 // simulated order and sees the portfolio, and sees cash-out marked test money only. The mock BFF answers
-// the way Lens B22.1, B22.6, B22.7, B22.8 and B22.9 do.
+// the way Lens B22.1, B22.6, B22.7, B22.8 and B22.9 do. B57.21: each is a panel opened from its row on the agent's page.
+
+/** Lens B57.12's one read for the agent's page, so the page and its Money card (B57.21) draw. */
+const summaryOf = (agent: Record<string, unknown>) => ({
+  as_of: '2026-09-29T09:00:00Z', agent, made_at: '2026-09-01T09:00:00Z', owner_user_id: 'ws_1', safe_to_spend: null,
+  month: { start: '2026-09-01T00:00:00Z', end: '2026-10-01T00:00:00Z', spent_ulxc: 0, forecast_ulxc: 0, runs_out_at: null, runs_out_on: null, monthly_limit_ulxc: 0 },
+  approvals: null, statement: null, statement_time_zone: 'UTC', rules: null, card: { status: 'none', last_declined: null }, currency_accounts: null,
+})
+
+/** B57.21 — a feature is a row of the agent's Money card; pressing it opens its own panel. */
+async function openPanel(row: string) {
+  fireEvent.click(await screen.findByTestId(`money-row-${row}`))
+  return screen.findByRole('dialog')
+}
+const closePanel = () => fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }))
+/** An element's words, its figures' no-break spaces as spaces. */
+const words = (el: Element | null) => (el?.textContent ?? '').replace(/\u00a0/g, ' ')
 
 // B17.33 — what a pot's Move out met on each send (a 502, a dropped connection), and the key each carried.
 let potOut: { blips: Array<502 | 'drop'>; keys: string[] } = { blips: [], keys: [] }
@@ -53,6 +69,7 @@ function mockBff() {
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 50_000_000, allocated_ulxc: 50_000_000, unallocated_ulxc: 0, spent_ulxc: 0, agents: [agent] })
+    if (url === '/api/agents/agt_1/summary') return json(summaryOf(agent))
     if (url === '/api/wallets/capabilities')
       return json({
         capabilities: [
@@ -127,14 +144,15 @@ describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
     mockBff()
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
-    await screen.findByTestId('portfolio')
-    await waitFor(() => expect(document.querySelectorAll('[data-status-key="invest_and_trade"]')).toHaveLength(1))
-    for (const [key, cards] of [['escrow', 2], ['cash_out', 2]] as const)
-      expect([...document.querySelectorAll(`[data-status-key="${key}"]`)].map((el) => el.textContent), key).toEqual(Array(cards).fill('Sandbox'))
+    for (const [row, key, labels] of [['investing', 'invest_and_trade', 1], ['escrow', 'escrow', 2], ['cash-out', 'cash_out', 1]] as const) {
+      const panel = await openPanel(row)
+      await waitFor(() => expect([...panel.querySelectorAll(`[data-status-key="${key}"]`)].map((el) => el.textContent), key).toEqual(Array(labels).fill('Sandbox')))
+      expect(panel.textContent).not.toMatch(/test money|test credits|licensed partner/i)
+      // Never the word bank — but for the European Central Bank, whose rates the simulator names.
+      expect((panel.textContent ?? '').replace(/European Central Bank/g, '')).not.toMatch(/\bbank\b/i)
+      closePanel()
+    }
     expect(screen.queryByTestId(/^test-money-only-/)).toBeNull()
-    expect(document.body.textContent).not.toMatch(/test money|test credits|licensed partner/i)
-    // Never the word bank — but for the European Central Bank, whose rates the simulator and card panel name.
-    expect((document.body.textContent ?? '').replace(/European Central Bank/g, '')).not.toMatch(/\bbank\b/i)
   })
 
   // B17.33 — a Move out that meets a deploy's restart (a 502, then no answer) is sent again under one
@@ -145,16 +163,17 @@ describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
       mockBff()
       window.history.pushState({}, '', '/agents/agt_1')
       render(<App />)
-      fireEvent.change(await screen.findByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '1.2' } })
-      fireEvent.click(screen.getByRole('button', { name: 'Move in' }))
-      expect(await within(screen.getByTestId('pot')).findByText('1.2', { selector: '.font-figure' })).toBeTruthy()
+      const panel = await openPanel('pots')
+      fireEvent.change(await within(panel).findByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '1.2' } })
+      fireEvent.click(within(panel).getByRole('button', { name: 'Move in' }))
+      await waitFor(() => expect(words(within(panel).getByTestId('pot'))).toContain('1.2 LXC of 20 LXC'))
 
       potOut.blips.push(502, 'drop')
-      fireEvent.change(screen.getByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '0.4' } })
-      fireEvent.click(screen.getByRole('button', { name: 'Move out' }))
-      await vi.advanceTimersByTimeAsync(4_000) // the card's two retry delays, without waiting them out
-      expect(await within(screen.getByTestId('pot')).findByText('0.8', { selector: '.font-figure' })).toBeTruthy()
-      expect(within(screen.getByTestId('pot')).queryByRole('alert')).toBeNull()
+      fireEvent.change(within(panel).getByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '0.4' } })
+      fireEvent.click(within(panel).getByRole('button', { name: 'Move out' }))
+      await vi.advanceTimersByTimeAsync(4_000) // the panel's two retry delays, without waiting them out
+      await waitFor(() => expect(words(within(panel).getByTestId('pot'))).toContain('0.8 LXC of 20 LXC'))
+      expect(within(panel).queryByRole('alert')).toBeNull()
       expect(potOut.keys).toHaveLength(3)
       expect(potOut.keys[0]).not.toBe('')
       expect(new Set(potOut.keys).size).toBe(1)
@@ -168,29 +187,35 @@ describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    const escrow = await screen.findByTestId('escrow')
+    let panel = await openPanel('escrow')
+    const escrow = await within(panel).findByTestId('escrow')
     expect(escrow.textContent).toContain('Buyer holds for agt_bea')
     fireEvent.click(within(escrow).getByRole('button', { name: 'Confirm delivered' }))
-    expect(await within(await screen.findByTestId('escrow')).findByText('Released')).toBeTruthy()
-    expect(screen.getByTestId('escrow').textContent).toContain('Released to the payee: delivery confirmed')
+    expect(await within(await within(panel).findByTestId('escrow')).findByText('Released')).toBeTruthy()
+    expect(within(panel).getByTestId('escrow').textContent).toContain('Released to the payee: delivery confirmed')
     expect(sent).toContainEqual({ method: 'POST', url: '/api/wallets/escrows/esc_1/confirm', body: {} })
+    closePanel()
 
-    fireEvent.change(await screen.findByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '5' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Move in' }))
-    expect(await within(screen.getByTestId('pot')).findByText('5', { selector: '.font-figure' })).toBeTruthy()
+    panel = await openPanel('pots')
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Move in' }))
+    expect(within(panel).getByRole('alert').textContent).toBe('Type an amount in LXC first.')
+    fireEvent.change(within(panel).getByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '5' } })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Move in' }))
+    await waitFor(() => expect(words(within(panel).getByTestId('pot'))).toContain('5 LXC of 20 LXC'))
     expect(sent).toContainEqual({ method: 'POST', url: '/api/agents/agt_1/pots/pot_1/in', body: { amount_ulxc: 5_000_000 } })
-    fireEvent.change(screen.getByLabelText('Lock Rainy day until'), { target: { value: '2099-01-01' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Lock' }))
-    expect(await within(screen.getByTestId('pot')).findByText(/Locked until/)).toBeTruthy()
+    fireEvent.change(within(panel).getByLabelText('Lock Rainy day until'), { target: { value: '2099-01-01' } })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Lock' }))
+    expect(await within(within(panel).getByTestId('pot')).findByText(/Locked until/)).toBeTruthy()
     expect(sent).toContainEqual({ method: 'PUT', url: '/api/agents/agt_1/pots/pot_1/lock', body: { locked_until: new Date('2099-01-01T00:00:00').toISOString() } })
+    closePanel()
 
-    fireEvent.change(await screen.findByLabelText('Instrument for FX test'), { target: { value: 'EUR' } })
-    fireEvent.change(screen.getByLabelText('Quantity'), { target: { value: '1000' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Place order' }))
-    expect((await screen.findByText(/^Filled:/)).textContent).toBe('Filled: Buy 1,000 EUR at market, filled at $1.08 (2026-09-28 rate).')
+    panel = await openPanel('investing')
+    fireEvent.change(await within(panel).findByLabelText('Instrument for FX test'), { target: { value: 'EUR' } })
+    fireEvent.change(within(panel).getByLabelText('Quantity'), { target: { value: '1000' } })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Place order' }))
+    expect((await within(panel).findByText(/^Filled:/)).textContent).toBe('Filled: Buy 1,000 EUR at market, filled at $1.08 (2026-09-28 rate).')
     expect(sent).toContainEqual({ method: 'POST', url: '/api/agents/agt_1/portfolios/pf_1/orders', body: { instrument: 'EUR', side: 'buy', type: 'market', quantity_micros: 1_000_000_000 } })
-    const shown = await within(screen.getByTestId('portfolio')).findByText('1,000 EUR')
-    expect(shown).toBeTruthy()
-    expect(screen.getByTestId('portfolio').textContent).toContain('worth $10,000.00: $8,920.00 cash')
+    expect(await within(within(panel).getByTestId('portfolio')).findByText('1,000 EUR')).toBeTruthy()
+    expect(within(panel).getByTestId('portfolio').textContent).toContain('worth $10,000.00: $8,920.00 cash')
   })
 })

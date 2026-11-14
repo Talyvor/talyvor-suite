@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { populatedBff, settleQueries } from '../../populatedBff'
@@ -39,6 +39,8 @@ async function at(address: string, account: { account_type: string; money_kind: 
 }
 
 afterEach(() => {
+  // Unmounted first: the wallet's panel (B57.21) is a portal, which React must take out of the body itself.
+  cleanup()
   vi.restoreAllMocks()
   queryClient.clear()
   document.body.replaceChildren()
@@ -109,10 +111,13 @@ describe.each(TYPES.flatMap((t) => KINDS.map((k) => [t, k] as const)))('a %s acc
 
   it('Wallets: the address only for on-chain money, the IBAN and Send only for bank money', async () => {
     const { main } = await at('/agents/agt_research', account)
-    await within(main).findByTestId('agent-money-wallet')
+    // B57.21 — the wallet is a panel of the agent's Money card.
+    fireEvent.click(await within(main).findByTestId('money-row-wallet'))
+    const panel = await screen.findByRole('dialog')
+    await within(panel).findByTestId('agent-money-wallet')
     // A partner gives one of the two, the address first; a Hybrid account draws the address.
-    expect(within(main).queryByTestId('wallet-address') !== null).toBe(kind !== 'fiat')
-    expect(within(main).queryByTestId('wallet-iban') !== null).toBe(kind === 'fiat')
-    expect(within(main).queryByRole('region', { name: 'Send money' }) !== null).toBe(kind !== 'stablecoin')
+    expect(within(panel).queryByTestId('wallet-address') !== null).toBe(kind !== 'fiat')
+    expect(within(panel).queryByTestId('wallet-iban') !== null).toBe(kind === 'fiat')
+    expect(within(panel).queryByRole('region', { name: 'Send money' }) !== null).toBe(kind !== 'stablecoin')
   })
 })

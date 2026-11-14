@@ -13,6 +13,7 @@ import { BOOK_KEY, rulesKey } from './AgentBank'
 import { MoveLxc, ResumeAgent, StartEveryAgent } from './AgentCard'
 import { IssueCard, cardKey } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
+import { AgentMoneySection } from './AgentMoney'
 import { DownloadFailed, dayIn, lineWhat, lineWhen, useMonthFile } from './AgentStatement'
 import { approvalSheetTo } from './ApprovalSheet'
 import { PAYEES_KEY } from './Pay'
@@ -23,7 +24,7 @@ import { lxcPartOf, useMoneyFigures } from './money'
 // figure comes from GET /api/agents/{id}/summary, which Lens (B57.12) reads in one transaction, so the balance less what
 // waits is the safe-to-spend figure beside it. The header pauses, resumes or starts every agent again (B57.16), moves
 // LXC and opens the rules; the card tile freezes and unfreezes the agent's card. What today's agent view has that this
-// page does not draw yet stays below it, as it was, until B57.21 and B57.22 redraw it.
+// page does not draw yet stays below it, as it was, until B57.22 redraws it. B57.21: its Money card, below the others.
 
 /** Under BOOK_KEY, so every pause, resume, move and archive that refreshes the book refreshes the page too. */
 export const summaryKey = (id: string) => [...BOOK_KEY, 'summary', id]
@@ -488,6 +489,11 @@ export function AgentSummaryView({ id }: { id: string }) {
               <CardColumn s={s} />
             </div>
           </div>
+          {s.agent.archived_at ? null : (
+            <div className="grid items-start gap-4 wide:grid-cols-2">
+              <AgentMoneySection key={s.agent.id} agent={s.agent} />
+            </div>
+          )}
         </>
       )}
     </section>

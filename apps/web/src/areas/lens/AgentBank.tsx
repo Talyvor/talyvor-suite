@@ -26,14 +26,14 @@ import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { DeclineForm, declinedText } from './Decline'
 import { approvalSheetTo } from './ApprovalSheet'
 import { AgentCredentialCard } from './AgentCredential'
-import { AgentMoneyWalletCard } from './AgentMoneyWallet'
+import { AgentMoneySection } from './AgentMoney'
 import { Lxc, useLxcText } from './money'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
 import { RunsOut } from './RunsOut'
-import { AgentAddress, AgentTransfers, CreditLinePanel, Loans, MoneyRequests, OfferLoan, RecurringTransfer, SendAndRequest } from './WalletMoney'
-import { CashOutCard, CashOuts, Escrows, PayIntoEscrow, Portfolios, Pots } from './WalletHoldings'
+import { CreditLinePanel, Loans, MoneyRequests } from './WalletMoney'
+import { CashOuts, Escrows } from './WalletHoldings'
 import {
   type Agent,
   type AgentApproval,
@@ -3093,7 +3093,20 @@ export function Approvals({
   )
 }
 
-export function AgentBank() {
+/** B57.21 — the workspace's money between owners and what it holds, framed as the agent view's other cards. */
+function Framed({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card>
+      <CardHeader>{title}</CardHeader>
+      <div data-design="pocket" className="px-gutter py-3 text-reading text-ink-2">
+        {children}
+      </div>
+    </Card>
+  )
+}
+
+/** `moneyOnPage`: under an agent's page, which draws its money features itself (B57.21). */
+export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {}) {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   // B28.349 — /agents?agent=…&entry=… (a statement line a spend answer in Chat links to) opens that agent at that line.
   const [params] = useSearchParams()
@@ -3213,18 +3226,9 @@ export function AgentBank() {
                 <AgentCard agent={agent} book={book.data} />
               </div>
               <Money agent={agent} book={book.data} />
-              <AgentMoneyWalletCard key={`wallet-${agent.id}`} agent={agent} />
               {rulesFirst ? null : <Rules key={`rules-${agent.id}`} agent={agent} agents={live} />}
               <TryRules key={`try-${agent.id}`} agent={agent} agents={live} />
-              <AgentAddress key={`address-${agent.id}`} agent={agent} />
-              <SendAndRequest key={`send-${agent.id}`} agent={agent} />
-              <AgentTransfers agent={agent} />
-              <RecurringTransfer key={`recurring-${agent.id}`} agent={agent} />
-              <OfferLoan key={`loan-${agent.id}`} agent={agent} />
-              <PayIntoEscrow key={`escrow-${agent.id}`} agent={agent} />
-              <Pots key={`pots-${agent.id}`} agent={agent} />
-              <Portfolios key={`portfolios-${agent.id}`} agent={agent} />
-              <CashOutCard key={`cash-out-${agent.id}`} agent={agent} />
+              {moneyOnPage ? null : <AgentMoneySection key={`money-${agent.id}`} agent={agent} />}
               <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
               {/* B57.22 — its Settings: each row opens today's form for it, so each posts what it posted before. */}
@@ -3252,21 +3256,31 @@ export function AgentBank() {
         </Region>
       ) : null}
 
-      {book.isSuccess && hasAgents ? (
+      {book.isSuccess && hasAgents && !moneyOnPage ? (
         <Region index="05" label="Between owners" className="flex flex-col gap-gutter">
-          <MoneyRequests agents={agents} />
-          <CreditLinePanel />
+          <Framed title="Requests">
+            <MoneyRequests agents={agents} />
+          </Framed>
+          <Framed title="Credit line">
+            <CreditLinePanel />
+          </Framed>
           {/* B59.2 — lending between owners is credit's, and goes with it. */}
           <IfArea area="credit">
-            <Loans agents={agents} />
+            <Framed title="Loans">
+              <Loans agents={agents} />
+            </Framed>
           </IfArea>
         </Region>
       ) : null}
 
-      {book.isSuccess && hasAgents ? (
+      {book.isSuccess && hasAgents && !moneyOnPage ? (
         <Region index="06" label="Held and cashed out" className="flex flex-col gap-gutter">
-          <Escrows agents={agents} />
-          <CashOuts agents={agents} />
+          <Framed title="Escrow">
+            <Escrows agents={agents} />
+          </Framed>
+          <Framed title="Cash-outs">
+            <CashOuts agents={agents} />
+          </Framed>
         </Region>
       ) : null}
     </RegionScreen>

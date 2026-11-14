@@ -159,9 +159,11 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/keys': 0,
   // B19.4 — Waiting for a person, Agents, and the open agent's Money, Rules, Pay, Key and Statement.
   // B57.16 — an agent's page and its rules are today's agent view with that agent open.
-  // B57.22 — eight of them (name and description, pay, schedules, top-up, key, credential, limit boost, archive) open from its Settings rows.
-  '/agents/:id': 30,
-  '/agents/:id/rules': 30,
+  // 38 → 28 at B57.21: the agent's ten money cards are panels of its Money card, in Pocket; 38 → 23 on its page, which
+  // also draws the workspace's Requests, Credit line, Loans, Escrow and Cash-outs as its own panels.
+  // B57.22 — eight more (name and description, pay, schedules, top-up, key, credential, limit boost, archive) open from its Settings rows.
+  '/agents/:id': 15,
+  '/agents/:id/rules': 20,
   '/agents': 0, // B57.19 drew /agents in Pocket: its cards are AgentCards, so today's card headers are on /agents/:id alone
   // B20.3 — the catalog's Listings card. 1 → 0 at B29.11: the listings are cards of their own, a list
   // named Listings in the Browse region, and no card header.
