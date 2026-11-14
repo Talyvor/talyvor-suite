@@ -10,9 +10,11 @@ import {
   Dialog,
   EmptyState,
   Eyebrow,
+  Facts,
   Field,
   Icon,
   Input as PocketInput,
+  KindTile,
   RoomBadge,
   Row as PocketRow,
   Select as PocketSelect,
@@ -1408,6 +1410,8 @@ const MANDATE_STATUS: Record<string, { text: string; tone: ChipTone }> = {
   revoked: { text: 'Revoked', tone: 'bad' },
 }
 const mandateStatus = (s: string) => MANDATE_STATUS[s] ?? MANDATE_STATUS.revoked
+/** The day a mandate expires, with its year as the reference writes it: "22 October 2027". */
+const expiryDay = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
 
 /**
  * A mandate from an agent's account: a Talyvor company or an outside business pulls within it (B30.19). B55.56: the
@@ -1458,9 +1462,14 @@ function Mandates({
     },
   })
   const revoke = useMutation({ mutationFn: (id: string) => agentBankApi.revokeMandate(id), onSuccess: refresh })
+  // B57.117: a mandate decided here stays drawn as its request, with what was decided, until the page is left.
+  const [decided, setDecided] = useState<ReadonlySet<string>>(new Set())
   const decide = useMutation({
     mutationFn: ({ id, approve }: { id: string; approve: boolean }) => (approve ? approveMandateSigned(id) : agentBankApi.declineMandate(id)),
-    onSuccess: refresh,
+    onSuccess: (_m, { id }) => {
+      setDecided((d) => new Set(d).add(id))
+      refresh()
+    },
   })
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
   const currency = account?.currency ?? 'GBP'
@@ -1489,7 +1498,7 @@ function Mandates({
         line={
           <>
             Up to {formatMinor(m.max_per_pull_minor, m.currency)} a pull, {formatMinor(m.max_per_month_minor, m.currency)} a month · pulled this month{' '}
-            {formatMinor(m.pulled_this_month_minor, m.currency)} · expires {formatWhen(m.expires_at)}
+            {formatMinor(m.pulled_this_month_minor, m.currency)} · expires {expiryDay(m.expires_at)}
           </>
         }
         action={
@@ -1503,29 +1512,76 @@ function Mandates({
           </>
         }
       />
-      {granted && m.status === 'requested' ? (
-        <div className="grid gap-2 pb-3">
-          <p className="text-body text-ink-3">{agentName(m.agent_id)} asked for this mandate. Nothing is pulled until you approve it.</p>
-          {onlyThePhone ? (
-            <OnThePhone>Approve this mandate with a passkey on this browser: add this browser first.</OnThePhone>
-          ) : hold ? null : (
-            <div className="flex flex-wrap items-center gap-2">
-              <PocketButton type="button" size="sm" variant="primary" icon={<Icon name="faceid" />} disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: true })}>
-                Approve
-              </PocketButton>
-              <PocketButton type="button" size="sm" variant="secondary" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: false })}>
-                Decline
-              </PocketButton>
-            </div>
-          )}
-        </div>
-      ) : null}
     </li>
   )
-  const granted = mandates.data?.granted ?? []
+  // B57.117 — a mandate an agent asked for, drawn as the reference's w-approve-req: who asked, the terms Approve signs,
+  // Approve with your passkey and Decline, then what was decided.
+  const request = (m: Mandate) => {
+    const agent = agentName(m.agent_id)
+    const busy = decide.isPending && decide.variables?.id === m.id
+    return (
+      <PocketCard key={m.id} tone="white" className="relative grid gap-4 overflow-hidden rounded-sheet pt-6.5" data-testid={`mandate-${m.id}`} data-design="pocket">
+        {/* pocket.css .sheet: a request waiting for the owner wears the approval sheet's tangerine top edge. */}
+        <span aria-hidden="true" className="absolute inset-x-0 top-0 h-1.75 bg-tangerine" />
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <KindTile on="white" icon={<Icon name="key" />} />
+            <div className="min-w-0">
+              <h2 className="break-words font-semibold text-ink">{`${m.payee_name} pulls from ${agent}`}</h2>
+              <p className="text-caption text-ink-3">
+                From {agent}’s account · asked by {agent} · <span className="font-figure">{formatWhen(m.created_at)}</span>
+              </p>
+            </div>
+          </div>
+          <Chip tone={mandateStatus(m.status).tone}>{mandateStatus(m.status).text}</Chip>
+        </div>
+        <Facts
+          facts={[
+            { label: 'To', value: <span className="font-sans">{m.payee_name}</span> },
+            { label: 'Most per pull', value: formatMinor(m.max_per_pull_minor, m.currency) },
+            { label: 'Most per month', value: formatMinor(m.max_per_month_minor, m.currency) },
+            { label: 'Expires on', value: expiryDay(m.expires_at) },
+          ]}
+        />
+        {m.status === 'requested' ? (
+          <>
+            <p className="text-body text-ink-3">{agent} asked for this mandate. Nothing is pulled until you approve it.</p>
+            {onlyThePhone ? (
+              <OnThePhone>Approve this mandate with a passkey on this browser: add this browser first.</OnThePhone>
+            ) : hold ? null : (
+              <div className="flex flex-wrap gap-2">
+                <PocketButton type="button" className="flex-1" variant="primary" icon={<Icon name="faceid" />} disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: true })}>
+                  {busy && decide.variables?.approve ? 'Approving…' : 'Approve with your passkey'}
+                </PocketButton>
+                <PocketButton type="button" variant="secondary" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: false })}>
+                  {busy && !decide.variables?.approve ? 'Declining…' : 'Decline'}
+                </PocketButton>
+              </div>
+            )}
+          </>
+        ) : (
+          <p role="status" className="text-body text-ink">
+            {m.status === 'active' ? (
+              <>
+                <b>Approved.</b> {m.payee_name} pulls within these limits until the mandate expires or you revoke it.
+              </>
+            ) : (
+              <>
+                <b>Declined.</b> {m.payee_name} cannot pull from this account.
+              </>
+            )}
+          </p>
+        )}
+        {decide.isError && decide.variables?.id === m.id ? <Said ok={false}>{refusalText(decide.error)}</Said> : null}
+      </PocketCard>
+    )
+  }
+  const asked = (mandates.data?.granted ?? []).filter((m) => m.status === 'requested' || decided.has(m.id))
+  const granted = (mandates.data?.granted ?? []).filter((m) => !asked.includes(m))
   const received = mandates.data?.received ?? []
   return (
     <>
+      {asked.map(request)}
       <PocketCard tone="white">
         <h2 className="font-display text-head font-bold text-ink">Mandates</h2>
         {mandates.isError ? (
@@ -1554,11 +1610,6 @@ function Mandates({
         {revoke.isError ? (
           <div className="mt-3">
             <Said ok={false}>{refusalText(revoke.error)}</Said>
-          </div>
-        ) : null}
-        {decide.isError ? (
-          <div className="mt-3">
-            <Said ok={false}>{refusalText(decide.error)}</Said>
           </div>
         ) : null}
       </PocketCard>
