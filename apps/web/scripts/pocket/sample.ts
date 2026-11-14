@@ -247,6 +247,13 @@ const SAMPLE: Record<string, unknown> = {
       { id: 'bill_kite', source: 'email', supplier: 'Kite Accounting', invoice_number: 'KA-1001', amount_minor: 45_000, currency: 'USD', due_date: '2026-10-01', payee_id: 'payee_kite', payee_match: 'matched', status: 'paid', missing: [], created_at: '2026-09-28T09:00:00Z' },
     ],
   },
+  // B59.45 — Research's card (pounds) declined Compute shop, £24.00, yesterday: not one of its payees (README's sample).
+  '/api/agents/agt_research/card': {
+    card: { id: 'ic_research', agent_id: 'agt_research', last4: '4242', exp_month: 9, exp_year: 2029, currency: 'gbp', livemode: false, created_at: '2026-09-28T09:00:00Z' },
+    authorizations: [
+      { id: 'cauth_compute', authorization_id: 'iauth_compute', approved: false, reason: 'Compute shop is not one of its payees.', amount_minor: 2_400, currency: 'gbp', merchant_name: 'Compute shop', merchant_category: 'computer_software_stores', created_at: '2026-10-21T15:20:00Z' },
+    ],
+  },
   // B57.97 — no Talyvor Card yet, as w-card opens.
   '/api/money/physical-cards': { cards: [] },
   // B57.55 — Developers: the address tools are pointed at, and the workspace's two keys, as w-dev-keys lists them.
