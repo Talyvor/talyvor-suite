@@ -169,7 +169,7 @@ describe('the approval sheet', () => {
     const { decisions } = mockBff({ phoneOnly: true })
     const sheet = await openSheet('/?approval=apr_A')
     expect(await within(sheet).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
-    expect(within(sheet).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
+    expect(within(sheet).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/settings/devices')
     expect(within(sheet).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
     expect(decisions).toEqual([])
   })

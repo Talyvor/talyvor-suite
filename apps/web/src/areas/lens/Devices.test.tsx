@@ -4,6 +4,7 @@ import { App, queryClient } from '../../App'
 import { hideSnack } from '@talyvor/ui/pocket'
 import { b64u } from './passkeys'
 import { keysLine } from './Devices'
+import { pressEverything } from '../../test/pressEverything'
 import type { ApprovalKey } from './agentBankApi'
 
 // B57.43 — /settings/devices, Approvals and devices, as Pocket's w-security draws it: every passkey and the phone's key by
@@ -121,7 +122,18 @@ describe('Approvals and devices (B57.43)', () => {
     expect(keysLine([k('passkey', 'a'), k('phone', 'p')])).toBe(`1 passkey and your phone’s key are registered. ${some}`)
     expect(keysLine([k('passkey', 'a')])).toBe(`1 passkey is registered. ${one}`)
     expect(keysLine([k('phone', 'p')])).toBe(`Your phone’s key is registered. ${one}`)
-    expect(keysLine([])).toBe('No key is registered, so nobody can approve. Add one.')
+  })
+
+  it('with no key at all, says nobody can approve, and adds this browser’s passkey as the first', async () => {
+    mockBff({ keys: [] })
+    authenticator()
+    open()
+
+    expect(await screen.findByText('No key is registered, so nobody can approve. Add one.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Add this device' }))
+    expect(await screen.findByRole('dialog', { name: 'Add this device' })).toHaveTextContent(
+      'This browser makes a passkey. From then on, Face ID, Touch ID or this device’s PIN asks each time you approve or decline.',
+    )
   })
 
   it('names every key with its kind, when it was added and last used, and removes a passkey after asking, unsigned', async () => {
@@ -131,7 +143,7 @@ describe('Approvals and devices (B57.43)', () => {
 
     expect(await screen.findByText('2 passkeys and your phone’s key are registered. You approve with one of them; nothing is approved without one.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: 'Approvals and devices' }).closest('[data-design]')).toHaveAttribute('data-design', 'pocket')
-    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
+    expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
     const keys = screen.getByTestId('approval-keys')
     expect(keys).toHaveTextContent('This MacPasskey · added 14 Oct · last used 20 Oct')
     expect(keys).toHaveTextContent('iPadPasskey · added 15 Oct · never used')
@@ -160,7 +172,7 @@ describe('Approvals and devices (B57.43)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Remove Work iPhone' }))
     fireEvent.click(within(await screen.findByRole('dialog', { name: 'Remove “Work iPhone”?' })).getByRole('button', { name: 'Remove it' }))
     expect(await screen.findByText('Removed: Work iPhone')).toBeInTheDocument()
-    expect(sent).toEqual([{ method: 'POST', url: '/api/money/devices/dk_1/revoke', body: null }])
+    expect(sent).toEqual([{ method: 'POST', url: '/api/money/devices/dk_1/revoke', body: {} }])
   })
 
   it('keeps the last key: no Remove, and says why', async () => {
@@ -214,7 +226,7 @@ describe('Approvals and devices (B57.43)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Make a passkey' }))
     const waiting = 'Waiting for your phone. Open Talyvor on your phone and let this browser in. The code there should be 482913.'
     await waitFor(() => expect(dialog).toHaveTextContent(waiting))
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    fireEvent.click(within(dialog).getAllByRole('button', { name: 'Close' }).at(-1)!)
     // Closed, the card still says it waits, until the phone answers.
     expect(await screen.findByText(/^Waiting for your phone/)).toHaveTextContent(waiting)
     expect(screen.getByRole('button', { name: 'Add this device' })).toBeDisabled()
@@ -234,7 +246,7 @@ describe('Approvals and devices (B57.43)', () => {
     open()
 
     const phone = await screen.findByRole('region', { name: 'Your phone' })
-    expect(await within(phone).findByText(/^Your iPhone asks/)).toHaveTextContent(
+    expect((await within(phone).findAllByTestId('waiting-phone'))[0]).toHaveTextContent(
       /^Your iPhone asks to approve payments too\. Let it in only if you are adding it now and its code is 551203\.$/,
     )
     fireEvent.click(within(phone).getAllByRole('button', { name: 'Let it approve' })[0])
@@ -262,8 +274,10 @@ describe('Approvals and devices (B57.43)', () => {
     expect(approval).toHaveTextContent('One approval coversThat payment only')
     expect(approval).toHaveTextContent('Once you approve, it lasts24 hours')
     expect(approval).toHaveTextContent('A request you don’t answerExpires after 24 hours')
-    expect(screen.getByRole('region', { name: 'Your phone' })).toHaveTextContent(
-      'On your phone, the Talyvor app keeps a key in its secure chip that only Face ID can use, and signs your approvals with it.',
+    await waitFor(() =>
+      expect(screen.getByRole('region', { name: 'Your phone' })).toHaveTextContent(
+        'On your phone, the Talyvor app keeps a key in its secure chip that only Face ID can use, and signs your approvals with it.',
+      ),
     )
     const stop = screen.getByRole('region', { name: 'Stop everything' })
     fireEvent.click(within(stop).getByRole('button', { name: 'Pause every agent' }))
@@ -284,4 +298,10 @@ describe('Approvals and devices (B57.43)', () => {
     expect(screen.queryByText('Face ID and notifications')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Add this device' })).toBeNull()
   })
+
+  it('presses every control on Approvals and devices and each does something', async () => {
+    const report = await pressEverything('/settings/devices')
+    expect(report.pressed).toBeGreaterThan(0)
+    expect(report.dead).toEqual([])
+  }, 120_000)
 })
