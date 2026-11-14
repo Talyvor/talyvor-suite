@@ -1314,6 +1314,11 @@ export const agentBankApi = {
   pause: (id: string, reason: string) => send<{ paused: boolean }>('POST', `/api/agents/${e(id)}/pause`, { reason }),
   resume: (id: string, assertion?: PasskeyAssertion) => send<{ paused: boolean }>('POST', `/api/agents/${e(id)}/resume`, assertion ? { assertion } : undefined),
   resumeChallenge: (id: string) => send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/${e(id)}/resume-challenge`),
+  /** B59.12: changing the workspace's kind of money is always signed, over the challenge naming the kind (Lens B59.46). */
+  moneyKindChallenge: (money_kind: MoneyKind) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/workspace/account/money-kind/challenge', { money_kind }),
+  changeMoneyKind: (money_kind: MoneyKind, assertion: PasskeyAssertion) =>
+    send<WorkspaceAccount>('PUT', '/api/workspace/account/money-kind', { money_kind, assertion }),
   /** B19.10: once the workspace has a passkey, a decision carries an assertion over the approval's challenge. */
   /** B41.4 — approving with always_allow also saves that allowance for the approval's payee. */
   /** B55.19 — declining can say why (Lens B55.18); the agent sees it. */

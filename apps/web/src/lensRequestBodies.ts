@@ -640,6 +640,18 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor: "authorizeResume := func(w http.ResponseWriter, req *http.Request, agentID string) bool {",
     subject: "lensAgentResumeBody",
   },
+  // B59.12 — changing the workspace's kind of money, signed over the challenge for that kind (Lens B59.46); the
+  // challenge (POST …/account/money-kind/challenge) is the same body without the assertion.
+  {
+    route: "PUT /v1/workspaces/{wsID}/account/money-kind",
+    file: "apps/bff/workspace_account.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleWorkspaceMoneyKind(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/workspace_money_kind_handler.go",
+    upstreamAnchor: 'r.Put("/v1/workspaces/{wsID}/account/money-kind", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensWorkspaceMoneyKindBody",
+  },
   {
     route: "POST /v1/workspaces/{wsID}/agents/push/subscriptions",
     file: "apps/bff/agent_bank.go",
