@@ -47,7 +47,7 @@ afterEach(() => {
 })
 
 async function createWith(choice: string) {
-  window.history.pushState({}, '', '/agents')
+  window.history.pushState({}, '', '/agents/agt_1')
   render(<App />)
   const helpers = await screen.findByRole('group', { name: 'Its helper' })
   fireEvent.click(within(helpers).getByRole('button', { name: choice }))
@@ -78,7 +78,7 @@ describe('the helper picker', () => {
 
   it('editing an agent shows its helper and keeps its colour unless the owner picks another', async () => {
     const { sent } = mockBff({ name: 'Ledger', colour: 'mint' })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const helpers = await screen.findByRole('group', { name: 'Helper for Ledger' })
@@ -99,7 +99,7 @@ describe('the helper picker', () => {
   // a cloud pill 34 tall with the portrait 22 across, and the picked one on the page inside a 2px ink ring.
   it('draws each helper as a Pocket pick, where the agent is created and on its Name and description card', async () => {
     mockBff({ name: 'Ledger', colour: 'mint' })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     for (const name of ['Its helper', 'Helper for Ledger']) {

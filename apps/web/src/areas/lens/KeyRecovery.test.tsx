@@ -127,7 +127,7 @@ describe('Key recovery on the web (B55.54)', () => {
       devices: [{ id: 'dev_1', platform: 'ios', name: 'iPhone', revoked_at: '2026-10-02T09:00:00Z' }],
       approvals: [{ id: 'apr_1', agent_id: 'agt_1', amount_ulxc: 3 * M, model: '', reason: 'October hosting', status: 'pending', created_at: '2026-11-11T06:05:00Z' }],
     })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     const said = await screen.findAllByTestId('no-live-key')
     expect(said[0]).toHaveTextContent('Every key of this workspace was removed, so nothing can approve.')
@@ -141,7 +141,7 @@ describe('Key recovery on the web (B55.54)', () => {
       passkeys: [{ credential_id: 'old', name: 'iPhone', created_at: '2026-10-01T09:00:00Z', revoked_at: '2026-10-02T09:00:00Z' }],
       recovery: { id: 'rcv_1', status: 'waiting', created_at: '2026-11-11T09:00:00Z', ready_at: '2099-11-14T09:00:00Z', expires_at: '2099-11-15T09:00:00Z', mine: false },
     })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     const notice = await screen.findByTestId('key-recovery-notice')
     expect(notice).toHaveTextContent(/^The owner started a recovery\. A new key can be added from 14 Nov 2099 at \d\d:\d\d\./)

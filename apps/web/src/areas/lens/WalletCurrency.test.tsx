@@ -62,7 +62,7 @@ const balanceRow = () => screen.getByTestId('agent-balance-agt_1')
 describe('amounts in your own currency and plain-English rules', () => {
   it('shows 12.5 LXC with its dollar value, and in pounds once pounds are chosen', async () => {
     mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     await waitFor(() => expect(balanceRow().textContent).toBe('$1.25 (12.5 LXC)'))
@@ -72,14 +72,15 @@ describe('amounts in your own currency and plain-English rules', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Settings' }))
     fireEvent.click(within(await screen.findByRole('tablist', { name: 'Show amounts in' })).getByRole('tab', { name: 'Pounds' }))
     fireEvent.click(screen.getByRole('link', { name: 'Agents' }))
-    // 1.25 USD ÷ 1.1672 USD per EUR × 0.8354 GBP per EUR = £0.8947
-    await waitFor(() => expect(balanceRow().textContent).toBe('£0.89 (12.5 LXC)'))
+    // 1.25 USD ÷ 1.1672 USD per EUR × 0.8354 GBP per EUR = £0.8947 — on the agent's card, as B57.19's list draws it.
+    await waitFor(() => expect(screen.getByTestId('agent-card-balance-agt_1')).toHaveTextContent('£0.89'))
+    expect(screen.getByTestId('agent-card-balance-agt_1')).toHaveTextContent('12.5 LXC')
     expect(window.localStorage.getItem(FIAT_KEY)).toBe('GBP')
   })
 
   it('picks allowed models from the catalog instead of typing them, and states the rules as sentences', async () => {
     const { saved } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const models = await screen.findByLabelText('Allowed models for Researcher')
@@ -109,7 +110,7 @@ describe('amounts in your own currency and plain-English rules', () => {
   // B28.24 — the hourly and weekly caps are typed like the others, saved, and read back as one sentence.
   it('saves an hourly and a weekly cap and states them with the daily one', async () => {
     const { saved } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.change(await screen.findByLabelText('Hourly limit for Researcher, in LXC'), { target: { value: '1' } })
@@ -127,7 +128,7 @@ describe('amounts in your own currency and plain-English rules', () => {
   // B28.25 — a model is picked and given its own daily cap; the caps are saved as one map and stated.
   it('caps one model a day, saves the cap by the model, and states it', async () => {
     const { saved } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const pick = await screen.findByLabelText('Cap a model a day for Researcher')
@@ -155,7 +156,7 @@ describe('amounts in your own currency and plain-English rules', () => {
   // B28.26 — the owner caps the agent's requests a minute: a whole number, saved and stated.
   it('saves a cap on requests a minute and states it', async () => {
     const { saved } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const rate = await screen.findByLabelText('Requests per minute for Researcher')
@@ -174,7 +175,7 @@ describe('amounts in your own currency and plain-English rules', () => {
   // as Lens's two lists and stated.
   it('blocks one payee and allows another, saves both lists, and states them', async () => {
     const { saved } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'Researcher may not pay Writer' }))
@@ -200,7 +201,7 @@ describe('amounts in your own currency and plain-English rules', () => {
   // other payee by its id; saved as Lens's map in µLXC, an emptied box leaving its payee out, and stated.
   it('caps what the agent may pay one payee a day, saves the caps, and states them', async () => {
     const { saved } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.change(await screen.findByLabelText('Daily limit on payments to Writer from Researcher, in LXC'), { target: { value: '0.5' } })
@@ -248,7 +249,7 @@ describe('the dollar figure survives a failed read of the peg', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const peg = failPeg(1)
-      window.history.pushState({}, '', '/agents')
+      window.history.pushState({}, '', '/agents/agt_1')
       render(<App />)
 
       await waitFor(() => expect(balanceRow().textContent).toBe('12.5 LXC'))
@@ -265,7 +266,7 @@ describe('the dollar figure survives a failed read of the peg', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const peg = failPeg(Infinity)
-      window.history.pushState({}, '', '/agents')
+      window.history.pushState({}, '', '/agents/agt_1')
       render(<App />)
 
       await waitFor(() => expect(balanceRow().textContent).toBe('12.5 LXC'))

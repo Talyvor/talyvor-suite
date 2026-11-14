@@ -136,24 +136,25 @@ async function moveLxc(name: string, amount: string, press: string) {
 }
 
 describe('Agent Bank', () => {
-  // B28.271 — with no agents the screen is one card that creates the first: nothing to pause, forecast,
-  // approve, lend or hold shows until the agent exists, and then all of it does.
-  it('shows a workspace with no agents only the card that creates its first', async () => {
+  // B57.19 — with no agents /agents says so, and New agent creates the first: its own page opens, and only then are there
+  // approvals, spending and a forecast to show (B28.271). The plan is not read here, so the form shows and Lens judges.
+  it('shows a workspace with no agents that it has none, and New agent opens the first one’s page', async () => {
     mockBff()
     window.history.pushState({}, '', '/agents')
     render(<App />)
-    const card = await screen.findByTestId('agent-first')
-    expect(within(card).getByText('Create your first agent')).toBeInTheDocument()
+    expect(await screen.findByText('No agents yet')).toBeInTheDocument()
     // B57.8 — the top bar's Pause every agent is on every page; the page draws none of its own.
     expect(screen.queryByTestId('pause-every-agent')).toBeNull()
-    expect(screen.queryByTestId('agents-forecast')).toBeNull()
-    expect(screen.queryByTestId('agent-bank-totals')).toBeNull()
+    expect(screen.queryByTestId('agents-list')).toBeNull()
     for (const region of ['Approvals', 'Spending', 'Between owners', 'Held and cashed out'])
       expect(screen.queryByRole('region', { name: region })).toBeNull()
 
-    await createAgent('First')
-    expect(screen.queryByTestId('agent-first')).toBeNull()
-    expect(within(screen.getByTestId('pause-every-agent')).getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: 'New agent' })[0])
+    const dialog = await screen.findByRole('dialog', { name: 'New agent' })
+    fireEvent.change(await within(dialog).findByLabelText('Name'), { target: { value: 'First' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_1'))
+    await waitFor(() => expect(screen.getByTestId('agent-open')).toHaveTextContent('First'))
     expect(screen.getByRole('region', { name: 'Approvals' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Spending' })).toBeInTheDocument()
   })
@@ -163,7 +164,7 @@ describe('Agent Bank', () => {
     const bff = mockBff()
     bff.agents.push({ id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-09-28T06:00:00Z' })
     bff.approvals.push({ id: 'apr_1', agent_id: 'agt_1', amount_ulxc: M, model: 'gpt-5', status: 'expired', created_at: '2026-09-27T06:00:00Z', fp: '' })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     const approvals = await screen.findByRole('region', { name: 'Approvals' })
     expect(await within(approvals).findByText('Expired')).toBeInTheDocument()
@@ -176,7 +177,7 @@ describe('Agent Bank', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const bff = mockBff()
-      window.history.pushState({}, '', '/agents')
+      window.history.pushState({}, '', '/agents/agt_1')
       render(<App />)
       await screen.findByTestId('agent-first')
       await createAgent('South')
@@ -198,7 +199,7 @@ describe('Agent Bank', () => {
 
   it('creates and funds an agent, refuses a payment over its daily limit, and pays once approved from the inbox', async () => {
     const bff = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     await screen.findByTestId('agent-first')
@@ -250,7 +251,7 @@ describe('Agent Bank', () => {
   // waits in Approvals, the same as the sentence says it today, and never that it was paid.
   it('shows a payment Lens answers as pending approval as waiting in Approvals, never as paid', async () => {
     const bff = mockBff({ hold: 'accepted' })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     await screen.findByTestId('agent-first')

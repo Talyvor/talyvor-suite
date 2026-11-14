@@ -51,7 +51,7 @@ afterEach(() => {
 describe('asking whether an agent’s rules would let a request through', () => {
   it('says refused, with the rule, for a payment over the daily limit and allowed for a question under it, sending nothing else', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.click(await screen.findByRole('button', { name: 'A payment' }))

@@ -34,7 +34,7 @@ describe('limit alerts on the Agent Bank (B28.62)', () => {
       { id: 'sal_1', kind: 'budget', subject: 'bdg_1', category: 'ai_software', period: 'month', period_start: '2026-11-01T00:00:00Z', percent: 80,
         spent_minor: 800, limit_minor: 1000, currency: 'GBP', created_at: '2026-11-04T09:00:00Z' },
     ])
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const budget = await screen.findByTestId('limit-alert-sal_1')
@@ -48,7 +48,7 @@ describe('limit alerts on the Agent Bank (B28.62)', () => {
 
   it('says when no limit has been reached', async () => {
     mockBff([])
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     expect(await screen.findByText(/No limit reached yet/)).toBeTruthy()
   })
@@ -60,7 +60,7 @@ describe('limit alerts on the Agent Bank (B28.62)', () => {
         percent: 80, spent_minor: 8500, limit_minor: 10000, currency: 'GBP', created_at: '2026-11-07T01:00:00Z' }],
       false,
     )
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     const alert = await screen.findByTestId('limit-alert-sal_3')
     expect(alert.textContent).toContain('80% of every wallet’s monthly AI and software budget')

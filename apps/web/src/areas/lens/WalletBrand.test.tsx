@@ -34,7 +34,7 @@ afterEach(() => {
 
 describe('the wallet screens in the brand', () => {
   const SCREENS: Array<[string, string[]]> = [
-    ['/agents', ['Move LXC']],
+    ['/agents/agt_research', ['Move LXC']],
     // B57.17 — Review is Pocket's secondary button, as w-approvals draws it; Approve is the sheet's.
     ['/approvals', []],
     // B57.24 — Statements' two downloads are Pocket's secondary buttons, as w-stmt-research draws them.
@@ -72,11 +72,11 @@ describe('the wallet screens in the brand', () => {
       amounts++
       expect(m.closest('.font-figure'), `"${m.textContent}" is not on the figure face`).not.toBeNull()
     }
-    if (['/agents', '/approvals', '/statements'].includes(address)) expect(amounts, 'no LXC amount was read').toBeGreaterThan(0)
+    if (['/agents/agt_research', '/approvals', '/statements'].includes(address)) expect(amounts, 'no LXC amount was read').toBeGreaterThan(0)
   })
 
   it('shows each state as a pill: a waiting approval, settled statement lines, settled and held royalties', async () => {
-    const approvals = await at('/agents')
+    const approvals = await at('/agents/agt_research')
     const waiting = within(approvals).getByText(/wants to pay Acme Hosting/).closest('.min-h-row') as HTMLElement
     expect(pills(waiting)).toEqual(['Waiting'])
     document.body.replaceChildren()

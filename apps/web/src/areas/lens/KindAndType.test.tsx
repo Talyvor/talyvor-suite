@@ -83,7 +83,7 @@ describe.each(TYPES.flatMap((t) => KINDS.map((k) => [t, k] as const)))('a %s acc
   })
 
   it('Wallets: the address only for on-chain money, the IBAN and Send only for bank money', async () => {
-    const { main } = await at('/agents', account)
+    const { main } = await at('/agents/agt_research', account)
     await within(main).findByTestId('agent-money-wallet')
     // A partner gives one of the two, the address first; a Hybrid account draws the address.
     expect(within(main).queryByTestId('wallet-address') !== null).toBe(kind !== 'fiat')

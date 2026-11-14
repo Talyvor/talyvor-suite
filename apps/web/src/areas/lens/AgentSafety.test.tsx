@@ -93,7 +93,7 @@ async function fleet() {
 describe('the Agent Bank stops every agent or one, and shows what they are spending', () => {
   it('pauses every agent with a reason, starts them again, pauses one, and shows the forecast and an alert', async () => {
     const posts = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     await waitFor(() => expect(screen.getByTestId('agents-forecast').textContent).toBe('3 LXC'))
@@ -129,7 +129,7 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
     const ASSERTION = { rawId: new Uint8Array([1]).buffer, response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } }
     const get = vi.fn().mockRejectedValueOnce(new DOMException('The operation was cancelled.', 'NotAllowedError')).mockResolvedValue(ASSERTION)
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.click(await screen.findByRole('switch', { name: 'Pause Researcher' }))
@@ -171,7 +171,7 @@ describe('starting agents again when only the phone holds a key (B55.2)', () => 
   it('pauses from here, but sends no resume and says to start them on the phone', async () => {
     const posts = mockBff()
     onlyThePhoneKey()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.click(await screen.findByRole('switch', { name: 'Pause Researcher' }))
