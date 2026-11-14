@@ -840,3 +840,50 @@ describe('the pages under Pay (B57.32)', () => {
     expect(within(row).getByRole('button', { name: 'Stop' })).toBeTruthy()
   })
 })
+
+// B58.8 — Lens refuses live money at a person's word while the workspace has no key (Lens B58.7); Pay says so first.
+describe('the first live payment, before the workspace has a key (B58.8)', () => {
+  /** mockBff's workspace, with Lens labelling payments out `label` for it; every POST from here is counted. */
+  function labelled(label: 'live' | 'sandbox') {
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    const posts: string[] = []
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url === '/api/wallets/capabilities')
+        return new Response(JSON.stringify({ capabilities: [{ capability: 'payments_out', name: 'Money out', class: 'RED', real_money: label === 'live', level_needed: 'L2', label }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      if ((init?.method ?? 'GET') !== 'GET') posts.push(url)
+      return inner(input, init)
+    })
+    return posts
+  }
+
+  it('shows the step in place of Send when the money is live and there is no passkey or phone, and pays nothing', async () => {
+    mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')], [PAYMENT('mpay_0', 'payee_1', 'Acme Ltd', 100, 'completed')])
+    const posts = labelled('live')
+    window.history.pushState({}, '', '/money/pay#payee-payee_1')
+    render(<App />)
+    const form = await screen.findByTestId('send-payment')
+    const step = await within(form).findByTestId('pay-key-first')
+    expect(step.textContent).toContain('Add a passkey or your phone before your first payment.')
+    expect(within(step).getByRole('link', { name: 'Approvals and devices' }).getAttribute('href')).toBe('/approvals')
+    fireEvent.change(within(form).getByLabelText('Amount in GBP'), { target: { value: '20.00' } })
+    expect(within(form).queryByRole('button', { name: /^Send/ })).toBeNull()
+    fireEvent.submit(form)
+    expect(posts).toEqual([])
+  })
+
+  it('still offers Send in the Sandbox with no key', async () => {
+    mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')], [PAYMENT('mpay_0', 'payee_1', 'Acme Ltd', 100, 'completed')])
+    labelled('sandbox')
+    window.history.pushState({}, '', '/money/pay#payee-payee_1')
+    render(<App />)
+    const form = await screen.findByTestId('send-payment')
+    await within(form).findByText('Sandbox')
+    fireEvent.change(within(form).getByLabelText('Amount in GBP'), { target: { value: '20.00' } })
+    expect(within(form).getByRole('button', { name: 'Send £20.00' })).toBeTruthy()
+    expect(within(form).queryByTestId('pay-key-first')).toBeNull()
+  })
+})
