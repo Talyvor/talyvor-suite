@@ -184,7 +184,7 @@ describe('Move LXC', () => {
 })
 
 describe('an agent’s own addresses', () => {
-  it('/agents/:id opens that agent, and /agents/:id/rules opens it with its rules card first', async () => {
+  it('/agents/:id opens that agent, and /agents/:id/rules opens its rules page', async () => {
     mockBff()
     window.history.pushState({}, '', '/agents/agt_2')
     render(<App />)
@@ -194,9 +194,7 @@ describe('an agent’s own addresses', () => {
 
     window.history.pushState({}, '', '/agents/agt_2/rules')
     render(<App />)
-    expect((await screen.findByTestId('agent-open')).textContent).toBe('Writer')
-    const rules = await screen.findByRole('heading', { name: 'Rules' })
-    const card = screen.getByTestId('agent-card-agt_2')
-    expect(rules.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // B57.23 — the agent's rules on their own page.
+    expect(await screen.findByRole('heading', { level: 1, name: 'Writer’s rules' })).toBeInTheDocument()
   })
 })

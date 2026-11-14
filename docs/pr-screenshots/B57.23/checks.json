@@ -1,0 +1,5 @@
+[
+  { "route": "/agents/agt_research/rules", "screen": "w-rules" },
+  { "route": "/agents/agt_sales/rules", "screen": "w-rules-sales" },
+  { "route": "/agents/agt_research/rules", "screen": "w-rules+rollback-2", "steps": ["Roll Research’s rules back to version 2"], "frame": true }
+]

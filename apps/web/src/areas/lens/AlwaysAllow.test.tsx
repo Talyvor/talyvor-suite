@@ -98,4 +98,52 @@ describe('Approve and always allow this (B41.4)', () => {
     expect(sent.filter((s) => s.url === '/api/agents/approvals/apr_1/challenge').map((s) => s.body)).toEqual([{ always_allow: allow }])
     expect(sent.find((s) => s.url === '/api/agents/approvals/apr_1/approve')?.body.always_allow).toEqual(allow)
   })
+
+  // B57.23 — an always-allow is also a field on the agent's rules page: the one an approval saved is there to edit, and
+  // raising it loosens the rules, so it is saved with the passkey, with the allowances whole in the rules body.
+  it('edits an always-allow on the rules page and saves it, raised, with the passkey', async () => {
+    const sent: Array<{ url: string; method: string; body: Record<string, unknown> }> = []
+    const rules = {
+      max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 0, approval_above_ulxc: 2 * M, allowed_models: [], allowed_providers: [],
+      active_from: '', active_until: '', timezone: 'UTC', payee_allowances: { ws_a: { amount_ulxc: 40 * M, per: 'month' } },
+    }
+    const ASSERTION = { rawId: new Uint8Array([1]).buffer, response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } }
+    Object.defineProperty(navigator, 'credentials', { value: { get: vi.fn().mockResolvedValue(ASSERTION), create: vi.fn() }, configurable: true })
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {}
+      const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
+      if (method !== 'GET') sent.push({ url, method, body })
+      if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+      if (url === '/api/money/devices') return json({ devices: [] })
+      if (url === '/api/agents/passkeys') return json({ passkeys: [{ credential_id: 'Y3JlZDE', name: 'iPhone', created_at: '2026-10-28T06:00:00Z' }] })
+      if (url === '/api/agents')
+        return json({
+          workspace_balance_ulxc: 100 * M, allocated_ulxc: 10 * M, unallocated_ulxc: 90 * M, spent_ulxc: 0,
+          agents: [{ id: 'agt_1', name: 'Researcher', balance_ulxc: 10 * M, spent_ulxc: 0, keys: [], created_at: '2026-10-28T06:00:00Z' }],
+        })
+      if (url === '/api/money/payees') return json({ payees: [{ id: 'ws_a', name: 'Acme Hosting', country: 'GB', check: 'exact_match', checked_by: 'x', checked_at: '2026-10-28T06:00:00Z' }] })
+      if (url === '/api/agents/agt_1/rules-challenge')
+        return json({ looser: true, changes: ['Always allows Acme Hosting: was up to 40 LXC a month, now up to 60 LXC a month'], challenge: 'Y2gx', allow_credentials: ['Y3JlZDE'] })
+      if (url === '/api/agents/agt_1/rules') return json(method === 'PUT' ? (body.rules as object) : rules)
+      return new Response('null', { status: 404 })
+    })
+    window.history.pushState({}, '', '/agents/agt_1/rules')
+    render(<App />)
+
+    expect((await screen.findByRole('switch', { name: 'Always allow a payee' })).getAttribute('aria-checked')).toBe('true')
+    const field = await screen.findByLabelText('Always allow Acme Hosting from Researcher, in LXC a month')
+    expect(field).toHaveValue('40')
+    fireEvent.change(field, { target: { value: '60' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+    expect((await screen.findByTestId('rules-loosen')).textContent).toContain('Always allows Acme Hosting: was up to 40 LXC a month, now up to 60 LXC a month')
+    fireEvent.click(screen.getByRole('button', { name: 'Save with your passkey' }))
+    await screen.findByText('Your passkey was asked first, because the change loosens them.')
+    const put = sent.find((s) => s.method === 'PUT')!
+    expect(put.url).toBe('/api/agents/agt_1/rules')
+    expect((put.body.rules as Record<string, unknown>).payee_allowances).toEqual({ ws_a: { amount_ulxc: 60 * M, per: 'month' } })
+    expect(put.body.assertion).toEqual({ credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' })
+  })
 })

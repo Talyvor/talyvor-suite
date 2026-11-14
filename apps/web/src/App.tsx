@@ -43,8 +43,7 @@ import { CloseAccountScreen, HelpScreen, YourDataScreen } from './areas/lens/Hel
 import { CompanyDetailsScreen } from './areas/lens/CompanyDetails'
 import { SignedInFooter } from './components/HelpLinks'
 import { Features } from './areas/lens/Features'
-import { AgentBank } from './areas/lens/AgentBank'
-import { AgentPage } from './areas/lens/AgentPageRoute'
+import { AgentPage, AgentRulesPage } from './areas/lens/AgentPageRoute'
 import { Agents } from './areas/lens/Agents'
 import { ApprovalsScreen, StatementsScreen, usePendingApprovals } from './areas/lens/WalletScreens'
 import { ApprovalSheetHost } from './areas/lens/ApprovalSheet'
@@ -231,7 +230,7 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   // B57.16 — an agent's rules: today's agent view with that agent open, until B57.23 draws them.
   // B57.20 — an agent's page, from one read; today's agent view under it until B57.21 and B57.22 redraw the rest.
   { path: '/agents/:id', title: 'Agents', element: <AgentPage /> },
-  { path: '/agents/:id/rules', title: 'Agents', element: <AgentBank /> },
+  { path: '/agents/:id/rules', title: 'Agents', element: <AgentRulesPage /> },
   // B20.3 — browse, use and publish agents, prompts, skills, evaluations and pipelines; what they earned.
   { path: '/marketplace/*', title: 'Marketplace', element: <MarketplaceArea /> },
   { path: '/setup', title: 'Connect an agent', element: <Setup /> },

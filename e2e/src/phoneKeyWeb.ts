@@ -204,20 +204,21 @@ export function phoneKeyWeb(): Scenario {
       }
       seen.status = (await lens.agentApprovals(user)).find((a) => a.id === id)?.status ?? ''
 
-      const rulesPage = await ctx.app.tab(`/agents?agent=${encodeURIComponent(payer.id)}`)
+      // B57.23 — the agent's rules page.
+      const rulesPage = await ctx.app.tab(`/agents/${encodeURIComponent(payer.id)}/rules`)
       rulesPage.on('request', (q) => {
         if (q.method() !== 'PUT' || new URL(q.url()).pathname !== `/api/agents/${payer.id}/rules`) return
         const body = q.postDataJSON() as { daily_limit_ulxc?: number; rules?: { daily_limit_ulxc?: number } }
         seen.rulesSaved.push(body.rules?.daily_limit_ulxc ?? body.daily_limit_ulxc ?? -1)
       })
       try {
-        const daily = rulesPage.getByLabel(`Daily limit for ${payer.name}, in LXC`)
+        const daily = rulesPage.getByLabel(`At most a day for ${payer.name}, in LXC`)
         await daily.fill(RAISED_LXC, { timeout: TIMEOUT_MS })
         await rulesPage.getByRole('button', { name: 'Save rules' }).click()
         seen.loosenLine = await rulesPage.getByText(loosenLine(payer.name)).waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false)
         await daily.fill(LOWERED_LXC)
         await rulesPage.getByRole('button', { name: 'Save rules' }).click()
-        await rulesPage.getByText('Saved. Lens applies these rules to the next request or payment.').waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
+        await rulesPage.getByText(`${payer.name}’s rules are saved`).waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
       } catch (e) {
         seen.why ??= (e as Error).message.split('\n')[0]
       } finally {
