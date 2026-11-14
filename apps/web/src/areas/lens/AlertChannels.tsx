@@ -14,12 +14,12 @@ import { type AlertChannel, type AlertDelivery, agentBankApi, refusalText } from
 const CHANNELS_KEY = ['alert-channels']
 const DELIVERIES_KEY = ['alert-deliveries']
 
-const KIND_NAME: Record<AlertChannel['kind'], string> = {
+export const KIND_NAME: Record<AlertChannel['kind'], string> = {
   push: 'Push to your phones and browsers',
   webhook: 'Webhook, signed',
   slack: 'Slack',
 }
-const URL_HINT: Partial<Record<AlertChannel['kind'], string>> = {
+export const URL_HINT: Partial<Record<AlertChannel['kind'], string>> = {
   webhook: 'https://your-server.example/alerts',
   slack: 'https://hooks.slack.com/services/…',
 }
@@ -30,7 +30,8 @@ const DELIVERY: Record<AlertDelivery['status'], [PillStatus, string]> = {
 }
 const select = `h-8 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 
-export function AlertChannels() {
+/** The channels, their deliveries, the picker's state and the add and remove calls: one for each drawing of the card. */
+export function useAlertChannels() {
   const qc = useQueryClient()
   const channels = useQuery({ queryKey: CHANNELS_KEY, queryFn: agentBankApi.alertChannels })
   const deliveries = useQuery({ queryKey: DELIVERIES_KEY, queryFn: agentBankApi.alertDeliveries })
@@ -53,6 +54,11 @@ export function AlertChannels() {
   const list = channels.data?.channels ?? []
   const sent = deliveries.data?.deliveries ?? []
   const kindOf = (id: string, fallback: AlertChannel['kind']) => KIND_NAME[list.find((c) => c.id === id)?.kind ?? fallback]
+  return { channels, kind, setKind, url, setURL, secret, setSecret, add, remove, list, sent, kindOf }
+}
+
+export function AlertChannels() {
+  const { channels, kind, setKind, url, setURL, secret, setSecret, add, remove, list, sent, kindOf } = useAlertChannels()
 
   return (
     <Card data-testid="alert-channels">

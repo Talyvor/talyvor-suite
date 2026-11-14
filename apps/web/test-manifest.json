@@ -90,7 +90,7 @@
   "src/areas/lens/AgentStatementDownload.test.tsx": 11,
   "src/areas/lens/AgentStatementLabels.test.tsx": 3,
   "src/areas/lens/AgentStatementSearch.test.tsx": 7,
-  "src/areas/lens/AlertChannels.test.tsx": 2,
+  "src/areas/lens/AlertChannels.test.tsx": 3,
   "src/areas/lens/AlwaysAllow.test.tsx": 2,
   "src/areas/lens/ApprovalInbox.test.tsx": 17,
   "src/areas/lens/ApprovalSheet.test.tsx": 10,
