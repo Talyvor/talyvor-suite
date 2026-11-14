@@ -60,7 +60,7 @@ afterEach(() => {
 describe('the rules editor names the marketplace listings an agent may use', () => {
   it('allows one listing, and saving the other rules keeps it', async () => {
     const puts = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     const fr = await screen.findByRole('button', { name: 'Researcher may use Translate to French' })
     expect(screen.getByText('Any listing. Mark some Allowed to allow only those.')).toBeTruthy()

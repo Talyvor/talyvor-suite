@@ -869,6 +869,8 @@ export class AgentBankError extends ApiError {
     readonly sentence: string,
     /** B58.1: the approval a payment waits on, when Lens answered it held */
     readonly approvalID = '',
+    /** B57.19: the refusal's whole body, so a plan's 402 reads from its plan, gate, limit and allows */
+    readonly body: Record<string, unknown> = {},
   ) {
     super(status, path)
   }
@@ -881,13 +883,14 @@ async function send<T>(method: string, path: string, body: object = {}, headers:
     body: JSON.stringify(body),
   })
   if (!res.ok) {
-    let sentence = ''
+    let body: Record<string, unknown> = {}
     try {
-      sentence = ((await res.json()) as { error?: string }).error ?? ''
+      const parsed: unknown = await res.json()
+      if (parsed !== null && typeof parsed === 'object') body = parsed as Record<string, unknown>
     } catch {
       // a body that is not JSON carries no sentence
     }
-    throw new AgentBankError(res.status, path, sentence)
+    throw new AgentBankError(res.status, path, typeof body.error === 'string' ? body.error : '', '', body)
   }
   if (res.status === 204) return undefined as T // B28.32: ending a boost answers nothing
   return (await res.json()) as T

@@ -59,7 +59,7 @@ afterEach(() => {
 describe('renaming, describing and archiving an agent on Agent Wallets', () => {
   it('saves a new name and description, then archives it: the balance is swept and only its statement is left', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.change(await screen.findByLabelText('Name of Researcher'), { target: { value: 'Night researcher' } })

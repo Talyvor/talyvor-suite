@@ -63,7 +63,7 @@ afterEach(() => {
 describe('Agent Bank approvals with Face ID', () => {
   it('says who a payment pays, how much and what for (B23.10)', async () => {
     mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     const asks = await screen.findByText(/wants to pay/)
     expect(asks).toHaveTextContent(/^Researcher wants to pay Acme Hosting 3 LXC · October invoice$/)
@@ -83,7 +83,7 @@ describe('Agent Bank approvals with Face ID', () => {
       }
     })
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     expect(await screen.findByText(/October hosting/)).toBeInTheDocument()

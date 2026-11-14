@@ -83,7 +83,7 @@ afterEach(() => {
 describe('rule templates', () => {
   it('creates a new agent from the Support bot template in one click: its rules are saved as the template', async () => {
     const { calls, saved } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const start = await screen.findByRole('group', { name: 'Rules to start from' })
@@ -101,7 +101,7 @@ describe('rule templates', () => {
 
   it('fills an agent’s Rules card from the Coder template and saves exactly the template, replacing what it held', async () => {
     const { calls, saved } = mockBff(BUILDER)
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const templates = await screen.findByRole('group', { name: 'Rule templates for Builder' })
@@ -118,7 +118,7 @@ describe('rule templates', () => {
     const { calls, saved, assertions } = mockBff(BUILDER, { looser: true, passkey: true })
     const get = vi.fn().mockRejectedValueOnce(new DOMException('The operation was cancelled.', 'NotAllowedError')).mockResolvedValue(ASSERTION)
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.click(within(await screen.findByRole('group', { name: 'Rule templates for Builder' })).getByRole('button', { name: 'Coder' }))
@@ -144,7 +144,7 @@ describe('rule templates', () => {
     const { calls, assertions } = mockBff(BUILDER, { passkey: true })
     const get = vi.fn()
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.change(await screen.findByLabelText('Weekly limit for Builder, in LXC'), { target: { value: '5' } })
@@ -157,7 +157,7 @@ describe('rule templates', () => {
 
   it('with only the phone’s key, a looser save says to add this browser and sends nothing', async () => {
     const { calls, saved } = mockBff(BUILDER, { looser: true, phone: true })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     fireEvent.click(within(await screen.findByRole('group', { name: 'Rule templates for Builder' })).getByRole('button', { name: 'Coder' }))

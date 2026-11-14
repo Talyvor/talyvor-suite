@@ -106,7 +106,7 @@ afterEach(() => {
 describe('money between owners on Agent Wallets', () => {
   it('labels money between owners, loans and the credit line with Lens’s Sandbox, and no test-money line (B46.2, B56.11)', async () => {
     mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     await screen.findByTestId('agent-address')
     await waitFor(() => expect(document.querySelector('[data-status-key="company_credit_line"]')?.textContent).toBe('Sandbox'))
@@ -121,7 +121,7 @@ describe('money between owners on Agent Wallets', () => {
 
   it('sends test credits to another person’s agent, accepts a request, and offers a loan whose repayments, late and default show', async () => {
     const sent = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     expect((await screen.findByTestId('agent-address')).textContent).toContain('@acme.buyer')
@@ -159,7 +159,7 @@ describe('money between owners on Agent Wallets', () => {
 
   it('gives back a received transfer, asked twice: the refund shows, the original is marked, and the balance falls by it', async () => {
     const sent = mockBff({ received: true })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     expect((await screen.findByTestId('agent-balance-agt_1')).textContent).toContain('50')

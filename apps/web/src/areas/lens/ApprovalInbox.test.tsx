@@ -81,7 +81,7 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
 
 // The inbox with its filters lives on Agent Wallets; /approvals decides in the sheet (B57.17).
 const inbox = async () => {
-  window.history.pushState({}, '', '/agents')
+  window.history.pushState({}, '', '/agents/agt_1')
   render(<App />)
   const list = within(await screen.findByRole('group', { name: 'Waiting for a person' }))
   // Agent Wallets reads more than Approvals did, so the keys can still be reading when the list is in.

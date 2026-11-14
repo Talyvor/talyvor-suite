@@ -69,7 +69,8 @@ const AGENT_CREDIT = 'spend_on_talyvor move_between_own_agents'
 
 // Each address, and the capabilities each of its chips states.
 const PLACEMENTS: [string, string[]][] = [
-  ['/agents', [AGENT_CREDIT, AGENT_CREDIT, 'payments_out', 'pay_another_owner', 'currency_accounts account_details', 'pay_another_owner', 'pay_another_owner', 'pay_another_owner', 'loans_between_companies', 'escrow', 'invest_and_trade', 'cash_out', 'agent_card', AGENT_CREDIT, 'pay_another_owner', 'company_credit_line', 'loans_between_companies', 'escrow', 'cash_out']],
+  // B57.19 — /agents is the list; today's agent view, with its chips, is the agent's own address.
+  ['/agents/agt_research', [AGENT_CREDIT, AGENT_CREDIT, 'payments_out', 'pay_another_owner', 'currency_accounts account_details', 'pay_another_owner', 'pay_another_owner', 'pay_another_owner', 'loans_between_companies', 'escrow', 'invest_and_trade', 'cash_out', 'agent_card', AGENT_CREDIT, 'pay_another_owner', 'company_credit_line', 'loans_between_companies', 'escrow', 'cash_out']],
   // B57.17 — the agents' requests first, then the prepared payments, as w-approvals lists them.
   ['/approvals', ['pay_another_owner', 'payments_out']],
   // B57.24 — one chip, on the agent's statement document.
