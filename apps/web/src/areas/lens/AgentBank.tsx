@@ -12,7 +12,7 @@ import { IfArea } from '../../lib/workspaceAreas'
 import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
-import { assertOver, letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeEveryAgent, signApproval } from './passkeys'
+import { approveMandateSigned, assertOver, letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeEveryAgent, signApproval } from './passkeys'
 import { GetAKeyBack, NoLiveKey, RecoveryCodeRow } from './KeyRecovery'
 import { AgentAnalytics } from './AgentAnalytics'
 import { AlertChannels } from './AlertChannels'
@@ -49,6 +49,7 @@ import {
   type AgentSchedule,
   type AgentTopUp as AgentTopUpValue,
   type LimitAlert,
+  type Mandate,
   type PasskeyAssertion,
   type PaymentRequest,
   type PostingKind,
@@ -84,6 +85,8 @@ export const BOOK_KEY = ['agent-book']
 export const APPROVALS_KEY = ['agent-approvals']
 /** B55.10 — the payments Chat, an assistant, an agent or a voice request prepared, waiting for the person. */
 export const PREPARED_KEY = ['money-payment-requests', 'pending_approval']
+/** B55.40 — the mandates an agent's own key asked for; under Pay's ['money-mandates'], so a grant or revoke there reads them again. */
+export const MANDATE_REQUESTS_KEY = ['money-mandates', 'requested']
 export const rulesKey = (id: string) => ['agent-rules', id]
 export const rulesHistoryKey = (id: string) => ['agent-rules-history', id]
 export const boostsKey = (id: string) => ['agent-rule-boosts', id]
@@ -2647,6 +2650,89 @@ export function PreparedRow({ r, nameOf, labelled = false }: { r: PaymentRequest
   )
 }
 
+/**
+ * B55.40 — an agent's own key asked for a mandate (Lens B55.24): it pulls nothing until the owner approves it here, signed
+ * over a challenge naming that request as an approval is, or declines it. With only the phone's key, this browser cannot sign.
+ */
+export function MandateRequestRow({
+  m,
+  nameOf,
+  onlyThePhone,
+  hold,
+  onOutcome,
+}: {
+  m: Mandate
+  nameOf: (id: string) => string
+  onlyThePhone: boolean
+  hold: boolean
+  onOutcome: (o: { ok: boolean; text: React.ReactNode }) => void
+}) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  // The payee's name is the agent's own words, so where the money goes is shown as Lens holds it: the Talyvor workspace,
+  // or the owner's own saved payee an outside business's pulls are paid out to. Pay's ['money-payees'] read, shared.
+  const payees = useQuery({ queryKey: ['money-payees'], queryFn: agentBankApi.payees, enabled: Boolean(m.payee_business_id) })
+  const savedPayee = (payees.data?.payees ?? []).find((p) => p.id === m.payee_id)
+  const into = m.payee_workspace_id ? (
+    <>
+      into Talyvor workspace <span className="font-figure">{m.payee_workspace_id}</span>
+    </>
+  ) : (
+    <>
+      paid out to your saved payee {savedPayee ? savedPayee.name : <span className="font-figure">{m.payee_id}</span>}
+    </>
+  )
+  const decide = useMutation({
+    mutationFn: (approve: boolean) => (approve ? approveMandateSigned(m.id) : agentBankApi.declineMandate(m.id)),
+    onSuccess: (_, approve) =>
+      onOutcome({
+        ok: true,
+        text: approve
+          ? `Approved. ${m.payee_name} can pull from ${nameOf(m.agent_id)} up to ${formatMinor(m.max_per_month_minor, m.currency)} a month.`
+          : `Declined. ${m.payee_name} will not pull from ${nameOf(m.agent_id)}.`,
+      }),
+    onError: (err) => onOutcome({ ok: false, text: refusalText(err) }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['money-mandates'] }),
+  })
+  return (
+    // In Pocket's row, wrapped as PreparedRow is, so it reads the same on Approvals (B57.17) and on an agent's page.
+    <div data-mandate={m.id} {...{ [DESIGN_ATTR]: 'pocket' }} className="border-t border-line first:border-t-0">
+      <PocketRow
+        wrap
+        title={
+          <span className="whitespace-normal">
+            {nameOf(m.agent_id)} asks to let {m.payee_name} pull up to <span className="font-figure">{formatMinor(m.max_per_month_minor, m.currency)}</span> a month
+          </span>
+        }
+        line={
+          <span>
+            Up to <span className="font-figure">{formatMinor(m.max_per_pull_minor, m.currency)}</span> a pull · {into} · expires{' '}
+            <span className="font-figure">{formatWhen(m.expires_at)}</span> · asked <span className="font-figure">{formatWhen(m.created_at)}</span>
+          </span>
+        }
+        action={
+          !open ? (
+            <PocketButton variant="secondary" size="sm" data-tangerine="your-move" onClick={() => setOpen(true)}>
+              Review
+            </PocketButton>
+          ) : onlyThePhone ? (
+            <span className="text-body text-ink-2">Approve this mandate with a passkey on this browser: add this browser first.</span>
+          ) : hold ? null : (
+            <span className="flex flex-wrap gap-2">
+              <PocketButton size="sm" disabled={decide.isPending} onClick={() => decide.mutate(true)}>
+                Approve
+              </PocketButton>
+              <PocketButton variant="secondary" size="sm" disabled={decide.isPending} onClick={() => decide.mutate(false)}>
+                Decline
+              </PocketButton>
+            </span>
+          )
+        }
+      />
+    </div>
+  )
+}
+
 const ENROLMENTS_KEY = ['key-enrolments']
 
 /**
@@ -2719,6 +2805,7 @@ export function Approvals({
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const ownAgent = (id: string) => (book.data?.agents ?? []).some((x) => x.id === id)
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
+  const mandateRequests = useQuery({ queryKey: MANDATE_REQUESTS_KEY, queryFn: agentBankApi.requestedMandates })
   const keys = useKeys()
   const { signed, onlyThePhone, hold } = keys
   // Ticking several is for a workspace that signs nothing (bulk, below), once both key reads are in.
@@ -2803,6 +2890,10 @@ export function Approvals({
   // B55.10 — the payments prepared for the person sit above the agents' requests, narrowed by the same filters.
   const preparedAll = (prepared.data?.requests ?? []).filter((r) => agentId === undefined || r.agent_id === agentId)
   const preparedShown = preparedAll.filter((r) => (byAgent === '' || r.agent_id === byAgent) && byKind !== 'model')
+  // B55.40 — an agent's mandate request waits here too, narrowed the same way.
+  const requestsShown = (mandateRequests.data?.granted ?? []).filter(
+    (m) => m.status === 'requested' && (agentId === undefined || m.agent_id === agentId) && (byAgent === '' || m.agent_id === byAgent) && byKind !== 'model',
+  )
   const chosen = pending.filter((a) => picked.has(a.id))
   const toggle = (id: string) =>
     setPicked((s) => {
@@ -2915,8 +3006,17 @@ export function Approvals({
               ))}
             </div>
           ) : null}
+          {mandateRequests.isError ? (
+            <p className="border-b border-rule px-gutter py-3 text-body text-muted">{readFailure(mandateRequests.error, 'The mandate requests')}</p>
+          ) : requestsShown.length > 0 ? (
+            <div role="group" aria-label="Mandate requests" className="border-b border-rule">
+              {requestsShown.map((m) => (
+                <MandateRequestRow key={m.id} m={m} nameOf={nameOf} onlyThePhone={onlyThePhone} hold={hold} onOutcome={setOutcome} />
+              ))}
+            </div>
+          ) : null}
           {pending.length === 0 ? (
-            preparedShown.length > 0 ? null : (
+            preparedShown.length > 0 || requestsShown.length > 0 ? null : (
               <p className="px-gutter py-3 text-body text-muted">
                 {waiting.length > 0
                   ? 'Nothing waiting matches these filters.'

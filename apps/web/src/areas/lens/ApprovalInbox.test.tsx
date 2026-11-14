@@ -15,7 +15,13 @@ const PREPARED = {
   items: [{ position: 1, payee_id: 'payee_1', payee_name: 'Acme Hosting', currency: 'GBP', amount_minor: 12000, reference: 'INV-7', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking' }],
 }
 
-function mockBff(decided: Array<Record<string, unknown> & { id: string; status: string }> = [], prepared: object[] = [], only?: number) {
+// B55.40 — an agent's own key asked for a mandate: it waits for the owner and pulls nothing until approved.
+const REQUESTED = {
+  id: 'mdt_1', agent_id: 'agt_1', account_id: 'macc_agt', currency: 'GBP', payee_workspace_id: 'ws_a', payee_name: 'Acme Hosting', max_per_pull_minor: 500,
+  max_per_month_minor: 2000, pulled_this_month_minor: 0, expires_at: '2027-11-10T23:59:59Z', status: 'requested', created_at: '2026-11-10T06:00:00Z',
+}
+
+function mockBff(decided: Array<Record<string, unknown> & { id: string; status: string }> = [], prepared: object[] = [], only?: number, mandates: object[] = []) {
   const approvals: Array<Record<string, unknown> & { id: string; status: string }> = [
     { id: 'apr_1', agent_id: 'agt_1', amount_ulxc: 3 * M, model: '', status: 'pending', created_at: '2026-10-25T06:01:00Z', payee: { kind: 'company', id: 'ws_a', name: 'Acme Hosting' } },
     { id: 'apr_2', agent_id: 'agt_1', amount_ulxc: 2 * M, model: 'gpt-5', status: 'pending', created_at: '2026-10-25T06:02:00Z' },
@@ -27,6 +33,7 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
   const decisions: Array<{ id: string; decision: string }> = []
   const bodies: Record<string, unknown>[] = []
   const challenges: string[] = []
+  const mandateCalls: Array<{ url: string; body: unknown }> = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -45,6 +52,17 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
     if (url === '/api/money/payment-requests?status=pending_approval') return json({ requests: prepared })
     if (url === '/api/agents/passkeys') return json({ passkeys: [] })
     if (url === '/api/money/devices') return json({ devices: [] })
+    if (url === '/api/money/mandates?status=requested') return json({ granted: mandates, received: [] })
+    if (url === '/api/money/mandates/challenge') {
+      mandateCalls.push({ url, body: JSON.parse(String(init?.body)) })
+      return json({ challenge: 'Y2gw', allow_credentials: ['Y3JlZDE'], user_verification: 'required' })
+    }
+    const mandate = /^\/api\/money\/mandates\/([^/]+)\/(approve|decline)$/.exec(url)
+    if (mandate) {
+      mandateCalls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      mandates.splice(mandates.findIndex((m) => (m as { id: string }).id === mandate[1]), 1)
+      return json({ ...REQUESTED, status: mandate[2] === 'approve' ? 'active' : 'declined' })
+    }
     const challenge = /^\/api\/agents\/approvals\/([^/]+)\/challenge$/.exec(url)
     if (challenge) challenges.push(challenge[1])
     const decision = /^\/api\/agents\/approvals\/([^/]+)\/(approve|deny)$/.exec(url)
@@ -58,7 +76,7 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
     }
     return new Response('null', { status: 404 })
   })
-  return { decisions, bodies, challenges }
+  return { decisions, bodies, challenges, mandateCalls }
 }
 
 // The inbox with its filters lives on Agent Wallets; /approvals decides in the sheet (B57.17).
@@ -168,6 +186,54 @@ describe('the approvals inbox on Agent Wallets (B41.33)', () => {
     fireEvent.touchMove(row, { touches: [{ clientX: 90, clientY: 12 }] })
     fireEvent.touchEnd(row, { changedTouches: [{ clientX: 140, clientY: 14 }] })
     await waitFor(() => expect(bff.decisions).toEqual([{ id: 'apr_3', decision: 'approve' }]))
+  })
+})
+
+describe('an agent’s mandate request waiting on Approvals (B55.40)', () => {
+  it('lists it in words, and Review then Approve is signed over its own challenge', async () => {
+    const bff = mockBff([], [], 0, [REQUESTED])
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (input, init) =>
+      String(input) === '/api/agents/passkeys'
+        ? new Response(JSON.stringify({ passkeys: [{ id: 'pk_1', credential_id: 'Y3JlZDE', name: 'This Mac', created_at: '2026-11-01T09:00:00Z' }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        : inner(input, init),
+    )
+    const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
+      response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+    // B57.17 — it waits with the rest under Waiting for you, in Pocket's row.
+    const group = (await screen.findByText(/asks to let Acme Hosting/)).closest<HTMLElement>('[data-mandate="mdt_1"]')!
+    expect(group.closest('[data-design]')).toHaveAttribute('data-design', 'pocket')
+    const requests = within(group)
+    expect(group.textContent).toContain('Researcher asks to let Acme Hosting pull up to £20.00 a month')
+    // The payee's name is the agent's own words: the account the money goes to is shown as Lens holds it.
+    expect(group.textContent).toContain('into Talyvor workspace ws_a')
+    expect(await screen.findByRole('link', { name: 'Approvals 1 waiting' })).toBeInTheDocument()
+    fireEvent.click(requests.getByRole('button', { name: 'Review' }))
+    fireEvent.click(await requests.findByRole('button', { name: 'Approve' }))
+    await waitFor(() =>
+      expect(bff.mandateCalls).toEqual([
+        { url: '/api/money/mandates/challenge', body: { mandate_id: 'mdt_1' } },
+        { url: '/api/money/mandates/mdt_1/approve', body: { assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } } },
+      ]),
+    )
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(bff.decisions).toEqual([])
+  })
+
+  it('Decline sends the decline, and nothing is signed', async () => {
+    const bff = mockBff([], [], 0, [REQUESTED])
+    const get = vi.fn()
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+    const requests = within((await screen.findByText(/asks to let Acme Hosting/)).closest<HTMLElement>('[data-mandate="mdt_1"]')!)
+    fireEvent.click(requests.getByRole('button', { name: 'Review' }))
+    fireEvent.click(await requests.findByRole('button', { name: 'Decline' }))
+    await waitFor(() => expect(bff.mandateCalls).toEqual([{ url: '/api/money/mandates/mdt_1/decline', body: {} }]))
+    expect(get).not.toHaveBeenCalled()
   })
 })
 
