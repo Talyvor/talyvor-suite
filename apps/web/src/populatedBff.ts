@@ -73,6 +73,17 @@ const BODIES: Record<string, unknown> = {
       },
     ],
   },
+  // B59.19 — an Instant transfer's receipt, received: converted, moved on chain and paid out.
+  '/api/money/instant-transfers/%3Aid': {
+    id: 'itr_sample', agent_id: 'agt_research', from_account_id: 'macc_agt', to_payee_id: 'payee_1', beneficiary_name: 'Acme Hosting Ltd',
+    send_minor: 50000, send_currency: 'GBP', fee_minor: 125, receive_minor: 49875, receive_currency: 'GBP', rate: '0.99750000', arrives_in_seconds: true, status: 'received',
+    legs: [
+      { id: 'itr_sample:convert', leg: 'convert', done: true, partner_ref: 'cv_1', sell: { minor: 50000, currency: 'GBP' }, buy: { minor: 631_000_000, currency: 'USDC' } },
+      { id: 'itr_sample:move', leg: 'move', done: true, partner_ref: '0x9f3ac41e', sell: { minor: 631_000_000, currency: 'USDC' }, buy: { minor: 631_000_000, currency: 'USDC' } },
+      { id: 'itr_sample:payout', leg: 'payout', done: true, partner_ref: 'po_1', sell: { minor: 631_000_000, currency: 'USDC' }, buy: { minor: 49875, currency: 'GBP' } },
+    ],
+    reversal_entry_ids: [], created_at: '2026-10-23T09:00:00Z', updated_at: '2026-10-23T09:00:12Z',
+  },
   '/api/money/payment-requests/%3Aid': {
     id: 'preq_1', status: 'pending_approval', summary: '3 payments for Researcher', client: 'mcp:tlv_oc_claude', agent_id: 'agt_research', totals: { GBP: 32050 }, created_at: '2026-10-23T09:00:00Z',
     items: [
