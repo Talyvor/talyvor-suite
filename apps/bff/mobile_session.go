@@ -96,7 +96,11 @@ func (a *app) handleMobileSession(w http.ResponseWriter, r *http.Request) {
 		log.Printf("bff: phone login DENIED — email=%s sub=%s reason=%s | to admit them, add that "+
 			"address to OIDC_ALLOWED_EMAILS and RESTART the BFF (config is read at boot)",
 			emailForLog(claims.Email), idt.Subject, reason)
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "this workspace has not granted you access"})
+		msg := "this workspace has not granted you access"
+		if emailUnverified(claims.Email, claims.EmailVerified) {
+			msg = unverifiedEmailSentence
+		}
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})
 		return
 	}
 	s, err := a.provisionSession(ctx, idt.Subject, claims.Email, signup)
