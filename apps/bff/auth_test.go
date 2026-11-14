@@ -261,6 +261,7 @@ func newFakeIDP(t *testing.T) *fakeIDP {
 		clientID: "talyvor-suite", clientSecret: "test-client-secret",
 		codes: map[string]idpCode{},
 		sub:   "user-123", email: "ng@example.com",
+		emailVerified: boolPtr(true), // what Google sends; B58.9 refuses an address without it
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/openid-configuration", f.discovery)

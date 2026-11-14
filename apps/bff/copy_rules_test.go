@@ -21,8 +21,9 @@ var notWords = regexp.MustCompile(`(?s)<style>.*?</style>|<svg.*?</svg>`)
 
 func TestCopyRules_BFFPages(t *testing.T) {
 	pages := map[string]func(http.ResponseWriter){
-		"denied, with an email": func(w http.ResponseWriter) { writeDeniedPage(w, "someone@example.com") },
-		"denied, with no email": func(w http.ResponseWriter) { writeDeniedPage(w, "") },
+		"denied, with an email":       func(w http.ResponseWriter) { writeDeniedPage(w, "someone@example.com", false) },
+		"denied, with no email":       func(w http.ResponseWriter) { writeDeniedPage(w, "", false) },
+		"denied, email not confirmed": func(w http.ResponseWriter) { writeDeniedPage(w, "someone@example.com", true) },
 		"connect": func(w http.ResponseWriter) {
 			writeConnectPage(w, 200, connectPage{Client: "Claude", Email: "someone@example.com", Scopes: oauthScopeNames()})
 		},

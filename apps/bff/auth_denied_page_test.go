@@ -40,7 +40,7 @@ func deniedFlow(t *testing.T, email string, verified *bool, mut func(*config)) (
 // operator → try another account. The identity echo proves the LOGIN worked; the rest is the way
 // forward.
 func TestDeniedPage_StyledHTMLWithIdentityEchoInOrder(t *testing.T) {
-	resp, body := deniedFlow(t, "mallory@example.com", nil, nil)
+	resp, body := deniedFlow(t, "mallory@example.com", boolPtr(true), nil)
 
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Fatalf("Content-Type = %q, want text/html — a human mid-redirect gets a page, not JSON", ct)
@@ -70,7 +70,7 @@ func TestDeniedPage_StyledHTMLWithIdentityEchoInOrder(t *testing.T) {
 // logo's small drawing inline as the very kit file the web app serves (apps/web/public/brand/logo, B57.79), not a
 // redrawing of it.
 func TestDeniedPage_CarriesTheBrand(t *testing.T) {
-	_, body := deniedFlow(t, "mallory@example.com", nil, nil)
+	_, body := deniedFlow(t, "mallory@example.com", boolPtr(true), nil)
 	lower := strings.ToLower(body)
 	for _, old := range []string{"#fafaf9", "#1c1917", "#131110", "#e7e5e4", "#060a12", "#e6eef7", "#3ad6c0", "#0f7a6c", "space grotesk"} {
 		if strings.Contains(lower, old) {
@@ -96,7 +96,7 @@ func TestDeniedPage_CarriesTheBrand(t *testing.T) {
 
 // (2) The echoed identity is attacker-controlled (an IdP claim) — it must render escaped.
 func TestDeniedPage_EscapesHostileEmail(t *testing.T) {
-	_, body := deniedFlow(t, `<img src=x onerror=alert(1)>@evil.example`, nil, nil)
+	_, body := deniedFlow(t, `<img src=x onerror=alert(1)>@evil.example`, boolPtr(true), nil)
 	if strings.Contains(body, "<img") {
 		t.Fatal("hostile email rendered unescaped — XSS in the denied page")
 	}
@@ -138,31 +138,35 @@ func TestDeniedPage_NoSessionNoSessionCookie(t *testing.T) {
 	}
 }
 
-// (4) NOT A PROBE: the page is byte-identical whatever the refusal cause — excluded from a
-// populated list, an EMPTY list, or an issuer-unverified email that IS on the list. A refused
-// stranger learns only that they were refused.
+// (4) NOT A PROBE: the page is byte-identical whether the address is missing from a populated
+// list or the list is EMPTY. An email the provider has not confirmed gets its one sentence instead
+// (B58.9), and that page is the same whether or not the address is on the list. A refused stranger
+// learns only that they were refused.
 func TestDeniedPage_UniformAcrossRefusalCauses(t *testing.T) {
-	_, populated := deniedFlow(t, "mallory@example.com", nil, nil)
-	_, empty := deniedFlow(t, "mallory@example.com", nil, func(c *config) {
+	_, populated := deniedFlow(t, "mallory@example.com", boolPtr(true), nil)
+	_, empty := deniedFlow(t, "mallory@example.com", boolPtr(true), func(c *config) {
 		c.allowedEmails = nil
 	})
-	unverifiedFalse := false
-	_, unverified := deniedFlow(t, "mallory@example.com", &unverifiedFalse, func(c *config) {
-		c.allowedEmails = []string{"mallory@example.com"} // listed, but the issuer disputes the email
+	_, unverifiedListed := deniedFlow(t, "mallory@example.com", boolPtr(false), func(c *config) {
+		c.allowedEmails = []string{"mallory@example.com"}
 	})
+	_, unverifiedUnlisted := deniedFlow(t, "mallory@example.com", boolPtr(false), nil)
 
 	if populated != empty {
 		t.Error("denied page distinguishes empty allowlist from not-on-list — a probe channel")
 	}
-	if populated != unverified {
-		t.Error("denied page distinguishes unverified-email from not-on-list — a probe channel")
+	if unverifiedListed != unverifiedUnlisted {
+		t.Error("the unconfirmed-email page differs between a listed and an unlisted address — a probe channel")
+	}
+	if !strings.Contains(unverifiedListed, unverifiedEmailSentence) || strings.Contains(populated, unverifiedEmailSentence) {
+		t.Error("the unconfirmed-email sentence must appear on that refusal and on no other")
 	}
 }
 
 // (5) NO ALLOWLIST LEAKAGE of any kind: not the env var's name, not who is allowed, not the
 // internal refusal reason.
 func TestDeniedPage_LeaksNothing(t *testing.T) {
-	_, body := deniedFlow(t, "mallory@example.com", nil, func(c *config) {
+	_, body := deniedFlow(t, "mallory@example.com", boolPtr(true), func(c *config) {
 		c.allowedEmails = []string{"ng@example.com", "founder@example.com"}
 	})
 	for _, leak := range []string{
