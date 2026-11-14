@@ -601,6 +601,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/card-disputes", a.requireTenant(a.handleMoneyCardDisputes))
 	a.mux.HandleFunc("/api/money/card-refunds", a.requireTenant(a.handleMoneyCardRefunds))
 	a.mux.HandleFunc("/api/money/card-exports", a.requireTenant(a.handleMoneyCardExport))
+	a.mux.HandleFunc("/api/money/card-spends", a.requireTenant(a.handleMoneyCardSpends)) // B59.54, money_card_spends.go
 
 	a.mux.HandleFunc("/api/money/mandates", a.requireTenant(a.handleMoneyMandates))
 	a.mux.HandleFunc("/api/money/mandates/challenge", a.requireTenant(a.handleMoneyMandateChallenge))
