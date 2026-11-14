@@ -287,11 +287,11 @@ describe('Home — waiting for your yes (B57.18)', () => {
     const card = (await screen.findByRole('heading', { name: 'Waiting for your yes' })).closest('div.rounded-card') as HTMLElement
     expect(within(card).getByTestId('home-approvals-waiting')).toHaveTextContent('2')
     expect(within(card).getByRole('link', { name: '2 waiting, open Approvals' })).toHaveAttribute('href', '/approvals')
-    const reviews = within(screen.getByTestId('home-approvals')).getAllByRole('link', { name: /^Review/ })
-    expect(reviews.map((l) => l.getAttribute('href'))).toEqual(['/?approval=apr_1', '/?approval=apr_2'])
+    const links = within(screen.getByTestId('home-approvals')).getAllByRole('link', { name: /^Review/ })
+    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/?approval=apr_1', '/?approval=apr_2'])
     expect(within(card).getByText(/Researcher wants to use gpt-4o, up to/)).toBeInTheDocument()
     expect(card).toHaveTextContent('Anything outside your rules waits for your yes.')
-    fireEvent.click(reviews[0])
+    fireEvent.click(links[0])
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 

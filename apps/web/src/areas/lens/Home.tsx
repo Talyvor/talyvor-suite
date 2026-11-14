@@ -287,11 +287,11 @@ function MorningBriefing() {
             <li key={`${it.kind}-${it.id ?? i}`} className="border-t border-line" data-kind={it.kind}>
               {it.kind === 'approval' && it.id ? (
                 // B55.10 — a prepared payment (Lens's preq_ id) opens its own card; an agent's request, its sheet over Home.
-                <Link to={it.id.startsWith('preq_') ? `/approve/${encodeURIComponent(it.id)}` : approvalSheetTo(here, it.id)} className={cn('flex min-h-row items-center px-4 py-2', focusRing)}>
+                <Link to={it.id.startsWith('preq_') ? `/approve/${encodeURIComponent(it.id)}` : approvalSheetTo(here, it.id)} className={cn('flex min-h-row items-center px-gutter py-2', focusRing)}>
                   {body}
                 </Link>
               ) : (
-                <div className="flex min-h-row items-center px-4 py-2">{body}</div>
+                <div className="flex min-h-row items-center px-gutter py-2">{body}</div>
               )}
             </li>
           )
@@ -325,6 +325,7 @@ function AskTaly() {
 
 /** What an agent's request asks, as the approval sheet names it: "Sunny wants to pay €1,240.00". */
 function RequestRow({ a, agent }: { a: AgentApproval; agent: Agent | undefined }) {
+  // B57.15 — each opens its approval sheet over Home.
   const here = useLocation()
   const who = agent?.name ?? 'An agent'
   const amount =
@@ -362,6 +363,9 @@ function RequestRow({ a, agent }: { a: AgentApproval; agent: Agent | undefined }
   )
 }
 
+/** B45.11 — the approvals waiting for a person, first; each opens its approval sheet over Home (B57.15). B55.10: the payments Chat or an
+ * assistant prepared come before them, each opening its own card at /approve/<id>, and the count is both. B57.116: each is
+ * drawn in Pocket's row with Review, as w-home draws it. B57.18: under "Waiting for your yes", as W2 draws it. */
 function Waiting({
   pending,
   requests,
