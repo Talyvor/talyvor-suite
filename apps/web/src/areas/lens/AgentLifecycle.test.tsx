@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -62,14 +62,26 @@ describe('renaming, describing and archiving an agent on Agent Wallets', () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    fireEvent.change(await screen.findByLabelText('Name of Researcher'), { target: { value: 'Night researcher' } })
-    fireEvent.change(screen.getByLabelText('What Researcher is for'), { target: { value: 'Reads the overnight reports' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    // B57.22 — both are the Settings row's name and look.
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Name, description, colour and face')).getByRole('button'))
+    const look = await screen.findByRole('dialog', { name: 'Researcher’s name and look' })
+    fireEvent.change(within(look).getByLabelText('Name'), { target: { value: 'Night researcher' } })
+    fireEvent.change(within(look).getByLabelText('What it is for'), { target: { value: 'Reads the overnight reports' } })
+    fireEvent.click(within(look).getByRole('button', { name: 'Save' }))
     expect((await screen.findByTestId('agent-description')).textContent).toBe('Reads the overnight reports')
     expect(screen.getByTestId('agent-open').textContent).toBe('Night researcher')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Archive Night researcher' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, archive Night researcher' }))
+    // B57.22 — Archive asks first and says what happens; Keep it sends nothing.
+    fireEvent.click(within(screen.getByTestId('agent-setting-Archive')).getByRole('button'))
+    let ask = await screen.findByRole('dialog', { name: 'Archive Night researcher?' })
+    expect(ask.textContent).toMatch(
+      /Archiving Night researcher moves the\s.*0\.75\sLXC.*\sit holds back to the workspace, stops its keys working, and ends its top-up and schedules\. Its statement is kept\. It cannot be undone\./,
+    )
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep it' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(within(screen.getByTestId('agent-setting-Archive')).getByRole('button'))
+    ask = await screen.findByRole('dialog', { name: 'Archive Night researcher?' })
+    fireEvent.click(within(ask).getByRole('button', { name: 'Yes, archive Night researcher' }))
     const archived = await screen.findByTestId('agent-archived')
     expect(archived.textContent).toMatch(/0\.75 LXC.*went back to the workspace and 1 key was revoked/)
     expect(await screen.findByText('Taken back by the workspace')).toBeTruthy()

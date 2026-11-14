@@ -243,6 +243,7 @@ describe('Agent Bank', () => {
 
     await saveRules('Researcher', [['At most a day', '5'], ['Asks you above', '2']])
 
+    fireEvent.click(within(screen.getByTestId('agent-setting-Pay another agent')).getByRole('button')) // B57.22: a row of its Settings
     const pay = within(screen.getByRole('group', { name: 'Pay to' }))
     fireEvent.click(pay.getByRole('button', { name: 'Writer' }))
     fireEvent.change(screen.getByLabelText('Payment in LXC from Researcher'), { target: { value: '6' } })
@@ -288,6 +289,7 @@ describe('Agent Bank', () => {
     await waitFor(() => expect(screen.getByTestId('agent-balance-agt_2')).toHaveTextContent('10 LXC'))
     await saveRules('Researcher', [['Asks you above', '2']])
 
+    fireEvent.click(within(screen.getByTestId('agent-setting-Pay another agent')).getByRole('button')) // B57.22: a row of its Settings
     fireEvent.click(within(screen.getByRole('group', { name: 'Pay to' })).getByRole('button', { name: 'Writer' }))
     fireEvent.change(screen.getByLabelText('Payment in LXC from Researcher'), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('button', { name: 'Pay' }))

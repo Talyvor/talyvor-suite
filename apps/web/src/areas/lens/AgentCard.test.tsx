@@ -76,6 +76,7 @@ describe("an agent's card on Agent Wallets", () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Its card')).getByRole('button')) // B57.22: a row of its Settings
     const issue = await screen.findByRole('button', { name: 'Issue a card' })
     expect((issue as HTMLButtonElement).disabled).toBe(true) // the cardholder Stripe needs comes first
     for (const [label, value] of [
@@ -125,6 +126,7 @@ describe("an agent's card on Agent Wallets", () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Its card')).getByRole('button')) // B57.22: a row of its Settings
     const issue = await screen.findByRole('button', { name: 'Issue a card' })
     const panel = screen.getByTestId('agent-card-panel')
     expect(panel.getAttribute('data-design')).toBe('pocket') // the issue form is Pocket's too
@@ -157,6 +159,7 @@ describe("an agent's card on Agent Wallets", () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Its card')).getByRole('button')) // B57.22: a row of its Settings
     const issue = await screen.findByRole('button', { name: 'Issue a card' })
     for (const [label, value] of [
       ['First name', 'Ada'],

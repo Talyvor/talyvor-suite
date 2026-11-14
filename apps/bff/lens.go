@@ -555,6 +555,13 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B30.97 — invoices from an agent's currency account and their public pay page (Lens B30.20). See money_invoices.go.
 	a.mux.HandleFunc("/api/money/accounts", a.requireTenant(a.handleMoneyAccounts))
 	a.mux.HandleFunc("/api/money/accounts/{id}/statement", a.requireTenant(a.handleMoneyAccountStatement)) // B56.15
+	// B59.52 — Wallets' top up, withdraw and convert (Lens B17.255 and B59.51). See money_wallets.go.
+	a.mux.HandleFunc("/api/money/accounts/{id}/top-up", a.requireTenant(a.handleMoneyAccountTopUp))
+	a.mux.HandleFunc("/api/money/accounts/{id}/withdraw", a.requireTenant(a.handleMoneyAccountWithdraw(false)))
+	a.mux.HandleFunc("/api/money/accounts/{id}/withdraw/challenge", a.requireTenant(a.handleMoneyAccountWithdraw(true)))
+	a.mux.HandleFunc("/api/money/convert/quote", a.requireTenant(a.handleMoneyConvertQuote))
+	a.mux.HandleFunc("/api/money/convert", a.requireTenant(a.handleMoneyConvert(false)))
+	a.mux.HandleFunc("/api/money/convert/challenge", a.requireTenant(a.handleMoneyConvert(true)))
 	a.mux.HandleFunc("/api/money/invoices", a.requireTenant(a.handleMoneyInvoices))
 	a.mux.HandleFunc("/api/money/invoices/{id}/send", a.requireTenant(a.handleMoneyInvoiceMove("send")))
 	a.mux.HandleFunc("/api/money/invoices/{id}/void", a.requireTenant(a.handleMoneyInvoiceMove("void")))

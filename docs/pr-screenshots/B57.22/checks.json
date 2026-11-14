@@ -1,0 +1,20 @@
+[
+  {
+    "route": "/agents/agt_research",
+    "screen": "w-agent-research"
+  },
+  {
+    "route": "/agents/agt_research",
+    "screen": "w-agent-research+look-research",
+    "steps": [
+      "Name, description, colour and face"
+    ]
+  },
+  {
+    "route": "/agents/agt_research",
+    "screen": "w-agent-research+archive-research",
+    "steps": [
+      "Archive"
+    ]
+  }
+]

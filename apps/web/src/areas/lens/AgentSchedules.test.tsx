@@ -65,6 +65,8 @@ describe('scheduled payments and automatic top-ups on the Agent Bank', () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
+    // B57.22 — each is a row of the agent's Settings, opened over its page.
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Scheduled payments')).getByRole('button'))
     expect(await screen.findByText('Researcher pays nothing on a schedule.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Who Researcher pays on a schedule'), { target: { value: 'agent:agt_2' } })
     fireEvent.change(screen.getByLabelText('Scheduled amount in LXC for Researcher'), { target: { value: '1' } })
@@ -77,8 +79,8 @@ describe('scheduled payments and automatic top-ups on the Agent Bank', () => {
     expect(await screen.findByText('Paid')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
     expect(await screen.findByText('Researcher pays nothing on a schedule.')).toBeTruthy()
-
-    expect(screen.getByTestId('agent-topup').textContent).toBe('Researcher is not topped up automatically.')
+    fireEvent.click(within(screen.getByTestId('agent-setting-Automatic top-up')).getByRole('button'))
+    expect((await screen.findByTestId('agent-topup')).textContent).toBe('Researcher is not topped up automatically.')
     fireEvent.change(screen.getByLabelText('Top Researcher up below, in LXC'), { target: { value: '5' } })
     fireEvent.change(screen.getByLabelText('Top Researcher up to, in LXC'), { target: { value: '8' } })
     fireEvent.click(screen.getByRole('button', { name: 'Set top-up' }))
