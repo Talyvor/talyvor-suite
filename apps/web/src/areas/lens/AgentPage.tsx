@@ -9,6 +9,7 @@ import { WorkspaceLabel } from '../../labels/workspace'
 import { useAuthMeReader } from '../../lib/authMe'
 import { isSessionExpired } from '../../lib/productState'
 import { fetchModels } from '../chat/chatApi'
+import { AgentAnalytics } from './AgentAnalytics'
 import { BOOK_KEY, rulesKey } from './AgentBank'
 import { MoveLxc, ResumeAgent, StartEveryAgent } from './AgentCard'
 import { IssueCard, cardKey } from './AgentCardPanel'
@@ -25,6 +26,7 @@ import { lxcPartOf, useMoneyFigures } from './money'
 // waits is the safe-to-spend figure beside it. The header pauses, resumes or starts every agent again (B57.16), moves
 // LXC and opens the rules; the card tile freezes and unfreezes the agent's card. What today's agent view has that this
 // page does not draw yet stays below it, as it was, until B57.22 redraws it. B57.21: its Money card, below the others.
+// B57.111: its spend by day, model and destination, across the page under the statement and the rules.
 
 /** Under BOOK_KEY, so every pause, resume, move and archive that refreshes the book refreshes the page too. */
 export const summaryKey = (id: string) => [...BOOK_KEY, 'summary', id]
@@ -451,6 +453,13 @@ function Header({ s }: { s: AgentSummary }) {
   )
 }
 
+/** B57.111 — the agent's spend card, naming the agents it paid as the book names them. */
+function SpendCard({ s }: { s: AgentSummary }) {
+  const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
+  const nameOf = (id: string) => (id === s.agent.id ? s.agent.name : (book.data?.agents.find((a) => a.id === id)?.name ?? 'an agent'))
+  return <AgentAnalytics agent={s.agent} nameOf={nameOf} />
+}
+
 /** The page's own part: the header, the balance, what waits, the statement, the rules and the card. */
 export function AgentSummaryView({ id }: { id: string }) {
   // Not retried: every pause, move and freeze waits for this read again (it is under BOOK_KEY), and a failed one says so
@@ -489,6 +498,7 @@ export function AgentSummaryView({ id }: { id: string }) {
               <CardColumn s={s} />
             </div>
           </div>
+          <SpendCard key={`spend-${s.agent.id}`} s={s} />
           {s.agent.archived_at ? null : (
             <div className="grid items-start gap-4 wide:grid-cols-2">
               <AgentMoneySection key={s.agent.id} agent={s.agent} />
