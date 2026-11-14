@@ -1,0 +1,132 @@
+[
+ {
+  "route": "/agents",
+  "screen": "w-agents",
+  "answers": {
+   "/api/agents": {
+    "workspace_balance_ulxc": 124800000000,
+    "allocated_ulxc": 33900000000,
+    "unallocated_ulxc": 90900000000,
+    "spent_ulxc": 28000000000,
+    "agents": [
+     {
+      "id": "agt_research",
+      "name": "Research",
+      "balance_ulxc": 16500000000,
+      "spent_ulxc": 12400000000,
+      "keys": [
+       "key_research"
+      ],
+      "created_at": "2026-09-14T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     },
+     {
+      "id": "agt_sales",
+      "name": "Sales",
+      "balance_ulxc": 12000000000,
+      "spent_ulxc": 11000000000,
+      "keys": [
+       "key_sales"
+      ],
+      "created_at": "2026-10-05T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     },
+     {
+      "id": "agt_ops",
+      "name": "Ops",
+      "balance_ulxc": 5400000000,
+      "spent_ulxc": 4600000000,
+      "keys": [
+       "key_ops"
+      ],
+      "created_at": "2026-10-09T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true,
+      "paused_at": "2026-10-21T17:00:00Z"
+     },
+     {
+      "id": "agt_room",
+      "name": "Room: Agent pricing research",
+      "kind": "room",
+      "balance_ulxc": 0,
+      "spent_ulxc": 0,
+      "keys": [],
+      "created_at": "2026-10-12T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     }
+    ]
+   },
+   "/api/plan": {
+    "plan": "free",
+    "agents": 3,
+    "agents_used": 3
+   },
+   "/api/pricing": {
+    "usd_per_lxc": 0.1,
+    "min_usd_cents": 1000,
+    "max_usd_cents": 1000000,
+    "preset_usd_cents": [
+     1000
+    ],
+    "plan_gates": {
+     "order": [
+      "free",
+      "team",
+      "business"
+     ],
+     "plans": {
+      "free": {
+       "agents": 3,
+       "seats": 1,
+       "own_provider_keys": "none",
+       "live_money": false,
+       "slack_teams_approvals": false,
+       "sso": false,
+       "audit_export": false,
+       "edge": false
+      },
+      "team": {
+       "agents": 25,
+       "seats": 1,
+       "own_provider_keys": "none",
+       "live_money": false,
+       "slack_teams_approvals": false,
+       "sso": false,
+       "audit_export": false,
+       "edge": false
+      },
+      "business": {
+       "agents": -1,
+       "seats": 1,
+       "own_provider_keys": "none",
+       "live_money": false,
+       "slack_teams_approvals": false,
+       "sso": false,
+       "audit_export": false,
+       "edge": false
+      }
+     }
+    }
+   },
+   "/api/agents/agt_room/rules": {
+    "max_per_request_ulxc": 0,
+    "daily_limit_ulxc": 0,
+    "monthly_limit_ulxc": 1000000000,
+    "approval_above_ulxc": 0,
+    "allowed_models": null,
+    "allowed_providers": null,
+    "active_from": "",
+    "active_until": "",
+    "timezone": ""
+   },
+   "/api/workspace/areas": {
+    "areas": [
+     "rooms"
+    ]
+   }
+  }
+ }
+]

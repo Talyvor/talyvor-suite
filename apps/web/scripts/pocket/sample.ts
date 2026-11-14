@@ -137,6 +137,15 @@ const SAMPLE: Record<string, unknown> = {
         runs_out_at: '2026-11-14T17:40:54Z', runs_out_on: '2026-11-14', timezone: SAMPLE_TIME_ZONE },
     ],
   },
+  // B57.90 — the two alerts w-agents shows: Research and Sales each past half their month's limit.
+  '/api/money/budgets/alerts': {
+    alerts: [
+      { id: 'sal_research', kind: 'agent_limit', subject: 'agt_research', agent_id: 'agt_research', period: 'monthly', period_start: '2026-10-01T00:00:00Z',
+        percent: 50, spent_minor: lxc(10_120), limit_minor: lxc(20_000), currency: 'LXC', created_at: '2026-10-16T10:40:00Z' },
+      { id: 'sal_sales', kind: 'agent_limit', subject: 'agt_sales', agent_id: 'agt_sales', period: 'monthly', period_start: '2026-10-01T00:00:00Z',
+        percent: 50, spent_minor: lxc(7_610), limit_minor: lxc(15_000), currency: 'LXC', created_at: '2026-10-13T14:22:00Z' },
+    ],
+  },
   '/api/agents/agt_research/rules': RULES({ above: 2_500, perRequest: 10_000, daily: 5_000, monthly: 20_000, models: ['claude-sonnet-5', 'claude-haiku-4-5'], hours: ['08:00', '20:00'] }),
   '/api/agents/agt_sales/rules': RULES({ above: 500, perRequest: 1_000, daily: 2_000, monthly: 15_000, models: ['claude-haiku-4-5'] }),
   '/api/agents/agt_ops/rules': RULES({ above: 1_000, perRequest: 0, daily: 0, monthly: 10_000, models: ['claude-haiku-4-5'] }),
