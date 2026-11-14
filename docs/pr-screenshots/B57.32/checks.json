@@ -1,0 +1,7 @@
+[
+  { "route": "/money/pay", "screen": "w-pay", "answers": { "/api/money/payment-requests": { "requests": [] } } },
+  { "route": "/money/pay/standing-orders", "screen": "w-pay-orders", "answers": { "/api/agents/schedules": { "schedules": [] } } },
+  { "route": "/money/pay/mandates", "screen": "w-pay-mandates", "answers": { "/api/money/mandates": { "granted": [], "received": [] } } },
+  { "route": "/money/pay/bulk-payouts", "screen": "w-pay-bulk", "answers": { "/api/money/payouts": { "payouts": [] } } },
+  { "route": "/money/pay/bills", "screen": "w-pay-bills" }
+]

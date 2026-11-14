@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { type UseQueryResult, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Input, Pill, cn, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
+import { cn } from '@talyvor/ui'
 import {
   Button as PocketButton,
   Card as PocketCard,
   Chip,
+  Crumb,
   Dialog,
   EmptyState,
+  Eyebrow,
   Field,
   Icon,
   Input as PocketInput,
@@ -18,18 +20,14 @@ import {
   type ChipTone,
   type IconName,
 } from '@talyvor/ui/pocket'
-import { Card } from './walletBrand'
-import { Region, RegionScreen } from '../../components/Region'
 import { LinkedItem } from '../../components/LinkedItem'
 import { formatDecided, formatWhen } from './format'
-import { Note, readFailure } from './WalletMoney'
-import { APPROVALS_KEY, BOOK_KEY, OnThePhone, PREPARED_KEY, preparedBy, useKeys } from './AgentBank'
-import { DeclineForm, declinedText } from './Decline'
+import { readFailure } from './WalletMoney'
+import { BOOK_KEY, OnThePhone, PREPARED_KEY, preparedBy, useKeys } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { paymentRequestKey } from './Approve'
-import { approveMandateSigned, approvePayoutSigned, assertOver, grantMandateSigned, payOutsideSigned, signApproval, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
+import { approveMandateSigned, approvePayoutSigned, assertOver, grantMandateSigned, payOutsideSigned, signPayee, signPayeeCalled, signPayeeDetails } from './passkeys'
 import {
-  type AgentApproval,
   type AssistantRequest,
   type Bill,
   type AgentSchedule,
@@ -50,7 +48,6 @@ import {
   refusalText,
   useAccount,
 } from './agentBankApi'
-import { Lxc } from './money'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { PAY_OUT } from '../../labels/capabilities'
 import { DESIGN_ATTR } from '../../pocketPending'
@@ -63,7 +60,9 @@ import { DESIGN_ATTR } from '../../pocketPending'
 // B59.10 — by the workspace's type and kind (account.ts): a Stablecoin and crypto account has no bank transfers, so none of
 // the above is rendered for it; payout batches are a Business's; a Personal account reads "your account", not the company's.
 // B57.31 — the top of Pay is the Pocket reference's w-pay: Pay a saved payee, Payments out, Saved payees (pressing one pays
-// it) and Add a payee's dialog; standing orders, mandates, bulk payouts and bills stay below in today's cards until B57.32.
+// it) and Add a payee's dialog. B57.32 — standing orders, mandates, bulk payouts and bills each have a page under /money/pay
+// (w-pay-orders, w-pay-mandates, w-pay-bulk, w-pay-bills), reached from Also on Pay; what an assistant asked for is a card
+// on Pay; an agent's payment its rules hold waits on Approvals and Home, which Also on Pay links to.
 
 export const PAYEES_KEY = ['money-payees']
 export const PAYMENTS_KEY = ['money-payments']
@@ -90,8 +89,6 @@ const CHECK: Record<string, { text: string; tone: ChipTone }> = {
   no_match: { text: 'No match', tone: 'bad' },
 }
 
-const select = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
-const field = 'flex flex-col gap-1 text-caption text-muted'
 
 /** A date typed in the form, at nine in the morning UTC, as Lens wants a time. */
 const morningOf = (date: string) => `${date}T09:00:00Z`
@@ -116,7 +113,6 @@ export function PayScreen() {
   const askedPlans = (asked.data?.requests ?? []).filter((r) => r.kind === 'plan' && r.status !== 'signed')
   // A USDC wallet cannot pay a bank payee (B55.26): only pounds, euros and dollars send, repeat or take a mandate.
   const open = (accounts.data?.accounts ?? []).filter((a) => a.status === 'open' && FIATS.includes(a.currency))
-  const agentAccounts = open.filter((a) => a.purpose === 'agent')
   const saved = payees.data?.payees ?? []
   const sent = payments.data?.payments ?? []
   const waiting = prepared.data?.requests ?? []
@@ -144,22 +140,22 @@ export function PayScreen() {
 
   if (!shows) {
     return (
-      <RegionScreen>
-        <p className="text-body text-muted">Reading…</p>
-      </RegionScreen>
+      <div {...{ [DESIGN_ATTR]: 'pocket' }}>
+        <p className="text-body text-ink-3">Reading…</p>
+      </div>
     )
   }
   if (!shows.bankTransfers) {
     return (
-      <RegionScreen>
-        <p className="text-body text-muted" data-testid="pay-on-chain">
+      <div {...{ [DESIGN_ATTR]: 'pocket' }}>
+        <p className="text-body text-ink-3" data-testid="pay-on-chain">
           Your agents work on chain: each agent’s wallet address is on{' '}
-          <Link className={inlineLink} to="/agents">
+          <Link className={pocketLink} to="/agents">
             Agent Wallets
           </Link>
           .
         </p>
-      </RegionScreen>
+      </div>
     )
   }
   // B57.31 — the assistant line says only what waits: "Claude is waiting for you: 1 payee to save, below."
@@ -168,100 +164,183 @@ export function PayScreen() {
     askedPayees.length > 0 ? `${askedPayees.length} ${askedPayees.length === 1 ? 'payee' : 'payees'} to save` : '',
     askedMandates.length > 0 ? `${askedMandates.length} ${askedMandates.length === 1 ? 'mandate' : 'mandates'} to sign` : '',
   ].filter((x) => x !== '')
+  // B57.31 — the reference's w-pay, drawn in Pocket, flush with the page's heading.
   return (
-    <>
-      {/* B57.31 — the reference's w-pay, drawn in Pocket, flush with the page's heading. What B57.32 has not given its own
-          page yet is kept below it, in today's cards. */}
-      <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-4 pb-10">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="grid max-w-2xl gap-1">
-            <p className="text-reading text-ink-2" data-testid="pay-lead">
-              {business
-                ? 'Save the people and companies your company pays, then send money from your company’s account or one of your team’s agents’ accounts in pounds, euros or dollars.'
-                : 'Save the people and companies you pay, then send money from your account or one of your agents’ accounts in pounds, euros or dollars.'}
+    <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-4 pb-10">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="grid max-w-2xl gap-1">
+          <p className="text-reading text-ink-2" data-testid="pay-lead">
+            {business
+              ? 'Save the people and companies your company pays, then send money from your company’s account or one of your team’s agents’ accounts in pounds, euros or dollars.'
+              : 'Save the people and companies you pay, then send money from your account or one of your agents’ accounts in pounds, euros or dollars.'}
+          </p>
+          {asks.length > 0 ? (
+            <p className="text-body text-ink" data-testid="pay-asked">
+              <span className="font-semibold">{askers.length === 1 ? askers[0] : 'Your assistant'} is waiting for you:</span> {asks.join(' and ')}, below.
             </p>
-            {asks.length > 0 ? (
-              <p className="text-body text-ink" data-testid="pay-asked">
-                <span className="font-semibold">{askers.length === 1 ? askers[0] : 'Your assistant'} is waiting for you:</span> {asks.join(' and ')}, below.
-              </p>
-            ) : null}
-            {askedPlans.map((r) => (
-              <p key={r.id} className="text-body text-ink">
-                {r.assistant} prepared recurring payments for you to sign:{' '}
-                <Link className={pocketLink} to={`/money/plans/${r.id}`}>
-                  open the plan
-                </Link>
-                .
-              </p>
-            ))}
-          </div>
-          <PocketButton type="button" variant="secondary" icon={<Icon name="plus" />} onClick={() => setAdding(true)}>
-            Add a payee
-          </PocketButton>
+          ) : null}
+          {askedPlans.map((r) => (
+            <p key={r.id} className="text-body text-ink">
+              {r.assistant} prepared recurring payments for you to sign:{' '}
+              <Link className={pocketLink} to={`/money/plans/${r.id}`}>
+                open the plan
+              </Link>
+              .
+            </p>
+          ))}
         </div>
-        <div className="grid items-start gap-4 wide:grid-cols-5">
-          <div className="grid min-w-0 gap-4 wide:col-span-3">
-            {reading(accounts, 'Your accounts') ??
-              (open.length === 0 ? (
-                <p className="text-body text-muted" data-testid="pay-no-account">
-                  No currency account yet: open {business ? 'the company’s account' : 'your account'} on Invoices, then pay from it here.
-                </p>
-              ) : (
-                <PayForm accounts={open} payees={saved} sent={sent} waiting={waiting} payeeID={payeeID} setPayeeID={setPayeeID} accountName={accountName} agentName={agentName} business={business} />
-              ))}
-            <PaymentsOut payments={payments} waiting={waiting} />
-          </div>
-          <div className="grid min-w-0 gap-4 wide:col-span-2">
-            {askedPayees.length > 0 ? <AssistantPayees requests={askedPayees} /> : null}
-            <SavedPayees payees={payees} sent={sent} payeeID={payeeID} onPick={pick} onAdd={() => setAdding(true)} />
-            <AlsoOnPay payouts={shows.payoutBatches} />
-          </div>
-        </div>
-        <AddPayee open={adding} onClose={() => setAdding(false)} />
+        <PocketButton type="button" variant="secondary" icon={<Icon name="plus" />} onClick={() => setAdding(true)}>
+          Add a payee
+        </PocketButton>
       </div>
-      <RegionScreen>
-        <div className="px-gutter">
-          <Waiting agentName={agentName} />
+      <div className="grid items-start gap-4 wide:grid-cols-5">
+        <div className="grid min-w-0 gap-4 wide:col-span-3">
+          {reading(accounts, 'Your accounts') ??
+            (open.length === 0 ? (
+              <p className="text-body text-muted" data-testid="pay-no-account">
+                No currency account yet: open {business ? 'the company’s account' : 'your account'} on Invoices, then pay from it here.
+              </p>
+            ) : (
+              <PayForm accounts={open} payees={saved} sent={sent} waiting={waiting} payeeID={payeeID} setPayeeID={setPayeeID} accountName={accountName} agentName={agentName} business={business} />
+            ))}
+          <PaymentsOut payments={payments} waiting={waiting} />
         </div>
-        <div id="standing-orders">
-          <Region index="02" label="Standing orders" heading="Pay the same amount on a schedule" className="flex max-w-2xl flex-col gap-3">
-            {reading(accounts, 'Your accounts') ??
-              (agentAccounts.length === 0 ? (
-                <p className="text-body text-muted">A standing order runs from an agent’s account: open one on Invoices first.</p>
-              ) : (
-                <StandingOrders accounts={agentAccounts} payees={saved} accountName={accountName} payeeName={payeeName} agentName={agentName} />
-              ))}
-          </Region>
+        <div className="grid min-w-0 gap-4 wide:col-span-2">
+          {askedPayees.length > 0 ? <AssistantPayees requests={askedPayees} /> : null}
+          {askedMandates.length > 0 ? <AssistantMandates requests={askedMandates} payeeName={payeeName} /> : null}
+          <SavedPayees payees={payees} sent={sent} payeeID={payeeID} onPick={pick} onAdd={() => setAdding(true)} />
+          <AlsoOnPay payouts={shows.payoutBatches} />
         </div>
-        <div id="mandates">
-          <Region index="03" label="Mandates" heading="Let a payee pull within limits you set" className="flex max-w-2xl flex-col gap-3">
-            {reading(accounts, 'Your accounts') ??
-              (agentAccounts.length === 0 ? (
-                <p className="text-body text-muted">A mandate is on an agent’s account: open one on Invoices first.</p>
-              ) : (
-                <Mandates accounts={agentAccounts} payees={saved} accountName={accountName} agentName={agentName} />
-              ))}
-          </Region>
-        </div>
-        {shows.payoutBatches ? (
-          <div id="bulk-payouts">
-            <Region index="04" label="Bulk payouts" heading="Pay many at once from a file" className="flex max-w-2xl flex-col gap-3">
-              <Payouts />
-            </Region>
+      </div>
+      <AddPayee open={adding} onClose={() => setAdding(false)} />
+    </div>
+  )
+}
+
+/** B57.32 — what every page under Pay reads: the accounts that pay, the saved payees, and whose each account is. */
+function usePayBook() {
+  const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
+  const payees = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees })
+  const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
+  const { shows } = useAccount()
+  // A USDC wallet cannot pay a bank payee (B55.26): only pounds, euros and dollars repeat or take a mandate.
+  const agentAccounts = (accounts.data?.accounts ?? []).filter((a) => a.status === 'open' && FIATS.includes(a.currency) && a.purpose === 'agent')
+  const saved = payees.data?.payees ?? []
+  const agentName = (id: string | undefined) => book.data?.agents?.find((x) => x.id === id)?.name ?? id ?? ''
+  const accountName = (a: CurrencyAccount) => `${a.purpose === 'agent' ? agentName(a.agent_id) : (shows?.owner ?? 'The company')} · ${a.currency}`
+  const payeeName = (id: string | undefined) => saved.find((p) => p.id === id)?.name ?? id ?? ''
+  return { accounts, agentAccounts, saved, agentName, accountName, payeeName }
+}
+
+/**
+ * B57.32 — a page under Pay, as the reference's w-pay-orders draws one: the crumb back to Pay, the page's heading (the shell's
+ * top bar holds its one h1) and its line, then its cards. A Stablecoin and crypto account has no bank transfers (B59.10).
+ */
+function PayPage({ page, heading, lead, children }: { page: string; heading: string; lead: React.ReactNode; children: React.ReactNode }) {
+  const { shows } = useAccount()
+  return (
+    <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-4 pb-10">
+      <Crumb trail={[{ label: 'Pay', href: '/money/pay' }, { label: page }]} />
+      {!shows ? (
+        <p className="text-body text-ink-3">Reading…</p>
+      ) : !shows.bankTransfers ? (
+        <p className="text-body text-ink-3" data-testid="pay-on-chain">
+          Your agents work on chain: each agent’s wallet address is on{' '}
+          <Link className={pocketLink} to="/agents">
+            Agent Wallets
+          </Link>
+          .
+        </p>
+      ) : (
+        <>
+          <div className="grid max-w-2xl gap-1">
+            {/* The top bar's h1 already says it when the page's heading is its title (Bills you received). */}
+            {heading !== page ? <h2 className="font-display text-title font-bold text-ink">{heading}</h2> : null}
+            <p className="text-reading text-ink-2">{lead}</p>
           </div>
-        ) : null}
-        <div id="bills">
-          <Region index={shows.payoutBatches ? '05' : '04'} label="Bills" heading="Bills you received" className="flex max-w-2xl flex-col gap-3">
-            <Bills payeeName={payeeName} />
-          </Region>
-        </div>
-        {askedMandates.length > 0 ? (
-          <Region index={shows.payoutBatches ? '06' : '05'} label="Assistant permissions" heading="Sign what an assistant may pay for you" className="flex max-w-2xl flex-col gap-3">
-            <AssistantMandates requests={askedMandates} payeeName={payeeName} />
-          </Region>
-        ) : null}
-      </RegionScreen>
-    </>
+          <div className="grid min-w-0 max-w-3xl grid-cols-1 gap-4">{children}</div>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** B57.32 — /money/pay/standing-orders: the reference's w-pay-orders. */
+export function PayStandingOrdersScreen() {
+  const { accounts, agentAccounts, saved, accountName, payeeName, agentName } = usePayBook()
+  return (
+    <PayPage
+      page="Standing orders"
+      heading="Pay the same amount on a schedule"
+      lead="A standing order runs from an agent’s account and pays a saved payee the same amount every hour, day, week or month. Each payment is judged by the agent’s rules."
+    >
+      {accounts.isError ? (
+        <Said ok={false}>{readFailure(accounts.error, 'Your accounts')}</Said>
+      ) : accounts.isPending ? (
+        <p className="text-body text-ink-3">Reading…</p>
+      ) : agentAccounts.length === 0 ? (
+        <p className="text-body text-ink-3">A standing order runs from an agent’s account: open one on Invoices first.</p>
+      ) : (
+        <StandingOrders accounts={agentAccounts} payees={saved} accountName={accountName} payeeName={payeeName} agentName={agentName} />
+      )}
+    </PayPage>
+  )
+}
+
+/** B57.32 — /money/pay/mandates: the reference's w-pay-mandates. */
+export function PayMandatesScreen() {
+  const { accounts, agentAccounts, saved, accountName, agentName } = usePayBook()
+  return (
+    <PayPage
+      page="Mandates"
+      heading="Let a payee pull within limits you set"
+      lead="A mandate is on an agent’s account. The payee pulls up to the most per pull and per month you set, until it expires or you revoke it."
+    >
+      {accounts.isError ? (
+        <Said ok={false}>{readFailure(accounts.error, 'Your accounts')}</Said>
+      ) : accounts.isPending ? (
+        <p className="text-body text-ink-3">Reading…</p>
+      ) : agentAccounts.length === 0 ? (
+        <p className="text-body text-ink-3">A mandate is on an agent’s account: open one on Invoices first.</p>
+      ) : (
+        <Mandates accounts={agentAccounts} payees={saved} accountName={accountName} agentName={agentName} />
+      )}
+    </PayPage>
+  )
+}
+
+/** B57.32 — /money/pay/bulk-payouts: the reference's w-pay-bulk. Payout batches are a Business's (B59.10); any other is sent to Pay. */
+export function PayBulkPayoutsScreen() {
+  const { shows } = useAccount()
+  if (shows && shows.bankTransfers && !shows.payoutBatches) return <Navigate to="/money/pay" replace />
+  return (
+    <PayPage
+      page="Bulk payouts"
+      heading="Pay many at once from a file"
+      lead={
+        <>
+          A CSV with a header row (<span className="font-figure">payee_id, amount, currency, reference</span>) and up to <span className="font-figure">1,000</span> rows: each a saved
+          payee’s id, an amount such as <span className="font-figure">12.34</span>, GBP, EUR or USD, and a reference. Every row is checked before anything moves; one approval pays the
+          valid ones from the company’s account.
+        </>
+      }
+    >
+      <Payouts />
+    </PayPage>
+  )
+}
+
+/** B57.32 — /money/pay/bills: the reference's w-pay-bills. */
+export function PayBillsScreen() {
+  const { payeeName } = usePayBook()
+  return (
+    <PayPage
+      page="Bills you received"
+      heading="Bills you received"
+      lead="Add an invoice you received (a PDF, Word, HTML or text file), and Talyvor reads its supplier, amount, due date and invoice number and finds the saved payee. Bank details printed on an invoice are shown, never paid on their own: a bill is paid to a saved payee. The same invoice added twice is one bill."
+    >
+      <Bills payeeName={payeeName} />
+    </PayPage>
   )
 }
 
@@ -843,7 +922,7 @@ function AddPayee({ open, onClose }: { open: boolean; onClose: () => void }) {
   )
 }
 
-/** B57.31 — what else is on Pay, each scrolling to today's card below until B57.32 gives it its own page. */
+/** B57.31 — what else is on Pay. B57.32: each opens its own page under /money/pay. */
 function AlsoOnPay({ payouts }: { payouts: boolean }) {
   const bills = useQuery({ queryKey: BILLS_KEY, queryFn: agentBankApi.bills })
   const all = bills.data?.bills ?? []
@@ -866,7 +945,7 @@ function AlsoOnPay({ payouts }: { payouts: boolean }) {
       <h2 className="font-display text-head font-bold text-ink">Also on Pay</h2>
       <div className="mt-3 border-t border-line">
         {rows.map((r) => (
-          <PocketRow key={r.to} href={`#${r.to}`} leading={<RoomBadge icon={<Icon name={r.icon} />} />} title={r.title} line={r.line} />
+          <PocketRow key={r.to} href={`/money/pay/${r.to}`} leading={<RoomBadge icon={<Icon name={r.icon} />} />} title={r.title} line={r.line} />
         ))}
       </div>
       <p className="mt-3 text-body text-ink-3">
@@ -1072,7 +1151,8 @@ export function mandateInWords(assistant: string, t: MandateTerms, payeeName: (i
   ]
 }
 
-/** B40.35 — permission mandates an assistant drafted: none has any effect until the person's passkey signs it (Lens B40.2). */
+/** B40.35 — permission mandates an assistant drafted: none has any effect until the person's passkey signs it (Lens B40.2).
+ *  B57.32 — on Pay, in Pocket, beside the payees an assistant asked to add. */
 function AssistantMandates({ requests, payeeName }: { requests: AssistantRequest[]; payeeName: (id: string) => string }) {
   const qc = useQueryClient()
   const [signed, setSigned] = useState(false)
@@ -1092,32 +1172,33 @@ function AssistantMandates({ requests, payeeName }: { requests: AssistantRequest
     <>
       {requests.map((r) =>
         r.kind === 'mandate' ? (
-          <Card key={r.id}>
-            <CardHeader>{r.assistant} asks for a permission mandate</CardHeader>
-            <div className="flex flex-col gap-3 px-gutter py-3" data-testid={`asked-mandate-${r.id}`}>
-              <ul className="flex list-disc flex-col gap-1 pl-5 text-body text-ink">
-                {mandateInWords(r.assistant, r.details, payeeName).map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-              <p className="text-caption text-muted">
-                Drafted <span className="font-figure">{formatWhen(r.created_at)}</span>. It does nothing until you sign it.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="primary" disabled={sign.isPending} onClick={() => sign.mutate(r.id)}>
-                  {sign.isPending && sign.variables === r.id ? 'Signing…' : 'Sign with a passkey'}
-                </Button>
-                <Button type="button" disabled={dismiss.isPending} onClick={() => dismiss.mutate(r.id)}>
-                  Dismiss
-                </Button>
-              </div>
+          <PocketCard key={r.id} tone="white" data-testid={`asked-mandate-${r.id}`}>
+            <h2 className="font-display text-head font-bold text-ink">{r.assistant} asks for a permission mandate</h2>
+            <div className="mt-2">
+              <Chip tone="wait">Asked by {r.assistant}</Chip>
             </div>
-          </Card>
+            <ul className="mt-3 grid list-disc gap-1 pl-5 text-body text-ink">
+              {mandateInWords(r.assistant, r.details, payeeName).map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+            <p className="mt-2 text-body text-ink-3">
+              Drafted <span className="font-figure">{formatWhen(r.created_at)}</span>. It does nothing until you sign it.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <PocketButton type="button" size="sm" variant="primary" icon={<Icon name="faceid" />} disabled={sign.isPending} onClick={() => sign.mutate(r.id)}>
+                {sign.isPending && sign.variables === r.id ? 'Signing…' : 'Sign with a passkey'}
+              </PocketButton>
+              <PocketButton type="button" size="sm" variant="secondary" disabled={dismiss.isPending} onClick={() => dismiss.mutate(r.id)}>
+                Dismiss
+              </PocketButton>
+            </div>
+          </PocketCard>
         ) : null,
       )}
-      {sign.isError ? <Note ok={false}>{refusalText(sign.error)}</Note> : null}
-      {dismiss.isError ? <Note ok={false}>{refusalText(dismiss.error)}</Note> : null}
-      {signed ? <Note ok>Signed. The mandate is in force until it ends or you revoke it.</Note> : null}
+      {sign.isError ? <Said ok={false}>{refusalText(sign.error)}</Said> : null}
+      {dismiss.isError ? <Said ok={false}>{refusalText(dismiss.error)}</Said> : null}
+      {signed ? <Said ok>Signed. The mandate is in force until it ends or you revoke it.</Said> : null}
     </>
   )
 }
@@ -1129,71 +1210,8 @@ const SCAM_QUESTIONS = [
 ] as const
 type ScamAnswers = Partial<Record<(typeof SCAM_QUESTIONS)[number]['key'], boolean>>
 
-/** An agent's own payments out that its rules sent to a person: approve or decline here, signed once the workspace has a passkey. */
-function Waiting({ agentName }: { agentName: (id: string) => string }) {
-  const qc = useQueryClient()
-  const approvals = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
-  const { signed, onlyThePhone, hold } = useKeys()
-  const waiting = (approvals.data?.approvals ?? []).filter((a) => a.status === 'pending' && a.payee?.kind === 'outside')
-  // B55.19 — the payment whose Decline form is open, and what the last decline did.
-  const [declining, setDeclining] = useState<string | null>(null)
-  const [declined, setDeclined] = useState('')
-  const decide = useMutation({
-    mutationFn: async ({ a, decision, reason }: { a: AgentApproval; decision: 'approve' | 'deny'; reason?: string }) =>
-      agentBankApi.decide(a.id, decision, signed ? await signApproval(a.id) : undefined, undefined, reason),
-    onSuccess: (_, { a, decision }) => {
-      setDeclining(null)
-      setDeclined(decision === 'deny' ? declinedText(agentName(a.agent_id), a) : '')
-      void qc.invalidateQueries({ queryKey: APPROVALS_KEY })
-    },
-  })
-  if (approvals.isError) return <p className="text-body text-muted">{readFailure(approvals.error, 'The agents’ requests')}</p>
-  if (waiting.length === 0) return declined ? <Note ok>{declined}</Note> : null
-  return (
-    <Card>
-      <CardHeader>Waiting for your approval</CardHeader>
-      {declined ? (
-        <div className="px-gutter pt-3">
-          <Note ok>{declined}</Note>
-        </div>
-      ) : null}
-      <ul>
-        {waiting.map((a) => (
-          <li key={a.id} className="flex flex-col gap-2 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`approval-${a.id}`}>
-            <p className="text-body text-ink">
-              {agentName(a.agent_id)} asked to pay {a.payee?.name} <Lxc ulxc={a.amount_ulxc} />
-              {a.memo ? ` · ${a.memo}` : ''}
-            </p>
-            <p className="text-caption text-muted">
-              Asked <span className="font-figure">{formatWhen(a.created_at)}</span>. Approved, the agent’s next identical request goes through, once.
-            </p>
-            {onlyThePhone ? (
-              <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
-            ) : hold ? null : declining === a.id ? (
-              <DeclineForm disabled={decide.isPending} onDecline={(reason) => decide.mutate({ a, decision: 'deny', reason })} onCancel={() => setDeclining(null)} />
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ a, decision: 'approve' })}>
-                  Approve
-                </Button>
-                <Button type="button" disabled={decide.isPending} onClick={() => setDeclining(a.id)}>
-                  Decline
-                </Button>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
-      {decide.isError ? (
-        <div className="px-gutter pb-3">
-          <Note ok={false}>{refusalText(decide.error)}</Note>
-        </div>
-      ) : null}
-    </Card>
-  )
-}
-
-/** A standing order: an agent's schedule to a saved payee, each tick a payment out judged by its rules when it runs (B30.18). */
+/** A standing order: an agent's schedule to a saved payee, each tick a payment out judged by its rules when it runs (B30.18).
+ *  B57.32 — drawn in Pocket as the reference's w-pay-orders: the standing orders, then Set up a standing order. */
 function StandingOrders({
   accounts,
   payees,
@@ -1245,133 +1263,143 @@ function StandingOrders({
   })
   const stop = useMutation({ mutationFn: (sid: string) => agentBankApi.stopSchedule(sid), onSuccess: refresh })
   const orders = (schedules.data?.schedules ?? []).filter((s) => s.to_payee_id)
+  const why = payee === undefined ? 'Choose who to pay.' : minor === null ? 'Add an amount.' : first === '' ? 'Choose the day of the first payment.' : undefined
   return (
-    <Card>
-      <CardHeader>Standing orders</CardHeader>
-      <div className="flex flex-col gap-3 px-gutter py-3">
+    <>
+      <PocketCard tone="white">
+        <h2 className="font-display text-head font-bold text-ink">Standing orders</h2>
         {schedules.isError ? (
-          <p className="text-body text-muted">{readFailure(schedules.error, 'Your standing orders')}</p>
+          <div className="mt-3">
+            <Said ok={false}>{readFailure(schedules.error, 'Your standing orders')}</Said>
+          </div>
         ) : orders.length > 0 ? (
-          <ul className="flex flex-col gap-2" aria-label="Standing orders">
+          <ul className="mt-3 border-t border-line" aria-label="Standing orders">
             {orders.map((s) => (
-              <li key={s.id} className="flex flex-col gap-1 border-b border-rule pb-2 last:border-b-0 last:pb-0" data-testid={`standing-order-${s.id}`}>
-                <div className="flex flex-wrap items-center justify-between gap-2 text-body text-ink">
-                  <span>
-                    <span className="font-figure">{formatMinor(s.amount_minor ?? 0, s.currency ?? 'GBP')}</span> every {s.every} to {payeeName(s.to_payee_id)} from{' '}
-                    {agentName(s.from_agent_id)}
-                  </span>
-                  <Pill status={s.active ? 'settled' : 'idle'}>{s.active ? 'Active' : 'Stopped'}</Pill>
-                </div>
-                <p className="text-caption text-muted">
-                  Next <span className="font-figure">{formatWhen(s.next_run_at)}</span>
-                  {s.end_at ? (
+              <li key={s.id} data-testid={`standing-order-${s.id}`}>
+                <PocketRow
+                  wrap
+                  leading={<RoomBadge icon={<Icon name="clock" />} />}
+                  title={`${payeeName(s.to_payee_id)} · every ${s.every}`}
+                  line={
                     <>
-                      {' '}
-                      · until <span className="font-figure">{formatWhen(s.end_at)}</span>
+                      From {agentName(s.from_agent_id)} · next {formatWhen(s.next_run_at)}
+                      {s.end_at ? ` · until ${formatWhen(s.end_at)}` : ''}
+                      {s.memo ? ` · ${s.memo}` : ''}
                     </>
-                  ) : null}
-                  {s.memo ? ` · ${s.memo}` : ''}
-                </p>
-                {s.active ? (
-                  <div>
-                    <Button type="button" disabled={stop.isPending} onClick={() => stop.mutate(s.id)}>
-                      Stop
-                    </Button>
-                  </div>
-                ) : null}
+                  }
+                  amount={formatMinor(s.amount_minor ?? 0, s.currency ?? 'GBP')}
+                  action={
+                    <>
+                      <Chip tone={s.active ? 'good' : 'plain'}>{s.active ? 'Active' : 'Stopped'}</Chip>
+                      {s.active ? (
+                        <PocketButton type="button" size="sm" variant="secondary" disabled={stop.isPending} onClick={() => stop.mutate(s.id)}>
+                          Stop
+                        </PocketButton>
+                      ) : null}
+                    </>
+                  }
+                />
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-body text-muted">{schedules.isPending ? 'Reading…' : 'No standing order yet.'}</p>
+          <p className="mt-2 text-body text-ink-3">{schedules.isPending ? 'Reading…' : 'No standing order yet.'}</p>
         )}
-        {stop.isError ? <Note ok={false}>{refusalText(stop.error)}</Note> : null}
-          <form
-            className="flex flex-col gap-3"
-            data-testid="new-standing-order"
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (complete && !create.isPending) create.mutate()
-            }}
-          >
-            <div className="grid gap-3 wide:grid-cols-2">
-              <label className={field}>
-                From
-                <select aria-label="Standing order from" className={`${select} w-full`} value={account?.id ?? ''} onChange={(e) => setAccountID(e.target.value)}>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {accountName(a)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={field}>
-                To
-                <select aria-label="Standing order to" className={`${select} w-full`} value={payeeID} onChange={(e) => setPayeeID(e.target.value)}>
-                  <option value="">Choose a payee</option>
-                  {payees.map((p) => (
-                    <option key={p.id} value={p.id} disabled={p.needs_confirmation}>
-                      {p.name}
-                      {p.needs_confirmation ? ' (confirm first)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={field}>
-                Amount in {account?.currency ?? 'GBP'}
-                <Input aria-label="Standing order amount" inputMode="decimal" placeholder="10.00" className="font-figure" value={amount} onChange={(e) => setAmount(e.target.value)} />
-              </label>
-              <label className={field}>
-                Every
-                <select aria-label="Every" className={`${select} w-full`} value={every} onChange={(e) => setEvery(e.target.value as AgentSchedule['every'])}>
-                  {EVERY.map((x) => (
-                    <option key={x} value={x}>
-                      {x}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={field}>
-                First payment on
-                <Input aria-label="First payment on" type="date" className="font-figure" value={first} onChange={(e) => setFirst(e.target.value)} />
-              </label>
-              <label className={field}>
-                Until (optional)
-                <Input aria-label="Until" type="date" className="font-figure" value={end} onChange={(e) => setEnd(e.target.value)} />
-              </label>
-            </div>
-            <Input aria-label="Standing order memo" placeholder="Memo (optional)" value={memo} onChange={(e) => setMemo(e.target.value)} />
-            <div>
-              <Button type="submit" disabled={!complete || create.isPending}>
-                {create.isPending ? 'Setting up…' : 'Set up standing order'}
-              </Button>
-            </div>
-            {create.isError ? <Note ok={false}>{refusalText(create.error)}</Note> : null}
-            {made !== null ? (
-              <Note ok>
-                <span className="font-figure">{formatMinor(made.amount_minor ?? 0, made.currency ?? 'GBP')}</span> every {made.every}, first on{' '}
-                <span className="font-figure">{formatWhen(made.next_run_at)}</span>.
-              </Note>
-            ) : null}
-          </form>
-      </div>
-    </Card>
+        {stop.isError ? (
+          <div className="mt-3">
+            <Said ok={false}>{refusalText(stop.error)}</Said>
+          </div>
+        ) : null}
+      </PocketCard>
+      <PocketCard>
+        <h2 className="font-display text-head font-bold text-ink">Set up a standing order</h2>
+        <form
+          className="mt-3 grid gap-3"
+          data-testid="new-standing-order"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (complete && !create.isPending) create.mutate()
+          }}
+        >
+          <div className="grid gap-3 wide:grid-cols-2">
+            <Field className="min-w-0" label="From">
+              <PocketSelect aria-label="Standing order from" value={account?.id ?? ''} onChange={(e) => setAccountID(e.target.value)}>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {accountName(a)}
+                  </option>
+                ))}
+              </PocketSelect>
+            </Field>
+            <Field className="min-w-0" label="To">
+              <PocketSelect aria-label="Standing order to" value={payeeID} onChange={(e) => setPayeeID(e.target.value)}>
+                <option value="">Choose a payee</option>
+                {payees.map((p) => (
+                  <option key={p.id} value={p.id} disabled={p.needs_confirmation}>
+                    {p.name}
+                    {p.needs_confirmation ? ' (confirm first)' : ''}
+                  </option>
+                ))}
+              </PocketSelect>
+            </Field>
+          </div>
+          <div className="grid gap-3 wide:grid-cols-3">
+            <Field className="min-w-0" label={`Amount in ${account?.currency ?? 'GBP'}`}>
+              <PocketInput aria-label="Standing order amount" inputMode="decimal" placeholder="10.00" unit={account?.currency ?? 'GBP'} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </Field>
+            <Field className="min-w-0" label="Every">
+              <PocketSelect aria-label="Every" value={every} onChange={(e) => setEvery(e.target.value as AgentSchedule['every'])}>
+                {EVERY.map((x) => (
+                  <option key={x} value={x}>
+                    {x.charAt(0).toUpperCase() + x.slice(1)}
+                  </option>
+                ))}
+              </PocketSelect>
+            </Field>
+            <Field className="min-w-0" label="First payment on">
+              <PocketInput aria-label="First payment on" type="date" value={first} onChange={(e) => setFirst(e.target.value)} />
+            </Field>
+          </div>
+          <div className="grid gap-3 wide:grid-cols-2">
+            <Field className="min-w-0" label="Until (optional)">
+              <PocketInput aria-label="Until" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+            </Field>
+            <Field className="min-w-0" label="Memo (optional)">
+              <PocketInput aria-label="Standing order memo" placeholder="What the payee sees" className="font-sans" value={memo} onChange={(e) => setMemo(e.target.value)} />
+            </Field>
+          </div>
+          <div>
+            <PocketButton type="submit" variant="primary" disabled={!complete || create.isPending} disabledReason={create.isPending ? undefined : why}>
+              {create.isPending ? 'Setting up…' : 'Set up standing order'}
+            </PocketButton>
+          </div>
+          {create.isError ? <Said ok={false}>{refusalText(create.error)}</Said> : null}
+          {made !== null ? (
+            <Said ok>
+              <span className="font-figure">{formatMinor(made.amount_minor ?? 0, made.currency ?? 'GBP')}</span> every {made.every}, first on{' '}
+              <span className="font-figure">{formatWhen(made.next_run_at)}</span>.
+            </Said>
+          ) : null}
+        </form>
+      </PocketCard>
+    </>
   )
 }
 
 /** What a mandate's status reads as, and its pill (B55.56: an agent's own key only asks; the owner decides). */
-const MANDATE_STATUS: Record<string, { text: string; pill: PillStatus }> = {
-  requested: { text: 'Asked', pill: 'held' },
-  active: { text: 'Active', pill: 'settled' },
-  declined: { text: 'Declined', pill: 'slashed' },
-  expired: { text: 'Expired', pill: 'idle' },
-  revoked: { text: 'Revoked', pill: 'slashed' },
+const MANDATE_STATUS: Record<string, { text: string; tone: ChipTone }> = {
+  requested: { text: 'Asked', tone: 'wait' },
+  active: { text: 'Active', tone: 'good' },
+  declined: { text: 'Declined', tone: 'bad' },
+  expired: { text: 'Expired', tone: 'plain' },
+  revoked: { text: 'Revoked', tone: 'bad' },
 }
 const mandateStatus = (s: string) => MANDATE_STATUS[s] ?? MANDATE_STATUS.revoked
 
 /**
  * A mandate from an agent's account: a Talyvor company or an outside business pulls within it (B30.19). B55.56: the
  * owner's grant is signed as a payment is, and a mandate an agent asked for waits here for Approve (signed) or Decline.
+ * B57.32 — drawn in Pocket as the reference's w-pay-mandates: the mandates granted and received, then Grant a mandate.
  */
 function Mandates({
   accounts,
@@ -1422,41 +1450,61 @@ function Mandates({
     onSuccess: refresh,
   })
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }))
+  const currency = account?.currency ?? 'GBP'
+  const why =
+    pull === null
+      ? 'Add the most per pull.'
+      : month === null
+        ? 'Add the most per month.'
+        : kind === 'company'
+          ? form.workspace.trim() === ''
+            ? 'Add their workspace id.'
+            : undefined
+          : form.business.trim() === ''
+            ? 'Add the business id.'
+            : form.payee === ''
+              ? 'Choose the saved payee it is paid out to.'
+              : form.expires === ''
+                ? 'Choose when it expires.'
+                : undefined
   const row = (m: Mandate, granted: boolean) => (
-    <li key={m.id} className="flex flex-col gap-1 border-b border-rule pb-2 last:border-b-0 last:pb-0" data-testid={`mandate-${m.id}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-body text-ink">
-        <span>
-          {granted ? `${m.payee_name} pulls from ${agentName(m.agent_id)}` : `${m.payee_name} lets you pull`} · up to <span className="font-figure">{formatMinor(m.max_per_pull_minor, m.currency)}</span> a pull,{' '}
-          <span className="font-figure">{formatMinor(m.max_per_month_minor, m.currency)}</span> a month
-        </span>
-        <Pill status={mandateStatus(m.status).pill}>{mandateStatus(m.status).text}</Pill>
-      </div>
-      <p className="text-caption text-muted">
-        Pulled this month <span className="font-figure">{formatMinor(m.pulled_this_month_minor, m.currency)}</span> · expires{' '}
-        <span className="font-figure">{formatWhen(m.expires_at)}</span>
-      </p>
+    <li key={m.id} data-testid={`mandate-${m.id}`}>
+      <PocketRow
+        wrap
+        leading={<RoomBadge icon={<Icon name="key" />} />}
+        title={granted ? `${m.payee_name} pulls from ${agentName(m.agent_id)}` : `${m.payee_name} lets you pull`}
+        line={
+          <>
+            Up to {formatMinor(m.max_per_pull_minor, m.currency)} a pull, {formatMinor(m.max_per_month_minor, m.currency)} a month · pulled this month{' '}
+            {formatMinor(m.pulled_this_month_minor, m.currency)} · expires {formatWhen(m.expires_at)}
+          </>
+        }
+        action={
+          <>
+            <Chip tone={mandateStatus(m.status).tone}>{mandateStatus(m.status).text}</Chip>
+            {granted && m.status === 'active' ? (
+              <PocketButton type="button" size="sm" variant="secondary" disabled={revoke.isPending} onClick={() => revoke.mutate(m.id)}>
+                Revoke
+              </PocketButton>
+            ) : null}
+          </>
+        }
+      />
       {granted && m.status === 'requested' ? (
-        <>
-          <p className="text-caption text-muted">{agentName(m.agent_id)} asked for this mandate. Nothing is pulled until you approve it.</p>
+        <div className="grid gap-2 pb-3">
+          <p className="text-body text-ink-3">{agentName(m.agent_id)} asked for this mandate. Nothing is pulled until you approve it.</p>
           {onlyThePhone ? (
             <OnThePhone>Approve this mandate with a passkey on this browser: add this browser first.</OnThePhone>
           ) : hold ? null : (
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: true })}>
+              <PocketButton type="button" size="sm" variant="primary" icon={<Icon name="faceid" />} disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: true })}>
                 Approve
-              </Button>
-              <Button type="button" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: false })}>
+              </PocketButton>
+              <PocketButton type="button" size="sm" variant="secondary" disabled={decide.isPending} onClick={() => decide.mutate({ id: m.id, approve: false })}>
                 Decline
-              </Button>
+              </PocketButton>
             </div>
           )}
-        </>
-      ) : null}
-      {granted && m.status === 'active' ? (
-        <div>
-          <Button type="button" disabled={revoke.isPending} onClick={() => revoke.mutate(m.id)}>
-            Revoke
-          </Button>
         </div>
       ) : null}
     </li>
@@ -1464,110 +1512,134 @@ function Mandates({
   const granted = mandates.data?.granted ?? []
   const received = mandates.data?.received ?? []
   return (
-    <Card>
-      <CardHeader>Mandates</CardHeader>
-      <div className="flex flex-col gap-3 px-gutter py-3">
+    <>
+      <PocketCard tone="white">
+        <h2 className="font-display text-head font-bold text-ink">Mandates</h2>
         {mandates.isError ? (
-          <p className="text-body text-muted">{readFailure(mandates.error, 'Your mandates')}</p>
-        ) : granted.length > 0 ? (
-          <ul className="flex flex-col gap-2" aria-label="Mandates granted">
-            {granted.map((m) => row(m, true))}
-          </ul>
+          <div className="mt-3">
+            <Said ok={false}>{readFailure(mandates.error, 'Your mandates')}</Said>
+          </div>
         ) : (
-          <p className="text-body text-muted">{mandates.isPending ? 'Reading…' : 'No mandate granted yet.'}</p>
-        )}
-        {received.length > 0 ? (
           <>
-            <p className="text-caption text-label">Received</p>
-            <ul className="flex flex-col gap-2" aria-label="Mandates received">
-              {received.map((m) => row(m, false))}
-            </ul>
-          </>
-        ) : null}
-        {revoke.isError ? <Note ok={false}>{refusalText(revoke.error)}</Note> : null}
-        {decide.isError ? <Note ok={false}>{refusalText(decide.error)}</Note> : null}
-          <form
-            className="flex flex-col gap-3"
-            data-testid="new-mandate"
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (complete && !grant.isPending && !hold) grant.mutate()
-            }}
-          >
-            <div className="grid gap-3 wide:grid-cols-2">
-              <label className={field}>
-                On
-                <select aria-label="Mandate on" className={`${select} w-full`} value={account?.id ?? ''} onChange={(e) => setAccountID(e.target.value)}>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {accountName(a)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={field}>
-                Payee
-                <select aria-label="Mandate payee kind" className={`${select} w-full`} value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
-                  <option value="business">An outside business, paid to a saved payee</option>
-                  <option value="company">A Talyvor company, by its workspace id</option>
-                </select>
-              </label>
-              {kind === 'company' ? (
-                <Input aria-label="Payee’s workspace id" placeholder="Their workspace id" className="font-figure" value={form.workspace} onChange={(e) => set({ workspace: e.target.value })} />
-              ) : (
-                <>
-                  <Input aria-label="Business id" placeholder="The business’s id, as it names itself" className="font-figure" value={form.business} onChange={(e) => set({ business: e.target.value })} />
-                  <label className={field}>
-                    Paid out to
-                    <select aria-label="Paid out to" className={`${select} w-full`} value={form.payee} onChange={(e) => set({ payee: e.target.value })}>
-                      <option value="">Choose a saved payee</option>
-                      {payees.map((p) => (
-                        <option key={p.id} value={p.id} disabled={p.needs_confirmation}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </>
-              )}
-              <Input aria-label="Payee’s name" placeholder="Payee’s name (optional)" value={form.name} onChange={(e) => set({ name: e.target.value })} />
-              <label className={field}>
-                Most per pull, {account?.currency ?? 'GBP'}
-                <Input aria-label="Most per pull" inputMode="decimal" placeholder="5.00" className="font-figure" value={form.pull} onChange={(e) => set({ pull: e.target.value })} />
-              </label>
-              <label className={field}>
-                Most per month, {account?.currency ?? 'GBP'}
-                <Input aria-label="Most per month" inputMode="decimal" placeholder="20.00" className="font-figure" value={form.month} onChange={(e) => set({ month: e.target.value })} />
-              </label>
-              <label className={field}>
-                Expires on
-                <Input aria-label="Expires on" type="date" className="font-figure" value={form.expires} onChange={(e) => set({ expires: e.target.value })} />
-              </label>
-            </div>
-            {onlyThePhone ? (
-              <OnThePhone>Grant this mandate with a passkey on this browser: add this browser first.</OnThePhone>
+            {granted.length > 0 ? (
+              <ul className="mt-3 border-t border-line" aria-label="Mandates granted">
+                {granted.map((m) => row(m, true))}
+              </ul>
             ) : (
-              <div>
-                <Button type="submit" disabled={!complete || grant.isPending || hold}>
-                  {grant.isPending ? 'Granting…' : 'Grant mandate'}
-                </Button>
-              </div>
+              <p className="mt-2 text-body text-ink-3">{mandates.isPending ? 'Reading…' : 'No mandate granted yet.'}</p>
             )}
-            {grant.isError ? <Note ok={false}>{refusalText(grant.error)}</Note> : null}
-            {made !== null ? (
-              <Note ok>
-                Granted to {made.payee_name}.
-                {made.pull_key ? (
-                  <>
-                    {' '}
-                    Give the business this key once; it is not shown again: <span className="font-figure" data-testid="mandate-pull-key">{made.pull_key}</span>
-                  </>
-                ) : null}
-              </Note>
-            ) : null}
-          </form>
-      </div>
-    </Card>
+            <Eyebrow className="mt-4 block">Received</Eyebrow>
+            {received.length > 0 ? (
+              <ul className="mt-1 border-t border-line" aria-label="Mandates received">
+                {received.map((m) => row(m, false))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-body text-ink-3">{mandates.isPending ? 'Reading…' : 'No company lets you pull from it.'}</p>
+            )}
+          </>
+        )}
+        {revoke.isError ? (
+          <div className="mt-3">
+            <Said ok={false}>{refusalText(revoke.error)}</Said>
+          </div>
+        ) : null}
+        {decide.isError ? (
+          <div className="mt-3">
+            <Said ok={false}>{refusalText(decide.error)}</Said>
+          </div>
+        ) : null}
+      </PocketCard>
+      <PocketCard>
+        <h2 className="font-display text-head font-bold text-ink">Grant a mandate</h2>
+        <form
+          className="mt-3 grid gap-3"
+          data-testid="new-mandate"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (complete && !grant.isPending && !hold) grant.mutate()
+          }}
+        >
+          <div className="grid gap-3 wide:grid-cols-2">
+            <Field className="min-w-0" label="On">
+              <PocketSelect aria-label="Mandate on" value={account?.id ?? ''} onChange={(e) => setAccountID(e.target.value)}>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {accountName(a)}
+                  </option>
+                ))}
+              </PocketSelect>
+            </Field>
+            <Field className="min-w-0" label="Payee">
+              <PocketSelect aria-label="Mandate payee kind" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}>
+                <option value="business">An outside business, paid to a saved payee</option>
+                <option value="company">A Talyvor company, by its workspace id</option>
+              </PocketSelect>
+            </Field>
+          </div>
+          <div className="grid gap-3 wide:grid-cols-2">
+            {kind === 'company' ? (
+              <Field className="min-w-0" label="Their workspace id">
+                <PocketInput aria-label="Payee’s workspace id" placeholder="Their workspace id" value={form.workspace} onChange={(e) => set({ workspace: e.target.value })} />
+              </Field>
+            ) : (
+              <>
+                <Field className="min-w-0" label="Business id">
+                  <PocketInput aria-label="Business id" placeholder="The business’s id, as it names itself" value={form.business} onChange={(e) => set({ business: e.target.value })} />
+                </Field>
+                <Field className="min-w-0" label="Paid out to">
+                  <PocketSelect aria-label="Paid out to" value={form.payee} onChange={(e) => set({ payee: e.target.value })}>
+                    <option value="">Choose a saved payee</option>
+                    {payees.map((p) => (
+                      <option key={p.id} value={p.id} disabled={p.needs_confirmation}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </PocketSelect>
+                </Field>
+              </>
+            )}
+            <Field className="min-w-0" label="Payee’s name (optional)">
+              <PocketInput aria-label="Payee’s name" placeholder="As the mandate shows them" className="font-sans" value={form.name} onChange={(e) => set({ name: e.target.value })} />
+            </Field>
+          </div>
+          <div className="grid gap-3 wide:grid-cols-3">
+            <Field className="min-w-0" label={`Most per pull, ${currency}`}>
+              <PocketInput aria-label="Most per pull" inputMode="decimal" placeholder="5.00" unit={currency} value={form.pull} onChange={(e) => set({ pull: e.target.value })} />
+            </Field>
+            <Field className="min-w-0" label={`Most per month, ${currency}`}>
+              <PocketInput aria-label="Most per month" inputMode="decimal" placeholder="20.00" unit={currency} value={form.month} onChange={(e) => set({ month: e.target.value })} />
+            </Field>
+            <Field className="min-w-0" label="Expires on">
+              <PocketInput aria-label="Expires on" type="date" value={form.expires} onChange={(e) => set({ expires: e.target.value })} />
+            </Field>
+          </div>
+          <p className="text-body text-ink-3">
+            A mandate lets the payee pull without asking you each time, so granting one is signed with your passkey. Each pull is held to the mandate’s limits and to the agent’s rules.
+          </p>
+          {onlyThePhone ? (
+            <OnThePhone>Grant this mandate with a passkey on this browser: add this browser first.</OnThePhone>
+          ) : hold ? null : (
+            <div>
+              <PocketButton type="submit" variant="primary" icon={<Icon name="faceid" />} disabled={!complete || grant.isPending} disabledReason={grant.isPending ? undefined : why}>
+                {grant.isPending ? 'Granting…' : 'Grant with your passkey'}
+              </PocketButton>
+            </div>
+          )}
+          {grant.isError ? <Said ok={false}>{refusalText(grant.error)}</Said> : null}
+          {made !== null ? (
+            <Said ok>
+              Granted to {made.payee_name}.
+              {made.pull_key ? (
+                <>
+                  {' '}
+                  Give the business this key once; it is not shown again: <span className="font-figure" data-testid="mandate-pull-key">{made.pull_key}</span>
+                </>
+              ) : null}
+            </Said>
+          ) : null}
+        </form>
+      </PocketCard>
+    </>
   )
 }
 
@@ -1586,7 +1658,8 @@ const rowStatus = (s: string) => ROW_STATUS[s] ?? { text: 'We could not read thi
 
 /**
  * A file of payouts (payee_id, amount, currency, reference), validated row by row by Lens and paid on one approval (B30.21).
- * B57.144 — drawn in Pocket as the reference's w-pay-bulk: Upload a file, then Batches.
+ * B57.144 — drawn in Pocket as the reference's w-pay-bulk: Upload a file, then Batches. B57.32: on its own page, whose line
+ * says what the file holds.
  */
 function Payouts() {
   const qc = useQueryClient()
@@ -1606,12 +1679,7 @@ function Payouts() {
   })
   const list = [...(made !== null ? [made] : []), ...(batches.data?.payouts ?? []).filter((b) => b.id !== made?.id)]
   return (
-    <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid min-w-0 grid-cols-1 gap-4">
-      <p className="text-reading text-ink-2">
-        A CSV with a header row (<span className="font-figure">payee_id, amount, currency, reference</span>) and up to <span className="font-figure">1,000</span> rows: each a saved
-        payee’s id, an amount such as <span className="font-figure">12.34</span>, GBP, EUR or USD, and a reference. Every row is checked before anything moves; one approval pays the
-        valid ones from the company’s account.
-      </p>
+    <>
       <PocketCard tone="white">
         <h2 className="font-display text-head font-bold text-ink">Upload a file</h2>
         <form
@@ -1622,13 +1690,9 @@ function Payouts() {
             if (file !== null && !upload.isPending) upload.mutate()
           }}
         >
-          <PocketInput
-            aria-label="Payouts CSV"
-            type="file"
-            accept=".csv,text/csv"
-            className="min-w-0 flex-1 basis-56"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
+          <div className="min-w-0 flex-1 basis-56">
+            <PocketInput aria-label="Payouts CSV" type="file" accept=".csv,text/csv" className="overflow-hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </div>
           <PocketButton type="submit" variant="primary" disabled={upload.isPending} disabledReason={file === null && !upload.isPending ? 'Choose a CSV file first.' : undefined}>
             {upload.isPending ? 'Checking rows…' : 'Upload and check'}
           </PocketButton>
@@ -1659,7 +1723,7 @@ function Payouts() {
           </ul>
         )}
       </PocketCard>
-    </div>
+    </>
   )
 }
 
@@ -1775,17 +1839,19 @@ function Batch({ b }: { b: PayoutBatch }) {
   )
 }
 
-const PAYEE_MATCH: Record<string, { text: (name: string) => string; pill: PillStatus }> = {
-  matched: { text: (name) => `Saved payee: ${name}`, pill: 'settled' },
-  bank_details_differ: { text: (name) => `Bank details differ from ${name}`, pill: 'slashed' },
-  new_payee: { text: () => 'New payee', pill: 'held' },
+const PAYEE_MATCH: Record<string, { text: (name: string) => string; tone: ChipTone }> = {
+  matched: { text: (name) => `Saved payee: ${name}`, tone: 'plain' },
+  bank_details_differ: { text: (name) => `Bank details differ from ${name}`, tone: 'bad' },
+  new_payee: { text: () => 'New payee', tone: 'wait' },
 }
 const MISSING: Record<string, string> = { supplier: 'supplier', amount: 'amount', currency: 'currency', due_date: 'due date', invoice_number: 'invoice number' }
 
-/** B41.1 — the bills inbox: an invoice uploaded as a file becomes one bill, matched to a saved payee or marked a new payee (Lens B41.101). */
+/** B41.1 — the bills inbox: an invoice uploaded as a file becomes one bill, matched to a saved payee or marked a new payee (Lens B41.101).
+ *  B57.32 — drawn in Pocket as the reference's w-pay-bills: the inbox's upload, each bill as a row, and Pay the ticked ones. */
 function Bills({ payeeName }: { payeeName: (id: string | undefined) => string }) {
   const qc = useQueryClient()
   const bills = useQuery({ queryKey: BILLS_KEY, queryFn: agentBankApi.bills })
+  const { onlyThePhone } = useKeys()
   const [file, setFile] = useState<File | null>(null)
   const upload = useMutation({
     mutationFn: () => agentBankApi.uploadBill(file as File),
@@ -1810,88 +1876,86 @@ function Bills({ payeeName }: { payeeName: (id: string | undefined) => string })
     },
   })
   return (
-    <Card>
-      <CardHeader>Bills inbox</CardHeader>
-      <div className="flex flex-col gap-3 px-gutter py-3">
-        <form
-          className="flex flex-col gap-3"
-          data-testid="bill-upload"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (file !== null && !upload.isPending) upload.mutate()
-          }}
-        >
-          <p className="text-caption text-muted">
-            Add an invoice you received (a PDF, Word, HTML or text file) and Talyvor reads its supplier, amount, due date and invoice number and finds the saved payee. Bank details
-            printed on an invoice are shown, never paid on their own: a bill is paid to a saved payee. The same invoice added twice is one bill.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
+    <PocketCard tone="white">
+      <h2 className="font-display text-head font-bold text-ink">Bills inbox</h2>
+      <form
+        className="mt-3 grid grid-cols-1 gap-3"
+        data-testid="bill-upload"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (file !== null && !upload.isPending) upload.mutate()
+        }}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0 flex-1 basis-56">
+            <PocketInput
               aria-label="Invoice file"
               type="file"
+              className="overflow-hidden"
               accept=".pdf,.docx,.html,.htm,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/html,text/plain,text/markdown"
-              className="file:mr-3 file:border-0 file:bg-transparent file:text-caption file:text-ink"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
-            <Button type="submit" disabled={file === null || upload.isPending}>
-              {upload.isPending ? 'Reading invoice…' : 'Add bill'}
-            </Button>
           </div>
-          {upload.isError ? <Note ok={false}>{refusalText(upload.error)}</Note> : null}
-          {upload.isSuccess ? (
-            <Note ok>{upload.data.created ? `Added: ${upload.data.bill.supplier || 'a bill'}` : `Already in your inbox: ${upload.data.bill.supplier || 'this bill'}`}</Note>
+          <PocketButton type="submit" variant="primary" disabled={file === null || upload.isPending} disabledReason={file === null && !upload.isPending ? 'Choose an invoice file first.' : undefined}>
+            {upload.isPending ? 'Reading invoice…' : 'Add bill'}
+          </PocketButton>
+        </div>
+        {upload.isError ? <Said ok={false}>{refusalText(upload.error)}</Said> : null}
+        {upload.isSuccess ? (
+          <Said ok>{upload.data.created ? `Added: ${upload.data.bill.supplier || 'a bill'}` : `Already in your inbox: ${upload.data.bill.supplier || 'this bill'}`}</Said>
+        ) : null}
+      </form>
+      {bills.isError ? (
+        <div className="mt-3">
+          <Said ok={false}>{readFailure(bills.error, 'Your bills')}</Said>
+        </div>
+      ) : bills.isPending ? (
+        <p className="mt-3 text-body text-ink-3">Reading…</p>
+      ) : list.length === 0 ? (
+        <p className="mt-3 text-body text-ink-3" data-testid="bills-empty">
+          No bills yet: add an invoice you received above.
+        </p>
+      ) : (
+        <>
+          <ul className="mt-3 border-t border-line" aria-label="Bills">
+            {list.map((b) => (
+              <BillRow
+                key={b.id}
+                b={b}
+                payeeName={payeeName}
+                ticked={payable(b) ? !unticked.has(b.id) : undefined}
+                onTick={() => {
+                  setUnticked((s) => (s.has(b.id) ? new Set([...s].filter((x) => x !== b.id)) : new Set(s).add(b.id)))
+                  setPayKey(newMoveKey())
+                }}
+              />
+            ))}
+          </ul>
+          {due.length > 0 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-3" data-testid="bills-pay">
+              <PocketButton type="button" variant="primary" disabled={ticked.length === 0 || pay.isPending} disabledReason={ticked.length === 0 && !pay.isPending ? 'Tick at least one bill.' : undefined} onClick={() => pay.mutate()}>
+                {pay.isPending ? 'Preparing…' : `Pay ${ticked.length === 1 ? '1 bill' : `${ticked.length} bills`}`}
+              </PocketButton>
+              {ticked.length > 0 ? (
+                <span className="text-body text-ink-2" data-testid="bills-pay-total">
+                  Total <span className="font-figure font-semibold text-ink">{totalOf(ticked)}</span>
+                </span>
+              ) : null}
+            </div>
           ) : null}
-        </form>
-        {bills.isError ? (
-          <p className="text-body text-muted">{readFailure(bills.error, 'Your bills')}</p>
-        ) : bills.isPending ? (
-          <p className="text-body text-muted">Reading…</p>
-        ) : list.length === 0 ? (
-          <p className="text-body text-muted" data-testid="bills-empty">
-            No bills yet: add an invoice you received above.
-          </p>
-        ) : (
-          <>
-            <ul className="flex flex-col gap-2" aria-label="Bills">
-              {list.map((b) => (
-                <BillRow
-                  key={b.id}
-                  b={b}
-                  payeeName={payeeName}
-                  ticked={payable(b) ? !unticked.has(b.id) : undefined}
-                  onTick={() => {
-                    setUnticked((s) => (s.has(b.id) ? new Set([...s].filter((x) => x !== b.id)) : new Set(s).add(b.id)))
-                    setPayKey(newMoveKey())
-                  }}
-                />
-              ))}
-            </ul>
-            {due.length > 0 ? (
-              <div className="flex flex-col gap-2" data-testid="bills-pay">
-                <p className="text-caption text-muted">
-                  Pay the bills you tick as one batch: one card shows their count, total and every payee, and you approve it once with a passkey. Each bill is then paid
-                  separately, with its invoice number as the reference, and never twice.
-                  {list.some((b) => b.status === 'due' && !b.payee_id) ? ' A bill whose supplier is not a saved payee can be paid once you save the supplier as a payee.' : ''}
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button type="button" variant="primary" disabled={ticked.length === 0 || pay.isPending} onClick={() => pay.mutate()}>
-                    {pay.isPending ? 'Preparing…' : `Pay ${ticked.length === 1 ? '1 bill' : `${ticked.length} bills`}`}
-                  </Button>
-                  {ticked.length > 0 ? (
-                    <span className="text-caption text-muted" data-testid="bills-pay-total">
-                      Total <span className="font-figure">{totalOf(ticked)}</span>
-                    </span>
-                  ) : (
-                    <span className="text-caption text-muted">Tick at least one bill.</span>
-                  )}
-                </div>
-                {pay.isError ? <Note ok={false}>{refusalText(pay.error)}</Note> : null}
-              </div>
-            ) : null}
-          </>
-        )}
-      </div>
-    </Card>
+          {pay.isError ? (
+            <div className="mt-3">
+              <Said ok={false}>{refusalText(pay.error)}</Said>
+            </div>
+          ) : null}
+        </>
+      )}
+      <p className="mt-3 text-body text-ink-3">
+        A due bill gets a tick. Pay the bills you tick as one batch: one card shows their count, total and every payee, and you approve it once,{' '}
+        {onlyThePhone ? 'on your phone' : 'with your passkey'}. Each bill is then paid separately, with its invoice number as the reference, and never twice.
+        {list.some((b) => b.status === 'due' && !b.payee_id) ? ' A bill whose supplier is not a saved payee can be paid once you save the supplier as a payee.' : ''}
+      </p>
+    </PocketCard>
   )
 }
 
@@ -1904,24 +1968,29 @@ const totalOf = (bills: Bill[]) =>
     .map(([cur, minor]) => formatMinor(minor, cur))
     .join(', ')
 
+/** The kind of account details printed on a bill, as the row names them. */
+const printedKind = (b: Bill) => (b.iban ? 'IBAN' : b.routing_number ? 'routing and account number' : b.sort_code ? 'sort code and account number' : '')
+
+/** B57.32 — one bill as w-pay-bills draws it: supplier and invoice number, its due date and the details printed on it, then its
+ *  amount, Paid or Due, and what it matched; a due bill that can be paid gets its tick. */
 function BillRow({ b, payeeName, ticked, onTick }: { b: Bill; payeeName: (id: string | undefined) => string; ticked?: boolean; onTick: () => void }) {
-  const match = PAYEE_MATCH[b.payee_match] ?? { text: () => b.payee_match, pill: 'idle' as PillStatus }
+  const match = PAYEE_MATCH[b.payee_match] ?? { text: () => 'We could not read what this bill matched', tone: 'wait' as ChipTone }
   const missing = (b.missing ?? []).map((m) => MISSING[m] ?? m)
   const printed = b.iban ? `${b.iban}${b.bic ? ` · ${b.bic}` : ''}` : b.routing_number ? `${b.routing_number} · ${b.account_number ?? ''}` : b.sort_code ? `${b.sort_code} · ${b.account_number ?? ''}` : ''
   return (
-    <LinkedItem id={`bill-${b.id}`} className="flex flex-col gap-1 rounded-card border border-rule p-3" data-testid={`bill-${b.id}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-body text-ink">
-        <span className="flex min-w-0 items-center gap-2">
-          {ticked !== undefined ? (
-            <input
-              type="checkbox"
-              className={`h-4 w-4 shrink-0 accent-accent transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
-              checked={ticked}
-              onChange={onTick}
-              aria-label={`Pay ${formatMinor(b.amount_minor, b.currency)} to ${b.supplier || 'this supplier'}`}
-            />
-          ) : null}
-          <span className="min-w-0">
+    <LinkedItem id={`bill-${b.id}`} className="flex items-start gap-3 border-t border-line py-2.5 first:border-t-0" data-testid={`bill-${b.id}`}>
+      {ticked !== undefined ? (
+        <input
+          type="checkbox"
+          className={`mt-1 h-4 w-4 shrink-0 accent-primary transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${pocketFocusRing}`}
+          checked={ticked}
+          onChange={onTick}
+          aria-label={`Pay ${formatMinor(b.amount_minor, b.currency)} to ${b.supplier || 'this supplier'}`}
+        />
+      ) : null}
+      <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+        <div className="min-w-0 basis-4/5 wide:basis-0 wide:flex-1">
+          <p className="text-reading font-semibold text-ink">
             {b.supplier || 'Supplier not read'}
             {b.invoice_number ? (
               <>
@@ -1929,32 +1998,30 @@ function BillRow({ b, payeeName, ticked, onTick }: { b: Bill; payeeName: (id: st
                 · <span className="font-figure">{b.invoice_number}</span>
               </>
             ) : null}
-          </span>
-        </span>
-        <span className="flex items-center gap-2">
-          {b.amount_minor > 0 && b.currency ? <span className="font-figure">{formatMinor(b.amount_minor, b.currency)}</span> : null}
-          <Pill status={b.status === 'paid' ? 'settled' : 'held'}>{b.status === 'paid' ? 'Paid' : 'Due'}</Pill>
+          </p>
+          <p className="text-body text-ink-3">
+            {b.due_date ? (
+              <>
+                Due <span className="font-figure">{b.due_date}</span>
+              </>
+            ) : (
+              'No due date read'
+            )}
+            {printed ? (
+              <>
+                {' '}
+                · the bill’s printed details: {printedKind(b)} <span className="font-figure">{printed}</span>
+              </>
+            ) : null}
+          </p>
+          {missing.length > 0 ? <p className="text-body text-ink-3">Could not read: {missing.join(', ')}</p> : null}
+        </div>
+        <span className="flex flex-wrap items-center gap-2">
+          {b.amount_minor > 0 && b.currency ? <span className="font-figure font-semibold text-ink">{formatMinor(b.amount_minor, b.currency)}</span> : null}
+          <Chip tone={b.status === 'paid' ? 'good' : 'wait'}>{b.status === 'paid' ? 'Paid' : 'Due'}</Chip>
+          <Chip tone={match.tone}>{match.text(payeeName(b.payee_id))}</Chip>
         </span>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-caption text-muted">
-        <span>
-          {b.due_date ? (
-            <>
-              Due <span className="font-figure">{b.due_date}</span>
-            </>
-          ) : (
-            'No due date read'
-          )}
-          {printed ? (
-            <>
-              {' '}
-              · printed details <span className="font-figure">{printed}</span>
-            </>
-          ) : null}
-        </span>
-        <Pill status={match.pill}>{match.text(payeeName(b.payee_id))}</Pill>
-      </div>
-      {missing.length > 0 ? <p className="text-caption text-muted">Could not read: {missing.join(', ')}</p> : null}
     </LinkedItem>
   )
 }

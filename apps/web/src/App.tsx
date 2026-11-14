@@ -76,7 +76,7 @@ import { ConnectAI } from './areas/lens/ConnectAI'
 import { DocsEmailBranding } from './areas/docs/DocsEmailBranding'
 import { DocsWebhooks } from './areas/docs/DocsWebhooks'
 import { InvoicesScreen } from './areas/lens/Invoices'
-import { PayScreen } from './areas/lens/Pay'
+import { PayBillsScreen, PayBulkPayoutsScreen, PayMandatesScreen, PayScreen, PayStandingOrdersScreen } from './areas/lens/Pay'
 import { RecurringPlanScreen } from './areas/lens/RecurringPlan'
 import { SubscriptionsScreen } from './areas/lens/Subscriptions'
 import { BudgetsScreen } from './areas/lens/Budgets'
@@ -255,6 +255,11 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.
   { path: '/money/pay', title: 'Pay', element: <PayScreen /> },
+  // B57.32 — Pay's standing orders, mandates, bulk payouts and bills, each on its own page reached from Also on Pay.
+  { path: '/money/pay/standing-orders', title: 'Standing orders', element: <PayStandingOrdersScreen /> },
+  { path: '/money/pay/mandates', title: 'Mandates', element: <PayMandatesScreen /> },
+  { path: '/money/pay/bulk-payouts', title: 'Bulk payouts', element: <PayBulkPayoutsScreen /> },
+  { path: '/money/pay/bills', title: 'Bills you received', element: <PayBillsScreen /> },
   // B45.37 — the page an assistant's recurring-payments link opens: its standing orders, and one passkey signature.
   { path: '/money/plans/:id', title: 'Sign recurring payments', element: <RecurringPlanScreen /> },
   // B41.20 — every recurring payment, standing order and renewing rental, with its next charge, monthly cost and reminder.

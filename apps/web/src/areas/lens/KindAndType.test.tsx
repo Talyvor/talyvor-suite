@@ -61,9 +61,16 @@ describe.each(TYPES.flatMap((t) => KINDS.map((k) => [t, k] as const)))('a %s acc
     expect(within(main).queryByRole('heading', { name: 'People and companies you pay' }) !== null).toBe(kind !== 'stablecoin')
     expect(within(main).queryByRole('button', { name: 'Add a payee' }) !== null).toBe(kind !== 'stablecoin') // B57.31: Add a payee is a dialog
     expect(within(main).queryByTestId('pay-on-chain') !== null).toBe(kind === 'stablecoin')
+    // B57.32 — bulk payouts are a page under Pay, offered by Also on Pay only to a Business.
+    expect(within(main).queryByRole('link', { name: /^Bulk payouts/ }) !== null).toBe(business && kind !== 'stablecoin')
+    if (!business) expect(text).not.toMatch(/company’s|The company/)
+  })
+
+  it('Pay › Bulk payouts: the upload only for a Business that has bank transfers', async () => {
+    const { main } = await at('/money/pay/bulk-payouts', account)
     expect(within(main).queryByRole('heading', { name: 'Pay many at once from a file' }) !== null).toBe(business && kind !== 'stablecoin')
     expect(within(main).queryByLabelText('Payouts CSV') !== null).toBe(business && kind !== 'stablecoin')
-    if (!business) expect(text).not.toMatch(/company’s|The company/)
+    expect(within(main).queryByTestId('pay-on-chain') !== null).toBe(kind === 'stablecoin')
   })
 
   it('Cards: no owner card tier of the other type', async () => {
