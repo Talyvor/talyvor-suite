@@ -20,7 +20,7 @@ import { AgentCard, MoveLxc } from './AgentCard'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { HelperPicker } from '../../cards/HelperPicker'
-import { categoryWords } from './Budgets'
+import { limitAlertText } from './LimitAlertsCard'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { DeclineForm, declinedText } from './Decline'
 import { approvalSheetTo } from './ApprovalSheet'
@@ -48,7 +48,6 @@ import {
   type AgentRuleBoost,
   type AgentSchedule,
   type AgentTopUp as AgentTopUpValue,
-  type LimitAlert,
   type Mandate,
   type PasskeyAssertion,
   type PaymentRequest,
@@ -253,17 +252,6 @@ function Spending({ nameOf }: { nameOf: (id: string) => string }) {
       <AlertChannels />
     </div>
   )
-}
-
-const PERIOD_WORD: Record<string, string> = { week: 'weekly', month: 'monthly' }
-
-/** "80% of Researcher's daily limit": what an alert is about, in words. */
-function limitAlertText(a: LimitAlert, nameOf: (id: string) => string): string {
-  const whose = !a.agent_id ? 'your own' : a.agent_id === 'all' ? 'every wallet’s' : `${nameOf(a.agent_id)}’s`
-  const period = a.period ? `${PERIOD_WORD[a.period] ?? a.period} ` : ''
-  const what =
-    a.kind === 'card' ? 'card cap' : a.kind === 'agent_limit' ? `${period}limit` : `${period}${a.category ? `${categoryWords(a.category)} ` : ''}budget`
-  return `${a.percent}% of ${whose} ${what}`
 }
 
 /** B28.62 — each time spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit (Lens B28.335). */
