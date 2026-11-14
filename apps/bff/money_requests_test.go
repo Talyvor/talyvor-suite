@@ -189,6 +189,37 @@ func TestPendingPaymentRequestsListRelaysStatusOnly(t *testing.T) {
 	}
 }
 
+// B57.149 — Approvals' Decided list reaches Lens's B57.148 list of decided requests under the session's token with only
+// the status, and Lens's {"requests": […]}, decided_at with each, comes back as it was sent.
+func TestDecidedPaymentRequestsListRelaysStatusOnly(t *testing.T) {
+	const decided = `{"requests":[{"id":"preq_2","status":"approved","decided_at":"2026-11-12T10:31:00Z"},{"id":"preq_3","status":"cancelled","decided_at":"2026-11-11T09:00:00Z"}]}`
+	var mu sync.Mutex
+	got := ""
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		mu.Lock()
+		got = r.Method + " " + r.URL.Path + "?" + r.URL.RawQuery + " auth=" + r.Header.Get("Authorization")
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(decided))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	rec := doJSON(a, http.MethodGet, "/api/money/payment-requests?status=decided&workspace=other", ``)
+	if rec.Code != http.StatusOK || rec.Body.String() != decided {
+		t.Fatalf("list = %d %s", rec.Code, rec.Body.String())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !strings.HasPrefix(got, "GET /v1/money/payment-requests?status=decided auth=Bearer ") || strings.HasSuffix(got, "Bearer ") {
+		t.Errorf("Lens saw %q, want only the status under the session's token", got)
+	}
+}
+
 // B45.2 — Decline on a payment card in Chat cancels the request at Lens under the session's token, with no body.
 func TestDeclineCancelsTheRequestAtLens(t *testing.T) {
 	var got []string
