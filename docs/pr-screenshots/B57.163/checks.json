@@ -1,0 +1,11 @@
+[
+  {
+    "route": "/money/pay",
+    "screen": "w-pay",
+    "answers": {
+      "/api/wallets/capabilities": { "capabilities": [{ "capability": "payments_out", "name": "Money out", "class": "RED", "real_money": true, "level_needed": "L2", "label": "live" }] },
+      "/api/agents/passkeys": { "passkeys": [] },
+      "/api/money/devices": { "devices": [] }
+    }
+  }
+]
