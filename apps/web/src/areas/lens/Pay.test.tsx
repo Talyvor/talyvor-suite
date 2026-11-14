@@ -458,7 +458,7 @@ describe('the Pay screen', () => {
     expect(asked.textContent).toContain('Kite pulls from Researcher')
     expect(asked.textContent).toContain('Researcher asked for this mandate. Nothing is pulled until you approve it.')
     expect(within(asked).getByText('Asked')).toBeTruthy()
-    fireEvent.click(within(asked).getByRole('button', { name: 'Approve' }))
+    fireEvent.click(within(asked).getByRole('button', { name: 'Approve with your passkey' }))
     await within(screen.getByTestId('mandate-mdt_a')).findByText('Active')
     fireEvent.click(within(screen.getByTestId('mandate-mdt_b')).getByRole('button', { name: 'Decline' }))
     await within(screen.getByTestId('mandate-mdt_b')).findByText('Declined')
@@ -468,7 +468,34 @@ describe('the Pay screen', () => {
       expect.objectContaining({ url: '/api/money/mandates/mdt_a/approve', body: { assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } } }),
       expect.objectContaining({ url: '/api/money/mandates/mdt_b/decline', body: {} }),
     ])
-    expect(within(screen.getByTestId('mandate-mdt_a')).queryByRole('button', { name: 'Approve' })).toBeNull()
+    expect(within(screen.getByTestId('mandate-mdt_a')).queryByRole('button', { name: 'Approve with your passkey' })).toBeNull()
+  })
+
+  // B57.117 — the asked mandate is drawn as Pocket's request (w-approve-req): who asked, its terms, Approve with your
+  // passkey and Decline, then what was decided in words.
+  it('draws a mandate an agent asked for as a request in Pocket, with its terms and what was decided', async () => {
+    MANDATES = ['mdt_a', 'mdt_b'].map((id, i) => ({ id, agent_id: 'agt_1', account_id: 'macc_agt', currency: 'GBP', payee_workspace_id: 'ws_kite',
+      payee_name: i === 0 ? 'Kite' : 'Orbit', max_per_pull_minor: 500, max_per_month_minor: 2000, pulled_this_month_minor: 0,
+      expires_at: '2027-11-10T23:59:59Z', status: 'requested', created_at: '2026-11-10T09:00:00Z' }))
+    mockBff([], [], [], [], ['Y3JlZDE'])
+    const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
+      response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/money/pay/mandates')
+    render(<App />)
+
+    const asked = await screen.findByTestId('mandate-mdt_a')
+    expect(asked).toHaveAttribute('data-design', 'pocket')
+    expect(within(asked).getByRole('heading', { name: 'Kite pulls from Researcher' })).toBeInTheDocument()
+    expect(asked.textContent).toContain('From Researcher’s account · asked by Researcher')
+    const facts = Object.fromEntries([...asked.querySelectorAll('dl > div')].map((d) => [d.querySelector('dt')?.textContent, d.querySelector('dd')?.textContent]))
+    expect(facts).toEqual({ To: 'Kite', 'Most per pull': '£5.00', 'Most per month': '£20.00', 'Expires on': '10 November 2027' })
+    fireEvent.click(within(asked).getByRole('button', { name: 'Approve with your passkey' }))
+    expect(await within(screen.getByTestId('mandate-mdt_a')).findByRole('status')).toHaveTextContent(
+      'Approved. Kite pulls within these limits until the mandate expires or you revoke it.')
+    fireEvent.click(within(screen.getByTestId('mandate-mdt_b')).getByRole('button', { name: 'Decline' }))
+    expect(await within(screen.getByTestId('mandate-mdt_b')).findByRole('status')).toHaveTextContent('Declined. Orbit cannot pull from this account.')
+    expect(within(screen.getByTestId('mandate-mdt_b')).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
   })
 
   it('asks two scam questions before a first payment: a yes warns and needs a second confirmation, and a second payment asks nothing', async () => {
