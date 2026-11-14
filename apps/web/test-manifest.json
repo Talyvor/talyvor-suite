@@ -108,7 +108,7 @@
   "src/areas/lens/connectAI.test.tsx": 5,
   "src/areas/lens/Convert.test.tsx": 12,
   "src/areas/lens/convertRefusal.test.tsx": 11,
-  "src/areas/lens/Devices.test.tsx": 12,
+  "src/areas/lens/Devices.test.tsx": 14,
   "src/areas/lens/Documents.test.tsx": 12,
   "src/areas/lens/Earnings.test.tsx": 14,
   "src/areas/lens/Features.test.tsx": 25,

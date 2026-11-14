@@ -14,7 +14,8 @@
  * (w-home+sheet-A is reached by pressing "Review"), whether to shoot it dark, and whether the reference is only the
  * dialog's frame over its page (B57.5: a dialog on the story page, beside the reference's dialog without its page),
  * and what to answer instead of the sample for some addresses, by path (B57.49: /auth/me signed out for /signup), and
- * the reference's state to set before its shot (B57.116: { "pr": 1, "nw": 0 } shows a prepared payment).
+ * the reference's state to set before its shot (B57.116: { "pr": 1, "nw": 0 } shows a prepared payment), and whether the
+ * browser has an authenticator that says yes (B57.103: "authenticator": true makes a passkey, and signs with the one it holds).
  *
  * It builds the app once, serves dist with every /api and /auth request answered from scripts/pocket/sample.ts,
  * and for each check shoots the app at 1440x900 and 390x844 with the reference beside it, into
@@ -28,6 +29,7 @@
  *
  * The reference folder is POCKET_REFERENCE, default ~/talyvor-queue/design/pocket.
  */
+import { generateKeyPairSync } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
@@ -140,7 +142,18 @@ async function openApp(c, size) {
       (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(c.answers[new URL(route.request().url()).pathname]) }),
     )
   }
-  await page.goto(BASE + c.route)
+  // B57.103 — Face ID that says yes, holding one passkey of its own. WebAuthn takes no IP address, so the page is at localhost.
+  if (c.authenticator) {
+    const cdp = await ctx.newCDPSession(page)
+    await cdp.send('WebAuthn.enable')
+    const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+      options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+    })
+    const privateKey = generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64')
+    const id = Buffer.from('shots').toString('base64')
+    await cdp.send('WebAuthn.addCredential', { authenticatorId, credential: { credentialId: id, isResidentCredential: true, rpId: 'localhost', privateKey, userHandle: id, signCount: 0 } })
+  }
+  await page.goto((c.authenticator ? BASE.replace('127.0.0.1', 'localhost') : BASE) + c.route)
   await settle(page, t)
   let missed = ''
   for (const step of c.steps || []) {
