@@ -204,6 +204,8 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/money/pay/standing-orders': 0,
   '/money/pay/mandates': 0,
   '/money/pay/bulk-payouts': 0,
+  '/money/pay/instant-transfer': 0,
+  '/money/pay/instant-transfer/:id': 0,
   '/money/pay/bills': 0,
   // B57.27 — the prepared request is drawn in Pocket, whose card has no header.
   '/approve/:id': 0,

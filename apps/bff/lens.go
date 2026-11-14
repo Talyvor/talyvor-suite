@@ -560,6 +560,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	// The pay page's two routes take NO session: the payer is whoever holds the link, and Lens is called with no credential.
 	a.mux.HandleFunc("/api/public/pay/{token}", a.publicPayPage)
 	a.mux.HandleFunc("/api/public/pay/{token}/card", a.publicPayByCard)
+	// B59.19 — Instant transfer, for a Hybrid account (Lens B59.14 to B59.17). See instant_transfer.go.
+	a.mux.HandleFunc("/api/money/instant-transfers/quote", a.requireTenant(a.handleInstantTransferQuote))
+	a.mux.HandleFunc("/api/money/instant-transfers/{id}", a.requireTenant(a.handleInstantTransfer))
+	a.mux.HandleFunc("/api/agents/{id}/instant-transfers", a.requireTenant(a.handleInstantTransferSend))
 	// B30.96 — the Pay screen: saved payees, payments out, mandates and bulk payouts (Lens B30.16, B30.17, B30.19, B30.21). See money_pay.go.
 	a.mux.HandleFunc("/api/money/payees", a.requireTenant(a.handleMoneyPayees))
 	a.mux.HandleFunc("/api/money/payees/{id}/challenge", a.requireTenant(a.handleMoneyPayeeChallenge))
