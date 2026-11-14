@@ -280,6 +280,47 @@ function agentStatement(agent: string, band: { opening: number; in: number; out:
   }
 }
 
+/**
+ * B57.20 — each agent's page in one read (Lens B57.12), as w-agent-research, w-agent-sales and w-agent-ops draw it: its
+ * figures from the sample above, what waits for it, its newest lines, and its card. Research pays only Acme Hosting and
+ * Northwind Data and always allows Northwind up to $400.00 a month; its last card purchase was declined at Compute shop.
+ */
+SAMPLE['/api/agents/agt_research/rules'] = {
+  ...(SAMPLE['/api/agents/agt_research/rules'] as object),
+  allowed_payees: ['payee_acme', 'payee_northwind'],
+  payee_allowances: { payee_northwind: { amount_ulxc: lxc(4_000), per: 'month' } },
+}
+function agentSummary(
+  id: string,
+  { safe, waiting, spent, forecast, limit, lines, declined, accounts }: { safe: number; waiting: number; spent: number; forecast: number; limit: number; lines: object[][]; declined: object | null; accounts: object[] },
+) {
+  const agent = AGENTS.find((a) => a.id === id)!
+  const approvals = ((SAMPLE['/api/agents/approvals'] as { approvals: { agent_id: string }[] }).approvals ?? []).filter((a) => a.agent_id === id)
+  return {
+    as_of: SAMPLE_NOW, agent, made_at: agent.created_at, owner_user_id: agent.owner_user_id,
+    safe_to_spend: [{ currency: 'LXC', balance: agent.balance_ulxc, scheduled: 0, bills_due: 0, pending_approvals: lxc(waiting), safe_to_spend: lxc(safe) }],
+    month: { start: '2026-10-01T00:00:00Z', end: '2026-11-01T00:00:00Z', spent_ulxc: lxc(spent), forecast_ulxc: lxc(forecast), runs_out_at: null, runs_out_on: null, monthly_limit_ulxc: lxc(limit) },
+    approvals, statement: lines.flat(), statement_time_zone: SAMPLE_TIME_ZONE, rules: { version: 4, saved_at: '2026-10-01T09:00:00Z' },
+    card: { status: 'active', currency: 'gbp', last4: '4242', last_declined: declined }, currency_accounts: accounts,
+  }
+}
+Object.assign(SAMPLE, {
+  '/api/agents/agt_research/summary': agentSummary('agt_research', {
+    safe: 13_100, waiting: 3_400, spent: 12_400, forecast: 17_966, limit: 20_000,
+    lines: [modelDay('rs1', '2026-10-22T09:24:00Z', 'claude-sonnet-5', 312, -420, -23.1), modelDay('rh1', '2026-10-21T10:12:00Z', 'claude-haiku-4-5', 88, -20, -1.1)].flat().slice(0, 3).map((l) => [l]),
+    declined: { merchant_name: 'Compute shop', amount_minor: 2_400, currency: 'gbp', words: 'Declined: not one of its payees', reason: "economy: the agent's spending rules refuse this request: the agent may pay only the payees its rules name, and Compute shop is not one", at: '2026-10-21T15:00:00Z' },
+    accounts: [{ id: 'macc_research_usd', agent_id: 'agt_research', currency: 'USD', purpose: 'agent', status: 'open', name: 'US dollar account', balance_minor: 40_000, test_minor: 40_000, live_minor: 0 }],
+  }),
+  '/api/agents/agt_sales/summary': agentSummary('agt_sales', {
+    safe: 11_100, waiting: 900, spent: 11_000, forecast: 15_938, limit: 15_000,
+    lines: [modelDay('sh1', '2026-10-22T08:52:00Z', 'claude-haiku-4-5', 410, -120, -6.6)], declined: null, accounts: [],
+  }),
+  '/api/agents/agt_ops/summary': agentSummary('agt_ops', {
+    safe: 5_400, waiting: 0, spent: 4_600, forecast: 6_665, limit: 10_000,
+    lines: [modelDay('oh1', '2026-10-20T16:05:00Z', 'claude-haiku-4-5', 140, -40, -2.2)], declined: null, accounts: [],
+  }),
+})
+
 /** B57.8 — Pause every agent pauses the sample's agents until Start every agent again, so the shots draw the kill banner. */
 let allPaused = false
 
@@ -293,6 +334,7 @@ export function sampleBodyFor(url: string): unknown {
   const path = url.split('?')[0]
   if (path === '/api/agents/pause-all') return (allPaused = true), { all_paused: true }
   if (path === '/api/agents/resume-all') return (allPaused = false), { all_paused: false }
+  if (/^\/api\/agents\/[^/]+\/summary$/.test(path) && allPaused && path in SAMPLE) return { ...(SAMPLE[path] as object), all_paused_at: SAMPLE_NOW }
   if (path === '/api/agents' && allPaused) return { ...(SAMPLE[path] as object), all_paused_at: SAMPLE_NOW, all_paused_reason: 'paused from the top bar' }
   if (url in SAMPLE) return SAMPLE[url]
   if (path in SAMPLE) return SAMPLE[path]

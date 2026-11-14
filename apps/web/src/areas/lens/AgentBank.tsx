@@ -723,7 +723,8 @@ function Money({ agent, book }: { agent: Agent; book: AgentBook }) {
         </p>
         {claim.isSuccess && claim.data.agent_id === agent.id ? <Note ok>You own {agent.name} now. Fund it here.</Note> : null}
         <div>
-          <Button variant="primary" onClick={() => setMoving(true)}>
+          {/* B57.20 — not the primary: Edit rules on the agent's page above is the page's one primary action. */}
+          <Button variant="default" onClick={() => setMoving(true)}>
             Move LXC
           </Button>
         </div>

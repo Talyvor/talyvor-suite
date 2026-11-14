@@ -744,6 +744,43 @@ export interface StatementLine {
   requests?: number
 }
 
+/** Lens economy.AgentSummary (B57.12): one agent's page, every figure read in one transaction at `as_of`. */
+export interface AgentSummary {
+  as_of: string
+  agent: Agent
+  made_at: string
+  /** Who made it; the page names them when it is the person signed in. */
+  owner_user_id: string
+  /** Set while every agent of the workspace is paused, this one with them. */
+  all_paused_at?: string
+  /** LXC first, then by currency. */
+  safe_to_spend: SafeToSpendFigure[] | null
+  month: {
+    start: string
+    end: string
+    spent_ulxc: number
+    forecast_ulxc: number
+    runs_out_at: string | null
+    runs_out_on: string | null
+    /** 0 is no monthly limit */
+    monthly_limit_ulxc: number
+  }
+  /** Its requests waiting for a person, newest first: what its safe to spend takes off. */
+  approvals: AgentApproval[] | null
+  /** Its statement's newest lines this month, by model and day. */
+  statement: StatementLine[] | null
+  statement_time_zone: string
+  /** The rules version in force; null while its rules were never set. */
+  rules: { version: number; saved_at: string } | null
+  card: {
+    status: 'none' | 'active' | 'frozen'
+    currency?: string
+    last4?: string
+    last_declined: { merchant_name: string; amount_minor: number; currency: string; words: string; reason: string; at: string } | null
+  }
+  currency_accounts: CurrencyAccount[] | null
+}
+
 /** Lens economy.AgentPayment. */
 export interface AgentPayment {
   entry_id: string
@@ -1187,6 +1224,8 @@ export const agentBankApi = {
     }
   },
   issueCard: (id: string, holder: Cardholder) => send<AgentCard>('POST', `/api/agents/${e(id)}/card`, holder),
+  /** B57.20 — everything the agent's page shows, read by Lens at one moment (B57.12). */
+  summary: (id: string) => getJSON<AgentSummary>(`/api/agents/${e(id)}/summary`, { agent: 'object', month: 'object', card: 'object' }),
   /** B28.360 — every purchase on the agent's card refused until it is unfrozen; Lens answers the card. */
   freezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/freeze`),
   unfreezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/unfreeze`),
