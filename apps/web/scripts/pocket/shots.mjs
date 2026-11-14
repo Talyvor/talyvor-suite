@@ -221,7 +221,8 @@ async function deadControls(c) {
 
 for (const c of checks) {
   const name = c.screen || c.route.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'home'
-  const label = `${name}${c.dark ? '-dark' : ''}`
+  // B57.20 — one screen in several states keeps a file for each: w-agent-research@fR1.
+  const label = `${name}${c.state ? `@${Object.entries(c.state).map(([k, v]) => `${k}${v}`).join('-')}` : ''}${c.dark ? '-dark' : ''}`
   console.log(`\n${label} — the app at ${c.route}${c.steps?.length ? `, after ${c.steps.map((s) => `“${s}”`).join(', ')}` : ''}`)
   const ref = c.screen ? await reference(c) : null
   for (const size of SIZES) {

@@ -180,7 +180,7 @@ export function ResumeAgent({ agent, allPaused, open, onClose }: { agent: Agent;
 }
 
 /** The switch of an agent paused only with every agent: starting every agent again, signed the same way. */
-function StartEveryAgent({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function StartEveryAgent({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
   const { hold, onlyThePhone } = useKeys()
   const start = useMutation({
