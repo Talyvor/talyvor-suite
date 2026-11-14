@@ -1471,6 +1471,9 @@ export const agentBankApi = {
   /** B55.10 — every prepared request still waiting for the person (Lens B40.39; an expired one is left out, B55.9). */
   pendingPaymentRequests: () =>
     getJSON<{ requests: PaymentRequest[] | null }>('/api/money/payment-requests?status=pending_approval', { requests: 'list' }),
+  /** B57.149 — the prepared requests approved, cancelled or expired, newest decision first (Lens B57.148). */
+  decidedPaymentRequests: () =>
+    getJSON<{ requests: PaymentRequest[] | null }>('/api/money/payment-requests?status=decided', { requests: 'list' }),
   /** B41.3 — `reason` is why ticked items flagged a duplicate or changed bank details are paid; Lens signs it into the statement. */
   requestApproval: (id: string, positions: number[], reason = '') =>
     send<{ statement: string; challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payment-requests/${e(id)}/approval`,
@@ -1705,7 +1708,7 @@ export interface MandateTerms {
 /** Lens economy.PaymentRequest (B40.3): each item auto, needs_approval or blocked, with the rule that decided it. */
 export interface PaymentRequest {
   id: string
-  /** pending_approval | auto | blocked | approved | cancelled */
+  /** pending_approval | auto | blocked | approved | cancelled | expired */
   status: string
   summary: string
   client: string
@@ -1715,6 +1718,8 @@ export interface PaymentRequest {
   totals: Record<string, number>
   items: PaymentRequestItem[]
   created_at: string
+  /** B57.148 — when it was approved, cancelled or expired; only a decided request carries it. */
+  decided_at?: string
 }
 
 /** Lens agentsig.Result: verified — the signing domain belongs to a business Talyvor checked; signed — only the domain is known. */
