@@ -42,6 +42,7 @@ export const SHOT_ROUTES: Record<string, string> = {
   '/agents': '/agents',
   '/agents/:id': '/agents/agt_research',
   '/agents/:id/rules': '/agents/agt_research/rules',
+  '/cards': '/cards',
   '/marketplace/*': '/marketplace',
   '/setup': '/setup',
   '/spend': '/spend',
