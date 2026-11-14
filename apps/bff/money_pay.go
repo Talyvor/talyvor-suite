@@ -12,7 +12,7 @@ import (
 // payouts (B30.21), on this session's own token; standing orders go through the agent schedules in agent_bank.go (B30.18).
 //
 //	GET  /api/money/payees                          the saved payees outside Talyvor, each with what its bank said of the name
-//	POST /api/money/payees   {name, country, sort_code, account_number, iban, bic, routing_number}   save one; Lens checks the name
+//	POST /api/money/payees   {name, country, sort_code, account_number, iban, bic, routing_number, own}   save one; Lens checks the name
 //	POST /api/money/payees/{id}/challenge           the challenge a close or no match is confirmed over
 //	POST /api/money/payees/{id}/confirm {assertion} confirm it with one of the workspace's passkeys
 //	POST /api/money/payees/{id}/called/challenge    B41.11: the challenge the owner signs to say they called a new payee
@@ -62,6 +62,7 @@ func (a *app) handleMoneyPayees(w http.ResponseWriter, r *http.Request, t tenant
 			IBAN          string `json:"iban"`
 			BIC           string `json:"bic"`
 			RoutingNumber string `json:"routing_number"`
+			Own           bool   `json:"own"` // B59.52: a bank of the owner's own, the one Wallets withdraws to (Lens B59.51)
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
