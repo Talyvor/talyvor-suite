@@ -53,6 +53,9 @@ function mockBff(first: ReturnType<typeof summary>) {
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, user: { sub: 'usr_nick', email: 'nick@example.com' } })
     if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents/agt_1/summary') return json(now)
+    if (url.startsWith('/api/agents/agt_1/analytics'))
+      return json({ agent_id: 'agt_1', time_zone: 'Europe/London', out_ulxc: 420 * M, returned_ulxc: 0, spent_ulxc: 420 * M,
+        buckets: [{ day: '2026-10-21', model: 'claude-sonnet-5', destination: 'spend', out_ulxc: 420 * M, returned_ulxc: 0, spent_ulxc: 420 * M, postings: 312 }] })
     if (url === '/api/agents/agt_1/card/freeze' || url === '/api/agents/agt_1/card/unfreeze') {
       const frozen = url.endsWith('/freeze')
       now = { ...now, card: { ...now.card, status: frozen ? 'frozen' : 'active' } }
@@ -115,6 +118,17 @@ describe('An agent’s page (B57.20)', () => {
     const card = screen.getByTestId('agent-page-card')
     expect(card).toHaveTextContent('Agent card · pounds')
     expect(card).not.toHaveTextContent('4242')
+  })
+
+  // B57.111 — its spend by day, model and destination is the page's own card, and today's view under it no longer repeats it.
+  it('draws its spend by day, model and destination once, on the page', async () => {
+    await open(summary())
+    const spend = await screen.findByTestId('agent-analytics')
+    expect(screen.getByTestId('agent-page')).toContainElement(spend)
+    expect(text(await within(spend).findByTestId('agent-analytics-out'))).toBe('$42.00 420 LXC')
+    expect(within(spend).getByTestId('agent-analytics-model')).toHaveTextContent('claude-sonnet-5')
+    await screen.findByTestId('agent-open')
+    expect(screen.getAllByTestId('agent-analytics')).toHaveLength(1)
   })
 
   it('says a declined purchase in words', async () => {
