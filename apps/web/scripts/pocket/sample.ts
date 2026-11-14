@@ -377,6 +377,29 @@ Object.assign(SAMPLE, {
   }),
 })
 
+/**
+ * B57.111 — each agent's spend for the period (Lens B28.326), bucketed by day, model and destination: Research's calls
+ * on the days its statement shows, a hold that returned some unused, and a move to Sales.
+ */
+function analytics(agent: string, buckets: { day: string; model: string; destination: string; out: number; returned?: number; postings: number }[]) {
+  const rows = buckets.map((b) => ({
+    day: b.day, model: b.model, destination: b.destination, postings: b.postings,
+    out_ulxc: lxc(b.out), returned_ulxc: lxc(b.returned ?? 0), spent_ulxc: lxc(b.out - (b.returned ?? 0)),
+  }))
+  const sum = (k: 'out_ulxc' | 'returned_ulxc' | 'spent_ulxc') => rows.reduce((t, r) => t + r[k], 0)
+  return { agent_id: agent, time_zone: SAMPLE_TIME_ZONE, out_ulxc: sum('out_ulxc'), returned_ulxc: sum('returned_ulxc'), spent_ulxc: sum('spent_ulxc'), buckets: rows }
+}
+Object.assign(SAMPLE, {
+  '/api/agents/agt_research/analytics': analytics('agt_research', [
+    { day: '2026-10-22', model: 'claude-sonnet-5', destination: 'spend', out: 420, postings: 312 },
+    { day: '2026-10-21', model: 'claude-haiku-4-5', destination: 'spend', out: 20, postings: 88 },
+    { day: '2026-10-21', model: 'claude-sonnet-5', destination: 'held', out: 50, returned: 12, postings: 6 },
+    { day: '2026-10-20', model: '', destination: 'agent:agt_sales', out: 500, postings: 1 },
+  ]),
+  '/api/agents/agt_sales/analytics': analytics('agt_sales', [{ day: '2026-10-22', model: 'claude-haiku-4-5', destination: 'spend', out: 120, postings: 410 }]),
+  '/api/agents/agt_ops/analytics': analytics('agt_ops', [{ day: '2026-10-20', model: 'claude-haiku-4-5', destination: 'spend', out: 40, postings: 140 }]),
+})
+
 /** B57.8 — Pause every agent pauses the sample's agents until Start every agent again, so the shots draw the kill banner. */
 let allPaused = false
 
