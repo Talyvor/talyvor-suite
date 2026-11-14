@@ -60,6 +60,7 @@ export const SHOT_ROUTES: Record<string, string> = {
   '/settings/company': '/settings/company',
   '/money/invoices': '/money/invoices',
   '/money/pay': '/money/pay',
+  '/money/wallets': '/money/wallets',
   '/money/pay/standing-orders': '/money/pay/standing-orders',
   '/money/pay/mandates': '/money/pay/mandates',
   '/money/pay/bulk-payouts': '/money/pay/bulk-payouts',

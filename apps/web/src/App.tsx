@@ -79,6 +79,7 @@ import { DocsWebhooks } from './areas/docs/DocsWebhooks'
 import { InvoicesScreen } from './areas/lens/Invoices'
 import { PayBillsScreen, PayBulkPayoutsScreen, PayMandatesScreen, PayScreen, PayStandingOrdersScreen } from './areas/lens/Pay'
 import { PayInstantTransferScreen } from './areas/lens/InstantTransfer'
+import { WalletsScreen } from './areas/lens/Wallets'
 import { InstantTransferScreen } from './areas/lens/InstantTransferReceipt'
 import { RecurringPlanScreen } from './areas/lens/RecurringPlan'
 import { SubscriptionsScreen } from './areas/lens/Subscriptions'
@@ -259,6 +260,8 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/settings/company', title: 'Company details', element: <CompanyDetailsScreen /> },
   // B30.97 — invoices from an agent's currency account, each with its public pay link.
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
+  // B59.53 — Wallets: each side the kind shows, a tile per currency and each account, with Top up, Withdraw and Convert.
+  { path: '/money/wallets', title: 'Wallets', element: <WalletsScreen /> },
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.
   { path: '/money/pay', title: 'Pay', element: <PayScreen /> },
   // B57.32 — Pay's standing orders, mandates, bulk payouts and bills, each on its own page reached from Also on Pay.

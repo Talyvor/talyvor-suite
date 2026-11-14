@@ -1556,6 +1556,39 @@ export const agentBankApi = {
     send<InstantTransfer>('POST', `/api/agents/${e(agentID)}/instant-transfers`, body, { 'Idempotency-Key': key }),
   instantTransfer: (id: string) =>
     getJSON<InstantTransfer>(`/api/money/instant-transfers/${e(id)}`, { id: 'string', status: 'string', beneficiary_name: 'string', send_minor: 'number' }),
+  // B59.53 — Wallets (BFF B59.52, Lens B17.255 and B59.51): Sandbox money into a company account, a withdrawal to a bank of
+  // the owner's own and a conversion between the two sides, each once under its key and the last two signed over a challenge.
+  walletTopUp: (accountID: string, amount_minor: number, key: string) =>
+    send<unknown>('POST', `/api/money/accounts/${e(accountID)}/top-up`, { amount_minor }, { 'Idempotency-Key': key }),
+  walletWithdrawChallenge: (accountID: string, body: WithdrawalRequest, key: string) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/accounts/${e(accountID)}/withdraw/challenge`, body, { 'Idempotency-Key': key }),
+  walletWithdraw: (accountID: string, body: WithdrawalRequest, key: string, assertion?: PasskeyAssertion) =>
+    send<OutsidePayment>('POST', `/api/money/accounts/${e(accountID)}/withdraw`, { ...body, assertion }, { 'Idempotency-Key': key }),
+  sideConvertQuote: (body: { sell_currency: string; buy_currency: string; sell_minor: number }) => send<SideConversion>('POST', '/api/money/convert/quote', body),
+  sideConvertChallenge: (quote_id: string, key: string) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/money/convert/challenge', { quote_id }, { 'Idempotency-Key': key }),
+  sideConvert: (quote_id: string, key: string, assertion?: PasskeyAssertion) =>
+    send<SideConversion>('POST', '/api/money/convert', { quote_id, assertion }, { 'Idempotency-Key': key }),
+}
+
+/** B59.53 — a withdrawal from a company account to a bank saved as the owner's own (Lens economy.Withdrawal). */
+export interface WithdrawalRequest {
+  payee_id: string
+  amount_minor: number
+}
+
+/** B59.53 — Lens economy.Conversion between the company's two sides (B59.51): sell_minor leaves, the fee (margin) included. */
+export interface SideConversion {
+  id: string
+  sell_minor: number
+  sell_currency: string
+  margin_minor: number
+  buy_minor: number
+  buy_currency: string
+  /** what the owner gets, the margin taken, in whole units */
+  rate: string
+  status: string
+  expires_at: string
 }
 
 /** B59.19 — who an Instant transfer pays (Lens economy.InstantTo…): a Talyvor account, an outside wallet or a bank account. */
@@ -1700,6 +1733,8 @@ export interface OutsidePayee {
   /** B59.19 — a payee paid at a wallet: its network and address (Lens B46); none for a bank account */
   network?: string
   address?: string
+  /** B59.53 — a bank of the owner's own, the one Wallets withdraws to (Lens B59.51) */
+  own?: boolean
 }
 
 /** Lens economy.PermissionMandateTerms (B40.2), as an assistant drafted them, so any part may be missing: amounts are minor units by currency. */
@@ -1793,6 +1828,8 @@ export interface PayeeRequest {
   iban?: string
   bic?: string
   routing_number?: string
+  /** B59.53 — a bank of the owner's own, the one Wallets withdraws to (Lens B59.51) */
+  own?: boolean
 }
 
 /** B41.12 — a payee's new bank details: one set, as a payee is saved with. */
