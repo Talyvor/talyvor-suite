@@ -22,7 +22,6 @@ export const POCKET_PENDING: readonly string[] = [
   '/share/:token',
   '/docs/s/:token',
   // The console.
-  '/',
   '/statements',
   '/overview',
   '/ledger',
@@ -48,7 +47,6 @@ export const POCKET_PENDING: readonly string[] = [
   '/marketplace/*',
   '/spend',
   '/members',
-  '/settings/connect',
   '/settings/payout-details',
   '/money/invoices',
   '/money/pay',

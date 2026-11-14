@@ -132,8 +132,14 @@ const SAMPLE: Record<string, unknown> = {
       { id: 'macc_company_usd', agent_id: '', currency: 'USD', purpose: 'company', status: 'open', name: 'US dollar account', balance_minor: 320_000, test_minor: 320_000, live_minor: 0 },
       { id: 'macc_research_usd', agent_id: 'agt_research', currency: 'USD', purpose: 'agent', status: 'open', name: 'US dollar account', balance_minor: 40_000, test_minor: 40_000, live_minor: 0 },
       { id: 'macc_room_usd', agent_id: 'agt_room', currency: 'USD', purpose: 'agent', status: 'open', name: 'US dollar account', balance_minor: 25_000, test_minor: 25_000, live_minor: 0 },
+      // B57.18 — the company's USDC account, so a Hybrid Home draws both sides.
+      { id: 'macc_company_usdc', agent_id: '', currency: 'USDC', purpose: 'company', status: 'open', name: 'USDC account', balance_minor: 1_500_000_000, test_minor: 1_500_000_000, live_minor: 0 },
     ],
   },
+  // B57.18 — every agent's wallet, opened with the agent (Lens B46.4), as Home reads each one's stablecoin balance.
+  '/api/agents/agt_research/wallet': { account_id: 'macc_research', agent_id: 'agt_research', asset: 'USDC', partner: 'sandbox', balance_minor: 300_000_000, receive: { asset: 'USDC' }, mode: 'TEST' },
+  '/api/agents/agt_sales/wallet': { account_id: 'macc_sales', agent_id: 'agt_sales', asset: 'USDC', partner: 'sandbox', balance_minor: 80_000_000, receive: { asset: 'USDC' }, mode: 'TEST' },
+  '/api/agents/agt_ops/wallet': { account_id: 'macc_ops', agent_id: 'agt_ops', asset: 'USDC', partner: 'sandbox', balance_minor: 0, receive: { asset: 'USDC' }, mode: 'TEST' },
   // B56.15 — each account's statement this month, as README's "Statements for currency accounts" tells it.
   '/api/money/accounts/macc_company_usd/statement': {
     account_id: 'macc_company_usd', currency: 'USD', from: '2026-10-01T00:00:00Z', to: '2026-10-21T00:00:00Z',

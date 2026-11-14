@@ -585,7 +585,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/notices/settings", a.requireTenant(a.handleMoneyNoticeSettings))      // B53.8, money_search.go
 	a.mux.HandleFunc("/api/money/plan", a.requireTenant(a.handleMoneyPlan))                            // B53.16, money_search.go
 	a.mux.HandleFunc("/api/money/plan/income", a.requireTenant(a.handleMoneyPlanIncome))               // B53.16, money_search.go
-
+	a.mux.HandleFunc("/api/plan", a.requireTenant(a.handleWorkspacePlan))                              // B57.18 — Home's "3 of 3 on Free". See workspace_plan.go.
 	// B53.12 — the owner's physical card (physical_card.go); Lens answers 404 to all three while its switch is off.
 	a.mux.HandleFunc("/api/money/physical-cards", a.requireTenant(a.handlePhysicalCards))
 	a.mux.HandleFunc("/api/money/physical-cards/{id}/activate", a.requireTenant(a.handlePhysicalCardActivate))

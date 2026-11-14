@@ -2457,6 +2457,20 @@ export function readWorkspaceAccount(): Promise<WorkspaceAccount> {
   return getJSON<WorkspaceAccount>('/api/workspace/account', { account_type: 'string', money_kind: 'string' })
 }
 
+/** B57.18 — the workspace's plan as Lens has it: its name, the agents it takes (-1 is unlimited) and the agents it has. */
+export interface WorkspacePlan {
+  plan: string
+  agents: number
+  agents_used: number
+}
+
+export const PLAN_KEY = ['workspace-plan'] as const
+
+/** GET /api/plan — Lens's /v1/workspaces/{ws}/plan, as Home's "3 of 3 on Free" reads it. */
+export function readWorkspacePlan(): Promise<WorkspacePlan> {
+  return getJSON<WorkspacePlan>('/api/plan', { plan: 'string', agents: 'number', agents_used: 'number' })
+}
+
 /** What a workspace's type and kind show. */
 export interface Shows {
   /** Bank transfers in and out: payees by their bank details, IBANs to pay in. Not for Stablecoin. */
@@ -2475,6 +2489,8 @@ export interface Shows {
   cardTiers: readonly string[]
   /** The agents' heading: "Your agents", or "Your team’s agents". */
   agents: string
+  /** Home's total: "Your total", or "Your company’s total". */
+  total: string
   /** The owner's own account, where a payment names it: "Your account", or "The company". */
   owner: string
 }
@@ -2490,6 +2506,7 @@ export function shows({ account_type, money_kind }: WorkspaceAccount): Shows {
     payoutBatches: business,
     cardTiers: business ? ['Team', 'Business', 'Enterprise'] : ['Daily', 'Premium', 'Platinum'],
     agents: business ? 'Your team’s agents' : 'Your agents',
+    total: business ? 'Your company’s total' : 'Your total',
     owner: business ? 'The company' : 'Your account',
   }
 }

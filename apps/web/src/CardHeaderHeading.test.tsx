@@ -116,7 +116,8 @@ function cardHeaderTitles(root: ParentNode): Element[] {
 const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B28.6 — `/` is the wallet home; B45.11: waiting for you, your agents, budgets, forecast. Overview's six moved to /overview.
   // B57.16: "Your agents" is a heading over Pocket's agent cards, no longer a card header.
-  '/': 3,
+  // B57.18: Home is drawn in Pocket (launch pack W2): its cards are titled by headings, none is a card header.
+  '/': 0,
   // B28.7 — Approvals (waiting, decided). B57.24: Statements opens on an agent's statement, a Pocket document whose
   // name is its own heading, so it has no card header.
   '/approvals': 1,
@@ -182,8 +183,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/settings/terms': 0, // B57.42: drawn in Pocket
   '/settings/webhooks': 0,
   '/settings/email-branding': 0,
-  // B40.8 — one card per assistant.
-  '/settings/connect': 8,
+  '/settings/connect': 0, // B57.45: drawn in Pocket
   '/settings/company': 0, // B59.31: Pocket's own section title, no CardHeader
   '/settings/help': 0, // B59.28: Pocket's own section titles, no CardHeader
   '/settings/close': 0,

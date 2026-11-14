@@ -1941,8 +1941,9 @@ export function walletHome(seed: number): Scenario {
       if (!pending.some((x) => x.agent_id === a.id)) return fail(`Lens filed no pending approval for ${a.name}: ${held.status} ${held.error}`)
       const page = await ctx.app.tab('/')
       try {
-        await page.getByText('Your agents’ wallets, at a glance.', { exact: true }).waitFor({ timeout: ACTION_TIMEOUT_MS })
-        const used = (await page.getByTestId(`home-budget-used-${a.id}`).innerText({ timeout: ACTION_TIMEOUT_MS })).trim()
+        await page.getByTestId(`home-agent-${a.id}`).waitFor({ timeout: ACTION_TIMEOUT_MS })
+        // B57.18 — the bar's own figure: Home draws the month as "$x of $y" over a bar named by its percentage.
+        const used = ((await page.getByTestId(`home-budget-used-${a.id}`).getAttribute('data-used', { timeout: ACTION_TIMEOUT_MS })) ?? '').trim()
         const waiting = (await page.getByTestId('home-approvals-waiting').innerText({ timeout: ACTION_TIMEOUT_MS })).trim()
         ctx.evidence.push({ note: `Home: ${a.name} ${used} through its budget, ${waiting} approval(s) waiting; Lens: spent ${spent} of ${spent * 4} µLXC, ${pending.length} pending` })
         if (used !== '25%') return fail(`${a.name} spent ${spent} µLXC of a ${spent * 4} µLXC monthly budget; Home shows ${used} used, not 25%`)
@@ -1950,7 +1951,7 @@ export function walletHome(seed: number): Scenario {
         const glance = await homeGlance(ctx, page, a, pending.filter((x) => x.agent_id === a.id)[0]?.id ?? '')
         if (glance !== undefined) return fail(glance)
         return { pass: true, detail: `Home shows ${a.name} 25% through its monthly budget and ${waiting} approval(s) waiting, as Lens has them; ` +
-          'on a 390×844 phone the approvals, the total and the first agent row sit above the fold, the total and the safe to spend as Lens has them' }
+          'on a 390×844 phone the approvals come before the total and the total before the agents, what the agents hold as Lens has it' }
       } finally {
         await page.close()
       }
@@ -2032,32 +2033,24 @@ export function homeDailyBriefing(seed: number): Scenario {
 async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: string): Promise<string | undefined> {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.evaluate(() => window.scrollTo(0, 0))
-  const row = page.getByTestId(`agent-card-${a.id}`)
-  const safeShown = (await row.getByTestId(`agent-card-safe-${a.id}`).innerText({ timeout: ACTION_TIMEOUT_MS })).replace(/\s+/g, ' ')
-  const totalShown = (await page.getByTestId('home-total').innerText({ timeout: ACTION_TIMEOUT_MS })).replace(/\s+/g, ' ')
+  // B57.18 — what the agents hold in LXC is a fact under the total; the total itself is the currency accounts' in dollars.
+  const heldShown = (await page.getByTestId('home-agents-total').innerText({ timeout: ACTION_TIMEOUT_MS })).replace(/\s+/g, ' ')
   const book = await bookOf(ctx)
-  const safe = (await ctx.env.lens.agentSafeToSpend(ctx.app.user)).agents?.find((x) => x.agent_id === a.id)?.figures?.find((f) => f.currency === 'LXC')
-  ctx.evidence.push({ note: `Home at 390: total "${totalShown}", ${a.name} "${safeShown}"; Lens: ${book.allocated_ulxc} µLXC with agents, safe to spend ${safe?.safe_to_spend} µLXC` })
-  if (safe === undefined) return `Lens lists no LXC safe to spend for ${a.name}`
-  if (!totalShown.includes(shownLXC(book.allocated_ulxc))) return `Home's total reads "${totalShown}", not Lens's ${shownLXC(book.allocated_ulxc)} with agents`
-  // B57.7 — the total is a balance card's <Money>: dollars large first, LXC small after them.
+  ctx.evidence.push({ note: `Home at 390: across the agents "${heldShown}"; Lens: ${book.allocated_ulxc} µLXC with agents` })
+  if (!heldShown.includes(shownLXC(book.allocated_ulxc))) return `Home's "Across your agents" reads "${heldShown}", not Lens's ${shownLXC(book.allocated_ulxc)} with agents`
+  // B57.7 — a <Money>: dollars first, LXC small after them.
   const dollars = usdShown(shownLXC(book.allocated_ulxc), book.allocated_ulxc, ctx.env.usdPerLXC).split(' (')[0]
-  if (!totalShown.startsWith(`${dollars} `)) return `Home's total reads "${totalShown}", not ${dollars} first and its LXC after`
-  if (!safeShown.includes(shownLXC(safe.safe_to_spend))) return `${a.name}'s safe to spend reads "${safeShown}", not Lens's ${shownLXC(safe.safe_to_spend)}`
-  const link = page.locator(`a[href="/approvals#approval-${approvalID}"]`)
+  if (!heldShown.startsWith(`${dollars} `)) return `Home's "Across your agents" reads "${heldShown}", not ${dollars} first and its LXC after`
+  const link = page.locator(`a[href="/?approval=${approvalID}"]`)
   if (approvalID === '' || (await link.count()) === 0) {
     const listed = await page.getByTestId('home-approvals').locator('a').count()
-    if (listed < 3) return `Home lists ${listed} approval(s) and none opens ${a.name}'s card (${approvalID || 'none filed'})`
+    if (listed < 3) return `Home lists ${listed} approval(s) and none opens ${a.name}'s (${approvalID || 'none filed'})`
   }
   const box = async (l: Locator) => (await l.boundingBox()) ?? { y: Infinity, height: 0 }
-  const approvals = await box(page.getByRole('heading', { name: /^Waiting for you/ }))
-  const total = await box(page.getByTestId('home-total'))
-  const first = await box(page.locator('[data-testid^="agent-card-"]').first())
-  const ask = await box(page.getByRole('textbox', { name: 'Ask Taly' }))
-  if (!(approvals.y < total.y && total.y < first.y && first.y < ask.y)) return `Home's order at 390 is not approvals, total, agents, Taly: ${approvals.y}, ${total.y}, ${first.y}, ${ask.y}`
-  // B57.16 — the first agent card is taller than the row it replaced; its face, name and balance are what must be seen.
-  const held = await box(page.getByTestId(`agent-card-balance-${a.id}`))
-  if (held.y + held.height > 844) return `at 390×844 ${a.name}'s balance on its card ends at ${Math.round(held.y + held.height)}px, below the fold`
+  const approvals = await box(page.getByRole('heading', { name: 'Waiting for your yes' }))
+  const total = await box(page.getByTestId('home-agents-total'))
+  const first = await box(page.locator('[data-testid^="home-agent-"]').first())
+  if (!(approvals.y < total.y && total.y < first.y)) return `Home's order at 390 is not approvals, total, agents: ${approvals.y}, ${total.y}, ${first.y}`
   return undefined
 }
 

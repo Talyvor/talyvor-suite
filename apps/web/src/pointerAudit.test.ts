@@ -250,7 +250,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'error={ledger.error}',
     why: 'the CORRECT copy of the seam Spend.tsx had backwards — the whole positive control for that finding is that this line reads `ledger.error` while its guard is `ledger.isError`',
   },
-  'apps/web/src/PanelReportsItsOwnQuery.test.tsx:361|apps/web/src/areas/lens/Overview.tsx:326': {
+  'apps/web/src/PanelReportsItsOwnQuery.test.tsx:367|apps/web/src/areas/lens/Overview.tsx:326': {
     kind: 'LIVE',
     fragment: '<Failed what="the mint ledger" error={ledger.error} />',
     why: 'the same line quoted VERBATIM beside the must-stay-green control that asserts its wording, so the quote and the assertion cannot drift apart',
@@ -506,7 +506,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'X-User-Email',
     why: 'the screen marks YOUR row by comparing /auth/me\'s email to the roster; the claim that this header is the membership join key is the whole basis for that being a join rather than a guess',
   },
-  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/auth.go:886': {
+  'apps/web/src/areas/lens/Members.tsx:92|apps/bff/auth.go:881': {
     kind: 'LIVE',
     fragment: 's.email',
     why: 'the other half of the same argument — the browser may only mark a row if /auth/me serves the SAME value the BFF forwards upstream',
@@ -531,7 +531,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'TRACK_BASE_URL',
     why: 'the same claim at the case that asserts it, so the case and the header cannot drift apart',
   },
-  'apps/web/src/areas/lens/Members.test.tsx:51|apps/bff/auth.go:886': {
+  'apps/web/src/areas/lens/Members.test.tsx:51|apps/bff/auth.go:881': {
     kind: 'LIVE',
     fragment: 's.email',
     why: 'the fixture claims to serve /auth/me "in the exact shape" — a fixture more generous than the real handler is how the docs translate probe went green in English',
@@ -541,7 +541,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'X-User-Email',
     why: 'the case that argues the comparison must be EXACT rests on this being the key the upstream joined on',
   },
-  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/auth.go:886': {
+  'apps/web/src/areas/lens/Members.test.tsx:188|apps/bff/auth.go:881': {
     kind: 'LIVE',
     fragment: 's.email',
     why: 'same sentence, the /auth/me half',

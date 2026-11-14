@@ -885,73 +885,74 @@ func writeConnectPage(w http.ResponseWriter, status int, p connectPage) {
 	w.WriteHeader(status)
 	data := struct {
 		connectPage
-		MarkDark, MarkLight template.HTML
-	}{p, template.HTML(markDark), template.HTML(markLight)} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
+		LogoDark, LogoLight template.HTML
+	}{p, template.HTML(logoDark), template.HTML(logoLight)} // nosemgrep: go.lang.security.audit.xss.template-html-does-not-escape.unsafe-template-type -- both are SVG files embedded at build time, never caller text
 	if err := connectPageTmpl.Execute(w, data); err != nil {
 		log.Printf("bff: connect page render: %v", err)
 	}
 }
 
+// B57.45 — Pocket's w-connect+consent-claude: the auth card the denied page draws (auth.go), the kit's small logo on
+// top, the dialog's heading, lead line, list and faint line, and one row of actions with Cancel first.
 var connectPageTmpl = template.Must(template.New("connect").Parse(`<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#060A12">
+<meta name="theme-color" content="#F3F4F6">
 <title>{{if .Problem}}Could not connect{{else}}Connect {{.Client}}{{end}} | Talyvor</title>
 <style>
-  :root { color-scheme: dark light;
-          --tv-canvas: #060A12; --tv-surface: #081220; --tv-line: rgba(126,147,171,.18);
-          --tv-ink: #E6EEF7; --tv-ink-muted: #7E93AB;
-          --tv-accent: #3AD6C0; --tv-accent-hover: #55DFCC; --tv-on-accent: #060A12; }
+  :root { color-scheme: light dark;
+          --pk-page: #FFFFFF; --pk-cloud: #F3F4F6; --pk-cloud-2: #ECEEF2; --pk-ink: #111216; --pk-ink-2: #4A5061;
+          --pk-ink-3: #646B7B; --pk-primary: #111216; --pk-on-primary: #FFFFFF;
+          --pk-shadow-lg: 0 2px 6px rgba(17,18,22,.08), 0 24px 60px rgba(17,18,22,.14); }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center;
-         font: 15px/24px "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
-         background: var(--tv-canvas); color: var(--tv-ink); }
-  main { box-sizing: border-box; width: calc(100% - 2rem); max-width: 28rem; padding: 2rem 1.75rem;
-         background: var(--tv-surface); border: 1px solid var(--tv-line); border-radius: 10px; }
-  .mark-dark, .mark-light { width: 56px; margin: 0 0 1.5rem; }
-  .mark-light { display: none; }
-  .mark-dark svg, .mark-light svg { display: block; width: 56px; height: auto; }
-  h1 { font-size: 28px; line-height: 34px; font-weight: 500; letter-spacing: -0.01em; margin: 0; overflow-wrap: anywhere; }
-  .rule { width: 32px; height: 2px; background: var(--tv-accent); margin: 1rem 0 1.25rem; }
-  p { margin: 0 0 0.85rem; }
-  ul { margin: 0 0 1rem; padding-left: 1.25rem; }
-  li { margin: 0 0 0.35rem; }
-  .muted { color: var(--tv-ink-muted); }
-  strong { font-weight: 600; overflow-wrap: anywhere; }
-  form { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.25rem; }
-  button { font: inherit; font-size: 14px; line-height: 20px; font-weight: 600; padding: 10px 18px;
-           border-radius: 6px; cursor: pointer; border: 1px solid var(--tv-line); }
-  button.allow { background: var(--tv-accent); color: var(--tv-on-accent); border-color: var(--tv-accent); }
-  button.allow:hover { background: var(--tv-accent-hover); }
-  button.deny { background: transparent; color: var(--tv-ink); }
-  button:focus-visible { outline: 2px solid var(--tv-accent); outline-offset: 2px; }
-  @media (prefers-color-scheme: light) {
-    :root { --tv-canvas: #F4F7FB; --tv-surface: #FFFFFF; --tv-line: rgba(6,10,18,.10);
-            --tv-ink: #060A12; --tv-ink-muted: #46586E;
-            --tv-accent: #0F7A6C; --tv-accent-hover: #0A5F54; --tv-on-accent: #FFFFFF; }
-    .mark-dark { display: none; }
-    .mark-light { display: block; }
+         font: 15px/1.45 "Figtree", "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased;
+         background: var(--pk-cloud); color: var(--pk-ink); }
+  main { box-sizing: border-box; width: calc(100% - 2.5rem); max-width: 30rem; padding: 24px;
+         display: grid; gap: 14px;
+         background: var(--pk-page); border-radius: 24px; box-shadow: var(--pk-shadow-lg); }
+  .logo-dark { display: none; }
+  .logo-dark svg, .logo-light svg { display: block; width: 144px; height: auto; }
+  h1 { font-family: "Bricolage Grotesque", "Figtree", "Helvetica Neue", Arial, sans-serif;
+       font-size: 22px; line-height: 1.2; font-weight: 750; letter-spacing: -0.015em; margin: 10px 0 0;
+       overflow-wrap: anywhere; }
+  p { margin: 0; }
+  .lead { color: var(--pk-ink-2); }
+  .faint { color: var(--pk-ink-3); font-size: 14px; }
+  ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--pk-ink-2); }
+  strong { font-weight: 650; color: var(--pk-ink); overflow-wrap: anywhere; }
+  form { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin: 0; }
+  .btn { appearance: none; border: 0; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+         height: 44px; padding: 0 20px; border-radius: 999px; font: 650 15px/1 "Figtree", "Helvetica Neue", Arial, sans-serif; }
+  .btn.primary { background: var(--pk-primary); color: var(--pk-on-primary); }
+  .btn.secondary { background: var(--pk-cloud-2); color: var(--pk-ink); }
+  .btn:focus-visible { outline: 2px solid var(--pk-ink); outline-offset: 2px; }
+  /* last, so the dark scheme wins the cascade */
+  @media (prefers-color-scheme: dark) {
+    :root { --pk-page: #0F1013; --pk-cloud: #181A1F; --pk-cloud-2: #20232A; --pk-ink: #F2F3F5; --pk-ink-2: #A6ACB9;
+            --pk-ink-3: #8A90A0; --pk-primary: #F2F3F5; --pk-on-primary: #111216;
+            --pk-shadow-lg: 0 2px 6px rgba(0,0,0,.5), 0 24px 60px rgba(0,0,0,.55); }
+    .logo-light { display: none; }
+    .logo-dark { display: block; }
   }
 </style>
 <main>
-  <div class="mark-dark">{{.MarkDark}}</div>
-  <div class="mark-light">{{.MarkLight}}</div>
+  <div class="logo-light">{{.LogoLight}}</div>
+  <div class="logo-dark">{{.LogoDark}}</div>
   {{if .Problem}}
   <h1>Could not connect</h1>
-  <div class="rule"></div>
   <p>{{.Problem}}</p>
   {{else}}
   <h1>Connect {{.Client}} to Talyvor</h1>
-  <div class="rule"></div>
-  <p>{{.Client}} is asking to use your Talyvor workspace as <strong>{{.Email}}</strong>. It will be able to:</p>
+  <p class="lead">{{.Client}} is asking to use your Talyvor workspace as <strong>{{.Email}}</strong>. It will be able to:</p>
   <ul>{{range .Scopes}}<li>{{.}}</li>{{end}}</ul>
-  <p class="muted">It can never pay anything by itself: every payment waits for you to approve it in Talyvor.</p>
-  <p class="muted">After you choose, you go back to <strong>{{.ReturnTo}}</strong>.</p>
+  <p class="faint">It can never pay anything by itself: every payment it prepares waits for you to approve it, unless a permission you signed covers it.</p>
+  <p class="faint">After you choose, you go back to <strong>{{.ReturnTo}}</strong>.</p>
   <form method="post" action="/oauth/authorize">
     <input type="hidden" name="consent" value="{{.Consent}}">
-    <button class="allow" type="submit" name="decision" value="allow">Allow</button>
-    <button class="deny" type="submit" name="decision" value="deny">Cancel</button>
+    <button class="btn secondary" type="submit" name="decision" value="deny">Cancel</button>
+    <button class="btn primary" type="submit" name="decision" value="allow">Allow</button>
   </form>
   {{end}}
 </main>
