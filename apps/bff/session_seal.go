@@ -91,6 +91,7 @@ type sealedSession struct {
 	TrackWS     string `json:"tws,omitempty"`
 	Poolable    bool   `json:"pool,omitempty"`
 	Synthetic   bool   `json:"syn,omitempty"`
+	SignedInAt  int64  `json:"sat,omitempty"`
 }
 
 // seal returns a new session id carrying s.
@@ -102,6 +103,9 @@ func (z *sessionSealer) seal(s session) (string, error) {
 	}
 	if !s.lensTokenExp.IsZero() {
 		p.TokenExp = s.lensTokenExp.UnixNano()
+	}
+	if !s.signedInAt.IsZero() {
+		p.SignedInAt = s.signedInAt.UnixNano()
 	}
 	plain, err := json.Marshal(p)
 	if err != nil {
@@ -145,11 +149,14 @@ func (z *sessionSealer) open(sid string) (session, bool) {
 		sub: p.Sub, email: p.Email, expires: time.Unix(0, p.Expires),
 		workspaceID: p.WorkspaceID, lensToken: p.LensToken,
 		trackWorkspaceID: p.TrackWS, cachePoolable: p.Poolable, synthetic: p.Synthetic,
-		// B55.54: a session is sealed once, when it is signed in, so the seal's own time is its sign-in time.
-		signedInAt: issued,
 	}
 	if p.TokenExp != 0 {
 		s.lensTokenExp = time.Unix(0, p.TokenExp)
+	}
+	// B50.49: the sign-in time is the one sealed with the session, never the seal's own time; a seal without one
+	// restores a session that cannot get a key back until its person signs in again.
+	if p.SignedInAt != 0 {
+		s.signedInAt = time.Unix(0, p.SignedInAt)
 	}
 	return s, true
 }

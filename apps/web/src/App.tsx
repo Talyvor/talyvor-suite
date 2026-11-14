@@ -44,6 +44,7 @@ import { SignedInFooter } from './components/HelpLinks'
 import { Features } from './areas/lens/Features'
 import { AgentBank } from './areas/lens/AgentBank'
 import { ApprovalsScreen, StatementsScreen, usePendingApprovals } from './areas/lens/WalletScreens'
+import { ApprovalSheetHost } from './areas/lens/ApprovalSheet'
 import { MarketplaceArea } from './areas/marketplace/Marketplace'
 import { TryConversion, TryTare } from './areas/lens/TryIt'
 import { TopUp } from './areas/lens/TopUp'
@@ -608,6 +609,8 @@ function AppShell() {
       </IfArea>
       {/* B57.5 — the confirmation after an action, shown once on the next view, and the short messages. */}
       <SnackHost view={pathname} />
+      {/* B57.15 — the approval sheet, over whichever page ?approval=<id> (or /approvals#approval-<id>) is on. */}
+      <ApprovalSheetHost />
     </PocketShell>
     </div>
   )

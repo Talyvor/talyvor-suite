@@ -33,6 +33,14 @@ const RULES = (r: { above: number; perRequest: number; daily: number; monthly: n
   timezone: r.hours ? SAMPLE_TIME_ZONE : '',
 })
 
+const NORTHWIND_REQUEST = {
+  id: 'preq_northwind', status: 'pending_approval', summary: 'Pay Northwind Data $180.00', client: 'chat', totals: { USD: 18_000 }, created_at: '2026-10-22T09:31:00Z',
+  items: [
+    { position: 1, payee_id: 'payee_northwind', payee_name: 'Northwind Data', currency: 'USD', amount_minor: 18_000, reference: 'Invoice 1042', decision: 'needs_approval',
+      reason: 'no permission you signed covers it', flags: [{ code: 'first_payment', detail: 'the first payment to Northwind Data' }] },
+  ],
+}
+
 const SAMPLE: Record<string, unknown> = {
   '/auth/me': {
     mode: 'oidc',
@@ -45,6 +53,14 @@ const SAMPLE: Record<string, unknown> = {
   },
   '/api/workspace/name': { id: 'ws_nicks_team', name: 'Nick’s team' },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B57.139 — what was sent from Help and complaints and Your data, so their lists draw rows rather than the empty state.
+  '/api/workspace/requests': {
+    requests: [
+      { id: 3, kind: 'complaint', state: 'in_progress', reference: 'C-7KQ2-M4XD', message: 'A card payment was taken twice.', answer: '', filed_at: '2026-11-11T09:12:00Z', updated_at: '2026-11-11T09:12:00Z' },
+      { id: 2, kind: 'data_export', state: 'done', reference: '', message: '', answer: 'Your copy is ready.', filed_at: '2026-11-09T14:30:00Z', updated_at: '2026-11-10T10:05:00Z' },
+      { id: 1, kind: 'support', state: 'done', reference: '', message: 'How do I add an agent?', answer: 'From Agents, press New agent.', filed_at: '2026-11-08T16:40:00Z', updated_at: '2026-11-09T08:15:00Z' },
+    ],
+  },
   // B55.38 — Lens's peg, so the shots draw each LXC figure with its dollars first.
   '/api/lxc/topup-options': { allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 },
   '/api/agents': {
@@ -54,17 +70,25 @@ const SAMPLE: Record<string, unknown> = {
     spent_ulxc: lxc(28_000),
     agents: AGENTS,
   },
+  // B57.15 — the workspace's keys, as the sheet reads them: a passkey on this browser and the phone's key, so it signs here.
+  '/api/agents/passkeys': { passkeys: [{ credential_id: 'Y3JlZF9tYWM', name: 'This Mac', created_at: '2026-10-03T08:00:00Z' }] },
+  '/api/money/devices': { devices: [{ id: 'dk_iphone', name: 'iPhone, Talyvor app', created_at: '2026-10-04T09:00:00Z' }] },
   // The two requests waiting at 10:30.
   '/api/agents/approvals': {
     approvals: [
       {
         id: 'apr_acme', agent_id: 'agt_research', amount_ulxc: lxc(3_400), model: '', status: 'pending', created_at: '2026-10-22T08:17:00Z', expires_at: '2026-10-23T08:17:00Z',
         payee: { kind: 'outside', id: 'payee_acme', name: 'Acme Hosting' }, memo: 'October hosting invoice',
+        // B57.15 — what the sheet says, as w-home+sheet-A: Lens B57.11's paid_from, the amount it asks above and the budget left.
+        paid_from: { kind: 'account', account_id: 'acc_research_usd', name: 'Research’s US dollar account', currency: 'USD', amount_minor: 34_000, balance_minor: 40_000 },
+        asks_above_ulxc: lxc(2_500), budget_left_after_ulxc: lxc(4_200),
       },
       {
         id: 'apr_lead', agent_id: 'agt_sales', amount_ulxc: lxc(900), model: '', status: 'pending', created_at: '2026-10-22T07:41:00Z', expires_at: '2026-10-23T07:41:00Z',
         payee: { kind: 'listing', id: 'lst_lead_finder', name: 'Lead finder' },
         memo: 'One use of Lead finder (version 3), $90.00 (900 LXC) on your monthly marketplace bill',
+        paid_from: { kind: 'marketplace_bill', account_id: 'ws_1', name: 'Your monthly marketplace bill', currency: 'USD', amount_minor: 9_000, balance_minor: null },
+        asks_above_ulxc: lxc(500), budget_left_after_ulxc: lxc(3_100),
       },
     ],
   },
@@ -145,6 +169,14 @@ const SAMPLE: Record<string, unknown> = {
   ...agentStatement('agt_ops', { opening: 0, in: 10_000, out: 4_600 }, [
     modelDay('oh1', '2026-10-20T16:05:00Z', 'claude-haiku-4-5', 140, -40, -2.2),
   ], [modelDay('oh0', '2026-10-12T11:00:00Z', 'claude-haiku-4-5', 4_200, -4_320, -237.8), funded('of0', '2026-10-09T09:10:00Z', 10_000)]),
+  // B57.27 — README's "Prepared by Chat" (10:31): $180.00 to Northwind Data, invoice 1042, from the company's dollar account;
+  // no permission you signed covers it. Declined, Lens cancels it and says the payment was left out.
+  '/api/money/payment-requests/preq_northwind': NORTHWIND_REQUEST,
+  '/api/money/payment-requests/preq_northwind/cancel': {
+    ...NORTHWIND_REQUEST,
+    status: 'cancelled',
+    items: NORTHWIND_REQUEST.items.map((it) => ({ ...it, pay_status: 'not_approved' })),
+  },
   // B57.31 — README's payees: both by routing and account number, Kite last paid $450.00 on 1 Oct, Northwind not paid yet.
   '/api/money/payees': {
     payees: [

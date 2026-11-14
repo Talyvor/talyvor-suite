@@ -32,6 +32,7 @@ function mockBff(state: { passkeys: Passkey[]; devices?: { id: string; platform:
     }
     if (url === '/api/agents/keys/recover' && method === 'GET') return json({ recovery: state.recovery ?? null })
     if (url === '/api/agents/keys/recover') return json({ error: 'That recovery code is not right. Check it and try again.' }, 403)
+    if (url === '/api/agents/keys/recover/start') return json({ error: 'Sign in again, then try again.' }, 403)
     if (url === '/api/agents/keys/recover/cancel') {
       state.recovery = null
       return json({ recovery: { status: 'cancelled' } })
@@ -108,6 +109,16 @@ describe('Key recovery on the web (B55.54)', () => {
     const recover = sent.find((s) => s.url === '/api/agents/keys/recover')
     expect(recover?.body).toMatchObject({ code: 'AAAA BBBB CCCC DDDD EEEE', passkey: { credential_id: expect.any(String), public_key: expect.any(String) } })
     expect(screen.queryByRole('dialog', { name: 'Save your recovery code' })).toBeNull()
+  })
+
+  it('a sign-in too old to start a recovery links to a real sign-in, not the one the provider remembers (B50.49)', async () => {
+    mockBff({ passkeys: [{ credential_id: 'old', name: 'iPhone', created_at: '2026-10-01T09:00:00Z', revoked_at: '2026-10-02T09:00:00Z' }] })
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Wait 72 hours' }))
+
+    const again = await screen.findByRole('link', { name: 'Sign in again' })
+    expect(again).toHaveAttribute('href', '/auth/login?reauth=1&return_to=%2Fapprovals')
   })
 
   it('an approve control says every key was removed and offers the two ways back', async () => {

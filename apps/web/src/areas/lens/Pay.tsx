@@ -1571,7 +1571,23 @@ function Mandates({
   )
 }
 
-/** A file of payouts (payee_id, amount, currency, reference), validated row by row by Lens and paid on one approval (B30.21). */
+// B57.144 — a batch's status and each row's, in words; a status Lens adds later is never shown as Lens's own word (B55.41).
+const BATCH_STATUS: Record<string, { text: string; tone: ChipTone }> = {
+  awaiting_approval: { text: 'Awaiting approval', tone: 'wait' },
+  approved: { text: 'Approved', tone: 'good' },
+}
+const batchStatus = (s: string) => BATCH_STATUS[s] ?? { text: 'We could not read this batch’s status', tone: 'wait' as ChipTone }
+const ROW_STATUS: Record<string, { text: string; tone: ChipTone }> = {
+  valid: { text: 'Valid', tone: 'plain' },
+  invalid: { text: 'Invalid', tone: 'bad' },
+  ...PAYMENT_STATUS,
+}
+const rowStatus = (s: string) => ROW_STATUS[s] ?? { text: 'We could not read this row’s status', tone: 'wait' as ChipTone }
+
+/**
+ * A file of payouts (payee_id, amount, currency, reference), validated row by row by Lens and paid on one approval (B30.21).
+ * B57.144 — drawn in Pocket as the reference's w-pay-bulk: Upload a file, then Batches.
+ */
 function Payouts() {
   const qc = useQueryClient()
   const batches = useQuery({ queryKey: PAYOUTS_KEY, queryFn: agentBankApi.payouts })
@@ -1588,53 +1604,70 @@ function Payouts() {
       refresh()
     },
   })
-  const list = batches.data?.payouts ?? []
+  const list = [...(made !== null ? [made] : []), ...(batches.data?.payouts ?? []).filter((b) => b.id !== made?.id)]
   return (
-    <Card>
-      <CardHeader>Bulk payouts</CardHeader>
-      <div className="flex flex-col gap-3 px-gutter py-3">
+    <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid min-w-0 grid-cols-1 gap-4">
+      <p className="text-reading text-ink-2">
+        A CSV with a header row (<span className="font-figure">payee_id, amount, currency, reference</span>) and up to <span className="font-figure">1,000</span> rows: each a saved
+        payee’s id, an amount such as <span className="font-figure">12.34</span>, GBP, EUR or USD, and a reference. Every row is checked before anything moves; one approval pays the
+        valid ones from the company’s account.
+      </p>
+      <PocketCard tone="white">
+        <h2 className="font-display text-head font-bold text-ink">Upload a file</h2>
         <form
-          className="flex flex-col gap-3"
+          className="mt-3 flex flex-wrap items-center gap-2"
           data-testid="payout-upload"
           onSubmit={(e) => {
             e.preventDefault()
             if (file !== null && !upload.isPending) upload.mutate()
           }}
         >
-          <p className="text-caption text-muted">
-            A CSV with a header row (<span className="font-figure">payee_id,amount,currency,reference</span>) and up to 1,000 rows, each a saved payee’s id, an amount such as{' '}
-            <span className="font-figure">12.34</span>, GBP, EUR or USD and a reference. Every row is checked before anything moves; one approval pays the valid ones from the company’s
-            account.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Input aria-label="Payouts CSV" type="file" accept=".csv,text/csv" className="file:mr-3 file:border-0 file:bg-transparent file:text-caption file:text-ink" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-            <Button type="submit" disabled={file === null || upload.isPending}>
-              {upload.isPending ? 'Checking rows…' : 'Upload and check'}
-            </Button>
-          </div>
-          {upload.isError ? <Note ok={false}>{refusalText(upload.error)}</Note> : null}
+          <PocketInput
+            aria-label="Payouts CSV"
+            type="file"
+            accept=".csv,text/csv"
+            className="min-w-0 flex-1 basis-56"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+          <PocketButton type="submit" variant="primary" disabled={upload.isPending} disabledReason={file === null && !upload.isPending ? 'Choose a CSV file first.' : undefined}>
+            {upload.isPending ? 'Checking rows…' : 'Upload and check'}
+          </PocketButton>
         </form>
-        {made !== null ? <Batch b={made} /> : null}
-        {list.filter((b) => b.id !== made?.id).length > 0 ? (
-          <ul className="flex flex-col gap-2" aria-label="Payout batches">
-            {list
-              .filter((b) => b.id !== made?.id)
-              .map((b) => (
-                <li key={b.id}>
-                  <Batch b={b} />
-                </li>
-              ))}
-          </ul>
+        {upload.isError ? (
+          <div className="mt-3">
+            <Said ok={false}>{refusalText(upload.error)}</Said>
+          </div>
         ) : null}
-      </div>
-    </Card>
+      </PocketCard>
+      <PocketCard>
+        <h2 className="font-display text-head font-bold text-ink">Batches</h2>
+        {batches.isError && list.length === 0 ? (
+          <div className="mt-3">
+            <Said ok={false}>We couldn’t read your batches. Nothing changed.</Said>
+          </div>
+        ) : batches.isPending && list.length === 0 ? (
+          <p className="mt-3 text-body text-ink-3">Reading…</p>
+        ) : list.length === 0 ? (
+          <p className="mt-3 text-body text-ink-3">No batch uploaded yet: choose a CSV file above. Each one shows its rows, how many are valid and the total, and Approve and pay.</p>
+        ) : (
+          <ul className="mt-3 border-t border-line" aria-label="Payout batches">
+            {list.map((b) => (
+              <li key={b.id} className="border-t border-line first:border-t-0">
+                <Batch b={b} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </PocketCard>
+    </div>
   )
 }
 
 /**
  * One batch: its counts and totals, every row's result once read, and its one approval. B58.6: a batch awaiting approval
  * shows every row it pays, and once the workspace has a key, Approve asks for the passkey over the batch's own challenge
- * (Lens B58.5); with only the phone's key, it says to approve there.
+ * (Lens B58.5); with only the phone's key, it says to approve there. B57.144 — drawn in Pocket as w-approvals draws an
+ * approval: the batch as a row with its total and status, its rows under it, then the signing line and Approve.
  */
 function Batch({ b }: { b: PayoutBatch }) {
   const qc = useQueryClient()
@@ -1653,85 +1686,91 @@ function Batch({ b }: { b: PayoutBatch }) {
   })
   const batch = detail.data ?? b
   const totals = Object.entries(batch.totals_minor ?? {})
+  const total = totals.map(([c, n]) => formatMinor(n, c)).join(', ')
   const rows = batch.rows ?? []
+  const status = batchStatus(batch.status)
+  const awaiting = batch.status === 'awaiting_approval' && batch.rows_valid > 0
   return (
-    <div className="flex flex-col gap-2 rounded-card border border-rule p-3" data-testid={`payout-${b.id}`}>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-body text-ink">
-        <span>
-          <span className="font-figure">{batch.rows_total}</span> rows: <span className="font-figure">{batch.rows_valid}</span> valid,{' '}
-          <span className="font-figure">{batch.rows_invalid}</span> invalid
-          {totals.length > 0 ? (
-            <>
-              {' '}
-              · <span className="font-figure">{totals.map(([c, n]) => formatMinor(n, c)).join(', ')}</span> to pay
-            </>
-          ) : null}
-        </span>
-        <Pill status={batch.status === 'approved' ? 'settled' : batch.status === 'awaiting_approval' ? 'held' : 'idle'}>
-          {batch.status === 'awaiting_approval' ? 'Awaiting approval' : batch.status === 'approved' ? 'Approved' : batch.status}
-        </Pill>
-      </div>
-      <p className="text-caption text-muted">
-        Uploaded <span className="font-figure">{formatWhen(batch.created_at)}</span>
-        {batch.approved_at ? (
+    <div className="flex flex-col gap-3 pb-4" data-testid={`payout-${b.id}`}>
+      <PocketRow
+        wrap
+        leading={<RoomBadge icon={<Icon name={batch.status === 'approved' ? 'check' : batch.status === 'awaiting_approval' ? 'clock' : 'payments'} />} />}
+        title={`${batch.rows_total} ${batch.rows_total === 1 ? 'row' : 'rows'}: ${batch.rows_valid} valid, ${batch.rows_invalid} invalid`}
+        line={
           <>
-            {' '}
-            · approved <span className="font-figure">{formatWhen(batch.approved_at)}</span>
+            Uploaded {formatWhen(batch.created_at)}
+            {batch.approved_at ? ` · approved ${formatWhen(batch.approved_at)}` : ''}
           </>
-        ) : null}
-      </p>
+        }
+        amount={total || undefined}
+        action={<Chip tone={status.tone}>{status.text}</Chip>}
+      />
       {shown ? (
         rows.length > 0 ? (
-          <ul className="flex flex-col gap-1" aria-label="Rows">
-            {rows.map((r) => (
-              <li key={r.line} className="flex flex-wrap items-center justify-between gap-2 text-caption text-ink" data-testid={`payout-row-${r.line}`}>
-                <span className="min-w-0">
-                  <span className="font-figure">{r.line}</span> · {r.payee_name || r.payee_id}
-                  {r.reference ? ` · ${r.reference}` : ''}
-                  {r.detail ? <span className="text-muted"> · {r.detail}</span> : null}
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="font-figure">{formatMinor(r.amount_minor, r.currency)}</span>
-                  <Pill status={r.status === 'invalid' || r.status === 'failed' || r.status === 'returned' ? 'slashed' : r.status === 'completed' ? 'settled' : r.status === 'valid' ? 'idle' : 'held'}>
-                    {r.status}
-                  </Pill>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <PocketCard tone="white" tight>
+            <ul aria-label="Rows">
+              {rows.map((r) => {
+                const s = rowStatus(r.status)
+                return (
+                  <li key={r.line} data-testid={`payout-row-${r.line}`}>
+                    <PocketRow
+                      wrap
+                      title={r.payee_name || r.payee_id}
+                      line={
+                        <>
+                          {[`Line ${r.line}`, r.reference].filter((x) => x !== '').join(' · ')}
+                          {r.detail ? <span className="block">{r.detail.charAt(0).toUpperCase() + r.detail.slice(1)}</span> : null}
+                        </>
+                      }
+                      amount={formatMinor(r.amount_minor, r.currency)}
+                      action={<Chip tone={s.tone}>{s.text}</Chip>}
+                    />
+                  </li>
+                )
+              })}
+            </ul>
+          </PocketCard>
+        ) : detail.isError ? (
+          <Said ok={false}>{readFailure(detail.error, 'Its rows')}</Said>
         ) : (
-          <p className="text-caption text-muted">{detail.isError ? readFailure(detail.error, 'Its rows') : 'Reading rows…'}</p>
+          <p className="text-body text-ink-3">Reading rows…</p>
         )
-      ) : null}
-      <div className="flex flex-wrap items-center gap-2">
-        {!shown ? (
-          <Button type="button" onClick={() => setShown(true)}>
+      ) : (
+        <div>
+          <PocketButton type="button" size="sm" variant="secondary" onClick={() => setShown(true)}>
             Rows
-          </Button>
-        ) : null}
-        {batch.status === 'awaiting_approval' && batch.rows_valid > 0 && !hold ? (
-          <Button type="button" disabled={approve.isPending} onClick={() => approve.mutate()}>
-            {approve.isPending ? 'Paying…' : `Approve and pay ${batch.rows_valid} ${batch.rows_valid === 1 ? 'row' : 'rows'}`}
-          </Button>
-        ) : null}
-      </div>
-      {batch.status === 'awaiting_approval' && batch.rows_valid > 0 ? (
+          </PocketButton>
+        </div>
+      )}
+      {awaiting ? (
         onlyThePhone ? (
           <OnThePhone>Approve this on your phone: it is waiting in Talyvor there.</OnThePhone>
-        ) : signed && !hold ? (
-          <p className="text-caption text-muted" data-testid="payout-signs">
-            Your passkey signs these <span className="font-figure">{batch.rows_valid}</span> valid {batch.rows_valid === 1 ? 'row' : 'rows'}
-            {totals.length > 0 ? (
-              <>
-                {' '}
-                and <span className="font-figure">{totals.map(([c, n]) => formatMinor(n, c)).join(', ')}</span>
-              </>
+        ) : !hold ? (
+          <div className="flex flex-col gap-3">
+            {signed ? (
+              <p className="flex items-start gap-2 text-body text-ink-2" data-testid="payout-signs">
+                <Icon name="lock" size={16} className="mt-0.5 shrink-0" />
+                <span>
+                  Your passkey signs these <span className="font-figure">{batch.rows_valid}</span> valid {batch.rows_valid === 1 ? 'row' : 'rows'}
+                  {total ? (
+                    <>
+                      {' '}
+                      and <span className="font-figure">{total}</span>
+                    </>
+                  ) : null}
+                  . If the batch changes after you sign, nothing is paid.
+                </span>
+              </p>
             ) : null}
-            . If the batch changes after you sign, nothing is paid.
-          </p>
+            <div>
+              <PocketButton type="button" variant="primary" icon={<Icon name="faceid" />} disabled={approve.isPending} onClick={() => approve.mutate()}>
+                {approve.isPending ? 'Paying…' : `Approve and pay ${batch.rows_valid} ${batch.rows_valid === 1 ? 'row' : 'rows'}`}
+              </PocketButton>
+            </div>
+          </div>
         ) : null
       ) : null}
-      {approve.isError ? <Note ok={false}>{refusalText(approve.error)}</Note> : null}
+      {approve.isError ? <Said ok={false}>{refusalText(approve.error)}</Said> : null}
     </div>
   )
 }

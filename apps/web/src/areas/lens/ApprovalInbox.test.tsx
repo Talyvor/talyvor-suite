@@ -2,8 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
-// B41.33 — the approvals inbox: filters, several approved together, keyboard shortcuts and a swipe. The BFF
-// is stubbed; each decision is the same POST the single Approve button sends, and is counted here.
+// B57.17 — /approvals in Pocket: what waits (agents' requests and prepared payments, counted as the badge counts them),
+// the newest five decided with their date, how you approve, and each agent's rules. B41.33 — the inbox on Agent Wallets:
+// filters, several approved together, keyboard shortcuts and a swipe. The BFF is stubbed; each decision is the same POST
+// the single Approve button sends, and is counted here.
 
 const M = 1_000_000
 
@@ -77,10 +79,14 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
   return { decisions, bodies, challenges, mandateCalls }
 }
 
+// The inbox with its filters lives on Agent Wallets; /approvals decides in the sheet (B57.17).
 const inbox = async () => {
-  window.history.pushState({}, '', '/approvals')
+  window.history.pushState({}, '', '/agents')
   render(<App />)
-  return within(await screen.findByRole('group', { name: 'Waiting for a person' }))
+  const list = within(await screen.findByRole('group', { name: 'Waiting for a person' }))
+  // Agent Wallets reads more than Approvals did, so the keys can still be reading when the list is in.
+  await waitFor(() => ['agent-passkeys', 'money-devices'].forEach((k) => expect(queryClient.getQueryState([k])?.status).toMatch(/success|error/)))
+  return list
 }
 
 // B55.2 — no passkey and these phone keys, answered over mockBff's stub (null: the read is refused); every POST from here is counted.
@@ -105,7 +111,7 @@ afterEach(() => {
   window.history.pushState({}, '', '/')
 })
 
-describe('the approvals inbox (B41.33)', () => {
+describe('the approvals inbox on Agent Wallets (B41.33)', () => {
   it('narrows the waiting list by agent and by kind', async () => {
     mockBff()
     const list = await inbox()
@@ -139,6 +145,8 @@ describe('the approvals inbox (B41.33)', () => {
     fireEvent.keyDown(rows[1], { key: 'a' })
     await waitFor(() => expect(bff.decisions).toEqual([{ id: 'apr_2', decision: 'approve' }]))
     const first = (await list.findAllByRole('checkbox'))[0].closest<HTMLElement>('[data-approval]')!
+    // Agent Wallets reads its book again after a decision; the keys wait until it is in.
+    await waitFor(() => expect(within(first).getByRole('button', { name: 'Decline' })).toBeEnabled())
     fireEvent.keyDown(first, { key: 'd' })
     // d opens the decline form on that row, its reason field focused; Decline sends it.
     expect(document.activeElement).toBe(screen.getByLabelText('Why (optional, the agent sees it)'))
@@ -151,7 +159,6 @@ describe('the approvals inbox (B41.33)', () => {
   it('declines with a reason, cancels without sending, and says what declining does', async () => {
     const bff = mockBff()
     const list = await inbox()
-    expect(screen.getByText(/decline it and the request is refused, and asking again the same way is refused for 24 hours\./)).toBeInTheDocument()
     const row = list.getByText(/Acme Hosting/).closest<HTMLElement>('[data-approval]')!
     fireEvent.click(within(row).getByRole('button', { name: 'Decline' }))
     fireEvent.click(within(row).getByRole('button', { name: 'Cancel' }))
@@ -180,87 +187,6 @@ describe('the approvals inbox (B41.33)', () => {
     fireEvent.touchEnd(row, { changedTouches: [{ clientX: 140, clientY: 14 }] })
     await waitFor(() => expect(bff.decisions).toEqual([{ id: 'apr_3', decision: 'approve' }]))
   })
-
-  // B55.7 — Lens reads an approval nobody used within its 24 hours as expired: the row says so, and a status
-  // this screen does not know yet reads Closed, instead of the whole screen failing to draw.
-  it('shows an expired approval as Expired, and a status it does not know as Closed', async () => {
-    mockBff([
-      { id: 'apr_6', agent_id: 'agt_1', amount_ulxc: M, model: 'gpt-5', status: 'expired', created_at: '2026-10-24T06:00:00Z', expires_at: '2026-10-25T06:00:00Z' },
-      { id: 'apr_7', agent_id: 'agt_2', amount_ulxc: M, model: 'claude', status: 'expired', created_at: '2026-10-24T06:01:00Z', decided_at: '2026-10-24T07:00:00Z', expires_at: '2026-10-25T06:01:00Z' },
-      { id: 'apr_8', agent_id: 'agt_2', amount_ulxc: M, model: 'claude', status: 'withdrawn', created_at: '2026-10-24T06:02:00Z' },
-    ])
-    await inbox()
-    expect(screen.getAllByText('Expired')).toHaveLength(2)
-    expect(screen.getByText(/^Not answered within 24 hours,$/)).toBeInTheDocument()
-    expect(screen.getByText(/^Approved, but not used within 24 hours,$/)).toBeInTheDocument()
-    expect(screen.getByText('Closed')).toBeInTheDocument()
-    expect(screen.queryByText('This screen couldn’t be read.')).toBeNull()
-  })
-
-  // B55.41 — each decided row says when it was decided, and by which agent when another agent approved it.
-  it('says when each decided approval was decided, and by which agent', async () => {
-    mockBff([
-      { id: 'apr_6', agent_id: 'agt_1', amount_ulxc: M, model: 'gpt-5', status: 'denied', created_at: '2026-10-14T08:00:00Z', decided_at: '2026-10-14T09:12:00Z' },
-      { id: 'apr_7', agent_id: 'agt_1', amount_ulxc: M, model: '', status: 'approved', created_at: '2026-10-13T08:00:00Z', decided_at: '2026-10-13T09:00:00Z',
-        approved_by_agent_id: 'agt_2', payee: { kind: 'company', id: 'ws_d', name: 'Dock Labs' } },
-    ])
-    await inbox()
-    expect(document.body.textContent).toMatch(/, 14 Oct(?! by)/)
-    expect(document.body.textContent).toMatch(/, 13 Oct by Buyer/)
-  })
-})
-
-describe('payments prepared for the person (B55.10)', () => {
-  it('lists a payment an assistant prepared, with Review opening its card', async () => {
-    mockBff([], [PREPARED])
-    window.history.pushState({}, '', '/approvals')
-    render(<App />)
-    const prepared = within(await screen.findByRole('group', { name: 'Prepared payments' }))
-    expect(prepared.getByText('Your assistant prepared a payment to Acme Hosting')).toBeInTheDocument()
-    expect(prepared.getByText(/INV-7 · from the company’s account · asked/)).toBeInTheDocument()
-    expect(prepared.getByText('£120.00')).toBeInTheDocument()
-    expect(prepared.getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/approve/preq_1')
-  })
-
-  // B57.116 — drawn as w-approvals draws a waiting request: Chat's mark, the line over its hint, the total over its
-  // currency, and Pocket's Review.
-  it('draws the row in Pocket’s components: the line, its hint, the total and Review to /approve/{id}', async () => {
-    const MANY = { ...PREPARED, id: 'preq_2', client: 'chat', summary: '2 payments', totals: { GBP: 15000 }, items: [PREPARED.items[0], { ...PREPARED.items[0], position: 2, payee_name: 'Bolt Cloud', amount_minor: 3000 }] }
-    mockBff([], [PREPARED, MANY])
-    window.history.pushState({}, '', '/approvals')
-    render(<App />)
-    await screen.findByRole('group', { name: 'Prepared payments' })
-    const one = document.querySelector<HTMLElement>('[data-prepared="preq_1"]')!
-    expect(one.querySelector('[data-icon="chat"]')).not.toBeNull()
-    expect(within(one).getByText('Your assistant prepared a payment to Acme Hosting')).toHaveClass('font-semibold')
-    expect(one).toHaveTextContent('INV-7 · from the company’s account · asked')
-    expect(within(one).getByText('£120.00')).toBeInTheDocument()
-    expect(within(one).getByText('GBP')).toBeInTheDocument()
-    const review = within(one).getByRole('link', { name: 'Review' })
-    expect(review).toHaveAttribute('href', '/approve/preq_1')
-    expect(review).toHaveClass('rounded-pill')
-    const many = document.querySelector<HTMLElement>('[data-prepared="preq_2"]')!
-    expect(within(many).getByText('Chat prepared 2 payments')).toBeInTheDocument()
-    expect(many).toHaveTextContent('2 payments · from the company’s account · asked')
-    expect(within(many).getByText('£150.00')).toBeInTheDocument()
-    expect(within(many).getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/approve/preq_2')
-  })
-
-  it('counts one agent request and one prepared payment as 2 on the badge', async () => {
-    mockBff([], [PREPARED], 1)
-    window.history.pushState({}, '', '/approvals')
-    render(<App />)
-    expect(await screen.findByRole('link', { name: 'Approvals 2 waiting' })).toBeInTheDocument()
-  })
-
-  it('with nothing waiting, says a prepared payment appears here too', async () => {
-    mockBff([], [], 0)
-    window.history.pushState({}, '', '/approvals')
-    render(<App />)
-    expect(
-      await screen.findByText('Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount, or when Chat or an assistant prepares a payment.'),
-    ).toBeInTheDocument()
-  })
 })
 
 describe('an agent’s mandate request waiting on Approvals (B55.40)', () => {
@@ -277,7 +203,9 @@ describe('an agent’s mandate request waiting on Approvals (B55.40)', () => {
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
     window.history.pushState({}, '', '/approvals')
     render(<App />)
-    const group = await screen.findByRole('group', { name: 'Mandate requests' })
+    // B57.17 — it waits with the rest under Waiting for you, in Pocket's row.
+    const group = (await screen.findByText(/asks to let Acme Hosting/)).closest<HTMLElement>('[data-mandate="mdt_1"]')!
+    expect(group.closest('[data-design]')).toHaveAttribute('data-design', 'pocket')
     const requests = within(group)
     expect(group.textContent).toContain('Researcher asks to let Acme Hosting pull up to £20.00 a month')
     // The payee's name is the agent's own words: the account the money goes to is shown as Lens holds it.
@@ -301,7 +229,7 @@ describe('an agent’s mandate request waiting on Approvals (B55.40)', () => {
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
     window.history.pushState({}, '', '/approvals')
     render(<App />)
-    const requests = within(await screen.findByRole('group', { name: 'Mandate requests' }))
+    const requests = within((await screen.findByText(/asks to let Acme Hosting/)).closest<HTMLElement>('[data-mandate="mdt_1"]')!)
     fireEvent.click(requests.getByRole('button', { name: 'Review' }))
     fireEvent.click(await requests.findByRole('button', { name: 'Decline' }))
     await waitFor(() => expect(bff.mandateCalls).toEqual([{ url: '/api/money/mandates/mdt_1/decline', body: {} }]))
@@ -309,7 +237,7 @@ describe('an agent’s mandate request waiting on Approvals (B55.40)', () => {
   })
 })
 
-describe('the approvals inbox when only the phone holds a key (B55.2)', () => {
+describe('the approvals inbox on Agent Wallets when only the phone holds a key (B55.2)', () => {
   it('sends no decision, by button, key or swipe, and says to approve on the phone', async () => {
     const bff = mockBff()
     const posts = onlyThePhoneKey()
@@ -324,9 +252,8 @@ describe('the approvals inbox when only the phone holds a key (B55.2)', () => {
     fireEvent.touchEnd(row, { changedTouches: [{ clientX: 200, clientY: 0 }] })
     expect(bff.decisions).toEqual([])
     expect(posts).toEqual([])
-    // Lens refuses a passkey made here unsigned, and on Approvals the link would lead back to this page.
+    // Lens refuses a passkey made here unsigned.
     expect(screen.queryByRole('button', { name: /Add this device|Approve with Face ID from now on/ })).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Add this browser' })).toBeNull()
   })
 
   // B55.54: and with no key live there is no phone to approve on either, so each row says every key was removed.
@@ -360,5 +287,138 @@ describe('the approvals inbox when only the phone holds a key (B55.2)', () => {
     fireEvent.click(await within(document.querySelector<HTMLElement>('[data-approval="apr_1"]')!).findByRole('button', { name: 'Approve' }))
     await waitFor(() => expect(bff.decisions).toEqual([{ id: 'apr_1', decision: 'approve' }]))
     expect(bff.challenges).toEqual([])
+  })
+})
+
+const page = async () => {
+  window.history.pushState({}, '', '/approvals')
+  render(<App />)
+  return within(await screen.findByRole('group', { name: 'Waiting for you' }))
+}
+
+/** Today at hh:mm on this device's clock, as an ISO time. */
+const todayAt = (h: number, m: number) => {
+  const d = new Date()
+  d.setHours(h, m, 0, 0)
+  return d.toISOString()
+}
+
+describe('Approvals in Pocket (B57.17)', () => {
+  it('lists each agent’s request and each prepared payment, counted as the sidebar’s badge counts them', async () => {
+    mockBff([], [PREPARED], 1)
+    const waiting = await page()
+    const row = document.querySelector<HTMLElement>('[data-approval="apr_1"]')!
+    expect(row).toHaveTextContent('Researcher wants to pay Acme Hosting')
+    expect(within(row).getByRole('link', { name: 'Researcher' })).toHaveAttribute('href', '/agents/agt_1')
+    expect(within(row).getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/approvals?approval=apr_1')
+    const prepared = document.querySelector<HTMLElement>('[data-prepared="preq_1"]')!
+    expect(waiting.getByText('Your assistant prepared a payment to Acme Hosting')).toBeInTheDocument()
+    expect(prepared).toHaveTextContent('INV-7 · from the company’s account · asked')
+    expect(within(prepared).getByRole('link', { name: 'Review' })).toHaveAttribute('href', '/approve/preq_1')
+    expect(screen.getByTestId('approvals-waiting')).toHaveTextContent('2 waiting')
+    expect(await screen.findByRole('link', { name: 'Approvals 2 waiting' })).toBeInTheDocument()
+  })
+
+  it('names a listing it would use as a link, and where it is paid from and when it expires', async () => {
+    mockBff([], [], 0)
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (input, init) =>
+      String(input) === '/api/agents/approvals'
+        ? new Response(
+            JSON.stringify({
+              approvals: [
+                { id: 'apr_9', agent_id: 'agt_2', amount_ulxc: 9 * M, model: '', status: 'pending', created_at: todayAt(8, 41), expires_at: '2099-01-02T08:41:00Z',
+                  memo: 'One use of Lead finder (version 3)', payee: { kind: 'listing', id: 'lst_1', name: 'Lead finder' },
+                  paid_from: { kind: 'marketplace_bill', account_id: '', name: 'Your monthly marketplace bill', currency: 'USD', amount_minor: 900, balance_minor: null } },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        : inner(input, init),
+    )
+    await page()
+    const row = document.querySelector<HTMLElement>('[data-approval="apr_9"]')!
+    expect(row).toHaveTextContent('Buyer wants to use Lead finder')
+    expect(within(row).getByRole('link', { name: 'Lead finder' })).toHaveAttribute('href', '/marketplace/listings/lst_1')
+    expect(row).toHaveTextContent('One use of Lead finder (version 3) · on your monthly marketplace bill · expires 2 Jan at')
+  })
+
+  it('draws Expired and Closed, dates every decided row, names the agent that approved, and shows the newest five', async () => {
+    mockBff(
+      [
+        { id: 'apr_6', agent_id: 'agt_1', amount_ulxc: M, model: 'gpt-5', status: 'expired', created_at: '2025-10-01T06:00:00Z', expires_at: '2025-10-02T06:00:00Z' },
+        { id: 'apr_7', agent_id: 'agt_2', amount_ulxc: M, model: 'claude', status: 'withdrawn', created_at: '2025-10-03T06:02:00Z', decided_at: '2025-10-03T07:00:00Z' },
+        { id: 'apr_8', agent_id: 'agt_1', amount_ulxc: M, model: '', status: 'denied', created_at: '2025-10-14T08:00:00Z', decided_at: '2025-10-14T09:12:00Z', memo: 'October hosting invoice', payee: { kind: 'company', id: 'ws_a', name: 'Acme Hosting' } },
+        { id: 'apr_10', agent_id: 'agt_1', amount_ulxc: M, model: '', status: 'approved', created_at: todayAt(9, 0), decided_at: todayAt(9, 12), approved_by_agent_id: 'agt_2', payee: { kind: 'company', id: 'ws_d', name: 'Dock Labs' } },
+        { id: 'apr_11', agent_id: 'agt_2', amount_ulxc: M, model: '', status: 'used', created_at: '2025-10-20T08:00:00Z', decided_at: '2025-10-20T08:30:00Z', payee: { kind: 'company', id: 'ws_b', name: 'Bolt Cloud' } },
+        { id: 'apr_12', agent_id: 'agt_2', amount_ulxc: M, model: 'claude', status: 'expired', created_at: '2025-10-21T06:00:00Z', decided_at: '2025-10-21T07:00:00Z', expires_at: '2025-10-22T07:00:00Z' },
+        { id: 'apr_13', agent_id: 'agt_2', amount_ulxc: M, model: 'claude', status: 'denied', created_at: '2025-09-01T06:00:00Z', decided_at: '2025-09-01T07:00:00Z' },
+      ],
+      [],
+    )
+    await page()
+    const rows = Array.from(screen.getByTestId('approvals-decided').querySelectorAll<HTMLElement>('[data-decided]'))
+    // Newest first, five of them: apr_13 (1 Sep) and apr_6 (2 Oct) are left out.
+    expect(rows.map((r) => r.dataset.decided)).toEqual(['apr_10', 'apr_12', 'apr_11', 'apr_8', 'apr_7'])
+    expect(rows[0]).toHaveTextContent('Researcher wants to pay Dock LabsA payment to a company · today at 09:12 by Buyer')
+    expect(within(rows[0]).getByText('Approved')).toBeInTheDocument()
+    expect(rows[1]).toHaveTextContent('Approved, but not used within 24 hours · 21 Oct')
+    expect(within(rows[1]).getByText('Expired')).toBeInTheDocument()
+    expect(within(rows[2]).getByText('Approved and used')).toBeInTheDocument()
+    expect(rows[3]).toHaveTextContent('October hosting invoice · 14 Oct')
+    expect(rows[3]).not.toHaveTextContent('by ')
+    expect(within(rows[3]).getByText('Declined')).toBeInTheDocument()
+    expect(within(rows[4]).getByText('Closed')).toBeInTheDocument()
+    expect(screen.getByText('The newest five. A request lasts 24 hours, and so does an approval its agent has not used yet.')).toBeInTheDocument()
+  })
+
+  it('a approves the focused request, d opens its sheet on Decline, and j moves between them', async () => {
+    const bff = mockBff([], [], 2)
+    await page()
+    const [first, second] = Array.from(document.querySelectorAll<HTMLElement>('[data-approval]'))
+    first.focus()
+    fireEvent.keyDown(first, { key: 'j' })
+    expect(document.activeElement).toBe(second)
+    fireEvent.keyDown(second, { key: 'a' })
+    await waitFor(() => expect(bff.decisions).toEqual([{ id: 'apr_2', decision: 'approve' }]))
+    fireEvent.keyDown(document.querySelector<HTMLElement>('[data-approval="apr_1"]')!, { key: 'd' })
+    expect(await screen.findByLabelText('Why (optional, the agent sees it)')).toBeInTheDocument()
+    expect(window.location.search).toBe('?approval=apr_1&decline=1')
+    expect(bff.decisions).toHaveLength(1)
+  })
+
+  it('sends nothing from the keys when only the phone holds a key', async () => {
+    const bff = mockBff([], [], 1)
+    const posts = onlyThePhoneKey()
+    await page()
+    await waitFor(() => expect(queryClient.getQueryState(['money-devices'])?.status).toBe('success'))
+    const row = document.querySelector<HTMLElement>('[data-approval="apr_1"]')!
+    fireEvent.keyDown(row, { key: 'a' })
+    fireEvent.keyDown(row, { key: 'd' })
+    expect(window.location.search).toBe('')
+    expect(bff.decisions).toEqual([])
+    expect(posts).toEqual([])
+    // Lens refuses a passkey made here unsigned, and on Approvals the link would lead back to this page.
+    expect(screen.queryByRole('button', { name: /Add this device|Approve with Face ID from now on/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Add this browser' })).toBeNull()
+  })
+
+  it('says how approving works, links each agent’s rules, and keeps the Face ID card at the foot', async () => {
+    mockBff([], [], 0)
+    window.history.pushState({}, '', '/approvals')
+    render(<App />)
+    expect(
+      await screen.findByText('Nothing is waiting. A request or payment appears here when it is above an agent’s approval amount, or when Chat or an assistant prepares a payment.'),
+    ).toBeInTheDocument()
+    expect(screen.getByTestId('approvals-waiting')).toHaveTextContent('Nothing waiting')
+    expect(screen.getByText(/decline it and the request is refused, and asking again the same way is refused for 24 hours\./)).toBeInTheDocument()
+    const how = screen.getByLabelText('How you approve')
+    expect(how).toHaveTextContent('On the webWith your passkey')
+    expect(how).toHaveTextContent('If you declineThat request is refused, and asking again the same way is refused for 24 hours')
+    expect(await screen.findByRole('link', { name: 'Researcher’s rules' })).toHaveAttribute('href', '/agents/agt_1/rules')
+    expect(screen.getByRole('link', { name: 'Buyer’s rules' })).toHaveAttribute('href', '/agents/agt_2/rules')
+    expect((await screen.findByText('Face ID and notifications')).closest('[data-design]')).toHaveAttribute('data-design', 'today')
+    expect(screen.getByRole('heading', { level: 1, name: 'Approvals' }).closest('[data-design]')).toHaveAttribute('data-design', 'pocket')
+    expect(document.body.textContent).not.toMatch(/Taly\b/)
   })
 })

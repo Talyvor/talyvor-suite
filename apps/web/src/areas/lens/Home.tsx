@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { type UseQueryResult, useQueries, useQuery } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Button, Card, CardHeader, Input, NavIcon, type NavIconName, Pill, Row, cn, focusRing, inlineLink } from '@talyvor/ui'
 import { Money } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
@@ -8,6 +8,7 @@ import { InlineFailure, PanelFailure } from '../../components/SessionExpiredBar'
 import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, PREPARED_KEY, PauseEveryAgent, PreparedRow, rulesKey } from './AgentBank'
 import { type Agent, type AgentBook, type AgentRules, type SpendForecast, agentBankApi, useAccount } from './agentBankApi'
 import { RunsOut } from './RunsOut'
+import { approvalSheetTo } from './ApprovalSheet'
 import { Lxc } from './money'
 import { AgentCard, SAFE_TO_SPEND_KEY } from './AgentCard'
 import { SafeAmount, SafeBreakdown } from './SafeToSpend'
@@ -89,10 +90,12 @@ function Muted({ children }: { children: React.ReactNode }) {
 /** At most this many approvals are listed on Home, so the total and the agents stay above a phone's fold. */
 const APPROVALS_SHOWN = 3
 
-/** B45.11 — the approvals waiting for a person, first; each opens its card on Approvals. B55.10: the payments Chat or an
+/** B45.11 — the approvals waiting for a person, first; each opens its approval sheet over Home (B57.15). B55.10: the payments Chat or an
  * assistant prepared come before them, each opening its own card at /approve/<id>, and the count is both. B57.116: each is
  * drawn in Pocket's row with Review, as w-home draws it. */
 function ApprovalsFirst({ nameOf }: { nameOf: (id: string) => string }) {
+  // B57.15 — each opens its approval sheet over Home.
+  const here = useLocation()
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
   const pending = (list.data?.approvals ?? []).filter((a) => a.status === 'pending')
@@ -130,7 +133,7 @@ function ApprovalsFirst({ nameOf }: { nameOf: (id: string) => string }) {
           {pending.slice(0, APPROVALS_SHOWN - preparedShown.length).map((a) => (
             <li key={a.id} className="border-b border-rule last:border-b-0">
               <Link
-                to={`/approvals#approval-${a.id}`}
+                to={approvalSheetTo(here, a.id)}
                 className={cn('flex min-h-row items-center justify-between gap-gutter px-gutter py-2', focusRing)}
               >
                 <span className="flex min-w-0 flex-col">
@@ -160,6 +163,7 @@ export const BRIEFING_KEY = ['agent-briefing'] as const
 
 /** B41.6 — this morning's briefing: Lens's one line, and its items, each Lens's own sentence with its amount. */
 function MorningBriefing() {
+  const here = useLocation()
   const b = useQuery({ queryKey: BRIEFING_KEY, queryFn: agentBankApi.briefing })
   if (b.isError) return <PanelFailure error={b.error} what="this morning’s briefing" />
   const head = (
@@ -195,7 +199,7 @@ function MorningBriefing() {
             <li key={`${it.kind}-${it.id ?? i}`} className="border-t border-rule" data-kind={it.kind}>
               {it.kind === 'approval' && it.id ? (
                 // B55.10 — a prepared payment (Lens's preq_ id) opens its own card; an agent's request, its card on Approvals.
-                <Link to={it.id.startsWith('preq_') ? `/approve/${encodeURIComponent(it.id)}` : `/approvals#approval-${it.id}`} className={cn('flex min-h-row items-center px-gutter py-2', focusRing)}>
+                <Link to={it.id.startsWith('preq_') ? `/approve/${encodeURIComponent(it.id)}` : approvalSheetTo(here, it.id)} className={cn('flex min-h-row items-center px-gutter py-2', focusRing)}>
                   {body}
                 </Link>
               ) : (

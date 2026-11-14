@@ -1,7 +1,6 @@
 import { Fragment, useId, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Chip, EmptyState, Field, Icon, Money, Row, Select, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, Crumb, EmptyState, Field, Icon, KindTile, Money, Row, Select, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { cn } from '@talyvor/ui'
 import { isSessionExpired } from '../../lib/productState'
 import { readFailure } from './WalletMoney'
@@ -20,6 +19,8 @@ import {
 // that a person at Talyvor answers (Lens B59.27), and lists what was sent with its state and, for a complaint, its
 // reference. Closing the account is refused while any balance is not empty, and the refusal names each one. A data
 // export downloads here once Talyvor has marked it done. No screen promises when an answer comes.
+// B57.139 — each page is drawn as Pocket's w-card: the crumb back to Settings, the page's heading and its line, then
+// what was sent in the wide column with the form beside it.
 
 const KIND_TITLE: Record<RequestKind, string> = {
   support: 'Question or problem',
@@ -27,6 +28,14 @@ const KIND_TITLE: Record<RequestKind, string> = {
   account_closure: 'Close this account',
   data_export: 'A copy of your data',
   data_deletion: 'Delete your data',
+}
+
+const KIND_ICON: Record<RequestKind, 'phone' | 'x' | 'download'> = {
+  support: 'phone',
+  complaint: 'phone',
+  account_closure: 'x',
+  data_export: 'download',
+  data_deletion: 'x',
 }
 
 const STATE_CHIP: Record<AccountRequest['state'], React.ReactNode> = {
@@ -63,29 +72,17 @@ function refusalLine(err: unknown): React.ReactNode {
   return 'Nothing was sent. You can try again.'
 }
 
-function Breadcrumb({ page }: { page: string }) {
+/** The crumb back to Settings, then the page's heading (the shell's top bar holds its one h1) and its words. */
+function PageTop({ page, heading, children }: { page: string; heading: string; children: React.ReactNode }) {
   return (
-    <nav aria-label="Breadcrumb">
-      <ol className="flex flex-wrap items-center gap-1.5 text-body text-ink-3">
-        <li className="flex items-center gap-1.5">
-          <Link to="/settings" className={pocketFocusRing}>
-            Settings
-          </Link>
-          <Icon name="chev" size={16} />
-        </li>
-        <li>
-          <span aria-current="page" className="text-ink">
-            {page}
-          </span>
-        </li>
-      </ol>
-    </nav>
+    <>
+      <Crumb trail={[{ label: 'Settings', href: '/settings' }, { label: page }]} />
+      <div className="grid max-w-2xl gap-1">
+        <h2 className="font-display text-title font-bold text-ink">{heading}</h2>
+        <div className="grid gap-2 text-reading text-ink-2">{children}</div>
+      </div>
+    </>
   )
-}
-
-/** The page's words under the shell's heading, which already names it. */
-function Intro({ children }: { children: React.ReactNode }) {
-  return <div className="grid max-w-2xl gap-2 text-reading text-ink-2">{children}</div>
 }
 
 /** A message box in the same face as Pocket's Input, named by its own label. */
@@ -131,6 +128,7 @@ function SentList({ kinds, title, empty }: { kinds: RequestKind[]; title: string
           mine.map((r) => (
             <div key={r.id} data-testid={`request-${r.id}`} className="border-b border-line pb-2.5 last:border-b-0">
               <Row
+                leading={<KindTile icon={<Icon name={KIND_ICON[r.kind]} />} on="white" />}
                 title={KIND_TITLE[r.kind]}
                 line={
                   <>
@@ -199,12 +197,14 @@ export function HelpScreen() {
   const send = kind === 'support' ? help : complaint
   return (
     <div className="grid gap-5 px-gutter py-4 wide:py-6">
-      <Breadcrumb page="Help and complaints" />
-      <Intro>
+      <PageTop page="Help and complaints" heading="Ask us something, or make a complaint">
         <p>Ask us about your account, or tell us what went wrong. A person at Talyvor reads every message and answers on this page.</p>
         <p>A complaint gets a reference as soon as you send it. Quote it whenever you write to us about it.</p>
-      </Intro>
+      </PageTop>
       <div className="grid items-start gap-4 wide:grid-cols-12">
+        <div className="wide:col-span-7">
+          <SentList kinds={['support', 'complaint']} title="What you sent" empty="Nothing sent yet." />
+        </div>
         <Card className="wide:col-span-5">
           <h3 className="font-display text-reading font-bold text-ink">Write to us</h3>
           <form
@@ -237,9 +237,6 @@ export function HelpScreen() {
             </div>
           </form>
         </Card>
-        <div className="wide:col-span-7">
-          <SentList kinds={['support', 'complaint']} title="What you sent" empty="Nothing sent yet." />
-        </div>
       </div>
     </div>
   )
@@ -251,15 +248,17 @@ export function CloseAccountScreen() {
   const close = useSend('account_closure', () => ({ title: 'Asked', line: 'A person at Talyvor closes the account and answers on this page.' }))
   return (
     <div className="grid gap-5 px-gutter py-4 wide:py-6">
-      <Breadcrumb page="Close this account" />
-      <Intro>
+      <PageTop page="Close this account" heading="What must be empty first, and asking to close">
         <p>
           Before the account can close, every balance must be empty: the account’s own, each agent’s, and any money set aside. Move the
           money out first.
         </p>
         <p>A person at Talyvor closes the account and answers on this page. Only the account’s owner can ask.</p>
-      </Intro>
+      </PageTop>
       <div className="grid items-start gap-4 wide:grid-cols-12">
+        <div className="wide:col-span-7">
+          <SentList kinds={['account_closure']} title="What you asked" empty="You have not asked to close this account." />
+        </div>
         <Card className="wide:col-span-5">
           <h3 className="font-display text-reading font-bold text-ink">Ask to close</h3>
           <form
@@ -278,9 +277,6 @@ export function CloseAccountScreen() {
             </div>
           </form>
         </Card>
-        <div className="wide:col-span-7">
-          <SentList kinds={['account_closure']} title="What you asked" empty="You have not asked to close this account." />
-        </div>
       </div>
     </div>
   )
@@ -293,11 +289,13 @@ export function YourDataScreen() {
   const erase = useSend('data_deletion', () => ({ title: 'Asked', line: 'A person at Talyvor answers on this page.' }))
   return (
     <div className="grid gap-5 px-gutter py-4 wide:py-6">
-      <Breadcrumb page="Your data" />
-      <Intro>
+      <PageTop page="Your data" heading="A copy of your data, or ask for it to be deleted">
         <p>Ask for a copy of this account’s data, or ask Talyvor to delete it. A person at Talyvor handles each request. Only the account’s owner can ask.</p>
-      </Intro>
+      </PageTop>
       <div className="grid items-start gap-4 wide:grid-cols-12">
+        <div className="wide:col-span-7">
+          <SentList kinds={['data_export', 'data_deletion']} title="What you asked" empty="You have not asked for your data." />
+        </div>
         <div className="grid gap-4 wide:col-span-5">
           <Card>
             <h3 className="font-display text-reading font-bold text-ink">A copy of your data</h3>
@@ -316,7 +314,7 @@ export function YourDataScreen() {
           <Card>
             <h3 className="font-display text-reading font-bold text-ink">Delete your data</h3>
             <p className="mt-1 text-body text-ink-2">
-              Billing and ledger records, statements included, are kept, because the law requires them.
+              Ask, and we delete it. Billing and ledger records, statements included, are kept as the law requires.
             </p>
             <form
               className="mt-2 grid gap-3"
@@ -334,9 +332,6 @@ export function YourDataScreen() {
               </div>
             </form>
           </Card>
-        </div>
-        <div className="wide:col-span-7">
-          <SentList kinds={['data_export', 'data_deletion']} title="What you asked" empty="You have not asked for your data." />
         </div>
       </div>
     </div>
