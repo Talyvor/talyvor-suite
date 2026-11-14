@@ -17,7 +17,7 @@ const PRICING = {
   plan_gates: { order: ['free', 'team', 'business'], plans: { free: { agents: 3 }, team: { agents: 25 }, business: { agents: -1 } } },
 }
 
-function mockBff({ agents, plan, create }: { agents: ReturnType<typeof agent>[]; plan: { plan: string; agents: number; agents_used: number; seats: number }; create?: () => Response }) {
+function mockBff({ agents, plan, create }: { agents: ReturnType<typeof agent>[]; plan: { plan: string; agents: number; agents_used: number }; create?: () => Response }) {
   const sent: Array<{ method: string; url: string; body: Record<string, unknown> }> = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -27,6 +27,8 @@ function mockBff({ agents, plan, create }: { agents: ReturnType<typeof agent>[];
     if (method !== 'GET') sent.push({ method, url, body })
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    // B57.44: /api/plan carries the plan's seats too; Agents reads none of them.
+    if (url === '/api/plan' && !('seats' in plan)) return json({ ...plan, seats: 1 })
     if (url === '/api/plan') return json(plan)
     if (url === '/api/pricing') return json(PRICING)
     if (url === '/api/agents' && method === 'GET') {
@@ -67,7 +69,7 @@ async function openNewAgent() {
 describe('Agents (B57.19)', () => {
   it('lists every agent as its card, with the total, and the room’s wallet apart from the agents', async () => {
     const room = agent('agt_room', 'Room: Agent pricing research', { kind: 'room', balance_ulxc: 0 })
-    mockBff({ agents: [agent('agt_1', 'Research'), agent('agt_2', 'Sales'), agent('agt_3', 'Ops'), room], plan: { plan: 'free', agents: 3, agents_used: 3, seats: 1 } })
+    mockBff({ agents: [agent('agt_1', 'Research'), agent('agt_2', 'Sales'), agent('agt_3', 'Ops'), room], plan: { plan: 'free', agents: 3, agents_used: 3 } })
     window.history.pushState({}, '', '/agents')
     render(<App />)
     const list = await screen.findByTestId('agents-list')
@@ -83,7 +85,7 @@ describe('Agents (B57.19)', () => {
 
   it('says the plan’s limit before you try, naming only the agents — the room’s wallet takes no place', async () => {
     const room = agent('agt_room', 'Room: Agent pricing research', { kind: 'room' })
-    const { sent } = mockBff({ agents: [agent('agt_1', 'Research'), agent('agt_2', 'Sales'), agent('agt_3', 'Ops'), room], plan: { plan: 'free', agents: 3, agents_used: 3, seats: 1 } })
+    const { sent } = mockBff({ agents: [agent('agt_1', 'Research'), agent('agt_2', 'Sales'), agent('agt_3', 'Ops'), room], plan: { plan: 'free', agents: 3, agents_used: 3 } })
     await openNewAgent()
     const dialog = await screen.findByRole('dialog', { name: 'Free has room for 3 agents' })
     await waitFor(() =>
@@ -101,7 +103,7 @@ describe('Agents (B57.19)', () => {
 
   it('shows the create form below the limit, and opens the new agent’s page with what it is for and its rules saved', async () => {
     const room = agent('agt_room', 'Room: Agent pricing research', { kind: 'room' })
-    const { sent } = mockBff({ agents: [agent('agt_1', 'Research'), agent('agt_2', 'Sales'), room], plan: { plan: 'free', agents: 3, agents_used: 2, seats: 1 } })
+    const { sent } = mockBff({ agents: [agent('agt_1', 'Research'), agent('agt_2', 'Sales'), room], plan: { plan: 'free', agents: 3, agents_used: 2 } })
     await openNewAgent()
     const dialog = await screen.findByRole('dialog', { name: 'New agent' })
     fireEvent.change(await within(dialog).findByLabelText('Name'), { target: { value: 'Ops' } })
@@ -118,7 +120,7 @@ describe('Agents (B57.19)', () => {
     mockBff({
       agents: [agent('agt_1', 'Research'), agent('agt_2', 'Sales')],
       // The plan read before the agent was made elsewhere: Lens still refuses the create.
-      plan: { plan: 'free', agents: 3, agents_used: 2, seats: 1 },
+      plan: { plan: 'free', agents: 3, agents_used: 2 },
       create: () =>
         new Response(
           JSON.stringify({ error: 'LENS_PLAN_GATES: Free allows 3 agents, and all 3 are in use. Team allows 25.', setting: 'LENS_PLAN_GATES', plan: 'free', gate: 'agents', limit: 3, allows: 'team' }),
@@ -137,7 +139,7 @@ describe('Agents (B57.19)', () => {
   })
 
   it('sends /agents?agent=<id> on to that agent’s own page, with its statement line', async () => {
-    mockBff({ agents: [agent('agt_1', 'Research')], plan: { plan: 'free', agents: 3, agents_used: 1, seats: 1 } })
+    mockBff({ agents: [agent('agt_1', 'Research')], plan: { plan: 'free', agents: 3, agents_used: 1 } })
     window.history.pushState({}, '', '/agents?agent=agt_1&entry=ent_9')
     render(<App />)
     await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_1'))
