@@ -298,6 +298,9 @@ func agentRulesFields(w http.ResponseWriter, raw []byte) ([]byte, bool) {
 		Timezone               string           `json:"timezone"`
 		// B19.6 — Lens replaces every other rule on a save, so this is carried back as it was read.
 		PauseOnUnusualSpend bool `json:"pause_on_unusual_spend"`
+		// B59.19 — "Can use Instant transfer" (Lens B59.15), off by default. Absent (null) keeps what Lens holds, so a
+		// save from a screen that does not show the switch never turns it off.
+		MayInstantTransfer *bool `json:"may_instant_transfer"`
 	}
 	if err := json.Unmarshal(raw, &in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})

@@ -63,6 +63,7 @@ import {
   limitText,
   parseLXC,
   refusalText,
+  useAccount,
 } from './agentBankApi'
 import { WorkspaceLabel, approvalCapability, paymentRequestCapabilities } from '../../labels/workspace'
 import { DESIGN_ATTR } from '../../pocketPending'
@@ -834,6 +835,9 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
   const [listings, setListings] = useState<string[]>(rules.allowed_listings ?? [])
   const [payees, setPayees] = useState<Payees>(() => payeesOf(rules))
   const [pauseOnUnusual, setPauseOnUnusual] = useState(rules.pause_on_unusual_spend ?? false)
+  // B59.19 — "Can use Instant transfer", off by default; only a Hybrid account has the switch.
+  const instant = useAccount().shows?.instantTransfer === true
+  const [mayInstant, setMayInstant] = useState(rules.may_instant_transfer ?? false)
   const [from, setFrom] = useState(rules.active_from)
   const [until, setUntil] = useState(rules.active_until)
   const [timezone, setTimezone] = useState(rules.timezone)
@@ -892,6 +896,8 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
     active_until: until.trim(),
     timezone: timezone.trim(),
     pause_on_unusual_spend: pauseOnUnusual,
+    // Sent only when the switch moved: absent, Lens keeps what it holds, and a template does not touch it.
+    ...(instant && mayInstant !== (rules.may_instant_transfer ?? false) ? { may_instant_transfer: mayInstant } : {}),
   }
   const change = useRulesChange(agent.id)
   const judged = change.judgedFor({ rules: proposed })
@@ -975,6 +981,23 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
           {pauseOnUnusual ? 'On' : 'Off'}
         </Button>
       </Row>
+      {instant ? (
+        <Row
+          label="Can use Instant transfer"
+          hint={`Off by default. When it’s on, ${agent.name} can send Instant transfers inside these rules. Anything outside them waits for your yes.`}
+        >
+          <Button
+            type="button"
+            role="switch"
+            aria-label="Can use Instant transfer"
+            aria-checked={mayInstant}
+            className={pressed}
+            onClick={() => setMayInstant((on) => !on)}
+          >
+            {mayInstant ? 'On' : 'Off'}
+          </Button>
+        </Row>
+      ) : null}
       <TimePicker label="Active from" agentName={agent.name} value={from} onChange={setFrom} />
       <TimePicker label="Active until" agentName={agent.name} value={until} onChange={setUntil} />
       <TimeZonePicker agentName={agent.name} value={timezone} onChange={setTimezone} />
@@ -1324,6 +1347,9 @@ function ruleChanges(was: AgentRules, now: AgentRules, payeeName: (id: string) =
   if ((was.timezone || 'UTC') !== (now.timezone || 'UTC')) out.push({ rule: 'Time zone', from: was.timezone || 'UTC', to: now.timezone || 'UTC' })
   if (Boolean(was.pause_on_unusual_spend) !== Boolean(now.pause_on_unusual_spend)) {
     out.push({ rule: 'Pause on unusual spend', from: was.pause_on_unusual_spend ? 'on' : 'off', to: now.pause_on_unusual_spend ? 'on' : 'off' })
+  }
+  if (now.may_instant_transfer !== undefined && Boolean(was.may_instant_transfer) !== now.may_instant_transfer) {
+    out.push({ rule: 'Can use Instant transfer', from: was.may_instant_transfer ? 'on' : 'off', to: now.may_instant_transfer ? 'on' : 'off' })
   }
   return out
 }

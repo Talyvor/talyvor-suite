@@ -78,6 +78,8 @@ import { DocsEmailBranding } from './areas/docs/DocsEmailBranding'
 import { DocsWebhooks } from './areas/docs/DocsWebhooks'
 import { InvoicesScreen } from './areas/lens/Invoices'
 import { PayBillsScreen, PayBulkPayoutsScreen, PayMandatesScreen, PayScreen, PayStandingOrdersScreen } from './areas/lens/Pay'
+import { PayInstantTransferScreen } from './areas/lens/InstantTransfer'
+import { InstantTransferScreen } from './areas/lens/InstantTransferReceipt'
 import { RecurringPlanScreen } from './areas/lens/RecurringPlan'
 import { SubscriptionsScreen } from './areas/lens/Subscriptions'
 import { BudgetsScreen } from './areas/lens/Budgets'
@@ -262,6 +264,9 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/money/pay/mandates', title: 'Mandates', element: <PayMandatesScreen /> },
   { path: '/money/pay/bulk-payouts', title: 'Bulk payouts', element: <PayBulkPayoutsScreen /> },
   { path: '/money/pay/bills', title: 'Bills you received', element: <PayBillsScreen /> },
+  // B59.19 — Instant transfer, for a Hybrid account: the quote and the send, then its progress and its receipt.
+  { path: '/money/pay/instant-transfer', title: 'Instant transfer', element: <PayInstantTransferScreen /> },
+  { path: '/money/pay/instant-transfer/:id', title: 'Instant transfer', element: <InstantTransferScreen /> },
   // B45.37 — the page an assistant's recurring-payments link opens: its standing orders, and one passkey signature.
   { path: '/money/plans/:id', title: 'Sign recurring payments', element: <RecurringPlanScreen /> },
   // B41.20 — every recurring payment, standing order and renewing rental, with its next charge, monthly cost and reminder.

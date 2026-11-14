@@ -111,7 +111,7 @@ function mockBff({ hold = 'sentence' }: { hold?: 'sentence' | 'accepted' } = {})
     }
     return new Response('null', { status: 404 })
   })
-  return { agents, approvals, moveKeys, blips, setWorkspace: (v: number) => (workspace = v) }
+  return { agents, approvals, moveKeys, blips, rules, setWorkspace: (v: number) => (workspace = v) }
 }
 
 afterEach(() => {
@@ -195,6 +195,22 @@ describe('Agent Bank', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  // B59.19 — "Can use Instant transfer" is off by default; turned on and saved, the rules carry it to Lens.
+  it('turns on Can use Instant transfer and saves it with the rules', async () => {
+    const bff = mockBff()
+    window.history.pushState({}, '', '/agents/agt_1')
+    render(<App />)
+    await screen.findByTestId('agent-first')
+    await createAgent('Researcher')
+    const can = await screen.findByRole('switch', { name: 'Can use Instant transfer' })
+    expect(can.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(can)
+    expect(can.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+    await screen.findByText(/Saved\. Lens applies these rules/)
+    expect(bff.rules.agt_1.may_instant_transfer).toBe(true)
   })
 
   it('creates and funds an agent, refuses a payment over its daily limit, and pays once approved from the inbox', async () => {
