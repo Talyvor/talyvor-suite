@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -68,6 +68,7 @@ describe('a limit boost', () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Limit boost')).getByRole('button')) // B57.22: a row of its Settings
     const limit = (await screen.findByLabelText('Limit to raise for Researcher')) as HTMLSelectElement
     expect(limit.value).toBe('daily_limit_ulxc')
     fireEvent.change(screen.getByLabelText('Raise Researcher’s limit to'), { target: { value: '50' } })
@@ -97,6 +98,7 @@ describe('a limit boost', () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Limit boost')).getByRole('button'))
     fireEvent.change(await screen.findByLabelText('Raise Researcher’s limit to'), { target: { value: '50' } })
     fireEvent.change(screen.getByLabelText('Raise Researcher’s limit until'), { target: { value: '2030-01-01T18:00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Raise until then' }))

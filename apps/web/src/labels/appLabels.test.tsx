@@ -72,7 +72,8 @@ const PLACEMENTS: [string, string[]][] = [
   // B57.19 — /agents is the list; today's agent view, with its chips, is the agent's own address. B57.20: the agent's
   // page above it says it once, on its balance.
   // B57.21 — its money features are panels of its Money card, each with its label (AgentMoney.test.tsx, WalletMoney.test.tsx).
-  ['/agents/agt_research', [AGENT_CREDIT, AGENT_CREDIT, AGENT_CREDIT, 'payments_out', 'pay_another_owner', 'agent_card', AGENT_CREDIT]],
+  // B57.22 — the card's agent_card chip is inside its Settings row.
+  ['/agents/agt_research', [AGENT_CREDIT, AGENT_CREDIT, AGENT_CREDIT, 'payments_out', 'pay_another_owner', AGENT_CREDIT]],
   // B57.17 — the agents' requests first, then the prepared payments, as w-approvals lists them.
   ['/approvals', ['pay_another_owner', 'payments_out']],
   // B57.24 — one chip, on the agent's statement document.

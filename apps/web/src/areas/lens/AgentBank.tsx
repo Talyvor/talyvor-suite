@@ -20,6 +20,7 @@ import { AgentCard, MoveLxc } from './AgentCard'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { HelperPicker } from '../../cards/HelperPicker'
+import { AgentSettings } from './AgentSettings'
 import { limitAlertText } from './LimitAlertsCard'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { DeclineForm, declinedText } from './Decline'
@@ -309,7 +310,7 @@ function AlertsBeforeAgents({ nameOf }: { nameOf: (id: string) => string }) {
   )
 }
 
-const SCHEDULES_KEY = ['agent-schedules']
+export const SCHEDULES_KEY = ['agent-schedules']
 const scheduleSelect = `h-8 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 const EVERY: readonly [AgentSchedule['every'], string][] = [
   ['hour', 'every hour'],
@@ -725,35 +726,6 @@ function Money({ agent, book }: { agent: Agent; book: AgentBook }) {
  * B19.23 — whether the agent's owner is verified (Lens B19.11). Lens knows a person only as their
  * workspace, so the badge is this workspace's verification: a completed card purchase, or Talyvor's vouch.
  */
-function Ownership({ agent }: { agent: Agent }) {
-  if (agent.owner_user_id === undefined) return null
-  return (
-    <div className="flex flex-wrap items-center gap-2" data-testid="agent-ownership">
-      {agent.owner_user_id === '' ? (
-        <>
-          <Pill status="held">No owner</Pill>
-          <span className="text-caption text-muted">Nobody owns {agent.name} yet. Claim it under Money.</span>
-        </>
-      ) : agent.verified ? (
-        <>
-          <Pill status="settled">Verified</Pill>
-          <span className="text-caption text-muted">
-            Its owner is verified: this workspace has bought LXC with a card, or Talyvor vouches for it.
-          </span>
-        </>
-      ) : (
-        <>
-          <Pill status="idle">Not verified</Pill>
-          <span className="text-caption text-muted">
-            {agent.name} has an owner who is not verified yet. Buying LXC with a card on Billing verifies this
-            workspace, and every agent in it with an owner.
-          </span>
-        </>
-      )}
-    </div>
-  )
-}
-
 /** B28.21 — the agent's name and what it is for, in its owner's words (Lens keeps up to 500 characters); B57.124, its helper. */
 function AgentDetails({ agent }: { agent: Agent }) {
   const qc = useQueryClient()
@@ -797,54 +769,6 @@ function AgentDetails({ agent }: { agent: Agent }) {
         {save.isSuccess && !changed ? <Note ok>Saved.</Note> : null}
         {save.isError ? <Note ok={false}>{refusalText(save.error)}</Note> : null}
       </form>
-    </Card>
-  )
-}
-
-/**
- * B28.21 — archiving retires the agent for good (Lens B28.298): in one step its whole balance goes back to
- * the workspace as one withdraw entry, its keys stop working, and its top-up and schedules stop. Asked twice.
- */
-function ArchiveAgent({ agent, onArchived }: { agent: Agent; onArchived: (done: AgentArchive) => void }) {
-  const qc = useQueryClient()
-  const [asking, setAsking] = useState(false)
-  const archive = useMutation({
-    mutationFn: () => agentBankApi.archive(agent.id),
-    onSuccess: onArchived,
-    onSettled: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: BOOK_KEY }),
-        qc.invalidateQueries({ queryKey: statementKey(agent.id) }),
-      ]),
-  })
-  const keys = agent.keys.length
-  return (
-    <Card>
-      <CardHeader>Archive</CardHeader>
-      <div className="flex flex-col gap-2 px-gutter py-3">
-        <p className="text-body text-ink">
-          Archiving {agent.name} moves the {lxc(agent.balance_ulxc)} it holds back to the workspace, stops its{' '}
-          <span className="font-figure">{keys}</span> {keys === 1 ? 'key' : 'keys'} working, and ends its top-up and
-          schedules. Its statement is kept. It cannot be undone.
-        </p>
-        {asking ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="danger" disabled={archive.isPending} onClick={() => archive.mutate()}>
-              {archive.isPending ? 'Archiving…' : `Yes, archive ${agent.name}`}
-            </Button>
-            <Button disabled={archive.isPending} onClick={() => setAsking(false)}>
-              Keep it
-            </Button>
-          </div>
-        ) : (
-          <div>
-            <Button variant="danger" onClick={() => setAsking(true)}>
-              Archive {agent.name}
-            </Button>
-          </div>
-        )}
-        {archive.isError ? <Note ok={false}>{refusalText(archive.error)}</Note> : null}
-      </div>
     </Card>
   )
 }
@@ -1313,7 +1237,6 @@ export function Rules({ agent, agents }: { agent: Agent; agents: Agent[] }) {
           </p>
         )}
       </Card>
-      {rules.isSuccess ? <LimitBoost agent={agent} rules={rules.data} /> : null}
       <RulesHistory
         agent={agent}
         agents={agents}
@@ -1591,6 +1514,13 @@ function localMinute(d: Date): string {
  * and the rules and their history are never touched. A boost raises only a limit the rules set, and only while the
  * rules leave that limit where it was; it can be ended early.
  */
+/** B57.22 — the Limit boost row's form: today's, over the agent's rules as they stand. */
+function BoostForm({ agent }: { agent: Agent }) {
+  const rules = useQuery({ queryKey: rulesKey(agent.id), queryFn: () => agentBankApi.rules(agent.id) })
+  if (rules.isError) return <p className="text-body text-muted">{readFailure(rules.error, 'Its rules')}</p>
+  return rules.isSuccess ? <LimitBoost agent={agent} rules={rules.data} /> : <p className="text-body text-muted">Reading…</p>
+}
+
 function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
   const qc = useQueryClient()
   const boosts = useQuery({
@@ -3072,40 +3002,34 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
           ) : (
             <>
               {rulesFirst ? <Rules key={`rules-${agent.id}`} agent={agent} agents={live} /> : null}
-              <Ownership agent={agent} />
               <div className="wide:max-w-sm">
                 <AgentCard agent={agent} book={book.data} />
               </div>
-              <AgentDetails key={`details-${agent.id}`} agent={agent} />
               <Money agent={agent} book={book.data} />
               {rulesFirst ? null : <Rules key={`rules-${agent.id}`} agent={agent} agents={live} />}
               <TryRules key={`try-${agent.id}`} agent={agent} agents={live} />
-              {live.length > 1 ? (
-                <Pay
-                  key={`pay-${agent.id}`}
-                  agent={agent}
-                  agents={live}
-                  waiting={held}
-                  onHeld={(id, p) => setHeld((h) => ({ ...h, [id]: p }))}
-                />
-              ) : (
-                <Card>
-                  <CardHeader>Pay another agent</CardHeader>
-                  <p className="px-gutter py-3 text-body text-muted">Create a second agent to pay it from this one.</p>
-                </Card>
-              )}
-              <Schedules key={`schedules-${agent.id}`} agent={agent} agents={live} nameOf={nameOf} />
               {moneyOnPage ? null : <AgentMoneySection key={`money-${agent.id}`} agent={agent} />}
-              <AgentTopUpCard key={`topup-${agent.id}`} agent={agent} />
-              <IssueKey key={`key-${agent.id}`} agent={agent} />
-              <AgentCredentialCard key={`credential-${agent.id}`} agent={agent} />
-              <AgentCardPanel key={`card-${agent.id}`} agent={agent} />
               <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
-              <ArchiveAgent
-                key={`archive-${agent.id}`}
+              {/* B57.22 — its Settings: each row opens today's form for it, so each posts what it posted before. */}
+              <AgentSettings
+                key={`settings-${agent.id}`}
                 agent={agent}
                 onArchived={(done) => setArchived((m) => ({ ...m, [done.agent_id]: done }))}
+                forms={{
+                  keyForm: <IssueKey agent={agent} />,
+                  card: <AgentCardPanel agent={agent} />,
+                  topUp: <AgentTopUpCard agent={agent} />,
+                  boost: <BoostForm agent={agent} />,
+                  pay:
+                    live.length > 1 ? (
+                      <Pay agent={agent} agents={live} waiting={held} onHeld={(id, p) => setHeld((h) => ({ ...h, [id]: p }))} />
+                    ) : (
+                      <p className="text-body text-muted">Create a second agent to pay it from this one.</p>
+                    ),
+                  schedules: <Schedules agent={agent} agents={live} nameOf={nameOf} />,
+                  credential: <AgentCredentialCard agent={agent} />,
+                }}
               />
             </>
           )}
