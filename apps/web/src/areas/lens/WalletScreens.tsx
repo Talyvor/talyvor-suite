@@ -7,7 +7,7 @@ import { Region, RegionScreen } from '../../components/Region'
 import { WorkspaceLabel, approvalCapability } from '../../labels/workspace'
 import { ApiError } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
-import { APPROVALS_KEY, BOOK_KEY, DECIDED, FaceIDCard, MANDATE_REQUESTS_KEY, MandateRequestRow, PAYEE_KIND, PREPARED_KEY, PreparedRow, Statement, useKeys } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, DECIDED, MANDATE_REQUESTS_KEY, MandateRequestRow, PAYEE_KIND, PREPARED_KEY, PreparedRow, Statement, useKeys } from './AgentBank'
 import { approvalDeclineTo, approvalSheetTo, expiresText } from './ApprovalSheet'
 import { AgentStatement, DownloadFailed, JOURNAL_SENTENCE, MONTH_FILE_TYPES, downloadWords, useMonthFile } from './AgentStatement'
 import { agentBankApi, type Agent, type AgentApproval, type CurrencyAccount, type StatementFormat } from './agentBankApi'
@@ -69,8 +69,8 @@ export function ApprovalsScreen() {
 
 // B57.17 — /approvals as Pocket's w-approvals. What waits for the person (each agent's request and each
 // payment Chat or an assistant prepared, with Review), the newest five decided with their date, how approving works, and a
-// way to each agent's rules. Deciding happens in B57.15's sheet; a and d decide the focused row from the keyboard. The Face ID
-// and notifications card stays at the foot, in today's design, until B57.43 gives it a page of its own.
+// way to each agent's rules. Deciding happens in B57.15's sheet; a and d decide the focused row from the keyboard. The keys
+// are on Approvals and devices (B57.43).
 
 /** The newest this many decided approvals are listed. */
 export const DECIDED_SHOWN = 5
@@ -223,10 +223,16 @@ function ApprovalsPage() {
 
   return (
     <div className="grid min-w-0 gap-5">
-      <p className="max-w-3xl text-reading text-ink-2">
-        A request or payment waits here when it is above an agent’s approval amount. Approve it and the agent’s next identical request goes through,
-        once; decline it and the request is refused, and asking again the same way is refused for 24 hours.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-3xl text-reading text-ink-2">
+          A request or payment waits here when it is above an agent’s approval amount. Approve it and the agent’s next identical request goes through,
+          once; decline it and the request is refused, and asking again the same way is refused for 24 hours.
+        </p>
+        {/* B57.43 — passkeys, the phone's key and notifications have their own page. */}
+        <PocketButton asChild variant="secondary">
+          <Link to="/settings/devices">Approvals and devices</Link>
+        </PocketButton>
+      </div>
       <div className="grid items-start gap-4 wide:grid-cols-12">
         <div className="grid min-w-0 gap-4 wide:col-span-7">
           <Card tone="white" aria-label="Waiting for you">
@@ -381,10 +387,6 @@ function ApprovalsPage() {
             ) : null}
           </Card>
         </div>
-      </div>
-      {/* Today's Face ID and notifications card, until B57.43 moves it to Approvals and devices. */}
-      <div data-design="today" className="flex max-w-2xl flex-col gap-3">
-        <FaceIDCard />
       </div>
     </div>
   )

@@ -120,7 +120,8 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/': 0,
   // B28.7 — Approvals (waiting, decided). B57.24: Statements opens on an agent's statement, a Pocket document whose
   // name is its own heading, so it has no card header.
-  '/approvals': 1,
+  // B57.43: 1 → 0, the Face ID and notifications card moved to Approvals and devices.
+  '/approvals': 0,
   '/statements': 0,
   '/overview': 6,
   '/ledger': 1,
@@ -161,9 +162,10 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B57.16 — an agent's page and its rules are today's agent view with that agent open.
   // 38 → 28 at B57.21: the agent's ten money cards are panels of its Money card, in Pocket; 38 → 23 on its page, which
   // also draws the workspace's Requests, Credit line, Loans, Escrow and Cash-outs as its own panels.
+  // B57.43: one fewer, the Face ID and notifications card moved to Approvals and devices.
   // B57.22 — eight more (name and description, pay, schedules, top-up, key, credential, limit boost, archive) open from its Settings rows.
-  '/agents/:id': 15,
-  '/agents/:id/rules': 20,
+  '/agents/:id': 14,
+  '/agents/:id/rules': 19,
   '/agents': 0, // B57.19 drew /agents in Pocket: its cards are AgentCards, so today's card headers are on /agents/:id alone
   // B20.3 — the catalog's Listings card. 1 → 0 at B29.11: the listings are cards of their own, a list
   // named Listings in the Browse region, and no card header.
@@ -182,6 +184,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/operator/compliance': 0,
   // 6 → 0 at B57.42: drawn in Pocket, whose cards head themselves with an h2 or h3.
   '/settings': 0,
+  '/settings/devices': 0, // B57.43: drawn in Pocket
   '/settings/verification': 0, // B57.42: drawn in Pocket
   '/settings/payout-details': 0,
   '/settings/terms': 0, // B57.42: drawn in Pocket

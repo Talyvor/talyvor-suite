@@ -403,7 +403,7 @@ describe('Approvals in Pocket (B57.17)', () => {
     expect(screen.queryByRole('link', { name: 'Add this browser' })).toBeNull()
   })
 
-  it('says how approving works, links each agent’s rules, and keeps the Face ID card at the foot', async () => {
+  it('says how approving works, links each agent’s rules, and Approvals and devices', async () => {
     mockBff([], [], 0)
     window.history.pushState({}, '', '/approvals')
     render(<App />)
@@ -417,7 +417,7 @@ describe('Approvals in Pocket (B57.17)', () => {
     expect(how).toHaveTextContent('If you declineThat request is refused, and asking again the same way is refused for 24 hours')
     expect(await screen.findByRole('link', { name: 'Researcher’s rules' })).toHaveAttribute('href', '/agents/agt_1/rules')
     expect(screen.getByRole('link', { name: 'Buyer’s rules' })).toHaveAttribute('href', '/agents/agt_2/rules')
-    expect((await screen.findByText('Face ID and notifications')).closest('[data-design]')).toHaveAttribute('data-design', 'today')
+    expect(screen.getByRole('link', { name: 'Approvals and devices' })).toHaveAttribute('href', '/settings/devices')
     expect(screen.getByRole('heading', { level: 1, name: 'Approvals' }).closest('[data-design]')).toHaveAttribute('data-design', 'pocket')
     expect(document.body.textContent).not.toMatch(/Taly\b/)
   })
