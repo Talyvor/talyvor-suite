@@ -2,15 +2,28 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { inlineLink } from '@talyvor/ui'
-import { Button as PocketButton, Card, Chip, Face, Facts, Icon, Money, Row, Select, Tabs, pocketFocusRing, showSnack, type ChipTone } from '@talyvor/ui/pocket'
+import { Button as PocketButton, Card, Chip, Face, Facts, Icon, Money, RoomBadge, Row, Select, Tabs, pocketFocusRing, showSnack, type ChipTone } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { WorkspaceLabel, approvalCapability } from '../../labels/workspace'
 import { ApiError } from '../../lib/api'
 import { isSessionExpired } from '../../lib/productState'
-import { APPROVALS_KEY, BOOK_KEY, DECIDED, MANDATE_REQUESTS_KEY, MandateRequestRow, PAYEE_KIND, PREPARED_KEY, PreparedRow, Statement, useKeys } from './AgentBank'
+import {
+  APPROVALS_KEY,
+  BOOK_KEY,
+  DECIDED,
+  MANDATE_REQUESTS_KEY,
+  MandateRequestRow,
+  PAYEE_KIND,
+  PREPARED_KEY,
+  PreparedRow,
+  Statement,
+  preparedBy,
+  preparedWords,
+  useKeys,
+} from './AgentBank'
 import { approvalDeclineTo, approvalSheetTo, expiresText } from './ApprovalSheet'
 import { AgentStatement, DownloadFailed, JOURNAL_SENTENCE, MONTH_FILE_TYPES, downloadWords, useMonthFile } from './AgentStatement'
-import { agentBankApi, type Agent, type AgentApproval, type CurrencyAccount, type StatementFormat } from './agentBankApi'
+import { agentBankApi, type Agent, type AgentApproval, type CurrencyAccount, type PaymentRequest, type StatementFormat } from './agentBankApi'
 import { formatDecided } from './format'
 import { signApproval } from './passkeys'
 import { AccountStatement, MarketplaceBill, accountTitle, useAccountMonthCsv } from './AccountStatement'
@@ -76,6 +89,33 @@ export function ApprovalsScreen() {
 export const DECIDED_SHOWN = 5
 
 const DECIDED_TONE: Record<string, ChipTone> = { approved: 'good', used: 'good', denied: 'bad', expired: 'bad' }
+
+/** B57.162 — the prepared payments approved, cancelled or expired (Lens B57.161), listed in Decided with the agents' requests. */
+const DECIDED_PREPARED_KEY = ['money-payment-requests', 'decided']
+const PREPARED_TONE: Record<string, ChipTone> = { approved: 'good', cancelled: 'bad', expired: 'bad' }
+// Lens says how each was decided ("Approved and paid"); these are its words for a request it sent without one.
+const PREPARED_DECIDED: Record<string, string> = { approved: 'Approved', cancelled: 'Declined', expired: 'Expired' }
+
+/** A decided prepared payment, as w-approvals draws it: "A payment to Northwind Data", "Prepared by Chat · today at 10:31". */
+function DecidedPreparedRow({ r, nameOf }: { r: PaymentRequest; nameOf: (id: string) => string }) {
+  const items = r.items ?? []
+  return (
+    <div data-decided={r.id} className="border-t border-line first:border-t-0">
+      <Row
+        wrap
+        leading={<RoomBadge icon={<Icon name="chat" />} />}
+        title={items.length === 1 ? `A payment to ${items[0].payee_name}` : `${items.length} payments`}
+        line={
+          <>
+            Prepared by {preparedBy(r.client)} · <span className="font-figure">{formatDecided(r.decided_at ?? r.created_at)}</span>
+          </>
+        }
+        amount={preparedWords(r, nameOf).total}
+        action={<Chip tone={PREPARED_TONE[r.status] ?? 'plain'}>{r.decision || PREPARED_DECIDED[r.status] || 'Closed'}</Chip>}
+      />
+    </div>
+  )
+}
 
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 // "Tomorrow at 09:17" inside a line: "expires tomorrow at 09:17", and "16 Nov" keeps its capital.
@@ -160,6 +200,7 @@ function ApprovalsPage() {
   const location = useLocation()
   const list = useQuery({ queryKey: APPROVALS_KEY, queryFn: agentBankApi.approvals })
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
+  const decidedPrepared = useQuery({ queryKey: DECIDED_PREPARED_KEY, queryFn: agentBankApi.decidedPaymentRequests })
   // B55.40 — an agent's mandate request waits here too.
   const mandateRequests = useQuery({ queryKey: MANDATE_REQUESTS_KEY, queryFn: agentBankApi.requestedMandates })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
@@ -174,9 +215,12 @@ function ApprovalsPage() {
   const asked = (mandateRequests.data?.granted ?? []).filter((m) => m.status === 'requested')
   // The sidebar's badge counts the same three lists (usePendingApprovals).
   const count = waiting.length + requests.length + asked.length
-  const decided = all
-    .filter((a) => a.status !== 'pending')
-    .sort((x, y) => Date.parse(decidedAt(y)) - Date.parse(decidedAt(x)))
+  // B57.162 — the newest five of the agents' decided requests and the decided prepared payments together.
+  const decided = [
+    ...all.filter((a) => a.status !== 'pending').map((a) => ({ a, at: decidedAt(a) })),
+    ...(decidedPrepared.data?.requests ?? []).map((r) => ({ r, at: r.decided_at ?? r.created_at })),
+  ]
+    .sort((x, y) => Date.parse(y.at) - Date.parse(x.at))
     .slice(0, DECIDED_SHOWN)
   const decides = !keys.onlyThePhone && !keys.noLiveKey && !keys.hold
 
@@ -328,7 +372,9 @@ function ApprovalsPage() {
               <Title>Decided</Title>
               {decided.length > 0 ? (
                 <div className="mt-2" data-testid="approvals-decided">
-                  {decided.map((a) => {
+                  {decided.map((d) => {
+                    if ('r' in d) return <DecidedPreparedRow key={d.r.id} r={d.r} nameOf={nameOf} />
+                    const a = d.a
                     const agent = agentOf(a.agent_id)
                     const name = nameOf(a.agent_id)
                     const what =
@@ -353,6 +399,7 @@ function ApprovalsPage() {
                   })}
                 </div>
               ) : null}
+              {decidedPrepared.isError ? <p className="mt-2 text-body text-ink-2">The decided payments could not be read just now.</p> : null}
               <p className="mt-2 text-caption text-ink-3">The newest five. A request lasts 24 hours, and so does an approval its agent has not used yet.</p>
             </Card>
           ) : null}
