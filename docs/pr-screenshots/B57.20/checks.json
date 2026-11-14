@@ -1,0 +1,466 @@
+[
+ {
+  "route": "/agents/agt_research",
+  "screen": "w-agent-research"
+ },
+ {
+  "route": "/agents/agt_research",
+  "screen": "w-agent-research",
+  "state": {
+   "fR": 1
+  },
+  "answers": {
+   "/api/agents/agt_research/summary": {
+    "as_of": "2026-10-22T09:30:00Z",
+    "agent": {
+     "id": "agt_research",
+     "name": "Research",
+     "balance_ulxc": 16500000000,
+     "spent_ulxc": 12400000000,
+     "keys": [
+      "key_research"
+     ],
+     "created_at": "2026-09-14T09:00:00Z",
+     "owner_user_id": "usr_nick",
+     "verified": true
+    },
+    "made_at": "2026-09-14T09:00:00Z",
+    "owner_user_id": "usr_nick",
+    "safe_to_spend": [
+     {
+      "currency": "LXC",
+      "balance": 16500000000,
+      "scheduled": 0,
+      "bills_due": 0,
+      "pending_approvals": 3400000000,
+      "safe_to_spend": 13100000000
+     }
+    ],
+    "month": {
+     "start": "2026-10-01T00:00:00Z",
+     "end": "2026-11-01T00:00:00Z",
+     "spent_ulxc": 12400000000,
+     "forecast_ulxc": 17966000000,
+     "runs_out_at": null,
+     "runs_out_on": null,
+     "monthly_limit_ulxc": 20000000000
+    },
+    "approvals": [
+     {
+      "id": "apr_acme",
+      "agent_id": "agt_research",
+      "amount_ulxc": 3400000000,
+      "model": "",
+      "status": "pending",
+      "created_at": "2026-10-22T08:17:00Z",
+      "expires_at": "2026-10-23T08:17:00Z",
+      "payee": {
+       "kind": "outside",
+       "id": "payee_acme",
+       "name": "Acme Hosting"
+      },
+      "memo": "October hosting invoice",
+      "paid_from": {
+       "kind": "account",
+       "account_id": "acc_research_usd",
+       "name": "Research’s US dollar account",
+       "currency": "USD",
+       "amount_minor": 34000,
+       "balance_minor": 40000
+      },
+      "asks_above_ulxc": 2500000000,
+      "budget_left_after_ulxc": 4200000000
+     }
+    ],
+    "statement": [
+     {
+      "counterparty": "spend",
+      "balance_after_ulxc": 0,
+      "at": "2026-10-22T09:24:00Z",
+      "model": "claude-sonnet-5",
+      "day": "2026-10-22",
+      "entry_id": "rs1",
+      "kind": "spend",
+      "requests": 312,
+      "amount_ulxc": -420000000
+     },
+     {
+      "counterparty": "spend",
+      "balance_after_ulxc": 0,
+      "at": "2026-10-22T09:24:00Z",
+      "model": "claude-sonnet-5",
+      "day": "2026-10-22",
+      "entry_id": "rs1_fee",
+      "kind": "platform_fee",
+      "label": "Platform fee 5.5%",
+      "memo": "On those requests",
+      "amount_ulxc": -23100000
+     },
+     {
+      "counterparty": "spend",
+      "balance_after_ulxc": 0,
+      "at": "2026-10-21T10:12:00Z",
+      "model": "claude-haiku-4-5",
+      "day": "2026-10-21",
+      "entry_id": "rh1",
+      "kind": "spend",
+      "requests": 88,
+      "amount_ulxc": -20000000
+     }
+    ],
+    "statement_time_zone": "Europe/London",
+    "rules": {
+     "version": 4,
+     "saved_at": "2026-10-01T09:00:00Z"
+    },
+    "card": {
+     "status": "frozen",
+     "currency": "gbp",
+     "last4": "4242",
+     "last_declined": {
+      "merchant_name": "Compute shop",
+      "amount_minor": 2400,
+      "currency": "gbp",
+      "words": "Declined: not one of its payees",
+      "reason": "economy: the agent's spending rules refuse this request: the agent may pay only the payees its rules name, and Compute shop is not one",
+      "at": "2026-10-21T15:00:00Z"
+     }
+    },
+    "currency_accounts": [
+     {
+      "id": "macc_research_usd",
+      "agent_id": "agt_research",
+      "currency": "USD",
+      "purpose": "agent",
+      "status": "open",
+      "name": "US dollar account",
+      "balance_minor": 40000,
+      "test_minor": 40000,
+      "live_minor": 0
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/agents/agt_sales",
+  "screen": "w-agent-sales"
+ },
+ {
+  "route": "/agents/agt_sales",
+  "screen": "w-agent-sales",
+  "state": {
+   "pS": 1
+  },
+  "answers": {
+   "/api/agents/agt_sales/summary": {
+    "as_of": "2026-10-22T09:30:00Z",
+    "agent": {
+     "id": "agt_sales",
+     "name": "Sales",
+     "balance_ulxc": 12000000000,
+     "spent_ulxc": 11000000000,
+     "keys": [
+      "key_sales"
+     ],
+     "created_at": "2026-10-05T09:00:00Z",
+     "owner_user_id": "usr_nick",
+     "verified": true,
+     "paused_at": "2026-10-22T09:30:00Z"
+    },
+    "made_at": "2026-10-05T09:00:00Z",
+    "owner_user_id": "usr_nick",
+    "safe_to_spend": [
+     {
+      "currency": "LXC",
+      "balance": 12000000000,
+      "scheduled": 0,
+      "bills_due": 0,
+      "pending_approvals": 900000000,
+      "safe_to_spend": 11100000000
+     }
+    ],
+    "month": {
+     "start": "2026-10-01T00:00:00Z",
+     "end": "2026-11-01T00:00:00Z",
+     "spent_ulxc": 11000000000,
+     "forecast_ulxc": 15938000000,
+     "runs_out_at": null,
+     "runs_out_on": null,
+     "monthly_limit_ulxc": 15000000000
+    },
+    "approvals": [
+     {
+      "id": "apr_lead",
+      "agent_id": "agt_sales",
+      "amount_ulxc": 900000000,
+      "model": "",
+      "status": "pending",
+      "created_at": "2026-10-22T07:41:00Z",
+      "expires_at": "2026-10-23T07:41:00Z",
+      "payee": {
+       "kind": "listing",
+       "id": "lst_lead_finder",
+       "name": "Lead finder"
+      },
+      "memo": "One use of Lead finder (version 3), $90.00 (900 LXC) on your monthly marketplace bill",
+      "paid_from": {
+       "kind": "marketplace_bill",
+       "account_id": "ws_1",
+       "name": "Your monthly marketplace bill",
+       "currency": "USD",
+       "amount_minor": 9000,
+       "balance_minor": null
+      },
+      "asks_above_ulxc": 500000000,
+      "budget_left_after_ulxc": 3100000000
+     }
+    ],
+    "statement": [
+     {
+      "counterparty": "spend",
+      "balance_after_ulxc": 0,
+      "at": "2026-10-22T08:52:00Z",
+      "model": "claude-haiku-4-5",
+      "day": "2026-10-22",
+      "entry_id": "sh1",
+      "kind": "spend",
+      "requests": 410,
+      "amount_ulxc": -120000000
+     },
+     {
+      "counterparty": "spend",
+      "balance_after_ulxc": 0,
+      "at": "2026-10-22T08:52:00Z",
+      "model": "claude-haiku-4-5",
+      "day": "2026-10-22",
+      "entry_id": "sh1_fee",
+      "kind": "platform_fee",
+      "label": "Platform fee 5.5%",
+      "memo": "On those requests",
+      "amount_ulxc": -6600000
+     }
+    ],
+    "statement_time_zone": "Europe/London",
+    "rules": {
+     "version": 4,
+     "saved_at": "2026-10-01T09:00:00Z"
+    },
+    "card": {
+     "status": "active",
+     "currency": "gbp",
+     "last4": "4242",
+     "last_declined": null
+    },
+    "currency_accounts": []
+   },
+   "/api/agents": {
+    "workspace_balance_ulxc": 124800000000,
+    "allocated_ulxc": 33900000000,
+    "unallocated_ulxc": 90900000000,
+    "spent_ulxc": 28000000000,
+    "agents": [
+     {
+      "id": "agt_research",
+      "name": "Research",
+      "balance_ulxc": 16500000000,
+      "spent_ulxc": 12400000000,
+      "keys": [
+       "key_research"
+      ],
+      "created_at": "2026-09-14T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     },
+     {
+      "id": "agt_sales",
+      "name": "Sales",
+      "balance_ulxc": 12000000000,
+      "spent_ulxc": 11000000000,
+      "keys": [
+       "key_sales"
+      ],
+      "created_at": "2026-10-05T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true,
+      "paused_at": "2026-10-22T09:30:00Z"
+     },
+     {
+      "id": "agt_ops",
+      "name": "Ops",
+      "balance_ulxc": 5400000000,
+      "spent_ulxc": 4600000000,
+      "keys": [
+       "key_ops"
+      ],
+      "created_at": "2026-10-09T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true,
+      "paused_at": "2026-10-21T17:00:00Z"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/agents/agt_sales",
+  "screen": "w-agent-sales",
+  "state": {
+   "K": 1
+  },
+  "answers": {
+   "/api/agents/agt_sales/summary": {
+    "as_of": "2026-10-22T09:30:00Z",
+    "agent": {
+     "id": "agt_sales",
+     "name": "Sales",
+     "balance_ulxc": 12000000000,
+     "spent_ulxc": 11000000000,
+     "keys": [
+      "key_sales"
+     ],
+     "created_at": "2026-10-05T09:00:00Z",
+     "owner_user_id": "usr_nick",
+     "verified": true
+    },
+    "made_at": "2026-10-05T09:00:00Z",
+    "owner_user_id": "usr_nick",
+    "safe_to_spend": [
+     {
+      "currency": "LXC",
+      "balance": 12000000000,
+      "scheduled": 0,
+      "bills_due": 0,
+      "pending_approvals": 900000000,
+      "safe_to_spend": 11100000000
+     }
+    ],
+    "month": {
+     "start": "2026-10-01T00:00:00Z",
+     "end": "2026-11-01T00:00:00Z",
+     "spent_ulxc": 11000000000,
+     "forecast_ulxc": 15938000000,
+     "runs_out_at": null,
+     "runs_out_on": null,
+     "monthly_limit_ulxc": 15000000000
+    },
+    "approvals": [
+     {
+      "id": "apr_lead",
+      "agent_id": "agt_sales",
+      "amount_ulxc": 900000000,
+      "model": "",
+      "status": "pending",
+      "created_at": "2026-10-22T07:41:00Z",
+      "expires_at": "2026-10-23T07:41:00Z",
+      "payee": {
+       "kind": "listing",
+       "id": "lst_lead_finder",
+       "name": "Lead finder"
+      },
+      "memo": "One use of Lead finder (version 3), $90.00 (900 LXC) on your monthly marketplace bill",
+      "paid_from": {
+       "kind": "marketplace_bill",
+       "account_id": "ws_1",
+       "name": "Your monthly marketplace bill",
+       "currency": "USD",
+       "amount_minor": 9000,
+       "balance_minor": null
+      },
+      "asks_above_ulxc": 500000000,
+      "budget_left_after_ulxc": 3100000000
+     }
+    ],
+    "statement": [
+     {
+      "counterparty": "spend",
+      "balance_after_ulxc": 0,
+      "at": "2026-10-22T08:52:00Z",
+      "model": "claude-haiku-4-5",
+      "day": "2026-10-22",
+      "entry_id": "sh1",
+      "kind": "spend",
+      "requests": 410,
+      "amount_ulxc": -120000000
+     },
+     {
+      "counterparty": "spend",
+      "balance_after_ulxc": 0,
+      "at": "2026-10-22T08:52:00Z",
+      "model": "claude-haiku-4-5",
+      "day": "2026-10-22",
+      "entry_id": "sh1_fee",
+      "kind": "platform_fee",
+      "label": "Platform fee 5.5%",
+      "memo": "On those requests",
+      "amount_ulxc": -6600000
+     }
+    ],
+    "statement_time_zone": "Europe/London",
+    "rules": {
+     "version": 4,
+     "saved_at": "2026-10-01T09:00:00Z"
+    },
+    "card": {
+     "status": "active",
+     "currency": "gbp",
+     "last4": "4242",
+     "last_declined": null
+    },
+    "currency_accounts": [],
+    "all_paused_at": "2026-10-22T09:30:00Z"
+   },
+   "/api/agents": {
+    "workspace_balance_ulxc": 124800000000,
+    "allocated_ulxc": 33900000000,
+    "unallocated_ulxc": 90900000000,
+    "spent_ulxc": 28000000000,
+    "agents": [
+     {
+      "id": "agt_research",
+      "name": "Research",
+      "balance_ulxc": 16500000000,
+      "spent_ulxc": 12400000000,
+      "keys": [
+       "key_research"
+      ],
+      "created_at": "2026-09-14T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     },
+     {
+      "id": "agt_sales",
+      "name": "Sales",
+      "balance_ulxc": 12000000000,
+      "spent_ulxc": 11000000000,
+      "keys": [
+       "key_sales"
+      ],
+      "created_at": "2026-10-05T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true
+     },
+     {
+      "id": "agt_ops",
+      "name": "Ops",
+      "balance_ulxc": 5400000000,
+      "spent_ulxc": 4600000000,
+      "keys": [
+       "key_ops"
+      ],
+      "created_at": "2026-10-09T09:00:00Z",
+      "owner_user_id": "usr_nick",
+      "verified": true,
+      "paused_at": "2026-10-21T17:00:00Z"
+     }
+    ],
+    "all_paused_at": "2026-10-22T09:30:00Z",
+    "all_paused_reason": "paused from the top bar"
+   }
+  }
+ },
+ {
+  "route": "/agents/agt_ops",
+  "screen": "w-agent-ops"
+ }
+]
