@@ -1,8 +1,8 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CONTACT_EMAIL, Landing } from './Landing'
+import { CONTACT_EMAIL, Landing, PICTURE_LINE } from './Landing'
 import { ON_ITS_WAY, POSITIONING_SENTENCES } from '../../positioning'
 import { COMPANY_CONTACT } from '../../company'
 import { BUILDING } from '../../labels/StatusLabel'
@@ -104,9 +104,12 @@ describe('Landing', () => {
     const { container } = render(<Landing />)
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('An account for every AI agent.')
     const text = container.textContent ?? ''
-    // B59.5: wallets, then the close; Chat, the Marketplace and pooling are hidden areas.
+    // B57.60: the reference's sections less B59.5's hidden areas (Chat, the Marketplace and pooling), in its order.
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Talyvor checks the rules before the money moves.',
+      'You always know what is real.',
+      'Start free. Grow when you need to.',
+      'Before you start.',
       'Give your first agent a wallet.',
     ])
     expect(text).not.toMatch(/toward zero|ninety\s+days|90 days|near-zero/i)
@@ -158,36 +161,64 @@ describe('Landing', () => {
     expect(src).not.toMatch(/[\u2013\u2014]/)
   })
 
-  // B29.4: the board's WEBSITE HERO. The pieces a visitor sees, each read from the DOM: the drawn
-  // mark and wordmark (B51.1, the site header), the hero photograph with the 1200 version for phones and the
-  // SAME srcset and sizes index.html preloads. The verb stack ROUTE · PROVE · REUSE · COMPOUND was retired with the
-  // tagline on 5 Oct 2026 (B32.1): no verb sits on the photograph. B59.5: the band named Edge, the gateway and the
-  // marketplace, so it is gone.
-  it('draws the board: the mark and wordmark, the preloaded hero photo without the verbs', () => {
+  // B57.60: Pocket's hero (design/pocket s-home): on ink, the logo kit's three streams (decorative, and the image
+  // index.html preloads) flowing into a picture of the approval sheet, with two agent cards. The photograph and the
+  // section icons are gone; no retired verb sits on the page (B32.1).
+  it('draws the hero on ink: the streams, the sheet as a picture and two agent cards, without the photo or the verbs', () => {
     const { container } = render(<Landing />)
     // B51.1: the site's one header, with the kit's logo (B57.6).
-    const header = container.querySelector('header')!
-    expect(header.querySelector('[data-brand="lockup"] img[data-brand="logo"]')).not.toBeNull()
+    expect(container.querySelector('header [data-brand="lockup"] img[data-brand="logo"]')).not.toBeNull()
 
-    const photo = container.querySelector('figure img')!
-    expect(photo.getAttribute('src')).toBe('/brand/photos/hero.jpg')
-    const srcset = photo.getAttribute('srcset')!
-    expect(srcset).toContain('/brand/photos/hero-1200.jpg 1200w')
+    const hero = container.querySelector('#hero-heading')!.closest('section')!
+    expect(hero).toHaveAttribute('data-theme', 'dark')
+    const streams = hero.querySelector('img.tal-streams')!
+    expect(streams.getAttribute('src')).toBe('/brand/logo/talyvor-streams-on-dark.svg')
+    expect(streams).toHaveAttribute('aria-hidden', 'true')
+    expect(streams).toHaveAttribute('alt', '')
     const html = readFileSync(resolve(__dirname, '../../../index.html'), 'utf8')
-    expect(html, 'index.html must preload the srcset the page uses').toContain(srcset)
-    expect(html, 'index.html must preload with the sizes the page uses').toContain(photo.getAttribute('sizes')!)
+    expect(html, 'index.html must preload the art the page uses').toContain(`l.href = '${streams.getAttribute('src')}'`)
 
-    const figure = container.querySelector('figure.tal-hero-photo')!
-    expect(figure.querySelector('.tal-hero-scrim'), 'the scrim stays').not.toBeNull()
-    expect(container.querySelector('.tal-verbs')).toBeNull()
+    const sheet = hero.querySelector('[data-picture="approval-sheet"]')!
+    for (const line of ['Research wants to pay', '$340.00', 'to Acme Hosting', 'This approves this payment only.'])
+      expect(sheet.textContent).toContain(line)
+    // Dollars only: a picture's figures, never credit standing in for an account's money.
+    expect(sheet.textContent).not.toMatch(/LXC/)
+    expect([...hero.querySelectorAll('[data-agent-card]')].map((c) => c.textContent)).toEqual(['Research$1,650.00', 'Sales$1,200.00'])
+
+    expect(container.querySelector('img[src^="/brand/photos/"]')).toBeNull()
+    expect(container.querySelectorAll('img[src^="/brand/svg/"]')).toHaveLength(0)
     // Per text node: the page's textContent joins adjacent spans, so "Route" + "Prove" reads as one word.
     const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
     const words: string[] = []
     while (walker.nextNode()) words.push(...(walker.currentNode.textContent!.match(/\b(route|prove|reuse|compound)\b/gi) ?? []))
     expect(words, 'a retired verb shows as a word').toEqual([])
+  })
 
-    // B58.16: brand-v4's teal section icons are gone with that kit
-    expect(container.querySelectorAll('img[src^="/brand/svg/"]')).toHaveLength(0)
+  it('says the sheet is a picture when its buttons are pressed', () => {
+    render(<Landing />)
+    const line = screen.getByText(PICTURE_LINE)
+    expect(line).toHaveClass('sr-only')
+    for (const name of [/approve with your passkey/i, /^decline$/i])
+      expect(screen.getByRole('button', { name })).toHaveAccessibleDescription(PICTURE_LINE)
+    fireEvent.click(screen.getByRole('button', { name: /^decline$/i }))
+    expect(line).not.toHaveClass('sr-only')
+  })
+
+  it('leads every door where the reference does', () => {
+    const { container } = render(<Landing />)
+    const hero = container.querySelector('#hero-heading')!.closest('section')!
+    expect(within(hero).getByRole('link', { name: 'Get started' })).toHaveAttribute('href', '/signup')
+    expect(within(hero).getByRole('link', { name: 'See how it works' })).toHaveAttribute('href', '#wallets')
+    expect(container.querySelector('section#wallets')).not.toBeNull()
+    expect(screen.getByRole('link', { name: 'See pricing' })).toHaveAttribute('href', '/pricing')
+    expect(screen.getByRole('link', { name: 'Create your workspace' })).toHaveAttribute('href', '/signup')
+  })
+
+  it('asks the four questions', () => {
+    const { container } = render(<Landing />)
+    const asked = [...container.querySelectorAll('dl dt')].map((d) => d.textContent).filter((q) => q?.endsWith('?'))
+    expect(asked).toEqual(['Can my agents spend real money?', 'What is LXC?', 'Who approves payments?', 'Is Talyvor a bank?'])
+    expect(screen.getByText(/Talyvor is not a bank, and LXC is not money/)).toBeInTheDocument()
   })
 })
 
@@ -261,5 +292,37 @@ describe('Landing labels', () => {
     // No card network's mark: the network corner stays empty until the issuer gives the artwork.
     const words = `${container.textContent} ${faces.map((img) => img.getAttribute('alt')).join(' ')}`
     expect(words).not.toMatch(/visa|mastercard/i)
+  })
+  // B57.60: the four plans as /api/pricing serves them, and the LXC answer at the served rate; the page types no price.
+  it('prints each plan and the LXC rate as served, and none while unserved', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
+      String(input) === '/api/pricing'
+        ? new Response(
+            JSON.stringify({
+              usd_per_lxc: 0.1, min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000],
+              company_plans: [{ id: 'team', usd_cents: 4900 }, { id: 'business', usd_cents: 29900 }],
+              enterprise_from_usd_cents: 250000,
+              plan_gates: { order: ['free', 'team', 'business', 'enterprise'], plans: {
+                free: { agents: 3 }, team: { agents: 25 }, business: { agents: -1 }, enterprise: { agents: -1 } } },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        : new Response('null', { status: 404 }),
+    )
+    const { container } = render(<Landing />)
+    await vi.waitFor(() => expect(container.querySelectorAll('[data-plan]')).toHaveLength(4))
+    expect([...container.querySelectorAll('[data-plan]')].map((p) => p.textContent)).toEqual([
+      'Free$0up to 3 agents', 'Team$49a month', 'Business$299a month', 'EnterpriseFrom $2,500a month',
+    ])
+    expect(screen.getByText('What is LXC?').nextElementSibling!.textContent).toBe(
+      'Talyvor credit, and 1 LXC is $0.10. Agents spend it on AI requests and Talyvor’s services.',
+    )
+    cleanup()
+    vi.restoreAllMocks()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('null', { status: 503 }))
+    const again = render(<Landing />)
+    await new Promise((done) => setTimeout(done, 20))
+    expect(again.container.querySelectorAll('[data-plan]')).toHaveLength(0)
+    expect(screen.getByText('What is LXC?').nextElementSibling!.textContent).not.toMatch(/\$/)
   })
 })
