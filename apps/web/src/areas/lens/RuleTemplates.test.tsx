@@ -80,6 +80,12 @@ afterEach(() => {
   window.history.pushState({}, '', '/')
 })
 
+/** More rules → Start from a template → Coder, on Builder's rules page. */
+async function coder() {
+  fireEvent.click(within(await screen.findByTestId('more-rules')).getByRole('link', { name: /^Start from a template/ }))
+  fireEvent.click(within(screen.getByRole('group', { name: 'Rule templates for Builder' })).getByRole('button', { name: 'Coder' }))
+}
+
 describe('rule templates', () => {
   it('creates a new agent from the Support bot template in one click: its rules are saved as the template', async () => {
     const { calls, saved } = mockBff()
@@ -95,21 +101,23 @@ describe('rule templates', () => {
     await waitFor(() => expect(screen.getByTestId('agent-open')).toHaveTextContent('Helpdesk'))
     expect(calls).toEqual(['POST /api/agents Helpdesk', 'PUT /api/agents/agt_1/rules'])
     expect(saved[0]).toEqual(template('support-bot'))
-    expect(await screen.findByLabelText('Limit per request for Helpdesk, in LXC')).toHaveValue('0.5')
-    expect(screen.getByLabelText('Hourly limit for Helpdesk, in LXC')).toHaveValue('20')
+    // B57.23 — today's agent view states them; they are edited on the agent's rules page.
+    const words = await screen.findByTestId('rules-in-words')
+    await waitFor(() => expect(words.textContent).toContain('0.5 LXC on one request'))
+    expect(words.textContent).toContain('20 LXC an hour')
   })
 
-  it('fills an agent’s Rules card from the Coder template and saves exactly the template, replacing what it held', async () => {
+  // B57.23 — on the agent's rules page, under More rules.
+  it('fills an agent’s rules page from the Coder template and saves exactly the template, replacing what it held', async () => {
     const { calls, saved } = mockBff(BUILDER)
-    window.history.pushState({}, '', '/agents/agt_1')
+    window.history.pushState({}, '', '/agents/agt_1/rules')
     render(<App />)
 
-    const templates = await screen.findByRole('group', { name: 'Rule templates for Builder' })
-    fireEvent.click(within(templates).getByRole('button', { name: 'Coder' }))
-    expect(screen.getByLabelText('Weekly limit for Builder, in LXC')).toHaveValue('')
+    await coder()
+    expect(screen.getByRole('switch', { name: 'Only at certain hours' }).getAttribute('aria-checked')).toBe('false')
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
 
-    await screen.findByText(/Saved\. Lens applies these rules/)
+    await screen.findByText('Builder’s rules are saved')
     expect(saved).toEqual([template('coder')])
     expect(calls).toEqual(['POST /api/agents/agt_1/rules-challenge', 'PUT /api/agents/agt_1/rules'])
   })
@@ -118,15 +126,14 @@ describe('rule templates', () => {
     const { calls, saved, assertions } = mockBff(BUILDER, { looser: true, passkey: true })
     const get = vi.fn().mockRejectedValueOnce(new DOMException('The operation was cancelled.', 'NotAllowedError')).mockResolvedValue(ASSERTION)
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/agents/agt_1')
+    window.history.pushState({}, '', '/agents/agt_1/rules')
     render(<App />)
 
-    fireEvent.click(within(await screen.findByRole('group', { name: 'Rule templates for Builder' })).getByRole('button', { name: 'Coder' }))
+    await coder()
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-    const card = await screen.findByTestId('rules-loosen')
-    expect(card.textContent).toContain('This loosens Builder’s rules:')
-    expect(within(card).getAllByRole('listitem').map((li) => li.textContent)).toEqual(LOOSER)
-    expect(card.textContent).toContain('It needs your passkey. Tightening is saved at once.')
+    expect((await screen.findByTestId('rules-loosen')).textContent).toBe(
+      `This loosens Builder’s rules: ${LOOSER.join('. ')}. It needs your passkey. Tightening is saved at once.`,
+    )
     expect(get).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Save with your passkey' }))
@@ -134,7 +141,7 @@ describe('rule templates', () => {
     expect(saved).toEqual([])
 
     fireEvent.click(screen.getByRole('button', { name: 'Save with your passkey' }))
-    await screen.findByText(/Saved\. Lens applies these rules/)
+    await screen.findByText('Your passkey was asked first, because the change loosens them.')
     expect(saved).toEqual([template('coder')])
     expect(assertions).toEqual([{ credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' }])
     expect(calls.filter((c) => c.startsWith('PUT'))).toEqual(['PUT /api/agents/agt_1/rules'])
@@ -144,12 +151,13 @@ describe('rule templates', () => {
     const { calls, assertions } = mockBff(BUILDER, { passkey: true })
     const get = vi.fn()
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/agents/agt_1')
+    window.history.pushState({}, '', '/agents/agt_1/rules')
     render(<App />)
 
-    fireEvent.change(await screen.findByLabelText('Weekly limit for Builder, in LXC'), { target: { value: '5' } })
+    fireEvent.click(within(await screen.findByTestId('more-rules')).getByRole('link', { name: /^At most a week/ }))
+    fireEvent.change(screen.getByLabelText('At most a week for Builder, in LXC'), { target: { value: '5' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-    await screen.findByText(/Saved\. Lens applies these rules/)
+    await screen.findByText('Tightening is saved at once.')
     expect(get).not.toHaveBeenCalled()
     expect(assertions).toEqual([])
     expect(calls).toEqual(['POST /api/agents/agt_1/rules-challenge', 'PUT /api/agents/agt_1/rules'])
@@ -157,15 +165,16 @@ describe('rule templates', () => {
 
   it('with only the phone’s key, a looser save says to add this browser and sends nothing', async () => {
     const { calls, saved } = mockBff(BUILDER, { looser: true, phone: true })
-    window.history.pushState({}, '', '/agents/agt_1')
+    window.history.pushState({}, '', '/agents/agt_1/rules')
     render(<App />)
 
-    fireEvent.click(within(await screen.findByRole('group', { name: 'Rule templates for Builder' })).getByRole('button', { name: 'Coder' }))
+    await coder()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save rules' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
     expect((await screen.findByTestId('on-the-phone')).textContent).toBe(
       'Loosen Builder’s rules with a passkey on this browser: add this browser first.Add this browser',
     )
+    expect(screen.queryByRole('button', { name: /^Save/ })).toBeNull()
     expect(saved).toEqual([])
     expect(calls).toEqual(['POST /api/agents/agt_1/rules-challenge'])
   })
