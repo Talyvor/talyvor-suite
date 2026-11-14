@@ -105,6 +105,7 @@ func (a *app) handleMobileSession(w http.ResponseWriter, r *http.Request) {
 			"error": "could not provision your workspace — try again shortly"})
 		return
 	}
+	s.signedInAt = authTimeOf(idt)
 	sid, err := a.auth.storeSession(s)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})

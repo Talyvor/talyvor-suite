@@ -139,16 +139,18 @@ func TestNewRecoveryCodeSendsOnlyTheAssertion(t *testing.T) {
 	}
 }
 
-// B55.54 — the sign-in time survives a restart: a session restored from its seal keeps the time it was signed in.
+// B55.54 — the sign-in time survives a restart: a session restored from its seal keeps the time it was signed in,
+// which is the provider's, not the seal's own (B50.49).
 func TestARestoredSessionKeepsItsSignInTime(t *testing.T) {
 	z := newSessionSealer(testProvisionSecret, time.Hour)
-	sid, err := z.seal(session{sub: "u1", expires: time.Now().Add(time.Hour), workspaceID: "ws_rc", lensToken: "tok"})
+	signedIn := time.Now().Add(-time.Hour)
+	sid, err := z.seal(session{sub: "u1", expires: time.Now().Add(time.Hour), workspaceID: "ws_rc", lensToken: "tok", signedInAt: signedIn})
 	if err != nil {
 		t.Fatal(err)
 	}
 	z.bootedAt = time.Now().Add(time.Second) // a later process
 	s, ok := z.open(sid)
-	if !ok || s.signedInAt.IsZero() || time.Since(s.signedInAt) > time.Minute {
-		t.Fatalf("restored %v with sign-in time %v, want one from the seal", ok, s.signedInAt)
+	if !ok || !s.signedInAt.Equal(signedIn) {
+		t.Fatalf("restored %v with sign-in time %v, want %v from the seal", ok, s.signedInAt, signedIn)
 	}
 }

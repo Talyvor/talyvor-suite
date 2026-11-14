@@ -503,7 +503,7 @@ describe('the Pay screen', () => {
   // B57.31 — every control on the redrawn Pay does something. The buttons below are today's cards kept under it, which B57.32
   // redraws on their own pages (its forms' buttons are disabled until filled, and say why only once drawn in Pocket).
   it('presses every control on Pay and each does something', async () => {
-    const today = ['Set up standing order', 'Grant mandate', 'Revoke', 'Upload and check', 'Rows', 'Add bill'].map((b) => `button “${b}”:`)
+    const today = ['Set up standing order', 'Grant mandate', 'Revoke', 'Add bill'].map((b) => `button “${b}”:`)
     const report = await pressEverything('/money/pay')
     expect(report.pressed).toBeGreaterThan(0)
     expect(report.dead.filter((d) => !today.some((t) => d.startsWith(t)))).toEqual([])
@@ -522,7 +522,7 @@ describe('the Pay screen', () => {
     expect(bff.sent[0].headers['Content-Type']).toBe('text/csv')
     expect(bff.sent[0].headers['Idempotency-Key'].length).toBeGreaterThan(8)
     expect(bff.sent[0].body).toBe(csv)
-    expect(within(batch).getByTestId('payout-row-3').textContent).toContain('no such payee')
+    expect(within(batch).getByTestId('payout-row-3').textContent).toContain('No such payee')
     expect(within(batch).getByRole('button', { name: 'Approve and pay 1 row' })).toBeTruthy()
   })
 
@@ -575,8 +575,8 @@ describe('the Pay screen', () => {
     expect(pay[0].body).toEqual({ bill_ids: ['1', '2'] })
     expect(pay[0].headers['Idempotency-Key'].length).toBeGreaterThan(8)
     expect(within(card).getByTestId('approve-total').textContent).toBe('2 of 2 payments to approve, total £150.50')
-    for (const text of ['Acme Hosting Ltd', 'Brightline Studio Ltd', 'Reference: INV-1', 'Reference: INV-2']) expect(card.textContent).toContain(text)
-    expect(within(card).getByRole('button', { name: 'Approve 2 payments with a passkey' })).toBeTruthy()
+    for (const text of ['Acme Hosting Ltd', 'Brightline Studio Ltd', 'ReferenceINV-1', 'ReferenceINV-2']) expect(card.textContent).toContain(text)
+    expect(within(card).getByRole('button', { name: 'Approve 2 payments with your passkey' })).toBeTruthy()
   })
 
   // B40.35 — what an assistant asked for over /mcp waits here: a payee is saved only when the person presses Save, through the
@@ -673,11 +673,11 @@ describe('a payout batch’s approval (B58.6)', () => {
     fireEvent.click(within(batch).getByRole('button', { name: 'Approve and pay 1 row' }))
     await within(batch).findByText('A payment by a person needs the passkey or the phone key’s signature.')
     expect(within(batch).getByText('Awaiting approval')).toBeTruthy()
-    expect(within(within(batch).getByTestId('payout-row-2')).getByText('valid')).toBeTruthy()
+    expect(within(within(batch).getByTestId('payout-row-2')).getByText('Valid')).toBeTruthy()
 
     fireEvent.click(within(batch).getByRole('button', { name: 'Approve and pay 1 row' }))
     await within(batch).findByText('Approved')
-    expect(within(within(batch).getByTestId('payout-row-2')).getByText('completed')).toBeTruthy()
+    expect(within(within(batch).getByTestId('payout-row-2')).getByText('Completed')).toBeTruthy()
     expect(get).toHaveBeenCalledTimes(2)
     expect(new Uint8Array(get.mock.calls[0][0].publicKey.challenge)).toEqual(new Uint8Array([0x63, 0x68, 0x34]))
     const signed = { assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } }
@@ -698,6 +698,27 @@ describe('a payout batch’s approval (B58.6)', () => {
     expect(await within(batch).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
     expect(within(batch).queryByRole('button', { name: /Approve/ })).toBeNull()
     expect(posts).toEqual([])
+  })
+})
+
+// B57.144 — the batch awaiting approval in Pocket, as w-approvals draws a signed approval: held to Pocket's rules, its status
+// and each row's in words (never Lens's own), the signing line, and Approve as Pocket's primary button.
+describe('a payout batch’s signed approval in Pocket (B57.144)', () => {
+  it('draws the batch, its rows in words, the signing line and Approve in Pocket', async () => {
+    mockBff()
+    awaitingBatch([{ id: 'pk_1', name: 'MacBook' }], [])
+    window.history.pushState({}, '', '/money/pay')
+    render(<App />)
+    const batch = await screen.findByTestId('payout-mpob_1')
+    expect(batch.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    expect(screen.getByRole('heading', { name: 'Upload a file' }).closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    expect(within(batch).getByText('Awaiting approval')).toBeTruthy()
+    const valid = await within(batch).findByTestId('payout-row-2')
+    expect(within(valid).getByText('Valid')).toBeTruthy()
+    expect(within(within(batch).getByTestId('payout-row-3')).getByText('Invalid')).toBeTruthy()
+    expect(within(batch).getByTestId('payout-row-3').textContent).toContain('No such payee')
+    expect((await within(batch).findByTestId('payout-signs')).textContent).toBe('Your passkey signs these 1 valid row and £5.00. If the batch changes after you sign, nothing is paid.')
+    expect(within(batch).getByRole('button', { name: 'Approve and pay 1 row' }).closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
   })
 })
 

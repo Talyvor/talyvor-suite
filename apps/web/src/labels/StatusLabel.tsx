@@ -93,25 +93,6 @@ function keyOf(props: StatusLabelProps): string | undefined {
   return typeof props.capability === 'string' ? props.capability : props.capability.join(' ')
 }
 
-/** B56.10 — the "What the labels mean" block on /marketing and /pricing: each label beside its one line. */
-export function LabelsMeaning({ className }: { className?: string }) {
-  return (
-    <div data-testid="labels-meaning" className={className}>
-      <p className="text-eyebrow uppercase text-label">What the labels mean</p>
-      <dl className="mt-3 flex flex-col gap-2">
-        {(['live', 'sandbox', 'building'] as const).map((state) => (
-          <div key={state} className="flex flex-wrap items-center gap-3">
-            <dt>
-              <StatusLabel legend={state} />
-            </dt>
-            <dd className="text-body text-muted">{LABEL_LINES[state]}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  )
-}
-
 /** B56.10 — a line still in the build queue, said in words from the registry: "Paying earnings out in money is
  *  building; until then they are taken as Talyvor credits." Null once the registry has no entry for key. */
 export function buildingWords(key: string, until: string): string | null {

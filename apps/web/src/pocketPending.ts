@@ -18,13 +18,11 @@ import { matchRoutes } from 'react-router-dom'
  */
 export const POCKET_PENDING: readonly string[] = [
   // The public pages.
-  '/marketing/*',
   '/board/:token',
   '/share/:token',
   '/docs/s/:token',
   // The console.
   '/',
-  '/approvals',
   '/statements',
   '/overview',
   '/ledger',
@@ -61,7 +59,6 @@ export const POCKET_PENDING: readonly string[] = [
   '/scan/agents',
   '/scan/track-record',
   '/money/spending',
-  '/approve/:id',
   '/features',
   '/features/try/tare',
   '/features/try/conversion',

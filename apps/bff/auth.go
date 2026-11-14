@@ -22,6 +22,7 @@ import (
 	"crypto/rand"
 	_ "embed"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -78,7 +79,9 @@ type session struct {
 	synthetic bool
 
 	// signedInAt is when this person signed in (B55.54): getting a key back needs a sign-in within the last 10
-	// minutes, so it goes to Lens with the recovery routes (key_recovery.go).
+	// minutes, so it goes to Lens with the recovery routes (key_recovery.go). It is the identity provider's auth_time
+	// (B50.49), never when this session was made: a browser still signed in at the provider gets a new session
+	// without anyone signing in. Zero when the provider did not say, and then no recovery.
 	signedInAt time.Time
 }
 
@@ -430,6 +433,11 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if q.Get("prompt") == "select_account" {
 		opts = append(opts, oauth2.SetAuthURLParam("prompt", "select_account"))
 	}
+	// B50.49: key recovery's "Sign in again" asks for a real sign-in, not the provider's remembered one, so the
+	// id_token's auth_time is now.
+	if q.Get("reauth") == "1" {
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", "login"), oauth2.SetAuthURLParam("max_age", "0"))
+	}
 	http.Redirect(w, r, a.auth.oauth.AuthCodeURL(state, opts...), http.StatusFound)
 }
 
@@ -556,6 +564,7 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 			"error": "could not provision your workspace — try again shortly"})
 		return
 	}
+	s.signedInAt = authTimeOf(idt)
 	if err := a.startSession(w, r, s, int(a.cfg.sessionTTL.Seconds())); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
 		return
@@ -634,13 +643,33 @@ func (a *app) startSession(w http.ResponseWriter, r *http.Request, s session, ma
 	return nil
 }
 
+// authTimeOf is when the person signed in at the identity provider: the verified id_token's auth_time, never later
+// than now. Zero when the token does not carry one.
+func authTimeOf(idt *oidc.IDToken) time.Time {
+	var c struct {
+		AuthTime json.Number `json:"auth_time"`
+	}
+	if idt.Claims(&c) != nil {
+		return time.Time{}
+	}
+	secs, err := c.AuthTime.Int64()
+	if err != nil || secs <= 0 {
+		return time.Time{}
+	}
+	return minTime(time.Unix(secs, 0), time.Now())
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
+
 // storeSession stores a new session and returns its id. A cookie or a phone's bearer token carries it.
 func (auth *authenticator) storeSession(s session) (string, error) {
 	var sid string
 	var err error
-	if s.signedInAt.IsZero() {
-		s.signedInAt = time.Now()
-	}
 	if auth.sealer != nil {
 		sid, err = auth.sealer.seal(s)
 	} else {

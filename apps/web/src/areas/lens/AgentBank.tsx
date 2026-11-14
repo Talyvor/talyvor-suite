@@ -23,6 +23,7 @@ import { HelperPicker } from '../../cards/HelperPicker'
 import { categoryWords } from './Budgets'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { DeclineForm, declinedText } from './Decline'
+import { approvalSheetTo } from './ApprovalSheet'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneyWalletCard } from './AgentMoneyWallet'
 import { Lxc, useLxcText } from './money'
@@ -2283,7 +2284,7 @@ export function StatementDownload({ agent, primary = false, month = 'last' }: { 
   )
 }
 
-const PAYEE_KIND: Record<ApprovalPayee['kind'], string> = {
+export const PAYEE_KIND: Record<ApprovalPayee['kind'], string> = {
   agent: 'an agent',
   listing: 'a marketplace listing',
   company: 'a company',
@@ -2291,7 +2292,7 @@ const PAYEE_KIND: Record<ApprovalPayee['kind'], string> = {
   outside: 'a payee outside Talyvor',
 }
 
-const DECIDED: Record<AgentApproval['status'], { status: PillStatus; label: string }> = {
+export const DECIDED: Record<AgentApproval['status'], { status: PillStatus; label: string }> = {
   pending: { status: 'held', label: 'Waiting' },
   approved: { status: 'settled', label: 'Approved' },
   used: { status: 'settled', label: 'Approved and used' },
@@ -2624,7 +2625,7 @@ export function PreparedRow({ r, nameOf, labelled = false }: { r: PaymentRequest
           <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
             {labelled ? <WorkspaceLabel capability={paymentRequestCapabilities(r)} /> : null}
             <span>
-              {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
+              {w.hint.join(' · ')} · asked <span className="font-figure">{formatDecided(r.created_at)}</span>
             </span>
           </span>
         }
@@ -2690,18 +2691,26 @@ function WaitingPhones() {
   )
 }
 
+/** The Face ID and notifications card, or the way to get a key back, and the recovery code: Approvals' foot (B57.17) and Agent Wallets'. */
+export function FaceIDCard() {
+  const keys = useKeys()
+  return (
+    <>
+      {keys.noLiveKey ? <GetAKeyBack /> : <FaceID signed={keys.signed} ready={keys.isSuccess} passkeyCount={keys.passkeyCount} />}
+      {keys.thisBrowserSigns ? <RecoveryCodeRow /> : null}
+    </>
+  )
+}
+
 export function Approvals({
   nameOf,
   held,
   onSent,
-  primary = false,
   agentId,
 }: {
   nameOf: (id: string) => string
   held: Record<string, HeldPayment>
   onSent: (approvalID: string) => void
-  /** B29.9 — Approve is the teal action on Approvals; on Agent Wallets that is Fund. */
-  primary?: boolean
   /** B32.55 — only this agent's approvals: a room's settings show its wallet's. */
   agentId?: string
 }) {
@@ -2721,7 +2730,8 @@ export function Approvals({
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const swipeFrom = useRef<{ id: string; x: number; y: number } | null>(null)
   // B45.11 — Home links each approval to its card here, /approvals#approval-<id>: once the list is read, that card has focus.
-  const { hash } = useLocation()
+  const location = useLocation()
+  const { hash } = location
   useEffect(() => {
     if (list.isSuccess && hash.startsWith('#approval-')) document.getElementById(hash.slice(1))?.focus()
   }, [list.isSuccess, hash])
@@ -2835,8 +2845,7 @@ export function Approvals({
     )
   return (
     <div className="flex flex-col gap-3">
-      {keys.noLiveKey ? <GetAKeyBack /> : <FaceID signed={signed} ready={keys.isSuccess} passkeyCount={keys.passkeyCount} />}
-      {keys.thisBrowserSigns ? <RecoveryCodeRow /> : null}
+      <FaceIDCard />
       {outcome ? <Note ok={outcome.ok}>{outcome.text}</Note> : null}
       {list.isError ? (
         <p className="text-body text-muted">{readFailure(list.error, 'The approvals')}</p>
@@ -2881,7 +2890,7 @@ export function Approvals({
               </div>
               {pickable && chosen.length > 0 ? (
                 <div className="flex flex-col gap-2 wide:flex-row">
-                  <Button variant={primary ? 'primary' : 'default'} className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'approve' })}>
+                  <Button className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'approve' })}>
                     Approve {chosen.length}
                   </Button>
                   <Button className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'deny' })}>
@@ -2916,7 +2925,7 @@ export function Approvals({
             )
           ) : (
             <div role="group" aria-label="Waiting for a person" onKeyDown={onKeys}>
-              {pending.map((a, i) => (
+              {pending.map((a) => (
                 <Row
                   key={a.id}
                   stack
@@ -2986,14 +2995,17 @@ export function Approvals({
                     <DeclineForm disabled={busy} onDecline={(reason) => decide.mutate({ a, decision: 'deny', reason })} onCancel={() => setDeclining(null)} />
                   ) : (
                   <div className="flex w-full flex-col gap-2 wide:w-auto wide:flex-row wide:items-center">
-                    {/* B17.325 — one teal action per screen: the first waiting request's Approve, or Approve {n} once some are picked. */}
+                    {/* B57.15 — Review opens the approval sheet over this page, with what pays it and the budget left after. */}
+                    <Button asChild className="h-12 w-full wide:h-8 wide:w-auto">
+                      <Link to={approvalSheetTo(location, a.id)}>Review</Link>
+                    </Button>
+                    {/* B17.325 — the teal action on Agent Wallets is Fund, so Approve here is not filled (B29.9). */}
                     <Button
-                      variant={primary && i === 0 && chosen.length === 0 ? 'primary' : 'default'}
                       className="h-12 w-full wide:h-8 wide:w-auto"
                       disabled={busy}
                       onClick={() => decide.mutate({ a, decision: 'approve' })}
                     >
-                      {signed ? 'Approve with Face ID' : 'Approve'}
+                      {signed ? 'Approve with your passkey' : 'Approve'}
                     </Button>
                     <Button className="h-12 w-full wide:h-8 wide:w-auto" disabled={busy} onClick={() => setDeclining(a.id)}>
                       Decline

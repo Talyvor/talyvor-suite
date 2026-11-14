@@ -119,7 +119,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/': 3,
   // B28.7 — Approvals (waiting, decided). B57.24: Statements opens on an agent's statement, a Pocket document whose
   // name is its own heading, so it has no card header.
-  '/approvals': 2,
+  '/approvals': 1,
   '/statements': 0,
   '/overview': 6,
   '/ledger': 1,
@@ -198,9 +198,9 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/scan/track-record': 1, // B52.28: the Reports card
   '/money/budgets': 1, // B41.39: the Budgets card, under the populated fixture's one budget
   '/money/subscriptions': 1, // B41.20: the Subscriptions card, under the populated fixture's two found subscriptions
-  '/money/pay': 5, // B57.31: the top of Pay is drawn in Pocket, so only today's cards kept below it count; B41.1: the bills inbox
-  // B40.9 — one card: the prepared request.
-  '/approve/:id': 1,
+  '/money/pay': 4, // B57.31: the top of Pay is drawn in Pocket, so only today's cards kept below it count; B57.144: Bulk payouts is drawn in Pocket; B41.1: the bills inbox
+  // B57.27 — the prepared request is drawn in Pocket, whose card has no header.
+  '/approve/:id': 0,
   // B45.37 — one card: the plan the assistant prepared.
   '/money/plans/:id': 1,
   '/features': 1, // B57.42: "Documents you attach", moved here from Settings beside Document conversion

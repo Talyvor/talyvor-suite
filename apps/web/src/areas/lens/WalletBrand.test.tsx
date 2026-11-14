@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
-import { bodyFor, populatedBff, settleQueries } from '../../populatedBff'
+import { populatedBff, settleQueries } from '../../populatedBff'
 import { cardOnItsPlane, primaryActions, statusWithoutWords, tangerineOffenders } from '../../pocketRules'
 
 // B29.9 — Agent Wallets, Approvals, Statements, Royalties, Ledger and Spend in the brand, read off the populated
@@ -35,7 +35,8 @@ afterEach(() => {
 describe('the wallet screens in the brand', () => {
   const SCREENS: Array<[string, string[]]> = [
     ['/agents', ['Move LXC']],
-    ['/approvals', ['Approve']],
+    // B57.17 — Review is Pocket's secondary button, as w-approvals draws it; Approve is the sheet's.
+    ['/approvals', []],
     // B57.24 — Statements' two downloads are Pocket's secondary buttons, as w-stmt-research draws them.
     ['/statements', []],
     ['/statements/royalties', []],
@@ -74,24 +75,8 @@ describe('the wallet screens in the brand', () => {
     if (['/agents', '/approvals', '/statements'].includes(address)) expect(amounts, 'no LXC amount was read').toBeGreaterThan(0)
   })
 
-  it('fills only the first Approve teal when two requests wait, and only Approve 2 once both are picked (B17.325)', async () => {
-    const [first] = (bodyFor('/api/agents/approvals') as { approvals: Array<Record<string, unknown>> }).approvals
-    vi.restoreAllMocks()
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
-    populatedBff((impl) => {
-      vi.spyOn(globalThis, 'fetch').mockImplementation(impl as never)
-    }, { '/api/agents/approvals': { approvals: [first, { ...first, id: 'apr_2', memo: 'November invoice' }] } })
-    queryClient.clear()
-    const main = await at('/approvals')
-    expect(within(main).getAllByRole('button', { name: 'Approve' })).toHaveLength(2)
-    expect(primaries(main)).toEqual(['Approve'])
-
-    fireEvent.click(within(main).getByRole('checkbox', { name: /Select all 2/ }))
-    expect(primaries(main)).toEqual(['Approve 2'])
-  })
-
   it('shows each state as a pill: a waiting approval, settled statement lines, settled and held royalties', async () => {
-    const approvals = await at('/approvals')
+    const approvals = await at('/agents')
     const waiting = within(approvals).getByText(/wants to pay Acme Hosting/).closest('.min-h-row') as HTMLElement
     expect(pills(waiting)).toEqual(['Waiting'])
     document.body.replaceChildren()
