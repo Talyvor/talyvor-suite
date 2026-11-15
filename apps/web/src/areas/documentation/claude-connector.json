@@ -1,6 +1,6 @@
 {
   "name": "Talyvor",
-  "summary": "See your accounts, agents, payees and invoices, search the marketplace, draft invoices, and prepare payments that you approve in Talyvor. No tool pays.",
+  "summary": "See your accounts, agents, payees and invoices, search the marketplace, draft invoices, and prepare payments that you approve in Talyvor, and pay from an agent's wallet inside the limits you set; above them it waits for your passkey.",
   "server": "https://app.talyvor.com/mcp",
   "allowedLinkUris": ["https://app.talyvor.com", "talyvor:"],
   "examplePrompts": [

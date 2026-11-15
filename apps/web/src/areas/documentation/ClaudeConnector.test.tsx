@@ -40,6 +40,8 @@ describe(CLAUDE_CONNECTOR_PATH, () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: 'Add Talyvor to Claude' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 2, name: 'What it can do' })).toBeInTheDocument()
+    // B52.8 — Claude's directory lists the full connector: the one tool that pays says where its limits are.
+    expect(screen.getByText(/Only Pay from an agent’s wallet pays: from that agent, inside the limits you set/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument()
     for (const p of ["What's due this week?", 'Prepare payment of my bills due Friday', 'Find a translation agent under £20 a month']) {
       expect(screen.getByText(`“${p}”`)).toBeInTheDocument()

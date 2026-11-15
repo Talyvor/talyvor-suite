@@ -1,0 +1,92 @@
+{
+  "about": "B52.8 — the test cases Claude's directory (claude.ai/directory/manage) and ChatGPT's (platform.openai.com/plugins) ask for, against the demo workspace. TestConnectDirectoryTestCases runs every case in both modes: full is the connector a person adds and Claude's directory lists; prepare_only is BFF_CONNECT_PREPARE_ONLY=true, the connector ChatGPT's directory lists. shows is what the tool's answer must carry in that mode.",
+  "server": "https://app.talyvor.com/mcp",
+  "workspace": "One person's workspace: a GBP account holding £1,250.00; one bill due, Northern Power NP-881 for £165.50, its supplier a saved payee; saved payees including Grace Hopper; an agent agt-1 that may pay up to 1,000 at once without asking; another agent agt-2 it pays. The person granted every scope at consent.",
+  "cases": [
+    {
+      "id": "balances",
+      "prompt": "What's in my Talyvor accounts?",
+      "tool": "get_balances",
+      "arguments": {},
+      "expect": "The GBP account and its balance, £1,250.00.",
+      "shows": { "full": ["acc-gbp", "125000"], "prepare_only": ["acc-gbp", "125000"] }
+    },
+    {
+      "id": "bills-due",
+      "prompt": "What's due this week?",
+      "tool": "bills_due",
+      "arguments": {},
+      "expect": "One bill: Northern Power, NP-881, £165.50, due 5 November; the bill already paid is left out.",
+      "shows": { "full": ["Northern Power", "NP-881", "16550"], "prepare_only": ["Northern Power", "NP-881", "16550"] }
+    },
+    {
+      "id": "pay-bills",
+      "prompt": "Prepare payment of my bills due Friday",
+      "tool": "prepare_bills_payment",
+      "arguments": { "idempotency_key": "case-pay-bills" },
+      "expect": "One request waiting for the person's approval in Talyvor, with its link. Nothing is paid.",
+      "shows": { "full": ["pending_approval", "https://app.talyvor.com/approve/pr-bills"], "prepare_only": ["pending_approval", "https://app.talyvor.com/approve/pr-bills"] }
+    },
+    {
+      "id": "pay-payee",
+      "prompt": "Prepare a £42 payment to Grace Hopper",
+      "tool": "prepare_payment",
+      "arguments": { "idempotency_key": "case-pay-payee", "payee_id": "py-gh", "currency": "GBP", "amount_minor": 4200 },
+      "expect": "A payment waiting for the person's approval in Talyvor, with its link. Nothing is paid.",
+      "shows": { "full": ["pending_approval", "https://app.talyvor.com/approve/pr-1"], "prepare_only": ["pending_approval", "https://app.talyvor.com/approve/pr-1"] }
+    },
+    {
+      "id": "draft-invoice",
+      "prompt": "Draft an invoice to Acme Ltd for £120 of consulting, due 30 November",
+      "tool": "draft_invoice",
+      "arguments": { "account_id": "acc-gbp", "customer_name": "Acme Ltd", "due_date": "2026-11-30", "lines": [{ "description": "Consulting", "quantity": 1, "unit_amount_minor": 12000 }] },
+      "expect": "A draft invoice for £120.00. Nothing is sent until the person sends it.",
+      "shows": { "full": ["draft", "12000"], "prepare_only": ["draft", "12000"] }
+    },
+    {
+      "id": "pay-inside-limits",
+      "prompt": "Pay agent agt-2 400 from agt-1 for a GPU hour",
+      "tool": "send_payment",
+      "arguments": { "idempotency_key": "case-pay-inside", "agent_id": "agt-1", "to_agent_id": "agt-2", "amount_ulxc": 400, "memo": "GPU hour" },
+      "expect": "Full: paid at once, inside the limits the person set. Prepare-only: nothing is paid, and the person is pointed to Talyvor.",
+      "shows": { "full": ["\"status\":\"paid\"", "pay-1"], "prepare_only": ["Nothing has been paid", "/agents"] }
+    },
+    {
+      "id": "pay-above-limits",
+      "prompt": "Pay agent agt-2 5,000 from agt-1",
+      "tool": "send_payment",
+      "arguments": { "idempotency_key": "case-pay-above", "agent_id": "agt-1", "to_agent_id": "agt-2", "amount_ulxc": 5000 },
+      "expect": "Full: nothing is paid; it waits for the person's passkey in Talyvor, with the link. Prepare-only: nothing is paid, and the person is pointed to Talyvor.",
+      "shows": { "full": ["pending_approval", "Nothing has been paid", "/approvals"], "prepare_only": ["Nothing has been paid", "/agents"] }
+    },
+    {
+      "id": "statement",
+      "prompt": "Show me agt-1's statement",
+      "tool": "get_statement",
+      "arguments": { "agent_id": "agt-1" },
+      "expect": "What agt-1 paid and was paid.",
+      "shows": { "full": ["agt-1", "-400"], "prepare_only": ["agt-1", "-400"] }
+    },
+    {
+      "id": "pause",
+      "prompt": "Pause agt-1, it is over budget",
+      "tool": "pause_agent",
+      "arguments": { "agent_id": "agt-1", "reason": "over budget" },
+      "expect": "agt-1 stops spending; only the person can resume it, in Talyvor.",
+      "shows": { "full": [], "prepare_only": [] }
+    },
+    {
+      "id": "topup",
+      "prompt": "Top up my Talyvor wallet",
+      "tool": "open_topup",
+      "arguments": {},
+      "expect": "The link to top up in Talyvor. Nothing is charged in the chat.",
+      "shows": { "full": ["/billing", "Nothing is charged in the chat"], "prepare_only": ["/billing", "Nothing is charged in the chat"] }
+    }
+  ],
+  "not_for_talyvor": [
+    { "prompt": "What's the weather in Chisinau tomorrow?", "expect": "No Talyvor tool is called." },
+    { "prompt": "Write me a poem about autumn", "expect": "No Talyvor tool is called." },
+    { "prompt": "Should I buy shares in a chip maker?", "expect": "No Talyvor tool is called: Talyvor gives no investment advice." }
+  ]
+}
