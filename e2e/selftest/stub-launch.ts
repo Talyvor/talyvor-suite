@@ -10,6 +10,9 @@
 //        one"; inside them, a send to an account the agent never sent one to files nothing here and is refused 403, waiting
 //        for the owner's approval, as Lens does before any leg moves
 //
+// B61.51 — the company details (Lens B59.30): GET and PUT /v1/workspaces/{ws}/business {company_name, registration_number,
+// country, people}, the PUT 400 without a name, a registration number and a country.
+//
 // Help (Lens B59.27): POST and GET /v1/workspaces/{ws}/requests {kind, message} — received; a complaint with its reference.
 //
 // Its defects:
@@ -28,12 +31,15 @@ interface Quote { id: string; workspace_id: string; to: string; send_minor: numb
   receive_minor: number; receive_currency: string; arrives_in_seconds: boolean; expires_at: string; created_at: string }
 interface FiledRequest { id: number; kind: string; state: string; reference: string; message: string; answer: string; filed_at: string; updated_at: string }
 
+interface Company { company_name: string; registration_number: string; country: string; people: { name: string; role: string; share_bps: number }[] }
+
 const KINDS = ['support', 'complaint', 'account_closure', 'data_export', 'data_deletion']
 const FIATS = ['GBP', 'EUR', 'USD']
 
 export class LaunchDesk {
   private readonly quotes = new Map<string, Quote>()
   private readonly requests = new Map<string, FiledRequest[]>()
+  private readonly companies = new Map<string, Company>()
   private nextRequest = 1
 
   private readonly json: (res: ServerResponse, status: number, body: unknown) => void
@@ -54,11 +60,25 @@ export class LaunchDesk {
     if (rest === '/account' && req.method === 'GET') {
       return this.json(res, 200, { workspace_id: ws, account_type: 'business', money_kind: 'hybrid', country: '', registration_number: '' }), true
     }
+    if (rest === '/business' && (req.method === 'GET' || req.method === 'PUT')) return this.business(req, res, ws), true
     if (rest === '/requests') return this.request(req, res, ws), true
     if (rest === '/money/instant-transfers/quote' && req.method === 'POST') return this.quote(req, res, ws), true
     const m = /^\/agents\/([^/]+)\/money\/instant-transfers$/.exec(rest)
     if (m !== null && req.method === 'POST') return this.send(req, res, ws, m[1]), true
     return false
+  }
+
+  private async business(req: IncomingMessage, res: ServerResponse, ws: string): Promise<void> {
+    const empty: Company = { company_name: '', registration_number: '', country: '', people: [] }
+    if (req.method === 'GET') return this.json(res, 200, { workspace_id: ws, ...(this.companies.get(ws) ?? empty) })
+    const b = await this.body<Partial<Company>>(req)
+    const c: Company = { company_name: (b.company_name ?? '').trim(), registration_number: (b.registration_number ?? '').trim(),
+      country: (b.country ?? '').trim().toUpperCase(), people: b.people ?? [] }
+    if (c.company_name === '' || c.registration_number === '' || !/^[A-Z]{2}$/.test(c.country)) {
+      return this.json(res, 400, { error: 'economy: the business details need the company name, its registration number and its country' })
+    }
+    this.companies.set(ws, c)
+    this.json(res, 200, { workspace_id: ws, ...c })
   }
 
   private async request(req: IncomingMessage, res: ServerResponse, ws: string): Promise<void> {

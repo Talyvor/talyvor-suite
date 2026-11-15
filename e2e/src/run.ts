@@ -18,6 +18,7 @@ import { type B28Report, b28Report } from './b28.ts'
 import { type BuildingLabelsReport, readBuildingLabels } from './buildingLabels.ts'
 import { CapReached, SpendCap } from './budget.ts'
 import { type RunConfig, parseConfig } from './config.ts'
+import { UNCONFIRMED_SCENARIOS, confirmAll, confirmLine } from './confirmIdentity.ts'
 import { type DayBudget, dayBudget, leftOf } from './day.ts'
 import { deepJourneys, roundOf } from './deep.ts'
 import { type CoverageMap, type Inventory, Matcher, Recorder, type Tag, buildMap, cannotTest, inventory, leastCovered, refreshLensCheckout } from './coverage.ts'
@@ -364,6 +365,12 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     const reset = await lens.reset([...users, ...seated.own.values()].map((u) => u.workspaceID))
     console.log(reset === undefined ? 'reset: Lens did not answer within its request timeout; waited for the reset to run on to the end'
       : `reset ${reset} synthetic workspace(s), this run's: stored answers cleared, credits restored`)
+    // B61.51 — every user confirms who it is before any journey, as sign-up asks; the verification scenarios' own start unconfirmed.
+    stage = "confirming the synthetic users' identity"
+    const owned = [...seated.own].filter(([key]) => !UNCONFIRMED_SCENARIOS.has(key.slice(key.indexOf(':') + 1))).map(([, u]) => u)
+    const confirmed = await confirmAll(lens, [...users, ...owned])
+    console.log(confirmLine(confirmed, seated.own.size - owned.length))
+    for (const f of confirmed.failed) incidents.push(`${stamp()} user ${f.user.index} (${f.user.workspaceID}) could not confirm who it is, so its money journeys meet Lens's refusal: ${f.why}`)
     stage = 'reading the catalog'
     // B61.49 — a launch run does not read the old gateway's catalog (launch.ts).
     const catalog = await setUpCatalog(cfg.launch, () => lens.catalog(users[0]), cfg.model)

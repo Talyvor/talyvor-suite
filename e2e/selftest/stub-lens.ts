@@ -109,6 +109,10 @@
 // recording is heard as "Please show me the balance of my wallet." (the run's microphone clip).
 // B40.32: an agent's speech call is charged on its statement at the catalog's price; STUB_BREAK=speech-twice charges it twice.
 //
+// B61.51: STUB_IDENTITY_GATE=on refuses every movement of money (MONEY_MOVES) by a workspace below the level its account
+// needs, Sandbox money included, as Lens B61.52 makes it: a synthetic workspace is a Business, so below L3 it is 403
+// VERIFICATION_NEEDED "Confirm who you are to move money." Looking stays open. Off, money moves at any level, as Lens today.
+//
 // B26.24: every read the self-test makes is answered in the shape a real Lens answers it, held to
 // lens-shapes.json by test/stubLens.test.ts. A route this stub does not know is a 404 it logs as
 // "stub lens: no such route", which the self-test names — never a `{}` that a screen then throws on.
@@ -135,6 +139,14 @@ const HIDDEN: RegExp[] = process.env.STUB_HIDE_AREAS !== '1' ? [] : (() => {
   return prefixes.map((x) => new RegExp(`^${x.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{\}/g, '[^/]+')}(/|$)`))
 })()
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+/** B61.51 — STUB_IDENTITY_GATE=on: the routes that move money, refused below the level (above). */
+const IDENTITY_GATE = process.env.STUB_IDENTITY_GATE === 'on'
+const MONEY_MOVES: RegExp[] = [
+  /^\/v1\/money\/(payments|payouts|cards|physical-cards|bills\/pay|earnings-payouts)$/,
+  /^\/v1\/money\/accounts\/[^/]+\/test-money$/,
+  /^\/v1\/money\/payment-requests\/[^/]+\/approve$/,
+  /^\/v1\/workspaces\/[^/]+\/agents\/[^/]+\/(pay|money\/instant-transfers)$/,
+]
 /** B28.279 — its defects may be planted together, comma-separated, as stub-bank.ts's are. */
 const broke = (name: string): boolean => BREAK.split(',').includes(name)
 // B29.29 — the executive ROI report as Lens's own renderer (internal/roi RenderHTML, talyvor-lens 1d936fd) wrote it.
@@ -1444,6 +1456,11 @@ createServer(async (req, res) => {
       const of = workspaces.get(url.searchParams.get('workspace_id') ?? '')
       return json(res, 200, { rows: (of?.tagged ?? []).filter((e) => e.at >= since).map((e) => ({ request_id: e.request_id, feature: e.feature,
         issue_id: e.issue, cost_usd: e.cost_usd, input_tokens: 0, output_tokens: 0, ts: new Date(e.at).toISOString() })), next_cursor: '' })
+    }
+    // B61.51 — the identity gate (STUB_IDENTITY_GATE above), on the owner's token, a workspace key or an agent's own key.
+    if (IDENTITY_GATE && req.method === 'POST' && MONEY_MOVES.some((re) => re.test(p))) {
+      const mover = (byToken.get(bearer) ?? byKey.get(bearer))?.id ?? bank.agentOfKey(bearer)?.ws.id
+      if (mover !== undefined && bank.verificationLevel(mover) < 'L3') return json(res, 403, { error: 'Confirm who you are to move money.', code: 'VERIFICATION_NEEDED' })
     }
     if (p.startsWith('/v1/money/payment-requests') && await bank.agentPaymentRequests(req, res, p, bearer)) return
     if (p.startsWith('/v1/money/cards') && await bank.agentCards(req, res, p, bearer)) return
