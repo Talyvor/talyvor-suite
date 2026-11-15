@@ -82,3 +82,12 @@ CREATE TABLE IF NOT EXISTS connect_agent_ceilings (
     monthly_limit_ulxc   bigint NOT NULL CHECK (monthly_limit_ulxc > 0),
     updated_at           timestamptz NOT NULL DEFAULT now()
 );
+
+-- B54.21: a connection's ending Lens has not yet recorded (connect_revocations.go): written with the ending, told to Lens's
+-- POST /v1/auth/connect-revocations until it answers, then deleted. client_id '' is every assistant of the person's.
+CREATE TABLE IF NOT EXISTS connect_revocations_owed (
+    user_id   text NOT NULL,
+    client_id text NOT NULL,
+    owed_at   timestamptz NOT NULL,
+    PRIMARY KEY (user_id, client_id)
+);

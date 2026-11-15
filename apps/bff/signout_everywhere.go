@@ -3,7 +3,7 @@ package main
 // B52.9 — sign out everywhere. POST /auth/logout-everywhere ends every sign-in of the session's person: every
 // browser and phone session, and every assistant connected through Connect (their access and refresh tokens),
 // in the table first and then in memory, so a failure leaves them all whole rather than half-ended, and a
-// restart cannot bring any of them back.
+// restart cannot bring any of them back. Lens is then told, so their Connect tokens stop paying too (B54.21).
 
 import (
 	"context"
@@ -33,7 +33,7 @@ func (a *app) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	at := time.Now()
-	if err := a.oauth.db.endPerson(r.Context(), s.sub, at); err != nil {
+	if err := a.oauth.db.endPerson(r.Context(), s.sub, s.workspaceID, at); err != nil {
 		log.Printf("bff: sign out everywhere: %v", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "you could not be signed out everywhere; try again"})
 		return
@@ -42,6 +42,7 @@ func (a *app) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
 	a.oauth.grants.deleteWhere(func(g oauthGrant) bool { return g.Who.sub == s.sub })
 	a.oauth.codes.deleteWhere(func(c oauthCode) bool { return c.who.sub == s.sub })
 	a.auth.endPerson(s.sub, at)
+	a.connectionsEnded() // endPerson owed Lens the ending of every assistant of theirs (B54.21)
 	clearCookie(w, sessionCookieName)
 	log.Printf("bff: signed out everywhere (sub=%s)", s.sub)
 	w.WriteHeader(http.StatusNoContent)
