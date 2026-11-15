@@ -1,11 +1,10 @@
 import { useId, useState, useSyncExternalStore } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button as UiButton, CardHeader, Input, inlineLink } from '@talyvor/ui'
-import { Button, CodeBox, Dialog } from '@talyvor/ui/pocket'
-import { Card } from './walletBrand'
+import { inlineLink } from '@talyvor/ui'
+import { Button, Card, CodeBox, Dialog, Field, Icon, Input, KindTile } from '@talyvor/ui/pocket'
 import { AgentBankError, agentBankApi, type KeyRecovery } from './agentBankApi'
-import { DEVICES_KEY, Note, PASSKEYS_KEY, deviceText } from './AgentBank'
+import { DEVICES_KEY, PASSKEYS_KEY, deviceText } from './AgentBank'
 import { getAKeyBack, makeNewRecoveryCode, passkeysSupported } from './passkeys'
 import { forgetRecoveryCode, onRecoveryCode, recoveryCodeShown } from './recoveryCodeStore'
 
@@ -44,7 +43,7 @@ function Refused({ error, fallback }: { error: unknown; fallback: string }) {
   if (error instanceof AgentBankError && error.sentence === SIGN_IN_AGAIN) {
     const returnTo = window.location.pathname + window.location.search
     return (
-      <p role="alert" className="text-caption text-ink">
+      <p role="alert" className="text-body text-ink">
         {SIGN_IN_AGAIN}{' '}
         <a className={inlineLink} href={`/auth/login?reauth=1&return_to=${encodeURIComponent(returnTo)}`}>
           Sign in again
@@ -52,7 +51,11 @@ function Refused({ error, fallback }: { error: unknown; fallback: string }) {
       </p>
     )
   }
-  return <Note ok={false}>{deviceText(error, fallback)}</Note>
+  return (
+    <p role="alert" className="text-body text-ink">
+      {deviceText(error, fallback)}
+    </p>
+  )
 }
 
 /** Every read a new key changes: the keys, and the waiting recovery it ends. */
@@ -88,19 +91,27 @@ export function RecoveryCodeSheet() {
 /** Approvals and devices: the recovery code row. A new one is signed with a passkey here; the old one stops working. */
 export function RecoveryCodeRow() {
   const make = useMutation({ mutationFn: makeNewRecoveryCode })
+  const title = useId()
+  // B57.131 — a card as w-security draws its others: its title, its line, then the one thing to do.
   return (
-    <Card>
-      <CardHeader>Recovery code</CardHeader>
-      <div className="flex flex-col gap-2 px-gutter py-3">
-        <p className="text-body text-muted">If you ever lose every passkey and phone, this code lets you add a new key at once.</p>
-        {make.isError ? <Refused error={make.error} fallback="No new recovery code was made." /> : null}
-        <div>
-          <UiButton className="h-12 w-full wide:h-8 wide:w-auto" disabled={make.isPending} onClick={() => make.mutate()}>
+    <section aria-labelledby={title}>
+      <Card>
+        <h2 id={title} className="font-display text-reading font-bold text-ink">
+          Recovery code
+        </h2>
+        <p className="mt-1 text-body text-ink-3">If you ever lose every passkey and phone, this code lets you add a new key at once.</p>
+        {make.isError ? (
+          <div className="mt-2">
+            <Refused error={make.error} fallback="No new recovery code was made." />
+          </div>
+        ) : null}
+        <div className="mt-3">
+          <Button variant="secondary" icon={<Icon name="key" size={16} />} disabled={make.isPending} onClick={() => make.mutate()}>
             Make a new recovery code
-          </UiButton>
+          </Button>
         </div>
-      </div>
-    </Card>
+      </Card>
+    </section>
   )
 }
 
@@ -131,6 +142,7 @@ export function GetAKeyBack() {
   const changed = useKeyChanged()
   const [code, setCode] = useState('')
   const hint = useId()
+  const title = useId()
   const waiting = useQuery({ queryKey: RECOVERY_KEY, queryFn: agentBankApi.waitingRecovery, retry: false })
   const withCode = useMutation({
     mutationFn: () => getAKeyBack(deviceName(), code),
@@ -138,54 +150,51 @@ export function GetAKeyBack() {
     onSettled: changed,
   })
   const wait = useMutation({ mutationFn: agentBankApi.startRecovery, onSettled: changed })
+  // B57.131 — in the keys card's place, drawn as it is (w-security): the tile and the sentence, then the two ways back.
   return (
-    <Card id="get-a-key-back">
-      <CardHeader>Face ID and notifications</CardHeader>
-      <div className="flex flex-col gap-3 px-gutter py-3">
-        <p role="alert" className="text-body text-ink">
-          {NO_LIVE_KEY}
-        </p>
+    <section id="get-a-key-back" aria-labelledby={title}>
+      <Card tone="white">
+        <div className="flex items-start gap-3">
+          <KindTile icon={<Icon name="lock" />} className="bg-danger-50 text-danger" />
+          <h2 id={title} className="min-w-0 pt-1 font-display text-bar font-bold text-ink">
+            {NO_LIVE_KEY}
+          </h2>
+        </div>
         <form
-          className="flex flex-col gap-2"
+          className="mt-4 grid gap-2"
           onSubmit={(e) => {
             e.preventDefault()
             withCode.mutate()
           }}
         >
-          <label className="flex flex-col gap-1 text-caption text-muted">
-            Recovery code
-            <Input className="font-figure" autoComplete="off" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} />
-          </label>
-          <p id={hint} className="text-caption text-muted">
+          <Field label="Recovery code">
+            <Input autoComplete="off" spellCheck={false} value={code} onChange={(e) => setCode(e.target.value)} />
+          </Field>
+          <p id={hint} className="text-body text-ink-3">
             {passkeysSupported() ? 'Type the code you saved, then make the new passkey on this device.' : 'This browser cannot make a passkey.'}
           </p>
           {withCode.isError ? <Refused error={withCode.error} fallback="No key was added." /> : null}
           <div>
-            <UiButton
-              type="submit"
-              aria-describedby={hint}
-              className="h-12 w-full wide:h-8 wide:w-auto"
-              disabled={!passkeysSupported() || code.trim() === '' || withCode.isPending}
-            >
+            <Button type="submit" aria-describedby={hint} icon={<Icon name="key" size={16} />} disabled={!passkeysSupported() || code.trim() === '' || withCode.isPending}>
               Use your recovery code
-            </UiButton>
+            </Button>
           </div>
         </form>
         {waiting.data?.recovery ? null : (
-          <div className="flex flex-col gap-2 border-t border-rule pt-3">
-            <p className="text-body text-muted">
+          <div className="mt-4 grid gap-2 border-t border-line pt-4">
+            <p className="text-body text-ink-3">
               We wait 72 hours before you can add a new key, and tell everyone in your workspace. Anyone in it can cancel in that time.
             </p>
             {wait.isError ? <Refused error={wait.error} fallback="No recovery was started." /> : null}
             <div>
-              <UiButton className="h-12 w-full wide:h-8 wide:w-auto" disabled={wait.isPending} onClick={() => wait.mutate()}>
+              <Button variant="secondary" icon={<Icon name="clock" size={16} />} disabled={wait.isPending} onClick={() => wait.mutate()}>
                 Wait 72 hours
-              </UiButton>
+              </Button>
             </div>
           </div>
         )}
-      </div>
-    </Card>
+      </Card>
+    </section>
   )
 }
 
