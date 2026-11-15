@@ -73,9 +73,19 @@ function caller(ctx: ScenarioCtx) {
   }
 }
 
+/** The capabilities whose terms a GBP account and a payment to a payee need accepted first (Lens B30.9). */
+const ACCOUNT_TERMS = ['currency_accounts', 'payments_in', 'payments_out']
+
 /** A GBP account and a saved payee, the least a payment request needs; a setup Lens refuses is an ERROR, never a finding. */
 async function payeeReady(ctx: ScenarioCtx, name: string): Promise<string> {
   const call = caller(ctx)
+  // B61.83 — the deep rounds' users accept no terms at sign-up, so the owner accepts these first, as a person does.
+  const terms = await call<{ terms: { capability: string; version: number; accepted?: unknown }[] | null }>('GET', '/v1/workspaces/{ws}/terms', undefined, 'the owner reads the terms')
+  if (!terms.ok) throw new Error(`reading the workspace's terms answered ${said(terms)}`)
+  for (const t of (terms.value.terms ?? []).filter((x) => ACCOUNT_TERMS.includes(x.capability) && x.accepted == null)) {
+    const ok = await call('POST', `/v1/workspaces/{ws}/terms/${t.capability}/accept`, { version: t.version }, `the owner accepts ${t.capability}'s terms`)
+    if (ok.status !== 201) throw new Error(`accepting ${t.capability}'s terms answered ${said(ok)}`)
+  }
   const opened = await call('POST', '/v1/money/accounts', { currency: 'GBP' }, 'the owner opens a GBP account')
   if (opened.status !== 201) throw new Error(`opening a GBP account answered ${said(opened)}`)
   const p = await call<{ id: string }>('POST', '/v1/money/payees', { name, country: 'GB', sort_code: '040004', account_number: '35792461' }, `the owner saves ${name}`)
@@ -212,7 +222,11 @@ export const onApprovals: Decide = async (ctx, memo, allowLXC) => {
   try {
     await page.getByRole('heading', { level: 1, name: 'Approvals' }).waitFor({ timeout: ACTION_TIMEOUT_MS })
     if (allowLXC === undefined) return await approveRow(page, memo)
-    const row = page.locator('[data-approval]').filter({ hasText: memo }).first()
+    // B61.83 — "Approve and always allow" is on the agent's own page (AgentBank's Waiting for a person), not on Approvals.
+    const held = (await ctx.env.lens.agentApprovals(ctx.app.user)).find((x) => x.memo === memo && x.status === 'pending')
+    if (held === undefined) throw new Error(`no pending approval in Lens carries "${memo}"`)
+    await page.goto(new URL(`/agents/${encodeURIComponent(held.agent_id)}`, page.url()).toString())
+    const row = page.locator(`[data-approval="${held.id}"]`)
     await row.getByRole('button', { name: 'Approve and always allow this…' }).click({ timeout: ACTION_TIMEOUT_MS })
     await row.getByLabel(/^Always allow .* up to, in LXC$/).fill(String(allowLXC))
     await row.getByLabel('Each').selectOption('month')
@@ -398,7 +412,8 @@ export function xssShownBack(): Scenario {
         })
         try {
           // A screen that never shows the field proves nothing: an ERROR, not a pass.
-          await page.getByText(marker).first().waitFor({ state: 'visible', timeout: 30_000 }).catch(async () => {
+          // B61.83 — the first match may be a hidden <option> (Pay's From names the agent's account): a shown one is waited for.
+          await page.getByText(marker).filter({ visible: true }).first().waitFor({ state: 'visible', timeout: 30_000 }).catch(async () => {
             const read = (await page.locator('main').innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 300)
             throw new Error(`${screen} never showed ${shown.filter((s) => s.screen === screen).map((s) => s.field).join(' and ')}; it read "${read}"`)
           })
