@@ -83,7 +83,8 @@ describe('the marketplace in the brand', () => {
     fireEvent.change(within(main).getByLabelText(/Price per use/), { target: { value: '1.25' } })
     expect(within(preview).getByText('Arithmetic check')).toBeTruthy()
     expect(within(preview).getByText('You')).toBeTruthy()
-    expect(within(preview).getByTestId('listing-price').textContent).toBe('1.25 LXC')
+    // B61.14 — the price is typed in LXC on this hidden area but drawn in dollars alone: 1.25 LXC at $0.10 a LXC.
+    await waitFor(() => expect(within(preview).getByTestId('listing-price').textContent).toBe('$0.13'))
     expect(cardOnItsPlane(main.querySelector('form')!.closest('.rounded-card')!)).toBe(true)
     expect(primaries(main)).toEqual(['Publish'])
   })
@@ -105,7 +106,8 @@ describe('the marketplace in the brand', () => {
     const mine = within(main).getByTestId('listing-card')
     expect(mine.querySelector('svg[data-icon]')?.getAttribute('data-icon')).toBe('layers')
     expect(within(mine).getByText('You')).toBeTruthy()
-    expect(within(mine).getByTestId('listing-price').textContent).toBe('0.25 LXC')
+    // B61.14 — 250,000 µLXC at $0.10 a LXC, in dollars alone.
+    expect(within(mine).getByTestId('listing-price').textContent).toBe('$0.03')
   })
 
   // Once Lens holds LENS_PROVIDER_SECRET_KEK, the tax form renders on Selling beside the Stripe connect. The e2e

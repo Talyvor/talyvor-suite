@@ -233,7 +233,7 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
       label: 'Budget left after',
       value: (
         <span data-testid="approval-budget-left" className="font-figure">
-          {left !== null && of !== null ? `${sign}${left} of ${of}` : '—'}
+          {left !== null && of !== null ? `${sign}${left} of ${of}` : '…'}
         </span>
       ),
     })

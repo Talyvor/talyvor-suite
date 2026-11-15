@@ -41,7 +41,7 @@ import { DeclineForm, declinedText } from './Decline'
 import { approvalSheetTo } from './ApprovalSheet'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneySection } from './AgentMoney'
-import { Lxc, useLxcText } from './money'
+import { Lxc, pegQuery, useLensWords, useLxcText } from './money'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
@@ -71,6 +71,7 @@ import {
   agentBankApi,
   formatMinor,
   limitText,
+  parseDollars,
   parseLXC,
   refusalText,
   useAccount,
@@ -371,8 +372,11 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
   const [memo, setMemo] = useState('')
   const [shown, setShown] = useState<string | null>(null)
   const toListing = payee.startsWith('listing:')
-  // To a listing an amount is the most a tick pays, and empty means its price at the time.
-  const micros = toListing && amount.trim() === '' ? 0 : parseLXC(amount)
+  // B61.14 — typed in dollars at Lens's peg, never LXC. To a listing an amount is the most a tick pays, and empty means
+  // its price at the time.
+  const peg = useQuery(pegQuery).data?.usd_per_lxc ?? 0
+  const typed = parseDollars(amount, peg)
+  const micros = toListing && amount.trim() === '' ? 0 : typed !== null && typed > 0 ? typed : null
   const invalidate = () => qc.invalidateQueries({ queryKey: SCHEDULES_KEY })
   const create = useMutation({
     mutationFn: () =>
@@ -456,8 +460,8 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
             ))}
           </Select>
         </Field>
-        <Field label={`Scheduled amount in LXC for ${agent.name}`}>
-          <PocketInput inputMode="decimal" placeholder={toListing ? 'At most its price' : '0'} unit="LXC" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        <Field label={`Scheduled amount in dollars for ${agent.name}`}>
+          <PocketInput inputMode="decimal" placeholder={toListing ? 'At most its price' : '0'} unit="USD" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
         {micros !== null && micros > 0 ? (
           <p className="text-body text-ink-3" data-testid="schedule-amount">
@@ -480,7 +484,7 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
           <PocketButton
             type="submit"
             disabled={create.isPending}
-            disabledReason={payee === '' ? 'Pick who it pays first.' : micros === null ? 'Type an amount in LXC first.' : undefined}
+            disabledReason={payee === '' ? 'Pick who it pays first.' : micros === null ? 'Type an amount in dollars first.' : undefined}
           >
             Schedule
           </PocketButton>
@@ -609,6 +613,34 @@ function AgentList({ agents, selected, onSelect }: { agents: Agent[]; selected: 
           </div>
         </Row>
       ))}
+    </Card>
+  )
+}
+
+// B19.23 — Lens B19.11 gives an agent with no owner no money, so it is claimed first. B61.14: only the claim is left of
+// the old Money card; its LXC balance and Move LXC are parked.
+function Claim({ agent }: { agent: Agent }) {
+  const qc = useQueryClient()
+  const claim = useMutation({
+    mutationFn: () => agentBankApi.claim(agent.id),
+    onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
+  })
+  if (agent.owner_user_id !== '') return claim.isSuccess && claim.data.agent_id === agent.id ? <Note ok>You own {agent.name} now.</Note> : null
+  return (
+    <Card>
+      <CardHeader>Money</CardHeader>
+      <div className="flex flex-col gap-2 px-gutter py-3">
+        <p className="text-body text-ink" data-testid="agent-ownerless">
+          {agent.name} has no owner, so it cannot be funded: Lens gives an agent money or a payment only once a person of
+          this workspace owns it. Claim it to become its owner.
+        </p>
+        <div>
+          <Button disabled={claim.isPending} onClick={() => claim.mutate()}>
+            Claim {agent.name}
+          </Button>
+        </div>
+        {claim.isError ? <Note ok={false}>{refusalText(claim.error)}</Note> : null}
+      </div>
     </Card>
   )
 }
@@ -1449,13 +1481,17 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
       return soonest ? Math.min(Math.max(Date.parse(soonest) - Date.now() + 1000, 1000), 2_147_483_647) : false
     },
   })
-  const settable = BOOSTABLE.filter(([field]) => (rules[field] ?? 0) > 0)
+  // B61.14 — requests a minute is the parked gateway's: it is not offered for a boost.
+  const settable = BOOSTABLE.filter(([field]) => field !== 'requests_per_minute' && (rules[field] ?? 0) > 0)
   const [picked, setPicked] = useState('')
   const rule = settable.find(([field]) => field === picked) ?? settable[0]
   const [value, setValue] = useState('')
   const [until, setUntil] = useState(() => localMinute(new Date(Date.now() + 60 * 60_000)))
   const rate = rule?.[0] === 'requests_per_minute'
-  const raisedTo = rate ? (/^\s*\d+\s*$/.test(value) && Number(value) > 0 ? Number(value) : null) : parseLXC(value)
+  // B61.14 — a limit is raised in dollars at Lens's peg, never LXC.
+  const peg = useQuery(pegQuery).data?.usd_per_lxc ?? 0
+  const typed = parseDollars(value, peg)
+  const raisedTo = rate ? (/^\s*\d+\s*$/.test(value) && Number(value) > 0 ? Number(value) : null) : typed !== null && typed > 0 ? typed : null
   const at = new Date(until)
   // B55.14 — a boost always loosens the rules, so once the workspace has a passkey it is signed (Lens B55.13).
   const asked = rule !== undefined && raisedTo !== null && !Number.isNaN(at.getTime()) ? { rule: rule[0], value: raisedTo, until: at.toISOString() } : null
@@ -1540,7 +1576,7 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
           </Field>
           <p className="text-body text-ink-3">Now {boostFigure(rule[0], rules[rule[0]] ?? 0)}</p>
           <Field label={`Raise ${agent.name}’s limit to`}>
-            <PocketInput inputMode={rate ? 'numeric' : 'decimal'} placeholder="0" unit={rate ? 'a minute' : 'LXC'} value={value} onChange={(e) => setValue(e.target.value)} />
+            <PocketInput inputMode={rate ? 'numeric' : 'decimal'} placeholder="0" unit={rate ? 'a minute' : 'USD'} value={value} onChange={(e) => setValue(e.target.value)} />
           </Field>
           <Field label={`Raise ${agent.name}’s limit until`}>
             <PocketInput type="datetime-local" value={until} onChange={(e) => setUntil(e.target.value)} />
@@ -2023,9 +2059,12 @@ export function useRulesChange(agentID: string) {
     const j = await judge(change)
     return j.signs || j.phone ? null : commit(change, save, j)
   }
+  // B61.14 — Lens says what a change does in LXC; it is shown in the person's currency.
+  const words = useLensWords()
+  const said = judged && { ...judged, changes: judged.changes.map(words) }
   /** What Lens said this change does, while it is the change last asked about. */
-  const judgedFor = (change: RulesChange | null) => (change !== null && judged?.change === JSON.stringify(change) ? judged : null)
-  return { judge, commit, run, judged, judgedFor, reset: () => setJudged(null) }
+  const judgedFor = (change: RulesChange | null) => (change !== null && said?.change === JSON.stringify(change) ? said : null)
+  return { judge, commit, run, judged: said, judgedFor, reset: () => setJudged(null) }
 }
 
 /** B55.14 — said before a looser change is saved: what it loosens and that it needs the passkey, or where to add one. */
@@ -2374,7 +2413,7 @@ export function Approvals({
         <Card>
           <CardHeader>
             <span className="inline-flex flex-wrap items-center gap-2">
-              Waiting for a person <Term term="Waiting for a person">{`${TERMS.approval} ${TERMS.lxc}`}</Term>
+              Waiting for a person <Term term="Waiting for a person">{TERMS.approval}</Term>
             </span>
           </CardHeader>
           {waiting.length > 0 ? (
@@ -2710,6 +2749,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
               <div className="wide:max-w-sm">
                 <AgentCard agent={agent} book={book.data} />
               </div>
+              <Claim agent={agent} />
               <RulesSummary key={`rules-${agent.id}`} agent={agent} agents={live} />
               {moneyOnPage ? null : <AgentMoneySection key={`money-${agent.id}`} agent={agent} />}
               {moneyOnPage ? null : <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />}

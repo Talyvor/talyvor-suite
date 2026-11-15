@@ -11,7 +11,7 @@ const ME = 'ws_me'
 const OTHER = 'ws_other'
 // B55.34 — Lens names every member, and a named invite whose workspace has been a member, by its workspace.
 const NAMES: Record<string, string> = { [ME]: 'Ben’s lab', [OTHER]: 'Ana’s studio' }
-const PLAN_MAX_ULXC = 1_000_000_000 // Free's room_budget_max_usd, $100, at the peg
+const PLAN_MAX_ULXC = 1_000_000_000 // Free's room_budget_max_usd, $100, at the peg ($0.10 a LXC)
 
 const LATE = 'ws_late'
 
@@ -48,6 +48,7 @@ function mockBff(split = 'equal') {
     const json = (v: unknown, status = 200) =>
       new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, user: { sub: 'u1', email: 'u1@example.com' } })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     // B55.14: Lens judges a change to an agent's rules first; these do not loosen them.
     if (url.endsWith('/rules-challenge')) return json({ looser: false, changes: [], allow_credentials: [] })
     if (url === '/api/rooms') return json({ rooms: [], joined: [], invited: null })
@@ -194,8 +195,10 @@ describe('room settings', () => {
     window.history.pushState({}, '', '/rooms/room_1/settings')
     render(<App />)
 
+    // B61.14 — the budget reads in dollars alone: 200 LXC at $0.10 a LXC. The room's rules form is still typed in LXC.
     const budget = await screen.findByTestId('room-budget')
-    expect(budget.textContent).toContain('200 LXC')
+    await waitFor(() => expect(budget.textContent).toContain('spent of $20.00'))
+    expect(budget.textContent).not.toContain('LXC')
     const limit = await screen.findByLabelText('Monthly limit for Room: Agent pricing, in LXC')
     fireEvent.change(limit, { target: { value: '2000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
@@ -203,11 +206,11 @@ describe('room settings', () => {
     expect(refusal.textContent).toBe(
       'A monthly limit of 2,000 LXC is above the room’s budget: rooms_plan_limits (LENS_ROOMS_PLAN_LIMITS): your free plan allows a room a budget of at most $100 (1,000 LXC) a month — the team plan allows $5000.',
     )
-    expect(budget.textContent).toContain('200 LXC')
+    expect(budget.textContent).toContain('spent of $20.00')
 
     fireEvent.change(limit, { target: { value: '500' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-    await waitFor(() => expect(screen.getByTestId('room-budget').textContent).toContain('500 LXC'))
+    await waitFor(() => expect(screen.getByTestId('room-budget').textContent).toContain('spent of $50.00'))
     expect(bff.sent.filter((s) => s.url === '/api/agents/ag_room/rules').map((s) => s.body.monthly_limit_ulxc)).toEqual([2_000_000_000, 500_000_000])
   })
 

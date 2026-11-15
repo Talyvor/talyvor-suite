@@ -30,6 +30,8 @@ function mockBff() {
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    // B61.14 — the alerts read in dollars at Lens's peg, $0.10 a LXC.
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], usd_per_lxc: 0.1 })
     if (url === '/api/agents') {
       return json({ workspace_balance_ulxc: 100 * M, allocated_ulxc: 19 * M, unallocated_ulxc: 81 * M, spent_ulxc: 6 * M, agents: state.agents })
     }
@@ -67,12 +69,12 @@ describe('Chat wallet alerts (B28.91)', () => {
     render(<App />)
 
     const unusual = await screen.findByText(/^Writer spent/)
-    expect(unusual).toHaveTextContent(/^Writer spent 6 LXC.* in an hour; it usually spends 0\.5 LXC.* an hour\. Lens paused it, so it spends nothing until you resume it\.$/)
+    expect(unusual).toHaveTextContent('Writer spent $0.60 in an hour; it usually spends $0.05 an hour. Lens paused it, so it spends nothing until you resume it.')
     const near = await screen.findByText(/^Coder is on course/)
-    expect(near).toHaveTextContent(/^Coder is on course for its 8 LXC.* monthly limit: 2 LXC.* spent so far, and 9 LXC.* by the month’s end at this pace\.$/)
+    expect(near).toHaveTextContent('Coder is on course for its $0.80 monthly limit: $0.20 spent so far, and $0.90 by the month’s end at this pace.')
     const card = near.closest('[data-testid="chat-alert"]') as HTMLElement
     expect(within(card).getByRole('link', { name: 'Coder’s rules' })).toHaveAttribute('href', '/agents?agent=agt_3')
-    // Researcher has spent nothing this month and holds 10 LXC: nothing to say about it.
+    // Researcher has spent nothing this month and holds 10 LXC ($1.00): nothing to say about it.
     expect(texts().some((t) => t?.startsWith('Researcher'))).toBe(false)
   })
 
@@ -110,7 +112,7 @@ describe('Chat wallet alerts (B28.91)', () => {
     state.forecast[2] = { ...state.forecast[2], spent_ulxc: 8 * M, forecast_ulxc: 30 * M }
     render(<App />)
     await waitFor(() =>
-      expect(texts()).toContain('Coder has reached its 8 LXC monthly limit: it has spent 8 LXC this month, and Lens refuses anything more until the month ends.'),
+      expect(texts()).toContain('Coder has reached its $0.80 monthly limit: it has spent $0.80 this month, and Lens refuses anything more until the month ends.'),
     )
   })
 })

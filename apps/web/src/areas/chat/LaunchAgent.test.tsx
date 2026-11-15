@@ -24,6 +24,8 @@ function mockBff() {
     const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {}
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    // B61.14 — an amount Lens keeps in µLXC reads in dollars at Lens's peg, $0.10 a LXC.
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], usd_per_lxc: 0.1 })
     if (url === '/api/models') return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, tier: 'frontier' }])
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
@@ -103,7 +105,7 @@ describe('Launch an agent from Chat (B28.350)', () => {
 
     fireEvent.click(within(card).getByRole('button', { name: 'Try again' }))
     const done = await within(card).findByTestId('chat-launch-done')
-    expect(done).toHaveTextContent(/^Launched Researcher with 20 LXC in its wallet\. Open it on Agent Wallets$/)
+    expect(done).toHaveTextContent(/^Launched Researcher with \$2\.00 in its wallet\. Open it on Agent Wallets$/)
     expect(within(done).getByRole('link')).toHaveAttribute('href', '/agents?agent=agt_9')
     expect(within(card).getByTestId('chat-launch-key')).toHaveTextContent('tlv_agent_secret_9')
 
@@ -119,7 +121,7 @@ describe('Launch an agent from Chat (B28.350)', () => {
     bff.lines.push({ entry_id: 'ent_2', kind: 'spend', amount_ulxc: -12_345, counterparty: 'claude-opus-5', balance_after_ulxc: 20 * M - 12_345, at: '2026-10-06T05:01:00Z' })
     await queryClient.invalidateQueries({ queryKey: ['agent-statement', 'agt_9'] })
     const first = await within(card).findByTestId('chat-launch-first-call')
-    expect(first).toHaveTextContent(/^Researcher’s first call is on its statement: −0\.012345 LXC, leaving 19\.987655 LXC in its wallet\. See it on the statement$/)
+    expect(first).toHaveTextContent(/^Researcher’s first call is on its statement: −<\$0\.01, leaving \$2\.00 in its wallet\. See it on the statement$/)
     expect(within(first).getByRole('link')).toHaveAttribute('href', '/agents?agent=agt_9&entry=ent_2')
   })
 })

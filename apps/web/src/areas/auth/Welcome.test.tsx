@@ -28,6 +28,7 @@ function mockBff(opts: { name: string; firstSignIn?: boolean }) {
     if (url === '/api/agents')
       return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [{ id: 'agt_first', name: 'My first agent', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-11-14T09:00:00Z' }] })
     if (url === '/api/agents/agt_first/rules') return json(SUPPORT_BOT)
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     return new Response('null', { status: 404 })
   })
   return puts
@@ -53,10 +54,10 @@ describe('/welcome', () => {
     at('/')
     await waitFor(() => expect(window.location.pathname).toBe('/welcome'))
     expect(await screen.findByRole('heading', { name: 'Welcome to Talyvor' })).toBeInTheDocument()
-    // No peg in this fixture, so each amount is LXC alone.
+    // B61.14 — each amount in dollars alone, at the fixture's peg of $0.10 a LXC: 0.5 LXC is $0.05, never LXC.
     await waitFor(() =>
       expect(screen.getByTestId('welcome-agent-rules').textContent?.replace(/\s+/g, ' ')).toBe(
-        '“My first agent”, on the Support bot rules: at most 0.5 LXC a request, 20 LXC an hour, 200 LXC a day and 4,000 LXC a month. It asks you above 5 LXC, and pauses if its spending looks unusual.',
+        '“My first agent”, on the Support bot rules: at most $0.05 a request, $2.00 an hour, $20.00 a day and $400.00 a month. It asks you above $0.50, and pauses if its spending looks unusual.',
       ),
     )
     expect(screen.queryByText(ID)).not.toBeInTheDocument()

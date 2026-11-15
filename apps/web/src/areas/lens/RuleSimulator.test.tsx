@@ -5,13 +5,15 @@ import { App, queryClient } from '../../App'
 // B28.30 — "would this request pass my rules?", on the agent's rules page (B57.23). The mock BFF judges the request the way Lens
 // B28.306 does for a daily limit of 5 LXC: above it refused with the rule's sentence, at or below it allowed. It
 // moves nothing, so the only write the screen sends is the question itself.
+// B61.14 — the amount is typed in dollars at Lens's peg ($0.10 a LXC here), the question is only a payment to another of the
+// workspace's agents (a question to a model is the parked gateway's), and Lens's "5 LXC" in its reason reads in dollars.
 
-function mockBff({ paused = false, allPaused = false } = {}) {
+function mockBff({ paused = false, allPaused = false, alone = false } = {}) {
   const sent: Array<{ method: string; url: string; body?: unknown }> = []
   const agents = [
     { id: 'agt_1', name: 'Researcher', balance_ulxc: 10_000_000, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true, ...(paused ? { paused_at: '2026-10-05T08:00:00Z', paused_reason: 'paused from its page' } : {}) },
     { id: 'agt_2', name: 'Writer', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true },
-  ]
+  ].slice(0, alone ? 1 : 2)
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -41,6 +43,7 @@ function mockBff({ paused = false, allPaused = false } = {}) {
     if (url === '/api/agents/approvals') return json({ approvals: [] })
     if (url === '/api/agents/passkeys') return json({ passkeys: [] })
     if (url === '/api/marketplace/listings') return json({ listings: [] })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     return new Response('null', { status: 404 })
   })
   return sent
@@ -53,28 +56,31 @@ afterEach(() => {
 })
 
 describe('asking whether an agent’s rules would let a request through', () => {
-  it('says refused, with the rule, for a payment over the daily limit and allowed for a question under it, sending nothing else', async () => {
+  it('says refused, with the rule, for a payment over the daily limit and allowed for one under it, sending nothing else', async () => {
     const sent = mockBff()
     window.history.pushState({}, '', '/agents/agt_1/rules')
     render(<App />)
 
     const card = await screen.findByTestId('would-it-pass')
     expect(card.textContent).toContain('Ask whether these rules would let a request through, counting what it has really spent. Nothing is spent, paid or sent for approval.')
-    fireEvent.change(within(card).getByLabelText('What Researcher would do'), { target: { value: 'agent:agt_2' } })
-    fireEvent.change(within(card).getByLabelText('Amount in LXC to try for Researcher'), { target: { value: '6' } })
+    // Only a payment to the workspace's other agent is offered; no question to a model.
+    const who = within(card).getByLabelText('Who Researcher would pay') as HTMLSelectElement
+    expect([...who.options].map((o) => [o.value, o.text])).toEqual([['agt_2', 'Writer']])
+    expect(who.value).toBe('agt_2')
+    // $0.60 at $0.10 a LXC is 6 LXC, over the daily limit of 5 LXC ($0.50).
+    fireEvent.change(within(card).getByLabelText('Amount in dollars to try for Researcher'), { target: { value: '0.60' } })
     fireEvent.click(within(card).getByRole('button', { name: 'Would it pass?' }))
     expect((await within(card).findByRole('alert')).textContent).toBe(
-      'RefusedThe agent has spent 0 LXC of its daily limit of 5 LXC, and this payment would cost up to 6 LXC. Nothing was spent.',
+      'RefusedThe agent has spent $0.00 of its daily limit of $0.50, and this payment would cost up to $0.60. Nothing was spent.',
     )
 
-    fireEvent.change(within(card).getByLabelText('What Researcher would do'), { target: { value: '' } })
-    fireEvent.change(within(card).getByLabelText('Amount in LXC to try for Researcher'), { target: { value: '1' } })
+    fireEvent.change(within(card).getByLabelText('Amount in dollars to try for Researcher'), { target: { value: '0.1' } })
     fireEvent.click(within(card).getByRole('button', { name: 'Would it pass?' }))
     expect((await within(card).findByRole('status')).textContent).toBe('AllowedResearcher’s rules would let this through. Nothing was spent.')
 
     expect(sent).toEqual([
       { method: 'POST', url: '/api/agents/agt_1/rules/simulate', body: { amount_ulxc: 6_000_000, payee: { kind: 'agent', id: 'agt_2' } } },
-      { method: 'POST', url: '/api/agents/agt_1/rules/simulate', body: { amount_ulxc: 1_000_000, model: '', provider: '' } },
+      { method: 'POST', url: '/api/agents/agt_1/rules/simulate', body: { amount_ulxc: 1_000_000, payee: { kind: 'agent', id: 'agt_2' } } },
     ])
   })
 
@@ -87,13 +93,22 @@ describe('asking whether an agent’s rules would let a request through', () => 
       window.history.pushState({}, '', '/agents/agt_1/rules')
       render(<App />)
       const card = await screen.findByTestId('would-it-pass')
-      fireEvent.change(within(card).getByLabelText('Amount in LXC to try for Researcher'), { target: { value: '1' } })
+      fireEvent.change(within(card).getByLabelText('Amount in dollars to try for Researcher'), { target: { value: '0.1' } })
       fireEvent.click(within(card).getByRole('button', { name: 'Would it pass?' }))
       expect((await within(card).findByRole('alert')).textContent).toBe(words)
-      expect(sent).toEqual([{ method: 'POST', url: '/api/agents/agt_1/rules/simulate', body: { amount_ulxc: 1_000_000, model: '', provider: '' } }])
+      expect(sent).toEqual([{ method: 'POST', url: '/api/agents/agt_1/rules/simulate', body: { amount_ulxc: 1_000_000, payee: { kind: 'agent', id: 'agt_2' } } }])
       cleanup()
       vi.restoreAllMocks()
       queryClient.clear()
     }
+  })
+
+  it('is not drawn for an agent with no other agent in the workspace to pay', async () => {
+    const sent = mockBff({ alone: true })
+    window.history.pushState({}, '', '/agents/agt_1/rules')
+    render(<App />)
+    expect(await screen.findByLabelText('At most a day for Researcher, in dollars')).toHaveValue('0.5')
+    expect(screen.queryByTestId('would-it-pass')).toBeNull()
+    expect(sent).toEqual([])
   })
 })

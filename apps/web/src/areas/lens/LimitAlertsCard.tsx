@@ -31,7 +31,7 @@ function chipOf(percent: number): { tone: ChipTone; words: string } {
   return percent >= 100 ? { tone: 'bad', words: 'Reached' } : { tone: percent >= 80 ? 'wait' : 'plain', words: 'Nearing' }
 }
 
-/** "$1,012.00 of $2,000.00" for an agent's limit (B61.14: never LXC), "—" while no rate backs it; "$900.00 of $1,000.00" for a budget or a card. */
+/** "$1,012.00 of $2,000.00" for an agent's limit (B61.14: never LXC), "…" while no rate backs it; "$900.00 of $1,000.00" for a budget or a card. */
 function SpentOf({ a, money }: { a: LimitAlert; money: (ulxc: number) => string | null }) {
   if (a.currency !== 'LXC')
     return (
@@ -40,7 +40,7 @@ function SpentOf({ a, money }: { a: LimitAlert; money: (ulxc: number) => string 
         <Money minor={a.limit_minor} currency={a.currency} />
       </>
     )
-  return <>{`${money(a.spent_minor) ?? '—'} of ${money(a.limit_minor) ?? '—'}`}</>
+  return <>{`${money(a.spent_minor) ?? '…'} of ${money(a.limit_minor) ?? '…'}`}</>
 }
 
 export function LimitAlertsCard({ nameOf }: { nameOf: (id: string) => string }) {

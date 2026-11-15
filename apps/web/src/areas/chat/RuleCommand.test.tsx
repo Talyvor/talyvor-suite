@@ -21,6 +21,8 @@ function mockBff(passkey = false) {
     const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : {}
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    // B61.14 — an amount Lens keeps in µLXC reads in dollars at Lens's peg, $0.10 a LXC.
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], usd_per_lxc: 0.1 })
     if (url === '/api/models') {
       return json([
         { id: 'claude-opus-4-1', provider: 'anthropic', display_name: 'Claude Opus 4.1', input_per_1m: 15, output_per_1m: 75, tier: 'frontier', release_date: '2025-08-05' },
@@ -98,12 +100,12 @@ describe('Set an agent’s rule in plain words from Chat (B28.352)', () => {
     expect(within(card).getByLabelText('At most, in LXC')).toHaveValue('5')
     expect(within(card).getByLabelText('How often')).toHaveValue('day')
     await waitFor(() => expect(within(card).getByLabelText('On which model')).toHaveValue('claude-opus-5')) // the newest Opus
-    expect(await within(card).findByText('It is', { exact: false })).toHaveTextContent('It is 2 LXC now.')
-    expect(within(card).getByTestId('chat-rule-change')).toHaveTextContent(/^Researcher may spend at most 5 LXC a day on Claude Opus 5\./)
+    expect(await within(card).findByText('It is', { exact: false })).toHaveTextContent('It is $0.20 now.')
+    expect(within(card).getByTestId('chat-rule-change')).toHaveTextContent(/^Researcher may spend at most \$0\.50 a day on Claude Opus 5\./)
 
     fireEvent.click(within(card).getByRole('button', { name: 'Save the rule' }))
     const done = await within(card).findByTestId('chat-rule-saved')
-    expect(done).toHaveTextContent(/^Saved: Researcher may spend at most 5 LXC a day on Claude Opus 5\. Lens refuses a call that would take it past that\. See its rules on Agent Wallets$/)
+    expect(done).toHaveTextContent(/^Saved: Researcher may spend at most \$0\.50 a day on Claude Opus 5\. Lens refuses a call that would take it past that\. See its rules on Agent Wallets$/)
     expect(within(done).getByRole('link')).toHaveAttribute('href', '/agents?agent=agt_1')
     expect(bff.saved).toEqual([
       {
@@ -138,7 +140,7 @@ describe('Set an agent’s rule in plain words from Chat (B28.352)', () => {
 
     fireEvent.click(within(card).getByRole('button', { name: 'Save the rule' }))
     expect((await within(card).findByTestId('rules-loosen')).textContent).toBe(
-      'This loosens Researcher’s rules:Claude Opus 5 daily limit: was 2 LXC, now 5 LXCIt needs your passkey. Tightening is saved at once.',
+      'This loosens Researcher’s rules:Claude Opus 5 daily limit: was $0.20, now $0.50It needs your passkey. Tightening is saved at once.',
     )
     expect(get).not.toHaveBeenCalled()
     expect(bff.saved).toEqual([])
@@ -174,12 +176,12 @@ describe('Set an agent’s approval amount from Chat (B28.353)', () => {
     expect(screen.queryAllByTestId('turn-user')).toHaveLength(0) // nothing went to the model
     await waitFor(() => expect(within(card).getByLabelText('Agent')).toHaveValue('agt_1'))
     expect(within(card).getByLabelText('Ask above, in LXC')).toHaveValue('2.5')
-    expect(await within(card).findByText('It is', { exact: false })).toHaveTextContent('It is 2 LXC now.')
-    expect(within(card).getByTestId('chat-ask-above-change')).toHaveTextContent(/^A person must approve any request or payment Researcher makes above 2\.5 LXC\./)
+    expect(await within(card).findByText('It is', { exact: false })).toHaveTextContent('It is $0.20 now.')
+    expect(within(card).getByTestId('chat-ask-above-change')).toHaveTextContent(/^A person must approve any request or payment Researcher makes above \$0\.25\./)
 
     fireEvent.click(within(card).getByRole('button', { name: 'Save the rule' }))
     const done = await within(card).findByTestId('chat-ask-above-saved')
-    expect(done).toHaveTextContent(/^Saved: a person must approve any request or payment Researcher makes above 2\.5 LXC\. Until then it waits in Approvals\. See its rules on Agent Wallets$/)
+    expect(done).toHaveTextContent(/^Saved: a person must approve any request or payment Researcher makes above \$0\.25\. Until then it waits in Approvals\. See its rules on Agent Wallets$/)
     expect(bff.saved).toEqual([
       {
         max_per_request_ulxc: M,

@@ -84,21 +84,21 @@ describe('the allowance and balance meter in Chat (B28.104)', () => {
     mockBff(true)
     await ask()
     const meter = screen.getByTestId('allowance-meter')
-    expect(meter.textContent).toBe('Plan 25% used · $15.00 (150.00 LXC) left Prepaid balance $0.43 (4.25 LXC)')
+    expect(meter.textContent).toBe('Plan 25% used · $15.00 left Prepaid balance $0.43')
     expect(screen.getByRole('progressbar', { name: 'Plan allowance used this month' }).getAttribute('aria-valuenow')).toBe('25')
 
     send()
-    await waitFor(() => expect(screen.getByTestId('allowance-left').textContent).toBe('$15.00 (150.00 LXC)'))
-    expect(screen.getByTestId('prepaid-balance').textContent).toBe('$0.43 (4.25 LXC)')
+    await waitFor(() => expect(screen.getByTestId('allowance-left').textContent).toBe('$15.00'))
+    expect(screen.getByTestId('prepaid-balance').textContent).toBe('$0.43')
   })
 
   it('without a plan shows the prepaid balance alone, and it drops by the charge', async () => {
     mockBff(false)
     await ask()
-    expect(screen.getByTestId('allowance-meter').textContent).toBe('Prepaid balance $0.43 (4.25 LXC)')
+    expect(screen.getByTestId('allowance-meter').textContent).toBe('Prepaid balance $0.43')
     expect(screen.queryByTestId('allowance-left')).toBeNull()
 
     send()
-    await waitFor(() => expect(screen.getByTestId('prepaid-balance').textContent).toBe('$0.42 (4.25 LXC)'))
+    await waitFor(() => expect(screen.getByTestId('prepaid-balance').textContent).toBe('$0.42'))
   })
 })

@@ -18,6 +18,7 @@ function mockBff(passkey = false) {
     if (init?.method === 'POST') posts.push({ url, body: init.body ? JSON.parse(String(init.body)) : null })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents')
       return json({
         workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0,
@@ -96,12 +97,13 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    await waitFor(() => expect(screen.getByTestId('agents-forecast').textContent).toBe('3 LXC'))
+    // B61.14 — in dollars alone: 3 LXC at $0.10 is $0.30.
+    await waitFor(() => expect(screen.getByTestId('agents-forecast').textContent).toBe('$0.30'))
     // B28.57 — the day it runs out in its own time zone, not UTC's (moved here from Home by B57.18).
     const runsOut = screen.getByTestId('runs-out-agt_1')
     expect(runsOut).toHaveTextContent('runs out on 28 October 2026 (Australia/Sydney)')
     expect(within(runsOut).getByText('28 October 2026')).toHaveAttribute('dateTime', '2026-10-28')
-    expect(screen.getByText(/spent/, { selector: 'div' }).textContent).toContain('Researcher spent 0.6 LXC in an hour')
+    expect(screen.getByText(/spent/, { selector: 'div' }).textContent).toContain('Researcher spent $0.06 in an hour')
 
     fireEvent.change(await screen.findByLabelText('Why every agent is paused'), { target: { value: 'audit' } })
     fireEvent.click((await fleet()).getByRole('button', { name: 'Pause every agent' }))

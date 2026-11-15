@@ -7,7 +7,7 @@ import { topupApi } from './topupApi'
 
 // B28.22 — every amount Lens keeps in µLXC reads in the person's own currency: dollars from Lens's peg
 // (/api/lxc/topup-options), pounds and euros from that and the ECB's euro rates (/api/fx). A rate that cannot be read
-// shows no figure for it, never a guess: no peg ⇒ "—"; no ECB rate ⇒ dollars instead of pounds or euros. B61.14 — LXC
+// shows no figure for it, never a guess: no peg ⇒ "…"; no ECB rate ⇒ dollars instead of pounds or euros. B61.14 — LXC
 // itself is parked (Nick, 15 Nov) and never drawn.
 
 export type Fiat = 'USD' | 'GBP' | 'EUR'
@@ -142,10 +142,10 @@ export function AppMoney({ children }: { children: React.ReactNode }) {
 
 /**
  * B55.38 — an amount Lens keeps in µLXC, as words: its value in the person's currency, "$450.00" (B61.14: never LXC),
- * and "—" while no rate backs it (`fiat` null). `sign` is written before the figure; a negative amount carries its minus.
+ * and "…" while no rate backs it (`fiat` null). `sign` is written before the figure; a negative amount carries its minus.
  */
 export function lxcText(ulxc: number, fiat: string | null, sign: '' | '+' | '−' = ''): string {
-  if (fiat === null) return '—'
+  if (fiat === null) return '…'
   return `${ulxc < 0 ? '-' : sign}${fiat}`
 }
 
@@ -157,14 +157,14 @@ export function useLxcText(): (ulxc: number, sign?: '' | '+' | '−') => string 
 
 /**
  * B61.14 — a sentence Lens wrote, as a person reads it: each "0.75 LXC" or "750000 µLXC" in it becomes its value in
- * the person's currency, "$0.08", and "—" while no rate backs it. Lens's briefing and refusals still say LXC.
+ * the person's currency, "$0.08", and "…" while no rate backs it. Lens's briefing and refusals still say LXC.
  */
 export function useLensWords(): (text: string) => string {
   const money = useMoney()
   return (text) =>
     text.replace(/(\d[\d,]*(?:\.\d+)?)\s?(µ|u)?LXC\b/gi, (_, n: string, micro: string | undefined) => {
       const v = Number(n.replace(/,/g, ''))
-      return money(Math.round(micro ? v : v * 1_000_000)) ?? '—'
+      return money(Math.round(micro ? v : v * 1_000_000)) ?? '…'
     })
 }
 

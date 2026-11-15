@@ -7,7 +7,9 @@ import { App, queryClient } from '../../App'
 // back to version 1 writes version 1's rules back exactly and adds version 3, "rollback to 1", by whoever asked.
 // B55.14 — the rollback loosens the rules (Lens B55.13), so it asks first, and once the workspace has a passkey it is
 // signed over its challenge; Lens refuses it unsigned, as here.
+// B61.14 — the page reads and types every amount in dollars at Lens's peg, $0.10 a LXC here: 5 LXC is $0.50.
 
+// Lens says them in LXC; the page says them in dollars.
 const CHANGES = ['Daily limit: was 1 LXC, now 5 LXC', 'Ask a person above: was 0.5 LXC, now none']
 
 function mockBff(passkey = false) {
@@ -56,6 +58,7 @@ function mockBff(passkey = false) {
     if (url === '/api/agents/passkeys') return json({ passkeys: passkey ? [{ credential_id: 'Y3JlZDE', name: 'iPhone', created_at: '2026-10-06T04:00:00Z' }] : [] })
     if (url === '/api/money/devices') return json({ devices: [] })
     if (url === '/api/marketplace/listings') return json({ listings: [] })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     return new Response('null', { status: 404 })
   })
   return sent
@@ -76,14 +79,14 @@ describe('an agent’s rules history', () => {
     const v2 = await screen.findByTestId('rules-version-2')
     expect(v2.textContent).toContain('Researcher template applied by you')
     expect(v2.textContent).toContain('In force')
-    expect(v2.textContent).toContain('Asks you above: was none, now 0.5 LXC. Daily limit: was 5 LXC, now 1 LXC')
+    expect(v2.textContent).toContain('Asks you above: was none, now $0.05. Daily limit: was $0.50, now $0.10')
     expect(screen.getByTestId('rules-version-1').textContent).toContain('Saved by you')
     expect(screen.getByTestId('rules-version-1').textContent).toContain('The first rules')
-    expect((screen.getByLabelText('At most a day for Researcher, in LXC') as HTMLInputElement).value).toBe('1')
+    expect((screen.getByLabelText('At most a day for Researcher, in dollars') as HTMLInputElement).value).toBe('0.1')
 
     fireEvent.click(screen.getByRole('button', { name: 'Roll Researcher’s rules back to version 1' }))
     const dialog = await screen.findByRole('dialog', { name: 'Roll Researcher’s rules back to version 1?' })
-    await waitFor(() => expect(within(dialog).getByTestId('rules-rollback-ask').textContent).toContain(`This loosens Researcher’s rules: ${CHANGES.join('. ')}.`))
+    await waitFor(() => expect(within(dialog).getByTestId('rules-rollback-ask').textContent).toContain('This loosens Researcher’s rules: Daily limit: was $0.10, now $0.50. Ask a person above: was $0.05, now none.'))
     expect(dialog.textContent).toContain('The rollback is kept as version 3, so you can see it in the history.')
     expect(sent).toEqual([{ method: 'POST', url: '/api/agents/agt_1/rules-challenge', body: { rollback_to: 1 } }])
     fireEvent.click(within(dialog).getByRole('button', { name: 'Roll back' }))
@@ -91,7 +94,7 @@ describe('an agent’s rules history', () => {
     expect(screen.getByText('Researcher’s rules are back as they were at version 1')).toBeInTheDocument()
     expect(screen.getByText('The rollback is kept as version 3.')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).toBeNull()
-    await waitFor(() => expect((screen.getByLabelText('At most a day for Researcher, in LXC') as HTMLInputElement).value).toBe('5'))
+    await waitFor(() => expect((screen.getByLabelText('At most a day for Researcher, in dollars') as HTMLInputElement).value).toBe('0.5'))
     expect(screen.getByRole('switch', { name: 'Asks you above' }).getAttribute('aria-checked')).toBe('false')
 
     expect(sent).toEqual([

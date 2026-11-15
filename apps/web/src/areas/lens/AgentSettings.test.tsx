@@ -10,7 +10,8 @@ import type { Agent } from './agentBankApi'
 import { AppMoney } from './money'
 
 // B57.22 — an agent's Settings, as Pocket's w-agent-research draws it: one row for each thing its owner can set or
-// do, in the reference's order, each opening its form; Name and look and Archive open over the page.
+// do, in the reference's order, each opening its form; Name and look and Archive open over the page. B61.14 — Automatic
+// top-up and Pay another agent move LXC, which is parked, so they are not drawn.
 
 const RESEARCH: Agent = { id: 'agt_research', name: 'Research', balance_ulxc: 16_500_000_000, spent_ulxc: 0, keys: ['key_1'], created_at: '2026-09-14T09:00:00Z', owner_user_id: 'usr_nick', verified: false, colour: 'cobalt', face: 'circle' }
 
@@ -28,7 +29,7 @@ function mount() {
                 <AgentSettings
                   agent={RESEARCH}
                   onArchived={() => {}}
-                  forms={{ keyForm: form('Key'), card: form('Card'), topUp: form('Top-up'), boost: form('Boost'), pay: form('Pay'), schedules: form('Schedules'), credential: form('Credential') }}
+                  forms={{ keyForm: form('Key'), card: form('Card'), boost: form('Boost'), schedules: form('Schedules'), credential: form('Credential') }}
                 />
               }
             />
@@ -59,9 +60,7 @@ describe('an agent’s Settings (B57.22)', () => {
       'Name, description, colour and face',
       'Its key',
       'Its card',
-      'Automatic top-up',
       'Limit boost',
-      'Pay another agent',
       'Scheduled payments',
       'Prompt schedules',
       'Unusual spend',
@@ -70,7 +69,8 @@ describe('an agent’s Settings (B57.22)', () => {
       'Archive',
     ])
     expect(within(section).getByTestId('agent-setting-Name, description, colour and face')).toHaveTextContent('Research: cobalt, a circle face')
-    expect(within(section).getByTestId('agent-setting-Ownership')).toHaveTextContent('Its owner is not verified yet')
+    expect(within(section).getByTestId('agent-setting-Ownership')).toHaveTextContent('Its owner is not verified yet: paying by card verifies this workspace')
+    expect(section).not.toHaveTextContent(/LXC|top-up|Pay another agent/i)
     expect(within(section).getByTestId('agent-setting-Unusual spend').getAttribute('href')).toBe('/agents/agt_research/rules')
   })
 
@@ -83,9 +83,7 @@ describe('an agent’s Settings (B57.22)', () => {
     for (const [row, form] of [
       ['Its key', 'Key'],
       ['Its card', 'Card'],
-      ['Automatic top-up', 'Top-up'],
       ['Limit boost', 'Boost'],
-      ['Pay another agent', 'Pay'],
       ['Scheduled payments', 'Schedules'],
       ['Its credential', 'Credential'],
     ]) {
@@ -111,7 +109,7 @@ describe('an agent’s Settings (B57.22)', () => {
       },
       () => asked.length,
     )
-    expect(report.pressed).toBe(11) // every row but Ownership, which says and does not open
+    expect(report.pressed).toBe(9) // every row but Ownership, which says and does not open
     expect(report.dead).toEqual([])
   }, 300_000)
 })

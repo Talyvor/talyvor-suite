@@ -5,6 +5,7 @@ import { App, queryClient } from '../../App'
 // B41.4 — "Approve and always allow this" on Approvals: the rule is previewed in Lens's rule simulator before it can
 // be saved, and approving sends it with the approval. The BFF is stubbed; that the next payment is then not held is
 // proven against Lens by the e2e scenario approve-always-allow.
+// B61.14 — figures read in dollars alone at Lens's peg, $0.10 a LXC here.
 
 const M = 1_000_000
 
@@ -22,6 +23,7 @@ function mockBff(passkey = false) {
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (method === 'POST') sent.push({ url, body })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
     if (url === '/api/agents' && method === 'GET')
       return json({
@@ -62,7 +64,7 @@ describe('Approve and always allow this (B41.4)', () => {
     const approve = list.getByRole('button', { name: 'Approve and always allow' })
     expect(approve).toBeDisabled()
     fireEvent.click(list.getByRole('button', { name: 'Preview' }))
-    expect(await list.findByTestId('always-allow-preview')).toHaveTextContent('With this rule, Researcher could pay Acme Hosting 3 LXC')
+    expect(await list.findByTestId('always-allow-preview')).toHaveTextContent('With this rule, Researcher could pay Acme Hosting $0.30 like this without asking you.')
     expect(sent.find((s) => s.url.endsWith('/rules/simulate'))?.body).toEqual({
       amount_ulxc: 3 * M,
       payee: { kind: 'company', id: 'ws_a' },
@@ -72,7 +74,7 @@ describe('Approve and always allow this (B41.4)', () => {
     expect(approvals()).toEqual([])
 
     fireEvent.click(approve)
-    expect(await screen.findByText(/From now on Researcher pays Acme Hosting up to/)).toHaveTextContent(/up to 50 LXC.* a month without asking you\./)
+    expect(await screen.findByText(/From now on Researcher pays Acme Hosting up to/)).toHaveTextContent('From now on Researcher pays Acme Hosting up to $5.00 a month without asking you.')
     expect(approvals().map((s) => s.body)).toEqual([{ always_allow: { amount_ulxc: 50 * M, per: 'month' } }])
   })
   // B54.34 — Lens signs the allowance too (B54.29): the challenge is asked for with the allowance the approval saves.
@@ -117,6 +119,7 @@ describe('Approve and always allow this (B41.4)', () => {
       const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
       if (method !== 'GET') sent.push({ url, method, body })
       if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+      if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
       if (url === '/api/money/devices') return json({ devices: [] })
       if (url === '/api/agents/passkeys') return json({ passkeys: [{ credential_id: 'Y3JlZDE', name: 'iPhone', created_at: '2026-10-28T06:00:00Z' }] })
       if (url === '/api/agents')
@@ -134,11 +137,12 @@ describe('Approve and always allow this (B41.4)', () => {
     render(<App />)
 
     expect((await screen.findByRole('switch', { name: 'Always allow a payee' })).getAttribute('aria-checked')).toBe('true')
-    const field = await screen.findByLabelText('Always allow Acme Hosting from Researcher, in LXC a month')
-    expect(field).toHaveValue('40')
-    fireEvent.change(field, { target: { value: '60' } })
+    // 40 LXC at $0.10 a LXC is $4, typed in dollars; $6 is 60 LXC.
+    const field = await screen.findByLabelText('Always allow Acme Hosting from Researcher, in dollars a month')
+    expect(field).toHaveValue('4')
+    fireEvent.change(field, { target: { value: '6' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-    expect((await screen.findByTestId('rules-loosen')).textContent).toContain('Always allows Acme Hosting: was up to 40 LXC a month, now up to 60 LXC a month')
+    expect((await screen.findByTestId('rules-loosen')).textContent).toContain('Always allows Acme Hosting: was up to $4.00 a month, now up to $6.00 a month')
     fireEvent.click(screen.getByRole('button', { name: 'Save with your passkey' }))
     await screen.findByText('Your passkey was asked first, because the change loosens them.')
     const put = sent.find((s) => s.method === 'PUT')!

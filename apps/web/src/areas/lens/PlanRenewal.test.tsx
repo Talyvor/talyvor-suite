@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AppMoney } from './money'
 import { Plans } from './Plans'
 import { TopUp } from './TopUp'
 
@@ -34,6 +35,7 @@ function serve() {
     if (url === '/api/billing/subscription/cancel') return json(state(true))
     if (url === '/api/billing/subscription/resume') return json(state(false))
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, cache_poolable: true })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     return new Response('null', { status: 404 })
   })
   return posts
@@ -78,11 +80,17 @@ describe('cancel and resume on /billing (B26.17)', () => {
     render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <TopUp />
+          <AppMoney>
+            <TopUp />
+          </AppMoney>
         </MemoryRouter>
       </QueryClientProvider>,
     )
     expect((await screen.findByTestId('plan-renewal')).textContent).toBe('Your plan renews on Oct 28, 2026.')
+    // B61.14 — the allowance in dollars alone: 191.2 LXC at $0.10 is $19.12.
+    const left = screen.getByText('Allowance left').parentElement!.parentElement!
+    await waitFor(() => expect(left.textContent).toContain('$19.12'))
+    expect(left.textContent).not.toMatch(/LXC/)
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel at the end of this period' }))
     await waitFor(() =>

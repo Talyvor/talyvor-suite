@@ -165,10 +165,10 @@ const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
 /** "London" from "Europe/London". */
 const cityOf = (zone: string) => (zone ? (zone.split('/').pop() ?? zone).replace(/_/g, ' ') : 'UTC')
 
-/** A figure as the reference writes it in a sentence: "$400.00", or "—" while no rate backs it. */
+/** A figure as the reference writes it in a sentence: "$400.00", or "…" while no rate backs it. */
 function useFigure() {
   const money = useMoney()
-  return (ulxc: number) => money(ulxc) ?? '—'
+  return (ulxc: number) => money(ulxc) ?? '…'
 }
 
 /** Who a payee is: one of the workspace's agents, a saved payee, or its id. */
@@ -783,7 +783,7 @@ function MoreRules({
 }) {
   const [open, setOpen] = useState<string | null>(null)
   const money = useMoney()
-  const dollars = (t: string) => money(parseDollars(t, peg) ?? 0) ?? '—'
+  const dollars = (t: string) => money(parseDollars(t, peg) ?? 0) ?? '…'
   const limitNow = (f: LimitField) => (d.on[f] && (parseDollars(d.limits[f], peg) ?? 0) > 0 ? dollars(d.limits[f]) : 'No limit')
   const zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []
   const capNow = (pairs: [string, string][], name: (k: string) => string) => (pairs.length > 0 ? pairs.map(([k, t]) => `${name(k)}, ${dollars(t)}`).join('; ') : 'None')
@@ -879,7 +879,7 @@ function MoreRules({
             >
               <span className="min-w-0 flex-1">
                 <span className="block font-semibold text-ink">{it.title}</span>
-                <span className="block text-body text-ink-3">{it.now}</span>
+                <span className={`block text-body text-ink-3 ${/\d/.test(it.now) ? 'font-figure' : ''}`}>{it.now}</span>
               </span>
               <Icon name="chev" size={16} className={`shrink-0 text-ink-3 transition-transform duration-200 ${open === it.key ? 'rotate-90' : ''}`} />
             </a>

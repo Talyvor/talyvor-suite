@@ -49,6 +49,8 @@ afterEach(() => {
 describe('the agent statement', () => {
   it('names every kind of line, and a transfer, a card charge, a top-up and a pot move each by what it was', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input) === '/api/lxc/topup-options')
+        return new Response(JSON.stringify({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       if (String(input).split('?')[0] === '/api/agents/agt_1/statement')
         return new Response(JSON.stringify({ agent_id: 'agt_1', lines: rows.map(([l]) => l) }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       return new Response('null', { status: 404 })
@@ -74,11 +76,11 @@ describe('the agent statement', () => {
     const done = ['Transfer from Writer', 'Card charge', 'Topped up automatically by the workspace', 'Moved into a pot']
     for (const label of done) expect(what).toContain(label)
     expect(new Set(done).size).toBe(4)
-    // A received transfer reads as money in, signed +.
+    // A received transfer reads as money in, signed +, in dollars alone (B61.14): 5 LXC at $0.10 is $0.50.
     const received = within(table).getByText('Transfer from Writer').closest('tr')!
-    expect(within(received).getAllByRole('cell')[2].textContent).toBe('+5 LXC')
+    await waitFor(() => expect(within(received).getAllByRole('cell')[2].textContent).toBe('+$0.50'))
     const fee = within(table).getByText('Platform fee 3%').closest('tr')!
-    expect(within(fee).getAllByRole('cell')[2].textContent).toBe('−0.3 LXC')
+    expect(within(fee).getAllByRole('cell')[2].textContent).toBe('−$0.03')
   })
 })
 
@@ -162,9 +164,10 @@ describe('the agent’s statement on Statements (B57.24)', () => {
     expect(flat(docLines()[0])).toContain('Today, ')
     expect(flat(docLines()[2])).toContain('Yesterday, ')
     expect(flat(docLines()[4])).toContain('20 Oct, 18:30') // the browser's clock: these tests run at +14
-    // Dollars first with LXC beside: 420 LXC at $0.10 is $42.00.
-    expect(flat(docLines()[0])).toContain('−$42.00 −420 LXC')
-    expect(flat(docLines()[4])).toContain('+$1,000.00 +10,000 LXC')
+    // Dollars alone, never LXC (B61.14): 420 LXC at $0.10 is $42.00.
+    expect(flat(docLines()[0])).toContain('−$42.00')
+    expect(flat(docLines()[4])).toContain('+$1,000.00')
+    expect(flat(doc())).not.toMatch(/LXC/)
     expect(flat(doc())).toContain('Statement · October 2026, so far · updated')
   })
 
@@ -180,10 +183,10 @@ describe('the agent’s statement on Statements (B57.24)', () => {
     // Every line once, in Lens's order, the oldest last.
     const shown = docLines().map((r) => flat(within(r).getAllByRole('cell')[2]))
     expect(shown).toHaveLength(new Set(GROUPED.map((l) => l.entry_id)).size)
-    expect(shown.at(-1)).toContain('−$4.00 −40 LXC')
+    expect(shown.at(-1)).toBe('−$4.00')
     // The band: opening + in − out is the balance now, and the lines move exactly that much.
     const band = within(screen.getByTestId('statement-band')).getAllByRole('definition').map(flat)
-    expect(band).toEqual(['$1,890.00 18,900 LXC', `+$${(IN / M / 10).toLocaleString('en-US', { minimumFractionDigits: 2 })} +${(IN / M).toLocaleString('en-US')} LXC`, expect.stringMatching(/^−\$/), expect.stringMatching(/^\$/)])
+    expect(band).toEqual(['$1,890.00', `+$${(IN / M / 10).toLocaleString('en-US', { minimumFractionDigits: 2 })}`, expect.stringMatching(/^−\$[\d,.]+$/), expect.stringMatching(/^\$[\d,.]+$/)])
     expect(ACCOUNT.opening_ulxc + ACCOUNT.in_ulxc - ACCOUNT.out_ulxc).toBe(ACCOUNT.closing_ulxc)
     expect(ACCOUNT.closing_ulxc - ACCOUNT.opening_ulxc).toBe(GROUPED.reduce((t, l) => t + l.amount_ulxc, 0))
     expect(within(screen.getByTestId('statement-band')).getByText('Opening, 1 October')).toBeTruthy()

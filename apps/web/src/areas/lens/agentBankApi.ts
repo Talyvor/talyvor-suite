@@ -2428,16 +2428,6 @@ export function formatULXC(micros: number): string {
   return `${(micros / 1_000_000).toLocaleString('en-US', { maximumFractionDigits: 6 })} LXC`
 }
 
-/**
- * B60.3 — LXC as it reads beside the person's currency: two places with thousands separators, 499200705 µLXC →
- * "499.20 LXC". An amount under a hundredth keeps its exact figure, as statements, exports and the ledger do
- * (formatULXC): rounded it would read as nothing.
- */
-export function formatLXCBeside(micros: number): string {
-  if (micros !== 0 && Math.abs(micros) < 10_000) return formatULXC(micros)
-  return `${(micros / 1_000_000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} LXC`
-}
-
 /** A limit field's text: empty for "no limit". */
 export function limitText(micros: number): string {
   return micros > 0 ? String(micros / 1_000_000) : ''

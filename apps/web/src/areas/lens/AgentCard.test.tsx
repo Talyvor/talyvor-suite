@@ -33,6 +33,7 @@ function mockBff() {
     if (method !== 'GET') sent.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : null })
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents')
       return json({ workspace_balance_ulxc: 100_000_000, allocated_ulxc: 50_000_000, unallocated_ulxc: 50_000_000, spent_ulxc: 0, agents: [agent] })
     if (url === '/api/agents/agt_1/card' && method === 'POST') {
@@ -108,7 +109,8 @@ describe("an agent's card on Agent Wallets", () => {
     expect(within(rows[1]).getByText('Approved')).toBeTruthy()
     expect(rows[1].textContent).toContain("within the agent's rules and balance")
     expect(rows[1].textContent).toContain('£1 = $1.3972 · ECB, 2026-09-25')
-    expect(rows[1].textContent).toContain('−13.971751')
+    expect(rows[1].textContent).toContain('−$1.40') // 13.971751 LXC at $0.10, in dollars alone
+    expect(rows[1].textContent).not.toContain('LXC')
 
     expect(sent).toEqual([
       {

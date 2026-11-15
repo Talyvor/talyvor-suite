@@ -71,8 +71,8 @@ export function rulesInWords(
   r: AgentRules,
   { figures, payeeName, monthEnd }: { figures: (ulxc: number) => string | null; payeeName: (id: string) => string; monthEnd: string },
 ): RuleLine[] {
-  // The person's currency, and "—" while no rate backs it.
-  const lead = (ulxc: number) => figures(ulxc) ?? '—'
+  // The person's currency, and "…" while no rate backs it.
+  const lead = (ulxc: number) => figures(ulxc) ?? '…'
   const zone = cityOf(r.timezone)
   const allowances = Object.entries(r.payee_allowances ?? {}).filter(([, a]) => a.amount_ulxc > 0)
   const out: RuleLine[] = []
@@ -175,9 +175,9 @@ function BalanceCard({ s }: { s: AgentSummary }) {
   )
 }
 
-/** The person's currency alone ("$1,240.00"), or "—" while no rate backs it. */
+/** The person's currency alone ("$1,240.00"), or "…" while no rate backs it. */
 function MoneyCash({ ulxc, strong = false }: { ulxc: number; strong?: boolean }) {
-  const text = useMoney()(ulxc) ?? '—'
+  const text = useMoney()(ulxc) ?? '…'
   return <span className={`font-figure ${strong ? 'font-semibold text-ink' : ''}`}>{text}</span>
 }
 

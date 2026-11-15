@@ -23,6 +23,8 @@ const asked: URLSearchParams[] = []
 function fakeLens() {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = new URL(String(input), 'http://app')
+    // B61.14 — Lens's peg, $0.10 a LXC: the statement's figures read in dollars alone.
+    if (url.pathname === '/api/lxc/topup-options') return Response.json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url.pathname !== '/api/agents/agt_1/statement') return new Response('null', { status: 404 })
     const q = url.searchParams
     asked.push(q)
@@ -68,9 +70,9 @@ describe('the agent statement, searched, filtered and paged', () => {
     // Page 2 is asked for after page 1's last line, over the same period.
     expect(asked[1].get('cursor')).toBe('ent_31')
     expect(asked[1].get('to')).toBe(TO)
-    // Every line once, in Lens's order: page 2 continues below page 1.
-    const balances = shown().map((r) => within(r).getAllByRole('cell')[3].textContent)
-    expect(balances).toEqual(all.map((l) => `${l.balance_after_ulxc / 1_000_000} LXC`))
+    // Every line once, in Lens's order: page 2 continues below page 1. n LXC at $0.10 a LXC reads $n/10, to the cent.
+    const balances = () => shown().map((r) => within(r).getAllByRole('cell')[3].textContent)
+    await waitFor(() => expect(balances()).toEqual(all.map((l) => `$${((l.balance_after_ulxc / 1_000_000) * 0.1).toFixed(2)}`)))
     expect(screen.queryByRole('button', { name: 'Show older lines' })).toBeNull()
   })
 

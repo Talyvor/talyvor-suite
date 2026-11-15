@@ -56,6 +56,7 @@ beforeEach(() => {
     if (path === '/api/money/accounts/acct_usdc/statement') return json(RESEARCH_USDC)
     if (path === '/api/money/accounts/acct_eur/statement') return json(EUR)
     if (path === '/api/money/accounts/acct_gbp/statement') return json({ error: 'Lens could not answer just now' }, 502)
+    if (path === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     return json({ error: 'not here' }, 404)
   })
 })
@@ -91,7 +92,9 @@ describe('Statements, a tab per wallet and account', () => {
     show()
     const bill = await screen.findByTestId('marketplace-bill-lines')
     expect(bill.textContent).toContain('Lead finder · on the marketplace bill')
-    expect(bill.textContent).toContain('0.5 LXC')
+    // 0.5 LXC at Lens's peg of $0.10 a LXC, in dollars alone (B61.14).
+    await waitFor(() => expect(bill.textContent).toContain('$0.05'))
+    expect(bill.textContent).not.toContain('LXC')
   })
 
   it('shows the room’s wallet on its own tab', async () => {

@@ -28,6 +28,8 @@ function mockBff() {
     if (url === '/api/models') return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, tier: 'frontier' }])
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
+    // B61.14 — the statement's figures read in dollars alone, at Lens's peg: $0.10 a LXC.
+    if (url === '/api/lxc/topup-options') return json({ usd_per_lxc: 0.1, allowed_usd_cents: [1000], billing_enabled: true })
     if (url === '/api/agents') {
       const agent = (id: string, name: string) => ({ id, name, balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-10-06T04:00:00Z' })
       return json({ workspace_balance_ulxc: 100 * M, allocated_ulxc: 8 * M, unallocated_ulxc: 92 * M, spent_ulxc: 0, agents: [agent('agt_1', 'Researcher'), agent('agt_2', 'Writer')] })
@@ -66,7 +68,7 @@ describe('The live statement beside Chat (B28.351)', () => {
       const panel = await screen.findByTestId('chat-live-statement')
       expect(await within(panel).findAllByTestId('live-statement-line')).toHaveLength(1)
       expect(within(panel).getByLabelText('Agent')).toHaveValue('agt_1')
-      expect(within(panel).getByTestId('live-statement-line')).toHaveTextContent(/^Funded by the workspace\+5 LXC/)
+      expect(within(panel).getByTestId('live-statement-line')).toHaveTextContent(/^Funded by the workspace\+\$0\.50/)
       expect(within(panel).getByTestId('live-statement-line')).not.toHaveAttribute('data-new')
 
       // The agent makes a call: Lens adds the debit. Nothing on the page is touched.
@@ -79,8 +81,8 @@ describe('The live statement beside Chat (B28.351)', () => {
       const [debit, fund] = within(panel).getAllByTestId('live-statement-line')
       expect(debit).toHaveAttribute('data-new', 'true')
       expect(debit).toHaveAttribute('href', '/agents?agent=agt_1&entry=ent_2')
-      expect(debit).toHaveTextContent(/^New: Spent on a request−0\.012345 LXC/)
-      expect(debit).toHaveTextContent('Balance 4.987655 LXC')
+      expect(debit).toHaveTextContent(/^New: Spent on a request−<\$0\.01/)
+      expect(debit).toHaveTextContent('Balance $0.50')
       expect(fund).not.toHaveAttribute('data-new')
       expect(within(panel).getByRole('status')).toHaveTextContent('New on Researcher’s statement: Spent on a request')
     } finally {

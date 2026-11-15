@@ -41,7 +41,7 @@ const nbsp = (s: string) => s.replace(/ /g, ' ')
 
 /**
  * B57.7 — every money figure (pocket.css .moneyblock, .money): an account's amount (`minor` with its `currency`) in its
- * own currency. B61.14 — an amount Lens keeps in µLXC reads in the person's currency alone, and "—" while the peg is
+ * own currency. B61.14 — an amount Lens keeps in µLXC reads in the person's currency alone, and "…" while the peg is
  * unknown, never a guessed dollar and never LXC.
  */
 export function Money(props: MoneyProps) {
@@ -52,7 +52,7 @@ export function Money(props: MoneyProps) {
   const amount = props.ulxc ?? props.minor
   const sign = amount < 0 ? '−' : signed && amount > 0 ? '+' : ''
   const figure = props.ulxc === undefined ? figures.minor(Math.abs(props.minor), props.currency) : figures.ulxc(Math.abs(props.ulxc))
-  const lead = figure === null ? '—' : nbsp(sign + figure)
+  const lead = figure === null ? '…' : nbsp(sign + figure)
 
   if (size === 'row')
     return (

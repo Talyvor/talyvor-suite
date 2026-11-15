@@ -7,12 +7,12 @@ import { App, queryClient } from '../../App'
 // B55.14 — a boost always loosens the rules (Lens B55.13): once the workspace has a passkey it is signed over its
 // challenge, and Lens refuses it unsigned, as here.
 
-function mockBff(passkey = false) {
+function mockBff(passkey = false, held: Record<string, unknown> = {}) {
   const sent: Array<{ method: string; url: string; body?: unknown }> = []
   const agents = [
     { id: 'agt_1', name: 'Researcher', balance_ulxc: 10_000_000, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true },
   ]
-  const rules = { max_per_request_ulxc: 0, daily_limit_ulxc: 10_000_000, monthly_limit_ulxc: 0, approval_above_ulxc: 0, allowed_models: [], allowed_providers: [], active_from: '', active_until: '', timezone: 'UTC', pause_on_unusual_spend: false }
+  const rules = { max_per_request_ulxc: 0, daily_limit_ulxc: 10_000_000, monthly_limit_ulxc: 0, approval_above_ulxc: 0, allowed_models: [], allowed_providers: [], active_from: '', active_until: '', timezone: 'UTC', pause_on_unusual_spend: false, ...held }
   let boosts: Array<Record<string, unknown>> = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -51,6 +51,7 @@ function mockBff(passkey = false) {
     if (url === '/api/agents/passkeys') return json({ passkeys: passkey ? [{ credential_id: 'Y3JlZDE', name: 'iPhone', created_at: '2026-10-06T04:00:00Z' }] : [] })
     if (url === '/api/money/devices') return json({ devices: [] })
     if (url === '/api/marketplace/listings') return json({ listings: [] })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     return new Response('null', { status: 404 })
   })
   return sent
@@ -71,14 +72,15 @@ describe('a limit boost', () => {
     fireEvent.click(within(await screen.findByTestId('agent-setting-Limit boost')).getByRole('button')) // B57.22: a row of its Settings
     const limit = (await screen.findByLabelText('Limit to raise for Researcher')) as HTMLSelectElement
     expect(limit.value).toBe('daily_limit_ulxc')
-    fireEvent.change(screen.getByLabelText('Raise Researcher’s limit to'), { target: { value: '50' } })
+    // B61.14 — typed in dollars at the peg: $5 is 50 LXC.
+    fireEvent.change(screen.getByLabelText('Raise Researcher’s limit to'), { target: { value: '5' } })
     fireEvent.change(screen.getByLabelText('Raise Researcher’s limit until'), { target: { value: '2030-01-01T18:00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Raise until then' }))
 
     const row = await screen.findByTestId('boost-daily_limit_ulxc')
-    // B57.167: <Money>'s figure keeps its unit on its line.
-    expect(row.textContent).toMatch(/^Daily limit raised to 50\u00a0LXC until .+, then 10\u00a0LXC again by itself\.In force/)
-    expect(screen.getByRole('status').textContent).toMatch(/^Researcher’s daily limit is 50\u00a0LXC until .+, then 10\u00a0LXC again by itself\.$/)
+    // B61.14 — the figures in dollars alone, at the fixture's peg of $0.10 a LXC: 50 LXC is $5.00, 10 LXC is $1.00.
+    expect(row.textContent).toMatch(/^Daily limit raised to \$5\.00 until .+, then \$1\.00 again by itself\.In force/)
+    expect(screen.getByRole('status').textContent).toMatch(/^Researcher’s daily limit is \$5\.00 until .+, then \$1\.00 again by itself\.$/)
 
     fireEvent.click(screen.getByRole('button', { name: 'End the boost on Researcher’s daily limit now' }))
     await waitFor(() => expect(screen.queryByTestId('boost-daily_limit_ulxc')).toBeNull())
@@ -100,11 +102,11 @@ describe('a limit boost', () => {
     render(<App />)
 
     fireEvent.click(within(await screen.findByTestId('agent-setting-Limit boost')).getByRole('button'))
-    fireEvent.change(await screen.findByLabelText('Raise Researcher’s limit to'), { target: { value: '50' } })
+    fireEvent.change(await screen.findByLabelText('Raise Researcher’s limit to'), { target: { value: '5' } })
     fireEvent.change(screen.getByLabelText('Raise Researcher’s limit until'), { target: { value: '2030-01-01T18:00' } })
     fireEvent.click(screen.getByRole('button', { name: 'Raise until then' }))
     const card = await screen.findByTestId('rules-loosen')
-    expect(card.textContent).toBe('This loosens Researcher’s rules:Daily limit: was 10 LXC, now 50 LXC until 2030-01-01T18:00:00ZIt needs your passkey. Tightening is saved at once.')
+    expect(card.textContent).toBe('This loosens Researcher’s rules:Daily limit: was $1.00, now $5.00 until 2030-01-01T18:00:00ZIt needs your passkey. Tightening is saved at once.')
     expect(get).not.toHaveBeenCalled()
     expect(sent.some((s) => s.url === '/api/agents/agt_1/rules/boosts')).toBe(false)
 
@@ -117,5 +119,18 @@ describe('a limit boost', () => {
       { method: 'POST', url: '/api/agents/agt_1/rules-challenge', body: { boost } },
       { method: 'POST', url: '/api/agents/agt_1/rules/boosts', body: { ...boost, assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } } },
     ])
+  })
+
+  // B61.14 — requests a minute is the parked gateway's: a rule Lens holds for it is not offered for a boost.
+  it('does not offer requests a minute for a boost, even when the rules hold one', async () => {
+    mockBff(false, { requests_per_minute: 60 })
+    window.history.pushState({}, '', '/agents/agt_1')
+    render(<App />)
+
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Limit boost')).getByRole('button'))
+    const limit = (await screen.findByLabelText('Limit to raise for Researcher')) as HTMLSelectElement
+    const offered = Array.from(limit.options).map((o) => o.value)
+    expect(offered).toContain('daily_limit_ulxc')
+    expect(offered).not.toContain('requests_per_minute')
   })
 })

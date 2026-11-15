@@ -23,6 +23,7 @@ function mockBff(refuse?: string) {
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/models') return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, tier: 'frontier' }])
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
     if (url === '/api/agents' && method === 'GET') {
@@ -37,7 +38,7 @@ function mockBff(refuse?: string) {
     if (url === '/api/agents/agt_1/tasks') {
       tasks.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
       if (refuse !== undefined) return json({ error: refuse }, 403)
-      lines.push({ entry_id: 'ent_2', kind: 'spend', amount_ulxc: -12_345, counterparty: 'spend', balance_after_ulxc: 2 * M - 12_345, at: '2026-10-06T05:01:00Z' })
+      lines.push({ entry_id: 'ent_2', kind: 'spend', amount_ulxc: -1_234_000, counterparty: 'spend', balance_after_ulxc: 2 * M - 1_234_000, at: '2026-10-06T05:01:00Z' })
       return json({ agent_id: 'agt_1', answer: 'GPT, **Claude** and Gemini.', model: 'claude-opus-5', request_id: 'req_1', replayed: false, usage: { input_tokens: 9, output_tokens: 7 }, key_revoked: true })
     }
     return new Response('null', { status: 404 })
@@ -92,7 +93,7 @@ describe('Hand a task to an agent from Chat (B28.359)', () => {
 
     // The statement as it was just before is the line not counted: only the task's spend is.
     const billed = await within(card).findByTestId('chat-task-billed')
-    expect(billed).toHaveTextContent(/^Researcher’s wallet paid for it: −0\.012345 LXC on its statement, leaving 1\.987655 LXC\.Spent on a request −0\.012345 LXC$/)
+    expect(billed).toHaveTextContent(/^Researcher’s wallet paid for it: −\$0\.12 on its statement, leaving \$0\.08\.Spent on a request −\$0\.12$/)
     expect(within(billed).getByRole('link', { name: 'Spent on a request' })).toHaveAttribute('href', '/agents?agent=agt_1&entry=ent_2')
   })
 

@@ -29,6 +29,7 @@ function mockBff() {
     const method = init?.method ?? 'GET'
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents' && method === 'GET')
       return json({
         workspace_balance_ulxc: 100 * M, allocated_ulxc: 10 * M, unallocated_ulxc: 90 * M, spent_ulxc: 0,
@@ -67,7 +68,7 @@ async function openChat() {
   window.history.pushState({}, '', '/chat')
   render(<App />)
   const card = await screen.findByTestId('chat-money-request')
-  await waitFor(() => expect(within(card).getByTestId('chat-money-asks')).toHaveTextContent(/^Maker asks Researcher for 0\.8 LXC · invoice 12$/))
+  await waitFor(() => expect(within(card).getByTestId('chat-money-asks')).toHaveTextContent(/^Maker asks Researcher for \$0\.08 · invoice 12$/))
   return card
 }
 
@@ -78,7 +79,7 @@ describe('Chat money requests and escrows (B28.355)', () => {
     expect(screen.getByRole('region', { name: 'Money waiting for you' })).not.toHaveTextContent(/test money/i)
     fireEvent.click(within(card).getByRole('button', { name: 'Accept' }))
 
-    expect(await within(card).findByRole('status')).toHaveTextContent(/^Accepted\. Researcher paid Maker 0\.8 LXC\. See it on Researcher’s statement$/)
+    expect(await within(card).findByRole('status')).toHaveTextContent(/^Accepted\. Researcher paid Maker \$0\.08\. See it on Researcher’s statement$/)
     expect(bff.posts).toEqual(['/api/wallets/requests/req_1/accept'])
     expect(within(card).getByRole('link', { name: 'See it on Researcher’s statement' })).toHaveAttribute('href', '/agents?agent=agt_1')
     expect(within(card).queryByRole('button', { name: 'Accept' })).toBeNull()
@@ -97,10 +98,10 @@ describe('Chat money requests and escrows (B28.355)', () => {
     const bff = mockBff()
     await openChat()
     const card = await screen.findByTestId('chat-escrow')
-    expect(within(card).getByTestId('chat-escrow-holds')).toHaveTextContent(/^Researcher holds 1 LXC for Maker · logo$/)
+    expect(within(card).getByTestId('chat-escrow-holds')).toHaveTextContent(/^Researcher holds \$0\.10 for Maker · logo$/)
     fireEvent.click(within(card).getByRole('button', { name: 'Confirm delivered' }))
 
-    expect(await within(card).findByRole('status')).toHaveTextContent(/^Confirmed delivered\. Maker is paid 1 LXC from escrow\. See it on Researcher’s statement$/)
+    expect(await within(card).findByRole('status')).toHaveTextContent(/^Confirmed delivered\. Maker is paid \$0\.10 from escrow\. See it on Researcher’s statement$/)
     expect(bff.posts).toEqual(['/api/wallets/escrows/esc_1/confirm'])
   })
 })

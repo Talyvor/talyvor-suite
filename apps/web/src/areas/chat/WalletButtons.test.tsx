@@ -21,6 +21,8 @@ function mockBff(devices: unknown[] = [], paused = false) {
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/agents/passkeys') return json({ passkeys: [] })
+    // B61.14 — the amounts the panel says back read in dollars alone, at Lens's peg: $0.10 a LXC.
+    if (url === '/api/lxc/topup-options') return json({ usd_per_lxc: 0.1, allowed_usd_cents: [1000], billing_enabled: true })
     if (url === '/api/money/devices') return json({ devices }) // B55.2: none by default, so the web decides
     if (url === '/api/models') return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, tier: 'frontier' }])
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
@@ -73,20 +75,20 @@ describe('The wallet buttons beside Chat (B28.87)', () => {
 
     fireEvent.change(panel.getByLabelText('Amount in LXC for Researcher'), { target: { value: '2.5' } })
     fireEvent.click(panel.getByRole('button', { name: 'Fund' }))
-    expect(panel.getByRole('group', { name: 'Confirm' })).toHaveTextContent('Move 2.5 LXC from the workspace into Researcher’s wallet?')
+    await waitFor(() => expect(panel.getByRole('group', { name: 'Confirm' })).toHaveTextContent('Move $0.25 from the workspace into Researcher’s wallet?'))
     fireEvent.click(panel.getByRole('button', { name: 'Cancel' }))
     expect(panel.queryByRole('group', { name: 'Confirm' })).toBeNull()
     expect(bff.posts).toEqual([])
 
     fireEvent.click(panel.getByRole('button', { name: 'Fund' }))
     fireEvent.click(panel.getByRole('button', { name: 'Yes, fund' }))
-    expect(await panel.findByRole('status')).toHaveTextContent('Researcher now holds 7.5 LXC.')
+    expect(await panel.findByRole('status')).toHaveTextContent('Researcher now holds $0.75.')
 
     fireEvent.change(panel.getByLabelText('Amount in LXC for Researcher'), { target: { value: '1' } })
     fireEvent.click(panel.getByRole('button', { name: 'Withdraw' }))
-    expect(panel.getByRole('group', { name: 'Confirm' })).toHaveTextContent('Take 1 LXC out of Researcher’s wallet, back to the workspace?')
+    expect(panel.getByRole('group', { name: 'Confirm' })).toHaveTextContent('Take $0.10 out of Researcher’s wallet, back to the workspace?')
     fireEvent.click(panel.getByRole('button', { name: 'Yes, withdraw' }))
-    await waitFor(() => expect(panel.getByRole('status')).toHaveTextContent('Researcher now holds 6.5 LXC.'))
+    await waitFor(() => expect(panel.getByRole('status')).toHaveTextContent('Researcher now holds $0.65.'))
 
     expect(bff.posts.map((p) => [p.path, p.body])).toEqual([
       ['/api/agents/agt_1/fund', { amount_ulxc: 2_500_000 }],
