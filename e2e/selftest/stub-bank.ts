@@ -2647,7 +2647,7 @@ export class Bank {
     }
     // B52.28 — Scan agents' watches (stub-scan.ts), before the agent routes below catch …/scan-watches.
     if (await this.scan.route(req, res, ws.id, rest, now)) return true
-    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/wallet\/activity|\/[a-z-]+)?$/.exec(rest)) !== null) {
+    if ((m = /^\/agents\/([^/]+)(\/card\/(?:un)?freeze|\/wallet\/activity|\/rules\/challenge|\/[a-z-]+)?$/.exec(rest)) !== null) {
       const a = this.agents.get(m[1])
       if (a === undefined || a.ws !== ws.id) return json(res, 404, { error: 'economy: no such agent in this workspace' }), true
       const action = m[2] ?? ''
@@ -2728,6 +2728,23 @@ export class Bank {
         for (const w of closing) w.status = 'closed'
         Object.assign(a, { wallet_kind: kind, fiat_currency: fiat })
         return json(res, 200, this.walletsOf(a)), true
+      }
+      // B61.63 — the agent's page in one read (Lens B57.12), as the page draws it from the stub's own book.
+      if (action === '/summary' && method === 'GET') {
+        const book = this.book(ws) as { agents: { id: string }[]; all_paused_at?: string }
+        const now = new Date()
+        const balance = this.balance(`agent:${a.id}`)
+        const latest = a.versions?.[0]
+        return json(res, 200, {
+          as_of: now.toISOString(), agent: book.agents.find((x) => x.id === a.id), made_at: a.created_at, owner_user_id: a.owner_user_id,
+          ...(book.all_paused_at === undefined ? {} : { all_paused_at: book.all_paused_at }),
+          safe_to_spend: [{ currency: 'LXC', balance, scheduled: 0, bills_due: 0, pending_approvals: 0, safe_to_spend: balance }],
+          month: { start: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(), end: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString(),
+            spent_ulxc: 0, forecast_ulxc: 0, runs_out_at: null, runs_out_on: null, monthly_limit_ulxc: a.rules.monthly_limit_ulxc ?? 0 },
+          approvals: [], statement: [], statement_time_zone: 'UTC',
+          rules: latest === undefined ? null : { version: latest.version, saved_at: latest.created_at },
+          card: { status: 'none', last_declined: null }, currency_accounts: [],
+        }), true
       }
       if (action === '/rules' && method === 'GET') return json(res, 200, a.rules), true
       // B55.13 — what a change would do to the rules. The stub's workspaces sign nothing, so every change saves as today.

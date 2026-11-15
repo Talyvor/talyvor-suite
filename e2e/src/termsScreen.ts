@@ -107,8 +107,10 @@ export function termsAndCredentialScreens(): Scenario {
       const made = await call<{ id: string; name: string }>(ctx, 'POST', '/v1/workspaces/{ws}/agents', { name: `Credential check ${RUN_SALT}` })
       ctx.evidence.push({ note: 'the workspace makes an agent to show its credential', answer: `${made.status} ${made.text.slice(0, 200)}` })
       if (made.value?.id === undefined) return fail(`making an agent was answered ${made.status} ${made.error}`)
-      const agents = await ctx.app.tab(`/agents?agent=${encodeURIComponent(made.value.id)}`)
+      // B61.63 — the credential is a row of the Settings on the agent's own page, its card in the dialog the row opens.
+      const agents = await ctx.app.tab(`/agents/${encodeURIComponent(made.value.id)}`)
       try {
+        await agents.getByTestId('agent-settings').getByRole('button', { name: 'Its credential', exact: true }).click({ timeout: TIMEOUT_MS })
         const card = agents.getByTestId('agent-credential')
         await card.waitFor({ timeout: TIMEOUT_MS })
         await card.getByRole('button', { name: 'Show its credential' }).click()

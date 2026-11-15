@@ -91,12 +91,14 @@ export function agentWallet(): Scenario {
       }
 
       let requestID = ''
-      const page = await ctx.app.tab(`/agents?agent=${encodeURIComponent(agent.id)}`)
+      // B61.63 — the wallet is a row of the Money card on the agent's own page, its card in the dialog the row opens.
+      const page = await ctx.app.tab(`/agents/${encodeURIComponent(agent.id)}`)
       page.on('response', async (r) => {
         if (!r.url().endsWith('/api/money/payment-requests') || r.request().method() !== 'POST') return
         requestID ||= ((await r.json().catch(() => ({}))) as { id?: string }).id ?? ''
       })
       try {
+        await page.getByTestId('agent-page-money').getByRole('button', { name: 'Its wallet', exact: true }).click({ timeout: TIMEOUT_MS })
         const card = page.getByTestId('agent-money-wallet')
         try {
           await card.getByText(seen.lens.balance).waitFor({ timeout: TIMEOUT_MS })

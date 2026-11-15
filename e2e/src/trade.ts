@@ -292,7 +292,7 @@ export function walletEscrow(seed: number, partner: number): Scenario {
       if (err !== undefined) return fail(err)
       let [x, y] = await balances(ctx, a, other)
       if (x !== funded - kept || y !== 0) return fail(`held in escrow, ${a.name} holds ${x} µLXC (want ${funded - kept}) and the payee ${y} (want 0)`)
-      let said = await bank.settleEscrow(`logo ${seed}`, { confirm: true })
+      let said = await bank.settleEscrow(a, `logo ${seed}`, { confirm: true })
       ctx.evidence.push({ note: `Confirm delivered: ${said}` })
       if (said !== 'Released') return fail(`confirming delivery was refused: "${said}"`)
       const released = [...await escrowOf(app.user, `logo ${seed}`), ...await escrowOf(other.co, `logo ${seed}`)]
@@ -302,7 +302,7 @@ export function walletEscrow(seed: number, partner: number): Scenario {
 
       err = await open(argued, `print run ${seed}`)
       if (err !== undefined) return fail(err)
-      said = await bank.settleEscrow(`print run ${seed}`, { dispute: 'nothing arrived' })
+      said = await bank.settleEscrow(a, `print run ${seed}`, { dispute: 'nothing arrived' })
       ctx.evidence.push({ note: `Dispute: ${said}` })
       if (said !== 'Disputed') return fail(`disputing was refused: "${said}"`)
       const disputed = [...await escrowOf(app.user, `print run ${seed}`), ...await escrowOf(other.co, `print run ${seed}`)]
