@@ -1,0 +1,8 @@
+[
+  {
+    "route": "/money/subscriptions",
+    "answers": {
+      "/api/workspace/areas": { "areas": [] }
+    }
+  }
+]
