@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
 // B59.31 — a Business account's company details and the people with control, in Settings and at the end of sign-up,
-// on a BFF that answers as Lens B59.30 does. A Personal account never sees them: no Settings entry, no form after
+// on a BFF that answers as Lens B59.30 does. B61.20 moves the form from step 3 to step 4, the identity check. A Personal account never sees them: no Settings entry, no form after
 // sign-up, its address opens Home, and nothing asks the BFF for them.
 
 const saved = {
@@ -22,6 +22,7 @@ function mockBff(accountType: 'business' | 'personal') {
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/workspace/account') return json({ account_type: accountType, money_kind: 'hybrid' })
+    if (url === '/api/verification') return json({ workspace_id: 'ws_1', level: 'L0', live_level: 'L0', checks: null })
     if (url !== '/api/workspace/business') return new Response('null', { status: 404 })
     asked.push(init?.method ?? 'GET')
     if (accountType === 'personal') return json({ error: 'a Personal account has no company details', code: 'not_business' }, 404)
@@ -49,7 +50,7 @@ describe('company details and people with control (B59.31)', () => {
     const { puts } = mockBff('business')
     open('/settings/company')
     const form = await screen.findByRole('form', { name: 'Company details' })
-    expect(screen.getByText('These go to our partner’s identity check later. No identity documents are asked for.')).toBeTruthy()
+    expect(screen.getByText('These go to the identity check, “Confirm who you are”. No identity documents are asked for.')).toBeTruthy()
     expect((within(form).getByLabelText('Company name') as HTMLInputElement).value).toBe('Northwind Studio Ltd')
     expect((within(screen.getByTestId('person-0')).getByLabelText('Share') as HTMLInputElement).value).toBe('60')
 
@@ -112,7 +113,7 @@ describe('company details and people with control (B59.31)', () => {
     expect(await screen.findByRole('link', { name: /Company details/ })).toBeTruthy()
     cleanup()
     queryClient.clear()
-    open('/signup/key')
+    open('/signup/confirm')
     expect(await screen.findByRole('form', { name: 'Company details' })).toBeTruthy()
   })
 
@@ -124,8 +125,10 @@ describe('company details and people with control (B59.31)', () => {
     expect(screen.queryByRole('link', { name: /Company details/ })).toBeNull()
     cleanup()
 
-    open('/signup/key')
-    expect(await screen.findByRole('heading', { name: 'Add a passkey or pair your phone' })).toBeTruthy()
+    open('/signup/confirm')
+    expect(await screen.findByRole('heading', { name: 'Confirm who you are' })).toBeTruthy()
+    expect(await screen.findByLabelText('Legal name')).toBeTruthy()
+    expect(screen.queryByRole('form', { name: 'Company details' })).toBeNull()
     cleanup()
 
     open('/settings/company')
