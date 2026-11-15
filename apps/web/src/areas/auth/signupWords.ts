@@ -1,10 +1,11 @@
 // signupWords.ts — B59.8: sign-up's words, word for word from the launch pack (SPEC 3.2 and the design's P1, P2 and
-// W1). The phone (B59.9) shows the same words, and its tests compare against these.
+// W1). The phone (B59.9) shows the same words, and its tests compare against these. B61.20 adds step 4, the identity
+// check, and its words below (the phone's B61.21 shows the same).
 
 export type AccountType = 'personal' | 'business'
 export type MoneyKind = 'fiat' | 'stablecoin' | 'hybrid'
 
-export const SIGNUP_STEPS = ['Who is this account for?', 'Pick the kind of money', 'Add a passkey or pair your phone'] as const
+export const SIGNUP_STEPS = ['Who is this account for?', 'Pick the kind of money', 'Add a passkey or pair your phone', 'Confirm who you are'] as const
 
 export const ACCOUNT_TYPES: readonly { value: AccountType; title: string; line: string }[] = [
   { value: 'personal', title: 'Personal', line: 'For you and your own agents.' },
@@ -68,3 +69,55 @@ export const COUNTRIES: readonly (readonly [string, string])[] = [
   ['SK', 'Slovakia'], ['SI', 'Slovenia'], ['ZA', 'South Africa'], ['ES', 'Spain'], ['SE', 'Sweden'],
   ['CH', 'Switzerland'], ['AE', 'United Arab Emirates'], ['GB', 'United Kingdom'], ['US', 'United States'],
 ]
+
+/** B61.20 — step 4, "Confirm who you are": the identity check, run against Lens's levels. Settings, Verification shows
+ *  the same parts with the same words. */
+export const IDENTITY_WORDS = {
+  intro: {
+    personal: 'Talyvor checks who you are before your account can move money. It takes a minute.',
+    business: 'Talyvor checks who you are and your company before the account can move money. It takes a minute.',
+  },
+  checks: 'The checks',
+  contact: 'Email and phone',
+  person: 'Who you are',
+  company: 'Your company',
+  you: 'You',
+  email: 'Email',
+  phone: 'Phone number',
+  phoneHint: 'With the country code, like +447700900123.',
+  legalName: 'Legal name',
+  legalNameHint: 'As it is written on your ID.',
+  dateOfBirth: 'Date of birth',
+  country: 'Country you live in',
+  run: 'Confirm who I am',
+  running: 'Checking…',
+  passed: 'Passed',
+  passedSandbox: 'Passed in Sandbox',
+  checking: 'Checking…',
+  waiting: 'Waiting for the checker',
+  notPassed: 'Not passed',
+  notYet: 'Not checked yet',
+  documentTitle: 'Your ID document',
+  documentLine: 'When our identity partner is live, its own screen opens here to photograph your ID. In Sandbox nothing is asked for and nothing is kept.',
+  done: 'You’re confirmed. Your account is open.',
+  open: 'Open the app',
+  gate: 'Your account can look around but can’t move money until you confirm who you are.',
+  finish: 'Finish confirming who you are',
+} as const
+
+export const IDENTITY_ERRORS = {
+  email: 'Add your email address.',
+  phone: 'Add your phone number with its country code, like +447700900123.',
+  legalName: 'Add your legal name.',
+  dateOfBirth: 'Add your date of birth.',
+  country: 'Pick the country you live in.',
+  companyFirst: 'Save the company details, with at least one director, first.',
+  named: (name: string) => `Add ${name} to the people with control, and save.`,
+  failed: {
+    contact: 'We couldn’t confirm your email and phone. Check them and try again.',
+    person: 'We couldn’t confirm who you are. Check your legal name, date of birth and country, and try again.',
+    company: 'We couldn’t confirm your company. Check the company details and the people with control, and try again.',
+  },
+  expired: 'Your identity check expired. Start it again.',
+  unknown: 'Nothing was checked. You can try again.',
+} as const

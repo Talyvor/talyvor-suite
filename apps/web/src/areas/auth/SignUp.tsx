@@ -14,11 +14,12 @@ import { usePricing } from '../marketing/pricingApi'
 import { agentBankApi } from '../lens/agentBankApi'
 import { DEVICES_KEY, PASSKEYS_KEY, deviceText } from '../lens/AgentBank'
 import { passkeysSupported, registerThisDevice } from '../lens/passkeys'
-import { CompanyDetailsSection } from '../lens/CompanyDetails'
+import { IdentityChecks } from '../lens/IdentityChecks'
 import { AccessLine, AlreadyIn, EntryFrame, PrivacyTerms, SignInCard } from './Entry'
 import {
   ACCOUNT_TYPES,
   COUNTRIES,
+  IDENTITY_WORDS,
   KIND_NOTE,
   MONEY_KINDS,
   PROFILE_ERRORS,
@@ -37,6 +38,8 @@ import {
 // makes the workspace. Step 2's Continue is a link to the BFF's /auth/login with the answers in its query: the BFF holds them with the login in progress and sends them to Lens's POST /v1/provision at the callback, and it
 // refuses a sign-up without both. The callback lands on step 3, /signup/key, with a session.
 //
+// B61.20 — step 4, /signup/confirm, is the identity check (IdentityChecks): the account opens on Home once it passes.
+//
 // The name is the workspace's name. Country and a business's registration number ride the same query (B59.41), and
 // Lens keeps them with the workspace as its sign-up profile (talyvor-lens B59.40).
 
@@ -45,6 +48,7 @@ const PICK_TYPE = 'Pick who this account is for.'
 const PICK_KIND = 'Pick the kind of money.'
 
 export const SIGNUP_KEY_PATH = '/signup/key'
+export const SIGNUP_CONFIRM_PATH = '/signup/confirm'
 
 /** The BFF's sign-up entry: /auth/login with the answers, landing on step 3. */
 function signupLoginHref(type: AccountType, kind: MoneyKind, profile: Profile): string {
@@ -85,8 +89,10 @@ function SignUpFrame({ children, label = <SandboxLabel /> }: { children: React.R
 
 /** W1's stepper: numbered dots, tangerine when done or current, a tick when done, every step in words. The disc is
  *  tangerine-50 with tangerine ink, as Pocket's Steps draws it: ink on full tangerine is not a scored pair.
- *  B57.133 — a narrow screen gets P1's step bars instead: three bars, tangerine once reached, then "Step n of 3". */
-function Stepper({ at }: { at: 1 | 2 | 3 }) {
+ *  B57.133 — a narrow screen gets P1's step bars instead: a bar a step, tangerine once reached, then "Step n of 4". */
+type StepAt = 1 | 2 | 3 | 4
+
+function Stepper({ at }: { at: StepAt }) {
   return (
     <>
       <p className="flex items-center gap-1.5 text-body font-semibold text-ink-2 wide:hidden">
@@ -100,7 +106,7 @@ function Stepper({ at }: { at: 1 | 2 | 3 }) {
   )
 }
 
-function StepDots({ at }: { at: 1 | 2 | 3 }) {
+function StepDots({ at }: { at: StepAt }) {
   return (
     <ol aria-label="Sign-up steps" className="hidden flex-wrap items-center gap-x-6 gap-y-2 wide:flex">
       {SIGNUP_STEPS.map((title, i) => {
@@ -391,10 +397,7 @@ export function SignUpKey() {
     <SignUpFrame label={<WorkspaceStatus />}>
       <Stepper at={3} />
       <StepTitle id="signup-key">{SIGNUP_STEPS[2]}</StepTitle>
-      <KeyChoices>
-        {/* B59.31 — a Business adds its company details and the people with control here, or later in Settings. */}
-        <CompanyDetailsSection titled />
-      </KeyChoices>
+      <KeyChoices />
     </SignUpFrame>
   )
 }
@@ -434,7 +437,7 @@ function KeyDone({ children }: { children: React.ReactNode }) {
   )
 }
 
-function KeyChoices({ children }: { children?: React.ReactNode }) {
+function KeyChoices() {
   const qc = useQueryClient()
   const passkeys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
   // Asked every 3 seconds until a key is here, so the phone's key shows up the moment the app makes it.
@@ -484,19 +487,51 @@ function KeyChoices({ children }: { children?: React.ReactNode }) {
           )}
         </KeyOption>
       </div>
-      {children}
       {/* W1's foot: the step's buttons at the right; on a narrow screen one full-width button, as P1 and P2 draw it. */}
       <div className="grid wide:flex wide:justify-end">
+        {/* B61.20 — then the identity check, step 4, with a key or without one */}
         {done ? (
           <Button asChild>
-            <a href="/">Open the app</a>
+            <a href={SIGNUP_CONFIRM_PATH}>Continue</a>
           </Button>
         ) : (
           <Button asChild variant="outline">
-            <a href="/">Do this later</a>
+            <a href={SIGNUP_CONFIRM_PATH}>Do this later</a>
           </Button>
         )}
       </div>
     </div>
+  )
+}
+
+// ─── /signup/confirm ────────────────────────────────────────────────────────
+
+/**
+ * B61.20 — step 4, "Confirm who you are": Lens's checks for the account's level, shown as each passes, then Home. A
+ * Business gives its company details and the people with control here (B59.31's form). Not behind AuthGate, as step 3.
+ */
+export function SignUpConfirm() {
+  const me = useAuthMeReader()
+  useDocumentTitle(SIGNUP_STEPS[3])
+  if (me.isLoading) return <SignUpFrame label={null}>{null}</SignUpFrame>
+  if (me.data?.mode === 'oidc' && !me.data.authenticated) {
+    return (
+      <EntryFrame>
+        <SignInCard returnTo={SIGNUP_CONFIRM_PATH} />
+      </EntryFrame>
+    )
+  }
+  return (
+    <SignUpFrame label={<WorkspaceStatus />}>
+      <Stepper at={4} />
+      <StepTitle id="signup-confirm">{SIGNUP_STEPS[3]}</StepTitle>
+      <IdentityChecks
+        done={
+          <Button asChild>
+            <a href="/">{IDENTITY_WORDS.open}</a>
+          </Button>
+        }
+      />
+    </SignUpFrame>
   )
 }
