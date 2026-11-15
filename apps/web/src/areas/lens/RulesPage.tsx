@@ -9,9 +9,8 @@ import { CATALOG_KEY } from '../marketplace/parts'
 import { marketApi } from '../marketplace/marketApi'
 import { isSessionExpired } from '../../lib/productState'
 import { PAYEES_KEY } from './Pay'
-import { useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
-import { useMoneyFigures } from './money'
+import { pegQuery, useLensWords, useMoney } from './money'
 import {
   type Agent,
   type AgentBook,
@@ -20,7 +19,9 @@ import {
   type PayeeAllowance,
   type RuleSimulation,
   agentBankApi,
+  dollarsText,
   limitText,
+  parseDollars,
   parseLXC,
   refusalText,
   useAccount,
@@ -32,6 +33,10 @@ import {
 // judge a request the agent has not made. Saving sends the rules body Lens takes today (PUT /api/agents/{id}/rules), and
 // asks Lens first what the change does: a looser one needs the passkey (B55.14), a tighter one is saved at once. Every
 // save and rollback is a new version in Lens; a save that changes nothing sends nothing.
+//
+// B61.14 — every amount is typed in dollars, at Lens's peg, until the rules carry their own currency (B61.12); Lens keeps
+// them in µLXC, and LXC is never shown. The model, provider and requests-a-minute rules are the parked gateway's: they
+// are not drawn, and a save sends back what Lens holds for them unchanged.
 
 const MAIN_LIMITS = [
   ['approval_above_ulxc', 'Asks you above'],
@@ -46,7 +51,7 @@ const MORE_LIMITS = [
 type LimitField = (typeof MAIN_LIMITS)[number][0] | (typeof MORE_LIMITS)[number][0]
 type Switched = LimitField | 'hours' | 'payees' | 'allow' | 'models' | 'listings' | 'rate'
 
-/** The form as typed: amounts in LXC as text, and whether each switched rule is on. */
+/** The form as typed: amounts in dollars as text (model caps in LXC, never drawn), and whether each switched rule is on. */
 interface Draft {
   limits: Record<LimitField, string>
   on: Record<Switched, boolean>
@@ -59,7 +64,7 @@ interface Draft {
   listings: string[]
   allowed: string[]
   blocked: string[]
-  /** payee, amount in LXC as typed, per */
+  /** payee, amount in dollars as typed, per */
   allowances: [string, string, PayeeAllowance['per']][]
   modelCaps: [string, string][]
   payeeDay: [string, string][]
@@ -70,9 +75,10 @@ interface Draft {
 
 const LIMIT_FIELDS: LimitField[] = [...MAIN_LIMITS.map(([f]) => f), ...MORE_LIMITS.map(([f]) => f)]
 
-function draftOf(r: AgentRules): Draft {
-  const limits = Object.fromEntries(LIMIT_FIELDS.map((f) => [f, limitText(r[f] ?? 0)])) as Record<LimitField, string>
-  const allowances = Object.entries(r.payee_allowances ?? {}).map(([id, a]) => [id, limitText(a.amount_ulxc), a.per] as [string, string, PayeeAllowance['per']])
+function draftOf(r: AgentRules, peg: number): Draft {
+  const usd = (v: number) => dollarsText(v, peg)
+  const limits = Object.fromEntries(LIMIT_FIELDS.map((f) => [f, usd(r[f] ?? 0)])) as Record<LimitField, string>
+  const allowances = Object.entries(r.payee_allowances ?? {}).map(([id, a]) => [id, usd(a.amount_ulxc), a.per] as [string, string, PayeeAllowance['per']])
   return {
     limits,
     on: {
@@ -95,8 +101,8 @@ function draftOf(r: AgentRules): Draft {
     blocked: r.blocked_payees ?? [],
     allowances,
     modelCaps: Object.entries(r.model_daily_limits_ulxc ?? {}).map(([m, v]) => [m, limitText(v)]),
-    payeeDay: Object.entries(r.payee_daily_limits_ulxc ?? {}).map(([id, v]) => [id, limitText(v)]),
-    payeeMonth: Object.entries(r.payee_monthly_limits_ulxc ?? {}).map(([id, v]) => [id, limitText(v)]),
+    payeeDay: Object.entries(r.payee_daily_limits_ulxc ?? {}).map(([id, v]) => [id, usd(v)]),
+    payeeMonth: Object.entries(r.payee_monthly_limits_ulxc ?? {}).map(([id, v]) => [id, usd(v)]),
     pause: r.pause_on_unusual_spend ?? false,
     instant: r.may_instant_transfer ?? false,
   }
@@ -111,21 +117,23 @@ function parseRate(text: string): number | null {
   return n <= 2_147_483_647 ? n : null
 }
 
-const amounts = (pairs: [string, string][]) => Object.fromEntries(pairs.map(([k, t]) => [k, parseLXC(t) ?? 0] as const).filter(([, v]) => v > 0))
+const amounts = (pairs: [string, string][], parse: (t: string) => number | null) =>
+  Object.fromEntries(pairs.map(([k, t]) => [k, parse(t) ?? 0] as const).filter(([, v]) => v > 0))
 
 /**
  * The rules body Lens takes, from the form. A rule switched off is sent as none. Always allow and Instant transfer are
  * sent only when they changed: absent, Lens keeps what it holds, so a template or a save that does not touch them keeps
  * them as they are.
  */
-function bodyOf(d: Draft, was: Draft, instantShown: boolean): AgentRules {
-  const limit = (f: LimitField) => (d.on[f] ? (parseLXC(d.limits[f]) ?? 0) : 0)
+function bodyOf(d: Draft, was: Draft, instantShown: boolean, peg: number): AgentRules {
+  const usd = (t: string) => parseDollars(t, peg)
+  const limit = (f: LimitField) => (d.on[f] ? (usd(d.limits[f]) ?? 0) : 0)
   const allowances = d.on.allow
     ? Object.fromEntries(
-        d.allowances.map(([id, t, per]) => [id, { amount_ulxc: parseLXC(t) ?? 0, per }] as const).filter(([id, a]) => id !== '' && a.amount_ulxc > 0),
+        d.allowances.map(([id, t, per]) => [id, { amount_ulxc: usd(t) ?? 0, per }] as const).filter(([id, a]) => id !== '' && a.amount_ulxc > 0),
       )
     : {}
-  const wasAllowances = was.on.allow ? Object.fromEntries(was.allowances.map(([id, t, per]) => [id, { amount_ulxc: parseLXC(t) ?? 0, per }])) : {}
+  const wasAllowances = was.on.allow ? Object.fromEntries(was.allowances.map(([id, t, per]) => [id, { amount_ulxc: usd(t) ?? 0, per }])) : {}
   return {
     max_per_request_ulxc: limit('max_per_request_ulxc'),
     hourly_limit_ulxc: limit('hourly_limit_ulxc'),
@@ -134,14 +142,14 @@ function bodyOf(d: Draft, was: Draft, instantShown: boolean): AgentRules {
     monthly_limit_ulxc: limit('monthly_limit_ulxc'),
     approval_above_ulxc: limit('approval_above_ulxc'),
     requests_per_minute: d.on.rate ? (parseRate(d.rate) ?? 0) : 0,
-    model_daily_limits_ulxc: amounts(d.modelCaps),
+    model_daily_limits_ulxc: amounts(d.modelCaps, parseLXC),
     allowed_models: d.on.models ? d.models : [],
     allowed_providers: d.providers,
     allowed_listings: d.on.listings ? d.listings : [],
     allowed_payees: d.on.payees ? d.allowed : [],
     blocked_payees: d.blocked,
-    payee_daily_limits_ulxc: amounts(d.payeeDay),
-    payee_monthly_limits_ulxc: amounts(d.payeeMonth),
+    payee_daily_limits_ulxc: amounts(d.payeeDay, usd),
+    payee_monthly_limits_ulxc: amounts(d.payeeMonth, usd),
     active_from: d.on.hours ? d.from.trim() : '',
     active_until: d.on.hours ? d.until.trim() : '',
     timezone: d.timezone.trim(),
@@ -157,13 +165,10 @@ const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
 /** "London" from "Europe/London". */
 const cityOf = (zone: string) => (zone ? (zone.split('/').pop() ?? zone).replace(/_/g, ' ') : 'UTC')
 
-/** A figure as the reference writes it in a sentence: "$400.00 (4,000 LXC)", or LXC alone while no rate backs it. */
+/** A figure as the reference writes it in a sentence: "$400.00", or "—" while no rate backs it. */
 function useFigure() {
-  const figures = useMoneyFigures()
-  return (ulxc: number) => {
-    const { cash, lxc } = figures.ulxc(ulxc)
-    return cash ? `${cash} (${lxc})` : lxc
-  }
+  const money = useMoney()
+  return (ulxc: number) => money(ulxc) ?? '—'
 }
 
 /** Who a payee is: one of the workspace's agents, a saved payee, or its id. */
@@ -190,7 +195,7 @@ function changeText(change: string): string {
   return change
 }
 
-/** Every rule this page draws that differs between two versions, in words: "Daily limit: was $400.00 (4,000 LXC), now …". */
+/** Every rule this page draws that differs between two versions, in words: "Daily limit: was $400.00, now …". */
 function versionChanges(was: AgentRules, now: AgentRules, payeeName: (id: string) => string, figure: (ulxc: number) => string): string[] {
   const out: string[] = []
   const amount = (v: number | undefined) => ((v ?? 0) > 0 ? figure(v ?? 0) : 'none')
@@ -203,15 +208,11 @@ function versionChanges(was: AgentRules, now: AgentRules, payeeName: (id: string
     ['monthly_limit_ulxc', 'Monthly limit'],
   ]
   for (const [f, rule] of limits) if ((was[f] ?? 0) !== (now[f] ?? 0)) out.push(`${rule}: was ${amount(was[f])}, now ${amount(now[f])}`)
-  const rate = (n: number | undefined) => ((n ?? 0) > 0 ? String(n) : 'none')
-  if ((was.requests_per_minute ?? 0) !== (now.requests_per_minute ?? 0)) out.push(`Requests a minute: was ${rate(was.requests_per_minute)}, now ${rate(now.requests_per_minute)}`)
   const hours = (r: AgentRules) => (r.active_from || r.active_until ? `${r.active_from || 'any time'} to ${r.active_until || 'any time'} ${cityOf(r.timezone)} time` : 'any time')
   if (hours(was) !== hours(now)) out.push(`Hours: was ${hours(was)}, now ${hours(now)}`)
   const lists: [keyof AgentRules, string, string, (id: string) => string][] = [
     ['allowed_payees', 'Who it may pay', 'anyone', payeeName],
     ['blocked_payees', 'Never pays', 'nobody', payeeName],
-    ['allowed_models', 'Models', 'any', (id) => id],
-    ['allowed_providers', 'Providers', 'any', (id) => id],
     ['allowed_listings', 'Marketplace listings', 'any', (id) => id],
   ]
   for (const [f, rule, none, name] of lists) {
@@ -246,7 +247,6 @@ export function RulesPage({ id }: { id: string }) {
   useQuery({ queryKey: rulesKey(id), queryFn: () => agentBankApi.rules(id) })
   useQuery({ queryKey: rulesHistoryKey(id), queryFn: () => agentBankApi.rulesHistory(id) })
   useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees, retry: false })
-  useRuleChoices()
   useKeys()
   const agent = book.data?.agents.find((a) => a.id === id)
   return (
@@ -273,22 +273,22 @@ export function RulesPage({ id }: { id: string }) {
 
 function Rules({ agent, book }: { agent: Agent; book: AgentBook }) {
   const rules = useQuery({ queryKey: rulesKey(agent.id), queryFn: () => agentBankApi.rules(agent.id) })
+  const peg = useQuery(pegQuery)
   // A rollback puts other rules in force: the form starts again from them.
   const [round, setRound] = useState(0)
   if (rules.isError) return <p className="text-body text-ink-2">{isSessionExpired(rules.error) ? 'These rules can’t be read until you sign in again.' : `${agent.name}’s rules could not be read just now.`}</p>
-  if (!rules.data) return <p className="text-body text-ink-3">Reading…</p>
-  return <RulesEditor key={round} agent={agent} book={book} rules={rules.data} onRolledBack={() => setRound((n) => n + 1)} />
+  if (peg.isError) return <p className="text-body text-ink-2">{isSessionExpired(peg.error) ? 'These rules can’t be read until you sign in again.' : `${agent.name}’s rules could not be read just now.`}</p>
+  if (!rules.data || peg.data?.usd_per_lxc === undefined) return <p className="text-body text-ink-3">Reading…</p>
+  return <RulesEditor key={round} agent={agent} book={book} rules={rules.data} peg={peg.data.usd_per_lxc} onRolledBack={() => setRound((n) => n + 1)} />
 }
 
-function RulesEditor({ agent, book, rules, onRolledBack }: { agent: Agent; book: AgentBook; rules: AgentRules; onRolledBack: () => void }) {
+function RulesEditor({ agent, book, rules, peg, onRolledBack }: { agent: Agent; book: AgentBook; rules: AgentRules; peg: number; onRolledBack: () => void }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
-  const figures = useMoneyFigures()
   const figure = useFigure()
   const payees = usePayees(agent, book)
-  const choices = useRuleChoices()
   const instantShown = useAccount().shows?.instantTransfer === true
-  const [was] = useState(() => draftOf(rules))
+  const [was] = useState(() => draftOf(rules, peg))
   const [d, setD] = useState(was)
   const [filled, setFilled] = useState<RuleTemplate | null>(null)
   const [unchanged, setUnchanged] = useState(false)
@@ -303,15 +303,13 @@ function RulesEditor({ agent, book, rules, onRolledBack }: { agent: Agent; book:
   const typedAmounts = [
     ...LIMIT_FIELDS.filter((f) => d.on[f]).map((f) => d.limits[f]),
     ...(d.on.allow ? d.allowances.map(([, t]) => t) : []),
-    ...d.modelCaps.map(([, t]) => t),
     ...d.payeeDay.map(([, t]) => t),
     ...d.payeeMonth.map(([, t]) => t),
   ]
-  const badAmount = typedAmounts.some((t) => t.trim() !== '' && parseLXC(t) === null)
-  const badRate = d.on.rate && parseRate(d.rate) === null
-  const bad = badAmount || badRate
-  const body = bodyOf(d, was, instantShown)
-  const nothing = JSON.stringify(body) === JSON.stringify(bodyOf(was, was, instantShown))
+  const badAmount = typedAmounts.some((t) => parseDollars(t, peg) === null)
+  const bad = badAmount
+  const body = bodyOf(d, was, instantShown, peg)
+  const nothing = JSON.stringify(body) === JSON.stringify(bodyOf(was, was, instantShown, peg))
   const change = useRulesChange(agent.id)
   const judged = change.judgedFor({ rules: body })
   const history = useQuery({ queryKey: rulesHistoryKey(agent.id), queryFn: () => agentBankApi.rulesHistory(agent.id) })
@@ -339,19 +337,12 @@ function RulesEditor({ agent, book, rules, onRolledBack }: { agent: Agent; book:
     save.mutate(judged?.signs === true)
   }
   const fill = (t: RuleTemplate) => {
-    const next = draftOf(t.rules)
+    const next = draftOf(t.rules, peg)
     // A template names every rule but Always allow and Instant transfer, which it leaves as they are.
     setD((x) => ({ ...next, allowances: x.allowances, on: { ...next.on, allow: x.on.allow }, instant: x.instant }))
     setFilled(t)
     setUnchanged(false)
   }
-  const lxcLine = (f: LimitField) => {
-    const v = d.on[f] ? parseLXC(d.limits[f]) : null
-    if (v === null || v <= 0) return undefined
-    const cash = figures.ulxc(v).cash
-    return cash ? <span className="font-figure">{cash}</span> : undefined
-  }
-  const modelName = (m: string) => choices.models.flatMap((g) => g.options).find((o) => o.value === m)?.label ?? m
   const catalog = useQuery({ queryKey: [...CATALOG_KEY, ''], queryFn: () => marketApi.catalog(''), enabled: d.on.listings })
   const listingName = (l: string) => catalog.data?.find((x) => x.id === l)?.title ?? l
   return (
@@ -384,17 +375,16 @@ function RulesEditor({ agent, book, rules, onRolledBack }: { agent: Agent; book:
           Nothing changed. {agent.name}’s rules are as they were, so no new version was kept.
         </p>
       ) : null}
-      {badAmount ? <p role="alert" className="text-body text-ink">A limit is an amount of LXC with at most six decimals, or empty.</p> : null}
-      {badRate ? <p role="alert" className="text-body text-ink">Requests a minute is a whole number, or empty.</p> : null}
+      {badAmount ? <p role="alert" className="text-body text-ink">A limit is an amount in dollars, or empty.</p> : null}
       {save.isError ? <p role="alert" className="text-body text-ink">{refusalText(save.error)}</p> : null}
       <div className="grid items-start gap-4 wide:grid-cols-12 [&>*]:min-w-0">
         <Card tone="white" className="wide:col-span-8" data-testid="rules-rows">
           {MAIN_LIMITS.map(([f, title]) => (
-            <RuleRow key={f} title={title} line={lxcLine(f)} on={d.on[f]} onSwitch={(on) => turn(f, on)}>
+            <RuleRow key={f} title={title} on={d.on[f]} onSwitch={(on) => turn(f, on)}>
               <Input
-                aria-label={`${title} for ${agent.name}, in LXC`}
+                aria-label={`${title} for ${agent.name}, in dollars`}
                 inputMode="decimal"
-                unit="LXC"
+                unit="USD"
                 placeholder="No limit"
                 disabled={!d.on[f]}
                 value={d.limits[f]}
@@ -424,10 +414,10 @@ function RulesEditor({ agent, book, rules, onRolledBack }: { agent: Agent; book:
           <RuleRow
             title="Always allow a payee"
             line={
-              (parseLXC(d.limits.approval_above_ulxc) ?? 0) > 0 && d.on.approval_above_ulxc
+              (parseDollars(d.limits.approval_above_ulxc, peg) ?? 0) > 0 && d.on.approval_above_ulxc
                 ? (
                     <>
-                      Above <span className="font-figure">{figures.ulxc(parseLXC(d.limits.approval_above_ulxc) ?? 0).cash ?? figures.ulxc(parseLXC(d.limits.approval_above_ulxc) ?? 0).lxc}</span>, up to this,
+                      Above <span className="font-figure">{figure(parseDollars(d.limits.approval_above_ulxc, peg) ?? 0)}</span>, up to this,
                       without asking
                     </>
                   )
@@ -438,17 +428,6 @@ function RulesEditor({ agent, book, rules, onRolledBack }: { agent: Agent; book:
           >
             {d.on.allow ? <Allowances agent={agent} d={d} payees={payees} onChange={(allowances) => set({ allowances })} /> : null}
           </RuleRow>
-          <RuleRow title="Only these models" on={d.on.models} onSwitch={(on) => turn('models', on)}>
-            {d.on.models ? (
-              <IdList
-                label={`Models ${agent.name} may use`}
-                chosen={d.models}
-                options={choices.models.flatMap((g) => g.options).map((o) => ({ id: o.value, name: o.label }))}
-                nameOf={modelName}
-                onChange={(models) => set({ models })}
-              />
-            ) : null}
-          </RuleRow>
           <RuleRow title="Only these marketplace listings" on={d.on.listings} onSwitch={(on) => turn('listings', on)}>
             {d.on.listings ? (
               <IdList
@@ -458,11 +437,6 @@ function RulesEditor({ agent, book, rules, onRolledBack }: { agent: Agent; book:
                 nameOf={listingName}
                 onChange={(listings) => set({ listings })}
               />
-            ) : null}
-          </RuleRow>
-          <RuleRow title="At most requests a minute" on={d.on.rate} onSwitch={(on) => turn('rate', on)}>
-            {d.on.rate ? (
-              <Input aria-label={`Requests a minute for ${agent.name}`} inputMode="numeric" placeholder="No limit" value={d.rate} onChange={(e) => set({ rate: e.target.value })} />
             ) : null}
           </RuleRow>
           <RuleRow title="Pauses if its spending looks unusual" line="When an hour’s spend reaches 5 times its usual rate" on={d.pause} onSwitch={(pause) => set({ pause })} />
@@ -483,12 +457,11 @@ function RulesEditor({ agent, book, rules, onRolledBack }: { agent: Agent; book:
             set={set}
             turn={turn}
             payees={payees}
-            choices={choices}
-            modelName={modelName}
+            peg={peg}
             filled={filled}
             onFill={fill}
           />
-          <WouldItPass agent={agent} book={book} modelGroups={choices.models} providers={choices.providers} />
+          {book.agents.some((a) => a.id !== agent.id && !a.archived_at) ? <WouldItPass agent={agent} book={book} peg={peg} /> : null}
         </div>
       </div>
     </>
@@ -615,9 +588,9 @@ function Allowances({
         <span key={id} className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-body text-ink">{payees.nameOf(id)}</span>
           <Input
-            aria-label={`Always allow ${payees.nameOf(id)} from ${agent.name}, in LXC a ${per}`}
+            aria-label={`Always allow ${payees.nameOf(id)} from ${agent.name}, in dollars a ${per}`}
             inputMode="decimal"
-            unit={`LXC a ${per}`}
+            unit={`USD a ${per}`}
             className="w-44"
             value={text}
             onChange={(e) => onChange(d.allowances.map((a, j) => (j === i ? [id, e.target.value, per] : a)))}
@@ -795,8 +768,7 @@ function MoreRules({
   set,
   turn,
   payees,
-  choices,
-  modelName,
+  peg,
   filled,
   onFill,
 }: {
@@ -805,15 +777,16 @@ function MoreRules({
   set: (p: Partial<Draft>) => void
   turn: (k: Switched, on: boolean) => void
   payees: ReturnType<typeof usePayees>
-  choices: ReturnType<typeof useRuleChoices>
-  modelName: (m: string) => string
+  peg: number
   filled: RuleTemplate | null
   onFill: (t: RuleTemplate) => void
 }) {
   const [open, setOpen] = useState<string | null>(null)
-  const limitNow = (f: LimitField) => (d.on[f] && (parseLXC(d.limits[f]) ?? 0) > 0 ? `${d.limits[f]} LXC` : 'No limit')
+  const money = useMoney()
+  const dollars = (t: string) => money(parseDollars(t, peg) ?? 0) ?? '—'
+  const limitNow = (f: LimitField) => (d.on[f] && (parseDollars(d.limits[f], peg) ?? 0) > 0 ? dollars(d.limits[f]) : 'No limit')
   const zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []
-  const capNow = (pairs: [string, string][], name: (k: string) => string) => (pairs.length > 0 ? pairs.map(([k, t]) => `${name(k)}, ${t || 0} LXC`).join('; ') : 'None')
+  const capNow = (pairs: [string, string][], name: (k: string) => string) => (pairs.length > 0 ? pairs.map(([k, t]) => `${name(k)}, ${dollars(t)}`).join('; ') : 'None')
   const items: { key: string; title: string; now: string; field: React.ReactNode }[] = [
     ...MORE_LIMITS.map(([f, title]) => ({
       key: f,
@@ -821,9 +794,9 @@ function MoreRules({
       now: limitNow(f),
       field: (
         <Input
-          aria-label={`${title} for ${agent.name}, in LXC`}
+          aria-label={`${title} for ${agent.name}, in dollars`}
           inputMode="decimal"
-          unit="LXC"
+          unit="USD"
           placeholder="No limit"
           value={d.on[f] ? d.limits[f] : ''}
           onChange={(e) => {
@@ -833,20 +806,6 @@ function MoreRules({
         />
       ),
     })),
-    {
-      key: 'providers',
-      title: 'Only these providers',
-      now: d.providers.length > 0 ? d.providers.map((p) => choices.providers.find((x) => x.value === p)?.label ?? p).join(', ') : 'Any provider',
-      field: (
-        <IdList
-          label={`Providers ${agent.name} may use`}
-          chosen={d.providers}
-          options={choices.providers.map((p) => ({ id: p.value, name: p.label }))}
-          nameOf={(p) => choices.providers.find((x) => x.value === p)?.label ?? p}
-          onChange={(providers) => set({ providers })}
-        />
-      ),
-    },
     {
       key: 'blocked',
       title: 'Never these payees',
@@ -861,12 +820,6 @@ function MoreRules({
           onChange={(blocked) => set({ blocked, allowed: d.allowed.filter((a) => !blocked.includes(a)) })}
         />
       ),
-    },
-    {
-      key: 'model-caps',
-      title: 'At most a day on one model',
-      now: capNow(d.modelCaps, modelName),
-      field: <Caps label={`A day on one model for ${agent.name}`} pairs={d.modelCaps} nameOf={modelName} options={choices.models.flatMap((g) => g.options).map((o) => ({ id: o.value, name: o.label }))} onChange={(modelCaps) => set({ modelCaps })} />,
     },
     {
       key: 'payee-day',
@@ -938,7 +891,7 @@ function MoreRules({
   )
 }
 
-/** Caps by a model or a payee: each with its amount in LXC, and one more to add. */
+/** Caps by a payee: each with its amount in dollars, and one more to add. */
 function Caps({
   label,
   pairs,
@@ -961,9 +914,9 @@ function Caps({
         <span key={k} className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-body text-ink">{nameOf(k)}</span>
           <Input
-            aria-label={`${label}: ${nameOf(k)}, in LXC`}
+            aria-label={`${label}: ${nameOf(k)}, in dollars`}
             inputMode="decimal"
-            unit="LXC"
+            unit="USD"
             className="w-36"
             value={t}
             onChange={(e) => onChange(pairs.map((p, j) => (j === i ? [k, e.target.value] : p)))}
@@ -989,32 +942,19 @@ function Caps({
 }
 
 /**
- * B28.30 — Would it pass?: a question to a model or a payment to another of the workspace's agents, and an amount, judged
+ * B28.30 — Would it pass?: a payment to another of the workspace's agents (B61.14: a question to a model is the parked
+ * gateway's), and an amount in dollars, judged
  * by Lens with the agent's rules as a real one is, against what it has really spent. Nothing is spent, paid or sent for
  * approval. A paused agent is refused by Lens; the page says so in the reference's words.
  */
-function WouldItPass({
-  agent,
-  book,
-  modelGroups,
-  providers,
-}: {
-  agent: Agent
-  book: AgentBook
-  modelGroups: ReturnType<typeof useRuleChoices>['models']
-  providers: ReturnType<typeof useRuleChoices>['providers']
-}) {
-  const figure = useFigure()
+function WouldItPass({ agent, book, peg }: { agent: Agent; book: AgentBook; peg: number }) {
   const others = book.agents.filter((a) => a.id !== agent.id && !a.archived_at)
-  const [what, setWhat] = useState('')
+  const [payee, setPayee] = useState(others[0]?.id ?? '')
   const [amount, setAmount] = useState('')
-  const micros = parseLXC(amount)
-  const payee = what.startsWith('agent:') ? what.slice(6) : null
-  const model = what.startsWith('model:') ? what.slice(6) : ''
-  const provider = providers[modelGroups.findIndex((g) => g.options.some((o) => o.value === model))]?.value ?? ''
+  const typed = parseDollars(amount, peg)
+  const micros = typed !== null && typed > 0 ? typed : null
   const sim = useMutation({
-    mutationFn: () =>
-      agentBankApi.simulate(agent.id, payee ? { amount_ulxc: micros ?? 0, payee: { kind: 'agent', id: payee } } : { amount_ulxc: micros ?? 0, model, provider }),
+    mutationFn: () => agentBankApi.simulate(agent.id, { amount_ulxc: micros ?? 0, payee: { kind: 'agent', id: payee } }),
   })
   const [noAmount, setNoAmount] = useState(false)
   return (
@@ -1030,41 +970,27 @@ function WouldItPass({
         }}
       >
         <Select
-          aria-label={`What ${agent.name} would do`}
-          value={what}
+          aria-label={`Who ${agent.name} would pay`}
+          value={payee}
           onChange={(e) => {
-            setWhat(e.target.value)
+            setPayee(e.target.value)
             sim.reset()
           }}
         >
-          <option value="">A question to any model</option>
-          {modelGroups
-            .filter((g) => g.options.length > 0)
-            .map((g) => (
-              <optgroup key={g.label} label={`A question to ${g.label}`}>
-                {g.options.map((o) => (
-                  <option key={o.value} value={`model:${o.value}`}>
-                    {o.label}
-                  </option>
-                ))}
-              </optgroup>
+          <optgroup label="A payment to">
+            {others.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
             ))}
-          {others.length > 0 ? (
-            <optgroup label="A payment to">
-              {others.map((a) => (
-                <option key={a.id} value={`agent:${a.id}`}>
-                  {a.name}
-                </option>
-              ))}
-            </optgroup>
-          ) : null}
+          </optgroup>
         </Select>
         <span className="flex flex-wrap gap-2">
           <Input
             className="min-w-0 flex-1"
-            aria-label={`Amount in LXC to try for ${agent.name}`}
+            aria-label={`Amount in dollars to try for ${agent.name}`}
             inputMode="decimal"
-            unit="LXC"
+            unit="USD"
             value={amount}
             onChange={(e) => {
               setAmount(e.target.value)
@@ -1078,10 +1004,10 @@ function WouldItPass({
       </form>
       {noAmount ? (
         <p role="alert" className="mt-2 text-body text-ink">
-          Give an amount in LXC first.
+          Give an amount in dollars first.
         </p>
       ) : null}
-      {sim.data ? <Verdict agent={agent} book={book} answer={sim.data} figure={figure} /> : null}
+      {sim.data ? <Verdict agent={agent} book={book} answer={sim.data} /> : null}
       {sim.isError ? (
         <p role="alert" className="mt-2 text-body text-ink">
           {refusalText(sim.error)}
@@ -1091,7 +1017,8 @@ function WouldItPass({
   )
 }
 
-function Verdict({ agent, book, answer, figure }: { agent: Agent; book: AgentBook; answer: RuleSimulation; figure: (ulxc: number) => string }) {
+function Verdict({ agent, book, answer }: { agent: Agent; book: AgentBook; answer: RuleSimulation }) {
+  const words = useLensWords()
   const sentence = (s: string) => `${s.charAt(0).toUpperCase()}${s.slice(1)}${s.endsWith('.') ? '' : '.'}`
   const why =
     answer.verdict === 'allowed'
@@ -1100,8 +1027,7 @@ function Verdict({ agent, book, answer, figure }: { agent: Agent; book: AgentBoo
         ? 'Every agent is paused, so its requests are refused until you start them again.'
         : answer.verdict === 'refused' && agent.paused_at
           ? `${agent.name} is paused, so its requests are refused until you resume it.`
-          : sentence(answer.reason)
-  const short = answer.verdict !== 'refused' && answer.amount_ulxc > answer.balance_ulxc ? ` It holds only ${figure(answer.balance_ulxc)}, so it could not pay this until it is funded.` : ''
+          : sentence(words(answer.reason))
   return (
     <p role={answer.verdict === 'allowed' ? 'status' : 'alert'} className="mt-3 flex flex-wrap items-center gap-2 text-body text-ink" data-testid="rule-verdict">
       {answer.verdict === 'allowed' ? (
@@ -1118,8 +1044,7 @@ function Verdict({ agent, book, answer, figure }: { agent: Agent; book: AgentBoo
         </Chip>
       )}
       <span>
-        {why}
-        {short} Nothing was spent.
+        {why} Nothing was spent.
       </span>
     </p>
   )

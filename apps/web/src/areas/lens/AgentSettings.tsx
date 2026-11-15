@@ -11,7 +11,6 @@ import {
   type IconName,
   Input,
   KindTile,
-  Money,
   faceColours,
   faceOf,
   faceShapes,
@@ -32,14 +31,13 @@ import { type Agent, type AgentArchive, agentBankApi, refusalText } from './agen
 export interface SettingsForms {
   keyForm: React.ReactNode
   card: React.ReactNode
-  topUp: React.ReactNode
   boost: React.ReactNode
-  pay: React.ReactNode
   schedules: React.ReactNode
   credential: React.ReactNode
 }
 
-type Open = 'look' | 'key' | 'card' | 'topup' | 'boost' | 'pay' | 'schedules' | 'prompts' | 'credential' | 'archive' | null
+// B61.14 — Automatic top-up and Pay another agent move LXC, which is parked: they are not drawn.
+type Open = 'look' | 'key' | 'card' | 'boost' | 'schedules' | 'prompts' | 'credential' | 'archive' | null
 
 const CARD_CURRENCY: Record<string, string> = {
   gbp: 'pounds',
@@ -224,8 +222,7 @@ export function ArchiveDialog({
       }
     >
       <p>
-        Archiving {agent.name} moves the <Money ulxc={agent.balance_ulxc} /> it holds back to the workspace, stops its keys working, and ends its top-up and
-        schedules. Its statement is kept. It cannot be undone.
+        Archiving {agent.name} stops its keys working and ends its schedules. Its statement is kept. It cannot be undone.
       </p>
       {archive.isError ? (
         <p role="alert" className="text-caption text-ink">
@@ -286,8 +283,8 @@ function PromptSchedules({ agent }: { agent: Agent }) {
 function ownershipLine(agent: Agent): string {
   if (agent.owner_user_id === undefined) return `${agent.name}’s owner could not be read just now`
   if (agent.owner_user_id === '') return `Nobody owns ${agent.name} yet. Claim it under Money`
-  if (agent.verified) return 'Its owner is verified: this workspace has bought LXC with a card, or Talyvor vouches for it'
-  return 'Its owner is not verified yet: buying LXC with a card verifies this workspace'
+  if (agent.verified) return 'Its owner is verified: this workspace has paid by card, or Talyvor vouches for it'
+  return 'Its owner is not verified yet: paying by card verifies this workspace'
 }
 
 /** B57.22 — the Settings section: one row for everything an agent's owner can set or do on its page. */
@@ -299,10 +296,6 @@ export function AgentSettings({ agent, forms, onArchived }: { agent: Agent; form
   const card = useQuery({
     queryKey: cardKey(agent.id),
     queryFn: () => agentBankApi.card(agent.id),
-  })
-  const topUp = useQuery({
-    queryKey: ['agent-topup', agent.id],
-    queryFn: () => agentBankApi.topUp(agent.id),
   })
   const schedules = useQuery({
     queryKey: SCHEDULES_KEY,
@@ -323,9 +316,7 @@ export function AgentSettings({ agent, forms, onArchived }: { agent: Agent; form
   const panels: [Exclude<Open, null>, string, React.ReactNode][] = [
     ['key', 'Its key', forms.keyForm],
     ['card', 'Its card', forms.card],
-    ['topup', 'Automatic top-up', forms.topUp],
     ['boost', 'Limit boost', forms.boost],
-    ['pay', 'Pay another agent', forms.pay],
     ['schedules', 'Scheduled payments', forms.schedules],
     ['credential', 'Its credential', forms.credential],
   ]
@@ -352,30 +343,10 @@ export function AgentSettings({ agent, forms, onArchived }: { agent: Agent; form
             onOpen={() => setOpen('card')}
           />
           <SettingRow
-            icon="coin"
-            title="Automatic top-up"
-            line={
-              topUp.data ? (
-                <>
-                  Below <Money ulxc={topUp.data.below_ulxc} />, topped back up to <Money ulxc={topUp.data.to_ulxc} />
-                </>
-              ) : (
-                `${n} is not topped up automatically`
-              )
-            }
-            onOpen={() => setOpen('topup')}
-          />
-          <SettingRow
             icon="arrow"
             title="Limit boost"
             line="Raise one of its limits for a while, signed like an approval; it goes back by itself"
             onOpen={() => setOpen('boost')}
-          />
-          <SettingRow
-            icon="agents"
-            title="Pay another agent"
-            line={`Judged by ${n}’s rules. It stays inside this workspace`}
-            onOpen={() => setOpen('pay')}
           />
           <SettingRow
             icon="clock"

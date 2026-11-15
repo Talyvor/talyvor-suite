@@ -26,7 +26,6 @@ function refusal(err: unknown, nothing: string): string {
 export function AgentCard({ agent, book }: { agent: Agent; book: AgentBook }) {
   const qc = useQueryClient()
   const [dialog, setDialog] = useState<'resume' | 'start-all' | null>(null)
-  const safe = useQuery({ queryKey: SAFE_TO_SPEND_KEY, queryFn: agentBankApi.safeToSpend })
   const forecast = useQuery({ queryKey: FORECAST_KEY, queryFn: agentBankApi.forecast })
   const rules = useQuery({ queryKey: rulesKey(agent.id), queryFn: () => agentBankApi.rules(agent.id) })
   const card = useQuery({ queryKey: cardKey(agent.id), queryFn: () => agentBankApi.card(agent.id) })
@@ -42,7 +41,6 @@ export function AgentCard({ agent, book }: { agent: Agent; book: AgentBook }) {
 
   const allPaused = !!book.all_paused_at
   const running = !agent.paused_at && !allPaused
-  const safeFigure = (safe.data?.agents ?? []).find((s) => s.agent_id === agent.id)?.figures?.find((f) => f.currency === 'LXC')
   const month = forecast.data ? (forecast.data.agents ?? []).find((f) => f.agent_id === agent.id) : undefined
   const spent = forecast.data ? (month?.spent_ulxc ?? 0) : null
   const budget = rules.data?.monthly_limit_ulxc ?? 0
@@ -69,20 +67,6 @@ export function AgentCard({ agent, book }: { agent: Agent; book: AgentBook }) {
         <Link to={`/agents/${agent.id}`} className={`font-display text-body font-semibold text-ink ${pocketFocusRing}`}>
           {agent.name}
         </Link>
-        <div className="mt-1" data-testid={`agent-card-balance-${agent.id}`}>
-          <Money ulxc={agent.balance_ulxc} className="font-display text-bar text-ink" />
-        </div>
-        <div className="text-caption text-ink-3" data-testid={`agent-card-safe-${agent.id}`}>
-          {safe.isError ? (
-            'Safe to spend could not be read just now.'
-          ) : safeFigure ? (
-            <>
-              <Money ulxc={safeFigure.safe_to_spend} /> safe to spend
-            </>
-          ) : (
-            'Reading safe to spend…'
-          )}
-        </div>
       </div>
       <div className="grid gap-1.5">
         {pct !== null ? <Bar value={pct / 100} label={`${pct}% of budget used`} /> : null}

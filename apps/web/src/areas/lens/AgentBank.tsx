@@ -30,7 +30,7 @@ import { NoLiveKey } from './KeyRecovery'
 import { PageLinks } from '../../components/PageLinks'
 import { AgentAnalytics } from './AgentAnalytics'
 import { AlertChannels } from './AlertChannels'
-import { AgentCard, MoveLxc } from './AgentCard'
+import { AgentCard } from './AgentCard'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { HelperPicker } from '../../cards/HelperPicker'
@@ -60,7 +60,6 @@ import {
   type AgentRulesVersion,
   type AgentRuleBoost,
   type AgentSchedule,
-  type AgentTopUp as AgentTopUpValue,
   type Mandate,
   type PasskeyAssertion,
   type PaymentRequest,
@@ -70,7 +69,6 @@ import {
   type StatementLine,
   AgentBankError,
   agentBankApi,
-  approvalNamedIn,
   formatMinor,
   limitText,
   parseLXC,
@@ -494,66 +492,6 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
   )
 }
 
-/** B19.21 — below one balance, the workspace tops the agent back up to another (Lens B19.8), once per dip. */
-function AgentTopUpCard({ agent }: { agent: Agent }) {
-  const topUp = useQuery({ queryKey: ['agent-topup', agent.id], queryFn: () => agentBankApi.topUp(agent.id) })
-  return topUp.isError ? (
-    <p>{readFailure(topUp.error, 'Its top-up')}</p>
-  ) : topUp.isPending ? (
-    <p>Reading…</p>
-  ) : (
-    <TopUpForm key={topUp.dataUpdatedAt} agent={agent} current={topUp.data} />
-  )
-}
-
-function TopUpForm({ agent, current }: { agent: Agent; current: AgentTopUpValue | null }) {
-  const qc = useQueryClient()
-  const [below, setBelow] = useState(current ? limitText(current.below_ulxc) : '')
-  const [to, setTo] = useState(current ? limitText(current.to_ulxc) : '')
-  const belowMicros = parseLXC(below)
-  const toMicros = parseLXC(to)
-  const refresh = () => qc.invalidateQueries({ queryKey: ['agent-topup', agent.id] })
-  const save = useMutation({ mutationFn: () => agentBankApi.setTopUp(agent.id, belowMicros ?? 0, toMicros ?? 0), onSettled: refresh })
-  const remove = useMutation({ mutationFn: () => agentBankApi.removeTopUp(agent.id), onSettled: refresh })
-  return (
-    <form
-      className="grid gap-3.5"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (belowMicros !== null && toMicros !== null && !save.isPending) save.mutate()
-      }}
-    >
-      <p data-testid="agent-topup">
-        {current ? (
-          <>
-            When {agent.name} holds less than <PocketMoney ulxc={current.below_ulxc} />, the workspace tops it up to <PocketMoney ulxc={current.to_ulxc} />.
-          </>
-        ) : (
-          `${agent.name} is not topped up automatically.`
-        )}
-      </p>
-      <Field label={`Top ${agent.name} up below, in LXC`}>
-        <PocketInput inputMode="decimal" placeholder="0" unit="LXC" value={below} onChange={(e) => setBelow(e.target.value)} />
-      </Field>
-      <Field label={`Top ${agent.name} up to, in LXC`}>
-        <PocketInput inputMode="decimal" placeholder="0" unit="LXC" value={to} onChange={(e) => setTo(e.target.value)} />
-      </Field>
-      <div className="flex flex-wrap justify-end gap-2.5">
-        {current ? (
-          <PocketButton type="button" variant="secondary" disabled={remove.isPending} onClick={() => remove.mutate()}>
-            Remove
-          </PocketButton>
-        ) : null}
-        <PocketButton type="submit" disabled={save.isPending} disabledReason={belowMicros === null || toMicros === null ? 'Type both amounts in LXC first.' : undefined}>
-          {current ? 'Change top-up' : 'Set top-up'}
-        </PocketButton>
-      </div>
-      {save.isError ? <Note ok={false}>{refusalText(save.error)}</Note> : null}
-      {remove.isError ? <Note ok={false}>{refusalText(remove.error)}</Note> : null}
-    </form>
-  )
-}
-
 /**
  * B28.305 — a new agent can start from a rule template: created, then its rules saved as the template, in
  * the one click. When Lens refuses the rules the agent still exists, so it opens and the note says so.
@@ -671,54 +609,6 @@ function AgentList({ agents, selected, onSelect }: { agents: Agent[]; selected: 
           </div>
         </Row>
       ))}
-    </Card>
-  )
-}
-
-function Money({ agent, book }: { agent: Agent; book: AgentBook }) {
-  const qc = useQueryClient()
-  const [moving, setMoving] = useState(false)
-  // B19.23 — Lens B19.11 gives an agent with no owner no balance, so it is claimed before it is funded.
-  const claim = useMutation({
-    mutationFn: () => agentBankApi.claim(agent.id),
-    onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
-  })
-  if (agent.owner_user_id === '') {
-    return (
-      <Card>
-        <CardHeader>Money</CardHeader>
-        <div className="flex flex-col gap-2 px-gutter py-3">
-          <p className="text-body text-ink" data-testid="agent-ownerless">
-            {agent.name} has no owner, so it cannot be funded: Lens gives an agent a balance, a top-up or a payment
-            only once a person of this workspace owns it. Claim it to become its owner.
-          </p>
-          <div>
-            <Button disabled={claim.isPending} onClick={() => claim.mutate()}>
-              Claim {agent.name}
-            </Button>
-          </div>
-          {claim.isError ? <Note ok={false}>{refusalText(claim.error)}</Note> : null}
-        </div>
-      </Card>
-    )
-  }
-  // B57.16 — funding and taking back happen in Move LXC, the dialog the agent's page opens.
-  return (
-    <Card>
-      <CardHeader>Money</CardHeader>
-      <div className="flex flex-col gap-2 px-gutter py-3">
-        <p className="text-body text-ink">
-          {agent.name} holds {lxc(agent.balance_ulxc)}. The workspace has {lxc(book.unallocated_ulxc)} free to fund it.
-        </p>
-        {claim.isSuccess && claim.data.agent_id === agent.id ? <Note ok>You own {agent.name} now. Fund it here.</Note> : null}
-        <div>
-          {/* B57.20 — not the primary: Edit rules on the agent's page above is the page's one primary action. */}
-          <Button variant="default" onClick={() => setMoving(true)}>
-            Move LXC
-          </Button>
-        </div>
-        <MoveLxc agent={agent} book={book} open={moving} onClose={() => setMoving(false)} />
-      </div>
     </Card>
   )
 }
@@ -1676,101 +1566,6 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
   )
 }
 
-function Pay({
-  agent,
-  agents,
-  waiting,
-  onHeld,
-}: {
-  agent: Agent
-  agents: Agent[]
-  waiting: Record<string, HeldPayment>
-  onHeld: (approvalID: string, p: HeldPayment) => void
-}) {
-  const qc = useQueryClient()
-  const others = agents.filter((a) => a.id !== agent.id)
-  const [to, setTo] = useState<string | null>(null)
-  const [amount, setAmount] = useState('')
-  const [memo, setMemo] = useState('')
-  const micros = parseLXC(amount)
-  const payee = others.find((a) => a.id === to) ?? null
-  const pay = useMutation({
-    mutationFn: () => agentBankApi.pay(agent.id, payee?.id ?? '', micros ?? 0, memo.trim()),
-    onSuccess: () => {
-      setAmount('')
-      setMemo('')
-    },
-    onError: (err) => {
-      const approval = approvalNamedIn(err)
-      if (approval && payee && micros !== null) onHeld(approval, { from: agent.id, to: payee.id, amount: micros, memo: memo.trim() })
-    },
-    onSettled: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: BOOK_KEY }),
-        qc.invalidateQueries({ queryKey: APPROVALS_KEY }),
-        qc.invalidateQueries({ queryKey: statementKey(agent.id) }),
-      ]),
-  })
-  const held = approvalNamedIn(pay.error)
-  // Once its approval sent the payment, Approvals says so and this refusal is no longer true.
-  const settled = held !== null && !(held in waiting)
-  return (
-    <form
-      className="grid gap-3.5"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (payee && micros !== null && !pay.isPending) pay.mutate()
-      }}
-    >
-      <p>
-        {agent.name} holds <PocketMoney ulxc={agent.balance_ulxc} />. Judged by its rules, like any request it makes. It stays inside this workspace.
-      </p>
-      <div className="grid gap-1.5">
-        <span className="text-body font-semibold text-ink-2">Pay to</span>
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Pay to">
-          {others.map((a) => (
-            <PocketButton key={a.id} size="sm" variant={to === a.id ? 'primary' : 'secondary'} aria-pressed={to === a.id} onClick={() => setTo(a.id)}>
-              {a.name}
-            </PocketButton>
-          ))}
-        </div>
-      </div>
-      <Field label={`Payment in LXC from ${agent.name}`}>
-        <PocketInput inputMode="decimal" placeholder="0" unit="LXC" value={amount} onChange={(e) => setAmount(e.target.value)} />
-      </Field>
-      {micros !== null ? (
-        <p className="text-body text-ink-3" data-testid="pay-amount">
-          <PocketMoney ulxc={micros} />
-        </p>
-      ) : null}
-      <Field label="What the payment is for">
-        <PocketInput placeholder="What it is for" value={memo} onChange={(e) => setMemo(e.target.value)} />
-      </Field>
-      <div className="flex justify-end">
-        <PocketButton
-          type="submit"
-          disabled={pay.isPending}
-          disabledReason={!payee ? 'Pick who it pays first.' : micros === null ? 'Type an amount in LXC first.' : undefined}
-        >
-          {pay.isPending ? 'Paying…' : 'Pay'}
-        </PocketButton>
-      </div>
-      {pay.isSuccess ? (
-        <Note ok>
-          Paid <PocketMoney ulxc={pay.data.amount_ulxc} /> to {payee?.name ?? 'the agent'}. {agent.name} now holds{' '}
-          <PocketMoney ulxc={pay.data.from_balance_ulxc} />.
-        </Note>
-      ) : null}
-      {pay.isError && !settled ? (
-        <Note ok={false}>
-          Refused. {refusalText(pay.error)}
-          {held ? ' It is waiting in Approvals; approve it there and this payment is sent.' : ''}
-        </Note>
-      ) : null}
-    </form>
-  )
-}
-
 function IssueKey({ agent }: { agent: Agent }) {
   const qc = useQueryClient()
   const [issued, setIssued] = useState<AgentKey | null>(null)
@@ -1955,7 +1750,7 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
               <th className="py-2 font-normal">What</th>
               <th className="py-2 text-right font-normal">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1">
-                  Amount <Term term="LXC">{TERMS.lxc}</Term>
+                  Amount
                 </span>
               </th>
               <th className="px-gutter py-2 text-right font-normal">
@@ -2838,7 +2633,11 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
         </p>
         {book.isSuccess ? (
           <>
-            {hasAgents ? <Totals book={book.data} /> : null}
+            {hasAgents ? (
+              <IfArea area="gateway">
+                <Totals book={book.data} />
+              </IfArea>
+            ) : null}
             {/* A pause already set still says so: it holds an agent created later too. */}
             {hasAgents || book.data.all_paused_at ? <PauseEveryAgent book={book.data} /> : null}
             {hasAgents ? (
@@ -2911,7 +2710,6 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
               <div className="wide:max-w-sm">
                 <AgentCard agent={agent} book={book.data} />
               </div>
-              <Money agent={agent} book={book.data} />
               <RulesSummary key={`rules-${agent.id}`} agent={agent} agents={live} />
               {moneyOnPage ? null : <AgentMoneySection key={`money-${agent.id}`} agent={agent} />}
               {moneyOnPage ? null : <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />}
@@ -2924,14 +2722,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
                 forms={{
                   keyForm: <IssueKey agent={agent} />,
                   card: <AgentCardPanel agent={agent} />,
-                  topUp: <AgentTopUpCard agent={agent} />,
                   boost: <BoostForm agent={agent} />,
-                  pay:
-                    live.length > 1 ? (
-                      <Pay agent={agent} agents={live} waiting={held} onHeld={(id, p) => setHeld((h) => ({ ...h, [id]: p }))} />
-                    ) : (
-                      <p>Create a second agent to pay it from this one.</p>
-                    ),
                   schedules: <Schedules agent={agent} agents={live} nameOf={nameOf} />,
                   credential: <AgentCredentialCard agent={agent} />,
                 }}

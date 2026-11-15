@@ -9,7 +9,7 @@ import { WorkspaceLabel, approvalCapability } from '../../labels/workspace'
 import { isSessionExpired } from '../../lib/productState'
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, rulesKey, useKeys } from './AgentBank'
 import { type AgentApproval, agentBankApi } from './agentBankApi'
-import { lxcPartOf, useMoney } from './money'
+import { useMoney } from './money'
 import { signApproval } from './passkeys'
 
 // ApprovalSheet.tsx — B57.15: the approval sheet (Pocket w-home+sheet-A, w-home+sheet-L), over the page you are on.
@@ -209,7 +209,8 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
         </>
       ),
     })
-  if (from) {
+  // B61.14 — the LXC balance is parked and not drawn, so a request it pays names no "Paid from".
+  if (from && from.kind !== 'lxc') {
     const b = from.balance_minor
     facts.push({
       label: 'Paid from',
@@ -218,7 +219,7 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
           from.name
         ) : (
           <>
-            {from.name} (holds {from.kind === 'lxc' ? <Money ulxc={b} /> : <Money minor={b} currency={from.currency} />})
+            {from.name} (holds <Money minor={b} currency={from.currency} />)
           </>
         ),
     })
@@ -232,11 +233,7 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
       label: 'Budget left after',
       value: (
         <span data-testid="approval-budget-left" className="font-figure">
-          {left !== null && of !== null ? `${sign}${left} of ${of} ` : null}
-          <span className="text-micro font-semibold text-ink-3">
-            {sign}
-            {lxcPartOf(Math.abs(budgetLeft), limit)}
-          </span>
+          {left !== null && of !== null ? `${sign}${left} of ${of}` : '—'}
         </span>
       ),
     })

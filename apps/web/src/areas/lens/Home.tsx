@@ -23,7 +23,7 @@ import {
   useAccount,
 } from './agentBankApi'
 import { approvalSheetTo } from './ApprovalSheet'
-import { type FXRates, FX_KEY, fetchFX, useMoney } from './money'
+import { type FXRates, FX_KEY, fetchFX, useLensWords, useMoney } from './money'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { walletKey } from './AgentMoneyWallet'
 import { cardKey } from './AgentCardPanel'
@@ -43,7 +43,7 @@ import { SharingLine } from './Sharing'
 //      Review (B57.15's sheet over Home, or a prepared payment's own card, B55.10). Not drawn when nothing waits.
 //   3. The total: every currency account and agent wallet the workspace holds, in US dollars first at the ECB's rates
 //      (the BFF's /api/fx), split into Fiat and Stablecoin for a Hybrid account; only the sides the account's kind has
-//      (SPEC 3.3). Under it what the agents hold in LXC, what is not yet given to an agent, and Lens's forecast.
+//      (SPEC 3.3). B61.14: the accounts' total alone; LXC, what the agents hold in it and its forecast are parked.
 //   4. The agents: each one's fiat and stablecoin balance and its month against its monthly budget, the plan's
 //      "3 of 3 on Free" (Lens's /v1/workspaces/{ws}/plan through GET /api/plan), and the cards.
 // Every figure is Lens's, read through the same BFF routes and query keys as the screens that change it. A read that
@@ -209,7 +209,7 @@ export function Home() {
               </div>
             ) : null}
             <div className="min-w-0 wide:col-span-7 wide:col-start-1 wide:row-start-1">
-              <Total book={book.data} agents={agents} shows={shows} forecast={forecast} />
+              <Total agents={agents} shows={shows} />
             </div>
             <div className="min-w-0 wide:col-span-7 wide:col-start-1 wide:row-start-2">
               {agents.length === 0 || onboarding ? (
@@ -258,10 +258,11 @@ export { SAFE_TO_SPEND_KEY } from './AgentCard'
 function MorningBriefing() {
   const here = useLocation()
   const b = useQuery({ queryKey: BRIEFING_KEY, queryFn: agentBankApi.briefing })
+  const words = useLensWords()
   if (b.isError) return <InlineFailure error={b.error} failed="Couldn’t read this morning’s briefing" />
   const line = (
     <span className="text-body text-ink-2" data-testid="home-briefing-line">
-      {b.isPending ? 'Reading…' : b.data.line}
+      {b.isPending ? 'Reading…' : words(b.data.line)}
     </span>
   )
   const items = b.data?.items ?? []
@@ -281,7 +282,7 @@ function MorningBriefing() {
         {items.map((it, i) => {
           const body = (
             <span className="flex min-w-0 flex-col">
-              <span className="text-body text-ink">{it.text}</span>
+              <span className="text-body text-ink">{words(it.text)}</span>
               <span className="text-body text-ink-3">
                 {[it.kind === 'approval' ? it.name : '', it.reason ?? '', it.due_date ? `due ${it.due_date}` : ''].filter((x) => x !== '').join(' · ')}
               </span>
@@ -488,7 +489,7 @@ function BalanceRow({ label, figure, to }: { label: string; figure: React.ReactN
   )
 }
 
-function Total({ book, agents, shows, forecast }: { book: AgentBook; agents: Agent[]; shows: Shows; forecast: UseQueryResult<SpendForecast> }) {
+function Total({ agents, shows }: { agents: Agent[]; shows: Shows }) {
   const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
   // An agent's USDC account is its wallet (Lens B46.4): read for each agent where the account's kind holds coins.
   const wallets = useQueries({
@@ -583,35 +584,7 @@ function Total({ book, agents, shows, forecast }: { book: AgentBook; agents: Age
         </>
       )}
 
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line pt-4 wide:grid-cols-4">
-        <Fact label="Across your agents" testid="home-agents-total">
-          <Money ulxc={book.allocated_ulxc} className={stacked} />
-        </Fact>
-        <Fact label="Not yet given to an agent" testid="home-unallocated">
-          <Money ulxc={book.unallocated_ulxc} className={stacked} />
-        </Fact>
-        <Fact label="Spent this month" testid="home-spent">
-          {forecast.isError ? <InlineFailure error={forecast.error} className="text-body text-ink-3" /> : forecast.data ? <Money ulxc={forecast.data.spent_ulxc} className={stacked} /> : 'Reading…'}
-        </Fact>
-        <Fact label="On pace for" testid="home-forecast">
-          {forecast.isError ? <InlineFailure error={forecast.error} className="text-body text-ink-3" /> : forecast.data ? <Money ulxc={forecast.data.forecast_ulxc} className={stacked} /> : 'Reading…'}
-        </Fact>
-      </dl>
     </Card>
-  )
-}
-
-// B60.3 — LXC to two places is wider: in a fact's narrow column it goes under the dollars, as the reference draws it.
-const stacked = 'grid justify-items-start'
-
-function Fact({ label, testid, children }: { label: string; testid: string; children: React.ReactNode }) {
-  return (
-    <div className="grid gap-0.5">
-      <dt className="text-body text-ink-3">{label}</dt>
-      <dd className="text-ink" data-testid={testid}>
-        {children}
-      </dd>
-    </div>
   )
 }
 

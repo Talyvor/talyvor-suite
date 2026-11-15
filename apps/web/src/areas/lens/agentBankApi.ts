@@ -2401,6 +2401,28 @@ export function parseLXC(text: string): number | null {
   return Number.isSafeInteger(micros) && micros > 0 ? micros : null
 }
 
+/**
+ * B61.14 — an amount a person types in dollars, for a field Lens keeps in µLXC: `4.50` at Lens's peg (`usdPerLXC`
+ * dollars a LXC) → its µLXC. Exact both ways with dollarsText: what is typed is what reads back. Empty is 0 (no limit); null
+ * for anything that is not an amount of dollars, or that comes to no whole µLXC.
+ */
+export function parseDollars(text: string, usdPerLXC: number): number | null {
+  const t = text.trim().replace(/^\$/, '').replace(/,/g, '')
+  if (t === '') return 0
+  if (!/^\d+(\.\d{1,8})?$/.test(t) || !(usdPerLXC > 0)) return null
+  const micros = Math.round((Number(t) * 1_000_000) / usdPerLXC)
+  if (!Number.isSafeInteger(micros) || micros <= 0 || dollarsText(micros, usdPerLXC) !== eightPlaces(Number(t))) return null
+  return micros
+}
+
+/** µLXC → the dollars a field shows for it at Lens's peg, `4.5`; empty for none. Every place kept, so it reads back exact. */
+export function dollarsText(micros: number, usdPerLXC: number): string {
+  return micros > 0 ? eightPlaces((micros * usdPerLXC) / 1_000_000) : ''
+}
+
+/** 4.5 → `4.5`, 0.0000001 → `0.0000001`: to eight places at most, no trailing zeros and never an exponent. */
+const eightPlaces = (n: number) => n.toFixed(8).replace(/\.?0+$/, '')
+
 /** 12,500,000 µLXC → `12.5 LXC`: every µLXC shown, no trailing zeros. */
 export function formatULXC(micros: number): string {
   return `${(micros / 1_000_000).toLocaleString('en-US', { maximumFractionDigits: 6 })} LXC`
