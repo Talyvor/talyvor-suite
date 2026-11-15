@@ -1318,11 +1318,6 @@ export const agentBankApi = {
   pause: (id: string, reason: string) => send<{ paused: boolean }>('POST', `/api/agents/${e(id)}/pause`, { reason }),
   resume: (id: string, assertion?: PasskeyAssertion) => send<{ paused: boolean }>('POST', `/api/agents/${e(id)}/resume`, assertion ? { assertion } : undefined),
   resumeChallenge: (id: string) => send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/${e(id)}/resume-challenge`),
-  /** B59.12: changing the workspace's kind of money is always signed, over the challenge naming the kind (Lens B59.46). */
-  moneyKindChallenge: (money_kind: MoneyKind) =>
-    send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/workspace/account/money-kind/challenge', { money_kind }),
-  changeMoneyKind: (money_kind: MoneyKind, assertion: PasskeyAssertion) =>
-    send<WorkspaceAccount>('PUT', '/api/workspace/account/money-kind', { money_kind, assertion }),
   /** B19.10: once the workspace has a passkey, a decision carries an assertion over the approval's challenge. */
   /** B41.4 — approving with always_allow also saves that allowance for the approval's payee. */
   /** B55.19 — declining can say why (Lens B55.18); the agent sees it. */
@@ -2713,11 +2708,6 @@ export function shows({ account_type, money_kind }: WorkspaceAccount): Shows {
 
 export const TYPE_LABEL: Record<AccountType, string> = { business: 'Business', personal: 'Personal' }
 export const KIND_LABEL: Record<MoneyKind, string> = { fiat: 'Fiat only', stablecoin: 'Stablecoin and crypto only', hybrid: 'Hybrid' }
-export const KIND_LINE: Record<MoneyKind, string> = {
-  fiat: 'Your agents pay ordinary bills with cards and bank transfers.',
-  stablecoin: 'Your agents work on chain.',
-  hybrid: 'Both side by side, under one set of rules.',
-}
 const KIND_CHIP: Record<MoneyKind, string> = { fiat: 'Fiat', stablecoin: 'Stablecoin', hybrid: 'Hybrid' }
 
 /** The account's chip, as the switcher shows it: "Business · Hybrid". */
