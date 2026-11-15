@@ -508,8 +508,17 @@ function think(messages: Msg[]): string {
   }
   let m
   // An explorer (B17.5), scripted: open Chat, type a question, send it, note a finding, stop.
-  if ((m = /^You are an explorer testing Talyvor[\s\S]*?\nStep (\d+) of/.exec(q))) {
+  // B61.56 — with the hidden areas hidden, Chat is one: it asks for Chat (and is refused), notes a finding where it is, stops.
+  // B61.56 — "Step N of" is mid-line in the prompt ("Today is … Step 1 of at most 200"): never at a line's start.
+  if ((m = /^You are an explorer testing Talyvor[\s\S]*?\bStep (\d+) of at most/.exec(q))) {
     const box = /\[(\d+)\] textarea/.exec(q)?.[1]
+    if (HIDDEN.length > 0) {
+      switch (Number(m[1])) {
+        case 1: return '{"action":"goto","path":"/chat"}'
+        case 2: return '{"action":"finding","note":"(stub explorer) nothing is wrong on the launch version; this lead is here to be read","severity":"low"}'
+        default: return '{"action":"done"}'
+      }
+    }
     switch (Number(m[1])) {
       case 1: return '{"action":"goto","path":"/chat"}'
       case 2: return box === undefined ? '{"action":"done"}' : `{"action":"fill","target":${box},"text":"What is 2 + 2?"}`

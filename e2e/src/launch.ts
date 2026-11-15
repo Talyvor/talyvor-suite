@@ -192,6 +192,8 @@ export const inLaunch = (id: string): boolean => {
 export interface LaunchCut {
   played: number
   left_out: string[]
+  /** B61.56 — of the run's explorers, how many took a step on the launch pages; absent until they have run. */
+  explorers?: { explored: number; of: number }
 }
 
 /** Each journey with the scenarios outside the launch version taken out, and what that played and left out. */
@@ -210,7 +212,8 @@ export function launchCut(journeys: readonly Scenario[][]): { journeys: Scenario
 export function launchLine(cut: LaunchCut): string {
   const why = (id: string) => (id in LAUNCH_CANNOT_PLAY ? `: ${LAUNCH_CANNOT_PLAY[id]}` : '')
   return `Launch version: ${cut.played} played, ${cut.left_out.length} left out` +
-    (cut.left_out.length === 0 ? '' : ` (${cut.left_out.map((id) => `\`${id}\`${why(id)}`).join(', ')})`)
+    (cut.left_out.length === 0 ? '' : ` (${cut.left_out.map((id) => `\`${id}\`${why(id)}`).join(', ')})`) +
+    (cut.explorers === undefined ? '' : `; ${cut.explorers.explored} of ${cut.explorers.of} explorers explored the launch pages`)
 }
 
 // ── THE COVERAGE MAP, LAUNCH SCREENS AND ROUTES ONLY ────────────────────────────────────────────────
@@ -261,6 +264,12 @@ function bffHidden(path: string, h: HiddenPaths): boolean {
   const agent = path.startsWith('/api/agents/') ? path.slice('/api/agents/'.length).split('/') : []
   if (agent.slice(0, 2).some((seg) => h.bffAgentSegments.includes(seg))) return true
   return h.bff.some((p) => (p.endsWith('/') ? path.startsWith(p) : under(path, p) || path.startsWith(`${p}-`)))
+}
+
+/** B61.56 — whether the web app hides a screen's address (its AREA_PATHS), the address's query and fragment aside. */
+export function hiddenScreen(path: string, h: HiddenPaths): boolean {
+  const at = path.split(/[?#]/)[0].replace(/(.)\/$/, '$1')
+  return h.screens.some((p) => under(at, p))
 }
 
 /** The inventory with every hidden screen and route taken out, Track's and Docs' routes with it. */
