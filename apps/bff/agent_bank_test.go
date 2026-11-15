@@ -157,9 +157,34 @@ func TestAgentBankForwardsToTheSessionsWorkspaceWithRebuiltBodies(t *testing.T) 
 	if want := "POST /v1/workspaces/" + ws + "/agents/agt_1/fund {\"amount_ulxc\":10000000}"; f.got[0] != want {
 		t.Fatalf("Lens received %q, want %q", f.got[0], want)
 	}
-	if !strings.HasPrefix(f.got[1], "PUT /v1/workspaces/"+ws+"/agents/agt_1/rules {\"max_per_request_ulxc\":0,\"daily_limit_ulxc\":5000000,") ||
+	if !strings.HasPrefix(f.got[1], "PUT /v1/workspaces/"+ws+"/agents/agt_1/rules {\"daily_limit_ulxc\":5000000,") ||
 		strings.Contains(f.got[1], "secret") {
 		t.Fatalf("Lens received %q", f.got[1])
+	}
+}
+
+// B61.87 — a save in the rules' own currency reaches Lens with the currency and each limit in its minor units, and no
+// µLXC limit the client did not name: Lens refuses one on rules held in pounds or euros.
+func TestAgentRulesInTheirCurrencyReachLensWithNoULXCLimit(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	rec := doJSON(a, http.MethodPut, "/api/agents/agt_1/rules",
+		`{"currency":"GBP","max_per_payment_minor":5000,"hourly_limit_minor":0,"daily_limit_minor":12550,"weekly_limit_minor":0,"monthly_limit_minor":300000,"approval_above_minor":2500}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("rules = %d %s", rec.Code, rec.Body.String())
+	}
+	got := f.got[len(f.got)-1]
+	for _, want := range []string{`"currency":"GBP"`, `"max_per_payment_minor":5000`, `"hourly_limit_minor":0`, `"daily_limit_minor":12550`,
+		`"weekly_limit_minor":0`, `"monthly_limit_minor":300000`, `"approval_above_minor":2500`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Lens received %q, want %s in it", got, want)
+		}
+	}
+	if strings.Contains(got, "_limit_ulxc") || strings.Contains(got, "max_per_request_ulxc") || strings.Contains(got, "approval_above_ulxc") {
+		t.Fatalf("Lens received a µLXC limit nobody named: %q", got)
+	}
+	doJSON(a, http.MethodPost, "/api/agents/agt_1/rules/simulate", `{"amount_minor":2501,"currency":"EUR","payee":{"kind":"agent","id":"agt_bea"}}`)
+	if got := f.got[len(f.got)-1]; !strings.Contains(got, `"amount_minor":2501,"currency":"EUR"`) {
+		t.Fatalf("Lens received %q, want the amount in euro cents", got)
 	}
 }
 
@@ -222,7 +247,7 @@ func TestAgentRulesCarryTheAllowedListings(t *testing.T) {
 }
 
 // B28.24 — the hourly and weekly caps reach Lens with the other rules; a save that does not name them
-// sends null, which Lens reads as "keep the caps it holds", never as "no cap".
+// leaves them out (B61.87; null before), which Lens reads as "keep the caps it holds", never as "no cap".
 func TestAgentRulesCarryTheHourlyAndWeeklyCaps(t *testing.T) {
 	a, f := newFakeLensAgentBank(t)
 	doJSON(a, http.MethodPut, "/api/agents/agt_1/rules", `{"hourly_limit_ulxc":1000000,"weekly_limit_ulxc":20000000}`)
@@ -233,8 +258,8 @@ func TestAgentRulesCarryTheHourlyAndWeeklyCaps(t *testing.T) {
 	if !strings.Contains(f.got[0], `"hourly_limit_ulxc":1000000`) || !strings.Contains(f.got[0], `"weekly_limit_ulxc":20000000`) {
 		t.Fatalf("Lens received %q, want both caps", f.got[0])
 	}
-	if !strings.Contains(f.got[1], `"hourly_limit_ulxc":null`) || !strings.Contains(f.got[1], `"weekly_limit_ulxc":null`) {
-		t.Fatalf("Lens received %q, want both caps null when the save does not name them", f.got[1])
+	if strings.Contains(f.got[1], `"hourly_limit_ulxc"`) || strings.Contains(f.got[1], `"weekly_limit_ulxc"`) {
+		t.Fatalf("Lens received %q, want both caps left out when the save does not name them", f.got[1])
 	}
 }
 
@@ -792,11 +817,11 @@ func TestRulesChallengeAndSignedChangesReachLens(t *testing.T) {
 		t.Fatalf("Lens got %q; want four challenges and three signed changes", f.got)
 	}
 	ends := []string{
-		`/agents/agt_1/rules/challenge {"rules":{"max_per_request_ulxc":0,"daily_limit_ulxc":9000000,`,
+		`/agents/agt_1/rules/challenge {"rules":{"daily_limit_ulxc":9000000,`,
 		`/agents/agt_1/rules/challenge {"rollback_to":3}`,
 		`/agents/agt_1/rules/challenge {"template":"researcher"}`,
 		`/agents/agt_1/rules/challenge {"boost":{"rule":"daily_limit_ulxc","value":50000000,"until":"2026-10-06T18:00:00Z"}}`,
-		`/agents/agt_1/rules {"assertion":` + as + `,"rules":{"max_per_request_ulxc":0,"daily_limit_ulxc":9000000,`,
+		`/agents/agt_1/rules {"assertion":` + as + `,"rules":{"daily_limit_ulxc":9000000,`,
 		`/agents/agt_1/rules/rollback {"version":1,"assertion":` + as + `}`,
 		`/agents/agt_1/rules/boosts {"rule":"daily_limit_ulxc","value":50000000,"until":"2026-10-06T18:00:00Z","assertion":` + as + `}`,
 	}

@@ -120,7 +120,7 @@ describe('Agents (B57.19)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
     await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_4'))
     expect(sent.map((s) => `${s.method} ${s.url}`)).toEqual(['POST /api/agents', 'PATCH /api/agents/agt_4', 'PUT /api/agents/agt_4/rules'])
-    expect(sent[0].body).toEqual({ name: 'Ops' })
+    expect(sent[0].body).toEqual({ name: 'Ops', fiat_currency: 'USD' })
     expect(sent[1].body).toEqual({ description: 'Pays the hosting bills' })
   })
 
@@ -163,7 +163,7 @@ describe('Agents (B57.19)', () => {
 })
 
 // B61.13 — New agent is one of Talyvor's six, named by what it does, or the owner's own. Either way the owner types the
-// name, and sets the four rules the approved rules screen names (W4), in dollars at the peg ($0.10 per LXC here).
+// name, and sets the four rules the approved rules screen names (W4), in the account's currency (B61.87).
 describe('New agent (B61.13)', () => {
   const helpers = ['Remy', 'Sunny', 'Penny', 'Max', 'Nova', 'Ollie']
 
@@ -179,14 +179,16 @@ describe('New agent (B61.13)', () => {
       fireEvent.change(within(dialog).getByLabelText(field), { target: { value } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
     await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_2'))
-    expect(sent[0]).toEqual({ method: 'POST', url: '/api/agents', body: { name: 'Atlas', colour: 'cobalt' } })
+    expect(sent[0]).toEqual({ method: 'POST', url: '/api/agents', body: { name: 'Atlas', colour: 'cobalt', fiat_currency: 'USD' } })
     expect(sent[1].body).toEqual({ description: 'Research' })
+    // B61.87 — held in the account's currency (dollars here: it has no account in another), in its minor units.
     const read = (await (await fetch('/api/agents/agt_2/rules')).json()) as Record<string, number>
-    expect({ per_payment: read.max_per_request_ulxc, per_day: read.daily_limit_ulxc, per_month: read.monthly_limit_ulxc, ask_above: read.approval_above_ulxc }).toEqual({
-      per_payment: 500 * M,
-      per_day: 2000 * M,
-      per_month: 10000 * M,
-      ask_above: 200 * M,
+    expect({ currency: read.currency, per_payment: read.max_per_payment_minor, per_day: read.daily_limit_minor, per_month: read.monthly_limit_minor, ask_above: read.approval_above_minor }).toEqual({
+      currency: 'USD',
+      per_payment: 5000,
+      per_day: 20000,
+      per_month: 100000,
+      ask_above: 2000,
     })
   })
 
@@ -203,11 +205,11 @@ describe('New agent (B61.13)', () => {
     fireEvent.click(await within(within(dialog).getByTestId('new-agent-more-rules')).findByRole('button', { name: 'Hetzner' }))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
     await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_2'))
-    expect(sent[0].body).toEqual({ name: 'Ledger', colour: 'mint' })
+    expect(sent[0].body).toEqual({ name: 'Ledger', colour: 'mint', fiat_currency: 'USD' })
     expect(sent[1].body).toEqual({ description: 'Bookkeeping' })
     const put = sent.find((s) => s.method === 'PUT')!.body
     // Lens asks above its smallest amount: the first payment, of any size, waits for approval.
-    expect(put).toMatchObject({ max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 0, approval_above_ulxc: 1, allowed_payees: ['pye_1'] })
+    expect(put).toMatchObject({ currency: 'USD', max_per_payment_minor: 0, daily_limit_minor: 0, monthly_limit_minor: 0, approval_above_minor: 1, allowed_payees: ['pye_1'] })
   })
 
   it('offers no helper name, no fixed rule set and no LXC, and keeps Create off until a name is typed', async () => {

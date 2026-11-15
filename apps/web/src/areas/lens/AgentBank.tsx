@@ -42,6 +42,7 @@ import { approvalSheetTo } from './ApprovalSheet'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneySection } from './AgentMoney'
 import { Lxc, pegQuery, useLensWords, useLxcText } from './money'
+import { heldIn, parseRuleAmount } from './rulesCurrency'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
@@ -1440,12 +1441,24 @@ type BoostField = LimitField | 'requests_per_minute'
 /** B28.32 — the limits a boost may raise (Lens's boostableRules), named as the Rules card names them. */
 const BOOSTABLE: readonly (readonly [BoostField, string])[] = [...LIMITS, ['requests_per_minute', 'Requests a minute']]
 
-/** B28.32 — a limit's figure as its rule counts it: money, or requests a minute. */
-function boostFigure(rule: string, v: number): React.ReactNode {
+/** B61.87 — the limits a boost raises on rules held in a currency (Lens B61.12), in its minor units. */
+const MINOR_BOOSTABLE = [
+  ['max_per_payment_minor', 'Limit per request'],
+  ['hourly_limit_minor', 'Hourly limit'],
+  ['daily_limit_minor', 'Daily limit'],
+  ['weekly_limit_minor', 'Weekly limit'],
+  ['monthly_limit_minor', 'Monthly limit'],
+  ['approval_above_minor', 'Ask a person above'],
+] as const
+
+/** B28.32 — a limit's figure as its rule counts it: money in the rules' currency (B61.87), or requests a minute. */
+function boostFigure(rule: string, v: number, currency: string): React.ReactNode {
   return rule === 'requests_per_minute' ? (
     <>
       <span className="font-figure">{v}</span> requests a minute
     </>
+  ) : rule.endsWith('_minor') ? (
+    <span className="font-figure">{formatMinor(v, currency)}</span>
   ) : (
     <PocketMoney ulxc={v} />
   )
@@ -1481,16 +1494,20 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
       return soonest ? Math.min(Math.max(Date.parse(soonest) - Date.now() + 1000, 1000), 2_147_483_647) : false
     },
   })
-  // B61.14 — requests a minute is the parked gateway's: it is not offered for a boost.
-  const settable = BOOSTABLE.filter(([field]) => field !== 'requests_per_minute' && (rules[field] ?? 0) > 0)
+  // B61.14 — requests a minute is the parked gateway's: it is not offered for a boost. B61.87 — rules held in a currency
+  // raise their limits in it, in its minor units; a Lens older than B61.12 names only the µLXC ones.
+  const currency = heldIn(rules)
+  const inCurrency = rules.currency !== undefined
+  const limitOf = (field: string) => (rules[field as keyof AgentRules] as number | undefined) ?? 0
+  const settable: readonly (readonly [string, string])[] = (inCurrency ? MINOR_BOOSTABLE : LIMITS).filter(([field]) => limitOf(field) > 0)
   const [picked, setPicked] = useState('')
   const rule = settable.find(([field]) => field === picked) ?? settable[0]
   const [value, setValue] = useState('')
   const [until, setUntil] = useState(() => localMinute(new Date(Date.now() + 60 * 60_000)))
   const rate = rule?.[0] === 'requests_per_minute'
-  // B61.14 — a limit is raised in dollars at Lens's peg, never LXC.
+  // B61.14 — a limit is raised in money, never LXC: in the rules' currency (B61.87), or dollars at Lens's peg before B61.12.
   const peg = useQuery(pegQuery).data?.usd_per_lxc ?? 0
-  const typed = parseDollars(value, peg)
+  const typed = inCurrency ? parseRuleAmount(value, currency) : parseDollars(value, peg)
   const raisedTo = rate ? (/^\s*\d+\s*$/.test(value) && Number(value) > 0 ? Number(value) : null) : typed !== null && typed > 0 ? typed : null
   const at = new Date(until)
   // B55.14 — a boost always loosens the rules, so once the workspace has a passkey it is signed (Lens B55.13).
@@ -1508,7 +1525,7 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
       void qc.invalidateQueries({ queryKey: boostsKey(agent.id) })
     },
   })
-  const label = (r: string) => BOOSTABLE.find(([field]) => field === r)?.[1] ?? r
+  const label = (r: string) => [...BOOSTABLE, ...MINOR_BOOSTABLE].find(([field]) => field === r)?.[1] ?? r
   const inForce: AgentRuleBoost[] = boosts.data?.boosts ?? []
   const ready = asked !== null && !raise.isPending
   return (
@@ -1520,10 +1537,10 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
           {inForce.map((b) => (
             <li key={b.rule} className="flex flex-wrap items-center gap-2 border-t border-line py-2.5 first:border-t-0" data-testid={`boost-${b.rule}`}>
               <span className="text-ink">
-                {label(b.rule)} raised to {boostFigure(b.rule, b.value)} until <span className="font-figure">{formatWhen(b.until)}</span>,
-                then {boostFigure(b.rule, b.raised_from)} again by itself.
+                {label(b.rule)} raised to {boostFigure(b.rule, b.value, currency)} until <span className="font-figure">{formatWhen(b.until)}</span>,
+                then {boostFigure(b.rule, b.raised_from, currency)} again by itself.
               </span>
-              {(rules[b.rule as BoostField] ?? 0) === b.raised_from ? (
+              {limitOf(b.rule) === b.raised_from ? (
                 <Chip tone="good">In force</Chip>
               ) : (
                 <span className="text-body text-ink-3">No longer applies: the rules have changed this limit since.</span>
@@ -1574,9 +1591,9 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
               ))}
             </Select>
           </Field>
-          <p className="text-body text-ink-3">Now {boostFigure(rule[0], rules[rule[0]] ?? 0)}</p>
+          <p className="text-body text-ink-3">Now {boostFigure(rule[0], limitOf(rule[0]), currency)}</p>
           <Field label={`Raise ${agent.name}’s limit to`}>
-            <PocketInput inputMode={rate ? 'numeric' : 'decimal'} placeholder="0" unit={rate ? 'a minute' : 'USD'} value={value} onChange={(e) => setValue(e.target.value)} />
+            <PocketInput inputMode={rate ? 'numeric' : 'decimal'} placeholder="0" unit={rate ? 'a minute' : inCurrency ? currency : 'USD'} value={value} onChange={(e) => setValue(e.target.value)} />
           </Field>
           <Field label={`Raise ${agent.name}’s limit until`}>
             <PocketInput type="datetime-local" value={until} onChange={(e) => setUntil(e.target.value)} />
@@ -1589,9 +1606,9 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
           </div>
           {raise.isSuccess && raise.data !== null ? (
             <Note ok>
-              {agent.name}’s {label(raise.data.rule).toLowerCase()} is {boostFigure(raise.data.rule, raise.data.value)} until{' '}
+              {agent.name}’s {label(raise.data.rule).toLowerCase()} is {boostFigure(raise.data.rule, raise.data.value, currency)} until{' '}
               <span className="font-figure">{formatWhen(raise.data.until)}</span>, then{' '}
-              {boostFigure(raise.data.rule, raise.data.raised_from)} again by itself.
+              {boostFigure(raise.data.rule, raise.data.raised_from, currency)} again by itself.
             </Note>
           ) : null}
           {raise.isError ? <Note ok={false}>{refusalText(raise.error)}</Note> : null}

@@ -11,7 +11,21 @@ import { RULE_TEMPLATES } from './ruleTemplates'
 // B61.14 — amounts read and are typed in dollars at Lens's peg, $0.10 a LXC here.
 
 const M = 1_000_000
-const template = (id: string) => RULE_TEMPLATES.find((t) => t.id === id)!.rules
+/** B61.87 — a template as the rules page saves it: its µLXC limits in cents at the $0.10 peg, held in dollars, and no µLXC limit. */
+const template = (id: string) => {
+  const { max_per_request_ulxc, hourly_limit_ulxc, daily_limit_ulxc, weekly_limit_ulxc, monthly_limit_ulxc, approval_above_ulxc, ...rest } = RULE_TEMPLATES.find((t) => t.id === id)!.rules
+  const cents = (ulxc: number | undefined) => Math.floor((ulxc ?? 0) / 100_000)
+  return {
+    ...rest,
+    currency: 'USD',
+    max_per_payment_minor: cents(max_per_request_ulxc),
+    hourly_limit_minor: cents(hourly_limit_ulxc),
+    daily_limit_minor: cents(daily_limit_ulxc),
+    weekly_limit_minor: cents(weekly_limit_ulxc),
+    monthly_limit_minor: cents(monthly_limit_ulxc),
+    approval_above_minor: cents(approval_above_ulxc),
+  }
+}
 
 const BUILDER = {
   name: 'Builder',
@@ -102,7 +116,9 @@ describe('rule templates', () => {
 
     await waitFor(() => expect(screen.getByTestId('agent-open')).toHaveTextContent('Helpdesk'))
     expect(calls).toEqual(['POST /api/agents Helpdesk', 'PUT /api/agents/agt_1/rules'])
-    expect(saved[0]).toEqual(template('support-bot'))
+    // The old view's create form still saves the template as Lens's dollar rules; the rules page offers them in the
+    // account's currency (B61.87).
+    expect(saved[0]).toEqual(RULE_TEMPLATES.find((t) => t.id === 'support-bot')!.rules)
     // B57.23 — today's agent view states them; they are edited on the agent's rules page.
     const words = await screen.findByTestId('rules-in-words')
     await waitFor(() => expect(words.textContent).toContain('$0.05 on one request'))

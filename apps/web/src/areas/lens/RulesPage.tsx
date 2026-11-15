@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { type UseQueryResult, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { inlineLink } from '@talyvor/ui'
-import { Button, Card, Chip, Crumb, Dialog, Icon, Input, PageHeading, Select, Switch, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, Crumb, Dialog, Icon, Input, Money, PageHeading, Select, Switch, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { APPROVALS_KEY, BOOK_KEY, OnThePhone, changedBy, rulesHistoryKey, rulesKey, useKeys, useRulesChange } from './AgentBank'
 import { AgentFace } from './AgentFace'
 import { CATALOG_KEY } from '../marketplace/parts'
@@ -10,11 +10,13 @@ import { marketApi } from '../marketplace/marketApi'
 import { isSessionExpired } from '../../lib/productState'
 import { PAYEES_KEY } from './Pay'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
-import { pegQuery, useLensWords, useMoney } from './money'
+import { FX_KEY, fetchFX, pegQuery, useLensWords, useMoney, useMoneyFigures, type FXRates } from './money'
+import { CURRENCY_WORDS, type MinorLimit, agentCurrency, convertDown, heldIn, parseRuleAmount, ruleAmountText } from './rulesCurrency'
 import {
   type Agent,
   type AgentBook,
   type AgentRules,
+  type AgentRulesSave,
   type AgentRulesVersion,
   type PayeeAllowance,
   type RuleSimulation,
@@ -34,26 +36,50 @@ import {
 // asks Lens first what the change does: a looser one needs the passkey (B55.14), a tighter one is saved at once. Every
 // save and rollback is a new version in Lens; a save that changes nothing sends nothing.
 //
-// B61.14 — every amount is typed in dollars, at Lens's peg, until the rules carry their own currency (B61.12); Lens keeps
-// them in µLXC, and LXC is never shown. The model, provider and requests-a-minute rules are the parked gateway's: they
-// are not drawn, and a save sends back what Lens holds for them unchanged.
+// B61.87 — every amount limit is typed and shown in the account's own currency, the agent's (Lens B61.12): a save names the
+// currency and each limit in its minor units, and no µLXC limit. Rules Lens still holds in another currency — dollars,
+// for every agent's rules set before B61.12 — open converted at the day's rate, rounded down, for the owner to confirm,
+// and that save names every limit, as Lens requires on a change of currency. Payee caps and Always allow stay in dollars
+// at Lens's peg until Lens holds them in the rules' currency (B61.40). LXC is never shown. The model, provider and
+// requests-a-minute rules are the parked gateway's: they are not drawn, and a save sends back what Lens holds unchanged.
 
 const MAIN_LIMITS = [
-  ['approval_above_ulxc', 'Asks you above'],
-  ['max_per_request_ulxc', 'At most on one request'],
-  ['daily_limit_ulxc', 'At most a day'],
-  ['monthly_limit_ulxc', 'At most a month'],
+  ['approval_above_minor', 'Asks you above'],
+  ['max_per_payment_minor', 'At most on one request'],
+  ['daily_limit_minor', 'At most a day'],
+  ['monthly_limit_minor', 'At most a month'],
 ] as const
 const MORE_LIMITS = [
-  ['hourly_limit_ulxc', 'At most an hour'],
-  ['weekly_limit_ulxc', 'At most a week'],
+  ['hourly_limit_minor', 'At most an hour'],
+  ['weekly_limit_minor', 'At most a week'],
 ] as const
-type LimitField = (typeof MAIN_LIMITS)[number][0] | (typeof MORE_LIMITS)[number][0]
+type LimitField = MinorLimit
 type Switched = LimitField | 'hours' | 'payees' | 'allow' | 'models' | 'listings' | 'rate'
 
-/** The form as typed: amounts in dollars as text (model caps in LXC, never drawn), and whether each switched rule is on. */
+/** Each limit's µLXC form, which a Lens older than B61.12 names alone: dollars at the peg. */
+const ULXC_OF: Record<LimitField, keyof AgentRules> = {
+  approval_above_minor: 'approval_above_ulxc',
+  max_per_payment_minor: 'max_per_request_ulxc',
+  daily_limit_minor: 'daily_limit_ulxc',
+  monthly_limit_minor: 'monthly_limit_ulxc',
+  hourly_limit_minor: 'hourly_limit_ulxc',
+  weekly_limit_minor: 'weekly_limit_ulxc',
+}
+
+/** A limit as the rules hold it, in their own currency's minor units: from the µLXC form, cents at the peg, when Lens names no currency. */
+function heldMinor(r: AgentRules, f: LimitField, peg: number): number {
+  if (r.currency) return r[f] ?? 0
+  const ulxc = (r[ULXC_OF[f]] as number | undefined) ?? 0
+  return ulxc > 0 ? Math.max(Math.floor((ulxc * peg) / 10_000), 1) : 0
+}
+
+/** The form as typed: limits in the account's currency and payee amounts in dollars, as text, and whether each switched rule is on. */
 interface Draft {
+  /** the currency the limits are typed in: the account's */
+  currency: string
   limits: Record<LimitField, string>
+  /** B61.87 — each limit as the rules hold it in another currency, when the form opened them converted; null otherwise */
+  converted: { from: string; minor: Record<LimitField, number> } | null
   on: Record<Switched, boolean>
   rate: string
   from: string
@@ -75,14 +101,20 @@ interface Draft {
 
 const LIMIT_FIELDS: LimitField[] = [...MAIN_LIMITS.map(([f]) => f), ...MORE_LIMITS.map(([f]) => f)]
 
-function draftOf(r: AgentRules, peg: number): Draft {
+/** The form for rules r in currency: each limit converted at the day's rates (fx), rounded down, when r is held in another. */
+function draftOf(r: AgentRules, peg: number, currency: string, fx: FXRates | undefined): Draft {
   const usd = (v: number) => dollarsText(v, peg)
-  const limits = Object.fromEntries(LIMIT_FIELDS.map((f) => [f, usd(r[f] ?? 0)])) as Record<LimitField, string>
+  const from = r.currency ? heldIn(r) : 'USD'
+  const held = Object.fromEntries(LIMIT_FIELDS.map((f) => [f, heldMinor(r, f, peg)])) as Record<LimitField, number>
+  const minor = (f: LimitField) => (from === currency ? held[f] : (convertDown(held[f], from, currency, fx) ?? 0))
+  const limits = Object.fromEntries(LIMIT_FIELDS.map((f) => [f, ruleAmountText(minor(f), currency)])) as Record<LimitField, string>
   const allowances = Object.entries(r.payee_allowances ?? {}).map(([id, a]) => [id, usd(a.amount_ulxc), a.per] as [string, string, PayeeAllowance['per']])
   return {
+    currency,
     limits,
+    converted: from === currency ? null : { from, minor: held },
     on: {
-      ...(Object.fromEntries(LIMIT_FIELDS.map((f) => [f, (r[f] ?? 0) > 0])) as Record<LimitField, boolean>),
+      ...(Object.fromEntries(LIMIT_FIELDS.map((f) => [f, held[f] > 0])) as Record<LimitField, boolean>),
       hours: !!(r.active_from || r.active_until),
       payees: (r.allowed_payees ?? []).length > 0,
       allow: allowances.length > 0,
@@ -121,13 +153,13 @@ const amounts = (pairs: [string, string][], parse: (t: string) => number | null)
   Object.fromEntries(pairs.map(([k, t]) => [k, parse(t) ?? 0] as const).filter(([, v]) => v > 0))
 
 /**
- * The rules body Lens takes, from the form. A rule switched off is sent as none. Always allow and Instant transfer are
- * sent only when they changed: absent, Lens keeps what it holds, so a template or a save that does not touch them keeps
- * them as they are.
+ * The rules body Lens takes, from the form: the currency and every limit in its minor units, and no µLXC limit. A rule
+ * switched off is sent as none. Always allow and Instant transfer are sent only when they changed: absent, Lens keeps what
+ * it holds, so a template or a save that does not touch them keeps them as they are.
  */
-function bodyOf(d: Draft, was: Draft, instantShown: boolean, peg: number): AgentRules {
+function bodyOf(d: Draft, was: Draft, instantShown: boolean, peg: number): AgentRulesSave {
   const usd = (t: string) => parseDollars(t, peg)
-  const limit = (f: LimitField) => (d.on[f] ? (usd(d.limits[f]) ?? 0) : 0)
+  const limit = (f: LimitField) => (d.on[f] ? (parseRuleAmount(d.limits[f], d.currency) ?? 0) : 0)
   const allowances = d.on.allow
     ? Object.fromEntries(
         d.allowances.map(([id, t, per]) => [id, { amount_ulxc: usd(t) ?? 0, per }] as const).filter(([id, a]) => id !== '' && a.amount_ulxc > 0),
@@ -135,12 +167,13 @@ function bodyOf(d: Draft, was: Draft, instantShown: boolean, peg: number): Agent
     : {}
   const wasAllowances = was.on.allow ? Object.fromEntries(was.allowances.map(([id, t, per]) => [id, { amount_ulxc: usd(t) ?? 0, per }])) : {}
   return {
-    max_per_request_ulxc: limit('max_per_request_ulxc'),
-    hourly_limit_ulxc: limit('hourly_limit_ulxc'),
-    daily_limit_ulxc: limit('daily_limit_ulxc'),
-    weekly_limit_ulxc: limit('weekly_limit_ulxc'),
-    monthly_limit_ulxc: limit('monthly_limit_ulxc'),
-    approval_above_ulxc: limit('approval_above_ulxc'),
+    currency: d.currency,
+    max_per_payment_minor: limit('max_per_payment_minor'),
+    hourly_limit_minor: limit('hourly_limit_minor'),
+    daily_limit_minor: limit('daily_limit_minor'),
+    weekly_limit_minor: limit('weekly_limit_minor'),
+    monthly_limit_minor: limit('monthly_limit_minor'),
+    approval_above_minor: limit('approval_above_minor'),
     requests_per_minute: d.on.rate ? (parseRate(d.rate) ?? 0) : 0,
     model_daily_limits_ulxc: amounts(d.modelCaps, parseLXC),
     allowed_models: d.on.models ? d.models : [],
@@ -196,18 +229,31 @@ function changeText(change: string): string {
 }
 
 /** Every rule this page draws that differs between two versions, in words: "Daily limit: was $400.00, now …". */
-function versionChanges(was: AgentRules, now: AgentRules, payeeName: (id: string) => string, figure: (ulxc: number) => string): string[] {
+function versionChanges(
+  was: AgentRules,
+  now: AgentRules,
+  payeeName: (id: string) => string,
+  figure: (ulxc: number) => string,
+  inMoney: (minor: number, currency: string) => string,
+): string[] {
   const out: string[] = []
-  const amount = (v: number | undefined) => ((v ?? 0) > 0 ? figure(v ?? 0) : 'none')
   const limits: [LimitField, string][] = [
-    ['approval_above_ulxc', 'Asks you above'],
-    ['max_per_request_ulxc', 'Limit per request'],
-    ['hourly_limit_ulxc', 'Hourly limit'],
-    ['daily_limit_ulxc', 'Daily limit'],
-    ['weekly_limit_ulxc', 'Weekly limit'],
-    ['monthly_limit_ulxc', 'Monthly limit'],
+    ['approval_above_minor', 'Asks you above'],
+    ['max_per_payment_minor', 'Limit per request'],
+    ['hourly_limit_minor', 'Hourly limit'],
+    ['daily_limit_minor', 'Daily limit'],
+    ['weekly_limit_minor', 'Weekly limit'],
+    ['monthly_limit_minor', 'Monthly limit'],
   ]
-  for (const [f, rule] of limits) if ((was[f] ?? 0) !== (now[f] ?? 0)) out.push(`${rule}: was ${amount(was[f])}, now ${amount(now[f])}`)
+  // B61.87 — a version kept in a currency reads in it; one kept before B61.12, by its µLXC form.
+  const limit = (r: AgentRules, f: LimitField) => {
+    const v = r.currency ? (r[f] ?? 0) : ((r[ULXC_OF[f]] as number | undefined) ?? 0)
+    return { key: `${r.currency ?? ''}:${v}`, text: v > 0 ? (r.currency ? inMoney(v, heldIn(r)) : figure(v)) : 'none' }
+  }
+  for (const [f, rule] of limits) {
+    const [a, b] = [limit(was, f), limit(now, f)]
+    if (a.key !== b.key && a.text !== b.text) out.push(`${rule}: was ${a.text}, now ${b.text}`)
+  }
   const hours = (r: AgentRules) => (r.active_from || r.active_until ? `${r.active_from || 'any time'} to ${r.active_until || 'any time'} ${cityOf(r.timezone)} time` : 'any time')
   if (hours(was) !== hours(now)) out.push(`Hours: was ${hours(was)}, now ${hours(now)}`)
   const lists: [keyof AgentRules, string, string, (id: string) => string][] = [
@@ -279,16 +325,50 @@ function Rules({ agent, book }: { agent: Agent; book: AgentBook }) {
   if (rules.isError) return <p className="text-body text-ink-2">{isSessionExpired(rules.error) ? 'These rules can’t be read until you sign in again.' : `${agent.name}’s rules could not be read just now.`}</p>
   if (peg.isError) return <p className="text-body text-ink-2">{isSessionExpired(peg.error) ? 'These rules can’t be read until you sign in again.' : `${agent.name}’s rules could not be read just now.`}</p>
   if (!rules.data || peg.data?.usd_per_lxc === undefined) return <p className="text-body text-ink-3">Reading…</p>
-  return <RulesEditor key={round} agent={agent} book={book} rules={rules.data} peg={peg.data.usd_per_lxc} onRolledBack={() => setRound((n) => n + 1)} />
+  return <InCurrency key={round} agent={agent} book={book} rules={rules.data} peg={peg.data.usd_per_lxc} onRolledBack={() => setRound((n) => n + 1)} />
 }
 
-function RulesEditor({ agent, book, rules, peg, onRolledBack }: { agent: Agent; book: AgentBook; rules: AgentRules; peg: number; onRolledBack: () => void }) {
+/** B61.87 — the rules in the account's currency: the day's rates are read first when they are held in another and a rate is needed. */
+function InCurrency({ agent, book, rules, peg, onRolledBack }: { agent: Agent; book: AgentBook; rules: AgentRules; peg: number; onRolledBack: () => void }) {
+  const currency = agentCurrency(agent) ?? heldIn(rules)
+  const from = rules.currency ? heldIn(rules) : 'USD'
+  const needsRate = convertDown(1, from, currency, undefined) === null
+  const fx = useQuery({ queryKey: FX_KEY, queryFn: fetchFX, retry: false, staleTime: 60 * 60_000, enabled: needsRate })
+  if (needsRate && fx.isError)
+    return (
+      <p className="text-body text-ink-2">
+        {agent.name}’s rules are held in {CURRENCY_WORDS[from]}, and today’s rate to {CURRENCY_WORDS[currency]} could not be read just now. Nothing changed.
+      </p>
+    )
+  if (needsRate && !fx.data) return <p className="text-body text-ink-3">Reading…</p>
+  return <RulesEditor agent={agent} book={book} rules={rules} peg={peg} currency={currency} fx={fx.data} onRolledBack={onRolledBack} />
+}
+
+function RulesEditor({
+  agent,
+  book,
+  rules,
+  peg,
+  currency,
+  fx,
+  onRolledBack,
+}: {
+  agent: Agent
+  book: AgentBook
+  rules: AgentRules
+  peg: number
+  currency: string
+  fx: FXRates | undefined
+  onRolledBack: () => void
+}) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const figure = useFigure()
   const payees = usePayees(agent, book)
   const instantShown = useAccount().shows?.instantTransfer === true
-  const [was] = useState(() => draftOf(rules, peg))
+  const [was] = useState(() => draftOf(rules, peg, currency, fx))
+  const inMoney = useMoneyFigures().minor
+  const words = CURRENCY_WORDS[currency] ?? currency
   const [d, setD] = useState(was)
   const [filled, setFilled] = useState<RuleTemplate | null>(null)
   const [unchanged, setUnchanged] = useState(false)
@@ -300,16 +380,13 @@ function RulesEditor({ agent, book, rules, peg, onRolledBack }: { agent: Agent; 
     setUnchanged(false)
     setD((x) => ({ ...x, on: { ...x.on, [k]: on } }))
   }
-  const typedAmounts = [
-    ...LIMIT_FIELDS.filter((f) => d.on[f]).map((f) => d.limits[f]),
-    ...(d.on.allow ? d.allowances.map(([, t]) => t) : []),
-    ...d.payeeDay.map(([, t]) => t),
-    ...d.payeeMonth.map(([, t]) => t),
-  ]
+  const badLimit = LIMIT_FIELDS.some((f) => d.on[f] && parseRuleAmount(d.limits[f], currency) === null)
+  const typedAmounts = [...(d.on.allow ? d.allowances.map(([, t]) => t) : []), ...d.payeeDay.map(([, t]) => t), ...d.payeeMonth.map(([, t]) => t)]
   const badAmount = typedAmounts.some((t) => parseDollars(t, peg) === null)
-  const bad = badAmount
+  const bad = badLimit || badAmount
   const body = bodyOf(d, was, instantShown, peg)
-  const nothing = JSON.stringify(body) === JSON.stringify(bodyOf(was, was, instantShown, peg))
+  // Rules opened converted from another currency are a change by themselves: saving them holds them in this one.
+  const nothing = was.converted === null && JSON.stringify(body) === JSON.stringify(bodyOf(was, was, instantShown, peg))
   const change = useRulesChange(agent.id)
   const judged = change.judgedFor({ rules: body })
   const history = useQuery({ queryKey: rulesHistoryKey(agent.id), queryFn: () => agentBankApi.rulesHistory(agent.id) })
@@ -337,9 +414,9 @@ function RulesEditor({ agent, book, rules, peg, onRolledBack }: { agent: Agent; 
     save.mutate(judged?.signs === true)
   }
   const fill = (t: RuleTemplate) => {
-    const next = draftOf(t.rules, peg)
+    const next = draftOf(t.rules, peg, currency, fx)
     // A template names every rule but Always allow and Instant transfer, which it leaves as they are.
-    setD((x) => ({ ...next, allowances: x.allowances, on: { ...next.on, allow: x.on.allow }, instant: x.instant }))
+    setD((x) => ({ ...next, converted: x.converted, allowances: x.allowances, on: { ...next.on, allow: x.on.allow }, instant: x.instant }))
     setFilled(t)
     setUnchanged(false)
   }
@@ -375,16 +452,22 @@ function RulesEditor({ agent, book, rules, peg, onRolledBack }: { agent: Agent; 
           Nothing changed. {agent.name}’s rules are as they were, so no new version was kept.
         </p>
       ) : null}
-      {badAmount ? <p role="alert" className="text-body text-ink">A limit is an amount in dollars, or empty.</p> : null}
+      {was.converted ? (
+        <Card tight className="text-body text-ink" data-testid="rules-currency">
+          {agent.name}’s rules are still held in {CURRENCY_WORDS[was.converted.from]}. Each limit below is in {words} at today’s rate, rounded down: check them, then save to hold the rules in {words}.
+        </Card>
+      ) : null}
+      {badLimit ? <p role="alert" className="text-body text-ink">A limit is an amount in {words}, or empty.</p> : null}
+      {badAmount ? <p role="alert" className="text-body text-ink">A payee’s amount is an amount in dollars, or empty.</p> : null}
       {save.isError ? <p role="alert" className="text-body text-ink">{refusalText(save.error)}</p> : null}
       <div className="grid items-start gap-4 wide:grid-cols-12 [&>*]:min-w-0">
         <Card tone="white" className="wide:col-span-8" data-testid="rules-rows">
           {MAIN_LIMITS.map(([f, title]) => (
-            <RuleRow key={f} title={title} on={d.on[f]} onSwitch={(on) => turn(f, on)}>
+            <RuleRow key={f} title={title} line={convertedLine(was, f, inMoney)} on={d.on[f]} onSwitch={(on) => turn(f, on)}>
               <Input
-                aria-label={`${title} for ${agent.name}, in dollars`}
+                aria-label={`${title} for ${agent.name}, in ${words}`}
                 inputMode="decimal"
-                unit="USD"
+                unit={currency}
                 placeholder="No limit"
                 disabled={!d.on[f]}
                 value={d.limits[f]}
@@ -414,10 +497,10 @@ function RulesEditor({ agent, book, rules, peg, onRolledBack }: { agent: Agent; 
           <RuleRow
             title="Always allow a payee"
             line={
-              (parseDollars(d.limits.approval_above_ulxc, peg) ?? 0) > 0 && d.on.approval_above_ulxc
+              (parseRuleAmount(d.limits.approval_above_minor, currency) ?? 0) > 0 && d.on.approval_above_minor
                 ? (
                     <>
-                      Above <span className="font-figure">{figure(parseDollars(d.limits.approval_above_ulxc, peg) ?? 0)}</span>, up to this,
+                      Above <Money minor={parseRuleAmount(d.limits.approval_above_minor, currency) ?? 0} currency={currency} />, up to this,
                       without asking
                     </>
                   )
@@ -461,11 +544,17 @@ function RulesEditor({ agent, book, rules, peg, onRolledBack }: { agent: Agent; 
             filled={filled}
             onFill={fill}
           />
-          {book.agents.some((a) => a.id !== agent.id && !a.archived_at) ? <WouldItPass agent={agent} book={book} peg={peg} /> : null}
+          {book.agents.some((a) => a.id !== agent.id && !a.archived_at) ? <WouldItPass agent={agent} book={book} currency={currency} /> : null}
         </div>
       </div>
     </>
   )
+}
+
+/** B61.87 — under a limit opened converted, what the rules hold it at: "Held at $500.00, rounded down at today’s rate". */
+function convertedLine(was: Draft, f: LimitField, inMoney: (minor: number, currency: string) => string): string | undefined {
+  const c = was.converted
+  return c && c.minor[f] > 0 ? `Held at ${inMoney(c.minor[f], c.from)}, rounded down at today’s rate` : undefined
 }
 
 /** A rule: its name over its line, its value, and the switch that turns it on. */
@@ -646,6 +735,7 @@ function History({
   onRolledBack: () => void
 }) {
   const qc = useQueryClient()
+  const inMoney = useMoneyFigures().minor
   const versions = history.data?.versions ?? []
   const change = useRulesChange(agent.id)
   const [asking, setAsking] = useState<number | null>(null)
@@ -686,7 +776,7 @@ function History({
         <ol className="mt-2" aria-label={`Versions of ${agent.name}’s rules`}>
           {versions.map((v, i) => {
             const older = versions[i + 1]
-            const changes = older ? versionChanges(older.rules, v.rules, payeeName, figure) : []
+            const changes = older ? versionChanges(older.rules, v.rules, payeeName, figure, inMoney) : []
             const what = older === undefined ? (v.version === 1 ? 'The first rules' : 'Older versions are not shown') : changes.length > 0 ? changes.join('. ') : 'Only rules this page does not show changed'
             return (
               <li key={v.version} className="grid gap-0.5 border-t border-line py-3" data-testid={`rules-version-${v.version}`}>
@@ -784,7 +874,9 @@ function MoreRules({
   const [open, setOpen] = useState<string | null>(null)
   const money = useMoney()
   const dollars = (t: string) => money(parseDollars(t, peg) ?? 0) ?? '…'
-  const limitNow = (f: LimitField) => (d.on[f] && (parseDollars(d.limits[f], peg) ?? 0) > 0 ? dollars(d.limits[f]) : 'No limit')
+  const typedLimit = (f: LimitField) => parseRuleAmount(d.limits[f], d.currency) ?? 0
+  const inMoney = useMoneyFigures().minor
+  const limitNow = (f: LimitField) => (d.on[f] && typedLimit(f) > 0 ? inMoney(typedLimit(f), d.currency) : 'No limit')
   const zones = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : []
   const capNow = (pairs: [string, string][], name: (k: string) => string) => (pairs.length > 0 ? pairs.map(([k, t]) => `${name(k)}, ${dollars(t)}`).join('; ') : 'None')
   const items: { key: string; title: string; now: string; field: React.ReactNode }[] = [
@@ -794,9 +886,9 @@ function MoreRules({
       now: limitNow(f),
       field: (
         <Input
-          aria-label={`${title} for ${agent.name}, in dollars`}
+          aria-label={`${title} for ${agent.name}, in ${CURRENCY_WORDS[d.currency] ?? d.currency}`}
           inputMode="decimal"
-          unit="USD"
+          unit={d.currency}
           placeholder="No limit"
           value={d.on[f] ? d.limits[f] : ''}
           onChange={(e) => {
@@ -943,18 +1035,20 @@ function Caps({
 
 /**
  * B28.30 — Would it pass?: a payment to another of the workspace's agents (B61.14: a question to a model is the parked
- * gateway's), and an amount in dollars, judged
+ * gateway's), and an amount in the account's currency (B61.87), judged
  * by Lens with the agent's rules as a real one is, against what it has really spent. Nothing is spent, paid or sent for
  * approval. A paused agent is refused by Lens; the page says so in the reference's words.
  */
-function WouldItPass({ agent, book, peg }: { agent: Agent; book: AgentBook; peg: number }) {
+function WouldItPass({ agent, book, currency }: { agent: Agent; book: AgentBook; currency: string }) {
   const others = book.agents.filter((a) => a.id !== agent.id && !a.archived_at)
   const [payee, setPayee] = useState(others[0]?.id ?? '')
   const [amount, setAmount] = useState('')
-  const typed = parseDollars(amount, peg)
-  const micros = typed !== null && typed > 0 ? typed : null
+  const typed = parseRuleAmount(amount, currency)
+  const minor = typed !== null && typed > 0 ? typed : null
+  const words = CURRENCY_WORDS[currency] ?? currency
   const sim = useMutation({
-    mutationFn: () => agentBankApi.simulate(agent.id, { amount_ulxc: micros ?? 0, payee: { kind: 'agent', id: payee } }),
+    // B61.87 — a payment from the agent's account, in its currency's minor units (Lens B61.12).
+    mutationFn: () => agentBankApi.simulate(agent.id, { amount_ulxc: 0, amount_minor: minor ?? 0, currency, payee: { kind: 'agent', id: payee } }),
   })
   const [noAmount, setNoAmount] = useState(false)
   return (
@@ -965,7 +1059,7 @@ function WouldItPass({ agent, book, peg }: { agent: Agent; book: AgentBook; peg:
         className="mt-3 grid gap-2"
         onSubmit={(e) => {
           e.preventDefault()
-          if (micros === null) return setNoAmount(true)
+          if (minor === null) return setNoAmount(true)
           if (!sim.isPending) sim.mutate()
         }}
       >
@@ -988,9 +1082,9 @@ function WouldItPass({ agent, book, peg }: { agent: Agent; book: AgentBook; peg:
         <span className="flex flex-wrap gap-2">
           <Input
             className="min-w-0 flex-1"
-            aria-label={`Amount in dollars to try for ${agent.name}`}
+            aria-label={`Amount in ${words} to try for ${agent.name}`}
             inputMode="decimal"
-            unit="USD"
+            unit={currency}
             value={amount}
             onChange={(e) => {
               setAmount(e.target.value)
@@ -1004,7 +1098,7 @@ function WouldItPass({ agent, book, peg }: { agent: Agent; book: AgentBook; peg:
       </form>
       {noAmount ? (
         <p role="alert" className="mt-2 text-body text-ink">
-          Give an amount in dollars first.
+          Give an amount in {words} first.
         </p>
       ) : null}
       {sim.data ? <Verdict agent={agent} book={book} answer={sim.data} /> : null}
