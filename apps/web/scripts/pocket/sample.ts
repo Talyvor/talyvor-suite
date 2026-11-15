@@ -226,6 +226,18 @@ const SAMPLE: Record<string, unknown> = {
   // B57.27 — README's "Prepared by Chat" (10:31): $180.00 to Northwind Data, invoice 1042, from the company's dollar account;
   // no permission you signed covers it. Declined, Lens cancels it and says the payment was left out.
   '/api/money/payment-requests/preq_northwind': NORTHWIND_REQUEST,
+  // B57.162 — the same payment once approved and paid, as w-approvals' Decided lists it (pr=1, nw=1).
+  '/api/money/payment-requests?status=decided': {
+    requests: [
+      {
+        ...NORTHWIND_REQUEST,
+        status: 'approved',
+        decision: 'Approved and paid',
+        decided_at: '2026-10-22T09:31:00Z',
+        items: NORTHWIND_REQUEST.items.map((it) => ({ ...it, payment_id: 'mpay_northwind', pay_status: 'completed' })),
+      },
+    ],
+  },
   '/api/money/payment-requests/preq_northwind/cancel': {
     ...NORTHWIND_REQUEST,
     status: 'cancelled',
