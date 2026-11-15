@@ -407,13 +407,22 @@ export class AgentBankScreen {
   }
 
   /** B28.20 — the balance the agent's row shows, as Lens has it now. */
-  async balanceShown(agent: Agent): Promise<string> {
+  async balanceShown(agent: Agent, leads?: string): Promise<string> {
     await this.fresh(agent)
     const balance = this.page.getByTestId(`agent-balance-${agent.id}`)
     // B34.1 — the money figure follows the LXC once the peg is read (money.tsx); read too early, the line is LXC alone.
-    // B35.8 — waited for up to CURRENCY_WAIT_MS: none by then is what the verdict reads.
-    await balance.filter({ hasText: /\(.+\)\s*$/ }).waitFor({ timeout: CURRENCY_WAIT_MS }).catch(() => undefined)
+    // B35.8 — waited for up to CURRENCY_WAIT_MS: none by then is what the verdict reads. B61.83: until a currency shows (no
+    // launch screen says LXC since B61.14), or with `leads`, until that one does.
+    await balance.filter({ hasText: leads ?? /[$£€]/ }).waitFor({ timeout: CURRENCY_WAIT_MS }).catch(() => undefined)
     return figureText(await balance.innerText())
+  }
+
+  /** B61.83 — Settings → Show amounts in (B57.42, moved there from the wallet screens): the currency that leads beside LXC. */
+  async showAmountsIn(tab: 'US dollars' | 'Pounds' | 'Euros'): Promise<void> {
+    await this.page.goto(new URL('/settings', this.page.url()).toString())
+    const on = this.page.getByRole('tablist', { name: 'Show amounts in', exact: true }).getByRole('tab', { name: tab, exact: true })
+    await on.click({ timeout: ACTION_TIMEOUT_MS })
+    await this.page.locator('[role="tab"][aria-selected="true"]').filter({ hasText: tab }).waitFor({ timeout: ACTION_TIMEOUT_MS })
   }
 
   /**
@@ -556,7 +565,7 @@ export class AgentBankScreen {
   async send(agent: Agent, to: string, ulxc: number, memo: string): Promise<string> {
     await this.fresh(agent)
     const c = await this.money('Send or request')
-    await c.getByRole('group', { name: 'Send or request' }).getByRole('button', { name: 'Send', exact: true }).click()
+    await c.getByRole('tablist', { name: 'Send or request' }).getByRole('tab', { name: 'Send', exact: true }).click()
     await c.getByLabel('Send to (wallet ID or @handle)').fill(to)
     await c.getByLabel('Amount in LXC to send').fill(lxcText(ulxc))
     await c.getByLabel('What it is for').fill(memo)
@@ -578,7 +587,8 @@ export class AgentBankScreen {
   async giveBack(agent: Agent, from: string, memo: string): Promise<string> {
     await this.fresh(agent)
     const c = await this.money('Transfers')
-    const row = c.getByText(`Received from ${from} — ${memo}`, { exact: true }).first().locator('xpath=../..')
+    // B61.83 — the row's title reads "Received from <wallet> · <memo>" (WalletMoney.tsx transferText).
+    const row = c.getByText(`Received from ${from} · ${memo}`, { exact: true }).first().locator('xpath=../..')
     await row.getByRole('button', { name: 'Give back', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
     await row.getByRole('button', { name: 'Yes, give it back', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
     return said(c)
@@ -660,7 +670,7 @@ export class AgentBankScreen {
     const c = await this.money('Recurring transfer')
     await c.getByLabel('Pay every period to (wallet ID or @handle)').fill(to)
     await c.getByLabel('Recurring amount in LXC').fill(lxcText(ulxc))
-    await c.getByRole('group', { name: 'How often' }).getByRole('button', { name: `Every ${every}`, exact: true }).click()
+    await c.getByRole('tablist', { name: 'How often' }).getByRole('tab', { name: `Every ${every}`, exact: true }).click()
     await c.getByLabel('What the recurring transfer is for').fill(memo)
     await c.getByRole('button', { name: 'Start', exact: true }).click()
     return said(c)
@@ -3999,7 +4009,9 @@ export async function approveRow(page: Page, memo: string): Promise<string> {
   // By its row: the card's heading also carries its "?" button's label (B41.40), so card() no longer finds it.
   const row = page.locator('[data-approval]').filter({ hasText: memo }).first()
   await row.waitFor({ timeout: ACTION_TIMEOUT_MS })
-  await row.getByRole('button', { name: 'Approve', exact: true }).click()
+  // B61.83 — the row's Review opens the approval sheet (ApprovalSheet.tsx), where Approve is.
+  await row.getByRole('link', { name: 'Review', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: /^Approve( with your passkey)?$/ }).click({ timeout: ACTION_TIMEOUT_MS })
   const said = page.getByRole('status').filter({ hasText: /^(Approved|Declined)/ }).or(page.getByRole('alert')).first()
   await said.waitFor({ timeout: ACTION_TIMEOUT_MS })
   return (await said.innerText()).trim()

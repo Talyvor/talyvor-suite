@@ -92,9 +92,14 @@ const toLens: Post = async (ctx, path, body) => {
 
 describe('passkey-enrol-signed (B50.22)', () => {
   it('passes on a Lens that keeps an unsigned second passkey waiting and registers it only signed by the first', async () => {
-    const verdict = await passkeyEnrolSigned(toLens).run(await onStub(''))
+    const ctx = await onStub('')
+    const verdict = await passkeyEnrolSigned(toLens).run(ctx)
     expect(verdict.detail).toMatch(/^passkey B with no signature refused or kept waiting, and not listed; .* the payment landed once \(200000 µLXC\)$/)
     expect(verdict.pass).toBe(true)
+    // B61.83 — Lens's 202 pending_approval is read as held, not paid, and the 200 once approved as paid.
+    const answer = (note: string) => ctx.evidence.find((e) => e.note?.endsWith(note))?.answer
+    expect(answer('sent again after B tried to approve')).toMatch(/^held 202: held for approval apr_\w+: /)
+    expect(answer('sent again once approved')).toMatch(/^200 \{"entry_id":/)
   })
 
   it('FAILs when a second passkey registers with no signature', async () => {

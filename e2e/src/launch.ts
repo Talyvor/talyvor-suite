@@ -161,7 +161,11 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
 /** Why a launch-area scenario a launch run cannot play is left out of it (B61.63): each by name, once. */
 const NEEDS_A_MODEL = 'its agent asks a model, through the old gateway, which the launch version hides (a launch run reads no catalog, B61.49)'
 const NEEDS_STRIPE_FORM = 'it waits for Stripe’s hosted card form (#cardNumber), which the launch run of 15 Nov 15:07Z never drew'
+const LEDGER_PARKED = 'it reads the Ledger page (ledger-balance), which the launch version hides while LXC is parked (B61.17)'
+const NO_HERO_PHOTO = 'it measures the homepage hero photograph’s fade, and the homepage has had no photograph since B57.60 (Pocket’s hero, the approval sheet’s picture)'
 export const LAUNCH_CANNOT_PLAY: Readonly<Record<string, string>> = {
+  'ledger-reads-correctly': LEDGER_PARKED,
+  'hero-fade': NO_HERO_PHOTO,
   ...Object.fromEntries([
     'agent-analytics', 'agent-archive', 'agent-hourly-limit', 'agent-limit', 'agent-limit-boost', 'agent-model-limit', 'agent-pause-all',
     'agent-request-rate', 'agent-rules-unbypassable', 'first-agent', 'keys-unlisted', 'ledger-call-once', 'ledger-moves-at-once',

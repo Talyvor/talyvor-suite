@@ -27,7 +27,7 @@ const PAY_ULXC = 10_000
 const LISTING_PROMPT = 'What is 2 + 2? Reply with the number only.'
 const USE_MAX_TOKENS = 4096
 
-type Tried = { ok: true; said: string } | { ok: false; status: number; error: string }
+type Tried = { ok: true; said: string } | { ok: false; status: number; error: string; held?: boolean }
 
 /** One forbidden attempt: the rules that forbid it, the words Lens's refusal names it by, and the attempt itself. */
 interface Attempt {
@@ -157,7 +157,7 @@ export function agentRulesUnbypassable(): Scenario {
           refusal: /approval amount/,
           attempt: async (key) => {
             const r = await lens.payAsAgent(key, user.workspaceID, agent.id, payee.id, PAY_ULXC, `rules ${RUN_SALT}`)
-            return r.ok ? { ok: true, said: `paid, entry ${r.value.entry_id}` } : { ok: false, status: r.status, error: r.error }
+            return r.ok ? { ok: true, said: `paid, entry ${r.value.entry_id}` } : { ok: false, status: r.status, error: r.error, held: r.held !== undefined }
           },
         },
       ]
@@ -172,7 +172,7 @@ export function agentRulesUnbypassable(): Scenario {
         const r = await a.attempt(key)
         ctx.evidence.push({ note: `${a.what}: ${r.ok ? `served — ${r.said}` : `${r.status} ${r.error}`}` })
         if (r.ok) wrong.push(`${a.what} was served (${r.said})`)
-        else if (r.status !== 403 || !a.refusal.test(r.error)) wrong.push(`${a.what} was refused, but not by its rule: ${r.status} ${r.error}`)
+        else if ((r.status !== 403 && r.held !== true) || !a.refusal.test(r.error)) wrong.push(`${a.what} was refused, but not by its rule: ${r.status} ${r.error}`)
         const moved = await movedSince(ctx, ids, before)
         if (moved !== '') wrong.push(`${a.what} moved money: ${moved}`)
       }

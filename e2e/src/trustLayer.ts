@@ -244,7 +244,7 @@ export function trustLayer(): Scenario {
       const file = async (amount: number): Promise<string> => {
         const r = await pay(amount, `${payer.name} pays ${amount} µLXC, above its ${PAYER_ASKS_ABOVE_ULXC} µLXC approval amount`)
         const id = (await lens.agentApprovals(user)).find((a) => a.agent_id === payer.id && a.amount_ulxc === amount && a.status === 'pending')?.id
-        if (r.ok || r.status !== 403 || id === undefined) throw new Error(`${amount} µLXC above the approval amount must be refused 403 and file a pending approval; Lens answered ${r.ok ? 'paid' : `${r.status} ${r.error}`}`)
+        if (r.ok || r.held === undefined || id === undefined) throw new Error(`${amount} µLXC above the approval amount must be held, pending_approval, and file a pending approval; Lens answered ${r.ok ? 'paid' : `${r.status} ${r.error}`}`)
         return id
       }
       const asApprover = async (approval: string, note: string) => {

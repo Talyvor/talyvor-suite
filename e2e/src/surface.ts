@@ -12,7 +12,7 @@ import type { Page } from 'playwright'
 import type { AppUser } from './app.ts'
 import type { Answered, LedgerRow, LensClient, SyntheticUser } from './lens.ts'
 import { refusalOf } from './lens.ts'
-import { ACTION_TIMEOUT_MS, agentIn, bookOf, card, fail, openAgent, usdShown, withBank } from './bank.ts'
+import { ACTION_TIMEOUT_MS, agentIn, bookOf, card, fail, openAgent, withBank } from './bank.ts'
 import { bff } from './routes.ts'
 import { RUN_SALT, freshWord, parseFooter } from './oracles.ts'
 import { CannotTest, eventually, metered } from './scenarios.ts'
@@ -190,22 +190,20 @@ export function walletFX(seed: number): Scenario {
       }
       const rates = served !== undefined && served.rate_date < ecb.rate_date ? served : ecb
       const usd = (amount / 1e6) * ctx.env.usdPerLXC
-      const picker = bank.page.getByLabel('Show amounts in')
-      const balance = bank.page.getByTestId(`agent-balance-${a.id}`)
       try {
-        for (const [fiat, symbol, value] of [['GBP', '£', (usd / rates.usd_per_eur) * rates.gbp_per_eur], ['EUR', '€', usd / rates.usd_per_eur]] as const) {
-          await picker.selectOption(fiat)
-          await balance.filter({ hasText: symbol }).waitFor({ timeout: 15_000 }).catch(() => undefined)
-          const shown = (await balance.innerText()).replace(/\s+/g, ' ').trim()
-          const want = `${fiatShown(value, fiat)} (12.5 LXC)`
+        for (const [fiat, tab, symbol, value] of [['GBP', 'Pounds', '£', (usd / rates.usd_per_eur) * rates.gbp_per_eur], ['EUR', 'Euros', '€', usd / rates.usd_per_eur]] as const) {
+          await bank.showAmountsIn(tab)
+          const shown = await bank.balanceShown(a, symbol)
+          // B61.14 — no launch screen says LXC: the figure is the currency's alone.
+          const want = fiatShown(value, fiat)
           ctx.evidence.push({ note: `in ${fiat}: "${shown}"` })
           if (shown !== want) failures.push(`in ${fiat} ${a.name} reads "${shown}"; $${usd.toFixed(4)} at ${rates.usd_per_eur} USD and ${rates.gbp_per_eur} GBP per euro (${rates.rate_date}) is "${want}"`)
         }
       } finally {
-        await picker.selectOption('USD').catch(() => undefined)
+        await bank.showAmountsIn('US dollars').catch(() => undefined)
       }
-      const back = (await bank.balanceShown(a))
-      if (back !== usdShown('12.5 LXC', amount, ctx.env.usdPerLXC)) failures.push(`back in dollars ${a.name} reads "${back}"`)
+      const back = await bank.balanceShown(a, '$')
+      if (back !== fiatShown(usd, 'USD')) failures.push(`back in dollars ${a.name} reads "${back}"`)
       return failures.length === 0
         ? { pass: true, detail: `12.5 LXC read in pounds and euros at the ECB's ${rates.rate_date} rates (${rates.usd_per_eur} USD, ${rates.gbp_per_eur} GBP per euro), as /api/fx states them; back in dollars "${back}"` }
         : fail(failures.join('; '))
@@ -1766,22 +1764,25 @@ export function apiKeyRevoke(seed: number): Scenario {
       const name = `e2e-revoke-${seed}-${RUN_SALT}`
       const page = await app.tab('/keys')
       try {
-        await page.getByLabel('New key name').fill(name)
-        await page.getByRole('button', { name: 'Create key' }).click()
-        await page.getByRole('button', { name: 'Copy key' }).waitFor({ timeout: 15_000 })
-        const secret = (await page.locator('div.select-all').first().innerText()).trim()
+        // B61.83 — the New key dialog (Keys.tsx, under Settings since B61.3): the key is shown once, in its code block.
+        const making = page.getByRole('dialog', { name: 'New key' })
+        await page.getByRole('button', { name: 'New key', exact: true }).click()
+        await making.getByLabel('Key name').fill(name)
+        await making.getByRole('button', { name: 'Create key' }).click()
+        await making.getByRole('button', { name: 'Copy key' }).waitFor({ timeout: 15_000 })
+        const secret = (await making.locator('pre').first().innerText()).trim()
         const listed = await lensRead<{ id: string; name: string; key_prefix: string }[] | null>(ctx, '/v1/workspaces/{ws}/api-keys')
         const key = listed.ok ? (listed.value ?? []).find((k) => k.name === name) : undefined
         if (key === undefined) return fail(`made "${name}" on the screen, and Lens does not list it: ${listed.ok ? JSON.stringify(listed.value).slice(0, 200) : listed.status}`)
         const asKey = { ...app.user, token: secret }
         const works = await env.lens.act(asKey, 'GET', '/v1/workspaces/{ws}')
-        await page.getByRole('button', { name: /i stored it/i }).click()
+        await making.getByRole('button', { name: /i stored it/i }).click()
         await page.getByRole('button', { name: `Revoke ${key.key_prefix}` }).click()
-        await page.getByLabel(`Type ${key.key_prefix} to confirm`).fill(key.key_prefix)
+        await page.getByRole('dialog').getByLabel(`Type ${key.key_prefix} to confirm`).fill(key.key_prefix)
         // The confirm form replaces the row's Revoke button, so its answer is what is waited for.
         const [revoked] = await Promise.all([
           page.waitForResponse((r) => r.request().method() === 'DELETE' && r.url().includes(`/api/keys/${key.id}`), { timeout: 30_000 }).catch(() => undefined),
-          page.getByRole('button', { name: 'Revoke key' }).click(),
+          page.getByRole('dialog').getByRole('button', { name: 'Revoke key' }).click(),
         ])
         const after = await lensRead<{ id: string }[] | null>(ctx, '/v1/workspaces/{ws}/api-keys')
         // Lens keeps a key it has checked for up to KEY_CACHE_MS (talyvor-lens internal/auth/apikeys.go cacheTTL), as the

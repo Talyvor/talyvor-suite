@@ -64,6 +64,9 @@ export interface ScanTrackRecord { hits: number; misses: number; waiting: number
 
 export type Answered<T> = { ok: true; status: number; value: T } | { ok: false; status: number; error: string }
 
+/** B61.83 — an agent's payment as Lens answered it: paid (posted) when ok; held for the owner when held names its approval. */
+export type PayAnswer = { ok: true; status: number; value: AgentPayment } | { ok: false; status: number; error: string; held?: string }
+
 /** B28.288 — one request of a burst as Lens answered it: its status, the limiter's two headers (null when absent) and the body. */
 export interface BurstAnswer { status: number; retryAfter: string | null; remaining: string | null; text: string }
 
@@ -1398,14 +1401,24 @@ export class LensClient {
     return ((await this.call('GET', `/v1/workspaces/${user.workspaceID}/api-keys`, this.bearer(user.token))) as { id: string; name: string }[] | null) ?? []
   }
 
-  /** B17.6 — an agent pays another agent with its own key; Lens's answer or its refusal. */
-  async payAsAgent(key: string, workspaceID: string, fromAgentID: string, toAgentID: string, amountULXC: number, memo: string): Promise<Answered<AgentPayment>> {
+  /**
+   * B17.6 — an agent pays another agent with its own key; Lens's answer or its refusal. ok is paid: Lens posted it, its
+   * entry in the answer. B61.83: a payment held for the owner answers 202 "pending_approval" (Lens B58.2) and nothing is
+   * posted, so it is not ok, whatever its status code: held carries the approval it filed.
+   */
+  async payAsAgent(key: string, workspaceID: string, fromAgentID: string, toAgentID: string, amountULXC: number, memo: string): Promise<PayAnswer> {
     const res = await this.send('POST', `/v1/workspaces/${workspaceID}/agents/${fromAgentID}/pay`, {
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ to_agent_id: toAgentID, amount_ulxc: amountULXC, memo }),
     })
     const raw = await res.text()
-    return res.ok ? { ok: true, status: res.status, value: JSON.parse(raw) as AgentPayment } : { ok: false, status: res.status, error: refusalOf(raw) }
+    if (!res.ok) return { ok: false, status: res.status, error: refusalOf(raw) }
+    const body = JSON.parse(raw) as AgentPayment & { status?: string; approval_id?: string; message?: string }
+    if (body.status === 'pending_approval') {
+      return { ok: false, status: res.status, error: `held for approval ${body.approval_id ?? '(none named)'}: ${body.message ?? raw.slice(0, 300)}`, held: body.approval_id ?? '' }
+    }
+    if (typeof body.entry_id !== 'string' || body.entry_id === '') return { ok: false, status: res.status, error: `answered with no entry posted: ${raw.slice(0, 300)}` }
+    return { ok: true, status: res.status, value: body }
   }
 
   /**
