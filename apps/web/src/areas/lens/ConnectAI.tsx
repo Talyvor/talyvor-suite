@@ -1,12 +1,12 @@
 import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Chip, CodeBox, Crumb, Dialog, Eyebrow, KindTile, Row, showSnack, showToast } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, CodeBox, Crumb, Dialog, Eyebrow, Field, Input, KindTile, Money, Row, showSnack, showToast } from '@talyvor/ui/pocket'
 import { cn, inlineLink } from '@talyvor/ui'
 
 import { ApiError, getJSON, readable } from '../../lib/api'
 import { PREPARED_KEY } from './AgentBank'
-import { type PaymentRequest, agentBankApi } from './agentBankApi'
+import { type PaymentRequest, agentBankApi, limitText, parseLXC } from './agentBankApi'
 import { formatWhen } from './format'
 
 // B40.8 — Settings › Connect your AI: the address of Talyvor's MCP server (B40.7), how to add it to each assistant,
@@ -15,6 +15,7 @@ import { formatWhen } from './format'
 // B57.45 — drawn in Pocket (design/pocket w-connect): every assistant in one list, a connected one with Connected and
 // a Revoke that asks first, the others opening their steps in a dialog; the address and the Claude Code command
 // beside them; how a payment works; each connected assistant's latest tool calls below.
+// B52.6 — New agents from an assistant: the most an assistant may give a new agent it creates.
 
 /** One tool call, as the BFF's audit trail keeps it: the arguments by SHA-256 only. */
 interface Call {
@@ -72,6 +73,8 @@ export const SCOPE_WORDS: Record<string, string> = {
   'wallets:read': 'See your wallets and bills',
   'invoices:draft': 'Draft invoices and payees',
   'payments:prepare': 'Prepare payments for you to approve',
+  'payments:send': 'Pay from your agents within the limits you set',
+  'agents:write': 'Create and pause your agents, and lower their limits',
 }
 
 interface Assistant {
@@ -428,6 +431,107 @@ function HowAPaymentWorks() {
   )
 }
 
+/** B52.6 — the most an assistant may give a new agent (apps/bff/mcp_agents.go connectCeiling), in µLXC. */
+type Ceiling = Record<(typeof CEILING_FIELDS)[number][0], number>
+
+const CEILING_PATH = '/api/connect/agent-ceiling'
+const CEILING_FIELDS = [
+  ['max_per_request_ulxc', 'One payment'],
+  ['daily_limit_ulxc', 'A day'],
+  ['monthly_limit_ulxc', 'A month'],
+] as const
+
+async function saveCeiling(c: Ceiling): Promise<Ceiling> {
+  const res = await fetch(CEILING_PATH, {
+    method: 'PUT',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(c),
+  })
+  if (!res.ok) throw new ApiError(res.status, CEILING_PATH)
+  return (await res.json()) as Ceiling
+}
+
+/** New agents from an assistant: the ceiling as it is, then a form to set or change it. */
+function NewAgents() {
+  const heading = useId()
+  const read = useQuery({ queryKey: ['agent-ceiling'], queryFn: () => getJSON<Partial<Ceiling>>(CEILING_PATH) })
+  return (
+    <Card tone="white" role="region" aria-labelledby={heading} className="grid min-w-0 gap-3">
+      <h2 id={heading} className="font-display text-reading font-bold text-ink">
+        New agents from an assistant
+      </h2>
+      <p className="text-body text-ink-3">
+        An assistant you allow to create agents gives each one limits no higher than these. A new agent starts with no money.
+      </p>
+      {read.isError ? (
+        <p className="text-body text-ink-2">The limit for new agents could not be read. Try again shortly.</p>
+      ) : read.isPending ? (
+        <p className="text-body text-ink-3">Reading the limit for new agents…</p>
+      ) : (
+        <CeilingForm key={read.dataUpdatedAt} current={read.data.daily_limit_ulxc ? (read.data as Ceiling) : null} />
+      )}
+    </Card>
+  )
+}
+
+function CeilingForm({ current }: { current: Ceiling | null }) {
+  const qc = useQueryClient()
+  const [text, setText] = useState(
+    () => Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, current ? limitText(current[k]) : ''])) as Record<keyof Ceiling, string>,
+  )
+  const micros = Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, parseLXC(text[k])])) as Record<keyof Ceiling, number | null>
+  const ready = CEILING_FIELDS.every(([k]) => micros[k] !== null)
+  const save = useMutation({
+    mutationFn: () => saveCeiling(micros as Ceiling),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['agent-ceiling'] }),
+  })
+  return (
+    <form
+      className="grid gap-3"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (ready && !save.isPending) save.mutate()
+      }}
+    >
+      <p className="text-body text-ink" data-testid="agent-ceiling">
+        {current ? (
+          <>
+            An agent an assistant creates may spend at most <Money ulxc={current.max_per_request_ulxc} /> a payment,{' '}
+            <Money ulxc={current.daily_limit_ulxc} /> a day and <Money ulxc={current.monthly_limit_ulxc} /> a month. Higher limits are
+            yours to set, on Agent Wallets.
+          </>
+        ) : (
+          'Assistants cannot create agents until you say how much a new one may spend.'
+        )}
+      </p>
+      <div className="grid grid-cols-3 gap-2">
+        {CEILING_FIELDS.map(([k, label]) => (
+          <Field key={k} label={label} className="min-w-0">
+            <Input
+              className="min-w-0"
+              aria-label={`${label}, in LXC`}
+              inputMode="decimal"
+              unit="LXC"
+              value={text[k]}
+              onChange={(e) => setText({ ...text, [k]: e.target.value })}
+            />
+          </Field>
+        ))}
+      </div>
+      <div>
+        <Button type="submit" size="sm" disabled={!ready || save.isPending}>
+          {current ? 'Change' : 'Set'}
+        </Button>
+      </div>
+      {save.isError ? (
+        <p role="alert" className="text-body text-ink">
+          That limit was not saved. Try again.
+        </p>
+      ) : null}
+    </form>
+  )
+}
+
 /** Each connected assistant's latest tool calls, newest first. */
 function LatestCalls() {
   const list = useConnectedAssistants()
@@ -487,6 +591,7 @@ export function ConnectAI() {
         <div className="grid min-w-0 gap-4 wide:col-span-5">
           <Address url={url} />
           <HowAPaymentWorks />
+          <NewAgents />
         </div>
       </div>
       <LatestCalls />

@@ -66,3 +66,12 @@ ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS auth_methods text[] NOT NULL 
 ALTER TABLE oauth_clients ADD COLUMN IF NOT EXISTS jwks_uri text NOT NULL DEFAULT '';
 ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS resource text NOT NULL DEFAULT '';
 ALTER TABLE oauth_grants ADD COLUMN IF NOT EXISTS resource text NOT NULL DEFAULT '';
+
+-- B52.6: the most an assistant may give a new agent, per payment, per day and per month, as the person set it.
+CREATE TABLE IF NOT EXISTS connect_agent_ceilings (
+    workspace_id         text PRIMARY KEY,
+    max_per_request_ulxc bigint NOT NULL CHECK (max_per_request_ulxc > 0),
+    daily_limit_ulxc     bigint NOT NULL CHECK (daily_limit_ulxc > 0),
+    monthly_limit_ulxc   bigint NOT NULL CHECK (monthly_limit_ulxc > 0),
+    updated_at           timestamptz NOT NULL DEFAULT now()
+);

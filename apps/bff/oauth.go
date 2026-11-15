@@ -35,6 +35,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -56,11 +57,13 @@ const (
 	oauthMaxBody     = 64 << 10
 )
 
-// oauthScopes are the three things an assistant may ask for, in the words the consent screen shows.
+// oauthScopes are the things an assistant may ask for, in the words the consent screen shows.
 var oauthScopes = []struct{ name, words string }{
 	{"wallets:read", "See your wallets and bills"},
 	{"invoices:draft", "Draft invoices and payees"},
 	{"payments:prepare", "Prepare payments for you to approve"},
+	{"payments:send", "Pay from your agents within the limits you set"},
+	{"agents:write", "Create and pause your agents, and lower their limits"},
 }
 
 func oauthScopeNames() []string {
@@ -160,6 +163,7 @@ type oauthServer struct {
 	drafts   *ttlMap[assistantDraft] // B40.35: payees and mandates an assistant left for the person to confirm (mcp_drafts.go)
 	db       *oauthDB                // nil: memory only (oauth_store.go)
 	hits     connectHits             // B52.3's rate limits (connect_limits.go)
+	ceilings sync.Map                // B52.6: workspace id → connectCeiling (mcp_agents.go)
 }
 
 func newOAuthServer() *oauthServer {

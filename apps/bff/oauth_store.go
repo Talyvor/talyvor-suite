@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -246,4 +247,28 @@ func (d *oauthDB) toolCallsOf(ctx context.Context, sub string, perGrant int) (ma
 		return nil
 	})
 	return out, err
+}
+
+// ceiling is a workspace's agent ceiling (B52.6); ok is false when none was set. Without a database: none.
+func (d *oauthDB) ceiling(ctx context.Context, workspaceID string) (c connectCeiling, ok bool, err error) {
+	if d == nil {
+		return c, false, nil
+	}
+	err = d.pool.QueryRow(ctx, `SELECT max_per_request_ulxc, daily_limit_ulxc, monthly_limit_ulxc FROM connect_agent_ceilings
+		WHERE workspace_id = $1`, workspaceID).Scan(&c.MaxPerRequestULXC, &c.DailyLimitULXC, &c.MonthlyLimitULXC)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return c, false, nil
+	}
+	return c, err == nil, err
+}
+
+func (d *oauthDB) setCeiling(ctx context.Context, workspaceID string, c connectCeiling) error {
+	if d == nil {
+		return nil
+	}
+	_, err := d.pool.Exec(ctx, `INSERT INTO connect_agent_ceilings (workspace_id, max_per_request_ulxc, daily_limit_ulxc, monthly_limit_ulxc)
+		VALUES ($1, $2, $3, $4) ON CONFLICT (workspace_id) DO UPDATE SET max_per_request_ulxc = EXCLUDED.max_per_request_ulxc,
+		daily_limit_ulxc = EXCLUDED.daily_limit_ulxc, monthly_limit_ulxc = EXCLUDED.monthly_limit_ulxc, updated_at = now()`,
+		workspaceID, c.MaxPerRequestULXC, c.DailyLimitULXC, c.MonthlyLimitULXC)
+	return err
 }
