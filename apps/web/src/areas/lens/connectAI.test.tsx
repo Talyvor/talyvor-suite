@@ -65,9 +65,9 @@ const STEPS: Record<string, string[]> = {
     'Choose Connect, sign in to Talyvor and approve what Claude may do.',
   ],
   ChatGPT: [
-    'On chatgpt.com, open Settings › Apps & Connectors › Advanced settings and turn on Developer mode.',
-    'Back in Apps & Connectors, choose Create, name it Talyvor, paste your Talyvor address and choose OAuth.',
-    'Sign in to Talyvor and approve what ChatGPT may do.',
+    'On chatgpt.com, open Plugins, choose + and then Add custom MCP server.',
+    'Name it Talyvor, paste your Talyvor address, choose OAuth and then Create as a plugin.',
+    'Install Talyvor from your plugins, sign in to Talyvor and approve what ChatGPT may do.',
   ],
   'Claude Code': ['Run this in a terminal.', 'In Claude Code, type /mcp, choose talyvor and sign in.'],
   Cursor: ['Add this to ~/.cursor/mcp.json (or .cursor/mcp.json in a project).', 'In Cursor Settings › MCP, choose Connect next to Talyvor and sign in.'],

@@ -103,6 +103,8 @@ var publicReadRoutes = map[string]string{
 	"/.well-known/oauth-protected-resource/mcp": "B40.6 — the same RFC 9728 document at the path the 401's resource_metadata names",
 	"/.well-known/oauth-authorization-server": "B40.6 — RFC 8414 metadata: the endpoint addresses an assistant needs " +
 		"before it can sign anyone in — oauth_test.go asserts them",
+	"/.well-known/openai-apps-challenge": "B52.8 — the token ChatGPT's directory reads to prove the domain is Talyvor's, " +
+		"from a setting and nothing per-person; unset it is a 404 — connect_directory_test.go asserts both",
 	"/oauth/authorize": "B40.6 — where an assistant sends the person. Signed out it redirects to /auth/login and back; " +
 		"an unknown client is told so on a page before any session is looked at (the 400 here) — oauth_test.go owns both",
 	"/api/version": "the version surface is deliberately unauthenticated so an operator can " +

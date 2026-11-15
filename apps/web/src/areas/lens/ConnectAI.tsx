@@ -101,11 +101,11 @@ export const ASSISTANTS: Assistant[] = [
   {
     name: 'ChatGPT',
     steps: [
-      'On chatgpt.com, open Settings › Apps & Connectors › Advanced settings and turn on Developer mode.',
-      'Back in Apps & Connectors, choose Create, name it Talyvor, paste your Talyvor address and choose OAuth.',
-      'Sign in to Talyvor and approve what ChatGPT may do.',
+      'On chatgpt.com, open Plugins, choose + and then Add custom MCP server.',
+      'Name it Talyvor, paste your Talyvor address, choose OAuth and then Create as a plugin.',
+      'Install Talyvor from your plugins, sign in to Talyvor and approve what ChatGPT may do.',
     ],
-    note: 'Developer mode is on the web, on Plus, Pro, Business, Enterprise and Education.',
+    note: 'Adding one needs Developer mode, in ChatGPT’s settings on the web, on Plus, Pro, Business, Enterprise and Edu.',
   },
   {
     name: 'Claude Code',

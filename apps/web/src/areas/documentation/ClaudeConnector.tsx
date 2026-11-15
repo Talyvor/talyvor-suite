@@ -70,7 +70,8 @@ export function ClaudeConnector() {
 
           <Part id="tools" heading="What it can do">
             <p className="mt-1 text-body text-ink-2">
-              Every tool, <span className="font-figure">{listing.tools.length}</span> of them. No tool pays, pays out or
+              Every tool, <span className="font-figure">{listing.tools.length}</span> of them. Only Pay from an agent&rsquo;s
+              wallet pays: from that agent, inside the limits you set, and above them it waits for your passkey. No tool
               approves. Links Claude shows you open Talyvor at{' '}
               {listing.allowedLinkUris.map((u, i) => (
                 <span key={u}>
