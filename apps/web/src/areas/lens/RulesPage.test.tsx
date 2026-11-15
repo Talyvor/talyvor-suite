@@ -132,7 +132,11 @@ describe('an agent’s rules page', () => {
     // The save asked Lens first what it does; it tightens, so it was saved at once, and the page goes back to the agent.
     expect(sent.map((s) => `${s.method} ${s.url}`)).toEqual(['POST /api/agents/agt_1/rules-challenge', 'PUT /api/agents/agt_1/rules'])
     await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_1'))
-    expect(await screen.findByText('Research’s rules are saved as version 2')).toBeInTheDocument()
+    // B61.82 — the address moves before React Router's move lands: the confirmation is asked for once the rules page is
+    // gone from the screen, and it is still there a moment later.
+    await waitFor(() => expect(screen.queryByTestId('rules-page')).toBeNull())
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.getByRole('status')).toHaveTextContent('Research’s rules are saved as version 2')
   })
 
   it('says Nothing changed and sends nothing when no rule changed, and a rule turned off is saved as none', async () => {
