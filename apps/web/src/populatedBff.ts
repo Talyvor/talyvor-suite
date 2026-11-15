@@ -73,6 +73,16 @@ const BODIES: Record<string, unknown> = {
       },
     ],
   },
+  // B57.162 — a prepared payment approved and paid, as Approvals' Decided lists it (Lens B57.161).
+  '/api/money/payment-requests?status=decided': {
+    requests: [
+      {
+        id: 'preq_2', status: 'approved', decision: 'Approved and paid', summary: '1 payment for Researcher', client: 'chat', agent_id: 'agt_research', totals: { GBP: 18000 },
+        created_at: '2026-10-22T09:00:00Z', decided_at: '2026-10-22T09:05:00Z',
+        items: [{ position: 1, payee_id: 'payee_1', payee_name: 'Acme Hosting Ltd', currency: 'GBP', amount_minor: 18000, reference: 'October hosting', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking', payment_id: 'mpay_1', pay_status: 'completed' }],
+      },
+    ],
+  },
   // B59.19 — an Instant transfer's receipt, received: converted, moved on chain and paid out.
   '/api/money/instant-transfers/%3Aid': {
     id: 'itr_sample', agent_id: 'agt_research', from_account_id: 'macc_agt', to_payee_id: 'payee_1', beneficiary_name: 'Acme Hosting Ltd',
