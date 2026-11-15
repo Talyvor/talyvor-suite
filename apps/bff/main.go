@@ -553,6 +553,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// B54.21: a connection that ended is told to Lens until Lens records it, including what a previous run left owed.
+	go app.keepTellingLens(ctx)
+
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("bff: serve: %v", err)

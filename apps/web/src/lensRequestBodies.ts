@@ -1547,6 +1547,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/rooms/{roomID}/payouts", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensRoomPayoutBody",
   },
+  // B54.21 — the BFF tells Lens a connection ended, so its Connect tokens stop paying (apps/bff/connect_revocations.go).
+  {
+    route: "POST /v1/auth/connect-revocations",
+    file: "apps/bff/connect_revocations.go",
+    kind: "map-literal",
+    anchor:
+      'json.Marshal(map[string]string{"user_id": o.userID, "client_id": o.clientID})',
+    upstreamFile: "cmd/lens/connect_revocation_handler.go",
+    upstreamAnchor:
+      "func newConnectRevocationHandler(authManager *auth.Manager, store connectRevoker) http.HandlerFunc {",
+    subject: "lensConnectRevocationBody",
+  },
 ];
 
 /**

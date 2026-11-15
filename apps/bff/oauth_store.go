@@ -218,11 +218,32 @@ func (d *oauthDB) touchGrant(ctx context.Context, g oauthGrant) (bool, error) {
 	return tag.RowsAffected() == 1, err
 }
 
-func (d *oauthDB) deleteGrant(ctx context.Context, id string) error {
+// deleteGrant ends a connection and, in the same statement, owes Lens its ending (B54.21).
+func (d *oauthDB) deleteGrant(ctx context.Context, id string, ended connectRevocation) error {
 	if d == nil {
 		return nil
 	}
-	_, err := d.pool.Exec(ctx, `DELETE FROM oauth_grants WHERE id = $1`, id)
+	_, err := d.pool.Exec(ctx, `WITH g AS (DELETE FROM oauth_grants WHERE id = $1)
+		INSERT INTO connect_revocations_owed (user_id, client_id, owed_at) SELECT $2, $3, clock_timestamp() WHERE $2 <> ''
+		ON CONFLICT (user_id, client_id) DO UPDATE SET owed_at = EXCLUDED.owed_at`, id, ended.userID, ended.clientID)
+	return err
+}
+
+// owedRevocations is every ending Lens has not yet recorded, oldest first.
+func (d *oauthDB) owedRevocations(ctx context.Context) ([]owedRevocation, error) {
+	if d == nil {
+		return nil, nil
+	}
+	rows, _ := d.pool.Query(ctx, `SELECT user_id, client_id, owed_at FROM connect_revocations_owed ORDER BY owed_at`)
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (o owedRevocation, err error) {
+		return o, r.Scan(&o.userID, &o.clientID, &o.at)
+	})
+}
+
+// revocationRecorded forgets o once Lens recorded it, unless it was owed again since.
+func (d *oauthDB) revocationRecorded(ctx context.Context, o owedRevocation) error {
+	_, err := d.pool.Exec(ctx, `DELETE FROM connect_revocations_owed WHERE user_id = $1 AND client_id = $2 AND owed_at = $3`,
+		o.userID, o.clientID, o.at)
 	return err
 }
 
@@ -283,10 +304,11 @@ func (d *oauthDB) toolCallsOf(ctx context.Context, sub string, perGrant int) (ma
 }
 
 // endPerson is B52.9's sign out everywhere in the table, in one statement under the person's lock: every connection of sub goes (its
-// tokens with it, ON DELETE CASCADE), every code not yet redeemed goes, and the moment is kept. Then, still under the lock,
-// inMemory ends them in this process (B54.14), so a consent waiting for the lock (saveCode) finds its session gone. The
-// table goes first, so a failure there leaves them all whole.
-func (d *oauthDB) endPerson(ctx context.Context, sub string, at time.Time, inMemory func()) error {
+// tokens with it, ON DELETE CASCADE), every code not yet redeemed goes, the moment is kept, and Lens is owed the ending of
+// every assistant of theirs (B54.21): for workspaceID, the person's own, and for any other workspace a connection acted in.
+// Then, still under the lock, inMemory ends them in this process (B54.14), so a consent waiting for the lock (saveCode)
+// finds its session gone. The table goes first, so a failure there leaves them all whole.
+func (d *oauthDB) endPerson(ctx context.Context, sub, workspaceID string, at time.Time, inMemory func()) error {
 	if d == nil {
 		inMemory()
 		return nil
@@ -308,8 +330,12 @@ func (d *oauthDB) endPerson(ctx context.Context, sub string, at time.Time, inMem
 			release()
 		}
 	}()
-	if _, err := conn.Exec(ctx, `WITH g AS (DELETE FROM oauth_grants WHERE sub = $1), c AS (DELETE FROM oauth_codes WHERE sub = $1)
-		INSERT INTO signed_out_everywhere (sub, at) VALUES ($1, $2) ON CONFLICT (sub) DO UPDATE SET at = EXCLUDED.at`, sub, at); err != nil {
+	if _, err := conn.Exec(ctx, `WITH g AS (DELETE FROM oauth_grants WHERE sub = $1 RETURNING workspace_id),
+		c AS (DELETE FROM oauth_codes WHERE sub = $1),
+		o AS (INSERT INTO connect_revocations_owed (user_id, client_id, owed_at)
+			SELECT w, '', clock_timestamp() FROM (SELECT workspace_id AS w FROM g UNION SELECT $3::text) ws WHERE w <> ''
+			ON CONFLICT (user_id, client_id) DO UPDATE SET owed_at = EXCLUDED.owed_at)
+		INSERT INTO signed_out_everywhere (sub, at) VALUES ($1, $2) ON CONFLICT (sub) DO UPDATE SET at = EXCLUDED.at`, sub, at, workspaceID); err != nil {
 		return err
 	}
 	inMemory()
