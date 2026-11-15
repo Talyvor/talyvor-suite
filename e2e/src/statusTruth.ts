@@ -5,7 +5,7 @@
 // public /healthz with no pool or request internals (B37.11). Every rail that is down or not called is named. The screening
 // rail alone says how old the sanctions lists are, and reads operational only while they are fresh (B37.4).
 
-import { RAIL_SERVICES } from './moneyRails.ts'
+import { RAIL_SERVICES, railServicesListed } from './moneyRails.ts'
 import type { Scenario } from './scenarios.ts'
 
 /** talyvor-lens internal/status contract_test.go's documentedKeys, as README.md's Status section lists them. */
@@ -16,6 +16,7 @@ export const DOCUMENTED_KEYS = [
   'providers', 'providers[].name', 'providers[].status', 'providers[].latency_ms', 'providers[].checked_at',
   'rails', 'rails[].service', 'rails[].name', 'rails[].mode', 'rails[].status', 'rails[].last_success',
   'rails[].last_failure', 'rails[].capabilities', 'rails[].capabilities[].key', 'rails[].capabilities[].cleared',
+  'rails[].capabilities[].label',
   'rails[].lists_age_hours',
   'rails_summary', 'rails_summary.up', 'rails_summary.down', 'rails_summary.idle', 'rails_summary.down_names',
   'collectors', 'collectors[].source', 'collectors[].name', 'collectors[].on', 'collectors[].note',
@@ -47,7 +48,7 @@ interface Rail {
   status: string
   last_success: string | null
   last_failure: string | null
-  capabilities: { key: string; cleared: boolean | null }[]
+  capabilities: { key: string; cleared: boolean | null; label?: string }[]
   lists_age_hours?: number
 }
 
@@ -108,7 +109,7 @@ export function statusTruthVerdict(page: StatusJSON, health: Healthz, now = Date
   }
 
   const rails = Array.isArray(page.rails) ? page.rails : []
-  for (const service of RAIL_SERVICES) {
+  for (const service of railServicesListed(rails)) {
     const rows = rails.filter((r) => r.service === service)
     if (rows.length !== 1) { wrong.push(`rail ${service} is listed ${rows.length} times`); continue }
     const r = rows[0]

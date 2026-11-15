@@ -80,6 +80,7 @@ const SIDEBAR_DESTINATIONS = [
   // B28.7 — the wallet's own destinations, under Home.
   '/approvals',
   '/agents',
+  '/cards',
   '/statements',
   '/money/pay',
   '/money/invoices',

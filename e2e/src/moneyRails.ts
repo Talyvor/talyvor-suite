@@ -4,8 +4,17 @@
 
 import type { Scenario } from './scenarios.ts'
 
-/** Lens's partners.Services, in the order the status page lists them. */
-export const RAIL_SERVICES = ['account', 'fx', 'broker', 'stablecoin', 'kyc', 'screening', 'capital', 'insurer', 'agent_token', 'tax'] as const
+/** Lens's partners.Services the status page always lists, in its order. The broker rail is left off it until a trade_
+ * capability is cleared (talyvor-lens B56.6), so it is not demanded (B17.458). */
+export const RAIL_SERVICES = ['account', 'fx', 'stablecoin', 'kyc', 'screening', 'capital', 'insurer', 'agent_token', 'tax'] as const
+
+/** Rails the page lists only once a clearance is in force: not demanded, but held to the same rules when listed. */
+export const CLEARED_ONLY_RAIL_SERVICES = ['broker'] as const
+
+/** The services to hold `rails` to: every one always listed, and each cleared-only one the page does list. */
+export function railServicesListed(rails: readonly { service: string }[]): string[] {
+  return [...RAIL_SERVICES, ...CLEARED_ONLY_RAIL_SERVICES.filter((s) => rails.some((r) => r.service === s))]
+}
 
 /** One rail of /status.json, as Lens's status.MoneyRail sends it. */
 export interface MoneyRail {
@@ -17,11 +26,11 @@ export interface MoneyRail {
   last_failure: string | null
 }
 
-/** The oracle: all ten services listed once, each in mode "test", and none an outage. */
+/** The oracle: all nine services listed once, and a broker row the page lists held the same, each in mode "test", and none an outage. */
 export function railsVerdict(rails: readonly MoneyRail[] | null | undefined): { pass: boolean; detail: string } {
   if (!Array.isArray(rails)) return { pass: false, detail: `/status.json has no rails (${JSON.stringify(rails)})` }
   const wrong: string[] = []
-  for (const service of RAIL_SERVICES) {
+  for (const service of railServicesListed(rails)) {
     const rows = rails.filter((r) => r.service === service)
     if (rows.length === 0) { wrong.push(`${service} is not listed`); continue }
     if (rows.length > 1) wrong.push(`${service} is listed ${rows.length} times`)
@@ -38,7 +47,7 @@ export function moneyRails(): Scenario {
   return {
     id: 'status-money-rails',
     owner: 'talyvor-lens',
-    title: "Lens's status page lists all ten money rails, each on its Test partner, and none is down",
+    title: "Lens's status page lists all nine money rails, each on its Test partner, and none is down",
     feature: 'Agent Wallets',
     items: ['B30.12'],
     run: async (ctx) => {
