@@ -137,6 +137,28 @@ describe('Key recovery on the web (B55.54)', () => {
     expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull()
   })
 
+  // B57.131 — the cards drawn as Pocket's w-security draws its cards, not today's design inside the Pocket page.
+  it('with every key removed, Approvals and devices draws the way back in Pocket', async () => {
+    mockBff({ passkeys: [{ credential_id: 'old', name: 'iPhone', created_at: '2026-10-01T09:00:00Z', revoked_at: '2026-10-02T09:00:00Z' }] })
+    window.history.pushState({}, '', '/settings/devices')
+    render(<App />)
+    const card = await screen.findByRole('region', { name: 'Every key of this workspace was removed, so nothing can approve.' })
+    expect(card.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    expect(within(card).getByRole('textbox', { name: 'Recovery code' })).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Use your recovery code' })).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Wait 72 hours' })).toBeInTheDocument()
+  })
+
+  it('the Recovery code row is drawn in Pocket', async () => {
+    mockBff({ passkeys: [{ credential_id: 'mac', name: 'This Mac', created_at: '2026-10-01T09:00:00Z' }] })
+    window.history.pushState({}, '', '/settings/devices')
+    render(<App />)
+    const row = await screen.findByRole('region', { name: 'Recovery code' })
+    expect(row.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    expect(within(row).getByRole('heading', { name: 'Recovery code' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Make a new recovery code' })).toBeInTheDocument()
+  })
+
   it('a waiting recovery shows on every page to someone who did not start it, who can cancel it', async () => {
     const { sent } = mockBff({
       passkeys: [{ credential_id: 'old', name: 'iPhone', created_at: '2026-10-01T09:00:00Z', revoked_at: '2026-10-02T09:00:00Z' }],
