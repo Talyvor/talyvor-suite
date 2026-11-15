@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Chip, Input, Row } from '@talyvor/ui/pocket'
+import { Button, Chip, Input, Row } from '@talyvor/ui/pocket'
 import { isSessionExpired } from '../../lib/productState'
 import { formatWhen } from './format'
 import { type Agent, type AgentCard, type CardAuthorization, type Cardholder, agentBankApi, refusalText } from './agentBankApi'
@@ -182,11 +182,9 @@ export function IssueCard({ agent, onIssued }: { agent: Agent; onIssued?: () => 
 export function AgentCardPanel({ agent }: { agent: Agent }) {
   const q = useQuery({ queryKey: cardKey(agent.id), queryFn: () => agentBankApi.card(agent.id) })
   return (
-    <Card tone="white" data-testid="agent-card-panel" {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="font-display text-reading font-bold text-ink">Card</h3>
-        <WorkspaceLabel capability="agent_card" />
-      </div>
+    // B57.167 — opened from its Settings row, in a dialog that is titled by the row: the panel is the dialog's body.
+    <div data-testid="agent-card-panel" {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-4">
+      <WorkspaceLabel capability="agent_card" className="justify-self-start" />
       {q.isError ? (
         <p className="text-body text-ink-2">
           {isSessionExpired(q.error)
@@ -212,8 +210,8 @@ export function AgentCardPanel({ agent }: { agent: Agent }) {
             )}
           </div>
           {/* B59.25 — what came back of its payments, and every card payment of a date range as a file. */}
-          {/* Full width rules, with the two parts' own gutter plus 4 meeting the card's 20. */}
-          <div className="-mx-5 border-t border-line px-1">
+          {/* Full width rules, with the two parts' own gutter plus 8 meeting the dialog's 24. */}
+          <div className="-mx-6 border-t border-line px-2">
             <CardDisputesAndRefunds agentID={agent.id} />
             <div className="border-t border-line px-gutter py-3">
               <CardExport />
@@ -223,6 +221,6 @@ export function AgentCardPanel({ agent }: { agent: Agent }) {
       ) : (
         <IssueCard agent={agent} />
       )}
-    </Card>
+    </div>
   )
 }

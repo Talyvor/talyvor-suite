@@ -112,10 +112,10 @@ describe('untrusted text is only ever text', () => {
       },
     })
     window.history.pushState({}, '', '/agents/agt_1')
-    const { container } = render(<App />)
+    render(<App />)
     fireEvent.click(within(await screen.findByTestId('agent-setting-Its card')).getByRole('button')) // B57.22: a row of its Settings
     await within(await screen.findByTestId('agent-card-purchases')).findAllByText(/onerror=/)
-    assertInert(container)
+    assertInert(screen.getByRole('dialog', { name: 'Its card' })) // B57.167: it opens over the page
   })
 
   it('in a Room message', async () => {

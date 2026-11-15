@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -72,6 +72,31 @@ describe('an agent’s Settings (B57.22)', () => {
     expect(within(section).getByTestId('agent-setting-Name, description, colour and face')).toHaveTextContent('Research: cobalt, a circle face')
     expect(within(section).getByTestId('agent-setting-Ownership')).toHaveTextContent('Its owner is not verified yet')
     expect(within(section).getByTestId('agent-setting-Unusual spend').getAttribute('href')).toBe('/agents/agt_research/rules')
+  })
+
+  // B57.167 — the seven forms that opened under the section now open over the page, as the rest do, in Pocket's dialog.
+  it('opens each of its forms over the page, in a dialog named by its row', async () => {
+    populatedBff((impl) => vi.spyOn(globalThis, 'fetch').mockImplementation(impl))
+    window.history.pushState({}, '', '/agents/agt_research')
+    mount()
+    await settleQueries(queryClient, waitFor)
+    for (const [row, form] of [
+      ['Its key', 'Key'],
+      ['Its card', 'Card'],
+      ['Automatic top-up', 'Top-up'],
+      ['Limit boost', 'Boost'],
+      ['Pay another agent', 'Pay'],
+      ['Scheduled payments', 'Schedules'],
+      ['Its credential', 'Credential'],
+    ]) {
+      fireEvent.click(within(screen.getByTestId(`agent-setting-${row}`)).getByRole('button'))
+      const dialog = await screen.findByRole('dialog', { name: row })
+      expect(within(dialog).getByText(`${form} form`)).toBeTruthy()
+      expect(dialog.closest('[data-design="pocket"]')).not.toBeNull()
+      expect(within(screen.getByTestId('agent-settings')).queryByText(`${form} form`)).toBeNull()
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    }
   })
 
   it('every control in it does something', async () => {

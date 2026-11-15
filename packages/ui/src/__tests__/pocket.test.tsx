@@ -302,6 +302,14 @@ describe('the page pieces', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Copied. Store it now: it will not be shown again')
   })
 
+  // B57.167 — outside a secure context there is no clipboard at all: a key shown once still says it was not copied.
+  it('CodeBox says it could not copy when the browser has no clipboard', async () => {
+    Object.assign(navigator, { clipboard: undefined })
+    render(<CodeBox code="tlv_ws_example" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Could not copy. Select it and copy it yourself.')
+  })
+
   it('Steps are numbered, in order', () => {
     render(<Steps steps={[{ title: 'Make a key' }, { title: 'Add it to Claude', line: 'One command' }]} />)
     const items = screen.getAllByRole('listitem')

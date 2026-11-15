@@ -1,0 +1,48 @@
+[
+  {
+    "route": "/agents/agt_research",
+    "screen": "w-agent-research"
+  },
+  {
+    "route": "/agents/agt_research",
+    "steps": [
+      "Its key"
+    ]
+  },
+  {
+    "route": "/agents/agt_research",
+    "steps": [
+      "Its card"
+    ]
+  },
+  {
+    "route": "/agents/agt_research",
+    "steps": [
+      "Automatic top-up"
+    ]
+  },
+  {
+    "route": "/agents/agt_research",
+    "steps": [
+      "Limit boost"
+    ]
+  },
+  {
+    "route": "/agents/agt_research",
+    "steps": [
+      "Pay another agent"
+    ]
+  },
+  {
+    "route": "/agents/agt_research",
+    "steps": [
+      "Scheduled payments"
+    ]
+  },
+  {
+    "route": "/agents/agt_research",
+    "steps": [
+      "Its credential"
+    ]
+  }
+]
