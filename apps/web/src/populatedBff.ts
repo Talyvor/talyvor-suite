@@ -51,6 +51,26 @@ const BODIES: Record<string, unknown> = {
       { id: 'macc_agt', agent_id: 'agt_research', currency: 'GBP', purpose: 'agent', status: 'open', name: 'GBP account', balance_minor: 12000, test_minor: 12000, live_minor: 0 },
     ],
   },
+  // B61.2 — each account's statement, as Activity lists every payment in and out: a payment out, a card payment and an
+  // Instant transfer from the agent's account, and a payment into the company's.
+  '/api/money/accounts/macc_co/statement': {
+    account_id: 'macc_co', currency: 'GBP', opening_minor: 0, in_minor: 50000, out_minor: 0, closing_minor: 50000,
+    lines: [{ entry_id: 'ment_in', line: 1, at: '2026-10-09T09:00:00Z', kind: 'payment_in', amount_minor: 50000, funding: 'test', counterparty: 'Fennel Labs', memo: 'INV-000001', balance_after_minor: 50000 }],
+  },
+  '/api/money/accounts/macc_agt/statement': {
+    account_id: 'macc_agt', agent_id: 'agt_research', currency: 'GBP', opening_minor: 64250, in_minor: 0, out_minor: 52250, closing_minor: 12000,
+    lines: [
+      { entry_id: 'ment_out', line: 1, at: '2026-10-10T10:00:00Z', kind: 'payment_out', amount_minor: -2000, funding: 'test', counterparty: 'Acme Hosting Ltd', memo: 'October hosting', balance_after_minor: 62250 },
+      { entry_id: 'ment_card', line: 1, at: '2026-10-21T15:00:00Z', kind: 'card_charge', amount_minor: -250, funding: 'test', counterparty: 'Hetzner', partner_ref: 'cpay_1', balance_after_minor: 62000 },
+      { entry_id: 'ment_itr', line: 1, at: '2026-10-23T09:00:00Z', kind: 'instant_transfer_convert', amount_minor: -50000, funding: 'test', counterparty: 'sandbox', memo: 'Instant transfer itr_sample to Acme Hosting Ltd: £500.00 sent', balance_after_minor: 12000 },
+    ],
+  },
+  '/api/money/accounts/%3Aaccount/statement': { account_id: ':account', currency: 'GBP', opening_minor: 0, in_minor: 0, out_minor: 0, closing_minor: 0, lines: [] },
+  '/api/money/instant-transfers/itr_sample': {
+    id: 'itr_sample', agent_id: 'agt_research', from_account_id: 'macc_agt', to_payee_id: 'payee_1', beneficiary_name: 'Acme Hosting Ltd',
+    send_minor: 50000, send_currency: 'GBP', fee_minor: 125, receive_minor: 49875, receive_currency: 'GBP', rate: '0.99750000', arrives_in_seconds: true, status: 'received',
+    legs: [], reversal_entry_ids: [], created_at: '2026-10-23T09:00:00Z', updated_at: '2026-10-23T09:00:12Z',
+  },
   // B30.96 — the Pay screen: saved payees, payments out, mandates and payout batches.
   '/api/money/payees': {
     payees: [

@@ -14,6 +14,7 @@ const ORDER = [
   'Cards',
   'Statements',
   'Pay',
+  'Activity',
   'Invoices',
   'Spending',
   'Chat',
@@ -65,7 +66,7 @@ afterEach(() => {
 })
 
 describe('the navigation is wallet-first (B28.7)', () => {
-  it('the sidebar is the logo, the workspace, then Home, Approvals, Agents, Cards, Statements, Pay, Invoices, Spending, Chat, Rooms, Marketplace; a rule; Scan, Track and Docs, Developers, Billing, Settings; Privacy and Terms at its foot', async () => {
+  it('the sidebar is the logo, the workspace, then Home, Approvals, Agents, Cards, Statements, Pay, Activity, Invoices, Spending, Chat, Rooms, Marketplace; a rule; Scan, Track and Docs, Developers, Billing, Settings; Privacy and Terms at its foot', async () => {
     mockBff()
     const nav = await sidebarAt('/')
     await within(nav).findByRole('link', { name: /^Approvals 2/ })

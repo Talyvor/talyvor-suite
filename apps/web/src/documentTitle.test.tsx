@@ -185,6 +185,8 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/money/pay/bulk-payouts': 'Bulk payouts',
   '/money/pay/instant-transfer': 'Instant transfer',
   '/money/pay/instant-transfer/:id': 'Instant transfer',
+  '/activity': 'Activity',
+  '/activity/:account/:entry': 'Activity',
   '/money/pay/bills': 'Bills you received',
   '/money/subscriptions': 'Subscriptions',
   '/money/budgets': 'Budgets',
