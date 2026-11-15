@@ -77,23 +77,12 @@ import { App, CONSOLE_ROUTES, queryClient } from './App'
 const SIDEBAR_DESTINATIONS = [
   // The logo, to Home, and Home's own row: one destination, two links.
   '/',
-  // B28.7 — the wallet's own destinations, under Home.
-  '/approvals',
+  // B61.3 — the approved seven (launch-pack DESIGN.md W2), under Home.
   '/agents',
   '/cards',
-  '/statements',
   '/money/pay',
+  '/approvals',
   '/activity',
-  '/money/invoices',
-  '/money/spending',
-  '/chat',
-  '/rooms',
-  '/marketplace',
-  // Below the rule.
-  '/scan/reports',
-  '/track',
-  '/setup',
-  '/billing',
   '/settings',
   // At the foot.
   '/privacy',
@@ -276,8 +265,8 @@ describe('the capability, not the tag: activation is what the reader gets', () =
   })
 
   it('the destination is on the element itself, where the browser and the rotor read it', async () => {
-    const link = await sidebarLink('/setup')
-    expect(link.getAttribute('href')).toBe('/setup')
+    const link = await sidebarLink('/settings')
+    expect(link.getAttribute('href')).toBe('/settings')
     expect(
       link.getAttribute('target'),
       'a target would take the same-tab navigation away again',
@@ -293,6 +282,6 @@ describe('the capability, not the tag: activation is what the reader gets', () =
       current.map((el) => (el.textContent ?? '').trim()),
       'aria-current moved off the destination when it stopped being a button — the selected row ' +
         'is then a tick a sighted reader sees and nothing else',
-    ).toEqual(['Developers'])
+    ).toEqual(['Settings'])
   })
 })

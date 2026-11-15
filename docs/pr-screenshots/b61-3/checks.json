@@ -1,0 +1,6 @@
+[
+  { "route": "/" },
+  { "route": "/activity" },
+  { "route": "/money/pay" },
+  { "route": "/settings" }
+]

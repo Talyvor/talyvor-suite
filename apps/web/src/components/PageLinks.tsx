@@ -101,6 +101,7 @@ const SETTINGS_ICON: Record<string, IconName> = {
   '/settings/data': 'download',
   '/settings/close': 'x',
   '/operator': 'key',
+  '/setup': 'code',
 }
 
 /** "1 person" or "3 people". */
@@ -135,7 +136,8 @@ export function useSettingsLinks(): SettingsLink[] {
     { to: '/settings/devices', title: 'Approvals and devices', line: 'Your passkeys, your phone, and notifications' },
     { to: '/settings/connect', title: 'Connect your AI', line: 'Use Talyvor from Claude, ChatGPT and others' },
     ...(team ? [{ to: '/members', title: 'Members', line: roster.data ? people(roster.data.length) : undefined }] : []),
-    { to: '/billing', title: 'Billing and plan', line: plan },
+    // B61.3 — Billing and Plans, as one row.
+    { to: '/billing', title: 'Plan', line: plan },
     ...(business ? [{ to: '/settings/company', title: 'Company details', line: 'Company name, number and country, and the people with control' }] : []),
     { to: '/settings/verification', title: 'Verification', line: 'What Talyvor has checked about you' },
     // B55.28 — where the workspace is paid its earnings.
@@ -147,6 +149,8 @@ export function useSettingsLinks(): SettingsLink[] {
     { to: '/settings/data', title: 'Your data', line: 'A copy of your data, or ask for it to be deleted' },
     { to: '/settings/close', title: 'Close this account', line: 'What must be empty first, and asking to close' },
     ...(operator ? [{ to: '/operator', title: 'Talyvor operators', line: 'Workspaces, tax, compliance and the review queue. Shown only to Talyvor’s operators' }] : []),
+    // B61.3 — Connect an agent and API keys, as one row at the end, for a Business only.
+    ...(business ? [{ to: '/setup', title: 'Developers', line: 'Connect an agent, and API keys' }] : []),
   ]
   return links.filter((l) => areas.shows(l.to)).map((l) => ({ ...l, icon: SETTINGS_ICON[l.to] ?? 'settings' }))
 }

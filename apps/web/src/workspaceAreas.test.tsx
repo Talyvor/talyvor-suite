@@ -8,17 +8,17 @@ import { areaSource, readWorkspaceAreas } from './lib/workspaceAreas'
 // to Home. These read the areas from the BFF, as the console does, rather than the open-everything test default.
 
 /**
- * What each hidden area draws in the console when it is on: its addresses, its Home card and a page title, and whether
- * it has a sidebar row (B57.8 — Docs is reached from Track and Settings, and the gateway's features from Developers).
+ * What each hidden area draws in the console when it is on: its addresses, its Home card and a page title. None has a
+ * sidebar row (B61.3 — the sidebar is the approved seven).
  */
 const AREAS = [
-  { area: 'chat', paths: ['/chat'], card: null, page: 'Prompts', row: true },
-  { area: 'rooms', paths: ['/rooms'], card: null, page: 'Rooms', row: true },
-  { area: 'marketplace', paths: ['/marketplace'], card: null, page: 'Marketplace', row: true },
-  { area: 'track', paths: ['/track'], card: null, page: 'Track', row: true },
-  { area: 'docs', paths: ['/docs', '/settings/webhooks', '/settings/email-branding'], card: null, page: 'Webhooks', row: false },
-  { area: 'scan', paths: ['/scan/reports', '/scan/agents', '/scan/track-record'], card: null, page: 'Scan reports', row: true },
-  { area: 'gateway', paths: ['/features'], card: null, page: 'Gateway features', row: false },
+  { area: 'chat', paths: ['/chat'], card: null, page: 'Prompts' },
+  { area: 'rooms', paths: ['/rooms'], card: null, page: 'Rooms' },
+  { area: 'marketplace', paths: ['/marketplace'], card: null, page: 'Marketplace' },
+  { area: 'track', paths: ['/track'], card: null, page: 'Track' },
+  { area: 'docs', paths: ['/docs', '/settings/webhooks', '/settings/email-branding'], card: null, page: 'Webhooks' },
+  { area: 'scan', paths: ['/scan/reports', '/scan/agents', '/scan/track-record'], card: null, page: 'Scan reports' },
+  { area: 'gateway', paths: ['/features', '/spend'], card: null, page: 'Gateway features' },
 ] as const
 
 const inArea = (href: string, paths: readonly string[]) =>
@@ -85,7 +85,8 @@ describe('a hidden area is not there (B59.2)', () => {
     it(`${a.area}: all of it is there once Lens lists the area`, async () => {
       mockBff([a.area])
       const nav = await openApp('/')
-      if (a.row) expect(navHrefs(nav).filter((h) => inArea(h, a.paths)).length).toBeGreaterThan(0)
+      // B61.3 — the sidebar is the approved seven even then: an area that is on is reached from ⌘K and its address.
+      expect(navHrefs(nav).filter((h) => inArea(h, a.paths))).toEqual([])
       if (a.card !== null) expect(screen.getByTestId(a.card)).toBeTruthy()
       expect(paletteOptions()).toContain(a.page)
       cleanup()

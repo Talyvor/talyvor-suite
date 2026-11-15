@@ -8,22 +8,13 @@ import { PENDING_POLL_MS } from './areas/lens/WalletScreens'
 // screens, a rule, then the rest. Drives the real <App /> as an operator, which adds no row.
 
 const ORDER = [
+  // B61.3 — the approved seven (launch-pack DESIGN.md W2).
   'Home',
-  'Approvals',
   'Agents',
   'Cards',
-  'Statements',
   'Pay',
+  'Approvals',
   'Activity',
-  'Invoices',
-  'Spending',
-  'Chat',
-  'Rooms',
-  'Marketplace',
-  'Scan',
-  'Track and Docs',
-  'Developers',
-  'Billing',
   'Settings',
   'Privacy',
   'Terms',
@@ -66,7 +57,7 @@ afterEach(() => {
 })
 
 describe('the navigation is wallet-first (B28.7)', () => {
-  it('the sidebar is the logo, the workspace, then Home, Approvals, Agents, Cards, Statements, Pay, Activity, Invoices, Spending, Chat, Rooms, Marketplace; a rule; Scan, Track and Docs, Developers, Billing, Settings; Privacy and Terms at its foot', async () => {
+  it('the sidebar is the logo, the workspace, then Home, Agents, Cards, Pay, Approvals, Activity, Settings; Privacy and Terms at its foot', async () => {
     mockBff()
     const nav = await sidebarAt('/')
     await within(nav).findByRole('link', { name: /^Approvals 2/ })
@@ -76,10 +67,7 @@ describe('the navigation is wallet-first (B28.7)', () => {
     expect(links[0].getAttribute('href')).toBe('/')
     expect(links.slice(1).map((el) => (el.textContent ?? '').replace(/\d+ waiting$/, '').trim())).toEqual(ORDER)
     expect(nav.querySelectorAll('button[aria-expanded]')).toHaveLength(0)
-    // The rule sits between Marketplace and Scan.
-    const rule = nav.querySelector('[role="separator"]')!
-    expect(rule.previousElementSibling?.textContent).toBe('Marketplace')
-    expect(rule.nextElementSibling?.textContent).toBe('Scan')
+    expect(nav.querySelector('[role="separator"]')).toBeNull()
   })
 
   it('the workspace’s name sits under the logo, never its id', async () => {

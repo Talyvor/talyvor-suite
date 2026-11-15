@@ -174,7 +174,8 @@ describe('the ⌘K bar in Pocket (B57.9)', () => {
     expect(group(bar, 'Agents').getAllByRole('option').map((o) => o.textContent)).toEqual(['Researcher', 'Writer'])
     expect(group(bar, 'Payees').getAllByRole('option').map((o) => o.textContent)).toEqual(['Acme Hosting Ltd', 'Nord Research GmbH'])
     const pages = group(bar, 'Pages').getAllByRole('option').map((o) => o.textContent)
-    for (const page of ['Home', 'Approvals', 'Agents', 'Statements', 'Pay', 'Invoices', 'Settings', 'Ledger']) expect(pages).toContain(page)
+    // B61.3 — a page that left the sidebar says where it now opens from.
+    for (const page of ['Home', 'Approvals', 'Agents', 'Statements · in Activity', 'Pay', 'Invoices · in Pay', 'Settings', 'Ledger']) expect(pages).toContain(page)
     expect(screen.getByText('Enter to choose · Esc to close')).toBeInTheDocument()
   })
 

@@ -357,8 +357,8 @@ describe('every console address names itself to the browser', () => {
     // correct for exactly one route and wrong for every route the user walks to afterwards.
     await at('/')
     await waitFor(() => expect(document.title).toBe(`Home | ${BRAND}`))
-    fireEvent.click(screen.getByRole('link', { name: 'Statements' }))
-    await waitFor(() => expect(document.title).toBe(`Statements | ${BRAND}`))
+    fireEvent.click(screen.getByRole('link', { name: 'Activity' }))
+    await waitFor(() => expect(document.title).toBe(`Activity | ${BRAND}`))
   })
 })
 

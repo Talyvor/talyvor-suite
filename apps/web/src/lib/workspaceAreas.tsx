@@ -38,6 +38,8 @@ const AREA_PATHS: readonly { path: string; area: Area }[] = [
   { path: '/settings/email-branding', area: 'docs' },
   { path: '/scan', area: 'scan' },
   { path: '/features', area: 'gateway' },
+  // B61.3 — Spend and routing is the old gateway's too (LAUNCH-PACK.md section 2).
+  { path: '/spend', area: 'gateway' },
 ]
 
 /** The area a console address belongs to, or undefined for a launch screen. */

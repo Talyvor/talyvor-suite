@@ -100,6 +100,8 @@ function typing(target: EventTarget | null): boolean {
 export interface PalettePage {
   path: string
   title: string
+  /** B61.3 — the sidebar row a page that left the sidebar opens from, said beside its title and found by its name. */
+  place?: string
 }
 
 /** B57.9 — Keyboard shortcuts' message, as the reference words it; the modifier as this platform's keyboard shows it. */
@@ -229,7 +231,8 @@ export function CommandPalette({
         label: p.title,
         group: 'Pages',
         icon: pageIcon(p.path),
-        words: `go to open ${p.path}`,
+        detail: p.place === undefined ? undefined : `in ${p.place}`,
+        words: `go to open ${p.path}${p.place === undefined ? '' : ` ${p.place}`}`,
         run: () => {
           setShown(false)
           navigate(p.path)
