@@ -1,8 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
-import { Icon, Button as PocketButton, Row as PocketRow, RoomBadge, faceOf, type FaceColour } from '@talyvor/ui/pocket'
+import { Button, CardHeader, Input, Pill, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
+import {
+  Chip,
+  CodeBox,
+  Facts,
+  Field,
+  Icon,
+  Button as PocketButton,
+  Input as PocketInput,
+  Money as PocketMoney,
+  Row as PocketRow,
+  RoomBadge,
+  Select,
+  faceOf,
+  type FaceColour,
+} from '@talyvor/ui/pocket'
 import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
 import { useLinked } from '../../components/LinkedItem'
@@ -320,22 +334,25 @@ const EVERY: readonly [AgentSchedule['every'], string][] = [
 ]
 const everyText = (e: AgentSchedule['every']) => EVERY.find(([v]) => v === e)?.[1] ?? e
 
-/** B19.21 — one schedule's ticks, newest first: paid, or refused and why. */
+/** B19.21 — one schedule's ticks, newest first: paid, or refused and why. B57.167: Pocket's rows. */
 function ScheduleRuns({ sid }: { sid: string }) {
   const runs = useQuery({ queryKey: ['agent-schedule-runs', sid], queryFn: () => agentBankApi.scheduleRuns(sid) })
-  if (runs.isError) return <p className="px-gutter py-2 text-caption text-muted">{readFailure(runs.error, 'Its runs')}</p>
-  if (runs.isPending) return <p className="px-gutter py-2 text-caption text-muted">Reading…</p>
+  if (runs.isError) return <p className="pb-2.5 pl-4 text-body text-ink-3">{readFailure(runs.error, 'Its runs')}</p>
+  if (runs.isPending) return <p className="pb-2.5 pl-4 text-body text-ink-3">Reading…</p>
   const list = runs.data.runs ?? []
   return list.length > 0 ? (
-    <>
+    <div className="pl-4">
       {list.slice(0, 10).map((r) => (
-        <Row key={r.tick_at} className="pl-8" label={<span className="font-figure">{formatWhen(r.tick_at)}</span>} hint={r.detail || undefined}>
-          <Pill status={r.outcome === 'paid' ? 'settled' : 'slashed'}>{r.outcome === 'paid' ? 'Paid' : 'Refused'}</Pill>
-        </Row>
+        <PocketRow
+          key={r.tick_at}
+          title={<span className="font-figure font-normal">{formatWhen(r.tick_at)}</span>}
+          line={r.detail || undefined}
+          action={<Chip tone={r.outcome === 'paid' ? 'good' : 'bad'}>{r.outcome === 'paid' ? 'Paid' : 'Refused'}</Chip>}
+        />
       ))}
-    </>
+    </div>
   ) : (
-    <p className="px-gutter py-2 pl-8 text-caption text-muted">It has not run yet.</p>
+    <p className="pb-2.5 pl-4 text-body text-ink-3">It has not run yet.</p>
   )
 }
 
@@ -379,55 +396,55 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
   const payeeOf = (sc: AgentSchedule) =>
     sc.to_listing_id ? (listings.find((l) => l.id === sc.to_listing_id)?.title ?? 'a marketplace listing') : nameOf(sc.to_agent_id)
   return (
-    <Card>
-      <CardHeader>Scheduled payments</CardHeader>
+    <div className="grid gap-3.5">
       {list.isError ? (
-        <p className="px-gutter py-3 text-body text-muted">{readFailure(list.error, 'Its schedules')}</p>
+        <p>{readFailure(list.error, 'Its schedules')}</p>
       ) : list.isPending ? (
-        <p className="px-gutter py-3 text-body text-muted">Reading…</p>
+        <p>Reading…</p>
       ) : mine.length > 0 ? (
-        mine.map((sc) => (
-          <div key={sc.id}>
-            <Row
-              label={
-                <>
-                  Pays {payeeOf(sc)} {sc.to_listing_id && sc.amount_ulxc === 0 ? 'its price' : lxc(sc.amount_ulxc)} {everyText(sc.every)}
-                </>
-              }
-              hint={
-                <>
-                  Next <span className="font-figure">{formatWhen(sc.next_run_at)}</span>
-                  {sc.memo ? ` · ${sc.memo}` : ''}
-                </>
-              }
-            >
-              <Button aria-pressed={shown === sc.id} onClick={() => setShown(shown === sc.id ? null : sc.id)}>
-                Runs
-              </Button>
-              <Button disabled={stop.isPending} onClick={() => stop.mutate(sc.id)}>
-                Stop
-              </Button>
-            </Row>
-            {shown === sc.id ? <ScheduleRuns sid={sc.id} /> : null}
-          </div>
-        ))
+        <div>
+          {mine.map((sc) => (
+            <div key={sc.id} className="border-t border-line first:border-t-0">
+              <PocketRow
+                wrap
+                title={
+                  <>
+                    Pays {payeeOf(sc)} {sc.to_listing_id && sc.amount_ulxc === 0 ? 'its price' : <PocketMoney ulxc={sc.amount_ulxc} />} {everyText(sc.every)}
+                  </>
+                }
+                line={
+                  <>
+                    Next <span className="font-figure">{formatWhen(sc.next_run_at)}</span>
+                    {sc.memo ? ` · ${sc.memo}` : ''}
+                  </>
+                }
+                action={
+                  <>
+                    <PocketButton variant="secondary" size="sm" aria-pressed={shown === sc.id} onClick={() => setShown(shown === sc.id ? null : sc.id)}>
+                      Runs
+                    </PocketButton>
+                    <PocketButton variant="secondary" size="sm" disabled={stop.isPending} onClick={() => stop.mutate(sc.id)}>
+                      Stop
+                    </PocketButton>
+                  </>
+                }
+              />
+              {shown === sc.id ? <ScheduleRuns sid={sc.id} /> : null}
+            </div>
+          ))}
+        </div>
       ) : (
-        <p className="px-gutter py-3 text-body text-muted">{agent.name} pays nothing on a schedule.</p>
+        <p>{agent.name} pays nothing on a schedule.</p>
       )}
       <form
-        className="flex flex-col gap-2 px-gutter py-3"
+        className="grid gap-3.5 border-t border-line pt-3.5"
         onSubmit={(e) => {
           e.preventDefault()
           if (payee !== '' && micros !== null && !create.isPending) create.mutate()
         }}
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            aria-label={`Who ${agent.name} pays on a schedule`}
-            className={`${scheduleSelect} w-56`}
-            value={payee}
-            onChange={(e) => setPayee(e.target.value)}
-          >
+        <Field label={`Who ${agent.name} pays on a schedule`}>
+          <Select value={payee} onChange={(e) => setPayee(e.target.value)}>
             <option value="">Pay…</option>
             {others.map((a) => (
               <option key={a.id} value={`agent:${a.id}`}>
@@ -439,59 +456,53 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
                 {l.title} (marketplace)
               </option>
             ))}
-          </select>
-          <Input
-            aria-label={`Scheduled amount in LXC for ${agent.name}`}
-            inputMode="decimal"
-            placeholder={toListing ? 'At most its price' : 'LXC'}
-            className="w-32 font-figure"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <select
-            aria-label={`How often ${agent.name} pays`}
-            className={`${scheduleSelect} w-36`}
-            value={every}
-            onChange={(e) => setEvery(e.target.value as AgentSchedule['every'])}
-          >
+          </Select>
+        </Field>
+        <Field label={`Scheduled amount in LXC for ${agent.name}`}>
+          <PocketInput inputMode="decimal" placeholder={toListing ? 'At most its price' : '0'} unit="LXC" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        {micros !== null && micros > 0 ? (
+          <p className="text-body text-ink-3" data-testid="schedule-amount">
+            <PocketMoney ulxc={micros} /> {everyText(every)}
+          </p>
+        ) : null}
+        <Field label={`How often ${agent.name} pays`}>
+          <Select value={every} onChange={(e) => setEvery(e.target.value as AgentSchedule['every'])}>
             {EVERY.map(([v, label]) => (
               <option key={v} value={v}>
                 {label}
               </option>
             ))}
-          </select>
-          <Input
-            aria-label={`Memo for ${agent.name}’s scheduled payment`}
-            placeholder="Memo"
-            className="wide:w-40"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-          />
-          <Button type="submit" disabled={payee === '' || micros === null || create.isPending}>
+          </Select>
+        </Field>
+        <Field label={`Memo for ${agent.name}’s scheduled payment`}>
+          <PocketInput placeholder="Memo" value={memo} onChange={(e) => setMemo(e.target.value)} />
+        </Field>
+        <div className="flex justify-end">
+          <PocketButton
+            type="submit"
+            disabled={create.isPending}
+            disabledReason={payee === '' ? 'Pick who it pays first.' : micros === null ? 'Type an amount in LXC first.' : undefined}
+          >
             Schedule
-          </Button>
+          </PocketButton>
         </div>
         {create.isError ? <Note ok={false}>{refusalText(create.error)}</Note> : null}
         {stop.isError ? <Note ok={false}>{refusalText(stop.error)}</Note> : null}
       </form>
-    </Card>
+    </div>
   )
 }
 
 /** B19.21 — below one balance, the workspace tops the agent back up to another (Lens B19.8), once per dip. */
 function AgentTopUpCard({ agent }: { agent: Agent }) {
   const topUp = useQuery({ queryKey: ['agent-topup', agent.id], queryFn: () => agentBankApi.topUp(agent.id) })
-  return (
-    <Card>
-      <CardHeader>Automatic top-up</CardHeader>
-      {topUp.isError ? (
-        <p className="px-gutter py-3 text-body text-muted">{readFailure(topUp.error, 'Its top-up')}</p>
-      ) : topUp.isPending ? (
-        <p className="px-gutter py-3 text-body text-muted">Reading…</p>
-      ) : (
-        <TopUpForm key={topUp.dataUpdatedAt} agent={agent} current={topUp.data} />
-      )}
-    </Card>
+  return topUp.isError ? (
+    <p>{readFailure(topUp.error, 'Its top-up')}</p>
+  ) : topUp.isPending ? (
+    <p>Reading…</p>
+  ) : (
+    <TopUpForm key={topUp.dataUpdatedAt} agent={agent} current={topUp.data} />
   )
 }
 
@@ -506,46 +517,36 @@ function TopUpForm({ agent, current }: { agent: Agent; current: AgentTopUpValue 
   const remove = useMutation({ mutationFn: () => agentBankApi.removeTopUp(agent.id), onSettled: refresh })
   return (
     <form
-      className="flex flex-col gap-2 px-gutter py-3"
+      className="grid gap-3.5"
       onSubmit={(e) => {
         e.preventDefault()
         if (belowMicros !== null && toMicros !== null && !save.isPending) save.mutate()
       }}
     >
-      <p className="text-body text-ink" data-testid="agent-topup">
+      <p data-testid="agent-topup">
         {current ? (
           <>
-            When {agent.name} holds less than {lxc(current.below_ulxc)}, the workspace tops it up to {lxc(current.to_ulxc)}.
+            When {agent.name} holds less than <PocketMoney ulxc={current.below_ulxc} />, the workspace tops it up to <PocketMoney ulxc={current.to_ulxc} />.
           </>
         ) : (
           `${agent.name} is not topped up automatically.`
         )}
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          aria-label={`Top ${agent.name} up below, in LXC`}
-          inputMode="decimal"
-          placeholder="Below LXC"
-          className="w-28 font-figure"
-          value={below}
-          onChange={(e) => setBelow(e.target.value)}
-        />
-        <Input
-          aria-label={`Top ${agent.name} up to, in LXC`}
-          inputMode="decimal"
-          placeholder="Up to LXC"
-          className="w-28 font-figure"
-          value={to}
-          onChange={(e) => setTo(e.target.value)}
-        />
-        <Button type="submit" disabled={belowMicros === null || toMicros === null || save.isPending}>
-          {current ? 'Change top-up' : 'Set top-up'}
-        </Button>
+      <Field label={`Top ${agent.name} up below, in LXC`}>
+        <PocketInput inputMode="decimal" placeholder="0" unit="LXC" value={below} onChange={(e) => setBelow(e.target.value)} />
+      </Field>
+      <Field label={`Top ${agent.name} up to, in LXC`}>
+        <PocketInput inputMode="decimal" placeholder="0" unit="LXC" value={to} onChange={(e) => setTo(e.target.value)} />
+      </Field>
+      <div className="flex flex-wrap justify-end gap-2.5">
         {current ? (
-          <Button type="button" disabled={remove.isPending} onClick={() => remove.mutate()}>
+          <PocketButton type="button" variant="secondary" disabled={remove.isPending} onClick={() => remove.mutate()}>
             Remove
-          </Button>
+          </PocketButton>
         ) : null}
+        <PocketButton type="submit" disabled={save.isPending} disabledReason={belowMicros === null || toMicros === null ? 'Type both amounts in LXC first.' : undefined}>
+          {current ? 'Change top-up' : 'Set top-up'}
+        </PocketButton>
       </div>
       {save.isError ? <Note ok={false}>{refusalText(save.error)}</Note> : null}
       {remove.isError ? <Note ok={false}>{refusalText(remove.error)}</Note> : null}
@@ -1517,14 +1518,14 @@ type BoostField = LimitField | 'requests_per_minute'
 /** B28.32 — the limits a boost may raise (Lens's boostableRules), named as the Rules card names them. */
 const BOOSTABLE: readonly (readonly [BoostField, string])[] = [...LIMITS, ['requests_per_minute', 'Requests a minute']]
 
-/** B28.32 — a limit's figure as its rule counts it: LXC, or requests a minute. */
+/** B28.32 — a limit's figure as its rule counts it: money, or requests a minute. */
 function boostFigure(rule: string, v: number): React.ReactNode {
   return rule === 'requests_per_minute' ? (
     <>
       <span className="font-figure">{v}</span> requests a minute
     </>
   ) : (
-    lxc(v)
+    <PocketMoney ulxc={v} />
   )
 }
 
@@ -1543,8 +1544,8 @@ function localMinute(d: Date): string {
 /** B57.22 — the Limit boost row's form: today's, over the agent's rules as they stand. */
 function BoostForm({ agent }: { agent: Agent }) {
   const rules = useQuery({ queryKey: rulesKey(agent.id), queryFn: () => agentBankApi.rules(agent.id) })
-  if (rules.isError) return <p className="text-body text-muted">{readFailure(rules.error, 'Its rules')}</p>
-  return rules.isSuccess ? <LimitBoost agent={agent} rules={rules.data} /> : <p className="text-body text-muted">Reading…</p>
+  if (rules.isError) return <p>{readFailure(rules.error, 'Its rules')}</p>
+  return rules.isSuccess ? <LimitBoost agent={agent} rules={rules.data} /> : <p>Reading…</p>
 }
 
 function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
@@ -1585,56 +1586,55 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
   const inForce: AgentRuleBoost[] = boosts.data?.boosts ?? []
   const ready = asked !== null && !raise.isPending
   return (
-    <Card>
-      <CardHeader>Limit boost</CardHeader>
+    <div className="grid gap-3.5">
       {boosts.isError ? (
-        <p className="px-gutter py-3 text-body text-muted">{readFailure(boosts.error, `${agent.name}’s raised limits`)}</p>
+        <p>{readFailure(boosts.error, `${agent.name}’s raised limits`)}</p>
       ) : inForce.length > 0 ? (
-        <ul className="flex flex-col divide-y divide-rule" aria-label={`Limits raised for ${agent.name}`}>
+        <ul className="grid" aria-label={`Limits raised for ${agent.name}`}>
           {inForce.map((b) => (
-            <li key={b.rule} className="flex flex-wrap items-center gap-2 px-gutter py-3" data-testid={`boost-${b.rule}`}>
-              <span className="text-body text-ink">
+            <li key={b.rule} className="flex flex-wrap items-center gap-2 border-t border-line py-2.5 first:border-t-0" data-testid={`boost-${b.rule}`}>
+              <span className="text-ink">
                 {label(b.rule)} raised to {boostFigure(b.rule, b.value)} until <span className="font-figure">{formatWhen(b.until)}</span>,
                 then {boostFigure(b.rule, b.raised_from)} again by itself.
               </span>
               {(rules[b.rule as BoostField] ?? 0) === b.raised_from ? (
-                <Pill status="settled">In force</Pill>
+                <Chip tone="good">In force</Chip>
               ) : (
-                <span className="text-caption text-muted">No longer applies: the rules have changed this limit since.</span>
+                <span className="text-body text-ink-3">No longer applies: the rules have changed this limit since.</span>
               )}
-              <span className="text-caption text-muted">
+              <span className="text-body text-ink-3">
                 Set{changedBy(b.created_by)}, <span className="font-figure">{formatWhen(b.created_at)}</span>
               </span>
-              <Button
+              <PocketButton
+                variant="secondary"
+                size="sm"
                 className="ml-auto"
                 disabled={end.isPending}
                 aria-label={`End the boost on ${agent.name}’s ${label(b.rule).toLowerCase()} now`}
                 onClick={() => end.mutate(b.rule)}
               >
                 End now
-              </Button>
+              </PocketButton>
             </li>
           ))}
         </ul>
       ) : null}
       {rule === undefined ? (
-        <p className="px-gutter py-3 text-body text-muted">{agent.name} has no limit set to raise. Set one under Rules first.</p>
+        <p>{agent.name} has no limit set to raise. Set one under Rules first.</p>
       ) : (
         <form
-          className="flex flex-col gap-2 px-gutter py-3"
+          className="grid gap-3.5"
           onSubmit={(e) => {
             e.preventDefault()
             if (ready && asked !== null) raise.mutate(asked)
           }}
         >
-          <p className="text-body text-muted">
+          <p>
             Raise one of {agent.name}’s limits for a while. At the time you pick it goes back to the limit in its rules by
             itself; the rules do not change.
           </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              aria-label={`Limit to raise for ${agent.name}`}
-              className={`${scheduleSelect} w-48`}
+          <Field label={`Limit to raise for ${agent.name}`}>
+            <Select
               value={rule[0]}
               onChange={(e) => {
                 setPicked(e.target.value)
@@ -1646,29 +1646,21 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
                   {name}
                 </option>
               ))}
-            </select>
-            <span className="text-body text-muted">from {boostFigure(rule[0], rules[rule[0]] ?? 0)} to</span>
-            <Input
-              aria-label={`Raise ${agent.name}’s limit to`}
-              inputMode={rate ? 'numeric' : 'decimal'}
-              placeholder={rate ? 'a minute' : 'LXC'}
-              className="w-28 font-figure"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-            />
-            <span className="text-body text-muted">until</span>
-            <Input
-              type="datetime-local"
-              aria-label={`Raise ${agent.name}’s limit until`}
-              className="w-56 font-figure"
-              value={until}
-              onChange={(e) => setUntil(e.target.value)}
-            />
-            <Button type="submit" disabled={!ready}>
-              {raise.isPending ? 'Raising…' : judged?.signs ? 'Raise with your passkey' : 'Raise until then'}
-            </Button>
-          </div>
+            </Select>
+          </Field>
+          <p className="text-body text-ink-3">Now {boostFigure(rule[0], rules[rule[0]] ?? 0)}</p>
+          <Field label={`Raise ${agent.name}’s limit to`}>
+            <PocketInput inputMode={rate ? 'numeric' : 'decimal'} placeholder="0" unit={rate ? 'a minute' : 'LXC'} value={value} onChange={(e) => setValue(e.target.value)} />
+          </Field>
+          <Field label={`Raise ${agent.name}’s limit until`}>
+            <PocketInput type="datetime-local" value={until} onChange={(e) => setUntil(e.target.value)} />
+          </Field>
           <RulesLoosen agent={agent.name} judged={judged} />
+          <div className="flex justify-end">
+            <PocketButton type="submit" disabled={raise.isPending} disabledReason={asked === null ? 'Type what it is raised to, and until when, first.' : undefined}>
+              {raise.isPending ? 'Raising…' : judged?.signs ? 'Raise with your passkey' : 'Raise until then'}
+            </PocketButton>
+          </div>
           {raise.isSuccess && raise.data !== null ? (
             <Note ok>
               {agent.name}’s {label(raise.data.rule).toLowerCase()} is {boostFigure(raise.data.rule, raise.data.value)} until{' '}
@@ -1680,7 +1672,7 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
           {end.isError ? <Note ok={false}>{refusalText(end.error)}</Note> : null}
         </form>
       )}
-    </Card>
+    </div>
   )
 }
 
@@ -1723,59 +1715,59 @@ function Pay({
   // Once its approval sent the payment, Approvals says so and this refusal is no longer true.
   const settled = held !== null && !(held in waiting)
   return (
-    <Card>
-      <CardHeader>Pay another agent</CardHeader>
-      <form
-        className="flex flex-col gap-2 px-gutter py-3"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (payee && micros !== null && !pay.isPending) pay.mutate()
-        }}
-      >
-        <p className="text-body text-muted">
-          Judged by {agent.name}’s rules, like any request it makes. It stays inside this workspace.
-        </p>
+    <form
+      className="grid gap-3.5"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (payee && micros !== null && !pay.isPending) pay.mutate()
+      }}
+    >
+      <p>
+        {agent.name} holds <PocketMoney ulxc={agent.balance_ulxc} />. Judged by its rules, like any request it makes. It stays inside this workspace.
+      </p>
+      <div className="grid gap-1.5">
+        <span className="text-body font-semibold text-ink-2">Pay to</span>
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Pay to">
           {others.map((a) => (
-            <Button key={a.id} aria-pressed={to === a.id} className={pressed} onClick={() => setTo(a.id)}>
+            <PocketButton key={a.id} size="sm" variant={to === a.id ? 'primary' : 'secondary'} aria-pressed={to === a.id} onClick={() => setTo(a.id)}>
               {a.name}
-            </Button>
+            </PocketButton>
           ))}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            aria-label={`Payment in LXC from ${agent.name}`}
-            inputMode="decimal"
-            placeholder="LXC"
-            className="w-28 font-figure"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <Input
-            aria-label="What the payment is for"
-            placeholder="What it is for"
-            className="wide:w-56"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-          />
-          <Button type="submit" disabled={!payee || micros === null || pay.isPending}>
-            {pay.isPending ? 'Paying…' : 'Pay'}
-          </Button>
-        </div>
-        {pay.isSuccess ? (
-          <Note ok>
-            Paid {lxc(pay.data.amount_ulxc)} to {payee?.name ?? 'the agent'}. {agent.name} now holds{' '}
-            {lxc(pay.data.from_balance_ulxc)}.
-          </Note>
-        ) : null}
-        {pay.isError && !settled ? (
-          <Note ok={false}>
-            Refused. {refusalText(pay.error)}
-            {held ? ' It is waiting in Approvals; approve it there and this payment is sent.' : ''}
-          </Note>
-        ) : null}
-      </form>
-    </Card>
+      </div>
+      <Field label={`Payment in LXC from ${agent.name}`}>
+        <PocketInput inputMode="decimal" placeholder="0" unit="LXC" value={amount} onChange={(e) => setAmount(e.target.value)} />
+      </Field>
+      {micros !== null ? (
+        <p className="text-body text-ink-3" data-testid="pay-amount">
+          <PocketMoney ulxc={micros} />
+        </p>
+      ) : null}
+      <Field label="What the payment is for">
+        <PocketInput placeholder="What it is for" value={memo} onChange={(e) => setMemo(e.target.value)} />
+      </Field>
+      <div className="flex justify-end">
+        <PocketButton
+          type="submit"
+          disabled={pay.isPending}
+          disabledReason={!payee ? 'Pick who it pays first.' : micros === null ? 'Type an amount in LXC first.' : undefined}
+        >
+          {pay.isPending ? 'Paying…' : 'Pay'}
+        </PocketButton>
+      </div>
+      {pay.isSuccess ? (
+        <Note ok>
+          Paid <PocketMoney ulxc={pay.data.amount_ulxc} /> to {payee?.name ?? 'the agent'}. {agent.name} now holds{' '}
+          <PocketMoney ulxc={pay.data.from_balance_ulxc} />.
+        </Note>
+      ) : null}
+      {pay.isError && !settled ? (
+        <Note ok={false}>
+          Refused. {refusalText(pay.error)}
+          {held ? ' It is waiting in Approvals; approve it there and this payment is sent.' : ''}
+        </Note>
+      ) : null}
+    </form>
   )
 }
 
@@ -1788,34 +1780,34 @@ function IssueKey({ agent }: { agent: Agent }) {
   })
   if (issued) {
     return (
-      <RevealOnce
-        title={`${agent.name}’s key (shown once)`}
-        secret={issued.key}
-        copyLabel="Copy key"
-        identifier={issued.prefix}
-        identifierNote="Safe to share; this is how the key appears in lists."
-        onDone={() => {
-          setIssued(null)
-          issue.reset()
-          void qc.invalidateQueries({ queryKey: BOOK_KEY })
-        }}
-      />
+      <div className="grid gap-3.5" data-testid="agent-key-shown">
+        <p>{agent.name}’s key is shown once. Store it now: it will not be shown again.</p>
+        <CodeBox code={issued.key} copied="Copied. Store it now: it will not be shown again" />
+        <Facts facts={[{ label: 'How it appears in lists (not a credential)', value: issued.prefix }]} />
+        <div className="flex justify-end">
+          <PocketButton
+            onClick={() => {
+              setIssued(null)
+              issue.reset()
+              void qc.invalidateQueries({ queryKey: BOOK_KEY })
+            }}
+          >
+            Done, I stored it
+          </PocketButton>
+        </div>
+      </div>
     )
   }
   return (
-    <Card>
-      <CardHeader>Key</CardHeader>
-      <Row label="Issue a key" hint="A proxy key that spends only this agent’s balance, under its rules; shown once">
-        <Button disabled={issue.isPending} onClick={() => issue.mutate()}>
+    <div className="grid gap-3.5">
+      <p>A proxy key that spends only {agent.name}’s balance, under its rules. It is shown once.</p>
+      <div className="flex justify-end">
+        <PocketButton disabled={issue.isPending} onClick={() => issue.mutate()}>
           {issue.isPending ? 'Issuing…' : 'Issue a key'}
-        </Button>
-      </Row>
-      {issue.isError ? (
-        <div className="px-gutter py-2">
-          <Note ok={false}>{refusalText(issue.error)}</Note>
-        </div>
-      ) : null}
-    </Card>
+        </PocketButton>
+      </div>
+      {issue.isError ? <Note ok={false}>{refusalText(issue.error)}</Note> : null}
+    </div>
   )
 }
 
@@ -2924,7 +2916,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
               {moneyOnPage ? null : <AgentMoneySection key={`money-${agent.id}`} agent={agent} />}
               {moneyOnPage ? null : <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />}
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
-              {/* B57.22 — its Settings: each row opens today's form for it, so each posts what it posted before. */}
+              {/* B57.22 — its Settings: each row opens its form over the page, each posting what it posted before. */}
               <AgentSettings
                 key={`settings-${agent.id}`}
                 agent={agent}
@@ -2938,7 +2930,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
                     live.length > 1 ? (
                       <Pay agent={agent} agents={live} waiting={held} onHeld={(id, p) => setHeld((h) => ({ ...h, [id]: p }))} />
                     ) : (
-                      <p className="text-body text-muted">Create a second agent to pay it from this one.</p>
+                      <p>Create a second agent to pay it from this one.</p>
                     ),
                   schedules: <Schedules agent={agent} agents={live} nameOf={nameOf} />,
                   credential: <AgentCredentialCard agent={agent} />,

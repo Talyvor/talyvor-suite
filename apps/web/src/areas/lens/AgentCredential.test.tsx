@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentCredentialCard } from './AgentCredential'
+import { AppMoney } from './money'
 
 // B30.103 — an agent's credential on its card: what it says, the credential to copy, and Talyvor's check of it. The mock
 // BFF answers as Lens B30.5 does: the credential, then verify's answer; and for a frozen agent, 409 with Lens's sentence.
@@ -45,7 +46,9 @@ function mockBff(frozen = false) {
 const renderCard = () =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <AgentCredentialCard agent={agent} />
+      <AppMoney>
+        <AgentCredentialCard agent={agent} />
+      </AppMoney>
     </QueryClientProvider>,
   )
 

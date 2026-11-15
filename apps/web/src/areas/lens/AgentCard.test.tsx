@@ -130,7 +130,7 @@ describe("an agent's card on Agent Wallets", () => {
     const issue = await screen.findByRole('button', { name: 'Issue a card' })
     const panel = screen.getByTestId('agent-card-panel')
     expect(panel.getAttribute('data-design')).toBe('pocket') // the issue form is Pocket's too
-    expect(within(panel).getByRole('heading', { name: 'Card' })).toBeTruthy()
+    expect(within(screen.getByRole('dialog', { name: 'Its card' })).getByTestId('agent-card-panel')).toBe(panel) // B57.167: over the page
     for (const [label, value] of [
       ['First name', 'Ada'],
       ['Last name', 'Lovelace'],
