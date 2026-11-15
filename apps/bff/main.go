@@ -34,6 +34,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -121,6 +122,12 @@ type config struct {
 	connectPrepareOnly bool
 	// openAIAppsChallenge (BFF_OPENAI_APPS_CHALLENGE): ChatGPT's directory token, answered by connect_directory.go.
 	openAIAppsChallenge string
+
+	// helpLensKey (HELP_LENS_KEY) is a Lens key on Talyvor's own account that the Help chat's model calls go on, so a
+	// Help question never spends the customer's money (help_chat.go). Unset, Help answers every question with the
+	// team's button. helpQuestionsPerDay (HELP_QUESTIONS_PER_DAY) is how many questions one account may ask a day.
+	helpLensKey         string
+	helpQuestionsPerDay int
 }
 
 func loadConfig() (config, error) {
@@ -140,6 +147,15 @@ func loadConfig() (config, error) {
 		connectPrepareOnly: os.Getenv("BFF_CONNECT_PREPARE_ONLY") == "true",
 
 		openAIAppsChallenge: strings.TrimSpace(os.Getenv("BFF_OPENAI_APPS_CHALLENGE")),
+
+		helpLensKey: strings.TrimSpace(os.Getenv("HELP_LENS_KEY")),
+	}
+	if v := os.Getenv("HELP_QUESTIONS_PER_DAY"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return cfg, errors.New("HELP_QUESTIONS_PER_DAY must be a whole number above 0")
+		}
+		cfg.helpQuestionsPerDay = n
 	}
 	// Per-tenant provisioning replaces the single shared workspace key. Refuse to start without
 	// it: silently falling back to one shared workspace is exactly the state this replaced.
@@ -528,6 +544,9 @@ func main() {
 		db, err := openOAuthDB(context.Background(), dsn)
 		if err == nil {
 			err = app.useOAuthDB(context.Background(), db)
+		}
+		if err == nil {
+			err = app.help.useDB(context.Background(), db.pool)
 		}
 		if err != nil {
 			log.Fatalf("bff: BFF_DATABASE_URL: %s", redactSecret(err.Error()))

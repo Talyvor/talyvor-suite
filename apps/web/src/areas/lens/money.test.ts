@@ -7,14 +7,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatMinor } from './agentBankApi'
 import { Lxc, fiatText, lxcText } from './money'
 
-// B55.38 — one money format on the web: dollars as $450.00 everywhere, and dollars first beside LXC,
-// in the order src/moneyOrder.ts names.
+// B55.38 — one money format on the web: dollars as $450.00 everywhere. B61.14 — an amount Lens keeps in µLXC
+// reads in the person's currency alone, never beside LXC.
 
 const M = 1_000_000
 
-type Kit = { Lxc: typeof Lxc; QueryClient: typeof QueryClient; QueryClientProvider: typeof QueryClientProvider }
-
-function renderLxc(ulxc: number, peg: number | null, kit: Kit = { Lxc, QueryClient, QueryClientProvider }) {
+function renderLxc(ulxc: number, peg: number | null) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     if (String(input) === '/api/lxc/topup-options' && peg !== null)
       return new Response(JSON.stringify({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: peg }), {
@@ -23,15 +21,14 @@ function renderLxc(ulxc: number, peg: number | null, kit: Kit = { Lxc, QueryClie
       })
     return new Response('null', { status: 404 })
   })
-  const qc = new kit.QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(createElement(kit.QueryClientProvider, { client: qc }, createElement('p', { 'data-testid': 'amount' }, createElement(kit.Lxc, { ulxc }))))
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(createElement(QueryClientProvider, { client: qc }, createElement('p', { 'data-testid': 'amount' }, createElement(Lxc, { ulxc }))))
   return () => screen.getByTestId('amount').textContent
 }
 
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
-  vi.doUnmock('../../moneyOrder')
 })
 
 describe('one currency formatter', () => {
@@ -47,37 +44,32 @@ describe('one currency formatter', () => {
   })
 })
 
-describe('dollars first beside LXC', () => {
-  it('renders $450.00 (4,500.00 LXC)', async () => {
+describe('the person\'s currency alone, never LXC (B61.14)', () => {
+  it('renders $450.00', async () => {
     const text = renderLxc(4500 * M, 0.1)
-    await waitFor(() => expect(text()).toBe('$450.00 (4,500.00 LXC)'))
+    await waitFor(() => expect(text()).toBe('$450.00'))
+    expect(text()).not.toMatch(/LXC/)
   })
 
-  it('leads both figures with a minus', async () => {
+  it('leads the figure with a minus', async () => {
     const text = renderLxc(-4500 * M, 0.1)
-    await waitFor(() => expect(text()).toBe('-$450.00 (-4,500.00 LXC)'))
+    await waitFor(() => expect(text()).toBe('-$450.00'))
   })
 
-  it('shows LXC alone while no rate backs it', async () => {
+  it('writes a sign before the figure', () => {
+    expect(lxcText(4500 * M, '$450.00', '+')).toBe('+$450.00')
+    expect(lxcText(-4500 * M, '$450.00', '−')).toBe('-$450.00')
+  })
+
+  it('shows an ellipsis, never LXC or a guessed figure, while no rate backs it', async () => {
     const text = renderLxc(4500 * M, null)
     await new Promise((r) => setTimeout(r, 20))
-    expect(text()).toBe('4,500 LXC')
-    expect(lxcText(4500 * M, null)).toBe('4,500 LXC')
-  })
-
-  it('flips every amount with MONEY_ORDER', async () => {
-    expect(lxcText(4500 * M, '$450.00')).toBe('$450.00 (4,500.00 LXC)')
-    vi.resetModules()
-    vi.doMock('../../moneyOrder', () => ({ MONEY_ORDER: 'lxc-first' }))
-    const flipped = await import('./money')
-    const rq = await import('@tanstack/react-query')
-    expect(flipped.lxcText(4500 * M, '$450.00')).toBe('4,500.00 LXC ($450.00)')
-    const text = renderLxc(4500 * M, 0.1, { Lxc: flipped.Lxc, QueryClient: rq.QueryClient, QueryClientProvider: rq.QueryClientProvider })
-    await waitFor(() => expect(text()).toBe('4,500.00 LXC ($450.00)'))
+    expect(text()).toBe('…')
+    expect(lxcText(4500 * M, null)).toBe('…')
   })
 })
 
-// A bare LXC figure reaches a person only through money.tsx, so the order switch reaches every one.
+// A bare LXC figure is drawn nowhere but a form field's prefill: money.tsx draws the person's currency.
 // formatULXC is defined in agentBankApi.ts; a form field's value stays the bare figure a person edits.
 const FORM_FIELDS = new Set(['areas/marketplace/Marketplace.tsx'])
 

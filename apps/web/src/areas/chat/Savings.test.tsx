@@ -31,6 +31,8 @@ function mockLens(answers: Record<string, string>[]) {
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, user: { sub: 'user-a', email: 'user-a@example.com' } })
     if (url === '/api/models') return json(CATALOG)
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
+    // B61.14 — the savings in µLXC read in dollars alone, at Lens's peg: $0.10 a LXC.
+    if (url === '/api/lxc/topup-options') return json({ usd_per_lxc: 0.1, allowed_usd_cents: [1000], billing_enabled: true })
     if (url.startsWith('/api/ai/stream/')) {
       return new Response(ANSWER, { status: 200, headers: { 'Content-Type': 'text/event-stream', ...answers[asked++] } })
     }
@@ -77,11 +79,13 @@ describe('Saved in this chat', () => {
     expect(row('pool').dataset).toMatchObject({ total: String(sum('X-Talyvor-Pool-Saved-ULXC')), answers: '1', unstated: '0' })
     expect(row('conversion').dataset).toMatchObject({ total: String(sum('X-Talyvor-Distill-Tokens-Saved')), answers: '1', unstated: '0' })
     expect(row('tare').dataset).toMatchObject({ total: String(sum('X-Talyvor-Tare-Tokens-Saved')), answers: '2', unstated: '0' })
-    // 1,002,170 + 651 µLXC; 1,834 + 500 tokens — on the screen, to the µLXC.
-    expect(within(row('cache')).getByText('1.00217')).toBeInTheDocument()
+    // 1,002,170 + 651 µLXC (to the µLXC in the totals above); 1,834 + 500 tokens. On the screen in dollars alone (B61.14):
+    // 1,002,170 µLXC is $0.100217, 651 µLXC under a cent, and 1,002,821 µLXC in all $0.100282.
+    expect(within(row('cache')).getByText('$0.10')).toBeInTheDocument()
+    expect(within(row('pool')).getByText('<$0.01')).toBeInTheDocument()
     expect(row('cache')).toHaveTextContent('2 answers from your earlier ones')
     expect(row('tare')).toHaveTextContent('500 tokens')
-    expect(within(panel).getByTestId('chat-savings-total')).toHaveTextContent('In all: 1.002821 LXC saved, and 2,334 tokens fewer sent to the model.')
+    expect(within(panel).getByTestId('chat-savings-total')).toHaveTextContent('In all: $0.10 saved, and 2,334 tokens fewer sent to the model.')
   })
 
   it('an answer Lens replayed without saying what it saved is counted and said, and adds nothing', async () => {

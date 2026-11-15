@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Button, Card, CardHeader, Input, MuNumeral, Row } from '@talyvor/ui'
+import { Button, Card, CardHeader, Input, MuNumeral, Row, inlineLink } from '@talyvor/ui'
 import { api } from '../../lib/api'
 import { CapabilityOff } from './Capability'
 import { InlineFailure } from '../../components/SessionExpiredBar'
@@ -352,6 +352,22 @@ export function TopUp({
   const cardsOff = !billingOff && cards === 'off'
   const failure = start.error instanceof CheckoutError ? start.error : null
   const empty = hasNoCredit(balance.data)
+
+  // B61.14 — LXC is parked (Nick, 15 Nov): its balance, buying it and moving it to agents are the old gateway's, so a
+  // workspace without the gateway sees only its plan here, in its own currency.
+  if (!areas.has('gateway'))
+    return (
+      <RegionScreen>
+        <Region index="00" label="Billing" heading="Your plan" sectionClassName="pb-10 pt-4 wide:pb-12" className="max-w-2xl">
+          <YourPlan />
+          <p className="mt-4 text-body">
+            <Link to="/plans" className={inlineLink}>
+              See every plan
+            </Link>
+          </p>
+        </Region>
+      </RegionScreen>
+    )
 
   return (
     <RegionScreen>

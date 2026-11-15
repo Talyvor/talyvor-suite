@@ -43,6 +43,8 @@ function mockBff() {
       new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, user: { sub: 'u1', email: 'u1@example.com' } })
     if (url === '/api/rooms') return json({ rooms: [], joined: [], invited: null })
+    // B61.14 — the room's budget reads in dollars alone, at Lens's peg.
+    if (url === '/api/lxc/topup-options') return json({ usd_per_lxc: 0.1, allowed_usd_cents: [1000], billing_enabled: true })
     if (url === '/api/rooms/room_1') {
       const me = { workspace_id: ME, workspace_name: NAMES[ME], role: 'owner', may_spend: true, terms_version: 1, terms_current: true, joined_at: '' }
       return json({
@@ -144,7 +146,8 @@ describe('the room screen', () => {
     const bff = mockBff()
     window.history.pushState({}, '', '/rooms/room_1')
     render(<App />)
-    expect((await screen.findByTestId('room-budget-spent')).textContent).toBe('0 LXC')
+    await screen.findByTestId('room-budget-spent')
+    await waitFor(() => expect(screen.getByTestId('room-budget-spent').textContent).toBe('$0.00'))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Propose' }))
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Pricing prompt' } })
@@ -182,7 +185,7 @@ describe('the room screen', () => {
     })
     // The run message is in the conversation too, and the room's budget now counts it.
     expect(within(screen.getByRole('list', { name: 'Messages' })).getAllByTestId('run-cost')[0].textContent).toBe('Cost$0.10Paid by the room')
-    await waitFor(() => expect(screen.getByTestId('room-budget-spent').textContent).toBe('1 LXC'))
+    await waitFor(() => expect(screen.getByTestId('room-budget-spent').textContent).toBe('$0.10'))
   })
 
   // B55.35 — another member's message, contribution and self-paid run read by their workspace's name, never its id.

@@ -175,7 +175,7 @@ function ShowAmountsCard() {
   return (
     <Card tone="white">
       <h2 className="font-display text-reading font-bold text-ink">Show amounts in</h2>
-      <p className="mt-1 text-body text-ink-2">LXC are always shown too. Dollars are the default; pounds and euros use the day’s rate.</p>
+      <p className="mt-1 text-body text-ink-2">Dollars are the default; pounds and euros use the day’s rate.</p>
       <Tabs
         label="Show amounts in"
         className="mt-2"

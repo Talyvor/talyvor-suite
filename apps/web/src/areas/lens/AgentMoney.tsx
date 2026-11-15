@@ -85,56 +85,60 @@ export function AgentMoneySection({ agent }: { agent: Agent }) {
     <Card tone="white" data-design="pocket" className="grid content-start gap-2" data-testid="agent-page-money">
       <h2 className="font-display text-reading font-bold text-ink">Money</h2>
       <div>
-        <MoneyRow testId="money-row-address" icon="key" title="Its address" line={`Anyone on Talyvor can send ${name} credits at its wallet ID or @handle`} onOpen={() => setOpen('address')} />
-        <MoneyRow
-          testId="money-row-send"
-          icon="send"
-          title="Send or request"
-          line={`To or from any agent on Talyvor. Credits stay credits; sending is judged by ${name}’s rules`}
-          onOpen={() => setOpen('send')}
-        />
-        <MoneyRow
-          testId="money-row-requests"
-          icon="bell"
-          title="Requests"
-          line={`What other agents ask of ${name}, to accept or decline${emptied(requests, nRequests, 'None yet')}`}
-          onOpen={() => setOpen('requests')}
-        />
-        <MoneyRow
-          testId="money-row-transfers"
-          icon="arrow"
-          title="Transfers"
-          line={transfers.isSuccess && nTransfers === 0 ? `${name} has not sent or received a transfer yet` : `What ${name} sent to and received from other agents`}
-          onOpen={() => setOpen('transfers')}
-        />
-        <MoneyRow
-          testId="money-row-recurring"
-          icon="clock"
-          title="Recurring transfer"
-          line="Pay any agent on Talyvor the same amount every day, week or month"
-          onOpen={() => setOpen('recurring')}
-        />
-        <MoneyRow
-          testId="money-row-pots"
-          icon="coin"
-          title="Pots"
-          line={`Credits ${name} sets aside for a goal, a budget or a reserve${emptied(pots, nPots, 'No pots yet')}`}
-          onOpen={() => setOpen('pots')}
-        />
-        <MoneyRow
-          testId="money-row-escrow"
-          icon="shield"
-          title="Escrow"
-          line={`Credits held until you confirm the work was delivered${emptied(escrows, nEscrows, 'Nothing in escrow')}`}
-          onOpen={() => setOpen('escrow')}
-        />
-        <MoneyRow
-          testId="money-row-cash-out"
-          icon="download"
-          title="Cash out"
-          line={`Turn ${name}’s credits back into money. Only the workspace’s owner can ask${emptied(cashOuts, nCashOuts, 'No cash-outs yet')}`}
-          onOpen={() => setOpen('cash-out')}
-        />
+        {/* B61.14 — LXC is parked (Nick, 15 Nov): its address, sends, requests, transfers, pots, escrow, cash-outs and
+            credit line are the old gateway's, so only a workspace with the gateway has these rows. */}
+        <IfArea area="gateway">
+          <MoneyRow testId="money-row-address" icon="key" title="Its address" line={`Anyone on Talyvor can send ${name} credits at its wallet ID or @handle`} onOpen={() => setOpen('address')} />
+          <MoneyRow
+            testId="money-row-send"
+            icon="send"
+            title="Send or request"
+            line={`To or from any agent on Talyvor. Credits stay credits; sending is judged by ${name}’s rules`}
+            onOpen={() => setOpen('send')}
+          />
+          <MoneyRow
+            testId="money-row-requests"
+            icon="bell"
+            title="Requests"
+            line={`What other agents ask of ${name}, to accept or decline${emptied(requests, nRequests, 'None yet')}`}
+            onOpen={() => setOpen('requests')}
+          />
+          <MoneyRow
+            testId="money-row-transfers"
+            icon="arrow"
+            title="Transfers"
+            line={transfers.isSuccess && nTransfers === 0 ? `${name} has not sent or received a transfer yet` : `What ${name} sent to and received from other agents`}
+            onOpen={() => setOpen('transfers')}
+          />
+          <MoneyRow
+            testId="money-row-recurring"
+            icon="clock"
+            title="Recurring transfer"
+            line="Pay any agent on Talyvor the same amount every day, week or month"
+            onOpen={() => setOpen('recurring')}
+          />
+          <MoneyRow
+            testId="money-row-pots"
+            icon="coin"
+            title="Pots"
+            line={`Credits ${name} sets aside for a goal, a budget or a reserve${emptied(pots, nPots, 'No pots yet')}`}
+            onOpen={() => setOpen('pots')}
+          />
+          <MoneyRow
+            testId="money-row-escrow"
+            icon="shield"
+            title="Escrow"
+            line={`Credits held until you confirm the work was delivered${emptied(escrows, nEscrows, 'Nothing in escrow')}`}
+            onOpen={() => setOpen('escrow')}
+          />
+          <MoneyRow
+            testId="money-row-cash-out"
+            icon="download"
+            title="Cash out"
+            line={`Turn ${name}’s credits back into money. Only the workspace’s owner can ask${emptied(cashOuts, nCashOuts, 'No cash-outs yet')}`}
+            onOpen={() => setOpen('cash-out')}
+          />
+        </IfArea>
         <IfArea area="credit">
           <MoneyRow
             testId="money-row-loans"
@@ -144,23 +148,25 @@ export function AgentMoneySection({ agent }: { agent: Agent }) {
             onOpen={() => setOpen('loans')}
           />
         </IfArea>
-        <MoneyRow
-          testId="money-row-credit"
-          icon="card"
-          title="Credit line"
-          line={
-            credit.isSuccess && credit.data === null ? (
-              'This workspace has no credit line'
-            ) : credit.data ? (
-              <>
-                Your agents may spend up to <Money ulxc={credit.data.limit_ulxc} /> past zero
-              </>
-            ) : (
-              'What your agents may spend past zero, and its monthly invoices'
-            )
-          }
-          onOpen={() => setOpen('credit')}
-        />
+        <IfArea area="gateway">
+          <MoneyRow
+            testId="money-row-credit"
+            icon="card"
+            title="Credit line"
+            line={
+              credit.isSuccess && credit.data === null ? (
+                'This workspace has no credit line'
+              ) : credit.data ? (
+                <>
+                  Your agents may spend up to <Money ulxc={credit.data.limit_ulxc} /> past zero
+                </>
+              ) : (
+                'What your agents may spend past zero, and its monthly invoices'
+              )
+            }
+            onOpen={() => setOpen('credit')}
+          />
+        </IfArea>
         <MoneyRow
           testId="money-row-wallet"
           icon="payments"

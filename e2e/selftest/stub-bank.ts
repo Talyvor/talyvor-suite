@@ -149,7 +149,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
-import { lxcCell } from '../src/statementPDF.ts'
+import { dollarsCell } from '../src/statementPDF.ts'
 import { HOLD_REASON, TaxDesk } from './stub-tax.ts'
 import { VerificationDesk } from './stub-verification.ts'
 import { PayeeDesk } from './stub-payees.ts'
@@ -163,6 +163,7 @@ import { type KYAFacts, KYADesk } from './stub-kya.ts'
 import { type Lineage, TrustDesk } from './stub-trust.ts'
 import { TrustLayerDesk } from './stub-trust-layer.ts'
 import type { Judge, RoomAgent } from './stub-rooms.ts'
+import { LaunchDesk } from './stub-launch.ts'
 
 export interface BankWorkspace {
   id: string
@@ -216,6 +217,8 @@ interface Rules {
   max_commitment_ulxc: number
   allowed_licences: string[]
   may_subscribe: boolean
+  /** B61.48 — "Can use Instant transfer" (Lens B59.15): off until the owner turns it on. */
+  may_instant_transfer?: boolean
   /** B41.4 — "always allow": a payee paid without a person up to an amount a day or a month, saved by an approval. */
   payee_allowances?: Record<string, { amount_ulxc: number; per: 'day' | 'month' }>
 }
@@ -528,6 +531,8 @@ export class Bank {
   private readonly verification: VerificationDesk
   /** B30.126 — the workspace's saved outside payees (stub-payees.ts). */
   private readonly payees: PayeeDesk
+  /** B61.48 — Instant transfer, Help's requests and the account's kind (stub-launch.ts). */
+  private readonly launch: LaunchDesk
   /** B40.26 — signed permission mandates and their evaluator (stub-permission-mandates.ts). */
   private readonly permissionMandates: PermissionMandateDesk
   /** B40.28 — the phone app's device keys, which sign approvals (stub-device-keys.ts). */
@@ -555,6 +560,10 @@ export class Bank {
     this.d = d
     this.tax = new TaxDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
     this.verification = new VerificationDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
+    this.launch = new LaunchDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, id) => {
+      const a = this.agents.get(id)
+      return a === undefined || a.ws !== ws ? undefined : a.rules.may_instant_transfer === true
+    })
     this.payees = new PayeeDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })),
       { read: d.read, base: d.base, appURL: d.appURL })
@@ -770,7 +779,8 @@ export class Bank {
       .reduce((s, p) => s - p.amount_ulxc, 0)
     for (const [limit, name] of [[r.hourly_limit_ulxc, 'hourly'], [r.daily_limit_ulxc, 'daily'], [r.weekly_limit_ulxc, 'weekly'], [r.monthly_limit_ulxc, 'monthly']] as const) {
       if (limit > 0 && spent + amount > limit) {
-        return rule(`the agent has spent ${lxc(spent)} LXC of its ${name} limit of ${lxc(limit)} LXC, and this ${what} would cost up to ${lxc(amount)} LXC`)
+        // B61.16: as Lens's agent_rules.go writes it, in dollars alone.
+        return rule(`the agent has spent ${dollarsCell(spent)} of its ${name} limit of ${dollarsCell(limit)}, and this ${what} would cost up to ${dollarsCell(amount)}`)
       }
     }
     const modelCap = r.model_daily_limits_ulxc[modelCapKey(req.model ?? '')] ?? 0
@@ -905,6 +915,11 @@ export class Bank {
     return this.trustDesk.linked(a, b)
   }
 
+  /** B61.51 — the level a workspace's checks reach, "L0" to "L3" (stub-verification.ts). */
+  verificationLevel(ws: string): string {
+    return this.verification.levels(ws).level
+  }
+
   /** B40.23 — whether a workspace's owner passed the identity check (L2), as Lens economy.IdentityChecked reads a synthetic one. */
   identityChecked(ws: string): boolean {
     return this.verification.levels(ws).level >= 'L2'
@@ -1001,9 +1016,9 @@ export class Bank {
     if (format === 'journal') return this.answerJournal(res, s)
     if (format === 'pdf') {
       const rows = [
-        ...s.accounts.map((x) => [s.from, x.account, 'opening', '', '', lxcCell(x.opening_ulxc)]),
-        ...s.lines.map((l) => [l.at, l.account, l.kind, l.counterparty, lxcCell(l.amount_ulxc), lxcCell(l.balance_after_ulxc)]),
-        ...s.accounts.map((x) => [s.to, x.account, 'closing', '', '', lxcCell(x.closing_ulxc)]),
+        ...s.accounts.map((x) => [s.from, x.account, 'opening', '', '', dollarsCell(x.opening_ulxc)]),
+        ...s.lines.map((l) => [l.at, l.account, l.kind, l.counterparty, dollarsCell(l.amount_ulxc), dollarsCell(l.balance_after_ulxc)]),
+        ...s.accounts.map((x) => [s.to, x.account, 'closing', '', '', dollarsCell(x.closing_ulxc)]),
       ]
       const shown = (v: string) => `(${v.replace(/[()\\]/g, '\\$&')}) Tj`
       res.writeHead(200, {
@@ -1057,15 +1072,16 @@ export class Bank {
     return JSON.parse((await this.d.read(req)) || '{}') as T
   }
 
-  private pay(res: ServerResponse, ws: BankWorkspace, from: Agent, to: string, amount: number, memo: string, connect = false): void {
+  private pay(res: ServerResponse, ws: BankWorkspace, from: Agent, to: string, amount: number, memo: string): void {
     const { json } = this.d
     if (!(amount > 0)) return json(res, 400, { error: 'body must be {"to_agent_id": "<agent>", "amount_ulxc": <positive µLXC>, "memo": "<optional>"}' })
     const payee = this.agents.get(to)
     if (payee === undefined) return json(res, 404, { error: 'economy: no such agent in this workspace' })
     if (payee.id === from.id) return json(res, 400, { error: 'economy: an agent cannot pay itself' })
     const refused = this.judge(from, amount, { payment: true, payee, memo, fingerprint: `pay\0${from.id}\0${to}\0${amount}\0${memo}` })
-    // B52.4 — an assistant on a Connect token is told it waits for the owner, and which approval it is.
-    if (refused?.approval_id !== undefined && connect) {
+    // B58.2 — a payment held for the owner answers 202 pending_approval and the approval it filed, on every caller's key
+    // (B52.4 first did so for a Connect token); nothing is posted.
+    if (refused?.approval_id !== undefined) {
       return json(res, 202, { status: 'pending_approval', approval_id: refused.approval_id, amount_ulxc: amount, message: refused.error })
     }
     if (refused !== undefined) return json(res, refused.status, { error: refused.error })
@@ -1146,7 +1162,7 @@ export class Bank {
     if (a === undefined || ws === undefined) return false
     if (req.method === 'POST' && path === `/v1/workspaces/${a.ws}/agents/${a.id}/pay`) {
       const b = await this.body<{ to_agent_id?: string; amount_ulxc?: number; memo?: string }>(req)
-      return this.pay(res, ws, a, b.to_agent_id ?? '', b.amount_ulxc ?? 0, b.memo ?? '', true), true
+      return this.pay(res, ws, a, b.to_agent_id ?? '', b.amount_ulxc ?? 0, b.memo ?? ''), true
     }
     const approve = /^\/v1\/workspaces\/([^/]+)(\/agents\/approvals\/[^/]+\/approve)$/.exec(path)
     if (approve !== null && approve[1] === a.ws && req.method === 'POST' && this.broken('connect-approves')) {
@@ -2347,6 +2363,7 @@ export class Bank {
     const now = new Date().toISOString()
     let m: RegExpExecArray | null
     if (rest === '/agents' && method === 'GET') return json(res, 200, this.book(ws)), true
+    if (await this.launch.route(req, res, ws.id, rest)) return true
     if (rest === '/name') {
       if (method === 'PUT') {
         const name = ((await this.body<{ name?: string }>(req)).name ?? '').trim()
@@ -2761,7 +2778,8 @@ export class Bank {
           model_daily_limits_ulxc: r.model_daily_limits_ulxc == null ? a.rules.model_daily_limits_ulxc : modelCaps(r.model_daily_limits_ulxc),
           requests_per_minute: r.requests_per_minute ?? a.rules.requests_per_minute,
           max_commitment_ulxc: r.max_commitment_ulxc ?? a.rules.max_commitment_ulxc, allowed_licences: r.allowed_licences ?? a.rules.allowed_licences,
-          may_subscribe: r.may_subscribe ?? a.rules.may_subscribe, payee_allowances: r.payee_allowances ?? a.rules.payee_allowances,
+          may_subscribe: r.may_subscribe ?? a.rules.may_subscribe, may_instant_transfer: r.may_instant_transfer ?? a.rules.may_instant_transfer,
+          payee_allowances: r.payee_allowances ?? a.rules.payee_allowances,
           allowed_models: r.allowed_models ?? [], allowed_providers: r.allowed_providers ?? [] }
         this.recordRules(a, ws.id, 'set')
         this.kya.revoke(a.id, 'rules changed')

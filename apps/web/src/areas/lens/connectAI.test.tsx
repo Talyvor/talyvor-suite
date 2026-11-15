@@ -171,14 +171,15 @@ describe('Connect your AI', () => {
     await waitFor(() => expect(calls).toContain('POST /auth/logout-everywhere'))
   })
 
-  // B52.6 — the most an assistant may give a new agent: unset, it says assistants cannot create agents; set in LXC, it
-  // goes to the BFF in µLXC and reads back.
+  // B52.6 — the most an assistant may give a new agent: unset, it says assistants cannot create agents; set in dollars at
+  // Lens's peg (B61.14; $0.10 a LXC here), it goes to the BFF in µLXC and reads back in dollars.
   it('sets the most an assistant may give a new agent', async () => {
     let ceiling: Record<string, number> = {}
     const puts: unknown[] = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = String(input)
       if (path.startsWith('/api/money/payment-requests')) return new Response(JSON.stringify({ requests: [] }))
+      if (path === '/api/lxc/topup-options') return new Response(JSON.stringify({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 }))
       if (path !== '/api/connect/agent-ceiling') return new Response(JSON.stringify({ assistants: [] }))
       if (init?.method === 'PUT') {
         ceiling = JSON.parse(String(init.body)) as Record<string, number>
@@ -189,19 +190,20 @@ describe('Connect your AI', () => {
     renderScreen()
     const card = screen.getByRole('region', { name: 'New agents from an assistant' })
     expect(await within(card).findByText(/Assistants cannot create agents/)).toBeInTheDocument()
-    fireEvent.change(within(card).getByLabelText('One payment, in LXC'), { target: { value: '2' } })
-    fireEvent.change(within(card).getByLabelText('A day, in LXC'), { target: { value: '10' } })
-    fireEvent.change(within(card).getByLabelText('A month, in LXC'), { target: { value: '50.5' } })
+    fireEvent.change(within(card).getByLabelText('One payment, in dollars'), { target: { value: '0.2' } })
+    fireEvent.change(within(card).getByLabelText('A day, in dollars'), { target: { value: '1' } })
+    fireEvent.change(within(card).getByLabelText('A month, in dollars'), { target: { value: '5.05' } })
     fireEvent.click(within(card).getByRole('button', { name: 'Set' }))
-    await waitFor(() => expect(screen.getByTestId('agent-ceiling')).toHaveTextContent('at most 2 LXC a payment, 10 LXC a day and 50.5 LXC a month'))
+    await waitFor(() => expect(screen.getByTestId('agent-ceiling')).toHaveTextContent('at most $0.20 a payment, $1.00 a day and $5.05 a month'))
     expect(puts).toEqual([{ max_per_request_ulxc: 2_000_000, daily_limit_ulxc: 10_000_000, monthly_limit_ulxc: 50_500_000 }])
   })
 
-  // B57.157 — Pocket draws each limit as the agent's rules sheet does: a row with its name, then its amount in LXC.
+  // B57.157 — Pocket draws each limit as the agent's rules sheet does: a row with its name, then its amount in dollars.
   it('draws the limit for new agents as rows of the rules sheet', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const path = String(input)
       if (path.startsWith('/api/money/payment-requests')) return new Response(JSON.stringify({ requests: [] }))
+      if (path === '/api/lxc/topup-options') return new Response(JSON.stringify({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 }))
       if (path !== '/api/connect/agent-ceiling') return new Response(JSON.stringify({ assistants: [] }))
       return new Response(JSON.stringify({ max_per_request_ulxc: 2_000_000, daily_limit_ulxc: 10_000_000, monthly_limit_ulxc: 50_000_000 }))
     })
@@ -210,9 +212,9 @@ describe('Connect your AI', () => {
     await within(card).findByText(/An agent an assistant creates may spend at most/)
     const rows = within(card).getAllByTestId('ceiling-row')
     expect(rows.map((r) => [r.firstElementChild?.firstElementChild?.textContent, (within(r).getByRole('textbox') as HTMLInputElement).value])).toEqual([
-      ['One payment', '2'],
-      ['A day', '10'],
-      ['A month', '50'],
+      ['One payment', '0.2'],
+      ['A day', '1'],
+      ['A month', '5'],
     ])
     expect(within(card).getByRole('button', { name: 'Change' })).toBeEnabled()
   })

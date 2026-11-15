@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -32,6 +32,7 @@ function mockBff(operator: boolean) {
         ? json({ workspaces: WORKSPACES })
         : json({ error: 'operator access required — this account is not on OPERATOR_SUBS' }, 403)
     if (url === '/api/admin/marketplace/parked-uses') return json({ parked_uses: parked })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/admin/marketplace/parked-uses/use_9/retry' && init?.method === 'POST') {
       parked = []
       return json({ id: 'use_9', retrying: true })
@@ -83,7 +84,9 @@ describe('the operator screen (B18.25)', () => {
     const row = await screen.findByTestId('parked-use')
     expect(row.textContent).toContain("resource_missing: No such customer: 'cus_gone'")
     expect(within(row).getByText('5 times')).toBeTruthy()
-    expect(row.textContent).toContain('0.5 LXC')
+    // Its price, 0.5 LXC, at Lens's peg of $0.10 a LXC: dollars alone (B61.14).
+    await waitFor(() => expect(row.textContent).toContain('$0.05'))
+    expect(row.textContent).not.toContain('LXC')
     fireEvent.click(within(row).getByRole('button', { name: 'Retry use_9' }))
     expect((await screen.findByTestId('parked-retried')).textContent).toBe('use_9 will be tried again on the next metering run.')
     expect(await screen.findByText(/No use is parked/)).toBeTruthy()

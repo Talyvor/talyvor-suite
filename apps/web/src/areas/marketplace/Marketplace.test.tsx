@@ -25,6 +25,8 @@ function mockBff() {
       new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/pricing') return json({ fees: { market_take_bps: 1500 } })
+    // B61.14 — Lens's peg, $0.10 a LXC: a use's price reads in dollars alone.
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/models') return json([{ id: 'gpt-4o', provider: 'openai', display_name: 'GPT-4o', input_per_1m: 2.5, output_per_1m: 10 }])
     if (url === '/api/marketplace/listings' && method === 'POST') {
       const artifact = body.artifact as Record<string, string>
@@ -152,7 +154,9 @@ describe('the marketplace', () => {
     fireEvent.click(screen.getByRole('button', { name: /Use it/ }))
     const result = await screen.findByTestId('market-use-result')
     expect(within(result).getByText('Bonjour — Hello')).toBeTruthy()
-    expect(result.textContent).toContain('0.5 LXC is on your marketplace bill for this month.')
+    // 0.5 LXC at $0.10 a LXC.
+    expect(result.textContent).toContain('$0.05 is on your marketplace bill for this month.')
+    expect(result.textContent).not.toMatch(/LXC/)
 
     // B20.10 — the buyer's bill for this month carries that use, its price and the total.
     await at('/marketplace/bill')

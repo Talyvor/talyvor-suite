@@ -29,6 +29,8 @@ function mockBff() {
         agents: [{ id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-09-28T09:00:00Z' }],
       })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
+    // B61.14 — the rules page types amounts in dollars at Lens's peg, and waits for it: $0.10 a LXC.
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents/passkeys') return json({ passkeys: [] })
     if (url === '/api/agents/agt_1/statement') return json({ agent_id: 'agt_1', lines: [] })
     if (url === '/api/marketplace/listings')
@@ -77,7 +79,8 @@ describe('the rules editor names the marketplace listings an agent may use', () 
     render(<App />)
     expect(await screen.findByRole('button', { name: 'Take Translate to French off' })).toBeTruthy()
     fireEvent.click(screen.getByRole('switch', { name: 'At most a day' }))
-    fireEvent.change(screen.getByLabelText('At most a day for Researcher, in LXC'), { target: { value: '5' } })
+    // $0.50 at $0.10 a LXC is 5 LXC.
+    fireEvent.change(screen.getByLabelText('At most a day for Researcher, in dollars'), { target: { value: '0.5' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
     await waitFor(() => expect(puts).toHaveLength(2))
     expect(puts[1]).toMatchObject({ daily_limit_ulxc: 5_000_000, allowed_listings: ['lst_fr'], pause_on_unusual_spend: true })

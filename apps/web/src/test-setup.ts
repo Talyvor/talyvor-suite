@@ -437,6 +437,7 @@ afterAll(() => {
 })
 
 import { areaSource } from './lib/workspaceAreas'
+import { physicalCardSource } from './areas/lens/PhysicalCard'
 
 // B59.2 — every area is open in these tests: each tests its screen as it behaves once the operator has switched its
 // area on. The hiding itself is tested in workspaceAreas.test.tsx, which reads the areas from the BFF.
@@ -444,4 +445,7 @@ const ALL_AREAS = ['marketplace', 'rooms', 'chat', 'track', 'docs', 'code', 'edg
 beforeEach(() => {
   areaSource.read = () => Promise.resolve(ALL_AREAS)
   areaSource.initial = ALL_AREAS
+  // B60.6 — and physical cards are served, as each test of the card page tests it once served. The app's default, off
+  // until a live issuer serves them, is tested in areas/lens/HeldCalls.test.tsx.
+  physicalCardSource.served = true
 })

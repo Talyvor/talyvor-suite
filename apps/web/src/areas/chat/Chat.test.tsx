@@ -1741,6 +1741,7 @@ describe('a listing in Chat (B28.426)', () => {
       body: 'data: {"choices":[{"delta":{"content":"Happy to help."}}]}\n\ndata: [DONE]\n\n',
       listings: { lst_tone: { id: 'lst_tone', title: 'Support tone', kind: 'skill', price_per_use_ulxc: 20_000 } },
       answerHeaders: { 'X-Talyvor-Listing-Charge': 'billed' },
+      usdPerLXC: 0.1,
     })
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
@@ -1759,7 +1760,8 @@ describe('a listing in Chat (B28.426)', () => {
     }
 
     const chip = await screen.findByTestId('chat-listing')
-    expect(chip.textContent).toBe('ListingSupport tone· 0.02 LXC a question, on your marketplace billRemove')
+    // B61.14 — its price in dollars alone: 20,000 µLXC at $0.10 a LXC is $0.002, under a cent.
+    await waitFor(() => expect(chip.textContent).toBe('ListingSupport tone· <$0.01 a question, on your marketplace billRemove'))
     await chooseModel('Claude Opus 5')
 
     // Two questions: each request names the listing, so Lens bills two uses, and each answer says how Lens charged it.

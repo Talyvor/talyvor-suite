@@ -16,6 +16,9 @@
 #                                                         # B61.49: a launch run against a stub Lens that answers 404 on
 #                                                         # every hidden area's route (internal/areas), and Track and Docs
 #                                                         # on every route: it must still reach the journeys
+#                                                         # B61.56: its explorers explore the launch screens, each step
+#                                                         # at E2E_EXPLORER_STEP_USD; E2E_EXPLORER_STEP_USD=5 (above the
+#                                                         # $1 cap) must stop them at the cap: "0 of 2 explorers explored"
 #   E2E_FAULTS=1 pnpm --filter @talyvor/e2e selftest      # B26.18: the run's browser is killed mid-run, then
 #                                                         # Lens; the report and summary must still be written
 #                                                         # and name both

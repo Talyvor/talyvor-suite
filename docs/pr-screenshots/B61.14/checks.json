@@ -1,0 +1,7 @@
+[
+  { "route": "/", "screen": "w-home" },
+  { "route": "/agents", "screen": "w-agents" },
+  { "route": "/agents/agt_research", "screen": "w-agent-research" },
+  { "route": "/agents/agt_research/rules", "screen": "w-rules" },
+  { "route": "/settings/connect", "screen": "w-connect" }
+]

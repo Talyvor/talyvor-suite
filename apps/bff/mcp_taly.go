@@ -189,6 +189,21 @@ func (a *app) talyModel(ctx context.Context, t tenant) (string, error) {
 	if err == nil && status != http.StatusOK {
 		err = fmt.Errorf("lens answered GET /v1/catalog/models %d", status)
 	}
+	var best string
+	if err == nil {
+		best, err = newestAnthropicModel(raw)
+	}
+	if err != nil {
+		return "", err
+	}
+	if best == "" {
+		return "", mcpSaid("Taly is not set up on this Talyvor yet.")
+	}
+	return best, nil
+}
+
+// newestAnthropicModel picks from Lens's catalog the newest Anthropic model, a frontier one first; "" when there is none.
+func newestAnthropicModel(raw []byte) (string, error) {
 	var models []struct {
 		ID          string `json:"id"`
 		Provider    string `json:"provider"`
@@ -196,10 +211,7 @@ func (a *app) talyModel(ctx context.Context, t tenant) (string, error) {
 		ReleaseDate string `json:"release_date"`
 		Tier        string `json:"tier"`
 	}
-	if err == nil {
-		err = json.Unmarshal(raw, &models)
-	}
-	if err != nil {
+	if err := json.Unmarshal(raw, &models); err != nil {
 		return "", err
 	}
 	best, bestRank := "", ""
@@ -211,9 +223,6 @@ func (a *app) talyModel(ctx context.Context, t tenant) (string, error) {
 		if rank > bestRank {
 			best, bestRank = m.ID, rank
 		}
-	}
-	if best == "" {
-		return "", mcpSaid("Taly is not set up on this Talyvor yet.")
 	}
 	return best, nil
 }

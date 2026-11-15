@@ -85,7 +85,9 @@ describe('plain-language mode (B41.40)', () => {
       expect(said).toMatch(/\. (Held|Settled) means /)
       expect(said.split('.')[0].length).toBeGreaterThan(10)
     }
-    expect(explain(within(table).getByRole('button', { name: 'What does “LXC” mean?' }))).toMatch(/^LXC is the credit your agents spend/)
+    // B61.14 — the Amount column reads in dollars alone, so it no longer explains LXC.
+    expect(within(table).queryByRole('button', { name: 'What does “LXC” mean?' })).toBeNull()
+    expect(table.textContent).not.toMatch(/LXC/)
     expect(explain(within(table).getByRole('button', { name: 'What does “Balance” mean?' }))).toMatch(/^Balance is /)
     expect(await critical()).toEqual([])
     cleanup()

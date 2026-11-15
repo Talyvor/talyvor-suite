@@ -1,18 +1,17 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bar, Button, Card, Chip, Dialog, Field, Input, Money, Switch, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
+import { Bar, Button, Card, Chip, Dialog, Money, Switch, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { isSessionExpired } from '../../lib/productState'
-import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, rulesKey, statementKey, useKeys } from './AgentBank'
+import { APPROVALS_KEY, BOOK_KEY, FORECAST_KEY, OnThePhone, rulesKey, useKeys } from './AgentBank'
 import { cardKey } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { RunsOut } from './RunsOut'
-import { type Agent, type AgentBook, AgentBankError, agentBankApi, newMoveKey, parseLXC, retryMoveThroughRestart } from './agentBankApi'
+import { type Agent, type AgentBook, agentBankApi } from './agentBankApi'
 import { resumeAgent, resumeEveryAgent } from './passkeys'
 
 // AgentCard.tsx — B57.16: Pocket's agent card (w-home, w-agents and the agent's page) with its switch, and the two dialogs
-// it opens. Pausing is instant; resuming is signed over the agent's resume challenge; Move LXC funds the agent from the
-// workspace's free LXC or takes LXC back, each with its own Idempotency-Key so a retry moves once.
+// it opens. Pausing is instant; resuming is signed over the agent's resume challenge. B61.14: Move LXC is parked and gone.
 
 export const SAFE_TO_SPEND_KEY = ['agent-safe-to-spend'] as const
 
@@ -26,7 +25,6 @@ function refusal(err: unknown, nothing: string): string {
 export function AgentCard({ agent, book }: { agent: Agent; book: AgentBook }) {
   const qc = useQueryClient()
   const [dialog, setDialog] = useState<'resume' | 'start-all' | null>(null)
-  const safe = useQuery({ queryKey: SAFE_TO_SPEND_KEY, queryFn: agentBankApi.safeToSpend })
   const forecast = useQuery({ queryKey: FORECAST_KEY, queryFn: agentBankApi.forecast })
   const rules = useQuery({ queryKey: rulesKey(agent.id), queryFn: () => agentBankApi.rules(agent.id) })
   const card = useQuery({ queryKey: cardKey(agent.id), queryFn: () => agentBankApi.card(agent.id) })
@@ -42,7 +40,6 @@ export function AgentCard({ agent, book }: { agent: Agent; book: AgentBook }) {
 
   const allPaused = !!book.all_paused_at
   const running = !agent.paused_at && !allPaused
-  const safeFigure = (safe.data?.agents ?? []).find((s) => s.agent_id === agent.id)?.figures?.find((f) => f.currency === 'LXC')
   const month = forecast.data ? (forecast.data.agents ?? []).find((f) => f.agent_id === agent.id) : undefined
   const spent = forecast.data ? (month?.spent_ulxc ?? 0) : null
   const budget = rules.data?.monthly_limit_ulxc ?? 0
@@ -69,20 +66,6 @@ export function AgentCard({ agent, book }: { agent: Agent; book: AgentBook }) {
         <Link to={`/agents/${agent.id}`} className={`font-display text-body font-semibold text-ink ${pocketFocusRing}`}>
           {agent.name}
         </Link>
-        <div className="mt-1" data-testid={`agent-card-balance-${agent.id}`}>
-          <Money ulxc={agent.balance_ulxc} className="font-display text-bar text-ink" />
-        </div>
-        <div className="text-caption text-ink-3" data-testid={`agent-card-safe-${agent.id}`}>
-          {safe.isError ? (
-            'Safe to spend could not be read just now.'
-          ) : safeFigure ? (
-            <>
-              <Money ulxc={safeFigure.safe_to_spend} /> safe to spend
-            </>
-          ) : (
-            'Reading safe to spend…'
-          )}
-        </div>
       </div>
       <div className="grid gap-1.5">
         {pct !== null ? <Bar value={pct / 100} label={`${pct}% of budget used`} /> : null}
@@ -212,98 +195,6 @@ export function StartEveryAgent({ open, onClose }: { open: boolean; onClose: () 
       <p>An agent you paused on its own stays paused.</p>
       {onlyThePhone ? <OnThePhone>Start your agents again on your phone with Face ID.</OnThePhone> : null}
       {start.isError ? <p role="alert">{refusal(start.error, 'Your agents are still paused.')}</p> : null}
-    </Dialog>
-  )
-}
-
-/** Move LXC: <agent>: Fund it from the workspace's free LXC, or Take back. Moving is not spending, so no approval. */
-export function MoveLxc({ agent, book, open, onClose }: { agent: Agent; book: AgentBook; open: boolean; onClose: () => void }) {
-  const qc = useQueryClient()
-  const [amount, setAmount] = useState('')
-  const micros = parseLXC(amount)
-  // B17.26 — the amount and the Idempotency-Key are the mutation's own, so a retry through a deploy's restart repeats
-  // both and Lens moves the LXC once.
-  const move = useMutation({
-    mutationFn: ({ dir, ulxc, key }: { dir: 'fund' | 'withdraw'; ulxc: number; key: string }) =>
-      dir === 'fund' ? agentBankApi.fund(agent.id, ulxc, key) : agentBankApi.withdraw(agent.id, ulxc, key),
-    retry: retryMoveThroughRestart,
-    retryDelay: (failures) => Math.min(500 * 2 ** failures, 4_000),
-    onSuccess: (done, { dir, ulxc }) => {
-      setAmount('')
-      onClose()
-      showSnack({
-        title: (
-          <>
-            {agent.name} now holds <Money ulxc={done.balance_ulxc} />
-          </>
-        ),
-        line: (
-          <>
-            <Money ulxc={ulxc} /> {dir === 'fund' ? 'moved in from the workspace.' : 'went back to the workspace.'}
-          </>
-        ),
-      })
-    },
-    onSettled: () =>
-      Promise.all([qc.invalidateQueries({ queryKey: BOOK_KEY }), qc.invalidateQueries({ queryKey: statementKey(agent.id) })]),
-  })
-  const [noAmount, setNoAmount] = useState(false)
-  const send = (dir: 'fund' | 'withdraw') => (micros === null ? setNoAmount(true) : move.mutate({ dir, ulxc: micros, key: newMoveKey() }))
-  // Lens answers 409 when the side giving has too little: the figure it has is the one this dialog shows.
-  const short = move.error instanceof AgentBankError && move.error.status === 409 ? move.variables?.dir : undefined
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      title={`Move LXC: ${agent.name}`}
-      actions={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="secondary" disabled={move.isPending} onClick={() => send('withdraw')}>
-            Take back
-          </Button>
-          <Button variant="primary" disabled={move.isPending} onClick={() => send('fund')}>
-            Fund {agent.name}
-          </Button>
-        </>
-      }
-    >
-      <p>
-        {agent.name} holds <Money ulxc={agent.balance_ulxc} />. The workspace has <Money ulxc={book.unallocated_ulxc} /> free to
-        fund it.
-      </p>
-      <Field label="Amount in LXC">
-        <div className="flex items-center gap-3">
-          <Input inputMode="decimal" placeholder="LXC" className="w-36 font-figure" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          {micros !== null ? (
-            <span data-testid="move-amount">
-              <Money ulxc={micros} />
-            </span>
-          ) : null}
-        </div>
-      </Field>
-      <p className="text-caption text-ink-3">
-        Moving needs no approval: it is not spending. It shows on {agent.name}’s statement as “Funded by the workspace” or
-        “Taken back by the workspace”.
-      </p>
-      {noAmount && micros === null ? <p role="alert">Type an amount in LXC first.</p> : null}
-      {move.isError ? (
-        <p role="alert">
-          {short === 'fund' ? (
-            <>
-              The workspace has only <Money ulxc={book.unallocated_ulxc} /> free to fund {agent.name}, so nothing moved.
-            </>
-          ) : short === 'withdraw' ? (
-            <>
-              {agent.name} holds only <Money ulxc={agent.balance_ulxc} />, so nothing moved.
-            </>
-          ) : (
-            refusal(move.error, 'The LXC did not move.')
-          )}
-        </p>
-      ) : null}
     </Dialog>
   )
 }

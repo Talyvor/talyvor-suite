@@ -17,7 +17,7 @@ function mockBff() {
   const schedule = {
     id: 'psc_1', agent_id: 'agt_1', prompt: 'What is 2+2?', provider: 'anthropic', model: 'claude-opus-5', every: 'day',
     next_run_at: '2026-10-09T09:00:00Z', active: true, created_at: '2026-10-08T05:00:00Z',
-    runs: [{ ran_at: '2026-10-08T09:00:00Z', outcome: 'answered', answer: 'It is **4**.', request_id: 'req_9', charged_ulxc: 317, entry_id: 'ent_9' }],
+    runs: [{ ran_at: '2026-10-08T09:00:00Z', outcome: 'answered', answer: 'It is **4**.', request_id: 'req_9', charged_ulxc: 317_000, entry_id: 'ent_9' }],
   }
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -26,6 +26,7 @@ function mockBff() {
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/models') return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, tier: 'frontier' }])
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
     if (url === '/api/agents' && method === 'GET') {
@@ -95,7 +96,7 @@ describe('Scheduled prompts billed to a wallet (B28.377)', () => {
     expect(await within(card).findByTestId('chat-schedule-done')).toHaveTextContent(/^At .+ Researcher asked Claude Opus 5:$/)
     expect(within(card).getByTestId('scheduled-run-answer')).toHaveTextContent('It is 4.')
     const billed = within(card).getByTestId('scheduled-run-billed')
-    expect(billed).toHaveTextContent(/^Researcher’s wallet paid 0\.000317 LXC for it: the line on its statement$/)
+    expect(billed).toHaveTextContent(/^Researcher’s wallet paid \$0\.03 for it: the line on its statement$/)
     expect(within(billed).getByRole('link', { name: 'the line on its statement' })).toHaveAttribute('href', '/agents?agent=agt_1&entry=ent_9')
   })
 

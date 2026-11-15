@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { AppMoney } from './money'
 import { YourPlan } from './Plan'
 
-// B1.6 — the subscriber's plan on /billing, from the BFF's gated GET /api/billing/allowance.
+// B1.6 — the subscriber's plan on /billing, from the BFF's gated GET /api/billing/allowance. B61.14 — its allowance reads in
+// dollars alone, at Lens's peg ($0.10 a LXC here), never LXC.
 
 const SUBSCRIBED = {
   allowance: {
@@ -27,12 +29,16 @@ function serve(body: unknown, subscription?: unknown) {
       ? json(body)
       : String(input) === '/api/billing/subscription' && subscription
         ? json(subscription)
-        : new Response('null', { status: 404 }),
+        : String(input) === '/api/lxc/topup-options'
+          ? json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
+          : new Response('null', { status: 404 }),
   )
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const utils = render(
     <QueryClientProvider client={client}>
-      <YourPlan />
+      <AppMoney>
+        <YourPlan />
+      </AppMoney>
     </QueryClientProvider>,
   )
   return { ...utils, fetchSpy }
@@ -46,10 +52,13 @@ describe('YourPlan (B1.6)', () => {
 
     const sentence = await screen.findByText(/Your plan is/)
     expect(sentence.textContent).toBe('Your plan is $20. Your team’s answers earned $6 of it back.')
+    // 50 of 200 LXC used and 150 LXC left, at $0.10 a LXC.
     const used = screen.getByText('Allowance used').closest('div.flex')!
-    expect(used.textContent).toMatch(/50.*of.*200/)
+    await waitFor(() => expect(used.textContent).toMatch(/^Allowance used.*\$5\.00\s*of\s*\$20\.00$/))
     const left = screen.getByText('Allowance left').closest('div.flex')!
-    expect(left.textContent).toMatch(/150/)
+    expect(left.textContent).toContain('$15.00')
+    expect(left.textContent).toContain('The plan never bills an overage')
+    expect(document.body.textContent).not.toMatch(/LXC|draws/)
   })
 
   // B27.20 — "Your plan is cancelled. It ends on …" sat above "the allowance renews …".

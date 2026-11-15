@@ -82,7 +82,8 @@ describe('Agents (B57.19)', () => {
     const list = await screen.findByTestId('agents-list')
     expect(within(list).getAllByRole('link', { name: /^Open / }).map((l) => l.getAttribute('aria-label'))).toEqual(['Open Research', 'Open Sales', 'Open Ops'])
     expect(within(list).getByRole('link', { name: 'Open Research' })).toHaveAttribute('href', '/agents/agt_1')
-    expect(screen.getByTestId('agents-totals')).toHaveTextContent('30 LXC with its agents and')
+    // B61.14 — the workspace's LXC credit wallet is not drawn: no "holds … free to fund them".
+    expect(screen.getByTestId('agents-totals').textContent).toBe('Each agent spends its own money, inside its own rules.')
     const wallet = await screen.findByTestId('room-wallet-agt_room')
     expect(within(list).queryByText('Room: Agent pricing research')).toBeNull()
     await waitFor(() => expect(wallet).toHaveTextContent('A room’s wallet. It does not take one of Free’s 3 agent places.'))

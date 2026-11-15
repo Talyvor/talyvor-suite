@@ -162,6 +162,9 @@ import { agentAnalytics } from './agentAnalytics.ts'
 import { statementPDF } from './statementPDF.ts'
 import { statementJournal } from './statementJournal.ts'
 import { openapiWallets } from './openapiWallets.ts'
+import { instantTransferOffered, instantTransferQuote } from './instantTransfer.ts'
+import { helpComplaint, helpNoDeadControl, helpRequest, yourDataRequest } from './helpScreen.ts'
+import { sandboxLabelEveryScreen } from './sandboxLabel.ts'
 
 export interface Evidence {
   note?: string
@@ -1294,11 +1297,16 @@ export function consoleScreensDraw(seed: number): Scenario {
           continue
         }
         const name = `e2e-b28266-${seed}-${Date.now() % 100_000}`
-        const field = page.getByLabel('New key name')
-        await field.fill(name)
-        await page.getByRole('button', { name: 'Create key' }).click()
-        await page.getByRole('button', { name: 'Copy key' }).waitFor({ state: 'visible', timeout: 15_000 })
-        const left = await field.inputValue()
+        // B61.83 — a key is made in the New key dialog (Keys.tsx, under Settings since B61.3); it closes on "Done, I stored it".
+        const making = page.getByRole('dialog', { name: 'New key' })
+        await page.getByRole('button', { name: 'New key', exact: true }).click()
+        await making.getByLabel('Key name').fill(name)
+        await making.getByRole('button', { name: 'Create key' }).click()
+        await making.getByRole('button', { name: 'Copy key' }).waitFor({ state: 'visible', timeout: 15_000 })
+        await making.getByRole('button', { name: /i stored it/i }).click()
+        await page.getByRole('button', { name: 'New key', exact: true }).click()
+        const left = await making.getByLabel('Key name').inputValue()
+        await making.getByRole('button', { name: 'Cancel', exact: true }).click()
         // The row is its name, then its facts line, then its identifier.
         const list = page.getByRole('region', { name: /the keys that exist/i })
         await list.getByText(name, { exact: true }).waitFor({ state: 'visible', timeout: 15_000 }).catch(() => undefined)
@@ -1308,18 +1316,17 @@ export function consoleScreensDraw(seed: number): Scenario {
         ctx.evidence.push({ note: `after creating "${name}": the name field holds "${left}"; its row reads "${facts.slice(0, 160)}"` })
         if (left !== '') failed.push(`the key name field still held "${left}" after the key was created`)
         if (!facts.includes('never used')) failed.push('the new key\'s row did not say it was never used')
-        await page.getByRole('button', { name: /i stored it/i }).click()
         const prefix = /tlv_ws_[0-9a-f]+/.exec(facts)?.[0]
         if (prefix !== undefined) {
           await page.getByRole('button', { name: `Revoke ${prefix}` }).click()
-          await page.getByLabel(`Type ${prefix} to confirm`).fill(prefix)
-          await page.getByRole('button', { name: 'Revoke key' }).click()
+          await page.getByRole('dialog').getByLabel(`Type ${prefix} to confirm`).fill(prefix)
+          await page.getByRole('dialog').getByRole('button', { name: 'Revoke key' }).click()
           await page.getByRole('button', { name: `Revoke ${prefix}` }).waitFor({ state: 'detached', timeout: 15_000 }).catch(() => undefined)
         }
         await page.close()
       }
       return failed.length === 0
-        ? { pass: true, detail: 'all four drew their heading at the load event and their data after; a new key cleared the name field and read "never used"' }
+        ? { pass: true, detail: 'all four drew their heading at the load event and their data after; a new key left no name behind and read "never used"' }
         : { pass: false, detail: failed.join('; ') }
     },
   }
@@ -1529,69 +1536,55 @@ export function walletHero(): Scenario {
 }
 
 /** B17.342 — the header's drawn lockup as marketingBoard reads it: a visible mark and wordmark, no tagline. */
-export function headerLockupFaults(l: { mark: boolean; wordmark: boolean; tagline: boolean }): string[] {
+export function headerLockupFaults(l: { logo: boolean; tagline: boolean }): string[] {
   const faults: string[] = []
-  if (!l.mark) faults.push('no drawn mark in the header')
-  if (!l.wordmark) faults.push('no drawn wordmark in the header')
+  if (!l.logo) faults.push('no logo from the kit (/brand/logo) in the header')
   if (l.tagline) faults.push('the retired tagline shows in the header')
   return faults
 }
 
-/** B29.4 — /marketing in the board's design: the drawn lockup, the hero photograph (no more than
- *  350 KB as served), and the positioning band. At 1440 the photo bleeds off the right edge beside
- *  the text; at 390 it sits under the text and nothing scrolls sideways. B32.1: the verb stack
- *  ROUTE · PROVE · REUSE · COMPOUND was retired with the tagline, so no verb shows as a word. */
+/** B29.4 — /marketing in the board's design: the kit's logo and nothing scrolls sideways, at 1440 and 390. B32.1: the
+ *  verb stack ROUTE · PROVE · REUSE · COMPOUND was retired with the tagline, so no verb shows as a word. B61.83: since
+ *  B57.60 the hero is Pocket's (Landing.tsx: the heading on ink beside the approval sheet's picture), with no
+ *  photograph and no positioning band, so it is the hero's heading that is waited for. */
 export function marketingBoard(): Scenario {
   return {
     id: 'marketing-board',
     owner: 'talyvor-suite',
-    title: "/marketing shows the board's hero — lockup without the tagline, photograph, no verb stack — at 1440 and at 390",
+    title: "/marketing shows the board's hero — its heading, the kit's logo without the tagline, no verb stack — at 1440 and at 390",
     run: async (ctx) => {
       const page = await ctx.app.tab('/marketing')
       const wrong: string[] = []
       try {
         for (const [width, height] of [[1440, 900], [390, 844]] as const) {
           await page.setViewportSize({ width, height })
-          await page.locator('figure img').waitFor({ state: 'visible' })
-          const got = await page.evaluate(async () => {
-            const photo = document.querySelector<HTMLImageElement>('figure img')!
-            if (!photo.complete) await new Promise((r) => photo.addEventListener('load', r, { once: true }))
-            const box = (el: Element | null) => (el === null ? null : el.getBoundingClientRect())
-            const p = box(photo)!
-            const h1 = box(document.querySelector('h1'))!
-            // B51.1: the header draws the mark and wordmark inline; there is no logo file to load.
+          await page.locator('#hero-heading').waitFor({ state: 'visible' })
+          const got = await page.evaluate(() => {
+            // B61.83 — the header shows the kit's logo file (packages/ui Logo: img[data-brand="logo"] from /brand/logo), one per theme.
             const header = document.querySelector('header')
-            const drawn = (b: string) => header?.querySelector(`svg[data-brand="${b}"]`)?.checkVisibility() === true
+            const logo = Array.from(header?.querySelectorAll<HTMLImageElement>('img[data-brand="logo"]') ?? [])
+              .some((i) => i.checkVisibility() && new URL(i.src).pathname.startsWith('/brand/logo/'))
             return {
-              src: photo.currentSrc,
-              loaded: photo.naturalWidth > 0,
-              photo: { left: p.left, right: p.right, top: p.top, width: p.width },
-              h1Bottom: h1.bottom,
+              heading: (document.querySelector('#hero-heading')?.textContent ?? '').trim(),
               stack: document.querySelector('.tal-verbs') !== null,
               verbs: document.body.innerText.match(/\b(route|prove|reuse|compound)\b/gi) ?? [],
-              lockup: { mark: drawn('mark'), wordmark: drawn('wordmark'), tagline: /ai work that compounds/i.test(header?.innerText ?? '') },
-              band: document.body.innerText.includes('Designed to run on your own infrastructure.'),
+              lockup: { logo, tagline: /ai work that compounds/i.test(header?.innerText ?? '') },
               scroll: document.documentElement.scrollWidth,
               client: document.documentElement.clientWidth,
             }
           })
-          const bytes = (await (await page.request.get(got.src)).body()).length
-          ctx.evidence.push({ note: `${width}: photo ${new URL(got.src).pathname} ${bytes} B at ${JSON.stringify(got.photo)}; verbs ${JSON.stringify(got.verbs)}; header lockup ${JSON.stringify(got.lockup)}; scroll ${got.scroll}/${got.client}` })
+          ctx.evidence.push({ note: `${width}: hero "${got.heading}"; verbs ${JSON.stringify(got.verbs)}; header lockup ${JSON.stringify(got.lockup)}; scroll ${got.scroll}/${got.client}` })
           const at = `${width}px`
-          if (!got.loaded) wrong.push(`${at}: the hero photo did not load`)
-          if (bytes > 350_000) wrong.push(`${at}: the hero photo served ${bytes} bytes, over 350 KB`)
+          if (got.heading === '') wrong.push(`${at}: the hero has no heading`)
           if (got.stack || got.verbs.length > 0) wrong.push(`${at}: the retired verb stack shows (${got.stack ? '.tal-verbs; ' : ''}${got.verbs.join(' ')})`)
           wrong.push(...headerLockupFaults(got.lockup).map((f) => `${at}: ${f}`))
-          if (!got.band) wrong.push(`${at}: no positioning band`)
           if (got.scroll > got.client) wrong.push(`${at}: scrolls sideways (${got.scroll} > ${got.client})`)
-          if (width === 1440 && (got.photo.left < width / 2 - 1 || got.photo.right < width - 1)) wrong.push(`${at}: the photo does not bleed off the right edge (${got.photo.left}–${got.photo.right})`)
-          if (width === 390 && (got.photo.top < got.h1Bottom || got.photo.width < got.client - 1)) wrong.push(`${at}: the photo is not full width under the text`)
         }
       } finally {
         await page.close()
       }
       return wrong.length === 0
-        ? { pass: true, detail: 'lockup without the tagline, photo (≤350 KB) and band at 1440 and 390, and no verb stack; the photo bleeds right on desktop and sits under the text on a phone' }
+        ? { pass: true, detail: 'the hero heading and the kit\'s logo without the tagline at 1440 and 390, no verb stack, and nothing scrolls sideways' }
         : { pass: false, detail: `/marketing: ${wrong.join('; ')}` }
     },
   }
@@ -5672,6 +5665,13 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B30.123 — once a run, last, after the night's test payments through partner accounts: on the operator read key, every money
   // currency reconciled within two days, no shortfall in the safeguarding view and no break on the newest day.
   if (i === 8) list.push(dailyReconciliation())
+  // B61.48 — the launch version's three areas that had no scenario, once a run each. Instant transfer on a workspace of its own: a
+  // quote shows what leaves, the fee, the rate and what arrives, holds 30 seconds and is refused in words after; Pay offers it to a
+  // Hybrid account alone. Help: a question and a complaint filed and said so, a copy of the data asked for and listed, no dead
+  // control. The Sandbox label on every signed-in launch screen, none Live and none calling the money test money.
+  if (i === 4) list.push(instantTransferQuote(), instantTransferOffered())
+  if (i === 3) list.push(helpRequest(), helpComplaint(), yourDataRequest(), helpNoDeadControl())
+  if (i === 2) list.push(sandboxLabelEveryScreen())
   return list
 }
 

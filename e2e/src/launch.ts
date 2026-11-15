@@ -73,7 +73,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'xss-shown-back', 'pocket-03', 'pocket-04', 'pocket-05', 'pocket-06', 'pocket-08', 'pocket-13', 'pocket-15', 'pocket-16',
     'pocket-17',
   ],
-  'instant-transfer': [],
+  'instant-transfer': ['instant-transfer-offered', 'instant-transfer-quote'],
   activity: [
     'account-statements', 'agent-analytics', 'alert-channels', 'budgets-by-category', 'coach-week', 'daily-briefing',
     'ledger-reads-correctly', 'limit-alerts', 'month-plan', 'spend-notice-push', 'spending-screen', 'statement-journal',
@@ -84,9 +84,9 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
   settings: [
     'api-key-revoke', 'console-screens-draw', 'keys-unlisted', 'operator-compliance-boundary', 'seats-free', 'seats-team',
   ],
-  support: [],
+  support: ['help-complaint', 'help-no-dead-control', 'help-request', 'your-data-request'],
   legal: ['legal-pages-whole'],
-  'sandbox-label': [],
+  'sandbox-label': ['sandbox-label-every-screen'],
   home: [
     'agent-runs-out-date', 'app-shell', 'brand-planes', 'every-screen', 'home-cards', 'home-daily-briefing', 'one-search',
     'sidebar-unnamed-workspace', 'wallet-first-nav', 'wallet-home', 'pocket-07',
@@ -161,7 +161,11 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
 /** Why a launch-area scenario a launch run cannot play is left out of it (B61.63): each by name, once. */
 const NEEDS_A_MODEL = 'its agent asks a model, through the old gateway, which the launch version hides (a launch run reads no catalog, B61.49)'
 const NEEDS_STRIPE_FORM = 'it waits for Stripe’s hosted card form (#cardNumber), which the launch run of 15 Nov 15:07Z never drew'
+const LEDGER_PARKED = 'it reads the Ledger page (ledger-balance), which the launch version hides while LXC is parked (B61.17)'
+const NO_HERO_PHOTO = 'it measures the homepage hero photograph’s fade, and the homepage has had no photograph since B57.60 (Pocket’s hero, the approval sheet’s picture)'
 export const LAUNCH_CANNOT_PLAY: Readonly<Record<string, string>> = {
+  'ledger-reads-correctly': LEDGER_PARKED,
+  'hero-fade': NO_HERO_PHOTO,
   ...Object.fromEntries([
     'agent-analytics', 'agent-archive', 'agent-hourly-limit', 'agent-limit', 'agent-limit-boost', 'agent-model-limit', 'agent-pause-all',
     'agent-request-rate', 'agent-rules-unbypassable', 'first-agent', 'keys-unlisted', 'ledger-call-once', 'ledger-moves-at-once',
@@ -192,6 +196,8 @@ export const inLaunch = (id: string): boolean => {
 export interface LaunchCut {
   played: number
   left_out: string[]
+  /** B61.56 — of the run's explorers, how many took a step on the launch pages; absent until they have run. */
+  explorers?: { explored: number; of: number }
 }
 
 /** Each journey with the scenarios outside the launch version taken out, and what that played and left out. */
@@ -210,7 +216,8 @@ export function launchCut(journeys: readonly Scenario[][]): { journeys: Scenario
 export function launchLine(cut: LaunchCut): string {
   const why = (id: string) => (id in LAUNCH_CANNOT_PLAY ? `: ${LAUNCH_CANNOT_PLAY[id]}` : '')
   return `Launch version: ${cut.played} played, ${cut.left_out.length} left out` +
-    (cut.left_out.length === 0 ? '' : ` (${cut.left_out.map((id) => `\`${id}\`${why(id)}`).join(', ')})`)
+    (cut.left_out.length === 0 ? '' : ` (${cut.left_out.map((id) => `\`${id}\`${why(id)}`).join(', ')})`) +
+    (cut.explorers === undefined ? '' : `; ${cut.explorers.explored} of ${cut.explorers.of} explorers explored the launch pages`)
 }
 
 // ── THE COVERAGE MAP, LAUNCH SCREENS AND ROUTES ONLY ────────────────────────────────────────────────
@@ -261,6 +268,12 @@ function bffHidden(path: string, h: HiddenPaths): boolean {
   const agent = path.startsWith('/api/agents/') ? path.slice('/api/agents/'.length).split('/') : []
   if (agent.slice(0, 2).some((seg) => h.bffAgentSegments.includes(seg))) return true
   return h.bff.some((p) => (p.endsWith('/') ? path.startsWith(p) : under(path, p) || path.startsWith(`${p}-`)))
+}
+
+/** B61.56 — whether the web app hides a screen's address (its AREA_PATHS), the address's query and fragment aside. */
+export function hiddenScreen(path: string, h: HiddenPaths): boolean {
+  const at = path.split(/[?#]/)[0].replace(/(.)\/$/, '$1')
+  return h.screens.some((p) => under(at, p))
 }
 
 /** The inventory with every hidden screen and route taken out, Track's and Docs' routes with it. */

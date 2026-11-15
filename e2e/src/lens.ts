@@ -2,6 +2,7 @@
 // one's ledger back, and ask the judge. Every call a synthetic user makes uses that user's own token.
 
 import { randomUUID } from 'node:crypto'
+import { confirmAll } from './confirmIdentity.ts'
 import type { Recorder, Tag } from './coverage.ts'
 import type { CatalogModel } from './oracles.ts'
 import type { Plan } from './pricing.ts'
@@ -62,6 +63,9 @@ export interface ScanTrackRecord { hits: number; misses: number; waiting: number
   records: { report_id: number; outlook_low: number; outlook_high: number; outcome?: number; hit?: boolean }[] | null }
 
 export type Answered<T> = { ok: true; status: number; value: T } | { ok: false; status: number; error: string }
+
+/** B61.83 — an agent's payment as Lens answered it: paid (posted) when ok; held for the owner when held names its approval. */
+export type PayAnswer = { ok: true; status: number; value: AgentPayment } | { ok: false; status: number; error: string; held?: string }
 
 /** B28.288 — one request of a burst as Lens answered it: its status, the limiter's two headers (null when absent) and the body. */
 export interface BurstAnswer { status: number; retryAfter: string | null; remaining: string | null; text: string }
@@ -1135,8 +1139,12 @@ export class LensClient {
     return Number((JSON.parse(raw) as { reset?: number }).reset ?? 0)
   }
 
-  /** Creates `count` synthetic workspaces, each with test credits and a token; B35.7 — on `plan` when one is named. */
-  async createUsers(count: number, plan?: Plan): Promise<SyntheticUser[]> {
+  /**
+   * Creates `count` synthetic workspaces, each with test credits and a token; B35.7 — on `plan` when one is named. B61.51 —
+   * each then confirms who it is (confirmIdentity.ts) unless `confirm` is false, as the verification scenarios' own users
+   * start: one that cannot is named in the run's incidents, and is still returned.
+   */
+  async createUsers(count: number, plan?: Plan, { confirm = true }: { confirm?: boolean } = {}): Promise<SyntheticUser[]> {
     const body = (await this.call('POST', '/v1/synthetic/workspaces', { [SYNTHETIC_KEY_HEADER]: this.key },
       plan === undefined ? { count } : { count, plan })) as {
       plan?: string
@@ -1145,7 +1153,13 @@ export class LensClient {
     const list = body.workspaces ?? []
     if (list.length !== count) throw new Error(`asked Lens for ${count} synthetic users, got ${list.length}`)
     if (plan !== undefined && body.plan !== plan) throw new Error(`asked Lens for ${count} synthetic users on ${plan}, and it made them on ${body.plan ?? 'no plan it names'}`)
-    return list.map((w, index) => ({ index, workspaceID: w.workspace_id, token: w.token, expiresAt: w.expires_at, plan: plan ?? 'free' }))
+    const users: SyntheticUser[] = list.map((w, index) => ({ index, workspaceID: w.workspace_id, token: w.token, expiresAt: w.expires_at, plan: plan ?? 'free' }))
+    if (confirm) {
+      for (const f of (await confirmAll(this, users)).failed) {
+        this.pace.incidents.push(`${new Date().toISOString()} ${this.tag.scenario}: synthetic user ${f.user.workspaceID} could not confirm who it is: ${f.why}`)
+      }
+    }
+    return users
   }
 
   async catalog(user: SyntheticUser): Promise<CatalogModel[]> {
@@ -1387,14 +1401,24 @@ export class LensClient {
     return ((await this.call('GET', `/v1/workspaces/${user.workspaceID}/api-keys`, this.bearer(user.token))) as { id: string; name: string }[] | null) ?? []
   }
 
-  /** B17.6 — an agent pays another agent with its own key; Lens's answer or its refusal. */
-  async payAsAgent(key: string, workspaceID: string, fromAgentID: string, toAgentID: string, amountULXC: number, memo: string): Promise<Answered<AgentPayment>> {
+  /**
+   * B17.6 — an agent pays another agent with its own key; Lens's answer or its refusal. ok is paid: Lens posted it, its
+   * entry in the answer. B61.83: a payment held for the owner answers 202 "pending_approval" (Lens B58.2) and nothing is
+   * posted, so it is not ok, whatever its status code: held carries the approval it filed.
+   */
+  async payAsAgent(key: string, workspaceID: string, fromAgentID: string, toAgentID: string, amountULXC: number, memo: string): Promise<PayAnswer> {
     const res = await this.send('POST', `/v1/workspaces/${workspaceID}/agents/${fromAgentID}/pay`, {
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ to_agent_id: toAgentID, amount_ulxc: amountULXC, memo }),
     })
     const raw = await res.text()
-    return res.ok ? { ok: true, status: res.status, value: JSON.parse(raw) as AgentPayment } : { ok: false, status: res.status, error: refusalOf(raw) }
+    if (!res.ok) return { ok: false, status: res.status, error: refusalOf(raw) }
+    const body = JSON.parse(raw) as AgentPayment & { status?: string; approval_id?: string; message?: string }
+    if (body.status === 'pending_approval') {
+      return { ok: false, status: res.status, error: `held for approval ${body.approval_id ?? '(none named)'}: ${body.message ?? raw.slice(0, 300)}`, held: body.approval_id ?? '' }
+    }
+    if (typeof body.entry_id !== 'string' || body.entry_id === '') return { ok: false, status: res.status, error: `answered with no entry posted: ${raw.slice(0, 300)}` }
+    return { ok: true, status: res.status, value: body }
   }
 
   /**

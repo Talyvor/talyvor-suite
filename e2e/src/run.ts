@@ -18,16 +18,17 @@ import { type B28Report, b28Report } from './b28.ts'
 import { type BuildingLabelsReport, readBuildingLabels } from './buildingLabels.ts'
 import { CapReached, SpendCap } from './budget.ts'
 import { type RunConfig, parseConfig } from './config.ts'
+import { UNCONFIRMED_SCENARIOS, confirmAll, confirmLine } from './confirmIdentity.ts'
 import { type DayBudget, dayBudget, leftOf } from './day.ts'
 import { deepJourneys, roundOf } from './deep.ts'
 import { type CoverageMap, type Inventory, Matcher, Recorder, type Tag, buildMap, cannotTest, inventory, leastCovered, refreshLensCheckout } from './coverage.ts'
 import { type CodeReport, codeSkipped, runCode } from './code.ts'
 import { type EdgeReport, readEdge } from './edge.ts'
-import { type ExplorerSummary, type Finding, Notebook, explore } from './explore.ts'
+import { type ExplorerSummary, type Finding, Notebook, explore, ledgerSpentUSD } from './explore.ts'
 import { fileB28Items, fileBuildingLabelItems, fileCodeItems, fileEdgeItems, fileHostileItems, fileItems, filePocketItems } from './filing.ts'
 import { type HostileReport, type Repo, runHostile } from './hostile.ts'
 import { LensClient, type SyntheticUser, describe } from './lens.ts'
-import { type HiddenPaths, type LaunchCut, hiddenPaths, launchCut, launchInventory, launchLine, setUpCatalog } from './launch.ts'
+import { type HiddenPaths, type LaunchCut, hiddenPaths, hiddenScreen, launchCut, launchInventory, launchLine, setUpCatalog } from './launch.ts'
 import { lightJourneys } from './light.ts'
 import { pocketJourneys } from './pocketProblems/index.ts'
 import { type PocketRow, pocketRows } from './pocketProblems/problems.ts'
@@ -364,6 +365,12 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     const reset = await lens.reset([...users, ...seated.own.values()].map((u) => u.workspaceID))
     console.log(reset === undefined ? 'reset: Lens did not answer within its request timeout; waited for the reset to run on to the end'
       : `reset ${reset} synthetic workspace(s), this run's: stored answers cleared, credits restored`)
+    // B61.51 — every user confirms who it is before any journey, as sign-up asks; the verification scenarios' own start unconfirmed.
+    stage = "confirming the synthetic users' identity"
+    const owned = [...seated.own].filter(([key]) => !UNCONFIRMED_SCENARIOS.has(key.slice(key.indexOf(':') + 1))).map(([, u]) => u)
+    const confirmed = await confirmAll(lens, [...users, ...owned])
+    console.log(confirmLine(confirmed, seated.own.size - owned.length))
+    for (const f of confirmed.failed) incidents.push(`${stamp()} user ${f.user.index} (${f.user.workspaceID}) could not confirm who it is, so its money journeys meet Lens's refusal: ${f.why}`)
     stage = 'reading the catalog'
     // B61.49 — a launch run does not read the old gateway's catalog (launch.ts).
     const catalog = await setUpCatalog(cfg.launch, () => lens.catalog(users[0]), cfg.model)
@@ -651,20 +658,23 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     }
 
     // B17.5 — THE EXPLORERS, after the scenarios, under the same cap: whatever the scenarios left.
-    // B61.49 — an explorer reserves each step at its model's catalog price, which a launch run does not read: none explore.
-    if (cfg.launch && cfg.explorers > 0) console.log(`explorers: none of ${cfg.explorers}, their model is priced from the old gateway's catalog`)
-    if (cfg.explorers > 0 && !cfg.launch && !cap.reached && stoppedBy === undefined) {
+    // B61.56 — a launch run's explore the launch version's screens only, each step at the price per step (explore.ts).
+    if (cfg.explorers > 0 && !cap.reached && stoppedBy === undefined) {
       stage = 'creating the explorers'
       const explorers = await lens.createUsers(cfg.explorers)
       stage = 'the explorers explored'
       // B25.5 (3) — every explorer is told every feature, and each starts at the next least covered.
       const perFeature = new Map<string, number>()
       for (const o of outcomes) for (const f of o.features) perFeature.set(f, (perFeature.get(f) ?? 0) + 1)
-      const areas = leastCovered(buildMap(inv, rec), perFeature)
+      const shown = hidden === undefined ? inv : launchInventory(inv, hidden)
+      const areas = leastCovered(buildMap(shown, rec), perFeature)
+      const h = hidden
+      const isHidden = h === undefined ? undefined : (path: string) => hiddenScreen(path, h)
       // B26.19 — one notebook for them all; a screen with a parameter is reached by a click, never sent to.
-      const notebook = new Notebook(findings, inv.screens.filter((e) => cannotTest(e) === undefined && !e.path.includes(':')).map((e) => e.path),
-        (path) => screens?.match('GET', path.replace(/(.)\/$/, '$1'))?.path ?? path)
+      const notebook = new Notebook(findings, shown.screens.filter((e) => cannotTest(e) === undefined && !e.path.includes(':')).map((e) => e.path),
+        (path) => screens?.match('GET', path.replace(/(.)\/$/, '$1'))?.path ?? path, isHidden)
       console.log(`${explorers.length} explorers, up to ${cfg.exploreMinutes} minutes each, with $${(cfg.capUSD - cap.spentUSD).toFixed(2)} of the cap left; ` +
+        (cfg.launch ? `the launch version only, each step reserved at $${cfg.explorerStepUSD} and held to its ledger; ` : '') +
         `least covered first: ${areas.slice(0, explorers.length).map((a) => a.feature).join(', ')}`)
       const again = new Browsers(cfg.headed, incidents)
       try {
@@ -677,8 +687,9 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
               (async () => AppUser.signIn(await again.get(), user, { appURL: cfg.appURL, syntheticKey: cfg.syntheticKey, cap, catalog, modelName: cfg.model, book, usdPerLXC, recorder: rec, tag, home: cfg.launch }))()))
             try {
               s = await timed(SIGN_IN_MS + cfg.exploreMinutes * 60_000, 'exploring', unlessStopped('exploring',
-                explore(n, app, { lens: lens.tagged(tag), cap, catalog, usdPerLXC, provider: cfg.judgeProvider, model: cfg.explorerModel,
-                  minutes: cfg.exploreMinutes, features: areas, start, notebook })))
+                explore(n, app, { lens: lens.tagged(tag), cap, catalog, stepUSD: cfg.explorerStepUSD, usdPerLXC, provider: cfg.judgeProvider, model: cfg.explorerModel,
+                  minutes: cfg.exploreMinutes, features: areas, start, notebook, hidden: isHidden,
+                  spentByLedger: cfg.launch ? async () => ledgerSpentUSD(await lens.ledger(user), usdPerLXC) : undefined })))
             } finally {
               await timed(CLOSE_MS, 'closing its browser', app.close()).catch(() => undefined)
             }
@@ -693,6 +704,10 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
         await timed(CLOSE_MS, 'closing the browser', again.close()).catch(() => undefined)
       }
       summaries.sort((a, b) => a.explorer - b.explorer)
+    }
+    if (cut !== undefined && cfg.explorers > 0) {
+      cut.explorers = { explored: summaries.filter((s) => s.steps > 0).length, of: cfg.explorers }
+      console.log(`explorers: ${cut.explorers.explored} of ${cut.explorers.of} explored the launch version`)
     }
   } catch (e) {
     stoppedBy ??= `${stage}: ${describe(e)}`

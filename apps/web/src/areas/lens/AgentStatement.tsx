@@ -7,6 +7,7 @@ import { DESIGN_ATTR } from '../../pocketPending'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { AGENT_CREDIT } from '../../labels/capabilities'
 import { fetchModels } from '../chat/chatApi'
+import { useWorkspaceAreas } from '../../lib/workspaceAreas'
 import { Note, STATEMENT_KINDS, dayAfter, lineText, monthPeriod, readFailure, saveFile } from './AgentBank'
 import { AgentFace } from './AgentFace'
 import { AgentBankError, STATEMENT_PAGE_LINES, agentBankApi, refusalText, type Agent, type StatementLine } from './agentBankApi'
@@ -143,7 +144,9 @@ export function AgentStatement({ agent, nameOf }: { agent: Agent; nameOf: (id: s
     placeholderData: keepPreviousData,
   })
   // The catalog only names the models: a read that fails shows each model as Lens names it, and raises nothing.
-  const catalog = useQuery({ queryKey: [STATEMENT_DOC_KEY, 'models'], queryFn: () => fetchModels().catch(() => []), retry: false })
+  // B60.6 — the catalog is the old gateway's: without that area each model shows as Lens names it, and nothing is asked.
+  const gateway = useWorkspaceAreas().has('gateway')
+  const catalog = useQuery({ queryKey: [STATEMENT_DOC_KEY, 'models'], queryFn: () => fetchModels().catch(() => []), retry: false, enabled: gateway })
   const modelOf = (id: string) => catalog.data?.find((m) => m.id === id)?.display_name ?? id
   // Show all reads every page after the first, one at a time, to the month's first line; a search pages by hand.
   const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = st
@@ -191,7 +194,8 @@ export function AgentStatement({ agent, nameOf }: { agent: Agent; nameOf: (id: s
           {(
             [
               [`Opening, ${dayMonth(opened)}`, account?.opening_ulxc ?? 0, false, ''],
-              ['Money in', account?.in_ulxc ?? 0, true, 'text-success'],
+              // B61.14 — with LXC gone a figure has no words beside it, so money in is not drawn in a status colour.
+              ['Money in', account?.in_ulxc ?? 0, true, ''],
               ['Money out', -(account?.out_ulxc ?? 0), false, ''],
               ['Balance now', account?.closing_ulxc ?? 0, false, ''],
             ] as const
@@ -199,7 +203,7 @@ export function AgentStatement({ agent, nameOf }: { agent: Agent; nameOf: (id: s
             <div key={label} className="grid content-end gap-0.5">
               <dt className="text-micro font-semibold text-ink-3">{label}</dt>
               <dd>
-                <Money ulxc={ulxc} signed={signed} exact className={`grid justify-items-start gap-0.5 font-display text-head font-bold ${tone}`} />
+                <Money ulxc={ulxc} signed={signed} className={`grid justify-items-start gap-0.5 font-display text-head font-bold ${tone}`} />
               </dd>
             </div>
           ))}
@@ -260,7 +264,7 @@ export function AgentStatement({ agent, nameOf }: { agent: Agent; nameOf: (id: s
                       </td>
                       <td className="py-2.5 pl-4 text-right">
                         {/* On a phone the LXC goes under the dollars, so the table fits the width. */}
-                        <Money ulxc={l.amount_ulxc} signed exact className={`grid justify-items-end wide:block ${l.amount_ulxc > 0 ? 'text-success' : ''}`} />
+                        <Money ulxc={l.amount_ulxc} signed className="grid justify-items-end wide:block" />
                       </td>
                     </tr>
                   )

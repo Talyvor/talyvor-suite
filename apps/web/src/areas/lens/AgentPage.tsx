@@ -4,14 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { inlineLink } from '@talyvor/ui'
 import { Bar, Button, Card, Chip, Crumb, Dialog, Eyebrow, Icon, Money, Switch, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { AgentCard as AgentCardArt } from '../../cards/AgentCard'
-import { AGENT_CREDIT } from '../../labels/capabilities'
-import { WorkspaceLabel } from '../../labels/workspace'
 import { useAuthMeReader } from '../../lib/authMe'
 import { isSessionExpired } from '../../lib/productState'
 import { fetchModels } from '../chat/chatApi'
 import { AgentAnalytics } from './AgentAnalytics'
 import { BOOK_KEY, rulesKey } from './AgentBank'
-import { MoveLxc, ResumeAgent, StartEveryAgent } from './AgentCard'
+import { ResumeAgent, StartEveryAgent } from './AgentCard'
 import { IssueCard, cardKey } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { AgentMoneySection } from './AgentMoney'
@@ -19,12 +17,12 @@ import { DownloadFailed, dayIn, lineWhat, lineWhen, useMonthFile } from './Agent
 import { approvalSheetTo } from './ApprovalSheet'
 import { PAYEES_KEY } from './Pay'
 import { type AgentApproval, type AgentRules, type AgentSummary, agentBankApi } from './agentBankApi'
-import { lxcPartOf, useMoneyFigures } from './money'
+import { useMoney } from './money'
 
 // AgentPage.tsx — B57.20: an agent's page, as Pocket's w-agent-research, w-agent-sales and w-agent-ops draw it. Every
 // figure comes from GET /api/agents/{id}/summary, which Lens (B57.12) reads in one transaction, so the balance less what
-// waits is the safe-to-spend figure beside it. The header pauses, resumes or starts every agent again (B57.16), moves
-// LXC and opens the rules; the card tile freezes and unfreezes the agent's card. What today's agent view has that this
+// waits is the safe-to-spend figure beside it. The header pauses, resumes or starts every agent again (B57.16) and opens
+// the rules (B61.14: LXC is parked, so nothing moves LXC and its credit balance is not drawn); the card tile freezes and unfreezes the agent's card. What today's agent view has that this
 // page does not draw yet stays below it, as it was, until B57.22 redraws it. B57.21: its Money card, below the others.
 // B57.111: its spend by day, model and destination, across the page under the statement and the rules.
 
@@ -67,30 +65,29 @@ export interface RuleLine {
 
 /**
  * B57.20 — the agent's rules in words, as the reference's rules card says them: each limit in the person's currency
- * with its LXC under it, the hours, who it may pay, what it always allows, and its models. None set reads as such.
+ * (B61.14: never LXC), the hours, who it may pay and what it always allows. None set reads as such.
  */
 export function rulesInWords(
   r: AgentRules,
-  { figures, payeeName, modelName, monthEnd }: { figures: (ulxc: number) => { cash: string | null; lxc: string }; payeeName: (id: string) => string; modelName: (id: string) => string; monthEnd: string },
+  { figures, payeeName, monthEnd }: { figures: (ulxc: number) => string | null; payeeName: (id: string) => string; monthEnd: string },
 ): RuleLine[] {
-  // The person's currency in the title and LXC first in the line under it; LXC alone while no rate backs it.
-  const lead = (ulxc: number) => figures(ulxc).cash ?? figures(ulxc).lxc
-  const lxcFirst = (ulxc: number) => (figures(ulxc).cash === null ? '' : `${figures(ulxc).lxc}. `)
+  // The person's currency, and "…" while no rate backs it.
+  const lead = (ulxc: number) => figures(ulxc) ?? '…'
   const zone = cityOf(r.timezone)
   const allowances = Object.entries(r.payee_allowances ?? {}).filter(([, a]) => a.amount_ulxc > 0)
   const out: RuleLine[] = []
   if (r.approval_above_ulxc > 0)
     out.push({
       title: `Asks you above ${lead(r.approval_above_ulxc)}`,
-      line: `${lxcFirst(r.approval_above_ulxc)}Above it, a payment asks you first${allowances.length > 0 ? ', unless a rule below allows it' : ''}`,
+      line: `Above it, a payment asks you first${allowances.length > 0 ? ', unless a rule below allows it' : ''}`,
     })
   if (r.max_per_request_ulxc > 0)
-    out.push({ title: `At most ${lead(r.max_per_request_ulxc)} on one request`, line: `${lxcFirst(r.max_per_request_ulxc)}Anything larger is refused` })
-  if (r.daily_limit_ulxc > 0) out.push({ title: `At most ${lead(r.daily_limit_ulxc)} a day`, line: `${lxcFirst(r.daily_limit_ulxc)}Counted in ${zone} time` })
+    out.push({ title: `At most ${lead(r.max_per_request_ulxc)} on one request`, line: 'Anything larger is refused' })
+  if (r.daily_limit_ulxc > 0) out.push({ title: `At most ${lead(r.daily_limit_ulxc)} a day`, line: `Counted in ${zone} time` })
   if (r.monthly_limit_ulxc > 0) {
     const next = new Date(monthEnd)
-    const from = Number.isNaN(next.getTime()) ? '' : ` Counted from ${next.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' })} again`
-    out.push({ title: `At most ${lead(r.monthly_limit_ulxc)} a month`, line: `${lxcFirst(r.monthly_limit_ulxc).trim()}${from}`.trim() })
+    const from = Number.isNaN(next.getTime()) ? '' : `Counted from ${next.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' })} again`
+    out.push({ title: `At most ${lead(r.monthly_limit_ulxc)} a month`, line: from })
   }
   if (r.active_from && r.active_until) out.push({ title: `Only from ${r.active_from} to ${r.active_until}`, line: `${zone} time` })
   const allowed = r.allowed_payees ?? []
@@ -100,10 +97,8 @@ export function rulesInWords(
   for (const [id, a] of allowances)
     out.push({
       title: `Always allows ${payeeName(id)} up to ${lead(a.amount_ulxc)} a ${a.per}`,
-      line: `${lxcFirst(a.amount_ulxc)}${r.approval_above_ulxc > 0 ? `Above ${lead(r.approval_above_ulxc)}, without asking you, up to that` : 'Without asking you, up to that'}`,
+      line: `${r.approval_above_ulxc > 0 ? `Above ${lead(r.approval_above_ulxc)}, without asking you, up to that` : 'Without asking you, up to that'}`,
     })
-  const models = r.allowed_models ?? []
-  if (models.length > 0) out.push({ title: `Only ${andList(models.map(modelName))}`, line: 'Other models are refused' })
   return out
 }
 
@@ -111,7 +106,6 @@ export function rulesInWords(
 function WaitingRow({ a, agentName }: { a: AgentApproval; agentName: string }) {
   const here = useLocation()
   const now = new Date()
-  const lxcText = useMoneyFigures().ulxc(a.amount_ulxc).lxc
   const amount = a.paid_from && a.paid_from.kind !== 'lxc' ? <Money minor={a.paid_from.amount_minor} currency={a.paid_from.currency} /> : <Money ulxc={a.amount_ulxc} />
   const what = a.payee?.name || a.model || 'A payment'
   return (
@@ -121,7 +115,7 @@ function WaitingRow({ a, agentName }: { a: AgentApproval; agentName: string }) {
           {what}, {amount}
         </div>
         <p className="text-caption text-ink-3">
-          <span className="font-figure">{lxcText}</span> for its rules · waiting for you since <span className="font-figure">{sinceText(a.created_at, now)}</span>
+          Waiting for you since <span className="font-figure">{sinceText(a.created_at, now)}</span>
         </p>
       </div>
       <Button asChild variant="secondary" size="sm" data-tangerine="your-move">
@@ -133,32 +127,15 @@ function WaitingRow({ a, agentName }: { a: AgentApproval; agentName: string }) {
   )
 }
 
+// B61.14 — an agent's money is its currency accounts and cards: its LXC credit balance and safe to spend in credits are
+// the parked gateway's and are not drawn. What it spent this month stays, against its monthly limit.
 function BalanceCard({ s }: { s: AgentSummary }) {
-  const lxc = s.safe_to_spend?.find((f) => f.currency === 'LXC')
   const { month } = s
   const budget = month.monthly_limit_ulxc
   const lastDay = new Date(new Date(month.end).getTime() - 1)
   return (
     <Card className="grid gap-3" data-testid="agent-page-balance">
-      <div className="flex items-center justify-between gap-3">
-        <Eyebrow>Balance</Eyebrow>
-        <WorkspaceLabel capability={AGENT_CREDIT} />
-      </div>
-      <Money ulxc={s.agent.balance_ulxc} size="card-sm" />
-      <p className="text-caption text-ink-3" data-testid="agent-page-safe">
-        {lxc ? (
-          <>
-            <Money ulxc={lxc.safe_to_spend} /> safe to spend
-            {lxc.pending_approvals > 0 ? (
-              <>
-                , after the <Money ulxc={lxc.pending_approvals} /> waiting
-              </>
-            ) : null}
-          </>
-        ) : (
-          'Safe to spend could not be read just now.'
-        )}
-      </p>
+      <Eyebrow>Balance</Eyebrow>
       <div className="grid gap-1.5" data-testid="agent-page-month">
         {budget > 0 ? <Bar value={month.spent_ulxc / budget} label={`${Math.round((month.spent_ulxc / budget) * 100)}% of budget used`} /> : null}
         <div className="flex items-baseline justify-between gap-3 text-caption">
@@ -173,7 +150,6 @@ function BalanceCard({ s }: { s: AgentSummary }) {
             ) : null}
           </span>
         </div>
-        {budget > 0 ? <span className="text-right font-figure text-micro text-ink-3">{lxcPartOf(month.spent_ulxc, budget)}</span> : null}
         {month.forecast_ulxc > 0 ? (
           <span className="text-caption text-ink-3">
             On pace for about <Money ulxc={month.forecast_ulxc} />
@@ -199,10 +175,9 @@ function BalanceCard({ s }: { s: AgentSummary }) {
   )
 }
 
-/** The person's currency alone ("$1,240.00"), or LXC while no rate backs it: the LXC is the line under it. */
+/** The person's currency alone ("$1,240.00"), or "…" while no rate backs it. */
 function MoneyCash({ ulxc, strong = false }: { ulxc: number; strong?: boolean }) {
-  const { cash, lxc } = useMoneyFigures().ulxc(ulxc)
-  const text = cash ?? lxc
+  const text = useMoney()(ulxc) ?? '…'
   return <span className={`font-figure ${strong ? 'font-semibold text-ink' : ''}`}>{text}</span>
 }
 
@@ -254,20 +229,19 @@ function StatementCard({ s, lines }: { s: AgentSummary; lines: NonNullable<Agent
 
 function RulesCard({ s }: { s: AgentSummary }) {
   const id = s.agent.id
-  const figures = useMoneyFigures()
+  const money = useMoney()
   const rules = useQuery({ queryKey: rulesKey(id), queryFn: () => agentBankApi.rules(id) })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const named = [...(rules.data?.allowed_payees ?? []), ...(rules.data?.blocked_payees ?? []), ...Object.keys(rules.data?.payee_allowances ?? {})]
   const outside = named.some((p) => !(book.data?.agents ?? []).some((a) => a.id === p))
   const payees = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees, enabled: outside })
-  const catalog = useQuery({ queryKey: ['agent-statement-doc', 'models'], queryFn: () => fetchModels().catch(() => []), retry: false })
   const payeeName = (p: string) =>
     book.data?.agents.find((a) => a.id === p)?.name ??
     payees.data?.payees?.find((x) => x.id === p)?.name ??
     (s.approvals ?? []).find((a) => a.payee?.id === p)?.payee?.name ??
     'a payee'
   const lines = rules.data
-    ? rulesInWords(rules.data, { figures: figures.ulxc, payeeName, modelName: (m) => catalog.data?.find((x) => x.id === m)?.display_name ?? m, monthEnd: s.month.end })
+    ? rulesInWords(rules.data, { figures: money, payeeName, monthEnd: s.month.end })
     : []
   return (
     <Card className="grid gap-3" data-testid="agent-page-rules">
@@ -380,8 +354,7 @@ function CardColumn({ s }: { s: AgentSummary }) {
 function Header({ s }: { s: AgentSummary }) {
   const qc = useQueryClient()
   const me = useAuthMeReader()
-  const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
-  const [dialog, setDialog] = useState<'resume' | 'start-all' | 'move' | null>(null)
+  const [dialog, setDialog] = useState<'resume' | 'start-all' | null>(null)
   const { agent } = s
   const allPaused = !!s.all_paused_at
   const running = !agent.paused_at && !allPaused
@@ -434,9 +407,6 @@ function Header({ s }: { s: AgentSummary }) {
             Start every agent again
           </Button>
         )}
-        <Button variant="secondary" disabled={!book.data} onClick={() => setDialog('move')}>
-          Move LXC
-        </Button>
         <Button asChild>
           <Link to={`/agents/${encodeURIComponent(agent.id)}/rules`}>Edit rules</Link>
         </Button>
@@ -448,7 +418,6 @@ function Header({ s }: { s: AgentSummary }) {
       ) : null}
       <ResumeAgent agent={agent} allPaused={allPaused} open={dialog === 'resume'} onClose={() => setDialog(null)} />
       <StartEveryAgent open={dialog === 'start-all'} onClose={() => setDialog(null)} />
-      {book.data ? <MoveLxc agent={agent} book={book.data} open={dialog === 'move'} onClose={() => setDialog(null)} /> : null}
     </div>
   )
 }

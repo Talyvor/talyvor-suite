@@ -1,16 +1,15 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
 // B19.21 — scheduled payments and automatic top-ups on the Agent Bank, walked the way the DONE line
-// reads: schedule a weekly payment from one agent to another, see its runs, stop it, and set a top-up.
-// The mock BFF keeps schedules and the top-up the way Lens B19.8 does: a new schedule is active, its
-// runs are Lens's record of each tick, stopping it makes it inactive, and an agent with no top-up is 404.
+// reads: schedule a weekly payment from one agent to another, see its runs, and stop it (B61.14: the top-up is no
+// longer drawn). The mock BFF keeps schedules the way Lens B19.8 does: a new schedule is active, its runs are Lens's
+// record of each tick, stopping it makes it inactive, and an agent with no top-up is 404.
 
 function mockBff() {
   const sent: Array<{ method: string; url: string; body: unknown }> = []
   const schedules: Array<Record<string, unknown>> = []
-  let topUp: Record<string, unknown> | null = null
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
@@ -19,6 +18,7 @@ function mockBff() {
     if (method !== 'GET') sent.push({ method, url, body })
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents')
       return json({
         workspace_balance_ulxc: 20_000_000, allocated_ulxc: 0, unallocated_ulxc: 20_000_000, spent_ulxc: 0,
@@ -36,10 +36,7 @@ function mockBff() {
     if (url === '/api/agents/schedules/sch_1/runs')
       return json({ schedule_id: 'sch_1', runs: [{ tick_at: '2026-09-28T09:00:00Z', outcome: 'paid', entry_id: 'e1', created_at: '2026-09-28T09:00:01Z' }] })
     if (url === '/api/agents/schedules/sch_1/stop') { schedules[0].active = false; return json({ schedule_id: 'sch_1', active: false }) }
-    if (url === '/api/agents/agt_1/topup') {
-      if (method === 'PUT') topUp = { agent_id: 'agt_1', ...body }
-      return topUp ? json(topUp) : json({ error: 'the agent has no automatic top-up' }, 404)
-    }
+    if (url === '/api/agents/agt_1/topup') return json({ error: 'the agent has no automatic top-up' }, 404)
     if (url === '/api/agents/forecast') return json({ at: '', month_start: '', month_end: '', spent_ulxc: 0, forecast_ulxc: 0, agents: [] })
     if (url === '/api/agents/alerts') return json({ alerts: [], rule: 'the rule' })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
@@ -60,7 +57,8 @@ afterEach(() => {
 })
 
 describe('scheduled payments and automatic top-ups on the Agent Bank', () => {
-  it('schedules a weekly payment, shows its runs, stops it, and sets a top-up', async () => {
+  // B61.14 — an automatic top-up moves LXC, which is parked: the agent's Settings no longer draw it.
+  it('schedules a weekly payment, shows its runs and stops it; there is no automatic top-up to set', async () => {
     const sent = mockBff()
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
@@ -69,32 +67,22 @@ describe('scheduled payments and automatic top-ups on the Agent Bank', () => {
     fireEvent.click(within(await screen.findByTestId('agent-setting-Scheduled payments')).getByRole('button'))
     expect(await screen.findByText('Researcher pays nothing on a schedule.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Who Researcher pays on a schedule'), { target: { value: 'agent:agt_2' } })
-    fireEvent.change(screen.getByLabelText('Scheduled amount in LXC for Researcher'), { target: { value: '1' } })
+    fireEvent.change(screen.getByLabelText('Scheduled amount in dollars for Researcher'), { target: { value: '0.1' } })
     fireEvent.change(screen.getByLabelText('Memo for Researcher’s scheduled payment'), { target: { value: 'drafts' } })
     fireEvent.click(screen.getByRole('button', { name: 'Schedule' }))
     const row = await screen.findByText(/Pays Writer/)
-    expect(row.textContent).toBe('Pays Writer 1\u00a0LXC every week') // B57.167: <Money>'s figure keeps its unit on its line
+    expect(row.textContent).toBe('Pays Writer $0.10 every week') // 1 LXC at $0.10, in dollars alone (B61.14)
 
     fireEvent.click(screen.getByRole('button', { name: 'Runs' }))
     expect(await screen.findByText('Paid')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
     expect(await screen.findByText('Researcher pays nothing on a schedule.')).toBeTruthy()
-    fireEvent.click(within(screen.getByTestId('agent-setting-Automatic top-up')).getByRole('button'))
-    expect((await screen.findByTestId('agent-topup')).textContent).toBe('Researcher is not topped up automatically.')
-    // B57.167 — in Pocket's dialog, each field with its label above it.
-    expect(within(screen.getByRole('dialog', { name: 'Automatic top-up' })).getByText('Top Researcher up below, in LXC').tagName).toBe('LABEL')
-    fireEvent.change(screen.getByLabelText('Top Researcher up below, in LXC'), { target: { value: '5' } })
-    fireEvent.change(screen.getByLabelText('Top Researcher up to, in LXC'), { target: { value: '8' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Set top-up' }))
-    await waitFor(() =>
-      expect(screen.getByTestId('agent-topup').textContent).toBe('When Researcher holds less than 5\u00a0LXC, the workspace tops it up to 8\u00a0LXC.'),
-    )
-    expect(within(screen.getByTestId('agent-topup').parentElement!).getByRole('button', { name: 'Remove' })).toBeTruthy()
+    expect(screen.queryByTestId('agent-setting-Automatic top-up')).toBeNull()
+    expect(screen.queryByTestId('agent-topup')).toBeNull()
 
     expect(sent).toEqual([
       { method: 'POST', url: '/api/agents/agt_1/schedules', body: { to_agent_id: 'agt_2', to_listing_id: '', amount_ulxc: 1_000_000, memo: 'drafts', every: 'week' } },
       { method: 'POST', url: '/api/agents/schedules/sch_1/stop', body: {} },
-      { method: 'PUT', url: '/api/agents/agt_1/topup', body: { below_ulxc: 5_000_000, to_ulxc: 8_000_000 } },
     ])
   })
 })

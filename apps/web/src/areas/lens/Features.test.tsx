@@ -20,6 +20,8 @@ function mockBff(
     agentBook = null as null | Record<string, unknown>,
     approvals = [] as Array<{ id: string; status: string }>,
     listings = null as null | Array<{ id: string; title: string }>,
+    /** B61.14 — Lens's peg, dollars a LXC: the agents' figures read in dollars at it, "…" while it is unread. */
+    usdPerLXC = undefined as number | undefined,
   } = {},
 ) {
   let tare = 'disabled'
@@ -37,6 +39,7 @@ function mockBff(
     const json = (v: unknown) =>
       new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/lxc/topup-options' && usdPerLXC !== undefined) return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: usdPerLXC })
     if (url === '/api/features/tare' && init?.method === 'POST') {
       const body = JSON.parse(String(init.body)) as { tare_policy: string }
       posts.push({ url, body })
@@ -160,12 +163,16 @@ describe('the Features screen', () => {
         { id: 'apr_1', status: 'pending' },
         { id: 'apr_2', status: 'approved' },
       ],
+      usdPerLXC: 0.1,
     })
     window.history.pushState({}, '', '/features')
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('state-Agent Wallets')).toHaveTextContent('On: 2 agents; 1 approval waiting'))
-    expect(screen.getByTestId('evidence-Agent Wallets').textContent).toBe(
-      'See it working: 2 agents hold 20 LXC of this workspace’s 50 LXC and have spent 2.5 LXC (measured). Each agent’s statement lists every charge.',
+    // B61.14 — in dollars alone at Lens's $0.10 a LXC, once the peg is read: 20, 50 and 2.5 LXC.
+    await waitFor(() =>
+      expect(screen.getByTestId('evidence-Agent Wallets').textContent).toBe(
+        'See it working: 2 agents hold $2.00 of this workspace’s $5.00 and have spent $0.25 (measured). Each agent’s statement lists every charge.',
+      ),
     )
     expect(within(row('Agent Wallets')).getByRole('link', { name: 'Open Agent Wallets' })).toHaveAttribute('href', '/agents')
     expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([

@@ -70,7 +70,7 @@ export function dailyBriefing(): Scenario {
       const held = await lens.payAsAgent(k.value.key, user.workspaceID, payer.id, payee.id, HELD_ULXC, `briefing ${HELD_ULXC}`)
       ctx.evidence.push({ note: `${payer.name} pays ${HELD_ULXC} µLXC, above its approval amount`, answer: held.ok ? 'paid' : `${held.status} ${held.error}` })
       const approval = (await lens.agentApprovals(user)).find((a) => a.agent_id === payer.id && a.amount_ulxc === HELD_ULXC && a.status === 'pending')
-      if (held.ok || held.status !== 403 || approval === undefined) return fail(`a ${HELD_ULXC} µLXC payment above the approval amount must be refused 403 and wait for approval; Lens answered ${held.ok ? 'paid' : `${held.status} ${held.error}`}`)
+      if (held.ok || held.held === undefined || approval === undefined) return fail(`a ${HELD_ULXC} µLXC payment above the approval amount must be held, pending_approval, and wait for approval; Lens answered ${held.ok ? 'paid' : `${held.status} ${held.error}`}`)
       const supplier = `Briefing Supplies ${RUN_SALT}`
       const due = new Date(Date.now() + 2 * DAY_MS).toISOString().slice(0, 10)
       const added = await lens.raw(user.token, 'POST', '/v1/money/bills', invoicePDF([supplier, 'INVOICE', `Invoice number: BRF-${RUN_SALT}`, `Due date: ${due}`,

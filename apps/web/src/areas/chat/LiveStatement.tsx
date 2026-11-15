@@ -190,13 +190,13 @@ export function LiveStatement({ follow = '' }: { follow?: string }) {
                       {lineText(l, nameOf)}
                     </span>
                     <span className="shrink-0 text-body text-ink" data-testid="live-statement-amount">
-                      <Lxc exact ulxc={Math.abs(l.amount_ulxc)} sign={l.amount_ulxc > 0 ? '+' : '−'} />
+                      <Lxc ulxc={Math.abs(l.amount_ulxc)} sign={l.amount_ulxc > 0 ? '+' : '−'} />
                     </span>
                   </span>
                   <span className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-3 font-figure text-caption text-muted">
                     <span className="font-figure">{formatWhen(l.at)}</span>
                     <span>
-                      Balance <Lxc exact ulxc={l.balance_after_ulxc} />
+                      Balance <Lxc ulxc={l.balance_after_ulxc} />
                     </span>
                   </span>
                 </Link>

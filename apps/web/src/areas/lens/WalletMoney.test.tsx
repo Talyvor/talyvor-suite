@@ -65,6 +65,7 @@ function mockBff({ received = false } = {}) {
     if (method !== 'GET') sent.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : null })
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents') {
       const held = agent.balance_ulxc - (givenBack ? 1_500_000 : 0)
       return json({ workspace_balance_ulxc: held, allocated_ulxc: held, unallocated_ulxc: 0, spent_ulxc: 0, agents: [{ ...agent, balance_ulxc: held }] })
@@ -155,7 +156,7 @@ describe('money between owners on Agent Wallets', () => {
     fireEvent.change(within(panel).getByLabelText('Amount in LXC to send'), { target: { value: '5' } })
     fireEvent.change(within(panel).getByLabelText('What it is for'), { target: { value: 'design work' } })
     fireEvent.click(within(panel).getByRole('button', { name: 'Send credits' }))
-    expect(words(await within(panel).findByRole('status'))).toBe('Sent 5 LXC. It went to another owner’s agent.')
+    expect(words(await within(panel).findByRole('status'))).toBe('Sent $0.50. It went to another owner’s agent.') // B61.14: 5 LXC at $0.10, in dollars alone
     expect(sent).toContainEqual({ method: 'POST', url: '/api/agents/agt_1/send', body: { to: '@bea', amount_ulxc: 5_000_000, memo: 'design work' } })
     closePanel()
 
@@ -180,7 +181,11 @@ describe('money between owners on Agent Wallets', () => {
     const shown = (await within(panel).findByTestId('loan')).textContent ?? ''
     expect(shown).toContain('In default')
     expect(shown).toContain('2 of 3 repaid')
-    expect(shown).toContain('Instalment 1 of 3 repaid: 33.333333 LXC + 3.333333 LXC interest')
+    // B61.14 — in dollars alone at $0.10: 33.333333 LXC is $3.33 and 3.333333 LXC $0.33.
+    expect(shown).toContain('Buyer lends agt_other $10.00 at 10% over 3 daily instalments')
+    expect(shown).toContain('late fee $0.20')
+    expect(shown).toContain('Instalment 1 of 3 repaid: $3.33 + $0.33 interest')
+    expect(shown).not.toContain('LXC')
     expect(shown).toContain('Instalment 2 of 3 repaid')
     expect(shown).toContain('The loan is late')
     expect(shown).toContain('Missed again: the loan is in default')
@@ -194,18 +199,19 @@ describe('money between owners on Agent Wallets', () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    expect((await screen.findByTestId('agent-balance-agt_1')).textContent).toContain('50')
+    // B61.14 — in dollars alone: 50 LXC at $0.10 is $5.00.
+    await vi.waitFor(async () => expect((await screen.findByTestId('agent-balance-agt_1')).textContent).toBe('$5.00'))
     const panel = await openPanel('transfers')
     expect(await within(panel).findByText('Received from agt_bea · overpaid')).toBeTruthy()
     fireEvent.click(within(panel).getByRole('button', { name: 'Give back' }))
     expect(sent).toEqual([]) // the first press only asks
     fireEvent.click(within(panel).getByRole('button', { name: 'Yes, give it back' }))
 
-    expect(words(await within(panel).findByRole('status'))).toBe('Gave 1.5 LXC back to agt_bea.')
+    expect(words(await within(panel).findByRole('status'))).toBe('Gave $0.15 back to agt_bea.') // 1.5 LXC at $0.10
     expect(sent).toContainEqual({ method: 'POST', url: '/api/wallets/transfers/xfr_in/refund', body: {} })
     expect(await within(panel).findByText('Gave back to agt_bea · refund: overpaid')).toBeTruthy()
     expect(within(panel).getByText('Given back')).toBeTruthy()
     expect(within(panel).queryByRole('button', { name: 'Give back' })).toBeNull()
-    await vi.waitFor(() => expect(screen.getByTestId('agent-balance-agt_1').textContent).toContain('48.5'))
+    await vi.waitFor(() => expect(screen.getByTestId('agent-balance-agt_1').textContent).toBe('$4.85'))
   })
 })
