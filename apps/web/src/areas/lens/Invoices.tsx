@@ -29,7 +29,7 @@ const STATUS: Record<Invoice['status'], { text: string; pill: PillStatus }> = {
   void: { text: 'Void', pill: 'slashed' },
 }
 
-const select = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
+const select = `h-8 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 
 /** Thirty days from today, as the date field wants it. */
 function inThirtyDays(): string {
@@ -255,7 +255,7 @@ function NewInvoice({ accounts }: { accounts: CurrencyAccount[] }) {
           <Input aria-label="Customer’s VAT number" placeholder="Their VAT number (optional)" value={customer.vat} onChange={(e) => setCustomer({ ...customer, vat: e.target.value })} />
           <Input aria-label="Your VAT number" placeholder="Your VAT number (optional)" value={sellerVAT} onChange={(e) => setSellerVAT(e.target.value)} />
         </div>
-        <textarea aria-label="Customer’s address" rows={2} placeholder="Their address (optional)" className={`w-full rounded-control border border-rule bg-surface p-3 text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`} value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} />
+        <textarea aria-label="Customer’s address" rows={2} placeholder="Their address (optional)" className={`w-full rounded-control border border-rule-strong bg-surface p-3 text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`} value={customer.address} onChange={(e) => setCustomer({ ...customer, address: e.target.value })} />
         <ul className="flex flex-col gap-2" aria-label="Lines">
           {lines.map((l, i) => (
             <li key={i} className="flex flex-wrap items-center gap-2">
@@ -290,7 +290,7 @@ function NewInvoice({ accounts }: { accounts: CurrencyAccount[] }) {
             </span>
           </label>
         </div>
-        <textarea aria-label="Memo" rows={2} placeholder="A note on the invoice (optional)" className={`w-full rounded-control border border-rule bg-surface p-3 text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`} value={memo} onChange={(e) => setMemo(e.target.value)} />
+        <textarea aria-label="Memo" rows={2} placeholder="A note on the invoice (optional)" className={`w-full rounded-control border border-rule-strong bg-surface p-3 text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`} value={memo} onChange={(e) => setMemo(e.target.value)} />
         <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" variant="primary" disabled={!complete || create.isPending}>
             {create.isPending ? 'Issuing…' : 'Create and send'}

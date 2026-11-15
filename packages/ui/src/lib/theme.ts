@@ -53,8 +53,12 @@ function initialTheme(): Theme {
   return 'light'
 }
 
-function apply(theme: Theme): void {
+function paint(theme: Theme): void {
   if (typeof document !== 'undefined') document.documentElement.setAttribute('data-theme', theme)
+}
+
+function apply(theme: Theme): void {
+  paint(theme)
   try {
     storage()?.setItem(STORAGE_KEY, theme)
   } catch {
@@ -63,21 +67,77 @@ function apply(theme: Theme): void {
   }
 }
 
+/**
+ * B57.42 — Settings' Appearance: Light, Dark, or Same as this device. "Same as this device" is no stored choice at
+ * all, so index.html's no-flash script asks prefers-color-scheme on every load, as it does on a first visit.
+ */
+export type ThemeChoice = Theme | 'device'
+
+function deviceTheme(): Theme {
+  try {
+    return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  } catch {
+    return 'light'
+  }
+}
+
+function initialChoice(): ThemeChoice {
+  try {
+    const stored = storage()?.getItem(STORAGE_KEY)
+    if (stored === 'light' || stored === 'dark') return stored
+  } catch {
+    // Refused: nothing was chosen that could be read, which is following the device.
+  }
+  return 'device'
+}
+
 interface ThemeState {
   theme: Theme
+  /** What the person chose in Settings; 'device' while the theme follows the device. */
+  choice: ThemeChoice
   setTheme: (t: Theme) => void
   toggle: () => void
+  choose: (c: ThemeChoice) => void
 }
 
 export const useTheme = create<ThemeState>((set, get) => ({
   theme: initialTheme(),
+  choice: initialChoice(),
   setTheme: (t) => {
     apply(t)
-    set({ theme: t })
+    set({ theme: t, choice: t })
   },
   toggle: () => {
     const next: Theme = get().theme === 'dark' ? 'light' : 'dark'
     apply(next)
-    set({ theme: next })
+    set({ theme: next, choice: next })
+  },
+  choose: (c) => {
+    if (c !== 'device') {
+      get().setTheme(c)
+      return
+    }
+    const t = deviceTheme()
+    paint(t)
+    try {
+      storage()?.removeItem(STORAGE_KEY)
+    } catch {
+      // Refused: there was nothing stored that could be read either, so the next load follows the device anyway.
+    }
+    set({ theme: t, choice: 'device' })
   },
 }))
+
+// While the theme follows the device, a change on the device repaints the page.
+try {
+  if (typeof window !== 'undefined') {
+    window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', (e) => {
+      if (useTheme.getState().choice !== 'device') return
+      const t: Theme = e.matches ? 'dark' : 'light'
+      paint(t)
+      useTheme.setState({ theme: t })
+    })
+  }
+} catch {
+  // No matchMedia: the device has nothing to say, and the page keeps the theme it has.
+}

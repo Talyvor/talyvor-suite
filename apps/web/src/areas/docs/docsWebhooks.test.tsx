@@ -38,7 +38,10 @@ function mockBFF(owner = true) {
 function renderScreen() {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <DocsWebhooks />
+      {/* B57.42 — drawn in Pocket, as /settings/… is in the app. */}
+      <div data-design="pocket">
+        <DocsWebhooks />
+      </div>
     </QueryClientProvider>,
   )
 }
@@ -51,7 +54,8 @@ describe('Docs webhooks settings', () => {
     expect(screen.queryByText(/whsec_/)).toBeNull()
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Webhook URL' }), { target: { value: 'https://hooks.example.com/d' } })
-    fireEvent.click(screen.getByRole('checkbox', { name: 'approval.requested' }))
+    fireEvent.click(screen.getByRole('button', { name: 'approval.requested', pressed: false }))
+    expect(screen.getByRole('button', { name: 'approval.requested' })).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'Add webhook' }))
     expect(await screen.findByText('whsec_FIRST')).toBeInTheDocument()
     expect(writes[0]).toEqual({

@@ -5,7 +5,7 @@ import { Button, Card, Dialog, EmptyState, Eyebrow, Field, Icon, Input, Row as P
 import { keysApi, type MintResult, type WorkspaceAPIKey } from './keysApi'
 import { formatWhen } from './format'
 import { ApiError, getJSON, readable } from '../../lib/api'
-import { CallList, CONNECTED_KEY, NEVER, SCOPE_WORDS, revokeAssistant, useConnectedAssistants, type Connected } from './ConnectAI'
+import { CallList, NEVER, RevokeAssistant, SCOPE_WORDS, useConnectedAssistants, type Connected } from './ConnectAI'
 import { isSessionExpired } from '../../lib/productState'
 import { PanelFailure } from '../../components/SessionExpiredBar'
 import { CodeCopy } from './Setup'
@@ -302,43 +302,6 @@ function assistantFacts(c: Connected): string {
   facts.push(c.last_used_at === NEVER ? 'never used' : `last used ${formatWhen(c.last_used_at)}`)
   facts.push(`connected ${formatWhen(c.connected_at)}`)
   return facts.join(' · ')
-}
-
-/** RevokeAssistant — asks before an assistant is disconnected (w-connect+revoke-claude). */
-function RevokeAssistant({ c, onClose, onRevoked }: { c: Connected; onClose: () => void; onRevoked: () => void }) {
-  const qc = useQueryClient()
-  const cut = useMutation({
-    mutationFn: () => revokeAssistant(c.id),
-    onSuccess: () => {
-      showSnack({ title: `${c.name} can no longer reach Talyvor`, line: 'Add it again with your Talyvor address.' })
-      onRevoked()
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: CONNECTED_KEY }),
-  })
-  return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={`Revoke ${c.name}?`}
-      actions={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Keep it
-          </Button>
-          <Button variant="danger" onClick={() => cut.mutate()} disabled={cut.isPending}>
-            {cut.isPending ? 'Revoking…' : 'Revoke'}
-          </Button>
-        </>
-      }
-    >
-      <p>{c.name} can no longer reach Talyvor. You can add it again at any time.</p>
-      {cut.isError ? (
-        <p role="alert" className="text-body text-ink">
-          That assistant was not revoked. Try again.
-        </p>
-      ) : null}
-    </Dialog>
-  )
 }
 
 /** The assistants this person has connected, as Pocket rows; Revoke asks first. */

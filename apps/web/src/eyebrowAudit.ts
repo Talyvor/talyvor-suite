@@ -238,23 +238,22 @@ export function takeEyebrowOffenders(): EyebrowOffender[] {
  * Test files that MUST render at least one eyebrow with the transform genuinely in effect.
  *
  * ⚠ CHOSEN FROM A MEASUREMENT, NOT FROM INTUITION. 27 of the 56 web test files render an eyebrow.
- * These five were picked because between them they cover every distinct SHAPE the product renders
- * — and two of them are the FRAGILE ones, the sites that appear only twice in the whole suite and
+ * These were picked because between them they cover every distinct SHAPE the product renders
+ * — and the FRAGILE one, a site that appears only twice in the whole suite and
  * would vanish silently if a fixture changed:
  *
  *   Overview   the console's densest eyebrow surface (1,005 observations)
  *   Landing    the public page's eyebrows, including the ones over quoted ledger figures
  *   Ledger     MuNumeral's unit labels — the eyebrow that contains a protected µ
- *   Members    the owner/member weight distinction preset.ts names as its reason for weight 400
  *   pm         Docs' code-fence language label and its pill
  *
  * A floor, not a census: a new surface is audited the moment its test renders it, listed or not.
+ * B57.44 — Members left the list when it was drawn in Pocket, which has no eyebrows: its roles are chips now.
  */
 export const MUST_RENDER_EYEBROW: Record<string, string> = {
   'src/areas/lens/Overview.test.tsx': 'the console surface with the most eyebrows in the product',
   'src/areas/marketing/Landing.test.tsx': 'the public page eyebrows, over the quoted ledger figures',
   'src/areas/lens/Ledger.test.tsx': 'MuNumeral unit labels — an eyebrow wrapping a protected µ',
-  'src/areas/lens/Members.test.tsx': 'the owner/member weight distinction, one of two fragile sites',
   'src/areas/docs/pm.test.tsx': 'the code-fence language label, the other fragile site',
 }
 

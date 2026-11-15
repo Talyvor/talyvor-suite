@@ -1,6 +1,5 @@
 import { useSyncExternalStore } from 'react'
 import { queryOptions, useQuery } from '@tanstack/react-query'
-import { focusRing } from '@talyvor/ui'
 import { type MoneyFigures, MoneyProvider } from '@talyvor/ui/pocket'
 import { ApiError, UnreadableError, readable } from '../../lib/api'
 import { MONEY_ORDER } from '../../moneyOrder'
@@ -159,6 +158,11 @@ export function lxcText(ulxc: number, fiat: string | null, sign: '' | '+' | '−
   return MONEY_ORDER === 'usd-first' ? `${cash} (${lxc})` : `${lxc} (${cash})`
 }
 
+/** B57.15 — a part of a whole in LXC alone, "4,200 of 20,000 LXC": drawn small beside the same two figures in dollars. */
+export function lxcPartOf(part: number, whole: number): string {
+  return `${formatULXC(part).replace(/ LXC$/, '')} of ${formatULXC(whole)}`
+}
+
 /** lxcText for words a screen builds itself, at the rate the screen's <Lxc> figures use. */
 export function useLxcText(): (ulxc: number, sign?: '' | '+' | '−') => string {
   const money = useMoney()
@@ -193,24 +197,3 @@ export function Lxc({ ulxc, sign = '' }: { ulxc: number; sign?: '' | '+' | '−'
   )
 }
 
-/** Which currency the wallet screens show beside LXC. */
-export function CurrencyPicker() {
-  const fiat = useFiat()
-  return (
-    <label className="flex items-center gap-2 text-body text-muted">
-      Show amounts in
-      <select
-        aria-label="Show amounts in"
-        className={`h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`}
-        value={fiat}
-        onChange={(e) => setFiat(e.target.value as Fiat)}
-      >
-        {FIATS.map((f) => (
-          <option key={f.code} value={f.code}>
-            {f.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  )
-}

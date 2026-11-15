@@ -18,13 +18,10 @@ import { matchRoutes } from 'react-router-dom'
  */
 export const POCKET_PENDING: readonly string[] = [
   // The public pages.
-  '/marketing/*',
   '/board/:token',
   '/share/:token',
   '/docs/s/:token',
   // The console.
-  '/',
-  '/approvals',
   '/statements',
   '/overview',
   '/ledger',
@@ -43,19 +40,13 @@ export const POCKET_PENDING: readonly string[] = [
   '/plans',
   '/billing/success',
   '/billing/cancel',
-  '/agents',
+  // B57.20 draws the agent's page above today's view, which stays under it until B57.21 and B57.22 redraw the rest.
+  // B57.23 draws /agents/:id/rules.
+  '/agents/:id',
   '/marketplace/*',
   '/spend',
-  '/members',
-  '/settings',
-  '/settings/verification',
-  '/settings/terms',
-  '/settings/webhooks',
-  '/settings/email-branding',
-  '/settings/connect',
+  '/settings/payout-details',
   '/money/invoices',
-  '/money/pay',
-  '/money/plans/:id',
   '/money/subscriptions',
   '/money/budgets',
   '/scan/reports',
@@ -63,7 +54,6 @@ export const POCKET_PENDING: readonly string[] = [
   '/scan/agents',
   '/scan/track-record',
   '/money/spending',
-  '/approve/:id',
   '/features',
   '/features/try/tare',
   '/features/try/conversion',

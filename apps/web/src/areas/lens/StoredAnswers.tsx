@@ -34,7 +34,7 @@ interface DeletionRequest {
 
 type Scope = 'shared' | 'all'
 
-const STORED_KEY = ['stored-answers']
+export const STORED_KEY = ['stored-answers']
 const REQUESTS_KEY = ['deletion-requests']
 
 async function send<T>(path: string, body: object): Promise<T> {
@@ -213,20 +213,21 @@ function AskForDeletion() {
   )
 }
 
-export function StoredAnswers() {
-  const stored = useQuery({
-    queryKey: STORED_KEY,
-    queryFn: () =>
-      getJSON<StoredReading>('/api/features/stored-answers', {
-        shared_answers: 'number',
-        private_answers: 'number',
-        shared_conversions: 'number',
-        private_conversions: 'number',
-        confirm_with: 'string',
-      }),
+/** What this workspace has stored, as Lens counts it; Settings reads the same answer. */
+export const readStored = () =>
+  getJSON<StoredReading>('/api/features/stored-answers', {
+    shared_answers: 'number',
+    private_answers: 'number',
+    shared_conversions: 'number',
+    private_conversions: 'number',
+    confirm_with: 'string',
   })
+
+export function StoredAnswers() {
+  const stored = useQuery({ queryKey: STORED_KEY, queryFn: readStored })
   const s = stored.data
   return (
+    <div id="stored-answers" className="contents">
     <Region index="08" label="Stored answers" heading="What this workspace has stored, and deleting it">
       <div className="flex flex-col gap-4">
         <p className="text-body text-ink" data-testid="stored-answers-counts">
@@ -254,5 +255,6 @@ export function StoredAnswers() {
         <AskForDeletion />
       </div>
     </Region>
+    </div>
   )
 }

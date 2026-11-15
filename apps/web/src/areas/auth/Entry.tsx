@@ -1,4 +1,4 @@
-import { Logo, ThemeToggle, cn } from '@talyvor/ui'
+import { Logo, cn } from '@talyvor/ui'
 import { Button, pocketFocusRing } from '@talyvor/ui/pocket'
 import { CompanyLine } from '../../components/CompanyLine'
 import { ACCESS_LINE, useSignupProbe, type SignupState } from '../../lib/signupOpen'
@@ -107,11 +107,9 @@ export function EntryFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-cloud text-ink">
       <Streams />
-      <header className="relative z-10 flex justify-end px-gutter py-4">
-        <ThemeToggle />
-      </header>
+      {/* B57.58 — no theme control here: Settings' Appearance is the one, and before you sign in the page follows the device. */}
       {/* `main`, NOT `div`: the page's words are in a landmark region (LandmarkCoverage.test.tsx measures it). */}
-      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-gutter pb-16 wide:px-10">
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-gutter py-16 wide:px-10">
         <AuthCard>{children}</AuthCard>
         <CompanyLine className="mt-6 w-full max-w-md" />
       </main>

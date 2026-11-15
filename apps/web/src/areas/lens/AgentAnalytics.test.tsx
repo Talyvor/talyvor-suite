@@ -24,12 +24,12 @@ const analytics: SpendAnalytics = {
 
 const asked: URLSearchParams[] = []
 
-function fakeLens() {
+function fakeLens(answer: SpendAnalytics = analytics) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = new URL(String(input), 'http://app')
     if (url.pathname !== '/api/agents/agt_1/analytics') return new Response('null', { status: 404 })
     asked.push(url.searchParams)
-    return new Response(JSON.stringify(analytics), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify(answer), { status: 200, headers: { 'Content-Type': 'application/json' } })
   })
 }
 
@@ -80,9 +80,45 @@ describe('per-agent analytics', () => {
     await screen.findByTestId('agent-analytics-out')
     const day = (back: number) => new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10)
     expect(asked[0].get('from')).toBe(day(29))
-    fireEvent.change(screen.getByRole('combobox', { name: 'Period of Researcher’s spend' }), { target: { value: '7' } })
+    const periods = screen.getByRole('tablist', { name: 'Period of Researcher’s spend' })
+    expect(within(periods).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Last 7 days', 'Last 30 days', 'Last 90 days'])
+    expect(within(periods).getByRole('tab', { name: 'Last 30 days' })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.click(within(periods).getByRole('tab', { name: 'Last 7 days' }))
     await waitFor(() => expect(asked).toHaveLength(2))
     expect(asked[1].get('from')).toBe(day(6))
     expect(asked[1].has('to')).toBe(false)
+  })
+
+  // B57.111 — in Pocket's components: a white card, each view under its eyebrow, each row a Pocket row with its share as a
+  // Pocket bar, every figure a Pocket figure.
+  it('is drawn in Pocket’s components', async () => {
+    fakeLens()
+    renderCard()
+    await screen.findByTestId('agent-analytics-out')
+    const card = screen.getByTestId('agent-analytics')
+    expect(card).toHaveAttribute('data-design', 'pocket')
+    expect(card).toHaveClass('bg-page', 'shadow-pocket')
+    expect(within(card).getByRole('heading', { level: 2, name: 'Spend by day, model and destination' })).toBeInTheDocument()
+    for (const [view, title] of [['day', 'By day'], ['model', 'By model'], ['destination', 'By destination']]) {
+      const part = screen.getByTestId(`agent-analytics-${view}`)
+      expect(part.firstElementChild).toHaveTextContent(title)
+      expect(part.firstElementChild).toHaveClass('text-pocket-eyebrow')
+      for (const row of within(part).getAllByTestId(`agent-analytics-${view}-row`)) {
+        expect(within(row).getByRole('img', { name: /% of the period’s out$/ })).toBeInTheDocument()
+        expect(row.querySelector('[data-money]')).not.toBeNull()
+      }
+    }
+    expect(within(screen.getByTestId('agent-analytics-destination')).getByRole('img', { name: 'Writer: 93% of the period’s out' })).toBeInTheDocument()
+    expect(card.querySelector('select')).toBeNull()
+  })
+
+  it('says so when nothing left the wallet in the period', async () => {
+    fakeLens({ agent_id: 'agt_1', time_zone: 'Europe/London', out_ulxc: 0, returned_ulxc: 0, spent_ulxc: 0, buckets: [] })
+    renderCard()
+    expect(await screen.findByTestId('agent-analytics-none')).toHaveTextContent(
+      'Nothing left this wallet in the period. Choose a longer period above, or fund the agent under Money to start it spending.',
+    )
+    expect(screen.queryByTestId('agent-analytics-out')).toBeNull()
+    expect(screen.getByRole('tablist', { name: 'Period of Researcher’s spend' })).toBeInTheDocument()
   })
 })

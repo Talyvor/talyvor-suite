@@ -1,13 +1,17 @@
-import { Button, inlineLink } from '@talyvor/ui'
+import { useState } from 'react'
+import { inlineLink } from '@talyvor/ui'
+import { Button, Face, Icon, SheetFrame } from '@talyvor/ui/pocket'
 import { ACCESS_LINE, useSignupProbe } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
 import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
 import { COMPANY_CONTACT } from '../../company'
 import { Waitlist } from '../../components/Waitlist'
 import { ON_ITS_WAY, OWNER_LINE, POSITIONING_LINE, POSITIONING_SENTENCES } from '../../positioning'
-import { LabelsMeaning, StatusLabel } from '../../labels/StatusLabel'
-import { WALLETS } from '../../labels/capabilities'
-import { usePricing } from './pricingApi'
+import { LABEL_LINES, StatusLabel } from '../../labels/StatusLabel'
+import { PAY_OUT, WALLETS } from '../../labels/capabilities'
+import { formatCents } from '../lens/topupApi'
+import { formatPeg, planName, usePricing, type Pricing } from './pricingApi'
+import { CONTRACTED } from './PriceCard'
 
 // The marketing landing (/marketing, OUTSIDE the AuthGate — see App.tsx). It must render with no
 // session, no router context, and no providers: Landing.test.tsx renders <Landing /> bare, so
@@ -17,24 +21,22 @@ import { usePricing } from './pricingApi'
 //
 // ── DESIGN STANCE ────────────────────────────────────────────────────────────────────────────────
 //
-// The brand board's WEBSITE HERO tile (brand-v4 BRAND.md, "The marketing page"; B29.4): the drawn
-// mark and wordmark in the site header (B51.1: every public page shares it), an eyebrow over every headline, one teal rule per section, raised
-// panels with a 1px line border instead of shadows, and every money figure in
-// IBM Plex Mono with tabular figures. The hero photograph bleeds off the right edge behind a gradient
-// from the canvas; on a phone it moves under the text. The
-// copy is unchanged — only the look moved. Display sizes are still the preset's; anything the
-// preset has no token for (the photo, the scrim) lives in the page's own <style> block,
-// on the theme's variables, so the tokens stay the one source of colour.
+// B57.60 — Pocket's homepage (design/pocket s-home): the hero on ink with a faint tangerine glow, the logo kit's three
+// streams flowing into a picture of the approval sheet with two agent cards beside it, then Wallets' four cards, what
+// the labels mean, the four plans, four questions and the close. The card faces are the approved deck
+// (talyvor-cards-final, Nick, 10 Nov 2026), which beats the reference for card faces. No section icons.
 //
-// The one thing a visitor should remember is the PRODUCT: every AI agent gets a wallet, and the
-// rules on it are enforced before the model call or the payment, not reconciled afterwards.
+// Text on a tangerine fill is not a plane the contrast audit classifies (planes.ts), so the hero's Get started is
+// Pocket's primary on the dark plane, the step numbers sit on tangerine-50 and so does the close.
+//
 // B59.5: the page names only the launch pack. Chat, the Marketplace, Rooms, pooling and the gateway are hidden areas
-// (LAUNCH-PACK.md section 2), so they have no section, band or sentence here.
+// (LAUNCH-PACK.md section 2), so the reference's Chat, Marketplace and Pooled answers sections are not drawn, and
+// neither is its band: B58.17 took Sovereign off it and the rest named hidden areas.
 //
 // ── COPY STANCE ──────────────────────────────────────────────────────────────────────────────────
 //
-// The page prints no figure: there is no projected curve and no "toward zero", because a shape drawn from a claim is
-// not a measurement.
+// Every price and the LXC rate are served (/api/pricing); the page types none. The approval sheet's figures are a
+// picture's, said to be a picture, and in dollars only.
 
 // ── THE CONTACT ADDRESS ──────────────────────────────────────────────────────────────────────────
 //
@@ -50,26 +52,10 @@ import { usePricing } from './pricingApi'
 export const CONTACT_EMAIL: string = import.meta.env.VITE_CONTACT_EMAIL || COMPANY_CONTACT
 const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}`
 
-/** A section's eyebrow: the mono index and the spaced-caps label. B58.16: brand-v4's teal icons are gone
- *  with the rest of that kit; the chosen logo kit draws no section icons. */
-export function Eyebrow({ index, children }: { index: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="font-figure text-caption text-faint">{index}</span>
-      <span className="text-eyebrow uppercase text-label">{children}</span>
-    </div>
-  )
-}
-
-/** The teal rule: 32×2 accent, once per section, under its headline. */
+/** The teal rule: 32×2 accent, once per section, under its headline. Still drawn by the public board and share pages. */
 export function TealRule({ className = '' }: { className?: string }) {
   return <span className={`block h-0.5 w-8 bg-accent ${className}`} aria-hidden="true" />
 }
-
-/** The hero photograph — brand-v4 photos/hero.jpg (2400w) and hero-1200.jpg for phones. index.html
- *  preloads the same srcset and sizes on /marketing, so the bytes it fetches are the ones used. */
-const HERO_SRCSET = '/brand/photos/hero-1200.jpg 1200w, /brand/photos/hero.jpg 2400w'
-const HERO_SIZES = '(min-width: 840px) 50vw, 100vw'
 
 /** What an agent's wallet does, in the order a request meets it. Each line is something the
  *  console already does — /agents is where a customer sets every one of them. */
@@ -107,16 +93,173 @@ const CARD_FACES: Array<{ id: string; alt: string }> = [
   { id: 'agent-ollie', alt: 'Ollie, Support’s agent card' },
 ]
 
-/** B56.10 — a section's eyebrow with Live or Sandbox beside it, as Lens labels the money it describes. */
-function LabelledEyebrow({ labels, capability, ...eyebrow }: Parameters<typeof Eyebrow>[0] & {
-  labels: Record<string, string> | undefined
-  capability: readonly string[]
-}) {
+/** The two agents the hero draws beside the sheet, each on its own card face: a picture's names and balances. */
+const HERO_AGENTS = [
+  { id: 'research', name: 'Research', colour: 'cobalt', face: 'circle', card: 'agent-remy', balance: '$1,650.00' },
+  { id: 'sales', name: 'Sales', colour: 'orchid', face: 'squircle', card: 'agent-sunny', balance: '$1,200.00' },
+] as const
+
+/** What the sheet's buttons say when pressed: the sheet is a picture of the one in the app (reference data-static). */
+export const PICTURE_LINE = 'A picture of the approval sheet. Get started to try it.'
+
+/** The reference's four questions (pocket.css .faq), less what the launch pack does not do. */
+const QUESTIONS: Array<{ q: string; a: (pricing: Pricing | undefined) => React.ReactNode }> = [
+  {
+    q: 'Can my agents spend real money?',
+    a: () =>
+      'Each money feature’s label says. Live moves real money. Sandbox works, and no real money moves. Building is in our build queue and not shipped yet.',
+  },
+  {
+    q: 'What is LXC?',
+    // The rate is served: with none confirmed, the answer names no figure.
+    a: (pricing) => (
+      <>
+        Talyvor credit
+        {typeof pricing?.usd_per_lxc === 'number' ? (
+          <>
+            , and <span className="font-figure">1 LXC</span> is <span className="font-figure">{formatPeg(pricing.usd_per_lxc)}</span>
+          </>
+        ) : null}
+        . Agents spend it on AI requests and Talyvor’s services.
+      </>
+    ),
+  },
+  {
+    q: 'Who approves payments?',
+    a: () =>
+      'You decide. Anything above the amount you set waits for approval, unless you allowed it in advance, for example by always allowing a payee up to a limit.',
+  },
+  {
+    q: 'Is Talyvor a bank?',
+    a: () => 'No. Talyvor is not a bank, and LXC is not money: it is credit for using Talyvor.',
+  },
+]
+
+/** A section's eyebrow: pocket.css .seye, tangerine-ink spaced caps, with any label beside it. */
+function SectionEye({ children, chip }: { children: React.ReactNode; chip?: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Eyebrow {...eyebrow} />
-      <StatusLabel capability={capability} labels={labels} />
+    <div className="flex flex-wrap items-center gap-2 text-pocket-eyebrow font-bold uppercase text-tangerine-ink">
+      <span>{children}</span>
+      {chip}
     </div>
+  )
+}
+
+/** A section heading in Pocket's display face (pocket.css .ssec h2). */
+function SectionHeading({ id, children }: { id: string; children: React.ReactNode }) {
+  return (
+    <h2 id={id} className="mt-2.5 max-w-4xl font-display text-display-2 font-extrabold text-ink">
+      {children}
+    </h2>
+  )
+}
+
+/** One band of the page: pocket.css .ssec. */
+function Band({ label, id, children }: { label: string; id?: string; children: React.ReactNode }) {
+  return (
+    <section id={id} aria-labelledby={label} className="mx-auto w-full max-w-6xl scroll-mt-16 px-gutter pt-14 wide:px-12">
+      {children}
+    </section>
+  )
+}
+
+/** The approval sheet as a picture (reference s-home .heroframe): the frame the app's sheet uses, sample figures in
+ *  dollars, and buttons that say what they are when pressed. */
+function SheetPicture({ labels }: { labels: Record<string, string> | undefined }) {
+  const [pressed, setPressed] = useState(false)
+  const research = HERO_AGENTS[0]
+  return (
+    <>
+      <div data-theme="light" data-picture="approval-sheet" className="text-ink">
+        <SheetFrame
+          className="rounded-sheet pb-5.5 wide:w-full"
+          head={
+            <>
+              <Face agent={research} size={40} waiting />
+              <div className="min-w-0">
+                <div className="font-bold text-ink">Research wants to pay</div>
+                <div className="text-body text-ink-3">October hosting invoice</div>
+              </div>
+            </>
+          }
+          label={<StatusLabel capability={PAY_OUT} labels={labels} />}
+          amount={<span className="text-pocket-amount font-extrabold">$340.00</span>}
+          to={
+            <>
+              to <b className="text-ink">Acme Hosting</b>
+            </>
+          }
+          facts={[
+            { label: 'Why it’s asking', value: 'It asks you above $250.00' },
+            { label: 'Paid from', value: 'Research’s US dollar account (holds $400.00)' },
+            { label: 'Budget left after', value: '$420.00 of $2,000.00' },
+            { label: 'Expires', value: 'Tomorrow at 09:17' },
+          ]}
+          only="This approves this payment only. Approving or declining asks for your passkey."
+          actions={
+            <>
+              <Button size="lg" className="w-full" aria-describedby="sheet-picture-line" icon={<Icon name="key" />} onClick={() => setPressed(true)}>
+                Approve with your passkey
+              </Button>
+              <Button size="lg" variant="secondary" className="w-full" aria-describedby="sheet-picture-line" onClick={() => setPressed(true)}>
+                Decline
+              </Button>
+            </>
+          }
+        />
+      </div>
+      {/* Always in the page for the buttons' description, on the hero's dark plane; shown once either is pressed. */}
+      <p id="sheet-picture-line" role="status" className={pressed ? 'mt-3 text-center text-body font-semibold text-ink wide:text-left' : 'sr-only'}>
+        {PICTURE_LINE}
+      </p>
+    </>
+  )
+}
+
+/** One agent on its own card (reference .floatc, with the approved card face): its face, name and balance. */
+function AgentCard({ agent, className = '' }: { agent: (typeof HERO_AGENTS)[number]; className?: string }) {
+  return (
+    <div
+      data-theme="light"
+      data-agent-card={agent.id}
+      className={`flex items-center gap-2.5 rounded-card-tight bg-page py-2.5 pl-2.5 pr-3.5 text-ink shadow-pocket ${className}`}
+    >
+      {/* The words beside it name the agent, so the card face is decorative here. */}
+      <img src={`/card-faces/${agent.card}.png`} width={768} height={485} alt="" decoding="async" className="tal-cardface block h-auto w-16" />
+      <Face agent={agent} size={34} />
+      <div className="grid text-caption">
+        <b className="text-body">{agent.name}</b>
+        <span className="font-figure">{agent.balance}</span>
+      </div>
+    </div>
+  )
+}
+
+/** The four plans, each price as /api/pricing serves it (reference .pmini). */
+function PlanMinis({ pricing }: { pricing: Pricing }) {
+  const gates = pricing.plan_gates
+  if (!gates) return null
+  return (
+    <ul className="mt-4 grid grid-cols-2 gap-4 wide:grid-cols-4">
+      {gates.order.map((id) => {
+        const listed = pricing.company_plans?.find((p) => p.id === id)
+        const cents = id === CONTRACTED ? pricing.enterprise_from_usd_cents : listed ? listed.usd_cents : id === 'free' ? 0 : undefined
+        // A plan Lens states no price for is left out rather than printed without one; /pricing says why.
+        if (cents === undefined) return null
+        const agents = gates.plans[id]?.agents
+        return (
+          <li key={id} data-plan={id} className="grid gap-1 rounded-card bg-cloud p-5">
+            <b className="text-ink">{planName(id)}</b>
+            <span className="font-figure text-title font-extrabold text-ink">
+              {`${id === CONTRACTED ? 'From ' : ''}${formatCents(cents)}`}
+            </span>
+            <span className="text-body text-ink-3">
+              {cents === 0 ? (typeof agents === 'number' && agents > 0 ? `up to ${agents} agents` : null) : 'a month'}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -126,245 +269,237 @@ export function Landing() {
   // probe that failed to answer leaves the page saying nothing about access rather than guessing.
   const { signup } = useSignupProbe()
   // B56.10: Lens's Live or Sandbox for the money sections, from the same public read /pricing makes; none until it answers.
-  const pricing = usePricing()
-  const labels = pricing.status === 'ok' ? pricing.pricing.labels : undefined
+  const state = usePricing()
+  const pricing = state.status === 'ok' ? state.pricing : undefined
+  const labels = pricing?.labels
   // THE FRONT DOOR TAKES THE BRAND LINE — `null`, not a page name. That is what the marketing
   // site does with its own home page, while every inner page is `<page> | TALYVOR`, and this
   // page's own h1 is a sentence, not a name. See documentTitle.test.tsx for the fetched titles.
   useDocumentTitle(null)
   return (
-    <div className="flex min-h-full flex-col bg-canvas text-ink">
-      {/* One staggered reveal on load, plus the transition the stepper needs. Deliberately small:
-          this page argues with structure, and motion competing with the argument is noise. Honours
-          prefers-reduced-motion, because a page about trust should.
-
-          Below the motion: the board's pieces the preset has no token for — the hero
-          photograph and its scrim. Colour comes only from the
-          theme's variables. The photograph's figure carries data-theme="dark", so its scrim is
-          Obsidian in both themes.
-
-          B36.1: the figure itself is masked, so its left and bottom edges (top and bottom under the
-          text on a phone) fade to transparent and whichever theme the page is in shows through —
-          nothing is painted over the photo, and the man at the glass sits in the opaque part. */}
+    <div data-design="pocket" className="flex min-h-full flex-col bg-page text-ink">
+      {/* pocket.css .hero.on-ink: ink in both themes, the glow tangerine at 16%. The stage is the reference's 1280 frame
+          from 840px; on a phone the art sits behind the sheet and the two agent cards follow it. Honours
+          prefers-reduced-motion: the only motion is the rise on load. */}
       <style>{`
         @keyframes tal-rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
-        .tal-rise { animation: tal-rise .42s cubic-bezier(.2,.7,.3,1) both }
         .tal-stagger > * { animation: tal-rise .5s cubic-bezier(.2,.7,.3,1) both }
         .tal-stagger > *:nth-child(2) { animation-delay: .06s }
         .tal-stagger > *:nth-child(3) { animation-delay: .12s }
-        .tal-stagger > *:nth-child(4) { animation-delay: .18s }
-        .tal-stagger > *:nth-child(5) { animation-delay: .24s }
-        @media (prefers-reduced-motion: reduce) {
-          .tal-rise, .tal-stagger > * { animation: none }
-        }
-        .tal-hero-photo { position: relative; margin: 0; aspect-ratio: 16 / 9; overflow: hidden; background: var(--canvas) }
-        .tal-hero-photo {
-          /* Transparent for the first and last 3%: on a phone those are the top and bottom few rows, which a light page shows any trace of the dark photo in. */
-          -webkit-mask-image: linear-gradient(to bottom, transparent 0%, transparent 3%, rgba(0,0,0,.35) 8%, rgba(0,0,0,.75) 13%, #000 18%,
-            #000 76%, rgba(0,0,0,.9) 81%, rgba(0,0,0,.65) 86%, rgba(0,0,0,.35) 91%, rgba(0,0,0,.12) 95%, transparent 97%);
-          mask-image: linear-gradient(to bottom, transparent 0%, transparent 3%, rgba(0,0,0,.35) 8%, rgba(0,0,0,.75) 13%, #000 18%,
-            #000 76%, rgba(0,0,0,.9) 81%, rgba(0,0,0,.65) 86%, rgba(0,0,0,.35) 91%, rgba(0,0,0,.12) 95%, transparent 97%);
-        }
-        .tal-hero-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 50% }
-        .tal-hero-scrim {
-          position: absolute; inset: 0;
-          background: linear-gradient(90deg, color-mix(in srgb, var(--canvas) 72%, transparent) 0%,
-            color-mix(in srgb, var(--canvas) 40%, transparent) 42%, color-mix(in srgb, var(--canvas) 20%, transparent) 100%);
-        }
+        @media (prefers-reduced-motion: reduce) { .tal-stagger > * { animation: none } }
+        .tal-hero, .tal-band { border-radius: 36px }
+        .tal-cardface { border-radius: 5px }
+        .tal-hero { background: radial-gradient(60% 55% at 58% 82%, color-mix(in srgb, var(--tangerine) 16%, transparent), transparent 72%), #111216 }
+        .tal-stage { position: relative; display: grid; justify-items: center; gap: 16px; margin-top: 32px }
+        .tal-stage .tal-streams { position: absolute; left: 50%; top: 40%; width: 150%; max-width: none; height: auto; transform: translate(-50%, -50%); opacity: .55 }
+        .tal-stage .tal-sheet { position: relative; z-index: 1; width: 100%; max-width: 380px }
+        .tal-stage .tal-cards { position: relative; z-index: 2; display: grid; gap: 12px; justify-items: center }
         @media (min-width: 840px) {
-          .tal-hero-photo { position: absolute; top: 0; bottom: 0; left: 50%; right: 0; aspect-ratio: auto }
-          .tal-hero-photo {
-            -webkit-mask-image:
-              linear-gradient(to right, transparent 0%, rgba(0,0,0,.06) 6%, rgba(0,0,0,.18) 12%, rgba(0,0,0,.36) 18%,
-                rgba(0,0,0,.56) 24%, rgba(0,0,0,.74) 30%, rgba(0,0,0,.88) 36%, rgba(0,0,0,.97) 42%, #000 48%),
-              linear-gradient(to bottom, #000 0%, #000 78%, rgba(0,0,0,.9) 83%, rgba(0,0,0,.65) 89%, rgba(0,0,0,.35) 94%,
-                rgba(0,0,0,.12) 98%, transparent 100%);
-            mask-image:
-              linear-gradient(to right, transparent 0%, rgba(0,0,0,.06) 6%, rgba(0,0,0,.18) 12%, rgba(0,0,0,.36) 18%,
-                rgba(0,0,0,.56) 24%, rgba(0,0,0,.74) 30%, rgba(0,0,0,.88) 36%, rgba(0,0,0,.97) 42%, #000 48%),
-              linear-gradient(to bottom, #000 0%, #000 78%, rgba(0,0,0,.9) 83%, rgba(0,0,0,.65) 89%, rgba(0,0,0,.35) 94%,
-                rgba(0,0,0,.12) 98%, transparent 100%);
-            -webkit-mask-composite: source-in;
-            mask-composite: intersect;
-            -webkit-mask-repeat: no-repeat;
-            mask-repeat: no-repeat;
-            -webkit-mask-size: 100% 100%;
-            mask-size: 100% 100%;
-          }
-          .tal-hero-photo img { object-position: 62% 50% }
-          .tal-hero-scrim {
-            background: linear-gradient(90deg, var(--canvas) 0%, color-mix(in srgb, var(--canvas) 72%, transparent) 26%,
-              color-mix(in srgb, var(--canvas) 20%, transparent) 100%);
-          }
+          .tal-stage { display: block; height: 700px; margin: 30px -56px 0 }
+          .tal-stage .tal-streams { left: 0; top: 50%; width: 660px; transform: translateY(-47.46%); opacity: 1 }
+          .tal-stage .tal-sheet { position: absolute; left: min(620px, calc(100% - 420px)); top: 50%; transform: translateY(-50%); width: 380px }
+          .tal-stage .tal-cards { position: static }
+          .tal-stage .tal-c1 { position: absolute; top: 96px; right: 64px; z-index: 2 }
+          .tal-stage .tal-c2 { position: absolute; bottom: 104px; right: 40px; z-index: 2 }
         }
       `}</style>
 
       <PublicHeader width="max-w-6xl" />
 
       <main className="flex-1">
-        {/* ── 00 · The product ─────────────────────────────────────────────── */}
-        {/* No border-b on this one section: the photograph fades out at its bottom (B36.1). */}
-        <section aria-labelledby="hero-heading" className="relative overflow-hidden">
-          <div className="relative z-10 mx-auto w-full max-w-6xl px-gutter pb-12 pt-14 wide:pb-28 wide:pt-24">
-            <div className="wide:w-1/2 wide:pr-12">
-              <div className="tal-stagger">
-                {/* B58.17 (Nick, 10 Nov 2026): the line and who owns the account, then positioning v2's two sentences
-                    (B44.4). The old headline stays only as this supporting eyebrow. */}
-                <p className="text-eyebrow uppercase text-label">Money and markets for AI agents</p>
-                <h1 id="hero-heading" className="mt-6 text-display-1 text-ink">
+        {/* ── The product ─────────────────────────────────────────────────── */}
+        <div className="px-3 pt-1.5 wide:px-6">
+          <section
+            aria-labelledby="hero-heading"
+            data-theme="dark"
+            className="tal-hero relative overflow-hidden px-6 pb-8 pt-12 text-ink wide:px-14 wide:pb-0 wide:pt-16"
+          >
+            <div className="tal-stagger">
+              {/* B58.17 (Nick, 10 Nov 2026): the line and who owns the account, then positioning v2's two sentences
+                  (B44.4). The old headline stays only as this supporting eyebrow. */}
+              <p className="text-pocket-eyebrow font-bold uppercase text-ink-2">Money and markets for AI agents</p>
+              <div>
+                <h1 id="hero-heading" className="mt-4 max-w-5xl font-display text-display-1 font-extrabold text-ink">
                   {POSITIONING_LINE}
                 </h1>
-                <p className="mt-4 text-display-3 text-ink">{OWNER_LINE}</p>
-                <p className="mt-7 text-lede text-muted">{POSITIONING_SENTENCES[0]}</p>
-                <p className="mt-4 text-body text-muted">{POSITIONING_SENTENCES[1]}</p>
-                {/* B56.1: what works, then what is on its way, never as live (Landing.test.tsx pins both). */}
-                <p className="mt-4 flex flex-wrap items-center gap-2 text-body text-muted">
-                  {ON_ITS_WAY}
-                  <StatusLabel building="payments_for_everyone" />
-                </p>
-                {/* ⚠ THE PRIMARY ACTION POINTS AT /signup, NOT /auth/login, AND NOT AT A MAILTO.
-                    Preserved from the previous version because the reasoning is easy to "simplify"
-                    away: an earlier draft sent people to sign-in on the theory that a stranger could
-                    not complete OAuth anyway, since the Google app is in Testing mode. That premise
-                    was inferred from config and was FALSE — Google's Testing state exempts apps
-                    requesting only openid, email and profile, which is exactly what apps/bff/auth.go
-                    requests. Nobody is stopped at Google; the only wall is ours
-                    (OIDC_ALLOWED_EMAILS). /signup tells a stranger what this is and who may enter —
-                    derived from the gate, so it is right in both configurations — before handing
-                    them to a third party. "Open the app" in the header is the other reader. */}
-                <div className="mt-8">
-                  <TealRule />
-                  <div className="mt-8 flex flex-wrap items-center gap-3">
-                    <Button asChild variant="primary" className="h-10 px-5">
+                <p className="mt-3 font-display text-display-3 font-bold text-ink">{OWNER_LINE}</p>
+              </div>
+              <div className="mt-7 grid items-start gap-8 wide:grid-cols-12 wide:gap-12">
+                <div className="wide:col-span-7">
+                  <p className="text-lede text-ink">{POSITIONING_SENTENCES[0]}</p>
+                  <p className="mt-3.5 text-reading text-ink-2">{POSITIONING_SENTENCES[1]}</p>
+                </div>
+                <div className="wide:col-span-5">
+                  {/* ⚠ THE PRIMARY ACTION POINTS AT /signup, NOT /auth/login, AND NOT AT A MAILTO. /signup tells a
+                      stranger what this is and who may enter, derived from the gate, before handing them to a third
+                      party (apps/bff/auth.go requests only openid, email and profile, so Google stops nobody).
+                      "Open the app" in the header is the other reader. */}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <Button asChild size="lg">
                       <a href="/signup">Get started</a>
                     </Button>
-                    <Button asChild className="h-10 px-5">
+                    <Button asChild size="lg" variant="outline">
                       <a href="#wallets">See how it works</a>
                     </Button>
                   </div>
+                  {/* B56.1: what works, then what is on its way, never as live (Landing.test.tsx pins both). */}
+                  <p className="mt-3.5 flex flex-wrap items-center gap-2 text-body font-medium text-ink-2">
+                    <StatusLabel building="payments_for_everyone" />
+                    {ON_ITS_WAY}
+                  </p>
                   {/* B44.1 — the visitor the ads bring can leave an email while access is by invitation; B51.1 — only
                       then: while sign-up is open Get started is the way in, and while unknown neither is promised. */}
-                  {signup === 'closed' ? <Waitlist className="mt-6 max-w-xl" /> : null}
+                  {signup === 'closed' ? (
+                    <div data-theme="light" className="mt-5 rounded-card bg-page p-4 text-ink shadow-pocket">
+                      {/* The waitlist form is still today's component (components/Waitlist.tsx), so it is held to
+                          today's rules, on today's name for the same white. */}
+                      <div data-design="today" className="bg-surface">
+                        <Waitlist />
+                      </div>
+                    </div>
+                  ) : null}
+                  {/* THE ACCESS SENTENCE IS THE SERVER'S, not the bundle's, and renders NOTHING while the answer is
+                      unknown. B58.17: one sign-up door, so these are /signup's words (ACCESS_LINE). */}
+                  {signup !== 'unknown' ? (
+                    <p data-access-line className="mt-4 max-w-xl text-body text-ink-2">
+                      {ACCESS_LINE[signup]}
+                    </p>
+                  ) : null}
                 </div>
               </div>
-              <p className="mt-4 text-caption text-faint">
-                <a href="/privacy" className={inlineLink}>
-                  Privacy
-                </a>
-                {' · '}
-                <a href="/terms" className={inlineLink}>
-                  Terms
-                </a>
-              </p>
-              {/* THE ACCESS SENTENCE IS THE SERVER'S, not the bundle's. A hardcoded "closed trial"
-                  line became a lie the moment an operator opened signups, with nothing in the build
-                  able to notice. This renders what the BFF reports, and renders NOTHING while the
-                  answer is unknown (first paint, BFF unreachable, older BFF): an unverified promise
-                  is not printed in either direction. */}
-              {/* B58.17: one sign-up door, so these are /signup's words (ACCESS_LINE), never a second version. */}
-              {signup !== 'unknown' ? (
-                <p data-access-line className="mt-5 max-w-xl text-body text-muted">
-                  {ACCESS_LINE[signup]}
-                </p>
-              ) : null}
             </div>
-          </div>
-          {/* The board's photograph: off the right edge from 840px, under the text on a phone. The
-              figure at the glass stays in frame at both crops. */}
-          <figure data-theme="dark" className="tal-hero-photo">
-            <img
-              src="/brand/photos/hero.jpg"
-              srcSet={HERO_SRCSET}
-              sizes={HERO_SIZES}
-              width={2400}
-              height={1357}
-              alt="A person standing at a glass wall, looking out over a lake and mountains"
-            />
-            <div className="tal-hero-scrim" aria-hidden="true" />
-          </figure>
-        </section>
 
-        {/* ── 01 · Wallets ─────────────────────────────────────────────────── */}
-        <section
-          id="wallets"
-          aria-labelledby="wallets-heading"
-          className="scroll-mt-16 border-b border-rule"
-        >
-          <div className="mx-auto w-full max-w-6xl px-gutter py-16 wide:py-20">
-            <LabelledEyebrow index="01" labels={labels} capability={WALLETS}>
-              Wallets
-            </LabelledEyebrow>
-            {/* THE ONE HEADING THAT NAMES THE PRODUCT. Landing.test.tsx asserts exactly one heading
-                matches /talyvor/i, so nothing else on this page may put the name in a heading. */}
-            <h2
-              id="wallets-heading"
-              className="mt-6 max-w-3xl text-display-3 text-ink"
-            >
-              Talyvor checks the rules before the money moves.
-            </h2>
-            <TealRule className="mt-5" />
-            <p className="mt-5 max-w-xl text-body text-muted">
-              Every model call and every payment an agent makes is checked against its wallet first,
-              so a rule that says no stops the call, instead of showing up as a line on next month’s
-              invoice.
-            </p>
-            <ol className="mt-10 grid gap-3 wide:grid-cols-2">
-              {WALLET.map((w, i) => (
-                <li key={w.title} className="rounded-card border border-rule bg-raised p-6">
-                  <div className="flex items-baseline gap-3">
-                    <span className="font-figure text-caption text-label">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <span className="text-head text-ink">{w.title}</span>
-                  </div>
-                  <p className="mt-3 text-body text-muted">{w.body}</p>
-                </li>
-              ))}
-            </ol>
-            <ul className="mt-10 grid grid-cols-2 gap-3 wide:grid-cols-3">
-              {CARD_FACES.map((c) => (
-                <li key={c.id}>
-                  <picture>
-                    <source type="image/webp" srcSet={`/card-faces/${c.id}.webp`} />
-                    <img
-                      src={`/card-faces/${c.id}.png`}
-                      width={768}
-                      height={485}
-                      loading="lazy"
-                      decoding="async"
-                      alt={c.alt}
-                      className="block h-auto w-full"
-                    />
-                  </picture>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
+            <div className="tal-stage">
+              <img
+                className="tal-streams"
+                src="/brand/logo/talyvor-streams-on-dark.svg"
+                alt=""
+                aria-hidden="true"
+                width={660}
+                height={508}
+                decoding="async"
+              />
+              <div className="tal-sheet">
+                <SheetPicture labels={labels} />
+              </div>
+              <div className="tal-cards">
+                <AgentCard agent={HERO_AGENTS[0]} className="tal-c1" />
+                <AgentCard agent={HERO_AGENTS[1]} className="tal-c2" />
+              </div>
+            </div>
+          </section>
+        </div>
 
-        {/* ── Close ────────────────────────────────────────────────────────── */}
-        <section aria-labelledby="close-heading">
-          <div className="mx-auto w-full max-w-6xl px-gutter py-20 wide:py-28">
-            <h2
-              id="close-heading"
-              className="max-w-3xl text-display-2 text-ink"
-            >
+        {/* ── Wallets ─────────────────────────────────────────────────────── */}
+        <Band id="wallets" label="wallets-heading">
+          <SectionEye chip={<StatusLabel capability={WALLETS} labels={labels} />}>Wallets</SectionEye>
+          {/* THE ONE HEADING THAT NAMES THE PRODUCT. Landing.test.tsx asserts exactly one heading
+              matches /talyvor/i, so nothing else on this page may put the name in a heading. */}
+          <SectionHeading id="wallets-heading">Talyvor checks the rules before the money moves.</SectionHeading>
+          <p className="mt-5 max-w-2xl text-lede text-ink-2">
+            Every model call and every payment an agent makes is checked against its wallet first, so a rule that says no
+            stops the call, instead of showing up as a line on next month’s invoice.
+          </p>
+          <ol className="mt-6 grid gap-4 wide:grid-cols-2 lg:grid-cols-4">
+            {WALLET.map((w, i) => (
+              <li key={w.title} className="grid content-start gap-2.5 rounded-sheet bg-cloud p-6.5">
+                <span
+                  aria-hidden="true"
+                  className="grid h-7 w-7 place-items-center rounded-pill bg-tangerine-50 font-figure text-caption font-bold text-tangerine-ink"
+                >
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <h3 className="font-display text-title font-bold text-ink">{w.title}</h3>
+                <p className="text-body text-ink-2">{w.body}</p>
+              </li>
+            ))}
+          </ol>
+          <ul className="mt-8 grid grid-cols-2 gap-4 wide:grid-cols-3">
+            {CARD_FACES.map((c) => (
+              <li key={c.id}>
+                <picture>
+                  <source type="image/webp" srcSet={`/card-faces/${c.id}.webp`} />
+                  <img
+                    src={`/card-faces/${c.id}.png`}
+                    width={768}
+                    height={485}
+                    loading="lazy"
+                    decoding="async"
+                    alt={c.alt}
+                    className="block h-auto w-full"
+                  />
+                </picture>
+              </li>
+            ))}
+          </ul>
+        </Band>
+
+        {/* ── What the labels mean (B56.9's legend) ───────────────────────── */}
+        <Band label="labels-heading">
+          <div data-testid="labels-meaning">
+            <SectionEye>What the labels mean</SectionEye>
+            <SectionHeading id="labels-heading">You always know what is real.</SectionHeading>
+            <p className="max-w-2xl text-lede text-ink-2">Every money feature carries a label, and so does every feature still being built.</p>
+            <dl className="mt-4 grid gap-4 wide:grid-cols-3">
+              {(['live', 'sandbox', 'building'] as const).map((s) => (
+                <div key={s} className="grid justify-items-start gap-2.5 rounded-card bg-cloud p-5">
+                  <dt>
+                    <StatusLabel legend={s} />
+                  </dt>
+                  <dd className="m-0 text-body text-ink-2">{LABEL_LINES[s]}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </Band>
+
+        {/* ── Pricing ─────────────────────────────────────────────────────── */}
+        <Band label="pricing-heading">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <SectionEye>Pricing</SectionEye>
+              <SectionHeading id="pricing-heading">Start free. Grow when you need to.</SectionHeading>
+            </div>
+            <Button asChild variant="secondary">
+              <a href="/pricing">See pricing</a>
+            </Button>
+          </div>
+          {pricing ? <PlanMinis pricing={pricing} /> : null}
+        </Band>
+
+        {/* ── Questions ───────────────────────────────────────────────────── */}
+        <Band label="questions-heading">
+          <SectionEye>Questions</SectionEye>
+          <SectionHeading id="questions-heading">Before you start.</SectionHeading>
+          <dl className="mt-4 grid gap-4 wide:grid-cols-2">
+            {QUESTIONS.map((f) => (
+              <div key={f.q} className="grid gap-1.5 rounded-card bg-cloud px-5.5 py-5">
+                <dt className="font-bold text-ink">{f.q}</dt>
+                <dd className="m-0 text-body text-ink-2">{f.a(pricing)}</dd>
+              </div>
+            ))}
+          </dl>
+        </Band>
+
+        {/* ── Close (pocket.css .cta) ─────────────────────────────────────── */}
+        <div className="px-3 pt-14 wide:px-6">
+          <section
+            aria-labelledby="close-heading"
+            className="tal-band flex flex-col items-start justify-between gap-6 bg-tangerine-50 p-8 text-ink wide:flex-row wide:items-center wide:p-14"
+          >
+            <h2 id="close-heading" className="font-display text-display-2 font-extrabold text-ink">
               Give your first agent a wallet.
             </h2>
-            <TealRule className="mt-6" />
-            <LabelsMeaning className="mt-8" />
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Button asChild variant="primary" className="h-10 px-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button asChild size="lg">
                 <a href="/signup">Create your workspace</a>
               </Button>
-              <Button asChild className="h-10 px-5">
-                <a href={CONTACT_MAILTO} className="font-mono">
-                  {CONTACT_EMAIL}
-                </a>
-              </Button>
+              <a href={CONTACT_MAILTO} className={`${inlineLink} font-mono font-semibold text-ink`}>
+                {CONTACT_EMAIL}
+              </a>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </main>
 
       <PublicFooter width="max-w-6xl" />

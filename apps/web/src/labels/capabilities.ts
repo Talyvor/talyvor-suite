@@ -39,3 +39,6 @@ export const BETWEEN_OWNERS_PAY = ['pay_another_owner'] as const
 
 /** B56.15 — a currency account's statement on Statements: the account in dollars, pounds, euros or USDC. */
 export const CURRENCY_ACCOUNT = ['currency_accounts'] as const
+
+/** B59.19 — Instant transfer: converted, moved on chain, then converted or paid out (Lens B59.13's three capabilities). */
+export const INSTANT_TRANSFER = ['fx', 'stablecoins', 'payments_out'] as const

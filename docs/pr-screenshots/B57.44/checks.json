@@ -1,0 +1,4 @@
+[
+  { "route": "/members", "screen": "w-members" },
+  { "route": "/members", "screen": "w-members+add-member", "steps": ["Add a member"] }
+]

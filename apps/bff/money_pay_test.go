@@ -292,3 +292,23 @@ func TestMandateGrantAndDecisionReachLensSigned(t *testing.T) {
 		t.Fatalf("Lens received %q, want nothing", got)
 	}
 }
+
+// B58.8 — Lens refuses a live payment while the workspace has no key (Lens B58.7); Pay shows its sentence as it is.
+func TestLiveKeyRefusalReachesPayWithItsSentence(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"Add a passkey or your phone before your first payment."}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+
+	rec := doJSON(a, http.MethodPost, "/api/money/payments", `{"account_id":"macc_1","payee_id":"payee_1","amount_minor":2000,"currency":"GBP","reference":"Rent","idempotency_key":"k1"}`)
+	if rec.Code != http.StatusForbidden || rec.Body.String() != `{"error":"Add a passkey or your phone before your first payment."}`+"\n" {
+		t.Fatalf("payment = %d %q, want 403 with Lens's sentence", rec.Code, rec.Body.String())
+	}
+}

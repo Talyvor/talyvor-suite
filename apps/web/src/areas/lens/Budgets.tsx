@@ -44,7 +44,7 @@ function budgetRefusal(err: unknown): string {
   const most = /at most (\d+) budgets/i.exec(s)
   return most ? `A workspace can have at most ${most[1]} budgets.` : refusalText(err)
 }
-const select = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
+const select = `h-8 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 
 export function BudgetsScreen() {

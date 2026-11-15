@@ -422,7 +422,7 @@ describe('the Pay screen', () => {
     const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
       response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/money/pay')
+    window.history.pushState({}, '', '/money/pay/mandates')
     render(<App />)
 
     const form = await screen.findByTestId('new-mandate')
@@ -431,7 +431,7 @@ describe('the Pay screen', () => {
     fireEvent.change(within(form).getByLabelText('Payee’s name'), { target: { value: 'Kite' } })
     fireEvent.change(within(form).getByLabelText('Most per pull'), { target: { value: '5.00' } })
     fireEvent.change(within(form).getByLabelText('Most per month'), { target: { value: '20.00' } })
-    fireEvent.click(within(form).getByRole('button', { name: 'Grant mandate' }))
+    fireEvent.click(within(form).getByRole('button', { name: 'Grant with your passkey' }))
     await within(form).findByText('Granted to Kite.')
     const grant = { account_id: 'macc_agt', payee_workspace_id: 'ws_kite', payee_business_id: '', payee_id: '', payee_name: 'Kite',
       max_per_pull_minor: 500, max_per_month_minor: 2000, expires_at: expect.stringMatching(/T23:59:59Z$/) }
@@ -451,14 +451,14 @@ describe('the Pay screen', () => {
     const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
       response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/money/pay')
+    window.history.pushState({}, '', '/money/pay/mandates')
     render(<App />)
 
     const asked = await screen.findByTestId('mandate-mdt_a')
     expect(asked.textContent).toContain('Kite pulls from Researcher')
     expect(asked.textContent).toContain('Researcher asked for this mandate. Nothing is pulled until you approve it.')
     expect(within(asked).getByText('Asked')).toBeTruthy()
-    fireEvent.click(within(asked).getByRole('button', { name: 'Approve' }))
+    fireEvent.click(within(asked).getByRole('button', { name: 'Approve with your passkey' }))
     await within(screen.getByTestId('mandate-mdt_a')).findByText('Active')
     fireEvent.click(within(screen.getByTestId('mandate-mdt_b')).getByRole('button', { name: 'Decline' }))
     await within(screen.getByTestId('mandate-mdt_b')).findByText('Declined')
@@ -468,7 +468,34 @@ describe('the Pay screen', () => {
       expect.objectContaining({ url: '/api/money/mandates/mdt_a/approve', body: { assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } } }),
       expect.objectContaining({ url: '/api/money/mandates/mdt_b/decline', body: {} }),
     ])
-    expect(within(screen.getByTestId('mandate-mdt_a')).queryByRole('button', { name: 'Approve' })).toBeNull()
+    expect(within(screen.getByTestId('mandate-mdt_a')).queryByRole('button', { name: 'Approve with your passkey' })).toBeNull()
+  })
+
+  // B57.117 — the asked mandate is drawn as Pocket's request (w-approve-req): who asked, its terms, Approve with your
+  // passkey and Decline, then what was decided in words.
+  it('draws a mandate an agent asked for as a request in Pocket, with its terms and what was decided', async () => {
+    MANDATES = ['mdt_a', 'mdt_b'].map((id, i) => ({ id, agent_id: 'agt_1', account_id: 'macc_agt', currency: 'GBP', payee_workspace_id: 'ws_kite',
+      payee_name: i === 0 ? 'Kite' : 'Orbit', max_per_pull_minor: 500, max_per_month_minor: 2000, pulled_this_month_minor: 0,
+      expires_at: '2027-11-10T23:59:59Z', status: 'requested', created_at: '2026-11-10T09:00:00Z' }))
+    mockBff([], [], [], [], ['Y3JlZDE'])
+    const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
+      response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/money/pay/mandates')
+    render(<App />)
+
+    const asked = await screen.findByTestId('mandate-mdt_a')
+    expect(asked).toHaveAttribute('data-design', 'pocket')
+    expect(within(asked).getByRole('heading', { name: 'Kite pulls from Researcher' })).toBeInTheDocument()
+    expect(asked.textContent).toContain('From Researcher’s account · asked by Researcher')
+    const facts = Object.fromEntries([...asked.querySelectorAll('dl > div')].map((d) => [d.querySelector('dt')?.textContent, d.querySelector('dd')?.textContent]))
+    expect(facts).toEqual({ To: 'Kite', 'Most per pull': '£5.00', 'Most per month': '£20.00', 'Expires on': '10 November 2027' })
+    fireEvent.click(within(asked).getByRole('button', { name: 'Approve with your passkey' }))
+    expect(await within(screen.getByTestId('mandate-mdt_a')).findByRole('status')).toHaveTextContent(
+      'Approved. Kite pulls within these limits until the mandate expires or you revoke it.')
+    fireEvent.click(within(screen.getByTestId('mandate-mdt_b')).getByRole('button', { name: 'Decline' }))
+    expect(await within(screen.getByTestId('mandate-mdt_b')).findByRole('status')).toHaveTextContent('Declined. Orbit cannot pull from this account.')
+    expect(within(screen.getByTestId('mandate-mdt_b')).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
   })
 
   it('asks two scam questions before a first payment: a yes warns and needs a second confirmation, and a second payment asks nothing', async () => {
@@ -500,17 +527,15 @@ describe('the Pay screen', () => {
     expect((within(form).getByRole('button', { name: 'Send £5.00' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  // B57.31 — every control on the redrawn Pay does something. The buttons below are today's cards kept under it, which B57.32
-  // redraws on their own pages (its forms' buttons are disabled until filled, and say why only once drawn in Pocket).
-  it('presses every control on Pay and each does something', async () => {
-    const today = ['Set up standing order', 'Grant mandate', 'Revoke', 'Upload and check', 'Rows', 'Add bill'].map((b) => `button “${b}”:`)
-    const report = await pressEverything('/money/pay')
+  // B57.31 — every control on Pay does something. B57.32: and on each of its pages, with nothing left in today's design.
+  it.each(['/money/pay', '/money/pay/standing-orders', '/money/pay/mandates', '/money/pay/bulk-payouts', '/money/pay/bills'])('presses every control on %s and each does something', async (route) => {
+    const report = await pressEverything(route)
     expect(report.pressed).toBeGreaterThan(0)
-    expect(report.dead.filter((d) => !today.some((t) => d.startsWith(t)))).toEqual([])
+    expect(report.dead).toEqual([])
   }, 120_000)
   it('uploads a payouts CSV as text/csv under one key and shows each row’s result', async () => {
     const bff = mockBff()
-    window.history.pushState({}, '', '/money/pay')
+    window.history.pushState({}, '', '/money/pay/bulk-payouts')
     render(<App />)
     const form = await screen.findByTestId('payout-upload')
     const csv = 'payee_id,amount,currency,reference\npayee_1,5.00,GBP,May\nnobody,1.00,GBP,\n'
@@ -522,14 +547,14 @@ describe('the Pay screen', () => {
     expect(bff.sent[0].headers['Content-Type']).toBe('text/csv')
     expect(bff.sent[0].headers['Idempotency-Key'].length).toBeGreaterThan(8)
     expect(bff.sent[0].body).toBe(csv)
-    expect(within(batch).getByTestId('payout-row-3').textContent).toContain('no such payee')
+    expect(within(batch).getByTestId('payout-row-3').textContent).toContain('No such payee')
     expect(within(batch).getByRole('button', { name: 'Approve and pay 1 row' })).toBeTruthy()
   })
 
   // B41.1 — an invoice uploaded as a file goes up as its own type and becomes one bill; the same invoice again is the same bill.
   it('adds an uploaded PDF invoice as one bill marked New payee, and the same invoice again stays one bill', async () => {
     const bff = mockBff()
-    window.history.pushState({}, '', '/money/pay')
+    window.history.pushState({}, '', '/money/pay/bills')
     render(<App />)
     const form = await screen.findByTestId('bill-upload')
     const file = new File(['%PDF-1.4'], 'acme.pdf', { type: 'application/pdf' })
@@ -558,7 +583,7 @@ describe('the Pay screen', () => {
       bill('4', 'Paid Already Ltd', 999, { status: 'paid' }),
       bill('5', 'Unknown Supplier Ltd', 777, { payee_id: undefined, payee_match: 'new_payee' }),
     ])
-    window.history.pushState({}, '', '/money/pay')
+    window.history.pushState({}, '', '/money/pay/bills')
     render(<App />)
     const panel = await screen.findByTestId('bills-pay')
     // Only a due bill with a saved payee can be ticked.
@@ -575,8 +600,8 @@ describe('the Pay screen', () => {
     expect(pay[0].body).toEqual({ bill_ids: ['1', '2'] })
     expect(pay[0].headers['Idempotency-Key'].length).toBeGreaterThan(8)
     expect(within(card).getByTestId('approve-total').textContent).toBe('2 of 2 payments to approve, total £150.50')
-    for (const text of ['Acme Hosting Ltd', 'Brightline Studio Ltd', 'Reference: INV-1', 'Reference: INV-2']) expect(card.textContent).toContain(text)
-    expect(within(card).getByRole('button', { name: 'Approve 2 payments with a passkey' })).toBeTruthy()
+    for (const text of ['Acme Hosting Ltd', 'Brightline Studio Ltd', 'ReferenceINV-1', 'ReferenceINV-2']) expect(card.textContent).toContain(text)
+    expect(within(card).getByRole('button', { name: 'Approve 2 payments with your passkey' })).toBeTruthy()
   })
 
   // B40.35 — what an assistant asked for over /mcp waits here: a payee is saved only when the person presses Save, through the
@@ -663,7 +688,7 @@ describe('a payout batch’s approval (B58.6)', () => {
     const get = vi.fn().mockResolvedValue({ rawId: new Uint8Array([1]).buffer,
       response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } })
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/money/pay')
+    window.history.pushState({}, '', '/money/pay/bulk-payouts')
     render(<App />)
 
     const batch = await screen.findByTestId('payout-mpob_1')
@@ -673,11 +698,11 @@ describe('a payout batch’s approval (B58.6)', () => {
     fireEvent.click(within(batch).getByRole('button', { name: 'Approve and pay 1 row' }))
     await within(batch).findByText('A payment by a person needs the passkey or the phone key’s signature.')
     expect(within(batch).getByText('Awaiting approval')).toBeTruthy()
-    expect(within(within(batch).getByTestId('payout-row-2')).getByText('valid')).toBeTruthy()
+    expect(within(within(batch).getByTestId('payout-row-2')).getByText('Valid')).toBeTruthy()
 
     fireEvent.click(within(batch).getByRole('button', { name: 'Approve and pay 1 row' }))
     await within(batch).findByText('Approved')
-    expect(within(within(batch).getByTestId('payout-row-2')).getByText('completed')).toBeTruthy()
+    expect(within(within(batch).getByTestId('payout-row-2')).getByText('Completed')).toBeTruthy()
     expect(get).toHaveBeenCalledTimes(2)
     expect(new Uint8Array(get.mock.calls[0][0].publicKey.challenge)).toEqual(new Uint8Array([0x63, 0x68, 0x34]))
     const signed = { assertion: { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' } }
@@ -692,7 +717,7 @@ describe('a payout batch’s approval (B58.6)', () => {
   it('with only the phone’s key, sends nothing and says to approve on the phone', async () => {
     mockBff()
     const posts = onlyThePhoneKey({ '/api/money/payouts': { payouts: [BATCH] }, '/api/money/payouts/mpob_1': { ...BATCH, rows: BATCH_ROWS } })
-    window.history.pushState({}, '', '/money/pay')
+    window.history.pushState({}, '', '/money/pay/bulk-payouts')
     render(<App />)
     const batch = await screen.findByTestId('payout-mpob_1')
     expect(await within(batch).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
@@ -701,17 +726,207 @@ describe('a payout batch’s approval (B58.6)', () => {
   })
 })
 
-describe('an agent’s payment waiting on Pay when only the phone holds a key (B55.2)', () => {
-  it('sends no decision and says to approve on the phone', async () => {
+/** B55.40 — the mandate form filled for a Talyvor company: £5.00 a pull, £20.00 a month. */
+async function fillMandate() {
+  const form = await screen.findByTestId('new-mandate')
+  fireEvent.change(within(form).getByLabelText('Mandate payee kind'), { target: { value: 'company' } })
+  fireEvent.change(within(form).getByLabelText('Payee’s workspace id'), { target: { value: 'ws_kite' } })
+  fireEvent.change(within(form).getByLabelText('Most per pull'), { target: { value: '5.00' } })
+  fireEvent.change(within(form).getByLabelText('Most per month'), { target: { value: '20.00' } })
+  return form
+}
+
+describe('a mandate the owner grants from Pay (B55.40)', () => {
+  it('grants nothing when the passkey prompt is cancelled, and says nothing changed', async () => {
+    const bff = mockBff([], [], [], [], ['Y3JlZDE'])
+    const get = vi.fn().mockResolvedValue(null)
+    Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
+    window.history.pushState({}, '', '/money/pay/mandates')
+    render(<App />)
+    const form = await fillMandate()
+    fireEvent.click(within(form).getByRole('button', { name: 'Grant with your passkey' }))
+    await within(form).findByText('Nothing changed. You can try again.')
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(bff.sent.map((c) => c.url)).toEqual(['/api/money/mandates/challenge'])
+  })
+
+  it('with only the phone’s key, says to add this browser first and sends nothing, for a grant or an agent’s request', async () => {
+    MANDATES = [{ id: 'mdt_a', agent_id: 'agt_1', account_id: 'macc_agt', currency: 'GBP', payee_workspace_id: 'ws_kite', payee_name: 'Kite', max_per_pull_minor: 500,
+      max_per_month_minor: 2000, pulled_this_month_minor: 0, expires_at: '2027-11-10T23:59:59Z', status: 'requested', created_at: '2026-11-10T09:00:00Z' }]
     mockBff()
-    const posts = onlyThePhoneKey({ '/api/agents/approvals': { approvals: [
-      { id: 'apr_9', agent_id: 'agt_1', amount_ulxc: 2_000_000, model: '', status: 'pending', created_at: '2026-10-25T06:01:00Z', payee: { kind: 'outside', id: 'payee_1', name: 'Acme Ltd' } },
-    ] } })
+    const posts = onlyThePhoneKey()
+    window.history.pushState({}, '', '/money/pay/mandates')
+    render(<App />)
+    const form = await fillMandate()
+    expect(await within(form).findByText('Grant this mandate with a passkey on this browser: add this browser first.')).toBeInTheDocument()
+    expect(within(form).queryByRole('button', { name: 'Grant with your passkey' })).toBeNull()
+    fireEvent.submit(form)
+    const asked = screen.getByTestId('mandate-mdt_a')
+    expect(within(asked).getByText('Approve this mandate with a passkey on this browser: add this browser first.')).toBeInTheDocument()
+    expect(within(asked).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
+    expect(posts).toEqual([])
+  })
+})
+
+// B57.144 — the batch awaiting approval in Pocket, as w-approvals draws a signed approval: held to Pocket's rules, its status
+// and each row's in words (never Lens's own), the signing line, and Approve as Pocket's primary button.
+describe('a payout batch’s signed approval in Pocket (B57.144)', () => {
+  it('draws the batch, its rows in words, the signing line and Approve in Pocket', async () => {
+    mockBff()
+    awaitingBatch([{ id: 'pk_1', name: 'MacBook' }], [])
+    window.history.pushState({}, '', '/money/pay/bulk-payouts')
+    render(<App />)
+    const batch = await screen.findByTestId('payout-mpob_1')
+    expect(batch.closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    expect(screen.getByRole('heading', { name: 'Upload a file' }).closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+    expect(within(batch).getByText('Awaiting approval')).toBeTruthy()
+    const valid = await within(batch).findByTestId('payout-row-2')
+    expect(within(valid).getByText('Valid')).toBeTruthy()
+    expect(within(within(batch).getByTestId('payout-row-3')).getByText('Invalid')).toBeTruthy()
+    expect(within(batch).getByTestId('payout-row-3').textContent).toContain('No such payee')
+    expect((await within(batch).findByTestId('payout-signs')).textContent).toBe('Your passkey signs these 1 valid row and £5.00. If the batch changes after you sign, nothing is paid.')
+    expect(within(batch).getByRole('button', { name: 'Approve and pay 1 row' }).closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+  })
+})
+
+// B57.32 — standing orders, mandates, bulk payouts and bills each have a page under Pay, reached from Also on Pay; an agent's
+// payment its rules hold is decided on Approvals and Home, which Pay links to, not on Pay.
+describe('the pages under Pay (B57.32)', () => {
+  it('opens each from Also on Pay, and sends an agent’s held payment to Approvals', async () => {
+    mockBff()
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (input, init) =>
+      String(input) === '/api/agents/approvals'
+        ? new Response(JSON.stringify({ approvals: [{ id: 'apr_9', agent_id: 'agt_1', amount_ulxc: 2_000_000, model: '', status: 'pending', created_at: '2026-10-25T06:01:00Z',
+            payee: { kind: 'outside', id: 'payee_1', name: 'Acme Ltd' } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        : inner(input, init))
     window.history.pushState({}, '', '/money/pay')
     render(<App />)
-    const card = await screen.findByTestId('approval-apr_9')
-    expect(await within(card).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
-    expect(within(card).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
+    const also = (await screen.findByRole('heading', { name: 'Also on Pay' })).parentElement as HTMLElement
+    const href = (name: string) => within(also).getByRole('link', { name: new RegExp(`^${name}`) }).getAttribute('href')
+    expect(href('Standing orders')).toBe('/money/pay/standing-orders')
+    expect(href('Mandates')).toBe('/money/pay/mandates')
+    expect(href('Bulk payouts')).toBe('/money/pay/bulk-payouts')
+    expect(href('Bills you received')).toBe('/money/pay/bills')
+    expect(within(also).getByRole('link', { name: 'Approvals' }).getAttribute('href')).toBe('/approvals')
+    expect(screen.queryByTestId('approval-apr_9')).toBeNull()
+    expect(screen.queryByTestId('new-standing-order')).toBeNull()
+    expect(screen.queryByTestId('new-mandate')).toBeNull()
+    expect(screen.queryByTestId('bill-upload')).toBeNull()
+    expect(screen.queryByTestId('payout-upload')).toBeNull()
+  })
+
+  it.each([
+    ['/money/pay/standing-orders', 'Standing orders', 'Pay the same amount on a schedule', 'new-standing-order'],
+    ['/money/pay/mandates', 'Mandates', 'Let a payee pull within limits you set', 'new-mandate'],
+    ['/money/pay/bulk-payouts', 'Bulk payouts', 'Pay many at once from a file', 'payout-upload'],
+    ['/money/pay/bills', 'Bills you received', 'Bills you received', 'bill-upload'],
+  ])('%s has the crumb Pay ›, its heading and its form, in Pocket', async (route, page, heading, form) => {
+    mockBff()
+    window.history.pushState({}, '', route)
+    render(<App />)
+    const crumb = await screen.findByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(crumb).getByRole('link', { name: 'Pay' }).getAttribute('href')).toBe('/money/pay')
+    expect(within(crumb).getByText(page).getAttribute('aria-current')).toBe('page')
+    expect(await screen.findByRole('heading', { name: heading })).toBeTruthy()
+    expect((await screen.findByTestId(form)).closest('[data-design]')?.getAttribute('data-design')).toBe('pocket')
+  })
+
+  it('sets up a standing order from an agent’s account to a saved payee, in minor units, and lists it with Stop', async () => {
+    const bff = mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')])
+    const schedules: Record<string, unknown>[] = []
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input)
+      const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
+      if (url === '/api/agents/schedules') return json({ schedules })
+      if (url === '/api/agents/agt_1/schedules') {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+        bff.sent.push({ url, headers: init?.headers as Record<string, string>, body })
+        const s = { id: 'sch_1', from_agent_id: 'agt_1', ...body, active: true, next_run_at: String(body.first_run_at), created_at: '2026-11-14T09:00:00Z' }
+        schedules.push(s)
+        return json(s, 201)
+      }
+      return inner(input, init)
+    })
+    window.history.pushState({}, '', '/money/pay/standing-orders')
+    render(<App />)
+    const form = await screen.findByTestId('new-standing-order')
+    const submit = () => within(form).getByRole('button', { name: 'Set up standing order' }) as HTMLButtonElement
+    expect(submit().disabled).toBe(true)
+    expect(form.textContent).toContain('Choose who to pay.')
+    fireEvent.change(within(form).getByLabelText('Standing order to'), { target: { value: 'payee_1' } })
+    fireEvent.change(within(form).getByLabelText('Standing order amount'), { target: { value: '10.00' } })
+    fireEvent.change(within(form).getByLabelText('Every'), { target: { value: 'month' } })
+    fireEvent.click(submit())
+    const row = await screen.findByTestId('standing-order-sch_1')
+    expect(bff.sent.at(-1)).toMatchObject({ url: '/api/agents/agt_1/schedules', body: { to_payee_id: 'payee_1', amount_minor: 1000, currency: 'GBP', every: 'month' } })
+    expect(row.textContent).toContain('Acme Ltd · every month')
+    expect(row.textContent).toContain('£10.00')
+    expect(within(row).getByText('Active')).toBeTruthy()
+    expect(within(row).getByRole('button', { name: 'Stop' })).toBeTruthy()
+  })
+})
+
+// B58.8 — Lens refuses live money at a person's word while the workspace has no key (Lens B58.7); Pay says so first.
+describe('the first live payment, before the workspace has a key (B58.8)', () => {
+  /** mockBff's workspace, with Lens labelling payments out `label` for it; every POST from here is counted. */
+  function labelled(label: 'live' | 'sandbox') {
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    const posts: string[] = []
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url === '/api/wallets/capabilities')
+        return new Response(JSON.stringify({ capabilities: [{ capability: 'payments_out', name: 'Money out', class: 'RED', real_money: label === 'live', level_needed: 'L2', label }] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      if ((init?.method ?? 'GET') !== 'GET') posts.push(url)
+      return inner(input, init)
+    })
+    return posts
+  }
+
+  it('shows the step in place of Send when the money is live and there is no passkey or phone, and pays nothing', async () => {
+    mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')], [PAYMENT('mpay_0', 'payee_1', 'Acme Ltd', 100, 'completed')])
+    const posts = labelled('live')
+    window.history.pushState({}, '', '/money/pay#payee-payee_1')
+    render(<App />)
+    const form = await screen.findByTestId('send-payment')
+    const step = await within(form).findByTestId('pay-key-first')
+    expect(step.textContent).toContain('Add a passkey or your phone before your first payment.')
+    expect(within(step).getByRole('link', { name: 'Approvals and devices' }).getAttribute('href')).toBe('/approvals')
+    fireEvent.change(within(form).getByLabelText('Amount in GBP'), { target: { value: '20.00' } })
+    expect(within(form).queryByRole('button', { name: /^Send/ })).toBeNull()
+    fireEvent.submit(form)
     expect(posts).toEqual([])
+  })
+
+  // B57.163 — w-pay draws a line in place of its button as a bold small sentence beside a secondary button.
+  it("draws the step as w-pay's line in place of its button: the sentence in bold, the link as a secondary button", async () => {
+    mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')], [PAYMENT('mpay_0', 'payee_1', 'Acme Ltd', 100, 'completed')])
+    labelled('live')
+    window.history.pushState({}, '', '/money/pay#payee-payee_1')
+    render(<App />)
+    const step = await within(await screen.findByTestId('send-payment')).findByTestId('pay-key-first')
+    const sentence = within(step).getByText('Add a passkey or your phone before your first payment.')
+    expect(sentence.className).toContain('font-semibold')
+    expect(sentence.className).toContain('text-body')
+    const link = within(step).getByRole('link', { name: 'Approvals and devices' })
+    expect(link.className).toContain('rounded-pill')
+    expect(link.className).toContain('bg-cloud-2')
+    expect(link.getAttribute('href')).toBe('/approvals')
+  })
+
+  it('still offers Send in the Sandbox with no key', async () => {
+    mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')], [PAYMENT('mpay_0', 'payee_1', 'Acme Ltd', 100, 'completed')])
+    labelled('sandbox')
+    window.history.pushState({}, '', '/money/pay#payee-payee_1')
+    render(<App />)
+    const form = await screen.findByTestId('send-payment')
+    await within(form).findByText('Sandbox')
+    fireEvent.change(within(form).getByLabelText('Amount in GBP'), { target: { value: '20.00' } })
+    expect(within(form).getByRole('button', { name: 'Send £20.00' })).toBeTruthy()
+    expect(within(form).queryByTestId('pay-key-first')).toBeNull()
   })
 })

@@ -115,10 +115,13 @@ function cardHeaderTitles(root: ParentNode): Element[] {
  */
 const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // B28.6 — `/` is the wallet home; B45.11: waiting for you, your agents, budgets, forecast. Overview's six moved to /overview.
-  '/': 4,
+  // B57.16: "Your agents" is a heading over Pocket's agent cards, no longer a card header.
+  // B57.18: Home is drawn in Pocket (launch pack W2): its cards are titled by headings, none is a card header.
+  '/': 0,
   // B28.7 — Approvals (waiting, decided). B57.24: Statements opens on an agent's statement, a Pocket document whose
   // name is its own heading, so it has no card header.
-  '/approvals': 2,
+  // B57.43: 1 → 0, the Face ID and notifications card moved to Approvals and devices.
+  '/approvals': 0,
   '/statements': 0,
   '/overview': 6,
   '/ledger': 1,
@@ -156,7 +159,14 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/billing/cancel': 0,
   '/keys': 0,
   // B19.4 — Waiting for a person, Agents, and the open agent's Money, Rules, Pay, Key and Statement.
-  '/agents': 38, // B46.9 "Wallet"; B30.103 "Know Your Agent credential"; B19.10 added "Face ID and notifications"; B19.20 "Month-end forecast" and "Unusual spend"; B19.21 "Scheduled payments" and "Automatic top-up"; B19.22 "Statement for every agent"; B19.24 "Card" (B57.142 drew it in Pocket, so its title is no longer a card header); B22.10 "Address", "Send or request", "Transfers", "Recurring transfer", "Offer a loan", "Requests", "Credit line" and "Loans"; B22.12 "Pay into escrow", "Pots", "Investing, simulated", "Cash out", "Escrow" and "Cash-outs"; B28.21 "Name and description" and "Archive"; B28.30 "Would it pass?"; B28.31 "Rules history"; B28.32 "Limit boost"; B28.62 "Limit alerts"; B28.53 "Spend by day, model and destination"; B28.66 "Where alerts go" and "Sent alerts"
+  // B57.16 — an agent's page is today's agent view with that agent open; B57.23 gave its rules their own page.
+  // 38 → 28 at B57.21: the agent's ten money cards are panels of its Money card, in Pocket; 38 → 23 on its page, which
+  // also draws the workspace's Requests, Credit line, Loans, Escrow and Cash-outs as its own panels.
+  // B57.43: one fewer, the Face ID and notifications card moved to Approvals and devices.
+  // B57.22 — eight more (name and description, pay, schedules, top-up, key, credential, limit boost, archive) open from its Settings rows.
+  '/agents/:id': 11, // 14 → 12 at B57.23: Would it pass? and the rules history moved to the agent's rules page; 12 → 11 at B57.111: its spend by day, model and destination is a Pocket card with its own heading
+  '/agents/:id/rules': 0, // B57.23 drew it in Pocket
+  '/agents': 0, // B57.19 drew /agents in Pocket: its cards are AgentCards, so today's card headers are on /agents/:id alone
   // B20.3 — the catalog's Listings card. 1 → 0 at B29.11: the listings are cards of their own, a list
   // named Listings in the Browse region, and no card header.
   '/marketplace': 0,
@@ -167,20 +177,20 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // a NEW FILE that Spend.tsx renders, so `grep -c '<CardHeader' Spend.tsx` reads 2 before and
   // after and would have argued the opposite.
   '/spend': 5,
-  '/members': 1,
+  // 1 → 0 at B57.44: drawn in Pocket, a white card of members with no header.
+  '/members': 0,
   '/operator': 0,
   '/operator/tax': 0,
   '/operator/compliance': 0,
-  // 2 → 3 at B27.27: "Your provider keys". 3 → 6 at B59.10: "Kind of money", "Account type" and a Business's "Your team".
-  '/settings': 6,
-  // B30.116 — your level, the next check, the checks, and one card per level the capabilities need (L0, L2, L3).
-  '/settings/verification': 6,
-  // B30.103 — every capability with terms, in one card.
-  '/settings/terms': 1,
+  // 6 → 0 at B57.42: drawn in Pocket, whose cards head themselves with an h2 or h3.
+  '/settings': 0,
+  '/settings/devices': 0, // B57.43: drawn in Pocket
+  '/settings/verification': 0, // B57.42: drawn in Pocket
+  '/settings/payout-details': 0,
+  '/settings/terms': 0, // B57.42: drawn in Pocket
   '/settings/webhooks': 0,
   '/settings/email-branding': 0,
-  // B40.8 — one card per assistant.
-  '/settings/connect': 8,
+  '/settings/connect': 0, // B57.45: drawn in Pocket
   '/settings/company': 0, // B59.31: Pocket's own section title, no CardHeader
   '/settings/help': 0, // B59.28: Pocket's own section titles, no CardHeader
   '/settings/close': 0,
@@ -196,12 +206,18 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/scan/track-record': 1, // B52.28: the Reports card
   '/money/budgets': 1, // B41.39: the Budgets card, under the populated fixture's one budget
   '/money/subscriptions': 1, // B41.20: the Subscriptions card, under the populated fixture's two found subscriptions
-  '/money/pay': 5, // B57.31: the top of Pay is drawn in Pocket, so only today's cards kept below it count; B41.1: the bills inbox
-  // B40.9 — one card: the prepared request.
-  '/approve/:id': 1,
-  // B45.37 — one card: the plan the assistant prepared.
-  '/money/plans/:id': 1,
-  '/features': 0,
+  '/money/pay': 0, // B57.32: all of Pay is drawn in Pocket, its standing orders, mandates, bulk payouts and bills each on its own page
+  '/money/pay/standing-orders': 0,
+  '/money/pay/mandates': 0,
+  '/money/pay/bulk-payouts': 0,
+  '/money/pay/instant-transfer': 0,
+  '/money/pay/instant-transfer/:id': 0,
+  '/money/pay/bills': 0,
+  // B57.27 — the prepared request is drawn in Pocket, whose card has no header.
+  '/approve/:id': 0,
+  // B57.98 — the plan is drawn in Pocket, whose cards have no header.
+  '/money/plans/:id': 0,
+  '/features': 1, // B57.42: "Documents you attach", moved here from Settings beside Document conversion
   '/features/try/tare': 0,
   '/features/try/conversion': 0,
   '/track': 2,

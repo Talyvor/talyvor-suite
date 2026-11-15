@@ -1,7 +1,8 @@
 // B55.56 — a mandate an agent asked for, once a run, on a workspace of its own. An agent's own key asks Lens for a
 // mandate on its funded GBP account, to another Talyvor company: Lens records it requested, and the company's pull is
-// refused with nothing moved. With a passkey on, the owner's unsigned approval is refused on Lens; on the Pay screen the
-// owner presses Approve, which goes up signed, and Lens records the mandate active. The company then pulls £5.00: the
+// refused with nothing moved. With a passkey on, the owner's unsigned approval is refused on Lens. B55.40: the request
+// waits on Approvals in words, counted on the badge, and the owner's Review then Approve there goes up signed; Lens records
+// the mandate active. The company then pulls £5.00: the
 // agent's account holds £5.00 less, the company's £5.00 more, and the mandate counts £5.00 pulled this month.
 
 import { randomUUID } from 'node:crypto'
@@ -21,10 +22,10 @@ export function mandateAsked(): Scenario {
     id: 'mandate-asked',
     owner: 'talyvor-suite',
     own: true,
-    items: ['B55.56'],
+    items: ['B55.56', 'B55.40'],
     feature: 'Agent wallets',
     agents: 1,
-    title: "an agent's own key asks for a mandate and nothing can be pulled; the owner approves it on the Pay screen, signed with " +
+    title: "an agent's own key asks for a mandate and nothing can be pulled; the owner approves it from Approvals, signed with " +
       'the passkey, and the payee\'s £5.00 pull moves £5.00 out of the agent\'s account and into the payee\'s',
     run: async (ctx) => {
       const { lens } = ctx.env
@@ -58,7 +59,7 @@ export function mandateAsked(): Scenario {
       const [a1, b1] = await moved()
       if (early.ok || a1 !== a0 || b1 !== b0) return fail(`a requested mandate must pull nothing; Lens answered ${said(early)} and the accounts moved ${a0 - a1} and ${b1 - b0}`)
 
-      const page = await ctx.app.tab('/money/pay')
+      const page = await ctx.app.tab('/approvals')
       try {
         const made = await turnOnPasskey(ctx, page)
         if (made !== undefined) return fail(made)
@@ -68,15 +69,21 @@ export function mandateAsked(): Scenario {
         page.on('request', (r) => {
           if (r.method() === 'POST' && r.url().endsWith(`/api/money/mandates/${m.id}/approve`)) signed.push((r.postData() ?? '').includes('"assertion"'))
         })
-        await page.goto(new URL('/money/pay', page.url()).toString())
+        await page.goto(new URL('/approvals', page.url()).toString())
         await settled(page)
-        const row = page.getByTestId(`mandate-${m.id}`)
+        const row = page.locator(`[data-mandate="${m.id}"]`)
+        const words = (await row.innerText().catch(() => '')).trim()
+        ctx.evidence.push({ note: `the request on Approvals: ${words.slice(0, 300)}` })
+        if (!words.includes(`${agent.name} asks to let Asked Supplier ${RUN_SALT} pull up to £100.00 a month`)) {
+          return fail(`Approvals does not list the agent's mandate request in words; its row reads "${words.slice(0, 200)}"`)
+        }
+        await row.getByRole('button', { name: 'Review' }).click()
         const approve = row.getByRole('button', { name: 'Approve' })
-        if (!(await approve.isVisible().catch(() => false))) return fail(`the Pay screen shows no Approve for the asked mandate; its row reads "${(await row.innerText().catch(() => '')).slice(0, 200)}"`)
+        if (!(await approve.isVisible().catch(() => false))) return fail(`Review on Approvals shows no Approve for the asked mandate; its row reads "${(await row.innerText().catch(() => '')).slice(0, 200)}"`)
         await approve.click()
-        await row.getByText('Active').waitFor({ timeout: 30_000 }).catch(() => undefined)
-        ctx.evidence.push({ note: `the mandate on the Pay screen after Approve: ${(await row.innerText().catch(() => '')).trim().slice(0, 300)}` })
-        if (signed.at(-1) !== true) return fail(`Approve on the Pay screen must go up signed with the passkey; it ${signed.length === 0 ? 'sent nothing' : 'went up unsigned'}`)
+        await page.getByText(/^Approved\. .* can pull from /).waitFor({ timeout: 30_000 }).catch(() => undefined)
+        ctx.evidence.push({ note: `Approvals after Approve: ${(await page.locator('main').innerText().catch(() => '')).trim().slice(0, 300)}` })
+        if (signed.at(-1) !== true) return fail(`Approve on Approvals must go up signed with the passkey; it ${signed.length === 0 ? 'sent nothing' : 'went up unsigned'}`)
       } finally {
         await page.close()
       }
@@ -91,7 +98,7 @@ export function mandateAsked(): Scenario {
       const after = await step<{ granted: Mandate[] | null }>(ctx, 'GET', '/v1/money/mandates', undefined, 'Lens\'s record of the mandate after the pull')
       const counted = after.ok ? (after.value.granted ?? []).find((x) => x.id === m.id)?.pulled_this_month_minor : undefined
       if (counted !== PULL_MINOR) return fail(`the mandate counts ${counted} pulled this month, not ${PULL_MINOR}`)
-      return { pass: true, detail: `the agent's ask was recorded requested and its pull refused; the unsigned approval was refused 403; Approve went up signed; the £5.00 pull moved the agent's account ${a1} → ${a2} and the payee's ${b1} → ${b2}` }
+      return { pass: true, detail: `the agent's ask was recorded requested and its pull refused; the unsigned approval was refused 403; it waited on Approvals in words and Approve there went up signed; the £5.00 pull moved the agent's account ${a1} → ${a2} and the payee's ${b1} → ${b2}` }
     },
   }
 }

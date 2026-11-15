@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
-// B40.9 — the approval link opens one card with each item and the total; unticking an item approves only the others, and
-// the passkey signs Lens's statement only when it names exactly the payments still ticked.
+// B40.9, B57.27 — the approval link opens Pocket's w-approve-req: one card with each payment's facts and the ticks' total;
+// unticking a payment approves only the others, and the passkey signs Lens's statement only when it names exactly the
+// payments still ticked. Decline cancels what waits.
 
 const BASE = [
   { position: 1, payee_id: 'payee_1', payee_name: 'Acme Ltd', currency: 'GBP', amount_minor: 12000, reference: 'INV-7', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking', rule: 'requires_approval_above' },
@@ -39,7 +40,14 @@ function mockBff(lie = false, ITEMS: Record<string, unknown>[] = BASE, extra: Re
     }
     if (url === '/api/money/payment-requests/preq_1/approve') {
       sent.push({ url, body: JSON.parse(String(init?.body)) as Record<string, unknown> })
-      request = { ...request, status: 'approved', items: ITEMS.map((it) => (it.position === 1 ? { ...it, pay_status: 'completed' } : it)) }
+      // As Lens does: each ticked payment is paid, and one left out is not.
+      const ticked = (sent[0].body as { positions: number[] }).positions
+      request = { ...request, status: 'approved', items: ITEMS.map((it) => (it.decision !== 'needs_approval' ? it : { ...it, pay_status: ticked.includes(it.position as number) ? 'completed' : 'not_approved' })) }
+      return json(request)
+    }
+    if (url === '/api/money/payment-requests/preq_1/cancel') {
+      sent.push({ url, body: {} })
+      request = { ...request, status: 'cancelled', items: ITEMS.map((it) => (it.decision === 'needs_approval' ? { ...it, pay_status: 'not_approved' } : it)) }
       return json(request)
     }
     return json({ error: 'not found' }, 404)
@@ -73,30 +81,65 @@ afterEach(() => {
 })
 
 describe('the approval screen', () => {
-  it('shows each item and the total, and approves only the items left ticked with one passkey', async () => {
-    const bff = mockBff()
+  // B57.27 — Pocket's w-approve-req: the page's line and Back, the prepared card headed by Lens's summary, each payment's
+  // facts, and How it is paid with its two ways on.
+  it('heads the card with Lens’s summary and says each payment’s facts in words', async () => {
+    mockBff(false, BASE, { summary: 'Pay Acme Ltd £120.00, Brightline Studio £45.50' })
     window.history.pushState({}, '', '/approve/preq_1')
     render(<App />)
 
     const card = await screen.findByTestId('approve-card')
+    expect(screen.getByText('A payment Chat or a connected assistant prepared. Nothing is paid until you approve it.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
+    expect(within(card).getByText('Pay Acme Ltd £120.00, Brightline Studio £45.50')).toBeInTheDocument()
+    await waitFor(() => expect(card.textContent).toContain('From Researcher’s account · asked by an assistant you connected · Oct 23,'))
     expect(card.textContent).not.toMatch(/test money/i)
-    await within(card).findByText(/From Researcher’s account · asked by an assistant you connected/)
-    expect(screen.getByTestId('approve-total').textContent).toBe('2 of 2 payments to approve, total £165.50')
-    const acme = await within(card).findByTestId('approve-item-1')
-    await within(acme).findByText('Known payee')
-    expect(acme.textContent).toContain('Verified')
-    expect(acme.textContent).toContain('£120.00')
-    expect(acme.textContent).toContain('Reference: INV-7')
-    expect(acme.textContent).toContain('Asks for approval: above the £100.00 the mandate pays without asking.')
-    expect(screen.getByTestId('approve-item-2').textContent).toContain('New payee')
-    expect(screen.getByTestId('approve-item-2').textContent).toContain('Not verified')
-    expect(screen.getByTestId('approve-item-3').textContent).toContain('Blocked: the agent\'s rules block this payee.')
-    expect(within(screen.getByTestId('approve-item-3')).queryByRole('checkbox')).toBeNull()
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Approve £45.50 to Brightline Studio' }))
+    const acme = await within(card).findByTestId('approve-item-1')
+    const facts = (el: HTMLElement) => Object.fromEntries([...el.querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]))
+    await within(acme).findByText('Known payee')
+    expect(facts(acme)).toEqual({
+      To: 'Acme Ltd · Known payee · Verified',
+      Amount: '£120.00',
+      Reference: 'INV-7',
+      'Why it asks': 'Above the £100.00 the mandate pays without asking',
+    })
+    // Saved but never paid, and its name not yet confirmed.
+    expect(facts(screen.getByTestId('approve-item-2')).To).toBe('Brightline Studio · Known payee · Not verified · First payment')
+    expect(screen.getByTestId('approve-item-3').textContent).toContain("Blocked: the agent's rules block this payee.")
+    expect(within(screen.getByTestId('approve-item-3')).queryByRole('button', { name: /ticked$/ })).toBeNull()
+
+    const how = screen.getByRole('region', { name: 'How it is paid' })
+    expect(how.textContent).toContain('One passkey approves the payments you tick, and each is paid once, from the account it names. A payment inside a permission you signed is paid without asking.')
+    expect(within(how).getByRole('link', { name: 'Payments out' })).toHaveAttribute('href', '/money/pay')
+    expect(within(how).getByRole('link', { name: 'Connect your AI' })).toHaveAttribute('href', '/settings/connect')
+  })
+
+  it('never shows a summary Lens wrote for machines: it says the payment instead', async () => {
+    mockBff(false, [BASE[0]], { summary: '1 item(s), GBP 120.00: 1 need approval, 0 auto, 0 blocked' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+    const card = await screen.findByTestId('approve-card')
+    expect(within(card).getByText('Pay Acme Ltd £120.00')).toBeInTheDocument()
+    expect(card.textContent).not.toContain('item(s)')
+  })
+
+  it('counts the ticks and approves only the payments left ticked with one passkey', async () => {
+    const bff = mockBff()
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+
+    await screen.findByTestId('approve-card')
+    expect(screen.getByTestId('approve-total').textContent).toBe('2 of 2 payments to approve, total £165.50')
+    expect(screen.getByRole('button', { name: 'Approve 2 payments with your passkey' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Pay Brightline Studio, ticked' }))
     expect(screen.getByTestId('approve-total').textContent).toBe('1 of 2 payments to approve, total £120.00')
-    fireEvent.click(screen.getByRole('button', { name: 'Approve 1 payment with a passkey' }))
-    await screen.findByText('Approved. Each payment you approved is paid once.')
+    fireEvent.click(screen.getByRole('button', { name: 'Pay Acme Ltd, ticked' }))
+    expect(screen.getByRole('button', { name: 'Approve 0 payments with your passkey' })).toBeDisabled()
+    expect(screen.getByText('Tick at least one payment.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Pay Acme Ltd, not ticked' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 1 payment with your passkey' }))
+    await screen.findByText('Approved with your passkey: £120.00 to Acme Ltd.')
 
     expect(bff.get).toHaveBeenCalledTimes(1)
     expect(bff.sent.map((x) => x.url)).toEqual(['/api/money/payment-requests/preq_1/approval', '/api/money/payment-requests/preq_1/approve'])
@@ -104,6 +147,34 @@ describe('the approval screen', () => {
     const signed = JSON.parse(String(bff.sent[1].body.statement)) as { items: { position: number }[] }
     expect(signed.items.map((it) => it.position)).toEqual([1])
     expect(bff.sent[1].body.assertion).toMatchObject({ credential_id: 'AQ', signature: 'BA' })
+    // Each payment's own status, in words, once decided.
+    expect(within(screen.getByTestId('approve-item-1')).getByText('Paid')).toBeInTheDocument()
+    expect(within(screen.getByTestId('approve-item-2')).getByText('Not paid: you left it out')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /ticked$/ })).toBeNull()
+  })
+
+  it('declines over the request’s cancel, and says nothing that waited will be paid', async () => {
+    const bff = mockBff()
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Decline' }))
+    await screen.findByText('Declined. Nothing that waited for you will be paid.')
+    expect(bff.sent.map((x) => x.url)).toEqual(['/api/money/payment-requests/preq_1/cancel'])
+    expect(bff.get).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull()
+  })
+
+  it('opened again once approved, says what was approved and each payment’s status, and asks nothing', async () => {
+    mockBff(false, [{ ...BASE[0], payment_id: 'mpay_1', pay_status: 'sent' }, { ...BASE[1], pay_status: 'not_approved' }], { status: 'approved' })
+    window.history.pushState({}, '', '/approve/preq_1')
+    render(<App />)
+
+    expect(await screen.findByText('Approved with your passkey: £120.00 to Acme Ltd.')).toBeInTheDocument()
+    expect(within(screen.getByTestId('approve-item-1')).getByText('Sent')).toBeInTheDocument()
+    expect(within(screen.getByTestId('approve-item-2')).getByText('Not paid: you left it out')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /ticked$/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Approve|^Decline/ })).toBeNull()
   })
 
   it('signs nothing when the statement names payments other than those ticked', async () => {
@@ -111,8 +182,8 @@ describe('the approval screen', () => {
     window.history.pushState({}, '', '/approve/preq_1')
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Approve £45.50 to Brightline Studio' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Approve 1 payment with a passkey' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Pay Brightline Studio, ticked' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve 1 payment with your passkey' }))
     await screen.findByText('What you were asked to sign is not what is shown here, so nothing was signed. Reload the page.')
     expect(bff.get).not.toHaveBeenCalled()
     expect(bff.sent.map((x) => x.url)).toEqual(['/api/money/payment-requests/preq_1/approval'])
@@ -132,15 +203,17 @@ describe('the approval screen', () => {
     const acme = await screen.findByTestId('approve-item-1')
     await within(acme).findByText('Possible duplicate')
     expect(screen.getByTestId('approve-flag-1-duplicate').textContent).toBe('Invoice INV-7 was paid to Acme Ltd already, £120.00 on 2026-10-02.')
+    // Lens's flags say a first payment itself: Acme Ltd was paid before, so it is not said.
+    expect(acme.textContent).not.toContain('First payment')
     const bright = screen.getByTestId('approve-item-2')
     expect(within(bright).getByText('Bank details changed')).toBeTruthy()
     expect(within(bright).getByText('First payment')).toBeTruthy()
 
-    const button = screen.getByRole('button', { name: 'Approve 2 payments with a passkey' })
+    const button = screen.getByRole('button', { name: 'Approve 2 payments with your passkey' })
     expect((button as HTMLButtonElement).disabled).toBe(true)
     fireEvent.change(screen.getByRole('textbox', { name: /Say why you are paying it/ }), { target: { value: '  The supplier re-sent a corrected invoice.  ' } })
     fireEvent.click(button)
-    await screen.findByText('Approved. Each payment you approved is paid once.')
+    await screen.findByText('Approved with your passkey: £120.00 to Acme Ltd and £45.50 to Brightline Studio.')
 
     expect(bff.sent[0].body).toEqual({ positions: [1, 2], reason: 'The supplier re-sent a corrected invoice.' })
     expect(JSON.parse(String(bff.sent[1].body.statement))).toMatchObject({ reason: 'The supplier re-sent a corrected invoice.' })
@@ -259,7 +332,7 @@ describe('the approval screen when only the phone holds a key (B55.2)', () => {
     expect(await screen.findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
     const card = screen.getByTestId('approve-card')
     expect(within(card).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
-    expect(within(card).queryByRole('checkbox')).toBeNull()
+    expect(within(card).queryByRole('button', { name: /ticked$/ })).toBeNull()
     expect(bff.get).not.toHaveBeenCalled()
     expect(posts).toEqual([])
   })

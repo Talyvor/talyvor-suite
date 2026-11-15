@@ -9,7 +9,7 @@ import { Lxc } from './money'
 // catalog (/api/models), the browser's time zones and a clock. A name the rules already hold that the
 // catalog does not list is kept, so saving the other rules never drops it.
 
-const selectClass = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
+const selectClass = `h-8 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 
 export const MODELS_KEY = ['chat-models']
 

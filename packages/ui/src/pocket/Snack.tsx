@@ -11,10 +11,12 @@ export interface SnackProps {
 }
 
 // pocket.css .snack: ink with the page's colour on it, a tick, the title and its line, at the foot of the view.
+// Both are Pocket wherever they open, as the Layer is: the page under them may still be drawn in today's design.
 export function Snack({ title, line, label, className }: SnackProps) {
   return (
     <div
       role="status"
+      data-design="pocket"
       className={cn(
         'fixed inset-x-4 bottom-5.5 z-50 flex items-center gap-3 rounded-inset bg-primary py-3 pl-4 pr-3.5 text-body text-on-primary shadow-pocket-lg',
         'wide:inset-x-auto wide:left-1/2 wide:max-w-3xl wide:-translate-x-1/2',
@@ -38,6 +40,7 @@ export function Toast({ children, className }: { children: React.ReactNode; clas
   return (
     <div
       role="status"
+      data-design="pocket"
       className={cn(
         'fixed bottom-6 left-1/2 z-50 max-w-sm -translate-x-1/2 rounded-control bg-primary px-4 py-2.5 text-body font-semibold text-on-primary shadow-pocket-lg',
         className,

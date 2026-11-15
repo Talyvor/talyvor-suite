@@ -1,0 +1,98 @@
+[
+ {
+  "route": "/approvals",
+  "screen": "w-approvals",
+  "answers": {
+   "/api/agents/approvals": {
+    "approvals": [
+     {
+      "id": "apr_acme",
+      "agent_id": "agt_research",
+      "amount_ulxc": 3400000000,
+      "model": "",
+      "status": "approved",
+      "created_at": "2026-10-22T08:17:00Z",
+      "decided_at": "2026-10-22T08:31:00Z",
+      "expires_at": "2026-10-23T08:17:00Z",
+      "payee": {
+       "kind": "outside",
+       "id": "payee_acme",
+       "name": "Acme Hosting"
+      },
+      "memo": "October hosting invoice"
+     },
+     {
+      "id": "apr_lead",
+      "agent_id": "agt_sales",
+      "amount_ulxc": 900000000,
+      "model": "",
+      "status": "denied",
+      "created_at": "2026-10-22T07:41:00Z",
+      "decided_at": "2026-10-22T08:31:00Z",
+      "expires_at": "2026-10-23T07:41:00Z",
+      "payee": {
+       "kind": "listing",
+       "id": "lst_lead_finder",
+       "name": "Lead finder"
+      },
+      "memo": "One use of Lead finder (version 3), $90.00 (900 LXC) on your monthly marketplace bill"
+     },
+     {
+      "id": "apr_old1",
+      "agent_id": "agt_sales",
+      "amount_ulxc": 900000000,
+      "model": "",
+      "status": "denied",
+      "created_at": "2026-10-14T07:00:00Z",
+      "decided_at": "2026-10-14T08:00:00Z",
+      "payee": {
+       "kind": "listing",
+       "id": "lst_lead_finder",
+       "name": "Lead finder"
+      }
+     },
+     {
+      "id": "apr_old2",
+      "agent_id": "agt_research",
+      "amount_ulxc": 3100000000,
+      "model": "",
+      "status": "used",
+      "created_at": "2026-09-22T07:00:00Z",
+      "decided_at": "2026-09-22T08:00:00Z",
+      "payee": {
+       "kind": "company",
+       "id": "ws_acme",
+       "name": "Acme Hosting"
+      }
+     }
+    ]
+   },
+   "/api/money/payment-requests": {
+    "requests": []
+   },
+   "/api/money/mandates": {
+    "granted": [
+     {
+      "id": "mdt_kite",
+      "agent_id": "agt_research",
+      "account_id": "macc_research",
+      "currency": "GBP",
+      "payee_workspace_id": "ws_kite",
+      "payee_name": "Kite Data",
+      "max_per_pull_minor": 500,
+      "max_per_month_minor": 2000,
+      "pulled_this_month_minor": 0,
+      "expires_at": "2027-10-22T23:59:59Z",
+      "status": "requested",
+      "created_at": "2026-10-22T08:05:00Z"
+     }
+    ],
+    "received": []
+   }
+  },
+  "state": {
+   "A": "a",
+   "L": "d"
+  }
+ }
+]

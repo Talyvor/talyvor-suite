@@ -8,9 +8,8 @@ export interface SwitchProps extends React.ComponentPropsWithoutRef<typeof Switc
   disabledReason?: string
 }
 
-// pocket.css .toggle: 44 by 26, the control grey off and ink on. The thumb is the page off and on-primary on: white
-// on both in the light theme, as the reference; dark on both in the dark theme, where the reference keeps the off thumb
-// white, because the colours are theme tokens only and no token is white in both themes. Radix supplies role="switch", aria-checked and Space.
+// pocket.css .toggle: 44 by 26, the control grey off and ink on. The thumb is white off in both themes (the knob colour)
+// and on-primary on: white in the light theme, ink in the dark, as .pk-dark .toggle.on::after (B57.58). Radix supplies role="switch", aria-checked and Space.
 export const Switch = forwardRef<React.ElementRef<typeof SwitchPrimitive.Root>, SwitchProps>(function Switch(
   { disabledReason, disabled, className, ...props },
   ref,
@@ -31,7 +30,7 @@ export const Switch = forwardRef<React.ElementRef<typeof SwitchPrimitive.Root>, 
     >
       <SwitchPrimitive.Thumb
         className={cn(
-          'pointer-events-none block h-5 w-5 translate-x-0.75 rounded-pill bg-page',
+          'pointer-events-none block h-5 w-5 translate-x-0.75 rounded-pill bg-knob',
           'transition-all duration-200 data-[state=checked]:translate-x-5.25 data-[state=checked]:bg-on-primary',
         )}
       />

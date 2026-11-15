@@ -694,6 +694,18 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor: "authorizeResume := func(w http.ResponseWriter, req *http.Request, agentID string) bool {",
     subject: "lensAgentResumeBody",
   },
+  // B59.12 — changing the workspace's kind of money, signed over the challenge for that kind (Lens B59.46); the
+  // challenge (POST …/account/money-kind/challenge) is the same body without the assertion.
+  {
+    route: "PUT /v1/workspaces/{wsID}/account/money-kind",
+    file: "apps/bff/workspace_account.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleWorkspaceMoneyKind(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/workspace_money_kind_handler.go",
+    upstreamAnchor: 'r.Put("/v1/workspaces/{wsID}/account/money-kind", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensWorkspaceMoneyKindBody",
+  },
   {
     route: "POST /v1/workspaces/{wsID}/agents/push/subscriptions",
     file: "apps/bff/agent_bank.go",
@@ -1263,6 +1275,74 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/payments", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensMoneyPaymentBody",
   },
+  // B59.19 — Instant transfer on the web: the quote, then the send from an agent's account (Lens B59.14, B59.15).
+  {
+    route: "POST /v1/workspaces/{wsID}/money/instant-transfers/quote",
+    file: "apps/bff/instant_transfer.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleInstantTransferQuote(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/instant_transfer_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/money/instant-transfers/quote", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensInstantQuoteBody",
+  },
+  {
+    route: "POST /v1/workspaces/{wsID}/agents/{agentID}/money/instant-transfers",
+    file: "apps/bff/instant_transfer.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleInstantTransferSend(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/instant_transfer_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/money/instant-transfers", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensInstantSendBody",
+  },
+  // B59.52 — Wallets' top up, withdraw and convert, for the web and the phone (Lens B17.255 and B59.51).
+  {
+    route: "POST /v1/money/accounts/{id}/test-money",
+    file: "apps/bff/money_wallets.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyAccountTopUp(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/accounts/{id}/test-money", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensTestMoneyBody",
+  },
+  {
+    route: "POST /v1/money/accounts/{id}/withdraw",
+    file: "apps/bff/money_wallets.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyAccountWithdraw(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_wallets_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/accounts/{id}/withdraw", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensWithdrawBody",
+  },
+  {
+    route: "POST /v1/money/convert/quote",
+    file: "apps/bff/money_wallets.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyConvertQuote(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_wallets_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/convert/quote", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSideConvertQuoteBody",
+  },
+  {
+    route: "POST /v1/money/convert",
+    file: "apps/bff/money_wallets.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyConvert(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_wallets_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/convert", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensSideConvertBody",
+  },
   {
     route: "POST /v1/money/mandates",
     file: "apps/bff/money_pay.go",
@@ -1443,6 +1523,29 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor:
       'r.Post("/v1/money/devices/{id}/push-token", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensDevicePushTokenBody",
+  },
+  // B55.28 — where a workspace is paid, and a room's payout by its terms (Lens B46.11).
+  {
+    route: "PUT /v1/money/payout-details",
+    file: "apps/bff/money_earnings.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPayoutDetails(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_earnings_handler.go",
+    upstreamAnchor:
+      'r.Put("/v1/money/payout-details", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPayoutDetailsBody",
+  },
+  {
+    route: "POST /v1/rooms/{roomID}/payouts",
+    file: "apps/bff/money_earnings.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleRoomPayouts(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_earnings_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/rooms/{roomID}/payouts", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensRoomPayoutBody",
   },
 ];
 

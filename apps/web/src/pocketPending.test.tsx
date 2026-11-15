@@ -49,9 +49,9 @@ describe('pocketPending.ts', () => {
   })
 
   it('App marks every page with the design it is held to', async () => {
-    // B57.63 took /privacy out of the list, so it is Pocket's; /marketing is still today's.
+    // B57.63 took /privacy out of the list and B57.60 /marketing, so both are Pocket's.
     for (const [path, design] of [
-      ['/marketing', 'today'],
+      ['/marketing', 'pocket'],
       ['/privacy', 'pocket'],
     ]) {
       window.history.pushState({}, '', path)

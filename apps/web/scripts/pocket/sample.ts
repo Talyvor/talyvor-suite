@@ -33,6 +33,14 @@ const RULES = (r: { above: number; perRequest: number; daily: number; monthly: n
   timezone: r.hours ? SAMPLE_TIME_ZONE : '',
 })
 
+const NORTHWIND_REQUEST = {
+  id: 'preq_northwind', status: 'pending_approval', summary: 'Pay Northwind Data $180.00', client: 'chat', totals: { USD: 18_000 }, created_at: '2026-10-22T09:31:00Z',
+  items: [
+    { position: 1, payee_id: 'payee_northwind', payee_name: 'Northwind Data', currency: 'USD', amount_minor: 18_000, reference: 'Invoice 1042', decision: 'needs_approval',
+      reason: 'no permission you signed covers it', flags: [{ code: 'first_payment', detail: 'the first payment to Northwind Data' }] },
+  ],
+}
+
 const SAMPLE: Record<string, unknown> = {
   '/auth/me': {
     mode: 'oidc',
@@ -44,7 +52,29 @@ const SAMPLE: Record<string, unknown> = {
     signup_open: true,
   },
   '/api/workspace/name': { id: 'ws_nicks_team', name: 'Nick’s team' },
+  // B57.44 — Members: Nick alone, the owner, on Free's one seat; the plan gates as Lens's internal/plans sets them.
+  '/api/members': [{ id: 'mem_nick', name: 'Nick', email: 'nick@example.com', role: 'owner', avatar_url: '' }],
+  '/api/pricing': {
+    ...(bodyFor('/api/pricing') as object),
+    plan_gates: {
+      order: ['free', 'team', 'business', 'enterprise'],
+      plans: {
+        free: { agents: 3, seats: 1, own_provider_keys: 'none', live_money: false, slack_teams_approvals: false, sso: false, audit_export: false, edge: false },
+        team: { agents: 25, seats: 5, own_provider_keys: 'add_on', live_money: true, slack_teams_approvals: true, sso: false, audit_export: false, edge: false },
+        business: { agents: -1, seats: 25, own_provider_keys: 'included', live_money: true, slack_teams_approvals: true, sso: true, audit_export: true, edge: false },
+        enterprise: { agents: -1, seats: -1, own_provider_keys: 'included', live_money: true, slack_teams_approvals: true, sso: true, audit_export: true, edge: true },
+      },
+    },
+  },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B57.139 — what was sent from Help and complaints and Your data, so their lists draw rows rather than the empty state.
+  '/api/workspace/requests': {
+    requests: [
+      { id: 3, kind: 'complaint', state: 'in_progress', reference: 'C-7KQ2-M4XD', message: 'A card payment was taken twice.', answer: '', filed_at: '2026-11-11T09:12:00Z', updated_at: '2026-11-11T09:12:00Z' },
+      { id: 2, kind: 'data_export', state: 'done', reference: '', message: '', answer: 'Your copy is ready.', filed_at: '2026-11-09T14:30:00Z', updated_at: '2026-11-10T10:05:00Z' },
+      { id: 1, kind: 'support', state: 'done', reference: '', message: 'How do I add an agent?', answer: 'From Agents, press New agent.', filed_at: '2026-11-08T16:40:00Z', updated_at: '2026-11-09T08:15:00Z' },
+    ],
+  },
   // B55.38 — Lens's peg, so the shots draw each LXC figure with its dollars first.
   '/api/lxc/topup-options': { allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 },
   '/api/agents': {
@@ -54,17 +84,33 @@ const SAMPLE: Record<string, unknown> = {
     spent_ulxc: lxc(28_000),
     agents: AGENTS,
   },
+  // B57.15 — the workspace's keys, as the sheet reads them: a passkey on this browser and the phone's key, so it signs here.
+  '/api/agents/passkeys': { passkeys: [{ credential_id: 'Y3JlZF9tYWM', name: 'This Mac', created_at: '2026-10-03T08:00:00Z' }] },
+  '/api/money/devices': { devices: [{ id: 'dk_iphone', name: 'iPhone, Talyvor app', created_at: '2026-10-04T09:00:00Z' }] },
+  // B57.43 — every key by name, as w-security lists them: two passkeys and the phone's key.
+  '/api/agents/keys': {
+    keys: [
+      { kind: 'passkey', id: 'Y3JlZF9pcGhvbmU', name: 'iPhone', platform: '', created_at: '2026-10-03T08:00:00Z', last_used_at: '2026-10-22T08:40:00Z' },
+      { kind: 'passkey', id: 'Y3JlZF9tYWM', name: 'This Mac', platform: '', created_at: '2026-10-03T08:00:00Z', last_used_at: '2026-10-20T09:00:00Z' },
+      { kind: 'phone', id: 'dk_iphone', name: 'iPhone, Talyvor app', platform: 'ios', created_at: '2026-10-04T09:00:00Z', last_used_at: '2026-10-22T08:45:00Z' },
+    ],
+  },
   // The two requests waiting at 10:30.
   '/api/agents/approvals': {
     approvals: [
       {
         id: 'apr_acme', agent_id: 'agt_research', amount_ulxc: lxc(3_400), model: '', status: 'pending', created_at: '2026-10-22T08:17:00Z', expires_at: '2026-10-23T08:17:00Z',
         payee: { kind: 'outside', id: 'payee_acme', name: 'Acme Hosting' }, memo: 'October hosting invoice',
+        // B57.15 — what the sheet says, as w-home+sheet-A: Lens B57.11's paid_from, the amount it asks above and the budget left.
+        paid_from: { kind: 'account', account_id: 'acc_research_usd', name: 'Research’s US dollar account', currency: 'USD', amount_minor: 34_000, balance_minor: 40_000 },
+        asks_above_ulxc: lxc(2_500), budget_left_after_ulxc: lxc(4_200),
       },
       {
         id: 'apr_lead', agent_id: 'agt_sales', amount_ulxc: lxc(900), model: '', status: 'pending', created_at: '2026-10-22T07:41:00Z', expires_at: '2026-10-23T07:41:00Z',
         payee: { kind: 'listing', id: 'lst_lead_finder', name: 'Lead finder' },
         memo: 'One use of Lead finder (version 3), $90.00 (900 LXC) on your monthly marketplace bill',
+        paid_from: { kind: 'marketplace_bill', account_id: 'ws_1', name: 'Your monthly marketplace bill', currency: 'USD', amount_minor: 9_000, balance_minor: null },
+        asks_above_ulxc: lxc(500), budget_left_after_ulxc: lxc(3_100),
       },
     ],
   },
@@ -99,6 +145,32 @@ const SAMPLE: Record<string, unknown> = {
         runs_out_at: '2026-11-14T17:40:54Z', runs_out_on: '2026-11-14', timezone: SAMPLE_TIME_ZONE },
     ],
   },
+  // B57.90 — the two alerts w-agents shows: Research and Sales each past half their month's limit.
+  '/api/money/budgets/alerts': {
+    alerts: [
+      { id: 'sal_research', kind: 'agent_limit', subject: 'agt_research', agent_id: 'agt_research', period: 'monthly', period_start: '2026-10-01T00:00:00Z',
+        percent: 50, spent_minor: lxc(10_120), limit_minor: lxc(20_000), currency: 'LXC', created_at: '2026-10-16T10:40:00Z' },
+      { id: 'sal_sales', kind: 'agent_limit', subject: 'agt_sales', agent_id: 'agt_sales', period: 'monthly', period_start: '2026-10-01T00:00:00Z',
+        percent: 50, spent_minor: lxc(7_610), limit_minor: lxc(15_000), currency: 'LXC', created_at: '2026-10-13T14:22:00Z' },
+    ],
+  },
+  // B57.115 — Where alerts go below them: alerts pushed to the owner's phones and posted to a Slack channel, and what was sent.
+  '/api/money/alerts/channels': {
+    channels: [
+      { id: 'ach_push', kind: 'push', created_at: '2026-09-14T09:10:00Z' },
+      { id: 'ach_slack', kind: 'slack', url: 'https://hooks.slack.com/…t7Qa', created_at: '2026-10-02T11:00:00Z' },
+    ],
+  },
+  '/api/money/alerts/deliveries': {
+    deliveries: [
+      { id: 'adl_research_push', channel_id: 'ach_push', channel_kind: 'push', alert_kind: 'limit', alert_id: 'sal_research', title: 'Agent limit',
+        body: 'Research has used 50% of its monthly limit', status: 'sent', attempts: 1, created_at: '2026-10-16T10:40:00Z', sent_at: '2026-10-16T10:40:20Z' },
+      { id: 'adl_research_slack', channel_id: 'ach_slack', channel_kind: 'slack', alert_kind: 'limit', alert_id: 'sal_research', title: 'Agent limit',
+        body: 'Research has used 50% of its monthly limit', status: 'failed', attempts: 5, last_error: 'Slack answered 404', created_at: '2026-10-16T10:40:00Z' },
+      { id: 'adl_sales_push', channel_id: 'ach_push', channel_kind: 'push', alert_kind: 'limit', alert_id: 'sal_sales', title: 'Agent limit',
+        body: 'Sales has used 50% of its monthly limit', status: 'sent', attempts: 1, created_at: '2026-10-13T14:22:00Z', sent_at: '2026-10-13T14:22:15Z' },
+    ],
+  },
   '/api/agents/agt_research/rules': RULES({ above: 2_500, perRequest: 10_000, daily: 5_000, monthly: 20_000, models: ['claude-sonnet-5', 'claude-haiku-4-5'], hours: ['08:00', '20:00'] }),
   '/api/agents/agt_sales/rules': RULES({ above: 500, perRequest: 1_000, daily: 2_000, monthly: 15_000, models: ['claude-haiku-4-5'] }),
   '/api/agents/agt_ops/rules': RULES({ above: 1_000, perRequest: 0, daily: 0, monthly: 10_000, models: ['claude-haiku-4-5'] }),
@@ -108,8 +180,14 @@ const SAMPLE: Record<string, unknown> = {
       { id: 'macc_company_usd', agent_id: '', currency: 'USD', purpose: 'company', status: 'open', name: 'US dollar account', balance_minor: 320_000, test_minor: 320_000, live_minor: 0 },
       { id: 'macc_research_usd', agent_id: 'agt_research', currency: 'USD', purpose: 'agent', status: 'open', name: 'US dollar account', balance_minor: 40_000, test_minor: 40_000, live_minor: 0 },
       { id: 'macc_room_usd', agent_id: 'agt_room', currency: 'USD', purpose: 'agent', status: 'open', name: 'US dollar account', balance_minor: 25_000, test_minor: 25_000, live_minor: 0 },
+      // B57.18 — the company's USDC account, so a Hybrid Home draws both sides.
+      { id: 'macc_company_usdc', agent_id: '', currency: 'USDC', purpose: 'company', status: 'open', name: 'USDC account', balance_minor: 1_500_000_000, test_minor: 1_500_000_000, live_minor: 0 },
     ],
   },
+  // B57.18 — every agent's wallet, opened with the agent (Lens B46.4), as Home reads each one's stablecoin balance.
+  '/api/agents/agt_research/wallet': { account_id: 'macc_research', agent_id: 'agt_research', asset: 'USDC', partner: 'sandbox', balance_minor: 300_000_000, receive: { asset: 'USDC' }, mode: 'TEST' },
+  '/api/agents/agt_sales/wallet': { account_id: 'macc_sales', agent_id: 'agt_sales', asset: 'USDC', partner: 'sandbox', balance_minor: 80_000_000, receive: { asset: 'USDC' }, mode: 'TEST' },
+  '/api/agents/agt_ops/wallet': { account_id: 'macc_ops', agent_id: 'agt_ops', asset: 'USDC', partner: 'sandbox', balance_minor: 0, receive: { asset: 'USDC' }, mode: 'TEST' },
   // B56.15 — each account's statement this month, as README's "Statements for currency accounts" tells it.
   '/api/money/accounts/macc_company_usd/statement': {
     account_id: 'macc_company_usd', currency: 'USD', from: '2026-10-01T00:00:00Z', to: '2026-10-21T00:00:00Z',
@@ -145,6 +223,26 @@ const SAMPLE: Record<string, unknown> = {
   ...agentStatement('agt_ops', { opening: 0, in: 10_000, out: 4_600 }, [
     modelDay('oh1', '2026-10-20T16:05:00Z', 'claude-haiku-4-5', 140, -40, -2.2),
   ], [modelDay('oh0', '2026-10-12T11:00:00Z', 'claude-haiku-4-5', 4_200, -4_320, -237.8), funded('of0', '2026-10-09T09:10:00Z', 10_000)]),
+  // B57.27 — README's "Prepared by Chat" (10:31): $180.00 to Northwind Data, invoice 1042, from the company's dollar account;
+  // no permission you signed covers it. Declined, Lens cancels it and says the payment was left out.
+  '/api/money/payment-requests/preq_northwind': NORTHWIND_REQUEST,
+  // B57.162 — the same payment once approved and paid, as w-approvals' Decided lists it (pr=1, nw=1).
+  '/api/money/payment-requests?status=decided': {
+    requests: [
+      {
+        ...NORTHWIND_REQUEST,
+        status: 'approved',
+        decision: 'Approved and paid',
+        decided_at: '2026-10-22T09:31:00Z',
+        items: NORTHWIND_REQUEST.items.map((it) => ({ ...it, payment_id: 'mpay_northwind', pay_status: 'completed' })),
+      },
+    ],
+  },
+  '/api/money/payment-requests/preq_northwind/cancel': {
+    ...NORTHWIND_REQUEST,
+    status: 'cancelled',
+    items: NORTHWIND_REQUEST.items.map((it) => ({ ...it, pay_status: 'not_approved' })),
+  },
   // B57.31 — README's payees: both by routing and account number, Kite last paid $450.00 on 1 Oct, Northwind not paid yet.
   '/api/money/payees': {
     payees: [
@@ -228,6 +326,92 @@ function agentStatement(agent: string, band: { opening: number; in: number; out:
   }
 }
 
+/**
+ * B57.20 — each agent's page in one read (Lens B57.12), as w-agent-research, w-agent-sales and w-agent-ops draw it: its
+ * figures from the sample above, what waits for it, its newest lines, and its card. Research pays only Acme Hosting and
+ * Northwind Data and always allows Northwind up to $400.00 a month; its last card purchase was declined at Compute shop.
+ */
+SAMPLE['/api/agents/agt_research/rules'] = {
+  ...(SAMPLE['/api/agents/agt_research/rules'] as object),
+  allowed_payees: ['payee_acme', 'payee_northwind'],
+  payee_allowances: { payee_northwind: { amount_ulxc: lxc(4_000), per: 'month' } },
+}
+/**
+ * B57.23 — Research's rules history, as w-rules draws it: version 1 the first rules (14 Sep), version 2 added Northwind
+ * Data, always allowed up to $400.00 a month (9 Oct), version 3 the daily limit from $400.00 to $500.00 (20 Oct), in force.
+ * Rolling back to version 2 tightens them (w-rules+rollback-2), so Lens answers no challenge for it.
+ */
+{
+  const v3 = SAMPLE['/api/agents/agt_research/rules'] as Record<string, unknown>
+  const v2 = { ...v3, daily_limit_ulxc: lxc(4_000) }
+  const v1 = { ...v2, allowed_payees: ['payee_acme'], payee_allowances: {} }
+  SAMPLE['/api/agents/agt_research/rules/history'] = {
+    versions: [
+      { version: 3, rules: v3, changed_by: 'jwt:user:usr_nick', change: 'set', created_at: '2026-10-20T09:00:00Z' },
+      { version: 2, rules: v2, changed_by: 'jwt:user:usr_nick', change: 'set', created_at: '2026-10-09T09:00:00Z' },
+      { version: 1, rules: v1, changed_by: 'jwt:user:usr_nick', change: 'set', created_at: '2026-09-14T09:00:00Z' },
+    ],
+  }
+  SAMPLE['/api/agents/agt_sales/rules/history'] = {
+    versions: [{ version: 1, rules: SAMPLE['/api/agents/agt_sales/rules'], changed_by: 'jwt:user:usr_nick', change: 'set', created_at: '2026-10-05T09:00:00Z' }],
+  }
+  SAMPLE['/api/agents/agt_research/rules-challenge'] = { looser: false, changes: ['Daily limit: was $500.00 (5,000 LXC), now $400.00 (4,000 LXC)'], allow_credentials: [] }
+  SAMPLE['/api/agents/agt_research/rules/simulate'] = { verdict: 'allowed', reason: '', amount_ulxc: lxc(30), at: SAMPLE_NOW, balance_ulxc: lxc(16_500) }
+}
+function agentSummary(
+  id: string,
+  { safe, waiting, spent, forecast, limit, lines, declined, accounts }: { safe: number; waiting: number; spent: number; forecast: number; limit: number; lines: object[][]; declined: object | null; accounts: object[] },
+) {
+  const agent = AGENTS.find((a) => a.id === id)!
+  const approvals = ((SAMPLE['/api/agents/approvals'] as { approvals: { agent_id: string }[] }).approvals ?? []).filter((a) => a.agent_id === id)
+  return {
+    as_of: SAMPLE_NOW, agent, made_at: agent.created_at, owner_user_id: agent.owner_user_id,
+    safe_to_spend: [{ currency: 'LXC', balance: agent.balance_ulxc, scheduled: 0, bills_due: 0, pending_approvals: lxc(waiting), safe_to_spend: lxc(safe) }],
+    month: { start: '2026-10-01T00:00:00Z', end: '2026-11-01T00:00:00Z', spent_ulxc: lxc(spent), forecast_ulxc: lxc(forecast), runs_out_at: null, runs_out_on: null, monthly_limit_ulxc: lxc(limit) },
+    approvals, statement: lines.flat(), statement_time_zone: SAMPLE_TIME_ZONE, rules: { version: 4, saved_at: '2026-10-01T09:00:00Z' },
+    card: { status: 'active', currency: 'gbp', last4: '4242', last_declined: declined }, currency_accounts: accounts,
+  }
+}
+Object.assign(SAMPLE, {
+  '/api/agents/agt_research/summary': agentSummary('agt_research', {
+    safe: 13_100, waiting: 3_400, spent: 12_400, forecast: 17_966, limit: 20_000,
+    lines: [modelDay('rs1', '2026-10-22T09:24:00Z', 'claude-sonnet-5', 312, -420, -23.1), modelDay('rh1', '2026-10-21T10:12:00Z', 'claude-haiku-4-5', 88, -20, -1.1)].flat().slice(0, 3).map((l) => [l]),
+    declined: { merchant_name: 'Compute shop', amount_minor: 2_400, currency: 'gbp', words: 'Declined: not one of its payees', reason: "economy: the agent's spending rules refuse this request: the agent may pay only the payees its rules name, and Compute shop is not one", at: '2026-10-21T15:00:00Z' },
+    accounts: [{ id: 'macc_research_usd', agent_id: 'agt_research', currency: 'USD', purpose: 'agent', status: 'open', name: 'US dollar account', balance_minor: 40_000, test_minor: 40_000, live_minor: 0 }],
+  }),
+  '/api/agents/agt_sales/summary': agentSummary('agt_sales', {
+    safe: 11_100, waiting: 900, spent: 11_000, forecast: 15_938, limit: 15_000,
+    lines: [modelDay('sh1', '2026-10-22T08:52:00Z', 'claude-haiku-4-5', 410, -120, -6.6)], declined: null, accounts: [],
+  }),
+  '/api/agents/agt_ops/summary': agentSummary('agt_ops', {
+    safe: 5_400, waiting: 0, spent: 4_600, forecast: 6_665, limit: 10_000,
+    lines: [modelDay('oh1', '2026-10-20T16:05:00Z', 'claude-haiku-4-5', 140, -40, -2.2)], declined: null, accounts: [],
+  }),
+})
+
+/**
+ * B57.111 — each agent's spend for the period (Lens B28.326), bucketed by day, model and destination: Research's calls
+ * on the days its statement shows, a hold that returned some unused, and a move to Sales.
+ */
+function analytics(agent: string, buckets: { day: string; model: string; destination: string; out: number; returned?: number; postings: number }[]) {
+  const rows = buckets.map((b) => ({
+    day: b.day, model: b.model, destination: b.destination, postings: b.postings,
+    out_ulxc: lxc(b.out), returned_ulxc: lxc(b.returned ?? 0), spent_ulxc: lxc(b.out - (b.returned ?? 0)),
+  }))
+  const sum = (k: 'out_ulxc' | 'returned_ulxc' | 'spent_ulxc') => rows.reduce((t, r) => t + r[k], 0)
+  return { agent_id: agent, time_zone: SAMPLE_TIME_ZONE, out_ulxc: sum('out_ulxc'), returned_ulxc: sum('returned_ulxc'), spent_ulxc: sum('spent_ulxc'), buckets: rows }
+}
+Object.assign(SAMPLE, {
+  '/api/agents/agt_research/analytics': analytics('agt_research', [
+    { day: '2026-10-22', model: 'claude-sonnet-5', destination: 'spend', out: 420, postings: 312 },
+    { day: '2026-10-21', model: 'claude-haiku-4-5', destination: 'spend', out: 20, postings: 88 },
+    { day: '2026-10-21', model: 'claude-sonnet-5', destination: 'held', out: 50, returned: 12, postings: 6 },
+    { day: '2026-10-20', model: '', destination: 'agent:agt_sales', out: 500, postings: 1 },
+  ]),
+  '/api/agents/agt_sales/analytics': analytics('agt_sales', [{ day: '2026-10-22', model: 'claude-haiku-4-5', destination: 'spend', out: 120, postings: 410 }]),
+  '/api/agents/agt_ops/analytics': analytics('agt_ops', [{ day: '2026-10-20', model: 'claude-haiku-4-5', destination: 'spend', out: 40, postings: 140 }]),
+})
+
 /** B57.8 — Pause every agent pauses the sample's agents until Start every agent again, so the shots draw the kill banner. */
 let allPaused = false
 
@@ -241,6 +425,7 @@ export function sampleBodyFor(url: string): unknown {
   const path = url.split('?')[0]
   if (path === '/api/agents/pause-all') return (allPaused = true), { all_paused: true }
   if (path === '/api/agents/resume-all') return (allPaused = false), { all_paused: false }
+  if (/^\/api\/agents\/[^/]+\/summary$/.test(path) && allPaused && path in SAMPLE) return { ...(SAMPLE[path] as object), all_paused_at: SAMPLE_NOW }
   if (path === '/api/agents' && allPaused) return { ...(SAMPLE[path] as object), all_paused_at: SAMPLE_NOW, all_paused_reason: 'paused from the top bar' }
   if (url in SAMPLE) return SAMPLE[url]
   if (path in SAMPLE) return SAMPLE[path]

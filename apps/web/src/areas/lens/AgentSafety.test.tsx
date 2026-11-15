@@ -45,7 +45,11 @@ function mockBff(passkey = false) {
     }
     if (url === '/api/agents/agt_1/pause') { researcherPaused = true; return json({ agent_id: 'agt_1', paused: true }) }
     if (url === '/api/agents/forecast')
-      return json({ at: '', month_start: '', month_end: '', spent_ulxc: 1_000_000, forecast_ulxc: 3_000_000, agents: [{ agent_id: 'agt_1', name: 'Researcher', spent_ulxc: 1_000_000, forecast_ulxc: 3_000_000 }] })
+      return json({
+        at: '', month_start: '', month_end: '', spent_ulxc: 1_000_000, forecast_ulxc: 3_000_000,
+        // B28.57 — Researcher, in Sydney, runs out at 17:00 UTC on 27 October: 28 October in its own zone (Lens B28.330).
+        agents: [{ agent_id: 'agt_1', name: 'Researcher', spent_ulxc: 1_000_000, forecast_ulxc: 3_000_000, runs_out_at: '2026-10-28T04:00:00+11:00', runs_out_on: '2026-10-28', timezone: 'Australia/Sydney' }],
+      })
     if (url === '/api/agents/alerts')
       return json({ alerts: [{ id: 'al_1', agent_id: 'agt_1', last_hour_ulxc: 600_000, usual_per_hour_ulxc: 100_000, paused: false, created_at: '2026-09-28T09:30:00Z' }], rule: 'the rule' })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
@@ -89,10 +93,14 @@ async function fleet() {
 describe('the Agent Bank stops every agent or one, and shows what they are spending', () => {
   it('pauses every agent with a reason, starts them again, pauses one, and shows the forecast and an alert', async () => {
     const posts = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     await waitFor(() => expect(screen.getByTestId('agents-forecast').textContent).toBe('3 LXC'))
+    // B28.57 — the day it runs out in its own time zone, not UTC's (moved here from Home by B57.18).
+    const runsOut = screen.getByTestId('runs-out-agt_1')
+    expect(runsOut).toHaveTextContent('runs out on 28 October 2026 (Australia/Sydney)')
+    expect(within(runsOut).getByText('28 October 2026')).toHaveAttribute('dateTime', '2026-10-28')
     expect(screen.getByText(/spent/, { selector: 'div' }).textContent).toContain('Researcher spent 0.6 LXC in an hour')
 
     fireEvent.change(await screen.findByLabelText('Why every agent is paused'), { target: { value: 'audit' } })
@@ -102,15 +110,17 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
     fireEvent.click((await fleet()).getByRole('button', { name: 'Start every agent again' }))
     await (await fleet()).findByRole('button', { name: 'Pause every agent' })
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
-    expect((await screen.findByTestId('agent-paused')).textContent).toBe('Researcher is paused: paused from Agent Wallets.')
-    expect(screen.getByText('Paused')).toBeTruthy()
+    // B57.16 — the agent card's switch pauses at once, with no dialog, and says so in its note and its snack.
+    fireEvent.click(await screen.findByRole('switch', { name: 'Pause Researcher' }))
+    expect(await screen.findByText('Paused. Resuming needs your passkey or your phone.')).toBeInTheDocument()
+    expect(screen.getByText('Researcher is paused')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).toBeNull()
 
     expect(posts.map((p) => [p.url, p.body])).toEqual([
       ['/api/agents/pause-all', { reason: 'audit' }],
       ['/api/agents/resume-all/challenge', {}],
       ['/api/agents/resume-all', {}],
-      ['/api/agents/agt_1/pause', { reason: 'paused from Agent Wallets' }],
+      ['/api/agents/agt_1/pause', { reason: 'paused from its card' }],
     ])
   })
 
@@ -119,21 +129,25 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
     const ASSERTION = { rawId: new Uint8Array([1]).buffer, response: { clientDataJSON: new Uint8Array([2]).buffer, authenticatorData: new Uint8Array([3]).buffer, signature: new Uint8Array([4]).buffer } }
     const get = vi.fn().mockRejectedValueOnce(new DOMException('The operation was cancelled.', 'NotAllowedError')).mockResolvedValue(ASSERTION)
     Object.defineProperty(navigator, 'credentials', { value: { get, create: vi.fn() }, configurable: true })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
-    await screen.findByTestId('agent-paused')
+    fireEvent.click(await screen.findByRole('switch', { name: 'Pause Researcher' }))
+    // B57.16 — switching on opens Resume, which signs over the agent's resume challenge.
+    fireEvent.click(await screen.findByRole('switch', { name: 'Resume Researcher' }))
     expect(get).not.toHaveBeenCalled()
+    const resume = await screen.findByRole('dialog', { name: 'Resume Researcher?' })
+    expect(resume).toHaveTextContent('Its requests and payments are served again, within its rules.')
 
-    // Face ID cancelled: nothing is sent and Researcher stays paused.
-    fireEvent.click(screen.getByRole('button', { name: 'Resume Researcher' }))
+    // Face ID cancelled: nothing is sent, Researcher stays paused, and the dialog says why in words.
+    fireEvent.click(within(resume).getByRole('button', { name: 'Resume with your passkey' }))
     await waitFor(() => expect(get).toHaveBeenCalledTimes(1))
-    expect(screen.getByTestId('agent-paused')).toBeTruthy()
+    expect(await within(resume).findByRole('alert')).toHaveTextContent('Researcher is still paused. The passkey was not signed.')
     expect(posts.some((p) => p.url === '/api/agents/agt_1/resume')).toBe(false)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Resume Researcher' }))
-    await screen.findByRole('button', { name: 'Pause Researcher' })
+    fireEvent.click(within(resume).getByRole('button', { name: 'Resume with your passkey' }))
+    await screen.findByRole('switch', { name: 'Pause Researcher' })
+    expect(screen.getByText('Researcher is running again')).toBeInTheDocument()
 
     fireEvent.click((await fleet()).getByRole('button', { name: 'Pause every agent' }))
     fireEvent.click(await (await fleet()).findByRole('button', { name: 'Start every agent again' }))
@@ -141,7 +155,7 @@ describe('the Agent Bank stops every agent or one, and shows what they are spend
 
     const assertion = { credential_id: 'AQ', client_data_json: 'Ag', authenticator_data: 'Aw', signature: 'BA' }
     expect(posts.map((p) => [p.url, p.body])).toEqual([
-      ['/api/agents/agt_1/pause', { reason: 'paused from Agent Wallets' }],
+      ['/api/agents/agt_1/pause', { reason: 'paused from its card' }],
       ['/api/agents/agt_1/resume-challenge', {}],
       ['/api/agents/agt_1/resume-challenge', {}],
       ['/api/agents/agt_1/resume', { assertion }],
@@ -157,12 +171,15 @@ describe('starting agents again when only the phone holds a key (B55.2)', () => 
   it('pauses from here, but sends no resume and says to start them on the phone', async () => {
     const posts = mockBff()
     onlyThePhoneKey()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Pause Researcher' }))
-    expect(await screen.findByText('Resume Researcher on your phone with Face ID.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Resume Researcher' })).toBeNull()
+    fireEvent.click(await screen.findByRole('switch', { name: 'Pause Researcher' }))
+    fireEvent.click(await screen.findByRole('switch', { name: 'Resume Researcher' }))
+    const resume = await screen.findByRole('dialog', { name: 'Resume Researcher?' })
+    expect(within(resume).getByText('Resume Researcher on your phone with Face ID.')).toBeInTheDocument()
+    expect(within(resume).queryByRole('button', { name: 'Resume with your passkey' })).toBeNull()
+    fireEvent.click(within(resume).getByRole('button', { name: 'Cancel' }))
 
     fireEvent.click((await fleet()).getByRole('button', { name: 'Pause every agent' }))
     expect(await screen.findByText('Start your agents again on your phone with Face ID.')).toBeInTheDocument()

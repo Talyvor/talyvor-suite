@@ -199,8 +199,8 @@ describe('talking to Talyvor in Chat (B40.12)', () => {
     // Nothing is paid until the passkey signs.
     expect(bff.approved).toHaveLength(0)
     const card = screen.getByTestId('approve-card')
-    fireEvent.click(within(card).getByRole('button', { name: 'Approve 1 payment with a passkey' }))
-    await within(card).findByText('Approved. Each payment you approved is paid once.')
+    fireEvent.click(within(card).getByRole('button', { name: 'Approve 1 payment with your passkey' }))
+    await within(card).findByText(/^Approved with your passkey: £120\.00 to /)
     expect(bff.approvals).toEqual([{ positions: [1] }])
     expect(navigator.credentials.get).toHaveBeenCalledTimes(1)
     expect(bff.approved).toHaveLength(1)
@@ -376,8 +376,8 @@ describe('Hey Taly (B45.27)', () => {
 
     expect(bff.approved).toHaveLength(0)
     const card = screen.getByTestId('approve-card')
-    fireEvent.click(within(card).getByRole('button', { name: 'Approve 1 payment with a passkey' }))
-    await within(card).findByText('Approved. Each payment you approved is paid once.')
+    fireEvent.click(within(card).getByRole('button', { name: 'Approve 1 payment with your passkey' }))
+    await within(card).findByText(/^Approved with your passkey: £120\.00 to /)
     expect(navigator.credentials.get).toHaveBeenCalledTimes(1)
     expect(bff.approved).toHaveLength(1)
   })

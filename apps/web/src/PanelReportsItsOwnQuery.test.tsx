@@ -114,7 +114,12 @@ function bodyFor(url: string): unknown {
     return { at: '2026-10-04T00:00:00Z', month_start: '2026-10-01T00:00:00Z', month_end: '2026-11-01T00:00:00Z', spent_ulxc: 0, forecast_ulxc: 0, agents: [] }
   if (url.includes('/api/agents/approvals')) return { approvals: [] }
   if (url.includes('/api/money/payment-requests')) return { requests: [] }
+  if (url.includes('/api/money/mandates')) return { granted: [], received: [] } // B55.40: the badge counts an agent's mandate request
   if (url.includes('/api/agents/briefing')) return { items: [], spent_yesterday: [], quiet: true, line: 'A quiet day: nothing was spent yesterday, and nothing is waiting for you.' }
+  // B57.18 — Home's balances, the Researcher's wallet and the plan.
+  if (url.includes('/api/money/accounts')) return { accounts: [] }
+  if (url.includes('/api/agents/agt_1/wallet')) return { account_id: 'macc_1', agent_id: 'agt_1', asset: 'USDC', partner: 'sandbox', balance_minor: 0, receive: { asset: 'USDC' }, mode: 'TEST' }
+  if (url.includes('/api/plan')) return { plan: 'free', agents: 3, agents_used: 1, seats: 1 }
   if (url.includes('/api/agents/agt_1/rules'))
     return { max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 0, approval_above_ulxc: 0, allowed_models: null, allowed_providers: null, active_from: '', active_until: '', timezone: '' }
   if (url.includes('/api/agents'))
@@ -165,23 +170,24 @@ function mockBff(refusals: Array<[string, number]> = []) {
  */
 const ADDRESS_ROUTES: Record<string, string[]> = {
   // B28.6 — `/` is the wallet home; Overview moved to /overview with the same reads. B28.22 — and the LXC peg, for dollars.
-  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/agents/passkeys', '/api/agents/safe-to-spend', '/api/lxc/topup-options', '/api/money/devices', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/overview': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/bonds', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/ledger': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/billing': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/billing/allowance', '/api/lxc/balance', '/api/lxc/topup-options', '/api/money/payment-requests', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/keys': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/connect/assistants', '/api/keys', '/api/money/access', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/setup': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/context', '/api/keys', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/spend': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/members': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/distill', '/api/money/payment-requests', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/agt_1/wallet', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/lxc/topup-options', '/api/money/accounts', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/overview': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/bonds', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/ledger': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/billing': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/billing/allowance', '/api/lxc/balance', '/api/lxc/topup-options', '/api/money/mandates', '/api/money/payment-requests', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/keys': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/connect/assistants', '/api/keys', '/api/money/access', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/setup': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/context', '/api/keys', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/spend': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/members': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  // B57.42 — Settings' cards read the plan and the members; Shared answers its counts; Documents you attach left for /features.
+  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/billing/subscription', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B8.1 made every gated address ask for /api/docs/spaces, for the sidebar's list of spaces. B10.6
   // replaced that list with the pages this browser pinned or opened, which needs no read — so only
   // Overview (its product status) and /docs itself still ask for it. B18.27 moved the pins to Docs,
   // so every address asks for /api/docs/pins again — one read, for the sidebar. B27.15 asks Docs
   // whether the person is a member first (/api/docs/membership), and reads pins only if so.
   // B4.2 added /api/track/projects — the issue list's Project filter.
-  '/track': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/payment-requests', '/api/track/issues', '/api/track/projects', '/api/track/workspaces', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/docs': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/track': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/track/issues', '/api/track/projects', '/api/track/workspaces', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/docs': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/docs/membership', '/api/docs/pins', '/api/docs/spaces', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
 }
 
 const FAILURE_WORDING = /Couldn[’']t (load|check)/i
@@ -270,7 +276,12 @@ describe('the swept set', () => {
     const pairs = Object.values(ADDRESS_ROUTES).reduce((n, r) => n + r.length, 0)
     // 97 → 108 at B59.10: the sidebar reads the account's type and kind on every address, for its chip.
     // 108 → 119 at B55.54: the shell reads whether a key recovery waits, on every address, to show it on every page.
-    expect(pairs).toBe(119)
+    // 119 → 120 at B57.16: `/` reads each agent's card, for the agent card's Card frozen chip.
+    // 120 → 122 at B57.42: /settings reads the plan, the members and the stored-answer counts, and no longer /api/distill.
+    // 122 → 133 at B55.40: and an agent's mandate requests, which its Approvals badge counts, on every address.
+    // 133 → 132 at B57.18: `/` drops the cards, passkeys, safe to spend and devices reads, and reads the balances, each
+    // agent's wallet and the plan.
+    expect(pairs).toBe(132)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {
@@ -361,7 +372,8 @@ describe('a 500 next to a 401 is still a 500', () => {
 
 // ─── the read that no session mechanism could see ───────────────────────────
 //
-// /settings' only read is areas/lens/Documents.tsx#readDistill. It threw
+// B57.42 — Documents you attach moved from /settings to /features, so these run there. Its read is
+// areas/lens/Documents.tsx#readDistill. It threw
 // `new Error(String(res.status))` while every other hand-rolled read in this app raises the
 // shared ApiError on purpose and says so in a comment (track/data.ts, docs/api.ts, keysApi,
 // topupApi, IssueList, DocsUpstreamCard, Sharing, Overview's probe). ALL THREE session
@@ -395,6 +407,8 @@ function mockDistill(readStatus: number | null, writeStatus: number | null) {
       if (refused !== null) return json({ error: 'refused' }, refused)
       return json({ distill_policy: 'always', converted: 0, vision_ocr: 0, days: 30 })
     }
+    // B57.42 — /features reads its switches until Lens names the guardrails; answered at once, so the page settles.
+    if (url === '/api/features') return json({ distill_policy: 'always', cache_poolable: true, guardrails: { injection: true, pii: true } })
     return json(bodyFor(url))
   })
 }
@@ -405,7 +419,7 @@ const RETRY_ADVICE = /You can try again/i
 describe('the document-setting read is a first-class citizen of the session machinery', () => {
   it('a 401 is a verdict, not a flake — /api/distill is asked ONCE', async () => {
     mockDistill(401, null)
-    at('/settings')
+    at('/features')
     await waitFor(() => expect(document.querySelector('[role="alert"]')).not.toBeNull(), { timeout: 5000 })
     await settled()
     const reads = requested.filter((r) => r.startsWith('GET /api/distill'))
@@ -417,7 +431,7 @@ describe('the document-setting read is a first-class citizen of the session mach
 
   it('the setting does not add a second diagnosis under the bar', async () => {
     mockDistill(401, null)
-    at('/settings')
+    at('/features')
     await waitFor(() => expect(document.querySelector('[role="alert"]')).not.toBeNull(), { timeout: 5000 })
     await settled()
     expect(pageText(), 'the bar has already said what happened; "the buttons still work" is both a second voice and false').not.toMatch(DISTILL_ADVICE)
@@ -428,7 +442,7 @@ describe('the document-setting read is a first-class citizen of the session mach
     // buttons really do still work and re-reading really is what happens, so the sentence is
     // correct and must not be traded away for a vaguer one.
     mockDistill(500, null)
-    at('/settings')
+    at('/features')
     await settled()
     await waitFor(() => expect(pageText()).toMatch(DISTILL_ADVICE), { timeout: 5000 })
     expect(document.querySelector('[role="alert"]'), 'a 500 is not a session problem').toBeNull()
@@ -439,7 +453,7 @@ describe('the document-setting read is a first-class citizen of the session mach
     // of "the buttons below still work": true of a blip, false of a dead credential, and a third
     // voice under a bar that has already given the remedy.
     mockDistill(null, 401)
-    at('/settings')
+    at('/features')
     await settled()
     fireEvent.click(await screen.findByRole('button', { name: /Do not convert my documents/i }))
     await waitFor(() => expect(pageText()).toMatch(/did not save/i), { timeout: 5000 })
@@ -448,7 +462,7 @@ describe('the document-setting read is a first-class citizen of the session mach
 
   it('and a genuine save failure DOES — must stay green', async () => {
     mockDistill(null, 500)
-    at('/settings')
+    at('/features')
     await settled()
     fireEvent.click(await screen.findByRole('button', { name: /Do not convert my documents/i }))
     await waitFor(() => expect(pageText()).toMatch(/did not save/i), { timeout: 5000 })

@@ -31,13 +31,14 @@ import (
 //	POST /api/agents/{id}/rules/boosts {"rule", "value", "until", "assertion"?}   B28.32: raise a limit until a time; it reverts by itself
 //	DELETE /api/agents/{id}/rules/boosts/{rule}        B28.32: end a boost before its time
 //	GET  /api/agents/{id}/wallet                       B46.9: its wallet on the money layer — balance and how to pay into it
+//	GET  /api/agents/{id}/summary                      B57.20: its page in one read (Lens B57.12), every figure from one moment
 //	GET  /api/agents/{id}/statement                    the agent's account, newest first
 //	GET  /api/agents/{id}/statement?from=&to=&format=json|csv|pdf|journal   B19.22: its statement for a period, to download (B28.55: PDF; B28.56: a journal for Xero or QuickBooks)
 //	GET  /api/agents/{id}/statement?kind=&q=&limit=&cursor=     B28.51: that statement searched, filtered and paged
 //	GET  /api/agents/{id}/analytics?from=&to=          B28.53: its spend for a period by day, model and destination
 //	GET  /api/agents/statement?from=&to=&format=json|csv|pdf|journal        B19.22: every account in the bank, for a period
 //	POST /api/agents/{id}/claim                        B19.23: the signed-in person becomes an ownerless agent's owner
-//	PATCH /api/agents/{id}              {"name"?, "description"?, "colour"?}   B28.21: rename it, describe it; B57.124: its helper
+//	PATCH /api/agents/{id}              {"name"?, "description"?, "colour"?, "face"?}   B28.21: rename it, describe it; B57.124: its helper; B57.22: its face
 //	POST /api/agents/{id}/archive                      B28.21: retire it — its balance back to the workspace, its keys revoked
 //	GET  /api/agents/{id}/card                         B19.24: its test-mode card and every purchase on it (404: none)
 //	POST /api/agents/{id}/card          {cardholder}   B19.24: issue it one, the cardholder's name and billing address
@@ -292,17 +293,23 @@ func agentRulesFields(w http.ResponseWriter, raw []byte) ([]byte, bool) {
 		PayeeDailyLimitsULXC map[string]int64 `json:"payee_daily_limits_ulxc"`
 		// B41.4 — the same over the month (Lens B41.104); absent keeps, sent replaces whole.
 		PayeeMonthlyLimitsULXC map[string]int64 `json:"payee_monthly_limits_ulxc"`
-		ActiveFrom             string           `json:"active_from"`
-		ActiveUntil            string           `json:"active_until"`
-		Timezone               string           `json:"timezone"`
+		// B57.23 — the owner's "always allow" by payee (Lens B41.104), now a field on the rules page. Absent (null) keeps
+		// what Lens holds; sent, it replaces them whole. Lens judges an added or raised one as loosening.
+		PayeeAllowances map[string]payeeAllowance `json:"payee_allowances"`
+		ActiveFrom      string                    `json:"active_from"`
+		ActiveUntil     string                    `json:"active_until"`
+		Timezone        string                    `json:"timezone"`
 		// B19.6 — Lens replaces every other rule on a save, so this is carried back as it was read.
 		PauseOnUnusualSpend bool `json:"pause_on_unusual_spend"`
+		// B59.19 — "Can use Instant transfer" (Lens B59.15), off by default. Absent (null) keeps what Lens holds, so a
+		// save from a screen that does not show the switch never turns it off.
+		MayInstantTransfer *bool `json:"may_instant_transfer"`
 	}
 	if err := json.Unmarshal(raw, &in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return nil, false
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_licences, max_commitment_ulxc, may_subscribe, payee_allowances
+	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_licences, max_commitment_ulxc, may_subscribe
 	body, _ := json.Marshal(in)
 	return body, true
 }
@@ -403,6 +410,21 @@ func (a *app) handleAgentWallet(w http.ResponseWriter, r *http.Request, t tenant
 		return
 	}
 	suffix, ok := agentSuffix(w, r, "wallet")
+	if !ok {
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, suffix, nil)
+}
+
+// handleAgentSummary — GET /api/agents/{id}/summary (B57.20): everything the agent's page shows, as Lens B57.12 reads it
+// in one transaction — the agent, safe to spend, the month, what waits for approval, its newest statement lines, its rules
+// version, its card and last decline in words, and its currency accounts. Lens refuses another workspace's agent (404).
+func (a *app) handleAgentSummary(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	suffix, ok := agentSuffix(w, r, "summary")
 	if !ok {
 		return
 	}
@@ -657,8 +679,8 @@ func (a *app) handleAgentClaim(w http.ResponseWriter, r *http.Request, t tenant)
 }
 
 // handleAgent — PATCH /api/agents/{id} (B28.21): renames the agent and/or sets what it is for, and (B57.124) its
-// helper's colour. Any of them; an absent name or description is sent as null and an absent colour not at all,
-// which Lens leaves as it is. Lens answers the agent.
+// helper's colour, and (B57.22) its face. Any of them; an absent name or description is sent as null and an absent
+// colour or face not at all, which Lens leaves as it is. Lens answers the agent.
 func (a *app) handleAgent(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodPatch {
 		methodNotAllowed(w, http.MethodPatch)
@@ -672,16 +694,17 @@ func (a *app) handleAgent(w http.ResponseWriter, r *http.Request, t tenant) {
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
 		Colour      *string `json:"colour,omitempty"` // B57.124: its helper; left out, Lens keeps the colour it has
+		Face        *string `json:"face,omitempty"`   // B57.22: circle, squircle, hexagon or flower; left out, Lens keeps it
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	if in.Name == nil && in.Description == nil && in.Colour == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send a new name, a description, a colour, or any of them"})
+	if in.Name == nil && in.Description == nil && in.Colour == nil && in.Face == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send a new name, a description, a colour, a face, or any of them"})
 		return
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentUpdateBody: face
+	// UPSTREAM-BINDS-ONLY lensAgentUpdateBody: none
 	body, _ := json.Marshal(in)
 	a.agentBankRelay(w, r, t, http.MethodPatch, "/agents/"+url.PathEscape(id), body)
 }

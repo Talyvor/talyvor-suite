@@ -15,7 +15,7 @@ import { isSessionExpired } from '../../lib/productState'
 // a short typed question, and when it declines the page says "nothing to reduce" and why — it never
 // implies a saving it did not make. Every token and dollar figure is Lens's estimate and says so.
 
-const fieldClass = `w-full rounded-control border border-rule bg-surface text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
+const fieldClass = `w-full rounded-control border border-rule-strong bg-surface text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 
 const count = (n: number) => n.toLocaleString('en-US')
 
@@ -124,7 +124,7 @@ export function TryTare() {
           <textarea
             id="tare-content"
             spellCheck={false}
-            className={`min-h-48 w-full rounded-control border border-rule bg-surface p-3 font-mono text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+            className={`min-h-48 w-full rounded-control border border-rule-strong bg-surface p-3 font-mono text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder='{"users":[{"id":1,"name":"ada"},{"id":2,"name":"bob"}]}'
@@ -222,7 +222,7 @@ export function TryTare() {
                   it.
                 </p>
               ) : null}
-              <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-control border border-rule bg-surface p-3 font-mono text-caption text-ink">
+              <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-all rounded-control border border-rule-strong bg-surface p-3 font-mono text-caption text-ink">
                 {r.reduced}
               </pre>
             </div>
@@ -339,7 +339,7 @@ export function TryConversion() {
                 </ul>
               ) : null}
               <Button onClick={download}>Download as Markdown</Button>
-              <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-control border border-rule bg-surface p-3 font-mono text-caption text-ink">
+              <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-control border border-rule-strong bg-surface p-3 font-mono text-caption text-ink">
                 {r.markdown}
               </pre>
             </div>
