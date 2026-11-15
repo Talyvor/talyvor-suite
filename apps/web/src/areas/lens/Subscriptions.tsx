@@ -10,6 +10,8 @@ import { LICENCES_KEY } from '../marketplace/Licences'
 import { type Listing, type MarketLicence, marketApi } from '../marketplace/marketApi'
 import { type AgentSchedule, agentBankApi, formatMinor } from './agentBankApi'
 import { useLxcText } from './money'
+import { ApiError } from '../../lib/api'
+import { useWorkspaceAreas } from '../../lib/workspaceAreas'
 
 // Subscriptions.tsx — B41.20: everything that charges again, in one list, soonest first — the payments Lens found recurring
 // on a card or a payment out (B41.120), the standing orders an agent pays (B30.18) and the marketplace rentals and
@@ -45,15 +47,28 @@ function orderMonthly(minor: number, every: AgentSchedule['every']): number {
 const day = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 const daysBefore = (d: Date, n: number) => new Date(d.getTime() - n * DAY_MS)
 
+/** B60.2 — the BFF answers 404 on the licences while the marketplace is held: that is no licences, never a failure. */
+async function licencesOrNone(): Promise<MarketLicence[]> {
+  try {
+    return await marketApi.licences()
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return []
+    throw err
+  }
+}
+
 export function SubscriptionsScreen() {
   const found = useQuery({ queryKey: SUBSCRIPTIONS_KEY, queryFn: agentBankApi.subscriptions })
   const schedules = useQuery({ queryKey: SCHEDULES_KEY, queryFn: agentBankApi.schedules })
-  const licences = useQuery({ queryKey: LICENCES_KEY, queryFn: marketApi.licences })
+  // B60.2 — a held marketplace is not asked for its licences (the switch B59.2 hides it with).
+  const areas = useWorkspaceAreas()
+  const market = areas.has('marketplace')
+  const licences = useQuery({ queryKey: [...LICENCES_KEY, 'or-none'], queryFn: licencesOrNone, enabled: market })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const payees = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees })
   const lxc = useLxcText()
   const money = (minor: number, currency: string) => (currency === 'LXC' ? lxc(minor) : formatMinor(minor, currency))
-  const renewing = (licences.data ?? []).filter((l) => l.status === 'active' && l.auto_renew && l.kind !== 'buy' && l.ends_at !== null)
+  const renewing = (market ? (licences.data ?? []) : []).filter((l) => l.status === 'active' && l.auto_renew && l.kind !== 'buy' && l.ends_at !== null)
   // A rental's period and price are its offer's, on its listing.
   const listings = useQueries({
     queries: [...new Set(renewing.map((l) => l.listing_id))].map((id) => ({ queryKey: ['market-listing', id], queryFn: () => marketApi.listing(id) })),
@@ -114,9 +129,9 @@ export function SubscriptionsScreen() {
 
   const now = Date.now()
   const dueSoon = rows.filter((r) => r.remind.getTime() <= now)
-  const failed = [found, schedules, licences].find((q) => q.isError)
+  const failed = [found, schedules, ...(market ? [licences] : [])].find((q) => q.isError)
   // A rental's row waits for its listing: without the offer it would show no period and no monthly cost (B17.348).
-  const pending = found.isPending || schedules.isPending || licences.isPending || listings.some((q) => q.isPending)
+  const pending = found.isPending || schedules.isPending || !areas.settled || (market && licences.isPending) || listings.some((q) => q.isPending)
   return (
     <RegionScreen>
       <Region
@@ -127,9 +142,9 @@ export function SubscriptionsScreen() {
         className="flex max-w-2xl flex-col gap-3"
       >
         <p className="text-body text-muted">
-          The payments your agents and you make again and again (a card or a payment out that recurs, a standing order, a
-          marketplace rental or subscription that renews), each with its next charge, what it costs a month, and a reminder three
-          days before it renews.
+          The payments your agents and you make again and again (a card or a payment out that recurs, a standing order
+          {market ? ', a marketplace rental or subscription that renews' : ''}), each with its next charge, what it costs a month,
+          and a reminder three days before it renews.
         </p>
         {!pending ? (
           <p className="text-body text-ink" data-testid="subscriptions-count">
@@ -148,8 +163,9 @@ export function SubscriptionsScreen() {
           <p className="text-body text-muted">Reading…</p>
         ) : rows.length === 0 ? (
           <p className="text-body text-muted">
-            Nothing renews yet. One appears here when you set up a standing order on Pay, rent a listing that renews in the
-            Marketplace, or pay the same merchant the same amount three times on a schedule.
+            Nothing renews yet. One appears here when you set up a standing order on Pay,
+            {market ? ' rent a listing that renews in the Marketplace,' : ''} or pay the same merchant the same amount three times on
+            a schedule.
           </p>
         ) : (
           <Card>

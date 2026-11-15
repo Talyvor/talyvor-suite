@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { areaSource } from '../../lib/workspaceAreas'
 
 // B41.20 — /money/subscriptions: a listing rented monthly, a standing order and a card subscription Lens found (B41.120), each
 // with its next charge, its monthly cost and its reminder three days before; one due within three days says so.
@@ -9,7 +10,7 @@ const DAY = 86_400_000
 const iso = (ms: number) => new Date(ms).toISOString()
 const day = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 
-function mockBff(now: number, listingRead: Promise<void> = Promise.resolve()) {
+function mockBff(now: number, listingRead: Promise<void> = Promise.resolve(), licences: 'listed' | 'off' = 'listed', schedules: 'listed' | 'failing' = 'listed') {
   const agent = { id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true }
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -18,10 +19,12 @@ function mockBff(now: number, listingRead: Promise<void> = Promise.resolve()) {
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [agent] })
     if (url === '/api/money/payees') return json({ payees: [{ id: 'pye_1', name: 'Office Rent Ltd', country: 'GB' }] })
+    if (url === '/api/agents/schedules' && schedules === 'failing') return new Response('{}', { status: 500 })
     if (url === '/api/agents/schedules') {
       return json({ schedules: [{ id: 'sch_1', from_agent_id: 'agt_1', to_agent_id: '', to_payee_id: 'pye_1', amount_minor: 1000, currency: 'GBP',
         amount_ulxc: 0, every: 'week', next_run_at: iso(now + 2 * DAY), active: true, created_at: '2026-10-01T09:00:00Z' }] })
     }
+    if (url === '/api/marketplace/licences' && licences === 'off') return new Response('null', { status: 404 })
     if (url === '/api/marketplace/licences') {
       return json({ licences: [{ id: 'lic_1', listing_id: 'lst_1', title: 'Market brief', offer_id: 'off_1', licence: 'commercial', terms: '', kind: 'rent',
         pinned_version: null, starts_at: iso(now - 10 * DAY), ends_at: iso(now + 20 * DAY), auto_renew: true, status: 'active', uses_covered: 0,
@@ -91,5 +94,38 @@ describe('the subscriptions view (B41.20)', () => {
     answer()
     const rental = await screen.findByTestId('subscription-lic-lic_1')
     expect(rental.textContent).toContain('$5.00 a month')
+  })
+
+  // B60.2 — while the marketplace is held the BFF's licences route is off: Subscriptions does not ask it, and lists the rest.
+  it('asks nothing of a held marketplace and says nothing failed', async () => {
+    const now = Date.now()
+    mockBff(now, Promise.resolve(), 'off')
+    areaSource.read = () => Promise.resolve([])
+    areaSource.initial = []
+    window.history.pushState({}, '', '/money/subscriptions')
+    render(<App />)
+
+    expect(await screen.findByTestId('subscriptions-count')).toHaveTextContent('2 renew, 1 in the next 3 days')
+    expect(screen.getByTestId('subscription-so-sch_1')).toBeInTheDocument()
+    expect(screen.queryByText(/could not be read/)).toBeNull()
+    expect(vi.mocked(fetch).mock.calls.map(([u]) => String(u))).not.toContain('/api/marketplace/licences')
+    expect(document.body.textContent).not.toMatch(/marketplace/i)
+  })
+
+  it('reads a 404 from the licences as none, never a failure', async () => {
+    mockBff(Date.now(), Promise.resolve(), 'off')
+    window.history.pushState({}, '', '/money/subscriptions')
+    render(<App />)
+
+    expect(await screen.findByTestId('subscriptions-count')).toHaveTextContent('2 renew')
+    expect(screen.queryByText(/could not be read/)).toBeNull()
+  })
+
+  it('still says so when another read fails', async () => {
+    mockBff(Date.now(), Promise.resolve(), 'listed', 'failing')
+    window.history.pushState({}, '', '/money/subscriptions')
+    render(<App />)
+
+    expect(await screen.findByText('Some of your subscriptions could not be read just now.')).toBeInTheDocument()
   })
 })
