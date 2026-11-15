@@ -9,7 +9,7 @@ import { BOOK_KEY } from './AgentBank'
 import { BUDGETS_KEY, CATEGORIES, categoryName } from './Budgets'
 import { SUBSCRIPTIONS_KEY } from './Subscriptions'
 import { MonthPlan } from './MonthPlan'
-import { PHYSICAL_CARDS_KEY } from './PhysicalCard'
+import { PHYSICAL_CARDS_KEY, physicalCardSource } from './PhysicalCard'
 import { type CoachLine, type NoticeSettings, type SpendFinding, type Spending, agentBankApi, formatMinor, refusalText } from './agentBankApi'
 
 // Spending.tsx — B53.8: the owner's own spending in one place, every number from Lens (B53.3–B53.7): this week and this
@@ -138,8 +138,8 @@ export function SpendingScreen() {
     },
   })
 
-  // B53.12 — null while Lens's physical-card switch is off, and then no link shows.
-  const physicalCards = useQuery({ queryKey: PHYSICAL_CARDS_KEY, queryFn: agentBankApi.physicalCards, retry: false })
+  // B53.12 — null while Lens's physical-card switch is off, and then no link shows. B60.6: not asked at all until served.
+  const physicalCards = useQuery({ queryKey: PHYSICAL_CARDS_KEY, queryFn: agentBankApi.physicalCards, retry: false, enabled: physicalCardSource.served })
   const findings = unusual.data?.findings ?? []
   const said = sentences(findings, coach.data?.lines ?? [])
   const payments = spending.data?.payments ?? []

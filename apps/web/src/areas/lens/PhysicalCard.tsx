@@ -17,6 +17,14 @@ import { type CardAddress, type PhysicalCard, type WorkspaceAccount, WORKSPACE_N
 
 export const PHYSICAL_CARDS_KEY = ['physical-cards']
 
+/**
+ * B60.6 — whether this deployment serves physical cards. Lens mounts GET /api/money/physical-cards only while its
+ * LENS_PHYSICAL_CARDS switch is on, and it stays off until a live card issuer serves the card, so until then the app never
+ * asks: Spending shows no link and /money/card goes to Spending. It turns on in the same change as Lens's switch. The
+ * package's tests turn it on (test-setup.ts), as they test the card page as it behaves once served.
+ */
+export const physicalCardSource: { served: boolean } = { served: false }
+
 const oneLine = (a: CardAddress) => [a.line1, a.line2, a.city, a.postcode, a.country].filter(Boolean).join(', ')
 const cardIcon = <Icon name="card" />
 
@@ -73,7 +81,8 @@ function Refused({ error }: { error: unknown }) {
 
 export function PhysicalCardScreen() {
   const qc = useQueryClient()
-  const cards = useQuery({ queryKey: PHYSICAL_CARDS_KEY, queryFn: agentBankApi.physicalCards })
+  const served = physicalCardSource.served
+  const cards = useQuery({ queryKey: PHYSICAL_CARDS_KEY, queryFn: agentBankApi.physicalCards, enabled: served })
   const { account } = useAccount()
   const refresh = () => void qc.invalidateQueries({ queryKey: PHYSICAL_CARDS_KEY })
 
@@ -112,7 +121,7 @@ export function PhysicalCardScreen() {
     },
   })
 
-  if (cards.data === null) return <Navigate to="/money/spending" replace />
+  if (!served || cards.data === null) return <Navigate to="/money/spending" replace />
   const list = cards.data ?? []
   // A card on its way or in use; a frozen or closed one stays listed but does not stop a new order.
   const live = list.filter((c) => c.state === 'inactive' || c.state === 'active')
