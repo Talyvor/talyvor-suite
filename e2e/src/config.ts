@@ -71,6 +71,11 @@ export interface RunConfig {
   exploreMinutes: number
   /** The model choosing each explorer's next move, by catalog id, asked through judgeProvider. */
   explorerModel: string
+  /**
+   * B61.56 — what one explorer step is reserved at, in USD, when the run reads no catalog to price explorerModel by (a
+   * launch run): the most one step's question may cost. Each step is then held to what the explorer's ledger shows it spent.
+   */
+  explorerStepUSD: number
   /** B25.5 — a checkout of talyvor-lens, whose routes the coverage map lists; 'none' lists none. */
   lensSrc: string
   /** Where the run clones Lens from into its own lensSrc; undefined when lensSrc was given, which is left as it is. */
@@ -134,6 +139,8 @@ export const DEFAULTS = {
   outDir: 'out',
   exploreMinutes: 30,
   explorerModel: 'claude-haiku-4-5',
+  // B61.56 — about 6,500 tokens in and 300 out at Claude Haiku 4.5's list price ($1 and $5 a million), rounded up.
+  explorerStepUSD: 0.01,
   lensRepo: 'https://github.com/Talyvor/talyvor-lens.git',
   trackRepo: 'https://github.com/Talyvor/talyvor-track.git',
   docsRepo: 'https://github.com/Talyvor/talyvor-docs.git',
@@ -204,6 +211,7 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     explorers: lean ? 0 : Math.min(10, Math.floor(num('explorers', 'E2E_EXPLORERS', 0, true))),
     exploreMinutes: num('explore-minutes', 'E2E_EXPLORE_MINUTES', DEFAULTS.exploreMinutes),
     explorerModel: pick('explorer-model', 'E2E_EXPLORER_MODEL') ?? DEFAULTS.explorerModel,
+    explorerStepUSD: num('explorer-step-usd', 'E2E_EXPLORER_STEP_USD', DEFAULTS.explorerStepUSD),
     // Unless told where one is, the run keeps its own checkout of Lens, up to its main (coverage.ts).
     lensSrc: pick('lens-src', 'E2E_LENS_SRC') ?? `${pick('out', 'E2E_OUT') ?? DEFAULTS.outDir}/lens-src`,
     lensRepo: pick('lens-src', 'E2E_LENS_SRC') !== undefined ? undefined : env.E2E_LENS_REPO ?? DEFAULTS.lensRepo,
