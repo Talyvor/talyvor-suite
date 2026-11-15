@@ -1,0 +1,100 @@
+[
+  {
+    "route": "/settings/devices",
+    "screen": "w-security"
+  },
+  {
+    "route": "/settings/devices",
+    "answers": {
+      "/api/agents/passkeys": {
+        "passkeys": [
+          {
+            "credential_id": "Y3JlZF9tYWM",
+            "name": "This Mac",
+            "created_at": "2026-10-03T08:00:00Z",
+            "revoked_at": "2026-10-20T08:00:00Z"
+          }
+        ]
+      },
+      "/api/money/devices": {
+        "devices": [
+          {
+            "id": "dk_iphone",
+            "name": "iPhone, Talyvor app",
+            "created_at": "2026-10-04T09:00:00Z",
+            "revoked_at": "2026-10-20T08:00:00Z"
+          }
+        ]
+      },
+      "/api/agents/keys/recover": {
+        "recovery": null
+      }
+    }
+  },
+  {
+    "route": "/approvals",
+    "answers": {
+      "/api/agents/passkeys": {
+        "passkeys": [
+          {
+            "credential_id": "Y3JlZF9tYWM",
+            "name": "This Mac",
+            "created_at": "2026-10-03T08:00:00Z",
+            "revoked_at": "2026-10-20T08:00:00Z"
+          }
+        ]
+      },
+      "/api/money/devices": {
+        "devices": [
+          {
+            "id": "dk_iphone",
+            "name": "iPhone, Talyvor app",
+            "created_at": "2026-10-04T09:00:00Z",
+            "revoked_at": "2026-10-20T08:00:00Z"
+          }
+        ]
+      },
+      "/api/agents/keys/recover": {
+        "recovery": null
+      }
+    },
+    "steps": [
+      "Review"
+    ]
+  },
+  {
+    "route": "/agents",
+    "answers": {
+      "/api/agents/passkeys": {
+        "passkeys": [
+          {
+            "credential_id": "Y3JlZF9tYWM",
+            "name": "This Mac",
+            "created_at": "2026-10-03T08:00:00Z",
+            "revoked_at": "2026-10-20T08:00:00Z"
+          }
+        ]
+      },
+      "/api/money/devices": {
+        "devices": [
+          {
+            "id": "dk_iphone",
+            "name": "iPhone, Talyvor app",
+            "created_at": "2026-10-04T09:00:00Z",
+            "revoked_at": "2026-10-20T08:00:00Z"
+          }
+        ]
+      },
+      "/api/agents/keys/recover": {
+        "recovery": {
+          "id": "rcv_1",
+          "status": "waiting",
+          "created_at": "2026-10-21T09:00:00Z",
+          "ready_at": "2026-10-24T09:00:00Z",
+          "expires_at": "2026-10-25T09:00:00Z",
+          "mine": false
+        }
+      }
+    }
+  }
+]
