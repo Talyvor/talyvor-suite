@@ -330,12 +330,16 @@ func (d *oauthDB) endPerson(ctx context.Context, sub, workspaceID string, at tim
 			release()
 		}
 	}()
-	if _, err := conn.Exec(ctx, `WITH g AS (DELETE FROM oauth_grants WHERE sub = $1 RETURNING workspace_id),
-		c AS (DELETE FROM oauth_codes WHERE sub = $1),
-		o AS (INSERT INTO connect_revocations_owed (user_id, client_id, owed_at)
-			SELECT w, '', clock_timestamp() FROM (SELECT workspace_id AS w FROM g UNION SELECT $3::text) ws WHERE w <> ''
-			ON CONFLICT (user_id, client_id) DO UPDATE SET owed_at = EXCLUDED.owed_at)
-		INSERT INTO signed_out_everywhere (sub, at) VALUES ($1, $2) ON CONFLICT (sub) DO UPDATE SET at = EXCLUDED.at`, sub, at, workspaceID); err != nil {
+	err = pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `WITH g AS (DELETE FROM oauth_grants WHERE sub = $1 RETURNING workspace_id),
+			c AS (DELETE FROM oauth_codes WHERE sub = $1),
+			o AS (INSERT INTO connect_revocations_owed (user_id, client_id, owed_at)
+				SELECT w, '', clock_timestamp() FROM (SELECT workspace_id AS w FROM g UNION SELECT $3::text) ws WHERE w <> ''
+				ON CONFLICT (user_id, client_id) DO UPDATE SET owed_at = EXCLUDED.owed_at)
+			INSERT INTO signed_out_everywhere (sub, at) VALUES ($1, $2) ON CONFLICT (sub) DO UPDATE SET at = EXCLUDED.at`, sub, at, workspaceID)
+		return err
+	})
+	if err != nil {
 		return err
 	}
 	inMemory()
