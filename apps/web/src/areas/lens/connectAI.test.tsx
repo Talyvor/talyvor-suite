@@ -182,4 +182,24 @@ describe('Connect your AI', () => {
     await waitFor(() => expect(screen.getByTestId('agent-ceiling')).toHaveTextContent('at most 2 LXC a payment, 10 LXC a day and 50.5 LXC a month'))
     expect(puts).toEqual([{ max_per_request_ulxc: 2_000_000, daily_limit_ulxc: 10_000_000, monthly_limit_ulxc: 50_500_000 }])
   })
+
+  // B57.157 — Pocket draws each limit as the agent's rules sheet does: a row with its name, then its amount in LXC.
+  it('draws the limit for new agents as rows of the rules sheet', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path.startsWith('/api/money/payment-requests')) return new Response(JSON.stringify({ requests: [] }))
+      if (path !== '/api/connect/agent-ceiling') return new Response(JSON.stringify({ assistants: [] }))
+      return new Response(JSON.stringify({ max_per_request_ulxc: 2_000_000, daily_limit_ulxc: 10_000_000, monthly_limit_ulxc: 50_000_000 }))
+    })
+    renderScreen()
+    const card = screen.getByRole('region', { name: 'New agents from an assistant' })
+    await within(card).findByText(/An agent an assistant creates may spend at most/)
+    const rows = within(card).getAllByTestId('ceiling-row')
+    expect(rows.map((r) => [r.firstElementChild?.firstElementChild?.textContent, (within(r).getByRole('textbox') as HTMLInputElement).value])).toEqual([
+      ['One payment', '2'],
+      ['A day', '10'],
+      ['A month', '50'],
+    ])
+    expect(within(card).getByRole('button', { name: 'Change' })).toBeEnabled()
+  })
 })
