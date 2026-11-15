@@ -90,14 +90,21 @@ export function fourthAgentVerdict(r: Made): Verdict {
   return pastAgentsVerdict(r, 'free', FREE_AGENTS, 'team', 'fourth')
 }
 
-/** Lens's answer to one agent past the `limit` of `plan`: the plan's refusal (402), naming LENS_PLAN_GATES, the plan and `allows`. */
+/** The agents each plan holds past Free, as Lens's refusal says them (B32.12; Business is unlimited). */
+const ALLOWS_AGENTS: Readonly<Record<Plan, string>> = { free: `${FREE_AGENTS}`, team: `${TEAM_AGENTS}`, business: 'unlimited agents' }
+
+/**
+ * Lens's answer to one agent past the `limit` of `plan`: the plan's refusal (402) in Lens's plain sentence
+ * (internal/plans RefuseCount, B55.29), with LENS_PLAN_GATES in its `setting` and never in the words.
+ */
 export function pastAgentsVerdict(r: Made, plan: Plan, limit: number, allows: Plan, ordinal: string): Verdict {
   if (r.agent !== undefined) return fail(`a ${NAME[plan]} workspace with ${limit} agents made a ${ordinal}, ${r.agent.id}`)
   const said = r.refusal?.error ?? ''
   if (r.status !== 402) return fail(`the ${ordinal} agent was refused ${r.status} "${said}", not by the plan (402)`)
-  const missing = ['LENS_PLAN_GATES', `the ${plan} plan allows ${limit} agents`, `the ${allows} plan`].filter((w) => !said.includes(w))
-  if (missing.length > 0) return fail(`the refusal "${said}" does not name ${missing.join(', ')}`)
+  const want = `${NAME[plan]} allows ${limit} agents, and all ${limit} are in use. ${NAME[allows]} allows ${ALLOWS_AGENTS[allows]}.`
+  if (said !== want) return fail(`the refusal "${said}" is not Lens's "${want}"`)
   const got: Partial<PlanRefusal> = r.refusal ?? {}
+  if (got.setting !== 'LENS_PLAN_GATES') return fail(`the refusal's setting is ${got.setting === undefined ? 'missing' : `"${got.setting}"`}, not LENS_PLAN_GATES`)
   if (got.plan !== plan || got.gate !== 'agents' || got.limit !== limit || got.allows !== allows) {
     return fail(`the refusal reads plan ${got.plan}, gate ${got.gate}, limit ${got.limit}, allowing ${got.allows}; not ${plan}, agents, ${limit}, ${allows}`)
   }
@@ -261,7 +268,7 @@ export function pricingFreeAgents(seed: number): Scenario {
     // B35.7 — Free's own gate, on a workspace of its own: nothing else run by its user fills it first.
     plan: 'free',
     own: true,
-    title: `a Free workspace makes up to ${FREE_AGENTS} agents; the fourth is refused in Lens's words, naming LENS_PLAN_GATES, the free plan and the team plan, and the workspace still has ${FREE_AGENTS}`,
+    title: `a Free workspace makes up to ${FREE_AGENTS} agents; the fourth is refused in Lens's words, naming Free and Team, and the workspace still has ${FREE_AGENTS}`,
     feature: 'Agent Wallets',
     run: async (ctx) => {
       const { env, app } = ctx
@@ -286,7 +293,7 @@ export function pricingFreeAgents(seed: number): Scenario {
 
 /**
  * B35.7 — each paid plan's own gate, on a workspace of its own created on it (talyvor-lens B35.1): Team makes agents up
- * to its 25th and is refused the 26th, naming LENS_PLAN_GATES, the team plan and the business plan; Business makes the
+ * to its 25th and is refused the 26th, naming Team and Business; Business makes the
  * 26th. Each offers Slack and Teams approvals, which Free does not, as Lens's read of the workspace's plan says.
  */
 export function planAgents(plan: 'team' | 'business', seed: number): Scenario {
@@ -297,7 +304,7 @@ export function planAgents(plan: 'team' | 'business', seed: number): Scenario {
     plan,
     own: true,
     title: plan === 'team'
-      ? `a Team workspace makes up to ${TEAM_AGENTS} agents and is refused the ${past}th in Lens's words, naming LENS_PLAN_GATES, the team plan and the business plan; Team offers Slack and Teams approvals`
+      ? `a Team workspace makes up to ${TEAM_AGENTS} agents and is refused the ${past}th in Lens's words, naming Team and Business; Team offers Slack and Teams approvals`
       : `a Business workspace makes its ${past}th agent, past Team's ${TEAM_AGENTS}; Business offers Slack and Teams approvals`,
     feature: 'Agent Wallets',
     run: async (ctx) => {

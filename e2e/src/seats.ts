@@ -2,9 +2,9 @@
 // does (apps/web/src/areas/lens/Members.tsx). The BFF adds them to the session's Track workspace (POST
 // /api/members), and Track asks Lens, before each add, whether the plan of the Lens workspace the BFF names has
 // a seat for one more (B32.70, B32.73). The oracles are what Track answered and its roster read back after,
-// never the screen alone: a Free workspace's second member is refused in Lens's own words, which name
-// LENS_PLAN_GATES, the free plan and the team plan, and the roster still lists the owner alone; on Team (a
-// test-mode subscription) the fifth member is added and the sixth refused, naming the business plan.
+// never the screen alone: a Free workspace's second member is refused in Lens's own plain sentence (internal/plans
+// RefuseCount, B55.29), "Free allows 1 seat, and it is taken. Team allows 5.", and the roster still lists the owner
+// alone; on Team (a test-mode subscription) the fifth member is added and the sixth refused, naming Business.
 
 import type { Page } from 'playwright'
 import { ACTION_TIMEOUT_MS, fail } from './bank.ts'
@@ -22,7 +22,7 @@ interface Member { id: string; email: string; role: string }
 /** Track's answer to an add, as the BFF relays it: the member on 201, else {error, code, plan, limit, allows}. */
 interface AddAnswer { email?: string; error?: string; code?: string; plan?: string; limit?: number; allows?: string }
 
-interface Added { status: number; body: AddAnswer; shown: string; plansLink: boolean }
+export interface Added { status: number; body: AddAnswer; shown: string; plansLink: boolean }
 
 /** The roster, read back through the BFF as the Members screen reads it. */
 async function roster(page: Page): Promise<Member[]> {
@@ -47,12 +47,11 @@ async function addOnScreen(page: Page, email: string): Promise<Added> {
   return { status: res.status(), body, shown: shown.trim(), plansLink }
 }
 
-/** Why Track's refusal of one member too many is not the plan's, in Lens's words naming both plans; undefined when it is. */
-function notThePlansRefusal(add: Added, plan: string, allows: string, words: string[]): string | undefined {
+/** Why Track's refusal of one member too many is not the plan's, in Lens's sentence `want`; undefined when it is. */
+export function notThePlansRefusal(add: Added, plan: string, allows: string, want: string): string | undefined {
   if (add.status === 201) return `the member was added (201)`
   if (add.status !== 402) return `Track answered ${add.status} ${add.body.code ?? ''} "${add.body.error ?? ''}", not the plan's refusal (402)`
-  const missing = ['LENS_PLAN_GATES', ...words].filter((w) => !(add.body.error ?? '').includes(w))
-  if (missing.length > 0) return `the refusal "${add.body.error}" does not name ${missing.join(', ')}`
+  if (add.body.error !== want) return `the refusal "${add.body.error}" is not Lens's "${want}"`
   if (add.body.plan !== plan || add.body.allows !== allows) return `the refusal reads plan "${add.body.plan}" allowing "${add.body.allows}", not ${plan} allowing ${allows}`
   if (add.shown !== `${add.body.error} See plans` || !add.plansLink) return `Members shows "${add.shown}", not Lens's "${add.body.error}" with a link to /plans`
   return undefined
@@ -62,10 +61,10 @@ const newEmail = (seed: number, n: number): string => `seat-${seed}-${n}-${Date.
 
 /** Adds one member too many and checks the refusal and the roster after it; the verdict, or undefined when both hold. */
 async function oneTooMany(page: Page, ctx: ScenarioCtx, email: string, before: Member[],
-  plan: string, allows: string, words: string[]): Promise<Verdict | undefined> {
+  plan: string, allows: string, want: string): Promise<Verdict | undefined> {
   const add = await addOnScreen(page, email)
   ctx.evidence.push({ note: `Add member ${email} with ${before.length} on the roster: ${add.status}; Members shows "${add.shown}"`, answer: JSON.stringify(add.body) })
-  const wrong = notThePlansRefusal(add, plan, allows, words)
+  const wrong = notThePlansRefusal(add, plan, allows, want)
   if (wrong !== undefined) return fail(`on ${plan}, adding member ${before.length + 1}: ${wrong}`)
   const after = await roster(page)
   ctx.evidence.push({ note: `the roster after: ${after.map((m) => `${m.email} (${m.role})`).join(', ')}` })
@@ -82,7 +81,7 @@ export function seatsFree(seed: number): Scenario {
     // B35.7 — Free's own gate, on a workspace of its own: the users that run it are on paid plans for their others.
     plan: 'free',
     own: true,
-    title: "a Free workspace's owner adds a second member on Members: Track refuses it in Lens's words, naming LENS_PLAN_GATES, the free plan and the team plan, and the roster still lists one",
+    title: "a Free workspace's owner adds a second member on Members: Track refuses it in Lens's words, naming Free and Team, and the roster still lists one",
     feature: 'Members',
     run: async (ctx) => {
       const page = await ctx.app.tab('/members')
@@ -91,7 +90,7 @@ export function seatsFree(seed: number): Scenario {
         ctx.evidence.push({ note: `the roster before: ${before.map((m) => `${m.email} (${m.role})`).join(', ') || 'nobody'}` })
         if (before.length !== 1) throw new Error(`a new workspace's roster lists ${before.length} members; Track's bootstrap makes its owner the one`)
         const email = newEmail(seed, 2)
-        const wrong = await oneTooMany(page, ctx, email, before, 'free', 'team', ['the free plan allows 1 seat', 'the team plan'])
+        const wrong = await oneTooMany(page, ctx, email, before, 'free', 'team', 'Free allows 1 seat, and it is taken. Team allows 5.')
         return wrong ?? { pass: true, detail: `a second member on Free was refused in Lens's words with a link to /plans, and the roster still lists its owner alone` }
       } finally {
         await page.close()
@@ -145,7 +144,7 @@ export function seatsTeam(seed: number): Scenario {
           }
           members = after
         }
-        const wrong = await oneTooMany(page, ctx, newEmail(seed, TEAM_SEATS + 1), members, 'team', 'business', [`the team plan allows ${TEAM_SEATS} seats`, 'the business plan'])
+        const wrong = await oneTooMany(page, ctx, newEmail(seed, TEAM_SEATS + 1), members, 'team', 'business', `Team allows ${TEAM_SEATS} seats, and all ${TEAM_SEATS} are taken. Business allows 25.`)
         return wrong ?? { pass: true, detail: `on Team the roster took its fifth member; the sixth was refused in Lens's words with a link to /plans, and the roster still lists five` }
       } finally {
         await page.close()
