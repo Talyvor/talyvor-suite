@@ -13,13 +13,14 @@ package main
 //	open_topup              the link to top up in Talyvor: nothing is charged in the chat
 //
 //	GET /api/connect/agent-ceiling   the ceiling, or {} when the person has not set one
-//	PUT /api/connect/agent-ceiling   {max_per_request_ulxc, daily_limit_ulxc, monthly_limit_ulxc}, each above 0
+//	PUT /api/connect/agent-ceiling   {max_per_request_ulxc, daily_limit_ulxc, monthly_limit_ulxc}, each above 0; the owner or an admin only
 //
 // Every call but send_payment's is on the person's own Lens credential, as every other tool's is (mcp.go).
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -404,6 +405,17 @@ func (a *app) handleAgentCeiling(w http.ResponseWriter, r *http.Request, t tenan
 		d.DisallowUnknownFields()
 		if d.Decode(&c) != nil || c.MaxPerRequestULXC < 1 || c.DailyLimitULXC < 1 || c.MonthlyLimitULXC < 1 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "each limit is a whole number of µLXC above 0"})
+			return
+		}
+		// Lens decides who may set it: its GET /v1/money/access answers the workspace's owner or an admin alone.
+		if _, err := a.lensGet(r.Context(), t, "/v1/money/access"); err != nil {
+			var refused *lensStatusError
+			if errors.As(err, &refused) && (refused.status == http.StatusForbidden || refused.status == http.StatusUnauthorized) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the workspace's owner or an admin may set this limit"})
+				return
+			}
+			log.Printf("bff: who may set the agent ceiling: %v", err)
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Lens could not answer just now"})
 			return
 		}
 		if err := a.oauth.db.setCeiling(r.Context(), t.workspaceID, c); err != nil {

@@ -107,6 +107,30 @@ func TestConnectSendPaymentNeedsItsScope(t *testing.T) {
 	}
 }
 
+// TestAgentCeilingOwnerOrAdminOnly: Lens decides who may set the limit for new agents. A session Lens does not take
+// for the workspace's owner or an admin is refused and nothing is saved; the owner's save asks Lens on its own token.
+func TestAgentCeilingOwnerOrAdminOnly(t *testing.T) {
+	a, lens, _ := agentsApp(t)
+	ck := &http.Cookie{Name: sessionCookieName, Value: "sid-ada"}
+	ceiling := `{"max_per_request_ulxc":1000,"daily_limit_ulxc":5000,"monthly_limit_ulxc":10000}`
+
+	lens.notOwner = true
+	if rec := serve(a, "PUT", "/api/connect/agent-ceiling", oauthOrigin, ceiling, nil, ck); rec.Code != http.StatusForbidden {
+		t.Fatalf("not the owner or an admin: %d %s", rec.Code, rec.Body.String())
+	}
+	if got := jsonOf(t, serve(a, "GET", "/api/connect/agent-ceiling", "", "", nil, ck)); len(got) != 0 {
+		t.Fatalf("a refused save must keep nothing: %v", got)
+	}
+
+	lens.notOwner = false
+	if rec := serve(a, "PUT", "/api/connect/agent-ceiling", oauthOrigin, ceiling, nil, ck); rec.Code != http.StatusOK {
+		t.Fatalf("the owner: %d %s", rec.Code, rec.Body.String())
+	}
+	if got := lens.count("GET /v1/money/access Bearer jwt-for-ws-ada"); got != 2 {
+		t.Fatalf("each save must ask Lens on the session's own token; calls %v", lens.calls)
+	}
+}
+
 // TestConnectCreateAgentUnderTheCeiling: create_agent is refused until the person sets the ceiling in the app, and
 // above it; under it the agent is made, described and given exactly those limits.
 func TestConnectCreateAgentUnderTheCeiling(t *testing.T) {
@@ -127,8 +151,9 @@ func TestConnectCreateAgentUnderTheCeiling(t *testing.T) {
 	if got := jsonOf(t, serve(a, "GET", "/api/connect/agent-ceiling", "", "", nil, ck)); got["monthly_limit_ulxc"] != float64(10000) {
 		t.Fatalf("the ceiling reads back: %v", got)
 	}
-	if r := toolCall(t, a, token, "create_agent", args); r["isError"] != true || !strings.Contains(text(r), "monthly_limit_ulxc") || len(lens.calls) != 0 {
-		t.Fatalf("a monthly limit above the ceiling: %v, Lens calls %v", r, lens.calls)
+	before := len(lens.calls) // the save asked Lens who may set it
+	if r := toolCall(t, a, token, "create_agent", args); r["isError"] != true || !strings.Contains(text(r), "monthly_limit_ulxc") || len(lens.calls) != before {
+		t.Fatalf("a monthly limit above the ceiling: %v, Lens calls %v", r, lens.calls[before:])
 	}
 
 	args["monthly_limit_ulxc"] = 10000

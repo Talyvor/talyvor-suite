@@ -18,6 +18,8 @@ type fakeLensForMCP struct {
 	mu    sync.Mutex
 	calls []string // "METHOD /path Bearer … Idempotency-Key"
 	sent  map[string]map[string]any
+	// notOwner makes Lens refuse GET /v1/money/access, as it does anyone but the workspace's owner or an admin.
+	notOwner bool
 }
 
 func (f *fakeLensForMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -29,6 +31,11 @@ func (f *fakeLensForMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.sent[r.Method+" "+r.URL.Path] = body
 	f.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
+	if f.notOwner && r.Method+" "+r.URL.Path == "GET /v1/money/access" {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"error":"only the workspace's owner or an admin may list what may act for it"}`)
+		return
+	}
 	switch r.Method + " " + r.URL.Path {
 	case "POST /v1/provision":
 		_, _ = io.WriteString(w, `{"workspace_id":"ws-other","token":"jwt-other","expires_at":"2099-01-01T00:00:00Z"}`)

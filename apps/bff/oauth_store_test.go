@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"testing"
@@ -109,8 +111,18 @@ func TestOAuthSignInsSurviveARestart(t *testing.T) {
 		t.Fatalf("%d grants left in the table after both connections ended (%v)", left, err)
 	}
 
-	// B52.6: the limit for new agents survives a restart, and a second save replaces the first.
+	// B52.6: the limit for new agents survives a restart, and a second save replaces the first. Lens takes the session
+	// for the workspace's owner, which each save asks it first.
+	owner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method+" "+r.URL.Path != "GET /v1/money/access" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = io.WriteString(w, `{"items":[]}`)
+	}))
+	t.Cleanup(owner.Close)
 	a, ck = boot()
+	a.cfg.lensBaseURL = owner.URL
 	for _, body := range []string{`{"max_per_request_ulxc":1,"daily_limit_ulxc":2,"monthly_limit_ulxc":3}`, `{"max_per_request_ulxc":4,"daily_limit_ulxc":5,"monthly_limit_ulxc":6}`} {
 		if rec := serve(a, "PUT", "/api/connect/agent-ceiling", oauthOrigin, body, nil, ck); rec.Code != http.StatusOK {
 			t.Fatalf("saving the agent ceiling: %d %s", rec.Code, rec.Body.String())
