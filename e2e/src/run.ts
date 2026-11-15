@@ -27,7 +27,7 @@ import { type ExplorerSummary, type Finding, Notebook, explore } from './explore
 import { fileB28Items, fileBuildingLabelItems, fileCodeItems, fileEdgeItems, fileHostileItems, fileItems, filePocketItems } from './filing.ts'
 import { type HostileReport, type Repo, runHostile } from './hostile.ts'
 import { LensClient, type SyntheticUser, describe } from './lens.ts'
-import { type HiddenPaths, type LaunchCut, hiddenPaths, launchCut, launchInventory, launchLine } from './launch.ts'
+import { type HiddenPaths, type LaunchCut, hiddenPaths, launchCut, launchInventory, launchLine, setUpCatalog } from './launch.ts'
 import { lightJourneys } from './light.ts'
 import { pocketJourneys } from './pocketProblems/index.ts'
 import { type PocketRow, pocketRows } from './pocketProblems/problems.ts'
@@ -365,9 +365,10 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     console.log(reset === undefined ? 'reset: Lens did not answer within its request timeout; waited for the reset to run on to the end'
       : `reset ${reset} synthetic workspace(s), this run's: stored answers cleared, credits restored`)
     stage = 'reading the catalog'
-    const catalog = await lens.catalog(users[0])
+    // B61.49 — a launch run does not read the old gateway's catalog (launch.ts).
+    const catalog = await setUpCatalog(cfg.launch, () => lens.catalog(users[0]), cfg.model)
+    if (cfg.launch) console.log('catalog: not read, the model catalog is the old gateway\'s and outside the launch version')
     const usdPerLXC = await lens.usdPerLXC()
-    if (!catalog.some((m) => m.display_name === cfg.model)) throw new Error(`the catalog has no model named "${cfg.model}"`)
     // B35.7 — every money oracle judges by the fees Lens states.
     stage = 'reading the fees'
     const fees = await lens.fees()
@@ -641,7 +642,8 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     stoppedAtCap = cap.reached
 
     // B34.10 — TALYVOR CODE: the CLI from main on a synthetic agent's own key, before the explorers spend what is left.
-    if (cfg.codeRepo !== 'none') {
+    // B61.49 — Code is outside the launch version: a launch run does not run it.
+    if (cfg.codeRepo !== 'none' && !cfg.launch) {
       stage = 'running Talyvor Code'
       code = await runCode({ lens: lens.tagged({ scenario: 'talyvor-code', user: -1 }), cap, usdPerLXC, outDir: cfg.outDir,
         src: cfg.codeSrc, cloneURL: cfg.codeClone, repo: cfg.codeRepo, skip: notRun() })
@@ -649,7 +651,9 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     }
 
     // B17.5 — THE EXPLORERS, after the scenarios, under the same cap: whatever the scenarios left.
-    if (cfg.explorers > 0 && !cap.reached && stoppedBy === undefined) {
+    // B61.49 — an explorer reserves each step at its model's catalog price, which a launch run does not read: none explore.
+    if (cfg.launch && cfg.explorers > 0) console.log(`explorers: none of ${cfg.explorers}, their model is priced from the old gateway's catalog`)
+    if (cfg.explorers > 0 && !cfg.launch && !cap.reached && stoppedBy === undefined) {
       stage = 'creating the explorers'
       const explorers = await lens.createUsers(cfg.explorers)
       stage = 'the explorers explored'
@@ -699,7 +703,9 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
   }
   if (stoppedBy !== undefined) console.log(`STOPPED: ${stoppedBy}`)
   // B34.10 — a run that stopped before Talyvor Code still reports its CI.
-  if (cfg.codeRepo !== 'none' && code === undefined) code = await codeSkipped(cfg.codeRepo, `not run: ${stoppedBy ?? 'the run stopped before it'}`)
+  if (cfg.codeRepo !== 'none' && code === undefined) {
+    code = await codeSkipped(cfg.codeRepo, cfg.launch ? 'not run: Code is outside the launch version' : `not run: ${stoppedBy ?? 'the run stopped before it'}`)
+  }
   const after = versions === undefined ? undefined : await productionVersions(cfg.appURL, cfg.lensURL)
 
   outcomes.sort((a, b) => a.user - b.user)
