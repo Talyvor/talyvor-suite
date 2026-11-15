@@ -1,0 +1,4 @@
+[
+  { "route": "/?approval=apr_acme", "screen": "w-home+sheet-A" },
+  { "route": "/?approval=apr_lead", "screen": "w-home+sheet-L" }
+]

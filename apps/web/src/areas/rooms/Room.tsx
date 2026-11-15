@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Input, NavIcon, cn, focusRing } from '@talyvor/ui'
+import { Link } from 'react-router-dom'
+import { Button, Input, NavIcon, cn, focusRing, inlineLink } from '@talyvor/ui'
 import { Region } from '../../components/Region'
+import { agentBankApi, formatMinor } from '../lens/agentBankApi'
 import { Lxc } from '../lens/money'
 import { formatWhen } from '../lens/format'
 import { ARTIFACT, artifactOf } from '../marketplace/Marketplace'
@@ -112,6 +114,28 @@ export function RoomBudget({ wallet }: { wallet: RoomWallet }) {
 // ── The conversation ───────────────────────────────────────────────────────────────────────────────
 
 /** What a run cost and who paid, from its message's refs. */
+export const EARNINGS_PAYOUTS_KEY = ['earnings-payouts']
+
+/** B55.28 — what this room's payouts hold for this workspace until it saves verified payout details, by currency. */
+export function HeldForYou({ room }: { room: RoomDetail }) {
+  const me = room.me?.workspace_id ?? ''
+  const payouts = useQuery({ queryKey: EARNINGS_PAYOUTS_KEY, queryFn: agentBankApi.earningsPayouts, enabled: me !== '' })
+  const held: Record<string, number> = {}
+  for (const p of payouts.data?.payouts ?? []) {
+    if (p.status === 'held' && p.recipient_workspace_id === me && p.source.startsWith(`room:${room.id}:`)) {
+      held[p.currency] = (held[p.currency] ?? 0) + p.amount_minor
+    }
+  }
+  return Object.entries(held).map(([currency, minor]) => (
+    <p key={currency} className="text-body text-ink" data-testid="room-held-for-you">
+      <span className="font-figure">{formatMinor(minor, currency)}</span> from this room is held for you.{' '}
+      <Link className={inlineLink} to="/settings/payout-details">
+        Add your payout details to receive it.
+      </Link>
+    </p>
+  ))
+}
+
 export function RunCost({ refs, payer, me }: { refs: RunRefs; payer: string; me: string }) {
   const cost =
     refs.run === 'ask'

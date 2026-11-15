@@ -106,7 +106,7 @@ afterEach(() => {
 describe('downloading a statement for a period on the Agent Bank', () => {
   it("saves last month's CSV for one agent, opening and closing balances included", async () => {
     const { asked, saved } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const form = await screen.findByTestId('agent-statement-download')
@@ -124,7 +124,7 @@ describe('downloading a statement for a period on the Agent Bank', () => {
 
   it("saves last month's CSV for the whole bank", async () => {
     const { asked, saved } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const form = await screen.findByTestId('bank-statement-download')
@@ -139,7 +139,7 @@ describe('downloading a statement for a period on the Agent Bank', () => {
 
   it("saves last month's statement for one agent as a PDF", async () => {
     const { asked, saved } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const form = await screen.findByTestId('agent-statement-download')
@@ -154,7 +154,7 @@ describe('downloading a statement for a period on the Agent Bank', () => {
 
   it("saves last month's journal for every agent, to import into Xero or QuickBooks", async () => {
     const { asked, saved } = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     const form = await screen.findByTestId('bank-statement-download')

@@ -486,7 +486,7 @@ describe('B57.94 — what may act for this workspace, every name in words, every
     renderKeys()
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke Claude' }))
     const dialog = await screen.findByRole('dialog', { name: 'Revoke Claude?' })
-    expect(dialog).toHaveTextContent('Claude can no longer reach Talyvor. You can add it again at any time.')
+    expect(dialog).toHaveTextContent('Claude can no longer read your wallets and bills or prepare payments. You can add it again at any time.')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Keep it' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(posts).toEqual([])

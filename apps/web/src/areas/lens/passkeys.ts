@@ -10,6 +10,7 @@ import {
   type EnrolmentWaiting,
   type Mandate,
   type MandateGrant,
+  type MoneyKind,
   type OutsidePayment,
   type OutsidePaymentRequest,
   type PasskeyAssertion,
@@ -17,6 +18,7 @@ import {
   type PayeeDetails,
   type PayoutBatch,
   type RecoveryPasskey,
+  type WorkspaceAccount,
 } from './agentBankApi'
 import { showRecoveryCode } from './recoveryCodeStore'
 
@@ -176,6 +178,15 @@ export async function resumeAgent(agentID: string): Promise<{ paused: boolean }>
 export async function resumeEveryAgent(): Promise<{ all_paused: boolean }> {
   const c = await agentBankApi.resumeAllChallenge()
   return agentBankApi.resumeAll((c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
+/**
+ * B59.12 — the workspace's kind of money changed, signed with a passkey over the challenge naming the kind picked. Lens
+ * has no unsigned change (B59.46), so Face ID always asks here.
+ */
+export async function changeMoneyKindSigned(kind: MoneyKind): Promise<WorkspaceAccount> {
+  const c = await agentBankApi.moneyKindChallenge(kind)
+  return agentBankApi.changeMoneyKind(kind, await assertOver(c))
 }
 
 export async function assertOver({ challenge, allow_credentials }: { challenge: string; allow_credentials: string[] | null }): Promise<PasskeyAssertion> {

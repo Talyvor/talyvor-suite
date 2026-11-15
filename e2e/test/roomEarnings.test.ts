@@ -44,7 +44,10 @@ async function runAgainstStub(broken: string): Promise<{ verdict: Verdict; evide
     const paid = await fetch(url, { method: 'POST', redirect: 'manual', body: new URLSearchParams({ card: '4242 4242 4242 4242' }) })
     return paid.status === 303 ? undefined : `the stub checkout answered ${paid.status}`
   }
-  return { verdict: await roomEarnings(byCard).run(ctx), evidence }
+  // The stub is Lens alone, with no app in front: the owner's writes go to the Lens routes the app relays them to.
+  const direct = <T>(_: ScenarioCtx, method: string, apiPath: string, body: object, headers?: Record<string, string>) =>
+    lens.act<T>(user, method, apiPath.replace(/^\/api\/money\//, '/v1/money/').replace(/^\/api\/rooms\//, '/v1/rooms/'), body, headers)
+  return { verdict: await roomEarnings(byCard, direct).run(ctx), evidence }
 }
 
 describe('room-earnings-payout (B46.21)', () => {

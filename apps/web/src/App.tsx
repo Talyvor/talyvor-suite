@@ -11,7 +11,7 @@ import {
   useLocation,
   useNavigationType,
 } from 'react-router-dom'
-import { Logo, ThemeToggle, cn, inlineLink } from '@talyvor/ui'
+import { Logo, cn, inlineLink } from '@talyvor/ui'
 import {
   Button as PocketButton,
   EmptyState,
@@ -38,12 +38,15 @@ import { Setup } from './areas/lens/Setup'
 import { Spend } from './areas/lens/Spend'
 import { Members } from './areas/lens/Members'
 import { Settings, TeamOnly } from './areas/lens/Sharing'
+import { WELCOME_PATH, Welcome, WelcomeRedirect } from './areas/auth/Welcome'
 import { CloseAccountScreen, HelpScreen, YourDataScreen } from './areas/lens/HelpAndAccount'
 import { CompanyDetailsScreen } from './areas/lens/CompanyDetails'
 import { SignedInFooter } from './components/HelpLinks'
 import { Features } from './areas/lens/Features'
-import { AgentBank } from './areas/lens/AgentBank'
+import { AgentPage, AgentRulesPage } from './areas/lens/AgentPageRoute'
+import { Agents } from './areas/lens/Agents'
 import { ApprovalsScreen, StatementsScreen, usePendingApprovals } from './areas/lens/WalletScreens'
+import { ApprovalSheetHost } from './areas/lens/ApprovalSheet'
 import { MarketplaceArea } from './areas/marketplace/Marketplace'
 import { TryConversion, TryTare } from './areas/lens/TryIt'
 import { TopUp } from './areas/lens/TopUp'
@@ -67,12 +70,16 @@ import { DocsArea } from './areas/docs/DocsArea'
 import { OperatorTax } from './areas/lens/OperatorTax'
 import { OperatorCompliance } from './areas/lens/OperatorCompliance'
 import { VerificationScreen } from './areas/lens/Verification'
+import { DevicesScreen } from './areas/lens/Devices'
+import { PayoutDetailsScreen } from './areas/lens/PayoutDetails'
 import { CapabilityTermsScreen } from './areas/lens/CapabilityTerms'
 import { ConnectAI } from './areas/lens/ConnectAI'
 import { DocsEmailBranding } from './areas/docs/DocsEmailBranding'
 import { DocsWebhooks } from './areas/docs/DocsWebhooks'
 import { InvoicesScreen } from './areas/lens/Invoices'
-import { PayScreen } from './areas/lens/Pay'
+import { PayBillsScreen, PayBulkPayoutsScreen, PayMandatesScreen, PayScreen, PayStandingOrdersScreen } from './areas/lens/Pay'
+import { PayInstantTransferScreen } from './areas/lens/InstantTransfer'
+import { InstantTransferScreen } from './areas/lens/InstantTransferReceipt'
 import { RecurringPlanScreen } from './areas/lens/RecurringPlan'
 import { SubscriptionsScreen } from './areas/lens/Subscriptions'
 import { BudgetsScreen } from './areas/lens/Budgets'
@@ -218,15 +225,24 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/billing/cancel', title: 'Billing', element: <BillingCancel /> },
   { path: '/keys', title: 'API keys', element: <Keys /> },
   // B19.4 — each AI agent's own wallet: balance, rules, statement, payments and approvals. B57.8: Pocket's Agents.
-  { path: '/agents', title: 'Agents', element: <AgentBank /> },
+  // B57.19 — the agents as Pocket's w-agents, and New agent with the plan's limit said first.
+  { path: '/agents', title: 'Agents', element: <Agents /> },
+  // B57.16 — an agent's rules: today's agent view with that agent open, until B57.23 draws them.
+  // B57.20 — an agent's page, from one read; today's agent view under it until B57.21 and B57.22 redraw the rest.
+  { path: '/agents/:id', title: 'Agents', element: <AgentPage /> },
+  { path: '/agents/:id/rules', title: 'Agents', element: <AgentRulesPage /> },
   // B20.3 — browse, use and publish agents, prompts, skills, evaluations and pipelines; what they earned.
   { path: '/marketplace/*', title: 'Marketplace', element: <MarketplaceArea /> },
   { path: '/setup', title: 'Connect an agent', element: <Setup /> },
   { path: '/spend', title: 'Spend and routing', element: <Spend /> },
   { path: '/members', title: 'Members', element: <Members /> },
   { path: '/settings', title: 'Settings', element: <Settings /> },
+  // B57.43 — every passkey and the phone's key by name, added and removed, the waiting phone and Stop everything.
+  { path: '/settings/devices', title: 'Approvals and devices', element: <DevicesScreen /> },
   // B30.116 — the owner's verification level, each check, and the level each capability needs for live money.
   { path: '/settings/verification', title: 'Verification', element: <VerificationScreen /> },
+  // B55.28 — where the workspace is paid its share of a room, its marketplace sales and royalties.
+  { path: '/settings/payout-details', title: 'Payout details', element: <PayoutDetailsScreen /> },
   // B30.103 — each money capability's terms, read and accepted before its first use.
   { path: '/settings/terms', title: 'Capability terms', element: <CapabilityTermsScreen /> },
   // B39.25 — a Docs workspace's owner adds, rotates and deletes its signed webhooks.
@@ -245,6 +261,14 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   { path: '/money/invoices', title: 'Invoices', element: <InvoicesScreen /> },
   // B30.96 — pay a saved payee, standing orders, mandates and bulk payouts, with an agent's approvals inline.
   { path: '/money/pay', title: 'Pay', element: <PayScreen /> },
+  // B57.32 — Pay's standing orders, mandates, bulk payouts and bills, each on its own page reached from Also on Pay.
+  { path: '/money/pay/standing-orders', title: 'Standing orders', element: <PayStandingOrdersScreen /> },
+  { path: '/money/pay/mandates', title: 'Mandates', element: <PayMandatesScreen /> },
+  { path: '/money/pay/bulk-payouts', title: 'Bulk payouts', element: <PayBulkPayoutsScreen /> },
+  { path: '/money/pay/bills', title: 'Bills you received', element: <PayBillsScreen /> },
+  // B59.19 — Instant transfer, for a Hybrid account: the quote and the send, then its progress and its receipt.
+  { path: '/money/pay/instant-transfer', title: 'Instant transfer', element: <PayInstantTransferScreen /> },
+  { path: '/money/pay/instant-transfer/:id', title: 'Instant transfer', element: <InstantTransferScreen /> },
   // B45.37 — the page an assistant's recurring-payments link opens: its standing orders, and one passkey signature.
   { path: '/money/plans/:id', title: 'Sign recurring payments', element: <RecurringPlanScreen /> },
   // B41.20 — every recurring payment, standing order and renewing rental, with its next charge, monthly cost and reminder.
@@ -393,10 +417,10 @@ function Sidebar() {
       )}
       <div className="grid gap-0.5">
         {item('/', 'Home', 'home', pathname === '/')}
-        {item('/approvals', 'Approvals', 'approvals', under(pathname, '/approvals', '/approve'), pending)}
+        {item('/approvals', 'Approvals', 'approvals', under(pathname, '/approvals', '/approve', '/money/plans'), pending)}
         {item('/agents', 'Agents', 'agents', under(pathname, '/agents'))}
         {item('/statements', 'Statements', 'statements', under(pathname, '/statements'))}
-        {item('/money/pay', 'Pay', 'payments', under(pathname, '/money/pay', '/money/plans'))}
+        {item('/money/pay', 'Pay', 'payments', under(pathname, '/money/pay'))}
         {item('/money/invoices', 'Invoices', 'invoices', under(pathname, '/money/invoices'))}
         {item('/money/spending', 'Spending', 'spending', under(pathname, '/money/spending', '/money/budgets', '/money/subscriptions', '/money/card'))}
         {item('/chat', 'Chat', 'chat', under(pathname, '/chat'))}
@@ -472,7 +496,12 @@ function Palette({ pages, trigger }: { pages: PalettePage[]; trigger: (open: () 
   return <CommandPalette pages={offered} trigger={trigger} />
 }
 
+/** B57.50 — behind the gate: a new workspace's first page in its own layout, and every other address in the console's shell. */
 function AppShell() {
+  return useLocation().pathname === WELCOME_PATH ? <Welcome /> : <ConsoleShell />
+}
+
+function ConsoleShell() {
   const { pathname } = useLocation()
   const operator = useAuthMeReader().data?.operator === true
   // B59.2 — and no page of an area this workspace does not have.
@@ -487,8 +516,11 @@ function AppShell() {
   // B47.2 — Chat has the whole page: the suite's sidebar waits off to the left until Menu asks for it.
   const chat = pathname === '/chat' || pathname.startsWith('/chat/')
   return (
-    // B57.8 — Pocket's shell: the sidebar, the top bar, the kill banner and the page's heading. Taly, the palette and the
-    // theme switch are still today's design until B57.9 and B57.42 draw them, and carry their own marker.
+    <>
+    {/* B57.50 — an unnamed workspace's first page in a tab is /welcome. */}
+    <WelcomeRedirect />
+    {/* B57.8 — Pocket's shell: the sidebar, the top bar, the kill banner and the page's heading. B57.9 drew the ⌘K bar;
+        Taly and the theme switch are still today's design until B57.159 and B57.42 draw them, and carry their own marker. */}
     <div className="contents" data-design="pocket">
     <PocketShell
       drawer={chat}
@@ -507,6 +539,7 @@ function AppShell() {
                 aria-keyshortcuts={ariaKeys('palette')}
                 className={cn(
                   'flex h-10 min-w-0 flex-1 items-center gap-2 rounded-pill bg-cloud px-3.5 text-left text-body text-ink-3 wide:max-w-md',
+                  'transition-colors duration-200 active:scale-98',
                   pocketFocusRing,
                 )}
               >
@@ -523,10 +556,6 @@ function AppShell() {
           {/* B57.118 — the label, top right on every screen, before Pause every agent (the launch pack's W2 to W5). */}
           <WorkspaceStatus />
           <EveryAgentSwitch />
-          {/* B57.42 moves the theme switch to Settings as Appearance; until then it stays here, in today's design. */}
-          <div className="contents" data-design="today">
-            <ThemeToggle />
-          </div>
           <Avatar />
         </>
       }
@@ -596,7 +625,7 @@ function AppShell() {
       </ScreenBoundary>
       {/* B59.28 — Help and complaints, Close this account and Your data at the foot of every page; Chat has the whole page. */}
       {chat ? null : <SignedInFooter />}
-      {/* B45.6 — Taly, on every signed-in page, told which page it is on. Today's design until B57.9. */}
+      {/* B45.6 — Taly, on every signed-in page, told which page it is on. Today's design until B57.159. */}
       {/* B59.2 — Taly goes with Chat. */}
       <IfArea area="chat">
         <div className="contents" data-design="today">
@@ -605,8 +634,11 @@ function AppShell() {
       </IfArea>
       {/* B57.5 — the confirmation after an action, shown once on the next view, and the short messages. */}
       <SnackHost view={pathname} />
+      {/* B57.15 — the approval sheet, over whichever page ?approval=<id> (or /approvals#approval-<id>) is on. */}
+      <ApprovalSheetHost />
     </PocketShell>
     </div>
+    </>
   )
 }
 

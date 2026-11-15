@@ -235,40 +235,36 @@ export function appShell(): Scenario {
 }
 
 /**
- * B29.8 — Home opens like the board's PRODUCT UI tile: "Welcome to Talyvor" and a raised card for each
- * product. Each card is clicked from a freshly opened Home, as a person does, and must land on its route
- * with the console's own heading naming the page there — not the catch-all's "Not found".
+ * B29.8 — each link Home offers opens its own screen. B57.18: Home is the launch pack's W2 — the greeting, then the total
+ * with Top up and Pay, the agents with See all and the plan, and the cards — so the links clicked are those; the products
+ * are in the sidebar. Each is clicked from a freshly opened Home, as a person does, and must land on its route with the
+ * console's own heading naming the page there — not the catch-all's "Not found".
  */
 export const HOME_CARDS = [
-  { title: 'Agent Wallets', path: '/agents', heading: 'Agents' },
-  { title: 'Approvals', path: '/approvals', heading: 'Approvals' },
-  { title: 'Statements', path: '/statements', heading: 'Statements' },
-  { title: 'Chat', path: '/chat', heading: 'Chat' },
-  { title: 'Marketplace', path: '/marketplace', heading: 'Marketplace' },
-  { title: 'Track', path: '/track', heading: 'Track' },
-  { title: 'Docs', path: '/docs', heading: 'Docs' },
-  { title: 'Developers', path: '/setup', heading: 'Connect an agent' },
+  { title: 'Top up', path: '/billing', heading: 'Billing' },
+  { title: 'Pay', path: '/money/pay', heading: 'Pay' },
+  { title: 'See all', path: '/agents', heading: 'Agents' },
+  { title: 'See all', path: '/money/card', heading: 'Talyvor Card' },
 ] as const
 
 export function homeCards(): Scenario {
   return {
     id: 'home-cards',
     owner: 'talyvor-suite',
-    title: 'Home welcomes the person and each of its eight product cards opens its own screen',
+    title: 'Home greets the person and each of its links opens its own screen',
     run: async (ctx) => {
       const wrong: string[] = []
       const landed: string[] = []
       for (const card of HOME_CARDS) {
         const page = await ctx.app.tab('/')
         try {
-          await page.getByRole('heading', { level: 2, name: 'Welcome to Talyvor' }).waitFor({ timeout: HEADING_TIMEOUT_MS })
-          const link = page.getByRole('list', { name: 'Products' }).getByRole('link', { name: new RegExp(`^${card.title}`) })
-          if ((await link.count()) !== 1) {
-            wrong.push(`Home has ${await link.count()} "${card.title}" card(s)`)
+          await page.getByRole('heading', { level: 2, name: /^Good (morning|afternoon|evening)/ }).waitFor({ timeout: HEADING_TIMEOUT_MS })
+          const link = page.locator(`main a[href="${card.path}"]`).filter({ hasText: card.title })
+          if ((await link.count()) < 1) {
+            wrong.push(`Home has no "${card.title}" link to ${card.path}`)
             continue
           }
-          if ((await link.locator('svg[data-icon]').count()) < 1) wrong.push(`the ${card.title} card has no icon`)
-          await link.click()
+          await link.first().click()
           await page.waitForURL((u) => u.pathname === card.path, { timeout: HEADING_TIMEOUT_MS }).catch(() => undefined)
           const at = new URL(page.url()).pathname
           if (at !== card.path) {
@@ -286,7 +282,7 @@ export function homeCards(): Scenario {
       }
       ctx.evidence.push({ note: `Home's cards: ${landed.join(', ') || 'none landed'}` })
       return wrong.length === 0
-        ? { pass: true, detail: `all ${HOME_CARDS.length} Home cards open their screen: ${landed.join(', ')}` }
+        ? { pass: true, detail: `all ${HOME_CARDS.length} Home links open their screen: ${landed.join(', ')}` }
         : { pass: false, detail: wrong.join('; '), where: ['/'] }
     },
   }

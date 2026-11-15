@@ -220,6 +220,13 @@
   --logo-on-dark: block;
 }
 
+/* B57.58 — a switch's knob when off (pocket.css .toggle::after): white in both themes, the one Pocket colour no token
+   holds in both. On, it is the on-primary token: white in the light theme and ink in the dark (.pk-dark .toggle.on::after). */
+:root,
+[data-theme] {
+  --knob: #FFFFFF;
+}
+
 html, body { height: 100%; }
 body {
   margin: 0;

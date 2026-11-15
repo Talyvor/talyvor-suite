@@ -111,7 +111,7 @@ function mockBff({ hold = 'sentence' }: { hold?: 'sentence' | 'accepted' } = {})
     }
     return new Response('null', { status: 404 })
   })
-  return { agents, approvals, moveKeys, blips, setWorkspace: (v: number) => (workspace = v) }
+  return { agents, approvals, moveKeys, blips, rules, setWorkspace: (v: number) => (workspace = v) }
 }
 
 afterEach(() => {
@@ -127,25 +127,48 @@ async function createAgent(name: string) {
   await waitFor(() => expect(screen.getByTestId('agent-open')).toHaveTextContent(name))
 }
 
+/** B57.16 — the open agent's Move LXC: the amount typed, then Fund <agent> or Take back. */
+async function moveLxc(name: string, amount: string, press: string) {
+  fireEvent.click(screen.getByRole('button', { name: 'Move LXC' }))
+  const dialog = await screen.findByRole('dialog', { name: `Move LXC: ${name}` })
+  fireEvent.change(within(dialog).getByLabelText('Amount in LXC'), { target: { value: amount } })
+  fireEvent.click(within(dialog).getByRole('button', { name: press }))
+}
+
+/** B57.23 — the open agent's rules, set on their own page: each rule switched on with its amount, then saved. */
+async function saveRules(name: string, rows: [string, string][], switches: string[] = []) {
+  fireEvent.click(await screen.findByRole('link', { name: `Edit ${name}’s rules, see their history or ask whether a request would pass` }))
+  await screen.findByRole('heading', { level: 1, name: `${name}’s rules` })
+  for (const [rule, value] of rows) {
+    fireEvent.click(screen.getByRole('switch', { name: rule }))
+    fireEvent.change(screen.getByLabelText(`${rule} for ${name}, in LXC`), { target: { value } })
+  }
+  for (const rule of switches) fireEvent.click(screen.getByRole('switch', { name: rule }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+  await screen.findByText(`${name}’s rules are saved`)
+  await waitFor(() => expect(screen.getByTestId('agent-open')).toHaveTextContent(name))
+}
+
 describe('Agent Bank', () => {
-  // B28.271 — with no agents the screen is one card that creates the first: nothing to pause, forecast,
-  // approve, lend or hold shows until the agent exists, and then all of it does.
-  it('shows a workspace with no agents only the card that creates its first', async () => {
+  // B57.19 — with no agents /agents says so, and New agent creates the first: its own page opens, and only then are there
+  // approvals, spending and a forecast to show (B28.271). The plan is not read here, so the form shows and Lens judges.
+  it('shows a workspace with no agents that it has none, and New agent opens the first one’s page', async () => {
     mockBff()
     window.history.pushState({}, '', '/agents')
     render(<App />)
-    const card = await screen.findByTestId('agent-first')
-    expect(within(card).getByText('Create your first agent')).toBeInTheDocument()
+    expect(await screen.findByText('No agents yet')).toBeInTheDocument()
     // B57.8 — the top bar's Pause every agent is on every page; the page draws none of its own.
     expect(screen.queryByTestId('pause-every-agent')).toBeNull()
-    expect(screen.queryByTestId('agents-forecast')).toBeNull()
-    expect(screen.queryByTestId('agent-bank-totals')).toBeNull()
+    expect(screen.queryByTestId('agents-list')).toBeNull()
     for (const region of ['Approvals', 'Spending', 'Between owners', 'Held and cashed out'])
       expect(screen.queryByRole('region', { name: region })).toBeNull()
 
-    await createAgent('First')
-    expect(screen.queryByTestId('agent-first')).toBeNull()
-    expect(within(screen.getByTestId('pause-every-agent')).getByRole('button', { name: 'Pause every agent' })).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('button', { name: 'New agent' })[0])
+    const dialog = await screen.findByRole('dialog', { name: 'New agent' })
+    fireEvent.change(await within(dialog).findByLabelText('Name'), { target: { value: 'First' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_1'))
+    await waitFor(() => expect(screen.getByTestId('agent-open')).toHaveTextContent('First'))
     expect(screen.getByRole('region', { name: 'Approvals' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Spending' })).toBeInTheDocument()
   })
@@ -155,7 +178,7 @@ describe('Agent Bank', () => {
     const bff = mockBff()
     bff.agents.push({ id: 'agt_1', name: 'Researcher', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-09-28T06:00:00Z' })
     bff.approvals.push({ id: 'apr_1', agent_id: 'agt_1', amount_ulxc: M, model: 'gpt-5', status: 'expired', created_at: '2026-09-27T06:00:00Z', fp: '' })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     const approvals = await screen.findByRole('region', { name: 'Approvals' })
     expect(await within(approvals).findByText('Expired')).toBeInTheDocument()
@@ -168,19 +191,17 @@ describe('Agent Bank', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const bff = mockBff()
-      window.history.pushState({}, '', '/agents')
+      window.history.pushState({}, '', '/agents/agt_1')
       render(<App />)
       await screen.findByTestId('agent-first')
       await createAgent('South')
-      fireEvent.change(screen.getByLabelText('Amount in LXC for South'), { target: { value: '1' } })
-      fireEvent.click(screen.getByRole('button', { name: 'Fund' }))
+      await moveLxc('South', '1', 'Fund South')
       await waitFor(() => expect(screen.getByTestId('agent-balance-agt_1')).toHaveTextContent('1 LXC'))
 
       bff.blips.push(502, 'drop')
-      fireEvent.change(screen.getByLabelText('Amount in LXC for South'), { target: { value: '0.25' } })
-      fireEvent.click(screen.getByRole('button', { name: 'Take back' }))
-      await vi.advanceTimersByTimeAsync(4_000) // the card's two retry delays, without waiting them out
-      await waitFor(() => expect(screen.getByText(/South now holds/)).toHaveTextContent('South now holds 0.75 LXC.'))
+      await moveLxc('South', '0.25', 'Take back')
+      await vi.advanceTimersByTimeAsync(4_000) // the dialog's two retry delays, without waiting them out
+      await waitFor(() => expect(screen.getByText(/South now holds/)).toHaveTextContent('South now holds 0.75 LXC'))
       expect(screen.queryByRole('alert')).toBeNull()
       expect(bff.moveKeys).toHaveLength(3)
       expect(bff.moveKeys[0]).not.toBe('')
@@ -190,26 +211,39 @@ describe('Agent Bank', () => {
     }
   })
 
+  // B59.19 — "Can use Instant transfer" is off by default; turned on and saved, the rules carry it to Lens.
+  it('turns on Can use Instant transfer and saves it with the rules', async () => {
+    const bff = mockBff()
+    window.history.pushState({}, '', '/agents/agt_1')
+    render(<App />)
+    await screen.findByTestId('agent-first')
+    await createAgent('Researcher')
+    fireEvent.click(await screen.findByRole('link', { name: 'Edit Researcher’s rules, see their history or ask whether a request would pass' }))
+    const can = await screen.findByRole('switch', { name: 'Can use Instant transfer' })
+    expect(can.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(can)
+    expect(can.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+    await screen.findByText('Researcher’s rules are saved')
+    expect(bff.rules.agt_1.may_instant_transfer).toBe(true)
+  })
+
   it('creates and funds an agent, refuses a payment over its daily limit, and pays once approved from the inbox', async () => {
     const bff = mockBff()
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     await screen.findByTestId('agent-first')
     await createAgent('Writer')
     await createAgent('Researcher')
 
-    fireEvent.change(screen.getByLabelText('Amount in LXC for Researcher'), { target: { value: '10' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Fund' }))
+    await moveLxc('Researcher', '10', 'Fund Researcher')
     await waitFor(() => expect(screen.getByTestId('agent-balance-agt_2')).toHaveTextContent('10 LXC'))
     expect(screen.getByTestId('agent-bank-totals')).toHaveTextContent('10 LXC with its agents and 90 LXC free to fund them')
 
-    const daily = await screen.findByLabelText('Daily limit for Researcher, in LXC')
-    fireEvent.change(daily, { target: { value: '5' } })
-    fireEvent.change(screen.getByLabelText('Ask a person above for Researcher, in LXC'), { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-    await screen.findByText(/Saved\. Lens applies these rules/)
+    await saveRules('Researcher', [['At most a day', '5'], ['Asks you above', '2']])
 
+    fireEvent.click(within(screen.getByTestId('agent-setting-Pay another agent')).getByRole('button')) // B57.22: a row of its Settings
     const pay = within(screen.getByRole('group', { name: 'Pay to' }))
     fireEvent.click(pay.getByRole('button', { name: 'Writer' }))
     fireEvent.change(screen.getByLabelText('Payment in LXC from Researcher'), { target: { value: '6' } })
@@ -245,19 +279,17 @@ describe('Agent Bank', () => {
   // waits in Approvals, the same as the sentence says it today, and never that it was paid.
   it('shows a payment Lens answers as pending approval as waiting in Approvals, never as paid', async () => {
     const bff = mockBff({ hold: 'accepted' })
-    window.history.pushState({}, '', '/agents')
+    window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     await screen.findByTestId('agent-first')
     await createAgent('Writer')
     await createAgent('Researcher')
-    fireEvent.change(screen.getByLabelText('Amount in LXC for Researcher'), { target: { value: '10' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Fund' }))
+    await moveLxc('Researcher', '10', 'Fund Researcher')
     await waitFor(() => expect(screen.getByTestId('agent-balance-agt_2')).toHaveTextContent('10 LXC'))
-    fireEvent.change(await screen.findByLabelText('Ask a person above for Researcher, in LXC'), { target: { value: '2' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
-    await screen.findByText(/Saved\. Lens applies these rules/)
+    await saveRules('Researcher', [['Asks you above', '2']])
 
+    fireEvent.click(within(screen.getByTestId('agent-setting-Pay another agent')).getByRole('button')) // B57.22: a row of its Settings
     fireEvent.click(within(screen.getByRole('group', { name: 'Pay to' })).getByRole('button', { name: 'Writer' }))
     fireEvent.change(screen.getByLabelText('Payment in LXC from Researcher'), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('button', { name: 'Pay' }))

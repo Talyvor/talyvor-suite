@@ -16,23 +16,28 @@ import { resumeEveryAgent } from '../areas/lens/passkeys'
 const PAUSED_FROM_THE_TOP_BAR = 'paused from the top bar'
 
 /** Whether every agent is paused, from the agents' book every money screen already reads. Unknown is not paused. */
-function useAllPaused(): boolean {
+export function useAllPaused(): boolean {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   return Boolean(book.data?.all_paused_at)
 }
 
-/** The top bar's switch: Pause every agent, or while they are paused, Start every agent again. */
-export function EveryAgentSwitch() {
+/** Pause every agent at once: instant, no passkey (Lens B19.7), said in the snack. B57.43: also Approvals and devices'. */
+export function usePauseEveryAgent(reason: string) {
   const qc = useQueryClient()
-  const paused = useAllPaused()
-  const [starting, setStarting] = useState(false)
-  const pause = useMutation({
-    mutationFn: () => agentBankApi.pauseAll(PAUSED_FROM_THE_TOP_BAR),
+  return useMutation({
+    mutationFn: () => agentBankApi.pauseAll(reason),
     onSuccess: () =>
       showSnack({ title: 'Every agent is paused', line: 'Talyvor refuses each one’s next request or payment until you start them again.' }),
     onError: (err) => showSnack({ title: 'Your agents were not paused', line: deviceText(err, 'Try again.') }),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
+}
+
+/** The top bar's switch: Pause every agent, or while they are paused, Start every agent again. */
+export function EveryAgentSwitch() {
+  const paused = useAllPaused()
+  const [starting, setStarting] = useState(false)
+  const pause = usePauseEveryAgent(PAUSED_FROM_THE_TOP_BAR)
   return (
     <>
       {paused ? (
@@ -85,7 +90,7 @@ export function KillBanner() {
  * The killoff dialog. An agent paused on its own stays paused, and is named. With only the phone's key, the phone
  * starts them (B55.2) and this browser can be added; until the keys are read, nothing is offered to press.
  */
-function StartEveryAgent({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function StartEveryAgent({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null
   return <StartEveryAgentDialog onClose={onClose} />
 }
@@ -132,7 +137,7 @@ function StartEveryAgentDialog({ onClose }: { onClose: () => void }) {
       {onlyThePhone ? (
         <p data-testid="on-the-phone">
           Start your agents again on your phone with Face ID.{' '}
-          <Link className={cn(inlineLink, 'whitespace-nowrap font-semibold text-ink')} to="/approvals" onClick={onClose}>
+          <Link className={cn(inlineLink, 'whitespace-nowrap font-semibold text-ink')} to="/settings/devices" onClick={onClose}>
             Add this browser
           </Link>
         </p>

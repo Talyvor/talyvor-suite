@@ -1,0 +1,66 @@
+[
+ {
+  "route": "/agents/agt_research",
+  "screen": "w-agent-research"
+ },
+ {
+  "route": "/agents/agt_research",
+  "steps": [
+   "Its address"
+  ]
+ },
+ {
+  "route": "/agents/agt_research",
+  "steps": [
+   "Send or request"
+  ]
+ },
+ {
+  "route": "/agents/agt_research",
+  "steps": [
+   "Requests"
+  ]
+ },
+ {
+  "route": "/agents/agt_research",
+  "steps": [
+   "Transfers"
+  ]
+ },
+ {
+  "route": "/agents/agt_research",
+  "steps": [
+   "Recurring transfer"
+  ]
+ },
+ {
+  "route": "/agents/agt_research",
+  "steps": [
+   "Pots"
+  ]
+ },
+ {
+  "route": "/agents/agt_research",
+  "steps": [
+   "Escrow"
+  ]
+ },
+ {
+  "route": "/agents/agt_research",
+  "steps": [
+   "Cash out"
+  ]
+ },
+ {
+  "route": "/agents/agt_research",
+  "steps": [
+   "Credit line"
+  ]
+ },
+ {
+  "route": "/agents/agt_research",
+  "steps": [
+   "Its wallet"
+  ]
+ }
+]

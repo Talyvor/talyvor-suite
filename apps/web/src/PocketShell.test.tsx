@@ -100,8 +100,9 @@ describe('Pause every agent, from the top bar of every page', () => {
     expect(dialog).toHaveTextContent('An agent you paused on its own stays paused.')
     expect(dialog).toHaveTextContent('Ops stays paused until you resume it.')
 
-    // The passkey prompt cancelled: nothing is sent, and every agent stays paused.
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Start them with your passkey' }))
+    // The passkey prompt cancelled: nothing is sent, and every agent stays paused. The dialog reads the keys itself, so
+    // the passkey's button is there once that read answers (B57.18: Home no longer reads them first).
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Start them with your passkey' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Cancelled. Nothing changed.')
     expect(posts.some((p) => p.url === '/api/agents/resume-all')).toBe(false)
 
@@ -129,7 +130,7 @@ describe('Pause every agent, from the top bar of every page', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Start every agent again?' })
     expect(await within(dialog).findByText(/Start your agents again on your phone with Face ID\./)).toBeInTheDocument()
-    expect(within(dialog).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
+    expect(within(dialog).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/settings/devices')
     expect(within(dialog).queryByRole('button', { name: /^Start/ })).toBeNull()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('dialog')).toBeNull()

@@ -85,6 +85,35 @@ describe('help and complaints, closing the account, your data (B59.28)', () => {
     await waitFor(() => expect(posts).toEqual([{ kind: 'data_export', message: '' }]))
   })
 
+  // B57.139 — drawn as Pocket's w-card: the crumb back to Settings, the page's heading and its line, then what was
+  // sent in the wide column with the form beside it.
+  it('draws each page as w-card: crumb, heading, then what was sent before the form', async () => {
+    for (const [path, heading, button] of [
+      ['/settings/help', 'Ask us something, or make a complaint', 'Send'],
+      ['/settings/close', 'What must be empty first, and asking to close', 'Ask to close this account'],
+      ['/settings/data', 'A copy of your data, or ask for it to be deleted', 'Ask for a copy'],
+    ]) {
+      mockBff()
+      open(path)
+      const crumb = await screen.findByRole('navigation', { name: 'Breadcrumb' })
+      expect(within(crumb).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('/settings')
+      expect(screen.getByRole('heading', { level: 2, name: heading })).toBeTruthy()
+      const sent = await screen.findByTestId('sent-requests')
+      const form = screen.getByRole('button', { name: button })
+      expect(sent.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      cleanup()
+      vi.restoreAllMocks()
+      queryClient.clear()
+    }
+  })
+
+  it('says what deleting your data does in the privacy notice’s words', async () => {
+    mockBff()
+    open('/settings/data')
+    const del = (await screen.findByRole('heading', { level: 3, name: 'Delete your data' })).parentElement
+    expect(del?.textContent).toContain('Ask, and we delete it.')
+  })
+
   it('links all three from the foot of a signed-in page and from both legal pages', async () => {
     mockBff()
     for (const path of ['/agents', '/privacy', '/terms']) {

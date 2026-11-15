@@ -1,0 +1,12 @@
+[
+  { "route": "/settings/connect", "screen": "w-connect" },
+  { "route": "/settings/connect", "screen": "w-connect", "dark": true },
+  { "route": "/settings/connect", "screen": "w-connect+howto-claude", "steps": ["How to add Claude"], "frame": true, "answers": { "/api/connect/assistants": { "assistants": [] } } },
+  { "route": "/settings/connect", "screen": "w-connect+howto-chatgpt", "steps": ["How to add ChatGPT"], "frame": true },
+  { "route": "/settings/connect", "screen": "w-connect+howto-claude-code", "steps": ["How to add Claude Code"], "frame": true },
+  { "route": "/settings/connect", "screen": "w-connect+howto-cursor", "steps": ["How to add Cursor"], "frame": true },
+  { "route": "/settings/connect", "screen": "w-connect+howto-microsoft-copilot", "steps": ["How to add Microsoft Copilot"], "frame": true },
+  { "route": "/settings/connect", "screen": "w-connect+howto-mistral-le-chat", "steps": ["How to add Mistral Le Chat"], "frame": true },
+  { "route": "/settings/connect", "screen": "w-connect+howto-grok", "steps": ["How to add Grok"], "frame": true },
+  { "route": "/settings/connect", "screen": "w-connect+revoke-claude", "steps": ["Revoke Claude"], "frame": true }
+]

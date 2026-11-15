@@ -22,10 +22,11 @@ export function helperFor(colour: string): AgentCardArt | undefined {
   return cardArt.find((c): c is AgentCardArt => c.family === 'agent' && c.colour === colour)
 }
 
-export function AgentCard({ agent, className }: { agent: AgentLike; className?: string }) {
+/** `sub` is the line under the name in place of its job: the agent's page writes "Agent card · pounds" (B57.20). */
+export function AgentCard({ agent, sub: line, className }: { agent: AgentLike; sub?: string; className?: string }) {
   const { colour } = faceOf(agent)
-  const sub = agent.description ?? ''
-  const label = agentCardLabel(agent.name, sub)
+  const sub = line ?? agent.description ?? ''
+  const label = agentCardLabel(agent.name, agent.description ?? '')
   const helper = helperFor(colour)
   if (helper) return <TalyvorCard card={helper} holder={agent.name} sub={sub} alt={label} className={className} />
 

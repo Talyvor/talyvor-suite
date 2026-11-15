@@ -1,4 +1,4 @@
-import type { Config } from 'tailwindcss'
+import type { Config, PluginUtils } from 'tailwindcss/types/config'
 
 /**
  * The locked preset. Every value the components may use is a NAMED token here;
@@ -23,7 +23,7 @@ const preset = {
         danger: { DEFAULT: 'var(--danger)', 50: 'var(--danger-50)' },
         primary: 'var(--primary)',
         'on-primary': 'var(--on-primary)',
-        scrim: 'var(--scrim)',
+        scrim: 'var(--scrim)', knob: 'var(--knob)',
         agent: {
           cobalt: 'var(--agent-cobalt)', orchid: 'var(--agent-orchid)', sky: 'var(--agent-sky)', mint: 'var(--agent-mint)',
           lemon: 'var(--agent-lemon)', rose: 'var(--agent-rose)', lime: 'var(--agent-lime)',
@@ -276,6 +276,14 @@ const preset = {
       minHeight: { row: '38px', 'below-header': 'calc(100dvh - 4.5rem)' },
       outlineColor: { accent: 'var(--accent)' },
       ringColor: { accent: 'var(--accent)' },
+    },
+    // B57.58 — `text-page` is the console's heading size (fontSize.page above), so it must not also be a colour. With
+    // `page` among the text colours, Tailwind emitted `.text-page{color:var(--page)}` after `.text-ink` and every
+    // Region heading and price drawn `text-page text-ink` took the page's own colour: unreadable in light and dark.
+    // Words on an ink fill are `text-on-primary`.
+    textColor: ({ theme }: PluginUtils) => {
+      const { page: _page, ...colors } = theme('colors') as Record<string, string | Record<string, string>>
+      return colors
     },
   },
 } satisfies Partial<Config>

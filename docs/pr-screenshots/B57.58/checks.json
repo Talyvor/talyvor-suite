@@ -1,0 +1,4 @@
+[
+  { "route": "/", "screen": "w-home", "dark": true },
+  { "route": "/?approval=apr_acme", "screen": "w-home+sheet-A", "dark": true }
+]

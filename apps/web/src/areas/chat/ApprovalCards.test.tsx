@@ -167,7 +167,7 @@ describe('Chat approval cards when only the phone holds a key (B55.2)', () => {
     render(<App />)
     const card = (await screen.findAllByTestId('chat-approval'))[0]
     expect(await within(card).findByText('Approve this on your phone: it is waiting in Talyvor there.')).toBeInTheDocument()
-    expect(within(card).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/approvals')
+    expect(within(card).getByRole('link', { name: 'Add this browser' })).toHaveAttribute('href', '/settings/devices')
     expect(within(card).queryByRole('button', { name: /Approve|Decline/ })).toBeNull()
     expect(posts).toEqual([])
   })

@@ -92,6 +92,8 @@ without.
 | `LENS_SYNTHETIC_KEY` | — | same value as Lens's; set ⇒ `POST /auth/synthetic` signs in Lens's synthetic test workspaces (B17.2), unset ⇒ 404 |
 | `LENS_MODERATOR_KEY` | — | a `tlv_mod_` key from Lens (`/lens moderator-keys create web app`, talyvor-lens `docs/moderator-keys.md`); set ⇒ the marketplace review queue under `/api/admin/marketplace/*` works for anyone on `OPERATOR_SUBS`, each call naming the signed-in operator in `X-Talyvor-Operator`; unset ⇒ 501. Never a Lens admin key (B20.12) |
 | `LENS_OPERATOR_READ_KEY` | — | the same value as Lens's `LENS_OPERATOR_READ_KEY`; set ⇒ `GET /api/admin/workspaces` (the operator screen) reads every workspace's spend, held LENS and last activity from Lens for anyone on `OPERATOR_SUBS`; unset ⇒ 501. Never a Lens admin key (B18.25) |
+| `PICOVOICE_ACCESS_KEY` | — | "Hey Taly"'s Picovoice access key; set ⇒ `GET /api/voice/key` answers it to a signed-in phone (never logged); unset ⇒ 503 "Hey Taly is off." (B58.10) |
+| `BFF_VOICE_KEY_PER_SESSION_HOUR` | `20` | `GET /api/voice/key` requests per signed-in person per hour (B58.10) |
 
 That is the whole surface, and it is held to the binary from both sides:
 `TestEveryEnvVarTheBinaryReadsIsDocumented` fails if a variable is read and missing here,

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { populatedBff, settleQueries } from '../../populatedBff'
@@ -39,6 +39,8 @@ async function at(address: string, account: { account_type: string; money_kind: 
 }
 
 afterEach(() => {
+  // Unmounted first: the wallet's panel (B57.21) is a portal, which React must take out of the body itself.
+  cleanup()
   vi.restoreAllMocks()
   queryClient.clear()
   document.body.replaceChildren()
@@ -61,9 +63,34 @@ describe.each(TYPES.flatMap((t) => KINDS.map((k) => [t, k] as const)))('a %s acc
     expect(within(main).queryByRole('heading', { name: 'People and companies you pay' }) !== null).toBe(kind !== 'stablecoin')
     expect(within(main).queryByRole('button', { name: 'Add a payee' }) !== null).toBe(kind !== 'stablecoin') // B57.31: Add a payee is a dialog
     expect(within(main).queryByTestId('pay-on-chain') !== null).toBe(kind === 'stablecoin')
+    // B57.32 — bulk payouts are a page under Pay, offered by Also on Pay only to a Business.
+    expect(within(main).queryByRole('link', { name: /^Bulk payouts/ }) !== null).toBe(business && kind !== 'stablecoin')
+    if (!business) expect(text).not.toMatch(/company’s|The company/)
+  })
+
+  it('Pay › Bulk payouts: the upload only for a Business that has bank transfers', async () => {
+    const { main } = await at('/money/pay/bulk-payouts', account)
     expect(within(main).queryByRole('heading', { name: 'Pay many at once from a file' }) !== null).toBe(business && kind !== 'stablecoin')
     expect(within(main).queryByLabelText('Payouts CSV') !== null).toBe(business && kind !== 'stablecoin')
-    if (!business) expect(text).not.toMatch(/company’s|The company/)
+    expect(within(main).queryByTestId('pay-on-chain') !== null).toBe(kind === 'stablecoin')
+  })
+
+  // B59.19 — Instant transfer is Hybrid's alone: no Home action, no row on Pay, its page sends any other kind back to
+  // Pay, and an agent's rules have no "Can use Instant transfer" switch.
+  it('Instant transfer: an entry only for Hybrid', { timeout: 20_000 }, async () => {
+    const hybrid = kind === 'hybrid'
+    let { main } = await at('/', account)
+    expect(within(main).queryByRole('link', { name: 'Instant transfer' }) !== null).toBe(hybrid)
+    document.body.replaceChildren()
+    ;({ main } = await at('/money/pay', account))
+    expect(within(main).queryByRole('link', { name: /^Instant transfer/ }) !== null).toBe(hybrid)
+    document.body.replaceChildren()
+    ;({ main } = await at('/money/pay/instant-transfer', account))
+    expect(within(main).queryByTestId('instant-transfer-form') !== null).toBe(hybrid)
+    document.body.replaceChildren()
+    ;({ main } = await at('/agents/agt_research/rules', account))
+    await within(main).findByRole('switch', { name: 'Pauses if its spending looks unusual' })
+    expect(within(main).queryByRole('switch', { name: 'Can use Instant transfer' }) !== null).toBe(hybrid)
   })
 
   it('Cards: no owner card tier of the other type', async () => {
@@ -76,18 +103,21 @@ describe.each(TYPES.flatMap((t) => KINDS.map((k) => [t, k] as const)))('a %s acc
     // B57.8 — Members left the sidebar: Settings links it.
     const { main } = await at('/settings', account)
     const pages = within(main).getByRole('navigation', { name: 'Settings pages' })
-    expect(within(pages).queryByRole('link', { name: 'Members' }) !== null).toBe(business)
+    expect(within(pages).queryByRole('link', { name: /^Members/ }) !== null).toBe(business)
     expect(within(main).getByTestId('settings-money-kind').textContent).toContain(KIND_LABEL[kind])
     expect(within(main).getByTestId('settings-account-type').textContent).toContain(CHIP[type])
     expect(within(main).queryByTestId('settings-team') !== null).toBe(business)
   })
 
   it('Wallets: the address only for on-chain money, the IBAN and Send only for bank money', async () => {
-    const { main } = await at('/agents', account)
-    await within(main).findByTestId('agent-money-wallet')
+    const { main } = await at('/agents/agt_research', account)
+    // B57.21 — the wallet is a panel of the agent's Money card.
+    fireEvent.click(await within(main).findByTestId('money-row-wallet'))
+    const panel = await screen.findByRole('dialog')
+    await within(panel).findByTestId('agent-money-wallet')
     // A partner gives one of the two, the address first; a Hybrid account draws the address.
-    expect(within(main).queryByTestId('wallet-address') !== null).toBe(kind !== 'fiat')
-    expect(within(main).queryByTestId('wallet-iban') !== null).toBe(kind === 'fiat')
-    expect(within(main).queryByRole('region', { name: 'Send money' }) !== null).toBe(kind !== 'stablecoin')
+    expect(within(panel).queryByTestId('wallet-address') !== null).toBe(kind !== 'fiat')
+    expect(within(panel).queryByTestId('wallet-iban') !== null).toBe(kind === 'fiat')
+    expect(within(panel).queryByRole('region', { name: 'Send money' }) !== null).toBe(kind !== 'stablecoin')
   })
 })

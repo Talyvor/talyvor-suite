@@ -616,9 +616,26 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	// THE HUNDRED-AND-EIGHTIETH TO EIGHTY-SECOND ARE B55.56'S, POST only: /api/money/mandates/challenge relays a
 	// one-time challenge for the grant or approval it names and holds nothing; /api/money/mandates/{id}/approve and
 	// .../decline decide an agent's requested mandate, read back through GET /api/money/mandates, in the sweep's reach.
-	if len(methodOnly) > 182 {
+	//
+	// THE HUNDRED-AND-EIGHTY-THIRD IS B55.28'S, POST only: /api/rooms/{id}/payouts pays a room's members by its terms, and
+	// each payout is read back through GET /api/money/earnings-payouts, in the sweep's reach.
+	//
+	// THE HUNDRED-AND-EIGHTY-FOURTH AND FIFTH ARE B59.19'S, POST only: /api/money/instant-transfers/quote relays a quote
+	// locked for 30 seconds, and /api/agents/{id}/instant-transfers sends one; each transfer is read back through GET
+	// /api/money/instant-transfers/{id}, in the sweep's reach.
+	//
+	// THE HUNDRED-AND-EIGHTY-SIXTH AND SEVENTH ARE B59.12'S: PUT /api/workspace/account/money-kind changes the kind of
+	// money, read back through GET /api/workspace/account, in the sweep's reach; POST .../money-kind/challenge relays a
+	// one-time challenge and holds nothing.
+	//
+	// THE HUNDRED-AND-EIGHTY-EIGHTH TO NINETY-THIRD ARE B59.52'S, POST only: /api/money/accounts/{id}/top-up and
+	// .../withdraw move money in and out of a company account, read back through GET /api/money/accounts and its
+	// statement, in the sweep's reach; /api/money/convert/quote, /api/money/convert and their /challenge routes (and
+	// .../withdraw/challenge) relay a quote, a conversion or a one-time challenge, the conversion read back through the
+	// same accounts.
+	if len(methodOnly) > 193 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 182 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 193 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}

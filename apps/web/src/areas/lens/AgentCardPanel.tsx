@@ -107,7 +107,8 @@ const FIELDS: { key: keyof Cardholder; label: string; required: boolean; width: 
   { key: 'country', label: 'Country (two letters)', required: false, width: 'w-20', auto: 'country' },
 ]
 
-function IssueCard({ agent }: { agent: Agent }) {
+/** B57.20: the agent's page opens it in a dialog, and closes that once the card is issued. */
+export function IssueCard({ agent, onIssued }: { agent: Agent; onIssued?: () => void }) {
   const qc = useQueryClient()
   const [holder, setHolder] = useState<Cardholder>({
     first_name: '',
@@ -124,7 +125,10 @@ function IssueCard({ agent }: { agent: Agent }) {
   const ready = FIELDS.every((f) => !f.required || holder[f.key].trim() !== '') && phone !== null
   const issue = useMutation({
     mutationFn: () => agentBankApi.issueCard(agent.id, { ...holder, phone_number: phone ?? '' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: cardKey(agent.id) }),
+    onSuccess: () => {
+      onIssued?.()
+      return qc.invalidateQueries({ queryKey: cardKey(agent.id) })
+    },
   })
   return (
     <form

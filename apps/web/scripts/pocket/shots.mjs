@@ -3,13 +3,19 @@
  * B57.1 — pocket-shots: the app beside the Pocket reference, for every Pocket item.
  *
  *   pnpm --filter @talyvor/web pocket:shots <item> <checks.json>
+ *   pnpm --filter @talyvor/web pocket:shots <item> --dark [checks.json] [--no-press]
+ *
+ * B57.58 — --dark shoots every check in dark, and with no checks file every route it knows (scripts/pocket/routes.ts),
+ * and every dark shot also runs the contrast check: every text pair at 4.5:1, every field's and switch's edge at 3:1.
+ * --no-press leaves out the press check, which opens a fresh page for each control and is most of the time a sweep takes.
  *
  * checks.json is a list of { route, screen, steps?, dark?, frame?, answers?, state? }: the app's address, the reference's screen id
  * (README.md's tables; leave it out for a page with no reference, such as the story page), the words or aria-labels to press in the app to reach the screen as a person would
  * (w-home+sheet-A is reached by pressing "Review"), whether to shoot it dark, and whether the reference is only the
  * dialog's frame over its page (B57.5: a dialog on the story page, beside the reference's dialog without its page),
  * and what to answer instead of the sample for some addresses, by path (B57.49: /auth/me signed out for /signup), and
- * the reference's state to set before its shot (B57.116: { "pr": 1, "nw": 0 } shows a prepared payment).
+ * the reference's state to set before its shot (B57.116: { "pr": 1, "nw": 0 } shows a prepared payment), and whether the
+ * browser has an authenticator that says yes (B57.103: "authenticator": true makes a passkey, and signs with the one it holds).
  *
  * It builds the app once, serves dist with every /api and /auth request answered from scripts/pocket/sample.ts,
  * and for each check shoots the app at 1440x900 and 390x844 with the reference beside it, into
@@ -23,6 +29,7 @@
  *
  * The reference folder is POCKET_REFERENCE, default ~/talyvor-queue/design/pocket.
  */
+import { generateKeyPairSync } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
@@ -44,13 +51,14 @@ const SIZES = [
 ]
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' }
 
-const [item, checksArg] = process.argv.slice(2)
-if (!item || !checksArg || !/^[\w.-]+$/.test(item)) {
-  console.error('usage: pnpm --filter @talyvor/web pocket:shots <item> <checks.json>')
+const args = process.argv.slice(2)
+const DARK = args.includes('--dark')
+const PRESS = !args.includes('--no-press')
+const [item, checksArg] = args.filter((a) => !a.startsWith('--'))
+if (!item || (!checksArg && !DARK) || !/^[\w.-]+$/.test(item)) {
+  console.error('usage: pnpm --filter @talyvor/web pocket:shots <item> <checks.json> | <item> --dark [checks.json] [--no-press]')
   process.exit(2)
 }
-// pnpm runs the script in apps/web; a relative path means where the person typed it.
-const checks = JSON.parse(await readFile(resolve(process.env.INIT_CWD || process.cwd(), checksArg), 'utf8'))
 if (!existsSync(join(REFERENCE, 'index.html'))) {
   console.error(`no Pocket reference at ${REFERENCE}: set POCKET_REFERENCE`)
   process.exit(2)
@@ -61,6 +69,11 @@ const overrides = JSON.parse(await readFile(join(WEB, 'scripts/pocket/overrides.
 const loader = await createServer({ root: WEB, logLevel: 'error', server: { middlewareMode: true, hmr: false }, appType: 'custom', optimizeDeps: { noDiscovery: true } })
 const { sampleBodyFor, sampleReset, SAMPLE_NOW, SAMPLE_TIME_ZONE } = await loader.ssrLoadModule('/scripts/pocket/sample.ts')
 const check = await loader.ssrLoadModule('/src/test/pocketCheck.ts')
+const { SHOT_ROUTES } = await loader.ssrLoadModule('/scripts/pocket/routes.ts')
+// pnpm runs the script in apps/web; a relative path means where the person typed it.
+const checks = (checksArg ? JSON.parse(await readFile(resolve(process.env.INIT_CWD || process.cwd(), checksArg), 'utf8')) : Object.values(SHOT_ROUTES).map((route) => ({ route }))).map(
+  (c) => (DARK ? { ...c, dark: true } : c),
+)
 await loader.close()
 
 console.log('building the app and the story page…')
@@ -129,7 +142,18 @@ async function openApp(c, size) {
       (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(c.answers[new URL(route.request().url()).pathname]) }),
     )
   }
-  await page.goto(BASE + c.route)
+  // B57.103 — Face ID that says yes, holding one passkey of its own. WebAuthn takes no IP address, so the page is at localhost.
+  if (c.authenticator) {
+    const cdp = await ctx.newCDPSession(page)
+    await cdp.send('WebAuthn.enable')
+    const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+      options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true },
+    })
+    const privateKey = generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64')
+    const id = Buffer.from('shots').toString('base64')
+    await cdp.send('WebAuthn.addCredential', { authenticatorId, credential: { credentialId: id, isResidentCredential: true, rpId: 'localhost', privateKey, userHandle: id, signCount: 0 } })
+  }
+  await page.goto((c.authenticator ? BASE.replace('127.0.0.1', 'localhost') : BASE) + c.route)
   await settle(page, t)
   let missed = ''
   for (const step of c.steps || []) {
@@ -209,8 +233,11 @@ async function deadControls(c) {
 }
 
 for (const c of checks) {
-  const name = c.screen || c.route.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'home'
-  const label = `${name}${c.dark ? '-dark' : ''}`
+  // B57.21 — a screen with no reference, reached by steps (an agent's money panel), is named by its steps too.
+  const steps = !c.screen && c.steps?.length ? `+${c.steps.join('-').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '')}` : ''
+  const name = (c.screen || c.route.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'home') + steps
+  // B57.20 — one screen in several states keeps a file for each: w-agent-research@fR1.
+  const label = `${name}${c.state ? `@${Object.entries(c.state).map(([k, v]) => `${k}${v}`).join('-')}` : ''}${c.dark ? '-dark' : ''}`
   console.log(`\n${label} — the app at ${c.route}${c.steps?.length ? `, after ${c.steps.map((s) => `“${s}”`).join(', ')}` : ''}`)
   const ref = c.screen ? await reference(c) : null
   for (const size of SIZES) {
@@ -223,10 +250,11 @@ for (const c of checks) {
     const hay = await page.evaluate(`(${check.haystackOf})(document.body)`)
     if (ref) for (const m of check.wordsCheck(c.screen, ref.words, hay, overrides)) failures.push(`${label} at ${size.name}: missing ${m}`)
     if (size.name === '390') for (const p of await page.evaluate(`(${check.layoutProblems})(document)`)) failures.push(`${label} at 390: ${p}`)
+    if (c.dark) for (const p of await page.evaluate(`(${check.contrastProblems})(document)`)) failures.push(`${label} at ${size.name}: ${p}`)
     await ctx.close()
   }
   // A screen the steps could not reach has no controls of its own to press; the story page's specimens press nothing.
-  if (!c.route.startsWith('/__pocket-story/') && !failures.some((f) => f.startsWith(`${label} at `) && f.includes('nothing to press'))) for (const d of await deadControls(c)) failures.push(`${label}: ${d}`)
+  if (PRESS && !c.route.startsWith('/__pocket-story/') && !failures.some((f) => f.startsWith(`${label} at `) && f.includes('nothing to press'))) for (const d of await deadControls(c)) failures.push(`${label}: ${d}`)
 }
 
 await browser.close()
@@ -236,4 +264,4 @@ if (failures.length) {
   console.log(`\n${failures.length} problem${failures.length === 1 ? '' : 's'}:\n${failures.map((f) => `  ✗ ${f}`).join('\n')}`)
   process.exit(1)
 }
-console.log('\nevery word on every reference screen is on the app, the layout holds at 390, and every control does something')
+console.log(`\nevery word on every reference screen is on the app, the layout holds at 390${DARK ? ', every text pair reads in dark' : ''}${PRESS ? ', and every control does something' : ''}`)

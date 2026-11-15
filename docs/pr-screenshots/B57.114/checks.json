@@ -1,0 +1,41 @@
+[
+  {
+    "route": "/agents",
+    "screen": "w-agents"
+  },
+  {
+    "route": "/",
+    "screen": "w-home",
+    "answers": {
+      "/api/agents/forecast": {
+        "at": "2026-10-22T09:30:00Z",
+        "month_start": "2026-10-01T00:00:00Z",
+        "month_end": "2026-11-01T00:00:00Z",
+        "spent_ulxc": 28000000000,
+        "forecast_ulxc": 40569000000,
+        "agents": [
+          {
+            "agent_id": "agt_research",
+            "name": "Research",
+            "spent_ulxc": 12400000000,
+            "forecast_ulxc": 17966000000,
+            "balance_ulxc": 16500000000,
+            "runs_out_at": null,
+            "runs_out_on": null,
+            "timezone": "Europe/London"
+          },
+          {
+            "agent_id": "agt_sales",
+            "name": "Sales",
+            "spent_ulxc": 11000000000,
+            "forecast_ulxc": 15938000000,
+            "balance_ulxc": 12000000000,
+            "runs_out_at": "2026-11-14T17:40:54Z",
+            "runs_out_on": "2026-11-14",
+            "timezone": "Europe/London"
+          }
+        ]
+      }
+    }
+  }
+]

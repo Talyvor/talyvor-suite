@@ -137,7 +137,7 @@ function Rates() {
             ref={file}
             type="file"
             accept=".csv,text/csv"
-            className={`rounded-control text-body text-ink transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing} file:mr-3 file:h-8 file:rounded-control file:border file:border-rule file:bg-surface file:px-3 file:text-body file:text-ink`}
+            className={`rounded-control text-body text-ink transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing} file:mr-3 file:h-8 file:rounded-control file:border file:border-rule-strong file:bg-surface file:px-3 file:text-body file:text-ink`}
             onChange={(e) => setChosen(e.target.files?.[0] ?? null)}
           />
         </label>

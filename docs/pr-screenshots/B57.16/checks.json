@@ -1,0 +1,5 @@
+[
+  { "route": "/agents/agt_research", "screen": "w-agent-research+move-research", "steps": ["Move LXC"], "frame": true },
+  { "route": "/agents/agt_ops", "screen": "w-home+resume-ops", "steps": ["Resume Ops"], "frame": true },
+  { "route": "/", "screen": "w-home" }
+]

@@ -370,6 +370,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B40.12 — talking to Talyvor in Chat: the recording transcribed and the answer spoken, through Lens. See chat_voice.go.
 	a.mux.HandleFunc("/api/chat/voice/transcriptions", a.requireTenant(a.handleVoiceTranscription))
 	a.mux.HandleFunc("/api/chat/voice/speech", a.requireTenant(a.handleVoiceSpeech))
+	// B58.10 — "Hey Taly"'s voice key for a signed-in phone, so the app ships none. See voice_key.go.
+	a.mux.HandleFunc("/api/voice/key", a.requireTenant(a.handleVoiceKey))
 	a.mux.HandleFunc("/api/public/chats/{token}", a.publicChatShare())
 	a.mux.Handle("/share/{token}", a.sharePage())
 
@@ -415,7 +417,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/features", a.requireTenant(a.handleFeatures))
 	// B59.38 — which areas the workspace has; the phone shows an area only when it is listed. See workspace_areas.go.
 	a.mux.HandleFunc("/api/workspace/areas", a.requireTenant(a.handleWorkspaceAreas))
-	a.mux.HandleFunc("/api/workspace/account", a.requireTenant(a.handleWorkspaceAccount)) // B59.10 — the type and kind of money. See workspace_account.go.
+	a.mux.HandleFunc("/api/workspace/account", a.requireTenant(a.handleWorkspaceAccount))                              // B59.10 — the type and kind of money. See workspace_account.go.
+	a.mux.HandleFunc("/api/workspace/account/money-kind", a.requireTenant(a.handleWorkspaceMoneyKind(false)))          // B59.12 — changing it, signed
+	a.mux.HandleFunc("/api/workspace/account/money-kind/challenge", a.requireTenant(a.handleWorkspaceMoneyKind(true))) // B59.12
 	// B59.28 — help and complaints, closing the account and the workspace's data. See workspace_requests.go.
 	a.mux.HandleFunc("/api/workspace/requests", a.requireTenant(a.handleWorkspaceRequests))
 	a.mux.HandleFunc("/api/workspace/requests/{id}/export", a.requireTenant(a.handleWorkspaceRequestExport))
@@ -481,6 +485,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/{id}/rules/boosts", a.requireTenant(a.handleAgentRuleBoosts))          // B28.32
 	a.mux.HandleFunc("/api/agents/{id}/rules/boosts/{rule}", a.requireTenant(a.handleAgentRuleBoostEnd)) // B28.32
 	a.mux.HandleFunc("/api/agents/{id}/wallet", a.requireTenant(a.handleAgentWallet))                    // B46.9
+	a.mux.HandleFunc("/api/agents/{id}/summary", a.requireTenant(a.handleAgentSummary))                  // B57.20
 	a.mux.HandleFunc("/api/agents/{id}/statement", a.requireTenant(a.handleAgentStatement))
 	a.mux.HandleFunc("/api/agents/statement", a.requireTenant(a.handleBankStatement))       // B19.22
 	a.mux.HandleFunc("/api/agents/{id}/analytics", a.requireTenant(a.handleAgentAnalytics)) // B28.53
@@ -553,6 +558,13 @@ func newApp(cfg config, auth *authenticator) *app {
 	// B30.97 — invoices from an agent's currency account and their public pay page (Lens B30.20). See money_invoices.go.
 	a.mux.HandleFunc("/api/money/accounts", a.requireTenant(a.handleMoneyAccounts))
 	a.mux.HandleFunc("/api/money/accounts/{id}/statement", a.requireTenant(a.handleMoneyAccountStatement)) // B56.15
+	// B59.52 — Wallets' top up, withdraw and convert (Lens B17.255 and B59.51). See money_wallets.go.
+	a.mux.HandleFunc("/api/money/accounts/{id}/top-up", a.requireTenant(a.handleMoneyAccountTopUp))
+	a.mux.HandleFunc("/api/money/accounts/{id}/withdraw", a.requireTenant(a.handleMoneyAccountWithdraw(false)))
+	a.mux.HandleFunc("/api/money/accounts/{id}/withdraw/challenge", a.requireTenant(a.handleMoneyAccountWithdraw(true)))
+	a.mux.HandleFunc("/api/money/convert/quote", a.requireTenant(a.handleMoneyConvertQuote))
+	a.mux.HandleFunc("/api/money/convert", a.requireTenant(a.handleMoneyConvert(false)))
+	a.mux.HandleFunc("/api/money/convert/challenge", a.requireTenant(a.handleMoneyConvert(true)))
 	a.mux.HandleFunc("/api/money/invoices", a.requireTenant(a.handleMoneyInvoices))
 	a.mux.HandleFunc("/api/money/invoices/{id}/send", a.requireTenant(a.handleMoneyInvoiceMove("send")))
 	a.mux.HandleFunc("/api/money/invoices/{id}/void", a.requireTenant(a.handleMoneyInvoiceMove("void")))
@@ -560,6 +572,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	// The pay page's two routes take NO session: the payer is whoever holds the link, and Lens is called with no credential.
 	a.mux.HandleFunc("/api/public/pay/{token}", a.publicPayPage)
 	a.mux.HandleFunc("/api/public/pay/{token}/card", a.publicPayByCard)
+	// B59.19 — Instant transfer, for a Hybrid account (Lens B59.14 to B59.17). See instant_transfer.go.
+	a.mux.HandleFunc("/api/money/instant-transfers/quote", a.requireTenant(a.handleInstantTransferQuote))
+	a.mux.HandleFunc("/api/money/instant-transfers/{id}", a.requireTenant(a.handleInstantTransfer))
+	a.mux.HandleFunc("/api/agents/{id}/instant-transfers", a.requireTenant(a.handleInstantTransferSend))
 	// B30.96 — the Pay screen: saved payees, payments out, mandates and bulk payouts (Lens B30.16, B30.17, B30.19, B30.21). See money_pay.go.
 	a.mux.HandleFunc("/api/money/payees", a.requireTenant(a.handleMoneyPayees))
 	a.mux.HandleFunc("/api/money/payees/{id}/challenge", a.requireTenant(a.handleMoneyPayeeChallenge))
@@ -586,7 +602,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/notices/settings", a.requireTenant(a.handleMoneyNoticeSettings))      // B53.8, money_search.go
 	a.mux.HandleFunc("/api/money/plan", a.requireTenant(a.handleMoneyPlan))                            // B53.16, money_search.go
 	a.mux.HandleFunc("/api/money/plan/income", a.requireTenant(a.handleMoneyPlanIncome))               // B53.16, money_search.go
-
+	a.mux.HandleFunc("/api/plan", a.requireTenant(a.handleWorkspacePlan))                              // B57.18 — Home's "3 of 3 on Free". See workspace_plan.go.
 	// B53.12 — the owner's physical card (physical_card.go); Lens answers 404 to all three while its switch is off.
 	a.mux.HandleFunc("/api/money/physical-cards", a.requireTenant(a.handlePhysicalCards))
 	a.mux.HandleFunc("/api/money/physical-cards/{id}/activate", a.requireTenant(a.handlePhysicalCardActivate))
@@ -595,6 +611,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/card-disputes", a.requireTenant(a.handleMoneyCardDisputes))
 	a.mux.HandleFunc("/api/money/card-refunds", a.requireTenant(a.handleMoneyCardRefunds))
 	a.mux.HandleFunc("/api/money/card-exports", a.requireTenant(a.handleMoneyCardExport))
+	a.mux.HandleFunc("/api/money/card-spends", a.requireTenant(a.handleMoneyCardSpends)) // B59.54, money_card_spends.go
 
 	a.mux.HandleFunc("/api/money/mandates", a.requireTenant(a.handleMoneyMandates))
 	a.mux.HandleFunc("/api/money/mandates/challenge", a.requireTenant(a.handleMoneyMandateChallenge))
@@ -715,6 +732,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/rooms/{id}/objections/{oid}/vote", a.requireTenant(a.handleRoomObjectionVote))       // B41.47
 	a.mux.HandleFunc("/api/rooms/{id}/tasks", a.requireTenant(a.handleRoomTasks))                               // B41.52
 	a.mux.HandleFunc("/api/rooms/{id}/tasks/{tid}/claim", a.requireTenant(a.handleRoomTaskClaim))               // B41.52
+	// B55.28 — payout details, the earnings payouts and a room's payout by its terms. See money_earnings.go.
+	a.mux.HandleFunc("/api/money/payout-details", a.requireTenant(a.handleMoneyPayoutDetails))
+	a.mux.HandleFunc("/api/money/earnings-payouts", a.requireTenant(a.handleMoneyEarningsPayouts))
+	a.mux.HandleFunc("/api/rooms/{id}/payouts", a.requireTenant(a.handleRoomPayouts))
 	a.mux.HandleFunc("/api/room-invites/{token}", a.requireTenant(a.handleRoomInvitePreview))
 	a.mux.HandleFunc("/api/room-invites/{token}/join", a.requireTenant(a.handleRoomInviteJoin))
 	// B11.3 — the Try-it pages: Tare and document conversion run on the person's input through Lens's

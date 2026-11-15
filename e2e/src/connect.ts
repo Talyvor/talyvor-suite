@@ -482,7 +482,7 @@ export function connectMCP(): Scenario {
           if (chipState !== 'sandbox') wrong.push(`the approval card's payments out are labelled ${JSON.stringify(chipState)}, not Sandbox`)
           if (await page.getByText('Test money', { exact: true }).count() > 0) wrong.push('the approval card still carries a "Test money" chip')
           if (!(await page.getByTestId('approve-total').innerText()).includes('2 of 2 payments to approve, total £30.00')) wrong.push(`the approval card's total reads "${await page.getByTestId('approve-total').innerText()}"`)
-          await page.getByRole('checkbox', { name: 'Approve £20.00 to Nightly MCP Supplier Two Ltd' }).click()
+          await page.getByRole('button', { name: 'Pay Nightly MCP Supplier Two Ltd, ticked' }).click()
           const total = await page.getByTestId('approve-total').innerText()
           if (!total.includes('1 of 2 payments to approve, total £10.00')) wrong.push(`after unticking the second payment the card reads "${total}"`)
         } catch (err) {
@@ -917,8 +917,10 @@ export function connectRecurring(): Scenario {
       try {
         const words = await screenWords('the plan screen before signing')
         for (const l of lines) if (!words.includes(l.name)) wrong.push(`the plan screen does not show ${l.name}`)
-        if (!words.includes('£300.00 every month') || !words.includes('£12.50 every week') || await pills('Waiting for your signature') !== 2 ||
-          !words.includes('A payment above £200.00 always waits for your approval.')) wrong.push(`the plan screen reads "${words}"`)
+        // B57.98 — the plan's limits are in What signing allows, beside the plan, and each unsigned order reads Prepared.
+        const allows = (await page.getByTestId('plan-terms').innerText()).replace(/\s+/g, ' ')
+        if (!words.includes('£300.00 every month') || !words.includes('£12.50 every week') || await pills('Prepared') !== 2 ||
+          !allows.includes('A payment above £200.00 always waits for your approval.')) wrong.push(`the plan screen reads "${words}" beside "${allows}"`)
       } catch (err) {
         wrong.push(`the plan screen did not open from the assistant's link: ${String(err).slice(0, 300)}`)
       }
@@ -928,7 +930,7 @@ export function connectRecurring(): Scenario {
       if (signed.status() !== 201) return { pass: false, detail: [...wrong, `signing the plan answered ${signed.status()}`].join('; ') }
       try {
         const words = await screenWords('the plan screen after signing')
-        if (await pills('Running') !== 2 || words.includes('Sign with passkey')) wrong.push(`after signing the plan screen reads "${words}"`)
+        if (await pills('Running') !== 2 || words.includes('Sign with your passkey')) wrong.push(`after signing the plan screen reads "${words}"`)
       } catch (err) {
         wrong.push(`the plan screen did not open after signing: ${String(err).slice(0, 300)}`)
       }

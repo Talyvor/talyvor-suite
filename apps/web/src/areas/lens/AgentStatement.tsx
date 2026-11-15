@@ -29,7 +29,7 @@ const STATEMENT_DOC_KEY = 'agent-statement-doc'
 const dayMonth = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' })
 
 /** YYYY-MM-DD of `d` in `zone`, the form Lens's grouped `day` takes. */
-const dayIn = (d: Date, zone: string) => {
+export const dayIn = (d: Date, zone: string) => {
   try {
     return new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
   } catch {
@@ -52,7 +52,7 @@ export function lineWhen(iso: string, now = new Date()): string {
 }
 
 /** What a line was, and the faint words after it. */
-function lineWhat(l: StatementLine, nameOf: (id: string) => string, modelOf: (id: string) => string, today: string): [string, string] {
+export function lineWhat(l: StatementLine, nameOf: (id: string) => string, modelOf: (id: string) => string, today: string): [string, string] {
   if (l.kind === 'platform_fee' && l.day) return [lineText(l, nameOf), l.memo ?? '']
   if (l.day && l.model && l.requests !== undefined) {
     const n = `${l.requests.toLocaleString('en-GB')} request${l.requests === 1 ? '' : 's'}`

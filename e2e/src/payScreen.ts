@@ -175,6 +175,8 @@ export function payScreen(): Scenario {
         ctx.evidence.push({ note: `the payment row on the screen: ${paymentShown.slice(0, 200)}` })
         if (!paymentShown.includes('£20.00')) return fail(`the payment row reads "${paymentShown.slice(0, 120)}", not £20.00`)
 
+        // B57.32: standing orders, mandates and bulk payouts each have their own page under Pay.
+        await page.goto(new URL('/money/pay/standing-orders', page.url()).toString())
         const order = page.getByTestId('new-standing-order')
         await order.getByLabel('Standing order from').selectOption(acct.id)
         await order.getByLabel('Standing order to').selectOption(payeeID)
@@ -186,13 +188,14 @@ export function payScreen(): Scenario {
         if (!(await orderRow.isVisible())) return fail(`setting up the standing order on the screen: ${(await refusalOf(order)) || 'no standing order row appeared'}`)
         ctx.evidence.push({ note: `the standing order row on the screen: ${((await orderRow.textContent()) ?? '').trim().slice(0, 200)}` })
 
+        await page.goto(new URL('/money/pay/mandates', page.url()).toString())
         const mandate = page.getByTestId('new-mandate')
         await mandate.getByLabel('Mandate on').selectOption(acct.id)
         await mandate.getByLabel('Business id').fill(`nightly-business-${RUN_SALT}`)
         await mandate.getByLabel('Paid out to').selectOption(payeeID)
         await mandate.getByLabel('Most per pull').fill('5.00')
         await mandate.getByLabel('Most per month').fill('20.00')
-        await mandate.getByRole('button', { name: 'Grant mandate' }).click()
+        await mandate.getByRole('button', { name: 'Grant with your passkey' }).click()
         const mandateRow = page.locator('[data-testid^="mandate-"]').filter({ hasNot: page.getByTestId('mandate-pull-key') }).first()
         await mandateRow.or(mandate.getByRole('alert')).first().waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
         if (!(await mandateRow.isVisible())) return fail(`granting the mandate on the screen: ${(await refusalOf(mandate)) || 'no mandate row appeared'}`)
@@ -200,6 +203,7 @@ export function payScreen(): Scenario {
         if (pullKey === '') return fail('the granted mandate shows no pull key for the outside business')
         ctx.evidence.push({ note: `the mandate row on the screen: ${((await mandateRow.textContent()) ?? '').trim().slice(0, 200)}; a pull key of ${pullKey.length} characters shown once` })
 
+        await page.goto(new URL('/money/pay/bulk-payouts', page.url()).toString())
         const upload = page.getByTestId('payout-upload')
         const csv = `payee_id,amount,currency,reference\n${payeeID},5.00,GBP,${reference} A\n${payeeID},6.00,GBP,${reference} B\nnobody-${RUN_SALT},1.00,GBP,${reference} C\n`
         await upload.getByLabel('Payouts CSV').setInputFiles({ name: 'payouts.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) })

@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, CardHeader, Pill, cn, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
-import { Card } from './walletBrand'
-import { Region, RegionScreen } from '../../components/Region'
+import { cn, inlineLink } from '@talyvor/ui'
+import { Button, Card, Chip, Crumb, pocketFocusRing, type ChipTone } from '@talyvor/ui/pocket'
 import { Markdown } from '../chat/Markdown'
 import { formatWhen } from './format'
 import { Note, readFailure } from './WalletMoney'
@@ -20,10 +19,14 @@ const termsTextKey = (capability: string) => ['capability-terms', capability]
 /** " by <who>" when Lens names the person by an address a reader knows; nothing for an internal id such as jwt:user:…. */
 const byWhom = (person: string) => (person.includes('@') && !person.includes(':') ? ` by ${person}` : '')
 
-function state(t: WorkspaceTerms): { text: string; pill: PillStatus } {
-  if (t.accepted) return { text: 'Accepted', pill: 'settled' }
-  if (t.previously_accepted_version) return { text: `Version ${t.version} is new: accept it again`, pill: 'held' }
-  return { text: 'Not accepted yet', pill: 'idle' }
+function state(t: WorkspaceTerms): { text: string; tone: ChipTone } {
+  if (t.accepted) return { text: 'Accepted', tone: 'good' }
+  if (t.previously_accepted_version)
+    return {
+      text: `Version ${t.version} is new: accept it again`,
+      tone: 'wait',
+    }
+  return { text: 'Not accepted yet', tone: 'plain' }
 }
 
 export function CapabilityTermsScreen() {
@@ -31,63 +34,63 @@ export function CapabilityTermsScreen() {
   const [open, setOpen] = useState<string | null>(null)
   const list = terms.data?.terms ?? []
   const accepted = list.filter((t) => t.accepted).length
+  // B57.42 — Pocket's w-capability: the crumb, the line, and one white card listing every capability with terms.
   return (
-    <RegionScreen>
-      <Region
-        index="00"
-        label="Terms"
-        heading="The terms each money capability asks you to accept"
-        sectionClassName="pb-10 pt-4 wide:pb-12"
-        className="flex max-w-2xl flex-col gap-3"
-      >
-        <p className="text-body text-muted">
-          Each money capability asks you to accept its terms before its first use. When Talyvor
-          publishes a new version, the capability asks again before its next use.
+    <div className="grid min-w-0 gap-5">
+      <Crumb trail={[{ label: 'Settings', href: '/settings' }, { label: 'Capability terms' }]} />
+      <div className="grid max-w-3xl gap-1">
+        <h2 className="font-display text-bar font-bold text-ink">The terms each money capability asks you to accept</h2>
+        <p className="text-reading text-ink-2">
+          Each money capability asks you to accept its terms before its first use. When Talyvor publishes a new version, the capability asks
+          again before its next use.
         </p>
-        <p className="text-body text-muted">
+        <p className="text-body text-ink-2">
           Which of them may use live money depends on your verification level:{' '}
-          <Link className={inlineLink} to="/settings/verification">
+          <Link className={cn(inlineLink, 'font-semibold text-ink')} to="/settings/verification">
             see Verification
           </Link>
           .
         </p>
-        {terms.isSuccess && list.length > 0 ? (
-          <p className="text-body text-ink" data-testid="terms-count">
-            <span className="font-figure">{accepted}</span> of <span className="font-figure">{list.length}</span> accepted
-          </p>
-        ) : null}
-      </Region>
-      <Region index="01" label="Capabilities" heading="Read each one, then accept it" className="flex max-w-2xl flex-col gap-3">
-        {terms.isError ? (
-          <p className="text-body text-muted">{readFailure(terms.error, 'The terms')}</p>
-        ) : terms.isPending ? (
-          <p className="text-body text-muted">Reading…</p>
-        ) : list.length === 0 ? (
-          <p className="text-body text-muted">No capability asks for terms on this deployment yet.</p>
-        ) : (
-          <Card>
-            <CardHeader>Every capability with terms</CardHeader>
-            <ul>
-              {list.map((t) => (
-                <TermsRow key={t.capability} t={t} open={open === t.capability} onOpen={(o) => setOpen(o ? t.capability : null)} />
-              ))}
-            </ul>
-          </Card>
-        )}
-      </Region>
-    </RegionScreen>
+      </div>
+      {terms.isError ? (
+        <p className="text-body text-ink-2">{readFailure(terms.error, 'The terms')}</p>
+      ) : terms.isPending ? (
+        <p className="text-body text-ink-2">Reading…</p>
+      ) : list.length === 0 ? (
+        <p className="text-body text-ink-2">No capability asks for terms on this deployment yet.</p>
+      ) : (
+        <Card tone="white" className="min-w-0 max-w-3xl">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="font-display text-reading font-bold text-ink">Read each one, then accept it</h3>
+            <p className="text-body text-ink-3" data-testid="terms-count">
+              <span className="font-figure">{accepted}</span> of <span className="font-figure">{list.length}</span> accepted
+            </p>
+          </div>
+          <ul className="mt-2">
+            {list.map((t) => (
+              <TermsRow key={t.capability} t={t} open={open === t.capability} onOpen={(o) => setOpen(o ? t.capability : null)} />
+            ))}
+          </ul>
+        </Card>
+      )}
+    </div>
   )
 }
 
 function TermsRow({ t, open, onOpen }: { t: WorkspaceTerms; open: boolean; onOpen: (open: boolean) => void }) {
   const s = state(t)
   return (
-    <li className="flex flex-col gap-2 border-b border-rule px-gutter py-3 last:border-b-0" data-testid={`terms-${t.capability}`}>
+    <li className="flex flex-col gap-2 border-t border-line py-2.5 first:border-t-0" data-testid={`terms-${t.capability}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="min-w-0 text-body text-ink">{t.name}</span>
-        <Pill status={s.pill}>{s.text}</Pill>
+        <span className="min-w-0 font-semibold text-ink">{t.name}</span>
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
+          <Chip tone={s.tone}>{s.text}</Chip>
+          <Button variant="secondary" size="sm" aria-expanded={open} onClick={() => onOpen(!open)}>
+            {open ? 'Close' : t.accepted ? 'Read the terms' : 'Read and accept'}
+          </Button>
+        </span>
       </div>
-      <p className="text-caption text-muted">
+      <p className="text-body text-ink-3">
         Version <span className="font-figure">{t.version}</span>
         {t.accepted ? (
           <>
@@ -101,11 +104,6 @@ function TermsRow({ t, open, onOpen }: { t: WorkspaceTerms; open: boolean; onOpe
           </>
         ) : null}
       </p>
-      <div>
-        <Button aria-expanded={open} onClick={() => onOpen(!open)}>
-          {open ? 'Close' : t.accepted ? 'Read the terms' : 'Read and accept'}
-        </Button>
-      </div>
       {open ? <TermsText t={t} /> : null}
     </li>
   )
@@ -126,13 +124,13 @@ function TermsText({ t }: { t: WorkspaceTerms }) {
     // A newer version was published while this one was being read: read the list and the text again.
     onError: () => void qc.invalidateQueries({ queryKey: TERMS_KEY }),
   })
-  if (text.isError) return <p className="text-body text-muted">{readFailure(text.error, 'These terms')}</p>
-  if (text.isPending) return <p className="text-body text-muted">Reading…</p>
+  if (text.isError) return <p className="text-body text-ink-2">{readFailure(text.error, 'These terms')}</p>
+  if (text.isPending) return <p className="text-body text-ink-2">Reading…</p>
   const read = text.data
   return (
     <div className="flex flex-col gap-3">
       <div
-        className={cn('max-h-96 overflow-y-auto rounded-control border border-rule px-gutter py-3 text-body text-ink', focusRing)}
+        className={cn('max-h-96 overflow-y-auto rounded-inset bg-cloud px-4 py-3 text-body text-ink', pocketFocusRing)}
         data-testid="terms-text"
         tabIndex={0}
         aria-label={`${t.name}: terms, version ${read.version}`}
@@ -145,7 +143,7 @@ function TermsText({ t }: { t: WorkspaceTerms }) {
         </Note>
       ) : (
         <div>
-          <Button variant="primary" disabled={accept.isPending} onClick={() => accept.mutate(read.version)}>
+          <Button disabled={accept.isPending} onClick={() => accept.mutate(read.version)}>
             {accept.isPending ? 'Accepting…' : `Accept version ${read.version}`}
           </Button>
         </div>

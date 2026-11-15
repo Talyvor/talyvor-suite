@@ -39,6 +39,8 @@ export interface Agent {
   kind?: string
   /** B57.10 — its face's colour, which B57.124's helper follows; absent from a Lens older than B57.10. */
   colour?: string
+  /** B57.10 — its face's shape: circle, squircle, hexagon or flower; absent from a Lens older than B57.10. */
+  face?: string
 }
 
 /** Lens economy.AgentArchive (B28.21): what archiving an agent did. */
@@ -652,6 +654,8 @@ export interface AgentRules {
   timezone: string
   /** B19.6 — pause the agent on an unusual-spend alert. Carried back unchanged on a save. */
   pause_on_unusual_spend?: boolean
+  /** B59.19 — "Can use Instant transfer" (Lens B59.15), off by default. A save without it keeps what Lens holds. */
+  may_instant_transfer?: boolean
 }
 
 /** Lens economy.Payee. `name` is empty when the payee no longer exists. */
@@ -681,6 +685,24 @@ export interface AgentApproval {
   expires_at?: string
   /** The approver agent that approved it within its own limits (Lens B45.28); none when a person decided. */
   approved_by_agent_id?: string
+  /** B57.15 — what pays it, with its balance now (Lens B57.11); null on one filed before Lens kept it. */
+  paid_from?: ApprovalPaidFrom | null
+  /** The approval amount it was above, and the month's budget left after it (null with no monthly limit) (Lens B57.11). */
+  asks_above_ulxc?: number | null
+  budget_left_after_ulxc?: number | null
+}
+
+/** Lens economy.PaidFrom: the agent's LXC, one of its accounts, the monthly marketplace bill or its card. */
+export interface ApprovalPaidFrom {
+  kind: 'lxc' | 'account' | 'marketplace_bill' | 'card'
+  account_id: string
+  /** In words, as the sheet shows it: "Research’s US dollar account". */
+  name: string
+  currency: string
+  /** The amount in that one's currency (µLXC for lxc). */
+  amount_minor: number
+  /** Its balance now, in the same units; none for the bill or a card. */
+  balance_minor: number | null
 }
 
 /** Every kind of agent_postings row Lens writes on an agent's account. */
@@ -724,6 +746,43 @@ export interface StatementLine {
    *  and how many questions it is. */
   day?: string
   requests?: number
+}
+
+/** Lens economy.AgentSummary (B57.12): one agent's page, every figure read in one transaction at `as_of`. */
+export interface AgentSummary {
+  as_of: string
+  agent: Agent
+  made_at: string
+  /** Who made it; the page names them when it is the person signed in. */
+  owner_user_id: string
+  /** Set while every agent of the workspace is paused, this one with them. */
+  all_paused_at?: string
+  /** LXC first, then by currency. */
+  safe_to_spend: SafeToSpendFigure[] | null
+  month: {
+    start: string
+    end: string
+    spent_ulxc: number
+    forecast_ulxc: number
+    runs_out_at: string | null
+    runs_out_on: string | null
+    /** 0 is no monthly limit */
+    monthly_limit_ulxc: number
+  }
+  /** Its requests waiting for a person, newest first: what its safe to spend takes off. */
+  approvals: AgentApproval[] | null
+  /** Its statement's newest lines this month, by model and day. */
+  statement: StatementLine[] | null
+  statement_time_zone: string
+  /** The rules version in force; null while its rules were never set. */
+  rules: { version: number; saved_at: string } | null
+  card: {
+    status: 'none' | 'active' | 'frozen'
+    currency?: string
+    last4?: string
+    last_declined: { merchant_name: string; amount_minor: number; currency: string; words: string; reason: string; at: string } | null
+  }
+  currency_accounts: CurrencyAccount[] | null
 }
 
 /** Lens economy.AgentPayment. */
@@ -851,6 +910,8 @@ export class AgentBankError extends ApiError {
     readonly sentence: string,
     /** B58.1: the approval a payment waits on, when Lens answered it held */
     readonly approvalID = '',
+    /** B57.19: the refusal's whole body, so a plan's 402 reads from its plan, gate, limit and allows */
+    readonly body: Record<string, unknown> = {},
   ) {
     super(status, path)
   }
@@ -863,13 +924,14 @@ async function send<T>(method: string, path: string, body: object = {}, headers:
     body: JSON.stringify(body),
   })
   if (!res.ok) {
-    let sentence = ''
+    let body: Record<string, unknown> = {}
     try {
-      sentence = ((await res.json()) as { error?: string }).error ?? ''
+      const parsed: unknown = await res.json()
+      if (parsed !== null && typeof parsed === 'object') body = parsed as Record<string, unknown>
     } catch {
       // a body that is not JSON carries no sentence
     }
-    throw new AgentBankError(res.status, path, sentence)
+    throw new AgentBankError(res.status, path, typeof body.error === 'string' ? body.error : '', '', body)
   }
   if (res.status === 204) return undefined as T // B28.32: ending a boost answers nothing
   return (await res.json()) as T
@@ -1166,11 +1228,13 @@ export const agentBankApi = {
     }
   },
   issueCard: (id: string, holder: Cardholder) => send<AgentCard>('POST', `/api/agents/${e(id)}/card`, holder),
+  /** B57.20 — everything the agent's page shows, read by Lens at one moment (B57.12). */
+  summary: (id: string) => getJSON<AgentSummary>(`/api/agents/${e(id)}/summary`, { agent: 'object', month: 'object', card: 'object' }),
   /** B28.360 — every purchase on the agent's card refused until it is unfrozen; Lens answers the card. */
   freezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/freeze`),
   unfreezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/unfreeze`),
   /** B28.21 — renames the agent and/or sets what it is for, and (B57.124) its helper's colour; Lens answers the agent. */
-  update: (id: string, change: { name?: string; description?: string; colour?: string }) => send<Agent>('PATCH', `/api/agents/${e(id)}`, change),
+  update: (id: string, change: { name?: string; description?: string; colour?: string; face?: string }) => send<Agent>('PATCH', `/api/agents/${e(id)}`, change),
   /** B28.21 — retires the agent: its balance back to the workspace, its keys revoked, its top-up and schedules stopped. */
   archive: (id: string) => send<AgentArchive>('POST', `/api/agents/${e(id)}/archive`),
   /** B19.23 — the signed-in person becomes the owner of an agent that has none. */
@@ -1254,6 +1318,11 @@ export const agentBankApi = {
   pause: (id: string, reason: string) => send<{ paused: boolean }>('POST', `/api/agents/${e(id)}/pause`, { reason }),
   resume: (id: string, assertion?: PasskeyAssertion) => send<{ paused: boolean }>('POST', `/api/agents/${e(id)}/resume`, assertion ? { assertion } : undefined),
   resumeChallenge: (id: string) => send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/agents/${e(id)}/resume-challenge`),
+  /** B59.12: changing the workspace's kind of money is always signed, over the challenge naming the kind (Lens B59.46). */
+  moneyKindChallenge: (money_kind: MoneyKind) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/workspace/account/money-kind/challenge', { money_kind }),
+  changeMoneyKind: (money_kind: MoneyKind, assertion: PasskeyAssertion) =>
+    send<WorkspaceAccount>('PUT', '/api/workspace/account/money-kind', { money_kind, assertion }),
   /** B19.10: once the workspace has a passkey, a decision carries an assertion over the approval's challenge. */
   /** B41.4 — approving with always_allow also saves that allowance for the approval's payee. */
   /** B55.19 — declining can say why (Lens B55.18); the agent sees it. */
@@ -1409,6 +1478,9 @@ export const agentBankApi = {
   /** B55.10 — every prepared request still waiting for the person (Lens B40.39; an expired one is left out, B55.9). */
   pendingPaymentRequests: () =>
     getJSON<{ requests: PaymentRequest[] | null }>('/api/money/payment-requests?status=pending_approval', { requests: 'list' }),
+  /** B57.149 — the prepared requests approved, cancelled or expired, newest decision first (Lens B57.148). */
+  decidedPaymentRequests: () =>
+    getJSON<{ requests: PaymentRequest[] | null }>('/api/money/payment-requests?status=decided', { requests: 'list' }),
   /** B41.3 — `reason` is why ticked items flagged a duplicate or changed bank details are paid; Lens signs it into the statement. */
   requestApproval: (id: string, positions: number[], reason = '') =>
     send<{ statement: string; challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/payment-requests/${e(id)}/approval`,
@@ -1426,7 +1498,17 @@ export const agentBankApi = {
   approveMandate: (id: string, assertion?: PasskeyAssertion) =>
     send<Mandate>('POST', `/api/money/mandates/${e(id)}/approve`, assertion ? { assertion } : {}),
   declineMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/decline`),
+  /** B55.40 — the mandates an agent's own key asked for, waiting for the owner on Approvals; each pulls nothing until approved. */
+  requestedMandates: () =>
+    getJSON<{ granted: Mandate[] | null; received: Mandate[] | null }>('/api/money/mandates?status=requested', { granted: 'list', received: 'list' }),
   revokeMandate: (id: string) => send<Mandate>('POST', `/api/money/mandates/${e(id)}/revoke`),
+  // B55.28 — where this workspace is paid its earnings (Lens B46.11), what it made or was paid, and a room's payout.
+  payoutDetails: () => getJSON<{ payout_details: PayoutDetails[] | null }>('/api/money/payout-details', { payout_details: 'list' }),
+  savePayoutDetails: (body: PayoutDetailsRequest) => send<PayoutDetails>('PUT', '/api/money/payout-details', body),
+  earningsPayouts: () => getJSON<{ payouts: EarningsPayout[] | null }>('/api/money/earnings-payouts', { payouts: 'list' }),
+  /** The room's wallet pays its members by the room's terms, once under key however many times it is sent. */
+  payOutRoom: (roomID: string, body: RoomPayoutRequest, key: string) =>
+    send<{ agreement: string; payouts: EarningsPayout[] | null }>('POST', `/api/rooms/${e(roomID)}/payouts`, body, { 'Idempotency-Key': key }),
   payouts: () => getJSON<{ payouts: PayoutBatch[] | null }>('/api/money/payouts', { payouts: 'list' }),
   payout: (id: string) => getSaid<PayoutBatch>(`/api/money/payouts/${e(id)}`),
   /** The CSV as the person chose it, under one Idempotency-Key: Lens parses and validates every row. */
@@ -1467,6 +1549,96 @@ export const agentBankApi = {
   },
   /** B41.2 — the ticked bills as one payment request (Lens B41.102), for one approval on /approve/<id>; nothing is paid here. */
   payBills: (billIDs: string[], key: string) => send<PaymentRequest>('POST', '/api/money/bills/pay', { bill_ids: billIDs }, { 'Idempotency-Key': key }),
+  // B59.19 — Instant transfer, for a Hybrid account (Lens B59.14 to B59.17): a quote locked for 30 seconds, the send from an
+  // agent's account under a key a retry sends again, and the receipt.
+  instantQuote: (body: InstantQuoteRequest) => send<InstantQuote>('POST', '/api/money/instant-transfers/quote', body),
+  instantSend: (agentID: string, body: InstantSend, key: string) =>
+    send<InstantTransfer>('POST', `/api/agents/${e(agentID)}/instant-transfers`, body, { 'Idempotency-Key': key }),
+  instantTransfer: (id: string) =>
+    getJSON<InstantTransfer>(`/api/money/instant-transfers/${e(id)}`, { id: 'string', status: 'string', beneficiary_name: 'string', send_minor: 'number' }),
+}
+
+/** B59.19 — who an Instant transfer pays (Lens economy.InstantTo…): a Talyvor account, an outside wallet or a bank account. */
+export type InstantTo = 'talyvor_account' | 'wallet' | 'bank_account'
+
+/** Lens economy.InstantQuoteRequest (B59.14): every amount in minor units. A bank account names its country. */
+export interface InstantQuoteRequest {
+  send_minor: number
+  send_currency: string
+  receive_currency: string
+  to: InstantTo
+  country: string
+}
+
+/** Lens economy.InstantQuote (B59.14), locked until expires_at. send_minor includes the fee; receive_minor is what arrives. */
+export interface InstantQuote {
+  id: string
+  to: InstantTo
+  country?: string
+  send_minor: number
+  send_currency: string
+  fee_minor: number
+  /** receive_currency per send_currency after the fee, in whole units */
+  rate: string
+  receive_minor: number
+  receive_currency: string
+  arrives_in_seconds: boolean
+  /** the bank rail's real time when it does not land in seconds */
+  arrives_within_seconds?: number
+  expires_at: string
+  created_at: string
+}
+
+/** B59.19 — a send against a quote: to a Talyvor account by its id, or to a saved payee (a wallet or a bank account). */
+export interface InstantSend {
+  quote_id: string
+  to_account_id?: string
+  to_payee_id?: string
+}
+
+/** Lens economy.InstantAmount. */
+export interface InstantAmount {
+  minor: number
+  currency: string
+}
+
+/** Lens economy.InstantLeg: convert, move, then credit or payout; a direct bank payment has the payout alone. */
+export interface InstantLeg {
+  id: string
+  leg: 'convert' | 'move' | 'credit' | 'payout'
+  done: boolean
+  entry_id?: string
+  /** the provider's reference: the move leg's is the on-chain reference */
+  partner_ref?: string
+  conversion_ref?: string
+  sell: InstantAmount
+  buy: InstantAmount
+}
+
+/** Lens economy.InstantTransfer (B59.15): the receipt. */
+export interface InstantTransfer {
+  id: string
+  agent_id: string
+  from_account_id: string
+  to_account_id?: string
+  to_payee_id?: string
+  to_address?: string
+  beneficiary_name: string
+  send_minor: number
+  send_currency: string
+  fee_minor: number
+  receive_minor: number
+  receive_currency: string
+  rate: string
+  arrives_in_seconds: boolean
+  arrives_within_seconds?: number
+  status: 'sent' | 'converted' | 'on_its_way' | 'received' | 'reversed'
+  legs: InstantLeg[] | null
+  failed_leg?: string
+  failure?: string
+  reversal_entry_ids?: string[] | null
+  created_at: string
+  updated_at: string
 }
 
 /** What a schedule asks for: a payment to another agent or a listing in µLXC, or (B30.18) a standing order to a saved outside payee. */
@@ -1525,6 +1697,9 @@ export interface OutsidePayee {
   notice?: string
   /** set while screening holds the payee for an operator */
   screening?: string
+  /** B59.19 — a payee paid at a wallet: its network and address (Lens B46); none for a bank account */
+  network?: string
+  address?: string
 }
 
 /** Lens economy.PermissionMandateTerms (B40.2), as an assistant drafted them, so any part may be missing: amounts are minor units by currency. */
@@ -1540,7 +1715,7 @@ export interface MandateTerms {
 /** Lens economy.PaymentRequest (B40.3): each item auto, needs_approval or blocked, with the rule that decided it. */
 export interface PaymentRequest {
   id: string
-  /** pending_approval | auto | blocked | approved | cancelled */
+  /** pending_approval | auto | blocked | approved | cancelled | expired */
   status: string
   summary: string
   client: string
@@ -1550,6 +1725,10 @@ export interface PaymentRequest {
   totals: Record<string, number>
   items: PaymentRequestItem[]
   created_at: string
+  /** B57.148 — when it was approved, cancelled or expired; only a decided request carries it. */
+  decided_at?: string
+  /** B57.161 — how it was decided, in Lens's words: Approved and paid, Approved, Declined or Expired. */
+  decision?: string
 }
 
 /** Lens agentsig.Result: verified — the signing domain belongs to a business Talyvor checked; signed — only the domain is known. */
@@ -1725,6 +1904,44 @@ export interface Bill {
 }
 
 /** Lens economy.PayoutBatch (B30.21): rows only when one batch is read. */
+/** Lens economy.PayoutDetails — where the workspace is paid in one asset; status pending, verified or failed. */
+export interface PayoutDetails {
+  asset: 'USD' | 'GBP' | 'EUR' | 'USDC'
+  holder: string
+  iban?: string
+  bic?: string
+  network?: string
+  address?: string
+  status: 'pending' | 'verified' | 'failed'
+  updated_at: string
+}
+
+export type PayoutDetailsRequest =
+  | { asset: 'USD' | 'GBP' | 'EUR'; holder: string; iban: string; bic: string }
+  | { asset: 'USDC'; holder: string; network: 'base'; address: string }
+
+/** Lens economy.EarningsPayout — one recipient's part of a sale, a room's split or a royalty, in minor units. */
+export interface EarningsPayout {
+  id: string
+  kind: string
+  /** "room:{roomID}:{key}" for a room's payout */
+  source: string
+  recipient_workspace_id: string
+  share_bps?: number
+  amount_minor: number
+  currency: string
+  status: 'held' | 'pending' | 'completed' | 'failed' | 'returned'
+  detail?: string
+  created_at: string
+}
+
+/** POST /api/rooms/{id}/payouts — shares, in basis points by member workspace, only when the owner decides the split. */
+export interface RoomPayoutRequest {
+  amount_minor: number
+  currency: string
+  shares?: Record<string, number>
+}
+
 export interface PayoutBatch {
   id: string
   agent_id?: string
@@ -2391,6 +2608,22 @@ export function readWorkspaceAccount(): Promise<WorkspaceAccount> {
   return getJSON<WorkspaceAccount>('/api/workspace/account', { account_type: 'string', money_kind: 'string' })
 }
 
+/** B57.18 — the workspace's plan as Lens has it: its name, the agents it takes (-1 is unlimited) and the agents it has.
+ *  B57.44 — and the members it takes (-1 is unlimited), for Members' "Free has 1 seat". */
+export interface WorkspacePlan {
+  plan: string
+  agents: number
+  agents_used: number
+  seats: number
+}
+
+export const PLAN_KEY = ['workspace-plan'] as const
+
+/** GET /api/plan — Lens's /v1/workspaces/{ws}/plan, as Home's "3 of 3 on Free" reads it. */
+export function readWorkspacePlan(): Promise<WorkspacePlan> {
+  return getJSON<WorkspacePlan>('/api/plan', { plan: 'string', agents: 'number', agents_used: 'number', seats: 'number' })
+}
+
 /** What a workspace's type and kind show. */
 export interface Shows {
   /** Bank transfers in and out: payees by their bank details, IBANs to pay in. Not for Stablecoin. */
@@ -2409,6 +2642,8 @@ export interface Shows {
   cardTiers: readonly string[]
   /** The agents' heading: "Your agents", or "Your team’s agents". */
   agents: string
+  /** Home's total: "Your total", or "Your company’s total". */
+  total: string
   /** The owner's own account, where a payment names it: "Your account", or "The company". */
   owner: string
 }
@@ -2424,6 +2659,7 @@ export function shows({ account_type, money_kind }: WorkspaceAccount): Shows {
     payoutBatches: business,
     cardTiers: business ? ['Team', 'Business', 'Enterprise'] : ['Daily', 'Premium', 'Platinum'],
     agents: business ? 'Your team’s agents' : 'Your agents',
+    total: business ? 'Your company’s total' : 'Your total',
     owner: business ? 'The company' : 'Your account',
   }
 }

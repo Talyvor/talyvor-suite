@@ -53,7 +53,7 @@ describe('Taly’s lines', () => {
       mockBff('disabled')
       window.history.pushState({}, '', '/approve/preq_1')
       render(<App />)
-      await screen.findByTestId('approve-total')
+      await screen.findByTestId('approve-card')
     }],
     ['decline', async () => {
       mockBff('disabled', 'blocked')

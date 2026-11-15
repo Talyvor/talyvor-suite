@@ -1,0 +1,5 @@
+[
+  { "route": "/settings/help" },
+  { "route": "/settings/close" },
+  { "route": "/settings/data" }
+]

@@ -12,11 +12,11 @@ import { areaSource, readWorkspaceAreas } from './lib/workspaceAreas'
  * it has a sidebar row (B57.8 — Docs is reached from Track and Settings, and the gateway's features from Developers).
  */
 const AREAS = [
-  { area: 'chat', paths: ['/chat'], card: 'home-card-chat', page: 'Prompts', row: true },
+  { area: 'chat', paths: ['/chat'], card: null, page: 'Prompts', row: true },
   { area: 'rooms', paths: ['/rooms'], card: null, page: 'Rooms', row: true },
-  { area: 'marketplace', paths: ['/marketplace'], card: 'home-card-marketplace', page: 'Marketplace', row: true },
-  { area: 'track', paths: ['/track'], card: 'home-card-track', page: 'Track', row: true },
-  { area: 'docs', paths: ['/docs', '/settings/webhooks', '/settings/email-branding'], card: 'home-card-docs', page: 'Webhooks', row: false },
+  { area: 'marketplace', paths: ['/marketplace'], card: null, page: 'Marketplace', row: true },
+  { area: 'track', paths: ['/track'], card: null, page: 'Track', row: true },
+  { area: 'docs', paths: ['/docs', '/settings/webhooks', '/settings/email-branding'], card: null, page: 'Webhooks', row: false },
   { area: 'scan', paths: ['/scan/reports', '/scan/agents', '/scan/track-record'], card: null, page: 'Scan reports', row: true },
   { area: 'gateway', paths: ['/features'], card: null, page: 'Gateway features', row: false },
 ] as const
@@ -110,17 +110,18 @@ describe('a hidden area is not there (B59.2)', () => {
     expect(paletteOptions().some((o) => o.includes('New chat'))).toBe(true)
   })
 
-  it('gateway: Settings carries no shared-answers or document-conversion entry by default', async () => {
+  it('gateway: Settings carries no shared-answers entry by default, and document conversion is never on Settings (B57.42)', async () => {
     mockBff([])
     await openApp('/settings')
-    expect(await screen.findByText('Provider keys')).toBeTruthy()
-    expect(screen.queryByText('Shared answers (saves on repeated questions)')).toBeNull()
+    expect(await screen.findByText('Your provider keys')).toBeTruthy()
+    expect(screen.queryByText('Shared answers')).toBeNull()
     expect(screen.queryByText('Documents you attach')).toBeNull()
     cleanup()
     queryClient.clear()
 
     mockBff(['gateway'])
     await openApp('/settings')
-    expect(await screen.findByText('Shared answers (saves on repeated questions)')).toBeTruthy()
+    expect(await screen.findByText('Shared answers')).toBeTruthy()
+    expect(screen.queryByText('Documents you attach')).toBeNull()
   })
 })

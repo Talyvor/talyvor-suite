@@ -73,6 +73,27 @@ const BODIES: Record<string, unknown> = {
       },
     ],
   },
+  // B57.162 — a prepared payment approved and paid, as Approvals' Decided lists it (Lens B57.161).
+  '/api/money/payment-requests?status=decided': {
+    requests: [
+      {
+        id: 'preq_2', status: 'approved', decision: 'Approved and paid', summary: '1 payment for Researcher', client: 'chat', agent_id: 'agt_research', totals: { GBP: 18000 },
+        created_at: '2026-10-22T09:00:00Z', decided_at: '2026-10-22T09:05:00Z',
+        items: [{ position: 1, payee_id: 'payee_1', payee_name: 'Acme Hosting Ltd', currency: 'GBP', amount_minor: 18000, reference: 'October hosting', decision: 'needs_approval', reason: 'above the £100.00 the mandate pays without asking', payment_id: 'mpay_1', pay_status: 'completed' }],
+      },
+    ],
+  },
+  // B59.19 — an Instant transfer's receipt, received: converted, moved on chain and paid out.
+  '/api/money/instant-transfers/%3Aid': {
+    id: 'itr_sample', agent_id: 'agt_research', from_account_id: 'macc_agt', to_payee_id: 'payee_1', beneficiary_name: 'Acme Hosting Ltd',
+    send_minor: 50000, send_currency: 'GBP', fee_minor: 125, receive_minor: 49875, receive_currency: 'GBP', rate: '0.99750000', arrives_in_seconds: true, status: 'received',
+    legs: [
+      { id: 'itr_sample:convert', leg: 'convert', done: true, partner_ref: 'cv_1', sell: { minor: 50000, currency: 'GBP' }, buy: { minor: 631_000_000, currency: 'USDC' } },
+      { id: 'itr_sample:move', leg: 'move', done: true, partner_ref: '0x9f3ac41e', sell: { minor: 631_000_000, currency: 'USDC' }, buy: { minor: 631_000_000, currency: 'USDC' } },
+      { id: 'itr_sample:payout', leg: 'payout', done: true, partner_ref: 'po_1', sell: { minor: 631_000_000, currency: 'USDC' }, buy: { minor: 49875, currency: 'GBP' } },
+    ],
+    reversal_entry_ids: [], created_at: '2026-10-23T09:00:00Z', updated_at: '2026-10-23T09:00:12Z',
+  },
   '/api/money/payment-requests/%3Aid': {
     id: 'preq_1', status: 'pending_approval', summary: '3 payments for Researcher', client: 'mcp:tlv_oc_claude', agent_id: 'agt_research', totals: { GBP: 32050 }, created_at: '2026-10-23T09:00:00Z',
     items: [
@@ -180,6 +201,9 @@ const BODIES: Record<string, unknown> = {
   // B46.16 — the sidebar shows the workspace's name on every address.
   '/api/workspace/name': { id: 'ws_1', name: 'Acme' },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B57.18 — Home's "2 of 3 on Free" (Lens's plan through GET /api/plan), and the ECB's rates its total is valued at.
+  '/api/plan': { plan: 'free', agents: 3, agents_used: 2, seats: 1 },
+  '/api/fx': { rate_date: '2026-10-09', usd_per_eur: 1.17, gbp_per_eur: 0.86 },
   // B59.31 — Settings → Company details, as a company with two people with control.
   '/api/workspace/business': {
     company_name: 'Acme Robotics Ltd',
@@ -538,6 +562,54 @@ const BY_PATH: Record<string, unknown> = {
       { id: 'cauth_1', authorization_id: 'iauth_1', approved: true, reason: "within the agent's rules and balance", amount_minor: 100, currency: 'gbp', merchant_name: 'Compute shop', merchant_category: 'computer_software_stores', rate_date: '2026-09-25T00:00:00Z', ecb_usd_per_eur: '1.1672', ecb_currency_per_eur: '0.8354', amount_usd_micros: 1_397_176, amount_ulxc: 13_971_751, created_at: '2026-09-28T10:00:00Z' },
     ],
   },
+  // B57.20 — the researcher's page in one read (Lens B57.12): 3 LXC waits, so 10 LXC less it is 7 LXC safe to spend; its
+  // card is active and its last purchase declined says why in words.
+  '/api/agents/agt_research/summary': {
+    as_of: '2026-10-05T09:00:00Z',
+    agent: { id: 'agt_research', name: 'Researcher', balance_ulxc: 10_000_000, spent_ulxc: 1_250_000, keys: ['key_1'], created_at: '2026-09-27T09:00:00Z' },
+    made_at: '2026-09-27T09:00:00Z',
+    owner_user_id: '',
+    safe_to_spend: [{ currency: 'LXC', balance: 10_000_000, scheduled: 0, bills_due: 0, pending_approvals: 3_000_000, safe_to_spend: 7_000_000 }],
+    month: { start: '2026-10-01T00:00:00Z', end: '2026-11-01T00:00:00Z', spent_ulxc: 1_250_000, forecast_ulxc: 7_750_000, runs_out_at: null, runs_out_on: null, monthly_limit_ulxc: 50_000_000 },
+    approvals: [
+      { id: 'apr_1', agent_id: 'agt_research', amount_ulxc: 3_000_000, model: '', status: 'pending', created_at: '2026-10-05T08:00:00Z', expires_at: '2026-10-06T08:00:00Z',
+        payee: { kind: 'agent', id: 'agt_writer', name: 'Writer' } },
+    ],
+    statement: [
+      { entry_id: 'ent_1', kind: 'spend', amount_ulxc: -1_250_000, counterparty: 'provider', at: '2026-10-04T10:00:00Z', balance_after_ulxc: 10_000_000, model: 'claude-haiku-4-5', day: '2026-10-04', requests: 12 },
+    ],
+    statement_time_zone: 'Europe/London',
+    rules: { version: 1, saved_at: '2026-09-27T09:01:00Z' },
+    card: { status: 'active', currency: 'gbp', last4: '4242',
+      last_declined: { merchant_name: 'Compute shop', amount_minor: 200, currency: 'gbp', words: 'Declined: above its limit per request', reason: "the agent's limit per request is 20 LXC", at: '2026-09-28T10:05:00Z' } },
+    currency_accounts: [],
+  },
+  // The console sweep opens /agents/:id as it is written; it reads the same page.
+  '/api/agents/%3Aid/summary': {
+    as_of: '2026-10-05T09:00:00Z',
+    agent: { id: 'agt_research', name: 'Researcher', balance_ulxc: 10_000_000, spent_ulxc: 1_250_000, keys: ['key_1'], created_at: '2026-09-27T09:00:00Z' },
+    made_at: '2026-09-27T09:00:00Z',
+    owner_user_id: '',
+    safe_to_spend: [{ currency: 'LXC', balance: 10_000_000, scheduled: 0, bills_due: 0, pending_approvals: 3_000_000, safe_to_spend: 7_000_000 }],
+    month: { start: '2026-10-01T00:00:00Z', end: '2026-11-01T00:00:00Z', spent_ulxc: 1_250_000, forecast_ulxc: 7_750_000, runs_out_at: null, runs_out_on: null, monthly_limit_ulxc: 50_000_000 },
+    approvals: [
+      { id: 'apr_1', agent_id: 'agt_research', amount_ulxc: 3_000_000, model: '', status: 'pending', created_at: '2026-10-05T08:00:00Z', expires_at: '2026-10-06T08:00:00Z',
+        payee: { kind: 'agent', id: 'agt_writer', name: 'Writer' } },
+    ],
+    statement: [
+      { entry_id: 'ent_1', kind: 'spend', amount_ulxc: -1_250_000, counterparty: 'provider', at: '2026-10-04T10:00:00Z', balance_after_ulxc: 10_000_000, model: 'claude-haiku-4-5', day: '2026-10-04', requests: 12 },
+    ],
+    statement_time_zone: 'Europe/London',
+    rules: { version: 1, saved_at: '2026-09-27T09:01:00Z' },
+    card: { status: 'active', currency: 'gbp', last4: '4242',
+      last_declined: { merchant_name: 'Compute shop', amount_minor: 200, currency: 'gbp', words: 'Declined: above its limit per request', reason: "the agent's limit per request is 20 LXC", at: '2026-09-28T10:05:00Z' } },
+    currency_accounts: [],
+  },
+  // B57.16 — the writer's card, frozen, so its agent card shows the Card frozen chip.
+  '/api/agents/agt_writer/card': {
+    card: { id: 'ic_writer', agent_id: 'agt_writer', last4: '1881', exp_month: 3, exp_year: 2029, currency: 'gbp', livemode: false, created_at: '2026-10-01T09:00:00Z', frozen: true, frozen_at: '2026-10-20T09:00:00Z' },
+    authorizations: [],
+  },
   // B19.20 — this month's forecast, and one unusual-spend alert that paused an agent.
   '/api/agents/safe-to-spend': {
     company: [{ currency: 'LXC', balance: 87_500_000, scheduled: 0, bills_due: 0, pending_approvals: 0, safe_to_spend: 87_500_000 }],
@@ -679,6 +751,8 @@ const BY_PATH: Record<string, unknown> = {
       {
         id: 'apr_1', agent_id: 'agt_research', amount_ulxc: 3_000_000, model: '', status: 'pending', created_at: '2026-09-27T12:30:00Z',
         payee: { kind: 'company', id: 'ws_acme', name: 'Acme Hosting' }, memo: 'October invoice',
+        paid_from: { kind: 'lxc', account_id: 'agt_research', name: 'Researcher’s LXC balance', currency: 'LXC', amount_minor: 3_000_000, balance_minor: 10_000_000 },
+        asks_above_ulxc: 2_000_000, budget_left_after_ulxc: null,
       },
     ],
   },
@@ -694,6 +768,8 @@ const BY_PATH: Record<string, unknown> = {
     timezone: '',
   },
   // B46.9 — the Researcher's wallet on the money layer, served by the sandbox: nothing to pay into yet.
+  // B57.18 — the Writer's wallet, as Home reads every agent's in a workspace that holds coins.
+  '/api/agents/agt_writer/wallet': { account_id: 'macc_writer', agent_id: 'agt_writer', asset: 'USDC', partner: 'sandbox', balance_minor: 0, receive: { asset: 'USDC' }, mode: 'TEST' },
   '/api/agents/agt_research/wallet': {
     account_id: 'macc_research',
     agent_id: 'agt_research',
@@ -762,6 +838,12 @@ const BY_PATH: Record<string, unknown> = {
     checks: [
       { level: 'L2', subject: 'person', method: 'test', test: true, status: 'completed', evidence_ref: 'kyc_test_8f2c41d07a', verified_name: 'Ada Owner', country: 'GB', started_at: '2026-10-08T09:12:00Z', checked_at: '2026-10-08T09:12:00Z' },
       { level: 'L1', subject: 'contact', method: 'test', test: true, status: 'completed', evidence_ref: 'kyc_test_31be09c5d2', started_at: '2026-10-08T09:10:00Z', checked_at: '2026-10-08T09:10:00Z' },
+    ],
+  },
+  // B55.28 — where the workspace is paid: euros to an IBAN, its holder being checked.
+  '/api/money/payout-details': {
+    payout_details: [
+      { workspace_id: 'ws-1', asset: 'EUR', holder: 'Fixture Ltd', iban: 'DE89370400440532013000', bic: 'COBADEFFXXX', partner: 'test', status: 'pending', updated_at: '2026-10-10T09:00:00Z' },
     ],
   },
   // B30.103 — each capability's terms: fx accepted, payments_out's new version asking again, b2b_credit never accepted.
@@ -879,6 +961,10 @@ const BY_PATH: Record<string, unknown> = {
     cache: { total_requests: 200, cache_hits: 65, misses: 135, hit_rate: 0.325 },
   },
 }
+
+// B57.23 — the console sweep opens /agents/:id/rules as it is written; its page reads the rules and their history at once.
+BY_PATH['/api/agents/%3Aid/rules'] = BY_PATH['/api/agents/agt_research/rules']
+BY_PATH['/api/agents/%3Aid/rules/history'] = BY_PATH['/api/agents/agt_research/rules/history']
 
 /**
  * Endpoints that legitimately answer with a JSON array.

@@ -21,6 +21,7 @@ import (
 //	POST /api/money/payment-requests     {"voice", "items": [{payee_id, currency, amount_minor, reference}]}
 //	                                     → POST /v1/money/payment-requests as client "voice" (or "chat"), Idempotency-Key passed on
 //	GET  /api/money/payment-requests?status=pending_approval → GET /v1/money/payment-requests (B40.39) → {"requests": […]}
+//	GET  /api/money/payment-requests?status=decided          → the same, approved, cancelled or expired, each with decided_at (B57.149)
 
 // voiceAudioMaxBytes is Lens's own limit on a recording (25 MB) with room for the multipart envelope.
 const voiceAudioMaxBytes = 26 << 20
@@ -112,7 +113,8 @@ func (a *app) voiceRelay(w http.ResponseWriter, r *http.Request, t tenant, path 
 // Lens judges each item and moves no money; a request from voice always needs approval (Lens B40.3).
 func (a *app) handleMoneyPaymentRequests(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method == http.MethodGet {
-		// B40.39: the phone's Bills due. Only status goes up; Lens refuses any status but pending_approval.
+		// B40.39: the phone's Bills due; B57.149: Approvals' Decided. Only status goes up; Lens refuses any status but
+		// pending_approval and decided.
 		path := "/v1/money/payment-requests"
 		if s := r.URL.Query().Get("status"); s != "" {
 			path += "?" + url.Values{"status": {s}}.Encode()

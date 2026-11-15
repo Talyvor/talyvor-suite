@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, CardHeader, Input, Pill, RevealOnce, Row, focusRing, inlineLink, type PillStatus } from '@talyvor/ui'
 import { Icon, Button as PocketButton, Row as PocketRow, RoomBadge, faceOf, type FaceColour } from '@talyvor/ui/pocket'
 import { Card, pressed } from './walletBrand'
-import { LAST_KEY, RemoveKeyDialog } from './RemoveKey'
 import { Region, RegionScreen } from '../../components/Region'
 import { useLinked } from '../../components/LinkedItem'
 import { isSessionExpired } from '../../lib/productState'
@@ -12,41 +11,43 @@ import { IfArea } from '../../lib/workspaceAreas'
 import { formatDecided, formatWhen } from './format'
 import { kindLabel, marketApi, priceText } from '../marketplace/marketApi'
 import { CATALOG_KEY } from '../marketplace/parts'
-import { assertOver, letInKey, notifyThisDevice, passkeysSupported, pushSupported, registerThisDevice, resumeAgent, resumeEveryAgent, signApproval } from './passkeys'
-import { GetAKeyBack, NoLiveKey, RecoveryCodeRow } from './KeyRecovery'
+import { approveMandateSigned, assertOver, resumeEveryAgent, signApproval } from './passkeys'
+import { NoLiveKey } from './KeyRecovery'
+import { PageLinks } from '../../components/PageLinks'
 import { AgentAnalytics } from './AgentAnalytics'
 import { AlertChannels } from './AlertChannels'
+import { AgentCard, MoveLxc } from './AgentCard'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { HelperPicker } from '../../cards/HelperPicker'
-import { categoryWords } from './Budgets'
+import { AgentSettings } from './AgentSettings'
+import { limitAlertText } from './LimitAlertsCard'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
 import { DeclineForm, declinedText } from './Decline'
+import { approvalSheetTo } from './ApprovalSheet'
 import { AgentCredentialCard } from './AgentCredential'
-import { AgentMoneyWalletCard } from './AgentMoneyWallet'
-import { CurrencyPicker, Lxc, useLxcText } from './money'
+import { AgentMoneySection } from './AgentMoney'
+import { Lxc, useLxcText } from './money'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
 import { RunsOut } from './RunsOut'
-import { AgentAddress, AgentTransfers, CreditLinePanel, Loans, MoneyRequests, OfferLoan, RecurringTransfer, SendAndRequest } from './WalletMoney'
-import { CashOutCard, CashOuts, Escrows, PayIntoEscrow, Portfolios, Pots } from './WalletHoldings'
+import { CreditLinePanel, Loans, MoneyRequests } from './WalletMoney'
+import { CashOuts, Escrows } from './WalletHoldings'
 import {
   type Agent,
   type AgentApproval,
-  type ApprovalKey,
   type PayeeAllowance,
   type AgentArchive,
   type ApprovalPayee,
   type AgentBook,
   type AgentKey,
-  type KeyEnrolment,
   type AgentRules,
   type AgentRulesVersion,
   type AgentRuleBoost,
   type AgentSchedule,
   type AgentTopUp as AgentTopUpValue,
-  type LimitAlert,
+  type Mandate,
   type PasskeyAssertion,
   type PaymentRequest,
   type PostingKind,
@@ -58,10 +59,9 @@ import {
   approvalNamedIn,
   formatMinor,
   limitText,
-  newMoveKey,
   parseLXC,
   refusalText,
-  retryMoveThroughRestart,
+  useAccount,
 } from './agentBankApi'
 import { WorkspaceLabel, approvalCapability, paymentRequestCapabilities } from '../../labels/workspace'
 import { DESIGN_ATTR } from '../../pocketPending'
@@ -84,6 +84,8 @@ export const BOOK_KEY = ['agent-book']
 export const APPROVALS_KEY = ['agent-approvals']
 /** B55.10 — the payments Chat, an assistant, an agent or a voice request prepared, waiting for the person. */
 export const PREPARED_KEY = ['money-payment-requests', 'pending_approval']
+/** B55.40 — the mandates an agent's own key asked for; under Pay's ['money-mandates'], so a grant or revoke there reads them again. */
+export const MANDATE_REQUESTS_KEY = ['money-mandates', 'requested']
 export const rulesKey = (id: string) => ['agent-rules', id]
 export const rulesHistoryKey = (id: string) => ['agent-rules-history', id]
 export const boostsKey = (id: string) => ['agent-rule-boosts', id]
@@ -174,41 +176,6 @@ export function PauseEveryAgent({ book }: { book: AgentBook }) {
   )
 }
 
-/** B19.20 — pausing one agent (Lens B19.6): its every movement is refused until it is resumed. */
-function PauseAgent({ agent }: { agent: Agent }) {
-  const qc = useQueryClient()
-  const { hold, onlyThePhone } = useKeys()
-  const change = useMutation({
-    mutationFn: (pause: boolean) => (pause ? agentBankApi.pause(agent.id, 'paused from Agent Wallets') : resumeAgent(agent.id)),
-    onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
-  })
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-3">
-        {agent.paused_at ? (
-          <>
-            <p className="text-body text-ink" data-testid="agent-paused">
-              {agent.name} is paused{agent.paused_reason ? `: ${agent.paused_reason}` : ''}.
-            </p>
-            {onlyThePhone ? (
-              <OnThePhone>Resume {agent.name} on your phone with Face ID.</OnThePhone>
-            ) : hold ? null : (
-              <Button disabled={change.isPending} onClick={() => change.mutate(false)}>
-                Resume {agent.name}
-              </Button>
-            )}
-          </>
-        ) : (
-          <Button disabled={change.isPending} onClick={() => change.mutate(true)}>
-            Pause {agent.name}
-          </Button>
-        )}
-      </div>
-      {change.isError ? <Note ok={false}>{refusalText(change.error)}</Note> : null}
-    </div>
-  )
-}
-
 /** B19.20 — this month's spend run on to its end (Lens B19.6), and the unusual-spend alerts. */
 function Spending({ nameOf }: { nameOf: (id: string) => string }) {
   const forecast = useQuery({ queryKey: FORECAST_KEY, queryFn: agentBankApi.forecast })
@@ -287,17 +254,6 @@ function Spending({ nameOf }: { nameOf: (id: string) => string }) {
   )
 }
 
-const PERIOD_WORD: Record<string, string> = { week: 'weekly', month: 'monthly' }
-
-/** "80% of Researcher's daily limit": what an alert is about, in words. */
-function limitAlertText(a: LimitAlert, nameOf: (id: string) => string): string {
-  const whose = !a.agent_id ? 'your own' : a.agent_id === 'all' ? 'every wallet’s' : `${nameOf(a.agent_id)}’s`
-  const period = a.period ? `${PERIOD_WORD[a.period] ?? a.period} ` : ''
-  const what =
-    a.kind === 'card' ? 'card cap' : a.kind === 'agent_limit' ? `${period}limit` : `${period}${a.category ? `${categoryWords(a.category)} ` : ''}budget`
-  return `${a.percent}% of ${whose} ${what}`
-}
-
 /** B28.62 — each time spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit (Lens B28.335). */
 function LimitAlerts({ nameOf }: { nameOf: (id: string) => string }) {
   const alerts = useQuery({ queryKey: ['limit-alerts'], queryFn: agentBankApi.limitAlerts })
@@ -354,8 +310,8 @@ function AlertsBeforeAgents({ nameOf }: { nameOf: (id: string) => string }) {
   )
 }
 
-const SCHEDULES_KEY = ['agent-schedules']
-const scheduleSelect = `h-8 rounded-control border border-rule bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
+export const SCHEDULES_KEY = ['agent-schedules']
+const scheduleSelect = `h-8 rounded-control border border-rule-strong bg-surface px-2 text-body text-ink transition-colors duration-200 hover:border-rule-strong ${focusRing}`
 const EVERY: readonly [AgentSchedule['every'], string][] = [
   ['hour', 'every hour'],
   ['day', 'every day'],
@@ -720,28 +676,12 @@ function AgentList({ agents, selected, onSelect }: { agents: Agent[]; selected: 
 
 function Money({ agent, book }: { agent: Agent; book: AgentBook }) {
   const qc = useQueryClient()
-  const [amount, setAmount] = useState('')
-  const micros = parseLXC(amount)
-  // B17.26 — the amount and the Idempotency-Key are the mutation's own, so a retry through a deploy's
-  // restart repeats both and Lens moves the LXC once.
-  const move = useMutation({
-    mutationFn: ({ dir, ulxc, key }: { dir: 'fund' | 'withdraw'; ulxc: number; key: string }) =>
-      dir === 'fund' ? agentBankApi.fund(agent.id, ulxc, key) : agentBankApi.withdraw(agent.id, ulxc, key),
-    retry: retryMoveThroughRestart,
-    retryDelay: (failures) => Math.min(500 * 2 ** failures, 4_000),
-    onSuccess: () => setAmount(''),
-    onSettled: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: BOOK_KEY }),
-        qc.invalidateQueries({ queryKey: statementKey(agent.id) }),
-      ]),
-  })
+  const [moving, setMoving] = useState(false)
   // B19.23 — Lens B19.11 gives an agent with no owner no balance, so it is claimed before it is funded.
   const claim = useMutation({
     mutationFn: () => agentBankApi.claim(agent.id),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
-  const busy = move.isPending || micros === null
   if (agent.owner_user_id === '') {
     return (
       <Card>
@@ -761,6 +701,7 @@ function Money({ agent, book }: { agent: Agent; book: AgentBook }) {
       </Card>
     )
   }
+  // B57.16 — funding and taking back happen in Move LXC, the dialog the agent's page opens.
   return (
     <Card>
       <CardHeader>Money</CardHeader>
@@ -769,29 +710,13 @@ function Money({ agent, book }: { agent: Agent; book: AgentBook }) {
           {agent.name} holds {lxc(agent.balance_ulxc)}. The workspace has {lxc(book.unallocated_ulxc)} free to fund it.
         </p>
         {claim.isSuccess && claim.data.agent_id === agent.id ? <Note ok>You own {agent.name} now. Fund it here.</Note> : null}
-        <div className="flex items-center gap-2">
-          <Input
-            aria-label={`Amount in LXC for ${agent.name}`}
-            inputMode="decimal"
-            placeholder="LXC"
-            className="w-28 font-figure"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <Button variant="primary" disabled={busy} onClick={() => move.mutate({ dir: 'fund', ulxc: micros ?? 0, key: newMoveKey() })}>
-            Fund
-          </Button>
-          <Button disabled={busy} onClick={() => move.mutate({ dir: 'withdraw', ulxc: micros ?? 0, key: newMoveKey() })}>
-            Take back
+        <div>
+          {/* B57.20 — not the primary: Edit rules on the agent's page above is the page's one primary action. */}
+          <Button variant="default" onClick={() => setMoving(true)}>
+            Move LXC
           </Button>
         </div>
-        {/* Said only while it is still true: a payment or a request moves the balance after it. */}
-        {move.isSuccess && move.data.balance_ulxc === agent.balance_ulxc ? (
-          <Note ok>
-            {agent.name} now holds {lxc(move.data.balance_ulxc)}.
-          </Note>
-        ) : null}
-        {move.isError ? <Note ok={false}>{refusalText(move.error)}</Note> : null}
+        <MoveLxc agent={agent} book={book} open={moving} onClose={() => setMoving(false)} />
       </div>
     </Card>
   )
@@ -801,35 +726,6 @@ function Money({ agent, book }: { agent: Agent; book: AgentBook }) {
  * B19.23 — whether the agent's owner is verified (Lens B19.11). Lens knows a person only as their
  * workspace, so the badge is this workspace's verification: a completed card purchase, or Talyvor's vouch.
  */
-function Ownership({ agent }: { agent: Agent }) {
-  if (agent.owner_user_id === undefined) return null
-  return (
-    <div className="flex flex-wrap items-center gap-2" data-testid="agent-ownership">
-      {agent.owner_user_id === '' ? (
-        <>
-          <Pill status="held">No owner</Pill>
-          <span className="text-caption text-muted">Nobody owns {agent.name} yet. Claim it under Money.</span>
-        </>
-      ) : agent.verified ? (
-        <>
-          <Pill status="settled">Verified</Pill>
-          <span className="text-caption text-muted">
-            Its owner is verified: this workspace has bought LXC with a card, or Talyvor vouches for it.
-          </span>
-        </>
-      ) : (
-        <>
-          <Pill status="idle">Not verified</Pill>
-          <span className="text-caption text-muted">
-            {agent.name} has an owner who is not verified yet. Buying LXC with a card on Billing verifies this
-            workspace, and every agent in it with an owner.
-          </span>
-        </>
-      )}
-    </div>
-  )
-}
-
 /** B28.21 — the agent's name and what it is for, in its owner's words (Lens keeps up to 500 characters); B57.124, its helper. */
 function AgentDetails({ agent }: { agent: Agent }) {
   const qc = useQueryClient()
@@ -860,7 +756,7 @@ function AgentDetails({ agent }: { agent: Agent }) {
           maxLength={500}
           rows={3}
           placeholder="What it is for, e.g. answers support tickets overnight"
-          className={`w-full rounded-control border border-rule bg-surface p-3 text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+          className={`w-full rounded-control border border-rule-strong bg-surface p-3 text-body text-ink placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
@@ -873,54 +769,6 @@ function AgentDetails({ agent }: { agent: Agent }) {
         {save.isSuccess && !changed ? <Note ok>Saved.</Note> : null}
         {save.isError ? <Note ok={false}>{refusalText(save.error)}</Note> : null}
       </form>
-    </Card>
-  )
-}
-
-/**
- * B28.21 — archiving retires the agent for good (Lens B28.298): in one step its whole balance goes back to
- * the workspace as one withdraw entry, its keys stop working, and its top-up and schedules stop. Asked twice.
- */
-function ArchiveAgent({ agent, onArchived }: { agent: Agent; onArchived: (done: AgentArchive) => void }) {
-  const qc = useQueryClient()
-  const [asking, setAsking] = useState(false)
-  const archive = useMutation({
-    mutationFn: () => agentBankApi.archive(agent.id),
-    onSuccess: onArchived,
-    onSettled: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: BOOK_KEY }),
-        qc.invalidateQueries({ queryKey: statementKey(agent.id) }),
-      ]),
-  })
-  const keys = agent.keys.length
-  return (
-    <Card>
-      <CardHeader>Archive</CardHeader>
-      <div className="flex flex-col gap-2 px-gutter py-3">
-        <p className="text-body text-ink">
-          Archiving {agent.name} moves the {lxc(agent.balance_ulxc)} it holds back to the workspace, stops its{' '}
-          <span className="font-figure">{keys}</span> {keys === 1 ? 'key' : 'keys'} working, and ends its top-up and
-          schedules. Its statement is kept. It cannot be undone.
-        </p>
-        {asking ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="danger" disabled={archive.isPending} onClick={() => archive.mutate()}>
-              {archive.isPending ? 'Archiving…' : `Yes, archive ${agent.name}`}
-            </Button>
-            <Button disabled={archive.isPending} onClick={() => setAsking(false)}>
-              Keep it
-            </Button>
-          </div>
-        ) : (
-          <div>
-            <Button variant="danger" onClick={() => setAsking(true)}>
-              Archive {agent.name}
-            </Button>
-          </div>
-        )}
-        {archive.isError ? <Note ok={false}>{refusalText(archive.error)}</Note> : null}
-      </div>
     </Card>
   )
 }
@@ -985,6 +833,9 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
   const [listings, setListings] = useState<string[]>(rules.allowed_listings ?? [])
   const [payees, setPayees] = useState<Payees>(() => payeesOf(rules))
   const [pauseOnUnusual, setPauseOnUnusual] = useState(rules.pause_on_unusual_spend ?? false)
+  // B59.19 — "Can use Instant transfer", off by default; only a Hybrid account has the switch.
+  const instant = useAccount().shows?.instantTransfer === true
+  const [mayInstant, setMayInstant] = useState(rules.may_instant_transfer ?? false)
   const [from, setFrom] = useState(rules.active_from)
   const [until, setUntil] = useState(rules.active_until)
   const [timezone, setTimezone] = useState(rules.timezone)
@@ -1043,6 +894,8 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
     active_until: until.trim(),
     timezone: timezone.trim(),
     pause_on_unusual_spend: pauseOnUnusual,
+    // Sent only when the switch moved: absent, Lens keeps what it holds, and a template does not touch it.
+    ...(instant && mayInstant !== (rules.may_instant_transfer ?? false) ? { may_instant_transfer: mayInstant } : {}),
   }
   const change = useRulesChange(agent.id)
   const judged = change.judgedFor({ rules: proposed })
@@ -1126,6 +979,23 @@ function RulesForm({ agent, agents, rules }: { agent: Agent; agents: Agent[]; ru
           {pauseOnUnusual ? 'On' : 'Off'}
         </Button>
       </Row>
+      {instant ? (
+        <Row
+          label="Can use Instant transfer"
+          hint={`Off by default. When it’s on, ${agent.name} can send Instant transfers inside these rules. Anything outside them waits for your yes.`}
+        >
+          <Button
+            type="button"
+            role="switch"
+            aria-label="Can use Instant transfer"
+            aria-checked={mayInstant}
+            className={pressed}
+            onClick={() => setMayInstant((on) => !on)}
+          >
+            {mayInstant ? 'On' : 'Off'}
+          </Button>
+        </Row>
+      ) : null}
       <TimePicker label="Active from" agentName={agent.name} value={from} onChange={setFrom} />
       <TimePicker label="Active until" agentName={agent.name} value={until} onChange={setUntil} />
       <TimeZonePicker agentName={agent.name} value={timezone} onChange={setTimezone} />
@@ -1367,7 +1237,6 @@ export function Rules({ agent, agents }: { agent: Agent; agents: Agent[] }) {
           </p>
         )}
       </Card>
-      {rules.isSuccess ? <LimitBoost agent={agent} rules={rules.data} /> : null}
       <RulesHistory
         agent={agent}
         agents={agents}
@@ -1377,6 +1246,32 @@ export function Rules({ agent, agents }: { agent: Agent; agents: Agent[] }) {
         }}
       />
     </>
+  )
+}
+
+/**
+ * B57.23 — an agent's rules in words on today's agent view, the way to its rules page, where they are edited, kept in
+ * their history and tried with Would it pass?, and a boost. A room's wallet keeps the whole card above in its settings.
+ */
+function RulesSummary({ agent, agents }: { agent: Agent; agents: Agent[] }) {
+  const rules = useQuery({ queryKey: rulesKey(agent.id), queryFn: () => agentBankApi.rules(agent.id) })
+  useLinked('rules', rules.isSuccess) // B41.7 — a rule found by the one search opens here
+  return (
+    <Card id="rules">
+      <CardHeader>Rules</CardHeader>
+      {rules.isSuccess ? (
+        <>
+          <RulesInWords agentName={agent.name} rules={rules.data} payeeName={(id) => agents.find((a) => a.id === id)?.name ?? id} />
+          <p className="px-gutter pb-3 text-body">
+            <Link className={inlineLink} to={`/agents/${encodeURIComponent(agent.id)}/rules`}>
+              Edit {agent.name}’s rules, see their history or ask whether a request would pass
+            </Link>
+          </p>
+        </>
+      ) : (
+        <p className="px-gutter py-3 text-body text-muted">{rules.isError ? readFailure(rules.error, 'This agent’s rules') : 'Reading…'}</p>
+      )}
+    </Card>
   )
 }
 
@@ -1395,7 +1290,7 @@ function changeText(change: string): string {
  * B28.31 — who made a version, from the credential Lens names: the operator, a key (by its id), or a signed-in
  * session — on Talyvor that is the workspace's own, so "you". Lens names nobody for rules set before history.
  */
-function changedBy(by: string): string {
+export function changedBy(by: string): string {
   if (by === '') return ''
   if (by === 'operator') return ' by Talyvor support'
   const key = /:key:([^:]+)$/.exec(by)?.[1]
@@ -1476,6 +1371,9 @@ function ruleChanges(was: AgentRules, now: AgentRules, payeeName: (id: string) =
   if ((was.timezone || 'UTC') !== (now.timezone || 'UTC')) out.push({ rule: 'Time zone', from: was.timezone || 'UTC', to: now.timezone || 'UTC' })
   if (Boolean(was.pause_on_unusual_spend) !== Boolean(now.pause_on_unusual_spend)) {
     out.push({ rule: 'Pause on unusual spend', from: was.pause_on_unusual_spend ? 'on' : 'off', to: now.pause_on_unusual_spend ? 'on' : 'off' })
+  }
+  if (now.may_instant_transfer !== undefined && Boolean(was.may_instant_transfer) !== now.may_instant_transfer) {
+    out.push({ rule: 'Can use Instant transfer', from: was.may_instant_transfer ? 'on' : 'off', to: now.may_instant_transfer ? 'on' : 'off' })
   }
   return out
 }
@@ -1642,6 +1540,13 @@ function localMinute(d: Date): string {
  * and the rules and their history are never touched. A boost raises only a limit the rules set, and only while the
  * rules leave that limit where it was; it can be ended early.
  */
+/** B57.22 — the Limit boost row's form: today's, over the agent's rules as they stand. */
+function BoostForm({ agent }: { agent: Agent }) {
+  const rules = useQuery({ queryKey: rulesKey(agent.id), queryFn: () => agentBankApi.rules(agent.id) })
+  if (rules.isError) return <p className="text-body text-muted">{readFailure(rules.error, 'Its rules')}</p>
+  return rules.isSuccess ? <LimitBoost agent={agent} rules={rules.data} /> : <p className="text-body text-muted">Reading…</p>
+}
+
 function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
   const qc = useQueryClient()
   const boosts = useQuery({
@@ -1775,118 +1680,6 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
           {end.isError ? <Note ok={false}>{refusalText(end.error)}</Note> : null}
         </form>
       )}
-    </Card>
-  )
-}
-
-/**
- * B28.30 — "would this request pass my rules?" (Lens B28.306). A question to a model, or a payment to another of
- * the workspace's agents, is judged by the agent's rules exactly as a real one is — against what it has really
- * spent — and nothing is spent, posted or sent for approval. The answer is Lens's: allowed, refused with the
- * rule's own sentence, or waiting for a person's approval.
- */
-function TryRules({ agent, agents }: { agent: Agent; agents: Agent[] }) {
-  const choices = useRuleChoices()
-  const others = agents.filter((a) => a.id !== agent.id)
-  const [kind, setKind] = useState<'question' | 'payment'>('question')
-  const [model, setModel] = useState('')
-  const [to, setTo] = useState<string | null>(null)
-  const [amount, setAmount] = useState('')
-  const micros = parseLXC(amount)
-  const payee = kind === 'payment' ? (others.find((a) => a.id === to) ?? null) : null
-  // The catalog's groups are its providers, so the model chosen names the provider Lens judges it by.
-  const provider = choices.providers[choices.models.findIndex((g) => g.options.some((o) => o.value === model))]?.value ?? ''
-  const sim = useMutation({
-    mutationFn: () =>
-      agentBankApi.simulate(
-        agent.id,
-        payee ? { amount_ulxc: micros ?? 0, payee: { kind: 'agent', id: payee.id } } : { amount_ulxc: micros ?? 0, model, provider },
-      ),
-  })
-  const ready = micros !== null && (kind === 'question' || payee !== null) && !sim.isPending
-  const answer = sim.data
-  const what = (k: 'question' | 'payment') => {
-    setKind(k)
-    sim.reset()
-  }
-  return (
-    <Card>
-      <CardHeader>Would it pass?</CardHeader>
-      <form
-        className="flex flex-col gap-2 px-gutter py-3"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (ready) sim.mutate()
-        }}
-      >
-        <p className="text-body text-muted">
-          Ask whether {agent.name}’s rules would let a request through, counting what it has really spent. Nothing is
-          spent, paid or sent for approval.
-        </p>
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="What to try">
-          <Button aria-pressed={kind === 'question'} className={pressed} onClick={() => what('question')}>
-            A question to a model
-          </Button>
-          {others.length > 0 ? (
-            <Button aria-pressed={kind === 'payment'} className={pressed} onClick={() => what('payment')}>
-              A payment
-            </Button>
-          ) : null}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {kind === 'question' ? (
-            <select aria-label={`Model ${agent.name} would ask`} className={`${scheduleSelect} w-56`} value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="">Any model</option>
-              {choices.models
-                .filter((g) => g.options.length > 0)
-                .map((g) => (
-                  <optgroup key={g.label} label={g.label}>
-                    {g.options.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-            </select>
-          ) : (
-            <select aria-label={`Who ${agent.name} would pay`} className={`${scheduleSelect} w-56`} value={to ?? ''} onChange={(e) => setTo(e.target.value || null)}>
-              <option value="">Choose an agent…</option>
-              {others.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <Input
-            aria-label={`Amount in LXC to try for ${agent.name}`}
-            inputMode="decimal"
-            placeholder="LXC"
-            className="w-28 font-figure"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-          <Button type="submit" disabled={!ready}>
-            {sim.isPending ? 'Asking…' : 'Would it pass?'}
-          </Button>
-        </div>
-        {answer ? (
-          <Note ok={answer.verdict === 'allowed'}>
-            <span data-testid="rule-verdict">
-              {answer.verdict === 'allowed' ? 'Allowed.' : answer.verdict === 'refused' ? 'Refused.' : 'Needs approval.'}
-            </span>{' '}
-            {answer.verdict === 'allowed'
-              ? `${agent.name}’s rules would let this through.`
-              : `${answer.reason.charAt(0).toUpperCase()}${answer.reason.slice(1)}${answer.reason.endsWith('.') ? '' : '.'}`}
-            {answer.verdict !== 'refused' && answer.amount_ulxc > answer.balance_ulxc ? (
-              <> It holds only {lxc(answer.balance_ulxc)}, so it could not pay this until it is funded.</>
-            ) : null}{' '}
-            Nothing was spent.
-          </Note>
-        ) : null}
-        {sim.isError ? <Note ok={false}>{refusalText(sim.error)}</Note> : null}
-      </form>
     </Card>
   )
 }
@@ -2351,7 +2144,7 @@ export function StatementDownload({ agent, primary = false, month = 'last' }: { 
   )
 }
 
-const PAYEE_KIND: Record<ApprovalPayee['kind'], string> = {
+export const PAYEE_KIND: Record<ApprovalPayee['kind'], string> = {
   agent: 'an agent',
   listing: 'a marketplace listing',
   company: 'a company',
@@ -2359,7 +2152,7 @@ const PAYEE_KIND: Record<ApprovalPayee['kind'], string> = {
   outside: 'a payee outside Talyvor',
 }
 
-const DECIDED: Record<AgentApproval['status'], { status: PillStatus; label: string }> = {
+export const DECIDED: Record<AgentApproval['status'], { status: PillStatus; label: string }> = {
   pending: { status: 'held', label: 'Waiting' },
   approved: { status: 'settled', label: 'Approved' },
   used: { status: 'settled', label: 'Approved and used' },
@@ -2394,13 +2187,16 @@ export function useKeys() {
   const thisBrowserSigns = passkeyCount > 0 && !noLiveKey
   const signed = passkeyCount > 0 || (devices.data?.devices ?? []).length > 0
   const onlyThePhone = isSuccess && signed && !thisBrowserSigns
-  return { signed, thisBrowserSigns, onlyThePhone, noLiveKey, hold: !isSuccess || onlyThePhone, passkeyCount, isSuccess }
+  const error = passkeys.error ?? devices.error
+  return { signed, thisBrowserSigns, onlyThePhone, noLiveKey, hold: !isSuccess || onlyThePhone, passkeyCount, isSuccess, error }
 }
 
 /** B55.14 — what Lens said a change to an agent's rules does, for the change it was asked about. */
 interface RulesJudged {
   change: string
   changes: string[]
+  /** B57.23 — it loosens the rules, whether or not anything signs it */
+  looser: boolean
   /** looser, and this browser's passkey signs it */
   signs: boolean
   /** looser, and only the phone's key could sign it */
@@ -2420,7 +2216,7 @@ export function useRulesChange(agentID: string) {
   const judge = async (change: RulesChange): Promise<RulesJudged> => {
     const j = await agentBankApi.rulesChallenge(agentID, change)
     const signs = j.looser && (j.allow_credentials ?? []).length > 0
-    const next = { change: JSON.stringify(change), changes: j.changes ?? [], signs, phone: j.looser && !signs && onlyThePhone }
+    const next = { change: JSON.stringify(change), changes: j.changes ?? [], looser: j.looser, signs, phone: j.looser && !signs && onlyThePhone }
     setJudged(next)
     return next
   }
@@ -2464,15 +2260,15 @@ export function RulesLoosen({ agent, judged }: { agent: string; judged: RulesJud
 
 /** B55.2 — said in place of a button this browser cannot sign for: where to do it, and how to sign here too (B55.3). */
 export function OnThePhone({ children }: { children: React.ReactNode }) {
-  // On Approvals itself the link would lead back to the same page.
-  const here = useLocation().pathname === '/approvals'
+  // On Approvals and devices itself the link would lead back to the same page.
+  const here = useLocation().pathname === '/settings/devices'
   // B55.54 — with no live key there is no phone to do it on either: say so, and where to get a key back.
   if (useKeys().noLiveKey) return <NoLiveKey here={here} />
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body text-ink" data-testid="on-the-phone">
       <span>{children}</span>
       {here ? null : (
-        <Link className={inlineLink} to="/approvals">
+        <Link className={inlineLink} to="/settings/devices">
           Add this browser
         </Link>
       )}
@@ -2486,171 +2282,6 @@ export function deviceText(err: unknown, fallback: string): string {
   if (err instanceof DOMException && err.name === 'NotAllowedError') return 'Cancelled. Nothing changed.'
   if (err instanceof DOMException && err.name === 'NotSupportedError') return fallback
   return err instanceof Error && err.message ? err.message : fallback
-}
-
-export const APPROVAL_KEYS_KEY = ['approval-keys']
-
-/** B55.16 — "Passkey · added 14 Oct · last used yesterday", or "Phone key · …". */
-function keyFacts(k: ApprovalKey): string {
-  return [
-    k.kind === 'phone' ? 'Phone key' : 'Passkey',
-    `added ${formatDecided(k.created_at)}`,
-    k.last_used_at ? `last used ${formatDecided(k.last_used_at)}` : 'never used',
-  ].join(' · ')
-}
-
-/** B55.16 — the card's line: "2 passkeys and your phone’s key are registered. You approve with one of them; …". */
-function keysLine(keys: ApprovalKey[]): string {
-  const phones = keys.filter((k) => k.kind === 'phone').length
-  const passkeys = keys.length - phones
-  const what = [
-    passkeys === 0 ? '' : `${passkeys} passkey${passkeys === 1 ? '' : 's'}`,
-    phones === 0 ? '' : phones === 1 ? 'your phone’s key' : `${phones} phone keys`,
-  ]
-    .filter((x) => x !== '')
-    .join(' and ')
-  const head = `${what.charAt(0).toUpperCase()}${what.slice(1)} ${keys.length === 1 ? 'is' : 'are'} registered.`
-  return keys.length === 1
-    ? `${head} You approve with it; nothing is approved without it.`
-    : `${head} You approve with one of them; nothing is approved without one.`
-}
-
-/**
- * B19.10 — the phone half: a passkey made here signs every approval from now on, and this device can
- * be told when one is filed. Lens keeps both (B19.16); nothing is kept in the browser but the passkey.
- * B55.3: with only the phone's key, a passkey made here waits until the phone lets it in (Lens B55.1).
- * B55.16 — every passkey and phone key is listed by name, and any but the last can be removed.
- */
-function FaceID({ signed, ready, passkeyCount }: { signed: boolean; ready: boolean; passkeyCount: number }) {
-  const qc = useQueryClient()
-  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
-  const [waiting, setWaiting] = useState<{ id: string; code: string } | null>(null)
-  // Lens lets only the owner or an admin read the keys; anyone else keeps the line below without the list.
-  const keys = useQuery({ queryKey: APPROVAL_KEYS_KEY, queryFn: agentBankApi.approvalKeys })
-  const list = keys.data?.keys ?? []
-  const [asking, setAsking] = useState<ApprovalKey | null>(null)
-  const remove = useMutation({
-    // Removing needs no signature: stopping a key is instant, and Lens refuses the last one.
-    mutationFn: async (k: ApprovalKey) => {
-      await (k.kind === 'phone' ? agentBankApi.revokeDevice(k.id) : agentBankApi.removePasskey(k.id))
-    },
-    onSuccess: (_, k) => {
-      setAsking(null)
-      setSaid({ ok: true, text: `Removed: ${k.name}. It can no longer approve anything.` })
-    },
-    onSettled: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: APPROVAL_KEYS_KEY }),
-        qc.invalidateQueries({ queryKey: PASSKEYS_KEY }),
-        qc.invalidateQueries({ queryKey: DEVICES_KEY }),
-      ]),
-  })
-  const ask = (k: ApprovalKey | null) => {
-    remove.reset()
-    setAsking(k)
-  }
-  const register = useMutation({
-    mutationFn: () => registerThisDevice(navigator.userAgent.includes('iPhone') ? 'iPhone' : 'This device'),
-    onSuccess: (enrolment) => {
-      if (enrolment) {
-        setSaid(null)
-        setWaiting(enrolment)
-      } else setSaid({ ok: true, text: 'This device now signs approvals. Face ID asks each time you approve or decline.' })
-    },
-    onError: (err) => setSaid({ ok: false, text: deviceText(err, 'No passkey was made.') }),
-    onSettled: () => qc.invalidateQueries({ queryKey: PASSKEYS_KEY }),
-  })
-  // Asked every 3 seconds while the phone decides; Lens expires the enrolment after 10 minutes, and so does this.
-  const poll = useQuery({
-    queryKey: ['key-enrolment', waiting?.id],
-    queryFn: () => agentBankApi.enrolment(waiting!.id),
-    enabled: waiting !== null,
-    refetchInterval: 3000,
-  })
-  const status = waiting ? poll.data?.status : undefined
-  useEffect(() => {
-    if (!waiting) return
-    const end = (added: boolean) => {
-      setWaiting(null)
-      setSaid(
-        added
-          ? { ok: true, text: 'This browser now signs approvals. Face ID, Touch ID or this device’s PIN asks each time you approve or decline.' }
-          : { ok: false, text: 'This browser was not added. Nothing changed.' },
-      )
-      if (added) qc.invalidateQueries({ queryKey: PASSKEYS_KEY })
-    }
-    if (status === 'approved') return end(true)
-    if (status === 'declined' || status === 'expired') return end(false)
-    const timer = setTimeout(() => end(false), 10 * 60_000)
-    return () => clearTimeout(timer)
-  }, [waiting, status, qc])
-  const notify = useMutation({
-    mutationFn: notifyThisDevice,
-    onSuccess: () => setSaid({ ok: true, text: 'This device is told when an agent asks for approval.' }),
-    onError: (err) => setSaid({ ok: false, text: deviceText(err, 'Notifications could not be turned on.') }),
-  })
-  return (
-    <Card>
-      <CardHeader>Face ID and notifications</CardHeader>
-      <div className="flex flex-col gap-2 px-gutter py-3">
-        <p className="text-body text-muted">
-          {keys.isSuccess && list.length > 0
-            ? keysLine(list)
-            : signed && passkeyCount === 0
-            ? 'Approvals are signed on your phone. Nothing is approved without it.'
-            : signed
-            ? `Approvals are signed with a passkey (${passkeyCount} registered). Nothing is approved without one.`
-            : 'Approvals are not signed yet. Make a passkey on your phone and every approval asks for Face ID.'}
-        </p>
-        {list.length > 0 ? (
-          <div className="-mx-gutter" data-testid="approval-keys">
-            {list.map((k) => (
-              <Row key={`${k.kind}-${k.id}`} stack label={k.name || (k.kind === 'phone' ? 'Phone key' : 'Passkey')} hint={keyFacts(k)}>
-                {list.length === 1 ? (
-                  <span className="text-caption text-muted">{LAST_KEY}</span>
-                ) : (
-                  <Button className="h-12 wide:h-8" aria-label={`Remove ${k.name}`} onClick={() => ask(k)}>
-                    Remove
-                  </Button>
-                )}
-              </Row>
-            ))}
-          </div>
-        ) : null}
-        <RemoveKeyDialog
-          name={asking?.name ?? null}
-          pending={remove.isPending}
-          error={remove.error}
-          onKeep={() => ask(null)}
-          onRemove={() => asking && remove.mutate(asking)}
-        />
-        {waiting ? (
-          <Note ok>Waiting for your phone. Open Talyvor on your phone and let this browser in. The code there should be <span className="font-figure">{waiting.code}</span>.</Note>
-        ) : said ? (
-          <Note ok={said.ok}>{said.text}</Note>
-        ) : null}
-        {passkeyCount > 0 ? <WaitingPhones /> : null}
-        <div className="flex flex-col gap-2 wide:flex-row">
-          {!passkeysSupported() ? (
-            <p className="text-caption text-muted">This browser cannot make a passkey.</p>
-          ) : !ready ? null : (
-            <Button className="h-12 wide:h-8" disabled={register.isPending || waiting !== null} onClick={() => register.mutate()}>
-              {signed ? 'Add this device' : 'Approve with Face ID from now on'}
-            </Button>
-          )}
-          {pushSupported() ? (
-            <Button className="h-12 wide:h-8" disabled={notify.isPending} onClick={() => notify.mutate()}>
-              Notify this device
-            </Button>
-          ) : (
-            <p className="text-caption text-muted">
-              To be told on an iPhone, add Talyvor to the Home Screen (Share, then Add to Home Screen) and open it from there.
-            </p>
-          )}
-        </div>
-      </div>
-    </Card>
-  )
 }
 
 /** B55.10 — who prepared it: Lens names the client "chat", "voice", "mcp:<client id>" or "key:<key id>" (B40.3). */
@@ -2692,7 +2323,7 @@ export function PreparedRow({ r, nameOf, labelled = false }: { r: PaymentRequest
           <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
             {labelled ? <WorkspaceLabel capability={paymentRequestCapabilities(r)} /> : null}
             <span>
-              {w.hint.join(' · ')} · asked <span className="font-figure">{formatWhen(r.created_at)}</span>
+              {w.hint.join(' · ')} · asked <span className="font-figure">{formatDecided(r.created_at)}</span>
             </span>
           </span>
         }
@@ -2714,47 +2345,86 @@ export function PreparedRow({ r, nameOf, labelled = false }: { r: PaymentRequest
   )
 }
 
-const ENROLMENTS_KEY = ['key-enrolments']
-
 /**
- * B55.3 — a phone waiting to approve payments too (Lens B55.1), let in by this browser's passkey signing its enrolment
- * challenge. Lens lets only an owner or admin read them, so for anyone else the list fails and nothing shows.
+ * B55.40 — an agent's own key asked for a mandate (Lens B55.24): it pulls nothing until the owner approves it here, signed
+ * over a challenge naming that request as an approval is, or declines it. With only the phone's key, this browser cannot sign.
  */
-function WaitingPhones() {
+export function MandateRequestRow({
+  m,
+  nameOf,
+  onlyThePhone,
+  hold,
+  onOutcome,
+}: {
+  m: Mandate
+  nameOf: (id: string) => string
+  onlyThePhone: boolean
+  hold: boolean
+  onOutcome: (o: { ok: boolean; text: React.ReactNode }) => void
+}) {
   const qc = useQueryClient()
-  const list = useQuery({ queryKey: ENROLMENTS_KEY, queryFn: agentBankApi.enrolments, refetchInterval: 3000 })
-  const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null)
-  const decide = useMutation({
-    mutationFn: async ({ en, letIn }: { en: KeyEnrolment; letIn: boolean }) => {
-      await (letIn ? letInKey(en.id) : agentBankApi.declineEnrolment(en.id))
-    },
-    onSuccess: (_, { en, letIn }) => setSaid({ ok: true, text: letIn ? `${en.name} can approve now.` : `${en.name} was not added. Nothing changed.` }),
-    onError: (err, { en }) => setSaid({ ok: false, text: deviceText(err, `${en.name} was not added. Nothing changed.`) }),
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ENROLMENTS_KEY })
-      qc.invalidateQueries({ queryKey: DEVICES_KEY })
-    },
-  })
-  const phones = (list.data?.enrolments ?? []).filter((en) => en.kind === 'device' && en.status === 'waiting')
-  return (
+  const [open, setOpen] = useState(false)
+  // The payee's name is the agent's own words, so where the money goes is shown as Lens holds it: the Talyvor workspace,
+  // or the owner's own saved payee an outside business's pulls are paid out to. Pay's ['money-payees'] read, shared.
+  const payees = useQuery({ queryKey: ['money-payees'], queryFn: agentBankApi.payees, enabled: Boolean(m.payee_business_id) })
+  const savedPayee = (payees.data?.payees ?? []).find((p) => p.id === m.payee_id)
+  const into = m.payee_workspace_id ? (
     <>
-      {said ? <Note ok={said.ok}>{said.text}</Note> : null}
-      {phones.map((en) => (
-        <div key={en.id} className="flex flex-col gap-2">
-          <p className="text-body text-ink">
-            Your {en.name} asks to approve payments too. Let it in only if you are adding it now and its code is <span className="font-figure">{en.code}</span>.
-          </p>
-          <div className="flex flex-col gap-2 wide:flex-row">
-            <Button variant="primary" className="h-12 wide:h-8" disabled={decide.isPending} onClick={() => decide.mutate({ en, letIn: true })}>
-              Let it approve
-            </Button>
-            <Button className="h-12 wide:h-8" disabled={decide.isPending} onClick={() => decide.mutate({ en, letIn: false })}>
-              Not this one
-            </Button>
-          </div>
-        </div>
-      ))}
+      into Talyvor workspace <span className="font-figure">{m.payee_workspace_id}</span>
     </>
+  ) : (
+    <>
+      paid out to your saved payee {savedPayee ? savedPayee.name : <span className="font-figure">{m.payee_id}</span>}
+    </>
+  )
+  const decide = useMutation({
+    mutationFn: (approve: boolean) => (approve ? approveMandateSigned(m.id) : agentBankApi.declineMandate(m.id)),
+    onSuccess: (_, approve) =>
+      onOutcome({
+        ok: true,
+        text: approve
+          ? `Approved. ${m.payee_name} can pull from ${nameOf(m.agent_id)} up to ${formatMinor(m.max_per_month_minor, m.currency)} a month.`
+          : `Declined. ${m.payee_name} will not pull from ${nameOf(m.agent_id)}.`,
+      }),
+    onError: (err) => onOutcome({ ok: false, text: refusalText(err) }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['money-mandates'] }),
+  })
+  return (
+    // In Pocket's row, wrapped as PreparedRow is, so it reads the same on Approvals (B57.17) and on an agent's page.
+    <div data-mandate={m.id} {...{ [DESIGN_ATTR]: 'pocket' }} className="border-t border-line first:border-t-0">
+      <PocketRow
+        wrap
+        title={
+          <span className="whitespace-normal">
+            {nameOf(m.agent_id)} asks to let {m.payee_name} pull up to <span className="font-figure">{formatMinor(m.max_per_month_minor, m.currency)}</span> a month
+          </span>
+        }
+        line={
+          <span>
+            Up to <span className="font-figure">{formatMinor(m.max_per_pull_minor, m.currency)}</span> a pull · {into} · expires{' '}
+            <span className="font-figure">{formatWhen(m.expires_at)}</span> · asked <span className="font-figure">{formatWhen(m.created_at)}</span>
+          </span>
+        }
+        action={
+          !open ? (
+            <PocketButton variant="secondary" size="sm" data-tangerine="your-move" onClick={() => setOpen(true)}>
+              Review
+            </PocketButton>
+          ) : onlyThePhone ? (
+            <span className="text-body text-ink-2">Approve this mandate with a passkey on this browser: add this browser first.</span>
+          ) : hold ? null : (
+            <span className="flex flex-wrap gap-2">
+              <PocketButton size="sm" disabled={decide.isPending} onClick={() => decide.mutate(true)}>
+                Approve
+              </PocketButton>
+              <PocketButton variant="secondary" size="sm" disabled={decide.isPending} onClick={() => decide.mutate(false)}>
+                Decline
+              </PocketButton>
+            </span>
+          )
+        }
+      />
+    </div>
   )
 }
 
@@ -2762,14 +2432,11 @@ export function Approvals({
   nameOf,
   held,
   onSent,
-  primary = false,
   agentId,
 }: {
   nameOf: (id: string) => string
   held: Record<string, HeldPayment>
   onSent: (approvalID: string) => void
-  /** B29.9 — Approve is the teal action on Approvals; on Agent Wallets that is Fund. */
-  primary?: boolean
   /** B32.55 — only this agent's approvals: a room's settings show its wallet's. */
   agentId?: string
 }) {
@@ -2778,6 +2445,7 @@ export function Approvals({
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const ownAgent = (id: string) => (book.data?.agents ?? []).some((x) => x.id === id)
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
+  const mandateRequests = useQuery({ queryKey: MANDATE_REQUESTS_KEY, queryFn: agentBankApi.requestedMandates })
   const keys = useKeys()
   const { signed, onlyThePhone, hold } = keys
   // Ticking several is for a workspace that signs nothing (bulk, below), once both key reads are in.
@@ -2789,7 +2457,8 @@ export function Approvals({
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const swipeFrom = useRef<{ id: string; x: number; y: number } | null>(null)
   // B45.11 — Home links each approval to its card here, /approvals#approval-<id>: once the list is read, that card has focus.
-  const { hash } = useLocation()
+  const location = useLocation()
+  const { hash } = location
   useEffect(() => {
     if (list.isSuccess && hash.startsWith('#approval-')) document.getElementById(hash.slice(1))?.focus()
   }, [list.isSuccess, hash])
@@ -2861,6 +2530,10 @@ export function Approvals({
   // B55.10 — the payments prepared for the person sit above the agents' requests, narrowed by the same filters.
   const preparedAll = (prepared.data?.requests ?? []).filter((r) => agentId === undefined || r.agent_id === agentId)
   const preparedShown = preparedAll.filter((r) => (byAgent === '' || r.agent_id === byAgent) && byKind !== 'model')
+  // B55.40 — an agent's mandate request waits here too, narrowed the same way.
+  const requestsShown = (mandateRequests.data?.granted ?? []).filter(
+    (m) => m.status === 'requested' && (agentId === undefined || m.agent_id === agentId) && (byAgent === '' || m.agent_id === byAgent) && byKind !== 'model',
+  )
   const chosen = pending.filter((a) => picked.has(a.id))
   const toggle = (id: string) =>
     setPicked((s) => {
@@ -2903,8 +2576,8 @@ export function Approvals({
     )
   return (
     <div className="flex flex-col gap-3">
-      {keys.noLiveKey ? <GetAKeyBack /> : <FaceID signed={signed} ready={keys.isSuccess} passkeyCount={keys.passkeyCount} />}
-      {keys.thisBrowserSigns ? <RecoveryCodeRow /> : null}
+      {/* B57.43 — the Face ID and notifications card moved to Approvals and devices. */}
+      <PageLinks label="Approvals and devices" links={[{ to: '/settings/devices', title: 'Approvals and devices', line: 'Your passkeys, your phone, and notifications' }]} />
       {outcome ? <Note ok={outcome.ok}>{outcome.text}</Note> : null}
       {list.isError ? (
         <p className="text-body text-muted">{readFailure(list.error, 'The approvals')}</p>
@@ -2949,7 +2622,7 @@ export function Approvals({
               </div>
               {pickable && chosen.length > 0 ? (
                 <div className="flex flex-col gap-2 wide:flex-row">
-                  <Button variant={primary ? 'primary' : 'default'} className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'approve' })}>
+                  <Button className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'approve' })}>
                     Approve {chosen.length}
                   </Button>
                   <Button className="h-12 wide:h-8" disabled={busy} onClick={() => bulk.mutate({ chosen, decision: 'deny' })}>
@@ -2974,8 +2647,17 @@ export function Approvals({
               ))}
             </div>
           ) : null}
+          {mandateRequests.isError ? (
+            <p className="border-b border-rule px-gutter py-3 text-body text-muted">{readFailure(mandateRequests.error, 'The mandate requests')}</p>
+          ) : requestsShown.length > 0 ? (
+            <div role="group" aria-label="Mandate requests" className="border-b border-rule">
+              {requestsShown.map((m) => (
+                <MandateRequestRow key={m.id} m={m} nameOf={nameOf} onlyThePhone={onlyThePhone} hold={hold} onOutcome={setOutcome} />
+              ))}
+            </div>
+          ) : null}
           {pending.length === 0 ? (
-            preparedShown.length > 0 ? null : (
+            preparedShown.length > 0 || requestsShown.length > 0 ? null : (
               <p className="px-gutter py-3 text-body text-muted">
                 {waiting.length > 0
                   ? 'Nothing waiting matches these filters.'
@@ -2984,7 +2666,7 @@ export function Approvals({
             )
           ) : (
             <div role="group" aria-label="Waiting for a person" onKeyDown={onKeys}>
-              {pending.map((a, i) => (
+              {pending.map((a) => (
                 <Row
                   key={a.id}
                   stack
@@ -3054,14 +2736,17 @@ export function Approvals({
                     <DeclineForm disabled={busy} onDecline={(reason) => decide.mutate({ a, decision: 'deny', reason })} onCancel={() => setDeclining(null)} />
                   ) : (
                   <div className="flex w-full flex-col gap-2 wide:w-auto wide:flex-row wide:items-center">
-                    {/* B17.325 — one teal action per screen: the first waiting request's Approve, or Approve {n} once some are picked. */}
+                    {/* B57.15 — Review opens the approval sheet over this page, with what pays it and the budget left after. */}
+                    <Button asChild className="h-12 w-full wide:h-8 wide:w-auto">
+                      <Link to={approvalSheetTo(location, a.id)}>Review</Link>
+                    </Button>
+                    {/* B17.325 — the teal action on Agent Wallets is Fund, so Approve here is not filled (B29.9). */}
                     <Button
-                      variant={primary && i === 0 && chosen.length === 0 ? 'primary' : 'default'}
                       className="h-12 w-full wide:h-8 wide:w-auto"
                       disabled={busy}
                       onClick={() => decide.mutate({ a, decision: 'approve' })}
                     >
-                      {signed ? 'Approve with Face ID' : 'Approve'}
+                      {signed ? 'Approve with your passkey' : 'Approve'}
                     </Button>
                     <Button className="h-12 w-full wide:h-8 wide:w-auto" disabled={busy} onClick={() => setDeclining(a.id)}>
                       Decline
@@ -3104,16 +2789,34 @@ export function Approvals({
   )
 }
 
-export function AgentBank() {
+/** B57.21 — the workspace's money between owners and what it holds, framed as the agent view's other cards. */
+function Framed({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card>
+      <CardHeader>{title}</CardHeader>
+      <div data-design="pocket" className="px-gutter py-3 text-reading text-ink-2">
+        {children}
+      </div>
+    </Card>
+  )
+}
+
+/** `moneyOnPage`: under an agent's page, which draws its money features (B57.21) and its spend card (B57.111) itself. */
+export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {}) {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   // B28.349 — /agents?agent=…&entry=… (a statement line a spend answer in Chat links to) opens that agent at that line.
   const [params] = useSearchParams()
-  const linkedAgent = params.get('agent')
+  // B57.16 — /agents/:id opens that agent; its rules have their own page (B57.23).
+  const { id } = useParams()
+  const linkedAgent = id ?? params.get('agent')
   const linkedEntry = params.get('entry') ?? undefined
   const [chosen, setChosen] = useState<string | null>(linkedAgent)
-  useEffect(() => {
+  // React Router keeps this screen mounted from one agent's address to the next, so a new one opens its agent here.
+  const [openedFor, setOpenedFor] = useState(linkedAgent)
+  if (openedFor !== linkedAgent) {
+    setOpenedFor(linkedAgent)
     if (linkedAgent !== null) setChosen(linkedAgent)
-  }, [linkedAgent])
+  }
   const [held, setHeld] = useState<Record<string, HeldPayment>>({})
   const [archived, setArchived] = useState<Record<string, AgentArchive>>({})
   const agents = book.data?.agents ?? []
@@ -3141,7 +2844,6 @@ export function AgentBank() {
           person must approve, and read every movement on its statement. Lens checks the rules before a provider is
           called or a payment moves.
         </p>
-        {first ? null : <CurrencyPicker />}
         {book.isSuccess ? (
           <>
             {hasAgents ? <Totals book={book.data} /> : null}
@@ -3209,73 +2911,69 @@ export function AgentBank() {
             <>
               <Archived agent={agent} done={archived[agent.id]} />
               <AgentDetails key={`details-${agent.id}`} agent={agent} />
-              <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
+              {moneyOnPage ? null : <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />}
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
             </>
           ) : (
             <>
-              <Ownership agent={agent} />
-              <PauseAgent agent={agent} />
-              <AgentDetails key={`details-${agent.id}`} agent={agent} />
+              <div className="wide:max-w-sm">
+                <AgentCard agent={agent} book={book.data} />
+              </div>
               <Money agent={agent} book={book.data} />
-              <AgentMoneyWalletCard key={`wallet-${agent.id}`} agent={agent} />
-              <Rules key={`rules-${agent.id}`} agent={agent} agents={live} />
-              <TryRules key={`try-${agent.id}`} agent={agent} agents={live} />
-              {live.length > 1 ? (
-                <Pay
-                  key={`pay-${agent.id}`}
-                  agent={agent}
-                  agents={live}
-                  waiting={held}
-                  onHeld={(id, p) => setHeld((h) => ({ ...h, [id]: p }))}
-                />
-              ) : (
-                <Card>
-                  <CardHeader>Pay another agent</CardHeader>
-                  <p className="px-gutter py-3 text-body text-muted">Create a second agent to pay it from this one.</p>
-                </Card>
-              )}
-              <AgentAddress key={`address-${agent.id}`} agent={agent} />
-              <SendAndRequest key={`send-${agent.id}`} agent={agent} />
-              <AgentTransfers agent={agent} />
-              <Schedules key={`schedules-${agent.id}`} agent={agent} agents={live} nameOf={nameOf} />
-              <RecurringTransfer key={`recurring-${agent.id}`} agent={agent} />
-              <OfferLoan key={`loan-${agent.id}`} agent={agent} />
-              <PayIntoEscrow key={`escrow-${agent.id}`} agent={agent} />
-              <Pots key={`pots-${agent.id}`} agent={agent} />
-              <Portfolios key={`portfolios-${agent.id}`} agent={agent} />
-              <CashOutCard key={`cash-out-${agent.id}`} agent={agent} />
-              <AgentTopUpCard key={`topup-${agent.id}`} agent={agent} />
-              <IssueKey key={`key-${agent.id}`} agent={agent} />
-              <AgentCredentialCard key={`credential-${agent.id}`} agent={agent} />
-              <AgentCardPanel key={`card-${agent.id}`} agent={agent} />
-              <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />
+              <RulesSummary key={`rules-${agent.id}`} agent={agent} agents={live} />
+              {moneyOnPage ? null : <AgentMoneySection key={`money-${agent.id}`} agent={agent} />}
+              {moneyOnPage ? null : <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />}
               <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
-              <ArchiveAgent
-                key={`archive-${agent.id}`}
+              {/* B57.22 — its Settings: each row opens today's form for it, so each posts what it posted before. */}
+              <AgentSettings
+                key={`settings-${agent.id}`}
                 agent={agent}
                 onArchived={(done) => setArchived((m) => ({ ...m, [done.agent_id]: done }))}
+                forms={{
+                  keyForm: <IssueKey agent={agent} />,
+                  card: <AgentCardPanel agent={agent} />,
+                  topUp: <AgentTopUpCard agent={agent} />,
+                  boost: <BoostForm agent={agent} />,
+                  pay:
+                    live.length > 1 ? (
+                      <Pay agent={agent} agents={live} waiting={held} onHeld={(id, p) => setHeld((h) => ({ ...h, [id]: p }))} />
+                    ) : (
+                      <p className="text-body text-muted">Create a second agent to pay it from this one.</p>
+                    ),
+                  schedules: <Schedules agent={agent} agents={live} nameOf={nameOf} />,
+                  credential: <AgentCredentialCard agent={agent} />,
+                }}
               />
             </>
           )}
         </Region>
       ) : null}
 
-      {book.isSuccess && hasAgents ? (
+      {book.isSuccess && hasAgents && !moneyOnPage ? (
         <Region index="05" label="Between owners" className="flex flex-col gap-gutter">
-          <MoneyRequests agents={agents} />
-          <CreditLinePanel />
+          <Framed title="Requests">
+            <MoneyRequests agents={agents} />
+          </Framed>
+          <Framed title="Credit line">
+            <CreditLinePanel />
+          </Framed>
           {/* B59.2 — lending between owners is credit's, and goes with it. */}
           <IfArea area="credit">
-            <Loans agents={agents} />
+            <Framed title="Loans">
+              <Loans agents={agents} />
+            </Framed>
           </IfArea>
         </Region>
       ) : null}
 
-      {book.isSuccess && hasAgents ? (
+      {book.isSuccess && hasAgents && !moneyOnPage ? (
         <Region index="06" label="Held and cashed out" className="flex flex-col gap-gutter">
-          <Escrows agents={agents} />
-          <CashOuts agents={agents} />
+          <Framed title="Escrow">
+            <Escrows agents={agents} />
+          </Framed>
+          <Framed title="Cash-outs">
+            <CashOuts agents={agents} />
+          </Framed>
         </Region>
       ) : null}
     </RegionScreen>

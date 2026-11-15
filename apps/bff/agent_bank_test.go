@@ -68,6 +68,13 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 		case strings.HasSuffix(r.URL.Path, "/agents/safe-to-spend"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"agents": []map[string]any{{"agent_id": "agt_1", "name": "Researcher",
 				"figures": []map[string]any{{"currency": "LXC", "balance": 100_000_000, "safe_to_spend": 50_000_000}}}}})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/summary"): // B57.20: Lens B57.12's one read of an agent's page
+			_ = json.NewEncoder(w).Encode(map[string]any{"as_of": "2026-11-11T13:00:15Z", "agent": map[string]any{"id": "agt_1", "name": "Research", "balance_ulxc": 960_000_000},
+				"safe_to_spend": []map[string]any{{"currency": "LXC", "balance": 960_000_000, "pending_approvals": 200_000_000, "safe_to_spend": 760_000_000}},
+				"card":          map[string]any{"status": "frozen", "last_declined": map[string]any{"words": "Declined: not one of its payees"}}})
+		case strings.HasSuffix(r.URL.Path, "/agents/agt_gone/summary"):
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "economy: agent not found"})
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/wallet"):
 			_ = json.NewEncoder(w).Encode(map[string]any{"agent_id": "agt_1", "asset": "USDC", "balance_minor": 2_500_000, "mode": "LIVE",
 				"receive": map[string]any{"asset": "USDC", "network": "base", "address": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"}})
@@ -296,6 +303,28 @@ func TestAgentRulesCarryThePayeeDailyCaps(t *testing.T) {
 	}
 	if !strings.Contains(f.got[1], `"payee_daily_limits_ulxc":null`) {
 		t.Fatalf("Lens received %q, want the payee caps null when the save does not name them", f.got[1])
+	}
+}
+
+// B57.23 — Always allow is a field on the rules page: the allowances a save names reach Lens (Lens B41.104 replaces them
+// whole, and judges an added one as loosening), and a save that does not name them sends null, which Lens reads as "keep
+// the allowances it holds". Before B57.23 the BFF dropped them, so only an approval could set one.
+func TestAgentRulesCarryThePayeeAllowances(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	doJSON(a, http.MethodPut, "/api/agents/agt_1/rules", `{"payee_allowances":{"agt_2":{"amount_ulxc":4000000000,"per":"month"}}}`)
+	doJSON(a, http.MethodPut, "/api/agents/agt_1/rules", `{"daily_limit_ulxc":5000000}`)
+	doJSON(a, http.MethodPost, "/api/agents/agt_1/rules-challenge", `{"rules":{"payee_allowances":{}}}`)
+	if len(f.got) != 3 {
+		t.Fatalf("Lens received %d requests, want 3: %q", len(f.got), f.got)
+	}
+	if !strings.Contains(f.got[0], `"payee_allowances":{"agt_2":{"amount_ulxc":4000000000,"per":"month"}}`) {
+		t.Fatalf("Lens received %q, want the payee's allowance", f.got[0])
+	}
+	if !strings.Contains(f.got[1], `"payee_allowances":null`) {
+		t.Fatalf("Lens received %q, want the allowances null when the save does not name them", f.got[1])
+	}
+	if !strings.Contains(f.got[2], `"payee_allowances":{}`) {
+		t.Fatalf("Lens received %q, want the challenge to carry the allowances it is asked about", f.got[2])
 	}
 }
 
@@ -619,6 +648,23 @@ func TestAgentHelperColourReachesLens(t *testing.T) {
 	}
 }
 
+// B57.22 — the name-and-look picker's colour and face reach Lens on PATCH; a face alone is a change too.
+func TestAgentColourAndFaceReachLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	if rec := doJSON(a, http.MethodPatch, "/api/agents/agt_1", `{"name":"Research","description":"","colour":"lime","face":"hexagon"}`); rec.Code != http.StatusOK {
+		t.Fatalf("save the look = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPatch, "/api/agents/agt_1", `{"face":"flower"}`); rec.Code != http.StatusOK {
+		t.Fatalf("a face alone = %d %s", rec.Code, rec.Body.String())
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	want := []string{`/agents/agt_1 {"name":"Research","description":"","colour":"lime","face":"hexagon"}`, `/agents/agt_1 {"name":null,"description":null,"face":"flower"}`}
+	if len(f.got) != 2 || !strings.HasSuffix(f.got[0], want[0]) || !strings.HasSuffix(f.got[1], want[1]) {
+		t.Fatalf("Lens got %q; want …%q", f.got, want)
+	}
+}
+
 // B28.30 — "would this pass my rules?" reaches Lens's simulator with only the request's fields (a browser's
 // workspace id goes nowhere) and answers Lens's verdict and reason.
 func TestRuleSimulationReachesLens(t *testing.T) {
@@ -672,6 +718,27 @@ func TestAgentWalletReachesLens(t *testing.T) {
 	defer f.mu.Unlock()
 	if len(f.got) != 1 || !strings.HasPrefix(f.got[0], "GET /v1/workspaces/") || !strings.HasSuffix(f.got[0], "/agents/agt_1/wallet ") {
 		t.Fatalf("Lens got %q; want GET …/agents/agt_1/wallet", f.got)
+	}
+}
+
+// B57.20 — an agent's page in one read: GET /api/agents/{id}/summary reaches Lens B57.12's summary for the session's own
+// workspace and answers it as Lens did; an agent not in the workspace is Lens's 404, and a write is refused here.
+func TestAgentSummaryReachesLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	rec := doJSON(a, http.MethodGet, "/api/agents/agt_1/summary", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"safe_to_spend":760000000`) || !strings.Contains(rec.Body.String(), `"words":"Declined: not one of its payees"`) {
+		t.Fatalf("summary = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodGet, "/api/agents/agt_gone/summary", ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("another workspace's agent = %d %s, want 404", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodPost, "/api/agents/agt_1/summary", "{}"); rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST summary = %d, want 405", rec.Code)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.got) != 2 || !strings.HasPrefix(f.got[0], "GET /v1/workspaces/") || !strings.HasSuffix(f.got[0], "/agents/agt_1/summary ") {
+		t.Fatalf("Lens got %q; want GET …/agents/agt_1/summary", f.got)
 	}
 }
 
