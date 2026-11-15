@@ -34,6 +34,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -58,11 +59,16 @@ type strangerLens struct {
 	accounts map[string][3]string
 	// B59.41: the sign-up profile each workspace was made with — country and registration_number, as sent.
 	profiles map[string][2]string
+	// B61.7: the accounts each identity opened after its first, in order; the first is its derived workspace.
+	opened map[string][]string
+	// tokenLife is how long a token it mints lives; 0 is an hour.
+	tokenLife time.Duration
 }
 
 func newStrangerLens(t *testing.T) *strangerLens {
 	t.Helper()
-	l := &strangerLens{created: map[string]bool{}, poolable: map[string]bool{}, accounts: map[string][3]string{}, profiles: map[string][2]string{}}
+	l := &strangerLens{created: map[string]bool{}, poolable: map[string]bool{}, accounts: map[string][3]string{}, profiles: map[string][2]string{},
+		opened: map[string][]string{}}
 	l.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		l.mu.Lock()
 		l.paths = append(l.paths, r.URL.Path)
@@ -76,6 +82,17 @@ func newStrangerLens(t *testing.T) *strangerLens {
 		}
 		ws := wsSegment(r.URL.Path)
 		switch {
+		// B61.8: the account's type and kind, on its own token only, as Lens's isolation middleware holds it.
+		case strings.HasSuffix(r.URL.Path, "/account") && r.Method == http.MethodGet:
+			if r.Header.Get("Authorization") != "Bearer jwt-for-"+ws {
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":"token does not grant access to this workspace"}`))
+				return
+			}
+			l.mu.Lock()
+			acct := l.accounts[ws]
+			l.mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]any{"workspace_id": ws, "account_type": acct[0], "money_kind": acct[1]})
 		case strings.HasSuffix(r.URL.Path, "/cache-poolable"):
 			var in struct {
 				CachePoolable bool `json:"cache_poolable"`
@@ -121,6 +138,8 @@ func (l *strangerLens) serveProvision(w http.ResponseWriter, r *http.Request) {
 	}
 	var in struct {
 		Identity      string `json:"identity"`
+		Mode          string `json:"mode"`
+		AccountID     string `json:"account_id"`
 		CachePoolable *bool  `json:"cache_poolable"`
 		AccountType   string `json:"account_type"`
 		MoneyKind     string `json:"money_kind"`
@@ -135,7 +154,51 @@ func (l *strangerLens) serveProvision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ws := deriveWorkspaceIDLikeLens(in.Identity)
+	life := l.tokenLife
+	if life == 0 {
+		life = time.Hour
+	}
 	l.mu.Lock()
+	// B61.7's modes, as cmd/lens/provision_handler.go answers them.
+	held := append([]string{ws}, l.opened[in.Identity]...)
+	switch in.Mode {
+	case "list":
+		accounts := []map[string]any{}
+		for _, id := range held {
+			if l.created[id] {
+				a := l.accounts[id]
+				accounts = append(accounts, map[string]any{"id": id, "name": a[2], "type": a[0], "kind": a[1], "opened_at": "2026-11-15T10:00:00Z"})
+			}
+		}
+		l.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{"accounts": accounts})
+		return
+	case "session":
+		owned := slices.Contains(held, in.AccountID) && l.created[in.AccountID]
+		poolable := l.poolable[in.AccountID]
+		l.mu.Unlock()
+		if !owned {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":"no such account"}`))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"workspace_id": in.AccountID, "created": false, "cache_poolable": poolable,
+			"token": "jwt-for-" + in.AccountID, "expires_at": time.Now().Add(life).UTC().Format(time.RFC3339),
+		})
+		return
+	case "open":
+		if l.created[ws] {
+			if len(held) >= 10 {
+				l.mu.Unlock()
+				w.WriteHeader(http.StatusConflict)
+				_, _ = w.Write([]byte(`{"error":"you already hold 10 accounts, the most one person can hold"}`))
+				return
+			}
+			ws = fmt.Sprintf("a%s%d", ws[1:12], len(held))
+			l.opened[in.Identity] = append(l.opened[in.Identity], ws)
+		}
+	}
 	created := !l.created[ws]
 	if created {
 		l.created[ws] = true
@@ -147,7 +210,7 @@ func (l *strangerLens) serveProvision(w http.ResponseWriter, r *http.Request) {
 	l.mu.Unlock()
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"workspace_id": ws, "created": created, "cache_poolable": poolable,
-		"token": "jwt-for-" + ws, "expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		"token": "jwt-for-" + ws, "expires_at": time.Now().Add(life).UTC().Format(time.RFC3339),
 	})
 }
 

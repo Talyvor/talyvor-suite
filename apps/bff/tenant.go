@@ -77,13 +77,64 @@ func provisionIdentity(issuer, subject string) string {
 	return issuer + "\x00" + subject
 }
 
+// provisionAsk is which of Lens's provision modes a call asks for (B61.7). The zero value is the call every sign-in
+// made before: the identity's first account, made on first sight. open makes another account with sign-up's answers;
+// session mints a token for accountID, one of the identity's own accounts, and for no other.
+type provisionAsk struct {
+	mode      string // "", "open" or "session"; "list" is listAccounts' (accounts.go)
+	accountID string
+}
+
+// errNoSuchAccount is Lens's 404 to a session for an account the identity does not hold (B61.7).
+var errNoSuchAccount = errors.New("no such account")
+
+// provisionRefused is a refusal Lens words for the person: the eleventh account (409), or a sign-up answer Lens
+// checks further than parseSignupAccount does, like a country that does not exist (400).
+type provisionRefused struct {
+	status int
+	msg    string
+}
+
+func (e provisionRefused) Error() string {
+	return fmt.Sprintf("provision: lens returned %d: %s", e.status, e.msg)
+}
+
 // provision turns an identity into a tenant. cachePoolable is passed only when non-nil, so
 // "said nothing" reaches Lens as silence and its new-workspace default applies. signup is sign-up's
 // answers (B59.8), the same: empty sends none of them.
 func (a *app) provision(ctx context.Context, identity string, cachePoolable *bool, signup signupAccount) (provisionResult, error) {
+	return a.provisionAs(ctx, identity, provisionAsk{}, cachePoolable, signup)
+}
+
+// provisionAccount mints a token for accountID, one of identity's accounts, and refuses one Lens answered for any
+// other workspace: a Lens from before B61.7 reads no mode and would answer the first account.
+func (a *app) provisionAccount(ctx context.Context, identity, accountID string) (provisionResult, error) {
+	prov, err := a.provisionAs(ctx, identity, provisionAsk{mode: "session", accountID: accountID}, nil, signupAccount{})
+	if err == nil && prov.WorkspaceID != accountID {
+		return provisionResult{}, fmt.Errorf("provision: asked for account %s, lens answered %s", accountID, prov.WorkspaceID)
+	}
+	return prov, err
+}
+
+func (a *app) provisionAs(ctx context.Context, identity string, ask provisionAsk, cachePoolable *bool, signup signupAccount) (provisionResult, error) {
 	var out provisionResult
+	raw, err := a.provisionPost(ctx, identity, ask, cachePoolable, signup)
+	if err != nil {
+		return out, err
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return out, fmt.Errorf("provision: unreadable response: %w", err)
+	}
+	if out.WorkspaceID == "" || out.Token == "" {
+		return out, errors.New("provision: lens returned no workspace or token")
+	}
+	return out, nil
+}
+
+// provisionPost is the one call to POST /v1/provision, in any mode; it answers the body of a 200.
+func (a *app) provisionPost(ctx context.Context, identity string, ask provisionAsk, cachePoolable *bool, signup signupAccount) ([]byte, error) {
 	if a.cfg.provisionSecret == "" {
-		return out, errors.New("LENS_PROVISION_SECRET is not configured")
+		return nil, errors.New("LENS_PROVISION_SECRET is not configured")
 	}
 	// UPSTREAM-BINDS-ONLY lensProvisionBody: none
 	// display_name, account_type and money_kind are sign-up's answers (B59.8), off the wire on a
@@ -100,8 +151,11 @@ func (a *app) provision(ctx context.Context, identity string, cachePoolable *boo
 	// agrees. identity is the LOUD one: "" is refused 400 by the handler's own branch.
 	// cache_poolable is silent in the other direction — a renamed key reaches lens as SILENCE, so
 	// no RegisterOption is passed and the new-workspace default replaces the choice the person made.
+	// mode and account_id are B61.7's, LOUD upstream: an unknown mode is 400, and a session without account_id is 400.
 	body, err := json.Marshal(struct {
 		Identity      string `json:"identity"`
+		Mode          string `json:"mode,omitempty"`
+		AccountID     string `json:"account_id,omitempty"`
 		DisplayName   string `json:"display_name,omitempty"`
 		CachePoolable *bool  `json:"cache_poolable,omitempty"`
 		TTLHours      int    `json:"ttl_hours"`
@@ -109,41 +163,45 @@ func (a *app) provision(ctx context.Context, identity string, cachePoolable *boo
 		MoneyKind     string `json:"money_kind,omitempty"`
 		Country       string `json:"country,omitempty"`
 		Registration  string `json:"registration_number,omitempty"`
-	}{Identity: identity, DisplayName: signup.name, CachePoolable: cachePoolable, TTLHours: sessionTokenTTLHours,
+	}{Identity: identity, Mode: ask.mode, AccountID: ask.accountID, DisplayName: signup.name, CachePoolable: cachePoolable, TTLHours: sessionTokenTTLHours,
 		AccountType: signup.accountType, MoneyKind: signup.moneyKind, Country: signup.country,
 		Registration: signup.registrationNumber})
 	if err != nil {
-		return out, err
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.cfg.lensBaseURL+provisionPath, bytes.NewReader(body))
 	if err != nil {
-		return out, err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(provisionSecretHeader, a.cfg.provisionSecret) // server-side only, never emitted
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return out, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
+		var said struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(raw, &said)
+		switch {
+		// A session for an account that is not the identity's: Lens's own sentence, as a JSON body.
+		case resp.StatusCode == http.StatusNotFound && ask.mode == "session" && said.Error != "":
+			return nil, errNoSuchAccount
 		// Lens 404s this route when LENS_PROVISION_SECRET is unset on ITS side — absent
 		// capability, not open capability. Say so plainly rather than reporting a bad secret.
-		if resp.StatusCode == http.StatusNotFound {
-			return out, errors.New("lens has no provisioning route (LENS_PROVISION_SECRET unset upstream)")
+		case resp.StatusCode == http.StatusNotFound:
+			return nil, errors.New("lens has no provisioning route (LENS_PROVISION_SECRET unset upstream)")
+		case (resp.StatusCode == http.StatusConflict || resp.StatusCode == http.StatusBadRequest) && said.Error != "":
+			return nil, provisionRefused{status: resp.StatusCode, msg: said.Error}
 		}
-		return out, fmt.Errorf("provision: lens returned %d", resp.StatusCode)
+		return nil, fmt.Errorf("provision: lens returned %d", resp.StatusCode)
 	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return out, fmt.Errorf("provision: unreadable response: %w", err)
-	}
-	if out.WorkspaceID == "" || out.Token == "" {
-		return out, errors.New("provision: lens returned no workspace or token")
-	}
-	return out, nil
+	return raw, nil
 }
 
 // lensWorkspacePath is the ONLY place a Lens workspace-scoped path is assembled. The workspace
@@ -206,10 +264,9 @@ const workspaceTokenSkew = 60 * time.Second
 //
 // ── WHY RE-PROVISIONING IS THE RIGHT REFRESH ─────────────────────────────────
 //
-// POST /v1/provision is idempotent on identity: Lens derives the workspace from (issuer, sub),
-// so this returns the SAME workspace with a fresh token — there is no separate refresh endpoint
-// to add, and no second code path that could drift from the login path. It states no pooling
-// preference (provisionForSession), so a re-mint cannot disturb consent Lens already recorded.
+// POST /v1/provision's session mode (B61.7) mints a fresh token for the one account the session is
+// on, and Lens refuses an account the identity does not hold — there is no separate refresh endpoint
+// to add. It states no pooling preference, so a re-mint cannot disturb consent Lens already recorded.
 //
 // ── WHAT IT DELIBERATELY DOES NOT DO ─────────────────────────────────────────
 //
@@ -235,7 +292,9 @@ func (a *app) refreshWorkspaceToken(ctx context.Context, sid string, s session) 
 	if s.lensTokenExp.IsZero() || time.Now().Before(s.lensTokenExp.Add(-workspaceTokenSkew)) {
 		return s
 	}
-	prov, err := a.provisionForSession(ctx, provisionIdentity(a.cfg.oidcIssuer, s.sub))
+	// For the account the session is on (B61.8), never the identity's first: that would move a person who switched
+	// back to their first account when the token ran out.
+	prov, err := a.provisionAccount(ctx, provisionIdentity(a.cfg.oidcIssuer, s.sub), s.workspaceID)
 	if err != nil {
 		log.Printf("bff: workspace token re-mint FAILED for sub=%s (request continues with the "+
 			"expired one, and will surface as a 401): %s", s.sub, redactSecret(err.Error()))

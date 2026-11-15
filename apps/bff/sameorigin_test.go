@@ -579,6 +579,10 @@ var notSweptWrite = map[string]string{
 	"/api/help/chat": "B61.38 — Origin-GATED, but DELETE forgets the chat the BFF keeps and writes nothing upstream; TestHelpWritesRefuseAnotherSite asserts the 403",
 	"/api/help/team": "B61.38 — Origin-GATED, and it files to Lens only once a chat exists, which this table's fixture has none of; TestHelpWritesRefuseAnotherSite asserts the 403",
 	"/mcp":           "B40.6 — exempt (oauthMachinePath): an assistant's bearer token, never the cookie, is what it accepts",
+	"/api/accounts": "B61.8 — Origin-GATED, but its one upstream write is POST /v1/provision, which this table's arrival " +
+		"assertion excludes on purpose; TestB618_SwitchingToAnotherPersonsAccountOrFromAnotherSiteIsRefused posts it from another site and asserts the 403",
+	"/api/accounts/switch": "B61.8 — the same: its one upstream call is POST /v1/provision; " +
+		"TestB618_SwitchingToAnotherPersonsAccountOrFromAnotherSiteIsRefused posts it from another site and asserts the 403 and that the session did not move",
 	"/auth/logout": "a browser POST the app issues at itself; it is swept by TestLogout_RefusesCrossOrigin, " +
 		"which drives it directly rather than through this table because it has no JSON body and no upstream.",
 	"/auth/logout-everywhere": "B52.9 — Origin-GATED, but it answers in the BFF and writes nothing upstream; " +
