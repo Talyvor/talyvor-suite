@@ -18,7 +18,10 @@ const read = (el: Element | null) => (el?.textContent ?? '').replace(/\u00a0/g, 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
 const REMY_USD = { id: 'macc_remy', agent_id: 'agt_remy', currency: 'USD', purpose: 'agent' as const, status: 'open', name: 'USD account', balance_minor: 620_000, test_minor: 620_000, live_minor: 0 }
-const LUMEN = { id: 'payee_lf', name: 'Lumen Freight GmbH', country: 'DE', iban: 'DE89370400440532014417', check: 'exact_match', checked_by: 'test', checked_at: '2026-11-01T09:00:00Z', needs_confirmation: false, created_at: '2026-11-01T09:00:00Z' }
+const LUMEN = {
+  id: 'payee_lf', name: 'Lumen Freight GmbH', country: 'DE', iban: 'DE89370400440532014417', check: 'exact_match', checked_by: 'test', checked_at: '2026-11-01T09:00:00Z', needs_confirmation: false, created_at: '2026-11-01T09:00:00Z',
+  cooling_off_until: new Date(Date.now() + 86_400_000).toISOString(),
+}
 
 function quote(n: number, lifeSeconds = 30) {
   const created = new Date()
@@ -145,7 +148,7 @@ describe('sending it', () => {
     const card = await fillIn()
     await within(card).findByText('$5,000.00')
     fireEvent.click(within(card).getByRole('button', { name: 'Continue' }))
-    await screen.findByTestId('instant-progress')
+    await screen.findByTestId('instant-receipt')
     expect(sends).toHaveLength(1)
     expect(sends[0].body).toEqual({ quote_id: 'itq_1', to_payee_id: 'payee_lf' })
     expect(sends[0].key).toBeTruthy()
@@ -170,7 +173,7 @@ describe('sending it', () => {
     const sheet = await screen.findByRole('dialog', { name: 'Approve this Instant transfer' })
     expect(read(sheet)).toContain('This approves this payment only.')
     fireEvent.click(within(sheet).getByRole('button', { name: 'Approve with your passkey' }))
-    await screen.findByTestId('instant-progress')
+    await screen.findByTestId('instant-receipt')
     expect(decided).toEqual(['/api/agents/approvals/apr_1/approve'])
     expect(sends).toHaveLength(2)
     expect(sends[1].body.quote_id).not.toBe(sends[0].body.quote_id)
@@ -183,7 +186,6 @@ describe('its progress', () => {
     ['sent', ['done', 'current', 'next', 'next'], 'Sent'],
     ['converted', ['done', 'done', 'current', 'next'], 'Converted'],
     ['on_its_way', ['done', 'done', 'current', 'next'], 'On its way'],
-    ['received', ['done', 'done', 'done', 'done'], 'Received'],
     ['reversed', ['failed', 'next', 'next', 'next'], 'Didn’t go through'],
   ]
   for (const [state, steps, eyebrow] of cases) {
@@ -201,7 +203,67 @@ describe('its progress', () => {
   }
 })
 
+describe('B57.164: the form as W3 draws it', () => {
+  it('has Pay’s pages above it, Instant transfer on', async () => {
+    show('/money/pay/instant-transfer')
+    const tabs = await screen.findByRole('navigation', { name: 'Pay' })
+    expect(within(tabs).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['One payment', '/money/pay'],
+      ['Instant transfer', '/money/pay/instant-transfer'],
+      ['Standing orders', '/money/pay/standing-orders'],
+      ['Mandates', '/money/pay/mandates'],
+      ['Payout batches', '/money/pay/bulk-payouts'],
+    ])
+    expect(within(tabs).getByRole('link', { name: 'Instant transfer' }).getAttribute('aria-current')).toBe('page')
+  })
+
+  it('draws the picked payee as a card, with New payee while Lens still counts it new', async () => {
+    await fillIn()
+    const card = await screen.findByTestId('instant-recipient')
+    expect(read(card)).toBe('LFLumen Freight GmbHGermany · account ending 4417 · gets eurosNew payee')
+    expect(read(screen.getByTestId('instant-holds'))).toBe('US dollar balance · holds $6,200.00')
+  })
+})
+
+describe('B57.164: progress as P9 draws it', () => {
+  it('stamps when it was sent and says the step under way is now', async () => {
+    status = 'on_its_way'
+    show('/money/pay/instant-transfer/itr_7Q2M')
+    const steps = await screen.findAllByTestId('instant-step')
+    const sent = new Date('2026-11-14T10:42:07Z').toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    expect(read(steps[0])).toContain(sent)
+    expect(read(steps[2]).endsWith('Now')).toBe(true)
+    expect(read(steps[3])).not.toContain('Now')
+  })
+})
+
 describe('the receipt', () => {
+  it('takes the place of the progress once it lands, and downloads as a file', async () => {
+    const saved: Blob[] = []
+    URL.createObjectURL = vi.fn((b: Blob) => {
+      saved.push(b)
+      return 'blob:receipt'
+    })
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    show('/money/pay/instant-transfer/itr_7Q2M')
+    const receipt = await screen.findByTestId('instant-receipt')
+    expect(screen.queryByTestId('instant-progress')).toBeNull()
+    expect(read(within(receipt).getByTestId('instant-status'))).toBe('Received')
+    expect(read(receipt)).toContain('arrived in 12 seconds')
+    fireEvent.click(within(receipt).getByRole('button', { name: 'Download receipt' }))
+    expect(saved).toHaveLength(1)
+    const text = await new Promise<string>((done) => {
+      const r = new FileReader()
+      r.onload = () => done(String(r.result))
+      r.readAsText(saved[0])
+    })
+    expect(text).toContain('They got: €4,593.48')
+    expect(text).toContain('1. $4,987.50 to 4,987.50 USDC · Rate 1 USD = 1.0000 USDC')
+    expect(text).toContain('On-chain reference: 0x9f3ac41e')
+    expect(text).toContain('Transfer ID: itr_7Q2M')
+  })
+
   it('shows both conversions and the on-chain reference', async () => {
     show('/money/pay/instant-transfer/itr_7Q2M')
     const receipt = await screen.findByTestId('instant-receipt')

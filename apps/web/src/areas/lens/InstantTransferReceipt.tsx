@@ -1,9 +1,10 @@
+import { useRef } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { cn, inlineLink } from '@talyvor/ui'
 import { Button as PocketButton, Card as PocketCard, Chip, Crumb, Eyebrow, Facts, Icon, Money, pocketFocusRing, showToast } from '@talyvor/ui/pocket'
-import { BOOK_KEY } from './AgentBank'
-import { BALANCE_WORDS, MONEY_WORDS, arrivesText, instantKey, rateText } from './InstantTransfer'
+import { BOOK_KEY, saveFile } from './AgentBank'
+import { ArrivesChip, BALANCE_WORDS, MONEY_WORDS, arrivesText, instantKey, rateText } from './InstantTransfer'
 import { type InstantLeg, type InstantTransfer, agentBankApi, useAccount } from './agentBankApi'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { INSTANT_TRANSFER } from '../../labels/capabilities'
@@ -12,6 +13,7 @@ import { DESIGN_ATTR } from '../../pocketPending'
 // InstantTransferReceipt.tsx — B59.19: an Instant transfer once sent (design P9 and P10, launch pack 4.1): its progress —
 // Sent, Converted, On its way, Received, or reversed with the agent's money back — read from Lens until it lands, then
 // its receipt with both conversions and the on-chain reference; and on a statement, its lines as one that opens its legs.
+// B57.164: drawn as P9 and P10 — the steps on a timeline with their times, and once it lands the receipt in its place.
 
 // ── Progress and the receipt ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -41,7 +43,7 @@ export function InstantTransferScreen() {
   if (shows && !shows.instantTransfer) return <Navigate to="/money/pay" replace />
   const agent = book.data?.agents?.find((a) => a.id === t.data?.agent_id)?.name ?? 'The agent'
   return (
-    <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid max-w-3xl gap-4 pb-10">
+    <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid max-w-2xl gap-4 pb-10">
       <Crumb
         trail={[
           { label: 'Pay', href: '/money/pay' },
@@ -58,12 +60,33 @@ export function InstantTransferScreen() {
         </div>
       ) : !t.data ? (
         <p className="text-body text-ink-3">Reading…</p>
+      ) : t.data.status === 'received' ? (
+        <Receipt t={t.data} agent={agent} />
       ) : (
-        <>
-          <Progress t={t.data} agent={agent} />
-          {t.data.status === 'received' ? <Receipt t={t.data} agent={agent} /> : null}
-        </>
+        <Progress t={t.data} agent={agent} />
       )}
+    </div>
+  )
+}
+
+/** "10:42:07": when a step happened, to the second, as P9 writes it. */
+const clock = (at: string) =>
+  new Date(at).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+
+/** "$5,000.00 to Lumen Freight GmbH": the amount large, and who gets it, as P9 and P10 open. */
+function Headline({ t }: { t: InstantTransfer }) {
+  return (
+    <div className="grid gap-1">
+      <p className="font-display text-pocket-balance-sm text-ink" data-receipt-line>
+        <Money minor={t.send_minor} currency={t.send_currency} />
+      </p>
+      <p className="text-reading text-ink-2" data-receipt-line>
+        to <span className="font-semibold text-ink">{t.beneficiary_name}</span>
+      </p>
     </div>
   )
 }
@@ -82,37 +105,48 @@ function Progress({ t, agent }: { t: InstantTransfer; agent: string }) {
   return (
     <PocketCard tone="white" className="grid gap-4" data-testid="instant-progress">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="grid gap-1">
-          <Eyebrow data-testid="instant-status">{STATUS_WORDS[t.status]}</Eyebrow>
-          <p className="font-display text-title font-bold text-ink">
-            <Money minor={t.send_minor} currency={t.send_currency} />
-          </p>
-          <p className="text-body text-ink-2">to {t.beneficiary_name}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <WorkspaceLabel capability={INSTANT_TRANSFER} />
-          {reversed ? <Chip tone="bad">Reversed</Chip> : <Chip tone="plain">{arrivesText(t, new Date(t.created_at))}</Chip>}
-        </div>
+        <Eyebrow data-testid="instant-status">{STATUS_WORDS[t.status]}</Eyebrow>
+        <WorkspaceLabel capability={INSTANT_TRANSFER} />
       </div>
-      <ol className="grid gap-3" aria-label="Progress">
+      <Headline t={t} />
+      {reversed ? (
+        <Chip tone="bad" className="justify-self-start">
+          Reversed
+        </Chip>
+      ) : (
+        <ArrivesChip>{arrivesText(t, new Date(t.created_at))}</ArrivesChip>
+      )}
+      <ol className="grid rounded-card bg-cloud p-4" aria-label="Progress">
         {STEPS.map((step, i) => {
           const state = reversed ? (i === 0 ? 'failed' : 'next') : i < done ? 'done' : i === done ? 'current' : 'next'
+          // Lens stamps when it was sent; the step under way is happening now.
+          const when = state === 'current' ? 'Now' : i === 0 && state === 'done' ? clock(t.created_at) : ''
+          const last = i === STEPS.length - 1
           return (
-            <li key={step} className="flex items-start gap-3" data-testid="instant-step" data-state={state}>
+            <li key={step} className="relative flex items-start gap-3 pb-5 last:pb-0" data-testid="instant-step" data-state={state}>
+              {last ? null : <span aria-hidden="true" className={cn('absolute left-3 top-6.5 bottom-0 w-0.5 -translate-x-1/2', state === 'done' ? 'bg-ink' : 'bg-cloud-2')} />}
               <span
                 aria-hidden="true"
                 className={cn(
-                  'mt-0.5 inline-grid h-5 w-5 shrink-0 place-items-center rounded-pill',
-                  state === 'done' ? 'bg-ink text-on-primary' : state === 'current' ? 'shadow-edge' : state === 'failed' ? 'bg-danger text-on-primary' : 'bg-cloud-2',
+                  'relative inline-grid h-6 w-6 shrink-0 place-items-center rounded-pill',
+                  state === 'done'
+                    ? 'bg-ink text-on-primary'
+                    : state === 'current'
+                      ? 'bg-page shadow-pick'
+                      : state === 'failed'
+                        ? 'bg-danger text-on-primary'
+                        : 'bg-page shadow-edge',
                 )}
               >
-                {state === 'done' ? <Icon name="check" size={12} /> : null}
+                {state === 'done' ? <Icon name="check" size={14} /> : state === 'failed' ? <Icon name="x" size={14} /> : null}
+                {state === 'current' ? <span className="h-2.5 w-2.5 rounded-pill bg-ink" /> : null}
               </span>
-              <span className="grid gap-0.5">
-                <span className="font-semibold text-ink">{state === 'failed' ? 'Didn’t go through' : step}</span>
+              <span className="grid min-w-0 flex-1 gap-0.5">
+                <span className={cn('font-semibold', state === 'next' ? 'text-ink-2' : 'text-ink')}>{state === 'failed' ? 'Didn’t go through' : step}</span>
                 <span className="text-body text-ink-3">{lines[i]}</span>
                 <span className="sr-only">{state === 'done' ? 'Step done' : state === 'current' ? 'Step in progress' : 'Step not started'}</span>
               </span>
+              {when ? <span className="shrink-0 font-figure text-body text-ink-3">{when}</span> : null}
             </li>
           )
         })}
@@ -125,14 +159,17 @@ function Progress({ t, agent }: { t: InstantTransfer; agent: string }) {
             {BALANCE_WORDS[t.send_currency] ?? t.send_currency} balance.
           </span>
         </p>
-      ) : t.status !== 'received' ? (
-        <p className="text-body text-ink-3">You can leave this screen. We’ll tell you when it lands.</p>
-      ) : null}
-      <div className="flex flex-wrap gap-2">
-        <PocketButton asChild>
+      ) : (
+        <p className="flex items-start gap-2 rounded-card-tight bg-cloud p-3.5 text-body text-ink-2">
+          <Icon name="bell" size={16} />
+          <span>You can leave this screen. We’ll tell you when it lands.</span>
+        </p>
+      )}
+      <div className="grid gap-2 wide:flex wide:flex-wrap">
+        <PocketButton asChild size="lg">
           <Link to="/money/pay">Done</Link>
         </PocketButton>
-        <PocketButton asChild variant="secondary">
+        <PocketButton asChild size="lg" variant="secondary">
           <Link to={`/statements?wallet=${encodeURIComponent(t.from_account_id)}`}>See it in Activity</Link>
         </PocketButton>
       </div>
@@ -154,6 +191,33 @@ function conversion(leg: InstantLeg, sell: number): { text: React.ReactNode; rat
   }
 }
 
+/** "0x9f3a…c41e": a long on-chain reference shortened as P10 shows it; the whole of it is copied and downloaded. */
+const shortRef = (ref: string) => (ref.length > 14 ? `${ref.slice(0, 6)}…${ref.slice(-4)}` : ref)
+
+/** "Today at 10:42", or "14 November at 10:42" on another day. */
+function whenSent(at: Date, now = new Date()): string {
+  const time = at.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  const day = at.toDateString() === now.toDateString() ? 'Today' : at.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })
+  return `${day} at ${time}`
+}
+
+/** A line of the receipt as a person reads it, for the file: <Money>'s own figures, without its no-break spaces. */
+const said = (n: Element | null) => (n?.textContent ?? '').replace(/\u00a0/g, ' ').trim()
+
+/** The receipt as a text file, line by line from the receipt on the screen, each reference whole. */
+function receiptText(card: HTMLElement): string {
+  const lines = ['Instant transfer receipt']
+  for (const n of card.querySelectorAll('[data-receipt-line], dl > div, li')) {
+    if (n.matches('dl > div')) lines.push(`${said(n.querySelector('dt'))}: ${n.querySelector('[title]')?.getAttribute('title') ?? said(n.querySelector('dd'))}`)
+    else if (n.matches('li')) lines.push(`${said(n.firstElementChild)}. ${[...(n.lastElementChild?.children ?? [])].map(said).join(' · ')}`)
+    else lines.push(said(n))
+  }
+  return lines.join('\n') + '\n'
+}
+
 function Receipt({ t, agent }: { t: InstantTransfer; agent: string }) {
   const legs = t.legs ?? []
   const convert = legs.find((l) => l.leg === 'convert')
@@ -163,89 +227,114 @@ function Receipt({ t, agent }: { t: InstantTransfer; agent: string }) {
   const conversions = [...(convert ? [conversion(convert, convert.sell.minor - t.fee_minor)] : []), ...(out ? [conversion(out, out.sell.minor)] : [])]
   const at = new Date(t.created_at)
   const took = Math.max(1, Math.round((new Date(t.updated_at).getTime() - at.getTime()) / 1000))
+  const paidFrom = `${agent}’s ${BALANCE_WORDS[t.send_currency] ?? t.send_currency} balance`
   const copy = (ref: string) => {
     const said = () => showToast('Copied')
     void (navigator.clipboard?.writeText(ref) ?? Promise.resolve()).then(said, () => showToast('We couldn’t copy it. Select it and copy it instead.'))
   }
+  const card = useRef<HTMLDivElement>(null)
+  const download = () => {
+    if (!card.current) return
+    saveFile(`instant-transfer-${t.id}.txt`, new Blob([receiptText(card.current)], { type: 'text/plain' }))
+    showToast('Downloading the receipt')
+  }
 
   return (
-    <PocketCard tone="white" className="grid gap-4" data-testid="instant-receipt">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-head font-bold text-ink">Receipt</h2>
-        <Chip tone="good">Received</Chip>
-      </div>
-      <p className="text-body text-ink-2">
-        {at.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' })} at{' '}
-        <span className="font-figure">
-          {at.toLocaleTimeString('en-GB', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </span>{' '}
-        · arrived in <span className="font-figure">{took}</span> seconds
-      </p>
-      <Facts
-        facts={[
-          {
-            label: 'You sent',
-            value: <Money minor={t.send_minor} currency={t.send_currency} />,
-          },
-          {
-            label: 'Fee',
-            value: <Money minor={t.fee_minor} currency={t.send_currency} />,
-          },
-          {
-            label: 'They got',
-            value: <Money minor={t.receive_minor} currency={t.receive_currency} />,
-          },
-        ]}
-      />
-      {conversions.length > 0 ? (
-        <div className="grid gap-2" data-testid="instant-conversions">
-          <h3 className="font-semibold text-ink">Conversions</h3>
-          <ol className="grid gap-2">
-            {conversions.map((c, i) => (
-              <li key={i} className="flex gap-3 text-body">
-                <span className="font-figure text-ink-3">{i + 1}</span>
-                <span className="grid gap-0.5">
-                  <span className="text-ink">{c.text}</span>
-                  <span className="font-figure text-ink-3">{c.rate}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
+    <div ref={card}>
+      <PocketCard tone="white" className="grid gap-4" data-testid="instant-receipt">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Chip tone="good" data-testid="instant-status">
+            <Icon name="check" size={14} />
+            Received
+          </Chip>
+          <WorkspaceLabel capability={INSTANT_TRANSFER} />
         </div>
-      ) : null}
-      <Facts
-        facts={[
-          ...(move?.partner_ref
-            ? [
-                {
-                  label: 'On-chain reference',
-                  value: (
-                    <span className="inline-flex items-center gap-2">
-                      <span data-testid="instant-onchain-ref">{move.partner_ref}</span>
-                      <button
-                        type="button"
-                        aria-label="Copy the on-chain reference"
-                        className={`rounded-pill text-ink-3 ${pocketFocusRing}`}
-                        onClick={() => copy(move.partner_ref ?? '')}
-                      >
-                        <Icon name="copy" size={14} />
-                      </button>
-                    </span>
-                  ),
-                },
-              ]
-            : []),
-          { label: 'Transfer ID', value: t.id },
-          {
-            label: 'Paid from',
-            value: `${agent}’s ${BALANCE_WORDS[t.send_currency] ?? t.send_currency} balance`,
-          },
-        ]}
-      />
-    </PocketCard>
+        <div className="grid gap-1">
+          <Headline t={t} />
+          <p className="text-body text-ink-3" data-receipt-line>
+            {whenSent(at)} · arrived in <span className="font-figure">{took}</span> seconds
+          </p>
+        </div>
+        <Facts
+          facts={[
+            {
+              label: 'You sent',
+              value: <Money minor={t.send_minor} currency={t.send_currency} />,
+            },
+            {
+              label: 'Fee',
+              value: <Money minor={t.fee_minor} currency={t.send_currency} />,
+            },
+            {
+              label: <span className="font-semibold text-ink">They got</span>,
+              value: (
+                <span className="font-display text-title font-bold">
+                  <Money minor={t.receive_minor} currency={t.receive_currency} />
+                </span>
+              ),
+            },
+          ]}
+        />
+        {conversions.length > 0 ? (
+          <div className="grid gap-3 rounded-inset bg-cloud p-4" data-testid="instant-conversions">
+            <h2 className="font-display text-head font-bold text-ink">Conversions</h2>
+            <ol className="grid gap-3">
+              {conversions.map((c, i) => (
+                <li key={i} className="flex items-start gap-3 text-body">
+                  <span aria-hidden="true" className="inline-grid h-6 w-6 shrink-0 place-items-center rounded-pill bg-tangerine-50 font-figure text-caption text-tangerine-ink">
+                    {i + 1}
+                  </span>
+                  <span className="grid gap-0.5">
+                    <span className="font-semibold text-ink">{c.text}</span>
+                    <span className="font-figure text-ink-3">{c.rate}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+        <Facts
+          facts={[
+            ...(move?.partner_ref
+              ? [
+                  {
+                    label: 'On-chain reference',
+                    value: (
+                      <span className="inline-flex items-center gap-2">
+                        <span data-testid="instant-onchain-ref" className="font-mono" title={move.partner_ref}>
+                          {shortRef(move.partner_ref)}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label="Copy the on-chain reference"
+                          className={`rounded-pill text-ink-3 ${pocketFocusRing}`}
+                          onClick={() => copy(move.partner_ref ?? '')}
+                        >
+                          <Icon name="copy" size={14} />
+                        </button>
+                      </span>
+                    ),
+                  },
+                ]
+              : []),
+            {
+              label: 'Transfer ID',
+              value: <span className="font-mono">{t.id}</span>,
+            },
+            { label: 'Paid from', value: paidFrom },
+          ]}
+        />
+        <div className="grid gap-2 wide:flex wide:flex-wrap">
+          <PocketButton asChild size="lg">
+            <Link to="/money/pay">Done</Link>
+          </PocketButton>
+          <PocketButton type="button" size="lg" variant="secondary" onClick={download}>
+            <Icon name="download" size={16} />
+            Download receipt
+          </PocketButton>
+        </div>
+      </PocketCard>
+    </div>
   )
 }
 
