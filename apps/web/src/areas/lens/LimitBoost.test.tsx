@@ -76,8 +76,9 @@ describe('a limit boost', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Raise until then' }))
 
     const row = await screen.findByTestId('boost-daily_limit_ulxc')
-    expect(row.textContent).toMatch(/^Daily limit raised to 50 LXC until .+, then 10 LXC again by itself\.In force/)
-    expect(screen.getByRole('status').textContent).toMatch(/^Researcher’s daily limit is 50 LXC until .+, then 10 LXC again by itself\.$/)
+    // B57.167: <Money>'s figure keeps its unit on its line.
+    expect(row.textContent).toMatch(/^Daily limit raised to 50\u00a0LXC until .+, then 10\u00a0LXC again by itself\.In force/)
+    expect(screen.getByRole('status').textContent).toMatch(/^Researcher’s daily limit is 50\u00a0LXC until .+, then 10\u00a0LXC again by itself\.$/)
 
     fireEvent.click(screen.getByRole('button', { name: 'End the boost on Researcher’s daily limit now' }))
     await waitFor(() => expect(screen.queryByTestId('boost-daily_limit_ulxc')).toBeNull())

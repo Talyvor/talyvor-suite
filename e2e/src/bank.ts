@@ -118,6 +118,14 @@ export class AgentBankScreen {
     return outcome(this.page.getByRole('status').filter({ hasText: `${agent.name} now holds` }), dialog)
   }
 
+  /** B57.167 — a row of the agent's Settings, pressed: the dialog it opens over the page, named by the row. */
+  private async setting(title: string): Promise<Locator> {
+    await this.page.getByTestId('agent-settings').getByRole('button', { name: title, exact: true }).click()
+    const dialog = this.page.getByRole('dialog', { name: title, exact: true })
+    await dialog.waitFor({ timeout: ACTION_TIMEOUT_MS })
+    return dialog
+  }
+
   /** B57.23 — the agent's rules page (apps/web RulesPage.tsx), opened afresh; its whole page. */
   private async rulesPage(agent: Agent): Promise<Locator> {
     await this.page.goto(new URL(`/agents/${encodeURIComponent(agent.id)}/rules`, this.page.url()).toString())
@@ -235,7 +243,7 @@ export class AgentBankScreen {
    */
   async boostLimit(agent: Agent, label: string, ulxc: number, until: number): Promise<string | undefined> {
     await this.fresh(agent)
-    const c = card(this.page, 'Limit boost')
+    const c = await this.setting('Limit boost')
     await c.getByLabel(`Limit to raise for ${agent.name}`).selectOption({ label })
     await c.getByLabel(`Raise ${agent.name}’s limit to`).fill(lxcText(ulxc))
     const local = await this.page.evaluate((ms) => {
@@ -258,10 +266,11 @@ export class AgentBankScreen {
   /** Issues the agent a key and reads it off the card that shows it once. */
   async issueKey(agent: Agent): Promise<string> {
     await this.fresh(agent)
-    await card(this.page, 'Key').getByRole('button', { name: 'Issue a key', exact: true }).click()
-    const shown = card(this.page, `${agent.name}’s key (shown once)`)
+    await (await this.setting('Its key')).getByRole('button', { name: 'Issue a key', exact: true }).click()
+    const shown = this.page.getByTestId('agent-key-shown')
     await shown.waitFor({ timeout: ACTION_TIMEOUT_MS })
-    const key = (await shown.locator('.select-all').innerText()).trim()
+    // The key is the first line of its code box; Copy is the next.
+    const key = (await shown.locator('.font-mono').first().innerText()).trim()
     await shown.getByRole('button', { name: 'Done, I stored it' }).click()
     return key
   }
@@ -287,7 +296,7 @@ export class AgentBankScreen {
   /** Pays `to` from `from` on Pay another agent; answers the line the card then shows. */
   async pay(from: Agent, to: Agent, ulxc: number, memo: string): Promise<string> {
     await this.fresh(from)
-    const c = card(this.page, 'Pay another agent')
+    const c = await this.setting('Pay another agent')
     await c.getByRole('group', { name: 'Pay to' }).getByRole('button', { name: to.name, exact: true }).click()
     await c.getByLabel(`Payment in LXC from ${from.name}`).fill(lxcText(ulxc))
     await c.getByLabel('What the payment is for').fill(memo)
@@ -636,7 +645,7 @@ export class AgentBankScreen {
   /** Card → Issue a card, to the cardholder `holder`; Lens's refusal, if it was refused. */
   async issueCard(agent: Agent, holder: { first: string; last: string; line1: string; city: string; postcode: string }): Promise<string | undefined> {
     await this.fresh(agent)
-    const c = card(this.page, 'Card')
+    const c = await this.setting('Its card')
     for (const [label, v] of [['First name', holder.first], ['Last name', holder.last], ['Address', holder.line1], ['Town or city', holder.city], ['Postcode', holder.postcode]]) {
       await c.getByLabel(label, { exact: true }).fill(v)
     }
@@ -647,7 +656,7 @@ export class AgentBankScreen {
   /** B25.8 — Card → the purchases on the agent's card, one line each, as the screen lists them. */
   async purchases(agent: Agent): Promise<string[]> {
     await this.fresh(agent)
-    const rows = card(this.page, 'Card').getByTestId('agent-card-purchases').locator('tbody tr')
+    const rows = (await this.setting('Its card')).getByTestId('agent-card-purchase')
     await rows.first().waitFor({ timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
     return (await rows.allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim())
   }
@@ -655,7 +664,7 @@ export class AgentBankScreen {
   /** B19.21 — Automatic top-up → Set top-up: below `belowULXC` the workspace tops the agent up to `toULXC`; Lens's refusal, if it was refused. */
   async setTopUp(agent: Agent, belowULXC: number, toULXC: number): Promise<string | undefined> {
     await this.fresh(agent)
-    const c = card(this.page, 'Automatic top-up')
+    const c = await this.setting('Automatic top-up')
     await c.getByLabel(`Top ${agent.name} up below, in LXC`).fill(lxcText(belowULXC))
     await c.getByLabel(`Top ${agent.name} up to, in LXC`).fill(lxcText(toULXC))
     await c.getByRole('button', { name: 'Set top-up', exact: true }).click()
@@ -665,7 +674,7 @@ export class AgentBankScreen {
   /** Automatic top-up → Remove; Lens's refusal, if it was refused. */
   async removeTopUp(agent: Agent): Promise<string | undefined> {
     await this.fresh(agent)
-    const c = card(this.page, 'Automatic top-up')
+    const c = await this.setting('Automatic top-up')
     await c.getByRole('button', { name: 'Remove', exact: true }).click()
     return outcome(c.getByTestId('agent-topup').filter({ hasText: 'is not topped up automatically' }), c)
   }

@@ -31,12 +31,18 @@ export function CodeBox({ code, copied = 'Copied', mono = true, className }: Cod
           variant="secondary"
           size="sm"
           icon={<CopyIcon />}
-          onClick={() =>
-            navigator.clipboard.writeText(code).then(
-              () => setSaid(copied),
-              () => setSaid('Could not copy. Select it and copy it yourself.'),
-            )
-          }
+          onClick={() => {
+            // B57.167 — outside a secure context there is no navigator.clipboard, and the call throws before any
+            // promise exists: a key shown once must still say it was not copied.
+            try {
+              void navigator.clipboard.writeText(code).then(
+                () => setSaid(copied),
+                () => setSaid('Could not copy. Select it and copy it yourself.'),
+              )
+            } catch {
+              setSaid('Could not copy. Select it and copy it yourself.')
+            }
+          }}
         >
           Copy
         </Button>

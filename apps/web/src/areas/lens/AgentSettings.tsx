@@ -25,9 +25,10 @@ import { type Agent, type AgentArchive, agentBankApi, refusalText } from './agen
 
 // AgentSettings.tsx — B57.22: the Settings section of an agent's page, as Pocket's w-agent-research draws it. One row
 // for each thing the agent's owner can set or do; a row opens it over the page. Name and look and Archive are drawn
-// here; the rest are today's own forms, given to this section by the agent view, so each posts what it posted before.
+// here; the rest are the agent view's own forms, given to this section, so each posts what it posted before.
+// B57.167 — those seven are drawn in Pocket too, and each opens over the page as the rest do.
 
-/** What a row opens: today's form for it, given by the agent view. */
+/** What a row opens: the agent view's form for it. */
 export interface SettingsForms {
   keyForm: React.ReactNode
   card: React.ReactNode
@@ -63,7 +64,7 @@ function RowBody({ icon, title, line, lineId, chevron = true }: { icon: IconName
   )
 }
 
-function SettingRow({ icon, title, line, onOpen, expanded }: { icon: IconName; title: string; line: React.ReactNode; onOpen: () => void; expanded?: boolean }) {
+function SettingRow({ icon, title, line, onOpen }: { icon: IconName; title: string; line: React.ReactNode; onOpen: () => void }) {
   const lineId = useId()
   return (
     // The whole row is one control, named by its title, with its line as what it says now: an empty button over the
@@ -74,7 +75,7 @@ function SettingRow({ icon, title, line, onOpen, expanded }: { icon: IconName; t
         type="button"
         className={`absolute inset-0 rounded-control ${pocketFocusRing}`}
         onClick={onOpen}
-        aria-expanded={expanded}
+        aria-haspopup="dialog"
         aria-label={title}
         aria-describedby={lineId}
       />
@@ -319,19 +320,15 @@ export function AgentSettings({ agent, forms, onArchived }: { agent: Agent; form
   const asking = (prompts.data?.schedules ?? []).filter((s) => s.agent_id === agent.id && s.active).length
   const unusual = rules.data?.pause_on_unusual_spend ?? false
   const cardCurrency = card.data?.card?.currency
-  // Today's forms open under the section, as they are drawn today, until each is redrawn in Pocket; pressing the
-  // row again folds it away. Name and look, prompt schedules and Archive open over the page.
-  const inline: Partial<Record<Exclude<Open, null>, React.ReactNode>> = {
-    key: forms.keyForm,
-    card: forms.card,
-    topup: forms.topUp,
-    boost: forms.boost,
-    pay: forms.pay,
-    schedules: forms.schedules,
-    credential: forms.credential,
-  }
-  const toggle = (which: Exclude<Open, null>) => () => setOpen((o) => (o === which ? null : which))
-  const shown = open ? inline[open] : undefined
+  const panels: [Exclude<Open, null>, string, React.ReactNode][] = [
+    ['key', 'Its key', forms.keyForm],
+    ['card', 'Its card', forms.card],
+    ['topup', 'Automatic top-up', forms.topUp],
+    ['boost', 'Limit boost', forms.boost],
+    ['pay', 'Pay another agent', forms.pay],
+    ['schedules', 'Scheduled payments', forms.schedules],
+    ['credential', 'Its credential', forms.credential],
+  ]
   return (
     <>
       <Card tone="white" className="grid gap-2" data-testid="agent-settings" {...{ [DESIGN_ATTR]: 'pocket' }}>
@@ -342,8 +339,7 @@ export function AgentSettings({ agent, forms, onArchived }: { agent: Agent; form
             icon="key"
             title="Its key"
             line={`A proxy key that spends only ${n}’s balance, under its rules; shown once`}
-            onOpen={toggle('key')}
-            expanded={open === 'key'}
+            onOpen={() => setOpen('key')}
           />
           <SettingRow
             icon="card"
@@ -353,8 +349,7 @@ export function AgentSettings({ agent, forms, onArchived }: { agent: Agent; form
                 ? `Issued in ${CARD_CURRENCY[cardCurrency] ?? cardCurrency.toUpperCase()}: each purchase is paid from its wallet only if its rules allow it`
                 : `${n} has no card yet. Each purchase on one is paid from its wallet only if its rules allow it`
             }
-            onOpen={toggle('card')}
-            expanded={open === 'card'}
+            onOpen={() => setOpen('card')}
           />
           <SettingRow
             icon="coin"
@@ -368,29 +363,25 @@ export function AgentSettings({ agent, forms, onArchived }: { agent: Agent; form
                 `${n} is not topped up automatically`
               )
             }
-            onOpen={toggle('topup')}
-            expanded={open === 'topup'}
+            onOpen={() => setOpen('topup')}
           />
           <SettingRow
             icon="arrow"
             title="Limit boost"
             line="Raise one of its limits for a while, signed like an approval; it goes back by itself"
-            onOpen={toggle('boost')}
-            expanded={open === 'boost'}
+            onOpen={() => setOpen('boost')}
           />
           <SettingRow
             icon="agents"
             title="Pay another agent"
             line={`Judged by ${n}’s rules. It stays inside this workspace`}
-            onOpen={toggle('pay')}
-            expanded={open === 'pay'}
+            onOpen={() => setOpen('pay')}
           />
           <SettingRow
             icon="clock"
             title="Scheduled payments"
             line={paying === 0 ? `${n} pays nothing on a schedule` : `${n} makes ${paying} ${paying === 1 ? 'payment' : 'payments'} on a schedule`}
-            onOpen={toggle('schedules')}
-            expanded={open === 'schedules'}
+            onOpen={() => setOpen('schedules')}
           />
           <SettingRow
             icon="chat"
@@ -411,8 +402,7 @@ export function AgentSettings({ agent, forms, onArchived }: { agent: Agent; form
             icon="shield"
             title="Its credential"
             line={`Signed by Talyvor: who owns ${n}, how far they are verified, and what it may do with live money`}
-            onOpen={toggle('credential')}
-            expanded={open === 'credential'}
+            onOpen={() => setOpen('credential')}
           />
           <div className="flex w-full items-center gap-3 border-t border-line py-2.5 text-reading" data-testid="agent-setting-Ownership">
             <RowBody icon="agents" title="Ownership" line={ownershipLine(agent)} chevron={false} />
@@ -430,7 +420,12 @@ export function AgentSettings({ agent, forms, onArchived }: { agent: Agent; form
         </Dialog>
         <ArchiveDialog agent={agent} open={open === 'archive'} onClose={close} onArchived={onArchived} />
       </Card>
-      {shown !== undefined ? <div data-testid={`agent-setting-open-${open}`}>{shown}</div> : null}
+      {/* A form is drawn only while its dialog is open, so a key shown once is gone when it closes. */}
+      {panels.map(([which, title, body]) => (
+        <Dialog key={which} open={open === which} onClose={close} title={title} className="max-h-screen overflow-y-auto">
+          {body}
+        </Dialog>
+      ))}
     </>
   )
 }

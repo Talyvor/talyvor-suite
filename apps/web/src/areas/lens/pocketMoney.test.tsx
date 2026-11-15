@@ -166,7 +166,6 @@ const NOT_YET = [
   'areas/lens/AccountStatement.tsx',
   'areas/lens/AgentBank.tsx',
   'areas/lens/AgentCardPanel.tsx',
-  'areas/lens/AgentCredential.tsx',
   'areas/lens/AgentMoneyWallet.tsx',
   'areas/lens/AlwaysAllow.tsx',
   'areas/lens/Approve.tsx',
