@@ -73,6 +73,8 @@ export const SCOPE_WORDS: Record<string, string> = {
   'wallets:read': 'See your wallets and bills',
   'invoices:draft': 'Draft invoices and payees',
   'payments:prepare': 'Prepare payments for you to approve',
+  'payments:send': 'Pay from your agents within the limits you set',
+  'agents:write': 'Create and pause your agents, and lower their limits',
 }
 
 interface Assistant {
@@ -502,10 +504,11 @@ function CeilingForm({ current }: { current: Ceiling | null }) {
           'Assistants cannot create agents until you say how much a new one may spend.'
         )}
       </p>
-      <div className="grid gap-3 wide:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2">
         {CEILING_FIELDS.map(([k, label]) => (
-          <Field key={k} label={label}>
+          <Field key={k} label={label} className="min-w-0">
             <Input
+              className="min-w-0"
               aria-label={`${label}, in LXC`}
               inputMode="decimal"
               unit="LXC"
