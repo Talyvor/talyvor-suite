@@ -37,6 +37,7 @@ LENS_SYNTHETIC_KEY=… pnpm --filter @talyvor/e2e run \
 | `--hostile-prs` | `E2E_HOSTILE_PRS` | on | B28.289 — the hostile pull requests made against each repo's main after the scenarios; `none` makes none |
 | `--deep-rounds` | `E2E_DEEP_ROUNDS` | 0 | B28.292, B50.7 — rounds of the deep red-team pass after the scenarios, under the same cap; the nightly plays one round every night and `E2E_DEEP_ROUNDS` (default 3) on `E2E_DEEP_DAY` |
 | `--light` | `E2E_LIGHT=1` | off | B28.294 — the light pass: its own six users and the core money and auth paths, nothing else (below) |
+| `--launch` | `E2E_LAUNCH=1` | off (the nightly sets it) | B61.1 — only the launch version's scenarios, in every pass; the report lists what was left out, and the map counts launch screens and routes only (src/launch.ts) |
 | `--day-cap-usd` | `E2E_DAY_CAP_USD` | — | B28.294 — the day's one cap, US$: the run spends only what the runs in `--out` since `E2E_NIGHTLY_AT` left of it, and nothing when none is left; the nightly script sets it to `E2E_CAP_USD` |
 | | `E2E_NIGHTLY_AT` | 03:00 | B28.294 — when the testers' day starts (this machine's clock): the nightly's hour |
 | `--headed` | | off | show the browsers |

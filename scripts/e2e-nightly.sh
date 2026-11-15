@@ -203,6 +203,8 @@ run_once() {
     # B28.294 — one cap for the day, the nightly's and the light passes' together; the day starts at the nightly's hour.
     export E2E_DAY_CAP_USD=${E2E_DAY_CAP_USD:-${E2E_CAP_USD:-5}} E2E_NIGHTLY_AT="$at"
     if [ "$light" = 1 ]; then export E2E_LIGHT=1; else unset E2E_LIGHT; fi
+    # B61.1 — the testers play the launch version only, every pass, unless the settings file sets E2E_LAUNCH=0.
+    export E2E_LAUNCH=${E2E_LAUNCH:-1}
     cd "$repo" || exit 2
     to_main
     if [ -n "$why" ]; then

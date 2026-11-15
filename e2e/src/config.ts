@@ -106,6 +106,8 @@ export interface RunConfig {
   light: boolean
   /** B55.44 — the Pocket problems pass (pocketProblems/): one user for each of the 25 problems, and nothing else the light pass leaves out. */
   pocket: boolean
+  /** B61.1 — only the scenarios of the launch version are played, in every pass, and the map counts its screens and routes only (launch.ts). */
+  launch: boolean
   /**
    * B28.294 — the testers' one cap for the day, shared by the nightly and the light passes: a run may spend only what the
    * day's earlier runs in `outDir` left of it (light.ts); undefined leaves the run its own cap alone.
@@ -143,7 +145,7 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     const a = argv[i]
     if (!a.startsWith('--')) throw new Error(`unexpected argument ${a}`)
     const [k, inline] = a.slice(2).split('=', 2)
-    if (k === 'headed' || k === 'light' || k === 'pocket') {
+    if (k === 'headed' || k === 'light' || k === 'pocket' || k === 'launch') {
       flags.set(k, 'true')
       continue
     }
@@ -219,6 +221,7 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
     deepRounds: lean ? 0 : Math.floor(num('deep-rounds', 'E2E_DEEP_ROUNDS', 0, true)),
     light,
     pocket,
+    launch: flags.get('launch') === 'true' || env.E2E_LAUNCH === '1',
     dayCapUSD: dayCap === undefined ? undefined : num('day-cap-usd', 'E2E_DAY_CAP_USD', 0),
     nightlyAt,
     headed: flags.get('headed') === 'true',
