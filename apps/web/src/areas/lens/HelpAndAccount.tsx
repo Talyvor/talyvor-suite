@@ -1,4 +1,4 @@
-import { Fragment, useId, useState } from 'react'
+import { Fragment, useEffect, useId, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, Card, Chip, Crumb, EmptyState, Field, Icon, KindTile, Money, Row, Select, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
@@ -315,6 +315,12 @@ export function CloseAccountScreen() {
 function HelpChatKept() {
   const qc = useQueryClient()
   const chat = useHelpChat()
+  // B61.65 — once Talyvor has closed this account, the BFF has deleted its Help chat: read it again.
+  const requests = useAccountRequests()
+  const closed = (requests.data ?? []).some((r) => r.kind === 'account_closure' && r.state === 'done')
+  useEffect(() => {
+    if (closed) void qc.invalidateQueries({ queryKey: HELP_CHAT_KEY })
+  }, [closed, qc])
   const erase = useMutation({
     mutationFn: deleteHelpChat,
     onSuccess: () => {
@@ -326,7 +332,7 @@ function HelpChatKept() {
   return (
     <Card tone="white">
       <h3 className="font-display text-reading font-bold text-ink">Your Help chat</h3>
-      <p className="mt-1 text-body text-ink-2">Kept for 30 days so our team can read it, then deleted.</p>
+      <p className="mt-1 text-body text-ink-2">Kept for 30 days so our team can read it, then deleted. Closing this account deletes it too.</p>
       <div className="mt-2" data-testid="help-chat-kept">
         {chat.isError ? (
           <p className="text-body text-ink-2">{readFailure(chat.error, 'Your Help chat')}</p>

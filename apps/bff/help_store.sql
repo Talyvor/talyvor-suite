@@ -20,3 +20,10 @@ CREATE TABLE IF NOT EXISTS help_asked (
     n            integer NOT NULL,
     PRIMARY KEY (workspace_id, day)
 );
+
+-- B61.65: the accounts Talyvor closed. Their chat and counts are deleted; only the id stays, so Help takes no more
+-- questions from them.
+CREATE TABLE IF NOT EXISTS help_closed (
+    workspace_id text PRIMARY KEY,
+    closed_at    timestamptz NOT NULL
+);
