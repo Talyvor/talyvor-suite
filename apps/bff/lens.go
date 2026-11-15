@@ -419,6 +419,9 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/features", a.requireTenant(a.handleFeatures))
 	// B59.38 — which areas the workspace has; the phone shows an area only when it is listed. See workspace_areas.go.
 	a.mux.HandleFunc("/api/workspace/areas", a.requireTenant(a.handleWorkspaceAreas))
+	// B61.8 — your accounts, the session moving to another of them, and opening another. See accounts.go.
+	a.mux.HandleFunc("/api/accounts", a.requireSession(a.handleAccounts))
+	a.mux.HandleFunc("/api/accounts/switch", a.requireSession(a.handleAccountSwitch))
 	a.mux.HandleFunc("/api/workspace/account", a.requireTenant(a.handleWorkspaceAccount))                              // B59.10 — the type and kind of money. See workspace_account.go.
 	a.mux.HandleFunc("/api/workspace/account/money-kind", a.requireTenant(a.handleWorkspaceMoneyKind(false)))          // B59.12 — changing it, signed
 	a.mux.HandleFunc("/api/workspace/account/money-kind/challenge", a.requireTenant(a.handleWorkspaceMoneyKind(true))) // B59.12

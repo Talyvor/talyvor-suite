@@ -553,15 +553,17 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// B61.8: a sign-up by someone this browser is already signed in as opens another account (accounts.go).
+	_, signedIn, _ := a.auth.sessionAndIDFrom(r)
+	another := signedIn.sub == idt.Subject && !signedIn.synthetic
 	// Rotate: any previous session this browser presented dies with the new
 	// login — one live session per browser, and no fixation via a stale id.
 	if old, err := r.Cookie(sessionCookieName); err == nil {
 		a.auth.endSession(old.Value)
 	}
-	s, perr := a.provisionSession(ctx, idt.Subject, claims.Email, p.signup)
+	s, perr := a.provisionSession(ctx, idt.Subject, claims.Email, p.signup, another)
 	if perr != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{
-			"error": "could not provision your workspace — try again shortly"})
+		writeProvisionFailed(w, perr)
 		return
 	}
 	s.signedInAt = authTimeOf(idt)
@@ -576,12 +578,18 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 
 // provisionSession turns an identity the allowlist admitted into a session, not yet stored: the
 // browser callback and the phone sign-in (mobile_session.go) both come through here, with sign-up's answers (B59.8).
-func (a *app) provisionSession(ctx context.Context, sub, email string, signup signupAccount) (session, error) {
+// another is a sign-up by someone already signed in as this identity: it opens another account (B61.8) rather than
+// answering the one they already have.
+func (a *app) provisionSession(ctx context.Context, sub, email string, signup signupAccount, another bool) (session, error) {
 	// PROVISION: turn this identity into a tenant before the session exists. The workspace id is
 	// derived by LENS from the identity we present — the BFF never names a workspace, so no bug
 	// here can aim at another tenant. A provisioning failure is a hard stop: falling back to a
 	// shared workspace is the exact state this replaced, so there is no fallback path at all.
-	prov, perr := a.provision(ctx, provisionIdentity(a.cfg.oidcIssuer, sub), nil, signup)
+	var ask provisionAsk
+	if another && signup != (signupAccount{}) {
+		ask.mode = "open"
+	}
+	prov, perr := a.provisionAs(ctx, provisionIdentity(a.cfg.oidcIssuer, sub), ask, nil, signup)
 	if perr != nil {
 		log.Printf("bff: provisioning FAILED for sub=%s: %s", sub, redactSecret(perr.Error()))
 		return session{}, perr

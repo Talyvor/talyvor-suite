@@ -103,10 +103,11 @@ func (a *app) handleMobileSession(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": msg})
 		return
 	}
-	s, err := a.provisionSession(ctx, idt.Subject, claims.Email, signup)
+	// B61.8: a sign-up from a phone already signed in as this person opens another account.
+	_, signedIn, _ := a.auth.bearerSession(r)
+	s, err := a.provisionSession(ctx, idt.Subject, claims.Email, signup, signedIn.sub == idt.Subject && !signedIn.synthetic)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{
-			"error": "could not provision your workspace — try again shortly"})
+		writeProvisionFailed(w, err)
 		return
 	}
 	s.signedInAt = authTimeOf(idt)
