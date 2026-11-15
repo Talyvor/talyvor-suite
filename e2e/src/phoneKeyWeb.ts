@@ -9,7 +9,7 @@
 // and the page lets it in with this browser's new passkey: Lens holds that enrolment approved.
 
 import type { Page } from 'playwright'
-import { card, fail } from './bank.ts'
+import { card, dollarsTyped, fail } from './bank.ts'
 import { softDevice } from './deviceKeyApproval.ts'
 import { RUN_SALT } from './oracles.ts'
 import { said } from './routes.ts'
@@ -18,8 +18,7 @@ import { CannotTest, type Scenario, type ScenarioCtx, type Verdict } from './sce
 const FUND_ULXC = 300_000
 const APPROVAL_ABOVE_ULXC = 100_000
 const DAILY_ULXC = 1_000_000
-const RAISED_LXC = '2'
-const LOWERED_LXC = '0.5'
+const RAISED_ULXC = 2_000_000
 const LOWERED_ULXC = 500_000
 const TIMEOUT_MS = 30_000
 export const PHONE_LINE = 'Approve this on your phone: it is waiting in Talyvor there.'
@@ -212,11 +211,12 @@ export function phoneKeyWeb(): Scenario {
         seen.rulesSaved.push(body.rules?.daily_limit_ulxc ?? body.daily_limit_ulxc ?? -1)
       })
       try {
-        const daily = rulesPage.getByLabel(`At most a day for ${payer.name}, in LXC`)
-        await daily.fill(RAISED_LXC, { timeout: TIMEOUT_MS })
+        // B61.86 — since B61.14 the rules page types its limits in dollars, at Lens's peg.
+        const daily = rulesPage.getByLabel(`At most a day for ${payer.name}, in dollars`)
+        await daily.fill(dollarsTyped(RAISED_ULXC, ctx.env.usdPerLXC), { timeout: TIMEOUT_MS })
         await rulesPage.getByRole('button', { name: 'Save rules' }).click()
         seen.loosenLine = await rulesPage.getByText(loosenLine(payer.name)).waitFor({ timeout: TIMEOUT_MS }).then(() => true, () => false)
-        await daily.fill(LOWERED_LXC)
+        await daily.fill(dollarsTyped(LOWERED_ULXC, ctx.env.usdPerLXC))
         await rulesPage.getByRole('button', { name: 'Save rules' }).click()
         await rulesPage.getByText(`${payer.name}’s rules are saved`).waitFor({ timeout: TIMEOUT_MS }).catch(() => undefined)
       } catch (e) {

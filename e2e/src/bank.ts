@@ -14,7 +14,7 @@ import { listPriceUSD, seeded, statesNumber, sumTask } from './oracles.ts'
 import { keptOf, percent, platformFeeBPS } from './fees.ts'
 import { feeVerdict } from './pricing.ts'
 import { otherCompanyOnTeam } from './room.ts'
-import { CannotTest, type Scenario, type ScenarioCtx, type Verdict } from './scenarios.ts'
+import { CannotTest, type RunEnv, type Scenario, type ScenarioCtx, type Verdict } from './scenarios.ts'
 
 export const ACTION_TIMEOUT_MS = 30_000
 /** B35.8 — the most an agent's balance may take to show its dollar figure beside the LXC. */
@@ -37,12 +37,20 @@ const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  */
 export const figureText = (text: string): string => text.replace(/\s+/g, ' ').trim()
 export const lxcText = (ulxc: number): string => String(ulxc / 1e6)
+/**
+ * B61.86 — µLXC as a field typed in dollars takes it at Lens's peg (apps/web agentBankApi dollarsText): to eight places, no
+ * trailing zeros, so what is typed reads back as exactly that many µLXC. Since B61.14 the rules are typed in dollars.
+ */
+export const dollarsTyped = (ulxc: number, usdPerLXC: number): string => ((ulxc * usdPerLXC) / 1e6).toFixed(8).replace(/\.?0+$/, '')
 
-/** B55.38 — an LXC amount as the wallet screens show it, dollars at the peg first: "$1.25 (12.5 LXC)" (apps/web money.tsx). */
-export function usdShown(lxc: string, ulxc: number, usdPerLXC: number): string {
+/**
+ * B55.38 — an amount Lens keeps in µLXC as the screens show it in dollars at the peg: "$1.25" (apps/web money.tsx). B61.86 —
+ * in the currency alone, since B61.14 took the LXC from beside it.
+ */
+export function usdShown(ulxc: number, usdPerLXC: number): string {
   const usd = (ulxc / 1e6) * usdPerLXC
   const fmt = (v: number) => v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return `${usd > 0 && usd < 0.005 ? `<${fmt(0.01)}` : fmt(usd)} (${lxc})`
+  return usd > 0 && usd < 0.005 ? `<${fmt(0.01)}` : fmt(usd)
 }
 
 /** The card under an `h2` heading (packages/ui CardHeader). */
@@ -64,13 +72,17 @@ async function outcome(done: Locator, scope: Locator): Promise<string | undefine
  */
 export class AgentBankScreen {
   readonly page: Page
+  private readonly env: Pick<RunEnv, 'lens' | 'usdPerLXC'>
+  private readonly user: SyntheticUser
 
-  private constructor(page: Page) {
+  private constructor(page: Page, env: Pick<RunEnv, 'lens' | 'usdPerLXC'>, user: SyntheticUser) {
     this.page = page
+    this.env = env
+    this.user = user
   }
 
-  static async open(app: AppUser): Promise<AgentBankScreen> {
-    const s = new AgentBankScreen(await app.tab('/agents'))
+  static async open(app: AppUser, env: Pick<RunEnv, 'lens' | 'usdPerLXC'>): Promise<AgentBankScreen> {
+    const s = new AgentBankScreen(await app.tab('/agents'), env, app.user)
     await s.ready()
     return s
   }
@@ -79,9 +91,14 @@ export class AgentBankScreen {
     await this.page.close()
   }
 
-  /** The book is read: Agents' totals line names what the workspace holds (it does with no agents too). */
+  /**
+   * The book is read: Agents draws its list, or "No agents yet". B61.86 — since B61.14 its totals line names no figure (what
+   * the workspace holds was LXC, which is parked), so it is drawn before the book is read and says nothing of it.
+   */
   private async ready(): Promise<void> {
-    await this.page.getByTestId('agents-totals').filter({ hasText: 'The workspace holds' }).waitFor()
+    await this.page.getByTestId('agents-list')
+      .or(this.page.getByText('No agents yet', { exact: true }))
+      .first().waitFor({ timeout: ACTION_TIMEOUT_MS })
   }
 
   /** Agents, afresh. */
@@ -138,14 +155,14 @@ export class AgentBankScreen {
     await this.opened(agent.name).waitFor({ timeout: ACTION_TIMEOUT_MS })
   }
 
-  /** Funds the agent from the workspace, or takes LXC back, in its page's Move LXC dialog (B57.16); its snack says it moved. */
+  /**
+   * Funds the agent from the workspace, or takes LXC back: Lens's refusal, or undefined once it moved. B61.86 — through
+   * Lens, as the workspace's owner, not on a screen: B61.14 parked the agent page's Move LXC dialog with the LXC under it.
+   */
   async move(agent: Agent, ulxc: number, how: 'Fund' | 'Take back'): Promise<string | undefined> {
-    await this.fresh(agent)
-    await this.page.getByTestId('agent-page').getByRole('button', { name: 'Move LXC', exact: true }).first().click()
-    const dialog = this.page.getByRole('dialog', { name: `Move LXC: ${agent.name}` })
-    await dialog.getByLabel('Amount in LXC').fill(lxcText(ulxc))
-    await dialog.getByRole('button', { name: how === 'Fund' ? `Fund ${agent.name}` : how, exact: true }).click()
-    return outcome(this.page.getByRole('status').filter({ hasText: `${agent.name} now holds` }), dialog)
+    const { lens } = this.env
+    const moved = how === 'Fund' ? lens.fundAgent(this.user, agent.id, ulxc) : lens.withdrawAgent(this.user, agent.id, ulxc)
+    return moved.then(() => undefined, (e: unknown) => (e instanceof Error ? e.message : String(e)))
   }
 
   /** B61.63 — a row of the agent's Money card (AgentMoney.tsx), pressed: the dialog it opens over the page, named by the row. */
@@ -207,7 +224,7 @@ export class AgentBankScreen {
     const scope = await this.rulesPage(agent)
     if (more) await this.moreRule(scope, rule)
     else await this.ruleOn(scope, rule)
-    await scope.getByLabel(`${rule} for ${agent.name}, in LXC`, { exact: true }).fill(lxcText(ulxc))
+    await scope.getByLabel(`${rule} for ${agent.name}, in dollars`, { exact: true }).fill(dollarsTyped(ulxc, this.env.usdPerLXC))
     return this.saveRules(scope, agent)
   }
 
@@ -244,9 +261,9 @@ export class AgentBankScreen {
     const scope = await this.rulesPage(agent)
     await this.moreRule(scope, 'At most a day to one payee')
     for (const c of caps) {
-      const box = scope.getByLabel(`A day to one payee from ${agent.name}: ${c.payee.name}, in LXC`, { exact: true })
+      const box = scope.getByLabel(`A day to one payee from ${agent.name}: ${c.payee.name}, in dollars`, { exact: true })
       if (!(await box.isVisible())) await scope.getByLabel(`Add to a day to one payee from ${agent.name}`, { exact: true }).selectOption(c.payee.id)
-      await box.fill(lxcText(c.ulxc))
+      await box.fill(dollarsTyped(c.ulxc, this.env.usdPerLXC))
     }
     return this.saveRules(scope, agent)
   }
@@ -257,8 +274,9 @@ export class AgentBankScreen {
    */
   async wouldPass(from: Agent, to: Agent, ulxc: number): Promise<string> {
     const c = (await this.rulesPage(from)).getByTestId('would-it-pass')
-    await c.getByLabel(`What ${from.name} would do`, { exact: true }).selectOption(`agent:${to.id}`)
-    await c.getByLabel(`Amount in LXC to try for ${from.name}`, { exact: true }).fill(lxcText(ulxc))
+    // B61.86 — since B61.14 it asks only of a payment to another agent (a question to a model is the parked gateway's).
+    await c.getByLabel(`Who ${from.name} would pay`, { exact: true }).selectOption(to.id)
+    await c.getByLabel(`Amount in dollars to try for ${from.name}`, { exact: true }).fill(dollarsTyped(ulxc, this.env.usdPerLXC))
     await c.getByRole('button', { name: 'Would it pass?', exact: true }).click()
     const said = c.getByTestId('rule-verdict').or(c.getByRole('alert')).first()
     await said.waitFor({ timeout: ACTION_TIMEOUT_MS })
@@ -871,7 +889,7 @@ async function billShown(app: AppUser): Promise<string> {
 export const fail = (detail: string): Verdict => ({ pass: false, detail })
 
 export async function withBank(ctx: ScenarioCtx, body: (bank: AgentBankScreen) => Promise<Verdict>): Promise<Verdict> {
-  const bank = await AgentBankScreen.open(ctx.app)
+  const bank = await AgentBankScreen.open(ctx.app, ctx.env)
   try {
     return await body(bank)
   } finally {
@@ -1781,7 +1799,7 @@ export function agentApproval(seed: number): Scenario {
       if (phone !== undefined) return fail(`on a 390px phone, ${phone}`)
       const { row, said: approved } = await bank.approve(payer, payee)
       ctx.evidence.push({ note: `Waiting for a person: ${row}` }, { note: `Approve: ${approved}` })
-      const asked = `${usdShown('1 LXC', 1e6, ctx.env.usdPerLXC)} — ${memo}`
+      const asked = `${usdShown(1e6, ctx.env.usdPerLXC)} — ${memo}`
       if (!row.endsWith(` ${asked}`)) return fail(`the row waiting for a person does not say ${asked}: "${row}"`)
       if (!/^Approved and paid/.test(approved)) return fail(`approving did not pay: "${approved}"`)
       const after = await bookOf(ctx)
@@ -1949,7 +1967,7 @@ export function chatApprovalFaceID(seed: number): Scenario {
         return fail(`no card in Chat reads "${asks}…"; it shows: ${(await page.getByTestId('chat-approval').allInnerTexts()).join(' | ') || 'no approval card'}`)
       }
       const row = (await approval.getByTestId('chat-approval-asks').innerText()).trim()
-      const wanted = `${asks}${usdShown('1 LXC', 1e6, ctx.env.usdPerLXC)} — ${memo}`
+      const wanted = `${asks}${usdShown(1e6, ctx.env.usdPerLXC)} — ${memo}`
       if (row !== wanted) return fail(`the card reads "${row}", not "${wanted}"`)
       await mkdir(ctx.env.outDir, { recursive: true })
       for (const [width, height] of [[1440, 900], [390, 844]] as const) {
@@ -2134,7 +2152,7 @@ async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: st
   ctx.evidence.push({ note: `Home at 390: across the agents "${heldShown}"; Lens: ${book.allocated_ulxc} µLXC with agents` })
   if (!heldShown.includes(shownLXC(book.allocated_ulxc))) return `Home's "Across your agents" reads "${heldShown}", not Lens's ${shownLXC(book.allocated_ulxc)} with agents`
   // B57.7 — a <Money>: dollars first, LXC small after them.
-  const dollars = usdShown(shownLXC(book.allocated_ulxc), book.allocated_ulxc, ctx.env.usdPerLXC).split(' (')[0]
+  const dollars = usdShown(book.allocated_ulxc, ctx.env.usdPerLXC)
   if (!heldShown.startsWith(`${dollars} `)) return `Home's "Across your agents" reads "${heldShown}", not ${dollars} first and its LXC after`
   const link = page.locator(`a[href="/?approval=${approvalID}"]`)
   if (approvalID === '' || (await link.count()) === 0) {
@@ -4678,7 +4696,7 @@ export function agentBalanceStored(seed: number): Scenario {
         return fail(`the book does not add up: ${after.workspace_balance_ulxc} ≠ ${after.allocated_ulxc} + ${after.unallocated_ulxc}`)
       }
       const shown = await bank.balanceShown(a)
-      const want = usdShown(shownLXC(total), total, ctx.env.usdPerLXC)
+      const want = usdShown(total, ctx.env.usdPerLXC)
       if (shown !== want) return fail(`Agent Wallets shows ${a.name} holding "${shown}"; its postings sum to ${want}`)
       return { pass: true, detail: `${MANY_FUNDINGS} fundings at once, ${lxcText(total)} LXC: ${a.name}'s stored balance = its ${posted.length} postings = the screen's ${shown}, and the workspace's agents hold that much more` }
     }),
@@ -4706,7 +4724,7 @@ export function walletCurrency(seed: number): Scenario {
       const held = agentIn(await bookOf(ctx), a.id)?.balance_ulxc
       if (held !== amount) return fail(`funded ${amount} µLXC; Lens's book has ${a.name} holding ${held}`)
       const shown = await bank.balanceShown(a)
-      const want = usdShown('12.5 LXC', amount, ctx.env.usdPerLXC)
+      const want = usdShown(amount, ctx.env.usdPerLXC)
       ctx.evidence.push({ note: `Agent Wallets shows ${a.name} holding "${shown}"` })
       if (shown !== want) return fail(`Agent Wallets shows ${a.name} holding "${shown}"; at $${ctx.env.usdPerLXC} per LXC it should read "${want}"`)
       const model = ctx.env.judgeModel

@@ -33,7 +33,7 @@ export function keysLetIn(): Bare {
     feature: 'Agent Wallets',
     title: 'a workspace whose first key is a web passkey adds a second device, let in from the first with "Let it approve"',
     run: async (ctx) => {
-      const first = await AgentBankScreen.open(ctx.app)
+      const first = await AgentBankScreen.open(ctx.app, ctx.env)
       const browser = ctx.app.context.browser()
       if (browser === null) throw new Error('the run has no browser to open a second device in')
       const second = await browser.newContext()
