@@ -199,6 +199,12 @@ const SAMPLE: Record<string, unknown> = {
     opening_minor: 0, in_minor: 40_000, out_minor: 0, closing_minor: 40_000,
     lines: [{ entry_id: 'ment_fennel', line: 1, at: '2026-10-12T14:20:00Z', kind: 'invoice_payment', amount_minor: 40_000, funding: 'test', counterparty: 'Fennel Labs', memo: 'INV-000001', balance_after_minor: 40_000 }],
   },
+  // B61.2 — the company's USDC account, as Activity reads every account: a top-up in.
+  '/api/money/accounts/macc_company_usdc/statement': {
+    account_id: 'macc_company_usdc', currency: 'USDC', from: '2026-10-01T00:00:00Z', to: '2026-10-21T00:00:00Z',
+    opening_minor: 0, in_minor: 1_500_000_000, out_minor: 0, closing_minor: 1_500_000_000,
+    lines: [{ entry_id: 'ment_usdc', line: 1, at: '2026-10-02T11:00:00Z', kind: 'payment_in', amount_minor: 1_500_000_000, funding: 'test', counterparty: 'Nick’s team', balance_after_minor: 1_500_000_000 }],
+  },
   '/api/money/accounts/macc_room_usd/statement': {
     account_id: 'macc_room_usd', agent_id: 'agt_room', currency: 'USD', from: '2026-10-01T00:00:00Z', to: '2026-10-21T00:00:00Z',
     opening_minor: 0, in_minor: 25_000, out_minor: 0, closing_minor: 25_000,

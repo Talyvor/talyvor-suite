@@ -1,0 +1,5 @@
+[
+  { "route": "/activity" },
+  { "route": "/activity/macc_company_usd/ment_kite" },
+  { "route": "/money/pay" }
+]

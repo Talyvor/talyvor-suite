@@ -18,7 +18,7 @@ import { DESIGN_ATTR } from '../../pocketPending'
 // ── Progress and the receipt ─────────────────────────────────────────────────────────────────────────────────────
 
 const STEPS = ['Sent', 'Converted', 'On its way', 'Received'] as const
-const STATUS_WORDS: Record<InstantTransfer['status'], string> = {
+export const STATUS_WORDS: Record<InstantTransfer['status'], string> = {
   sent: 'Sent',
   converted: 'Converted',
   on_its_way: 'On its way',

@@ -24,7 +24,7 @@ import { CURRENCY_ACCOUNT } from '../../labels/capabilities'
 // first, and the way back to Accounts on Invoices. Download CSV sits at the top of Statements, as an agent's does.
 
 /** Whose account it is: "Company", or the agent's name. An agent the book does not list reads "Agent". */
-function accountOwner(a: CurrencyAccount, agents: readonly Agent[]): string {
+export function accountOwner(a: CurrencyAccount, agents: readonly Agent[]): string {
   return a.purpose === 'agent' && a.agent_id ? (agents.find((x) => x.id === a.agent_id)?.name ?? 'Agent') : 'Company'
 }
 
@@ -55,9 +55,12 @@ const KIND_WORDS: Record<string, string> = {
   test_money: 'Paid in',
 }
 
+/** A line's kind in words: "Card payment", "Paid in". B61.2's Activity names its rows with them too. */
+export const kindWords = (kind: string) => KIND_WORDS[kind] ?? `${kind.charAt(0).toUpperCase()}${kind.slice(1).replace(/_/g, ' ')}`
+
 /** What a line was: who it was from or to, then in faint words its kind and memo. With nobody named, its kind leads. */
 function lineWhat(l: MoneyStatementLine): [string, string] {
-  const kind = KIND_WORDS[l.kind] ?? `${l.kind.charAt(0).toUpperCase()}${l.kind.slice(1).replace(/_/g, ' ')}`
+  const kind = kindWords(l.kind)
   const who = l.counterparty.startsWith('workspace:') ? 'The company' : l.counterparty
   return who ? [who, [kind, l.memo].filter(Boolean).join(' · ')] : [kind, l.memo ?? '']
 }

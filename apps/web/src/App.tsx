@@ -82,6 +82,8 @@ import { PayBillsScreen, PayBulkPayoutsScreen, PayMandatesScreen, PayScreen, Pay
 import { PayInstantTransferScreen } from './areas/lens/InstantTransfer'
 import { WalletsScreen } from './areas/lens/Wallets'
 import { InstantTransferScreen } from './areas/lens/InstantTransferReceipt'
+import { ActivityScreen } from './areas/lens/Activity'
+import { ActivityPaymentScreen } from './areas/lens/ActivityPayment'
 import { RecurringPlanScreen } from './areas/lens/RecurringPlan'
 import { SubscriptionsScreen } from './areas/lens/Subscriptions'
 import { BudgetsScreen } from './areas/lens/Budgets'
@@ -275,6 +277,9 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   // B59.19 — Instant transfer, for a Hybrid account: the quote and the send, then its progress and its receipt.
   { path: '/money/pay/instant-transfer', title: 'Instant transfer', element: <PayInstantTransferScreen /> },
   { path: '/money/pay/instant-transfer/:id', title: 'Instant transfer', element: <InstantTransferScreen /> },
+  // B61.2 — Activity, as the phone has it: every payment in and out, and each one's own page.
+  { path: '/activity', title: 'Activity', element: <ActivityScreen /> },
+  { path: '/activity/:account/:entry', title: 'Activity', element: <ActivityPaymentScreen /> },
   // B45.37 — the page an assistant's recurring-payments link opens: its standing orders, and one passkey signature.
   { path: '/money/plans/:id', title: 'Sign recurring payments', element: <RecurringPlanScreen /> },
   // B41.20 — every recurring payment, standing order and renewing rental, with its next charge, monthly cost and reminder.
@@ -428,6 +433,7 @@ function Sidebar() {
         {item('/cards', 'Cards', 'card', under(pathname, '/cards'))}
         {item('/statements', 'Statements', 'statements', under(pathname, '/statements'))}
         {item('/money/pay', 'Pay', 'payments', under(pathname, '/money/pay'))}
+        {item('/activity', 'Activity', 'clock', under(pathname, '/activity'))}
         {item('/money/invoices', 'Invoices', 'invoices', under(pathname, '/money/invoices'))}
         {item('/money/spending', 'Spending', 'spending', under(pathname, '/money/spending', '/money/budgets', '/money/subscriptions', '/money/card'))}
         {item('/chat', 'Chat', 'chat', under(pathname, '/chat'))}

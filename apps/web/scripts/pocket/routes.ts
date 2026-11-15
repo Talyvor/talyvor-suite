@@ -67,6 +67,8 @@ export const SHOT_ROUTES: Record<string, string> = {
   '/money/pay/bulk-payouts': '/money/pay/bulk-payouts',
   '/money/pay/instant-transfer': '/money/pay/instant-transfer',
   '/money/pay/instant-transfer/:id': '/money/pay/instant-transfer/itr_sample',
+  '/activity': '/activity',
+  '/activity/:account/:entry': '/activity/macc_company_usd/ment_kite',
   '/money/pay/bills': '/money/pay/bills',
   '/money/plans/:id': '/money/plans/rpl_sample',
   '/money/subscriptions': '/money/subscriptions',
