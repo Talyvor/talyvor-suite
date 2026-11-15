@@ -1,0 +1,91 @@
+{
+  "pages": [
+    {
+      "path": "/signup",
+      "name": "Sign up",
+      "lines": [
+        "Create a workspace with an account you already have."
+      ]
+    },
+    {
+      "path": "/agents",
+      "name": "Agent Wallets",
+      "lines": [
+        "Create an agent. It gets a wallet of its own, empty until you fund it.",
+        "Fund its wallet from the workspace’s balance. The agent can spend only what its wallet holds.",
+        "Issue the agent its own key: a proxy key that spends only this agent’s balance, under its rules. It is shown once.",
+        "Watch its statement: every request the agent makes is a line with what it cost and the balance left.",
+        "Create an agent, fund its wallet and take funds back.",
+        "Issue the agent a key that spends only its own balance, under its rules.",
+        "Set its spending rules: a payment past a limit is refused, and one above the approval amount waits in your approvals inbox, approved with a passkey once you have one.",
+        "Pause one agent, or stop every agent with one switch.",
+        "Read and download each wallet’s statement.",
+        "Agents pay each other and hold money in escrow."
+      ]
+    },
+    {
+      "path": "/setup",
+      "name": "Setup",
+      "lines": [
+        "Give the agent that key and the base URL Setup prints for Claude Code, Cursor, Continue or the OpenAI SDK."
+      ]
+    },
+    {
+      "path": "/documentation/claude",
+      "name": "Talyvor in Claude",
+      "lines": [
+        "Connect Claude, so it can read your accounts and prepare payments that you approve in Talyvor."
+      ]
+    },
+    {
+      "path": "/documentation",
+      "name": "Documentation",
+      "lines": [
+        "Every wallet route Lens answers, with what each one does."
+      ]
+    },
+    {
+      "path": "",
+      "name": "Talyvor",
+      "lines": [
+        "Each agent gets a wallet of its own: you fund it, the agent spends only what it holds, and its statement is every payment against it.",
+        "Talyvor checks your rules before an agent's payment moves.",
+        "Talyvor's email address is hello@talyvor.com. We answer by email."
+      ]
+    },
+    {
+      "path": "/approvals",
+      "name": "Approvals",
+      "lines": [
+        "A payment above an agent's approval amount waits in your approvals inbox until you approve or decline it.",
+        "You approve with a passkey once you have one."
+      ]
+    },
+    {
+      "path": "/settings/help",
+      "name": "Help and complaints",
+      "lines": [
+        "Ask us about your account, or tell us what went wrong. A person at Talyvor reads every message and answers on this page.",
+        "A complaint gets a reference as soon as you send it. Quote it whenever you write to us about it."
+      ]
+    },
+    {
+      "path": "/settings/close",
+      "name": "Close this account",
+      "lines": [
+        "Before the account can close, every balance must be empty: the account's own, each agent's, and any money set aside. Move the money out first.",
+        "A person at Talyvor closes the account and answers on this page. Only the account's owner can ask."
+      ]
+    },
+    {
+      "path": "/settings/data",
+      "name": "Your data",
+      "lines": [
+        "Ask for a copy of this account's data, or ask Talyvor to delete it. A person at Talyvor handles each request. Only the account's owner can ask.",
+        "When your copy is ready, Download appears beside your request.",
+        "Billing and ledger records, statements included, are kept as the law requires.",
+        "Help chats are kept for 30 days and are listed on this page, where you can delete yours."
+      ]
+    }
+  ]
+}

@@ -42,6 +42,7 @@ import { WELCOME_PATH, Welcome, WelcomeRedirect } from './areas/auth/Welcome'
 import { CloseAccountScreen, HelpScreen, YourDataScreen } from './areas/lens/HelpAndAccount'
 import { CompanyDetailsScreen } from './areas/lens/CompanyDetails'
 import { SignedInFooter } from './components/HelpLinks'
+import { HelpButton, HelpChatHost } from './components/HelpChat'
 import { Features } from './areas/lens/Features'
 import { AgentPage, AgentRulesPage } from './areas/lens/AgentPageRoute'
 import { Agents } from './areas/lens/Agents'
@@ -317,6 +318,12 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
 // a table on every navigation for an answer that cannot change.
 const TITLE_MATCHERS = CONSOLE_ROUTES.map(({ path }) => ({ path }))
 
+/** B61.38 — a page the Help chat points to, by the title its heading shows; a public page by its own words. */
+function helpPageName(pathname: string): string {
+  const t = titleFor(pathname)
+  return t !== NOT_FOUND_TITLE ? t : 'this page'
+}
+
 function titleFor(pathname: string): string {
   // B17.82 — /earnings draws Royalties before its address catches up, so it is titled as Royalties.
   const matches = matchRoutes(TITLE_MATCHERS, pathname === '/earnings' ? ROYALTIES_PATH : pathname)
@@ -577,6 +584,8 @@ function ConsoleShell() {
           {/* B57.118 — the label, top right on every screen, before Pause every agent (the launch pack's W2 to W5). */}
           <WorkspaceStatus />
           <EveryAgentSwitch />
+          {/* B61.38 — Help, on every signed-in page: the chat answered by AI, with our team one press away. */}
+          <HelpButton />
           <Avatar />
         </>
       }
@@ -659,6 +668,8 @@ function ConsoleShell() {
       <SnackHost view={pathname} />
       {/* B57.15 — the approval sheet, over whichever page ?approval=<id> (or /approvals#approval-<id>) is on. */}
       <ApprovalSheetHost />
+      {/* B61.38 — the Help panel, over whichever page ?help=open is on. */}
+      <HelpChatHost pageName={helpPageName} />
     </PocketShell>
     </div>
     </>

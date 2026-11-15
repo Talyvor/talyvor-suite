@@ -575,7 +575,10 @@ var notSweptWrite = map[string]string{
 	"/auth/synthetic/mobile": "B57.86 — exempt (originExemptPath) only with no Origin: the phone harness sends none, and the operator key is the credential; another site's Origin is refused (B50.36, TestSyntheticPhoneSignInRefusesAnotherSite)",
 	"/api/connect/agent-ceiling": "B52.6 — Origin-GATED, but it is kept in the BFF and writes nothing upstream, so this table's arrival " +
 		"assertion cannot hold for it; TestConnectCreateAgentUnderTheCeiling puts one from another site and asserts the 403",
-	"/mcp": "B40.6 — exempt (oauthMachinePath): an assistant's bearer token, never the cookie, is what it accepts",
+	"/api/help/ask":  "B61.38 — Origin-GATED, but the chat is kept in the BFF and the model call goes on Talyvor's own key, so this table's arrival assertion cannot hold for it; TestHelpWritesRefuseAnotherSite asserts the 403",
+	"/api/help/chat": "B61.38 — Origin-GATED, but DELETE forgets the chat the BFF keeps and writes nothing upstream; TestHelpWritesRefuseAnotherSite asserts the 403",
+	"/api/help/team": "B61.38 — Origin-GATED, and it files to Lens only once a chat exists, which this table's fixture has none of; TestHelpWritesRefuseAnotherSite asserts the 403",
+	"/mcp":           "B40.6 — exempt (oauthMachinePath): an assistant's bearer token, never the cookie, is what it accepts",
 	"/auth/logout": "a browser POST the app issues at itself; it is swept by TestLogout_RefusesCrossOrigin, " +
 		"which drives it directly rather than through this table because it has no JSON body and no upstream.",
 	"/auth/logout-everywhere": "B52.9 — Origin-GATED, but it answers in the BFF and writes nothing upstream; " +
