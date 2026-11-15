@@ -157,6 +157,20 @@ describe('Connect your AI', () => {
     expect(await within(how).findByRole('link', { name: 'See the page a prepared payment opens' })).toHaveAttribute('href', '/approve/pr-7')
   })
 
+  it('signs out everywhere after asking once', async () => {
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(input)}`)
+      if (init?.method === 'POST') return new Response(null, { status: 204 })
+      return new Response(JSON.stringify({ assistants: [] }))
+    })
+    renderScreen()
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out everywhere' }))
+    expect(calls).not.toContain('POST /auth/logout-everywhere')
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, sign out everywhere' }))
+    await waitFor(() => expect(calls).toContain('POST /auth/logout-everywhere'))
+  })
+
   // B52.6 — the most an assistant may give a new agent: unset, it says assistants cannot create agents; set in LXC, it
   // goes to the BFF in µLXC and reads back.
   it('sets the most an assistant may give a new agent', async () => {

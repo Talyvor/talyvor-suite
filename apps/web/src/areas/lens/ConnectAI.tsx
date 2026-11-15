@@ -16,6 +16,7 @@ import { useMoneyFigures } from './money'
 // B57.45 — drawn in Pocket (design/pocket w-connect): every assistant in one list, a connected one with Connected and
 // a Revoke that asks first, the others opening their steps in a dialog; the address and the Claude Code command
 // beside them; how a payment works; each connected assistant's latest tool calls below.
+// B52.9 — sign out everywhere, which ends every assistant with every other sign-in. Asks once first.
 // B52.6 — New agents from an assistant: the most an assistant may give a new agent it creates.
 // B57.157 — its three limits drawn as rows of the agent's rules sheet (w-rules), every word B52.6 showed kept.
 
@@ -589,6 +590,61 @@ function CallsCard({ c }: { c: Connected }) {
   )
 }
 
+/** B52.9 — ends every sign-in of this person: browsers, phones and every connected assistant. Asks once first. */
+function SignOutEverywhere() {
+  const heading = useId()
+  const qc = useQueryClient()
+  const [asking, setAsking] = useState(false)
+  const out = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/auth/logout-everywhere', { method: 'POST', headers: { Accept: 'application/json' } })
+      if (!res.ok) throw new ApiError(res.status, '/auth/logout-everywhere')
+    },
+    // This browser is signed out too; re-probe so the sign-in page takes over.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['auth-me'] }),
+  })
+  return (
+    <Card role="region" aria-labelledby={heading} className="grid min-w-0 gap-3">
+      <h2 id={heading} className="font-display text-reading font-bold text-ink">
+        Sign out everywhere
+      </h2>
+      <p className="text-body text-ink-3">
+        Signs you out of Talyvor in every browser and on every phone, and disconnects every assistant above. Each one has
+        to sign in again.
+      </p>
+      <div>
+        <Button variant="secondary" size="sm" onClick={() => setAsking(true)}>
+          Sign out everywhere
+        </Button>
+      </div>
+      {asking ? (
+        <Dialog
+          open
+          onClose={() => setAsking(false)}
+          title="Sign out everywhere?"
+          actions={
+            <>
+              <Button variant="secondary" disabled={out.isPending} onClick={() => setAsking(false)}>
+                Cancel
+              </Button>
+              <Button variant="danger" disabled={out.isPending} onClick={() => out.mutate()}>
+                {out.isPending ? 'Signing out…' : 'Yes, sign out everywhere'}
+              </Button>
+            </>
+          }
+        >
+          <p>Every browser, every phone and every connected assistant has to sign in again.</p>
+          {out.isError ? (
+            <p role="alert" className="text-body text-ink">
+              You were not signed out anywhere. Try again.
+            </p>
+          ) : null}
+        </Dialog>
+      ) : null}
+    </Card>
+  )
+}
+
 export function ConnectAI() {
   const url = `${window.location.origin}/mcp`
   return (
@@ -605,6 +661,7 @@ export function ConnectAI() {
         <div className="grid min-w-0 gap-4 wide:col-span-5">
           <Address url={url} />
           <HowAPaymentWorks />
+          <SignOutEverywhere />
           <NewAgents />
         </div>
       </div>
