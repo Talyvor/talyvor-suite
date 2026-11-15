@@ -87,6 +87,8 @@ without.
 | `BFF_CONNECT_PREPARE_ONLY` | unset | `true` ⇒ Connect's `send_payment` pays nothing and points to Talyvor: the connector a public plugin directory lists (B52.6) |
 | `BFF_OPENAI_APPS_CHALLENGE` | unset | the token ChatGPT's plugin directory gives Talyvor's OpenAI publisher account; `/.well-known/openai-apps-challenge` answers it as plain text; unset ⇒ that path is a 404 (B52.8) |
 | `LENS_CONNECT_MINT_KEY` | — | the same value as Lens's `LENS_CONNECT_MINT_KEY`; set ⇒ Connect's `send_payment` pays from an agent inside its limits on a token Lens binds to that agent; unset ⇒ it pays nothing (B52.6). With it the BFF also tells Lens when a person disconnects an assistant or signs out everywhere, retried every 30 s until Lens records it, so those Connect tokens stop paying at once (B54.21). Never a Lens admin key |
+| `HELP_LENS_KEY` | unset | a Lens key on Talyvor's own account; the Help chat's model calls go on it, never on the customer's (B61.38). Unset ⇒ Help asks no model and offers "Send to our team" for every question |
+| `HELP_QUESTIONS_PER_DAY` | `20` | how many questions one account may ask the Help chat in a UTC day (B61.38); a whole number above 0 |
 | `OPERATOR_SUBS` | — | OIDC `sub`s that may read every tenant. Unset means **nobody** |
 | `TRACK_BASE_URL` | — | optional pair with the secret below; `oidc` only |
 | `TRACK_GATEWAY_SECRET` | — | must equal Track's `GATEWAY_AUTH_SECRET` |

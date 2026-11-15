@@ -1231,6 +1231,17 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/workspaces/{wsID}/requests", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensWorkspaceRequestBody",
   },
+  // B61.38 — the Help chat's "Send to our team" files the chat so far as the same support request.
+  {
+    route: "POST /v1/workspaces/{wsID}/requests",
+    file: "apps/bff/help_chat.go",
+    kind: "map-literal",
+    anchor: 'json.Marshal(map[string]string{"kind": "support", "message": text})',
+    upstreamFile: "cmd/lens/support_requests_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/workspaces/{wsID}/requests", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensHelpTeamRequestBody",
+  },
   {
     route: "POST /v1/money/payees/{id}/confirm",
     file: "apps/bff/money_pay.go",
@@ -1650,6 +1661,10 @@ export const NON_LENS_ANON_SITES = [
   {
     file: "mcp_taly.go",
     what: "talyAsk (B45.41) marshals an Anthropic Messages request (model, max_tokens, system, messages, tools) for Lens's model proxy, POST /v1/proxy/anthropic/v1/messages, which relays it to the provider as it relays Chat's own (stream.go) — the provider's key set, not one Lens binds, so this site is exempt.",
+  },
+  {
+    file: "help_chat.go",
+    what: "helpCall (B61.38) marshals an Anthropic Messages request (model, max_tokens, system, messages) for Lens's model proxy, POST /v1/proxy/anthropic/v1/messages, on Talyvor's own key, as talyAsk does — the provider's key set, not one Lens binds, so this site is exempt.",
   },
 ] as const;
 

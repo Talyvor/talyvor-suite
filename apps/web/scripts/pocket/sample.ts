@@ -67,6 +67,16 @@ const SAMPLE: Record<string, unknown> = {
     },
   },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B61.38 — a Help chat: a question the help pages answer, with its page, and one they do not, with the team's button.
+  '/api/help/chat': {
+    messages: [
+      { by: 'you', text: 'How do I give an agent money?', at: '2026-11-12T09:00:00Z' },
+      { by: 'ai', text: 'Open Agents, pick the agent and press Fund. It spends only what its wallet holds.', page: '/agents', at: '2026-11-12T09:00:05Z' },
+      { by: 'you', text: 'Can you tell me when my statement for October closes?', at: '2026-11-12T09:01:00Z' },
+      { by: 'ai', text: "I don't know that. Our team can help: send it to them and we answer by email.", team: true, at: '2026-11-12T09:01:04Z' },
+    ],
+    kept_days: 30,
+  },
   // B57.139 — what was sent from Help and complaints and Your data, so their lists draw rows rather than the empty state.
   '/api/workspace/requests': {
     requests: [

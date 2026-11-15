@@ -58,6 +58,9 @@ type app struct {
 	// oauth is Talyvor Connect's authorization server for outside assistants (oauth.go).
 	oauth *oauthServer
 
+	// help keeps each workspace's Help chat and counts its questions a day (help_chat.go).
+	help *helpStore
+
 	// trackSpendSynced is when each Track workspace last asked Track to credit its Chat spend (track_spend.go).
 	trackSpendSynced sync.Map
 
@@ -76,6 +79,7 @@ func newApp(cfg config, auth *authenticator) *app {
 		fxSource:     ecbDailyURL,
 		connectorOut: newConnectorTransport(),
 		oauth:        newOAuthServer(),
+		help:         newHelpStore(),
 	}
 	a.areas = areasReader(a)
 
@@ -424,6 +428,10 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/workspace/account/money-kind/challenge", a.requireTenant(a.handleWorkspaceMoneyKind(true))) // B59.12
 	// B59.28 — help and complaints, closing the account and the workspace's data. See workspace_requests.go.
 	a.mux.HandleFunc("/api/workspace/requests", a.requireTenant(a.handleWorkspaceRequests))
+	// B61.38 — Help is a chat, answered by AI on Talyvor's own key, with the team one press away (help_chat.go).
+	a.mux.HandleFunc("/api/help/chat", a.requireTenant(a.handleHelpChat))
+	a.mux.HandleFunc("/api/help/ask", a.requireTenant(a.handleHelpAsk))
+	a.mux.HandleFunc("/api/help/team", a.requireTenant(a.handleHelpTeam))
 	a.mux.HandleFunc("/api/workspace/requests/{id}/export", a.requireTenant(a.handleWorkspaceRequestExport))
 	a.mux.HandleFunc("/api/workspace/business", a.requireTenant(a.handleWorkspaceBusiness)) // B59.31 — a Business workspace's company details and people with control. See workspace_business.go.
 	a.mux.HandleFunc("/api/features/tare", a.requireTenant(a.handleFeatureTare))
