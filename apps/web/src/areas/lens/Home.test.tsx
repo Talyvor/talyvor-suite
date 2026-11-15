@@ -356,7 +356,11 @@ describe('Home — the total (B57.18)', () => {
     expect(screen.getByTestId('home-stablecoin')).toHaveTextContent('Stablecoin$15,500.00USDC15,500.00')
     expect(screen.getByRole('img', { name: 'Fiat 68%, Stablecoin 32%' })).toBeInTheDocument()
     // Only the actions with a screen behind them.
-    expect(screen.getByRole('link', { name: 'Top up' })).toHaveAttribute('href', '/billing')
+    // B59.53: Top up and Convert open Wallets at that action, and See all in Wallets opens it.
+    expect(screen.getByRole('link', { name: 'Top up' })).toHaveAttribute('href', '/money/wallets?do=top-up')
+    expect(screen.getByRole('link', { name: 'Convert' })).toHaveAttribute('href', '/money/wallets?do=convert')
+    expect(screen.queryByRole('link', { name: 'Withdraw' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'See all in Wallets' })).toHaveAttribute('href', '/money/wallets')
     expect(screen.getAllByRole('link', { name: 'Pay' }).some((l) => l.getAttribute('href') === '/money/pay')).toBe(true)
 
     // What the agents hold in LXC, what is not yet given to one, and Lens's forecast.
@@ -375,6 +379,9 @@ describe('Home — the total (B57.18)', () => {
     expect(screen.queryByTestId('home-stablecoin')).toBeNull()
     expect(screen.getByTestId('home-fiat')).not.toHaveTextContent('Fiat$')
     expect(screen.queryByRole('img', { name: /^Fiat \d+%/ })).toBeNull()
+    // B59.53 (P3): Top up, Pay and Withdraw; no Convert.
+    expect(screen.getByRole('link', { name: 'Withdraw' })).toHaveAttribute('href', '/money/wallets?do=withdraw')
+    expect(screen.queryByRole('link', { name: 'Convert' })).toBeNull()
   })
 
   it('a Stablecoin only account has no fiat side and no Top up; an empty one says how to start', async () => {

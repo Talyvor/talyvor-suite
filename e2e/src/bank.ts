@@ -1504,6 +1504,9 @@ export function spendNoticePush(seed: number): Scenario {
   }
 }
 
+/** The refusal agentLimitBoost wants once the boost has ended: the rules' own daily limit, as Lens writes it — "daily limit of $0.00 (0.000001 LXC)". */
+export const boostEndedRefusal = /daily limit of [^(]*\(0\.000001 LXC\)/
+
 /**
  * B28.32 — the DONE line: after expiry a hold at the boosted size writes nothing. An agent funded 1 LXC with a daily
  * limit of 0.000001 LXC has it raised on Limit boost to 1 LXC until a whole minute one to two minutes away. Before that
@@ -1563,7 +1566,7 @@ export function agentLimitBoost(seed: number): Scenario {
 
       const refused = await agentAsks(ctx, key, q, 'the same request after the boost ended')
       if (refused.ok) return fail(`after the boost ended the request was served: "${refused.value.text}"`)
-      if (refused.status !== 403 || !/daily limit of 0\.000001 LXC/.test(refused.error)) {
+      if (refused.status !== 403 || !boostEndedRefusal.test(refused.error)) {
         return fail(`refused, but not by the 0.000001 LXC daily limit: ${refused.status} ${refused.error}`)
       }
       const late = (await ctx.env.lens.agentLines(ctx.app.user, a.id)).filter((l) => !lines1.some((o) => o.entry_id === l.entry_id))

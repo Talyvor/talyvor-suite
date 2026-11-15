@@ -1,13 +1,14 @@
 import { useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Chip, CodeBox, Crumb, Dialog, Eyebrow, Field, Input, KindTile, Money, Row, showSnack, showToast } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, CodeBox, Crumb, Dialog, Eyebrow, Input, KindTile, Money, Row, showSnack, showToast } from '@talyvor/ui/pocket'
 import { cn, inlineLink } from '@talyvor/ui'
 
 import { ApiError, getJSON, readable } from '../../lib/api'
 import { PREPARED_KEY } from './AgentBank'
 import { type PaymentRequest, agentBankApi, limitText, parseLXC } from './agentBankApi'
 import { formatWhen } from './format'
+import { useMoneyFigures } from './money'
 
 // B40.8 — Settings › Connect your AI: the address of Talyvor's MCP server (B40.7), how to add it to each assistant,
 // and the assistants this person has connected (B40.6 grants), each with its last use, what it did (B52.3) and a
@@ -17,6 +18,7 @@ import { formatWhen } from './format'
 // beside them; how a payment works; each connected assistant's latest tool calls below.
 // B52.9 — sign out everywhere, which ends every assistant with every other sign-in. Asks once first.
 // B52.6 — New agents from an assistant: the most an assistant may give a new agent it creates.
+// B57.157 — its three limits drawn as rows of the agent's rules sheet (w-rules), every word B52.6 showed kept.
 
 /** One tool call, as the BFF's audit trail keeps it: the arguments by SHA-256 only. */
 interface Call {
@@ -482,6 +484,12 @@ function CeilingForm({ current }: { current: Ceiling | null }) {
   )
   const micros = Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, parseLXC(text[k])])) as Record<keyof Ceiling, number | null>
   const ready = CEILING_FIELDS.every(([k]) => micros[k] !== null)
+  const figures = useMoneyFigures()
+  // The amount typed, in the person's currency, under its name, as the rules sheet shows it; nothing while no rate backs it.
+  const cashLine = (v: number | null) => {
+    const cash = v !== null && v > 0 ? figures.ulxc(v).cash : null
+    return cash ? <div className="font-figure text-body text-ink-3">{cash}</div> : null
+  }
   const save = useMutation({
     mutationFn: () => saveCeiling(micros as Ceiling),
     onSettled: () => qc.invalidateQueries({ queryKey: ['agent-ceiling'] }),
@@ -505,18 +513,24 @@ function CeilingForm({ current }: { current: Ceiling | null }) {
           'Assistants cannot create agents until you say how much a new one may spend.'
         )}
       </p>
-      <div className="grid grid-cols-3 gap-2">
+      {/* B57.157 — drawn as the agent's rules sheet draws a limit (w-rules): its name over its value, the amount beside. */}
+      <div data-testid="ceiling-rows">
         {CEILING_FIELDS.map(([k, label]) => (
-          <Field key={k} label={label} className="min-w-0">
-            <Input
-              className="min-w-0"
-              aria-label={`${label}, in LXC`}
-              inputMode="decimal"
-              unit="LXC"
-              value={text[k]}
-              onChange={(e) => setText({ ...text, [k]: e.target.value })}
-            />
-          </Field>
+          <div key={k} data-testid="ceiling-row" className="flex flex-wrap items-center gap-3 border-t border-line py-3 first:border-t-0">
+            <div className="min-w-0 basis-full sm:basis-2/5">
+              <div className="font-semibold text-ink">{label}</div>
+              {cashLine(micros[k])}
+            </div>
+            <div className="min-w-0 flex-1">
+              <Input
+                aria-label={`${label}, in LXC`}
+                inputMode="decimal"
+                unit="LXC"
+                value={text[k]}
+                onChange={(e) => setText({ ...text, [k]: e.target.value })}
+              />
+            </div>
+          </div>
         ))}
       </div>
       <div>

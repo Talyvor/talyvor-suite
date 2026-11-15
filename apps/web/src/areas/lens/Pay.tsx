@@ -829,15 +829,16 @@ function SavedPayees({
   )
 }
 
-/** B57.31 — Add a payee: the name on the account, the account, and the name check before Save payee keeps it. */
-function AddPayee({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** B57.31 — Add a payee: the name on the account, the account, and the name check before Save payee keeps it. B59.53:
+ *  with own, Wallets' Add your own bank, the bank Withdraw pays out to. */
+export function AddPayee({ open, onClose, own = false }: { open: boolean; onClose: () => void; own?: boolean }) {
   const qc = useQueryClient()
   const [kind, setKind] = useState<'uk' | 'iban' | 'us'>('uk')
   const [form, setForm] = useState({ name: '', country: 'GB', sort_code: '', account_number: '', iban: '', bic: '', routing_number: '' })
   const [made, setMade] = useState<OutsidePayee | null>(null)
   const create = useMutation({
     mutationFn: () => {
-      const body: PayeeRequest = { name: form.name.trim(), country: form.country.trim().toUpperCase() }
+      const body: PayeeRequest = { name: form.name.trim(), country: form.country.trim().toUpperCase(), ...(own ? { own } : {}) }
       if (kind === 'iban') Object.assign(body, { iban: form.iban.replace(/\s/g, '').toUpperCase(), bic: form.bic.trim().toUpperCase() })
       else if (kind === 'us') Object.assign(body, { routing_number: form.routing_number.trim(), account_number: form.account_number.trim() })
       else Object.assign(body, { sort_code: form.sort_code.replace(/\D/g, ''), account_number: form.account_number.trim() })
@@ -870,7 +871,7 @@ function AddPayee({ open, onClose }: { open: boolean; onClose: () => void }) {
       <Dialog
         open={open}
         onClose={onClose}
-        title="Add a payee"
+        title={own ? 'Add your own bank' : 'Add a payee'}
         actions={
           <>
             <PocketButton type="button" variant="secondary" onClick={onClose}>
