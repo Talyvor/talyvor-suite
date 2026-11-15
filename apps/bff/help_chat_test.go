@@ -262,7 +262,7 @@ func TestHelpChatKeptThirtyDaysInPostgres(t *testing.T) {
 	if err := first.useDB(ctx, db.pool); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.pool.Exec(ctx, `TRUNCATE help_messages, help_asked`); err != nil {
+	if _, err := db.pool.Exec(ctx, `TRUNCATE help_messages, help_asked, help_closed`); err != nil {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-31 * 24 * time.Hour)
@@ -289,6 +289,26 @@ func TestHelpChatKeptThirtyDaysInPostgres(t *testing.T) {
 		if err != nil || ok != (i <= 2) {
 			t.Errorf("question %d: within %v %v", i, ok, err)
 		}
+	}
+	// B61.65: a closed account's chat and its questions counted go, rows and all; ws_b's stay.
+	_ = again.add(ctx, "ws_a", helpMessage{By: "you", Text: "before closing", At: time.Now()})
+	if err := again.closed(ctx, "ws_a"); err != nil {
+		t.Fatal(err)
+	}
+	var msgs, counted int
+	_ = db.pool.QueryRow(ctx, `SELECT count(*) FROM help_messages WHERE workspace_id = 'ws_a'`).Scan(&msgs)
+	_ = db.pool.QueryRow(ctx, `SELECT count(*) FROM help_asked WHERE workspace_id = 'ws_a'`).Scan(&counted)
+	if msgs != 0 || counted != 0 {
+		t.Errorf("closed, ws_a keeps %d help_messages and %d help_asked rows, want none", msgs, counted)
+	}
+	if shut, err := again.isClosed(ctx, "ws_a"); !shut || err != nil {
+		t.Errorf("closed, ws_a reads as closed %v %v, want true", shut, err)
+	}
+	if shut, _ := again.isClosed(ctx, "ws_b"); shut {
+		t.Error("ws_b reads as closed")
+	}
+	if got, _ := again.chat(ctx, "ws_b"); len(got) != 1 {
+		t.Errorf("ws_b's chat = %+v, want it untouched by ws_a's closing", got)
 	}
 }
 
