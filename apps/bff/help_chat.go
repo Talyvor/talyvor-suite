@@ -175,13 +175,14 @@ var helpPagePattern = regexp.MustCompile(`^/[a-z0-9/_-]{0,80}$`)
 type helpStore struct {
 	mu    sync.Mutex
 	chats map[string][]helpMessage
-	asked map[string]int // workspace + "|" + UTC day
+	asked map[string]int  // workspace + "|" + UTC day
+	shut  map[string]bool // workspaces Talyvor closed (help_closed.go)
 	db    *pgxpool.Pool
 	now   func() time.Time
 }
 
 func newHelpStore() *helpStore {
-	return &helpStore{chats: map[string][]helpMessage{}, asked: map[string]int{}, now: time.Now}
+	return &helpStore{chats: map[string][]helpMessage{}, asked: map[string]int{}, shut: map[string]bool{}, now: time.Now}
 }
 
 func (s *helpStore) useDB(ctx context.Context, pool *pgxpool.Pool) error {
@@ -331,6 +332,14 @@ func (a *app) handleHelpAsk(w http.ResponseWriter, r *http.Request, t tenant) {
 	}
 	ctx := r.Context()
 	ws := t.workspaceID
+	if shut, err := a.help.isClosed(ctx, ws); err != nil {
+		log.Printf("bff: help ask: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not read the Help chat"})
+		return
+	} else if shut {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": helpClosedAccount}) // B61.65
+		return
+	}
 	before, err := a.help.chat(ctx, ws)
 	if err != nil {
 		log.Printf("bff: help ask: %v", err)

@@ -10,7 +10,7 @@ import { pressEverything } from '../test/pressEverything'
 const at = '2026-11-15T09:00:00Z'
 type Msg = { by: string; text: string; page?: string; team?: boolean; topic?: string; at: string }
 
-function mockBff(answer: (q: string) => { status?: number; reply?: Msg; error?: string }) {
+function mockBff(answer: (q: string) => { status?: number; reply?: Msg; error?: string }, closure?: 'done') {
   const sent: Array<{ path: string; method: string; body: unknown }> = []
   let chat: Msg[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -32,6 +32,13 @@ function mockBff(answer: (q: string) => { status?: number; reply?: Msg; error?: 
       return json(a.error ? { error: a.error, messages: chat } : { messages: chat }, a.status ?? 200)
     }
     if (url === '/api/help/team') return json({ id: 9, kind: 'support', state: 'received' }, 201)
+    if (url === '/api/workspace/requests' && closure) {
+      // as the BFF does (B61.65): reading a closure Talyvor finished deletes the account's Help chat
+      await new Promise((r) => setTimeout(r, 30))
+      chat = []
+      const closed = { id: 4, kind: 'account_closure', state: closure, reference: '', message: '', answer: 'Closed.', filed_at: at, updated_at: at }
+      return json({ requests: [closed] })
+    }
     return new Response('null', { status: 404 })
   })
   return { sent, setChat: (c: Msg[]) => (chat = c) }
@@ -127,6 +134,16 @@ describe('the Help chat (B61.38)', () => {
     fireEvent.click(kept.getByRole('button', { name: 'Delete this chat' }))
     expect(await kept.findByText('No Help chat kept.')).toBeTruthy()
     expect(sent.some((s) => s.path === '/api/help/chat' && s.method === 'DELETE')).toBe(true)
+  })
+
+  it('Your data shows the chat gone once Talyvor has closed the account (B61.65)', async () => {
+    const { setChat } = mockBff(() => ({}), 'done')
+    setChat([{ by: 'you', text: 'Where is my card?', at }])
+    open('/settings/data')
+    const kept = within(await screen.findByTestId('help-chat-kept'))
+    expect(await kept.findByText('No Help chat kept.')).toBeTruthy()
+    expect(kept.queryByText('Where is my card?')).toBeNull()
+    expect(screen.getByText('Kept for 30 days so our team can read it, then deleted. Closing this account deletes it too.')).toBeTruthy()
   })
 
   it('every control in the open panel does something', async () => {
