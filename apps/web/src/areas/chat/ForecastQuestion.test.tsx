@@ -20,6 +20,7 @@ function mockBff(agents: ForecastAgent[]) {
     if (url === '/api/models') {
       return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, tier: 'frontier', release_date: '2026-06-01' }])
     }
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
     if (url === '/api/agents/approvals') return json({ approvals: [] })
     if (url === '/api/agents/forecast') {
@@ -72,7 +73,7 @@ describe('Will an agent run out this month, answered in Chat from the forecast (
     const said = await within(yes).findByTestId('chat-forecast-answer')
     expect(said).toHaveTextContent(/^Yes\. At its pace so far this month, Researcher runs out on 24 October 2026\.$/)
     expect(within(said).getByTestId('chat-forecast-date')).toHaveAttribute('dateTime', '2026-10-24')
-    expect(yes).toHaveTextContent('It has spent 6 LXC this month; at that pace, 31 LXC by the month’s end. It holds 4 LXC now.')
+    expect(yes).toHaveTextContent('It has spent $0.60 this month; at that pace, $3.10 by the month’s end. It holds $0.40 now.')
     expect(within(yes).getByRole('link', { name: 'See it on Agent Wallets' })).toHaveAttribute('href', '/agents?agent=agt_1')
 
     const no = await ask('Will Support bot run out this month?')
@@ -87,6 +88,6 @@ describe('Will an agent run out this month, answered in Chat from the forecast (
     const card = await ask('Will Researcher run out this month?')
     expect(await within(card).findByTestId('chat-forecast-answer')).toHaveTextContent('Lens’s forecast does not say yet when Researcher runs out.')
     expect(within(card).queryByTestId('chat-forecast-date')).toBeNull()
-    expect(card).toHaveTextContent('It has spent 6 LXC this month; at that pace, 31 LXC by the month’s end.')
+    expect(card).toHaveTextContent('It has spent $0.60 this month; at that pace, $3.10 by the month’s end.')
   })
 })

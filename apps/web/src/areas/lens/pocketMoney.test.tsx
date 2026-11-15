@@ -6,11 +6,12 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AppMoney, setFiat } from './money'
 
-// B57.7 — <Money> (packages/ui) draws every figure dollars first, from the app's formatter, in the order MONEY_ORDER
-// names. The figures are written with no-break spaces; these tests write them as plain spaces through `text`.
+// B57.7 — <Money> (packages/ui) draws every figure from the app's formatter. B61.14 — an amount Lens keeps in µLXC reads
+// in the person's currency alone, never LXC. The figures are written with no-break spaces; these tests write them as plain
+// spaces through `text`.
 
 const M = 1_000_000
-const NBSP = / /g
+const NBSP = /\u00a0/g
 
 function servePeg(peg: number | null) {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -22,14 +23,12 @@ function servePeg(peg: number | null) {
   })
 }
 
-type Kit = { AppMoney: typeof AppMoney; Money: typeof Money; SheetFrame: typeof SheetFrame }
-
-function draw(peg: number | null, node: (k: Kit) => React.ReactNode, kit: Kit = { AppMoney, Money, SheetFrame }) {
+function draw(peg: number | null, node: React.ReactNode) {
   servePeg(peg)
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={qc}>
-      <kit.AppMoney>{node(kit)}</kit.AppMoney>
+      <AppMoney>{node}</AppMoney>
     </QueryClientProvider>,
   )
 }
@@ -40,82 +39,80 @@ const figures = () => [...document.querySelectorAll('[data-money]')].map(text)
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
-  vi.doUnmock('../../moneyOrder')
   window.localStorage.clear()
 })
 
 describe('<Money ulxc>', () => {
-  it('draws dollars large and LXC small beside them, with no-break spaces', async () => {
-    draw(0.1, ({ Money }) => <Money ulxc={16_500 * M} size="card" />)
-    await waitFor(() => expect(figures()).toEqual(['$1,650.00 16,500.00 LXC']))
-    const [big, small] = document.querySelector('[data-money]')!.children
-    expect(big).toHaveClass('text-pocket-balance')
-    expect(small.textContent).toBe('16,500.00 LXC')
+  it('draws dollars alone, large, and no LXC beside them (B61.14)', async () => {
+    draw(0.1, <Money ulxc={16_500 * M} size="card" />)
+    await waitFor(() => expect(figures()).toEqual(['$1,650.00']))
+    const children = [...document.querySelector('[data-money]')!.children]
+    expect(children).toHaveLength(1)
+    expect(children[0]).toHaveClass('text-pocket-balance')
+    expect(document.body.textContent).not.toMatch(/LXC/)
   })
 
   it('writes a debit with the true minus and a credit with its +', async () => {
-    draw(0.1, ({ Money }) => (
+    draw(
+      0.1,
       <>
         <Money ulxc={-3400 * M} />
         <Money ulxc={900 * M} signed />
         <Money ulxc={900 * M} />
-      </>
-    ))
-    await waitFor(() => expect(figures()).toEqual(['−$340.00 −3,400.00 LXC', '+$90.00 +900.00 LXC', '$90.00 900.00 LXC']))
+      </>,
+    )
+    await waitFor(() => expect(figures()).toEqual(['−$340.00', '+$90.00', '$90.00']))
   })
 
-  it('writes under a cent as <$0.01 with its exact LXC beside it', async () => {
-    draw(0.1, ({ Money }) => <Money ulxc={42} />)
-    await waitFor(() => expect(figures()).toEqual(['<$0.01 0.000042 LXC']))
+  it('writes under a cent as <$0.01, and no LXC beside it', async () => {
+    draw(0.1, <Money ulxc={42} />)
+    await waitFor(() => expect(figures()).toEqual(['<$0.01']))
   })
 
-  it('rounds LXC beside dollars to two places, and a statement’s figure keeps every place (B60.3)', async () => {
-    draw(0.1, ({ Money }) => (
-      <>
-        <Money ulxc={499_200_705} />
-        <Money ulxc={499_200_705} exact />
-      </>
-    ))
-    await waitFor(() => expect(figures()).toEqual(['$49.92 499.20 LXC', '$49.92 499.200705 LXC']))
+  it('draws a figure to the cent, whatever places Lens keeps in µLXC', async () => {
+    draw(0.1, <Money ulxc={499_200_705} />)
+    await waitFor(() => expect(figures()).toEqual(['$49.92']))
   })
 
-  it('draws LXC alone, large, while the peg is unknown', async () => {
-    draw(null, ({ Money }) => <Money ulxc={16_500 * M} size="card" />)
+  it('draws an ellipsis, large, while the peg is unknown: never a guessed dollar, never LXC', async () => {
+    draw(null, <Money ulxc={16_500 * M} size="card" />)
     await new Promise((r) => setTimeout(r, 20))
-    expect(figures()).toEqual(['16,500 LXC'])
-    expect(screen.getByText('16,500')).toHaveClass('text-pocket-balance')
+    expect(figures()).toEqual(['…'])
+    expect(screen.getByText('…')).toHaveClass('text-pocket-balance')
   })
 
-  it('draws the person’s chosen pounds or euros first', async () => {
+  it('draws the person’s chosen pounds or euros alone', async () => {
     setFiat('GBP')
-    draw(0.1, ({ Money }) => <Money ulxc={1000 * M} />)
-    await waitFor(() => expect(figures()).toEqual(['£64.00 1,000.00 LXC']))
+    draw(0.1, <Money ulxc={1000 * M} />)
+    await waitFor(() => expect(figures()).toEqual(['£64.00']))
     cleanup()
     setFiat('EUR')
-    draw(0.1, ({ Money }) => <Money ulxc={1000 * M} />)
-    await waitFor(() => expect(figures()).toEqual(['€80.00 1,000.00 LXC']))
+    draw(0.1, <Money ulxc={1000 * M} />)
+    await waitFor(() => expect(figures()).toEqual(['€80.00']))
   })
 })
 
 describe('<Money minor currency>', () => {
   it('draws an account in its own currency, USDC as a token, and no LXC', async () => {
-    draw(0.1, ({ Money }) => (
+    draw(
+      0.1,
       <>
         <Money minor={40_000} currency="USD" />
         <Money minor={2400} currency="GBP" />
         <Money minor={1200} currency="EUR" />
         <Money minor={400 * M} currency="USDC" size="card-sm" />
-      </>
-    ))
+      </>,
+    )
     await waitFor(() => expect(figures()).toEqual(['$400.00', '£24.00', '€12.00', '400.00 USDC']))
     expect(screen.getByText('400')).toHaveClass('text-pocket-balance-sm')
   })
 })
 
-describe('one switch', () => {
-  it('flips every <Money> on a balance card, the sheet and a statement with MONEY_ORDER', async () => {
+describe('the app’s one formatter', () => {
+  it('draws every <Money> on a balance card, the sheet and a statement in dollars alone', async () => {
     // Held to Pocket's rules, as the screens that draw these are once redrawn (pocketPending.ts).
-    const page = ({ Money, SheetFrame }: Kit) => (
+    draw(
+      0.1,
       <div data-design="pocket">
         <Money ulxc={16_500 * M} size="card" />
         <SheetFrame head="Research wants to pay" amount={<Money ulxc={3400 * M} size="sheet" />} />
@@ -128,22 +125,12 @@ describe('one switch', () => {
             </tr>
           </tbody>
         </table>
-      </div>
+      </div>,
     )
-    draw(0.1, page)
-    await waitFor(() => expect(figures()).toEqual(['$1,650.00 16,500.00 LXC', '$340.00 3,400.00 LXC', '−$90.00 −900.00 LXC']))
-    cleanup()
-    vi.restoreAllMocks()
-
-    vi.resetModules()
-    vi.doMock('../../moneyOrder', () => ({ MONEY_ORDER: 'lxc-first' }))
-    const flipped = await import('./money')
-    const pocket = await import('@talyvor/ui/pocket')
-    draw(0.1, page, { AppMoney: flipped.AppMoney, Money: pocket.Money, SheetFrame: pocket.SheetFrame })
-    await waitFor(() => expect(figures()).toEqual(['16,500.00 LXC $1,650.00', '3,400.00 LXC $340.00', '−900.00 LXC −$90.00']))
+    await waitFor(() => expect(figures()).toEqual(['$1,650.00', '$340.00', '−$90.00']))
   })
 
-  it('has no order of its own: <Money> outside the app’s provider refuses to draw', () => {
+  it('has no formatter of its own: <Money> outside the app’s provider refuses to draw', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(() => render(<Money ulxc={M} />)).toThrow(/MoneyProvider/)
   })

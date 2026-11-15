@@ -30,7 +30,7 @@ import { NoLiveKey } from './KeyRecovery'
 import { PageLinks } from '../../components/PageLinks'
 import { AgentAnalytics } from './AgentAnalytics'
 import { AlertChannels } from './AlertChannels'
-import { AgentCard, MoveLxc } from './AgentCard'
+import { AgentCard } from './AgentCard'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { HelperPicker } from '../../cards/HelperPicker'
@@ -41,7 +41,7 @@ import { DeclineForm, declinedText } from './Decline'
 import { approvalSheetTo } from './ApprovalSheet'
 import { AgentCredentialCard } from './AgentCredential'
 import { AgentMoneySection } from './AgentMoney'
-import { Lxc, useLxcText } from './money'
+import { Lxc, pegQuery, useLensWords, useLxcText } from './money'
 import { KIND_TERMS, TERMS, Term } from './Term'
 import { ChoicePicker, ModelLimitsPicker, RulesInWords, TimePicker, TimeZonePicker, useRuleChoices } from './rulePickers'
 import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
@@ -60,7 +60,6 @@ import {
   type AgentRulesVersion,
   type AgentRuleBoost,
   type AgentSchedule,
-  type AgentTopUp as AgentTopUpValue,
   type Mandate,
   type PasskeyAssertion,
   type PaymentRequest,
@@ -70,9 +69,9 @@ import {
   type StatementLine,
   AgentBankError,
   agentBankApi,
-  approvalNamedIn,
   formatMinor,
   limitText,
+  parseDollars,
   parseLXC,
   refusalText,
   useAccount,
@@ -373,8 +372,11 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
   const [memo, setMemo] = useState('')
   const [shown, setShown] = useState<string | null>(null)
   const toListing = payee.startsWith('listing:')
-  // To a listing an amount is the most a tick pays, and empty means its price at the time.
-  const micros = toListing && amount.trim() === '' ? 0 : parseLXC(amount)
+  // B61.14 — typed in dollars at Lens's peg, never LXC. To a listing an amount is the most a tick pays, and empty means
+  // its price at the time.
+  const peg = useQuery(pegQuery).data?.usd_per_lxc ?? 0
+  const typed = parseDollars(amount, peg)
+  const micros = toListing && amount.trim() === '' ? 0 : typed !== null && typed > 0 ? typed : null
   const invalidate = () => qc.invalidateQueries({ queryKey: SCHEDULES_KEY })
   const create = useMutation({
     mutationFn: () =>
@@ -458,8 +460,8 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
             ))}
           </Select>
         </Field>
-        <Field label={`Scheduled amount in LXC for ${agent.name}`}>
-          <PocketInput inputMode="decimal" placeholder={toListing ? 'At most its price' : '0'} unit="LXC" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        <Field label={`Scheduled amount in dollars for ${agent.name}`}>
+          <PocketInput inputMode="decimal" placeholder={toListing ? 'At most its price' : '0'} unit="USD" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
         {micros !== null && micros > 0 ? (
           <p className="text-body text-ink-3" data-testid="schedule-amount">
@@ -482,7 +484,7 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
           <PocketButton
             type="submit"
             disabled={create.isPending}
-            disabledReason={payee === '' ? 'Pick who it pays first.' : micros === null ? 'Type an amount in LXC first.' : undefined}
+            disabledReason={payee === '' ? 'Pick who it pays first.' : micros === null ? 'Type an amount in dollars first.' : undefined}
           >
             Schedule
           </PocketButton>
@@ -491,66 +493,6 @@ function Schedules({ agent, agents, nameOf }: { agent: Agent; agents: Agent[]; n
         {stop.isError ? <Note ok={false}>{refusalText(stop.error)}</Note> : null}
       </form>
     </div>
-  )
-}
-
-/** B19.21 — below one balance, the workspace tops the agent back up to another (Lens B19.8), once per dip. */
-function AgentTopUpCard({ agent }: { agent: Agent }) {
-  const topUp = useQuery({ queryKey: ['agent-topup', agent.id], queryFn: () => agentBankApi.topUp(agent.id) })
-  return topUp.isError ? (
-    <p>{readFailure(topUp.error, 'Its top-up')}</p>
-  ) : topUp.isPending ? (
-    <p>Reading…</p>
-  ) : (
-    <TopUpForm key={topUp.dataUpdatedAt} agent={agent} current={topUp.data} />
-  )
-}
-
-function TopUpForm({ agent, current }: { agent: Agent; current: AgentTopUpValue | null }) {
-  const qc = useQueryClient()
-  const [below, setBelow] = useState(current ? limitText(current.below_ulxc) : '')
-  const [to, setTo] = useState(current ? limitText(current.to_ulxc) : '')
-  const belowMicros = parseLXC(below)
-  const toMicros = parseLXC(to)
-  const refresh = () => qc.invalidateQueries({ queryKey: ['agent-topup', agent.id] })
-  const save = useMutation({ mutationFn: () => agentBankApi.setTopUp(agent.id, belowMicros ?? 0, toMicros ?? 0), onSettled: refresh })
-  const remove = useMutation({ mutationFn: () => agentBankApi.removeTopUp(agent.id), onSettled: refresh })
-  return (
-    <form
-      className="grid gap-3.5"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (belowMicros !== null && toMicros !== null && !save.isPending) save.mutate()
-      }}
-    >
-      <p data-testid="agent-topup">
-        {current ? (
-          <>
-            When {agent.name} holds less than <PocketMoney ulxc={current.below_ulxc} />, the workspace tops it up to <PocketMoney ulxc={current.to_ulxc} />.
-          </>
-        ) : (
-          `${agent.name} is not topped up automatically.`
-        )}
-      </p>
-      <Field label={`Top ${agent.name} up below, in LXC`}>
-        <PocketInput inputMode="decimal" placeholder="0" unit="LXC" value={below} onChange={(e) => setBelow(e.target.value)} />
-      </Field>
-      <Field label={`Top ${agent.name} up to, in LXC`}>
-        <PocketInput inputMode="decimal" placeholder="0" unit="LXC" value={to} onChange={(e) => setTo(e.target.value)} />
-      </Field>
-      <div className="flex flex-wrap justify-end gap-2.5">
-        {current ? (
-          <PocketButton type="button" variant="secondary" disabled={remove.isPending} onClick={() => remove.mutate()}>
-            Remove
-          </PocketButton>
-        ) : null}
-        <PocketButton type="submit" disabled={save.isPending} disabledReason={belowMicros === null || toMicros === null ? 'Type both amounts in LXC first.' : undefined}>
-          {current ? 'Change top-up' : 'Set top-up'}
-        </PocketButton>
-      </div>
-      {save.isError ? <Note ok={false}>{refusalText(save.error)}</Note> : null}
-      {remove.isError ? <Note ok={false}>{refusalText(remove.error)}</Note> : null}
-    </form>
   )
 }
 
@@ -675,49 +617,29 @@ function AgentList({ agents, selected, onSelect }: { agents: Agent[]; selected: 
   )
 }
 
-function Money({ agent, book }: { agent: Agent; book: AgentBook }) {
+// B19.23 — Lens B19.11 gives an agent with no owner no money, so it is claimed first. B61.14: only the claim is left of
+// the old Money card; its LXC balance and Move LXC are parked.
+function Claim({ agent }: { agent: Agent }) {
   const qc = useQueryClient()
-  const [moving, setMoving] = useState(false)
-  // B19.23 — Lens B19.11 gives an agent with no owner no balance, so it is claimed before it is funded.
   const claim = useMutation({
     mutationFn: () => agentBankApi.claim(agent.id),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
-  if (agent.owner_user_id === '') {
-    return (
-      <Card>
-        <CardHeader>Money</CardHeader>
-        <div className="flex flex-col gap-2 px-gutter py-3">
-          <p className="text-body text-ink" data-testid="agent-ownerless">
-            {agent.name} has no owner, so it cannot be funded: Lens gives an agent a balance, a top-up or a payment
-            only once a person of this workspace owns it. Claim it to become its owner.
-          </p>
-          <div>
-            <Button disabled={claim.isPending} onClick={() => claim.mutate()}>
-              Claim {agent.name}
-            </Button>
-          </div>
-          {claim.isError ? <Note ok={false}>{refusalText(claim.error)}</Note> : null}
-        </div>
-      </Card>
-    )
-  }
-  // B57.16 — funding and taking back happen in Move LXC, the dialog the agent's page opens.
+  if (agent.owner_user_id !== '') return claim.isSuccess && claim.data.agent_id === agent.id ? <Note ok>You own {agent.name} now.</Note> : null
   return (
     <Card>
       <CardHeader>Money</CardHeader>
       <div className="flex flex-col gap-2 px-gutter py-3">
-        <p className="text-body text-ink">
-          {agent.name} holds {lxc(agent.balance_ulxc)}. The workspace has {lxc(book.unallocated_ulxc)} free to fund it.
+        <p className="text-body text-ink" data-testid="agent-ownerless">
+          {agent.name} has no owner, so it cannot be funded: Lens gives an agent money or a payment only once a person of
+          this workspace owns it. Claim it to become its owner.
         </p>
-        {claim.isSuccess && claim.data.agent_id === agent.id ? <Note ok>You own {agent.name} now. Fund it here.</Note> : null}
         <div>
-          {/* B57.20 — not the primary: Edit rules on the agent's page above is the page's one primary action. */}
-          <Button variant="default" onClick={() => setMoving(true)}>
-            Move LXC
+          <Button disabled={claim.isPending} onClick={() => claim.mutate()}>
+            Claim {agent.name}
           </Button>
         </div>
-        <MoveLxc agent={agent} book={book} open={moving} onClose={() => setMoving(false)} />
+        {claim.isError ? <Note ok={false}>{refusalText(claim.error)}</Note> : null}
       </div>
     </Card>
   )
@@ -1559,13 +1481,17 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
       return soonest ? Math.min(Math.max(Date.parse(soonest) - Date.now() + 1000, 1000), 2_147_483_647) : false
     },
   })
-  const settable = BOOSTABLE.filter(([field]) => (rules[field] ?? 0) > 0)
+  // B61.14 — requests a minute is the parked gateway's: it is not offered for a boost.
+  const settable = BOOSTABLE.filter(([field]) => field !== 'requests_per_minute' && (rules[field] ?? 0) > 0)
   const [picked, setPicked] = useState('')
   const rule = settable.find(([field]) => field === picked) ?? settable[0]
   const [value, setValue] = useState('')
   const [until, setUntil] = useState(() => localMinute(new Date(Date.now() + 60 * 60_000)))
   const rate = rule?.[0] === 'requests_per_minute'
-  const raisedTo = rate ? (/^\s*\d+\s*$/.test(value) && Number(value) > 0 ? Number(value) : null) : parseLXC(value)
+  // B61.14 — a limit is raised in dollars at Lens's peg, never LXC.
+  const peg = useQuery(pegQuery).data?.usd_per_lxc ?? 0
+  const typed = parseDollars(value, peg)
+  const raisedTo = rate ? (/^\s*\d+\s*$/.test(value) && Number(value) > 0 ? Number(value) : null) : typed !== null && typed > 0 ? typed : null
   const at = new Date(until)
   // B55.14 — a boost always loosens the rules, so once the workspace has a passkey it is signed (Lens B55.13).
   const asked = rule !== undefined && raisedTo !== null && !Number.isNaN(at.getTime()) ? { rule: rule[0], value: raisedTo, until: at.toISOString() } : null
@@ -1650,7 +1576,7 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
           </Field>
           <p className="text-body text-ink-3">Now {boostFigure(rule[0], rules[rule[0]] ?? 0)}</p>
           <Field label={`Raise ${agent.name}’s limit to`}>
-            <PocketInput inputMode={rate ? 'numeric' : 'decimal'} placeholder="0" unit={rate ? 'a minute' : 'LXC'} value={value} onChange={(e) => setValue(e.target.value)} />
+            <PocketInput inputMode={rate ? 'numeric' : 'decimal'} placeholder="0" unit={rate ? 'a minute' : 'USD'} value={value} onChange={(e) => setValue(e.target.value)} />
           </Field>
           <Field label={`Raise ${agent.name}’s limit until`}>
             <PocketInput type="datetime-local" value={until} onChange={(e) => setUntil(e.target.value)} />
@@ -1673,101 +1599,6 @@ function LimitBoost({ agent, rules }: { agent: Agent; rules: AgentRules }) {
         </form>
       )}
     </div>
-  )
-}
-
-function Pay({
-  agent,
-  agents,
-  waiting,
-  onHeld,
-}: {
-  agent: Agent
-  agents: Agent[]
-  waiting: Record<string, HeldPayment>
-  onHeld: (approvalID: string, p: HeldPayment) => void
-}) {
-  const qc = useQueryClient()
-  const others = agents.filter((a) => a.id !== agent.id)
-  const [to, setTo] = useState<string | null>(null)
-  const [amount, setAmount] = useState('')
-  const [memo, setMemo] = useState('')
-  const micros = parseLXC(amount)
-  const payee = others.find((a) => a.id === to) ?? null
-  const pay = useMutation({
-    mutationFn: () => agentBankApi.pay(agent.id, payee?.id ?? '', micros ?? 0, memo.trim()),
-    onSuccess: () => {
-      setAmount('')
-      setMemo('')
-    },
-    onError: (err) => {
-      const approval = approvalNamedIn(err)
-      if (approval && payee && micros !== null) onHeld(approval, { from: agent.id, to: payee.id, amount: micros, memo: memo.trim() })
-    },
-    onSettled: () =>
-      Promise.all([
-        qc.invalidateQueries({ queryKey: BOOK_KEY }),
-        qc.invalidateQueries({ queryKey: APPROVALS_KEY }),
-        qc.invalidateQueries({ queryKey: statementKey(agent.id) }),
-      ]),
-  })
-  const held = approvalNamedIn(pay.error)
-  // Once its approval sent the payment, Approvals says so and this refusal is no longer true.
-  const settled = held !== null && !(held in waiting)
-  return (
-    <form
-      className="grid gap-3.5"
-      onSubmit={(e) => {
-        e.preventDefault()
-        if (payee && micros !== null && !pay.isPending) pay.mutate()
-      }}
-    >
-      <p>
-        {agent.name} holds <PocketMoney ulxc={agent.balance_ulxc} />. Judged by its rules, like any request it makes. It stays inside this workspace.
-      </p>
-      <div className="grid gap-1.5">
-        <span className="text-body font-semibold text-ink-2">Pay to</span>
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Pay to">
-          {others.map((a) => (
-            <PocketButton key={a.id} size="sm" variant={to === a.id ? 'primary' : 'secondary'} aria-pressed={to === a.id} onClick={() => setTo(a.id)}>
-              {a.name}
-            </PocketButton>
-          ))}
-        </div>
-      </div>
-      <Field label={`Payment in LXC from ${agent.name}`}>
-        <PocketInput inputMode="decimal" placeholder="0" unit="LXC" value={amount} onChange={(e) => setAmount(e.target.value)} />
-      </Field>
-      {micros !== null ? (
-        <p className="text-body text-ink-3" data-testid="pay-amount">
-          <PocketMoney ulxc={micros} />
-        </p>
-      ) : null}
-      <Field label="What the payment is for">
-        <PocketInput placeholder="What it is for" value={memo} onChange={(e) => setMemo(e.target.value)} />
-      </Field>
-      <div className="flex justify-end">
-        <PocketButton
-          type="submit"
-          disabled={pay.isPending}
-          disabledReason={!payee ? 'Pick who it pays first.' : micros === null ? 'Type an amount in LXC first.' : undefined}
-        >
-          {pay.isPending ? 'Paying…' : 'Pay'}
-        </PocketButton>
-      </div>
-      {pay.isSuccess ? (
-        <Note ok>
-          Paid <PocketMoney ulxc={pay.data.amount_ulxc} /> to {payee?.name ?? 'the agent'}. {agent.name} now holds{' '}
-          <PocketMoney ulxc={pay.data.from_balance_ulxc} />.
-        </Note>
-      ) : null}
-      {pay.isError && !settled ? (
-        <Note ok={false}>
-          Refused. {refusalText(pay.error)}
-          {held ? ' It is waiting in Approvals; approve it there and this payment is sent.' : ''}
-        </Note>
-      ) : null}
-    </form>
   )
 }
 
@@ -1955,7 +1786,7 @@ export function Statement({ agent, nameOf, entry }: { agent: Agent; nameOf: (id:
               <th className="py-2 font-normal">What</th>
               <th className="py-2 text-right font-normal">
                 <span className="inline-flex flex-wrap items-center justify-end gap-1">
-                  Amount <Term term="LXC">{TERMS.lxc}</Term>
+                  Amount
                 </span>
               </th>
               <th className="px-gutter py-2 text-right font-normal">
@@ -2228,9 +2059,12 @@ export function useRulesChange(agentID: string) {
     const j = await judge(change)
     return j.signs || j.phone ? null : commit(change, save, j)
   }
+  // B61.14 — Lens says what a change does in LXC; it is shown in the person's currency.
+  const words = useLensWords()
+  const said = judged && { ...judged, changes: judged.changes.map(words) }
   /** What Lens said this change does, while it is the change last asked about. */
-  const judgedFor = (change: RulesChange | null) => (change !== null && judged?.change === JSON.stringify(change) ? judged : null)
-  return { judge, commit, run, judged, judgedFor, reset: () => setJudged(null) }
+  const judgedFor = (change: RulesChange | null) => (change !== null && said?.change === JSON.stringify(change) ? said : null)
+  return { judge, commit, run, judged: said, judgedFor, reset: () => setJudged(null) }
 }
 
 /** B55.14 — said before a looser change is saved: what it loosens and that it needs the passkey, or where to add one. */
@@ -2579,7 +2413,7 @@ export function Approvals({
         <Card>
           <CardHeader>
             <span className="inline-flex flex-wrap items-center gap-2">
-              Waiting for a person <Term term="Waiting for a person">{`${TERMS.approval} ${TERMS.lxc}`}</Term>
+              Waiting for a person <Term term="Waiting for a person">{TERMS.approval}</Term>
             </span>
           </CardHeader>
           {waiting.length > 0 ? (
@@ -2838,7 +2672,11 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
         </p>
         {book.isSuccess ? (
           <>
-            {hasAgents ? <Totals book={book.data} /> : null}
+            {hasAgents ? (
+              <IfArea area="gateway">
+                <Totals book={book.data} />
+              </IfArea>
+            ) : null}
             {/* A pause already set still says so: it holds an agent created later too. */}
             {hasAgents || book.data.all_paused_at ? <PauseEveryAgent book={book.data} /> : null}
             {hasAgents ? (
@@ -2911,7 +2749,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
               <div className="wide:max-w-sm">
                 <AgentCard agent={agent} book={book.data} />
               </div>
-              <Money agent={agent} book={book.data} />
+              <Claim agent={agent} />
               <RulesSummary key={`rules-${agent.id}`} agent={agent} agents={live} />
               {moneyOnPage ? null : <AgentMoneySection key={`money-${agent.id}`} agent={agent} />}
               {moneyOnPage ? null : <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />}
@@ -2924,14 +2762,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
                 forms={{
                   keyForm: <IssueKey agent={agent} />,
                   card: <AgentCardPanel agent={agent} />,
-                  topUp: <AgentTopUpCard agent={agent} />,
                   boost: <BoostForm agent={agent} />,
-                  pay:
-                    live.length > 1 ? (
-                      <Pay agent={agent} agents={live} waiting={held} onHeld={(id, p) => setHeld((h) => ({ ...h, [id]: p }))} />
-                    ) : (
-                      <p>Create a second agent to pay it from this one.</p>
-                    ),
                   schedules: <Schedules agent={agent} agents={live} nameOf={nameOf} />,
                   credential: <AgentCredentialCard agent={agent} />,
                 }}

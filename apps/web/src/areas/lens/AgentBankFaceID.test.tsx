@@ -30,6 +30,7 @@ function mockBff() {
       new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/money/devices') return json({ devices: [] }) // B55.2: no phone key, so the web decides
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents' && method === 'GET')
       return json({
         workspace_balance_ulxc: 100 * M, allocated_ulxc: 10 * M, unallocated_ulxc: 90 * M, spent_ulxc: 0,
@@ -66,7 +67,8 @@ describe('Agent Bank approvals with Face ID', () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
     const asks = await screen.findByText(/wants to pay/)
-    expect(asks).toHaveTextContent(/^Researcher wants to pay Acme Hosting 3 LXC · October invoice$/)
+    // B61.14 — in dollars alone: 3 LXC at $0.10 is $0.30.
+    await waitFor(() => expect(asks).toHaveTextContent(/^Researcher wants to pay Acme Hosting \$0\.30 · October invoice$/))
   })
 
   it('signs each approve and deny with the passkey over that approval’s challenge', async () => {

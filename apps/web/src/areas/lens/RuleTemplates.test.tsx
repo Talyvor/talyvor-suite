@@ -8,6 +8,7 @@ import { RULE_TEMPLATES } from './ruleTemplates'
 // it held before replaced, not merged.
 // B55.14 — a save first asks Lens what it does (Lens B55.13): a tighter one is saved at once; a looser one says what it
 // loosens and, once the workspace has a key, is saved only with this browser's passkey.
+// B61.14 — amounts read and are typed in dollars at Lens's peg, $0.10 a LXC here.
 
 const M = 1_000_000
 const template = (id: string) => RULE_TEMPLATES.find((t) => t.id === id)!.rules
@@ -39,6 +40,7 @@ function mockBff(existing?: { name: string; rules: Record<string, unknown> }, ke
     const method = init?.method ?? 'GET'
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents' && method === 'GET')
       return json({ workspace_balance_ulxc: 100 * M, allocated_ulxc: 0, unallocated_ulxc: 100 * M, spent_ulxc: 0, agents })
     if (url === '/api/agents' && method === 'POST') {
@@ -103,8 +105,8 @@ describe('rule templates', () => {
     expect(saved[0]).toEqual(template('support-bot'))
     // B57.23 — today's agent view states them; they are edited on the agent's rules page.
     const words = await screen.findByTestId('rules-in-words')
-    await waitFor(() => expect(words.textContent).toContain('0.5 LXC on one request'))
-    expect(words.textContent).toContain('20 LXC an hour')
+    await waitFor(() => expect(words.textContent).toContain('$0.05 on one request'))
+    expect(words.textContent).toContain('$2.00 an hour')
   })
 
   // B57.23 — on the agent's rules page, under More rules.
@@ -132,7 +134,8 @@ describe('rule templates', () => {
     await coder()
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
     expect((await screen.findByTestId('rules-loosen')).textContent).toBe(
-      `This loosens Builder’s rules: ${LOOSER.join('. ')}. It needs your passkey. Tightening is saved at once.`,
+      // Lens says LXC; the page says dollars.
+      'This loosens Builder’s rules: Weekly limit: was $0.90, now none. Allowed models: was gpt-4o, now any. It needs your passkey. Tightening is saved at once.',
     )
     expect(get).not.toHaveBeenCalled()
 
@@ -155,7 +158,7 @@ describe('rule templates', () => {
     render(<App />)
 
     fireEvent.click(within(await screen.findByTestId('more-rules')).getByRole('link', { name: /^At most a week/ }))
-    fireEvent.change(screen.getByLabelText('At most a week for Builder, in LXC'), { target: { value: '5' } })
+    fireEvent.change(screen.getByLabelText('At most a week for Builder, in dollars'), { target: { value: '0.5' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
     await screen.findByText('Tightening is saved at once.')
     expect(get).not.toHaveBeenCalled()

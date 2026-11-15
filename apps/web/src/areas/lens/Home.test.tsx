@@ -23,13 +23,15 @@ const BUSY = {
   items: [
     { kind: 'approval', id: 'apr_1', agent_id: 'agt_1', name: 'Acme Hosting', amount: 30 * M, currency: 'LXC', text: '30 LXC waits for your approval' },
     { kind: 'bill', id: 'bill_1', name: 'Northwind Supplies', amount: 4200, currency: 'GBP', due_date: '2026-10-31', text: 'A bill from Northwind Supplies for £42.00 is due' },
-    { kind: 'payment', id: 'ent_1', agent_id: 'agt_1', name: 'Writer', amount: 30_000, currency: 'LXC', text: '0.03 LXC was paid to Writer' },
-    { kind: 'payment', id: 'ent_2', agent_id: 'agt_1', name: 'Writer', amount: 45_000, currency: 'LXC', text: '0.045 LXC was paid to Writer' },
+    { kind: 'payment', id: 'ent_1', agent_id: 'agt_1', name: 'Writer', amount: 3 * M, currency: 'LXC', text: '3 LXC was paid to Writer' },
+    { kind: 'payment', id: 'ent_2', agent_id: 'agt_1', name: 'Writer', amount: 4_500_000, currency: 'LXC', text: '4.5 LXC was paid to Writer' },
   ],
-  spent_yesterday: [{ currency: 'LXC', amount: 75_000 }],
+  spent_yesterday: [{ currency: 'LXC', amount: 7_500_000 }],
   quiet: false,
-  line: '1 approval waiting, 1 bill due this week, 2 payments yesterday, spent yesterday 0.075 LXC.',
+  line: '1 approval waiting, 1 bill due this week, 2 payments yesterday, spent yesterday 7.5 LXC.',
 }
+// B61.14 — Lens's briefing still says LXC; Home reads it in dollars at the peg ($0.10 a LXC here): 7.5 LXC is $0.75.
+const BUSY_LINE = '1 approval waiting, 1 bill due this week, 2 payments yesterday, spent yesterday $0.75.'
 
 // B55.10 — a payment an assistant (client mcp:) prepared, and the briefing's line for it, as Lens lists it with its preq_ id.
 const PREPARED = {
@@ -185,16 +187,16 @@ afterEach(() => {
 
 describe('Home — the 30-second daily briefing (B41.6)', () => {
   it('after two payments, a held approval and a bill due, the morning briefing names all four with their amounts, approval first', async () => {
-    mockBff({ agents: AGENTS, briefing: BUSY })
+    mockBff({ agents: AGENTS, briefing: BUSY, usdPerLXC: 0.1 })
     render(<App />)
 
-    await waitFor(() => expect(screen.getByTestId('home-briefing-line')).toHaveTextContent(BUSY.line))
+    await waitFor(() => expect(screen.getByTestId('home-briefing-line').textContent).toBe(BUSY_LINE))
     const items = within(screen.getByTestId('home-briefing-items')).getAllByRole('listitem')
     expect(items.map((li) => li.textContent)).toEqual([
-      '30 LXC waits for your approvalAcme Hosting',
+      '$3.00 waits for your approvalAcme Hosting',
       'A bill from Northwind Supplies for £42.00 is duedue 2026-10-31',
-      '0.03 LXC was paid to Writer',
-      '0.045 LXC was paid to Writer',
+      '$0.30 was paid to Writer',
+      '$0.45 was paid to Writer',
     ])
     expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/?approval=apr_1')
     // It sits above the waiting card, under the greeting.
@@ -215,7 +217,7 @@ describe('Home — the 30-second daily briefing (B41.6)', () => {
 
 describe('Home — payments prepared for the person (B55.10)', () => {
   it('lists a payment an assistant prepared first, counts it, and the briefing opens its card', async () => {
-    mockBff({ agents: AGENTS, briefing: PREPARED_BRIEFING, prepared: [PREPARED] })
+    mockBff({ agents: AGENTS, briefing: PREPARED_BRIEFING, prepared: [PREPARED], usdPerLXC: 0.1 })
     render(<App />)
 
     const list = within(await screen.findByTestId('home-approvals'))
@@ -231,7 +233,7 @@ describe('Home — payments prepared for the person (B55.10)', () => {
     expect(review).toHaveAttribute('href', '/approve/preq_1')
     expect(review).toHaveClass('rounded-pill')
     expect(screen.getByTestId('home-approvals-waiting')).toHaveTextContent('3')
-    await waitFor(() => expect(screen.getByTestId('home-briefing-line')).toHaveTextContent(BUSY.line))
+    await waitFor(() => expect(screen.getByTestId('home-briefing-line').textContent).toBe(BUSY_LINE))
     const items = within(screen.getByTestId('home-briefing-items')).getAllByRole('listitem')
     expect(within(items[0]).getByRole('link')).toHaveAttribute('href', '/approve/preq_1')
   })
@@ -366,11 +368,10 @@ describe('Home — the total (B57.18)', () => {
     expect(screen.getByRole('link', { name: 'See all in Wallets' })).toHaveAttribute('href', '/money/wallets')
     expect(screen.getAllByRole('link', { name: 'Pay' }).some((l) => l.getAttribute('href') === '/money/pay')).toBe(true)
 
-    // What the agents hold in LXC, what is not yet given to one, and Lens's forecast.
-    expect(screen.getByTestId('home-agents-total')).toHaveTextContent('16 LXC')
-    expect(screen.getByTestId('home-unallocated')).toHaveTextContent('34 LXC')
-    await waitFor(() => expect(screen.getByTestId('home-spent')).toHaveTextContent('3 LXC'))
-    expect(screen.getByTestId('home-forecast')).toHaveTextContent('25 LXC')
+    // B61.14 — the LXC credit wallet is parked: no fact for what the agents hold in it, what is not yet given to one,
+    // or Lens's forecast of it, under the total.
+    for (const label of ['Across your agents', 'Not yet given to an agent', 'Spent this month', 'On pace for']) expect(screen.queryByText(label)).toBeNull()
+    for (const testid of ['home-agents-total', 'home-unallocated', 'home-spent', 'home-forecast']) expect(screen.queryByTestId(testid)).toBeNull()
   })
 
   it('a Personal, Fiat only account: its total and its currencies, with no stablecoin side and no split', async () => {
@@ -408,18 +409,25 @@ describe('Home — the total (B57.18)', () => {
   })
 })
 
-describe('Home — LXC beside dollars reads to two places (B60.3)', () => {
-  it('a 499.200705 LXC balance reads "$49.92 499.20 LXC"', async () => {
+describe('Home — no LXC beside the dollars (B60.3, B61.14)', () => {
+  it('an agent’s 499.200705 LXC credit is not drawn, and its month reads in dollars alone', async () => {
     mockBff({ agents: [{ ...AGENTS[0], balance_ulxc: 499_200_705 }], usdPerLXC: 0.1 })
     render(<App />)
 
-    await waitFor(() => expect(screen.getByTestId('home-agents-total')).toHaveTextContent('$49.92 499.20 LXC'))
+    // Researcher spent 3 LXC of its 12 LXC budget: at $0.10 a LXC, $0.30 of $1.20.
+    const researcher = await screen.findByTestId('home-agent-agt_1')
+    await waitFor(() => expect(researcher).toHaveTextContent('$0.30 of $1.20'))
+    await waitFor(() => expect(screen.getByTestId('home-briefing-line')).toHaveTextContent(QUIET.line))
+    const main = document.querySelector('main')!
+    expect(main).not.toHaveTextContent('LXC')
+    // The credit balance, $49.92 at the peg, is the parked LXC wallet's: Home draws it nowhere.
+    expect(main).not.toHaveTextContent('$49.92')
   })
 })
 
 describe('Home — the agents and the cards (B57.18)', () => {
   it('“2 of 3 on Free” opens Plans; each agent’s balances and its month against its budget', async () => {
-    mockBff({ agents: AGENTS, accounts: HYBRID_ACCOUNTS, wallets: { agt_1: 1_500_000_000 } })
+    mockBff({ agents: AGENTS, accounts: HYBRID_ACCOUNTS, wallets: { agt_1: 1_500_000_000 }, usdPerLXC: 0.1 })
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Your team’s agents' })).toBeInTheDocument()
@@ -430,10 +438,10 @@ describe('Home — the agents and the cards (B57.18)', () => {
     await waitFor(() => expect(researcher).toHaveTextContent('€7,500.00'))
     await waitFor(() => expect(researcher).toHaveTextContent('1,500.00 USDC'))
     expect(within(researcher).getByRole('link', { name: /Researcher/ })).toHaveAttribute('href', '/agents/agt_1')
-    // Researcher spent 3 of its 12 LXC monthly budget: 25%.
+    // Researcher spent 3 of its 12 LXC monthly budget: 25%, in dollars at $0.10 a LXC.
     await waitFor(() => expect(screen.getByTestId('home-budget-used-agt_1')).toHaveAttribute('data-used', '25%'))
     expect(screen.getByRole('img', { name: /^25% of Researcher’s monthly budget used/ })).toBeInTheDocument()
-    expect(researcher).toHaveTextContent('3 LXC of 12 LXC')
+    await waitFor(() => expect(researcher).toHaveTextContent('$0.30 of $1.20'))
     expect(screen.queryByTestId('home-above-budget-agt_1')).toBeNull()
     // Buyer has no budget, so it is offered one, on its rules.
     const buyer = screen.getByTestId('home-agent-agt_2')
@@ -569,6 +577,8 @@ function mockNewWorkspace() {
     if (url === '/api/agents/approvals') return json({ approvals: [] })
     if (url === '/api/agents/forecast') return json({ spent_ulxc: 0, forecast_ulxc: 0, agents: [] })
     if (url === '/api/wallets/capabilities') return json({ capabilities: [] })
+    // B61.14 — Lens's peg, $0.10 a LXC: the first agent's funding reads in dollars at it.
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url.startsWith('/api/')) return json({})
     return new Response('null', { status: 404 })
   })
@@ -594,7 +604,8 @@ describe('Home — the first agent in one click (B46.2)', () => {
 
     const ready = await screen.findByTestId('first-agent-ready')
     expect(ready).toHaveTextContent('Your first agent is ready')
-    expect(ready).toHaveTextContent('Researcher holds 20 LXC.')
+    // B61.14 — 20 LXC at $0.10 a LXC.
+    await waitFor(() => expect(ready).toHaveTextContent('Researcher holds $2.00.'))
     expect(screen.getByTestId('onboarding-key')).toHaveTextContent('tlv_ak_1234secret')
     expect(within(screen.getByTestId('onboarding-key')).getByRole('button', { name: /copy/i })).toBeInTheDocument()
     expect(screen.getAllByText(/OPENAI_API_KEY="tlv_ak_1234secret"/).length).toBeGreaterThan(0)

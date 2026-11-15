@@ -3,15 +3,14 @@ import { useQuery } from '@tanstack/react-query'
 import { Button, Card, Chip, Money, Row, type ChipTone } from '@talyvor/ui/pocket'
 import { cn, inlineLink } from '@talyvor/ui'
 import { InlineFailure } from '../../components/SessionExpiredBar'
-import { MONEY_ORDER } from '../../moneyOrder'
 import { categoryWords } from './Budgets'
 import { formatWhen } from './format'
-import { lxcPartOf, useMoney } from './money'
+import { useMoney } from './money'
 import { type LimitAlert, agentBankApi } from './agentBankApi'
 
 // LimitAlertsCard.tsx — B57.90: Limit alerts on /agents as Pocket's w-agents draws them, below the room's wallet. Each time
 // spending reached 50, 80 or 100% of a budget, a card's cap or an agent's limit, once a period (Lens B28.335, B28.62):
-// what it is about in words, how much of the limit is spent (dollars first, LXC beside them for an agent's limit), when,
+// what it is about in words, how much of the limit is spent (in the person’s currency), when,
 // and Nearing or Reached.
 
 export const LIMIT_ALERTS_KEY = ['limit-alerts']
@@ -32,7 +31,7 @@ function chipOf(percent: number): { tone: ChipTone; words: string } {
   return percent >= 100 ? { tone: 'bad', words: 'Reached' } : { tone: percent >= 80 ? 'wait' : 'plain', words: 'Nearing' }
 }
 
-/** "$1,012.00 of $2,000.00 (10,120 of 20,000 LXC)" for an agent's limit, LXC alone while no rate backs it; "$900.00 of $1,000.00" for a budget or a card. */
+/** "$1,012.00 of $2,000.00" for an agent's limit (B61.14: never LXC), "…" while no rate backs it; "$900.00 of $1,000.00" for a budget or a card. */
 function SpentOf({ a, money }: { a: LimitAlert; money: (ulxc: number) => string | null }) {
   if (a.currency !== 'LXC')
     return (
@@ -41,12 +40,7 @@ function SpentOf({ a, money }: { a: LimitAlert; money: (ulxc: number) => string 
         <Money minor={a.limit_minor} currency={a.currency} />
       </>
     )
-  const lxc = lxcPartOf(a.spent_minor, a.limit_minor)
-  const spent = money(a.spent_minor)
-  const limit = money(a.limit_minor)
-  if (spent === null || limit === null) return <>{lxc}</>
-  const cash = `${spent} of ${limit}`
-  return <>{MONEY_ORDER === 'usd-first' ? `${cash} (${lxc})` : `${lxc} (${cash})`}</>
+  return <>{`${money(a.spent_minor) ?? '…'} of ${money(a.limit_minor) ?? '…'}`}</>
 }
 
 export function LimitAlertsCard({ nameOf }: { nameOf: (id: string) => string }) {

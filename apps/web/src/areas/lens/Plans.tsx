@@ -143,7 +143,7 @@ function PlanCard({
               of usage included this month
             </li>
           ) : null}
-          <li>Past it, chat continues on prepaid credits, never an overage</li>
+          <li>Never an overage</li>
         </ul>
       </div>
       {current || canChoose || switching ? (
@@ -285,9 +285,7 @@ function UsageMeter({ summary }: { summary: PlanSummary }) {
         </div>
         <p className="text-caption text-muted">
           Renews {formatDay(a.period_end)}.{' '}
-          {pct >= 100
-            ? 'It is used up, so chat is drawing your LXC balance until then.'
-            : 'When it runs out, chat draws your LXC balance. The plan never bills an overage.'}
+          {pct >= 100 ? 'It is used up until then.' : 'The plan never bills an overage.'}
         </p>
       </div>
     </Card>

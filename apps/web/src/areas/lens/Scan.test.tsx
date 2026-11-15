@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -40,6 +40,8 @@ function mockBff(calls: string[]) {
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (method !== 'GET') calls.push(`${method} ${url} ${String(init?.body ?? '')}`)
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    // B61.14 — Lens's peg, $0.10 a LXC: what an alert paid reads in dollars alone.
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents' && method === 'POST') return json({ id: 'agt_scan', name: 'Gas watch' }, 201)
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [{ id: 'agt_scan', name: 'Gas watch' }] })
     if (url === '/api/agents/agt_scan/rules' && method === 'GET') return json(RULES)
@@ -53,7 +55,7 @@ function mockBff(calls: string[]) {
       return json({ watches: watched ? [{ id: 'swt_1', agent_id: 'agt_scan', series: ['gie.agsi.de.full'], rule: 'z', z: 2, active: true, created_at: '2026-11-05T09:00:00Z',
         alerts: [{ id: 7, series: 'gie.agsi.de.full', observed_at: '2026-11-04T00:00:00Z', body: 'German gas storage read 71% full, 2.3 standard deviations below its normal.',
           finding: { at: '2026-11-04T00:00:00Z', value: 71, unit: '%', normal_low: 85, normal_high: 93, z: -2.3, outlook_at: '2026-11-18T00:00:00Z', outlook_low: 66, outlook_high: 74 },
-          attribution: ['GIE AGSI+'], charged_ulxc: 50_000, created_at: '2026-11-05T10:00:00Z' }] }] : [] })
+          attribution: ['GIE AGSI+'], charged_ulxc: 500_000, created_at: '2026-11-05T10:00:00Z' }] }] : [] })
     }
     if (url === '/api/scan/track-record') {
       return json({ hits: 1, misses: 0, waiting: 1, records: [
@@ -106,7 +108,9 @@ describe('Scan in the app (B52.28)', () => {
     expect(screen.getByTestId('scan-watch-swt_1').textContent).toContain('more than 2 standard deviations from its normal')
     expect(alert.textContent).toContain('EU gas storage (how full) · Germany')
     expect(alert.textContent).toContain('German gas storage read 71% full')
-    expect(alert.textContent).toContain('Sources: GIE AGSI+ · paid 0.05 LXC')
+    // 0.5 LXC at $0.10 a LXC.
+    await waitFor(() => expect(alert.textContent).toContain('Sources: GIE AGSI+ · paid $0.05'))
+    expect(alert.textContent).not.toMatch(/LXC/)
     noTradeWording()
   })
 

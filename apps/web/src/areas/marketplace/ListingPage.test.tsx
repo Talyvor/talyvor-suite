@@ -225,18 +225,26 @@ describe('listing page 2', () => {
   it.each(['test', 'live'])('says a use goes on the monthly marketplace bill, never on a card, while card_payments is %s', async (cards) => {
     mockBff()
     const rest = vi.mocked(globalThis.fetch).getMockImplementation()!
+    // B61.14 — the price reads in dollars alone at Lens's peg ($0.10 a LXC): 5,000,000 µLXC is $0.50.
     vi.mocked(globalThis.fetch).mockImplementation(async (input, init) =>
-      String(input) === '/api/pricing' ? new Response(JSON.stringify({ card_payments: cards }), { status: 200 }) : rest(input, init),
+      String(input) === '/api/pricing'
+        ? new Response(JSON.stringify({ card_payments: cards }), { status: 200 })
+        : String(input) === '/api/lxc/topup-options'
+          ? Response.json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
+          : rest(input, init),
     )
     const said = async (text: RegExp) => (await screen.findByText(text)).textContent?.replace(/\s+/g, ' ')
     await at('/marketplace/listings/lst_paid')
-    expect(await said(/Each use costs/)).toMatch(
-      /^Each use costs 5 LXC.*, on your monthly marketplace bill, not taken from your credits\. The models it calls are billed to you as usual\.$/,
+    await screen.findByText('$0.50')
+    expect(await said(/Each use costs/)).toBe(
+      'Each use costs $0.50, on your monthly marketplace bill, not taken from your credits. The models it calls are billed to you as usual.',
     )
     await at('/marketplace/listings/lst_trial')
-    expect(await said(/uses of it are free trials/)).toMatch(
-      /^Your first 3 uses of it are free trials, not billed\. After them, each use costs 5 LXC.*, on your monthly marketplace bill\. The models it calls are billed to you as usual\.$/,
+    await screen.findByText('$0.50')
+    expect(await said(/uses of it are free trials/)).toBe(
+      'Your first 3 uses of it are free trials, not billed. After them, each use costs $0.50, on your monthly marketplace bill. The models it calls are billed to you as usual.',
     )
+    expect(document.body.textContent).not.toMatch(/LXC/)
     expect(document.body.textContent).not.toMatch(/on your card/)
   })
 

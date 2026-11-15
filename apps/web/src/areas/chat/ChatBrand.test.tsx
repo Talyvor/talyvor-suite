@@ -20,6 +20,7 @@ function mockBff() {
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/models')
       return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, release_date: '2026-07-24', tier: 'frontier' }])
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
     return new Response('null', { status: 404 })
   })
@@ -89,7 +90,7 @@ describe('chat in the brand (B29.10)', () => {
     const lines = screen.getByRole('navigation', { name: 'Statement lines this answer read' })
     expect(lines.parentElement).toHaveClass('bg-raised', 'rounded-card')
     expect(within(lines).getByText('From your agents’ statements')).toHaveClass('text-eyebrow', 'uppercase', 'text-label')
-    expect(within(lines).getByRole('link', { name: /^Researcher: −1\.23 LXC/ })).toBeInTheDocument()
+    expect(within(lines).getByRole('link', { name: /^Researcher: −\$0\.12 · / })).toBeInTheDocument()
 
     // B57.3 — Pocket's rules: Send is the one primary (ink) action, tangerine only for the brand and
     // "your move", status colours always with words.

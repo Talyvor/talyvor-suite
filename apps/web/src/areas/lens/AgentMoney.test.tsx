@@ -72,13 +72,32 @@ describe('An agent’s money features, on its page (B57.21)', () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
     populatedBff((impl) => vi.spyOn(globalThis, 'fetch').mockImplementation(impl))
     const { read, initial } = areaSource
-    areaSource.read = () => Promise.resolve([])
-    areaSource.initial = []
+    areaSource.read = () => Promise.resolve(['gateway'])
+    areaSource.initial = ['gateway']
     try {
       await mount()
       expect(screen.getByTestId('money-row-pots')).toBeInTheDocument()
       expect(screen.queryByTestId('money-row-loans')).toBeNull()
       expect(screen.queryByTestId('money-row-investing')).toBeNull()
+    } finally {
+      areaSource.read = read
+      areaSource.initial = initial
+    }
+  })
+
+  // B61.14 — the LXC credit wallet's rows (address, send, requests, transfers, recurring, pots, escrow, cash out, credit
+  // line) are the gateway area's: a workspace without it is left with its wallet alone.
+  it('has only Its wallet for a workspace without the gateway, credit and trading', async () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    populatedBff((impl) => vi.spyOn(globalThis, 'fetch').mockImplementation(impl))
+    const { read, initial } = areaSource
+    areaSource.read = () => Promise.resolve([])
+    areaSource.initial = []
+    try {
+      await mount()
+      const card = screen.getByTestId('agent-page-money')
+      expect(within(card).getAllByRole('button').map((b) => b.textContent)).toEqual(['Its wallet'])
+      expect(screen.queryByTestId('money-row-pots')).toBeNull()
     } finally {
       areaSource.read = read
       areaSource.initial = initial

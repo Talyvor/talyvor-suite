@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -106,11 +106,12 @@ describe('the platform fee on an agent’s statement (B57.24)', () => {
         const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
         if (path.startsWith('/api/agents/agt_1/statement?'))
           return json({ to: '2026-10-05T12:00:00Z', group: 'day', time_zone: 'UTC', lines: [
-            line('ent_1', 'claude-sonnet-5', { requests: 2, amount_ulxc: -10_000_000 }),
-            line('ent_2', 'claude-sonnet-5', { kind: 'platform_fee', label: 'Platform fee 3%', memo: 'On those requests', amount_ulxc: -300_000 }),
-            line('ent_3', 'gpt-5', { requests: 1, amount_ulxc: -1_000_000 }),
-            line('ent_4', 'gpt-5', { kind: 'platform_fee', label: 'Platform fee 3%', memo: 'On those requests', amount_ulxc: -30_000 }),
+            line('ent_1', 'claude-sonnet-5', { requests: 2, amount_ulxc: -100_000_000 }),
+            line('ent_2', 'claude-sonnet-5', { kind: 'platform_fee', label: 'Platform fee 3%', memo: 'On those requests', amount_ulxc: -3_000_000 }),
+            line('ent_3', 'gpt-5', { requests: 1, amount_ulxc: -10_000_000 }),
+            line('ent_4', 'gpt-5', { kind: 'platform_fee', label: 'Platform fee 3%', memo: 'On those requests', amount_ulxc: -300_000 }),
           ] })
+        if (path === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
         return new Response('null', { status: 404 })
       }),
     )
@@ -124,12 +125,13 @@ describe('the platform fee on an agent’s statement (B57.24)', () => {
       </MemoryRouter>,
     )
     const rows = within(await screen.findByTestId('statement-lines')).getAllByRole('row').slice(1)
-    // No peg is served, so each amount is LXC alone.
+    // At Lens's peg of $0.10 a LXC, each amount in dollars alone (B61.14): 100, 3, 10 and 0.3 LXC.
+    await waitFor(() => expect(text(within(rows[0]).getAllByRole('cell')[2])).not.toBe('…'))
     expect(rows.map((r) => text(within(r).getByTestId('statement-doc-what')) + ' ' + text(within(r).getAllByRole('cell')[2]))).toEqual([
-      'claude-sonnet-5·2requests −10LXC',
-      'Platformfee3%·Onthoserequests −0.3LXC',
-      'gpt-5·1request −1LXC',
-      'Platformfee3%·Onthoserequests −0.03LXC',
+      'claude-sonnet-5·2requests −$10.00',
+      'Platformfee3%·Onthoserequests −$0.30',
+      'gpt-5·1request −$1.00',
+      'Platformfee3%·Onthoserequests −$0.03',
     ])
   })
 })

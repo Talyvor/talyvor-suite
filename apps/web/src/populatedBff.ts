@@ -324,7 +324,7 @@ const BODIES: Record<string, unknown> = {
   // is what it answers now that a bare list is refused as unreadable (B27.12).
   '/api/bonds': { capability: 'bonds', enabled: false },
 
-  '/api/lxc/topup-options': { allowed_usd_cents: [1000, 2500, 5000], billing_enabled: true },
+  '/api/lxc/topup-options': { usd_per_lxc: 0.1, allowed_usd_cents: [1000, 2500, 5000], billing_enabled: true },
 
   // B28.5 — the public price list, with each plan's included usage as Lens states it (B28.439, h = 0).
   '/api/pricing': {

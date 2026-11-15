@@ -134,10 +134,13 @@ function whatOf(a: AgentApproval): string {
   return a.payee ? capital(`a payment to ${PAYEE_KIND[a.payee.kind] ?? 'an account'}`) : 'A payment'
 }
 
-/** Where it is paid from: "from its US dollar account", "on your monthly marketplace bill"; nothing when `what` says it already. */
+/**
+ * Where it is paid from: "from its US dollar account", "on your monthly marketplace bill"; nothing when `what` says it
+ * already, or when it is the LXC balance (B61.14: parked, and not drawn).
+ */
 function whereOf(a: AgentApproval, agentName: string, what: string): string | null {
   const from = a.paid_from
-  if (!from) return null
+  if (!from || from.kind === 'lxc') return null
   const own = `${agentName}’s `
   const where =
     from.kind === 'marketplace_bill' ? 'on your monthly marketplace bill' : `from ${from.name.startsWith(own) ? `its ${from.name.slice(own.length)}` : from.name}`

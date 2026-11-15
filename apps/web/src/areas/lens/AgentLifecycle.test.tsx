@@ -4,12 +4,13 @@ import { App, queryClient } from '../../App'
 
 // B28.21 — an agent is renamed, described and archived on Agent Wallets. The mock BFF keeps the agent the
 // way Lens B28.298 does: a PATCH changes its name and description, and archiving sweeps its balance back to
-// the workspace in one withdraw line, revokes its keys and sets archived_at.
+// the workspace in one withdraw line, revokes its keys and sets archived_at. B61.14 — what was swept reads in dollars
+// alone at Lens's peg ($0.10 a LXC here), and the archive dialog no longer names the LXC it holds.
 
 function mockBff() {
   const sent: Array<{ method: string; url: string; body?: unknown }> = []
   const agent: Record<string, unknown> = {
-    id: 'agt_1', name: 'Researcher', description: '', balance_ulxc: 750_000, spent_ulxc: 0, keys: ['key_1'],
+    id: 'agt_1', name: 'Researcher', description: '', balance_ulxc: 7_500_000, spent_ulxc: 0, keys: ['key_1'],
     created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1', verified: true,
   }
   const lines: unknown[] = []
@@ -20,6 +21,7 @@ function mockBff() {
     if (method !== 'GET') sent.push({ method, url, body: init?.body ? JSON.parse(String(init.body)) : undefined })
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/lxc/topup-options') return json({ usd_per_lxc: 0.1, allowed_usd_cents: [] })
     if (url === '/api/agents') {
       const held = agent.balance_ulxc as number
       return json({ workspace_balance_ulxc: 20_000_000, allocated_ulxc: held, unallocated_ulxc: 20_000_000 - held, spent_ulxc: 0, agents: [agent] })
@@ -74,19 +76,18 @@ describe('renaming, describing and archiving an agent on Agent Wallets', () => {
     // B57.22 — Archive asks first and says what happens; Keep it sends nothing.
     fireEvent.click(within(screen.getByTestId('agent-setting-Archive')).getByRole('button'))
     let ask = await screen.findByRole('dialog', { name: 'Archive Night researcher?' })
-    expect(ask.textContent).toMatch(
-      /Archiving Night researcher moves the\s.*0\.75\sLXC.*\sit holds back to the workspace, stops its keys working, and ends its top-up and schedules\. Its statement is kept\. It cannot be undone\./,
-    )
+    expect(ask).toHaveTextContent('Archiving Night researcher stops its keys working and ends its schedules. Its statement is kept. It cannot be undone.')
+    expect(ask).not.toHaveTextContent(/LXC|top-up/)
     fireEvent.click(within(ask).getByRole('button', { name: 'Keep it' }))
     expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.click(within(screen.getByTestId('agent-setting-Archive')).getByRole('button'))
     ask = await screen.findByRole('dialog', { name: 'Archive Night researcher?' })
     fireEvent.click(within(ask).getByRole('button', { name: 'Yes, archive Night researcher' }))
     const archived = await screen.findByTestId('agent-archived')
-    expect(archived.textContent).toMatch(/0\.75 LXC.*went back to the workspace and 1 key was revoked/)
+    expect(archived.textContent).toMatch(/: \$0\.75 went back to the workspace and 1 key was revoked\./)
+    expect(archived).not.toHaveTextContent(/LXC/)
     expect(await screen.findByText('Taken back by the workspace')).toBeTruthy()
-    // Archived, it can no longer be funded or given a key: those cards are gone.
-    expect(screen.queryByLabelText('Amount in LXC for Night researcher')).toBeNull()
+    // Archived, it can no longer be given a key: that card is gone.
     expect(screen.queryByRole('button', { name: 'Issue a key' })).toBeNull()
     expect(screen.getByText('Archived')).toBeTruthy()
 

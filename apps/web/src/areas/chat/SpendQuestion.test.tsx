@@ -35,6 +35,8 @@ function mockBff() {
     const url = String(input)
     const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    // B61.14 — an amount Lens keeps in µLXC reads in dollars at Lens's peg, $0.10 a LXC.
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], usd_per_lxc: 0.1 })
     if (url === '/api/models')
       return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, release_date: '2026-07-24', tier: 'frontier' }])
     if (url === '/api/ai/providers') return json({ unconfigured: [] })
@@ -93,12 +95,12 @@ describe('asking what the agents spent (B28.349)', () => {
       { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: JSON.stringify(SPENT) }] },
     ])
 
-    const link = within(lines).getByRole('link', { name: /^Researcher: −1\.23 LXC/ })
+    const link = within(lines).getByRole('link', { name: /^Researcher: −\$0\.12 / })
     expect(link).toHaveAttribute('href', '/agents?agent=agt_1&entry=ent_9')
     fireEvent.click(link)
     const row = await screen.findByTestId('statement-line-linked')
     expect(row).toHaveAttribute('aria-current', 'true')
-    expect(row).toHaveTextContent('1.23 LXC')
+    expect(row).toHaveTextContent('−$0.12')
     expect(screen.getByTestId('agent-open')).toHaveTextContent('Researcher')
   })
 })

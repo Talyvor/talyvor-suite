@@ -6,9 +6,9 @@ import { cn, inlineLink } from '@talyvor/ui'
 
 import { ApiError, getJSON, readable } from '../../lib/api'
 import { PREPARED_KEY } from './AgentBank'
-import { type PaymentRequest, agentBankApi, limitText, parseLXC } from './agentBankApi'
+import { type PaymentRequest, agentBankApi, dollarsText, parseDollars } from './agentBankApi'
 import { formatWhen } from './format'
-import { useMoneyFigures } from './money'
+import { pegQuery, useMoney } from './money'
 
 // B40.8 — Settings › Connect your AI: the address of Talyvor's MCP server (B40.7), how to add it to each assistant,
 // and the assistants this person has connected (B40.6 grants), each with its last use, what it did (B52.3) and a
@@ -458,6 +458,8 @@ async function saveCeiling(c: Ceiling): Promise<Ceiling> {
 function NewAgents() {
   const heading = useId()
   const read = useQuery({ queryKey: ['agent-ceiling'], queryFn: () => getJSON<Partial<Ceiling>>(CEILING_PATH) })
+  // B61.14 — the limits are typed in dollars, at Lens's peg, until they carry their own currency (B61.12).
+  const peg = useQuery(pegQuery)
   return (
     <Card tone="white" role="region" aria-labelledby={heading} className="grid min-w-0 gap-3">
       <h2 id={heading} className="font-display text-reading font-bold text-ink">
@@ -466,28 +468,28 @@ function NewAgents() {
       <p className="text-body text-ink-3">
         An assistant you allow to create agents gives each one limits no higher than these. A new agent starts with no money.
       </p>
-      {read.isError ? (
+      {read.isError || peg.isError ? (
         <p className="text-body text-ink-2">The limit for new agents could not be read. Try again shortly.</p>
-      ) : read.isPending ? (
+      ) : read.isPending || peg.data?.usd_per_lxc === undefined ? (
         <p className="text-body text-ink-3">Reading the limit for new agents…</p>
       ) : (
-        <CeilingForm key={read.dataUpdatedAt} current={read.data.daily_limit_ulxc ? (read.data as Ceiling) : null} />
+        <CeilingForm key={read.dataUpdatedAt} current={read.data.daily_limit_ulxc ? (read.data as Ceiling) : null} peg={peg.data.usd_per_lxc} />
       )}
     </Card>
   )
 }
 
-function CeilingForm({ current }: { current: Ceiling | null }) {
+function CeilingForm({ current, peg }: { current: Ceiling | null; peg: number }) {
   const qc = useQueryClient()
   const [text, setText] = useState(
-    () => Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, current ? limitText(current[k]) : ''])) as Record<keyof Ceiling, string>,
+    () => Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, current ? dollarsText(current[k], peg) : ''])) as Record<keyof Ceiling, string>,
   )
-  const micros = Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, parseLXC(text[k])])) as Record<keyof Ceiling, number | null>
+  const micros = Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, parseDollars(text[k], peg) || null])) as Record<keyof Ceiling, number | null>
   const ready = CEILING_FIELDS.every(([k]) => micros[k] !== null)
-  const figures = useMoneyFigures()
+  const money = useMoney()
   // The amount typed, in the person's currency, under its name, as the rules sheet shows it; nothing while no rate backs it.
   const cashLine = (v: number | null) => {
-    const cash = v !== null && v > 0 ? figures.ulxc(v).cash : null
+    const cash = v !== null && v > 0 ? money(v) : null
     return cash ? <div className="font-figure text-body text-ink-3">{cash}</div> : null
   }
   const save = useMutation({
@@ -523,9 +525,9 @@ function CeilingForm({ current }: { current: Ceiling | null }) {
             </div>
             <div className="min-w-0 flex-1">
               <Input
-                aria-label={`${label}, in LXC`}
+                aria-label={`${label}, in dollars`}
                 inputMode="decimal"
-                unit="LXC"
+                unit="USD"
                 value={text[k]}
                 onChange={(e) => setText({ ...text, [k]: e.target.value })}
               />

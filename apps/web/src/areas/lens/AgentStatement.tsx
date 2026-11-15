@@ -194,7 +194,8 @@ export function AgentStatement({ agent, nameOf }: { agent: Agent; nameOf: (id: s
           {(
             [
               [`Opening, ${dayMonth(opened)}`, account?.opening_ulxc ?? 0, false, ''],
-              ['Money in', account?.in_ulxc ?? 0, true, 'text-success'],
+              // B61.14 — with LXC gone a figure has no words beside it, so money in is not drawn in a status colour.
+              ['Money in', account?.in_ulxc ?? 0, true, ''],
               ['Money out', -(account?.out_ulxc ?? 0), false, ''],
               ['Balance now', account?.closing_ulxc ?? 0, false, ''],
             ] as const
@@ -202,7 +203,7 @@ export function AgentStatement({ agent, nameOf }: { agent: Agent; nameOf: (id: s
             <div key={label} className="grid content-end gap-0.5">
               <dt className="text-micro font-semibold text-ink-3">{label}</dt>
               <dd>
-                <Money ulxc={ulxc} signed={signed} exact className={`grid justify-items-start gap-0.5 font-display text-head font-bold ${tone}`} />
+                <Money ulxc={ulxc} signed={signed} className={`grid justify-items-start gap-0.5 font-display text-head font-bold ${tone}`} />
               </dd>
             </div>
           ))}
@@ -263,7 +264,7 @@ export function AgentStatement({ agent, nameOf }: { agent: Agent; nameOf: (id: s
                       </td>
                       <td className="py-2.5 pl-4 text-right">
                         {/* On a phone the LXC goes under the dollars, so the table fits the width. */}
-                        <Money ulxc={l.amount_ulxc} signed exact className={`grid justify-items-end wide:block ${l.amount_ulxc > 0 ? 'text-success' : ''}`} />
+                        <Money ulxc={l.amount_ulxc} signed className="grid justify-items-end wide:block" />
                       </td>
                     </tr>
                   )

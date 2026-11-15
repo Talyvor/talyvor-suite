@@ -473,13 +473,6 @@ function AgentsList() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <p className="max-w-3xl text-reading text-ink-2" data-testid="agents-totals">
           Each agent spends its own money, inside its own rules.
-          {book.data ? (
-            <>
-              {' '}
-              The workspace holds <Money ulxc={book.data.workspace_balance_ulxc} />: <Money ulxc={book.data.allocated_ulxc} /> with its agents and{' '}
-              <Money ulxc={book.data.unallocated_ulxc} /> free to fund them.
-            </>
-          ) : null}
         </p>
         <div className="flex flex-wrap gap-2.5">
           <Button asChild variant="secondary">

@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { Card, CardHeader, formatDay, MuNumeral, Row } from '@talyvor/ui'
+import { Card, CardHeader, formatDay, Row } from '@talyvor/ui'
+import { Money } from '@talyvor/ui/pocket'
 import { planApi } from './planApi'
 import { PlanRenewal, SUBSCRIPTION_KEY } from './Plans'
 import { formatCents } from './topupApi'
 
 /**
- * B1.6 — a subscriber's plan, on /billing under the LXC balance: what it costs, what the team's
+ * B1.6 — a subscriber's plan, on /billing (B61.14: its amounts in the person's currency, never LXC): what it costs, what the team's
  * answers earned back against it, and how much of this period's allowance is used and left.
  *
  * ⚠ IT DRAWS NOTHING UNLESS THERE IS A PLAN TO DESCRIBE. No plans sold here (`enabled:false`),
@@ -69,15 +70,15 @@ export function YourPlan() {
         label="Allowance used"
         hint={`Since ${formatDay(a.period_start)}; ${periodEnd}`}
       >
-        <MuNumeral micros={a.consumed_ulxc} unit="lxc" />
+        <Money ulxc={a.consumed_ulxc} />
         <span className="text-body text-muted">of</span>
-        <MuNumeral micros={a.granted_ulxc} unit="lxc" />
+        <Money ulxc={a.granted_ulxc} />
       </Row>
       <Row
         label="Allowance left"
-        hint="When it runs out, chat draws the LXC balance above. The plan never bills an overage"
+        hint="The plan never bills an overage"
       >
-        <MuNumeral micros={a.remaining_ulxc} unit="lxc" />
+        <Money ulxc={a.remaining_ulxc} />
       </Row>
     </Card>
   )

@@ -5,6 +5,7 @@ import { App, queryClient } from '../../App'
 // B22.12 — the DONE line: on Agent Wallets an owner completes an escrow, fills and locks a pot, places a
 // simulated order and sees the portfolio, and sees cash-out marked test money only. The mock BFF answers
 // the way Lens B22.1, B22.6, B22.7, B22.8 and B22.9 do. B57.21: each is a panel opened from its row on the agent's page.
+// B61.14 — a pot's figures read in dollars alone at Lens's peg ($0.10 a LXC here); its Move field is still typed in LXC.
 
 /** Lens B57.12's one read for the agent's page, so the page and its Money card (B57.21) draw. */
 const summaryOf = (agent: Record<string, unknown>) => ({
@@ -68,6 +69,7 @@ function mockBff() {
     if (method !== 'GET') sent.push({ method, url, body })
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/lxc/topup-options') return json({ usd_per_lxc: 0.1, allowed_usd_cents: [] })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 50_000_000, allocated_ulxc: 50_000_000, unallocated_ulxc: 0, spent_ulxc: 0, agents: [agent] })
     if (url === '/api/agents/agt_1/summary') return json(summaryOf(agent))
     if (url === '/api/wallets/capabilities')
@@ -166,13 +168,13 @@ describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
       const panel = await openPanel('pots')
       fireEvent.change(await within(panel).findByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '1.2' } })
       fireEvent.click(within(panel).getByRole('button', { name: 'Move in' }))
-      await waitFor(() => expect(words(within(panel).getByTestId('pot'))).toContain('1.2 LXC of 20 LXC'))
+      await waitFor(() => expect(words(within(panel).getByTestId('pot'))).toContain('$0.12 of $2.00'))
 
       potOut.blips.push(502, 'drop')
       fireEvent.change(within(panel).getByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '0.4' } })
       fireEvent.click(within(panel).getByRole('button', { name: 'Move out' }))
       await vi.advanceTimersByTimeAsync(4_000) // the panel's two retry delays, without waiting them out
-      await waitFor(() => expect(words(within(panel).getByTestId('pot'))).toContain('0.8 LXC of 20 LXC'))
+      await waitFor(() => expect(words(within(panel).getByTestId('pot'))).toContain('$0.08 of $2.00'))
       expect(within(panel).queryByRole('alert')).toBeNull()
       expect(potOut.keys).toHaveLength(3)
       expect(potOut.keys[0]).not.toBe('')
@@ -201,7 +203,7 @@ describe('escrow, pots, investing and cash-out on Agent Wallets', () => {
     expect(within(panel).getByRole('alert').textContent).toBe('Type an amount in LXC first.')
     fireEvent.change(within(panel).getByLabelText('Amount in LXC to move for Rainy day'), { target: { value: '5' } })
     fireEvent.click(within(panel).getByRole('button', { name: 'Move in' }))
-    await waitFor(() => expect(words(within(panel).getByTestId('pot'))).toContain('5 LXC of 20 LXC'))
+    await waitFor(() => expect(words(within(panel).getByTestId('pot'))).toContain('$0.50 of $2.00'))
     expect(sent).toContainEqual({ method: 'POST', url: '/api/agents/agt_1/pots/pot_1/in', body: { amount_ulxc: 5_000_000 } })
     fireEvent.change(within(panel).getByLabelText('Lock Rainy day until'), { target: { value: '2099-01-01' } })
     fireEvent.click(within(panel).getByRole('button', { name: 'Lock' }))

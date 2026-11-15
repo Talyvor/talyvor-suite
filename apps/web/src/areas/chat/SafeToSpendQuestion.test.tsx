@@ -15,6 +15,8 @@ function mockBff() {
     const url = String(input)
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    // B61.14 — an amount Lens keeps in µLXC reads in dollars at Lens's peg, $0.10 a LXC.
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], usd_per_lxc: 0.1 })
     if (url === '/api/models') {
       return json([{ id: 'claude-opus-5', provider: 'anthropic', display_name: 'Claude Opus 5', input_per_1m: 5, output_per_1m: 25, tier: 'frontier', release_date: '2026-06-01' }])
     }
@@ -71,13 +73,13 @@ describe('How much can an agent spend, answered in Chat from Lens’s safe to sp
 
     const agent = await ask('How much can researcher spend?')
     expect(screen.queryAllByTestId('turn-user')).toHaveLength(0) // nothing went to the model
-    expect(within(agent).getByTestId('chat-safe-agent-LXC')).toHaveTextContent('50 LXC safe to spend this month')
-    expect(agent).toHaveTextContent('100 LXC held, less 20 LXC scheduled, 0 LXC in bills due and 30 LXC waiting for approval')
+    expect(within(agent).getByTestId('chat-safe-agent-LXC')).toHaveTextContent('$5.00 safe to spend this month')
+    expect(agent).toHaveTextContent('$10.00 held, less $2.00 scheduled, $0.00 in bills due and $3.00 waiting for approval')
 
     const company = await ask('What is safe to spend?')
     expect(within(company).getByTestId('chat-safe-company-GBP')).toHaveTextContent('£470.00 safe to spend this month')
     expect(company).toHaveTextContent('£30.00 in bills due')
     expect(within(company).getByTestId('chat-safe-company-USDC')).toHaveTextContent('2.50 USDC safe to spend this month')
-    expect(company).toHaveTextContent('Researcher: 50 LXC')
+    expect(company).toHaveTextContent('Researcher: $5.00')
   })
 })

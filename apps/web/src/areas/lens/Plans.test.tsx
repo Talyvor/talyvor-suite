@@ -41,6 +41,8 @@ function serve(allowance: unknown, { sharing = true, pooled = 9, pricing = PRICI
     if (url === '/api/billing/allowance') return json(allowance)
     if (url === '/api/billing/subscribe') return json({ url: 'https://checkout.stripe.com/c/pay/cs_test_plan' })
     if (url === '/api/pricing') return json(pricing)
+    // B61.14 — Lens's peg, $0.10 a LXC: the included usage reads in dollars at it.
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, cache_poolable: sharing })
     if (url.startsWith('/api/usage'))
       return json({ period_days: 30, models: [], cache: { total_requests: 40, cache_hits: pooled, misses: 31, hit_rate: 0.2, by_source: { upstream: 31, cache_hit_pooled: pooled } } })
@@ -89,15 +91,16 @@ describe('Plans (B13.3)', () => {
     expect(screen.queryByText(/earn on every plan/)).not.toBeInTheDocument()
   })
 
-  it('shows on each plan card the LXC of usage it includes this month, as /api/pricing states it (B28.5)', async () => {
+  it('shows on each plan card the usage it includes this month, in dollars at the peg, as /api/pricing states it (B28.5, B61.14)', async () => {
     serve({ capability: 'subscriptions', enabled: true, data: UNSUBSCRIBED })
     renderIn(<Plans />)
 
-    const shown = { plus: '191.2 LXC', pro: '968 LXC', max: '1,939 LXC' }
+    // 191.2, 968 and 1,939 LXC at $0.10 a LXC.
+    const shown = { plus: '$19.12', pro: '$96.80', max: '$193.90' }
     for (const [id, figure] of Object.entries(shown)) {
       expect((await screen.findByTestId(`plan-included-${id}`)).textContent).toBe(figure)
     }
-    expect(screen.getByTestId('plan-included-pro').closest('li')!.textContent).toBe('968 LXC of usage included this month')
+    expect(screen.getByTestId('plan-included-pro').closest('li')!.textContent).toBe('$96.80 of usage included this month')
     expect(screen.queryByText(/× the included usage of Plus/)).not.toBeInTheDocument()
   })
 

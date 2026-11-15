@@ -14,7 +14,7 @@ function mockBff(alerts: unknown[], withAgent = true) {
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 20_000_000, allocated_ulxc: 5_000_000, unallocated_ulxc: 15_000_000, spent_ulxc: 0, agents: withAgent ? [agent] : [] })
     if (url === '/api/money/budgets/alerts') return json({ alerts })
-    // Lens's peg, 1.00 LXC = $0.10, so an agent's limit reads in dollars first.
+    // Lens's peg, 1.00 LXC = $0.10, so an agent's limit reads in dollars.
     if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents/forecast') return json({ at: '', month_start: '', month_end: '', spent_ulxc: 0, forecast_ulxc: 0, agents: [] })
     if (url === '/api/agents/alerts') return json({ alerts: [], rule: 'the rule' })
@@ -70,10 +70,10 @@ describe('limit alerts on the Agent Bank (B28.62)', () => {
   })
 })
 
-// B57.90 — the Limit alerts card on /agents, as Pocket's w-agents draws it: what each alert is about in words, dollars first
-// with LXC beside them for an agent's limit, when, the chip Nearing or Reached, and a link to Budgets.
+// B57.90 — the Limit alerts card on /agents, as Pocket's w-agents draws it: what each alert is about in words, in dollars
+// (B61.14: an agent's limit in dollars alone, never LXC), when, the chip Nearing or Reached, and a link to Budgets.
 describe('the Limit alerts card on Agents (B57.90)', () => {
-  it('reads each alert in words, dollars first with LXC beside them, and links to Budgets', async () => {
+  it('reads each alert in words, in dollars alone, and links to Budgets', async () => {
     mockBff([
       { id: 'sal_4', kind: 'agent_limit', subject: 'agt_1', agent_id: 'agt_1', period: 'monthly', period_start: '2026-10-01T00:00:00Z', percent: 50,
         spent_minor: 10_120_000_000, limit_minor: 20_000_000_000, currency: 'LXC', created_at: '2026-10-16T11:40:00Z' },
@@ -90,7 +90,7 @@ describe('the Limit alerts card on Agents (B57.90)', () => {
     const card = await screen.findByTestId('agents-limit-alerts')
     const limit = await within(card).findByTestId('limit-alert-sal_4')
     expect(limit.textContent).toContain('50% of Researcher’s monthly limit')
-    await waitFor(() => expect(limit.textContent).toContain('$1,012.00 of $2,000.00 (10,120.00 of 20,000.00 LXC) spent'))
+    await waitFor(() => expect(limit.textContent).toContain('$1,012.00 of $2,000.00 spent'))
     expect(within(limit).getByText('Nearing')).toBeTruthy()
 
     const bills = within(card).getByTestId('limit-alert-sal_5')
@@ -103,8 +103,8 @@ describe('the Limit alerts card on Agents (B57.90)', () => {
     expect(within(ai).getByText('Reached')).toBeTruthy()
     expect(within(card).getByTestId('limit-alert-sal_7').textContent).toContain('80% of Researcher’s card cap')
 
-    // Never a category id, and never µLXC.
-    expect(card.textContent).not.toMatch(/ai[_ ]software|ai_|µ|ulxc|10120000000/i)
+    // Never a category id, never µLXC and never LXC.
+    expect(card.textContent).not.toMatch(/ai[_ ]software|ai_|µ|ulxc|LXC|10120000000/i)
     expect(within(card).getByRole('link', { name: 'Budgets' }).getAttribute('href')).toBe('/money/budgets')
   })
 

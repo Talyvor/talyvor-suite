@@ -5,7 +5,9 @@ import { pressEverything } from '../../test/pressEverything'
 
 // B57.23 — an agent's rules on their own page, /agents/:id/rules. Every row and every More rules field saves into the
 // rules body Lens takes today (PUT /api/agents/{id}/rules); Always allow is a field there now; a save that changes
-// nothing sends nothing and says so.
+// nothing sends nothing and says so. B61.14 — every amount is typed in dollars at Lens's peg ($0.10 a LXC here, so $25
+// is 250,000,000 µLXC), and the model, provider and requests-a-minute rules are not drawn: a save sends back what Lens
+// holds for them.
 
 const M = 1_000_000
 
@@ -16,13 +18,13 @@ const RULES = {
   timezone: 'UTC', pause_on_unusual_spend: false,
 }
 
-function mockBff() {
+function mockBff(held: Record<string, unknown> = {}) {
   const sent: Array<{ method: string; url: string; body?: unknown }> = []
   const agents = [
     { id: 'agt_1', name: 'Research', balance_ulxc: 10 * M, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1' },
     { id: 'agt_2', name: 'Sales', balance_ulxc: 0, spent_ulxc: 0, keys: [], created_at: '2026-08-01T09:00:00Z', owner_user_id: 'ws_1' },
   ]
-  let rules: Record<string, unknown> = { ...RULES }
+  let rules: Record<string, unknown> = { ...RULES, ...held }
   const versions = [{ version: 1, rules, changed_by: 'jwt:user:ws_1', change: 'set', created_at: '2026-09-14T09:00:00Z' }]
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -32,6 +34,7 @@ function mockBff() {
     if (method !== 'GET') sent.push({ method, url, body })
     const json = (v: unknown, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
+    if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 20 * M, allocated_ulxc: 10 * M, unallocated_ulxc: 10 * M, spent_ulxc: 0, agents })
     if (url === '/api/models')
       return json([
@@ -73,9 +76,13 @@ describe('an agent’s rules page', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Research’s rules' })).toBeInTheDocument()
     expect(screen.getByText('Turn on the rules you want. Every change is kept in the history.')).toBeInTheDocument()
-    for (const [rule, value] of [['Asks you above', '250'], ['At most on one request', '1000'], ['At most a day', '500'], ['At most a month', '2000']]) {
+    // B61.14 — the parked gateway's rules are not drawn, as rows or under More rules.
+    for (const rule of ['Only these models', 'At most requests a minute']) expect(screen.queryByRole('switch', { name: rule })).not.toBeInTheDocument()
+    for (const rule of [/^Only these providers/, /^At most a day on one model/])
+      expect(within(screen.getByTestId('more-rules')).queryByRole('link', { name: rule })).not.toBeInTheDocument()
+    for (const [rule, value] of [['Asks you above', '25'], ['At most on one request', '100'], ['At most a day', '50'], ['At most a month', '200']]) {
       turnOn(rule)
-      field(`${rule} for Research, in LXC`, value)
+      field(`${rule} for Research, in dollars`, value)
     }
     turnOn('Only at certain hours')
     field('Research works from', '08:00')
@@ -87,31 +94,21 @@ describe('an agent’s rules page', () => {
     turnOn('Always allow a payee')
     field('A payee Research always may pay', 'pye_acme')
     fireEvent.click(within(screen.getByRole('switch', { name: 'Always allow a payee' }).parentElement!).getByRole('button', { name: 'Add' }))
-    field('Always allow Acme Hosting from Research, in LXC a month', '400')
-    turnOn('Only these models')
-    await waitFor(() => expect(screen.getByLabelText('Add to models Research may use')).toBeInTheDocument())
-    field('Add to models Research may use', 'claude-haiku-4-5')
-    turnOn('At most requests a minute')
-    field('Requests a minute for Research', '30')
+    field('Always allow Acme Hosting from Research, in dollars a month', '40')
     turnOn('Pauses if its spending looks unusual')
     more('At most an hour')
-    field('At most an hour for Research, in LXC', '50')
+    field('At most an hour for Research, in dollars', '5')
     more('At most a week')
-    field('At most a week for Research, in LXC', '1500')
-    more('Only these providers')
-    field('Add to providers Research may use', 'anthropic')
+    field('At most a week for Research, in dollars', '150')
     more('Never these payees')
     field('A payee’s id to add to payees Research may never pay', 'mrc_casino')
     fireEvent.click(within(screen.getByRole('group', { name: 'Payees Research may never pay' })).getByRole('button', { name: 'Add' }))
-    more('At most a day on one model')
-    field('Add to a day on one model for Research', 'claude-sonnet-5')
-    field('A day on one model for Research: Claude Sonnet 5, in LXC', '20')
     more('At most a day to one payee')
     field('Add to a day to one payee from Research', 'agt_2')
-    field('A day to one payee from Research: Sales, in LXC', '5')
+    field('A day to one payee from Research: Sales, in dollars', '0.5')
     more('At most a month to one payee')
     field('Add to a month to one payee from Research', 'agt_2')
-    field('A month to one payee from Research: Sales, in LXC', '60')
+    field('A month to one payee from Research: Sales, in dollars', '6')
     more('Time zone')
     field('Time zone for Research', 'Europe/London')
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
@@ -122,8 +119,8 @@ describe('an agent’s rules page', () => {
       url: '/api/agents/agt_1/rules',
       body: {
         max_per_request_ulxc: 1000 * M, hourly_limit_ulxc: 50 * M, daily_limit_ulxc: 500 * M, weekly_limit_ulxc: 1500 * M, monthly_limit_ulxc: 2000 * M,
-        approval_above_ulxc: 250 * M, requests_per_minute: 30, model_daily_limits_ulxc: { 'claude-sonnet-5': 20 * M },
-        allowed_models: ['claude-haiku-4-5'], allowed_providers: ['anthropic'], allowed_listings: [], allowed_payees: ['agt_2', 'mrc_compute'],
+        approval_above_ulxc: 250 * M, requests_per_minute: 0, model_daily_limits_ulxc: {},
+        allowed_models: [], allowed_providers: [], allowed_listings: [], allowed_payees: ['agt_2', 'mrc_compute'],
         blocked_payees: ['mrc_casino'], payee_daily_limits_ulxc: { agt_2: 5 * M }, payee_monthly_limits_ulxc: { agt_2: 60 * M },
         active_from: '08:00', active_until: '20:00', timezone: 'Europe/London', pause_on_unusual_spend: true,
         payee_allowances: { pye_acme: { amount_ulxc: 400 * M, per: 'month' } },
@@ -148,11 +145,26 @@ describe('an agent’s rules page', () => {
     expect((await screen.findByRole('status')).textContent).toBe('Nothing changed. Research’s rules are as they were, so no new version was kept.')
     // Turned on and off again with a value typed: still nothing to save.
     turnOn('At most a day')
-    field('At most a day for Research, in LXC', '5')
+    field('At most a day for Research, in dollars', '0.5')
     turnOn('At most a day')
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
     expect((await screen.findByRole('status')).textContent).toContain('Nothing changed.')
     expect(sent).toEqual([])
+  })
+
+  it('sends back unchanged the model, provider and requests-a-minute rules Lens holds, which it does not draw (B61.14)', async () => {
+    const held = { requests_per_minute: 30, model_daily_limits_ulxc: { 'claude-sonnet-5': 20 * M }, allowed_models: ['claude-haiku-4-5'], allowed_providers: ['anthropic'] }
+    const sent = mockBff(held)
+    window.history.pushState({}, '', '/agents/agt_1/rules')
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Research’s rules' })).toBeInTheDocument()
+    turnOn('At most a day')
+    field('At most a day for Research, in dollars', '4.5')
+    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+    await waitFor(() => expect(sent.some((s) => s.method === 'PUT')).toBe(true))
+    // $4.50 at $0.10 a LXC is 45 LXC. Always allow did not change, so it is not sent (toEqual reads undefined as absent).
+    expect(sent.find((s) => s.method === 'PUT')?.body).toEqual({ ...RULES, ...held, daily_limit_ulxc: 45 * M, payee_allowances: undefined })
   })
 
   it('has no control that does nothing', { timeout: 120_000 }, async () => {
