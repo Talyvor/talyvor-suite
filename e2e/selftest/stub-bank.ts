@@ -1072,15 +1072,16 @@ export class Bank {
     return JSON.parse((await this.d.read(req)) || '{}') as T
   }
 
-  private pay(res: ServerResponse, ws: BankWorkspace, from: Agent, to: string, amount: number, memo: string, connect = false): void {
+  private pay(res: ServerResponse, ws: BankWorkspace, from: Agent, to: string, amount: number, memo: string): void {
     const { json } = this.d
     if (!(amount > 0)) return json(res, 400, { error: 'body must be {"to_agent_id": "<agent>", "amount_ulxc": <positive µLXC>, "memo": "<optional>"}' })
     const payee = this.agents.get(to)
     if (payee === undefined) return json(res, 404, { error: 'economy: no such agent in this workspace' })
     if (payee.id === from.id) return json(res, 400, { error: 'economy: an agent cannot pay itself' })
     const refused = this.judge(from, amount, { payment: true, payee, memo, fingerprint: `pay\0${from.id}\0${to}\0${amount}\0${memo}` })
-    // B52.4 — an assistant on a Connect token is told it waits for the owner, and which approval it is.
-    if (refused?.approval_id !== undefined && connect) {
+    // B58.2 — a payment held for the owner answers 202 pending_approval and the approval it filed, on every caller's key
+    // (B52.4 first did so for a Connect token); nothing is posted.
+    if (refused?.approval_id !== undefined) {
       return json(res, 202, { status: 'pending_approval', approval_id: refused.approval_id, amount_ulxc: amount, message: refused.error })
     }
     if (refused !== undefined) return json(res, refused.status, { error: refused.error })
@@ -1161,7 +1162,7 @@ export class Bank {
     if (a === undefined || ws === undefined) return false
     if (req.method === 'POST' && path === `/v1/workspaces/${a.ws}/agents/${a.id}/pay`) {
       const b = await this.body<{ to_agent_id?: string; amount_ulxc?: number; memo?: string }>(req)
-      return this.pay(res, ws, a, b.to_agent_id ?? '', b.amount_ulxc ?? 0, b.memo ?? '', true), true
+      return this.pay(res, ws, a, b.to_agent_id ?? '', b.amount_ulxc ?? 0, b.memo ?? ''), true
     }
     const approve = /^\/v1\/workspaces\/([^/]+)(\/agents\/approvals\/[^/]+\/approve)$/.exec(path)
     if (approve !== null && approve[1] === a.ws && req.method === 'POST' && this.broken('connect-approves')) {
