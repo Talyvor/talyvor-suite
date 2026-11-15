@@ -83,6 +83,7 @@ const SIDEBAR_DESTINATIONS = [
   '/cards',
   '/statements',
   '/money/pay',
+  '/activity',
   '/money/invoices',
   '/money/spending',
   '/chat',

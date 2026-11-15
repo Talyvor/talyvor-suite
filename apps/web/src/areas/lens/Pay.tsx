@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { type UseQueryResult, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { cn } from '@talyvor/ui'
+import { cn, inlineLink } from '@talyvor/ui'
 import {
   Button as PocketButton,
   Card as PocketCard,
@@ -626,7 +626,13 @@ function PaymentsOut({ payments, waiting }: { payments: UseQueryResult<{ payment
   for (const q of requests) for (const i of q.data?.items ?? []) if (i.payment_id) preparedFor.set(i.payment_id, preparedBy(q.data?.client ?? ''))
   return (
     <PocketCard>
-      <h2 className="font-display text-head font-bold text-ink">Payments out</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-display text-head font-bold text-ink">Payments out</h2>
+        {/* B61.2 — W5: every payment, in and out, is on Activity. */}
+        <Link to="/activity" className={cn('text-body font-semibold text-ink', inlineLink)}>
+          See all in Activity
+        </Link>
+      </div>
       {payments.isError ? (
         <Said ok={false}>We couldn’t read your payments. Nothing changed.</Said>
       ) : payments.isPending ? (
