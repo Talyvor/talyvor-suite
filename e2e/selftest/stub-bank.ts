@@ -149,7 +149,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
-import { lxcCell } from '../src/statementPDF.ts'
+import { dollarsCell } from '../src/statementPDF.ts'
 import { HOLD_REASON, TaxDesk } from './stub-tax.ts'
 import { VerificationDesk } from './stub-verification.ts'
 import { PayeeDesk } from './stub-payees.ts'
@@ -779,7 +779,8 @@ export class Bank {
       .reduce((s, p) => s - p.amount_ulxc, 0)
     for (const [limit, name] of [[r.hourly_limit_ulxc, 'hourly'], [r.daily_limit_ulxc, 'daily'], [r.weekly_limit_ulxc, 'weekly'], [r.monthly_limit_ulxc, 'monthly']] as const) {
       if (limit > 0 && spent + amount > limit) {
-        return rule(`the agent has spent ${lxc(spent)} LXC of its ${name} limit of ${lxc(limit)} LXC, and this ${what} would cost up to ${lxc(amount)} LXC`)
+        // B61.16: as Lens's agent_rules.go writes it, in dollars alone.
+        return rule(`the agent has spent ${dollarsCell(spent)} of its ${name} limit of ${dollarsCell(limit)}, and this ${what} would cost up to ${dollarsCell(amount)}`)
       }
     }
     const modelCap = r.model_daily_limits_ulxc[modelCapKey(req.model ?? '')] ?? 0
@@ -1015,9 +1016,9 @@ export class Bank {
     if (format === 'journal') return this.answerJournal(res, s)
     if (format === 'pdf') {
       const rows = [
-        ...s.accounts.map((x) => [s.from, x.account, 'opening', '', '', lxcCell(x.opening_ulxc)]),
-        ...s.lines.map((l) => [l.at, l.account, l.kind, l.counterparty, lxcCell(l.amount_ulxc), lxcCell(l.balance_after_ulxc)]),
-        ...s.accounts.map((x) => [s.to, x.account, 'closing', '', '', lxcCell(x.closing_ulxc)]),
+        ...s.accounts.map((x) => [s.from, x.account, 'opening', '', '', dollarsCell(x.opening_ulxc)]),
+        ...s.lines.map((l) => [l.at, l.account, l.kind, l.counterparty, dollarsCell(l.amount_ulxc), dollarsCell(l.balance_after_ulxc)]),
+        ...s.accounts.map((x) => [s.to, x.account, 'closing', '', '', dollarsCell(x.closing_ulxc)]),
       ]
       const shown = (v: string) => `(${v.replace(/[()\\]/g, '\\$&')}) Tj`
       res.writeHead(200, {

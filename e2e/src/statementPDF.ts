@@ -10,13 +10,16 @@ import type { Scenario, ScenarioCtx, Verdict } from './scenarios.ts'
 /** An account's opening and closing for the period, as the JSON statement gives them. */
 export interface PeriodBalance { account: string; opening_ulxc: number; closing_ulxc: number }
 
-/** Lens's economy.LXC: µLXC as LXC with every digit kept and the thousands grouped — "3,400 LXC", "-0.001234 LXC". */
-export function lxcCell(ulxc: number): string {
-  if (ulxc < 0) return `-${lxcCell(-ulxc)}`
-  const digits = String(ulxc).padStart(7, '0')
-  const whole = digits.slice(0, -6).replace(/\B(?=(\d{3})+$)/g, ',')
-  const frac = digits.slice(-6).replace(/0+$/, '')
-  return `${frac === '' ? whole : `${whole}.${frac}`} LXC`
+/**
+ * Lens's economy.LXCMoney (B61.16): µLXC as the dollars it is worth at the $0.10 peg and nothing else, to its last µLXC
+ * below a cent, the thousands grouped — "$340.00", "$0.1649999", "-$0.0001234".
+ */
+export function dollarsCell(ulxc: number): string {
+  if (ulxc < 0) return `-${dollarsCell(-ulxc)}`
+  const digits = String(ulxc).padStart(8, '0')
+  const whole = digits.slice(0, -7).replace(/\B(?=(\d{3})+$)/g, ',')
+  const frac = digits.slice(-7).replace(/0+$/, '').padEnd(2, '0')
+  return `$${whole}.${frac}`
 }
 
 /**
@@ -49,8 +52,8 @@ export function statementPDFVerdict(
     wrong.push(`${file.name} has ${pdf.opening.length} opening and ${pdf.closing.length} closing balance(s); the JSON statement has ${json.length} account(s)`)
   } else {
     json.forEach((a, i) => {
-      if (pdf.opening[i] !== lxcCell(a.opening_ulxc)) wrong.push(`${file.name} opens ${a.account} at ${pdf.opening[i]}; the JSON statement at ${lxcCell(a.opening_ulxc)}`)
-      if (pdf.closing[i] !== lxcCell(a.closing_ulxc)) wrong.push(`${file.name} closes ${a.account} at ${pdf.closing[i]}; the JSON statement at ${lxcCell(a.closing_ulxc)}`)
+      if (pdf.opening[i] !== dollarsCell(a.opening_ulxc)) wrong.push(`${file.name} opens ${a.account} at ${pdf.opening[i]}; the JSON statement at ${dollarsCell(a.opening_ulxc)}`)
+      if (pdf.closing[i] !== dollarsCell(a.closing_ulxc)) wrong.push(`${file.name} closes ${a.account} at ${pdf.closing[i]}; the JSON statement at ${dollarsCell(a.closing_ulxc)}`)
     })
   }
   if (agent !== undefined) {

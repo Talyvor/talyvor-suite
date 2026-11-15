@@ -1550,8 +1550,8 @@ export function spendNoticePush(seed: number): Scenario {
   }
 }
 
-/** The refusal agentLimitBoost wants once the boost has ended: the rules' own daily limit, as Lens writes it — "daily limit of $0.00 (0.000001 LXC)". */
-export const boostEndedRefusal = /daily limit of [^(]*\(0\.000001 LXC\)/
+/** The refusal agentLimitBoost wants once the boost has ended: the rules' own 1 µLXC daily limit, as Lens writes it in dollars alone (B61.16) — "daily limit of $0.0000001". */
+export const boostEndedRefusal = /daily limit of \$0\.0000001\b/
 
 /**
  * B28.32 — the DONE line: after expiry a hold at the boosted size writes nothing. An agent funded 1 LXC with a daily
@@ -1613,7 +1613,7 @@ export function agentLimitBoost(seed: number): Scenario {
       const refused = await agentAsks(ctx, key, q, 'the same request after the boost ended')
       if (refused.ok) return fail(`after the boost ended the request was served: "${refused.value.text}"`)
       if (refused.status !== 403 || !boostEndedRefusal.test(refused.error)) {
-        return fail(`refused, but not by the 0.000001 LXC daily limit: ${refused.status} ${refused.error}`)
+        return fail(`refused, but not by the $0.0000001 daily limit: ${refused.status} ${refused.error}`)
       }
       const late = (await ctx.env.lens.agentLines(ctx.app.user, a.id)).filter((l) => !lines1.some((o) => o.entry_id === l.entry_id))
       const chargedLate = (await spendRows(ctx)).filter((x) => !spends0.has(x.id) && !charged.some((c) => c.id === x.id))
@@ -1797,7 +1797,7 @@ interface ApprovalWorker {
  * push Lens sends for it is delivered to the app's service worker, which must show it with Approve and
  * Deny, and (B29.14) with the app icon as its icon and badge. Approve, run in the service worker on that
  * notification, must move Lens's approval row to approved with no page opened or moved and no money moved;
- * the payment sent again is then paid once. B55.49: the notification reads Lens's sentence, "$0.10 (1 LXC)".
+ * the payment sent again is then paid once. B55.49: the notification reads Lens's sentence, "$0.10" (B61.16).
  */
 export function agentApprovalPush(seed: number): Scenario {
   return {
@@ -1841,8 +1841,8 @@ export function agentApprovalPush(seed: number): Scenario {
       if (sw === undefined) return fail('/sw.js registered, but no service worker runs it')
 
       // The push Lens sends for a waiting approval (talyvor-lens economy/agent_approval_auth.go), delivered as a push.
-      // B55.49: body is Lens's sentence, dollars beside the LXC at the $0.10 peg (B55.30).
-      const sentence = `${payer.name} wants to pay ${payee.name} $0.10 (1 LXC)`
+      // B55.49: body is Lens's sentence, in dollars alone at the $0.10 peg (B61.16).
+      const sentence = `${payer.name} wants to pay ${payee.name} $0.10`
       const push = { type: 'agent_approval', approval_id: id, agent_name: payer.name, amount_ulxc: 1e6, amount_lxc: '1', reason: memo, body: sentence }
       await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify(push) })
       const shown = await sw.evaluate(async ({ tag, ms }) => {
