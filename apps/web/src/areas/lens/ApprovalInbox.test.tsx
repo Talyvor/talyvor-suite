@@ -21,7 +21,13 @@ const REQUESTED = {
   max_per_month_minor: 2000, pulled_this_month_minor: 0, expires_at: '2027-11-10T23:59:59Z', status: 'requested', created_at: '2026-11-10T06:00:00Z',
 }
 
-function mockBff(decided: Array<Record<string, unknown> & { id: string; status: string }> = [], prepared: object[] = [], only?: number, mandates: object[] = []) {
+function mockBff(
+  decided: Array<Record<string, unknown> & { id: string; status: string }> = [],
+  prepared: object[] = [],
+  only?: number,
+  mandates: object[] = [],
+  decidedPrepared: object[] = [],
+) {
   const approvals: Array<Record<string, unknown> & { id: string; status: string }> = [
     { id: 'apr_1', agent_id: 'agt_1', amount_ulxc: 3 * M, model: '', status: 'pending', created_at: '2026-10-25T06:01:00Z', payee: { kind: 'company', id: 'ws_a', name: 'Acme Hosting' } },
     { id: 'apr_2', agent_id: 'agt_1', amount_ulxc: 2 * M, model: 'gpt-5', status: 'pending', created_at: '2026-10-25T06:02:00Z' },
@@ -50,6 +56,7 @@ function mockBff(decided: Array<Record<string, unknown> & { id: string; status: 
       })
     if (url === '/api/agents/approvals') return json({ approvals })
     if (url === '/api/money/payment-requests?status=pending_approval') return json({ requests: prepared })
+    if (url === '/api/money/payment-requests?status=decided') return json({ requests: decidedPrepared })
     if (url === '/api/agents/passkeys') return json({ passkeys: [] })
     if (url === '/api/money/devices') return json({ devices: [] })
     if (url === '/api/money/mandates?status=requested') return json({ granted: mandates, received: [] })
@@ -370,6 +377,40 @@ describe('Approvals in Pocket (B57.17)', () => {
     expect(within(rows[3]).getByText('Declined')).toBeInTheDocument()
     expect(within(rows[4]).getByText('Closed')).toBeInTheDocument()
     expect(screen.getByText('The newest five. A request lasts 24 hours, and so does an approval its agent has not used yet.')).toBeInTheDocument()
+  })
+
+  // B57.162 — a prepared payment once decided (Lens B57.161) is listed with the agents' decided requests, newest five of both.
+  it('lists decided prepared payments with the agents’ decided requests, newest five of both', async () => {
+    const preparedDecided = (id: string, client: string, payee: string, status: string, decision: string, decidedAt: string, minor: number) => ({
+      id, status, decision, summary: '1 payment', client, agent_id: '', totals: { USD: minor }, created_at: decidedAt, decided_at: decidedAt,
+      items: [{ position: 1, payee_id: 'payee_1', payee_name: payee, currency: 'USD', amount_minor: minor, reference: 'INV-9', decision: 'needs_approval', reason: '' }],
+    })
+    mockBff(
+      [
+        { id: 'apr_7', agent_id: 'agt_2', amount_ulxc: M, model: 'claude', status: 'withdrawn', created_at: '2025-10-03T06:02:00Z', decided_at: '2025-10-03T07:00:00Z' },
+        { id: 'apr_8', agent_id: 'agt_1', amount_ulxc: M, model: '', status: 'denied', created_at: '2025-10-14T08:00:00Z', decided_at: '2025-10-14T09:12:00Z', payee: { kind: 'company', id: 'ws_a', name: 'Acme Hosting' } },
+        { id: 'apr_10', agent_id: 'agt_1', amount_ulxc: M, model: '', status: 'approved', created_at: todayAt(9, 0), decided_at: todayAt(9, 12), payee: { kind: 'company', id: 'ws_d', name: 'Dock Labs' } },
+        { id: 'apr_13', agent_id: 'agt_2', amount_ulxc: M, model: 'claude', status: 'denied', created_at: '2025-09-01T06:00:00Z', decided_at: '2025-09-01T07:00:00Z' },
+      ],
+      [],
+      undefined,
+      [],
+      [
+        preparedDecided('preq_9', 'chat', 'Northwind Data', 'approved', 'Approved and paid', todayAt(10, 31), 18000),
+        preparedDecided('preq_8', 'mcp:tlv_oc_claude', 'Acme Hosting', 'cancelled', 'Declined', '2025-10-15T09:00:00Z', 34000),
+        preparedDecided('preq_7', 'chat', 'Bolt Cloud', 'expired', 'Expired', '2025-08-01T10:00:00Z', 1000),
+      ],
+    )
+    await page()
+    await waitFor(() => expect(screen.getByTestId('approvals-decided').querySelector('[data-decided="preq_9"]')).not.toBeNull())
+    const rows = Array.from(screen.getByTestId('approvals-decided').querySelectorAll<HTMLElement>('[data-decided]'))
+    // apr_13 (1 Sep) and preq_7 (1 Aug) are older than the newest five.
+    expect(rows.map((r) => r.dataset.decided)).toEqual(['preq_9', 'apr_10', 'preq_8', 'apr_8', 'apr_7'])
+    expect(rows[0]).toHaveTextContent('A payment to Northwind DataPrepared by Chat · today at 10:31')
+    expect(rows[0]).toHaveTextContent('$180.00')
+    expect(within(rows[0]).getByText('Approved and paid')).toBeInTheDocument()
+    expect(rows[2]).toHaveTextContent('A payment to Acme HostingPrepared by Your assistant · 15 Oct')
+    expect(within(rows[2]).getByText('Declined')).toBeInTheDocument()
   })
 
   it('a approves the focused request, d opens its sheet on Decline, and j moves between them', async () => {

@@ -1762,6 +1762,8 @@ export interface PaymentRequest {
   created_at: string
   /** B57.148 — when it was approved, cancelled or expired; only a decided request carries it. */
   decided_at?: string
+  /** B57.161 — how it was decided, in Lens's words: Approved and paid, Approved, Declined or Expired. */
+  decision?: string
 }
 
 /** Lens agentsig.Result: verified — the signing domain belongs to a business Talyvor checked; signed — only the domain is known. */
