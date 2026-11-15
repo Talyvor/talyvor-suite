@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parseConfig } from '../src/config.ts'
 import type { Entry, Inventory } from '../src/coverage.ts'
+import { dollarsTyped, usdShown } from '../src/bank.ts'
 import { deepJourneys } from '../src/deep.ts'
-import { LAUNCH_CANNOT_PLAY, SCENARIO_AREAS, areaOf, hiddenPaths, hiddenPathsFrom, hiddenScreen, launchCut, launchInventory, launchLine, setUpCatalog } from '../src/launch.ts'
+import { LAUNCH_CANNOT_PLAY, LXC_PARKED, SCENARIO_AREAS, areaOf, hiddenPaths, hiddenPathsFrom, hiddenScreen, launchCut, launchInventory, launchLine, setUpCatalog } from '../src/launch.ts'
 import { lightJourneys } from '../src/light.ts'
 import { pocketJourneys } from '../src/pocketProblems/index.ts'
 import { type ReportedRun, renderRun, renderSummary } from '../src/report.ts'
@@ -46,7 +47,7 @@ describe('a launch run (B61.1)', () => {
   it('keeps the light pass and the Pocket pass to the same list', () => {
     expect(launchCut(lightJourneys()).cut.left_out).toEqual([
       'agent-limit', 'agent-rules-unbypassable', 'capital', 'cross-company-test-money', 'keys-unlisted', 'known-answer', 'ledger-call-once',
-      'ledger-moves-at-once', 'script-inert', 'spending-limit', 'webhook-unsigned',
+      'ledger-moves-at-once', 'script-inert', 'spending-limit', 'wallet-send-refund', 'webhook-unsigned',
     ])
     expect(launchCut(pocketJourneys()).cut.left_out).toEqual(['pocket-10', 'pocket-12', 'pocket-14', 'pocket-18', 'pocket-19'])
   })
@@ -57,6 +58,22 @@ describe('a launch run (B61.1)', () => {
     expect(Object.keys(LAUNCH_CANNOT_PLAY).filter((id) => areaOf(id) === undefined), 'a scenario left out must be one the map places').toEqual([])
     expect(launchLine(cut)).toContain('`agent-limit`: its agent asks a model, through the old gateway')
     expect(journeys.flat().some((s) => s.id === 'agent-open-fund')).toBe(true)
+  })
+
+  it('B61.86: leaves out what needs an LXC control B61.14 parked, counts it on the line, and reads and types dollars alone', () => {
+    const { journeys, cut } = launchCut(night())
+    expect(journeys.flat().some((s) => s.id === 'wallet-send-refund')).toBe(false)
+    expect(LAUNCH_CANNOT_PLAY['wallet-send-refund']).toBe(LXC_PARKED)
+    const parked = cut.left_out.filter((id) => LAUNCH_CANNOT_PLAY[id] === LXC_PARKED).length
+    expect(parked).toBeGreaterThan(0)
+    expect(launchLine(cut)).toContain(`${cut.left_out.length} left out, ${parked} of them because LXC is parked (`)
+    expect(launchLine(cut)).toContain('`wallet-send-refund`: LXC is parked')
+    expect(journeys.flat().some((s) => s.id === 'agent-open-fund')).toBe(true)
+    // At the peg of $0.10: 1 LXC reads "$0.10", nothing beside it; 1 µLXC is typed as "0.0000001" and reads back as 1 µLXC.
+    expect(usdShown(1e6, 0.1)).toBe('$0.10')
+    expect(usdShown(1, 0.1)).toBe('<$0.01')
+    expect([1, 500_000, 1e6, 12_345_678].map((u) => Math.round((Number(dollarsTyped(u, 0.1)) * 1e6) / 0.1))).toEqual([1, 500_000, 1e6, 12_345_678])
+    expect(dollarsTyped(1, 0.1)).toBe('0.0000001')
   })
 
   it('B61.56: names how many explorers explored, and which addresses are a hidden area\'s', () => {

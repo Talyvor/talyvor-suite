@@ -162,6 +162,12 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
 const NEEDS_A_MODEL = 'its agent asks a model, through the old gateway, which the launch version hides (a launch run reads no catalog, B61.49)'
 const NEEDS_STRIPE_FORM = 'it waits for Stripe’s hosted card form (#cardNumber), which the launch run of 15 Nov 15:07Z never drew'
 const LEDGER_PARKED = 'it reads the Ledger page (ledger-balance), which the launch version hides while LXC is parked (B61.17)'
+/**
+ * B61.86 — its steps press or read an LXC control or figure that B61.14 took off every launch account: the agent page's
+ * credit rows (Send or request, Requests, Transfers, Recurring transfer, Pots, Escrow, Cash out, Automatic top-up) are the
+ * parked gateway's, and Home and Agents name no LXC total. Found by playing the launch self-test against that web.
+ */
+export const LXC_PARKED = 'LXC is parked: its steps need an LXC control or figure B61.14 took off every launch screen'
 const NO_HERO_PHOTO = 'it measures the homepage hero photograph’s fade, and the homepage has had no photograph since B57.60 (Pocket’s hero, the approval sheet’s picture)'
 export const LAUNCH_CANNOT_PLAY: Readonly<Record<string, string>> = {
   'ledger-reads-correctly': LEDGER_PARKED,
@@ -171,6 +177,11 @@ export const LAUNCH_CANNOT_PLAY: Readonly<Record<string, string>> = {
     'agent-request-rate', 'agent-rules-unbypassable', 'first-agent', 'keys-unlisted', 'ledger-call-once', 'ledger-moves-at-once',
     'sdk-wallet-quickstart', 'statement-reconciles', 'subscriptions-view', 'wallet-currency', 'wallet-home', 'wallet-onboarding',
   ].map((id) => [id, NEEDS_A_MODEL])),
+  ...Object.fromEntries([
+    'agent-approval', 'agent-approval-push', 'agent-payee-daily-cap', 'agent-payee-lists', 'agent-runs-out-date', 'approvals-badge',
+    'approvals-inbox', 'approve-always-allow', 'home-daily-briefing', 'statement-line-kinds', 'wallet-cash-out', 'wallet-give-back',
+    'wallet-pots', 'wallet-recurring', 'wallet-request', 'wallet-send-refund',
+  ].map((id) => [id, LXC_PARKED])),
   ...Object.fromEntries([
     'agent-cards', 'agent-wallet-kinds', 'batch-approval-pays-once', 'coach-week', 'invoices-screen', 'money-layer-contract', 'pay-screen',
     'pocket-10', 'seats-team', 'wallet-statements',
@@ -215,7 +226,8 @@ export function launchCut(journeys: readonly Scenario[][]): { journeys: Scenario
 /** The report's and TESTERS.md's line. */
 export function launchLine(cut: LaunchCut): string {
   const why = (id: string) => (id in LAUNCH_CANNOT_PLAY ? `: ${LAUNCH_CANNOT_PLAY[id]}` : '')
-  return `Launch version: ${cut.played} played, ${cut.left_out.length} left out` +
+  const parked = cut.left_out.filter((id) => LAUNCH_CANNOT_PLAY[id] === LXC_PARKED).length
+  return `Launch version: ${cut.played} played, ${cut.left_out.length} left out` + (parked === 0 ? '' : `, ${parked} of them because LXC is parked`) +
     (cut.left_out.length === 0 ? '' : ` (${cut.left_out.map((id) => `\`${id}\`${why(id)}`).join(', ')})`) +
     (cut.explorers === undefined ? '' : `; ${cut.explorers.explored} of ${cut.explorers.of} explorers explored the launch pages`)
 }

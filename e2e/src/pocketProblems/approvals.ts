@@ -226,7 +226,7 @@ export function looseningSigned(): Bare {
     title: "with a passkey, raising an agent's daily limit is refused unsigned on Lens and asks for the passkey on the web; lowering it saves at once",
     run: async (ctx) => {
       const { lens } = ctx.env
-      const bank = await AgentBankScreen.open(ctx.app)
+      const bank = await AgentBankScreen.open(ctx.app, ctx.env)
       try {
         const made = await turnOnPasskey(ctx, bank.page)
         if (made !== undefined) return fail(made)
