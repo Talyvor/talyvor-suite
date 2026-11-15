@@ -30,7 +30,13 @@ function helpPages(): HelpPage[] {
     at(path, c.href.startsWith('#') ? 'Documentation' : c.label.split(':')[0]).lines.push(c.text)
   }
   let page: HelpPage | undefined
-  for (const line of readFileSync(resolve(HERE, 'help-facts.md'), 'utf8').replace(/<!--[\s\S]*?-->/g, '').split('\n')) {
+  let note = false // inside the file's <!-- … --> note, which is for whoever edits it, not for the model
+  for (const line of readFileSync(resolve(HERE, 'help-facts.md'), 'utf8').split('\n')) {
+    if (line.startsWith('<!--')) note = true
+    if (note) {
+      note = !line.includes('-->')
+      continue
+    }
     const head = /^## (\S*) ?· (.+)$/.exec(line)
     if (head) page = at(head[1], head[2])
     else if (line.startsWith('- ') && page) page.lines.push(line.slice(2))
