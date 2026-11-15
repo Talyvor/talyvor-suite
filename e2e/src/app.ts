@@ -277,6 +277,8 @@ export class AppUser {
   static async signIn(browser: Browser, user: SyntheticUser, opts: {
     appURL: string; syntheticKey: string; cap: SpendCap; catalog: CatalogModel[]; modelName: string; book: ChargeBook
     usdPerLXC: number; recorder?: Recorder; tag?: Tag
+    /** B61.1 — a launch run's tester starts on Home: Chat is a hidden area, so its composer never shows. */
+    home?: boolean
   }): Promise<AppUser> {
     const context = await whileUp(browser, 'opening a browser context', browser.newContext())
     // B27.16 — a sign-in that fails part-way closes what it opened.
@@ -314,6 +316,11 @@ export class AppUser {
       const app = new AppUser(user, context, page, opts.appURL, opts.cap, opts.catalog, opts.modelName, opts.book, opts.usdPerLXC,
         opts.recorder, tag)
       holder.app = app
+      if (opts.home === true) {
+        app.home = true
+        await app.openStart()
+        return app
+      }
       await app.openChat()
       if (!(await app.chooseModel(opts.modelName))) throw new Error(`the model picker does not offer "${opts.modelName}"`)
       return app
@@ -326,6 +333,14 @@ export class AppUser {
   /** B26.18 — a context whose browser has already gone has nothing left to close, and that is not an error. */
   async close(): Promise<void> {
     await this.context.close().catch(() => undefined)
+  }
+
+  /** B61.1 — where this tester starts, and goes back to after an ERROR: Home in a launch run, else Chat. */
+  home = false
+
+  async openStart(): Promise<void> {
+    if (!this.home) return this.openChat()
+    await this.page.goto(this.appURL + '/')
   }
 
   async openChat(): Promise<void> {

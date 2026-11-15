@@ -27,6 +27,7 @@ import { type ExplorerSummary, type Finding, Notebook, explore } from './explore
 import { fileB28Items, fileBuildingLabelItems, fileCodeItems, fileEdgeItems, fileHostileItems, fileItems, filePocketItems } from './filing.ts'
 import { type HostileReport, type Repo, runHostile } from './hostile.ts'
 import { LensClient, type SyntheticUser, describe } from './lens.ts'
+import { type HiddenPaths, type LaunchCut, hiddenPaths, launchCut, launchInventory, launchLine } from './launch.ts'
 import { lightJourneys } from './light.ts'
 import { pocketJourneys } from './pocketProblems/index.ts'
 import { type PocketRow, pocketRows } from './pocketProblems/problems.ts'
@@ -120,6 +121,8 @@ export interface RunResult {
   light?: true
   /** B55.44 — the Pocket problems pass's 25 rows (pocketProblems/). */
   pocket?: PocketRow[]
+  /** B61.1 — a launch run: how many scenarios it played, and the ones outside the launch version it left out (launch.ts). */
+  launch?: LaunchCut
   /** B28.294 — the day's one cap and what the day's earlier runs had spent of it; the run's own cap_usd is what they left. */
   day?: DayBudget
   /** B34.2 — what was tested: the harness, Lens's main at lens-src, and production's versions at the start. */
@@ -272,6 +275,8 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
   const cap = new SpendCap(cfg.capUSD)
   const book = new ChargeBook()
   let inv: Inventory | undefined
+  let hidden: HiddenPaths | undefined
+  let cut: LaunchCut | undefined
   let versions: Versions | undefined
   let screens: Matcher | undefined
   let users: SyntheticUser[] = []
@@ -328,6 +333,8 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
       if (behind !== undefined) incidents.push(`${stamp()} the map's ${name} routes are read from an older checkout or none: ${behind}`)
     }
     inv = await inventory(REPO, cfg.lensSrc, cfg.trackSrc, cfg.docsSrc)
+    // B61.1 — a launch run's map counts the launch version's screens and routes only.
+    if (cfg.launch) hidden = await hiddenPaths(REPO, cfg.lensSrc)
     screens = new Matcher(inv.screens, false)
     const listed = (n: number, name: string, missing: string | undefined) => (missing === undefined ? `${n} ${name} routes` : `no ${name} routes (${missing})`)
     console.log(`inventory: ${inv.screens.length} screens, ${inv.bff.length} BFF routes, ${listed(inv.lens.length, 'Lens', inv.lensMissing)}, ` +
@@ -338,8 +345,14 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     // B28.292 — on the weekly night, the deep pass's attackers and counterparties after them, created fresh with them.
     // B28.294 — the light pass plays its own few journeys instead.
     // B55.44 — the Pocket problems pass plays one user for each of the 25 problems.
-    const journeys = cfg.pocket ? pocketJourneys() : cfg.light ? lightJourneys()
+    const every = cfg.pocket ? pocketJourneys() : cfg.light ? lightJourneys()
       : [...Array.from({ length: cfg.users }, (_, i) => journeyFor(i, cfg.users, STREAMABLE)), ...deepJourneys(cfg.users, cfg.deepRounds)]
+    // B61.1 — a launch run plays the launch version's scenarios only, in every pass, and names the ones it leaves out.
+    let journeys = every
+    if (cfg.launch) {
+      ;({ journeys, cut } = launchCut(every))
+      console.log(launchLine(cut))
+    }
     const seated = await seat(lens, cast(journeys))
     users = seated.users
     const onPlan = (plan: string) => users.filter((u) => u.plan === plan).length
@@ -363,7 +376,7 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     stage = 'the users ran their journeys'
     let browsers = new Browsers(cfg.headed, incidents)
     const signIn = async (user: SyntheticUser) =>
-      AppUser.signIn(await browsers.get(), user, { appURL: cfg.appURL, syntheticKey: cfg.syntheticKey, cap, catalog, modelName: cfg.model, book, usdPerLXC, recorder: rec })
+      AppUser.signIn(await browsers.get(), user, { appURL: cfg.appURL, syntheticKey: cfg.syntheticKey, cap, catalog, modelName: cfg.model, book, usdPerLXC, recorder: rec, home: cfg.launch })
     const env: RunEnv = {
       inventory: inv,
       lens, fees, cap, catalog, usdPerLXC, book,
@@ -423,7 +436,7 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
         detail = e instanceof Error ? e.message : String(e)
         // Where it was when it broke — before going back to Chat, which is not where it broke.
         where = rec.screensOf(tag)
-        if (status === 'ERROR') await timed(CLOSE_MS, 'going back to Chat', unlessStopped('going back to Chat', app.openChat())).catch(() => undefined)
+        if (status === 'ERROR') await timed(CLOSE_MS, 'going back to the start', unlessStopped('going back to the start', app.openStart())).catch(() => undefined)
       }
       playing.delete(label)
       // B35.8 — the testers' own network dropping is not the feature failing.
@@ -657,7 +670,7 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
           const tag: Tag = { scenario: 'explorer', user: n }
           try {
             const app = await timed(SIGN_IN_MS, 'signing in', unlessStopped('signing in',
-              (async () => AppUser.signIn(await again.get(), user, { appURL: cfg.appURL, syntheticKey: cfg.syntheticKey, cap, catalog, modelName: cfg.model, book, usdPerLXC, recorder: rec, tag }))()))
+              (async () => AppUser.signIn(await again.get(), user, { appURL: cfg.appURL, syntheticKey: cfg.syntheticKey, cap, catalog, modelName: cfg.model, book, usdPerLXC, recorder: rec, tag, home: cfg.launch }))()))
             try {
               s = await timed(SIGN_IN_MS + cfg.exploreMinutes * 60_000, 'exploring', unlessStopped('exploring',
                 explore(n, app, { lens: lens.tagged(tag), cap, catalog, usdPerLXC, provider: cfg.judgeProvider, model: cfg.explorerModel,
@@ -704,6 +717,7 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     spent_usd: Number(cap.spentUSD.toFixed(6)),
     ...(cfg.deepRounds > 0 ? { deep_rounds: cfg.deepRounds } : {}),
     ...(cfg.light ? { light: true as const } : {}),
+    ...(cut === undefined ? {} : { launch: cut }),
     stopped_at_cap: stoppedAtCap ?? cap.reached,
     ...(stoppedBy === undefined ? {} : { stopped_by: stoppedBy }),
     incidents,
@@ -711,7 +725,7 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     outcomes,
     explorers: summaries,
     findings,
-    ...(inv === undefined ? {} : { coverage: buildMap(inv, rec) }),
+    ...(inv === undefined ? {} : { coverage: buildMap(hidden === undefined ? inv : launchInventory(inv, hidden), rec) }),
     network_drops: drops,
     memory,
     second_attempts: secondAttempts.sort((a, b) => a.user - b.user),
@@ -836,7 +850,9 @@ async function main(): Promise<number> {
   if (cfg.pocket) {
     let queue: string | undefined
     if (cfg.buildMd !== 'none') queue = await readFile(cfg.buildMd, 'utf8').catch(() => undefined)
-    result.pocket = pocketRows(queue, result.outcomes)
+    // B61.1 — a problem left out of a launch run has no row: it is neither passed nor filed.
+    const left = new Set(result.launch?.left_out ?? [])
+    result.pocket = pocketRows(queue, result.outcomes).filter((r) => !left.has(r.scenario))
     if (cfg.buildMd !== 'none') {
       const rows = result.pocket
       await attempt(`the Pocket problems that are back to ${cfg.buildMd}`, async () => {

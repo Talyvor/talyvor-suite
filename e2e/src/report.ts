@@ -21,6 +21,7 @@ import type { ExplorerSummary, Finding } from './explore.ts'
 import type { DayBudget } from './day.ts'
 import type { MemorySample } from './memory.ts'
 import type { Evidence } from './scenarios.ts'
+import { type LaunchCut, launchLine } from './launch.ts'
 import type { Raised } from './streak.ts'
 import { type Versions, versionsLine } from './versions.ts'
 
@@ -89,6 +90,8 @@ export interface ReportedRun {
   light?: true
   /** B55.44 — the run was the Pocket problems pass: its 25 rows (pocketProblems/). */
   pocket?: PocketRow[]
+  /** B61.1 — the run played the launch version only: what it played and what it left out (launch.ts). */
+  launch?: LaunchCut
   /** B28.294 — the day's one cap and what the day's earlier runs had spent of it (run.ts). */
   day?: DayBudget
   /** B28.296 — the scenarios FAILing three runs running or more, and their items, moved to the top of the queue (streak.ts). */
@@ -450,6 +453,7 @@ export function renderRun(run: ReportedRun): string {
     '',
     `Tested: ${testedText(run)}.`,
     '',
+    ...(run.launch === undefined ? [] : [`${launchLine(run.launch)}.`, '']),
     `Cost: about $${run.spent_usd.toFixed(4)} of a $${run.cap_usd.toFixed(2)} cap${dayText(run)}` +
       (run.stopped_at_cap ? ' — STOPPED AT THE CAP; everything after it was skipped.' : '.') +
       ` Finished ${run.finished_at}.`,
@@ -549,6 +553,7 @@ export function renderSummary(run: ReportedRun, report: string, newItems: string
     ...deepLine(run),
     `- **Coverage**: ${map === undefined ? 'no map' : `screens ${tallyLine(map.screens)}; BFF routes ${tallyLine(map.bff)}; ${servicesLine(map)}`}.`,
     `- **Tested**: ${testedText(run)}.`,
+    ...(run.launch === undefined ? [] : [`- **${launchLine(run.launch).replace(': ', '**: ')}.`]),
     `- **Works**: ${c.PASS} checks passed across ${passing.length} scenario(s).`,
     `- **Broken**: ${failing.length === 0 ? 'nothing failed' : failing.map(([id, os]) =>
       `\`${id}\` (${os.filter((o) => o.status === 'FAIL').length} of ${os.length}${run.filed?.[id] !== undefined ? `, ${run.filed[id]}` : ''})`).join(', ')}` +
