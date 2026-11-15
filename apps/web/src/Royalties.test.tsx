@@ -29,14 +29,14 @@ describe('Royalties sits under Statements', () => {
     window.history.pushState({}, '', '/')
   })
 
-  it('B57.8 — Royalties left the sidebar for Pocket’s rows; the Statements row stays marked on it, and no Earnings', async () => {
+  it('B57.8 — Royalties left the sidebar for Pocket’s rows; the Activity row stays marked on it (B61.3), and no Earnings', async () => {
     window.history.pushState({}, '', '/statements/royalties')
     render(<App />)
     const nav = await screen.findByRole('navigation', { name: /sections/i })
     const names = within(nav).getAllByRole('link').map((a) => a.textContent)
     expect(names).not.toContain('Royalties')
     expect(names).not.toContain('Earnings')
-    expect(within(nav).getByRole('link', { name: 'Statements' })).toHaveAttribute('aria-current', 'page')
+    expect(within(nav).getByRole('link', { name: 'Activity' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('the old /earnings address lands on Royalties', async () => {

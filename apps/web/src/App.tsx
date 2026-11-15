@@ -113,6 +113,7 @@ import { useAuthMeReader } from './lib/authMe'
 import { designOf } from './pocketPending'
 import { WorkspaceStatus } from './labels/workspace'
 import { AreaRoute, IfArea, useWorkspaceAreas } from './lib/workspaceAreas'
+import { ACTIVITY_TABS, PlaceTabs } from './components/PlaceTabs'
 
 // App.tsx is a SHARED file (see README §Directory ownership): it owns routing
 // and the nav for every area. Area work happens inside src/areas/<area>/ —
@@ -394,14 +395,13 @@ function Sidebar() {
   const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
   // B55.39 — Lens names a new workspace by its id; the sidebar never shows it.
   const workspaceLabel = !workspace.data?.name || workspace.data.name === workspace.data.id ? 'Your workspace' : workspace.data.name
-  // B59.2 — a row for an area this workspace does not have is not drawn.
-  const areas = useWorkspaceAreas()
   // B59.10 — the account's type and kind: its chip under the name.
   const account = useAccount()
-  const item = (to: string, label: string, icon: PocketIconName, active: boolean, badge?: number | null) =>
-    !areas.shows(to) ? null : <NavDestination to={to} label={label} icon={icon} active={active} badge={badge} />
-  // B57.8 — Pocket's rows, and no folding groups: every page that left the sidebar is linked from the page it belongs
-  // to (Billing links Overview and Ledger, the Marketplace its own pages, Settings the settings), and ⌘K finds every page.
+  const item = (to: string, label: string, icon: PocketIconName, active: boolean, badge?: number | null) => (
+    <NavDestination to={to} label={label} icon={icon} active={active} badge={badge} />
+  )
+  // B61.3 — the approved seven (launch-pack DESIGN.md W2) and nothing else: every page that left the sidebar opens from
+  // the one it belongs to (Activity's and Pay's tabs, Settings' Plan and Developers rows), and ⌘K finds it there.
   return (
     <nav className="flex flex-1 flex-col" aria-label="Sections">
       {/* B57.6 — the kit's small drawing at 144 px, light or dark by the theme, to Home. */}
@@ -428,23 +428,17 @@ function Sidebar() {
       )}
       <div className="grid gap-0.5">
         {item('/', 'Home', 'home', pathname === '/')}
-        {item('/approvals', 'Approvals', 'approvals', under(pathname, '/approvals', '/approve', '/money/plans'), pending)}
         {item('/agents', 'Agents', 'agents', under(pathname, '/agents'))}
-        {item('/cards', 'Cards', 'card', under(pathname, '/cards'))}
-        {item('/statements', 'Statements', 'statements', under(pathname, '/statements'))}
-        {item('/money/pay', 'Pay', 'payments', under(pathname, '/money/pay'))}
-        {item('/activity', 'Activity', 'clock', under(pathname, '/activity'))}
-        {item('/money/invoices', 'Invoices', 'invoices', under(pathname, '/money/invoices'))}
-        {item('/money/spending', 'Spending', 'spending', under(pathname, '/money/spending', '/money/budgets', '/money/subscriptions', '/money/card'))}
-        {item('/chat', 'Chat', 'chat', under(pathname, '/chat'))}
-        {item('/rooms', 'Rooms', 'rooms', under(pathname, '/rooms'))}
-        {item('/marketplace', 'Marketplace', 'marketplace', under(pathname, '/marketplace'))}
-        <div role="separator" className="mx-1.5 my-2.5 h-px bg-line" />
-        {item('/scan/reports', 'Scan', 'scan', under(pathname, '/scan'))}
-        {item('/track', 'Track and Docs', 'work', under(pathname, '/track', '/docs'))}
-        {item('/setup', 'Developers', 'code', under(pathname, '/setup', '/keys', '/spend', '/features'))}
-        {item('/billing', 'Billing', 'billing', under(pathname, '/billing', '/plans', '/overview', '/ledger'))}
-        {item('/settings', 'Settings', 'settings', under(pathname, '/settings', '/members', '/operator'))}
+        {item('/cards', 'Cards', 'card', under(pathname, '/cards', '/money/card'))}
+        {item('/money/pay', 'Pay', 'payments', under(pathname, '/money/pay', '/money/invoices'))}
+        {item('/approvals', 'Approvals', 'approvals', under(pathname, '/approvals', '/approve', '/money/plans'), pending)}
+        {item('/activity', 'Activity', 'clock', under(pathname, '/activity', '/statements', '/money/spending', '/money/budgets', '/money/subscriptions'))}
+        {item(
+          '/settings',
+          'Settings',
+          'settings',
+          under(pathname, '/settings', '/members', '/operator', '/billing', '/plans', '/overview', '/ledger', '/setup', '/keys'),
+        )}
       </div>
       {/* ── THE POLICIES, AND WHY HERE ────────────────────────────────────────────────
           Both routes have always resolved, and until B28 nothing inside the app linked to them: they
@@ -498,14 +492,27 @@ function palettePages(operator: boolean, shows: (path: string) => boolean): Pale
       r.path !== '/billing/cancel' &&
       (operator || !r.path.startsWith('/operator')) &&
       shows(r.path),
-  ).map((r) => ({ path: r.path.replace(/\/\*$/, ''), title: r.title }))
+  ).map((r) => ({ path: r.path.replace(/\/\*$/, ''), title: r.title, place: PLACE_OF[r.path] }))
 }
 
-/** B59.10 — Members is a Business's team; a Personal account is never offered it. Its own component, told only whether
+/** B61.3 — the sidebar row a page that left the sidebar now opens from, which the palette says beside its title. */
+const PLACE_OF: Record<string, string> = {
+  ...Object.fromEntries(ACTIVITY_TABS.tabs.filter((t) => t.to !== '/activity').map((t) => [t.to, 'Activity'])),
+  '/money/invoices': 'Pay',
+  '/billing': 'Settings',
+  '/plans': 'Settings',
+  '/setup': 'Settings',
+  '/keys': 'Settings',
+}
+
+/** B61.3 — what a Personal account is never offered: Members, Pay's Invoices and the Developers pages. */
+const BUSINESS_ONLY = new Set(['/members', '/money/invoices', '/setup', '/keys'])
+
+/** B59.10 — Members is a Business's team; a Personal account is never offered it (B61.3: nor Invoices or Developers). Its own component, told only whether
  * the account is Personal, so the account's read re-renders the palette once at most and never the whole shell. */
 function Palette({ pages, trigger }: { pages: PalettePage[]; trigger: (open: () => void) => React.ReactNode }) {
   const personal = usePersonal()
-  const offered = useMemo(() => (personal ? pages.filter((p) => p.path !== '/members') : pages), [pages, personal])
+  const offered = useMemo(() => (personal ? pages.filter((p) => !BUSINESS_ONLY.has(p.path)) : pages), [pages, personal])
   return <CommandPalette pages={offered} trigger={trigger} />
 }
 
@@ -590,6 +597,8 @@ function ConsoleShell() {
           the content as the page's heading; Chat keeps the whole page, so there it is for a screen
           reader only. */}
       <PageHeading className={pathname === '/chat' ? 'sr-only' : 'mb-4.5'}>{page}</PageHeading>
+      {/* B61.3 — Activity's tabs, and Pay's on a Business: the pages that left the sidebar, under the section they belong to. */}
+      <PlaceTabs />
       {/* B27.12 — a screen that throws while drawing shows "couldn't be read" here, with the shell
           still standing. Try again drops the failed screen's cached reads and asks for them anew. */}
       <ScreenBoundary address={pathname} onRetry={() => void queryClient.resetQueries({ type: 'inactive' })}>

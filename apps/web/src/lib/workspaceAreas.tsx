@@ -38,6 +38,8 @@ const AREA_PATHS: readonly { path: string; area: Area }[] = [
   { path: '/settings/email-branding', area: 'docs' },
   { path: '/scan', area: 'scan' },
   { path: '/features', area: 'gateway' },
+  // B61.3 — Spend and routing is the old gateway's too (LAUNCH-PACK.md section 2).
+  { path: '/spend', area: 'gateway' },
   // B61.17 — LXC is parked, and these three are LXC's: its balances, its ledger and the LENS it earned.
   { path: '/overview', area: 'gateway' },
   { path: '/ledger', area: 'gateway' },

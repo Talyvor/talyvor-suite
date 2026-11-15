@@ -5,7 +5,7 @@ import { docsNavKey } from './areas/docs/docsNav'
 
 // B8.1 made a Docs page reachable from the sidebar; B10.6 changed how: the pages a person PINNED and
 // the last five they OPENED — never every page — and the space list reaches the rest. B57.8 — the
-// sidebar is Pocket's rows, so Docs' own home lists them, one click from "Track and Docs" and Docs.
+// sidebar is Pocket's rows, so Docs' own home lists them, one click from Track's Docs link.
 // This drives the real app. The rows themselves are pinned by ConsoleNavLinks.test.tsx.
 
 type ServerPin = { page_id: string; space_id: string; title: string; at: string }
@@ -53,12 +53,10 @@ afterEach(() => {
 describe('the Docs home: pinned and recent pages, never all of them (B10.6, B57.8)', () => {
   it('every page is reachable through All documents; an opened page is recent; a pinned one is one click away, in another browser too', async () => {
     mockBff()
-    window.history.pushState({}, '', '/')
+    // B61.3 — Track is a hidden area with no sidebar row: its address opens it, and it links Docs.
+    window.history.pushState({}, '', '/track')
     const first = render(<App />)
-    const nav = await screen.findByRole('navigation', { name: /sections/i })
-
-    // B57.8 — the sidebar's Track and Docs row opens Track, which links Docs.
-    fireEvent.click(within(nav).getByRole('link', { name: 'Track and Docs' }))
+    await screen.findByRole('navigation', { name: /sections/i })
     fireEvent.click(within(screen.getByRole('navigation', { name: 'Track' })).getByRole('link', { name: 'Docs' }))
     fireEvent.click(await within(screen.getByRole('main')).findByRole('link', { name: 'Open space Engineering' }))
     fireEvent.click(await within(screen.getByRole('main')).findByRole('link', { name: /Onboarding/ }))

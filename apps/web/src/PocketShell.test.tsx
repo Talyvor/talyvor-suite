@@ -81,7 +81,7 @@ describe('Pause every agent, from the top bar of every page', () => {
 
     // While paused the top bar offers the way back, and the banner is on every page.
     expect(await bar.findByRole('button', { name: 'Start every agent again' })).toBeInTheDocument()
-    fireEvent.click(within(screen.getByRole('navigation', { name: /sections/i })).getByRole('link', { name: 'Statements' }))
+    fireEvent.click(within(screen.getByRole('navigation', { name: /sections/i })).getByRole('link', { name: 'Activity' }))
     expect(await screen.findByTestId('kill-banner')).toBeInTheDocument()
   })
 

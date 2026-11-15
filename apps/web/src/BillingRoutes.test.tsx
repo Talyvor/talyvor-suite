@@ -78,11 +78,11 @@ describe('the billing routes Lens already redirects to', () => {
     expect(await screen.findByRole('button', { name: '$10' })).toBeInTheDocument()
   })
 
-  it('reaches the top-up screen from the sidebar, so buying is discoverable', async () => {
-    at('/')
-    // B57.8 — one click: Billing is a row of its own.
-    const nav = await screen.findByRole('navigation', { name: /sections/i })
-    expect(within(nav).getByRole('link', { name: 'Billing' })).toHaveAttribute('href', '/billing')
+  it('reaches the top-up screen from Settings, so buying is discoverable', async () => {
+    at('/settings')
+    // B61.3 — Billing and Plans are Settings' one row, Plan.
+    const pages = await screen.findByRole('navigation', { name: 'Settings pages' })
+    expect(within(pages).getByRole('link', { name: /^Plan/ })).toHaveAttribute('href', '/billing')
   })
 
   it('B57.8 — Billing links Overview and Ledger, which left the sidebar', async () => {

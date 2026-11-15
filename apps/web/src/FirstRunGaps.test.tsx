@@ -159,8 +159,8 @@ describe('first run opens Home in onboarding mode', () => {
       expect(window.location.pathname).toBe('/')
     })
     expect(await screen.findByTestId('home-onboarding')).toBeInTheDocument()
-    // B57.18: Setup is the sidebar's Developers, one link away.
-    expect(within(screen.getByRole('navigation', { name: /sections/i })).getByRole('link', { name: 'Developers' })).toHaveAttribute('href', '/setup')
+    // B61.3: Setup is Settings' Developers row, and Settings is the sidebar's.
+    expect(within(screen.getByRole('navigation', { name: /sections/i })).getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
   })
 
   it('does NOT trap them there — the whole app is reachable from Setup', async () => {
@@ -176,9 +176,9 @@ describe('first run opens Home in onboarding mode', () => {
     // here is about the NAVIGATION, so it is now asked of the navigation.
     const nav = within(await screen.findByRole('navigation', { name: /sections/i }))
     expect(nav.getByRole('link', { name: /^home$/i })).toBeInTheDocument()
-    expect(nav.getByRole('link', { name: /^statements$/i })).toBeInTheDocument()
-    // B57.8 — API keys is one of Developers' pages, and the Developers row is marked here.
-    expect(nav.getByRole('link', { name: /^developers$/i })).toHaveAttribute('aria-current', 'page')
+    expect(nav.getByRole('link', { name: /^activity$/i })).toBeInTheDocument()
+    // B61.3 — Developers is a row of Settings, and the Settings row is marked here.
+    expect(nav.getByRole('link', { name: /^settings$/i })).toHaveAttribute('aria-current', 'page')
   })
 
   it('a new workspace that Lens gave "My first agent" is asked its name, and the sidebar never shows its id', async () => {
@@ -201,7 +201,7 @@ describe('first run opens Home in onboarding mode', () => {
     // needs_pooling_choice is false on every login after the one that created the workspace,
     // so the redirect must not fire. Landing a returning user on Setup every time would be a
     // different kind of broken.
-    await screen.findByRole('link', { name: /^statements$/i })
+    await screen.findByRole('link', { name: /^activity$/i })
     expect(window.location.pathname).toBe('/')
   })
 })
@@ -223,7 +223,7 @@ describe('the /specimen gallery is gone', () => {
     // ⚠ `link`, NOT `button`: sidebar destinations are `<a href>` now (ConsoleNavLinks.test.tsx).
     // As `button` the second line would be constant-true — no nav row carries that role any more,
     // so a /specimen row restored tomorrow would be a link and would slip past this.
-    await screen.findByRole('link', { name: /^statements$/i })
+    await screen.findByRole('link', { name: /^activity$/i })
     expect(screen.queryByRole('link', { name: /^specimen$/i })).toBeNull()
   })
 })
