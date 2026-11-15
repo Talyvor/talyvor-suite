@@ -54,6 +54,7 @@ function mockBff({
   wallets = {},
   plan = { plan: 'free', agents: 3, agents_used: 2, seats: 1 },
   allPaused = false,
+  usdPerLXC,
 }: {
   agents: Array<(typeof AGENTS)[number] & { paused_at?: string }>
   newWorkspace?: boolean
@@ -66,6 +67,7 @@ function mockBff({
   wallets?: Record<string, number>
   plan?: object
   allPaused?: boolean
+  usdPerLXC?: number
 }) {
   const writes: string[] = []
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
@@ -96,6 +98,7 @@ function mockBff({
     if (url === '/api/money/accounts') return json({ accounts })
     if (url === '/api/fx') return json({ rate_date: '2026-10-03', usd_per_eur: 1.2, gbp_per_eur: 0.8 })
     if (url === '/api/plan') return json(plan)
+    if (url === '/api/lxc/topup-options' && usdPerLXC !== undefined) return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: usdPerLXC })
     const wallet = /^\/api\/agents\/([^/]+)\/wallet$/.exec(url)
     if (wallet)
       return json({ account_id: `macc_${wallet[1]}`, agent_id: wallet[1], asset: 'USDC', partner: 'sandbox', balance_minor: wallets[wallet[1]] ?? 0, receive: { asset: 'USDC' }, mode: 'TEST' })
@@ -402,6 +405,15 @@ describe('Home — the total (B57.18)', () => {
 
     expect(await screen.findByText('We couldn’t read your balances. Nothing changed.')).toBeInTheDocument()
     expect(screen.queryByTestId('home-total')).toBeNull()
+  })
+})
+
+describe('Home — LXC beside dollars reads to two places (B60.3)', () => {
+  it('a 499.200705 LXC balance reads "$49.92 499.20 LXC"', async () => {
+    mockBff({ agents: [{ ...AGENTS[0], balance_ulxc: 499_200_705 }], usdPerLXC: 0.1 })
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByTestId('home-agents-total')).toHaveTextContent('$49.92 499.20 LXC'))
   })
 })
 

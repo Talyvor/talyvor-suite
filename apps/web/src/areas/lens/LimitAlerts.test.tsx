@@ -14,7 +14,7 @@ function mockBff(alerts: unknown[], withAgent = true) {
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 20_000_000, allocated_ulxc: 5_000_000, unallocated_ulxc: 15_000_000, spent_ulxc: 0, agents: withAgent ? [agent] : [] })
     if (url === '/api/money/budgets/alerts') return json({ alerts })
-    // Lens's peg, 1 LXC = $0.10, so an agent's limit reads in dollars first.
+    // Lens's peg, 1.00 LXC = $0.10, so an agent's limit reads in dollars first.
     if (url === '/api/lxc/topup-options') return json({ allowed_usd_cents: [1000], billing_enabled: true, usd_per_lxc: 0.1 })
     if (url === '/api/agents/forecast') return json({ at: '', month_start: '', month_end: '', spent_ulxc: 0, forecast_ulxc: 0, agents: [] })
     if (url === '/api/agents/alerts') return json({ alerts: [], rule: 'the rule' })
@@ -90,7 +90,7 @@ describe('the Limit alerts card on Agents (B57.90)', () => {
     const card = await screen.findByTestId('agents-limit-alerts')
     const limit = await within(card).findByTestId('limit-alert-sal_4')
     expect(limit.textContent).toContain('50% of Researcher’s monthly limit')
-    await waitFor(() => expect(limit.textContent).toContain('$1,012.00 of $2,000.00 (10,120 of 20,000 LXC) spent'))
+    await waitFor(() => expect(limit.textContent).toContain('$1,012.00 of $2,000.00 (10,120.00 of 20,000.00 LXC) spent'))
     expect(within(limit).getByText('Nearing')).toBeTruthy()
 
     const bills = within(card).getByTestId('limit-alert-sal_5')

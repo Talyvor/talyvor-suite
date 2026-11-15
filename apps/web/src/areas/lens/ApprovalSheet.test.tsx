@@ -102,9 +102,9 @@ describe('the approval sheet', () => {
     expect(sheet).toHaveTextContent('October hosting invoice')
     expect(sheet).toHaveTextContent('to Acme Hosting')
     const facts = sheet.querySelector('dl')!
-    expect(facts).toHaveTextContent('Why it’s askingIt asks you above $250.00 2,500 LXC')
+    expect(facts).toHaveTextContent('Why it’s askingIt asks you above $250.00 2,500.00 LXC')
     expect(facts).toHaveTextContent('Paid fromResearch’s US dollar account (holds $400.00)')
-    expect(await within(sheet).findByTestId('approval-budget-left')).toHaveTextContent('$420.00 of $2,000.00 4,200 of 20,000 LXC')
+    expect(await within(sheet).findByTestId('approval-budget-left')).toHaveTextContent('$420.00 of $2,000.00 4,200.00 of 20,000.00 LXC')
     expect(facts).toHaveTextContent('ExpiresTomorrow at 09:17')
     expect(sheet).toHaveTextContent('This approves this payment only. Approving or declining asks for your passkey.')
     expect(within(sheet).getByRole('link', { name: 'Open Research' })).toHaveAttribute('href', '/agents/agt_1')
@@ -122,7 +122,7 @@ describe('the approval sheet', () => {
 
   it.each([
     ['a listing’s use on the monthly bill', { payee: { kind: 'listing', id: 'lst_1', name: 'Lead finder' }, memo: 'One use of Lead finder (version 3)', paid_from: { kind: 'marketplace_bill', account_id: 'ws_1', name: 'Your monthly marketplace bill', currency: 'USD', amount_minor: 34_000, balance_minor: null } }, 'Research wants to use', 'Paid fromYour monthly marketplace bill'],
-    ['the agent’s LXC', { paid_from: { kind: 'lxc', account_id: 'agt_1', name: 'Research’s LXC balance', currency: 'LXC', amount_minor: 3_400 * M, balance_minor: 4_000 * M } }, 'Research wants to pay', 'Paid fromResearch’s LXC balance (holds $400.00 4,000 LXC)'],
+    ['the agent’s LXC', { paid_from: { kind: 'lxc', account_id: 'agt_1', name: 'Research’s LXC balance', currency: 'LXC', amount_minor: 3_400 * M, balance_minor: 4_000 * M } }, 'Research wants to pay', 'Paid fromResearch’s LXC balance (holds $400.00 4,000.00 LXC)'],
     ['the agent’s card', { paid_from: { kind: 'card', account_id: 'crd_1', name: 'Research’s card', currency: 'USD', amount_minor: 34_000, balance_minor: null } }, 'Research wants to pay', 'Paid fromResearch’s card'],
   ])('says what pays: %s', async (_, over, title, paid) => {
     mockBff({ approvals: [acme(over as Partial<Approval>)] })
@@ -136,7 +136,7 @@ describe('the approval sheet', () => {
     const sheet = await openSheet('/agents/agt_1?approval=apr_A')
     fireEvent.click(within(sheet).getByRole('button', { name: 'Decline' }))
     const form = await screen.findByRole('dialog', { name: 'Decline Research’s payment?' })
-    expect(form).toHaveTextContent('$340.00 3,400 LXC to Acme Hosting. The same request is then refused without asking you for 24 hours.')
+    expect(form).toHaveTextContent('$340.00 3,400.00 LXC to Acme Hosting. The same request is then refused without asking you for 24 hours.')
     fireEvent.change(within(form).getByLabelText('Why (optional, the agent sees it)'), { target: { value: 'not this month' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Decline' }))
     expect(await screen.findByText('Declined. Research’s payment is refused')).toBeInTheDocument()

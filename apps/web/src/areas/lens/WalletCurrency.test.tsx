@@ -65,7 +65,7 @@ describe('amounts in your own currency and plain-English rules', () => {
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    await waitFor(() => expect(balanceRow().textContent).toBe('$1.25 (12.5 LXC)'))
+    await waitFor(() => expect(balanceRow().textContent).toBe('$1.25 (12.50 LXC)'))
     expect(within(balanceRow()).getByTestId('fiat').className).toContain('font-figure')
 
     // B57.42 — Show amounts in moved to Settings: chosen there, followed here.
@@ -74,7 +74,7 @@ describe('amounts in your own currency and plain-English rules', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Agents' }))
     // 1.25 USD ÷ 1.1672 USD per EUR × 0.8354 GBP per EUR = £0.8947 — on the agent's card, as B57.19's list draws it.
     await waitFor(() => expect(screen.getByTestId('agent-card-balance-agt_1')).toHaveTextContent('£0.89'))
-    expect(screen.getByTestId('agent-card-balance-agt_1')).toHaveTextContent('12.5 LXC')
+    expect(screen.getByTestId('agent-card-balance-agt_1')).toHaveTextContent('12.50 LXC')
     expect(window.localStorage.getItem(FIAT_KEY)).toBe('GBP')
   })
 
@@ -85,8 +85,8 @@ describe('amounts in your own currency and plain-English rules', () => {
     render(<App />)
 
     const before = await screen.findByTestId('rules-in-words')
-    await waitFor(() => expect(before.textContent).toContain('Researcher may spend at most $2.00 (20 LXC) a day.'))
-    expect(before.textContent).toContain('A person must approve any request or payment above $0.50 (5 LXC).')
+    await waitFor(() => expect(before.textContent).toContain('Researcher may spend at most $2.00 (20.00 LXC) a day.'))
+    expect(before.textContent).toContain('A person must approve any request or payment above $0.50 (5.00 LXC).')
     expect(before.textContent).toContain('It may use any model from any provider.')
 
     await rulesPage()
@@ -122,7 +122,7 @@ describe('amounts in your own currency and plain-English rules', () => {
     const words = await save(saved, 1)
     expect(saved[0]).toMatchObject({ hourly_limit_ulxc: 1 * M, daily_limit_ulxc: 20 * M, weekly_limit_ulxc: 50 * M })
     await waitFor(() =>
-      expect(words.textContent).toContain('Researcher may spend at most $0.10 (1 LXC) an hour, $2.00 (20 LXC) a day and $5.00 (50 LXC) a week.'),
+      expect(words.textContent).toContain('Researcher may spend at most $0.10 (1.00 LXC) an hour, $2.00 (20.00 LXC) a day and $5.00 (50.00 LXC) a week.'),
     )
   })
 
@@ -144,7 +144,7 @@ describe('amounts in your own currency and plain-English rules', () => {
     const words = await save(saved, 1)
     expect(saved[0].model_daily_limits_ulxc).toEqual({ 'gpt-4o': 0.5 * M, 'claude-haiku-4-5': 2 * M })
     await waitFor(() =>
-      expect(words.textContent).toContain('On one model it may spend at most $0.05 (0.5 LXC) a day on GPT-4o and $0.20 (2 LXC) a day on Claude Haiku 4.5.'),
+      expect(words.textContent).toContain('On one model it may spend at most $0.05 (0.50 LXC) a day on GPT-4o and $0.20 (2.00 LXC) a day on Claude Haiku 4.5.'),
     )
 
     await rulesPage()
@@ -213,7 +213,7 @@ describe('amounts in your own currency and plain-English rules', () => {
     const words = await save(saved, 1)
     expect(saved[0].payee_daily_limits_ulxc).toEqual({ agt_2: 0.5 * M, merchant_9: 2 * M })
     await waitFor(() => expect(words.textContent).toContain('To one payee it may pay at most'))
-    expect(words.textContent).toMatch(/0\.5 LXC.* a day to Writer and .*2 LXC.* a day to merchant_9\./)
+    expect(words.textContent).toMatch(/0\.50 LXC.* a day to Writer and .*2\.00 LXC.* a day to merchant_9\./)
 
     await rulesPage()
     more('At most a day to one payee')
@@ -270,7 +270,7 @@ describe('the dollar figure survives a failed read of the peg', () => {
       await waitFor(() => expect(balanceRow().textContent).toBe('12.5 LXC'))
       peg.shown()
       await vi.advanceTimersByTimeAsync(2_000)
-      await waitFor(() => expect(balanceRow().textContent).toBe('$1.25 (12.5 LXC)'))
+      await waitFor(() => expect(balanceRow().textContent).toBe('$1.25 (12.50 LXC)'))
       expect(peg.reads()).toBe(2)
     } finally {
       vi.useRealTimers()
