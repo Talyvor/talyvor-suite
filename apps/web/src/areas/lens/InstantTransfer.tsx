@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cn, inlineLink } from '@talyvor/ui'
@@ -8,6 +8,7 @@ import {
   Chip,
   Crumb,
   Dialog,
+  Face,
   Facts,
   Field,
   Icon,
@@ -140,8 +141,99 @@ export function PayInstantTransferScreen() {
   if (shows && !shows.instantTransfer) return <Navigate to="/money/pay" replace />
   return (
     <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-4 pb-10">
-      <Crumb trail={[{ label: 'Pay', href: '/money/pay' }, { label: 'Instant transfer' }]} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Crumb trail={[{ label: 'Pay', href: '/money/pay' }, { label: 'Instant transfer' }]} />
+        {shows ? <PayTabs payoutBatches={shows.payoutBatches} /> : null}
+      </div>
       {shows ? <InstantTransferForm /> : <p className="text-body text-ink-3">Reading…</p>}
+    </div>
+  )
+}
+
+/** B57.164 — W3's row of Pay's pages above the form, Instant transfer on: each a link to its own page under Pay. */
+function PayTabs({ payoutBatches }: { payoutBatches: boolean }) {
+  const tabs = [
+    { to: '/money/pay', label: 'One payment' },
+    { to: '/money/pay/instant-transfer', label: 'Instant transfer' },
+    { to: '/money/pay/standing-orders', label: 'Standing orders' },
+    { to: '/money/pay/mandates', label: 'Mandates' },
+    ...(payoutBatches ? [{ to: '/money/pay/bulk-payouts', label: 'Payout batches' }] : []),
+  ]
+  return (
+    <nav aria-label="Pay" className="flex flex-wrap gap-1.5" data-testid="instant-pay-tabs">
+      {tabs.map((t) => {
+        const on = t.to === '/money/pay/instant-transfer'
+        return (
+          <Link
+            key={t.to}
+            to={t.to}
+            aria-current={on ? 'page' : undefined}
+            className={cn(
+              'inline-flex h-8.5 items-center whitespace-nowrap rounded-pill px-3.5 text-body font-semibold transition-colors duration-200',
+              on ? 'bg-primary text-on-primary' : 'bg-cloud text-ink-2',
+              pocketFocusRing,
+            )}
+          >
+            {t.label}
+          </Link>
+        )
+      })}
+    </nav>
+  )
+}
+
+/** "LF" for Lumen Freight GmbH: a payee's badge, as W3 draws it beside its name. */
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('')
+
+/** A payee Lens still counts as new: its first payments wait out the cooling-off (Lens B41.111). */
+const isNewPayee = (p: OutsidePayee, now = Date.now()) => Boolean(p.cooling_off_until && new Date(p.cooling_off_until).getTime() > now)
+
+/** The ink chip W3 and P9 draw for when it lands. */
+export function ArrivesChip({ children, ...props }: React.HTMLAttributes<HTMLSpanElement>) {
+  return (
+    <span {...props} className="inline-flex items-center gap-1.5 justify-self-start rounded-pill bg-primary px-2.5 py-1 text-caption text-on-primary">
+      <Icon name="send" size={14} />
+      {children}
+    </span>
+  )
+}
+
+/**
+ * A choice drawn as W3's card (a face or a badge, two lines, a chip) with the browser's own list laid over it unseen:
+ * a press opens the list (the phone's wheel on a phone), the keyboard and a screen reader reach the select by its
+ * label, and the card shows the pick. Its label is Field's, so it reads as every other field on the form.
+ */
+function PickField({
+  label,
+  card,
+  className,
+  children,
+  ...select
+}: {
+  label: string
+  card: React.ReactNode
+} & React.SelectHTMLAttributes<HTMLSelectElement>) {
+  const id = useId()
+  return (
+    <div className={cn('grid gap-1.5', className)}>
+      <label htmlFor={id} className="text-body font-semibold text-ink-2">
+        {label}
+      </label>
+      <div className="relative rounded-control has-[:focus-visible]:outline has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-tangerine">
+        <div aria-hidden="true" className="flex min-h-14 items-center gap-3 rounded-control bg-page px-3.5 py-2.5 shadow-edge">
+          {card}
+          <Icon name="chev" size={16} className="ml-auto rotate-90 text-ink-3" />
+        </div>
+        <select id={id} className={cn('absolute inset-0 h-full w-full cursor-pointer appearance-none font-figure opacity-0 shadow-edge', pocketFocusRing)} {...select}>
+          {children}
+        </select>
+      </div>
     </div>
   )
 }
@@ -186,6 +278,7 @@ function InstantTransferForm() {
 
   const account = from.find((a) => a.id === accountID) ?? from[0]
   const agent = agentName(account?.agent_id)
+  const fromAgent = book.data?.agents?.find((x) => x.id === account?.agent_id)
   const choices = saved.filter((p) => (to === 'wallet' ? Boolean(p.address) : !p.address))
   const payee = choices.find((p) => p.id === payeeID)
   const minor = minorOf(typed)
@@ -295,11 +388,11 @@ function InstantTransferForm() {
                   )}
                 >
                   <input type="radio" name="instant-to" className={cn('sr-only', pocketFocusRing)} checked={to === c.to} onChange={() => pick(c.to)} />
-                  <span aria-hidden="true" className={cn('absolute right-3.5 top-3.5 inline-grid h-5 w-5 place-items-center rounded-pill shadow-edge', to === c.to && 'bg-ink')}>
+                  <span aria-hidden="true" className={cn('absolute left-3.5 top-3.5 inline-grid h-5 w-5 place-items-center rounded-pill shadow-edge', to === c.to && 'bg-ink')}>
                     {to === c.to ? <span className="h-2 w-2 rounded-pill bg-page" /> : null}
                   </span>
-                  <span className="pr-7 font-semibold text-ink">{c.title}</span>
-                  <span className="text-body text-ink-2">{c.line}</span>
+                  <span className="pl-7 font-semibold text-ink">{c.title}</span>
+                  <span className="pl-7 text-body text-ink-2">{c.line}</span>
                 </label>
               ))}
             </div>
@@ -319,11 +412,12 @@ function InstantTransferForm() {
                 </PocketSelect>
               </Field>
             </div>
-          ) : (
-            <Field label="Recipient">
+          ) : payees.isError || choices.length === 0 ? (
+            <div className="grid gap-1.5">
+              <p className="text-body font-semibold text-ink-2">Recipient</p>
               {payees.isError ? (
                 <p className="text-body text-ink-3">{readFailure(payees.error, 'Your payees')}</p>
-              ) : choices.length === 0 ? (
+              ) : (
                 <p className="text-body text-ink-3" data-testid="instant-no-payees">
                   {to === 'wallet' ? 'No saved wallet yet.' : 'No payees yet.'}{' '}
                   <Link className={`text-ink ${inlineLink}`} to="/money/pay">
@@ -331,17 +425,39 @@ function InstantTransferForm() {
                   </Link>{' '}
                   on Pay first.
                 </p>
-              ) : (
-                <PocketSelect aria-label="Recipient" value={payeeID} onChange={(e) => setPayeeID(e.target.value)}>
-                  <option value="">Pick who gets it</option>
-                  {choices.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {payeeLine(p)}
-                    </option>
-                  ))}
-                </PocketSelect>
               )}
-            </Field>
+            </div>
+          ) : (
+            <PickField
+              label="Recipient"
+              value={payeeID}
+              onChange={(e) => setPayeeID(e.target.value)}
+              card={
+                payee ? (
+                  <span className="flex min-w-0 flex-1 items-center gap-3" data-testid="instant-recipient">
+                    <span className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-tile bg-cloud text-caption text-ink-2">{initials(payee.name)}</span>
+                    <span className="grid min-w-0 gap-0.5">
+                      <span className="truncate font-semibold text-ink">{payee.name}</span>
+                      <span className="truncate text-body text-ink-3">{payeeDetails(payee)}</span>
+                    </span>
+                    {isNewPayee(payee) ? (
+                      <Chip tone="wait" className="ml-auto">
+                        New payee
+                      </Chip>
+                    ) : null}
+                  </span>
+                ) : (
+                  <span className="text-reading text-ink-3">Pick who gets it</span>
+                )
+              }
+            >
+              <option value="">Pick who gets it</option>
+              {choices.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {payeeLine(p)}
+                </option>
+              ))}
+            </PickField>
           )}
           {reading !== null ? (
             <p className="text-body text-ink-3">{reading}</p>
@@ -350,25 +466,42 @@ function InstantTransferForm() {
               An Instant transfer goes from an agent’s account in pounds, euros or dollars: open one on Invoices first.
             </p>
           ) : (
-            <div className="grid gap-3 wide:grid-cols-2">
-              <div className="grid gap-1">
-                <Field label="From">
-                  <PocketSelect aria-label="From" value={account?.id ?? ''} onChange={(e) => setAccountID(e.target.value)}>
-                    {from.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {agentName(a.agent_id)} · {BALANCE_WORDS[a.currency]} balance
-                      </option>
-                    ))}
-                  </PocketSelect>
-                </Field>
-                {account ? (
-                  <p className="text-body text-ink-3" data-testid="instant-holds">
-                    holds <Money minor={account.test_minor} currency={account.currency} />
-                  </p>
-                ) : null}
-              </div>
-              <Field label="Amount">
-                <PocketInput aria-label="Amount" inputMode="decimal" unit={account?.currency} value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <div className="grid items-start gap-3 wide:grid-cols-5">
+              <PickField
+                label="From"
+                className="min-w-0 wide:col-span-3"
+                value={account?.id ?? ''}
+                onChange={(e) => setAccountID(e.target.value)}
+                card={
+                  account ? (
+                    <span className="flex min-w-0 flex-1 items-center gap-3">
+                      {fromAgent ? <Face agent={fromAgent} size={34} /> : null}
+                      <span className="grid min-w-0 gap-0.5">
+                        <span className="truncate font-semibold text-ink">{agent}</span>
+                        <span className="truncate text-body text-ink-3" data-testid="instant-holds">
+                          {BALANCE_WORDS[account.currency]} balance · holds <Money minor={account.test_minor} currency={account.currency} />
+                        </span>
+                      </span>
+                    </span>
+                  ) : null
+                }
+              >
+                {from.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {agentName(a.agent_id)} · {BALANCE_WORDS[a.currency]} balance
+                  </option>
+                ))}
+              </PickField>
+              <Field label="Amount" className="min-w-0 wide:col-span-2">
+                <PocketInput
+                  aria-label="Amount"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  unit={account?.currency}
+                  className="min-h-14 min-w-0 font-display text-title font-bold"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
               </Field>
             </div>
           )}
@@ -412,9 +545,9 @@ function InstantTransferForm() {
                   value: <Money minor={q.fee_minor} currency={q.send_currency} />,
                 },
                 {
-                  label: 'They get',
+                  label: <span className="font-semibold text-ink">They get</span>,
                   value: (
-                    <span data-testid="instant-they-get">
+                    <span data-testid="instant-they-get" className="font-display text-title font-bold">
                       <Money minor={q.receive_minor} currency={q.receive_currency} />
                     </span>
                   ),
@@ -422,12 +555,12 @@ function InstantTransferForm() {
               ]}
             />
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <Chip tone="plain" data-testid="instant-arrives">
-                <Icon name="send" size={14} />
-                {arrivesText(q)}
-              </Chip>
-              <span className="text-body text-ink-3">
-                Locked for <span className="font-figure">{lockedFor}</span> seconds
+              <ArrivesChip data-testid="instant-arrives">{arrivesText(q)}</ArrivesChip>
+              <span className="inline-flex items-center gap-1.5 text-body text-ink-2">
+                <Icon name="lock" size={14} />
+                <span>
+                  Locked for <span className="font-figure">{lockedFor}</span> seconds
+                </span>
               </span>
             </div>
             <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-pill bg-cloud-2">
@@ -529,9 +662,14 @@ function InstantTransferForm() {
 
 /** "Lumen Freight GmbH · Germany · account ending 4417 · gets euros", or a wallet's name and the end of its address. */
 function payeeLine(p: OutsidePayee): string {
-  if (p.address) return `${p.name} · wallet ending ${p.address.slice(-4)}`
+  return `${p.name} · ${payeeDetails(p)}`
+}
+
+/** W3's line under a payee's name: "Germany · account ending 4417 · gets euros", or "wallet ending 4f2a · gets USDC". */
+function payeeDetails(p: OutsidePayee): string {
+  if (p.address) return `wallet ending ${p.address.slice(-4)} · gets USDC`
   const number = p.iban || p.account_number || ''
-  return [p.name, countryName(p.country), number ? `account ending ${number.slice(-4)}` : '', `gets ${MONEY_WORDS[bankCurrency(p.country)]}`].filter(Boolean).join(' · ')
+  return [countryName(p.country), number ? `account ending ${number.slice(-4)}` : '', `gets ${MONEY_WORDS[bankCurrency(p.country)]}`].filter(Boolean).join(' · ')
 }
 
 /** The line the statement will show for it, and the legs under it, from the quote (W3: "One line, three legs"). */
