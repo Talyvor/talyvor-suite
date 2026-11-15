@@ -425,18 +425,27 @@ function Waiting({
 // ── The total ────────────────────────────────────────────────────────────────────────────────────────────────────
 
 function Actions({ shows }: { shows: Shows }) {
-  // Only the actions with a screen to open: Withdraw, Receive, Send and Convert join them with theirs. B59.19: Instant
-  // transfer, for a Hybrid account.
+  // Only the actions with a screen to open: Receive and Send join them with theirs. B59.19: Instant transfer, for a Hybrid
+  // account. B59.53: Top up, Withdraw (P3) and, for a Hybrid account, Convert (P5, W2) open Wallets at that action.
   return (
     <div className="flex flex-wrap gap-2 wide:justify-end">
       {shows.bankTransfers ? (
         <Button asChild icon={<Icon name="plus" size={18} />}>
-          <Link to="/billing">Top up</Link>
+          <Link to="/money/wallets?do=top-up">Top up</Link>
         </Button>
       ) : null}
       <Button asChild variant={shows.bankTransfers ? 'white' : 'primary'}>
         <Link to="/money/pay">Pay</Link>
       </Button>
+      {shows.convert ? (
+        <Button asChild variant="white">
+          <Link to="/money/wallets?do=convert">Convert</Link>
+        </Button>
+      ) : shows.bankTransfers ? (
+        <Button asChild variant="white">
+          <Link to="/money/wallets?do=withdraw">Withdraw</Link>
+        </Button>
+      ) : null}
       {shows.instantTransfer ? (
         <Button asChild variant="white">
           <Link to="/money/pay/instant-transfer">Instant transfer</Link>
@@ -568,6 +577,9 @@ function Total({ book, agents, shows, forecast }: { book: AgentBook; agents: Age
               />
             ) : null}
           </div>
+          <Link to="/money/wallets" className={cn(inlineLink, 'justify-self-start text-body')} data-testid="home-wallets">
+            See all in Wallets
+          </Link>
         </>
       )}
 

@@ -148,6 +148,7 @@ const PINNED: Readonly<Record<string, string>> = {
   '/settings/data': 'Your data',
   '/money/invoices': 'Invoices',
   '/money/pay': 'Pay',
+  '/money/wallets': 'Wallets',
   '/money/pay/standing-orders': 'Standing orders',
   '/money/pay/mandates': 'Mandates',
   '/money/pay/bulk-payouts': 'Bulk payouts',

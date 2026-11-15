@@ -207,6 +207,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/scan/track-record': 1, // B52.28: the Reports card
   '/money/budgets': 1, // B41.39: the Budgets card, under the populated fixture's one budget
   '/money/subscriptions': 1, // B41.20: the Subscriptions card, under the populated fixture's two found subscriptions
+  '/money/wallets': 0, // B59.53: Wallets is drawn in Pocket
   '/money/pay': 0, // B57.32: all of Pay is drawn in Pocket, its standing orders, mandates, bulk payouts and bills each on its own page
   '/money/pay/standing-orders': 0,
   '/money/pay/mandates': 0,
