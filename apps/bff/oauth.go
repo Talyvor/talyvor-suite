@@ -164,6 +164,8 @@ type oauthServer struct {
 	db       *oauthDB                // nil: memory only (oauth_store.go)
 	hits     connectHits             // B52.3's rate limits (connect_limits.go)
 	ceilings sync.Map                // B52.6: workspace id → connectCeiling (mcp_agents.go)
+	// revocations is what Lens is told when a connection ends (B54.21, connect_revocations.go).
+	revocations connectRevocations
 }
 
 func newOAuthServer() *oauthServer {
@@ -750,7 +752,7 @@ func (a *app) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		}
 		if prev.used {
 			// A rotated token came back: someone holds a copy. End the grant for everyone.
-			if err := a.revokeGrant(r.Context(), g.ID); err != nil {
+			if err := a.revokeGrant(r.Context(), g); err != nil {
 				log.Printf("bff: oauth replayed grant not deleted from the table: %v", err)
 				a.oauth.grants.delete(g.ID) // ended here at least: a replay never leaves the connection usable
 			}
@@ -830,7 +832,7 @@ func (a *app) handleOAuthRevoke(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		// Holding a public client's token is all the proof revoking it needs.
 		if g, live := a.oauth.grants.get(t.grantID); live {
-			if err := a.revokeGrant(r.Context(), g.ID); err != nil {
+			if err := a.revokeGrant(r.Context(), g); err != nil {
 				log.Printf("bff: oauth revoke: %v", err)
 				oauthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "try again")
 				return
@@ -842,12 +844,15 @@ func (a *app) handleOAuthRevoke(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// revokeGrant ends a connection in the table first, so a failure leaves it whole rather than back after a restart.
-func (a *app) revokeGrant(ctx context.Context, id string) error {
-	if err := a.oauth.db.deleteGrant(ctx, id); err != nil {
+// revokeGrant ends a connection in the table first, so a failure leaves it whole rather than back after a restart,
+// and then tells Lens, so the assistant's Connect tokens stop paying too (B54.21).
+func (a *app) revokeGrant(ctx context.Context, g oauthGrant) error {
+	ended := connectRevocation{userID: g.Who.workspaceID, clientID: g.ClientID}
+	if err := a.oauth.db.deleteGrant(ctx, g.ID, ended); err != nil {
 		return err
 	}
-	a.oauth.grants.delete(id)
+	a.oauth.grants.delete(g.ID)
+	a.connectionsEnded(ended)
 	return nil
 }
 
