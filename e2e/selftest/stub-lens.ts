@@ -1167,8 +1167,9 @@ async function stripeWebhook(req: IncomingMessage, res: ServerResponse, secret: 
   res.writeHead(200).end()
 }
 
-// talyvor-lens partners.Services and status.railNames, in its order.
-const RAILS: [string, string][] = [['account', 'Accounts and payments'], ['fx', 'Currency conversion'], ['broker', 'Trading'],
+// talyvor-lens partners.Services and status.railNames, in its order; the broker rail ('Trading') is off the page until a
+// trade_ capability is cleared (talyvor-lens B56.6).
+const RAILS: [string, string][] = [['account', 'Accounts and payments'], ['fx', 'Currency conversion'],
   ['stablecoin', 'Stablecoins'], ['kyc', 'Identity verification'], ['screening', 'Sanctions screening'], ['capital', 'Credit'],
   ['insurer', 'Cover'], ['agent_token', 'Agent cards'], ['tax', 'Tax']]
 
@@ -1177,7 +1178,7 @@ function moneyRails(screeningDown: boolean): { name: string; status: string }[] 
   const hourAgo = new Date(now - 3_600_000).toISOString()
   const recent = new Date(now).toISOString()
   return RAILS.map(([service, name]) => {
-    const capabilities = service === 'fx' ? [{ key: 'fx', cleared: false }] : []
+    const capabilities = service === 'fx' ? [{ key: 'fx', cleared: false, label: 'sandbox' }] : []
     if (service !== 'screening') return { service, mode: 'test', last_success: recent, last_failure: null, name, status: 'operational', capabilities }
     const [ok, failed] = screeningDown ? [hourAgo, recent] : [recent, hourAgo]
     return { service, mode: 'test', last_success: ok, last_failure: failed, name, status: screeningDown ? 'outage' : 'operational', capabilities, lists_age_hours: 3 }

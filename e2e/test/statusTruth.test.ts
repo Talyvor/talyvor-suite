@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { RAIL_SERVICES } from '../src/moneyRails.ts'
 import { type Healthz, type StatusJSON, statusTruthVerdict } from '../src/statusTruth.ts'
 
 const NOW = Date.parse('2026-10-09T17:50:00Z')
@@ -7,9 +6,9 @@ const probed = '2026-10-09T17:46:00Z'
 
 // Production's /status.json and /healthz as read at 17:46 UTC on 9 Oct, every rail answering its probe.
 function page(): StatusJSON & Record<string, unknown> {
-  const rails = RAIL_SERVICES.map((service) => ({
+  const rails = ['account', 'fx', 'stablecoin', 'kyc', 'screening', 'capital', 'insurer', 'agent_token', 'tax'].map((service) => ({
     service, name: service, mode: 'test', status: 'operational', last_success: probed, last_failure: null,
-    capabilities: service === 'fx' ? [{ key: 'fx', cleared: false }] : [],
+    capabilities: service === 'fx' ? [{ key: 'fx', cleared: false, label: 'sandbox' }] : [],
     ...(service === 'screening' ? { lists_age_hours: 3 } : {}),
   }))
   return {
@@ -17,14 +16,14 @@ function page(): StatusJSON & Record<string, unknown> {
     components: ['PostgreSQL', 'Redis', 'NATS', 'Proxy'].map((name) => ({ name, status: 'operational', latency_ms: 1, measured: true, checked_at: probed })),
     providers: [{ name: 'OpenAI', status: 'operational', latency_ms: 183, checked_at: probed }],
     rails,
-    rails_summary: { up: 10, down: 0, idle: 0, down_names: [] },
+    rails_summary: { up: 9, down: 0, idle: 0, down_names: [] },
   }
 }
 const health = (): Healthz => ({ status: 'healthy', version: 'b98a576', uptime_seconds: 198, checks: { database: { status: 'healthy', latency_ms: 1 } } })
 
 describe('the status-truth oracle (B37.7)', () => {
-  it('passes production as it reads with every rail answering', () => {
-    expect(statusTruthVerdict(page(), health(), NOW)).toEqual({ pass: true, detail: expect.stringContaining('all 10 money rails') })
+  it('passes production as it reads with every rail answering: nine rails, no broker, each capability labelled (B17.458)', () => {
+    expect(statusTruthVerdict(page(), health(), NOW)).toEqual({ pass: true, detail: expect.stringContaining('all 9 money rails') })
   })
 
   it("passes Scan's data collectors as production sends them, one off with its note and one on (B17.353)", () => {
@@ -33,14 +32,14 @@ describe('the status-truth oracle (B37.7)', () => {
       { source: 'eia', name: 'US EIA open data (weekly petroleum stocks)', on: false, note: 'off: needs its API key in the server setting LENS_SCAN_EIA_KEY', last_retrieved: null, failing: false },
       { source: 'entsog', name: 'ENTSOG transparency platform (gas flows)', on: true, last_retrieved: '2026-11-04T17:04:47.883791Z', failing: false },
     ]
-    expect(statusTruthVerdict(p, health(), NOW)).toEqual({ pass: true, detail: expect.stringContaining('all 10 money rails') })
+    expect(statusTruthVerdict(p, health(), NOW)).toEqual({ pass: true, detail: expect.stringContaining('all 9 money rails') })
   })
 
   it('names a rail that is down and one never called', () => {
     const p = page()
-    p.rails![5] = { ...p.rails![5], status: 'outage', last_failure: probed }
-    p.rails![9] = { ...p.rails![9], status: 'unknown', last_success: null }
-    p.rails_summary = { up: 8, down: 1, idle: 1, down_names: ['screening'] }
+    p.rails![4] = { ...p.rails![4], status: 'outage', last_failure: probed }
+    p.rails![8] = { ...p.rails![8], status: 'unknown', last_success: null }
+    p.rails_summary = { up: 7, down: 1, idle: 1, down_names: ['screening'] }
     const v = statusTruthVerdict(p, health(), NOW)
     expect(v.pass).toBe(false)
     expect(v.detail).toContain('rail screening (screening) is down')
@@ -58,8 +57,8 @@ describe('the status-truth oracle (B37.7)', () => {
   it('fails a stale probe, an unread clearance, a wrong summary, an extra key, an error text and public internals', () => {
     const p = page()
     p.rails![0] = { ...p.rails![0], last_success: '2026-10-09T17:30:00Z' }
-    p.rails![1] = { ...p.rails![1], capabilities: [{ key: 'fx', cleared: null }] }
-    p.rails_summary = { up: 9, down: 0, idle: 1, down_names: [] }
+    p.rails![1] = { ...p.rails![1], capabilities: [{ key: 'fx', cleared: null, label: 'sandbox' }] }
+    p.rails_summary = { up: 8, down: 0, idle: 1, down_names: [] }
     p.components[0] = { ...p.components[0], status: 'outage', message: 'failed to connect to `user=lens`: 127.0.0.1:55433' }
     p.workspace = 'ws_1'
     const v = statusTruthVerdict(p, { ...health(), database_pool: {}, requests: {} }, NOW)
@@ -70,7 +69,7 @@ describe('the status-truth oracle (B37.7)', () => {
   })
 
   it("holds the sanctions lists' age to the screening rail alone, and to no more than 48 h while it reads operational (B37.14)", () => {
-    const screening = RAIL_SERVICES.indexOf('screening')
+    const screening = page().rails!.findIndex((r) => r.service === 'screening')
     const p = page()
     delete p.rails![screening].lists_age_hours
     p.rails![0] = { ...p.rails![0], lists_age_hours: 3 }
