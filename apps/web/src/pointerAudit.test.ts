@@ -434,7 +434,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the BFF half of the same parenthesis — the sentence promises this line says the payment happens at Stripe AFTER the redirect',
   },
-  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:1037': {
+  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:1038': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'the first of the TWO independent clamps the page ceiling rests on, quoted verbatim by the sentence that cites it',
@@ -444,7 +444,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the example that paragraph gives of a citation checkable from here — now checked, which is what it asked for',
   },
-  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:1037': {
+  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:1038': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'its second example, pinned for the same reason',
@@ -464,17 +464,17 @@ const PINS: Record<string, Pin> = {
   // A deployer following one of these is mid-deploy and checking a refusal before they trip it.
   // The fragment is the REFUSAL ITSELF: a claim that the BFF stops for a variable is worth
   // exactly the line that stops it, so deleting the refusal reds the runbook that promises it.
-  'deploy/README.md:385|apps/bff/main.go:139': {
+  'deploy/README.md:385|apps/bff/main.go:149': {
     kind: 'LIVE',
     fragment: 'TRACK_WORKSPACE_ID must not be set',
     why: 'the ~~TRACK_WORKSPACE_ID~~ row promises "the BFF now REFUSES TO START if this is set"; it cited 112, which is a closing brace',
   },
-  'deploy/FULL-STACK-DEPLOY.md:39|apps/bff/main.go:133': {
+  'deploy/FULL-STACK-DEPLOY.md:39|apps/bff/main.go:143': {
     kind: 'LIVE',
     fragment: 'LENS_PROVISION_SECRET is required',
     why: '"BFF requires LENS_PROVISION_SECRET … Refuses to start, names itself" — it cited 94, a comment line naming a test',
   },
-  'deploy/FULL-STACK-DEPLOY.md:40|apps/bff/main.go:142': {
+  'deploy/FULL-STACK-DEPLOY.md:40|apps/bff/main.go:152': {
     kind: 'LIVE',
     fragment: 'LENS_API_KEY must not be set',
     why: '"BFF refuses to boot if LENS_API_KEY is set" — it cited 96, the docsGatewaySecret field',
@@ -487,7 +487,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'one configured workspace credential',
     why: 'the "cosmetic, not blocking" note that auth.go still describes the old one-workspace model — the only in-repo runbook pointer that was accurate',
   },
-  'apps/web/src/areas/docs/BFF-GAPS.md:14|apps/bff/lens.go:193': {
+  'apps/web/src/areas/docs/BFF-GAPS.md:14|apps/bff/lens.go:194': {
     kind: 'LIVE',
     fragment: '"/api/docs/spaces"',
     why: 'the Docs proxy mechanics are "same as the existing route"; it cited lens.go:74, which is /api/bonds — three more Docs routes were mounted above it',

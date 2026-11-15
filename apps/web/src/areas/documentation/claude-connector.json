@@ -31,6 +31,13 @@
     { "name": "prepare_batch", "title": "Prepare payments for approval", "kind": "send" },
     { "name": "prepare_bills_payment", "title": "Prepare paying the bills due for approval", "kind": "send" },
     { "name": "request_marketplace_purchase", "title": "Prepare a marketplace purchase for approval", "kind": "send" },
-    { "name": "cancel_request", "title": "Cancel a payment request", "kind": "send" }
+    { "name": "cancel_request", "title": "Cancel a payment request", "kind": "send" },
+    { "name": "send_payment", "title": "Pay from an agent's wallet", "kind": "send" },
+    { "name": "create_agent", "title": "Create an agent", "kind": "write" },
+    { "name": "pause_agent", "title": "Pause an agent", "kind": "write" },
+    { "name": "set_agent_limits", "title": "Lower an agent's limits", "kind": "write" },
+    { "name": "get_statement", "title": "Agent statement", "kind": "read" },
+    { "name": "list_incoming_requests", "title": "Money requests waiting", "kind": "read" },
+    { "name": "open_topup", "title": "Top up in Talyvor", "kind": "read" }
   ]
 }

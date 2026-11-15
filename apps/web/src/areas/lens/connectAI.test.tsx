@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ConnectAI } from './ConnectAI'
+import { AppMoney } from './money'
 
 // B57.45 — Pocket's w-connect at the wire: every assistant with its note, How to add it opening that assistant's
 // steps in a dialog, a connected one with Connected, its last use, what it may do and a Revoke that asks first; the
@@ -37,9 +38,11 @@ function renderScreen() {
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter>
-        <div data-design="pocket">
-          <ConnectAI />
-        </div>
+        <AppMoney>
+          <div data-design="pocket">
+            <ConnectAI />
+          </div>
+        </AppMoney>
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -152,5 +155,31 @@ describe('Connect your AI', () => {
     const how = screen.getByRole('region', { name: 'How a payment works' })
     for (const step of ['Your assistant prepares it', 'Talyvor writes it out', 'You approve it']) expect(within(how).getByText(step)).toBeInTheDocument()
     expect(await within(how).findByRole('link', { name: 'See the page a prepared payment opens' })).toHaveAttribute('href', '/approve/pr-7')
+  })
+
+  // B52.6 — the most an assistant may give a new agent: unset, it says assistants cannot create agents; set in LXC, it
+  // goes to the BFF in µLXC and reads back.
+  it('sets the most an assistant may give a new agent', async () => {
+    let ceiling: Record<string, number> = {}
+    const puts: unknown[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = String(input)
+      if (path.startsWith('/api/money/payment-requests')) return new Response(JSON.stringify({ requests: [] }))
+      if (path !== '/api/connect/agent-ceiling') return new Response(JSON.stringify({ assistants: [] }))
+      if (init?.method === 'PUT') {
+        ceiling = JSON.parse(String(init.body)) as Record<string, number>
+        puts.push(ceiling)
+      }
+      return new Response(JSON.stringify(ceiling))
+    })
+    renderScreen()
+    const card = screen.getByRole('region', { name: 'New agents from an assistant' })
+    expect(await within(card).findByText(/Assistants cannot create agents/)).toBeInTheDocument()
+    fireEvent.change(within(card).getByLabelText('One payment, in LXC'), { target: { value: '2' } })
+    fireEvent.change(within(card).getByLabelText('A day, in LXC'), { target: { value: '10' } })
+    fireEvent.change(within(card).getByLabelText('A month, in LXC'), { target: { value: '50.5' } })
+    fireEvent.click(within(card).getByRole('button', { name: 'Set' }))
+    await waitFor(() => expect(screen.getByTestId('agent-ceiling')).toHaveTextContent('at most 2 LXC a payment, 10 LXC a day and 50.5 LXC a month'))
+    expect(puts).toEqual([{ max_per_request_ulxc: 2_000_000, daily_limit_ulxc: 10_000_000, monthly_limit_ulxc: 50_500_000 }])
   })
 })

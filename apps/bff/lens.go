@@ -90,6 +90,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/mcp", a.oauthOn(a.perIP(limitMCPIP, a.handleMCP)))
 	a.mux.HandleFunc("/api/connect/assistants", a.oauthOn(a.requireSession(a.handleConnectedAssistants))) // B40.8 — oauth_connected.go
 	a.mux.HandleFunc("/api/connect/assistants/{id}/revoke", a.oauthOn(a.requireSession(a.handleConnectedAssistantRevoke)))
+	a.mux.HandleFunc("/api/connect/agent-ceiling", a.oauthOn(a.requireTenant(a.handleAgentCeiling))) // B52.6 — mcp_agents.go
 
 	// The auth surface. Registered in every mode: in disabled mode the login
 	// machinery answers an explicit 404 (not a silent SPA fallback) and /auth/me
