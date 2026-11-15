@@ -73,7 +73,7 @@ describe('scheduled payments and automatic top-ups on the Agent Bank', () => {
     fireEvent.change(screen.getByLabelText('Memo for Researcher’s scheduled payment'), { target: { value: 'drafts' } })
     fireEvent.click(screen.getByRole('button', { name: 'Schedule' }))
     const row = await screen.findByText(/Pays Writer/)
-    expect(row.textContent).toBe('Pays Writer 1 LXC every week')
+    expect(row.textContent).toBe('Pays Writer 1\u00a0LXC every week') // B57.167: <Money>'s figure keeps its unit on its line
 
     fireEvent.click(screen.getByRole('button', { name: 'Runs' }))
     expect(await screen.findByText('Paid')).toBeTruthy()
@@ -81,11 +81,13 @@ describe('scheduled payments and automatic top-ups on the Agent Bank', () => {
     expect(await screen.findByText('Researcher pays nothing on a schedule.')).toBeTruthy()
     fireEvent.click(within(screen.getByTestId('agent-setting-Automatic top-up')).getByRole('button'))
     expect((await screen.findByTestId('agent-topup')).textContent).toBe('Researcher is not topped up automatically.')
+    // B57.167 — in Pocket's dialog, each field with its label above it.
+    expect(within(screen.getByRole('dialog', { name: 'Automatic top-up' })).getByText('Top Researcher up below, in LXC').tagName).toBe('LABEL')
     fireEvent.change(screen.getByLabelText('Top Researcher up below, in LXC'), { target: { value: '5' } })
     fireEvent.change(screen.getByLabelText('Top Researcher up to, in LXC'), { target: { value: '8' } })
     fireEvent.click(screen.getByRole('button', { name: 'Set top-up' }))
     await waitFor(() =>
-      expect(screen.getByTestId('agent-topup').textContent).toBe('When Researcher holds less than 5 LXC, the workspace tops it up to 8 LXC.'),
+      expect(screen.getByTestId('agent-topup').textContent).toBe('When Researcher holds less than 5\u00a0LXC, the workspace tops it up to 8\u00a0LXC.'),
     )
     expect(within(screen.getByTestId('agent-topup').parentElement!).getByRole('button', { name: 'Remove' })).toBeTruthy()
 
