@@ -144,15 +144,27 @@ func (d *oauthDB) saveClient(ctx context.Context, c oauthClient) error {
 	return err
 }
 
-func (d *oauthDB) saveCode(ctx context.Context, key string, c oauthCode) error {
+// saveCode writes a code under its person's lock (B54.14), after asking signedIn again there: a sign out everywhere
+// that got the lock first has ended the person's sessions by then (endPerson), and one that comes after deletes the
+// code, so a consent answered while the person signs out everywhere leaves no code behind. false: signedIn said
+// no, and nothing is written.
+func (d *oauthDB) saveCode(ctx context.Context, key string, c oauthCode, signedIn func() bool) (bool, error) {
 	if d == nil {
-		return nil
+		return signedIn(), nil
 	}
-	_, err := d.pool.Exec(ctx, `INSERT INTO oauth_codes (hash, client_id, client_name, redirect_uri, challenge, scope, sub, email,
-		workspace_id, synthetic, resource, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		key, c.clientID, c.clientName, c.redirectURI, c.challenge, c.scope, c.who.sub, c.who.email, c.who.workspaceID,
-		c.who.synthetic, c.resource, c.expires)
-	return err
+	saved := false
+	err := pgx.BeginFunc(ctx, d.pool, func(tx pgx.Tx) error {
+		if err := lockPerson(ctx, tx, c.who.sub); err != nil || !signedIn() {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO oauth_codes (hash, client_id, client_name, redirect_uri, challenge, scope, sub, email,
+			workspace_id, synthetic, resource, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			key, c.clientID, c.clientName, c.redirectURI, c.challenge, c.scope, c.who.sub, c.who.email, c.who.workspaceID,
+			c.who.synthetic, c.resource, c.expires)
+		saved = err == nil
+		return err
+	})
+	return saved && err == nil, err
 }
 
 // takeCode deletes a code's row; it reports false when the row was already gone, so a code is spent once even if
@@ -186,9 +198,13 @@ func (d *oauthDB) insertGrant(ctx context.Context, g oauthGrant, consented time.
 	return tag.RowsAffected() == 1, err
 }
 
-// lockPerson holds sub's lock until tx ends: a grant is created, or a person signed out everywhere, one at a time.
+// personLock is the advisory lock of the person $1 names.
+const personLock = `hashtextextended('oauth person ' || $1, 0)`
+
+// lockPerson holds sub's lock until tx ends: a code or a grant is created, or a person signed out everywhere, one at
+// a time.
 func lockPerson(ctx context.Context, tx pgx.Tx, sub string) error {
-	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('oauth person ' || $1, 0))`, sub)
+	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(`+personLock+`)`, sub)
 	return err
 }
 
@@ -290,14 +306,31 @@ func (d *oauthDB) toolCallsOf(ctx context.Context, sub string, perGrant int) (ma
 // endPerson is B52.9's sign out everywhere in the table, in one statement under the person's lock: every connection of sub goes (its
 // tokens with it, ON DELETE CASCADE), every code not yet redeemed goes, the moment is kept, and Lens is owed the ending of
 // every assistant of theirs (B54.21): for workspaceID, the person's own, and for any other workspace a connection acted in.
-func (d *oauthDB) endPerson(ctx context.Context, sub, workspaceID string, at time.Time) error {
+// Then, still under the lock, inMemory ends them in this process (B54.14), so a consent waiting for the lock (saveCode)
+// finds its session gone. The table goes first, so a failure there leaves them all whole.
+func (d *oauthDB) endPerson(ctx context.Context, sub, workspaceID string, at time.Time, inMemory func()) error {
 	if d == nil {
+		inMemory()
 		return nil
 	}
-	return pgx.BeginFunc(ctx, d.pool, func(tx pgx.Tx) error {
-		if err := lockPerson(ctx, tx, sub); err != nil {
-			return err
+	conn, err := d.pool.Acquire(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	// A connection that might still hold the lock goes back to the pool closed, or it would stop every later
+	// consent and sign-out of sub.
+	release := func() { _ = conn.Conn().Close(context.WithoutCancel(ctx)) }
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock(`+personLock+`)`, sub); err != nil {
+		release()
+		return err
+	}
+	defer func() {
+		if _, err := conn.Exec(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock(`+personLock+`)`, sub); err != nil {
+			release()
 		}
+	}()
+	err = pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `WITH g AS (DELETE FROM oauth_grants WHERE sub = $1 RETURNING workspace_id),
 			c AS (DELETE FROM oauth_codes WHERE sub = $1),
 			o AS (INSERT INTO connect_revocations_owed (user_id, client_id, owed_at)
@@ -306,6 +339,11 @@ func (d *oauthDB) endPerson(ctx context.Context, sub, workspaceID string, at tim
 			INSERT INTO signed_out_everywhere (sub, at) VALUES ($1, $2) ON CONFLICT (sub) DO UPDATE SET at = EXCLUDED.at`, sub, at, workspaceID)
 		return err
 	})
+	if err != nil {
+		return err
+	}
+	inMemory()
+	return nil
 }
 
 // signedOutEverywhere is every person's latest sign out everywhere.

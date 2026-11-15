@@ -614,7 +614,7 @@ func (a *app) oauthAuthorizeAnswer(w http.ResponseWriter, r *http.Request) {
 		writeConnectPage(w, http.StatusBadRequest, connectPage{Problem: "That answer could not be read. Start again from your assistant."})
 		return
 	}
-	s, ok := a.auth.sessionFrom(r)
+	sid, s, ok := a.auth.sessionAndIDFrom(r)
 	c, found := a.oauth.consents.take(r.PostForm.Get("consent"))
 	if !ok || !found || c.sub != s.sub {
 		writeConnectPage(w, http.StatusBadRequest, connectPage{Problem: "This request has expired or was already answered. Start again from your assistant."})
@@ -633,9 +633,16 @@ func (a *app) oauthAuthorizeAnswer(w http.ResponseWriter, r *http.Request) {
 		challenge: c.challenge, scope: c.sc, resource: a.mcpResource(), who: oauthWho{sub: s.sub, email: s.email, workspaceID: s.workspaceID,
 			lensToken: s.lensToken, lensTokenExp: s.lensTokenExp, synthetic: s.synthetic},
 		expires: time.Now().Add(oauthCodeTTL)}
-	if err := a.oauth.db.saveCode(r.Context(), tokenKey(code), oc); err != nil {
+	// B54.14: the session is asked for again under the person's lock, so a sign out everywhere since the check above
+	// leaves no code.
+	saved, err := a.oauth.db.saveCode(r.Context(), tokenKey(code), oc, func() bool { _, still := a.auth.session(sid); return still })
+	if err != nil {
 		log.Printf("bff: oauth code not saved: %v", err)
 		writeConnectPage(w, http.StatusInternalServerError, connectPage{Problem: "Something went wrong on our side. Try again."})
+		return
+	}
+	if !saved {
+		writeConnectPage(w, http.StatusBadRequest, connectPage{Problem: "This request has expired or was already answered. Start again from your assistant."})
 		return
 	}
 	a.oauth.codes.put(tokenKey(code), oc)

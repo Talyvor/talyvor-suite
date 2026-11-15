@@ -33,15 +33,16 @@ func (a *app) handleLogoutEverywhere(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	at := time.Now()
-	if err := a.oauth.db.endPerson(r.Context(), s.sub, s.workspaceID, at); err != nil {
+	if err := a.oauth.db.endPerson(r.Context(), s.sub, s.workspaceID, at, func() {
+		// Every token resolves through its grant (oauthGrantFrom), so the grants going ends them all.
+		a.oauth.grants.deleteWhere(func(g oauthGrant) bool { return g.Who.sub == s.sub })
+		a.oauth.codes.deleteWhere(func(c oauthCode) bool { return c.who.sub == s.sub })
+		a.auth.endPerson(s.sub, at)
+	}); err != nil {
 		log.Printf("bff: sign out everywhere: %v", err)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "you could not be signed out everywhere; try again"})
 		return
 	}
-	// Every token resolves through its grant (oauthGrantFrom), so the grants going ends them all.
-	a.oauth.grants.deleteWhere(func(g oauthGrant) bool { return g.Who.sub == s.sub })
-	a.oauth.codes.deleteWhere(func(c oauthCode) bool { return c.who.sub == s.sub })
-	a.auth.endPerson(s.sub, at)
 	a.connectionsEnded() // endPerson owed Lens the ending of every assistant of theirs (B54.21)
 	clearCookie(w, sessionCookieName)
 	log.Printf("bff: signed out everywhere (sub=%s)", s.sub)
