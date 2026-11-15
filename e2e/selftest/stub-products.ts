@@ -16,6 +16,8 @@
 //   track-hook-sig — Track signs a webhook with the secret's text, not the key its base64 part decodes to (B39.23)
 //   docs-hook-twice — Docs sends an approval.requested webhook twice under two ids (B39.24)
 //   docs-hook-rotate-ignored — Docs answers a rotate with a new secret but keeps signing with the old one (B39.25)
+//
+// B61.49: STUB_HIDE_AREAS=1 answers every request 404, as a workspace without Track and Docs (hidden areas whole) meets them.
 
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { type IncomingMessage, type Server, type ServerResponse, createServer } from 'node:http'
@@ -59,6 +61,10 @@ function serve(port: number, name: string, route: (req: IncomingMessage, res: Se
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`)
     try {
+      if (process.env.STUB_HIDE_AREAS === '1') {
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+        return void res.end('404 page not found\n')
+      }
       // B34.5 — a published board is read by anyone with its link: the BFF sends no gateway proof for it (publicBoard).
       if (req.headers['x-gateway-auth'] !== SECRET && !url.pathname.startsWith('/v1/public/')) return json(res, 401, { error: 'gateway proof required' })
       if (url.pathname === '/v1/bootstrap' && req.method === 'POST') {

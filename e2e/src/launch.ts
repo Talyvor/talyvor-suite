@@ -14,6 +14,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Inventory } from './coverage.ts'
+import type { CatalogModel } from './oracles.ts'
 import type { Scenario } from './scenarios.ts'
 
 /** LAUNCH-PACK.md section 1, the launch version: these are played. */
@@ -256,4 +257,18 @@ export function launchInventory(inv: Inventory, h: HiddenPaths): Inventory {
     trackMissing: why,
     docsMissing: why,
   }
+}
+
+// ── THE RUN'S SET-UP ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * B61.49 — the model catalog the run's set-up reads, and the model it must hold. The catalog is the old gateway's (Lens
+ * internal/areas: /v1/catalog), which a launch workspace does not have, so a launch run never asks for it and goes on with
+ * none: a launch scenario that still needs a model's price fails itself on it. Any other run reads it as before.
+ */
+export async function setUpCatalog(launch: boolean, read: () => Promise<CatalogModel[]>, model: string): Promise<CatalogModel[]> {
+  if (launch) return []
+  const catalog = await read()
+  if (!catalog.some((m) => m.display_name === model)) throw new Error(`the catalog has no model named "${model}"`)
+  return catalog
 }
