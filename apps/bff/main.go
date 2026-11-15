@@ -119,6 +119,9 @@ type config struct {
 	// connectPrepareOnly (BFF_CONNECT_PREPARE_ONLY=true) is the connector a public plugin directory lists: send_payment
 	// pays nothing on it.
 	connectPrepareOnly bool
+	// openAIAppsChallenge (BFF_OPENAI_APPS_CHALLENGE) is the token ChatGPT's plugin directory issued to Talyvor's OpenAI
+	// publisher account; /.well-known/openai-apps-challenge answers it (connect_directory.go). Unset, that path is a 404.
+	openAIAppsChallenge string
 }
 
 func loadConfig() (config, error) {
@@ -134,8 +137,9 @@ func loadConfig() (config, error) {
 		moderatorKey:      os.Getenv("LENS_MODERATOR_KEY"),
 		operatorReadKey:   os.Getenv("LENS_OPERATOR_READ_KEY"),
 
-		lensConnectMintKey: os.Getenv("LENS_CONNECT_MINT_KEY"),
-		connectPrepareOnly: os.Getenv("BFF_CONNECT_PREPARE_ONLY") == "true",
+		lensConnectMintKey:  os.Getenv("LENS_CONNECT_MINT_KEY"),
+		connectPrepareOnly:  os.Getenv("BFF_CONNECT_PREPARE_ONLY") == "true",
+		openAIAppsChallenge: strings.TrimSpace(os.Getenv("BFF_OPENAI_APPS_CHALLENGE")),
 	}
 	// Per-tenant provisioning replaces the single shared workspace key. Refuse to start without
 	// it: silently falling back to one shared workspace is exactly the state this replaced.
