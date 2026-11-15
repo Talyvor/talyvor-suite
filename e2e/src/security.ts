@@ -266,7 +266,7 @@ export function approvalOwnRequest(decide: Decide = onApprovals): Scenario {
       const statusOf = async (x: string) => (await lens.agentApprovals(user)).find((a) => a.agent_id === payer.id && a.memo === memo(x))?.status ?? 'none'
       const held = async (x: string) => {
         const got = await pay(x)
-        if (got.ok || (await statusOf(x)) !== 'pending') throw new Error(`a payment above the approval amount was not held: ${said(got)}`)
+        if (got.ok || got.held === undefined || (await statusOf(x)) !== 'pending') throw new Error(`a payment above the approval amount was not held: ${said(got)}`)
       }
       const decided = async (x: string, allowLXC?: number) => {
         const line = await decide(ctx, memo(x), allowLXC)

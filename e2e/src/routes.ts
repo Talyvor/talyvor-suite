@@ -38,7 +38,8 @@ export async function bff<T>(ctx: ScenarioCtx, method: string, path: string, bod
 }
 
 /** What a step answered, for the evidence. */
-export const said = (a: Answered<unknown>): string => a.ok ? `${a.status} ${JSON.stringify(a.value).slice(0, 300)}` : `refused ${a.status}: ${a.error}`
+export const said = (a: Answered<unknown> & { held?: string }): string =>
+  a.ok ? `${a.status} ${JSON.stringify(a.value).slice(0, 300)}` : `${a.held === undefined ? 'refused' : 'held'} ${a.status}: ${a.error}`
 
 // ─── both sides' accounts ────────────────────────────────────────────────────
 

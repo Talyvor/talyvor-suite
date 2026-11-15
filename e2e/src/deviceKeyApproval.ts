@@ -77,7 +77,7 @@ export function deviceKeyApproval(): Scenario {
         const r = await lens.payAsAgent(k.value.key, user.workspaceID, payer.id, payee.id, amount, `device ${RUN_SALT} ${amount}`)
         ctx.evidence.push({ note: `${payer.name} pays ${amount} µLXC, above its ${APPROVAL_ABOVE_ULXC} µLXC approval amount`, answer: r.ok ? `paid ${JSON.stringify(r.value)}` : `${r.status} ${r.error}` })
         const id = (await lens.agentApprovals(user)).find((a) => a.agent_id === payer.id && a.amount_ulxc === amount && a.status === 'pending')?.id
-        if (r.ok || r.status !== 403 || id === undefined) throw new Error(`a ${amount} µLXC payment above the approval amount must be refused 403 and file a pending approval; Lens answered ${r.ok ? 'paid' : `${r.status} ${r.error}`}`)
+        if (r.ok || r.held === undefined || id === undefined) throw new Error(`a ${amount} µLXC payment above the approval amount must be held, pending_approval, and file a pending approval; Lens answered ${r.ok ? 'paid' : `${r.status} ${r.error}`}`)
         return id
       }
       const status = async (id: string) => (await lens.agentApprovals(user)).find((a) => a.id === id)?.status
