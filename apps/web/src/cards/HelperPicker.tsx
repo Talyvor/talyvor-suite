@@ -26,11 +26,12 @@ const head: Record<AgentCardArt['helper'], [number, number]> = {
 const zoom = 1 / 0.6
 const aspect = 1536 / 968
 
-function Portrait({ helper }: { helper: AgentCardArt }) {
+/** B61.13 — also New agent's pictures, larger and without the helper's name. */
+export function Portrait({ helper, className = 'size-5.5' }: { helper: AgentCardArt; className?: string }) {
   const [x, y] = head[helper.helper]
   const pct = (n: number) => `${(n * 100).toFixed(1)}%`
   return (
-    <span className="relative size-5.5 shrink-0 overflow-hidden rounded-pill" aria-hidden="true">
+    <span className={`relative ${className} shrink-0 overflow-hidden rounded-pill`} aria-hidden="true">
       <img
         src={helper.art}
         alt=""

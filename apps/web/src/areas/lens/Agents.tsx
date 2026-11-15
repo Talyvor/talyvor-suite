@@ -1,19 +1,23 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Dialog, EmptyState, Field, Icon, Input, Money, RoomBadge, pocketFocusRing, type FaceColour } from '@talyvor/ui/pocket'
+import { Button, Card, Dialog, EmptyState, Field, Icon, Input, Money, RoomBadge, pocketFocusRing } from '@talyvor/ui/pocket'
 import { cn, inlineLink } from '@talyvor/ui'
 import { InlineFailure } from '../../components/SessionExpiredBar'
 import { IfArea } from '../../lib/workspaceAreas'
-import { HelperPicker } from '../../cards/HelperPicker'
+import { Portrait } from '../../cards/HelperPicker'
+import type { AgentCardArt } from '../../cards/cardArt'
 import { planName, usePricing } from '../marketing/pricingApi'
 import { BOOK_KEY, rulesKey } from './AgentBank'
 import { AgentCard } from './AgentCard'
 import { AgentFace } from './AgentFace'
 import { AlertChannelsCard } from './AlertChannelsCard'
 import { LimitAlertsCard } from './LimitAlertsCard'
-import { RULE_TEMPLATES, type RuleTemplate } from './ruleTemplates'
-import { type Agent, type WorkspacePlan, AgentBankError, PLAN_KEY, agentBankApi, readWorkspacePlan, refusalText } from './agentBankApi'
+import { AGENT_KINDS, EVERY_PAYMENT_ASKS_ULXC, type AgentKindChoice, type SuggestedRules, ulxcForCents } from './agentKinds'
+import { pegQuery } from './money'
+import { PAYEES_KEY } from './Pay'
+import { dollarsToCents } from './topupApi'
+import { type Agent, type AgentRules, type WorkspacePlan, AgentBankError, PLAN_KEY, agentBankApi, readWorkspacePlan, refusalText } from './agentBankApi'
 
 // Agents.tsx — B57.19: /agents as Pocket's w-agents. The workspace's total, split between its agents and what is free to
 // fund them; Statements and New agent; one AgentCard (B57.16) per agent, each opening its own page; and a room's wallet,
@@ -21,6 +25,9 @@ import { type Agent, type WorkspacePlan, AgentBankError, PLAN_KEY, agentBankApi,
 // before you try (GET /api/plan, as Home's "2 of 3 on Free" reads it); below it, the create form. Lens still decides:
 // a 402 it answers anyway reads in words from its plan, gate, limit and allows fields, never its sentence. Below the room's
 // wallet, Limit alerts (B57.90), and below them Where alerts go (B57.115).
+// B61.13 — New agent starts with one of Talyvor's six, named by what it does, or the owner's own; either way the owner
+// types the name, and sets the four rules the approved rules screen names, in dollars at the peg. Nothing typed, every
+// payment waits for the owner's yes. The fixed rule sets are gone from it; the agent's Rules page keeps every rule.
 
 /** "Research", "Research and Sales", "Research, Sales and Ops". */
 function namesLine(names: string[]): string {
@@ -78,36 +85,150 @@ function LimitReached({ at, names, onClose }: { at: AtLimit; names: string[]; on
   )
 }
 
-const pick = cn('inline-flex h-8.5 items-center whitespace-nowrap rounded-pill bg-cloud px-3.5 text-body font-semibold text-ink aria-pressed:bg-page aria-pressed:shadow-pick', pocketFocusRing)
+const pick = cn('inline-flex h-8.5 items-center gap-2 whitespace-nowrap rounded-pill bg-cloud px-3.5 text-body font-semibold text-ink aria-pressed:bg-page aria-pressed:shadow-pick', pocketFocusRing)
+// A card the whole of which presses: its button holds only the name, one line, and stretches over the card.
+const choice = 'relative flex w-full items-center gap-3 rounded-card bg-cloud p-3 text-left transition-colors duration-200 hover:bg-cloud-2'
+const choiceButton = cn('whitespace-nowrap font-semibold text-ink after:absolute after:inset-0 after:rounded-card', pocketFocusRing)
+
+/** One choice of the first step: its picture, its name (the button) and its line. */
+function StartChoice({ picture, name, line, onPick }: { picture: React.ReactNode; name: string; line: string; onPick: () => void }) {
+  const id = useId()
+  return (
+    <div className={choice}>
+      {picture}
+      <span className="grid min-w-0 gap-0.5">
+        <button type="button" className={cn(choiceButton, 'justify-self-start')} aria-describedby={id} onClick={onPick}>
+          {name}
+        </button>
+        <span id={id} className="text-body text-ink-3">
+          {line}
+        </span>
+      </span>
+    </div>
+  )
+}
+
+/** B61.13 — the four rules New agent asks for, as the approved rules screen names them (launch pack W4). */
+const RULE_FIELDS = [
+  ['perPayment', 'Per payment', 'max_per_request_ulxc'],
+  ['perDay', 'Per day', 'daily_limit_ulxc'],
+  ['perMonth', 'Per month', 'monthly_limit_ulxc'],
+  ['askAbove', 'Ask me above', 'approval_above_ulxc'],
+] as const
+type RuleKey = keyof SuggestedRules
+type Typed = Record<RuleKey, string>
+const NOTHING_TYPED: Typed = { perPayment: '', perDay: '', perMonth: '', askAbove: '' }
+const typedFrom = (r: SuggestedRules): Typed => ({
+  perPayment: r.perPayment > 0 ? String(r.perPayment) : '',
+  perDay: r.perDay > 0 ? String(r.perDay) : '',
+  perMonth: r.perMonth > 0 ? String(r.perMonth) : '',
+  askAbove: r.askAbove > 0 ? String(r.askAbove) : '',
+})
+
+/** Each typed amount in cents, 0 for one left empty; null while any is not an amount. */
+function centsOf(typed: Typed): Record<RuleKey, number> | null {
+  const out = { perPayment: 0, perDay: 0, perMonth: 0, askAbove: 0 }
+  for (const [key] of RULE_FIELDS) {
+    if (typed[key].trim() === '') continue
+    const cents = dollarsToCents(typed[key])
+    if (cents === null) return null
+    out[key] = cents
+  }
+  return out
+}
 
 /**
- * The create form (B28.305's rule templates, B57.124's helper): created, then what it is for and its rules saved, in
- * the one press. When Lens refuses either the agent still exists, so the dialog says what was not saved and opens it.
+ * The rules New agent saves: the four amounts in Lens's units at the peg, and the payees More rules names. With none of
+ * the four typed, every payment waits for the owner's yes; null while an amount typed has no peg to back it.
+ */
+export function newAgentRules(cents: Record<RuleKey, number>, usdPerLXC: number | undefined, payees: string[]): AgentRules | null {
+  const rules: AgentRules = { max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 0, approval_above_ulxc: 0, allowed_models: [], allowed_providers: [], active_from: '', active_until: '', timezone: 'UTC' }
+  for (const [key, , field] of RULE_FIELDS) {
+    if (cents[key] === 0) continue
+    const ulxc = ulxcForCents(cents[key], usdPerLXC)
+    if (ulxc === null) return null
+    rules[field] = ulxc
+  }
+  if (RULE_FIELDS.every(([key]) => cents[key] === 0)) rules.approval_above_ulxc = EVERY_PAYMENT_ASKS_ULXC
+  if (payees.length > 0) rules.allowed_payees = payees
+  return rules
+}
+
+/** The first step: one of Talyvor's six, named by what it does, or the owner's own. */
+function StartWith({ onPick, onClose }: { onPick: (start: AgentKindChoice | 'own') => void; onClose: () => void }) {
+  return (
+    <div className="grid gap-3.5">
+      <h3 className="text-body font-semibold text-ink-2">Start with one of ours</h3>
+      <div className="grid gap-2.5 wide:grid-cols-2" data-testid="new-agent-kinds">
+        {AGENT_KINDS.map((k) => (
+          <StartChoice key={k.kind} picture={<Portrait helper={k.picture} className="size-12" />} name={k.kind} line={k.line} onPick={() => onPick(k)} />
+        ))}
+      </div>
+      <StartChoice
+        picture={
+          <span className="grid size-12 shrink-0 place-items-center rounded-pill bg-page text-ink-2 shadow-edge" aria-hidden="true">
+            <Icon name="plus" size={20} />
+          </span>
+        }
+        name="Make your own"
+        line="Name it, choose its picture and what it does, and set its rules."
+        onPick={() => onPick('own')}
+      />
+      <div className="flex flex-wrap justify-end gap-2.5">
+        <Button variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The create form (B61.13): the name the owner types, the picture and what it does, and the four rules, with payees
+ * under More rules. Created, then what it does and its rules saved, in the one press. When Lens refuses either the
+ * agent still exists, so the dialog says what was not saved and opens it.
  */
 function CreateForm({ onClose, onRefused }: { onClose: () => void; onRefused: (at: AtLimit) => void }) {
+  const [start, setStart] = useState<AgentKindChoice | 'own' | null>(null)
+  if (start === null) return <StartWith onPick={setStart} onClose={onClose} />
+  return <Details key={start === 'own' ? 'own' : start.kind} start={start} onBack={() => setStart(null)} onClose={onClose} onRefused={onRefused} />
+}
+
+function Details({ start, onBack, onClose, onRefused }: { start: AgentKindChoice | 'own'; onBack: () => void; onClose: () => void; onRefused: (at: AtLimit) => void }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const ours = start === 'own' ? null : start
   const [name, setName] = useState('')
-  const [purpose, setPurpose] = useState('')
-  const [template, setTemplate] = useState<RuleTemplate | null>(null)
-  const [colour, setColour] = useState<FaceColour | null>(null)
+  const [picture, setPicture] = useState<AgentCardArt | null>(ours?.picture ?? null)
+  const [does, setDoes] = useState<string>(ours?.kind ?? '')
+  const [typed, setTyped] = useState<Typed>(ours ? typedFrom(ours.rules) : NOTHING_TYPED)
+  const [more, setMore] = useState(false)
+  const [payees, setPayees] = useState<string[]>([])
+  const peg = useQuery(pegQuery)
+  const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
+  const saved = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees, retry: false, enabled: more })
+  const payeeChoices = [
+    ...(book.data?.agents ?? []).filter((a) => !a.archived_at && a.kind !== 'room').map((a) => ({ id: a.id, name: a.name })),
+    ...(saved.data?.payees ?? []).map((p) => ({ id: p.id, name: p.name })),
+  ]
+  const cents = centsOf(typed)
+  const nothingTyped = RULE_FIELDS.every(([key]) => typed[key].trim() === '')
+  const rules = cents ? newAgentRules(cents, peg.data?.usd_per_lxc, payees) : null
   const create = useMutation({
-    mutationFn: async () => {
-      const a = await agentBankApi.create(name.trim(), colour ?? undefined)
+    mutationFn: async (r: AgentRules) => {
+      const a = await agentBankApi.create(name.trim(), picture?.colour)
       const unsaved: string[] = []
-      if (purpose.trim() !== '') {
+      if (does.trim() !== '') {
         try {
-          await agentBankApi.update(a.id, { description: purpose.trim() })
+          await agentBankApi.update(a.id, { description: does.trim() })
         } catch (err) {
-          unsaved.push(`what it is for was not saved: ${refusalText(err)}`)
+          unsaved.push(`what it does was not saved: ${refusalText(err)}`)
         }
       }
-      if (template !== null) {
-        try {
-          qc.setQueryData(rulesKey(a.id), await agentBankApi.setRules(a.id, template.rules))
-        } catch (err) {
-          unsaved.push(`its ${template.name} rules were not saved: ${refusalText(err)}`)
-        }
+      try {
+        qc.setQueryData(rulesKey(a.id), await agentBankApi.setRules(a.id, r))
+      } catch (err) {
+        unsaved.push(`its rules were not saved: ${refusalText(err)}`)
       }
       return { a, unsaved }
     },
@@ -136,45 +257,132 @@ function CreateForm({ onClose, onRefused }: { onClose: () => void; onRefused: (a
       </>
     )
   }
+  const why =
+    name.trim() === ''
+      ? 'Name it first.'
+      : cents === null
+        ? 'Type each amount in dollars, like 50 or 12.50.'
+        : rules === null
+          ? peg.isError
+            ? 'The dollar rate could not be read. Try again in a moment.'
+            : 'Reading the dollar rate…'
+          : undefined
   return (
     <form
       className="grid gap-3.5"
       onSubmit={(e) => {
         e.preventDefault()
-        if (name.trim() !== '' && !create.isPending) create.mutate()
+        if (why === undefined && rules && !create.isPending) create.mutate(rules)
       }}
     >
+      <div className="flex items-center gap-3" data-testid="new-agent-start">
+        {ours ? (
+          <>
+            <Portrait helper={ours.picture} className="size-12" />
+            <span className="grid min-w-0 flex-1 gap-0.5">
+              <span className="font-semibold text-ink">{ours.kind}</span>
+              <span className="text-body text-ink-3">{ours.line}</span>
+            </span>
+          </>
+        ) : (
+          <span className="min-w-0 flex-1 font-semibold text-ink">Make your own</span>
+        )}
+        <Button variant="secondary" size="sm" onClick={onBack}>
+          Change
+        </Button>
+      </div>
       <Field label="Name">
         <Input placeholder="Agent name" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
-      <label className="grid gap-1.5">
-        <span className="text-body font-semibold text-ink-2">What it is for</span>
-        <textarea
-          rows={2}
-          maxLength={500}
-          placeholder="e.g. answers support tickets overnight"
-          className={cn(
-            'w-full rounded-control bg-page px-3.5 py-2.5 text-reading text-ink shadow-edge placeholder:text-faint transition-colors duration-200 hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50',
-            pocketFocusRing,
-          )}
-          value={purpose}
-          onChange={(e) => setPurpose(e.target.value)}
-        />
-      </label>
-      <div className="grid gap-1.5">
-        <span className="text-body font-semibold text-ink-2">Rules to start from</span>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Rules to start from">
-          {[null, ...RULE_TEMPLATES].map((t) => (
-            <button key={t?.id ?? 'none'} type="button" className={pick} aria-pressed={template?.id === t?.id} onClick={() => setTemplate(t)}>
-              {t?.name ?? 'No rules'}
-            </button>
+      {ours ? null : (
+        <>
+          <div className="grid gap-1.5">
+            <span className="text-body font-semibold text-ink-2">Picture</span>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Picture">
+              {AGENT_KINDS.map((k, i) => (
+                <button
+                  key={k.picture.id}
+                  type="button"
+                  aria-label={`Picture ${i + 1}`}
+                  aria-pressed={picture?.id === k.picture.id}
+                  className={cn('inline-flex rounded-pill p-0.5 aria-pressed:shadow-pick', pocketFocusRing)}
+                  onClick={() => setPicture((p) => (p?.id === k.picture.id ? null : k.picture))}
+                >
+                  <Portrait helper={k.picture} className="size-11" />
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <span className="text-body font-semibold text-ink-2">What it does</span>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="What it does">
+              {AGENT_KINDS.map((k) => (
+                <button key={k.kind} type="button" className={pick} aria-pressed={does === k.kind} onClick={() => setDoes((d) => (d === k.kind ? '' : k.kind))}>
+                  {k.kind}
+                </button>
+              ))}
+            </div>
+            <Input
+              aria-label="What it does, in your own words"
+              placeholder="Or in your own words"
+              maxLength={500}
+              value={AGENT_KINDS.some((k) => k.kind === does) ? '' : does}
+              onChange={(e) => setDoes(e.target.value)}
+            />
+          </div>
+        </>
+      )}
+      <div className="grid gap-2.5" role="group" aria-label="Its rules">
+        <div className="grid grid-cols-2 gap-2.5">
+          {RULE_FIELDS.map(([key, label]) => (
+            <Field key={key} label={label} className="min-w-0">
+              <Input
+                inputMode="decimal"
+                className="min-w-0"
+                unit="USD"
+                placeholder="None"
+                value={typed[key]}
+                onChange={(e) => setTyped((t) => ({ ...t, [key]: e.target.value }))}
+              />
+            </Field>
           ))}
         </div>
-        {template ? <p className="text-body text-ink-3">{template.summary}</p> : null}
+        <p className="text-body text-ink-3">Anything outside these rules waits for your yes.</p>
+        {nothingTyped ? (
+          <p className="text-body text-ink-2" data-testid="new-agent-every-payment">
+            With none of these set, every payment waits for your yes.
+          </p>
+        ) : null}
       </div>
-      <div className="grid gap-1.5">
-        <span className="text-body font-semibold text-ink-2">Its helper</span>
-        <HelperPicker label="Its helper" value={colour} onChange={setColour} />
+      <div className="grid gap-2.5">
+        <Button variant="secondary" size="sm" className="justify-self-start" aria-expanded={more} onClick={() => setMore((m) => !m)}>
+          More rules
+        </Button>
+        {more ? (
+          <div className="grid gap-1.5" data-testid="new-agent-more-rules">
+            <span className="text-body font-semibold text-ink-2">Payees</span>
+            <span className="text-body text-ink-3">
+              {payees.length > 0 ? 'Only these. Card shops count as payees.' : 'Any payee, inside the rules above. Pick some to allow only them. Card shops count as payees.'}
+            </span>
+            {payeeChoices.length > 0 ? (
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Payees">
+                {payeeChoices.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={pick}
+                    aria-pressed={payees.includes(p.id)}
+                    onClick={() => setPayees((all) => (all.includes(p.id) ? all.filter((x) => x !== p.id) : [...all, p.id]))}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="text-body text-ink-3">{saved.isPending ? 'Reading your payees…' : 'No saved payees yet. Add them in Pay.'}</span>
+            )}
+          </div>
+        ) : null}
       </div>
       {create.isError && !planRefusal(create.error) ? (
         <p role="alert" className="text-body text-danger">
@@ -185,7 +393,7 @@ function CreateForm({ onClose, onRefused }: { onClose: () => void; onRefused: (a
         <Button variant="secondary" onClick={onClose}>
           Cancel
         </Button>
-        <Button type="submit" disabled={name.trim() === '' || create.isPending} disabledReason={name.trim() === '' ? 'Name it first.' : undefined}>
+        <Button type="submit" disabled={create.isPending} disabledReason={why}>
           {create.isPending ? 'Creating…' : 'Create agent'}
         </Button>
       </div>
@@ -204,7 +412,7 @@ export function NewAgent({ open, onClose, names }: { open: boolean; onClose: () 
   const full = (p: WorkspacePlan) => p.agents >= 0 && p.agents_used >= p.agents
   const at: AtLimit | null = refused ?? (plan.data && full(plan.data) ? { plan: plan.data.plan, limit: plan.data.agents } : null)
   return (
-    <Dialog open={open} onClose={close} title={at ? `${planName(at.plan)} has room for ${agentsWord(at.limit)}` : 'New agent'}>
+    <Dialog open={open} onClose={close} title={at ? `${planName(at.plan)} has room for ${agentsWord(at.limit)}` : 'New agent'} className="max-h-screen overflow-y-auto">
       {plan.isPending && !refused ? (
         <p>Reading your plan…</p>
       ) : at ? (
