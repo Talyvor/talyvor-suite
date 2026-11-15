@@ -510,7 +510,8 @@ function AppShell() {
 
 function ConsoleShell() {
   const { pathname } = useLocation()
-  const operator = useAuthMeReader().data?.operator === true
+  const me = useAuthMeReader().data
+  const operator = me?.operator === true
   // B59.2 — and no page of an area this workspace does not have.
   const areas = useWorkspaceAreas()
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `areas.key` changes exactly when `areas.shows` answers differently
@@ -525,7 +526,7 @@ function ConsoleShell() {
   return (
     <>
     {/* B57.50 — an unnamed workspace's first page in a tab is /welcome. */}
-    <WelcomeRedirect />
+    <WelcomeRedirect firstSignIn={me?.needs_pooling_choice === true} />
     {/* B57.8 — Pocket's shell: the sidebar, the top bar, the kill banner and the page's heading. B57.9 drew the ⌘K bar;
         Taly and the theme switch are still today's design until B57.159 and B57.42 draw them, and carry their own marker. */}
     <div className="contents" data-design="pocket">

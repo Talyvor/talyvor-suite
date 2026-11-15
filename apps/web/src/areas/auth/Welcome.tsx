@@ -49,13 +49,16 @@ const unnamed = (w: { id: string; name: string } | undefined) => w !== undefined
 
 /**
  * In the shell: an unnamed workspace's first page in a tab is /welcome, on the sign-in that created it. Renders nothing
- * otherwise. B60.1 — only that sign-in: needs_pooling_choice is the BFF's word for it, false on every later one. A later
- * sign-in to a workspace still unnamed opens where it was going, and Home asks for the name (Onboarding's NameWorkspace).
+ * otherwise. B60.1 — only that sign-in: `firstSignIn` is the BFF's needs_pooling_choice, false on every later one, read by
+ * the shell from the /auth/me it already holds. A later sign-in to a workspace still unnamed opens where it was going,
+ * and Home asks for the name (Onboarding's NameWorkspace).
  */
-export function WelcomeRedirect() {
-  const firstSignIn = useAuthMeReader().data?.needs_pooling_choice === true
+export function WelcomeRedirect({ firstSignIn }: { firstSignIn: boolean }) {
   const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
-  if (!firstSignIn || !unnamed(workspace.data) || welcomed()) return null
+  // Read the name on every render, before firstSignIn can return early: a query whose data is never read re-renders
+  // on each change of its fetch state (measured: landmarkIds.test went from 23 s to past its 60 s limit).
+  const named = !unnamed(workspace.data)
+  if (named || !firstSignIn || welcomed()) return null
   return <Navigate to={WELCOME_PATH} replace />
 }
 
