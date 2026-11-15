@@ -65,7 +65,8 @@ describe('step 1: who is this account for?', () => {
     expect(steps.map((s) => s.textContent)).toEqual(['1Who is this account for?', '2Pick the kind of money', '3Add a passkey or pair your phone'])
     const choices = within(screen.getByRole('radiogroup')).getAllByRole('radio')
     expect(choices.map((c) => c.closest('label')!.textContent)).toEqual(['PersonalFor you and your own agents.', 'BusinessFor a company and its team.'])
-    expect(screen.getByText('The type can’t be changed later. You can hold several accounts and switch between them.')).toBeInTheDocument()
+    // B61.4 — the type is fixed once the account is open: another type is another account.
+    expect(screen.getByText('The type can’t be changed later. To use another type, open another account.')).toBeInTheDocument()
 
     const labels = () => Array.from(document.querySelectorAll('main label[for]')).map((l) => l.textContent)
     pick(/^Personal/)
@@ -108,7 +109,9 @@ describe('step 2: pick the kind of money', () => {
       ['Stablecoin and crypto balances', 'A card that spends from the stablecoin balance', 'Wallet addresses, on-chain send and receive'],
       ['Both balances, one total with the split', 'All cards', 'Convert between the two sides', 'Instant transfer'],
     ])
-    expect(screen.getByText('Fiat only or Stablecoin and crypto only can become Hybrid at any time.')).toBeInTheDocument()
+    // B61.4 — and so is the kind of money.
+    expect(screen.getByText('The kind of money can’t be changed later. To use another kind, open another account.')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('can become Hybrid')
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(await screen.findByRole('heading', { level: 1, name: 'Who is this account for?' })).toBeInTheDocument()

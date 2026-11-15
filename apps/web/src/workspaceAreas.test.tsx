@@ -111,6 +111,46 @@ describe('a hidden area is not there (B59.2)', () => {
     expect(paletteOptions().some((o) => o.includes('New chat'))).toBe(true)
   })
 
+  // B61.17 — Overview, Ledger and Royalties are LXC's, and LXC is parked: they are the gateway's, like its features.
+  const LXC_PAGES = ['/overview', '/ledger', '/statements/royalties']
+  const LAUNCH_SCREENS = ['/', '/billing', '/billing/success?session_id=cs_test', '/statements', '/settings', '/spend', '/setup']
+  const lxcLinks = () =>
+    Array.from(document.querySelectorAll('a'))
+      .map((a) => a.getAttribute('href') ?? '')
+      .filter((h) => inArea(h, [...LXC_PAGES, '/earnings']))
+
+  it('gateway: no screen links Overview, Ledger or Royalties by default, and each address goes to Home (B61.17)', async () => {
+    for (const path of LAUNCH_SCREENS) {
+      mockBff([])
+      await openApp(path)
+      expect(await screen.findByRole('main')).toBeTruthy()
+      expect({ path, links: lxcLinks() }).toEqual({ path, links: [] })
+      if (path === '/') for (const page of ['Overview', 'Ledger', 'Royalties']) expect(paletteOptions()).not.toContain(page)
+      cleanup()
+      queryClient.clear()
+    }
+    for (const path of [...LXC_PAGES, '/earnings']) {
+      mockBff([])
+      await openApp(path)
+      await waitFor(() => expect(window.location.pathname).toBe('/'))
+      cleanup()
+      queryClient.clear()
+    }
+  })
+
+  it('gateway: a workspace the operator opened it for still reaches Overview, Ledger and Royalties (B61.17)', async () => {
+    for (const path of LXC_PAGES) {
+      mockBff(['gateway'])
+      await openApp(path)
+      expect(window.location.pathname).toBe(path)
+      cleanup()
+      queryClient.clear()
+    }
+    mockBff(['gateway'])
+    await openApp('/')
+    for (const page of ['Overview', 'Ledger', 'Royalties']) expect(paletteOptions()).toContain(page)
+  })
+
   it('gateway: Settings carries no shared-answers entry by default, and document conversion is never on Settings (B57.42)', async () => {
     mockBff([])
     await openApp('/settings')

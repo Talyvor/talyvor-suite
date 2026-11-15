@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { AreaLink } from '../../lib/workspaceAreas'
 import { MuNumeral, inlineLink } from '@talyvor/ui'
 import type { SplitShortfall as Shortfall } from './spendMath'
 
@@ -37,9 +37,9 @@ export function SplitShortfall({
           <MuNumeral micros={unattributed} unit="lxc" className="align-baseline" /> of the total
           above is not broken down by model, because those charges did not record which model
           they were for; each one is listed in the{' '}
-          <Link className={inlineLink} to="/ledger">
+          <AreaLink className={inlineLink} to="/ledger">
             Ledger
-          </Link>
+          </AreaLink>
           .
         </p>
       ) : null}
@@ -48,9 +48,9 @@ export function SplitShortfall({
           {floor ? 'At least ' : ''}
           <MuNumeral micros={notShown} unit="lxc" className="align-baseline" /> more went to
           models other than the {shownCount} shown here; every charge is listed in the{' '}
-          <Link className={inlineLink} to="/ledger">
+          <AreaLink className={inlineLink} to="/ledger">
             Ledger
-          </Link>
+          </AreaLink>
           .
         </p>
       ) : null}

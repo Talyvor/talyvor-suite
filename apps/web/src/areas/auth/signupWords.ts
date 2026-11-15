@@ -47,8 +47,10 @@ export const PROFILE_ERRORS = {
   country: 'Pick your country.',
 } as const
 
-export const TYPE_NOTE = 'The type can’t be changed later. You can hold several accounts and switch between them.'
-export const KIND_NOTE = 'Fiat only or Stablecoin and crypto only can become Hybrid at any time.'
+// B61.4 — Nick, 15 Nov: the type and the kind are fixed once the account is open; another of either is another
+// account. Settings, Account says the same two sentences.
+export const TYPE_NOTE = 'The type can’t be changed later. To use another type, open another account.'
+export const KIND_NOTE = 'The kind of money can’t be changed later. To use another kind, open another account.'
 
 /** W1's line under step 2's title: "For Northwind Studio, a Business account." */
 export function kindFor(name: string, type: AccountType): string {

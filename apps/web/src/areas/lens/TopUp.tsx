@@ -22,6 +22,7 @@ import {
 import { WorkspaceLabel } from '../../labels/workspace'
 import { BUY_FROM_TALYVOR } from '../../labels/capabilities'
 import { BILLING_LINKS, PageLinks } from '../../components/PageLinks'
+import { useWorkspaceAreas } from '../../lib/workspaceAreas'
 
 // /billing — buying LXC. Until this screen there was no way for a customer to do
 // it at all: the Lens half (checkout, a signature-verified webhook, exactly-once
@@ -155,6 +156,8 @@ interface Step {
 }
 
 function WaysToGetCredit({ canBuy, cardsOff }: { canBuy: boolean; cardsOff: boolean }) {
+  // B61.17 — Royalties is LXC's, and LXC is parked: the step that opens it is there only with the gateway.
+  const royalties = useWorkspaceAreas().has('gateway')
   const steps: Step[] = canBuy && cardsOff
     ? [{ index: '01', title: CARDS_OFF, body: 'Until they are, credit arrives the other way.', to: null, cta: null }]
     : canBuy
@@ -185,7 +188,7 @@ function WaysToGetCredit({ canBuy, cardsOff }: { canBuy: boolean; cardsOff: bool
           cta: null,
         },
       ]
-  steps.push({
+  if (royalties) steps.push({
     index: '02',
     title: 'Convert LENS this workspace has earned.',
     body:
@@ -195,7 +198,9 @@ function WaysToGetCredit({ canBuy, cardsOff }: { canBuy: boolean; cardsOff: bool
     cta: 'Open Royalties',
   })
   return (
-    <ol className="mt-8 grid gap-px overflow-hidden rounded-card border border-rule bg-rule wide:grid-cols-2">
+    <ol
+      className={`mt-8 grid gap-px overflow-hidden rounded-card border border-rule bg-rule ${steps.length > 1 ? 'wide:grid-cols-2' : ''}`}
+    >
       {steps.map((s) => (
         <li key={s.index} className="flex flex-col items-start bg-raised px-gutter py-5">
           <span className="font-figure text-eyebrow uppercase text-label">Step {s.index}</span>
@@ -314,6 +319,7 @@ export function TopUp({
 } = {}) {
   const balance = useQuery({ queryKey: ['lxc-balance'], queryFn: api.lxcBalance })
   const options = useQuery({ queryKey: ['topup-options'], queryFn: topupApi.options })
+  const areas = useWorkspaceAreas()
 
   const start = useMutation({
     mutationFn: async (usdCents: number) => {
@@ -531,8 +537,8 @@ export function TopUp({
           </p>
         </Region>
       )}
-      {/* B57.8 — Overview and Ledger left the sidebar; Billing links them. */}
-      <PageLinks label="Where the money went" links={BILLING_LINKS} />
+      {/* B57.8 — Overview and Ledger left the sidebar; Billing links them. B61.17: only with the gateway, LXC's area. */}
+      {areas.has('gateway') ? <PageLinks label="Where the money went" links={BILLING_LINKS} /> : null}
     </RegionScreen>
   )
 }
