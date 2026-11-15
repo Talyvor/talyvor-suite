@@ -19,7 +19,7 @@ import { readFailure } from '../lens/WalletMoney'
 // Welcome.tsx — B57.50: a new workspace's first page (Pocket's w-first-home), in its own layout. Lens names a new
 // workspace by its id and makes "My first agent" at sign-up, so the first thing a new owner sees is the name to give
 // it, the agent Lens made with its rules in words, and where credit comes from. The shell sends a signed-in browser
-// here once per tab while the name is still the id (WelcomeRedirect); once it has a name, never again. It is drawn
+// here once per tab, on the sign-in that created the workspace, while the name is still the id (WelcomeRedirect). It is drawn
 // under the same AuthGate as the console, in place of the console's shell (App.tsx's AppShell), so it is here, beside
 // the other pages outside the shell.
 
@@ -47,10 +47,15 @@ export function markWelcomed() {
 /** Lens names a workspace by its id until someone names it. */
 const unnamed = (w: { id: string; name: string } | undefined) => w !== undefined && (!w.name || w.name === w.id)
 
-/** In the shell: an unnamed workspace's first page in a tab is /welcome. Renders nothing otherwise. */
+/**
+ * In the shell: an unnamed workspace's first page in a tab is /welcome, on the sign-in that created it. Renders nothing
+ * otherwise. B60.1 — only that sign-in: needs_pooling_choice is the BFF's word for it, false on every later one. A later
+ * sign-in to a workspace still unnamed opens where it was going, and Home asks for the name (Onboarding's NameWorkspace).
+ */
 export function WelcomeRedirect() {
+  const firstSignIn = useAuthMeReader().data?.needs_pooling_choice === true
   const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
-  if (!unnamed(workspace.data) || welcomed()) return null
+  if (!firstSignIn || !unnamed(workspace.data) || welcomed()) return null
   return <Navigate to={WELCOME_PATH} replace />
 }
 

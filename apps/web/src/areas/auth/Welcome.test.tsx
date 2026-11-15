@@ -8,13 +8,14 @@ import { RULE_TEMPLATES } from '../lens/ruleTemplates'
 const ID = 'uabcdefghijklmnopqrstuvwxy'
 const SUPPORT_BOT = RULE_TEMPLATES.find((t) => t.id === 'support-bot')!.rules
 
-function mockBff(opts: { name: string }) {
+// firstSignIn: the BFF's needs_pooling_choice, true only on the login that created the workspace.
+function mockBff(opts: { name: string; firstSignIn?: boolean }) {
   let name = opts.name
   const puts: unknown[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input).split('?')[0]
     const json = (body: unknown) => Response.json(body)
-    if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, user: { sub: 'sub-new', email: 'ada@acme.co.uk' }, workspace_id: ID, cache_poolable: true })
+    if (url === '/auth/me') return json({ mode: 'oidc', authenticated: true, user: { sub: 'sub-new', email: 'ada@acme.co.uk' }, workspace_id: ID, cache_poolable: true, needs_pooling_choice: opts.firstSignIn ?? false })
     if (url === '/api/workspace/name') {
       if (init?.method === 'PUT') {
         const body = JSON.parse(String(init.body)) as { name: string }
@@ -48,7 +49,7 @@ afterEach(() => {
 
 describe('/welcome', () => {
   it('an unnamed workspace lands on /welcome, with its first agent’s rules in words as Lens holds them', async () => {
-    mockBff({ name: ID })
+    mockBff({ name: ID, firstSignIn: true })
     at('/')
     await waitFor(() => expect(window.location.pathname).toBe('/welcome'))
     expect(await screen.findByRole('heading', { name: 'Welcome to Talyvor' })).toBeInTheDocument()
@@ -74,6 +75,15 @@ describe('/welcome', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Go to Home' }))
     expect(await screen.findByTestId('sidebar-workspace-name')).toHaveTextContent('Acme')
     expect(window.location.pathname).toBe('/')
+  })
+
+  // B60.1 — Nick signed in again to a workspace with an agent and no name, and read "A NEW WORKSPACE" as not being let in.
+  it('an unnamed workspace signed in again opens Home, which asks for the name, not /welcome', async () => {
+    mockBff({ name: ID })
+    at('/')
+    expect(await screen.findByTestId('name-workspace')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/')
+    expect(screen.queryByRole('heading', { name: 'Welcome to Talyvor' })).not.toBeInTheDocument()
   })
 
   it('a named workspace never lands on /welcome, and is sent Home from it', async () => {
