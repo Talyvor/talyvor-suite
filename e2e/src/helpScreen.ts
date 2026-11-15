@@ -74,12 +74,13 @@ export function deadControls(controls: readonly Control[], isScreen: (path: stri
       continue
     }
     const href = (c.href ?? '').trim()
-    if (href === '' || href === '#' || href.toLowerCase().startsWith('javascript:')) {
+    const url = href === '' || href === '#' ? undefined : URL.parse(href, origin)
+    // Only a page, a mail or a call is somewhere to go: any other scheme (javascript:, data:, …) leads nowhere.
+    if (url === undefined || url === null || !['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol)) {
       dead.push(`the link "${name}" leads nowhere (href "${href}")`)
       continue
     }
-    if (/^(mailto|tel):/i.test(href)) continue
-    const url = new URL(href, origin)
+    if (url.protocol === 'mailto:' || url.protocol === 'tel:') continue
     if (url.origin === new URL(origin).origin && !url.pathname.startsWith('/api/') && !isScreen(url.pathname)) {
       dead.push(`the link "${name}" leads to ${url.pathname}, which is no screen of the app`)
     }

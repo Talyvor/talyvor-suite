@@ -135,10 +135,12 @@ describe('help (B61.48)', () => {
     expect(deadControls(live, isScreen, 'http://app')).toEqual([])
     expect(deadControls([
       { tag: 'a', name: 'Terms', href: '#', disabled: false, reason: '' },
+      { tag: 'a', name: 'Open', href: 'data:text/html,hi', disabled: false, reason: '' },
       { tag: 'a', name: 'Old help', href: '/help-centre', disabled: false, reason: '' },
       { tag: 'button', name: 'Send', disabled: true, reason: '' },
     ], isScreen, 'http://app')).toEqual([
       'the link "Terms" leads nowhere (href "#")',
+      'the link "Open" leads nowhere (href "data:text/html,hi")',
       'the link "Old help" leads to /help-centre, which is no screen of the app',
       'the button "Send" is disabled and says nowhere why',
     ])
