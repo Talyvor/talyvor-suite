@@ -12,6 +12,7 @@ import { DESIGN_ATTR } from '../../pocketPending'
 import { DevelopersHead } from './Developers'
 import { keysApi, type MintResult, type WorkspaceAPIKey } from './keysApi'
 import { KEY_PLACEHOLDER, MECHANISM_CAVEATS, toolsFor, type Tool } from './setupSnippets'
+import { AreaLink } from '../../lib/workspaceAreas'
 
 // Setup — the page that was missing. A trial user signed in, minted a key, and was told nothing
 // about what to do with it. The product is "point your existing tool at Lens instead of the
@@ -383,9 +384,9 @@ export function Setup() {
               <li>
                 <strong className="text-ink">
                   Open the{' '}
-                  <Link className={`text-ink ${inlineLink}`} to="/ledger">
+                  <AreaLink className={`text-ink ${inlineLink}`} to="/ledger">
                     ledger
-                  </Link>
+                  </AreaLink>
                   .
                 </strong>{' '}
                 Within a few seconds a row appears for it, with what it cost. That row is the proof your traffic is flowing

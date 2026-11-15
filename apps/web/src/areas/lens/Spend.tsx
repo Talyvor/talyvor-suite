@@ -13,6 +13,7 @@ import { LEDGER_PAGE, byModel, debitTotal, feeTotal, inWindow, lxcDebitsByModel,
 import { PlatformFeeLines, totalHint } from './PlatformFeeLines'
 import { WindowFigure, WindowIncomplete } from './WindowFloor'
 import { Region, RegionScreen } from '../../components/Region'
+import { AreaLink } from '../../lib/workspaceAreas'
 
 // Spend & routing — LIVE. The screen the design system's central distinction
 // was built for:
@@ -169,9 +170,9 @@ export function Spend({ now = new Date() }: { now?: Date }) {
                   {windowRows.length} ledger row{windowRows.length === 1 ? '' : 's'} landed in this
                   window, and none of them records which model it came from, so there is nothing to
                   split by model. The rows themselves are on the{' '}
-                  <Link className={inlineLink} to="/ledger">
+                  <AreaLink className={inlineLink} to="/ledger">
                     ledger
-                  </Link>
+                  </AreaLink>
                   .
                 </div>
               ) : agg.length === 0 ? (

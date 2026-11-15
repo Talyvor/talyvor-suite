@@ -100,9 +100,11 @@ function Reference({ sessionId }: { sessionId: string }) {
 function Actions() {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button asChild variant="primary">
-        <Link to="/ledger">View the ledger</Link>
-      </Button>
+      <IfArea area="gateway">
+        <Button asChild variant="primary">
+          <Link to="/ledger">View the ledger</Link>
+        </Button>
+      </IfArea>
       <Button asChild>
         <Link to="/billing">Back to top up</Link>
       </Button>
