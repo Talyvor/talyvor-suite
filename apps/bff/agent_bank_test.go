@@ -188,6 +188,17 @@ func TestAgentRulesInTheirCurrencyReachLensWithNoULXCLimit(t *testing.T) {
 	}
 }
 
+// B61.87 — New agent opens the agent's own account in the account's currency.
+func TestAgentCreateNamesTheAccountsCurrency(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	doJSON(a, http.MethodPost, "/api/agents", `{"name":"Atlas","fiat_currency":"GBP"}`)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.got) != 1 || !strings.HasSuffix(f.got[0], `/agents {"colour":"","fiat_currency":"GBP","name":"Atlas"}`) {
+		t.Fatalf("Lens got %q; want the agent created in pounds", f.got)
+	}
+}
+
 // B17.26 — a Fund's Idempotency-Key reaches Lens, so the screen's retry through a restart moves once.
 func TestAgentBankForwardsAMovesIdempotencyKey(t *testing.T) {
 	a, f := newFakeLensAgentBank(t)
@@ -667,7 +678,8 @@ func TestAgentHelperColourReachesLens(t *testing.T) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	want := []string{`/agents {"colour":"cobalt","name":"Atlas"}`, `/agents/agt_1 {"name":null,"description":null,"colour":"rose"}`}
+	// B61.87: a create that names no currency sends it empty, which Lens reads as it reads none.
+	want := []string{`/agents {"colour":"cobalt","fiat_currency":"","name":"Atlas"}`, `/agents/agt_1 {"name":null,"description":null,"colour":"rose"}`}
 	if len(f.got) != 2 || !strings.HasSuffix(f.got[0], want[0]) || !strings.HasSuffix(f.got[1], want[1]) {
 		t.Fatalf("Lens got %q; want …%q", f.got, want)
 	}
