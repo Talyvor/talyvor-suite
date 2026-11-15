@@ -61,11 +61,9 @@ export function DevicesScreen() {
       <p className="max-w-3xl text-reading text-ink-2">Who can approve a payment, and how.</p>
       <div className="grid items-start gap-4 wide:grid-cols-12">
         <div className="grid min-w-0 gap-4 wide:col-span-7">
-          {/* B55.54 — with every key removed, the way to get one back; still today's design. */}
+          {/* B55.54 — with every key removed, the way to get one back (B57.131: in Pocket). */}
           {keys.noLiveKey ? (
-            <div data-design="today">
-              <GetAKeyBack />
-            </div>
+            <GetAKeyBack />
           ) : (
             <KeysCard />
           )}
@@ -83,11 +81,7 @@ export function DevicesScreen() {
               />
             </Card>
           </section>
-          {keys.thisBrowserSigns ? (
-            <div data-design="today">
-              <RecoveryCodeRow />
-            </div>
-          ) : null}
+          {keys.thisBrowserSigns ? <RecoveryCodeRow /> : null}
         </div>
         <div className="grid min-w-0 gap-4 wide:col-span-5">
           <StopEverything />
