@@ -405,6 +405,12 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err == nil && signup != (signupAccount{}) && signupFromAnotherSite(r) {
 		err = errors.New("start sign-up at /signup")
 	}
+	// B61.8: for someone already signed in, sign-up answers open ANOTHER account, so only our own /signup page
+	// (same-origin) may carry them. A link opened from an email or a chat app ("none"), or a browser that says nothing,
+	// signs the person in to the account they had; opening another from anywhere else is POST /api/accounts.
+	if _, live := a.auth.sessionFrom(r); live && r.Header.Get("Sec-Fetch-Site") != "same-origin" {
+		signup = signupAccount{}
+	}
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

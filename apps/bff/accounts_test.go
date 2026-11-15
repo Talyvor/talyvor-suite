@@ -18,8 +18,26 @@ import (
 // signUpIn drives sign-up's answers through /auth/login to the callback in br, which may already be signed in.
 func (s *strangerSuite) signUpIn(br *http.Client, sub string, answers url.Values) {
 	s.t.Helper()
+	s.signUpInFrom(br, sub, answers, "same-origin")
+}
+
+// signUpInFrom is signUpIn with the Sec-Fetch-Site the browser sends to /auth/login: "same-origin" from our own
+// /signup page, "none" from a link opened in an email or a chat app.
+func (s *strangerSuite) signUpInFrom(br *http.Client, sub string, answers url.Values, site string) {
+	s.t.Helper()
 	s.idp.sub, s.idp.email = sub, sub+"@example.org"
-	login, body := doReq(s.t, br, http.MethodGet, s.ts.URL+"/auth/login?"+answers.Encode())
+	req, err := http.NewRequest(http.MethodGet, s.ts.URL+"/auth/login?"+answers.Encode(), nil)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	req.Header.Set("Sec-Fetch-Site", site)
+	login, err := br.Do(req)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	b, _ := io.ReadAll(login.Body)
+	login.Body.Close()
+	body := string(b)
 	if login.StatusCode != http.StatusFound {
 		s.t.Fatalf("login: %d (%s)", login.StatusCode, body)
 	}
@@ -205,6 +223,22 @@ func TestB618_ASignUpWhileSignedInOpensAnotherAccount(t *testing.T) {
 	}
 	if list := s.accountsOf(br); len(list) != 2 {
 		t.Fatalf("/api/accounts = %+v, want both accounts", list)
+	}
+}
+
+// A link someone sent a signed-in person (Sec-Fetch-Site "none") carrying sign-up answers signs them in to the
+// account they had; it never opens another. Only our own /signup page (same-origin) opens one from /auth/login.
+func TestB618_ASignUpLinkFromElsewhereNeverOpensAnotherAccount(t *testing.T) {
+	s := startStrangerSuite(t, []string{"*"})
+	br := s.browser()
+	s.signUpIn(br, "b618-link", b618Business)
+	first := deriveWorkspaceIDLikeLens(provisionIdentity(s.idp.srv.URL, "b618-link"))
+	s.signUpInFrom(br, "b618-link", b618Personal, "none")
+	if got := s.accountTypeOf(br); got != "business "+first {
+		t.Fatalf("after a sign-up link opened from elsewhere the session reaches %q, want business %s", got, first)
+	}
+	if list := s.accountsOf(br); len(list) != 1 {
+		t.Fatalf("/api/accounts = %+v, want the one account the person had", list)
 	}
 }
 
