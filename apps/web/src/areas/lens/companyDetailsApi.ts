@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ApiError, getJSON } from '../../lib/api'
 
 // companyDetailsApi.ts — B59.31: a Business workspace's company details and the people with control (SPEC 6 (4), Lens
-// B59.30 through the BFF's workspace_business.go). They go to the partner's identity check later; no identity
+// B59.30 through the BFF's workspace_business.go). They go to the identity check (B61.20); no identity
 // document is asked for. A Personal workspace has none. The phone (B59.32) shows the same words.
 
 export type ControlRole = 'director' | 'shareholder' | 'other'
@@ -24,7 +24,7 @@ export interface CompanyDetails {
 
 export const COMPANY_WORDS = {
   title: 'Company details',
-  line: 'These go to our partner’s identity check later. No identity documents are asked for.',
+  line: 'These go to the identity check, “Confirm who you are”. No identity documents are asked for.',
   company: 'The company',
   people: 'People with control',
   peopleLine: 'Each director, and anyone who owns or controls part of the company.',

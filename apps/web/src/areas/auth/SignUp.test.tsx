@@ -2,14 +2,46 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
-// SignUp.test.tsx — B59.8: sign-up asks who the account is for, the kind of money, then a key, in the launch pack's
-// words (SPEC 3.2; the design's P1, P2 and W1). The words are typed here rather than imported, so a changed word in
+// SignUp.test.tsx — B59.8: sign-up asks who the account is for, the kind of money, then a key, and (B61.20) confirms who
+// you are, in the launch pack's words (SPEC 3.2; the design's P1, P2 and W1). The words are typed here rather than imported, so a changed word in
 // signupWords.ts is red until the spec says so too.
 
-function mockFetch(o: { authenticated?: boolean; passkeys?: unknown[]; devices?: unknown[] } = {}) {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+const MEANINGS = ['signed in', 'email and phone confirmed', 'identity checked', 'company checked']
+
+interface MockOptions {
+  authenticated?: boolean
+  passkeys?: unknown[]
+  devices?: unknown[]
+  /** B61.20 — the account's type, and the check the provider does not pass */
+  accountType?: 'personal' | 'business'
+  fails?: 'contact' | 'identity' | 'company'
+}
+
+function mockFetch(o: MockOptions = {}) {
+  const sent: Array<{ url: string; body: unknown }> = []
+  // Lens B30.4's record: each check needs the one below it, newest first; the Test provider passes it in Sandbox.
+  const checks: Array<Record<string, unknown>> = []
+  const reached = () => checks.filter((c) => c.status === 'completed').length
+  const record = () => ({ workspace_id: 'ws_1', level: `L${reached()}`, meaning: MEANINGS[reached()], live_level: 'L0', live_meaning: MEANINGS[0], checks: checks.length ? [...checks] : null })
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
-    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+    if (url === '/api/workspace/account') return json({ account_type: o.accountType ?? 'personal', money_kind: 'hybrid' })
+    if (url === '/api/workspace/business') {
+      return json({ company_name: 'Northwind Studio', registration_number: '12345678', country: 'GB', people: [{ name: 'Maya Lind', role: 'director', share_bps: 10000 }] })
+    }
+    if (url === '/api/verification') return json(record())
+    const m = /^\/api\/verification\/(contact|identity|company)$/.exec(url)
+    if (m && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body)) as unknown
+      sent.push({ url, body })
+      const level = ['contact', 'identity', 'company'].indexOf(m[1]) + 1
+      if (reached() < level - 1) return json({ error: 'economy: verification levels are reached in order' }, 409)
+      const status = o.fails === m[1] ? 'failed' : 'completed'
+      const check = { level: `L${level}`, subject: ['contact', 'person', 'company'][level - 1], method: 'test', test: true, status, evidence_ref: `test_kyc_${level}`, verified_name: level === 2 ? 'Maya Lind' : undefined, started_at: '2026-11-15T09:00:00Z', checked_at: '2026-11-15T09:00:00Z' }
+      checks.unshift(check)
+      return json({ check, verification: record() }, 201)
+    }
     if (url === '/auth/me') {
       return json({ mode: 'oidc', authenticated: o.authenticated ?? false, user: o.authenticated ? { sub: 's', email: 'maya@example.com' } : null, signup_open: true })
     }
@@ -17,6 +49,7 @@ function mockFetch(o: { authenticated?: boolean; passkeys?: unknown[]; devices?:
     if (url === '/api/money/devices') return json({ devices: o.devices ?? [] })
     return new Response('null', { status: 404 })
   })
+  return sent
 }
 
 function at(path: string) {
@@ -62,7 +95,7 @@ describe('step 1: who is this account for?', () => {
     at('/signup')
     await screen.findByRole('heading', { level: 1, name: 'Who is this account for?' })
     const steps = within(screen.getByRole('list', { name: 'Sign-up steps' })).getAllByRole('listitem')
-    expect(steps.map((s) => s.textContent)).toEqual(['1Who is this account for?', '2Pick the kind of money', '3Add a passkey or pair your phone'])
+    expect(steps.map((s) => s.textContent)).toEqual(['1Who is this account for?', '2Pick the kind of money', '3Add a passkey or pair your phone', '4Confirm who you are'])
     const choices = within(screen.getByRole('radiogroup')).getAllByRole('radio')
     expect(choices.map((c) => c.closest('label')!.textContent)).toEqual(['PersonalFor you and your own agents.', 'BusinessFor a company and its team.'])
     // B61.4 — the type is fixed once the account is open: another type is another account.
@@ -144,7 +177,7 @@ describe('step 2: pick the kind of money', () => {
 })
 
 describe('step 3: add a passkey or pair your phone', () => {
-  it('offers a passkey here or the phone’s key, and opens the app once one is there', async () => {
+  it('offers a passkey here or the phone’s key, and goes on to confirm who you are, with a key or later', async () => {
     mockFetch({ authenticated: true })
     at('/signup/key')
     await screen.findByRole('heading', { level: 1, name: 'Add a passkey or pair your phone' })
@@ -152,6 +185,7 @@ describe('step 3: add a passkey or pair your phone', () => {
     expect(await screen.findByRole('button', { name: 'Make a passkey' })).toBeInTheDocument()
     expect(screen.getByText('Open Talyvor on your phone, sign in with this account and turn on Approve with Face ID.')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Open the app' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Do this later' })).toHaveAttribute('href', '/signup/confirm')
     cleanup()
     queryClient.clear()
     vi.restoreAllMocks()
@@ -159,15 +193,15 @@ describe('step 3: add a passkey or pair your phone', () => {
     mockFetch({ authenticated: true, devices: [{ id: 'd1', name: 'iPhone', created_at: '2026-11-11T00:00:00Z' }] })
     at('/signup/key')
     expect(await screen.findByText('Your phone now signs approvals.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
+    expect(screen.getByRole('link', { name: 'Continue' })).toHaveAttribute('href', '/signup/confirm')
   })
 
-  it('draws P1’s step bars for a narrow screen: three bars, all reached, and “Step 3 of 3”', async () => {
+  it('draws P1’s step bars for a narrow screen: four bars, three reached, and “Step 3 of 4”', async () => {
     mockFetch({ authenticated: true })
     at('/signup/key')
-    const bars = await screen.findByText('Step 3 of 3')
+    const bars = await screen.findByText('Step 3 of 4')
     const row = bars.parentElement!
-    expect(row.querySelectorAll('[data-step-bar]')).toHaveLength(3)
+    expect(row.querySelectorAll('[data-step-bar]')).toHaveLength(4)
     expect(row.querySelectorAll('[data-step-bar="reached"]')).toHaveLength(3)
   })
 
@@ -182,5 +216,95 @@ describe('step 3: add a passkey or pair your phone', () => {
     at('/signup/key')
     const signIn = await screen.findByRole('link', { name: /^sign in$/i })
     expect(signIn).toHaveAttribute('href', `/auth/login?return_to=${encodeURIComponent('/signup/key')}`)
+  })
+})
+
+describe('step 4: confirm who you are (B61.20)', () => {
+  const fillYou = () => {
+    type('Phone number', '+447700900123')
+    type('Legal name', 'Maya Lind')
+    type('Date of birth', '1990-04-01')
+    fireEvent.change(screen.getByLabelText('Country you live in'), { target: { value: 'GB' } })
+  }
+  const run = () => fireEvent.click(screen.getByRole('button', { name: 'Confirm who I am' }))
+  const row = (subject: string) => screen.getByTestId(`identity-${subject}`)
+
+  it('a Personal sign-up ends on the identity step and opens Home only once the checks pass, uploading nothing', async () => {
+    const sent = mockFetch({ authenticated: true })
+    at('/signup/confirm')
+    await screen.findByRole('heading', { level: 1, name: 'Confirm who you are' })
+    expect(screen.getByRole('list', { name: 'Sign-up steps' }).querySelector('[aria-current="step"]')).toHaveTextContent('4Confirm who you are')
+    expect(await screen.findByLabelText('Legal name')).toBeInTheDocument()
+    expect((screen.getByLabelText('Email') as HTMLInputElement).value).toBe('maya@example.com')
+    expect(screen.getByText('Talyvor checks who you are before your account can move money. It takes a minute.')).toBeInTheDocument()
+    expect(within(row('contact')).getByText('Not checked yet')).toBeInTheDocument()
+    expect(screen.queryByTestId('identity-company')).toBeNull()
+    expect(screen.queryByRole('form', { name: 'Company details' })).toBeNull()
+    // the document step is the partner's place, and collects nothing
+    expect(screen.getByRole('heading', { name: 'Your ID document' })).toBeInTheDocument()
+    expect(document.querySelector('input[type="file"]')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Open the app' })).toBeNull()
+
+    fillYou()
+    run()
+    expect(await screen.findByText('You’re confirmed. Your account is open.')).toBeInTheDocument()
+    expect(within(row('contact')).getByText('Passed in Sandbox')).toBeInTheDocument()
+    expect(within(row('person')).getByText('Passed in Sandbox')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
+    expect(sent).toEqual([
+      { url: '/api/verification/contact', body: { email: 'maya@example.com', phone: '+447700900123' } },
+      { url: '/api/verification/identity', body: { name: 'Maya Lind', country: 'GB', date_of_birth: '1990-04-01' } },
+    ])
+  })
+
+  it('says what is missing before anything is sent', async () => {
+    const sent = mockFetch({ authenticated: true })
+    at('/signup/confirm')
+    await screen.findByLabelText('Legal name')
+    type('Email', '')
+    run()
+    for (const line of [
+      'Add your email address.',
+      'Add your phone number with its country code, like +447700900123.',
+      'Add your legal name.',
+      'Add your date of birth.',
+      'Pick the country you live in.',
+    ]) {
+      expect(screen.getByText(line)).toBeInTheDocument()
+    }
+    expect(sent).toEqual([])
+  })
+
+  it('a Business sign-up also gives its company details and runs the company check', async () => {
+    const sent = mockFetch({ authenticated: true, accountType: 'business' })
+    at('/signup/confirm')
+    expect(await screen.findByRole('form', { name: 'Company details' })).toBeInTheDocument()
+    expect(screen.getByText('Talyvor checks who you are and your company before the account can move money. It takes a minute.')).toBeInTheDocument()
+    expect(within(row('company')).getByText('Not checked yet')).toBeInTheDocument()
+    fillYou()
+    run()
+    expect(await screen.findByText('You’re confirmed. Your account is open.')).toBeInTheDocument()
+    expect(within(row('company')).getByText('Passed in Sandbox')).toBeInTheDocument()
+    expect(sent.map((s) => s.url)).toEqual(['/api/verification/contact', '/api/verification/identity', '/api/verification/company'])
+  })
+
+  it('a check that does not pass says what to fix, and the app stays shut', async () => {
+    mockFetch({ authenticated: true, fails: 'identity' })
+    at('/signup/confirm')
+    await screen.findByLabelText('Legal name')
+    fillYou()
+    run()
+    expect(await screen.findByText('We couldn’t confirm who you are. Check your legal name, date of birth and country, and try again.')).toBeInTheDocument()
+    expect(within(row('contact')).getByText('Passed in Sandbox')).toBeInTheDocument()
+    expect(within(row('person')).getByText('Not passed')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Open the app' })).toBeNull()
+  })
+
+  it('until the checks pass, Home says so in one sentence and leads back to the step', async () => {
+    mockFetch({ authenticated: true })
+    at('/')
+    const gate = await screen.findByTestId('identity-gate')
+    expect(gate).toHaveTextContent('Your account can look around but can’t move money until you confirm who you are.')
+    expect(within(gate).getByRole('link', { name: 'Finish confirming who you are' })).toHaveAttribute('href', '/signup/confirm')
   })
 })

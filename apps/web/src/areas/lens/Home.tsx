@@ -34,6 +34,7 @@ import { RunsOut } from './RunsOut'
 import { OWNER_HOLDER, OWNER_SUB, ownerFamily, useOwnerFace } from '../../cards/ownerCard'
 import { IfArea } from '../../lib/workspaceAreas'
 import { SharingLine } from './Sharing'
+import { IdentityGate } from './IdentityChecks'
 
 // Home.tsx — B57.18: Home as the launch pack's W2 draws it (design/launch-pack DESIGN.md, P3 to P5 and W2), with Lens's
 // figures. It answers, in order:
@@ -181,6 +182,8 @@ export function Home() {
           ) : null}
         </p>
       </div>
+      {/* B61.20 — until the identity check passes the account can look and cannot move money: one sentence and the way back. */}
+      <IdentityGate />
       <NameWorkspace />
       <MorningBriefing />
         <IfArea area="chat">

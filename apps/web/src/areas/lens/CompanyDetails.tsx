@@ -21,7 +21,7 @@ import {
 
 // CompanyDetails.tsx — B59.31: a Business workspace's company name, registration number and country, and the people
 // with control, each with a name, a role and a share (SPEC 6 (4)). In Settings (/settings/company) and at the end of
-// sign-up (/signup/key). They go to the partner's identity check later; no document is uploaded. A Personal account
+// sign-up's identity check (/signup/confirm, B61.20), which sends them to the company check; no document is uploaded. A Personal account
 // never sees it: no Settings entry, and its address opens Home.
 
 /** One person as typed: the share is the words in the box, in percent. */

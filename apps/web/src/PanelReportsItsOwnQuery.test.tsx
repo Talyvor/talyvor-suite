@@ -170,7 +170,7 @@ function mockBff(refusals: Array<[string, number]> = []) {
  */
 const ADDRESS_ROUTES: Record<string, string[]> = {
   // B28.6 — `/` is the wallet home; Overview moved to /overview with the same reads. B28.22 — and the LXC peg, for dollars.
-  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/agt_1/wallet', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/lxc/topup-options', '/api/money/accounts', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/agt_1/wallet', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/lxc/topup-options', '/api/money/accounts', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/verification', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/overview': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/bonds', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/ledger': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/billing': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/billing/allowance', '/api/lxc/balance', '/api/lxc/topup-options', '/api/money/mandates', '/api/money/payment-requests', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
@@ -281,7 +281,8 @@ describe('the swept set', () => {
     // 122 → 133 at B55.40: and an agent's mandate requests, which its Approvals badge counts, on every address.
     // 133 → 132 at B57.18: `/` drops the cards, passkeys, safe to spend and devices reads, and reads the balances, each
     // agent's wallet and the plan.
-    expect(pairs).toBe(132)
+    // 132 → 133 at B61.20: `/` reads the verification record, for the one sentence while the identity check is unfinished.
+    expect(pairs).toBe(133)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {

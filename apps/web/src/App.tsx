@@ -104,7 +104,7 @@ import { MetaPixel } from './areas/marketing/MetaPixel'
 import { Privacy } from './routes/Privacy'
 import { Terms } from './routes/Terms'
 import { SignIn } from './areas/auth/Entry'
-import { SignUp, SignUpKey } from './areas/auth/SignUp'
+import { SignUp, SignUpConfirm, SignUpKey } from './areas/auth/SignUp'
 import { SessionExpiredBar } from './components/SessionExpiredBar'
 import { KeyRecoveryNotice, RecoveryCodeSheet } from './areas/lens/KeyRecovery'
 import { CommandPalette, ariaKeys, shortcutText, type PalettePage } from './components/CommandPalette'
@@ -670,7 +670,7 @@ function ConsoleShell() {
  * (pocketPending.test.tsx reads that block and fails if the two differ).
  */
 const PUBLIC_PATHS = [
-  '/marketing/*', '/pricing', '/your-money', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms', '/signup', '/signup/key', '/signin',
+  '/marketing/*', '/pricing', '/your-money', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms', '/signup', '/signup/key', '/signup/confirm', '/signin',
   '/board/:token', '/share/:token', '/pay/:token', '/docs/s/:token',
 ]
 
@@ -762,6 +762,8 @@ export function App() {
             <Route path="/signup" element={<SignUp />} />
             {/* B59.8 — sign-up's step 3, where the identity provider sends a new workspace: a passkey or the phone. */}
             <Route path="/signup/key" element={<SignUpKey />} />
+            {/* B61.20 — step 4: the identity check, then Home. */}
+            <Route path="/signup/confirm" element={<SignUpConfirm />} />
             <Route path="/signin" element={<SignIn />} />
             {/* B27.30 — a Track board its workspace published as a link, read by anyone holding it.
                 Outside the gate: the reader has no account. Read-only — see areas/board/PublicBoard.tsx. */}
