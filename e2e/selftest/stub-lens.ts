@@ -1115,11 +1115,11 @@ function seatsCheck(res: ServerResponse, wsID: string, members: number): void {
   const gated = GATED_AS[plan] ?? plan
   const limit = SEATS.find(([p]) => p === gated)?.[1] ?? 1
   if (limit === -1 || members <= limit) return json(res, 200, { plan, seats: limit, members })
-  const seat = (n: number) => (n === 1 ? 'seat' : 'seats')
+  const name = (p: string) => p[0].toUpperCase() + p.slice(1)
   const allows = BREAK === 'seats-allows' ? undefined : SEATS.find(([, n]) => n === -1 || n > limit)
-  const error = `LENS_PLAN_GATES: the ${plan} plan allows ${limit} ${seat(limit)}` + (allows === undefined ? ' — a contract with Talyvor sets more'
-    : allows[1] === -1 ? ` — the ${allows[0]} plan allows unlimited seats` : ` — the ${allows[0]} plan allows ${allows[1]} ${seat(allows[1])}`)
-  return json(res, 402, { error, plan, gate: 'seats', limit, allows: allows?.[0] })
+  const error = (limit === 1 ? `${name(plan)} allows 1 seat, and it is taken.` : `${name(plan)} allows ${limit} seats, and all ${limit} are taken.`)
+    + (allows === undefined ? ' A contract with Talyvor sets more.' : allows[1] === -1 ? ` ${name(allows[0])} allows unlimited seats.` : ` ${name(allows[0])} allows ${allows[1]}.`)
+  return json(res, 402, { error, setting: 'LENS_PLAN_GATES', plan, gate: 'seats', limit, allows: allows?.[0] })
 }
 
 /** The Features page's switches: Lens's route for each, and the field it records. */

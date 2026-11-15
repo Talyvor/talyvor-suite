@@ -765,9 +765,11 @@ export interface Fees {
   platform_fee_bps: Record<string, number>
 }
 
-/** B32.15 — Lens's refusal of what a plan does not unlock (402): its sentence names LENS_PLAN_GATES and both plans. */
+/** B32.15 — Lens's refusal of what a plan does not unlock (402): a plain sentence naming both plans (B55.29), and its setting beside. */
 export interface PlanRefusal {
   error: string
+  /** LENS_PLAN_GATES, where the refusal names a setting. */
+  setting?: string
   plan?: string
   gate?: string
   limit?: number

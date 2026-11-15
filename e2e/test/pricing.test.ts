@@ -36,7 +36,7 @@ describe('the approved prices (B32.15)', () => {
   })
 
   it("passes Lens's refusal of a Free workspace's fourth agent, and fails a fourth agent made", () => {
-    const refusal = { error: 'LENS_PLAN_GATES: the free plan allows 3 agents — the team plan allows 25 agents', plan: 'free', gate: 'agents', limit: 3, allows: 'team' }
+    const refusal = { error: 'Free allows 3 agents, and all 3 are in use. Team allows 25.', setting: 'LENS_PLAN_GATES', plan: 'free', gate: 'agents', limit: 3, allows: 'team' }
     expect(fourthAgentVerdict({ status: 402, refusal }).pass).toBe(true)
     expect(fourthAgentVerdict({ status: 201, agent: { id: 'agt_4' } }).pass).toBe(false)
   })

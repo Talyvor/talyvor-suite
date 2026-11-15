@@ -3,6 +3,7 @@ import { keptOf, platformFeeBPS } from '../src/fees.ts'
 import type { Fees, LensClient } from '../src/lens.ts'
 import { TEAM_AGENTS, cast, seat, seatKey } from '../src/plans.ts'
 import { pastAgentsVerdict } from '../src/pricing.ts'
+import { notThePlansRefusal } from '../src/seats.ts'
 import { type Scenario, journeyFor } from '../src/scenarios.ts'
 
 const s = (id: string, more: Partial<Scenario> = {}): Scenario => ({ id, title: id, owner: 'talyvor-lens', run: async () => ({ pass: true, detail: '' }), ...more })
@@ -110,11 +111,26 @@ describe('every scenario on the plan it needs (B35.7)', () => {
     expect(seated.own.get(seatKey(1, 'seats-free'))).toMatchObject({ index: 1, workspaceID: 'free-0', plan: 'free' })
   })
 
-  it("judges Team's 26th agent by the plan's refusal, naming the team and the business plans", () => {
-    const error = 'LENS_PLAN_GATES: the team plan allows 25 agents — the business plan allows unlimited agents'
-    expect(pastAgentsVerdict({ status: 402, refusal: { error, plan: 'team', gate: 'agents', limit: 25, allows: 'business' } }, 'team', 25, 'business', '26th').pass).toBe(true)
+  it("judges Team's 26th agent by the plan's refusal in Lens's plain sentence, with LENS_PLAN_GATES in its setting (B17.460)", () => {
+    const refusal = { error: 'Team allows 25 agents, and all 25 are in use. Business allows unlimited agents.', setting: 'LENS_PLAN_GATES', plan: 'team', gate: 'agents', limit: 25, allows: 'business' }
+    expect(pastAgentsVerdict({ status: 402, refusal }, 'team', 25, 'business', '26th').pass).toBe(true)
+    expect(pastAgentsVerdict({ status: 402, refusal: { ...refusal, setting: undefined } }, 'team', 25, 'business', '26th').pass).toBe(false)
+    expect(pastAgentsVerdict({ status: 402, refusal: { ...refusal, error: `LENS_PLAN_GATES: ${refusal.error}` } }, 'team', 25, 'business', '26th').pass).toBe(false)
     expect(pastAgentsVerdict({ status: 201, agent: { id: 'ag_26' } }, 'team', 25, 'business', '26th'))
       .toEqual({ pass: false, detail: 'a Team workspace with 25 agents made a 26th, ag_26' })
+  })
+})
+
+describe("Track's refusal of one member too many (B17.460)", () => {
+  const added = (error: string, plan: string, allows: string) => ({ status: 402, body: { error, code: 'PLAN_SEATS', plan, limit: 1, allows }, shown: `${error} See plans`, plansLink: true })
+
+  it("passes Lens's plain sentences for Free's second member and Team's sixth, and fails the setting's name in the words", () => {
+    const free = 'Free allows 1 seat, and it is taken. Team allows 5.'
+    const team = 'Team allows 5 seats, and all 5 are taken. Business allows 25.'
+    expect(notThePlansRefusal(added(free, 'free', 'team'), 'free', 'team', free)).toBeUndefined()
+    expect(notThePlansRefusal(added(team, 'team', 'business'), 'team', 'business', team)).toBeUndefined()
+    expect(notThePlansRefusal(added(`LENS_PLAN_GATES: ${free}`, 'free', 'team'), 'free', 'team', free)).toContain('LENS_PLAN_GATES')
+    expect(notThePlansRefusal({ ...added(free, 'free', 'team'), status: 201 }, 'free', 'team', free)).toBe('the member was added (201)')
   })
 })
 
