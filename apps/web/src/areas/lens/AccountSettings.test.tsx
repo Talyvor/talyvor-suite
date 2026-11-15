@@ -153,6 +153,31 @@ describe('Settings, Kind of money: changing it', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  // B57.166 — the dialog is Pocket's signed confirm, as the Resume dialog and the approval sheet draw it: the key on
+  // its button, "Changing…" while the passkey signs, and the refusal's rule line on cloud, so it shows on the white dialog.
+  it('the dialog is a Pocket signed confirm: the key, Changing… while it signs, the refusal drawn on cloud', async () => {
+    const { radios, get } = await changing('hybrid', [account('USD', 3_158_000)], () => ({
+      status: 409,
+      body: { error: 'the account still holds 16700.000000 USDC: move it out first', code: 'wrong_money_kind', money_kind: 'hybrid', balances: { USDC: 16_700_000_000 } },
+    }))
+    let sign: (a: typeof ASSERTION) => void = () => {}
+    get.mockImplementationOnce(() => new Promise((resolve) => (sign = resolve)))
+    await waitFor(() => expect(radios()[0].textContent).not.toContain('Needs zero'))
+    fireEvent.click(radios()[0])
+    const dialog = await screen.findByRole('dialog', { name: 'Change to Fiat only?' })
+    const change = within(dialog).getByRole('button', { name: 'Change with your passkey' })
+    expect(change.querySelector('svg[data-icon="key"]')).not.toBeNull()
+    await waitFor(() => expect(change).toBeEnabled())
+    fireEvent.click(change)
+    expect(await within(dialog).findByRole('button', { name: 'Changing…' })).toBeDisabled()
+    sign(ASSERTION)
+    const rule = (await within(dialog).findByRole('alert')).querySelector('p') as HTMLElement
+    expect(rule.className).toContain('bg-cloud')
+    expect(rule.className).not.toContain('bg-page')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it('a kind blocked by its balances, the current kind and the type have no control', async () => {
     const { main, radios, sent } = await changing('hybrid', [account('USD', 3_158_000), account('USDC', 16_700_000_000)], ok)
     await waitFor(() => expect(radios()[0].textContent).toContain('Needs zero'))

@@ -48,10 +48,13 @@ function heldText(sums: [string, number][]) {
   ))
 }
 
-/** P11's rule line: why a single kind can't be picked yet. `sums` is null when the balances could not be read. */
-function RuleLine({ fiatSide, sums }: { fiatSide: boolean; sums: [string, number][] | null }) {
+/**
+ * P11's rule line: why a single kind can't be picked yet. `sums` is null when the balances could not be read. It is
+ * white on a choice card and cloud in the white dialog, so it shows as its own box on both.
+ */
+function RuleLine({ fiatSide, sums, inDialog = false }: { fiatSide: boolean; sums: [string, number][] | null; inDialog?: boolean }) {
   return (
-    <p className="mt-2.5 flex items-start gap-2 rounded-control bg-page px-3.5 py-2.5 text-body text-ink-2">
+    <p className={cn('flex items-start gap-2 rounded-control px-3.5 py-2.5 text-body text-ink-2', inDialog ? 'bg-cloud' : 'mt-2.5 bg-page')}>
       <Icon name="lock" className="mt-0.5 h-4 w-4 shrink-0" />
       <span>
         {fiatSide ? 'Needs zero fiat balances.' : 'Needs zero stablecoin and crypto balances.'}
@@ -71,7 +74,10 @@ function refusedBalances(err: unknown): [string, number][] | null {
     .sort(([a], [b]) => a.localeCompare(b))
 }
 
-/** Change to <kind>?: signed with the passkey over /api/workspace/account/money-kind/challenge (changeMoneyKindSigned). */
+/**
+ * Change to <kind>?: signed with the passkey over /api/workspace/account/money-kind/challenge (changeMoneyKindSigned).
+ * B57.166 — drawn as Pocket's signed confirm, like the Resume dialog: the key on the button, and "Changing…" while it signs.
+ */
 function ChangeKind({ to, onClose }: { to: MoneyKind; onClose: () => void }) {
   const qc = useQueryClient()
   const keys = useKeys()
@@ -97,8 +103,8 @@ function ChangeKind({ to, onClose }: { to: MoneyKind; onClose: () => void }) {
             Cancel
           </Button>
           {keys.onlyThePhone || noKey || keys.noLiveKey ? null : (
-            <Button variant="primary" disabled={keys.hold || change.isPending} onClick={() => change.mutate()}>
-              Change with your passkey
+            <Button variant="primary" icon={<Icon name="key" size={16} />} disabled={keys.hold || change.isPending} onClick={() => change.mutate()}>
+              {change.isPending ? 'Changing…' : 'Change with your passkey'}
             </Button>
           )}
         </>
@@ -117,7 +123,7 @@ function ChangeKind({ to, onClose }: { to: MoneyKind; onClose: () => void }) {
       ) : null}
       {held && held.length > 0 ? (
         <div role="alert">
-          <RuleLine fiatSide={to === 'stablecoin'} sums={held} />
+          <RuleLine fiatSide={to === 'stablecoin'} sums={held} inDialog />
         </div>
       ) : change.isError ? (
         <p role="alert">{deviceText(change.error, 'Nothing changed. You can try again.')}</p>
