@@ -1,0 +1,4 @@
+[
+  { "route": "/settings", "screen": "w-settings" },
+  { "route": "/signup", "screen": "w-signup", "answers": { "/auth/me": { "authenticated": false } } }
+]
