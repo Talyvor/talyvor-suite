@@ -12,6 +12,10 @@
 #                                                         # E2E_DAY_CAP_USD it has what the runs in E2E_OUT left of it
 #   STUB_SPEECH=on pnpm --filter @talyvor/e2e selftest   # B47.3: the stub Lens has speech, so voice-chat-mic records
 #                                                         # its clip rather than checking the microphone is hidden
+#   E2E_LAUNCH=1 STUB_HIDE_AREAS=1 E2E_LENS_SRC=<a talyvor-lens checkout> pnpm --filter @talyvor/e2e selftest
+#                                                         # B61.49: a launch run against a stub Lens that answers 404 on
+#                                                         # every hidden area's route (internal/areas), and Track and Docs
+#                                                         # on every route: it must still reach the journeys
 #   E2E_FAULTS=1 pnpm --filter @talyvor/e2e selftest      # B26.18: the run's browser is killed mid-run, then
 #                                                         # Lens; the report and summary must still be written
 #                                                         # and name both
@@ -44,7 +48,7 @@ tmp=$(mktemp -d)
 (cd "$root/apps/bff" && go build -o "$tmp/bff" .)
 [ -f "$root/apps/web/dist/index.html" ] || pnpm --dir "$root" --filter @talyvor/web build
 
-STUB_PROVISION_SECRET=selftest STUB_CONNECT_MINT_KEY=$connect_mint STUB_PORT=$stub_port STUB_APP_URL="http://localhost:$bff_port" LENS_VLLM_BASE_URL=${E2E_UPSTREAM_PORT:+http://127.0.0.1:$E2E_UPSTREAM_PORT} LENS_SYNTHETIC_KEY=$key STUB_MODERATOR_KEY=$moderator STUB_ADMIN_KEY=$admin STUB_OPERATOR_READ_KEY=$operator_read STUB_WEBHOOK_SECRET=$webhook_secret node --experimental-strip-types --no-warnings "$here/stub-lens.ts" >"$tmp/stub.log" 2>&1 &
+STUB_LENS_SRC=${E2E_LENS_SRC:-} STUB_PROVISION_SECRET=selftest STUB_CONNECT_MINT_KEY=$connect_mint STUB_PORT=$stub_port STUB_APP_URL="http://localhost:$bff_port" LENS_VLLM_BASE_URL=${E2E_UPSTREAM_PORT:+http://127.0.0.1:$E2E_UPSTREAM_PORT} LENS_SYNTHETIC_KEY=$key STUB_MODERATOR_KEY=$moderator STUB_ADMIN_KEY=$admin STUB_OPERATOR_READ_KEY=$operator_read STUB_WEBHOOK_SECRET=$webhook_secret node --experimental-strip-types --no-warnings "$here/stub-lens.ts" >"$tmp/stub.log" 2>&1 &
 stub=$!
 TRACK_PORT=$track_port DOCS_PORT=$docs_port GATEWAY_SECRET=$gateway LENS_URL="http://127.0.0.1:$stub_port" LENS_SYNTHETIC_KEY=$key node --experimental-strip-types --no-warnings "$here/stub-products.ts" &
 products=$!

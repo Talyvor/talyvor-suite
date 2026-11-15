@@ -101,6 +101,10 @@
 // (stub-bank.ts): the review queue answers the moderator key in STUB_MODERATOR_KEY, Lens's minute tick
 // runs every two seconds, and Stripe's Connect onboarding is a page at /stub-connect/….
 //
+// B61.49: STUB_HIDE_AREAS=1 answers every route under a hidden area 404 "404 page not found", as Lens's areaGate answers a
+// default workspace: the routes are read from internal/areas/areas.go in the Lens checkout STUB_LENS_SRC names (the
+// Gateway's catalog, Chat, Marketplace, Rooms, Scan and the rest), and the stub will not start without it.
+//
 // B47.3: speech is not configured, as on a Lens without LENS_DEEPGRAM_API_KEY; STUB_SPEECH=on configures it, and every
 // recording is heard as "Please show me the balance of my wallet." (the run's microphone clip).
 // B40.32: an agent's speech call is charged on its statement at the catalog's price; STUB_BREAK=speech-twice charges it twice.
@@ -117,11 +121,19 @@ import { DOC_CAP, auditWebhook, docxDocument, nodesAvailable, nodesRoute } from 
 import { roomAgentTool, roomListingRoute, roomsModeratorRoute, roomsRoute, setRoomWallets } from './stub-rooms.ts'
 import { lensOpenAPI, lensPage } from './stub-openapi.ts'
 import { PhysicalCardDesk } from './stub-physical-cards.ts'
+import { hiddenPathsFrom } from '../src/launch.ts'
 
 const PORT = Number(process.env.STUB_PORT ?? 9911)
 const BASE = `http://127.0.0.1:${PORT}`
 const KEY = process.env.LENS_SYNTHETIC_KEY ?? 'selftest-key'
 const BREAK = process.env.STUB_BREAK ?? ''
+/** B61.49 — the hidden areas' routes as Lens's internal/areas lists them, each `{}` one segment; none unless STUB_HIDE_AREAS=1. */
+const HIDDEN: RegExp[] = process.env.STUB_HIDE_AREAS !== '1' ? [] : (() => {
+  const src = process.env.STUB_LENS_SRC ?? ''
+  const prefixes = hiddenPathsFrom('', '', src === '' ? '' : readFileSync(`${src}/internal/areas/areas.go`, 'utf8')).lens
+  if (prefixes.length === 0) throw new Error(`STUB_HIDE_AREAS=1 needs STUB_LENS_SRC, a Lens checkout with internal/areas/areas.go (got "${src}")`)
+  return prefixes.map((x) => new RegExp(`^${x.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{\}/g, '[^/]+')}(/|$)`))
+})()
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 /** B28.279 — its defects may be planted together, comma-separated, as stub-bank.ts's are. */
 const broke = (name: string): boolean => BREAK.split(',').includes(name)
@@ -1224,6 +1236,11 @@ createServer(async (req, res) => {
   const bearer = (req.headers.authorization ?? '').replace(/^Bearer /, '')
   try {
     // B28.285 — Lens's /healthz: how long it has been up, which the testers read to tell a restart.
+    // B61.49 — a hidden area's route, as Lens's areaGate answers a workspace without it (Go's NotFound).
+    if (HIDDEN.some((re) => re.test(p))) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+      return void res.end('404 page not found\n')
+    }
     if (p === '/healthz') return json(res, 200, { status: broke('status-truth') ? 'degraded' : 'healthy', uptime_seconds: Math.floor(process.uptime()), version: 'stub' })
     // talyvor-lens B45.28, B45.29 — the AP2 key and outside agents' payment requests, on no credential (stub-trust-layer.ts).
     if (await bank.trustLayer.route(req, res, p, BASE)) return

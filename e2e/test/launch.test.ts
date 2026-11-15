@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { parseConfig } from '../src/config.ts'
 import type { Entry, Inventory } from '../src/coverage.ts'
 import { deepJourneys } from '../src/deep.ts'
-import { SCENARIO_AREAS, areaOf, hiddenPaths, hiddenPathsFrom, launchCut, launchInventory } from '../src/launch.ts'
+import { SCENARIO_AREAS, areaOf, hiddenPaths, hiddenPathsFrom, launchCut, launchInventory, setUpCatalog } from '../src/launch.ts'
 import { lightJourneys } from '../src/light.ts'
 import { pocketJourneys } from '../src/pocketProblems/index.ts'
 import { type ReportedRun, renderRun, renderSummary } from '../src/report.ts'
@@ -81,6 +81,23 @@ describe('a launch run (B61.1)', () => {
     expect(kept.bff.map((x) => x.path)).toEqual(['/api/agents/{id}', '/api/payees'])
     expect(kept.lens.map((x) => x.path)).toEqual(['/v1/agents/{id}'])
     expect([kept.track, kept.docs]).toEqual([[], []])
+  })
+})
+
+describe("the run's set-up and the old gateway's catalog (B61.49)", () => {
+  const model = { id: 'm', provider: 'p', display_name: 'Model', input_per_1m: 1, output_per_1m: 2 }
+  const gone = (): Promise<never> => Promise.reject(new Error('GET /v1/catalog/models: Lens answered 404: 404 page not found'))
+
+  it('a launch run never asks for the catalog, and goes on with none', async () => {
+    let asked = 0
+    await expect(setUpCatalog(true, () => (asked++, gone()), 'Model')).resolves.toEqual([])
+    expect(asked).toBe(0)
+  })
+
+  it('any other run reads it as before, and stops without its model', async () => {
+    await expect(setUpCatalog(false, async () => [model], 'Model')).resolves.toEqual([model])
+    await expect(setUpCatalog(false, async () => [model], 'Other')).rejects.toThrow('the catalog has no model named "Other"')
+    await expect(setUpCatalog(false, gone, 'Model')).rejects.toThrow('Lens answered 404')
   })
 })
 
