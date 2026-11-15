@@ -454,7 +454,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'The payment happens THERE',
     why: 'the citation that WAS pinned, named in the account of why its neighbour was not — so that account cannot rot either',
   },
-  'apps/web/src/checkoutRefusalSurface.test.tsx:177|apps/web/src/areas/lens/TopUp.tsx:327': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:177|apps/web/src/areas/lens/TopUp.tsx:329': {
     kind: 'LIVE',
     fragment: 'must not leave a pending marker behind',
     why: 'the rule the marker test asserts, quoted from the code that states it rather than restated',

@@ -198,7 +198,9 @@ function WaysToGetCredit({ canBuy, cardsOff }: { canBuy: boolean; cardsOff: bool
     cta: 'Open Royalties',
   })
   return (
-    <ol className="mt-8 grid gap-px overflow-hidden rounded-card border border-rule bg-rule wide:grid-cols-2">
+    <ol
+      className={`mt-8 grid gap-px overflow-hidden rounded-card border border-rule bg-rule ${steps.length > 1 ? 'wide:grid-cols-2' : ''}`}
+    >
       {steps.map((s) => (
         <li key={s.index} className="flex flex-col items-start bg-raised px-gutter py-5">
           <span className="font-figure text-eyebrow uppercase text-label">Step {s.index}</span>
