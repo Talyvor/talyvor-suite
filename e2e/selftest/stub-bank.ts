@@ -163,6 +163,7 @@ import { type KYAFacts, KYADesk } from './stub-kya.ts'
 import { type Lineage, TrustDesk } from './stub-trust.ts'
 import { TrustLayerDesk } from './stub-trust-layer.ts'
 import type { Judge, RoomAgent } from './stub-rooms.ts'
+import { LaunchDesk } from './stub-launch.ts'
 
 export interface BankWorkspace {
   id: string
@@ -216,6 +217,8 @@ interface Rules {
   max_commitment_ulxc: number
   allowed_licences: string[]
   may_subscribe: boolean
+  /** B61.48 — "Can use Instant transfer" (Lens B59.15): off until the owner turns it on. */
+  may_instant_transfer?: boolean
   /** B41.4 — "always allow": a payee paid without a person up to an amount a day or a month, saved by an approval. */
   payee_allowances?: Record<string, { amount_ulxc: number; per: 'day' | 'month' }>
 }
@@ -528,6 +531,8 @@ export class Bank {
   private readonly verification: VerificationDesk
   /** B30.126 — the workspace's saved outside payees (stub-payees.ts). */
   private readonly payees: PayeeDesk
+  /** B61.48 — Instant transfer, Help's requests and the account's kind (stub-launch.ts). */
+  private readonly launch: LaunchDesk
   /** B40.26 — signed permission mandates and their evaluator (stub-permission-mandates.ts). */
   private readonly permissionMandates: PermissionMandateDesk
   /** B40.28 — the phone app's device keys, which sign approvals (stub-device-keys.ts). */
@@ -555,6 +560,10 @@ export class Bank {
     this.d = d
     this.tax = new TaxDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
     this.verification = new VerificationDesk(d.json, (req) => this.body(req), (name) => this.broken(name))
+    this.launch = new LaunchDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, id) => {
+      const a = this.agents.get(id)
+      return a === undefined || a.ws !== ws ? undefined : a.rules.may_instant_transfer === true
+    })
     this.payees = new PayeeDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })),
       { read: d.read, base: d.base, appURL: d.appURL })
@@ -2347,6 +2356,7 @@ export class Bank {
     const now = new Date().toISOString()
     let m: RegExpExecArray | null
     if (rest === '/agents' && method === 'GET') return json(res, 200, this.book(ws)), true
+    if (await this.launch.route(req, res, ws.id, rest)) return true
     if (rest === '/name') {
       if (method === 'PUT') {
         const name = ((await this.body<{ name?: string }>(req)).name ?? '').trim()
@@ -2761,7 +2771,8 @@ export class Bank {
           model_daily_limits_ulxc: r.model_daily_limits_ulxc == null ? a.rules.model_daily_limits_ulxc : modelCaps(r.model_daily_limits_ulxc),
           requests_per_minute: r.requests_per_minute ?? a.rules.requests_per_minute,
           max_commitment_ulxc: r.max_commitment_ulxc ?? a.rules.max_commitment_ulxc, allowed_licences: r.allowed_licences ?? a.rules.allowed_licences,
-          may_subscribe: r.may_subscribe ?? a.rules.may_subscribe, payee_allowances: r.payee_allowances ?? a.rules.payee_allowances,
+          may_subscribe: r.may_subscribe ?? a.rules.may_subscribe, may_instant_transfer: r.may_instant_transfer ?? a.rules.may_instant_transfer,
+          payee_allowances: r.payee_allowances ?? a.rules.payee_allowances,
           allowed_models: r.allowed_models ?? [], allowed_providers: r.allowed_providers ?? [] }
         this.recordRules(a, ws.id, 'set')
         this.kya.revoke(a.id, 'rules changed')

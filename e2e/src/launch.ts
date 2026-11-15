@@ -73,7 +73,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'xss-shown-back', 'pocket-03', 'pocket-04', 'pocket-05', 'pocket-06', 'pocket-08', 'pocket-13', 'pocket-15', 'pocket-16',
     'pocket-17',
   ],
-  'instant-transfer': [],
+  'instant-transfer': ['instant-transfer-offered', 'instant-transfer-quote'],
   activity: [
     'account-statements', 'agent-analytics', 'alert-channels', 'budgets-by-category', 'coach-week', 'daily-briefing',
     'ledger-reads-correctly', 'limit-alerts', 'month-plan', 'spend-notice-push', 'spending-screen', 'statement-journal',
@@ -84,9 +84,9 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
   settings: [
     'api-key-revoke', 'console-screens-draw', 'keys-unlisted', 'operator-compliance-boundary', 'seats-free', 'seats-team',
   ],
-  support: [],
+  support: ['help-complaint', 'help-no-dead-control', 'help-request', 'your-data-request'],
   legal: ['legal-pages-whole'],
-  'sandbox-label': [],
+  'sandbox-label': ['sandbox-label-every-screen'],
   home: [
     'agent-runs-out-date', 'app-shell', 'brand-planes', 'every-screen', 'home-cards', 'home-daily-briefing', 'one-search',
     'sidebar-unnamed-workspace', 'wallet-first-nav', 'wallet-home', 'pocket-07',
