@@ -12,7 +12,7 @@ import type { Page } from 'playwright'
 import type { AppUser } from './app.ts'
 import type { Answered, LedgerRow, LensClient, SyntheticUser } from './lens.ts'
 import { refusalOf } from './lens.ts'
-import { ACTION_TIMEOUT_MS, agentIn, bookOf, card, fail, openAgent, usdShown, withBank } from './bank.ts'
+import { ACTION_TIMEOUT_MS, agentIn, bookOf, card, fail, openAgent, withBank } from './bank.ts'
 import { bff } from './routes.ts'
 import { RUN_SALT, freshWord, parseFooter } from './oracles.ts'
 import { CannotTest, eventually, metered } from './scenarios.ts'
@@ -194,15 +194,16 @@ export function walletFX(seed: number): Scenario {
         for (const [fiat, tab, symbol, value] of [['GBP', 'Pounds', '£', (usd / rates.usd_per_eur) * rates.gbp_per_eur], ['EUR', 'Euros', '€', usd / rates.usd_per_eur]] as const) {
           await bank.showAmountsIn(tab)
           const shown = await bank.balanceShown(a, symbol)
-          const want = `${fiatShown(value, fiat)} (12.50 LXC)`
+          // B61.14 — no launch screen says LXC: the figure is the currency's alone.
+          const want = fiatShown(value, fiat)
           ctx.evidence.push({ note: `in ${fiat}: "${shown}"` })
           if (shown !== want) failures.push(`in ${fiat} ${a.name} reads "${shown}"; $${usd.toFixed(4)} at ${rates.usd_per_eur} USD and ${rates.gbp_per_eur} GBP per euro (${rates.rate_date}) is "${want}"`)
         }
       } finally {
         await bank.showAmountsIn('US dollars').catch(() => undefined)
       }
-      const back = (await bank.balanceShown(a))
-      if (back !== usdShown('12.50 LXC', amount, ctx.env.usdPerLXC)) failures.push(`back in dollars ${a.name} reads "${back}"`)
+      const back = await bank.balanceShown(a, '$')
+      if (back !== fiatShown(usd, 'USD')) failures.push(`back in dollars ${a.name} reads "${back}"`)
       return failures.length === 0
         ? { pass: true, detail: `12.5 LXC read in pounds and euros at the ECB's ${rates.rate_date} rates (${rates.usd_per_eur} USD, ${rates.gbp_per_eur} GBP per euro), as /api/fx states them; back in dollars "${back}"` }
         : fail(failures.join('; '))

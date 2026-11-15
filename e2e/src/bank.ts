@@ -411,8 +411,9 @@ export class AgentBankScreen {
     await this.fresh(agent)
     const balance = this.page.getByTestId(`agent-balance-${agent.id}`)
     // B34.1 — the money figure follows the LXC once the peg is read (money.tsx); read too early, the line is LXC alone.
-    // B35.8 — waited for up to CURRENCY_WAIT_MS: none by then is what the verdict reads. B61.83: with `leads`, until it leads.
-    await balance.filter({ hasText: leads ?? /\(.+\)\s*$/ }).waitFor({ timeout: CURRENCY_WAIT_MS }).catch(() => undefined)
+    // B35.8 — waited for up to CURRENCY_WAIT_MS: none by then is what the verdict reads. B61.83: until a currency shows (no
+    // launch screen says LXC since B61.14), or with `leads`, until that one does.
+    await balance.filter({ hasText: leads ?? /[$£€]/ }).waitFor({ timeout: CURRENCY_WAIT_MS }).catch(() => undefined)
     return figureText(await balance.innerText())
   }
 
