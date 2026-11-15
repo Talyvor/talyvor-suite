@@ -158,16 +158,34 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
   'credit-top-up': ['credits-top-up', 'webhook-replayed', 'webhook-unsigned'],
 }
 
+/** Why a launch-area scenario a launch run cannot play is left out of it (B61.63): each by name, once. */
+const NEEDS_A_MODEL = 'its agent asks a model, through the old gateway, which the launch version hides (a launch run reads no catalog, B61.49)'
+const NEEDS_STRIPE_FORM = 'it waits for Stripe’s hosted card form (#cardNumber), which the launch run of 15 Nov 15:07Z never drew'
+export const LAUNCH_CANNOT_PLAY: Readonly<Record<string, string>> = {
+  ...Object.fromEntries([
+    'agent-analytics', 'agent-archive', 'agent-hourly-limit', 'agent-limit', 'agent-limit-boost', 'agent-model-limit', 'agent-pause-all',
+    'agent-request-rate', 'agent-rules-unbypassable', 'first-agent', 'keys-unlisted', 'ledger-call-once', 'ledger-moves-at-once',
+    'sdk-wallet-quickstart', 'statement-reconciles', 'subscriptions-view', 'wallet-currency', 'wallet-home', 'wallet-onboarding',
+  ].map((id) => [id, NEEDS_A_MODEL])),
+  ...Object.fromEntries([
+    'agent-cards', 'agent-wallet-kinds', 'batch-approval-pays-once', 'coach-week', 'invoices-screen', 'money-layer-contract', 'pay-screen',
+    'pocket-10', 'seats-team', 'wallet-statements',
+  ].map((id) => [id, NEEDS_STRIPE_FORM])),
+}
+
 const AREA_OF = new Map(Object.entries(SCENARIO_AREAS).flatMap(([area, ids]) => ids.map((id) => [id, area as Area] as const)))
 const LAUNCH = new Set<Area>(LAUNCH_AREAS)
 
 /** The area a scenario is in, or undefined when the map does not place it. */
 export const areaOf = (id: string): Area | undefined => AREA_OF.get(id)
 
-/** Whether a scenario is played in the launch version. One the map does not place is played: nothing is left out unseen. */
+/**
+ * Whether a scenario is played in the launch version. One the map does not place is played: nothing is left out unseen.
+ * One a launch run cannot play (LAUNCH_CANNOT_PLAY) is left out with its reason, never left to time out.
+ */
 export const inLaunch = (id: string): boolean => {
   const area = AREA_OF.get(id)
-  return area === undefined || LAUNCH.has(area)
+  return (area === undefined || LAUNCH.has(area)) && !(id in LAUNCH_CANNOT_PLAY)
 }
 
 /** What a launch run leaves out: the scenarios not played, by id, once each. */
@@ -190,8 +208,9 @@ export function launchCut(journeys: readonly Scenario[][]): { journeys: Scenario
 
 /** The report's and TESTERS.md's line. */
 export function launchLine(cut: LaunchCut): string {
+  const why = (id: string) => (id in LAUNCH_CANNOT_PLAY ? `: ${LAUNCH_CANNOT_PLAY[id]}` : '')
   return `Launch version: ${cut.played} played, ${cut.left_out.length} left out` +
-    (cut.left_out.length === 0 ? '' : ` (${cut.left_out.map((id) => `\`${id}\``).join(', ')})`)
+    (cut.left_out.length === 0 ? '' : ` (${cut.left_out.map((id) => `\`${id}\`${why(id)}`).join(', ')})`)
 }
 
 // ── THE COVERAGE MAP, LAUNCH SCREENS AND ROUTES ONLY ────────────────────────────────────────────────
