@@ -138,5 +138,6 @@ describe('Activity in the app', () => {
     const report = await pressEverything('/activity')
     expect(report.dead).toEqual([])
     expect(report.pressed).toBeGreaterThan(0)
-  })
+    // Each control is pressed on a fresh render of the whole console, sidebar and all: a minute, not five seconds.
+  }, 60_000)
 })
