@@ -1,0 +1,143 @@
+[
+ {
+  "route": "/signup/confirm?personal",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L0",
+    "meaning": "signed in",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": null
+   }
+  }
+ },
+ {
+  "route": "/signup/confirm?business",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "business",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L0",
+    "meaning": "signed in",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": null
+   },
+   "/api/workspace/business": {
+    "company_name": "Northwind Studio Ltd",
+    "registration_number": "12345678",
+    "country": "GB",
+    "people": [
+     {
+      "name": "Maya Lind",
+      "role": "director",
+      "share_bps": 6000
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/signup/confirm?passed",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L2",
+    "meaning": "identity checked",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": [
+     {
+      "level": "L2",
+      "subject": "person",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_sample_2",
+      "started_at": "2026-11-15T09:00:00Z",
+      "checked_at": "2026-11-15T09:00:00Z",
+      "verified_name": "Maya Lind"
+     },
+     {
+      "level": "L1",
+      "subject": "contact",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_sample_1",
+      "started_at": "2026-11-15T09:00:00Z",
+      "checked_at": "2026-11-15T09:00:00Z"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/settings/verification",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L1",
+    "meaning": "email and phone confirmed",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": [
+     {
+      "level": "L1",
+      "subject": "contact",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_sample_1",
+      "started_at": "2026-11-15T09:00:00Z",
+      "checked_at": "2026-11-15T09:00:00Z"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "route": "/?gate",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L1",
+    "meaning": "email and phone confirmed",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": [
+     {
+      "level": "L1",
+      "subject": "contact",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_sample_1",
+      "started_at": "2026-11-15T09:00:00Z",
+      "checked_at": "2026-11-15T09:00:00Z"
+     }
+    ]
+   }
+  }
+ }
+]
