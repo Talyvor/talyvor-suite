@@ -68,7 +68,8 @@ export async function seat(lens: LensClient, c: Cast): Promise<Seated> {
     const here = c.plans.flatMap((p, i) => (p === plan ? [i] : []))
     const seats = c.own.filter((o) => o.plan === plan)
     if (here.length + seats.length === 0) continue
-    const made = await lens.createUsers(here.length + seats.length, plan)
+    // B61.51 — confirmed by the run's set-up, which leaves the verification scenarios' own workspaces unconfirmed.
+    const made = await lens.createUsers(here.length + seats.length, plan, { confirm: false })
     here.forEach((index, n) => {
       users[index] = { ...made[n], index }
     })

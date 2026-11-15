@@ -137,6 +137,9 @@ var defaultProbes = map[string]defaultProbe{
 		bootWithUnset(t, "BFF_CONNECT_REDIRECT_ORIGINS", minimalDisabled())
 		return redirectOrigins()
 	}},
+	"HELP_QUESTIONS_PER_DAY": {canon: identityCanon, observe: func(t *testing.T) string {
+		return strconv.Itoa((&app{cfg: bootWithUnset(t, "HELP_QUESTIONS_PER_DAY", minimalDisabled())}).helpQuestionsPerDay())
+	}},
 	// The session TTL is parsed in oidc mode only, so this probe boots the mode that reads it.
 	"BFF_SESSION_TTL": {canon: durationCanon, observe: func(t *testing.T) string {
 		return bootWithUnset(t, "BFF_SESSION_TTL", minimalOIDC()).sessionTTL.String()

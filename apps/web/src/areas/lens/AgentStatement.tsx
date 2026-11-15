@@ -7,6 +7,7 @@ import { DESIGN_ATTR } from '../../pocketPending'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { AGENT_CREDIT } from '../../labels/capabilities'
 import { fetchModels } from '../chat/chatApi'
+import { useWorkspaceAreas } from '../../lib/workspaceAreas'
 import { Note, STATEMENT_KINDS, dayAfter, lineText, monthPeriod, readFailure, saveFile } from './AgentBank'
 import { AgentFace } from './AgentFace'
 import { AgentBankError, STATEMENT_PAGE_LINES, agentBankApi, refusalText, type Agent, type StatementLine } from './agentBankApi'
@@ -143,7 +144,9 @@ export function AgentStatement({ agent, nameOf }: { agent: Agent; nameOf: (id: s
     placeholderData: keepPreviousData,
   })
   // The catalog only names the models: a read that fails shows each model as Lens names it, and raises nothing.
-  const catalog = useQuery({ queryKey: [STATEMENT_DOC_KEY, 'models'], queryFn: () => fetchModels().catch(() => []), retry: false })
+  // B60.6 — the catalog is the old gateway's: without that area each model shows as Lens names it, and nothing is asked.
+  const gateway = useWorkspaceAreas().has('gateway')
+  const catalog = useQuery({ queryKey: [STATEMENT_DOC_KEY, 'models'], queryFn: () => fetchModels().catch(() => []), retry: false, enabled: gateway })
   const modelOf = (id: string) => catalog.data?.find((m) => m.id === id)?.display_name ?? id
   // Show all reads every page after the first, one at a time, to the month's first line; a search pages by hand.
   const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = st

@@ -162,6 +162,9 @@ import { agentAnalytics } from './agentAnalytics.ts'
 import { statementPDF } from './statementPDF.ts'
 import { statementJournal } from './statementJournal.ts'
 import { openapiWallets } from './openapiWallets.ts'
+import { instantTransferOffered, instantTransferQuote } from './instantTransfer.ts'
+import { helpComplaint, helpNoDeadControl, helpRequest, yourDataRequest } from './helpScreen.ts'
+import { sandboxLabelEveryScreen } from './sandboxLabel.ts'
 
 export interface Evidence {
   note?: string
@@ -5672,6 +5675,13 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // B30.123 — once a run, last, after the night's test payments through partner accounts: on the operator read key, every money
   // currency reconciled within two days, no shortfall in the safeguarding view and no break on the newest day.
   if (i === 8) list.push(dailyReconciliation())
+  // B61.48 — the launch version's three areas that had no scenario, once a run each. Instant transfer on a workspace of its own: a
+  // quote shows what leaves, the fee, the rate and what arrives, holds 30 seconds and is refused in words after; Pay offers it to a
+  // Hybrid account alone. Help: a question and a complaint filed and said so, a copy of the data asked for and listed, no dead
+  // control. The Sandbox label on every signed-in launch screen, none Live and none calling the money test money.
+  if (i === 4) list.push(instantTransferQuote(), instantTransferOffered())
+  if (i === 3) list.push(helpRequest(), helpComplaint(), yourDataRequest(), helpNoDeadControl())
+  if (i === 2) list.push(sandboxLabelEveryScreen())
   return list
 }
 

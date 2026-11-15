@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { startTransition, useEffect, useState } from 'react'
 import { create } from 'zustand'
 import { cn } from '../lib/cn'
 
@@ -74,7 +74,16 @@ const TOAST_MS = 2800
 
 /** Once per app, beside the routes: `view` is the address, so a snack is shown on one view and never again. */
 export function SnackHost({ view }: { view: string }) {
-  const { snack, toast } = useConfirmations()
+  const toast = useConfirmations((s) => s.toast)
+  // B61.82 — React Router 7 makes every move a transition, and a save shows its snack and moves in one tick. The snack is
+  // taken as a transition too, so the two land in one render: it belongs to the view arrived at, not the one being left.
+  const [snack, setSnack] = useState(() => useConfirmations.getState().snack)
+  useEffect(() => {
+    setSnack(useConfirmations.getState().snack)
+    return useConfirmations.subscribe((s, was) => {
+      if (s.snack !== was.snack) startTransition(() => setSnack(s.snack))
+    })
+  }, [])
   useEffect(() => {
     if (!snack) return
     if (snack.shownOn === undefined) useConfirmations.setState({ snack: { ...snack, shownOn: view } })

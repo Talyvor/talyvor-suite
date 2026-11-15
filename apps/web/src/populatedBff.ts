@@ -245,6 +245,16 @@ const BODIES: Record<string, unknown> = {
       { id: 'cref_1', payment_id: 'iauth_2', agent_id: 'agt_research', card_id: 'mcard_1', merchant: 'Print Shop', amount_minor: 1000, currency: 'GBP', credited_minor: 1000, created_at: '2026-10-13T09:00:00Z' },
     ],
   },
+  // B61.38 — a Help chat: a question the help pages answer, with its page, and one they do not, with the team's button.
+  '/api/help/chat': {
+    messages: [
+      { by: 'you', text: 'How do I give an agent money?', at: '2026-11-12T09:00:00Z' },
+      { by: 'ai', text: 'Open Agents, pick the agent and press Fund. It spends only what its wallet holds.', page: '/agents', at: '2026-11-12T09:00:05Z' },
+      { by: 'you', text: 'Can you tell me when my statement for October closes?', at: '2026-11-12T09:01:00Z' },
+      { by: 'ai', text: "I don't know that. Our team can help: send it to them and we answer by email.", team: true, at: '2026-11-12T09:01:04Z' },
+    ],
+    kept_days: 30,
+  },
   // B59.28 — one complaint answered and one data export ready to download.
   '/api/workspace/requests': {
     requests: [

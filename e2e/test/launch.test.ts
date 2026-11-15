@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { parseConfig } from '../src/config.ts'
 import type { Entry, Inventory } from '../src/coverage.ts'
 import { deepJourneys } from '../src/deep.ts'
-import { SCENARIO_AREAS, areaOf, hiddenPaths, hiddenPathsFrom, launchCut, launchInventory, setUpCatalog } from '../src/launch.ts'
+import { LAUNCH_CANNOT_PLAY, SCENARIO_AREAS, areaOf, hiddenPaths, hiddenPathsFrom, hiddenScreen, launchCut, launchInventory, launchLine, setUpCatalog } from '../src/launch.ts'
 import { lightJourneys } from '../src/light.ts'
 import { pocketJourneys } from '../src/pocketProblems/index.ts'
 import { type ReportedRun, renderRun, renderSummary } from '../src/report.ts'
@@ -38,14 +38,32 @@ describe('a launch run (B61.1)', () => {
       expect(played.has(id)).toBe(false)
       expect(cut.left_out).toContain(id)
     }
-    for (const id of ['agent-wallet', 'wallet-card', 'pay-screen']) expect(played.has(id)).toBe(true)
+    for (const id of ['agent-wallet', 'wallet-card', 'outside-payees']) expect(played.has(id)).toBe(true)
     expect(cut.left_out).not.toContain('agent-wallet')
     expect(cut.played).toBe(played.size)
   })
 
   it('keeps the light pass and the Pocket pass to the same list', () => {
-    expect(launchCut(lightJourneys()).cut.left_out).toEqual(['capital', 'cross-company-test-money', 'known-answer', 'script-inert', 'spending-limit', 'webhook-unsigned'])
-    expect(launchCut(pocketJourneys()).cut.left_out).toEqual(['pocket-12', 'pocket-14', 'pocket-18', 'pocket-19'])
+    expect(launchCut(lightJourneys()).cut.left_out).toEqual([
+      'agent-limit', 'agent-rules-unbypassable', 'capital', 'cross-company-test-money', 'keys-unlisted', 'known-answer', 'ledger-call-once',
+      'ledger-moves-at-once', 'script-inert', 'spending-limit', 'webhook-unsigned',
+    ])
+    expect(launchCut(pocketJourneys()).cut.left_out).toEqual(['pocket-10', 'pocket-12', 'pocket-14', 'pocket-18', 'pocket-19'])
+  })
+
+  it('B61.63: leaves out a launch scenario it cannot play, and the report says why', () => {
+    const { journeys, cut } = launchCut(night())
+    expect(journeys.flat().some((s) => s.id === 'agent-limit')).toBe(false)
+    expect(Object.keys(LAUNCH_CANNOT_PLAY).filter((id) => areaOf(id) === undefined), 'a scenario left out must be one the map places').toEqual([])
+    expect(launchLine(cut)).toContain('`agent-limit`: its agent asks a model, through the old gateway')
+    expect(journeys.flat().some((s) => s.id === 'agent-open-fund')).toBe(true)
+  })
+
+  it('B61.56: names how many explorers explored, and which addresses are a hidden area\'s', () => {
+    const { cut } = launchCut(night())
+    expect(launchLine({ ...cut, explorers: { explored: 2, of: 3 } })).toMatch(/; 2 of 3 explorers explored the launch pages$/)
+    const h = { screens: ['/chat', '/features'], bff: [], bffAgentSegments: [], lens: [] }
+    expect(['/chat', '/chat/9?x=1', '/features/', '/keys', '/chatter'].map((p) => hiddenScreen(p, h))).toEqual([true, true, true, false, false])
   })
 
   it('is on with E2E_LAUNCH=1 or --launch, and off without', () => {

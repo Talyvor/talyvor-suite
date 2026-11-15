@@ -11,6 +11,7 @@ import {
 } from "../../components/SessionExpiredBar";
 import { Region, RegionScreen } from "../../components/Region";
 import { isUnconfigured } from "../../lib/productState";
+import { IfArea } from "../../lib/workspaceAreas";
 import { CapabilityOff } from "./Capability";
 import { ModelTier } from "./ModelTier";
 import { formatUSD, formatWhen, humanizeType, ledgerStatus } from "./format";
@@ -479,12 +480,17 @@ function ProductsCard() {
           <StateMark state="on" />
         )}
       </Row>
-      <ProductRow
-        name="Track"
-        hint="Issues & workflows"
-        path="/api/track/workspaces"
-      />
-      <ProductRow name="Docs" hint="Team wiki" path="/api/docs/spaces" />
+      {/* B60.6 — a held area is left out, never probed: its routes answer 404 until the workspace has it. */}
+      <IfArea area="track">
+        <ProductRow
+          name="Track"
+          hint="Issues & workflows"
+          path="/api/track/workspaces"
+        />
+      </IfArea>
+      <IfArea area="docs">
+        <ProductRow name="Docs" hint="Team wiki" path="/api/docs/spaces" />
+      </IfArea>
       {bonds.isLoading ? (
         <Loading />
       ) : bonds.isError || !bonds.data ? (

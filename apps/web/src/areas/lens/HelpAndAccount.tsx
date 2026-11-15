@@ -1,4 +1,5 @@
 import { Fragment, useId, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button, Card, Chip, Crumb, EmptyState, Field, Icon, KindTile, Money, Row, Select, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { cn } from '@talyvor/ui'
@@ -14,6 +15,8 @@ import {
   sendRequest,
   useAccountRequests,
 } from './accountRequests'
+import { HELP_BY, HELP_CHAT_KEY, deleteHelpChat, useHelpChat } from './helpChat'
+import { helpHref } from '../../components/HelpChat'
 
 // HelpAndAccount.tsx — B59.28: Settings' Help and complaints, Close this account and Your data. Each sends a request
 // that a person at Talyvor answers (Lens B59.27), and lists what was sent with its state and, for a complaint, its
@@ -188,9 +191,32 @@ function Refused({ error }: { error: unknown }) {
   )
 }
 
+/** B61.38 — the Help chat, opened over this page. */
+function AskCard() {
+  const { pathname, search } = useLocation()
+  return (
+    <Card tone="white">
+      <Row
+        leading={<KindTile icon={<Icon name="chat" />} on="white" />}
+        title="Ask us anything about Talyvor."
+        line="Answers are written by AI. Our team is one press away."
+        action={
+          <Button asChild size="sm">
+            <Link to={helpHref(pathname, search)}>Open Help</Link>
+          </Button>
+        }
+        wrap
+      />
+    </Card>
+  )
+}
+
 /** /settings/help — ask for help or make a complaint, and what was sent. */
 export function HelpScreen() {
-  const [kind, setKind] = useState<'support' | 'complaint'>('support')
+  // B61.38 — the Help chat's "Make a complaint" opens this form on a complaint.
+  const [kind, setKind] = useState<'support' | 'complaint'>(() =>
+    new URLSearchParams(window.location.search).get('kind') === 'complaint' ? 'complaint' : 'support',
+  )
   const [message, setMessage] = useState('')
   const help = useSend('support', () => ({ title: 'Sent', line: 'A person at Talyvor reads it and answers on this page.' }))
   const complaint = useSend('complaint', (r) => ({ title: 'Complaint received', line: `Its reference is ${r.reference}.` }))
@@ -201,6 +227,9 @@ export function HelpScreen() {
         <p>Ask us about your account, or tell us what went wrong. A person at Talyvor reads every message and answers on this page.</p>
         <p>A complaint gets a reference as soon as you send it. Quote it whenever you write to us about it.</p>
       </PageTop>
+      <div className="max-w-2xl">
+        <AskCard />
+      </div>
       <div className="grid items-start gap-4 wide:grid-cols-12">
         <div className="wide:col-span-7">
           <SentList kinds={['support', 'complaint']} title="What you sent" empty="Nothing sent yet." />
@@ -282,6 +311,57 @@ export function CloseAccountScreen() {
   )
 }
 
+/** B61.38 — the Help chat as Talyvor keeps it, 30 days, and its delete. */
+function HelpChatKept() {
+  const qc = useQueryClient()
+  const chat = useHelpChat()
+  const erase = useMutation({
+    mutationFn: deleteHelpChat,
+    onSuccess: () => {
+      qc.setQueryData(HELP_CHAT_KEY, [])
+      showSnack({ title: 'Deleted', line: 'Your Help chat is gone.' })
+    },
+  })
+  const msgs = chat.data ?? []
+  return (
+    <Card tone="white">
+      <h3 className="font-display text-reading font-bold text-ink">Your Help chat</h3>
+      <p className="mt-1 text-body text-ink-2">Kept for 30 days so our team can read it, then deleted.</p>
+      <div className="mt-2" data-testid="help-chat-kept">
+        {chat.isError ? (
+          <p className="text-body text-ink-2">{readFailure(chat.error, 'Your Help chat')}</p>
+        ) : chat.isPending ? (
+          <p className="text-body text-ink-2">Reading…</p>
+        ) : msgs.length === 0 ? (
+          <EmptyState icon={<Icon name="chat" />} title="No Help chat kept." line="What you ask in Help appears here for 30 days." />
+        ) : (
+          <>
+            <ul className="grid gap-1.5">
+              {msgs.map((m, i) => (
+                <li key={`${m.at}-${i}`} className="text-body text-ink-2">
+                  <span className="font-semibold text-ink">{HELP_BY[m.by]}: </span>
+                  {m.text}
+                  <span className="text-ink-3"> · {day(m.at)}</span>
+                </li>
+              ))}
+            </ul>
+            {erase.isError ? (
+              <p role="alert" className="mt-2 text-body text-danger">
+                {isSessionExpired(erase.error) ? 'Nothing was deleted. Sign in again.' : 'Nothing was deleted. You can try again.'}
+              </p>
+            ) : null}
+            <div className="mt-3">
+              <Button size="sm" variant="danger" disabled={erase.isPending} onClick={() => erase.mutate()}>
+                {erase.isPending ? 'Deleting…' : 'Delete this chat'}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 /** /settings/data — ask for a copy of the account's data and download it, or ask for it to be deleted. */
 export function YourDataScreen() {
   const [message, setMessage] = useState('')
@@ -294,7 +374,10 @@ export function YourDataScreen() {
       </PageTop>
       <div className="grid items-start gap-4 wide:grid-cols-12">
         <div className="wide:col-span-7">
-          <SentList kinds={['data_export', 'data_deletion']} title="What you asked" empty="You have not asked for your data." />
+          <div className="grid gap-4">
+            <SentList kinds={['data_export', 'data_deletion']} title="What you asked" empty="You have not asked for your data." />
+            <HelpChatKept />
+          </div>
         </div>
         <div className="grid gap-4 wide:col-span-5">
           <Card>

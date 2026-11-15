@@ -50,6 +50,15 @@ export class SpendCap {
     this.committedUSD += cost
   }
 
+  /**
+   * B61.56 — moves what is committed by `deltaUSD`, never below zero: a spend counted at a price is held to what the
+   * ledger shows. Committed past the cap, the next reservation is refused and the cap shuts as at any other.
+   */
+  adjust(deltaUSD: number): void {
+    if (!Number.isFinite(deltaUSD)) throw new Error(`bad adjustment ${deltaUSD}`)
+    this.committedUSD = Math.max(0, this.committedUSD + deltaUSD)
+  }
+
   get spentUSD(): number {
     return this.committedUSD
   }

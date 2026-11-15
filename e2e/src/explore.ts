@@ -11,6 +11,11 @@
 // the screen it is on, and says "same" rather than writing it again in new words. One explorer makes at
 // most NOTES_PER_SCREEN notes on a screen; after the last, or after DWELL_STEPS steps there, it is moved
 // to the screen the explorers have seen least. Each distinct lead is reported once, with who saw it.
+//
+// B61.56 — in a launch run the explorers explore the launch version only. The run reads no model catalog there, so each
+// step is reserved at the price per step the harness's settings keep beside the explorer's model (--explorer-step-usd),
+// settled at what Lens's answer states it charged when it states one, and every ten steps and at the end the explorer is
+// held to what its own ledger shows it spent. It never opens an address of a hidden area, and a note about one is dropped.
 
 import type { Page } from 'playwright'
 import type { AppUser } from './app.ts'
@@ -58,13 +63,16 @@ export class Notebook {
   readonly screens: readonly string[]
   /** The screen a path is on (its route), or the path itself when it is on none. */
   private readonly screenOf: (path: string) => string
+  /** B61.56 — whether an address is a hidden area's: nothing noted there is written. */
+  private readonly hidden: (path: string) => boolean
   private readonly leads: Lead[] = []
   private readonly arrivals = new Map<string, number>()
 
-  constructor(findings: Finding[], screens: readonly string[], screenOf: (path: string) => string) {
+  constructor(findings: Finding[], screens: readonly string[], screenOf: (path: string) => string, hidden: (path: string) => boolean = () => false) {
     this.findings = findings
     this.screens = screens
     this.screenOf = screenOf
+    this.hidden = hidden
   }
 
   screen(where: string): string {
@@ -88,9 +96,10 @@ export class Notebook {
 
   /**
    * Explorer `n` notes something at `where`. The same words on the same screen are the lead already
-   * there; a note it has made before, or one past its last on this screen, is not written.
+   * there; a note it has made before, one past its last on this screen, or one about a hidden area, is not written.
    */
-  write(n: number, source: Finding['source'], severity: string, where: string, note: string, trail: string[]): Lead | 'again' | 'full' {
+  write(n: number, source: Finding['source'], severity: string, where: string, note: string, trail: string[]): Lead | 'again' | 'full' | 'hidden' {
+    if (this.hidden(where.split(/[?#]/)[0])) return 'hidden'
     const screen = this.screen(where)
     const words = sameWords(note)
     const lead = this.leads.find((l) => l.source === source && l.screen === screen && sameWords(l.note) === words)
@@ -102,7 +111,8 @@ export class Notebook {
   }
 
   /** Explorer `n` saw lead `id` too. */
-  same(n: number, id: number, where: string, trail: string[]): Lead | 'again' | 'full' | 'unknown' {
+  same(n: number, id: number, where: string, trail: string[]): Lead | 'again' | 'full' | 'unknown' | 'hidden' {
+    if (this.hidden(where.split(/[?#]/)[0])) return 'hidden'
     const lead = this.leads.find((l) => l.id === id)
     return lead === undefined ? 'unknown' : this.saw(n, lead, where, trail)
   }
@@ -250,14 +260,16 @@ function notesSoFar(n: number, book: Notebook, here: string): string[] {
   ]
 }
 
-function prompt(step: number, screen: Screen, trail: string[], seen: string[], features: Area[], start: Area | undefined, notes: string[]): string {
+function prompt(step: number, screen: Screen, trail: string[], seen: string[], features: Area[], start: Area | undefined, notes: string[], launch: boolean): string {
   return [
-    'You are an explorer testing Talyvor, a web app for working with AI models (Chat, Features, Docs, Track, Wallets, Billing and more).',
+    launch ? 'You are an explorer testing Talyvor, where AI agents get accounts, cards and payments under their owner\'s rules.'
+      : 'You are an explorer testing Talyvor, a web app for working with AI models (Chat, Features, Docs, Track, Wallets, Billing and more).',
     'You are signed in as a test user with test credits. Use it the way a curious new customer would: open its screens, try its',
     'features with small realistic inputs, and look for anything that seems wrong — an error, a broken or empty screen that should',
     'have content, figures that do not add up, text that contradicts itself or the screen, a control that does nothing.',
     'Do not sign out, and do not sign up a new account. Keep chat questions short.',
     ...(features.length > 0 ? ['', `Talyvor's features, each at its address: ${features.map((f) => `${f.feature} (${f.path})`).join(', ')}.`] : []),
+    ...(launch ? ['Open only these features and what they lead to: any other address is refused.'] : []),
     ...(start !== undefined ? [`Start with ${start.feature} (${start.path}): the scripted testers covered it least. Try everything it offers, then go on to the others.`] : []),
     '',
     `Today is ${new Date().toISOString().slice(0, 10)}. Step ${step} of at most ${MAX_STEPS}. You are at ${screen.url} ("${screen.title}").`,
@@ -282,7 +294,14 @@ function prompt(step: number, screen: Screen, trail: string[], seen: string[], f
 export interface ExploreOptions {
   lens: LensClient
   cap: SpendCap
+  /** The model catalog; empty in a launch run, where each step is reserved at stepUSD instead. */
   catalog: CatalogModel[]
+  /** B61.56 — the price per step a run with no catalog reserves (config explorerStepUSD). */
+  stepUSD: number
+  /** B61.56 — a launch run's: whether an address is a hidden area's. */
+  hidden?: (path: string) => boolean
+  /** B61.56 — a launch run's: what this explorer's own ledger shows it has spent, in USD. */
+  spentByLedger?: () => Promise<number>
   usdPerLXC: number
   provider: string
   model: string
@@ -294,14 +313,57 @@ export interface ExploreOptions {
   notebook: Notebook
 }
 
-const NOT_WRITTEN = { again: 'it had noted that already', full: `its ${NOTES_PER_SCREEN} notes on this screen were made`, unknown: 'there is no such lead' }
+const NOT_WRITTEN = { again: 'it had noted that already', full: `its ${NOTES_PER_SCREEN} notes on this screen were made`, unknown: 'there is no such lead',
+  hidden: 'the screen is outside the launch version' }
+/** B61.56 — what a ledger's rows show was spent, in USD: every debit, a spend and its platform fee alike. */
+export function ledgerSpentUSD(rows: readonly { amount_ulxc: number }[], usdPerLXC: number): number {
+  return (rows.reduce((s, r) => s + (r.amount_ulxc < 0 ? -r.amount_ulxc : 0), 0) / 1e6) * usdPerLXC
+}
+
+/** B61.56 — every this many steps, and at the end, an explorer with a ledger to read is held to it. */
+export const LEDGER_EVERY = 10
+
+/** B61.56 — what one step is reserved at: its worst case at the catalog's price, or the price per step with no catalog. */
+export function stepWorstUSD(model: CatalogModel | undefined, stepUSD: number, promptChars: number): number {
+  return model === undefined ? stepUSD : listPriceUSD(model, worstInputTokens(promptChars), MAX_OUTPUT_TOKENS)
+}
+
+/** B61.56 — what one answered step is settled at: nothing replayed, the pooled charge Lens states, else the catalog's or the step's price. */
+export function stepCostUSD(model: CatalogModel | undefined, stepUSD: number, reply: { replayed: boolean; pooledULXC: number | undefined; inputTokens: number; outputTokens: number },
+  usdPerLXC: number): number {
+  if (reply.replayed) return 0
+  if (reply.pooledULXC !== undefined) return (reply.pooledULXC / 1e6) * usdPerLXC
+  return model === undefined ? stepUSD : listPriceUSD(model, reply.inputTokens, reply.outputTokens)
+}
 
 /** One explorer's session. Its notes go into the shared notebook as they are made. */
 export async function explore(n: number, app: AppUser, opts: ExploreOptions): Promise<ExplorerSummary> {
+  // B61.56 — what the cap has counted for this explorer, held to its ledger as it goes and once more at the end.
+  let counted = 0
+  const heldToLedger = async (): Promise<void> => {
+    if (opts.spentByLedger === undefined) return
+    const spent = await opts.spentByLedger()
+    opts.cap.adjust(spent - counted)
+    counted = spent
+  }
+  const s = await exploring(n, app, opts, (usd) => {
+    counted += usd
+  }, heldToLedger)
+  try {
+    await heldToLedger()
+  } catch (e) {
+    s.detail += `; its ledger could not be read, so the cap counts its steps at their price: ${e instanceof Error ? e.message : String(e)}`
+  }
+  return s
+}
+
+async function exploring(n: number, app: AppUser, opts: ExploreOptions, count: (usd: number) => void, heldToLedger: () => Promise<void>): Promise<ExplorerSummary> {
   const page = app.page
   const book = opts.notebook
   const model = opts.catalog.find((m) => m.id === opts.model)
-  if (model === undefined) return { explorer: n, steps: 0, stopped: 'error', detail: `the catalog has no model ${opts.model}` }
+  if (model === undefined && opts.catalog.length > 0) return { explorer: n, steps: 0, stopped: 'error', detail: `the catalog has no model ${opts.model}` }
+  const launch = opts.hidden !== undefined
+  const hidden = (path: string): boolean => opts.hidden?.(path) === true
   const seen: string[] = []
   const trail: string[] = []
   const opened = new Set<string>()
@@ -349,18 +411,21 @@ export async function explore(n: number, app: AppUser, opts: ExploreOptions): Pr
       here = at
       dwell = 0
     }
-    const ask = prompt(step, screen, trail, seen.splice(0), opts.features, opts.start, notesSoFar(n, book, at))
+    const ask = prompt(step, screen, trail, seen.splice(0), opts.features, opts.start, notesSoFar(n, book, at), launch)
     let reply
     try {
-      const hold = opts.cap.reserve(listPriceUSD(model, worstInputTokens(ask.length), MAX_OUTPUT_TOKENS))
+      if (step > 1 && step % LEDGER_EVERY === 1) await heldToLedger()
+      const hold = opts.cap.reserve(stepWorstUSD(model, opts.stepUSD, ask.length))
       try {
         reply = await opts.lens.complete(app.user, opts.provider, opts.model, ask, MAX_OUTPUT_TOKENS, 'explorer')
       } catch (e) {
         opts.cap.settle(hold, undefined)
+        count(hold.worstUSD)
         throw e
       }
-      opts.cap.settle(hold, reply.replayed ? 0 : reply.pooledULXC !== undefined ? (reply.pooledULXC / 1e6) * opts.usdPerLXC
-        : listPriceUSD(model, reply.inputTokens, reply.outputTokens))
+      const cost = stepCostUSD(model, opts.stepUSD, reply, opts.usdPerLXC)
+      opts.cap.settle(hold, cost)
+      count(cost)
     } catch (e) {
       if (e instanceof CapReached) return end(step - 1, 'cap', e.message)
       return end(step - 1, 'error', e instanceof Error ? e.message : String(e))
@@ -384,6 +449,7 @@ export async function explore(n: number, app: AppUser, opts: ExploreOptions): Pr
       const label = target !== undefined ? `${move.action} [${target.i}] "${target.name}"`
         : move.action === 'goto' ? `goto ${move.path}` : move.action === 'press' ? `press ${move.key}` : JSON.stringify(move)
       try {
+        if (move.action === 'goto' && hidden(move.path)) throw new Error('not opened: it is outside the launch version')
         if (move.action === 'goto') await page.goto(new URL(move.path, page.url()).toString())
         else if (move.action === 'press') await page.keyboard.press(move.key)
         else if (target === undefined) throw new Error(`there is no control ${move.target}`)
@@ -395,6 +461,13 @@ export async function explore(n: number, app: AppUser, opts: ExploreOptions): Pr
       }
       await page.waitForLoadState('domcontentloaded').catch(() => undefined)
       await page.waitForTimeout(1_000)
+      // B61.56 — a click that led to a hidden area's address is taken back at once, before the screen is read.
+      const landed = new URL(page.url()).pathname
+      if (hidden(landed)) {
+        trail.push(`left ${landed} at once: it is outside the launch version`)
+        await page.goBack().catch(() => undefined)
+        if (hidden(new URL(page.url()).pathname)) await moveOn(`${landed} is outside the launch version`)
+      }
     }
     if (++dwell >= DWELL_STEPS) await moveOn(`${DWELL_STEPS} steps in a row on ${at}`)
   }

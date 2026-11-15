@@ -24,6 +24,8 @@ const AGENT_MAX_TOKENS = 16
 /** A listing's use: Lens runs it with the most output a chat answer may produce. */
 const USE_MAX_TOKENS = 4096
 const NUMBER_ONLY = 'Reply with the number only.'
+/** B61.63 — New agent's "Ask me above", in dollars, for an agent made as the harness always made them: one no payment of its waits on. */
+const NO_ASK_USD = '1000000'
 /** µLXC per µUSD: LXC is pegged at $0.10 (talyvor-lens market.ulxcPerUSDMicro). */
 const ULXC_PER_USD_MICRO = 10
 
@@ -55,7 +57,11 @@ async function outcome(done: Locator, scope: Locator): Promise<string | undefine
   return (await done.first().isVisible()) ? undefined : (await refused.first().innerText()).trim()
 }
 
-/** Agent Wallets (apps/web/src/areas/lens/AgentBank.tsx), in a tab of its own. */
+/**
+ * Agents (apps/web/src/areas/lens/Agents.tsx), in a tab of its own. B61.63 — Agents as it is drawn today: /agents is the
+ * workspace's totals line, its list of agents and New agent; everything done to one agent is done on that agent's own page
+ * (/agents/<id>, AgentPageRoute.tsx), where the screen goes for it.
+ */
 export class AgentBankScreen {
   readonly page: Page
 
@@ -73,49 +79,81 @@ export class AgentBankScreen {
     await this.page.close()
   }
 
-  /** The book is read: its totals, or (B28.271) with no agents yet, the card that creates the first. */
+  /** The book is read: Agents' totals line names what the workspace holds (it does with no agents too). */
   private async ready(): Promise<void> {
-    await this.page.getByTestId('agent-bank-totals').or(this.page.getByTestId('agent-first')).first().waitFor()
+    await this.page.getByTestId('agents-totals').filter({ hasText: 'The workspace holds' }).waitFor()
   }
 
+  /** Agents, afresh. */
+  private async home(): Promise<void> {
+    await this.page.goto(new URL('/agents', this.page.url()).toString())
+    await this.ready()
+  }
+
+  /** Agents' totals line, read afresh. */
   async totals(): Promise<string> {
-    return figureText(await this.page.getByTestId('agent-bank-totals').innerText())
+    await this.home()
+    return figureText(await this.page.getByTestId('agents-totals').innerText())
   }
 
-  /** Creates an agent by name; the screen opens it. */
-  async create(name: string): Promise<string | undefined> {
-    const form = this.page.locator('form').filter({ has: this.page.getByLabel('New agent name') })
-    await this.page.getByLabel('New agent name').fill(name)
-    await form.getByRole('button', { name: 'Create agent' }).click()
-    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
-    return outcome(this.page.getByTestId('agent-open').filter({ hasText: new RegExp(`^${esc(name)}$`) }), form)
+  /** The agent's own page is open: its header names it. */
+  private opened(name: string): Locator {
+    return this.page.getByTestId('agent-page').getByRole('heading', { level: 2, name, exact: true })
   }
 
   /**
-   * The screen as Lens has it now, with `agent` open. Every action starts here, so no note an earlier
-   * action left on the screen can be read as this one's answer.
+   * Creates an agent on New agent (B61.13), the owner's own: its name, and an "Ask me above" none of the harness's payments
+   * reaches, for with none of the four typed every payment and request waits for a yes; Lens's refusal, or the plan's limit.
+   * Created, the screen is the agent's page.
    */
-  private async fresh(agent?: Agent): Promise<void> {
-    // B57.23 — an agent's rules page is a page of its own: every action starts again from Agent Wallets.
-    if (/\/rules$/.test(new URL(this.page.url()).pathname)) await this.page.goto(new URL('/agents', this.page.url()).toString())
-    else await this.page.reload()
-    await this.ready()
-    if (agent === undefined) return
-    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
-    const open = this.page.getByTestId('agent-open').filter({ hasText: new RegExp(`^${esc(agent.name)}$`) })
-    if (await open.isVisible()) return
-    await this.page.getByTestId(`agent-balance-${agent.id}`).locator('xpath=..').getByRole('button', { name: /^(Manage|Open)$/ }).click()
-    await open.waitFor()
+  async create(name: string): Promise<string | undefined> {
+    await this.home()
+    await this.page.getByRole('button', { name: 'New agent', exact: true }).first().click()
+    const dialog = this.page.getByRole('dialog')
+    const kinds = dialog.getByTestId('new-agent-kinds')
+    const limit = dialog.getByTestId('new-agent-limit')
+    await kinds.or(limit).first().waitFor({ timeout: ACTION_TIMEOUT_MS })
+    if (await limit.isVisible()) return (await limit.innerText()).trim()
+    await dialog.getByRole('button', { name: 'Make your own', exact: true }).click()
+    await dialog.getByTestId('new-agent-start').waitFor({ timeout: ACTION_TIMEOUT_MS })
+    await dialog.getByLabel('Name', { exact: true }).fill(name)
+    await dialog.getByLabel('Ask me above', { exact: true }).fill(NO_ASK_USD)
+    await dialog.getByRole('button', { name: 'Create agent', exact: true }).click()
+    return outcome(this.opened(name), dialog)
   }
 
-  /** Funds the agent from the workspace, or takes LXC back, in Money's Move LXC dialog (B57.16); its snack says it moved. */
+  /**
+   * The screen as Lens has it now: `agent`'s own page, or with none named the page of the workspace's first agent, which
+   * carries what is done for every agent. Every action starts here, so no note an earlier action left on the screen can
+   * be read as this one's answer.
+   */
+  private async fresh(agent?: Agent): Promise<void> {
+    if (agent === undefined) {
+      await this.home()
+      await this.page.getByTestId('agents-list').getByRole('link', { name: /^Open / }).first().click()
+      await this.page.getByTestId('agent-page').getByRole('heading', { level: 2 }).first().waitFor({ timeout: ACTION_TIMEOUT_MS })
+      return
+    }
+    await this.page.goto(new URL(`/agents/${encodeURIComponent(agent.id)}`, this.page.url()).toString())
+    await this.opened(agent.name).waitFor({ timeout: ACTION_TIMEOUT_MS })
+  }
+
+  /** Funds the agent from the workspace, or takes LXC back, in its page's Move LXC dialog (B57.16); its snack says it moved. */
   async move(agent: Agent, ulxc: number, how: 'Fund' | 'Take back'): Promise<string | undefined> {
     await this.fresh(agent)
-    await card(this.page, 'Money').getByRole('button', { name: 'Move LXC', exact: true }).click()
+    await this.page.getByTestId('agent-page').getByRole('button', { name: 'Move LXC', exact: true }).first().click()
     const dialog = this.page.getByRole('dialog', { name: `Move LXC: ${agent.name}` })
     await dialog.getByLabel('Amount in LXC').fill(lxcText(ulxc))
     await dialog.getByRole('button', { name: how === 'Fund' ? `Fund ${agent.name}` : how, exact: true }).click()
     return outcome(this.page.getByRole('status').filter({ hasText: `${agent.name} now holds` }), dialog)
+  }
+
+  /** B61.63 — a row of the agent's Money card (AgentMoney.tsx), pressed: the dialog it opens over the page, named by the row. */
+  private async money(title: string): Promise<Locator> {
+    await this.page.getByTestId('agent-page-money').getByRole('button', { name: title, exact: true }).click()
+    const dialog = this.page.getByRole('dialog', { name: title, exact: true })
+    await dialog.waitFor({ timeout: ACTION_TIMEOUT_MS })
+    return dialog
   }
 
   /** B57.167 — a row of the agent's Settings, pressed: the dialog it opens over the page, named by the row. */
@@ -127,7 +165,7 @@ export class AgentBankScreen {
   }
 
   /** B57.23 — the agent's rules page (apps/web RulesPage.tsx), opened afresh; its whole page. */
-  private async rulesPage(agent: Agent): Promise<Locator> {
+  private async rulesPage(agent: Pick<Agent, 'id' | 'name'>): Promise<Locator> {
     await this.page.goto(new URL(`/agents/${encodeURIComponent(agent.id)}/rules`, this.page.url()).toString())
     const scope = this.page.getByTestId('rules-page')
     await scope.getByRole('heading', { level: 1, name: `${agent.name}’s rules`, exact: true }).waitFor({ timeout: ACTION_TIMEOUT_MS })
@@ -148,7 +186,7 @@ export class AgentBankScreen {
   }
 
   /** B57.23 — Save rules on the rules page: undefined once its snack says they are saved, or the refusal's words. */
-  private async saveRules(scope: Locator, agent: Agent): Promise<string | undefined> {
+  private async saveRules(scope: Locator, agent: Pick<Agent, 'name'>): Promise<string | undefined> {
     await scope.getByRole('button', { name: 'Save rules', exact: true }).click()
     return outcome(this.page.getByRole('status').filter({ hasText: `${agent.name}’s rules are saved` }), scope)
   }
@@ -370,7 +408,7 @@ export class AgentBankScreen {
 
   /** B28.20 — the balance the agent's row shows, as Lens has it now. */
   async balanceShown(agent: Agent): Promise<string> {
-    await this.fresh()
+    await this.fresh(agent)
     const balance = this.page.getByTestId(`agent-balance-${agent.id}`)
     // B34.1 — the money figure follows the LXC once the peg is read (money.tsx); read too early, the line is LXC alone.
     // B35.8 — waited for up to CURRENCY_WAIT_MS: none by then is what the verdict reads.
@@ -414,23 +452,19 @@ export class AgentBankScreen {
   }
 
   /**
-   * B28.305 — creates an agent from a rule template ("Support bot", "Researcher", "Coder") picked under
-   * "Start from"; the screen opens it. The refusal, if Lens refused the agent or its template's rules.
+   * B28.305 — creates an agent and gives it a rule template's rules ("Support bot", "Researcher", "Coder") from its rules
+   * page. The refusal, if Lens refused the agent or its template's rules.
    */
   async createFrom(name: string, template: string): Promise<string | undefined> {
-    const form = this.page.locator('form').filter({ has: this.page.getByLabel('New agent name') })
-    await form.getByRole('group', { name: 'Rules to start from' }).getByRole('button', { name: template, exact: true }).click()
-    await this.page.getByLabel('New agent name').fill(name)
-    await form.getByRole('button', { name: 'Create agent' }).click()
-    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
-    const err = await outcome(this.page.getByTestId('agent-open').filter({ hasText: new RegExp(`^${esc(name)}$`) }), form)
+    // B61.13 — New agent keeps no rule sets: the template is filled on the agent's rules page, as a person now does it.
+    const err = await this.create(name)
     if (err !== undefined) return err
-    const unsaved = form.getByRole('alert')
-    return (await unsaved.isVisible()) ? (await unsaved.innerText()).trim() : undefined
+    const id = new URL(this.page.url()).pathname.split('/')[2] ?? ''
+    return this.applyTemplate({ id: decodeURIComponent(id), name }, template)
   }
 
   /** B28.305 — fills the agent's rules page from a template, under More rules, and saves its rules. */
-  async applyTemplate(agent: Agent, template: string): Promise<string | undefined> {
+  async applyTemplate(agent: Pick<Agent, 'id' | 'name'>, template: string): Promise<string | undefined> {
     const scope = await this.rulesPage(agent)
     await this.moreRule(scope, 'Start from a template')
     await scope.getByRole('group', { name: `Rule templates for ${agent.name}` }).getByRole('button', { name: template, exact: true }).click()
@@ -447,22 +481,22 @@ export class AgentBankScreen {
     return (await words.innerText()).trim()
   }
 
-  /** B28.21 — renames and describes the agent on Name and description; Lens's refusal, if it refused. */
+  /** B28.21 — renames and describes the agent in its Settings' name and look; Lens's refusal, if it refused. */
   async describe(agent: Agent, name: string, description: string): Promise<string | undefined> {
     await this.fresh(agent)
-    const c = card(this.page, 'Name and description')
-    await c.getByLabel(`Name of ${agent.name}`).fill(name)
-    await c.getByLabel(`What ${agent.name} is for`).fill(description)
+    await this.page.getByTestId('agent-settings').getByRole('button', { name: 'Name, description, colour and face', exact: true }).click()
+    const c = this.page.getByRole('dialog', { name: `${agent.name}’s name and look`, exact: true })
+    await c.getByLabel('Name', { exact: true }).fill(name)
+    await c.getByLabel('What it is for', { exact: true }).fill(description)
     await c.getByRole('button', { name: 'Save', exact: true }).click()
-    // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
-    return outcome(this.page.getByTestId('agent-open').filter({ hasText: new RegExp(`^${esc(name)}$`) }), c)
+    return outcome(this.opened(name), c)
   }
 
-  /** B28.21 — archives the agent on Archive, confirming it; what the screen then says, or the refusal. */
+  /** B28.21 — archives the agent from its Settings' Archive, confirming it; what the screen then says, or the refusal. */
   async archive(agent: Agent): Promise<{ said?: string; err?: string }> {
     await this.fresh(agent)
-    const c = card(this.page, 'Archive')
-    await c.getByRole('button', { name: `Archive ${agent.name}`, exact: true }).click()
+    await this.page.getByTestId('agent-settings').getByRole('button', { name: 'Archive', exact: true }).click()
+    const c = this.page.getByRole('dialog', { name: `Archive ${agent.name}?`, exact: true })
     await c.getByRole('button', { name: `Yes, archive ${agent.name}`, exact: true }).click()
     const done = this.page.getByTestId('agent-archived')
     const err = await outcome(done, c)
@@ -521,7 +555,7 @@ export class AgentBankScreen {
   /** Send or request → Send: `ulxc` from `agent` to the wallet `to`; the line the card then shows. */
   async send(agent: Agent, to: string, ulxc: number, memo: string): Promise<string> {
     await this.fresh(agent)
-    const c = card(this.page, 'Send or request')
+    const c = await this.money('Send or request')
     await c.getByRole('group', { name: 'Send or request' }).getByRole('button', { name: 'Send', exact: true }).click()
     await c.getByLabel('Send to (wallet ID or @handle)').fill(to)
     await c.getByLabel('Amount in LXC to send').fill(lxcText(ulxc))
@@ -530,10 +564,10 @@ export class AgentBankScreen {
     return said(c)
   }
 
-  /** Between owners → Requests: accepts what the agent at wallet `from` asks `agent` for; the row's pill, or the refusal. */
+  /** The agent's Money → Requests: accepts what the agent at wallet `from` asks `agent` for; the row's pill, or the refusal. */
   async acceptRequest(agent: Agent, from: string): Promise<string> {
-    await this.fresh()
-    const c = card(this.page, 'Requests')
+    await this.fresh(agent)
+    const c = await this.money('Requests')
     const row = c.getByText(`${from} asks ${agent.name}`, { exact: true }).first().locator('xpath=../..')
     await row.getByRole('button', { name: 'Accept', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
     const done = row.getByText('Accepted', { exact: true })
@@ -543,7 +577,7 @@ export class AgentBankScreen {
   /** B28.23 — Transfers: gives back what the agent at wallet `from` sent `agent` with `memo`, asked twice; the note, or the refusal. */
   async giveBack(agent: Agent, from: string, memo: string): Promise<string> {
     await this.fresh(agent)
-    const c = card(this.page, 'Transfers')
+    const c = await this.money('Transfers')
     const row = c.getByText(`Received from ${from} — ${memo}`, { exact: true }).first().locator('xpath=../..')
     await row.getByRole('button', { name: 'Give back', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
     await row.getByRole('button', { name: 'Yes, give it back', exact: true }).click({ timeout: ACTION_TIMEOUT_MS })
@@ -553,7 +587,7 @@ export class AgentBankScreen {
   /** Offer a loan: `principal` to the wallet `to`, at `pct`% over `n` instalments every `every`. */
   async offerLoan(agent: Agent, l: { to: string; principal: number; pct: number; n: number; every: 'day' | 'week' | 'month'; memo: string }): Promise<string> {
     await this.fresh(agent)
-    const c = card(this.page, 'Offer a loan')
+    const c = await this.money('Loans')
     await c.getByLabel('Lend to (wallet ID or @handle)').fill(l.to)
     await c.getByLabel('Loan amount in LXC').fill(lxcText(l.principal))
     await c.getByLabel('Interest over the whole loan, in percent').fill(String(l.pct))
@@ -567,7 +601,7 @@ export class AgentBankScreen {
   /** Pay into escrow: `ulxc` for the wallet `to`, released on `releaseOn` (YYYY-MM-DD) unless disputed. */
   async payIntoEscrow(agent: Agent, to: string, ulxc: number, releaseOn: string, memo: string): Promise<string> {
     await this.fresh(agent)
-    const c = card(this.page, 'Pay into escrow')
+    const c = await this.money('Escrow')
     await c.getByLabel('Hold for (wallet ID or @handle)').fill(to)
     await c.getByLabel('Amount in LXC to hold').fill(lxcText(ulxc))
     await c.getByLabel('Release on').fill(releaseOn)
@@ -576,10 +610,10 @@ export class AgentBankScreen {
     return said(c)
   }
 
-  /** Held and cashed out → Escrow: confirms the escrow `memo` names delivered, or disputes it; its pill, or the refusal. */
-  async settleEscrow(memo: string, how: { confirm: true } | { dispute: string }): Promise<string> {
-    await this.fresh()
-    const c = card(this.page, 'Escrow')
+  /** The agent's Money → Escrow: confirms the escrow `memo` names delivered, or disputes it; its pill, or the refusal. */
+  async settleEscrow(agent: Agent, memo: string, how: { confirm: true } | { dispute: string }): Promise<string> {
+    await this.fresh(agent)
+    const c = await this.money('Escrow')
     const row = c.getByTestId('escrow').filter({ hasText: memo })
     if ('confirm' in how) {
       await row.getByRole('button', { name: 'Confirm delivered' }).click({ timeout: ACTION_TIMEOUT_MS })
@@ -594,7 +628,7 @@ export class AgentBankScreen {
   /** Pots → Create pot: a goal of `targetULXC`. */
   async createPot(agent: Agent, name: string, targetULXC: number): Promise<string | undefined> {
     await this.fresh(agent)
-    const c = card(this.page, 'Pots')
+    const c = await this.money('Pots')
     await c.getByLabel('New pot’s name').fill(name)
     await c.getByLabel('Target in LXC (optional)').fill(lxcText(targetULXC))
     await c.getByRole('button', { name: 'Create pot' }).click()
@@ -604,7 +638,7 @@ export class AgentBankScreen {
   /** Moves `ulxc` into or out of the pot `name`; Lens's refusal, if the move was refused. */
   async movePot(agent: Agent, name: string, ulxc: number, dir: 'in' | 'out'): Promise<string | undefined> {
     await this.fresh(agent)
-    const row = card(this.page, 'Pots').getByTestId('pot').filter({ hasText: name })
+    const row = (await this.money('Pots')).getByTestId('pot').filter({ hasText: name })
     await row.getByLabel(`Amount in LXC to move for ${name}`).fill(lxcText(ulxc))
     // B17.33 — the card sends a move again under its key while the app or Lens restarts (a 5xx), so the
     // move's answer is the first one that is not a 5xx — or, when every send met the restart, the alert.
@@ -623,7 +657,7 @@ export class AgentBankScreen {
   /** Recurring transfer: `ulxc` to the wallet `to` every `every`, from now. */
   async startRecurring(agent: Agent, to: string, ulxc: number, every: 'day' | 'week' | 'month', memo: string): Promise<string> {
     await this.fresh(agent)
-    const c = card(this.page, 'Recurring transfer')
+    const c = await this.money('Recurring transfer')
     await c.getByLabel('Pay every period to (wallet ID or @handle)').fill(to)
     await c.getByLabel('Recurring amount in LXC').fill(lxcText(ulxc))
     await c.getByRole('group', { name: 'How often' }).getByRole('button', { name: `Every ${every}`, exact: true }).click()
@@ -635,7 +669,7 @@ export class AgentBankScreen {
   /** Cash out: `ulxc` of the agent's credits, paid to `destination`. */
   async cashOut(agent: Agent, ulxc: number, destination: string): Promise<string> {
     await this.fresh(agent)
-    const c = card(this.page, 'Cash out')
+    const c = await this.money('Cash out')
     await c.getByLabel('Amount in LXC to cash out').fill(lxcText(ulxc))
     await c.getByLabel('Pay to (a name for the account)').fill(destination)
     await c.getByRole('button', { name: 'Ask to cash out' }).click()
@@ -1424,10 +1458,13 @@ export function agentRulesRollback(seed: number): Scenario {
     run: (ctx) => withBank(ctx, async (bank) => {
       const a = await openAgent(ctx, bank, `Rolled back ${seed}`)
       if (typeof a === 'string') return fail(a)
+      // B61.63 — New agent saves the agent's first rules itself (B61.13), so the versions here count from after it.
+      const made = (await ctx.env.lens.agentRulesHistory(ctx.app.user, a.id)).length
+      const v1 = made + 1
       let err = await bank.setLimit(a, 'Daily limit', 1e6)
       if (err !== undefined) return fail(`the 1 LXC daily limit was not saved: ${err}`)
       const first = (await ctx.env.lens.agentRulesHistory(ctx.app.user, a.id))[0]
-      if (first?.version !== 1 || first.change !== 'set') return fail(`saving the first rules made no version 1 "set": ${JSON.stringify(first)}`)
+      if (first?.version !== v1 || first.change !== 'set') return fail(`saving the first rules made no version ${v1} "set": ${JSON.stringify(first)}`)
       const was = JSON.stringify(await ctx.env.lens.agentRules(ctx.app.user, a.id))
       err = await bank.setLimit(a, 'Daily limit', 3e6)
       if (err !== undefined) return fail(`the 3 LXC daily limit was not saved: ${err}`)
@@ -1436,20 +1473,20 @@ export function agentRulesRollback(seed: number): Scenario {
       const changed = JSON.stringify(await ctx.env.lens.agentRules(ctx.app.user, a.id))
       if (changed === was) return fail(`two saves left Lens's rules as they were: ${changed}`)
 
-      err = await bank.rollBackRules(a, 1)
-      if (err !== undefined) return fail(`rolling back to version 1 was refused: ${err}`)
+      err = await bank.rollBackRules(a, v1)
+      if (err !== undefined) return fail(`rolling back to version ${v1} was refused: ${err}`)
       const now = JSON.stringify(await ctx.env.lens.agentRules(ctx.app.user, a.id))
       ctx.evidence.push({ note: `Lens's rules at version 1: ${was}; after the rollback: ${now}` })
-      if (now !== was) return fail(`the rollback did not restore version 1 exactly: Lens holds ${now}, version 1 was ${was}`)
+      if (now !== was) return fail(`the rollback did not restore version ${v1} exactly: Lens holds ${now}, version ${v1} was ${was}`)
       const versions = await ctx.env.lens.agentRulesHistory(ctx.app.user, a.id)
       const newest = versions[0]
       ctx.evidence.push({ note: `Lens's versions: ${versions.map((v) => `${v.version} ${v.change} by ${v.changed_by || '(nobody)'}`).join('; ')}` })
-      if (versions.length !== 4 || newest.change !== 'rollback to 1' || newest.changed_by === '' || newest.changed_by !== first.changed_by) {
-        return fail(`the rollback was not recorded as version 4, "rollback to 1", by ${first.changed_by || '(nobody)'}: ${versions.map((v) => `${v.version} ${v.change} by ${v.changed_by || '(nobody)'}`).join('; ')}`)
+      if (versions.length !== made + 4 || newest.change !== `rollback to ${v1}` || newest.changed_by === '' || newest.changed_by !== first.changed_by) {
+        return fail(`the rollback was not recorded as version ${made + 4}, "rollback to ${v1}", by ${first.changed_by || '(nobody)'}: ${versions.map((v) => `${v.version} ${v.change} by ${v.changed_by || '(nobody)'}`).join('; ')}`)
       }
-      const row = await bank.rulesVersion(4)
-      if (!row.includes('Rolled back to version 1 by you')) return fail(`Rules history does not say who rolled back: "${row}"`)
-      return { pass: true, detail: `rolled back to version 1: Lens's rules are byte for byte version 1's (${now}); version 4 "rollback to 1" by ${newest.changed_by}, and Rules history reads "${row}"` }
+      const row = await bank.rulesVersion(made + 4)
+      if (!row.includes(`Rolled back to version ${v1} by you`)) return fail(`Rules history does not say who rolled back: "${row}"`)
+      return { pass: true, detail: `rolled back to version ${v1}: Lens's rules are byte for byte version ${v1}'s (${now}); version ${made + 4} "rollback to ${v1}" by ${newest.changed_by}, and Rules history reads "${row}"` }
     }),
   }
 }
@@ -1513,8 +1550,8 @@ export function spendNoticePush(seed: number): Scenario {
   }
 }
 
-/** The refusal agentLimitBoost wants once the boost has ended: the rules' own daily limit, as Lens writes it — "daily limit of $0.00 (0.000001 LXC)". */
-export const boostEndedRefusal = /daily limit of [^(]*\(0\.000001 LXC\)/
+/** The refusal agentLimitBoost wants once the boost has ended: the rules' own 1 µLXC daily limit, as Lens writes it in dollars alone (B61.16) — "daily limit of $0.0000001". */
+export const boostEndedRefusal = /daily limit of \$0\.0000001\b/
 
 /**
  * B28.32 — the DONE line: after expiry a hold at the boosted size writes nothing. An agent funded 1 LXC with a daily
@@ -1576,7 +1613,7 @@ export function agentLimitBoost(seed: number): Scenario {
       const refused = await agentAsks(ctx, key, q, 'the same request after the boost ended')
       if (refused.ok) return fail(`after the boost ended the request was served: "${refused.value.text}"`)
       if (refused.status !== 403 || !boostEndedRefusal.test(refused.error)) {
-        return fail(`refused, but not by the 0.000001 LXC daily limit: ${refused.status} ${refused.error}`)
+        return fail(`refused, but not by the $0.0000001 daily limit: ${refused.status} ${refused.error}`)
       }
       const late = (await ctx.env.lens.agentLines(ctx.app.user, a.id)).filter((l) => !lines1.some((o) => o.entry_id === l.entry_id))
       const chargedLate = (await spendRows(ctx)).filter((x) => !spends0.has(x.id) && !charged.some((c) => c.id === x.id))
@@ -1760,7 +1797,7 @@ interface ApprovalWorker {
  * push Lens sends for it is delivered to the app's service worker, which must show it with Approve and
  * Deny, and (B29.14) with the app icon as its icon and badge. Approve, run in the service worker on that
  * notification, must move Lens's approval row to approved with no page opened or moved and no money moved;
- * the payment sent again is then paid once. B55.49: the notification reads Lens's sentence, "$0.10 (1 LXC)".
+ * the payment sent again is then paid once. B55.49: the notification reads Lens's sentence, "$0.10" (B61.16).
  */
 export function agentApprovalPush(seed: number): Scenario {
   return {
@@ -1804,8 +1841,8 @@ export function agentApprovalPush(seed: number): Scenario {
       if (sw === undefined) return fail('/sw.js registered, but no service worker runs it')
 
       // The push Lens sends for a waiting approval (talyvor-lens economy/agent_approval_auth.go), delivered as a push.
-      // B55.49: body is Lens's sentence, dollars beside the LXC at the $0.10 peg (B55.30).
-      const sentence = `${payer.name} wants to pay ${payee.name} $0.10 (1 LXC)`
+      // B55.49: body is Lens's sentence, in dollars alone at the $0.10 peg (B61.16).
+      const sentence = `${payer.name} wants to pay ${payee.name} $0.10`
       const push = { type: 'agent_approval', approval_id: id, agent_name: payer.name, amount_ulxc: 1e6, amount_lxc: '1', reason: memo, body: sentence }
       await cdp.send('ServiceWorker.deliverPushMessage', { origin, registrationId, data: JSON.stringify(push) })
       const shown = await sw.evaluate(async ({ tag, ms }) => {
@@ -2102,7 +2139,7 @@ async function homeGlance(ctx: ScenarioCtx, page: Page, a: Agent, approvalID: st
   return undefined
 }
 
-/** B28.271 — what Agent Wallets may not show a workspace with no agents: none of these has anything to act on yet. */
+/** B28.271 — what Agents may not show a workspace with no agents: none of these has anything to act on yet. */
 const EMPTY_HIDDEN = [
   // B57.8 — the page's own; the top bar's Pause every agent is on every page.
   { what: 'the pause-all switch', find: (p: Page) => p.getByTestId('pause-every-agent') },
@@ -2114,31 +2151,32 @@ const EMPTY_HIDDEN = [
 ] as const
 
 /**
- * B28.271 — Agent Wallets opened by a workspace with no agents is one card, "Create your first agent", with the
- * create form inside it; the pause-all switch, the forecast, approvals, "between owners" and "held" are not on the
- * screen. Run while the workspace is empty (before Home's onboarding creates one); creates nothing, spends nothing.
+ * B28.271 — Agents opened by a workspace with no agents says so and offers New agent (B57.19: "No agents yet", "Give an
+ * agent its own account, wallet and card."); the pause-all switch, the forecast, approvals, "between owners" and "held"
+ * are not on the screen, and neither is an agent list. Run while the workspace is empty (before Home's onboarding creates
+ * one); creates nothing, spends nothing.
  */
 export function agentWalletsEmpty(): Scenario {
   return {
     id: 'agent-wallets-empty',
     owner: 'talyvor-suite',
-    items: ['B28.271'],
-    title: 'Agent Wallets with no agents shows only the "Create your first agent" card — no pause-all, forecast or approvals',
+    items: ['B28.271', 'B61.63'],
+    title: 'Agents with no agents says "No agents yet" and offers New agent — no list, pause-all, forecast or approvals',
     run: async (ctx) => {
       const book = await bookOf(ctx)
       if (book.agents.length > 0) throw new CannotTest(`the workspace already has ${book.agents.length} agent(s)`)
       const page = await ctx.app.tab('/agents')
       try {
-        const card = page.getByTestId('agent-first')
-        const shown = await card.waitFor({ timeout: ACTION_TIMEOUT_MS }).then(() => true, () => false)
-        if (!shown) return fail('Agent Wallets with no agents shows no "Create your first agent" card')
-        if ((await card.getByText('Create your first agent', { exact: true }).count()) !== 1) return fail('the first-agent card is not headed "Create your first agent"')
-        if ((await card.getByLabel('New agent name').count()) !== 1) return fail('the first-agent card holds no form to name the agent')
+        const empty = page.getByText('No agents yet', { exact: true })
+        const shown = await empty.waitFor({ timeout: ACTION_TIMEOUT_MS }).then(() => true, () => false)
+        if (!shown) return fail('Agents with no agents does not say "No agents yet"')
+        if ((await page.getByText('Give an agent its own account, wallet and card.', { exact: true }).count()) !== 1) return fail('the empty Agents page does not say what an agent gets')
+        if ((await page.getByRole('button', { name: 'New agent', exact: true }).count()) < 1) return fail('the empty Agents page offers no New agent')
         const still: string[] = []
-        for (const { what, find } of EMPTY_HIDDEN) if ((await find(page).count()) > 0) still.push(what)
+        for (const { what, find } of [...EMPTY_HIDDEN, { what: 'a list of agents', find: (p: Page) => p.getByTestId('agents-list') }]) if ((await find(page).count()) > 0) still.push(what)
         if (still.length > 0) return fail(`with no agents the screen still shows ${still.join(', ')}`)
-        ctx.evidence.push({ note: `with no agents: the "Create your first agent" card, and none of ${EMPTY_HIDDEN.map((h) => h.what).join(', ')}` })
-        return { pass: true, detail: 'a workspace with no agents sees only the "Create your first agent" card' }
+        ctx.evidence.push({ note: `with no agents: "No agents yet" and New agent, and none of ${EMPTY_HIDDEN.map((h) => h.what).join(', ')}` })
+        return { pass: true, detail: 'a workspace with no agents sees "No agents yet" and New agent, and nothing to act on' }
       } finally {
         await page.close()
       }
@@ -3902,15 +3940,11 @@ async function giveBack(ctx: ScenarioCtx, name: string): Promise<void> {
 }
 
 /**
- * B28.7 — the navigation is wallet-first. B57.8 — and it is Pocket's rows, with no folding groups: Home, Approvals,
- * Agents, Statements, Pay, Invoices, Spending, Chat, Rooms, Marketplace; a rule; Scan, Track and Docs, Developers,
- * Billing, Settings; Privacy and Terms at its foot. The Approvals badge is held to Lens's own pending count, and every
+ * B28.7 — the navigation is wallet-first. B57.8 — and it is Pocket's rows, with no folding groups. B61.3 — the approved
+ * seven: Home, Agents, Cards, Pay, Approvals, Activity, Settings; Privacy and Terms at its foot. The Approvals badge is held to Lens's own pending count, and every
  * link the sidebar offers opens a page rather than the catch-all.
  */
-export const WALLET_FIRST_NAV = [
-  'Home', 'Approvals', 'Agents', 'Statements', 'Pay', 'Invoices', 'Spending', 'Chat', 'Rooms', 'Marketplace',
-  'Scan', 'Track and Docs', 'Developers', 'Billing', 'Settings', 'Privacy', 'Terms',
-] as const
+export const WALLET_FIRST_NAV = ['Home', 'Agents', 'Cards', 'Pay', 'Approvals', 'Activity', 'Settings', 'Privacy', 'Terms'] as const
 
 export function walletFirstNav(): Scenario {
   return {
@@ -3922,7 +3956,7 @@ export function walletFirstNav(): Scenario {
       const page = await ctx.app.tab('/')
       try {
         const nav = page.getByRole('navigation', { name: 'Sections' })
-        await nav.getByRole('link', { name: 'Statements' }).waitFor({ timeout: ACTION_TIMEOUT_MS })
+        await nav.getByRole('link', { name: 'Activity' }).waitFor({ timeout: ACTION_TIMEOUT_MS })
         // The logo leads, to Home, and is named rather than a row; every row after it is a link.
         const rows = await nav
           .locator('a[href]:not([aria-label])')
