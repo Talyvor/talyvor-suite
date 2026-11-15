@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 
 import { getJSON } from './api'
 
@@ -38,6 +38,11 @@ const AREA_PATHS: readonly { path: string; area: Area }[] = [
   { path: '/settings/email-branding', area: 'docs' },
   { path: '/scan', area: 'scan' },
   { path: '/features', area: 'gateway' },
+  // B61.17 — LXC is parked, and these three are LXC's: its balances, its ledger and the LENS it earned.
+  { path: '/overview', area: 'gateway' },
+  { path: '/ledger', area: 'gateway' },
+  { path: '/statements/royalties', area: 'gateway' },
+  { path: '/earnings', area: 'gateway' },
 ]
 
 /** The area a console address belongs to, or undefined for a launch screen. */
@@ -100,4 +105,15 @@ export function AreaRoute({ path, children }: { path: string; children: React.Re
   if (area === undefined) return children
   if (!areas.settled) return null
   return areas.has(area) ? children : <Navigate to="/" replace />
+}
+
+/** A link where the workspace has the address's area, and its words alone where it does not. */
+export function AreaLink({ to, className, children }: { to: string; className?: string; children: React.ReactNode }) {
+  return useWorkspaceAreas().shows(to) ? (
+    <Link className={className} to={to}>
+      {children}
+    </Link>
+  ) : (
+    <>{children}</>
+  )
 }

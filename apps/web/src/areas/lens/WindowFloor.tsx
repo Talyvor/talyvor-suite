@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { AreaLink } from '../../lib/workspaceAreas'
 import { MuNumeral, inlineLink } from '@talyvor/ui'
 
 // A THIRD DRESSING FOR A NUMBER, because this product already had exactly two and neither
@@ -51,9 +51,9 @@ export function WindowIncomplete({ days, pageSize, testId }: { days: number; pag
       The last {days} days hold more than {pageSize} ledger rows, and {pageSize} is the most one
       read can return, so the figures above count the most recent {pageSize} and are floors, not
       totals. The{' '}
-      <Link className={inlineLink} to="/ledger">
+      <AreaLink className={inlineLink} to="/ledger">
         ledger
-      </Link>{' '}
+      </AreaLink>{' '}
       pages through all of them.
     </div>
   )
