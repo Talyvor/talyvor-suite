@@ -585,21 +585,24 @@ function Total({ book, agents, shows, forecast }: { book: AgentBook; agents: Age
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-line pt-4 wide:grid-cols-4">
         <Fact label="Across your agents" testid="home-agents-total">
-          <Money ulxc={book.allocated_ulxc} />
+          <Money ulxc={book.allocated_ulxc} className={stacked} />
         </Fact>
         <Fact label="Not yet given to an agent" testid="home-unallocated">
-          <Money ulxc={book.unallocated_ulxc} />
+          <Money ulxc={book.unallocated_ulxc} className={stacked} />
         </Fact>
         <Fact label="Spent this month" testid="home-spent">
-          {forecast.isError ? <InlineFailure error={forecast.error} className="text-body text-ink-3" /> : forecast.data ? <Money ulxc={forecast.data.spent_ulxc} /> : 'Reading…'}
+          {forecast.isError ? <InlineFailure error={forecast.error} className="text-body text-ink-3" /> : forecast.data ? <Money ulxc={forecast.data.spent_ulxc} className={stacked} /> : 'Reading…'}
         </Fact>
         <Fact label="On pace for" testid="home-forecast">
-          {forecast.isError ? <InlineFailure error={forecast.error} className="text-body text-ink-3" /> : forecast.data ? <Money ulxc={forecast.data.forecast_ulxc} /> : 'Reading…'}
+          {forecast.isError ? <InlineFailure error={forecast.error} className="text-body text-ink-3" /> : forecast.data ? <Money ulxc={forecast.data.forecast_ulxc} className={stacked} /> : 'Reading…'}
         </Fact>
       </dl>
     </Card>
   )
 }
+
+// B60.3 — LXC to two places is wider: in a fact's narrow column it goes under the dollars, as the reference draws it.
+const stacked = 'grid justify-items-start'
 
 function Fact({ label, testid, children }: { label: string; testid: string; children: React.ReactNode }) {
   return (

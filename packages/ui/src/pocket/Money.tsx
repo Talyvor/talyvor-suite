@@ -6,8 +6,11 @@ export type MoneyOrder = 'usd-first' | 'lxc-first'
 
 /** The app's formatter (B55.38, B55.26). <Money> draws what these return and never formats a figure itself. */
 export interface MoneyFigures {
-  /** µLXC in the person's currency ("$1,650.00", "<$0.01"), null while no rate backs it, and in LXC ("16,500 LXC"). */
-  ulxc: (ulxc: number) => { cash: string | null; lxc: string }
+  /**
+   * µLXC in the person's currency ("$1,650.00", "<$0.01"), null while no rate backs it, and in LXC ("16,500.00 LXC");
+   * `exact` asks for LXC's every place, as a statement shows it.
+   */
+  ulxc: (ulxc: number, exact?: boolean) => { cash: string | null; lxc: string }
   /** An account's amount in its own currency: "$400.00", "£24.00", "400.00 USDC". */
   minor: (minor: number, currency: string) => string
 }
@@ -38,6 +41,8 @@ export type MoneyProps = ({ ulxc: number; minor?: never; currency?: never } | { 
   size?: MoneySize
   /** A credit shows its +; a debit always shows the true minus. */
   signed?: boolean
+  /** A statement's figure: LXC to its every place, not rounded beside the person's currency. */
+  exact?: boolean
   className?: string
 }
 
@@ -52,14 +57,14 @@ export function Money(props: MoneyProps) {
   const ctx = useContext(MoneyContext)
   if (ctx === null) throw new Error('<Money> needs the app’s <MoneyProvider>: the order is the app’s one switch')
   const figures = ctx.useFigures()
-  const { size = 'row', signed = false, className } = props
+  const { size = 'row', signed = false, exact = false, className } = props
   const amount = props.ulxc ?? props.minor
   const sign = amount < 0 ? '−' : signed && amount > 0 ? '+' : ''
   let lead: string
   let sub: string | null = null
   if (props.ulxc === undefined) lead = figures.minor(Math.abs(props.minor), props.currency)
   else {
-    const { cash, lxc } = figures.ulxc(Math.abs(props.ulxc))
+    const { cash, lxc } = figures.ulxc(Math.abs(props.ulxc), exact)
     if (cash === null) lead = lxc
     else [lead, sub] = ctx.order === 'usd-first' ? [cash, lxc] : [lxc, cash]
   }

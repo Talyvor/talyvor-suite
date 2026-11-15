@@ -267,7 +267,7 @@ export function MarketplaceBill({ agent }: { agent: Agent }) {
               <td className="px-gutter py-2 font-figure text-caption text-muted">{formatWhen(l.at)}</td>
               <td className="py-2">{[l.memo, l.label].filter(Boolean).join(' · ')}</td>
               <td className="px-gutter py-2 text-right font-figure">
-                <Lxc ulxc={l.amount_ulxc} />
+                <Lxc ulxc={l.amount_ulxc} exact />
               </td>
             </tr>
           ))}

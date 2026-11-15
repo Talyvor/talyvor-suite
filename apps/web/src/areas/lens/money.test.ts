@@ -48,14 +48,14 @@ describe('one currency formatter', () => {
 })
 
 describe('dollars first beside LXC', () => {
-  it('renders $450.00 (4,500 LXC)', async () => {
+  it('renders $450.00 (4,500.00 LXC)', async () => {
     const text = renderLxc(4500 * M, 0.1)
-    await waitFor(() => expect(text()).toBe('$450.00 (4,500 LXC)'))
+    await waitFor(() => expect(text()).toBe('$450.00 (4,500.00 LXC)'))
   })
 
   it('leads both figures with a minus', async () => {
     const text = renderLxc(-4500 * M, 0.1)
-    await waitFor(() => expect(text()).toBe('-$450.00 (-4,500 LXC)'))
+    await waitFor(() => expect(text()).toBe('-$450.00 (-4,500.00 LXC)'))
   })
 
   it('shows LXC alone while no rate backs it', async () => {
@@ -66,14 +66,14 @@ describe('dollars first beside LXC', () => {
   })
 
   it('flips every amount with MONEY_ORDER', async () => {
-    expect(lxcText(4500 * M, '$450.00')).toBe('$450.00 (4,500 LXC)')
+    expect(lxcText(4500 * M, '$450.00')).toBe('$450.00 (4,500.00 LXC)')
     vi.resetModules()
     vi.doMock('../../moneyOrder', () => ({ MONEY_ORDER: 'lxc-first' }))
     const flipped = await import('./money')
     const rq = await import('@tanstack/react-query')
-    expect(flipped.lxcText(4500 * M, '$450.00')).toBe('4,500 LXC ($450.00)')
+    expect(flipped.lxcText(4500 * M, '$450.00')).toBe('4,500.00 LXC ($450.00)')
     const text = renderLxc(4500 * M, 0.1, { Lxc: flipped.Lxc, QueryClient: rq.QueryClient, QueryClientProvider: rq.QueryClientProvider })
-    await waitFor(() => expect(text()).toBe('4,500 LXC ($450.00)'))
+    await waitFor(() => expect(text()).toBe('4,500.00 LXC ($450.00)'))
   })
 })
 

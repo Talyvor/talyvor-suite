@@ -3,7 +3,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query'
 import { type MoneyFigures, MoneyProvider } from '@talyvor/ui/pocket'
 import { ApiError, UnreadableError, readable } from '../../lib/api'
 import { MONEY_ORDER } from '../../moneyOrder'
-import { formatMinor, formatULXC } from './agentBankApi'
+import { formatLXCBeside, formatMinor, formatULXC } from './agentBankApi'
 import { topupApi } from './topupApi'
 
 // B28.22 — every LXC amount on the wallet screens also reads in the person's own currency: dollars from
@@ -134,7 +134,14 @@ export function useMoney(): (ulxc: number) => string | null {
 /** B57.7 — the figures packages/ui's <Money> draws: this formatter's, at the rate the screen's <Lxc> figures use. */
 export function useMoneyFigures(): MoneyFigures {
   const money = useMoney()
-  return { ulxc: (ulxc) => ({ cash: money(ulxc), lxc: formatULXC(ulxc) }), minor: formatMinor }
+  // B60.3 — LXC beside dollars reads to two places; LXC alone, or on a statement (`exact`), keeps its exact figure.
+  return {
+    ulxc: (ulxc, exact) => {
+      const cash = money(ulxc)
+      return { cash, lxc: cash === null || exact ? formatULXC(ulxc) : formatLXCBeside(ulxc) }
+    },
+    minor: formatMinor,
+  }
 }
 
 /** B57.7 — every <Money> in the app draws in MONEY_ORDER's order, so that one line flips them all. */
@@ -148,19 +155,19 @@ export function AppMoney({ children }: { children: React.ReactNode }) {
 
 /**
  * B55.38 — an LXC amount beside its value in the person's currency, in MONEY_ORDER's order:
- * "$450.00 (4,500 LXC)"; LXC alone while no rate backs it (`fiat` null). `sign` is written before both
+ * "$450.00 (4,500.00 LXC)", LXC to two places (B60.3); LXC alone, exact, while no rate backs it (`fiat` null). `sign` is written before both
  * figures; a negative amount carries its own minus into both.
  */
 export function lxcText(ulxc: number, fiat: string | null, sign: '' | '+' | '−' = ''): string {
-  const lxc = `${sign}${formatULXC(ulxc)}`
-  if (fiat === null) return lxc
+  if (fiat === null) return `${sign}${formatULXC(ulxc)}`
+  const lxc = `${sign}${formatLXCBeside(ulxc)}`
   const cash = `${ulxc < 0 ? '-' : sign}${fiat}`
   return MONEY_ORDER === 'usd-first' ? `${cash} (${lxc})` : `${lxc} (${cash})`
 }
 
 /** B57.15 — a part of a whole in LXC alone, "4,200 of 20,000 LXC": drawn small beside the same two figures in dollars. */
 export function lxcPartOf(part: number, whole: number): string {
-  return `${formatULXC(part).replace(/ LXC$/, '')} of ${formatULXC(whole)}`
+  return `${formatLXCBeside(part).replace(/ LXC$/, '')} of ${formatLXCBeside(whole)}`
 }
 
 /** lxcText for words a screen builds itself, at the rate the screen's <Lxc> figures use. */
@@ -169,16 +176,17 @@ export function useLxcText(): (ulxc: number, sign?: '' | '+' | '−') => string 
   return (ulxc, sign = '') => lxcText(ulxc, money(Math.abs(ulxc)), sign)
 }
 
-/** `$1.25 (12.5 LXC)` — lxcText as a figure: the leading figure in ink, the one in brackets muted. */
-export function Lxc({ ulxc, sign = '' }: { ulxc: number; sign?: '' | '+' | '−' }) {
+/** `$1.25 (12.50 LXC)` — lxcText as a figure (`exact`: a statement's LXC, to its every place): the leading figure in ink, the one in brackets muted. */
+export function Lxc({ ulxc, sign = '', exact = false }: { ulxc: number; sign?: '' | '+' | '−'; exact?: boolean }) {
   const money = useMoney()
   const fiat = money(Math.abs(ulxc))
+  const figure = fiat === null || exact ? formatULXC(ulxc) : formatLXCBeside(ulxc)
   // B29.9 — the whole amount, unit and fiat included, is on the figure face: IBM Plex Mono, tabular figures.
   const lxc = (
     <>
       <span className="font-figure">
         {sign}
-        {formatULXC(ulxc).replace(/ LXC$/, '')}
+        {figure.replace(/ LXC$/, '')}
       </span>{' '}
       LXC
     </>

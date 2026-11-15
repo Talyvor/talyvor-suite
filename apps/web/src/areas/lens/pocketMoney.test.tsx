@@ -47,10 +47,10 @@ afterEach(() => {
 describe('<Money ulxc>', () => {
   it('draws dollars large and LXC small beside them, with no-break spaces', async () => {
     draw(0.1, ({ Money }) => <Money ulxc={16_500 * M} size="card" />)
-    await waitFor(() => expect(figures()).toEqual(['$1,650.00 16,500 LXC']))
+    await waitFor(() => expect(figures()).toEqual(['$1,650.00 16,500.00 LXC']))
     const [big, small] = document.querySelector('[data-money]')!.children
     expect(big).toHaveClass('text-pocket-balance')
-    expect(small.textContent).toBe('16,500 LXC')
+    expect(small.textContent).toBe('16,500.00 LXC')
   })
 
   it('writes a debit with the true minus and a credit with its +', async () => {
@@ -61,12 +61,22 @@ describe('<Money ulxc>', () => {
         <Money ulxc={900 * M} />
       </>
     ))
-    await waitFor(() => expect(figures()).toEqual(['−$340.00 −3,400 LXC', '+$90.00 +900 LXC', '$90.00 900 LXC']))
+    await waitFor(() => expect(figures()).toEqual(['−$340.00 −3,400.00 LXC', '+$90.00 +900.00 LXC', '$90.00 900.00 LXC']))
   })
 
   it('writes under a cent as <$0.01 with its exact LXC beside it', async () => {
     draw(0.1, ({ Money }) => <Money ulxc={42} />)
     await waitFor(() => expect(figures()).toEqual(['<$0.01 0.000042 LXC']))
+  })
+
+  it('rounds LXC beside dollars to two places, and a statement’s figure keeps every place (B60.3)', async () => {
+    draw(0.1, ({ Money }) => (
+      <>
+        <Money ulxc={499_200_705} />
+        <Money ulxc={499_200_705} exact />
+      </>
+    ))
+    await waitFor(() => expect(figures()).toEqual(['$49.92 499.20 LXC', '$49.92 499.200705 LXC']))
   })
 
   it('draws LXC alone, large, while the peg is unknown', async () => {
@@ -79,11 +89,11 @@ describe('<Money ulxc>', () => {
   it('draws the person’s chosen pounds or euros first', async () => {
     setFiat('GBP')
     draw(0.1, ({ Money }) => <Money ulxc={1000 * M} />)
-    await waitFor(() => expect(figures()).toEqual(['£64.00 1,000 LXC']))
+    await waitFor(() => expect(figures()).toEqual(['£64.00 1,000.00 LXC']))
     cleanup()
     setFiat('EUR')
     draw(0.1, ({ Money }) => <Money ulxc={1000 * M} />)
-    await waitFor(() => expect(figures()).toEqual(['€80.00 1,000 LXC']))
+    await waitFor(() => expect(figures()).toEqual(['€80.00 1,000.00 LXC']))
   })
 })
 
@@ -121,7 +131,7 @@ describe('one switch', () => {
       </div>
     )
     draw(0.1, page)
-    await waitFor(() => expect(figures()).toEqual(['$1,650.00 16,500 LXC', '$340.00 3,400 LXC', '−$90.00 −900 LXC']))
+    await waitFor(() => expect(figures()).toEqual(['$1,650.00 16,500.00 LXC', '$340.00 3,400.00 LXC', '−$90.00 −900.00 LXC']))
     cleanup()
     vi.restoreAllMocks()
 
@@ -130,7 +140,7 @@ describe('one switch', () => {
     const flipped = await import('./money')
     const pocket = await import('@talyvor/ui/pocket')
     draw(0.1, page, { AppMoney: flipped.AppMoney, Money: pocket.Money, SheetFrame: pocket.SheetFrame })
-    await waitFor(() => expect(figures()).toEqual(['16,500 LXC $1,650.00', '3,400 LXC $340.00', '−900 LXC −$90.00']))
+    await waitFor(() => expect(figures()).toEqual(['16,500.00 LXC $1,650.00', '3,400.00 LXC $340.00', '−900.00 LXC −$90.00']))
   })
 
   it('has no order of its own: <Money> outside the app’s provider refuses to draw', () => {
