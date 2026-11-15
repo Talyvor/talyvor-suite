@@ -434,7 +434,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the BFF half of the same parenthesis — the sentence promises this line says the payment happens at Stripe AFTER the redirect',
   },
-  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:1039': {
+  'apps/web/src/areas/lens/spendWindowCeiling.test.tsx:16|apps/bff/lens.go:1040': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'the first of the TWO independent clamps the page ceiling rests on, quoted verbatim by the sentence that cites it',
@@ -444,7 +444,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'happens at Stripe',
     why: 'the example that paragraph gives of a citation checkable from here — now checked, which is what it asked for',
   },
-  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:1039': {
+  'apps/web/src/upstreamCitations.test.ts:55|apps/bff/lens.go:1040': {
     kind: 'LIVE',
     fragment: 'clampInt(r.URL.Query().Get("limit"), 20, 1, 200)',
     why: 'its second example, pinned for the same reason',
@@ -487,7 +487,7 @@ const PINS: Record<string, Pin> = {
     fragment: 'one configured workspace credential',
     why: 'the "cosmetic, not blocking" note that auth.go still describes the old one-workspace model — the only in-repo runbook pointer that was accurate',
   },
-  'apps/web/src/areas/docs/BFF-GAPS.md:14|apps/bff/lens.go:195': {
+  'apps/web/src/areas/docs/BFF-GAPS.md:14|apps/bff/lens.go:196': {
     kind: 'LIVE',
     fragment: '"/api/docs/spaces"',
     why: 'the Docs proxy mechanics are "same as the existing route"; it cited lens.go:74, which is /api/bonds — three more Docs routes were mounted above it',
