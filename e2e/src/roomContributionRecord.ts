@@ -68,7 +68,7 @@ export function roomContributionRecord(i: number): Scenario {
         ctx.evidence.push({ note: `the owner publishes S at 200 and M at 400 points: ${said(card)}` })
         if (!card.ok) return fail(`publishing the rate card was refused: ${said(card)}`)
 
-        const members = await lens.createUsers(3)
+        const members = await lens.createUsers(3, undefined, { confirm: false })
         for (const [n, u] of members.entries()) {
           const joined = await lens.act(u, 'POST', `${room}/join`, { terms_version: made.value.terms.version })
           if (!joined.ok) return fail(`${u.workspaceID} joining the room was refused: ${said(joined)}`)

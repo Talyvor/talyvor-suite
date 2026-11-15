@@ -2,6 +2,7 @@
 // one's ledger back, and ask the judge. Every call a synthetic user makes uses that user's own token.
 
 import { randomUUID } from 'node:crypto'
+import { confirmAll } from './confirmIdentity.ts'
 import type { Recorder, Tag } from './coverage.ts'
 import type { CatalogModel } from './oracles.ts'
 import type { Plan } from './pricing.ts'
@@ -1135,8 +1136,12 @@ export class LensClient {
     return Number((JSON.parse(raw) as { reset?: number }).reset ?? 0)
   }
 
-  /** Creates `count` synthetic workspaces, each with test credits and a token; B35.7 — on `plan` when one is named. */
-  async createUsers(count: number, plan?: Plan): Promise<SyntheticUser[]> {
+  /**
+   * Creates `count` synthetic workspaces, each with test credits and a token; B35.7 — on `plan` when one is named. B61.51 —
+   * each then confirms who it is (confirmIdentity.ts) unless `confirm` is false, as the verification scenarios' own users
+   * start: one that cannot is named in the run's incidents, and is still returned.
+   */
+  async createUsers(count: number, plan?: Plan, { confirm = true }: { confirm?: boolean } = {}): Promise<SyntheticUser[]> {
     const body = (await this.call('POST', '/v1/synthetic/workspaces', { [SYNTHETIC_KEY_HEADER]: this.key },
       plan === undefined ? { count } : { count, plan })) as {
       plan?: string
@@ -1145,7 +1150,13 @@ export class LensClient {
     const list = body.workspaces ?? []
     if (list.length !== count) throw new Error(`asked Lens for ${count} synthetic users, got ${list.length}`)
     if (plan !== undefined && body.plan !== plan) throw new Error(`asked Lens for ${count} synthetic users on ${plan}, and it made them on ${body.plan ?? 'no plan it names'}`)
-    return list.map((w, index) => ({ index, workspaceID: w.workspace_id, token: w.token, expiresAt: w.expires_at, plan: plan ?? 'free' }))
+    const users: SyntheticUser[] = list.map((w, index) => ({ index, workspaceID: w.workspace_id, token: w.token, expiresAt: w.expires_at, plan: plan ?? 'free' }))
+    if (confirm) {
+      for (const f of (await confirmAll(this, users)).failed) {
+        this.pace.incidents.push(`${new Date().toISOString()} ${this.tag.scenario}: synthetic user ${f.user.workspaceID} could not confirm who it is: ${f.why}`)
+      }
+    }
+    return users
   }
 
   async catalog(user: SyntheticUser): Promise<CatalogModel[]> {

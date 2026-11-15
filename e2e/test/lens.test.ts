@@ -91,7 +91,7 @@ describe("Lens's synthetic limit (B17.201)", () => {
     const { port } = server.address() as { port: number }
     const incidents: string[] = []
     const client = new LensClient(`http://127.0.0.1:${port}`, 'key', undefined, undefined, undefined, '', '', { sent: [], incidents })
-    expect(await client.createUsers(1)).toMatchObject([{ workspaceID: 'ws_1' }])
+    expect(await client.createUsers(1, undefined, { confirm: false })).toMatchObject([{ workspaceID: 'ws_1' }])
     expect(asked).toBe(3)
     expect(incidents).toHaveLength(2)
     expect(incidents[1]).toMatch(/POST \/v1\/synthetic\/workspaces met Lens's synthetic limit \(at most 10 synthetic calls a minute\); waited 1s and sent it again \(2 of 3\)/)

@@ -41,7 +41,7 @@ export function verificationLevels(): Scenario {
       'each a Test check with its evidence reference and the live level still L0; the record holds both checks; payments_out needs L2 and b2b_credit L3',
     run: async (ctx) => {
       const { lens } = ctx.env
-      const [owner] = await lens.createUsers(1)
+      const [owner] = await lens.createUsers(1, undefined, { confirm: false })
       const post = async (kind: string, body: object, note: string): Promise<Answered<CheckAnswer>> => {
         const got = await lens.act<CheckAnswer>(owner, 'POST', `${PATH}/${kind}`, body)
         ctx.evidence.push({ note, answer: said(got) })

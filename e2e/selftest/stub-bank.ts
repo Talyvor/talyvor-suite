@@ -914,6 +914,11 @@ export class Bank {
     return this.trustDesk.linked(a, b)
   }
 
+  /** B61.51 — the level a workspace's checks reach, "L0" to "L3" (stub-verification.ts). */
+  verificationLevel(ws: string): string {
+    return this.verification.levels(ws).level
+  }
+
   /** B40.23 — whether a workspace's owner passed the identity check (L2), as Lens economy.IdentityChecked reads a synthetic one. */
   identityChecked(ws: string): boolean {
     return this.verification.levels(ws).level >= 'L2'
