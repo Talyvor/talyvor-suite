@@ -1,5 +1,5 @@
-import { act, fireEvent, render as renderBare, screen } from '@testing-library/react'
-import { useState } from 'react'
+import { act, fireEvent, render as renderBare, screen, waitFor } from '@testing-library/react'
+import { startTransition, useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   Bar,
@@ -501,6 +501,33 @@ describe('Snack and Toast', () => {
     expect(screen.getByRole('status')).toHaveTextContent('INV-000002 is void')
     fireEvent.click(screen.getByRole('button', { name: 'Agents' }))
     expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  // B61.82 — React Router 7 makes every move a transition. A save shows its snack and moves, after an await, in one tick:
+  // the snack belongs to the page it lands on, not to the page it was pressed on in the moment before the move lands.
+  it('a snack shown just before a move made as a transition shows on the page the move lands on', async () => {
+    function SavesThenMoves() {
+      const [view, setView] = useState('/agents/agt_1/rules')
+      const save = async () => {
+        await Promise.resolve()
+        showSnack({ title: 'Research’s rules are saved' })
+        startTransition(() => setView('/agents/agt_1'))
+      }
+      return (
+        <>
+          <span data-testid="view">{view}</span>
+          <Button variant="secondary" onClick={() => void save()}>
+            Save rules
+          </Button>
+          <SnackHost view={view} />
+        </>
+      )
+    }
+    render(<SavesThenMoves />)
+    fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
+    await waitFor(() => expect(screen.getByTestId('view')).toHaveTextContent('/agents/agt_1'))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.getByRole('status')).toHaveTextContent('Research’s rules are saved')
   })
 
   it('a toast says its short message and goes', () => {
