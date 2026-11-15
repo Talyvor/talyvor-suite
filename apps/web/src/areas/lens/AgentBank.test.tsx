@@ -165,7 +165,8 @@ describe('Agent Bank', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: 'New agent' })[0])
     const dialog = await screen.findByRole('dialog', { name: 'New agent' })
-    fireEvent.change(await within(dialog).findByLabelText('Name'), { target: { value: 'First' } })
+    fireEvent.click(await within(dialog).findByRole('button', { name: /^Make your own/ }))
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'First' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
     await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_1'))
     await waitFor(() => expect(screen.getByTestId('agent-open')).toHaveTextContent('First'))
