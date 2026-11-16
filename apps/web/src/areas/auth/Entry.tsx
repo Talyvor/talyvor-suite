@@ -113,17 +113,18 @@ export function EntryFrame({ children }: { children: React.ReactNode }) {
       {/* `main`, NOT `div`: the page's words are in a landmark region (LandmarkCoverage.test.tsx measures it). */}
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-gutter py-16 wide:px-10">
         <AuthCard>{children}</AuthCard>
-        <CompanyLine className="mt-6 w-full max-w-md" />
+        <CompanyLine onBackground className="mt-6 w-full max-w-md" />
       </main>
     </div>
   )
 }
 
 /** The card's last line on both pages. Linked on every entry surface: someone deciding whether to create an account
- *  must be able to read what the service does with their data BEFORE they do. Both routes are public for that reason. */
-export function PrivacyTerms() {
+ *  must be able to read what the service does with their data BEFORE they do. Both routes are public for that reason.
+ *  B61.98 — sign-up shows it straight on the background, so there it is pk-on-bg. */
+export function PrivacyTerms({ onBackground = false }: { onBackground?: boolean }) {
   return (
-    <p className="text-caption font-normal text-ink-3">
+    <p className={cn('text-caption font-normal', onBackground ? 'pk-on-bg' : 'text-ink-3')}>
       <a href="/privacy" className={footLink}>Privacy</a>
       {' · '}
       <a href="/terms" className={footLink}>Terms</a>
@@ -133,17 +134,18 @@ export function PrivacyTerms() {
 
 /** The one line that says whether a stranger may actually start, DERIVED from the gate.
  *  `unknown` renders nothing: a promise we cannot verify is not printed. */
-export function AccessLine({ state }: { state: SignupState }) {
+export function AccessLine({ state, onBackground = false }: { state: SignupState; onBackground?: boolean }) {
+  const tone = cn('text-body', onBackground ? 'pk-on-bg' : 'text-ink-3')
   if (state === 'open') {
     return (
-      <p data-access-line className="text-body text-ink-3">
+      <p data-access-line className={tone}>
         {ACCESS_LINE.open}
       </p>
     )
   }
   if (state === 'closed') {
     return (
-      <p data-access-line className="text-body text-ink-3">
+      <p data-access-line className={tone}>
         {ACCESS_LINE.closed} If you’ve already been added, continue above. Otherwise join the waitlist below.
       </p>
     )

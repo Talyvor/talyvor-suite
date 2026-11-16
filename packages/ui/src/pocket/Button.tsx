@@ -13,6 +13,8 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   icon?: React.ReactNode
   /** Disables the button and says why, in words beside it that a screen reader hears as its description. */
   disabledReason?: string
+  /** B61.98 — the reason's own class: pk-on-bg where the button sits straight on the page's background. */
+  reasonClassName?: string
   /** Render as the single child element (Radix Slot), such as a router link. */
   asChild?: boolean
 }
@@ -34,7 +36,7 @@ const sizes: Record<ButtonSize, string> = {
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { variant = 'primary', size = 'md', icon, disabledReason, asChild = false, className, type, disabled, children, ...props },
+  { variant = 'primary', size = 'md', icon, disabledReason, reasonClassName, asChild = false, className, type, disabled, children, ...props },
   ref,
 ) {
   const reasonId = useId()
@@ -73,7 +75,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   return (
     <span className="inline-grid justify-items-start gap-1">
       {button}
-      <span id={reasonId} className="text-caption font-normal text-ink-3">
+      <span id={reasonId} className={cn('text-caption font-normal text-ink-3', reasonClassName)}>
         {disabledReason}
       </span>
     </span>

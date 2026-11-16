@@ -173,7 +173,7 @@ export function PayScreen() {
     <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-4 pb-10">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid max-w-2xl gap-1">
-          <p className="text-reading text-ink-2" data-testid="pay-lead">
+          <p className="text-reading pk-on-bg" data-testid="pay-lead">
             {business
               ? 'Save the people and companies your company pays, then send money from your company’s account or one of your team’s agents’ accounts in pounds, euros or dollars.'
               : 'Save the people and companies you pay, then send money from your account or one of your agents’ accounts in pounds, euros or dollars.'}

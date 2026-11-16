@@ -145,7 +145,7 @@ export function ActivityScreen() {
   return (
     <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid max-w-3xl gap-5 px-gutter py-4 wide:py-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-body text-ink-2">Every payment in and out of your accounts and your agents’, newest first.</p>
+        <p className="text-body pk-on-bg">Every payment in and out of your accounts and your agents’, newest first.</p>
         <WorkspaceLabel capability={CURRENCY_ACCOUNT} />
       </div>
       <div className="grid gap-3 wide:grid-cols-4">
