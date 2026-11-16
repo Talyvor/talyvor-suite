@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../App'
 import { pressEverything } from '../test/pressEverything'
 
-// B61.38 — Help is a chat in the top bar of every signed-in page and on Settings, Help: a question the help pages
+// B61.38 — Help is a chat on every signed-in page (B57.175: at its bottom right, as Pocket Live draws it) and on Settings, Help: a question the help pages
 // answer gets its answer and its page, one they do not gets "I don't know that" and "Send to our team", which files
 // the chat so far and opens the person's own email to Talyvor with the question; the day's limit is said in words.
 
@@ -64,18 +64,39 @@ afterEach(() => {
 })
 
 describe('the Help chat (B61.38)', () => {
+  it('B57.175: Help floats at the bottom right, greets, and asks one of its three questions with a press', async () => {
+    const { sent } = mockBff(() => ({ reply: { by: 'ai', text: 'A payment outside its rules waits for your yes.', at } }))
+    open('/approvals')
+    const help = await screen.findByRole('button', { name: 'Help' })
+    // Pocket Live: not in the top bar, but at the bottom right of the page.
+    expect(help.closest('header')).toBeNull()
+    expect(help.className).toContain('fixed')
+    fireEvent.click(help)
+    const panel = within(await screen.findByTestId('help-chat'))
+    expect(within(panel.getByTestId('help-hello')).getByText('Hi. Ask me how anything in Talyvor works.')).toBeTruthy()
+    // Our team gets the chat only once it has a question in it, as the BFF requires.
+    expect(panel.getByRole('button', { name: 'Send it to our team' })).toHaveProperty('disabled', true)
+    for (const q of ['How do approvals work?', 'How do I pause an agent?', 'How do I add money?']) expect(panel.getByRole('button', { name: q })).toBeTruthy()
+
+    fireEvent.click(panel.getByRole('button', { name: 'How do approvals work?' }))
+    expect(await panel.findByText('A payment outside its rules waits for your yes.')).toBeTruthy()
+    expect(sent.find((s) => s.path === '/api/help/ask')?.body).toEqual({ question: 'How do approvals work?', page: '/approvals' })
+    expect(panel.queryByRole('button', { name: 'How do I add money?' })).toBeNull()
+    expect(panel.getByRole('button', { name: 'Send it to our team' })).toHaveProperty('disabled', false)
+  })
+
+
   it('answers from the help pages with the page to open, and says who wrote each line', async () => {
     const { sent } = mockBff(() => ({ reply: { by: 'ai', text: 'Open Agents and press Create agent.', page: '/agents', at } }))
     open('/approvals')
     const panel = await ask('How do I make an agent?')
 
     expect(await panel.findByText('Open Agents and press Create agent.')).toBeTruthy()
-    expect(panel.getByText('Ask us anything about Talyvor.')).toBeTruthy()
     expect(panel.getByText('Answers are written by AI.')).toBeTruthy()
     expect(within(panel.getByTestId('help-you')).getByText('You')).toBeTruthy()
     expect(within(panel.getByTestId('help-ai')).getByText('Talyvor AI')).toBeTruthy()
     expect(panel.getByRole('link', { name: 'Open Agents' }).getAttribute('href')).toBe('/agents')
-    expect(panel.queryByRole('button', { name: 'Send to our team' })).toBeNull()
+    expect(panel.queryByText('We answer by email.')).toBeNull()
     expect(sent.find((s) => s.path === '/api/help/ask')?.body).toEqual({ question: 'How do I make an agent?', page: '/approvals' })
   })
 
@@ -89,7 +110,7 @@ describe('the Help chat (B61.38)', () => {
 
     expect(await panel.findByText(/^I don't know that\./)).toBeTruthy()
     expect(panel.getByText('We answer by email.')).toBeTruthy()
-    fireEvent.click(panel.getByRole('button', { name: 'Send to our team' }))
+    fireEvent.click(panel.getByRole('button', { name: 'Send it to our team' }))
 
     await waitFor(() => expect(opened).toHaveBeenCalled())
     expect(sent.filter((s) => s.path === '/api/help/team' && s.method === 'POST')).toHaveLength(1)
@@ -114,7 +135,7 @@ describe('the Help chat (B61.38)', () => {
     expect((await panel.findByRole('alert')).textContent).toBe(
       'You have asked 20 questions today, the most for one day. Ask again tomorrow, or send this to our team.',
     )
-    expect(panel.getByRole('button', { name: 'Send to our team' })).toBeTruthy()
+    expect(panel.getByRole('button', { name: 'Send it to our team' })).toBeTruthy()
     expect(panel.getByText('One more?')).toBeTruthy()
   })
 

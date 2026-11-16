@@ -17,8 +17,9 @@ export interface LayerProps {
 
 // pocket.css .layer > .scrim, .scrim.top, .scrim.corner and .scrim.bottom: a centred dialog is a bottom sheet below 840.
 const places: Record<LayerPosition, string> = {
-  centre: 'items-end wide:items-center',
-  top: 'items-start px-4 pt-24',
+  centre: 'items-end justify-center wide:items-center',
+  top: 'items-start justify-center px-4 pt-24',
+  // B57.175 — the corner is the bottom right, so it does not also carry justify-center (which Tailwind's own order lets win).
   corner: 'items-end justify-end px-4 pb-20 wide:pr-6',
 }
 
@@ -59,7 +60,7 @@ export function Layer({ label, labelledBy, onClose, position = 'centre', childre
     }
   }
   return createPortal(
-    <div ref={root} data-design="pocket" data-layer="" className={cn('fixed inset-0 z-40 flex justify-center', places[position])}>
+    <div ref={root} data-design="pocket" data-layer="" className={cn('fixed inset-0 z-40 flex', places[position])}>
       {/* The scrim: a press on it closes, as Esc does; a keyboard has Esc and the close x, so it is out of the tab order. */}
       <button type="button" data-scrim="" tabIndex={-1} aria-hidden="true" className="absolute inset-0 bg-scrim" onClick={onClose} />
       <div

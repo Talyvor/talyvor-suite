@@ -265,7 +265,7 @@
   "src/ClaimsAudit.test.tsx": 38,
   "src/CommandPalette.test.tsx": 14,
   "src/CompanyLine.test.tsx": 13,
-  "src/components/HelpChat.test.tsx": 8,
+  "src/components/HelpChat.test.tsx": 9,
   "src/components/Waitlist.test.tsx": 3,
   "src/ConsoleDeepHeading.test.tsx": 11,
   "src/ConsoleHeading.test.tsx": 71,
