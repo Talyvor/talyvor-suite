@@ -83,6 +83,19 @@ CREATE TABLE IF NOT EXISTS connect_agent_ceilings (
     updated_at           timestamptz NOT NULL DEFAULT now()
 );
 
+-- B61.19: the ceiling is held in the account's currency, each limit in its minor units. One set before, in µLXC, is moved
+-- once to dollars at Lens's peg ($0.10 a LXC, so 100,000 µLXC a cent), whole cents kept and never below one, as Lens moved
+-- the agents' rules (lens migration 0393). The µLXC columns are left empty from then on.
+ALTER TABLE connect_agent_ceilings ADD COLUMN IF NOT EXISTS currency text CHECK (currency IN ('GBP', 'EUR', 'USD', 'USDC'));
+ALTER TABLE connect_agent_ceilings ADD COLUMN IF NOT EXISTS max_per_payment_minor bigint CHECK (max_per_payment_minor > 0);
+ALTER TABLE connect_agent_ceilings ADD COLUMN IF NOT EXISTS daily_limit_minor bigint CHECK (daily_limit_minor > 0);
+ALTER TABLE connect_agent_ceilings ADD COLUMN IF NOT EXISTS monthly_limit_minor bigint CHECK (monthly_limit_minor > 0);
+ALTER TABLE connect_agent_ceilings ALTER COLUMN max_per_request_ulxc DROP NOT NULL, ALTER COLUMN daily_limit_ulxc DROP NOT NULL,
+    ALTER COLUMN monthly_limit_ulxc DROP NOT NULL;
+UPDATE connect_agent_ceilings SET currency = 'USD', max_per_payment_minor = GREATEST(max_per_request_ulxc / 100000, 1),
+    daily_limit_minor = GREATEST(daily_limit_ulxc / 100000, 1), monthly_limit_minor = GREATEST(monthly_limit_ulxc / 100000, 1)
+    WHERE currency IS NULL AND max_per_request_ulxc IS NOT NULL;
+
 -- B54.21: a connection's ending Lens has not yet recorded (connect_revocations.go): written with the ending, told to Lens's
 -- POST /v1/auth/connect-revocations until it answers, then deleted. client_id '' is every assistant of the person's.
 CREATE TABLE IF NOT EXISTS connect_revocations_owed (

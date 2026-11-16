@@ -817,7 +817,7 @@ func (a *app) handleAgentPay(w http.ResponseWriter, r *http.Request, t tenant) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentPayBody: none
+	// UPSTREAM-BINDS-ONLY lensAgentPayBody: amount_minor, currency, funding
 	body, _ := json.Marshal(in)
 	a.agentBankRelay(w, r, t, http.MethodPost, suffix, body)
 }

@@ -6,9 +6,9 @@ import { cn, inlineLink } from '@talyvor/ui'
 
 import { ApiError, getJSON, readable } from '../../lib/api'
 import { PREPARED_KEY } from './AgentBank'
-import { type PaymentRequest, agentBankApi, dollarsText, parseDollars } from './agentBankApi'
+import { type PaymentRequest, agentBankApi } from './agentBankApi'
 import { formatWhen } from './format'
-import { pegQuery, useMoney } from './money'
+import { CURRENCY_WORDS, parseRuleAmount, ruleAmountText, useAccountCurrency } from './rulesCurrency'
 
 // B40.8 — Settings › Connect your AI: the address of Talyvor's MCP server (B40.7), how to add it to each assistant,
 // and the assistants this person has connected (B40.6 grants), each with its last use, what it did (B52.3) and a
@@ -19,6 +19,7 @@ import { pegQuery, useMoney } from './money'
 // B52.9 — sign out everywhere, which ends every assistant with every other sign-in. Asks once first.
 // B52.6 — New agents from an assistant: the most an assistant may give a new agent it creates.
 // B57.157 — its three limits drawn as rows of the agent's rules sheet (w-rules), every word B52.6 showed kept.
+// B61.19 — and typed and kept in the account's own currency, as an agent's rules are.
 
 /** One tool call, as the BFF's audit trail keeps it: the arguments by SHA-256 only. */
 interface Call {
@@ -434,14 +435,17 @@ function HowAPaymentWorks() {
   )
 }
 
-/** B52.6 — the most an assistant may give a new agent (apps/bff/mcp_agents.go connectCeiling), in µLXC. */
-type Ceiling = Record<(typeof CEILING_FIELDS)[number][0], number>
+/**
+ * B52.6 — the most an assistant may give a new agent (apps/bff/mcp_agents.go connectCeiling). B61.19 — in the account's
+ * own currency, each limit in its minor units.
+ */
+type Ceiling = { currency: string } & Record<(typeof CEILING_FIELDS)[number][0], number>
 
 const CEILING_PATH = '/api/connect/agent-ceiling'
 const CEILING_FIELDS = [
-  ['max_per_request_ulxc', 'One payment'],
-  ['daily_limit_ulxc', 'A day'],
-  ['monthly_limit_ulxc', 'A month'],
+  ['max_per_payment_minor', 'One payment'],
+  ['daily_limit_minor', 'A day'],
+  ['monthly_limit_minor', 'A month'],
 ] as const
 
 async function saveCeiling(c: Ceiling): Promise<Ceiling> {
@@ -458,8 +462,8 @@ async function saveCeiling(c: Ceiling): Promise<Ceiling> {
 function NewAgents() {
   const heading = useId()
   const read = useQuery({ queryKey: ['agent-ceiling'], queryFn: () => getJSON<Partial<Ceiling>>(CEILING_PATH) })
-  // B61.14 — the limits are typed in dollars, at Lens's peg, until they carry their own currency (B61.12).
-  const peg = useQuery(pegQuery)
+  // B61.19 — typed in the account's own currency, as an agent's rules are (B61.87).
+  const currency = useAccountCurrency()
   return (
     <Card tone="white" role="region" aria-labelledby={heading} className="grid min-w-0 gap-3">
       <h2 id={heading} className="font-display text-reading font-bold text-ink">
@@ -468,32 +472,33 @@ function NewAgents() {
       <p className="text-body text-ink-3">
         An assistant you allow to create agents gives each one limits no higher than these. A new agent starts with no money.
       </p>
-      {read.isError || peg.isError ? (
+      {read.isError ? (
         <p className="text-body text-ink-2">The limit for new agents could not be read. Try again shortly.</p>
-      ) : read.isPending || peg.data?.usd_per_lxc === undefined ? (
+      ) : read.isPending || currency === null ? (
         <p className="text-body text-ink-3">Reading the limit for new agents…</p>
       ) : (
-        <CeilingForm key={read.dataUpdatedAt} current={read.data.daily_limit_ulxc ? (read.data as Ceiling) : null} peg={peg.data.usd_per_lxc} />
+        <CeilingForm key={read.dataUpdatedAt} current={read.data.currency ? (read.data as Ceiling) : null} currency={currency} />
       )}
     </Card>
   )
 }
 
-function CeilingForm({ current, peg }: { current: Ceiling | null; peg: number }) {
+function CeilingForm({ current, currency }: { current: Ceiling | null; currency: string }) {
   const qc = useQueryClient()
+  // A limit kept in another currency is shown as it is kept, and typed again in the account's.
   const [text, setText] = useState(
-    () => Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, current ? dollarsText(current[k], peg) : ''])) as Record<keyof Ceiling, string>,
+    () =>
+      Object.fromEntries(
+        CEILING_FIELDS.map(([k]) => [k, current?.currency === currency ? ruleAmountText(current[k], currency) : '']),
+      ) as Record<(typeof CEILING_FIELDS)[number][0], string>,
   )
-  const micros = Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, parseDollars(text[k], peg) || null])) as Record<keyof Ceiling, number | null>
-  const ready = CEILING_FIELDS.every(([k]) => micros[k] !== null)
-  const money = useMoney()
-  // The amount typed, in the person's currency, under its name, as the rules sheet shows it; nothing while no rate backs it.
-  const cashLine = (v: number | null) => {
-    const cash = v !== null && v > 0 ? money(v) : null
-    return cash ? <div className="font-figure text-body text-ink-3">{cash}</div> : null
-  }
+  const minors = Object.fromEntries(CEILING_FIELDS.map(([k]) => [k, parseRuleAmount(text[k], currency) || null])) as Record<
+    (typeof CEILING_FIELDS)[number][0],
+    number | null
+  >
+  const ready = CEILING_FIELDS.every(([k]) => minors[k] !== null)
   const save = useMutation({
-    mutationFn: () => saveCeiling(micros as Ceiling),
+    mutationFn: () => saveCeiling({ currency, ...minors } as Ceiling),
     onSettled: () => qc.invalidateQueries({ queryKey: ['agent-ceiling'] }),
   })
   return (
@@ -507,9 +512,9 @@ function CeilingForm({ current, peg }: { current: Ceiling | null; peg: number })
       <p className="text-body text-ink" data-testid="agent-ceiling">
         {current ? (
           <>
-            An agent an assistant creates may spend at most <Money ulxc={current.max_per_request_ulxc} /> a payment,{' '}
-            <Money ulxc={current.daily_limit_ulxc} /> a day and <Money ulxc={current.monthly_limit_ulxc} /> a month. Higher limits are
-            yours to set, on Agent Wallets.
+            An agent an assistant creates may spend at most <Money minor={current.max_per_payment_minor} currency={current.currency} /> a payment,{' '}
+            <Money minor={current.daily_limit_minor} currency={current.currency} /> a day and{' '}
+            <Money minor={current.monthly_limit_minor} currency={current.currency} /> a month. Higher limits are yours to set, on Agent Wallets.
           </>
         ) : (
           'Assistants cannot create agents until you say how much a new one may spend.'
@@ -521,13 +526,17 @@ function CeilingForm({ current, peg }: { current: Ceiling | null; peg: number })
           <div key={k} data-testid="ceiling-row" className="flex flex-wrap items-center gap-3 border-t border-line py-3 first:border-t-0">
             <div className="min-w-0 basis-full sm:basis-2/5">
               <div className="font-semibold text-ink">{label}</div>
-              {cashLine(micros[k])}
+              {minors[k] ? (
+                <div className="font-figure text-body text-ink-3">
+                  <Money minor={minors[k]} currency={currency} />
+                </div>
+              ) : null}
             </div>
             <div className="min-w-0 flex-1">
               <Input
-                aria-label={`${label}, in dollars`}
+                aria-label={`${label}, in ${CURRENCY_WORDS[currency] ?? currency}`}
                 inputMode="decimal"
-                unit="USD"
+                unit={currency}
                 value={text[k]}
                 onChange={(e) => setText({ ...text, [k]: e.target.value })}
               />
