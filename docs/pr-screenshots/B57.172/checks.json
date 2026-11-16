@@ -1,0 +1,5 @@
+[
+  { "route": "/agents", "steps": ["New agent"] },
+  { "route": "/agents", "steps": ["New agent", "Travel"] },
+  { "route": "/agents", "steps": ["New agent", "Make your own", "Picture 3", "More rules"] }
+]

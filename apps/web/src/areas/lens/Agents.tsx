@@ -27,6 +27,9 @@ import { type Agent, type AgentRulesSave, type WorkspacePlan, AgentBankError, PL
 // B61.13 — New agent starts with one of Talyvor's six, named by what it does, or the owner's own; either way the owner
 // types the name, and sets the four rules the approved rules screen names, in dollars at the peg. Nothing typed, every
 // payment waits for the owner's yes. The fixed rule sets are gone from it; the agent's Rules page keeps every rule.
+// B57.172 — the two ways in Pocket: every start a row button (the launch pack's: cloud, 16 round, a picture, two lines
+// and a chevron), one under another at every width; the start picked heads the form in the same cloud row, and the
+// form's Cancel and Create agent stay at the dialog's foot while the rules above them scroll.
 
 /** "Research", "Research and Sales", "Research, Sales and Ops". */
 function namesLine(names: string[]): string {
@@ -85,17 +88,17 @@ function LimitReached({ at, names, onClose }: { at: AtLimit; names: string[]; on
 }
 
 const pick = cn('inline-flex h-8.5 items-center gap-2 whitespace-nowrap rounded-pill bg-cloud px-3.5 text-body font-semibold text-ink aria-pressed:bg-page aria-pressed:shadow-pick', pocketFocusRing)
-// A card the whole of which presses: its button holds only the name, one line, and stretches over the card.
-const choice = 'relative flex w-full items-center gap-3 rounded-card bg-cloud p-3 text-left transition-colors duration-200 hover:bg-cloud-2'
+// A row button the whole of which presses: its button holds only the name, one line, and stretches over the row.
+const choice = 'relative flex w-full items-center gap-3 rounded-inset bg-cloud p-2.5 pr-3.5 text-left transition-colors duration-fast hover:bg-cloud-2'
 const choiceButton = cn('whitespace-nowrap font-semibold text-ink after:absolute after:inset-0 after:rounded-card', pocketFocusRing)
 
 /** One choice of the first step: its picture, its name (the button) and its line. */
 function StartChoice({ picture, name, line, onPick }: { picture: React.ReactNode; name: string; line: string; onPick: () => void }) {
   const id = useId()
   return (
-    <div className={choice}>
+    <div className={choice} data-testid="new-agent-way">
       {picture}
-      <span className="grid min-w-0 gap-0.5">
+      <span className="grid min-w-0 flex-1 gap-0.5">
         <button type="button" className={cn(choiceButton, 'justify-self-start')} aria-describedby={id} onClick={onPick}>
           {name}
         </button>
@@ -103,6 +106,7 @@ function StartChoice({ picture, name, line, onPick }: { picture: React.ReactNode
           {line}
         </span>
       </span>
+      <Icon name="chev" size={16} className="shrink-0 text-ink-3" />
     </div>
   )
 }
@@ -160,22 +164,25 @@ export function newAgentRules(minor: Record<RuleKey, number>, currency: string, 
   return rules
 }
 
+/** Make your own's picture: the plus, in a 48 circle beside the six portraits. */
+const ownPicture = (
+  <span className="grid size-12 shrink-0 place-items-center rounded-pill bg-page text-ink-2 shadow-edge" aria-hidden="true">
+    <Icon name="plus" size={20} />
+  </span>
+)
+
 /** The first step: one of Talyvor's six, named by what it does, or the owner's own. */
 function StartWith({ onPick, onClose }: { onPick: (start: AgentKindChoice | 'own') => void; onClose: () => void }) {
   return (
     <div className="grid gap-3.5">
       <h3 className="text-body font-semibold text-ink-2">Start with one of ours</h3>
-      <div className="grid gap-2.5 wide:grid-cols-2" data-testid="new-agent-kinds">
+      <div className="grid gap-2" data-testid="new-agent-kinds">
         {AGENT_KINDS.map((k) => (
           <StartChoice key={k.kind} picture={<Portrait helper={k.picture} className="size-12" />} name={k.kind} line={k.line} onPick={() => onPick(k)} />
         ))}
       </div>
       <StartChoice
-        picture={
-          <span className="grid size-12 shrink-0 place-items-center rounded-pill bg-page text-ink-2 shadow-edge" aria-hidden="true">
-            <Icon name="plus" size={20} />
-          </span>
-        }
+        picture={ownPicture}
         name="Make your own"
         line="Name it, choose its picture and what it does, and set its rules."
         onPick={() => onPick('own')}
@@ -290,7 +297,7 @@ function Details({
         if (why === undefined && rules && !create.isPending) create.mutate(rules)
       }}
     >
-      <div className="flex items-center gap-3" data-testid="new-agent-start">
+      <div className="flex items-center gap-3 rounded-inset bg-cloud p-2.5 pr-3" data-testid="new-agent-start">
         {ours ? (
           <>
             <Portrait helper={ours.picture} className="size-12" />
@@ -300,7 +307,10 @@ function Details({
             </span>
           </>
         ) : (
-          <span className="min-w-0 flex-1 font-semibold text-ink">Make your own</span>
+          <>
+            {ownPicture}
+            <span className="min-w-0 flex-1 font-semibold text-ink">Make your own</span>
+          </>
         )}
         <Button variant="secondary" size="sm" onClick={onBack}>
           Change
@@ -404,7 +414,7 @@ function Details({
           {refusalText(create.error)}
         </p>
       ) : null}
-      <div className="flex flex-wrap justify-end gap-2.5">
+      <div className="sticky -bottom-8.5 -mx-6 -mb-8.5 flex flex-wrap justify-end gap-2.5 bg-page px-6 pb-8.5 pt-3.5 wide:-bottom-6 wide:-mb-6 wide:pb-6" data-testid="new-agent-actions">
         <Button variant="secondary" onClick={onClose}>
           Cancel
         </Button>
@@ -428,7 +438,7 @@ export function NewAgent({ open, onClose, names }: { open: boolean; onClose: () 
   const full = (p: WorkspacePlan) => p.agents >= 0 && p.agents_used >= p.agents
   const at: AtLimit | null = refused ?? (plan.data && full(plan.data) ? { plan: plan.data.plan, limit: plan.data.agents } : null)
   return (
-    <Dialog open={open} onClose={close} title={at ? `${planName(at.plan)} has room for ${agentsWord(at.limit)}` : 'New agent'} className="max-h-screen overflow-y-auto">
+    <Dialog open={open} onClose={close} title={at ? `${planName(at.plan)} has room for ${agentsWord(at.limit)}` : 'New agent'} className="max-h-screen scroll-pb-28 overflow-y-auto">
       {plan.isPending && !refused ? (
         <p>Reading your plan…</p>
       ) : currency === null && !refused ? (
