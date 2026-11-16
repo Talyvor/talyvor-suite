@@ -144,6 +144,30 @@ func (e doorRefusal) Error() string {
 	return fmt.Sprintf("lens refused %d: %v", e.status, e.body["reason"])
 }
 
+// doorDown is Lens not answering the door: unreachable (status 0) or a 5xx. It is no refusal, so it spends no check
+// (B61.112).
+type doorDown struct {
+	path   string
+	status int
+	reason any
+	cause  error
+}
+
+func (e doorDown) Error() string {
+	if e.status == 0 {
+		return fmt.Sprintf("lens %s unreachable: %v", e.path, e.cause)
+	}
+	return fmt.Sprintf("lens %s answered %d", e.path, e.status)
+}
+
+// passcodeUnavailable: Lens cannot set or check a passcode just now (LENS_PASSCODE_SECRET unset). The redeem's only
+// 503 is that one, in Lens's generic 5xx words; the start's says so by its reason (talyvor-lens B61.113).
+func (e doorDown) passcodeUnavailable() bool {
+	return e.status == http.StatusServiceUnavailable && (e.reason == "passcode_unavailable" || e.path == "/v1/auth/phone/person")
+}
+
+const passcodeUnavailableSentence = "We can't set passcodes just now. Try again in a few minutes."
+
 // lensDoor posts body to one of Lens's sign-in routes on the provision secret and decodes a 2xx into out.
 func (a *app) lensDoor(ctx context.Context, path string, body, out any) error {
 	if a.cfg.provisionSecret == "" {
@@ -162,7 +186,7 @@ func (a *app) lensDoor(ctx context.Context, path string, body, out any) error {
 	req.Header.Set(provisionSecretHeader, a.cfg.provisionSecret) // server-side only, never emitted
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return err
+		return doorDown{path: path, cause: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	got, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
@@ -177,6 +201,10 @@ func (a *app) lensDoor(ctx context.Context, path string, body, out any) error {
 		if json.Unmarshal(got, &said) == nil && said["reason"] != nil {
 			return doorRefusal{status: resp.StatusCode, body: said, retryAfter: resp.Header.Get("Retry-After")}
 		}
+	}
+	if resp.StatusCode >= 500 {
+		_ = json.Unmarshal(got, &said)
+		return doorDown{path: path, status: resp.StatusCode, reason: said["reason"]}
 	}
 	return fmt.Errorf("lens %s answered %d", path, resp.StatusCode)
 }
@@ -193,6 +221,12 @@ func writeDoorFailure(w http.ResponseWriter, what string, err error) {
 			out["retry_at"] = at
 		}
 		writeJSON(w, refused.status, out)
+		return
+	}
+	var down doorDown
+	if errors.As(err, &down) && down.passcodeUnavailable() {
+		log.Printf("bff: %s: %s", what, redactSecret(err.Error()))
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": passcodeUnavailableSentence, "reason": "passcode_unavailable"})
 		return
 	}
 	log.Printf("bff: %s: %s", what, redactSecret(err.Error()))
@@ -308,7 +342,8 @@ func (a *app) handlePhoneFinish(w http.ResponseWriter, r *http.Request) {
 }
 
 // redeem uses check's ticket at Lens for identity ("" for the number's own person, or a new one) with passcode. A
-// refusal that leaves Lens's ticket unused (a wrong passcode, a wait) keeps the check; any other end spends it.
+// refusal that leaves Lens's ticket unused (a wrong passcode, a wait) keeps the check, and so does Lens not answering
+// (unreachable, a 5xx, the passcode it cannot set): the person tries again with it (B61.112). Any other end spends it.
 func (a *app) redeem(ctx context.Context, checkID string, c phoneCheck, identity, passcode, address string) (lensPerson, bool, error) {
 	var out struct {
 		Person  lensPerson `json:"person"`
@@ -316,8 +351,14 @@ func (a *app) redeem(ctx context.Context, checkID string, c phoneCheck, identity
 	}
 	err := a.lensDoor(ctx, "/v1/auth/phone/person", map[string]string{"ticket": c.ticket, "identity": identity,
 		"passcode": passcode, "caller_address": address}, &out)
-	var refused doorRefusal
-	if err == nil || !errors.As(err, &refused) || !slices.Contains([]any{"wrong_passcode", "passcode_wait", "passcode_needed", "weak_passcode"}, refused.body["reason"]) {
+	var (
+		refused doorRefusal
+		down    doorDown
+	)
+	switch {
+	case errors.As(err, &down):
+	case errors.As(err, &refused) && slices.Contains([]any{"wrong_passcode", "passcode_wait", "passcode_needed", "weak_passcode"}, refused.body["reason"]):
+	default:
 		a.auth.phoneChecks.delete(checkID)
 	}
 	if err == nil && out.Person.ID == "" {

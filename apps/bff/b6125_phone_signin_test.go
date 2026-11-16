@@ -39,12 +39,14 @@ type doorLens struct {
 	origins    map[string]string // challenge → the origin it was asked from
 	calls      []string
 	bodies     map[string]map[string]any // path → the last body
+	down       map[string]map[string]any // path → the 503 body Lens answers there instead (B61.112)
 }
 
 func newDoorLens(t *testing.T, rest *strangerLens) *doorLens {
 	t.Helper()
 	d := &doorLens{codes: map[string]string{}, tickets: map[string]string{}, people: map[string]*doorPerson{},
-		challenges: map[string]string{}, origins: map[string]string{}, bodies: map[string]map[string]any{}}
+		challenges: map[string]string{}, origins: map[string]string{}, bodies: map[string]map[string]any{},
+		down: map[string]map[string]any{}}
 	target, _ := url.Parse(rest.srv.URL)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	d.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,6 +71,11 @@ func newDoorLens(t *testing.T, rest *strangerLens) *doorLens {
 		d.calls = append(d.calls, r.URL.Path)
 		d.bodies[r.URL.Path] = in
 		d.n++
+		if said, ok := d.down[r.URL.Path]; ok {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(said)
+			return
+		}
 		switch r.URL.Path {
 		case "/v1/auth/phone/start":
 			if str("caller_address") == "" {

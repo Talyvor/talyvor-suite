@@ -207,6 +207,36 @@ describe('the passcode', () => {
     await screen.findByRole('heading', { level: 1, name: 'Choose a passcode' })
     expect(screen.getByRole('alert')).toHaveTextContent('Choose six digits that are not all the same or in a row.')
   })
+
+  it('a passcode that cannot be set just now keeps the person on "Type it again", and the next try uses the same check', async () => {
+    let tries = 0
+    const sent = mockDoor({
+      '/auth/phone/start': START,
+      '/auth/phone/finish': fresh,
+      '/auth/phone/join': () =>
+        ++tries === 1
+          ? { status: 503, body: { error: "We can't set passcodes just now. Try again in a few minutes.", reason: 'passcode_unavailable' } }
+          : { body: { signed_in: true, signup_unfinished: true, account_id: '' } },
+    })
+    at('/signup')
+    await throughPhone()
+    paste('The code', '482913')
+    await screen.findByRole('heading', { level: 1, name: 'Choose a passcode' })
+    typeDigits('Passcode', '135790')
+    await screen.findByRole('heading', { level: 1, name: 'Type it again' })
+    typeDigits('Passcode', '135790')
+    expect(await screen.findByRole('alert')).toHaveTextContent("We can't set passcodes just now. Try again in a few minutes.")
+    expect(screen.getByRole('heading', { level: 1, name: 'Type it again' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Passcode, digit 1 of 6')).toBeEnabled())
+    typeDigits('Passcode', '135790')
+    await waitFor(() =>
+      expect(sent.filter((x) => x.url === '/auth/phone/join').map((x) => x.body)).toEqual([
+        { check: 'chk_1', passcode: '135790' },
+        { check: 'chk_1', passcode: '135790' },
+      ]),
+    )
+    expect(sent.filter((x) => x.url === '/auth/phone/start')).toHaveLength(1)
+  })
 })
 
 /** A browser with passkeys: get and create answer with fixed bytes. */

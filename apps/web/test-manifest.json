@@ -1,7 +1,7 @@
 {
   "src/AdminRemoved.test.tsx": 5,
   "src/aiRequestBodyRegister.test.ts": 33,
-  "src/areas/auth/Door.test.tsx": 15,
+  "src/areas/auth/Door.test.tsx": 16,
   "src/areas/auth/Entry.test.tsx": 16,
   "src/areas/auth/SignUp.test.tsx": 13,
   "src/areas/auth/Welcome.test.tsx": 4,
