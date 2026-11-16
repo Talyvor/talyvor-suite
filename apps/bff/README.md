@@ -73,12 +73,14 @@ without.
 | `OIDC_ISSUER` | — | `oidc`: discovery base URL |
 | `OIDC_CLIENT_ID` | — | `oidc` |
 | `OIDC_CLIENT_SECRET` | — | `oidc`: confidential client; PKCE is on top, not instead |
+| `BFF_GOOGLE_SIGNIN` | (on) | B61.25: `off` removes Google sign-in — `/auth/login`, `/auth/callback`, `/auth/mobile/session` and `/auth/google/move` answer 404 and `/auth/me` says `google_signin: false` |
 | `OIDC_MOBILE_CLIENT_IDS` | (empty) | `oidc`: the phone app's client ids, comma-separated; its ID token is traded at `POST /auth/mobile/session` for a Bearer session. Empty: that route answers 404 |
 | `OIDC_ALLOWED_EMAILS` | — | `oidc`: comma-separated, or `*` for any authenticated identity |
 | `BFF_SESSION_TTL` | `12h` | absolute session lifetime; sessions are in-memory |
 | `BFF_DATABASE_URL` | (unset) | Postgres for assistant sign-ins (Talyvor Connect): clients, codes, grants and hashed tokens survive a restart; unset keeps them in memory |
 | `BFF_CONNECT_REGISTER_PER_IP_HOUR` | `10` | Talyvor Connect (B52.3): client registrations per IP per hour, which also caps the unused clients one address holds; over it is 429 with Retry-After |
 | `BFF_CONNECT_AUTHORIZE_PER_IP_MINUTE` | `60` | Connect: `/oauth/authorize` requests per IP per minute |
+| `BFF_PHONE_DOOR_PER_IP_MINUTE` | `60` | B61.25: requests per IP per minute to each sign-in route of the phone door (`/auth/phone/*`, `/auth/passkey/challenge`, `/auth/passkey/finish`, `/auth/unlock*`, `/auth/google/move`), beside Lens's own limits on texts and passcode tries |
 | `BFF_CONNECT_TOKEN_PER_IP_MINUTE` | `60` | Connect: `/oauth/token` requests per IP per minute |
 | `BFF_CONNECT_TOKEN_PER_CONNECTION_MINUTE` | `10` | Connect: refreshes per connection per minute |
 | `BFF_CONNECT_MCP_PER_IP_MINUTE` | `600` | Connect: `/mcp` requests per IP per minute |

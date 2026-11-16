@@ -1677,6 +1677,10 @@ export const NON_LENS_ANON_SITES = [
     what: "runTask (B28.359) marshals a task handed to an agent from Chat as a model request — OpenAI’s chat-completions shape, or Anthropic’s messages shape with max_tokens — and sends it on the agent’s key to Lens’s /v1/proxy/{provider}/…, which passes it to the provider exactly as it passes Chat’s own streamed requests (chatApi.ts requestBody builds the same shapes in the browser). The keys are the provider’s published request schema, not a key set any talyvor-lens route binds, so there is nothing for the register to ask talyvor-lens about and this site is exempt.",
   },
   {
+    file: "phone_signin.go",
+    what: "lensDoor (B61.25) marshals whichever body one of the phone door's handlers built and posts it to Lens's sign-in routes (/v1/auth/phone/*, /v1/auth/passcode/check, /v1/auth/passkey/*) on the provision secret. Those ARE key sets talyvor-lens binds — the request structs in cmd/lens/phone_signin_routes.go and passkey_signin_routes.go — and no row here asks about them yet: this site is exempt from the table because it is one relay for eight bodies, not because there is nothing to ask. A renamed key upstream reads as absent, and on every one of these routes absent is a refusal (no caller_address, no ticket, no person_id, a passcode needed), never a silent default; b6125_phone_signin_test.go drives each body against a stand-in of those structs.",
+  },
+  {
     file: "session_seal.go",
     what: "sessionSealer.seal (B17.40) marshals sealedSession, the session sealed into its own cookie id so a restart does not sign anyone out. It is encrypted and only this BFF ever reads it back — no request body, sent to no repository, so there is no key set to ask about and this site is exempt.",
   },

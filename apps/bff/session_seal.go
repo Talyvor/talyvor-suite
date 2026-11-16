@@ -94,6 +94,9 @@ type sealedSession struct {
 	Poolable    bool   `json:"pool,omitempty"`
 	Synthetic   bool   `json:"syn,omitempty"`
 	SignedInAt  int64  `json:"sat,omitempty"`
+	// B61.25: the person, and whether it is the phone app's session (restored locked).
+	PersonID string `json:"pid,omitempty"`
+	Phone    bool   `json:"ph,omitempty"`
 }
 
 // seal returns a new session id carrying s.
@@ -102,6 +105,7 @@ func (z *sessionSealer) seal(s session) (string, error) {
 		Issued: time.Now().UnixNano(), Expires: s.expires.UnixNano(),
 		Sub: s.sub, Email: s.email, WorkspaceID: s.workspaceID, LensToken: s.lensToken,
 		TrackWS: s.trackWorkspaceID, Poolable: s.cachePoolable, Synthetic: s.synthetic,
+		PersonID: s.personID, Phone: s.phone,
 	}
 	if !s.lensTokenExp.IsZero() {
 		p.TokenExp = s.lensTokenExp.UnixNano()
@@ -152,7 +156,10 @@ func (z *sessionSealer) open(sid string) (session, bool) {
 		sub: p.Sub, email: p.Email, expires: time.Unix(0, p.Expires),
 		workspaceID: p.WorkspaceID, lensToken: p.LensToken,
 		trackWorkspaceID: p.TrackWS, cachePoolable: p.Poolable, synthetic: p.Synthetic,
+		personID: p.PersonID, phone: p.Phone,
 	}
+	// B61.25: the phone app's lock is the server's, so a session that comes back from its seal comes back locked.
+	s.locked = s.lockable()
 	if p.TokenExp != 0 {
 		s.lensTokenExp = time.Unix(0, p.TokenExp)
 	}

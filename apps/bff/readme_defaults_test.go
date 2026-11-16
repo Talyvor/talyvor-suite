@@ -113,6 +113,10 @@ var defaultProbes = map[string]defaultProbe{
 		bootWithUnset(t, "BFF_CONNECT_AUTHORIZE_PER_IP_MINUTE", minimalDisabled())
 		return strconv.Itoa(limitAuthorizeIP.max())
 	}},
+	"BFF_PHONE_DOOR_PER_IP_MINUTE": {canon: identityCanon, observe: func(t *testing.T) string { // B61.25
+		bootWithUnset(t, "BFF_PHONE_DOOR_PER_IP_MINUTE", minimalDisabled())
+		return strconv.Itoa(limitDoorIP.max())
+	}},
 	"BFF_CONNECT_TOKEN_PER_IP_MINUTE": {canon: identityCanon, observe: func(t *testing.T) string {
 		bootWithUnset(t, "BFF_CONNECT_TOKEN_PER_IP_MINUTE", minimalDisabled())
 		return strconv.Itoa(limitTokenIP.max())

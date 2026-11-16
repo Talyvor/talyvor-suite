@@ -65,7 +65,7 @@ func (a *app) accountsCaller(w http.ResponseWriter, r *http.Request) (accountsOf
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required — sign in at /auth/login"})
 		return accountsOf{}, false
 	}
-	return accountsOf{identity: provisionIdentity(a.cfg.oidcIssuer, s.sub), current: s.workspaceID, sid: sid, s: s}, true
+	return accountsOf{identity: a.identityOf(s.sub), current: s.workspaceID, sid: sid, s: s}, true
 }
 
 func (a *app) handleAccounts(w http.ResponseWriter, r *http.Request) {
@@ -209,6 +209,7 @@ func (a *app) moveSession(w http.ResponseWriter, r *http.Request, c accountsOf, 
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
 		return
 	}
+	a.lastAccounts.Store(c.identity, prov.WorkspaceID)
 	log.Printf("bff: session for sub=%s moved to account %s", next.sub, prov.WorkspaceID)
 	writeJSON(w, http.StatusOK, out)
 }
