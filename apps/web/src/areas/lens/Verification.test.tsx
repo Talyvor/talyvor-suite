@@ -74,6 +74,9 @@ describe('the Verification screen', () => {
     fireEvent.change(screen.getByLabelText('Phone number'), { target: { value: '+44 7700 900123' } })
     fireEvent.change(screen.getByLabelText('Legal name'), { target: { value: 'Ada Owner' } })
     fireEvent.change(screen.getByLabelText('Date of birth'), { target: { value: '1990-04-01' } })
+    fireEvent.change(screen.getByLabelText('Address line 1'), { target: { value: '1 High Street' } })
+    fireEvent.change(screen.getByLabelText('Town or city'), { target: { value: 'London' } })
+    fireEvent.change(screen.getByLabelText('Postcode'), { target: { value: 'N1 9GU' } })
     fireEvent.change(screen.getByLabelText('Country you live in'), { target: { value: 'GB' } })
     fireEvent.click(screen.getByRole('button', { name: 'Confirm who I am' }))
 
@@ -95,7 +98,15 @@ describe('the Verification screen', () => {
 
     expect(sent).toEqual([
       { url: '/api/verification/contact', body: { email: 'owner@example.com', phone: '+447700900123' } },
-      { url: '/api/verification/identity', body: { name: 'Ada Owner', country: 'GB', date_of_birth: '1990-04-01' } },
+      {
+        url: '/api/verification/identity',
+        body: {
+          name: 'Ada Owner',
+          country: 'GB',
+          date_of_birth: '1990-04-01',
+          address: { lines: ['1 High Street'], town: 'London', postcode: 'N1 9GU', country: 'GB' },
+        },
+      },
     ])
   })
 })

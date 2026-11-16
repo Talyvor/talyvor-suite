@@ -1,0 +1,47 @@
+[
+ {
+  "route": "/signup/confirm?personal",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L0",
+    "meaning": "signed in",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": null
+   }
+  }
+ },
+ {
+  "route": "/settings/verification",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L1",
+    "meaning": "email and phone confirmed",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": [
+     {
+      "level": "L1",
+      "subject": "contact",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_sample_1",
+      "started_at": "2026-11-15T09:00:00Z",
+      "checked_at": "2026-11-15T09:00:00Z"
+     }
+    ]
+   }
+  }
+ }
+]
