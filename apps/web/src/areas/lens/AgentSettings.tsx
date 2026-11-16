@@ -20,7 +20,7 @@ import type { FaceColour, FaceShape } from '@talyvor/ui/pocket'
 import { BOOK_KEY, SCHEDULES_KEY, rulesKey, statementKey } from './AgentBank'
 import { cardKey } from './AgentCardPanel'
 import { DESIGN_ATTR } from '../../pocketPending'
-import { Portrait } from '../../cards/HelperPicker'
+import { PictureGallery } from '../../cards/HelperPicker'
 import { AGENT_PICTURES, lookFor, pictureOf } from '../../cards/agentPictures'
 import { type Agent, type AgentArchive, agentBankApi, refusalText } from './agentBankApi'
 
@@ -147,27 +147,17 @@ export function LookDialog({ agent, open, onClose }: { agent: Agent; open: boole
           onChange={(e) => setDescription(e.target.value)}
         />
       </div>
-      <div className="grid gap-1.5" role="radiogroup" aria-label="Picture">
+      <div className="grid gap-1.5">
         <span className="text-body font-semibold text-ink-2">Picture</span>
-        <div className="flex flex-wrap gap-2">
-          {AGENT_PICTURES.map((p, i) => (
-            <button
-              key={p.id}
-              type="button"
-              role="radio"
-              aria-checked={picture?.id === p.id}
-              aria-label={`Picture ${i + 1}`}
-              onClick={() => {
-                setPicture(p)
-                setColour(p.colour)
-              }}
-              className={`inline-flex rounded-pill p-0.5 ${picture?.id === p.id ? 'ring-2 ring-ink ring-offset-2 ring-offset-page' : ''} ${pocketFocusRing}`}
-              style={{ background: `var(--agent-${p.colour})` }}
-            >
-              <Portrait picture={p} className="size-9" />
-            </button>
-          ))}
-        </div>
+        <PictureGallery
+          label="Picture"
+          value={picture?.id ?? null}
+          onChange={(p) => {
+            if (!p) return
+            setPicture(p)
+            setColour(p.colour)
+          }}
+        />
       </div>
       <div className="grid gap-1.5" role="radiogroup" aria-label="Colour">
         <span className="text-body font-semibold text-ink-2">Colour</span>

@@ -5,8 +5,8 @@ import { Button, Card, Dialog, EmptyState, Field, Icon, Input, Money, RoomBadge,
 import { cn, inlineLink } from '@talyvor/ui'
 import { InlineFailure } from '../../components/SessionExpiredBar'
 import { IfArea } from '../../lib/workspaceAreas'
-import { Portrait } from '../../cards/HelperPicker'
-import { AGENT_PICTURES, lookFor, type AgentPicture } from '../../cards/agentPictures'
+import { PictureGallery, Portrait } from '../../cards/HelperPicker'
+import { lookFor, type AgentPicture } from '../../cards/agentPictures'
 import { planName, usePricing } from '../marketing/pricingApi'
 import { BOOK_KEY, rulesKey } from './AgentBank'
 import { AgentCard } from './AgentCard'
@@ -322,21 +322,8 @@ function Details({
       {ours ? null : (
         <>
           <div className="grid gap-1.5">
-            <span className="text-body font-semibold text-ink-2">Picture</span>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Picture">
-              {AGENT_PICTURES.map((g, i) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  aria-label={`Picture ${i + 1}`}
-                  aria-pressed={picture?.id === g.id}
-                  className={cn('inline-flex rounded-pill p-0.5 aria-pressed:shadow-pick', pocketFocusRing)}
-                  onClick={() => setPicture((p) => (p?.id === g.id ? null : g))}
-                >
-                  <Portrait picture={g} className="size-11" />
-                </button>
-              ))}
-            </div>
+            <span className="text-body font-semibold text-ink-2">Its picture</span>
+            <PictureGallery label="Its picture" value={picture?.id ?? null} onChange={setPicture} optional />
           </div>
           <div className="grid gap-1.5">
             <span className="text-body font-semibold text-ink-2">What it does</span>
