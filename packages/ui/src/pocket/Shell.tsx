@@ -10,7 +10,28 @@ export interface ShellProps {
   children: React.ReactNode
   /** B47.2 — the sidebar is a drawer at every width, opened only by Menu (Chat takes the whole page). */
   drawer?: boolean
+  /** B61.70 — the page's background (PageBackground), at the top of the content and running behind the top bar. */
+  background?: React.ReactNode
   className?: string
+}
+
+/**
+ * B61.70 — the page's scroll, read on scroll and never in a frame: past 4 px the top bar turns to glass, and over the first
+ * 80 px the background fades and lifts (--bg-scroll, 0 to 1, on the content's column; theme.css .pk-bg).
+ */
+function usePageScroll(ref: React.RefObject<HTMLDivElement | null>): boolean {
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY
+      setScrolled(y > 4)
+      ref.current?.style.setProperty('--bg-scroll', String(Math.min(1, Math.max(0, y / 80))))
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [ref])
+  return scrolled
 }
 
 /**
@@ -19,8 +40,10 @@ export interface ShellProps {
  * and closed by Esc, the scrim or following one of its links. It is the same <aside> at every width, off-screen and
  * invisible (so nothing in it takes focus) until opened.
  */
-export function Shell({ sidebar, bar, children, drawer = false, className }: ShellProps) {
+export function Shell({ sidebar, bar, children, drawer = false, background, className }: ShellProps) {
   const [open, setOpen] = useState(false)
+  const columnRef = useRef<HTMLDivElement | null>(null)
+  const scrolled = usePageScroll(columnRef)
   const asideId = useId()
   const asideRef = useRef<HTMLElement | null>(null)
   const menuRef = useRef<HTMLButtonElement | null>(null)
@@ -65,8 +88,15 @@ export function Shell({ sidebar, bar, children, drawer = false, className }: She
       >
         <div className="sticky top-0 flex max-h-screen min-h-screen flex-col overflow-y-auto px-3.5 py-4.5">{sidebar}</div>
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-header items-center gap-3 border-b border-line bg-page px-4 wide:px-7">
+      <div ref={columnRef} className="relative flex min-w-0 flex-1 flex-col">
+        {background}
+        {/* B61.70 — no ground of its own over the background; glass once the page has scrolled (theme.css .pk-top-glass). */}
+        <header
+          className={cn(
+            'sticky top-0 z-10 flex h-header items-center gap-3 border-b border-transparent px-4 wide:px-7',
+            scrolled && 'pk-top-glass',
+          )}
+        >
           <button
             ref={menuRef}
             type="button"
@@ -86,7 +116,7 @@ export function Shell({ sidebar, bar, children, drawer = false, className }: She
           </button>
           {bar}
         </header>
-        <main className="flex-1 p-gutter">{children}</main>
+        <main className="relative flex-1 p-gutter">{children}</main>
       </div>
     </div>
   )
