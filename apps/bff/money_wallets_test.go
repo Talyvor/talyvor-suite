@@ -136,3 +136,27 @@ func TestOwnBankPayeeReachesLens(t *testing.T) {
 		t.Fatalf("Lens received %q; want the payee with \"own\":true", *got)
 	}
 }
+
+// B61.84 — Add money and Take back reach Lens's funding route on the agent's account with the direction and amount
+// only, under the screen's Idempotency-Key, which Lens reads from the body; funding is never sent, so Lens moves test
+// money, and another workspace's account is Lens's 404.
+func TestAgentFundingReachesLens(t *testing.T) {
+	a, got := newFakeLensWallets(t)
+	if rec := postKeyed(a, "/api/money/accounts/macc_mine/funding", "fund-1", `{"direction":"to_agent","amount_minor":1000,"funding":"live","workspace_id":"ws_other"}`); rec.Code != http.StatusCreated {
+		t.Fatalf("add money = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := postKeyed(a, "/api/money/accounts/macc_mine/funding", "take-1", `{"direction":"to_company","amount_minor":400}`); rec.Code != http.StatusCreated {
+		t.Fatalf("take back = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := postKeyed(a, "/api/money/accounts/macc_theirs/funding", "fund-2", `{"direction":"to_agent","amount_minor":1000}`); rec.Code != http.StatusNotFound {
+		t.Fatalf("another workspace's account = %d %s, want 404", rec.Code, rec.Body.String())
+	}
+	want := []string{
+		`POST /v1/money/accounts/macc_mine/funding key=fund-1 {"direction":"to_agent","amount_minor":1000,"idempotency_key":"fund-1"}`,
+		`POST /v1/money/accounts/macc_mine/funding key=take-1 {"direction":"to_company","amount_minor":400,"idempotency_key":"take-1"}`,
+		`POST /v1/money/accounts/macc_theirs/funding key=fund-2 {"direction":"to_agent","amount_minor":1000,"idempotency_key":"fund-2"}`,
+	}
+	if strings.Join(*got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("Lens received\n  %s\nwant\n  %s", strings.Join(*got, "\n  "), strings.Join(want, "\n  "))
+	}
+}

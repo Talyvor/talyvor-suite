@@ -33,6 +33,7 @@ import {
   useAccount,
 } from './agentBankApi'
 import { DESIGN_ATTR } from '../../pocketPending'
+import { AgentFundingButtons } from './AgentFunding'
 
 // Wallets.tsx — B59.53: Wallets on the web, the twin of the phone's (B59.33). Each side the account's kind shows (SPEC
 // 3.3): Fiat only the fiat side, Stablecoin and crypto only the stablecoin side, Hybrid both, fiat first. Each side has a
@@ -42,6 +43,7 @@ import { DESIGN_ATTR } from '../../pocketPending'
 // and Withdraw and Convert are signed there with the owner's passkey once the workspace has one (BFF B59.52, Lens B59.51).
 // Home's Top up, Withdraw and Convert open it at that action (?do=). Lens decides everything and every refusal is its own
 // sentence. A side, an action or a field the kind does not have is not rendered.
+// B61.84 — beside each agent's account, Add money from the company's account in its currency and Take back (AgentFunding.tsx).
 
 export type Side = 'fiat' | 'stablecoin'
 export type WalletAction = 'top-up' | 'withdraw' | 'convert'
@@ -146,6 +148,12 @@ export function WalletsScreen() {
                         title={nameOf(a, shows.owner, agents)}
                         line={CURRENCY_NAME[a.currency] ?? a.currency}
                         amount={<Money minor={a.balance_minor} currency={a.currency} />}
+                        wrap={a.purpose === 'agent'}
+                        action={
+                          a.purpose === 'agent' && a.agent_id ? (
+                            <AgentFundingButtons agent={{ id: a.agent_id, name: agents.find((x) => x.id === a.agent_id)?.name ?? a.name }} currency={a.currency} size="sm" />
+                          ) : undefined
+                        }
                       />
                     ))}
                   </PocketCard>

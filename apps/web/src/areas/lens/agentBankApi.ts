@@ -1580,6 +1580,10 @@ export const agentBankApi = {
   // the owner's own and a conversion between the two sides, each once under its key and the last two signed over a challenge.
   walletTopUp: (accountID: string, amount_minor: number, key: string) =>
     send<unknown>('POST', `/api/money/accounts/${e(accountID)}/top-up`, { amount_minor }, { 'Idempotency-Key': key }),
+  // B61.84 — Add money and Take back (BFF B61.84, Lens B61.66): between the company's account and the agent's account
+  // accountID, in its currency, now, once under its key.
+  agentFunding: (accountID: string, direction: 'to_agent' | 'to_company', amount_minor: number, key: string) =>
+    send<AgentFundingMove>('POST', `/api/money/accounts/${e(accountID)}/funding`, { direction, amount_minor }, { 'Idempotency-Key': key }),
   walletWithdrawChallenge: (accountID: string, body: WithdrawalRequest, key: string) =>
     send<{ challenge: string; allow_credentials: string[] | null }>('POST', `/api/money/accounts/${e(accountID)}/withdraw/challenge`, body, { 'Idempotency-Key': key }),
   walletWithdraw: (accountID: string, body: WithdrawalRequest, key: string, assertion?: PasskeyAssertion) =>
@@ -2485,6 +2489,18 @@ export interface CurrencyAccount {
   balance_minor: number
   test_minor: number
   live_minor: number
+}
+
+/** B61.84 — Lens economy.AgentFunding: one move between the company's account and an agent's, and what each holds after. */
+export interface AgentFundingMove {
+  direction: 'to_agent' | 'to_company'
+  currency: string
+  amount_minor: number
+  company_account_id: string
+  agent_account_id: string
+  agent_id: string
+  company_balance_minor: number
+  agent_balance_minor: number
 }
 
 /** B59.25 — where a card dispute stands (Lens economy.CardDispute*). */

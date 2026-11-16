@@ -1332,6 +1332,18 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/accounts/{id}/test-money", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensTestMoneyBody",
   },
+  // B61.84 — Add money and Take back between the company's account and an agent's (Lens B61.66).
+  {
+    route: "POST /v1/money/accounts/{id}/funding",
+    file: "apps/bff/money_wallets.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyAccountFunding(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/money_accounts_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/accounts/{id}/funding", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensAgentFundingBody",
+  },
   {
     route: "POST /v1/money/accounts/{id}/withdraw",
     file: "apps/bff/money_wallets.go",

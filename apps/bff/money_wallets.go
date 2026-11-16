@@ -20,6 +20,9 @@ import (
 //	                          between the company's accounts on the two sides, good until expires_at
 //	POST /api/money/convert/challenge {quote_id}   the challenge converting at it is signed over, under the Idempotency-Key
 //	POST /api/money/convert {quote_id, assertion}   convert at the quote, once under the Idempotency-Key header
+//	POST /api/money/accounts/{id}/funding {direction, amount_minor}   B61.84: the owner or an admin gives the agent whose
+//	                          account it is money from the company's account in its currency (to_agent), or takes it
+//	                          back (to_company), now (Lens B61.66), once under the Idempotency-Key header
 //
 // Lens decides everything: whose account it is (another workspace's is not found), that only the owner or an admin may
 // move it, whether a signature is needed, and the kind of money (a workspace that is not Hybrid is refused 409
@@ -126,4 +129,31 @@ func (a *app) handleMoneyConvert(challenge bool) func(http.ResponseWriter, *http
 		body, _ := json.Marshal(in)
 		a.instantRelay(w, r, t, http.MethodPost, path, body)
 	}
+}
+
+// handleMoneyAccountFunding — POST /api/money/accounts/{id}/funding, {id} the agent's account (B61.84).
+func (a *app) handleMoneyAccountFunding(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	id, ok := pathID(w, "account id", r.PathValue("id"))
+	if !ok {
+		return
+	}
+	var in struct {
+		Direction      string `json:"direction"`
+		AmountMinor    int64  `json:"amount_minor"`
+		IdempotencyKey string `json:"idempotency_key"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<12)).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if k := r.Header.Get("Idempotency-Key"); k != "" && len(k) <= 128 {
+		in.IdempotencyKey = k
+	}
+	// UPSTREAM-BINDS-ONLY lensAgentFundingBody: funding
+	body, _ := json.Marshal(in)
+	a.instantRelay(w, r, t, http.MethodPost, "/v1/money/accounts/"+url.PathEscape(id)+"/funding", body)
 }
