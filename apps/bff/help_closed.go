@@ -29,7 +29,7 @@ const helpClosedPath = "/v1/admin/requests?kind=account_closure&state=done"
 // helpClosedAccount is what Help answers a question from an account Talyvor closed.
 const helpClosedAccount = "This account is closed, so Help takes no more questions from it."
 
-// closed deletes everything Help keeps for ws, its chat and its day's count of questions, and records ws as closed.
+// closed deletes everything Help keeps for ws, every person's chat in it and its day's count of questions, and records ws as closed.
 func (s *helpStore) closed(ctx context.Context, ws string) error {
 	if s.db != nil {
 		tx, err := s.db.Begin(ctx)
@@ -51,7 +51,11 @@ func (s *helpStore) closed(ctx context.Context, ws string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.shut[ws] = true
-	delete(s.chats, ws)
+	for who := range s.chats {
+		if who.ws == ws {
+			delete(s.chats, who)
+		}
+	}
 	for k := range s.asked {
 		if strings.HasPrefix(k, ws+"|") {
 			delete(s.asked, k)
