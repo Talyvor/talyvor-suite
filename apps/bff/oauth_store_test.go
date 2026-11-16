@@ -123,14 +123,14 @@ func TestOAuthSignInsSurviveARestart(t *testing.T) {
 	t.Cleanup(owner.Close)
 	a, ck = boot()
 	a.cfg.lensBaseURL = owner.URL
-	for _, body := range []string{`{"max_per_request_ulxc":1,"daily_limit_ulxc":2,"monthly_limit_ulxc":3}`, `{"max_per_request_ulxc":4,"daily_limit_ulxc":5,"monthly_limit_ulxc":6}`} {
+	for _, body := range []string{`{"currency":"USD","max_per_payment_minor":1,"daily_limit_minor":2,"monthly_limit_minor":3}`, `{"currency":"EUR","max_per_payment_minor":4,"daily_limit_minor":5,"monthly_limit_minor":6}`} {
 		if rec := serve(a, "PUT", "/api/connect/agent-ceiling", oauthOrigin, body, nil, ck); rec.Code != http.StatusOK {
 			t.Fatalf("saving the agent ceiling: %d %s", rec.Code, rec.Body.String())
 		}
 	}
 	a, ck = boot()
-	if got := jsonOf(t, serve(a, "GET", "/api/connect/agent-ceiling", "", "", nil, ck)); got["max_per_request_ulxc"] != float64(4) ||
-		got["daily_limit_ulxc"] != float64(5) || got["monthly_limit_ulxc"] != float64(6) {
+	if got := jsonOf(t, serve(a, "GET", "/api/connect/agent-ceiling", "", "", nil, ck)); got["currency"] != "EUR" || got["max_per_payment_minor"] != float64(4) ||
+		got["daily_limit_minor"] != float64(5) || got["monthly_limit_minor"] != float64(6) {
 		t.Fatalf("after a restart the agent ceiling reads %v", got)
 	}
 }

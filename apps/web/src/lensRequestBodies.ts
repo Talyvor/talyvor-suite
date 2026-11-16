@@ -388,7 +388,7 @@ export const LENS_BODIES: LensBody[] = [
     route: "POST /v1/workspaces/{wsID}/agents/{agentID}/pay",
     file: "apps/bff/mcp_agents.go",
     kind: "map-literal",
-    anchor: 'json.Marshal(map[string]any{"to_agent_id": to, "amount_ulxc": amount, "memo": memo})',
+    anchor: 'json.Marshal(map[string]any{"to_agent_id": to, "amount_minor": amount, "currency": currency, "memo": memo})',
     upstreamFile: "cmd/lens/agent_accounts_handler.go",
     upstreamAnchor:
       'r.Post("/v1/workspaces/{wsID}/agents/{agentID}/pay", func(w http.ResponseWriter, req *http.Request) {',
@@ -398,7 +398,7 @@ export const LENS_BODIES: LensBody[] = [
     route: "POST /v1/workspaces/{wsID}/agents",
     file: "apps/bff/mcp_agents.go",
     kind: "map-literal",
-    anchor: 'json.Marshal(map[string]string{"name": name})',
+    anchor: 'json.Marshal(map[string]string{"name": name, "wallet_kind": kind, "fiat_currency": fiat})',
     upstreamFile: "cmd/lens/agent_accounts_handler.go",
     upstreamAnchor:
       'r.Post("/v1/workspaces/{wsID}/agents", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',

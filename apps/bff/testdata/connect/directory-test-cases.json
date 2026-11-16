@@ -1,7 +1,7 @@
 {
   "about": "B52.8 — the test cases Claude's directory (claude.ai/directory/manage) and ChatGPT's (platform.openai.com/plugins) ask for, against the demo workspace. TestConnectDirectoryTestCases runs every case in both modes: full is the connector a person adds and Claude's directory lists; prepare_only is BFF_CONNECT_PREPARE_ONLY=true, the connector ChatGPT's directory lists. shows is what the tool's answer must carry in that mode.",
   "server": "https://app.talyvor.com/mcp",
-  "workspace": "One person's workspace: a GBP account holding £1,250.00; one bill due, Northern Power NP-881 for £165.50, its supplier a saved payee; saved payees including Grace Hopper; an agent agt-1 that may pay up to 1,000 at once without asking; another agent agt-2 it pays. The person granted every scope at consent.",
+  "workspace": "One person's workspace: a GBP account holding £1,250.00; one bill due, Northern Power NP-881 for £165.50, its supplier a saved payee; saved payees including Grace Hopper; an agent agt-1 with a GBP account that may pay up to £10.00 at once without asking; another agent agt-2 it pays in pounds. The person granted every scope at consent.",
   "cases": [
     {
       "id": "balances",
@@ -45,19 +45,19 @@
     },
     {
       "id": "pay-inside-limits",
-      "prompt": "Pay agent agt-2 400 from agt-1 for a GPU hour",
+      "prompt": "Pay agent agt-2 £4 from agt-1 for a GPU hour",
       "tool": "send_payment",
-      "arguments": { "idempotency_key": "case-pay-inside", "agent_id": "agt-1", "to_agent_id": "agt-2", "amount_ulxc": 400, "memo": "GPU hour" },
-      "expect": "Full: paid at once, inside the limits the person set. Prepare-only: nothing is paid, and the person is pointed to Talyvor.",
-      "shows": { "full": ["\"status\":\"paid\"", "pay-1"], "prepare_only": ["Nothing has been paid", "/agents"] }
+      "arguments": { "idempotency_key": "case-pay-inside", "agent_id": "agt-1", "to_agent_id": "agt-2", "amount_minor": 400, "currency": "GBP", "memo": "GPU hour" },
+      "expect": "Full: £4.00 paid at once from agt-1's pounds, inside the limits the person set. Prepare-only: nothing is paid, and the person is pointed to Talyvor.",
+      "shows": { "full": ["\"status\":\"paid\"", "pay-1", "\"currency\":\"GBP\""], "prepare_only": ["Nothing has been paid", "/agents"] }
     },
     {
       "id": "pay-above-limits",
-      "prompt": "Pay agent agt-2 5,000 from agt-1",
+      "prompt": "Pay agent agt-2 £50 from agt-1",
       "tool": "send_payment",
-      "arguments": { "idempotency_key": "case-pay-above", "agent_id": "agt-1", "to_agent_id": "agt-2", "amount_ulxc": 5000 },
+      "arguments": { "idempotency_key": "case-pay-above", "agent_id": "agt-1", "to_agent_id": "agt-2", "amount_minor": 5000, "currency": "GBP" },
       "expect": "Full: nothing is paid; it waits for the person's passkey in Talyvor, with the link. Prepare-only: nothing is paid, and the person is pointed to Talyvor.",
-      "shows": { "full": ["pending_approval", "Nothing has been paid", "/approvals"], "prepare_only": ["Nothing has been paid", "/agents"] }
+      "shows": { "full": ["pending_approval", "Nothing has been paid", "/approvals", "\"amount_minor\":5000"], "prepare_only": ["Nothing has been paid", "/agents"] }
     },
     {
       "id": "statement",

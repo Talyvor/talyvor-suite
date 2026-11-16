@@ -364,8 +364,8 @@ func (d *oauthDB) ceiling(ctx context.Context, workspaceID string) (c connectCei
 	if d == nil {
 		return c, false, nil
 	}
-	err = d.pool.QueryRow(ctx, `SELECT max_per_request_ulxc, daily_limit_ulxc, monthly_limit_ulxc FROM connect_agent_ceilings
-		WHERE workspace_id = $1`, workspaceID).Scan(&c.MaxPerRequestULXC, &c.DailyLimitULXC, &c.MonthlyLimitULXC)
+	err = d.pool.QueryRow(ctx, `SELECT currency, max_per_payment_minor, daily_limit_minor, monthly_limit_minor FROM connect_agent_ceilings
+		WHERE workspace_id = $1 AND currency IS NOT NULL`, workspaceID).Scan(&c.Currency, &c.MaxPerPaymentMinor, &c.DailyLimitMinor, &c.MonthlyLimitMinor)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return c, false, nil
 	}
@@ -376,9 +376,11 @@ func (d *oauthDB) setCeiling(ctx context.Context, workspaceID string, c connectC
 	if d == nil {
 		return nil
 	}
-	_, err := d.pool.Exec(ctx, `INSERT INTO connect_agent_ceilings (workspace_id, max_per_request_ulxc, daily_limit_ulxc, monthly_limit_ulxc)
-		VALUES ($1, $2, $3, $4) ON CONFLICT (workspace_id) DO UPDATE SET max_per_request_ulxc = EXCLUDED.max_per_request_ulxc,
-		daily_limit_ulxc = EXCLUDED.daily_limit_ulxc, monthly_limit_ulxc = EXCLUDED.monthly_limit_ulxc, updated_at = now()`,
-		workspaceID, c.MaxPerRequestULXC, c.DailyLimitULXC, c.MonthlyLimitULXC)
+	_, err := d.pool.Exec(ctx, `INSERT INTO connect_agent_ceilings (workspace_id, currency, max_per_payment_minor, daily_limit_minor, monthly_limit_minor)
+		VALUES ($1, $2, $3, $4, $5) ON CONFLICT (workspace_id) DO UPDATE SET currency = EXCLUDED.currency,
+		max_per_payment_minor = EXCLUDED.max_per_payment_minor, daily_limit_minor = EXCLUDED.daily_limit_minor,
+		monthly_limit_minor = EXCLUDED.monthly_limit_minor, max_per_request_ulxc = NULL, daily_limit_ulxc = NULL, monthly_limit_ulxc = NULL,
+		updated_at = now()`,
+		workspaceID, c.Currency, c.MaxPerPaymentMinor, c.DailyLimitMinor, c.MonthlyLimitMinor)
 	return err
 }

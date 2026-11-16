@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -87,24 +88,36 @@ func (f *fakeLensForMCP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 		_, _ = io.WriteString(w, `{"token":"jwt-connect","expires_at":"2099-01-01T00:00:00Z"}`)
 	case "POST /v1/workspaces/ws-ada/agents/agt-1/pay":
-		switch amount, _ := body["amount_ulxc"].(float64); {
+		// As Lens B61.18: amount_minor with its currency pays from the agent's account in that currency; above the
+		// approval amount it is held, and the 202 still carries Lens's µLXC field.
+		amount, _ := body["amount_minor"].(float64)
+		switch {
 		case r.Header.Get("Authorization") != "Bearer jwt-connect":
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = io.WriteString(w, `{"error":"only the paying agent's own key, the workspace's owner or an admin may pay from an agent"}`)
+		case body["amount_ulxc"] != nil:
+			_, _ = io.WriteString(w, `{"id":"pay-lxc","from_agent_id":"agt-1","to_agent_id":"agt-2","amount_ulxc":400}`)
+		case amount < 1 || body["currency"] == nil:
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"error":"body must be {\"to_agent_id\": \"<agent>\", \"amount_minor\": <positive minor units>, \"currency\": \"GBP|EUR|USD|USDC\"}"}`)
 		case amount > 1000:
 			w.WriteHeader(http.StatusAccepted)
-			_, _ = io.WriteString(w, `{"status":"pending_approval","approval_id":"apr-1","amount_ulxc":5000,"message":"economy: this payment needs the owner's approval"}`)
+			_, _ = io.WriteString(w, `{"status":"pending_approval","approval_id":"apr-1","amount_ulxc":5000000,"message":"economy: this payment of £50.00 needs the owner's approval"}`)
 		default:
-			_, _ = io.WriteString(w, `{"id":"pay-1","from_agent_id":"agt-1","to_agent_id":"agt-2","amount_ulxc":400}`)
+			_, _ = io.WriteString(w, `{"id":"pay-1","from_agent_id":"agt-1","to_agent_id":"agt-2","amount_minor":`+strconv.FormatInt(int64(amount), 10)+
+				`,"currency":"`+body["currency"].(string)+`","funding":"test","memo":"`+body["memo"].(string)+`"}`)
 		}
 	case "POST /v1/workspaces/ws-ada/agents":
 		w.WriteHeader(http.StatusCreated)
-		_, _ = io.WriteString(w, `{"id":"agt-new","name":"`+body["name"].(string)+`"}`)
+		_, _ = io.WriteString(w, `{"id":"agt-new","name":"`+body["name"].(string)+`","balance_ulxc":0}`)
 	case "GET /v1/workspaces/ws-ada/agents/agt-1/rules":
-		_, _ = io.WriteString(w, `{"max_per_request_ulxc":500,"hourly_limit_ulxc":0,"daily_limit_ulxc":2000,"weekly_limit_ulxc":0,"monthly_limit_ulxc":0,`+
-			`"approval_above_ulxc":300,"allowed_models":["gpt-4o"],`+rulesTheBFFDoesNotName+`}`)
+		// As Lens B61.12: the rules' currency and its minor-unit limits, beside the µLXC ones the parked gateway reads.
+		_, _ = io.WriteString(w, `{"max_per_request_ulxc":5000000,"hourly_limit_ulxc":0,"daily_limit_ulxc":20000000,"weekly_limit_ulxc":0,"monthly_limit_ulxc":0,`+
+			`"approval_above_ulxc":3000000,"currency":"GBP","max_per_payment_minor":500,"hourly_limit_minor":0,"daily_limit_minor":2000,"weekly_limit_minor":0,`+
+			`"monthly_limit_minor":0,"approval_above_minor":300,"allowed_models":["gpt-4o"],`+rulesTheBFFDoesNotName+`}`)
 	case "GET /v1/workspaces/ws-ada/agents/agt-new/rules":
-		_, _ = io.WriteString(w, `{"max_per_request_ulxc":0,"daily_limit_ulxc":0,"monthly_limit_ulxc":0,`+rulesTheBFFDoesNotName+`}`)
+		_, _ = io.WriteString(w, `{"max_per_request_ulxc":0,"daily_limit_ulxc":0,"monthly_limit_ulxc":0,"currency":"USD","max_per_payment_minor":0,`+
+			`"daily_limit_minor":0,"monthly_limit_minor":0,"approval_above_minor":0,`+rulesTheBFFDoesNotName+`}`)
 	case "GET /v1/workspaces/ws-ada/agents/agt-1/statement":
 		_, _ = io.WriteString(w, `{"agent_id":"agt-1","lines":[{"kind":"pay","amount_ulxc":-400}]}`)
 	case "GET /v1/workspaces/ws-ada/money-requests":

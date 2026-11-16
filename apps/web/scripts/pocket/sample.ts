@@ -184,6 +184,8 @@ const SAMPLE: Record<string, unknown> = {
   '/api/agents/agt_research/rules': RULES({ above: 2_500, perRequest: 10_000, daily: 5_000, monthly: 20_000, models: ['claude-sonnet-5', 'claude-haiku-4-5'], hours: ['08:00', '20:00'] }),
   '/api/agents/agt_sales/rules': RULES({ above: 500, perRequest: 1_000, daily: 2_000, monthly: 15_000, models: ['claude-haiku-4-5'] }),
   '/api/agents/agt_ops/rules': RULES({ above: 1_000, perRequest: 0, daily: 0, monthly: 10_000, models: ['claude-haiku-4-5'] }),
+  // B61.19 — the most an assistant may give a new agent, in the account's dollars.
+  '/api/connect/agent-ceiling': { currency: 'USD', max_per_payment_minor: 500, daily_limit_minor: 5_000, monthly_limit_minor: 50_000 },
   // The dollar accounts: the company's, Research's and the room wallet's.
   '/api/money/accounts': {
     accounts: [
