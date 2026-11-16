@@ -48,6 +48,7 @@ import { CloseAccountScreen, HelpScreen, YourDataScreen } from './areas/lens/Hel
 import { CompanyDetailsScreen } from './areas/lens/CompanyDetails'
 import { SignedInFooter } from './components/HelpLinks'
 import { HelpButton, HelpChatHost } from './components/HelpChat'
+import { YourAccountsHost, withAccountsOpen } from './areas/lens/YourAccounts'
 import { Features } from './areas/lens/Features'
 import { AgentPage, AgentRulesPage } from './areas/lens/AgentPageRoute'
 import { BOOK_KEY } from './areas/lens/AgentBank'
@@ -110,7 +111,7 @@ import { MetaPixel } from './areas/marketing/MetaPixel'
 import { Privacy } from './routes/Privacy'
 import { Terms } from './routes/Terms'
 import { SignIn } from './areas/auth/Entry'
-import { SignUp, SignUpConfirm, SignUpKey } from './areas/auth/SignUp'
+import { OpenAnotherAccount, OpenAnotherConfirm, SignUp, SignUpConfirm, SignUpKey } from './areas/auth/SignUp'
 import { SessionExpiredBar } from './components/SessionExpiredBar'
 import { KeyRecoveryNotice, RecoveryCodeSheet } from './areas/lens/KeyRecovery'
 import { CommandPalette, ariaKeys, shortcutText, type PalettePage } from './components/CommandPalette'
@@ -401,7 +402,7 @@ const under = (pathname: string, ...paths: string[]) =>
   paths.some((p) => pathname === p || (p !== '/' && pathname.startsWith(`${p}/`)))
 
 function Sidebar() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const pending = usePendingApprovals()
   // B46.16 — the name sign-up gave the workspace, under the brand.
   const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
@@ -421,7 +422,13 @@ function Sidebar() {
         <Logo width={144} />
       </Link>
       {workspace.isPending ? null : (
-        <div className="mb-2.5 flex items-center gap-2.5 rounded-inset bg-cloud p-2.5" data-testid="sidebar-workspace">
+        // B61.9 — the account tile opens "Your accounts", over the page it is pressed on.
+        <Link
+          to={withAccountsOpen(pathname, search)}
+          aria-label={`Switch account. ${workspaceLabel}${account.account ? `, ${accountChip(account.account)}` : ''}`}
+          className={cn('mb-2.5 flex items-center gap-2.5 rounded-inset bg-cloud p-2.5 text-left', pocketFocusRing)}
+          data-testid="sidebar-workspace"
+        >
           <span aria-hidden="true" className="grid h-8.5 w-8.5 shrink-0 place-items-center rounded-tile bg-cloud-2 font-bold text-ink">
             {workspaceLabel.charAt(0).toUpperCase()}
           </span>
@@ -436,7 +443,8 @@ function Sidebar() {
               </span>
             ) : null}
           </div>
-        </div>
+          <PocketIcon name="chev" size={16} className="ml-auto shrink-0 rotate-90 text-ink-3" />
+        </Link>
       )}
       <div className="grid gap-0.5">
         {item('/', 'Home', 'home', pathname === '/')}
@@ -695,6 +703,8 @@ function ConsoleShell() {
       <ApprovalSheetHost />
       {/* B61.38 — the Help panel, over whichever page ?help=open is on. */}
       <HelpChatHost pageName={helpPageName} />
+      {/* B61.9 — Your accounts, over whichever page ?accounts=open is on. */}
+      <YourAccountsHost />
     </PocketShell>
     </div>
     </>
@@ -706,7 +716,7 @@ function ConsoleShell() {
  * (pocketPending.test.tsx reads that block and fails if the two differ).
  */
 const PUBLIC_PATHS = [
-  '/marketing/*', '/pricing', '/your-money', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms', '/signup', '/signup/key', '/signup/confirm', '/signin',
+  '/marketing/*', '/pricing', '/your-money', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms', '/signup', '/signup/key', '/signup/confirm', '/accounts/new', '/accounts/new/confirm', '/signin',
   '/board/:token', '/share/:token', '/pay/:token', '/docs/s/:token',
 ]
 
@@ -800,6 +810,10 @@ export function App() {
             <Route path="/signup/key" element={<SignUpKey />} />
             {/* B61.20 — step 4: the identity check, then Home. */}
             <Route path="/signup/confirm" element={<SignUpConfirm />} />
+            {/* B61.9 — Open another account: sign-up's steps for someone signed in, then the new account's identity
+                check. Outside the gate for the reason step 3 is: a new account's Home asks its sharing choice. */}
+            <Route path="/accounts/new" element={<OpenAnotherAccount />} />
+            <Route path="/accounts/new/confirm" element={<OpenAnotherConfirm />} />
             <Route path="/signin" element={<SignIn />} />
             {/* B27.30 — a Track board its workspace published as a link, read by anyone holding it.
                 Outside the gate: the reader has no account. Read-only — see areas/board/PublicBoard.tsx. */}

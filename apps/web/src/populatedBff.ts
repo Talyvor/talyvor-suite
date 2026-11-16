@@ -221,6 +221,13 @@ const BODIES: Record<string, unknown> = {
   // B46.16 — the sidebar shows the workspace's name on every address.
   '/api/workspace/name': { id: 'ws_1', name: 'Acme' },
   '/api/workspace/account': { account_type: 'business', money_kind: 'hybrid' },
+  // B61.9 — Your accounts: the person's two, the workspace above the current one.
+  '/api/accounts': {
+    accounts: [
+      { id: 'ws_1', name: 'Acme', type: 'business', kind: 'hybrid', opened_at: '2026-09-01T00:00:00Z', current: true },
+      { id: 'ws_2', name: 'Maya Lind', type: 'personal', kind: 'fiat', opened_at: '2026-11-15T00:00:00Z', current: false },
+    ],
+  },
   // B57.18 — Home's "2 of 3 on Free" (Lens's plan through GET /api/plan), and the ECB's rates its total is valued at.
   '/api/plan': {
     plan: 'business_studio',
