@@ -4,12 +4,12 @@
 // /v1/public/fees), rounded up to the µLXC, never a status code. On Group the workspace then calls on its own provider
 // key, and the ledger gains neither row. Studio's agent past the agents Lens states for it (GET /v1/public/plans) is
 // refused naming its plan and the one that allows more; a seller's first $1.00 sale clears at 850,000 µUSD to the
-// seller and 150,000 to Talyvor; /pricing shows Team $49 and Business $299 as Lens serves them.
+// seller and 150,000 to Talyvor. B61.61 — what /pricing shows is planLadders.ts's.
 //
 // Each plan's agents, seats and fees are Lens's own figures, read on the night; the take and the prices below are
 // the decided ones, typed here on purpose, so the run fails the night Lens charges or serves any other.
 
-import { ACTION_TIMEOUT_MS, fail } from './bank.ts'
+import { fail } from './bank.ts'
 import { worstInputTokens } from './budget.ts'
 import { platformFeeBPS } from './fees.ts'
 import type { LedgerRow, MarketEarnings, PlanRefusal, Proxied, PublicPlan } from './lens.ts'
@@ -24,8 +24,6 @@ export type TesterPlan = 'business_studio' | 'business_company' | 'business_grou
 
 /** Talyvor's take of a marketplace sale, in basis points; the seller keeps the rest (B32.8, B32.9). */
 export const MARKET_TAKE_BPS = 1500
-/** Team's and Business's prices, in cents a month (B32.77). */
-export const PLAN_USD_CENTS: Readonly<Record<'team' | 'business', number>> = { team: 4900, business: 29900 }
 
 /** Each tester plan as a scenario's title reads it; a verdict says Lens's own name (GET /v1/public/plans). */
 const NAME: Readonly<Record<TesterPlan, string>> = { business_studio: 'Studio', business_company: 'Company', business_group: 'Group' }
@@ -131,22 +129,6 @@ export function splitVerdict(e: NonNullable<MarketEarnings['earnings']>[number] 
     return fail(`a $1.00 sale cleared at gross ${e.gross_usd_micros}, the seller's share ${e.share_usd_micros} and Talyvor's ${e.fee_usd_micros} µUSD; want ${DOLLAR_USD_MICROS}, ${share} and ${take}`)
   }
   return { pass: true, detail: `the $1.00 sale cleared at ${share} µUSD to the seller and ${take} µUSD to Talyvor, ${keep / 100}% and ${MARKET_TAKE_BPS / 100}% of the price before tax` }
-}
-
-/** "$49" for 4900 cents: whole dollars, as /pricing writes a plan's price. */
-const dollars = (cents: number): string => `$${(cents / 100).toLocaleString('en-US')}`
-
-/** Lens's company plan prices, and what /pricing shows for each: both the decided price. */
-export function pricesVerdict(served: readonly { id: string; usd_cents: number }[], shown: Readonly<Record<string, string>>): Verdict {
-  const wrong: string[] = []
-  for (const [id, cents] of Object.entries(PLAN_USD_CENTS)) {
-    const lens = served.filter((p) => p.id === id)
-    if (lens.length !== 1) wrong.push(`Lens serves ${lens.length} prices for ${id}`)
-    else if (lens[0].usd_cents !== cents) wrong.push(`Lens serves ${id} at ${lens[0].usd_cents} cents, not ${cents}`)
-    if (shown[id] !== dollars(cents)) wrong.push(`/pricing shows ${id} at "${shown[id] ?? '(nothing)'}", not ${dollars(cents)}`)
-  }
-  if (wrong.length > 0) return fail(wrong.join('; '))
-  return { pass: true, detail: `Lens serves Team at ${PLAN_USD_CENTS.team} and Business at ${PLAN_USD_CENTS.business} cents a month, and /pricing shows ${dollars(PLAN_USD_CENTS.team)} and ${dollars(PLAN_USD_CENTS.business)}` }
 }
 
 // ─── reaching each figure ────────────────────────────────────────────────────
@@ -351,29 +333,6 @@ export function pricingSellerSplit(seed: number, seller: number): Scenario {
       const cleared = await clearedBothSides(ctx, bought)
       if (typeof cleared === 'string') return fail(cleared)
       return splitVerdict((cleared.earned.earnings ?? []).find((x) => x.use_id === bought.line.use_id))
-    },
-  }
-}
-
-export function pricingApproved(): Scenario {
-  return {
-    id: 'pricing-approved',
-    owner: 'talyvor-suite',
-    title: "/pricing shows Team at $49 and Business at $299 a month, the prices Lens's public plans read serves",
-    run: async (ctx) => {
-      const served = await ctx.env.lens.companyPlans()
-      const page = await ctx.app.tab('/pricing')
-      const shown: Record<string, string> = {}
-      try {
-        for (const id of Object.keys(PLAN_USD_CENTS)) {
-          const price = page.getByTestId(`price-${id}`)
-          shown[id] = await price.waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS }).then(async () => (await price.innerText()).trim(), () => '(not shown)')
-        }
-      } finally {
-        await page.close()
-      }
-      ctx.evidence.push({ note: `Lens serves ${JSON.stringify(served)}; /pricing shows ${JSON.stringify(shown)}` })
-      return pricesVerdict(served, shown)
     },
   }
 }

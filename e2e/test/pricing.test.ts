@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LedgerRow, PublicPlan } from '../src/lens.ts'
-import { feeOn, feeVerdict, ownKeyVerdict, pastAgentsVerdict, pricesVerdict, splitVerdict } from '../src/pricing.ts'
+import { feeOn, feeVerdict, ownKeyVerdict, pastAgentsVerdict, splitVerdict } from '../src/pricing.ts'
 
 // One call's rows as Lens writes them (talyvor-lens economy.SpendLXCMeta, B32.11): the spend, then its fee.
 function call(spend: number, fee: number, bps: number, start = 50_000_000): LedgerRow[] {
@@ -50,12 +50,5 @@ describe('the approved prices (B32.15)', () => {
     const sale = { use_id: 'u', payable_at: '', gross_usd_micros: 1_000_000 }
     expect(splitVerdict({ ...sale, share_usd_micros: 850_000, fee_usd_micros: 150_000 }).pass).toBe(true)
     expect(splitVerdict({ ...sale, share_usd_micros: 1_000_000, fee_usd_micros: 0 }).pass).toBe(false)
-  })
-
-  it('passes Team $49 and Business $299 as Lens serves and /pricing shows them, and fails either changed', () => {
-    const served = [{ id: 'team', usd_cents: 4900 }, { id: 'business', usd_cents: 29900 }]
-    expect(pricesVerdict(served, { team: '$49', business: '$299' }).pass).toBe(true)
-    expect(pricesVerdict([served[0], { id: 'business', usd_cents: 24900 }], { team: '$49', business: '$249' }).pass).toBe(false)
-    expect(pricesVerdict(served, { team: '$49', business: '$249' }).pass).toBe(false)
   })
 })

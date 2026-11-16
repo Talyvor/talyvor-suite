@@ -33,7 +33,7 @@ export const LAUNCH_AREAS = [
   'sandbox-label',
   'home', // Home and the app shell around every launch screen
   'website', // the public site: its pages, its brand and the company plans' prices
-  'plans', // the company plans (Free, Team, Business) and their agent limits
+  'plans', // our plans, the two ladders (Solo, Crew, Fleet; Studio, Company, Group, Custom), and their agent limits
 ] as const
 
 /** LAUNCH-PACK.md section 2, hidden from users (the web app's, the BFF's and Lens's area names), and the LXC plans and credit top-ups. */
@@ -95,7 +95,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'brand-icons', 'brand-logo', 'brand-visual', 'company-line', 'hero-fade', 'honest-pages', 'marketing-board', 'pricing-approved',
     'pricing-board', 'pricing-truth', 'reading-pages', 'site-truth', 'social-preview', 'waitlist-join', 'wallet-docs', 'wallet-hero',
   ],
-  plans: ['billing-return-pages', 'plan-agents-company', 'plan-agents-group', 'pricing-studio-agents'],
+  plans: ['billing-return-pages', 'plan-agents-company', 'plan-agents-group', 'plan-change', 'pricing-studio-agents'],
 
   marketplace: [
     'buyer-protection', 'buyer-tax-profile', 'company-payment', 'lineage', 'market-abuse', 'market-agent-commitment',
@@ -154,7 +154,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
   trading: ['wallet-trading-sim'],
   credit: ['cross-company-test-money', 'wallet-loan', 'wallet-loan-default', 'wallet-loan-repay', 'wallet-loans-answered'],
   interest: [],
-  'lxc-plans': ['plan-cancel-resume', 'plan-change', 'plan-test-card', 'plans-earn-sentence', 'plans-included-usage'],
+  'lxc-plans': ['plan-cancel-resume', 'plan-test-card', 'plans-earn-sentence', 'plans-included-usage'],
   'credit-top-up': ['credits-top-up', 'webhook-replayed', 'webhook-unsigned'],
 }
 
