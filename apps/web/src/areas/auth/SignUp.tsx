@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Logo, cn } from '@talyvor/ui'
-import { Button, Field, Icon, Input, KindTile, Select, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Button, Field, Icon, Input, KindTile, PageBackground, Select, personalHues, pocketFocusRing } from '@talyvor/ui/pocket'
 import { CompanyLine } from '../../components/CompanyLine'
 import { Waitlist } from '../../components/Waitlist'
 import { SharedAnswersFact } from '../../components/StoredAnswersFacts'
@@ -71,15 +71,17 @@ function SandboxLabel() {
  *  workspace, so it passes that workspace's own label (B57.133), which says Status unknown when its read fails (S-06). */
 function SignUpFrame({ children, label = <SandboxLabel /> }: { children: React.ReactNode; label?: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-page text-ink">
-      <header className="flex items-center justify-between gap-4 border-b border-line px-gutter py-4 wide:px-10">
+    <div className="relative flex min-h-screen flex-col bg-page text-ink">
+      {/* B61.70 — the moving background, as behind every page, in a Personal account's colours. */}
+      <PageBackground hues={personalHues} />
+      <header className="relative flex items-center justify-between gap-4 border-b border-line px-gutter py-4 wide:px-10">
         <a href="/marketing" aria-label="Talyvor website" className={cn('rounded-control', pocketFocusRing)}>
           <Logo width={144} />
         </a>
         {/* B57.58 — no theme control: Settings' Appearance is the one, and before you sign in the page follows the device. */}
         <div className="flex items-center gap-3">{label}</div>
       </header>
-      <main className="mx-auto grid w-full max-w-5xl flex-1 content-start gap-5 px-gutter pb-16 pt-6 wide:px-10">
+      <main className="relative mx-auto grid w-full max-w-5xl flex-1 content-start gap-5 px-gutter pb-16 pt-6 wide:px-10">
         {children}
         <CompanyLine className="mt-6" />
       </main>
