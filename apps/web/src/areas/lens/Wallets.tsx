@@ -37,11 +37,11 @@ import { AgentFundingButtons } from './AgentFunding'
 
 // Wallets.tsx — B59.53: Wallets on the web, the twin of the phone's (B59.33). Each side the account's kind shows (SPEC
 // 3.3): Fiat only the fiat side, Stablecoin and crypto only the stablecoin side, Hybrid both, fiat first. Each side has a
-// tile per currency, then each account in it with what it holds, the company's first. Top up adds Sandbox money to one
+// tile per currency, then each account in it with what it holds, the company's first. Add money adds Sandbox money to one
 // of the company's accounts; Withdraw pays one out to a bank saved as the owner's own; Convert (Hybrid only) sells a
 // currency for USDC or USDC for a currency, between the company's accounts on the two sides. Each has a confirm step,
 // and Withdraw and Convert are signed there with the owner's passkey once the workspace has one (BFF B59.52, Lens B59.51).
-// Home's Top up, Withdraw and Convert open it at that action (?do=). Lens decides everything and every refusal is its own
+// Home's Add money, Withdraw and Convert open it at that action (?do=). Lens decides everything and every refusal is its own
 // sentence. A side, an action or a field the kind does not have is not rendered.
 // B61.84 — beside each agent's account, Add money from the company's account in its currency and Take back (AgentFunding.tsx).
 
@@ -105,7 +105,7 @@ export function WalletsScreen() {
         {shows ? (
           <div className="flex flex-wrap gap-2" data-testid="wallets-actions">
             <PocketButton type="button" icon={<Icon name="plus" size={18} />} onClick={() => open('top-up')}>
-              Top up
+              Add money
             </PocketButton>
             {shows.bankTransfers ? (
               <PocketButton type="button" variant="white" onClick={() => open('withdraw')}>
@@ -130,7 +130,7 @@ export function WalletsScreen() {
             <section key={s.side} aria-label={SIDE_WORD[s.side]} data-testid={`wallets-${s.side}`} className="grid content-start gap-3">
               <Eyebrow>{SIDE_WORD[s.side]}</Eyebrow>
               {s.totals.length === 0 ? (
-                <p className="text-body text-ink-2">{s.side === 'fiat' ? 'Top up to get started.' : 'Receive stablecoins to get started.'}</p>
+                <p className="text-body text-ink-2">{s.side === 'fiat' ? 'Add money to get started.' : 'Receive stablecoins to get started.'}</p>
               ) : (
                 <>
                   <div className="grid grid-cols-3 gap-y-3.5 rounded-card bg-cloud p-4">
@@ -241,7 +241,7 @@ function AccountAndAmount({
   )
 }
 
-/** Top up: Sandbox money into one of the company's accounts, once under its key. */
+/** Add money (B61.80; was Top up): Sandbox money into one of the company's accounts, once under its key. */
 function TopUp({ open, onClose, shows }: { open: boolean; onClose: () => void; shows: Shows }) {
   const qc = useQueryClient()
   const { read, accounts } = useCompanyAccounts(shows)
@@ -270,7 +270,7 @@ function TopUp({ open, onClose, shows }: { open: boolean; onClose: () => void; s
     <Dialog
       open={open}
       onClose={close}
-      title="Top up"
+      title="Add money"
       actions={
         confirming ? (
           <>
@@ -278,7 +278,7 @@ function TopUp({ open, onClose, shows }: { open: boolean; onClose: () => void; s
               Back
             </PocketButton>
             <PocketButton type="button" disabled={top.isPending} onClick={() => top.mutate()}>
-              {top.isPending ? 'Adding…' : 'Top up'}
+              {top.isPending ? 'Adding…' : 'Add money'}
             </PocketButton>
           </>
         ) : (

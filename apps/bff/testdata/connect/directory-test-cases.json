@@ -80,7 +80,7 @@
       "prompt": "Top up my Talyvor wallet",
       "tool": "open_topup",
       "arguments": {},
-      "expect": "The link to top up in Talyvor. Nothing is charged in the chat.",
+      "expect": "The link to add money in Talyvor. Nothing is charged in the chat.",
       "shows": { "full": ["/billing", "Nothing is charged in the chat"], "prepare_only": ["/billing", "Nothing is charged in the chat"] }
     }
   ],

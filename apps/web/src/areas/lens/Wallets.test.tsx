@@ -76,7 +76,7 @@ function show(at = '/money/wallets') {
 }
 
 describe('Wallets — the sides by kind', () => {
-  it('Hybrid: Fiat and Stablecoin side by side, a tile per currency and each account, with Top up, Withdraw and Convert', async () => {
+  it('Hybrid: Fiat and Stablecoin side by side, a tile per currency and each account, with Add money, Withdraw and Convert', async () => {
     show()
     const fiat = await screen.findByTestId('wallets-fiat')
     expect(read(within(fiat).getByTestId('wallets-tile-USD'))).toBe('US dollar$24,600.00')
@@ -86,7 +86,8 @@ describe('Wallets — the sides by kind', () => {
     const coins = screen.getByTestId('wallets-stablecoin')
     expect(read(within(coins).getByTestId('wallets-tile-USDC'))).toContain('14,000.00 USDC')
     const actions = screen.getByTestId('wallets-actions')
-    expect(within(actions).getAllByRole('button').map((b) => b.textContent)).toEqual(['Top up', 'Withdraw', 'Convert'])
+    expect(within(actions).getAllByRole('button').map((b) => b.textContent)).toEqual(['Add money', 'Withdraw', 'Convert'])
+    expect(screen.queryByText(/top.?up/i)).toBeNull()
   })
 
   it('Fiat only: no stablecoin side and no Convert', async () => {
@@ -94,7 +95,7 @@ describe('Wallets — the sides by kind', () => {
     show()
     await screen.findByTestId('wallets-fiat')
     expect(screen.queryByTestId('wallets-stablecoin')).toBeNull()
-    expect(within(screen.getByTestId('wallets-actions')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Top up', 'Withdraw'])
+    expect(within(screen.getByTestId('wallets-actions')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Add money', 'Withdraw'])
   })
 
   it('Stablecoin and crypto only: no fiat side, no Withdraw and no Convert', async () => {
@@ -102,21 +103,22 @@ describe('Wallets — the sides by kind', () => {
     show()
     await screen.findByTestId('wallets-stablecoin')
     expect(screen.queryByTestId('wallets-fiat')).toBeNull()
-    expect(within(screen.getByTestId('wallets-actions')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Top up'])
+    expect(within(screen.getByTestId('wallets-actions')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Add money'])
   })
 })
 
 describe('Wallets — each action confirms first', () => {
-  it('Top up: Continue shows what is added where, and only Top up sends it, under its key', async () => {
+  it('Add money: Continue shows what is added where, and only Add money sends it, under its key', async () => {
     show('/money/wallets?do=top-up')
-    const dialog = await screen.findByRole('dialog', { name: 'Top up' })
+    const dialog = await screen.findByRole('dialog', { name: 'Add money' })
+    expect(within(dialog).queryByText(/top.?up/i)).toBeNull()
     fireEvent.change(within(dialog).getByRole('textbox', { name: 'Amount' }), { target: { value: '250' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Continue' }))
     const confirm = await screen.findByTestId('top-up-confirm')
     expect(read(confirm)).toContain('$250.00')
     expect(read(confirm)).toContain('The company · USD')
     expect(posts).toEqual([])
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Top up' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Add money' }))
     await waitFor(() => expect(posts.map((p) => p.path)).toEqual(['/api/money/accounts/macc_usd/top-up']))
     expect(posts[0].body).toEqual({ amount_minor: 25_000 })
     expect(posts[0].key).toBeTruthy()

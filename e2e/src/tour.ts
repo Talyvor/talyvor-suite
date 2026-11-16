@@ -236,16 +236,16 @@ export function appShell(): Scenario {
 
 /**
  * B29.8 — each link Home offers opens its own screen. B57.18: Home is the launch pack's W2 — the greeting, then the total
- * with Top up and Pay, the agents with See all and the plan, and the cards — so the links clicked are those; the products
- * are in the sidebar. Each is clicked from a freshly opened Home, as a person does, and must land on its route with the
+ * with Add money and Pay, the agents with See all and the plan, and the cards — so the links clicked are those; the products
+ * are in the sidebar. B61.80: Add money (was Top up) opens Wallets at its sheet. Each is clicked from a freshly opened Home, as a person does, and must land on its route with the
  * console's own heading naming the page there — not the catch-all's "Not found".
  */
-export const HOME_CARDS = [
-  { title: 'Top up', path: '/billing', heading: 'Billing' },
+export const HOME_CARDS: readonly { title: string; path: string; heading: string; href?: string }[] = [
+  { title: 'Add money', path: '/money/wallets', heading: 'Wallets', href: '/money/wallets?do=top-up' },
   { title: 'Pay', path: '/money/pay', heading: 'Pay' },
   { title: 'See all', path: '/agents', heading: 'Agents' },
   { title: 'See all', path: '/money/card', heading: 'Talyvor Card' },
-] as const
+]
 
 export function homeCards(): Scenario {
   return {
@@ -259,7 +259,7 @@ export function homeCards(): Scenario {
         const page = await ctx.app.tab('/')
         try {
           await page.getByRole('heading', { level: 2, name: /^Good (morning|afternoon|evening)/ }).waitFor({ timeout: HEADING_TIMEOUT_MS })
-          const link = page.locator(`main a[href="${card.path}"]`).filter({ hasText: card.title })
+          const link = page.locator(`main a[href="${card.href ?? card.path}"]`).filter({ hasText: card.title })
           if ((await link.count()) < 1) {
             wrong.push(`Home has no "${card.title}" link to ${card.path}`)
             continue

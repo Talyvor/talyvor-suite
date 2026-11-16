@@ -10,7 +10,7 @@ package main
 //	set_agent_limits        a lower limit applies at once; a higher one is not applied, and the person raises it in Talyvor
 //	get_statement           an agent's statement
 //	list_incoming_requests  the money requests waiting on the person's agents
-//	open_topup              the link to top up in Talyvor: nothing is charged in the chat
+//	open_topup              the link to add money in Talyvor: nothing is charged in the chat
 //
 //	GET /api/connect/agent-ceiling   the ceiling, or {} when the person has not set one
 //	PUT /api/connect/agent-ceiling   {currency, max_per_payment_minor, daily_limit_minor, monthly_limit_minor}, each above 0;
@@ -118,11 +118,11 @@ var mcpAgentTools = []mcpTool{
 	{name: "list_incoming_requests", title: "Money requests waiting", scope: "wallets:read", kind: mcpReads, openWorld: true,
 		description: "The money requests other agents made of the person's agents that wait for an answer: who asks, of which agent, how much and why.",
 		run:         (*app).mcpIncomingRequests},
-	{name: "open_topup", title: "Top up in Talyvor", scope: "wallets:read", kind: mcpReads,
-		description: "The link where the person tops up their Talyvor wallet. Nothing is charged in the chat.",
+	{name: "open_topup", title: "Add money in Talyvor", scope: "wallets:read", kind: mcpReads,
+		description: "The link where the person adds money in Talyvor. Nothing is charged in the chat.",
 		run: func(a *app, _ context.Context, _ tenant, _ oauthGrant, _ mcpArgs) (map[string]any, error) {
 			link := a.cfg.publicBaseURL + "/billing"
-			return map[string]any{"url": link, "message": "The person tops up in Talyvor at " + link + ". Nothing is charged in the chat."}, nil
+			return map[string]any{"url": link, "message": "The person adds money in Talyvor at " + link + ". Nothing is charged in the chat."}, nil
 		}},
 }
 
