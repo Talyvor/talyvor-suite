@@ -93,6 +93,8 @@ type session struct {
 	locked   bool
 	lastSeen time.Time
 	awayAt   time.Time
+	// keyTicket is the ticket of the key sign-in that opened this session, the proof for its next key.
+	keyTicket keyTicket
 }
 
 func (s session) expiresAt() time.Time { return s.expires }
@@ -240,10 +242,8 @@ type authenticator struct {
 	httpClient     *http.Client
 	pending        *ttlMap[pendingLogin]
 	sessions       *ttlMap[session]
-	// phoneChecks are right codes waiting for their passcode, and keyTickets a key sign-in's ticket for the person's
-	// next key (phone_signin.go, B61.25).
+	// phoneChecks are right codes waiting for their passcode (phone_signin.go, B61.25).
 	phoneChecks *ttlMap[phoneCheck]
-	keyTickets  *ttlMap[keyTicket]
 	// sealer makes a session id carry its session, so a restart does not sign anyone out (B17.40).
 	// Nil without LENS_PROVISION_SECRET: sessions are then in memory only.
 	sealer *sessionSealer
@@ -281,8 +281,8 @@ func newAuthenticator(ctx context.Context, cfg config) (*authenticator, error) {
 func newSessionOnlyAuthenticator(cfg config) *authenticator {
 	return &authenticator{cfg: cfg, pending: newTTLMap[pendingLogin](), sessions: newTTLMap[session](),
 		spentIDTokens: newTTLMap[spentIDToken](),
-		phoneChecks:   newTTLMap[phoneCheck](), keyTickets: newTTLMap[keyTicket](),
-		sealer: newSessionSealer(cfg.provisionSecret, cfg.sessionTTL)}
+		phoneChecks:   newTTLMap[phoneCheck](),
+		sealer:        newSessionSealer(cfg.provisionSecret, cfg.sessionTTL)}
 }
 
 // session returns the session stored under sid, restoring it from its seal when this process has

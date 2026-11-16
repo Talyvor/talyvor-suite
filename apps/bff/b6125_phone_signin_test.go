@@ -416,6 +416,14 @@ func TestB6125_PasskeySignsInOnTheAccountLastUsed(t *testing.T) {
 	if got := s.accountTypeOf(other); got != "business "+second {
 		t.Fatalf("signed in to %q, want business %s", got, second)
 	}
+	// The key sign-in's ticket proves the next key in the session it opened, and in no other session of the person.
+	key := map[string]any{"name": "Laptop", "device": map[string]string{"public_key": "dev-5b"}}
+	if st, out, _ := s.post(br, "", "/auth/passkey/register", key); st != http.StatusForbidden || out["reason"] != "proof_needed" {
+		t.Fatalf("another session of the person added a key on the sign-in's ticket: %d %v", st, out)
+	}
+	if st, out, _ := s.post(other, "", "/auth/passkey/register", key); st != http.StatusCreated {
+		t.Fatalf("a key straight after a key sign-in: %d %v", st, out)
+	}
 }
 
 func TestB6125_LockedPhoneSessionGets423UntilUnlocked(t *testing.T) {

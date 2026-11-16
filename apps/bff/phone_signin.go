@@ -361,7 +361,7 @@ func (a *app) handlePhoneSignIn(w http.ResponseWriter, r *http.Request) {
 		writeDoorFailure(w, "phone sign-in", err)
 		return
 	}
-	a.landPerson(w, r, p, in.AccountID, nil)
+	a.landPerson(w, r, p, in.AccountID, keyTicket{}, nil)
 }
 
 func (a *app) handlePhoneJoin(w http.ResponseWriter, r *http.Request) {
@@ -392,12 +392,13 @@ func (a *app) handlePhoneJoin(w http.ResponseWriter, r *http.Request) {
 		writeDoorFailure(w, "phone join", err)
 		return
 	}
-	a.landPerson(w, r, p, "", nil)
+	a.landPerson(w, r, p, "", keyTicket{}, nil)
 }
 
 // landPerson signs p in: on the account asked for, or the one they were last on, or their first; with no account yet,
-// a sign-up session (joining) that may only finish sign-up. extra joins the answer.
-func (a *app) landPerson(w http.ResponseWriter, r *http.Request, p lensPerson, accountID string, extra map[string]any) {
+// a sign-up session (joining) that may only finish sign-up. kt is a key sign-in's ticket, kept in this session alone
+// for its next key. extra joins the answer.
+func (a *app) landPerson(w http.ResponseWriter, r *http.Request, p lensPerson, accountID string, kt keyTicket, extra map[string]any) {
 	sub, ok := a.subOf(p.Identity)
 	if !ok {
 		log.Printf("bff: phone sign-in for a person whose identity this BFF did not make (person=%s)", p.ID)
@@ -405,7 +406,8 @@ func (a *app) landPerson(w http.ResponseWriter, r *http.Request, p lensPerson, a
 		return
 	}
 	now := time.Now()
-	s := session{sub: sub, expires: now.Add(a.cfg.sessionTTL), personID: p.ID, phone: fromPhone(r), lastSeen: now, signedInAt: now}
+	s := session{sub: sub, expires: now.Add(a.cfg.sessionTTL), personID: p.ID, phone: fromPhone(r), lastSeen: now, signedInAt: now,
+		keyTicket: kt}
 	raw, err := a.provisionPost(r.Context(), p.Identity, provisionAsk{mode: "list"}, nil, signupAccount{})
 	var list struct {
 		Accounts []personAccount `json:"accounts"`
@@ -576,18 +578,17 @@ func (a *app) handleKeySignInFinish(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) landPersonWithKey(w http.ResponseWriter, r *http.Request, out keySignedIn, accountID string) {
-	// The key's ticket proves the next key for 5 minutes (Lens B61.24), so adding one straight after asks for nothing.
-	a.auth.keyTickets.put(out.Person.ID, keyTicket{ticket: out.Ticket, expires: parseExpiry(out.ExpiresAt)})
-	a.landPerson(w, r, out.Person, accountID, map[string]any{"phone_check_due": out.PhoneCheckDue})
+	// The key's ticket proves the next key for 5 minutes (Lens B61.24), so adding one straight after, in the session
+	// this sign-in opened, asks for nothing.
+	a.landPerson(w, r, out.Person, accountID, keyTicket{ticket: out.Ticket, expires: parseExpiry(out.ExpiresAt)},
+		map[string]any{"phone_check_due": out.PhoneCheckDue})
 }
 
-// keyTicket is a key sign-in's ticket from Lens, kept server-side for the person's next key.
+// keyTicket is a key sign-in's ticket from Lens, kept server-side in the session that sign-in opened (never sealed).
 type keyTicket struct {
 	ticket  string
 	expires time.Time
 }
-
-func (t keyTicket) expiresAt() time.Time { return t.expires }
 
 // personSession is the session of a person (one who has a person record), or a refusal written.
 func (a *app) personSession(w http.ResponseWriter, r *http.Request) (string, session, bool) {
@@ -632,7 +633,7 @@ func (a *app) handlePasskeyRegister(w http.ResponseWriter, r *http.Request) {
 	if a.doorUnavailable(w, r) {
 		return
 	}
-	_, s, ok := a.personSession(w, r)
+	sid, s, ok := a.personSession(w, r)
 	if !ok {
 		return
 	}
@@ -652,10 +653,9 @@ func (a *app) handlePasskeyRegister(w http.ResponseWriter, r *http.Request) {
 	if len(in.Device) > 0 {
 		body["device"] = in.Device
 	}
-	if in.Passcode == "" {
-		if t, ok := a.auth.keyTickets.take(s.personID); ok {
-			body["key_ticket"] = t.ticket
-		}
+	if in.Passcode == "" && s.keyTicket.ticket != "" && time.Now().Before(s.keyTicket.expires) {
+		body["key_ticket"] = s.keyTicket.ticket
+		a.auth.sessions.update(sid, func(cur session) session { cur.keyTicket = keyTicket{}; return cur })
 	}
 	var out map[string]any
 	if err := a.lensDoor(r.Context(), "/v1/auth/passkey/register", body, &out); err != nil {
