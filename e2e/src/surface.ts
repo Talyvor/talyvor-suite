@@ -818,7 +818,7 @@ export function docsTeamGrant(seed: number): Scenario {
     owner: 'talyvor-docs',
     items: ['B28.446', 'B28.450'],
     // Bob and Carol take two of Team's five seats; Free holds one.
-    plan: 'team',
+    plan: 'business_company',
     title: 'Docs: a team given edit on a private page lets its member edit it, a workspace member off the team is refused and cannot join it, and taking the member off takes the access away',
     run: async (ctx) => {
       const { env, app } = ctx

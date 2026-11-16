@@ -23,7 +23,7 @@ export function roomSpec(i: number): Scenario {
     owner: 'talyvor-suite',
     feature: 'Rooms',
     // A private room: Free opens none.
-    plan: 'team',
+    plan: 'business_company',
     own: true,
     title: "a room's spec, posted from a Docs page, is in the room's AI's context, and its update replaces it: asked for the spec's code word, the AI " +
       'answers the word the latest spec names',

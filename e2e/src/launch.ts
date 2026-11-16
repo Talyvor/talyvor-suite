@@ -82,7 +82,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
   ],
   connector: ['connect-approve', 'connect-contact', 'connect-mcp', 'connect-oauth', 'connect-pay', 'connect-recurring'],
   settings: [
-    'api-key-revoke', 'console-screens-draw', 'keys-unlisted', 'operator-compliance-boundary', 'seats-free', 'seats-team',
+    'api-key-revoke', 'console-screens-draw', 'keys-unlisted', 'operator-compliance-boundary', 'seats-company', 'seats-studio',
   ],
   support: ['help-complaint', 'help-no-dead-control', 'help-request', 'your-data-request'],
   legal: ['legal-pages-whole'],
@@ -95,7 +95,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'brand-icons', 'brand-logo', 'brand-visual', 'company-line', 'hero-fade', 'honest-pages', 'marketing-board', 'pricing-approved',
     'pricing-board', 'pricing-truth', 'reading-pages', 'site-truth', 'social-preview', 'waitlist-join', 'wallet-docs', 'wallet-hero',
   ],
-  plans: ['billing-return-pages', 'plan-agents-business', 'plan-agents-team', 'pricing-free-agents'],
+  plans: ['billing-return-pages', 'plan-agents-company', 'plan-agents-group', 'pricing-studio-agents'],
 
   marketplace: [
     'buyer-protection', 'buyer-tax-profile', 'company-payment', 'lineage', 'market-abuse', 'market-agent-commitment',
@@ -144,8 +144,8 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'file-bomb-bounded', 'follow-up-not-cached', 'gateway-auth', 'gateway-keys', 'gateway-mcp', 'gateway-providers',
     'gateway-sessions', 'injection-blocked', 'keys-not-forwarded', 'known-answer', 'lens-convert', 'lens-reads', 'lens-tokens',
     'lxc-convert-bonds', 'named-ids-isolated', 'nodes', 'one-digit-trap', 'outputs-attribution', 'pattern-mining-switch',
-    'personal-data-not-pooled', 'pool-isolation', 'pooled-royalty', 'povi', 'pricing-fee-business', 'pricing-fee-free',
-    'pricing-fee-team', 'pricing-own-key', 'provider-keys', 'rate-limits-hold', 'rephrase-same-account', 'royalties-not-headline',
+    'personal-data-not-pooled', 'pool-isolation', 'pooled-royalty', 'povi', 'pricing-fee-company', 'pricing-fee-group',
+    'pricing-fee-studio', 'pricing-own-key', 'provider-keys', 'rate-limits-hold', 'rephrase-same-account', 'royalties-not-headline',
     'settings-config-budgets', 'settings-guardrails', 'settings-operator-only', 'settings-prompts', 'settings-stored-answers',
     'settings-switches', 'settings-tare-distill', 'speech-through-lens', 'spend-plain-words', 'spend-platform-fee',
     'spending-limit', 'ssrf-refused', 'tare-model', 'tare-training', 'try-conversion', 'try-tare', 'workspace-limits-raised',
@@ -184,7 +184,7 @@ export const LAUNCH_CANNOT_PLAY: Readonly<Record<string, string>> = {
   ].map((id) => [id, LXC_PARKED])),
   ...Object.fromEntries([
     'agent-cards', 'agent-wallet-kinds', 'batch-approval-pays-once', 'coach-week', 'invoices-screen', 'money-layer-contract', 'pay-screen',
-    'pocket-10', 'seats-team', 'wallet-statements',
+    'pocket-10', 'wallet-statements',
   ].map((id) => [id, NEEDS_STRIPE_FORM])),
 }
 

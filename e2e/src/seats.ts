@@ -2,19 +2,26 @@
 // does (apps/web/src/areas/lens/Members.tsx). The BFF adds them to the session's Track workspace (POST
 // /api/members), and Track asks Lens, before each add, whether the plan of the Lens workspace the BFF names has
 // a seat for one more (B32.70, B32.73). The oracles are what Track answered and its roster read back after,
-// never the screen alone: a Free workspace's second member is refused in Lens's own plain sentence (internal/plans
-// RefuseCount, B55.29), "Free allows 1 seat, and it is taken. Team allows 5.", and the roster still lists the owner
-// alone; on Team (a test-mode subscription) the fifth member is added and the sixth refused, naming Business.
+// never the screen alone: a Studio workspace's second member is refused in Lens's own plain sentence (internal/plans
+// RefuseCount, B55.29), "Studio allows 1 seat, and it is taken. Company allows 5.", and the roster still lists the
+// owner alone; on Company the last seat it allows is filled and the next refused, naming the plan that allows more.
+// B61.90 — each on a workspace made on its plan (talyvor-lens B61.57), and every seat count and plan name is Lens's
+// own (GET /v1/public/plans).
 
 import type { Page } from 'playwright'
 import { ACTION_TIMEOUT_MS, fail } from './bank.ts'
+import type { PublicPlan } from './lens.ts'
+import { allowingMore, businessStep } from './pricing.ts'
 import { CannotTest, type Scenario, type ScenarioCtx, type Verdict } from './scenarios.ts'
-import { payCheckout } from './screens.ts'
 
-/** Seats on each plan in LENS_PLAN_GATES' default (Nicolai's decision of 5 Oct 2026, B32.12). */
-const TEAM_SEATS = 5
-/** How long Stripe's webhook may take to reach Lens after the test card is taken. */
-const WEBHOOK_WAIT_MS = 60_000
+/** Lens's sentence for one member past what `plan` allows (internal/plans RefuseCount), from Lens's own figures. */
+export function seatsRefusal(ladder: readonly PublicPlan[], plan: PublicPlan): { want: string; allows: string } {
+  const limit = plan.people
+  const allows = allowingMore(ladder, plan, (p) => p.people)
+  const said = limit === 1 ? `${plan.name} allows 1 seat, and it is taken.` : `${plan.name} allows ${limit} seats, and all ${limit} are taken.`
+  const more = allows === undefined ? ' A contract with Talyvor sets more.' : allows.people === -1 ? ` ${allows.name} allows unlimited seats.` : ` ${allows.name} allows ${allows.people}.`
+  return { want: said + more, allows: allows?.id ?? '' }
+}
 
 /** Track's memberView, as GET /api/members relays it. */
 interface Member { id: string; email: string; role: string }
@@ -74,24 +81,27 @@ async function oneTooMany(page: Page, ctx: ScenarioCtx, email: string, before: M
   return undefined
 }
 
-export function seatsFree(seed: number): Scenario {
+export function seatsStudio(seed: number): Scenario {
   return {
-    id: 'seats-free',
+    id: 'seats-studio',
     owner: 'talyvor-track',
-    // B35.7 — Free's own gate, on a workspace of its own: the users that run it are on paid plans for their others.
-    plan: 'free',
+    // B35.7 — Studio's own gate, on a workspace of its own: the users that run it are on paid plans for their others.
+    plan: 'business_studio',
     own: true,
-    title: "a Free workspace's owner adds a second member on Members: Track refuses it in Lens's words, naming Free and Team, and the roster still lists one",
+    title: "a Studio workspace's owner adds a member past the seats Lens states Studio allows on Members: Track refuses it in Lens's words, naming Studio and the plan that allows more, and the roster keeps what it had",
     feature: 'Members',
     run: async (ctx) => {
+      const { ladder, step } = await businessStep(ctx, 'business_studio')
+      if (step.people !== 1) throw new CannotTest(`Lens states ${step.name} allows ${step.people} people; this scenario adds the second member to a workspace of one`)
+      const { want, allows } = seatsRefusal(ladder, step)
       const page = await ctx.app.tab('/members')
       try {
         const before = await roster(page)
         ctx.evidence.push({ note: `the roster before: ${before.map((m) => `${m.email} (${m.role})`).join(', ') || 'nobody'}` })
         if (before.length !== 1) throw new Error(`a new workspace's roster lists ${before.length} members; Track's bootstrap makes its owner the one`)
         const email = newEmail(seed, 2)
-        const wrong = await oneTooMany(page, ctx, email, before, 'free', 'team', 'Free allows 1 seat, and it is taken. Team allows 5.')
-        return wrong ?? { pass: true, detail: `a second member on Free was refused in Lens's words with a link to /plans, and the roster still lists its owner alone` }
+        const wrong = await oneTooMany(page, ctx, email, before, step.id, allows, want)
+        return wrong ?? { pass: true, detail: `a second member on ${step.name} was refused in Lens's words with a link to /plans, and the roster still lists its owner alone` }
       } finally {
         await page.close()
       }
@@ -99,53 +109,39 @@ export function seatsFree(seed: number): Scenario {
   }
 }
 
-/**
- * On Team, bought with the test card on a checkout Lens opens (Plans offers company plans no button yet), the
- * owner adds members until the roster holds five, each read back; the sixth is refused naming the business plan.
- */
-export function seatsTeam(seed: number): Scenario {
+/** On Company, made on it, the owner adds members until the roster holds the seats Lens states Company allows, each read back; the next is refused. */
+export function seatsCompany(seed: number): Scenario {
   return {
-    id: 'seats-team',
+    id: 'seats-company',
     owner: 'talyvor-track',
-    // B35.7 — on a workspace of its own, created on Free: Team is bought on it with the test card.
+    // B35.7 — on a workspace of its own; B61.90 — made on Company itself.
+    plan: 'business_company',
     own: true,
-    title: "on Team (a test-mode subscription) the owner adds members on Members up to the fifth, each read back on the roster; the sixth is refused in Lens's words, naming the team plan and the business plan",
+    title: "on Company the owner adds members on Members up to the seats Lens states Company allows, each read back on the roster; the next is refused in Lens's words, naming Company and the plan that allows more",
     feature: 'Members',
     run: async (ctx) => {
-      const { env, app } = ctx
-      const start = await env.lens.startSubscription(app.user, 'team')
-      if (!start.ok || start.value.url === undefined) {
-        throw new CannotTest(`Lens opens this test workspace no Team checkout: ${start.status} ${start.ok ? 'without a url' : start.error}`)
-      }
-      const paid = await payCheckout(app, start.value.url, `tester-${seed}@example.com`)
-      ctx.evidence.push({ note: `Team, paid with the test card on ${paid.checkout}${paid.refused === undefined ? '' : `: ${paid.refused}`}` })
-      if (paid.refused !== undefined) return fail(`paying for Team with the test card: ${paid.refused}`)
-      const end = Date.now() + WEBHOOK_WAIT_MS
-      let sub = await env.lens.subscription(app.user)
-      while (!(sub.ok && sub.value.subscribed) && Date.now() < end) {
-        await app.page.waitForTimeout(5000)
-        sub = await env.lens.subscription(app.user)
-      }
-      if (!sub.ok || !sub.value.subscribed) return fail(`paid for Team with the test card, and Lens's subscription read says ${sub.ok ? 'not subscribed' : `${sub.status} ${sub.error}`}`)
-
-      const page = await app.tab('/members')
+      const { ladder, step } = await businessStep(ctx, 'business_company')
+      if (step.people === -1) throw new CannotTest(`Lens states ${step.name} allows unlimited people, so there is no member past it to refuse`)
+      const seats = step.people
+      const { want, allows } = seatsRefusal(ladder, step)
+      const page = await ctx.app.tab('/members')
       try {
         let members = await roster(page)
-        ctx.evidence.push({ note: `on Team, the roster before: ${members.map((m) => `${m.email} (${m.role})`).join(', ')}` })
-        if (members.length === 0 || members.length >= TEAM_SEATS) throw new Error(`the roster lists ${members.length} before any add on Team`)
-        while (members.length < TEAM_SEATS) {
+        ctx.evidence.push({ note: `on ${step.name}, the roster before: ${members.map((m) => `${m.email} (${m.role})`).join(', ')}` })
+        if (members.length === 0 || members.length >= seats) throw new Error(`the roster lists ${members.length} before any add on ${step.name}`)
+        while (members.length < seats) {
           const email = newEmail(seed, members.length + 1)
           const add = await addOnScreen(page, email)
           ctx.evidence.push({ note: `Add member ${email} with ${members.length} on the roster: ${add.status}; Members shows "${add.shown}"`, answer: JSON.stringify(add.body) })
-          if (add.status !== 201) return fail(`on Team, member ${members.length + 1} of ${TEAM_SEATS} was refused: ${add.status} ${add.body.code ?? ''} "${add.body.error ?? ''}"`)
+          if (add.status !== 201) return fail(`on ${step.name}, member ${members.length + 1} of ${seats} was refused: ${add.status} ${add.body.code ?? ''} "${add.body.error ?? ''}"`)
           const after = await roster(page)
           if (after.length !== members.length + 1 || !after.some((m) => m.email === email)) {
-            return fail(`on Team, ${email} was added (201) and the roster lists ${after.length}: ${after.map((m) => m.email).join(', ')}`)
+            return fail(`on ${step.name}, ${email} was added (201) and the roster lists ${after.length}: ${after.map((m) => m.email).join(', ')}`)
           }
           members = after
         }
-        const wrong = await oneTooMany(page, ctx, newEmail(seed, TEAM_SEATS + 1), members, 'team', 'business', `Team allows ${TEAM_SEATS} seats, and all ${TEAM_SEATS} are taken. Business allows 25.`)
-        return wrong ?? { pass: true, detail: `on Team the roster took its fifth member; the sixth was refused in Lens's words with a link to /plans, and the roster still lists five` }
+        const wrong = await oneTooMany(page, ctx, newEmail(seed, seats + 1), members, step.id, allows, want)
+        return wrong ?? { pass: true, detail: `on ${step.name} the roster took its member ${seats}; the next was refused in Lens's words with a link to /plans, and the roster still lists ${seats}` }
       } finally {
         await page.close()
       }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { LedgerRow } from '../src/lens.ts'
-import { feeOn, feeVerdict, fourthAgentVerdict, ownKeyVerdict, pricesVerdict, splitVerdict } from '../src/pricing.ts'
+import type { LedgerRow, PublicPlan } from '../src/lens.ts'
+import { feeOn, feeVerdict, ownKeyVerdict, pastAgentsVerdict, pricesVerdict, splitVerdict } from '../src/pricing.ts'
 
 // One call's rows as Lens writes them (talyvor-lens economy.SpendLXCMeta, B32.11): the spend, then its fee.
 function call(spend: number, fee: number, bps: number, start = 50_000_000): LedgerRow[] {
@@ -35,10 +35,15 @@ describe('the approved prices (B32.15)', () => {
     expect(ownKeyVerdict({ status: 200, ownKey: false }, []).pass).toBe(false)
   })
 
-  it("passes Lens's refusal of a Free workspace's fourth agent, and fails a fourth agent made", () => {
-    const refusal = { error: 'Free allows 3 agents, and all 3 are in use. Team allows 25.', setting: 'LENS_PLAN_GATES', plan: 'free', gate: 'agents', limit: 3, allows: 'team' }
-    expect(fourthAgentVerdict({ status: 402, refusal }).pass).toBe(true)
-    expect(fourthAgentVerdict({ status: 201, agent: { id: 'agt_4' } }).pass).toBe(false)
+  it("passes Lens's refusal of a Studio workspace's agent past its gate, in the figures Lens states, and fails one made (B61.90)", () => {
+    const plan = (id: PublicPlan['id'], name: string, agents: number): PublicPlan =>
+      ({ id, name, price_minor: null, agents, people: 1, gates: { agents, seats: 1, own_provider_keys: 'none', slack_teams_approvals: false } })
+    const ladder = [plan('business_studio', 'Studio', 3), plan('business_company', 'Company', 25), plan('business_group', 'Group', -1)]
+    const refusal = { error: 'Studio allows 3 agents, and all 3 are in use. Company allows 25.', setting: 'LENS_PLAN_GATES', plan: 'business_studio', gate: 'agents', limit: 3, allows: 'business_company' }
+    expect(pastAgentsVerdict({ status: 402, refusal }, ladder, ladder[0], '4th').pass).toBe(true)
+    expect(pastAgentsVerdict({ status: 201, agent: { id: 'agt_4' } }, ladder, ladder[0], '4th').pass).toBe(false)
+    // Lens's figure moved: Studio now allows 5, and the 5 Oct sentence is not Lens's.
+    expect(pastAgentsVerdict({ status: 402, refusal }, ladder, { ...ladder[0], agents: 5 }, '6th').pass).toBe(false)
   })
 
   it("passes a first $1.00 sale at 850,000 and 150,000 µUSD, and fails the seller keeping it all", () => {

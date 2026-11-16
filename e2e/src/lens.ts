@@ -759,6 +759,24 @@ export interface WorkspacePlan {
   gates: { agents: number; slack_teams_approvals?: boolean }
 }
 
+/** B61.90 — one plan as Lens's GET /v1/public/plans states it (talyvor-lens B61.57): -1 is unlimited. */
+export interface PublicPlan {
+  id: Plan
+  name: string
+  /** A month, by currency, in minor units; null for Custom, which a contract prices. */
+  price_minor: Record<string, number> | null
+  by_contract?: boolean
+  agents: number
+  people: number
+  gates: { agents: number; seats: number; own_provider_keys: string; slack_teams_approvals: boolean }
+}
+
+/** Both ladders, each from its smallest plan up. */
+export interface PublicPlans {
+  personal: PublicPlan[]
+  business: PublicPlan[]
+}
+
 /** B35.7 — every fee Talyvor charges, as Lens's public read states it (GET /v1/public/fees): basis points, 100 = 1%. */
 export interface Fees {
   /** Talyvor's take of a listing sale; the seller keeps the rest. */
@@ -1153,7 +1171,7 @@ export class LensClient {
     const list = body.workspaces ?? []
     if (list.length !== count) throw new Error(`asked Lens for ${count} synthetic users, got ${list.length}`)
     if (plan !== undefined && body.plan !== plan) throw new Error(`asked Lens for ${count} synthetic users on ${plan}, and it made them on ${body.plan ?? 'no plan it names'}`)
-    const users: SyntheticUser[] = list.map((w, index) => ({ index, workspaceID: w.workspace_id, token: w.token, expiresAt: w.expires_at, plan: plan ?? 'free' }))
+    const users: SyntheticUser[] = list.map((w, index) => ({ index, workspaceID: w.workspace_id, token: w.token, expiresAt: w.expires_at, plan: plan ?? 'business_studio' }))
     if (confirm) {
       for (const f of (await confirmAll(this, users)).failed) {
         this.pace.incidents.push(`${new Date().toISOString()} ${this.tag.scenario}: synthetic user ${f.user.workspaceID} could not confirm who it is: ${f.why}`)
@@ -1553,6 +1571,14 @@ export class LensClient {
   /** B35.7 — every fee Talyvor charges, as Lens's public read states it, read with no credential. */
   async fees(): Promise<Fees> {
     return (await this.call('GET', '/v1/public/fees', {})) as Fees
+  }
+
+  /**
+   * B61.90 — both ladders as Lens states them with no credential (GET /v1/public/plans, talyvor-lens B61.57): each plan's
+   * name, monthly price by currency and the agents and people it allows, -1 unlimited.
+   */
+  async publicPlans(): Promise<PublicPlans> {
+    return (await this.call('GET', '/v1/public/plans', {})) as PublicPlans
   }
 
   /** The plan Lens holds the workspace to, its gates, and the agents it has now. */

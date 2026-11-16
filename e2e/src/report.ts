@@ -429,7 +429,7 @@ export function renderPlans(run: ReportedRun): string[] {
   const lines = ['', '### By plan', '',
     'Each user ran on the largest plan its scenarios need; a scenario that tests a plan\'s own gate ran on a workspace of its own, on that plan.', '',
     '| Plan | Workspaces | Pass | Fail | Error | Skip | Failed or errored |', '|---|---:|---:|---:|---:|---:|---|']
-  const order = ['free', 'team', 'business', 'enterprise']
+  const order = ['business_studio', 'business_company', 'business_group', 'business_custom']
   for (const plan of [...on.keys()].sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99))) {
     const os = on.get(plan) ?? []
     const n = { PASS: 0, FAIL: 0, ERROR: 0, SKIP: 0 }

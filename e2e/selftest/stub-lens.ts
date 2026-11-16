@@ -173,13 +173,40 @@ const APP_URL = process.env.STUB_APP_URL ?? 'http://localhost:8797'
 const PLAN_FEES: Record<string, number> = { plus: 2000, pro: 10000, max: 20000 }
 /** B32.71 — the company plans Lens sells a test workspace (B32.10). They grant no allowance. */
 const COMPANY_PLANS: Record<string, number> = { team: 4900, business: 29900 }
-/** B32.11 — the platform fee on AI spend by plan, and B32.12 — the agents each plan holds (lens.env.example's defaults). */
-const PLATFORM_FEE_BPS: Record<string, number> = { free: 550, team: 300, business: 100 }
-const PLAN_AGENTS: Record<string, number> = { free: 3, team: 25, business: -1 }
-/** B32.12 — each plan's seats in LENS_PLAN_GATES' default (-1 unlimited), in the order a refusal looks for one
- *  that would allow more; plus, pro and max take free's gates and byok takes team's. */
-const SEATS: [string, number][] = [['free', 1], ['team', 5], ['business', 25], ['enterprise', -1]]
-const GATED_AS: Record<string, string> = { plus: 'free', pro: 'free', max: 'free', byok: 'team' }
+/** talyvor-lens B61.57 — the business ladder, smallest first (internal/plans BusinessLadder), and each plan's name. */
+const BUSINESS_LADDER = ['business_studio', 'business_company', 'business_group', 'business_custom']
+const PERSONAL_LADDER = ['personal_solo', 'personal_crew', 'personal_fleet']
+const PLAN_NAMES: Record<string, string> = { personal_solo: 'Solo', personal_crew: 'Crew', personal_fleet: 'Fleet',
+  business_studio: 'Studio', business_company: 'Company', business_group: 'Group', business_custom: 'Custom' }
+/** The plan a business on a 5 Oct plan is on now (internal/plans Successor); undefined for none of them. */
+function successor(old: string): string | undefined {
+  return { free: BUSINESS_LADDER[0], team: BUSINESS_LADDER[1], byok: BUSINESS_LADDER[1], plus: BUSINESS_LADDER[1], pro: BUSINESS_LADDER[1],
+    max: BUSINESS_LADDER[1], business: BUSINESS_LADDER[2], enterprise: BUSINESS_LADDER[3] }[old]
+}
+/** B32.11 — the platform fee on AI spend by plan, and B32.12 — the agents and seats each plan holds (-1 unlimited), as
+ *  lens.env.example's defaults give them since B61.57 (internal/fees and internal/plans Defaults). */
+const PLATFORM_FEE_BPS: Record<string, number> = { personal_solo: 550, personal_crew: 300, personal_fleet: 100,
+  business_studio: 550, business_company: 300, business_group: 100, business_custom: 100 }
+const PLAN_AGENTS: Record<string, number> = { personal_solo: 3, personal_crew: 10, personal_fleet: 25,
+  business_studio: 3, business_company: 25, business_group: -1, business_custom: -1 }
+/** Each business plan's seats, in the order a refusal looks for one that would allow more. */
+const SEATS: [string, number][] = [['business_studio', 1], ['business_company', 5], ['business_group', 25], ['business_custom', -1]]
+/** The 5 Oct plan the rooms stub (stub-rooms.ts) reads each business plan's room limits by. */
+const ROOMS_PLAN: Record<string, string> = { business_studio: 'free', business_company: 'team', business_group: 'business', business_custom: 'enterprise' }
+/** Every plan's gates as internal/plans Defaults gives them. */
+function planGates(): Record<string, { agents: number; seats: number; own_provider_keys: string; live_money: boolean; slack_teams_approvals: boolean;
+  sso: boolean; audit_export: boolean; edge: boolean }> {
+  const g = (id: string, keys: string, approvals: boolean, sso: boolean, edge = false) => ({ agents: PLAN_AGENTS[id],
+    seats: SEATS.find(([p]) => p === id)?.[1] ?? 1, own_provider_keys: keys, live_money: true, slack_teams_approvals: approvals, sso, audit_export: sso, edge })
+  return { personal_solo: g('personal_solo', 'none', false, false), personal_crew: g('personal_crew', 'none', false, false),
+    personal_fleet: g('personal_fleet', 'none', false, false), business_studio: g('business_studio', 'none', false, false),
+    business_company: g('business_company', 'add_on', true, false), business_group: g('business_group', 'included', true, true),
+    business_custom: g('business_custom', 'included', true, true, true) }
+}
+/** Each plan's monthly price in minor units by currency (internal/plans DefaultPrices); Custom is by contract. */
+const PLAN_PRICES_MINOR: Record<string, Record<string, number>> = {
+  personal_solo: { GBP: 0, EUR: 0, USD: 0 }, personal_crew: { GBP: 399, EUR: 399, USD: 399 }, personal_fleet: { GBP: 799, EUR: 899, USD: 999 },
+  business_studio: { GBP: 1000, EUR: 1000, USD: 1000 }, business_company: { GBP: 3500, EUR: 3500, USD: 3500 }, business_group: { GBP: 12500, EUR: 12500, USD: 12500 } }
 const ALLOWANCE_ULXC = 50_000_000
 
 const model = (id: string, provider: string, display_name: string, input_per_1m: number, output_per_1m: number, release_date: string, tier: string,
@@ -341,10 +368,10 @@ function tag(ws: Workspace, req: IncomingMessage, usd: number): void {
     issue: BREAK === 'issue' ? '' : String(req.headers['x-talyvor-issue'] ?? ''), request_id: 'req_' + randomBytes(10).toString('hex') })
 }
 
-/** B32.12 — the plan a workspace's gates are read under: a chat plan takes Free's. */
+/** talyvor-lens B61.57 — the plan a workspace is on (internal/plans Of): the plan put on it, else the successor of the
+ *  5 Oct plan its subscription bills, else Studio. */
 function gatedAs(ws: Workspace): string {
-  const id = ws.plan?.id ?? ws.syntheticPlan ?? 'free'
-  return PLAN_FEES[id] !== undefined ? 'free' : id
+  return ws.syntheticPlan ?? (ws.plan === undefined ? undefined : successor(ws.plan.id)) ?? BUSINESS_LADDER[0]
 }
 
 /** What the workspace spent this calendar month, in dollars (Lens spend/current-month). */
@@ -1144,11 +1171,10 @@ function seatsCheck(res: ServerResponse, wsID: string, members: number): void {
   const ws = workspaces.get(wsID)
   if (ws === undefined) return json(res, 404, { error: 'workspace not found' })
   if (!(members >= 0)) return json(res, 400, { error: 'members must be the number of members the workspace would have, ≥ 0' })
-  const plan = ws.plan?.id ?? ws.syntheticPlan ?? 'free'
-  const gated = GATED_AS[plan] ?? plan
-  const limit = SEATS.find(([p]) => p === gated)?.[1] ?? 1
+  const plan = gatedAs(ws)
+  const limit = SEATS.find(([p]) => p === plan)?.[1] ?? 1
   if (limit === -1 || members <= limit) return json(res, 200, { plan, seats: limit, members })
-  const name = (p: string) => p[0].toUpperCase() + p.slice(1)
+  const name = (p: string) => PLAN_NAMES[p] ?? p
   const allows = BREAK === 'seats-allows' ? undefined : SEATS.find(([, n]) => n === -1 || n > limit)
   const error = (limit === 1 ? `${name(plan)} allows 1 seat, and it is taken.` : `${name(plan)} allows ${limit} seats, and all ${limit} are taken.`)
     + (allows === undefined ? ' A contract with Talyvor sets more.' : allows[1] === -1 ? ` ${name(allows[0])} allows unlimited seats.` : ` ${name(allows[0])} allows ${allows[1]}.`)
@@ -1343,10 +1369,18 @@ createServer(async (req, res) => {
         const ws = workspaces.get(decodeURIComponent(onPlan[1]))
         if (ws === undefined) return json(res, 404, { error: 'not a synthetic workspace' })
         const { plan = '' } = JSON.parse((await read(req)) || '{}') as { plan?: string }
-        ws.syntheticPlan = plan
-        return json(res, 200, { workspace_id: ws.id, plan: { plan } })
+        // talyvor-lens B61.57 — any business plan, or a 5 Oct name taken as its successor.
+        const on = BUSINESS_LADDER.includes(plan) ? plan : successor(plan)
+        if (on === undefined) return json(res, 400, { error: `plan must be one of ${[...PERSONAL_LADDER, ...BUSINESS_LADDER].join(', ')}` })
+        ws.syntheticPlan = on
+        return json(res, 200, { workspace_id: ws.id, plan: { plan: on } })
       }
-      const { count = 100, plan = 'free' } = JSON.parse((await read(req)) || '{}') as { count?: number; plan?: string }
+      const asked = JSON.parse((await read(req)) || '{}') as { count?: number; plan?: string }
+      const count = asked.count ?? 100
+      // talyvor-lens B61.57 — Studio unnamed, a business plan as named, a 5 Oct name as its successor; the answer names
+      // the plan made.
+      const plan = asked.plan === undefined || asked.plan === '' ? BUSINESS_LADDER[0] : BUSINESS_LADDER.includes(asked.plan) ? asked.plan : successor(asked.plan)
+      if (plan === undefined) return json(res, 400, { error: `plan must be one of ${[...PERSONAL_LADDER, ...BUSINESS_LADDER].join(', ')}` })
       const expires = new Date(Date.now() + 24 * 3600e3).toISOString().replace(/\.\d+Z$/, 'Z')
       const out = []
       for (let i = 0; i < count; i++) {
@@ -1395,11 +1429,15 @@ createServer(async (req, res) => {
       return json(res, 200, { plans: Object.entries(PLAN_FEES).map(([id, cents]) => ({ id, usd_cents: cents, included_ulxc: (ALLOWANCE_ULXC * cents) / PLAN_FEES.plus })),
         company_plans: Object.entries(COMPANY_PLANS).map(([id, cents]) => ({ id, usd_cents: cents })), byok_add_on_usd_cents: 19900, enterprise_from_usd_cents: 250000 })
     }
+    // talyvor-lens B61.57 — both ladders, each plan's monthly price by currency and what it allows (GET /v1/public/plans).
+    if (p === '/v1/public/plans') {
+      const gates = planGates()
+      const ladder = (ids: string[]) => ids.map((id) => ({ id, name: PLAN_NAMES[id], price_minor: PLAN_PRICES_MINOR[id] ?? null,
+        ...(id === 'business_custom' ? { by_contract: true } : {}), agents: gates[id].agents, people: gates[id].seats, gates: gates[id] }))
+      return json(res, 200, { currencies: ['GBP', 'EUR', 'USD'], stablecoin_priced_in: 'USD', personal: ladder(PERSONAL_LADDER), business: ladder(BUSINESS_LADDER) })
+    }
     if (p === '/v1/public/plan-gates') {
-      const gate = (agents: number, seats: number, keys: string, live: boolean, sso: boolean, edge: boolean) =>
-        ({ agents, seats, own_provider_keys: keys, live_money: live, slack_teams_approvals: live, sso, audit_export: sso, edge })
-      return json(res, 200, { order: ['free', 'team', 'business', 'enterprise'], plans: { free: gate(3, 1, 'none', false, false, false),
-        team: gate(25, 5, 'add_on', true, false, false), business: gate(-1, 25, 'included', true, true, false), enterprise: gate(-1, -1, 'included', true, true, true) },
+      return json(res, 200, { order: [...PERSONAL_LADDER, ...BUSINESS_LADDER], plans: planGates(),
         // talyvor-lens B56.8 — plans.Built, as Lens's main has it.
         built: { agents: true, seats: true, own_provider_keys: true, live_money: true, slack_teams_approvals: false, sso: broke('label-built'), audit_export: true, edge: false } })
     }
@@ -1416,7 +1454,8 @@ createServer(async (req, res) => {
     if (scanReport !== null) return bank.scan.report(res, scanReport[1])
     if (p === '/v1/public/fees') {
       return json(res, 200, { market_take_bps: 1500, services_take_bps: 500, compute_take_bps: 500, lending_fee_bps: 100,
-        platform_fee_bps: { ...PLATFORM_FEE_BPS, enterprise: 100 }, fx_margin_bps: { free: 0, team: 50, business: 25, enterprise: 15 },
+        platform_fee_bps: PLATFORM_FEE_BPS, fx_margin_bps: { personal_solo: 100, personal_crew: 50, personal_fleet: 0,
+          business_studio: 60, business_company: 60, business_group: 60, business_custom: 15 },
         intl_payment_fee_minor: { GBP: 500, EUR: 600, USD: 700 }, merchant_fee_bps: 75, merchant_a2a_fee_bps: 100,
         // talyvor-lens B56.8 — fees.Charged, as Lens's main has it.
         charged: { market_take_bps: true, services_take_bps: true, compute_take_bps: true, lending_fee_bps: false, platform_fee_bps: true,
@@ -1521,7 +1560,8 @@ createServer(async (req, res) => {
     if (bank.publicRoute(res, p, url, ws.id)) return
     if (await bank.publicWrite(req, res, p, ws.id)) return
     // B32.53 — rooms: Chat's rail, the directory, a new room and a room's first screen (stub-rooms.ts).
-    if (await roomsRoute(req, res, p, url, ws.id, ws.plan?.id ?? ws.syntheticPlan ?? 'free')) return
+    // Rooms are held until the partner is live (Nick, 11 Nov): the rooms stub still reads its limits by the 5 Oct plan.
+    if (await roomsRoute(req, res, p, url, ws.id, ws.plan?.id ?? ROOMS_PLAN[ws.syntheticPlan ?? ''] ?? 'free')) return
     if (p === '/v1/catalog/discovered') return json(res, 200, [])
     if (ABSENT.has(p) || p.startsWith('/v1/bonds/')) return json(res, 404, { error: 'not found' })
     if (p === '/v1/markets/simulated/quotes') return json(res, 200, QUOTES)
@@ -1844,8 +1884,9 @@ createServer(async (req, res) => {
       if (rest === '/plan' && req.method === 'GET') {
         const gated = gatedAs(ws)
         const byok = ws.plan?.byok ?? false
-        return json(res, 200, { plan: ws.plan?.id ?? ws.syntheticPlan ?? 'free', gated_as: gated, byok_add_on: byok, own_provider_keys_allowed: byok || gated === 'business',
-          gates: { agents: PLAN_AGENTS[gated] ?? 3, slack_teams_approvals: gated !== 'free' }, agents_used: bank.activeAgents(ws.id) })
+        const gates = planGates()[gated]
+        return json(res, 200, { plan: gated, gated_as: gated, byok_add_on: byok, own_provider_keys_allowed: byok || gates.own_provider_keys === 'included',
+          gates, agents_used: bank.activeAgents(ws.id) })
       }
       // B28.364 — Lens's routing advisor (GET …/routing/recommendation) as one that has learned a provider's cheapest chat
       // model answers every question well: that model, on the quality-per-dollar basis, in Lens's routing.Recommendation.

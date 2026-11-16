@@ -115,7 +115,7 @@ export function roomInviteLimits(i: number): Scenario {
         }
 
         // Team: a private room.
-        const moved = await lens.setTestPlan(owner, 'team')
+        const moved = await lens.setTestPlan(owner, 'business_company')
         ctx.evidence.push({ note: `the workspace put on Team: ${said(moved)}` })
         if (!moved.ok) return fail(`putting the workspace on Team was refused: ${said(moved)}`)
         const made = await open('private', `Invite link check ${i}-${RUN_SALT}`)

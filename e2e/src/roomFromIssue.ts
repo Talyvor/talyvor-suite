@@ -20,7 +20,7 @@ export function roomFromIssue(i: number): Scenario {
     id: 'room-from-issue',
     owner: 'talyvor-suite',
     feature: 'Rooms',
-    plan: 'team',
+    plan: 'business_company',
     own: true,
     title: "a room opened from a Track issue's screen has the issue's title, its description ending with a link back to the issue, and the issue " +
       'as its first message; the room screen links back to the issue',

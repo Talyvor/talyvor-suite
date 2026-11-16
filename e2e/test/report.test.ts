@@ -100,9 +100,9 @@ describe('a run on several plans', () => {
   it('counts each plan’s verdicts and names what failed on it', () => {
     const o = (scenario: string, workspace: string, plan: string, status: 'PASS' | 'FAIL') =>
       ({ scenario, title: scenario, user: 0, workspace, plan, status, detail: '', evidence: [] })
-    const report = renderRun({ ...cutShort, stopped_by: undefined, outcomes: [o('agent-limit', 'ws0', 'team', 'PASS'), o('company-payment', 'ws0', 'team', 'FAIL'),
-      o('seats-free', 'ws1', 'free', 'PASS'), o('plan-agents-business', 'ws2', 'business', 'PASS')] })
+    const report = renderRun({ ...cutShort, stopped_by: undefined, outcomes: [o('agent-limit', 'ws0', 'business_company', 'PASS'), o('company-payment', 'ws0', 'business_company', 'FAIL'),
+      o('seats-studio', 'ws1', 'business_studio', 'PASS'), o('plan-agents-group', 'ws2', 'business_group', 'PASS')] })
     expect(report).toContain('### By plan')
-    expect(report).toContain('| free | 1 | 1 | 0 | 0 | 0 | none |\n| team | 1 | 1 | 1 | 0 | 0 | `company-payment` |\n| business | 1 | 1 | 0 | 0 | 0 | none |')
+    expect(report).toContain('| business_studio | 1 | 1 | 0 | 0 | 0 | none |\n| business_company | 1 | 1 | 1 | 0 | 0 | `company-payment` |\n| business_group | 1 | 1 | 0 | 0 | 0 | none |')
   })
 })

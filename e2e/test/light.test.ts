@@ -38,7 +38,7 @@ describe('the light pass (B28.294)', () => {
     expect(light.length).toBe(parseConfig(['--light'], env).users)
     expect(light[5]).toEqual([])
     expect(light.flat().filter((s) => s.partners !== undefined).map((s) => [s.id, s.partners])).toEqual([['wallet-send-refund', [5]], ['cross-company-test-money', [5]]])
-    expect(cast(light).plans[5]).toBe('business')
+    expect(cast(light).plans[5]).toBe('business_group')
   })
 
   it('has what the day\'s earlier runs left of its cap, the day starting at the nightly\'s hour', async () => {

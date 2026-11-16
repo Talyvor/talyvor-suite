@@ -1,33 +1,34 @@
 import { describe, expect, it } from 'vitest'
 import { keptOf, platformFeeBPS } from '../src/fees.ts'
 import type { Fees, LensClient } from '../src/lens.ts'
-import { TEAM_AGENTS, cast, seat, seatKey } from '../src/plans.ts'
+import { COMPANY_AGENTS, cast, seat, seatKey } from '../src/plans.ts'
+import type { PublicPlan } from '../src/lens.ts'
 import { pastAgentsVerdict } from '../src/pricing.ts'
-import { notThePlansRefusal } from '../src/seats.ts'
+import { notThePlansRefusal, seatsRefusal } from '../src/seats.ts'
 import { type Scenario, journeyFor } from '../src/scenarios.ts'
 
 const s = (id: string, more: Partial<Scenario> = {}): Scenario => ({ id, title: id, owner: 'talyvor-lens', run: async () => ({ pass: true, detail: '' }), ...more })
 
 describe('every scenario on the plan it needs (B35.7)', () => {
-  it('puts a user that opens agents on Team, past Team’s agents on Business, a counterparty on Business, and a gate on a workspace of its own', () => {
+  it('puts a user that opens agents on Company, past Company’s agents on Group, a counterparty on Group, and a gate on a workspace of its own', () => {
     const c = cast([
       [s('reads')],
       [s('wallet', { agents: 2 })],
-      [s('wallets', { agents: TEAM_AGENTS }), s('one-more', { agents: 1 })],
-      [s('pays-3', { agents: 1, partners: [3] }), s('seats-free', { plan: 'free', own: true }), s('gate', { plan: 'team', own: true, agents: 26 })],
+      [s('wallets', { agents: COMPANY_AGENTS }), s('one-more', { agents: 1 })],
+      [s('pays-3', { agents: 1, partners: [3] }), s('seats-studio', { plan: 'business_studio', own: true }), s('gate', { plan: 'business_company', own: true, agents: 26 })],
     ])
-    expect(c.plans).toEqual(['free', 'team', 'business', 'business'])
-    expect(c.own).toEqual([{ user: 3, scenario: 'seats-free', plan: 'free' }, { user: 3, scenario: 'gate', plan: 'team' }])
+    expect(c.plans).toEqual(['business_studio', 'business_company', 'business_group', 'business_group'])
+    expect(c.own).toEqual([{ user: 3, scenario: 'seats-studio', plan: 'business_studio' }, { user: 3, scenario: 'gate', plan: 'business_company' }])
   })
 
   it("casts a 10-user run so no shared workspace's scenarios open more agents than its plan holds", () => {
     const journeys = Array.from({ length: 10 }, (_, i) => journeyFor(i, 10, []))
     const c = cast(journeys)
-    const holds = { free: 3, team: TEAM_AGENTS, business: Infinity }
+    const holds: Record<string, number> = { business_studio: 3, business_company: COMPANY_AGENTS, business_group: Infinity }
     journeys.forEach((j, i) => expect(j.filter((x) => x.own !== true).reduce((n, x) => n + (x.agents ?? 0), 0)).toBeLessThanOrEqual(holds[c.plans[i]]))
-    // User 9 is every catalog-v4 scenario's other company; seats-free, each paid plan's agent gate, BYOK and a plan change (B34.5,
+    // User 9 is every catalog-v4 scenario's other company; seats-studio, each paid plan's agent gate, BYOK and a plan change (B34.5,
     // each bought with the test card) run on their own.
-    expect(c.plans[9]).toBe('business')
+    expect(c.plans[9]).toBe('business_group')
     // B34.6 — and every way into Lens's gateway, each on a workspace nothing else touches; B34.7 — and every Lens setting;
     // B34.8 — and evals, outputs and attribution, nodes, PoVI, LENS and credits bought.
     // B32.53 — and a private room, on a Team workspace of its own (Free opens no private room).
@@ -95,7 +96,7 @@ describe('every scenario on the plan it needs (B35.7)', () => {
     // B41.52 — and a room's open tasks board, claimed by one member and read by another, on Free.
     // B28.66 — and where alerts go, a budget's alerts queued once to each channel, on Free.
     // B61.48 — and an Instant transfer quote and what Pay offers, a question, a complaint and a data copy asked for, on Free.
-    expect(c.own.map((o) => `${o.scenario}:${o.plan}`).sort()).toEqual(['account-statements:free', 'agent-cards:free', 'agent-resume-signed:free', 'agent-rules-unbypassable:team', 'agent-wallet-kinds:free', 'agent-wallet:free', 'alert-channels:free', 'approval-own-request:free', 'approval-reused:free', 'batch-approval-pays-once:free', 'bills-duplicate-changed-details:free', 'bills-inbox:free', 'bills-pay-all-due:free', 'budgets-by-category:free', 'buyer-tax-profile:free', 'byok-addon:free', 'capability-terms:free', 'chat-first-message:free', 'chat-listing:free', 'chat-payment-card:free', 'coach-week:free', 'compliance:free', 'connect-approve:free', 'connect-contact:free', 'connect-mcp:free', 'connect-oauth:free', 'connect-pay:free', 'connect-recurring:free', 'credits-top-up:free', 'csrf-every-write:free', 'csrf-refused:free', 'daily-briefing:free', 'device-key-approval:free', 'device-keys-bff:free', 'evals:free', 'file-bomb-bounded:free', 'gateway-auth:free', 'gateway-keys:free', 'gateway-mcp:free', 'gateway-providers:free', 'gateway-sessions:free', 'help-complaint:free', 'help-request:free', 'injection-exfil-room-message:free', 'injection-exfil-web-page:free', 'injection-exfil:free', 'instant-transfer-offered:free', 'instant-transfer-quote:free', 'invoice-pay-link:free', 'invoices-screen:free', 'keys-not-forwarded:free', 'keys-unlisted:free', 'kya-credential:free', 'ledger-call-once:team', 'ledger-moves-at-once:team', 'lens-tokens:free', 'limit-alerts:free', 'lineage:free', 'market-abuse:free', 'market-agent-commitment:free', 'market-agent-mcp:free', 'market-bill-invoices:free', 'market-bill-tax:free', 'market-buyer-currency:free', 'market-discovery:free', 'market-earnings-payout:free', 'market-journal:free', 'market-listing-as-model:free', 'market-offers:free', 'market-receipts:free', 'market-rent:free', 'market-trial:free', 'market-trust:free', 'market-versions:free', 'mcp-pay-retried-once:free', 'mcp-sdk-agent-pay:free', 'money-layer-contract:free', 'money-tampered:team', 'month-plan:free', 'named-ids-isolated:free', 'nodes:free', 'one-search:free', 'outputs-attribution:free', 'outside-payees:free', 'passkey-enrol-signed:free', 'pay-screen:free', 'payee-cooling-off:free', 'payee-details-lock:free', 'payment-request-batch:free', 'permission-mandate:free', 'phone-bearer:free', 'phone-key-web:free', 'physical-card:free', 'plan-agents-business:business', 'plan-agents-team:team', 'plan-change:free', 'platform-report:free', 'pool-isolation:free', 'povi:free', 'rate-limits-hold:free', 'room-agent-mcp:free', 'room-contribution-record:free', 'room-contributions:free', 'room-decide-run:team', 'room-earnings-payout:team', 'room-from-issue:team', 'room-invite-limits:free', 'room-invite-screen:team', 'room-messages:team', 'room-objections:free', 'room-points:free', 'room-prizes:free', 'room-rate-card:free', 'room-reviews:free', 'room-runs:free', 'room-shared-ownership:free', 'room-spec:team', 'room-takeover:free', 'room-tasks:free', 'room-wallet:free', 'rooms-moderation:free', 'rooms-private:team', 'scan-agents:free', 'scan-report:free', 'screening-travel-rule:free', 'script-inert:team', 'seats-free:free', 'seats-team:free', 'self-billed-invoice:free', 'seller-tax-details:free', 'seller-week-statement:free', 'settings-config-budgets:free', 'settings-guardrails:free', 'settings-operator-only:free', 'settings-prompts:free', 'settings-stored-answers:free', 'settings-switches:free', 'settings-tare-distill:free', 'speech-through-lens:free', 'spending-screen:free', 'ssrf-refused:free', 'subscriptions-view:free', 'tax-and-payouts:free', 'terms-credential-screens:free', 'trust-layer:free', 'verification-levels:free', 'verification-screen:free', 'voice-chat-pay:free', 'wallet-statements:free', 'webhook-replayed:free', 'webhook-unsigned:free', 'workspace-limits-raised:free', 'xss-shown-back:team', 'your-data-request:free'])
+    expect(c.own.map((o) => `${o.scenario}:${o.plan}`).sort()).toEqual(['account-statements:business_studio', 'agent-cards:business_studio', 'agent-resume-signed:business_studio', 'agent-rules-unbypassable:business_company', 'agent-wallet-kinds:business_studio', 'agent-wallet:business_studio', 'alert-channels:business_studio', 'approval-own-request:business_studio', 'approval-reused:business_studio', 'batch-approval-pays-once:business_studio', 'bills-duplicate-changed-details:business_studio', 'bills-inbox:business_studio', 'bills-pay-all-due:business_studio', 'budgets-by-category:business_studio', 'buyer-tax-profile:business_studio', 'byok-addon:business_studio', 'capability-terms:business_studio', 'chat-first-message:business_studio', 'chat-listing:business_studio', 'chat-payment-card:business_studio', 'coach-week:business_studio', 'compliance:business_studio', 'connect-approve:business_studio', 'connect-contact:business_studio', 'connect-mcp:business_studio', 'connect-oauth:business_studio', 'connect-pay:business_studio', 'connect-recurring:business_studio', 'credits-top-up:business_studio', 'csrf-every-write:business_studio', 'csrf-refused:business_studio', 'daily-briefing:business_studio', 'device-key-approval:business_studio', 'device-keys-bff:business_studio', 'evals:business_studio', 'file-bomb-bounded:business_studio', 'gateway-auth:business_studio', 'gateway-keys:business_studio', 'gateway-mcp:business_studio', 'gateway-providers:business_studio', 'gateway-sessions:business_studio', 'help-complaint:business_studio', 'help-request:business_studio', 'injection-exfil-room-message:business_studio', 'injection-exfil-web-page:business_studio', 'injection-exfil:business_studio', 'instant-transfer-offered:business_studio', 'instant-transfer-quote:business_studio', 'invoice-pay-link:business_studio', 'invoices-screen:business_studio', 'keys-not-forwarded:business_studio', 'keys-unlisted:business_studio', 'kya-credential:business_studio', 'ledger-call-once:business_company', 'ledger-moves-at-once:business_company', 'lens-tokens:business_studio', 'limit-alerts:business_studio', 'lineage:business_studio', 'market-abuse:business_studio', 'market-agent-commitment:business_studio', 'market-agent-mcp:business_studio', 'market-bill-invoices:business_studio', 'market-bill-tax:business_studio', 'market-buyer-currency:business_studio', 'market-discovery:business_studio', 'market-earnings-payout:business_studio', 'market-journal:business_studio', 'market-listing-as-model:business_studio', 'market-offers:business_studio', 'market-receipts:business_studio', 'market-rent:business_studio', 'market-trial:business_studio', 'market-trust:business_studio', 'market-versions:business_studio', 'mcp-pay-retried-once:business_studio', 'mcp-sdk-agent-pay:business_studio', 'money-layer-contract:business_studio', 'money-tampered:business_company', 'month-plan:business_studio', 'named-ids-isolated:business_studio', 'nodes:business_studio', 'one-search:business_studio', 'outputs-attribution:business_studio', 'outside-payees:business_studio', 'passkey-enrol-signed:business_studio', 'pay-screen:business_studio', 'payee-cooling-off:business_studio', 'payee-details-lock:business_studio', 'payment-request-batch:business_studio', 'permission-mandate:business_studio', 'phone-bearer:business_studio', 'phone-key-web:business_studio', 'physical-card:business_studio', 'plan-agents-company:business_company', 'plan-agents-group:business_group', 'plan-change:business_studio', 'platform-report:business_studio', 'pool-isolation:business_studio', 'povi:business_studio', 'rate-limits-hold:business_studio', 'room-agent-mcp:business_studio', 'room-contribution-record:business_studio', 'room-contributions:business_studio', 'room-decide-run:business_company', 'room-earnings-payout:business_company', 'room-from-issue:business_company', 'room-invite-limits:business_studio', 'room-invite-screen:business_company', 'room-messages:business_company', 'room-objections:business_studio', 'room-points:business_studio', 'room-prizes:business_studio', 'room-rate-card:business_studio', 'room-reviews:business_studio', 'room-runs:business_studio', 'room-shared-ownership:business_studio', 'room-spec:business_company', 'room-takeover:business_studio', 'room-tasks:business_studio', 'room-wallet:business_studio', 'rooms-moderation:business_studio', 'rooms-private:business_company', 'scan-agents:business_studio', 'scan-report:business_studio', 'screening-travel-rule:business_studio', 'script-inert:business_company', 'seats-company:business_company', 'seats-studio:business_studio', 'self-billed-invoice:business_studio', 'seller-tax-details:business_studio', 'seller-week-statement:business_studio', 'settings-config-budgets:business_studio', 'settings-guardrails:business_studio', 'settings-operator-only:business_studio', 'settings-prompts:business_studio', 'settings-stored-answers:business_studio', 'settings-switches:business_studio', 'settings-tare-distill:business_studio', 'speech-through-lens:business_studio', 'spending-screen:business_studio', 'ssrf-refused:business_studio', 'subscriptions-view:business_studio', 'tax-and-payouts:business_studio', 'terms-credential-screens:business_studio', 'trust-layer:business_studio', 'verification-levels:business_studio', 'verification-screen:business_studio', 'voice-chat-pay:business_studio', 'wallet-statements:business_studio', 'webhook-replayed:business_studio', 'webhook-unsigned:business_studio', 'workspace-limits-raised:business_studio', 'xss-shown-back:business_company', 'your-data-request:business_studio'])
   })
 
   it('creates each plan’s workspaces in one call, each user at its index and each gate’s own beside it', async () => {
@@ -106,40 +107,54 @@ describe('every scenario on the plan it needs (B35.7)', () => {
         return Array.from({ length: count }, (_, n) => ({ index: n, workspaceID: `${plan}-${n}`, token: 't', expiresAt: '', plan }))
       },
     } as unknown as LensClient
-    const seated = await seat(lens, { plans: ['team', 'business', 'team'], own: [{ user: 1, scenario: 'seats-free', plan: 'free' }] })
-    expect(calls).toEqual([[1, 'free'], [2, 'team'], [1, 'business']])
-    expect(seated.users.map((u) => `${u.index} ${u.workspaceID}`)).toEqual(['0 team-0', '1 business-0', '2 team-1'])
-    expect(seated.own.get(seatKey(1, 'seats-free'))).toMatchObject({ index: 1, workspaceID: 'free-0', plan: 'free' })
+    const seated = await seat(lens, { plans: ['business_company', 'business_group', 'business_company'], own: [{ user: 1, scenario: 'seats-studio', plan: 'business_studio' }] })
+    expect(calls).toEqual([[1, 'business_studio'], [2, 'business_company'], [1, 'business_group']])
+    expect(seated.users.map((u) => `${u.index} ${u.workspaceID}`)).toEqual(['0 business_company-0', '1 business_group-0', '2 business_company-1'])
+    expect(seated.own.get(seatKey(1, 'seats-studio'))).toMatchObject({ index: 1, workspaceID: 'business_studio-0', plan: 'business_studio' })
   })
 
-  it("judges Team's 26th agent by the plan's refusal in Lens's plain sentence, with LENS_PLAN_GATES in its setting (B17.460)", () => {
-    const refusal = { error: 'Team allows 25 agents, and all 25 are in use. Business allows unlimited agents.', setting: 'LENS_PLAN_GATES', plan: 'team', gate: 'agents', limit: 25, allows: 'business' }
-    expect(pastAgentsVerdict({ status: 402, refusal }, 'team', 25, 'business', '26th').pass).toBe(true)
-    expect(pastAgentsVerdict({ status: 402, refusal: { ...refusal, setting: undefined } }, 'team', 25, 'business', '26th').pass).toBe(false)
-    expect(pastAgentsVerdict({ status: 402, refusal: { ...refusal, error: `LENS_PLAN_GATES: ${refusal.error}` } }, 'team', 25, 'business', '26th').pass).toBe(false)
-    expect(pastAgentsVerdict({ status: 201, agent: { id: 'ag_26' } }, 'team', 25, 'business', '26th'))
-      .toEqual({ pass: false, detail: 'a Team workspace with 25 agents made a 26th, ag_26' })
+  // B61.90 — the business ladder as Lens states it (GET /v1/public/plans, talyvor-lens B61.57 defaults).
+  const plan = (id: PublicPlan['id'], name: string, agents: number, people: number): PublicPlan =>
+    ({ id, name, price_minor: null, agents, people, gates: { agents, seats: people, own_provider_keys: 'none', slack_teams_approvals: false } })
+  const ladder = [plan('business_studio', 'Studio', 3, 1), plan('business_company', 'Company', 25, 5), plan('business_group', 'Group', -1, 25), plan('business_custom', 'Custom', -1, -1)]
+
+  it("judges Company's 26th agent by the plan's refusal in Lens's plain sentence, with LENS_PLAN_GATES in its setting (B17.460)", () => {
+    const refusal = { error: 'Company allows 25 agents, and all 25 are in use. Group allows unlimited agents.', setting: 'LENS_PLAN_GATES', plan: 'business_company', gate: 'agents', limit: 25, allows: 'business_group' }
+    expect(pastAgentsVerdict({ status: 402, refusal }, ladder, ladder[1], '26th').pass).toBe(true)
+    expect(pastAgentsVerdict({ status: 402, refusal: { ...refusal, setting: undefined } }, ladder, ladder[1], '26th').pass).toBe(false)
+    expect(pastAgentsVerdict({ status: 402, refusal: { ...refusal, error: `LENS_PLAN_GATES: ${refusal.error}` } }, ladder, ladder[1], '26th').pass).toBe(false)
+    expect(pastAgentsVerdict({ status: 201, agent: { id: 'ag_26' } }, ladder, ladder[1], '26th'))
+      .toEqual({ pass: false, detail: 'a Company workspace with 25 agents made a 26th, ag_26' })
   })
 })
 
 describe("Track's refusal of one member too many (B17.460)", () => {
   const added = (error: string, plan: string, allows: string) => ({ status: 402, body: { error, code: 'PLAN_SEATS', plan, limit: 1, allows }, shown: `${error} See plans`, plansLink: true })
+  const plan = (id: PublicPlan['id'], name: string, people: number): PublicPlan =>
+    ({ id, name, price_minor: null, agents: 3, people, gates: { agents: 3, seats: people, own_provider_keys: 'none', slack_teams_approvals: false } })
+  const ladder = [plan('business_studio', 'Studio', 1), plan('business_company', 'Company', 5), plan('business_group', 'Group', 25), plan('business_custom', 'Custom', -1)]
 
-  it("passes Lens's plain sentences for Free's second member and Team's sixth, and fails the setting's name in the words", () => {
-    const free = 'Free allows 1 seat, and it is taken. Team allows 5.'
-    const team = 'Team allows 5 seats, and all 5 are taken. Business allows 25.'
-    expect(notThePlansRefusal(added(free, 'free', 'team'), 'free', 'team', free)).toBeUndefined()
-    expect(notThePlansRefusal(added(team, 'team', 'business'), 'team', 'business', team)).toBeUndefined()
-    expect(notThePlansRefusal(added(`LENS_PLAN_GATES: ${free}`, 'free', 'team'), 'free', 'team', free)).toContain('LENS_PLAN_GATES')
-    expect(notThePlansRefusal({ ...added(free, 'free', 'team'), status: 201 }, 'free', 'team', free)).toBe('the member was added (201)')
+  it("writes Lens's plain sentences for Studio's second member and Company's sixth from the seats Lens states (B61.90)", () => {
+    expect(seatsRefusal(ladder, ladder[0])).toEqual({ want: 'Studio allows 1 seat, and it is taken. Company allows 5.', allows: 'business_company' })
+    expect(seatsRefusal(ladder, ladder[1])).toEqual({ want: 'Company allows 5 seats, and all 5 are taken. Group allows 25.', allows: 'business_group' })
+    expect(seatsRefusal(ladder, ladder[2])).toEqual({ want: 'Group allows 25 seats, and all 25 are taken. Custom allows unlimited seats.', allows: 'business_custom' })
+  })
+
+  it("passes Lens's plain sentences for Studio's second member and Company's sixth, and fails the setting's name in the words", () => {
+    const studio = seatsRefusal(ladder, ladder[0]).want
+    const company = seatsRefusal(ladder, ladder[1]).want
+    expect(notThePlansRefusal(added(studio, 'business_studio', 'business_company'), 'business_studio', 'business_company', studio)).toBeUndefined()
+    expect(notThePlansRefusal(added(company, 'business_company', 'business_group'), 'business_company', 'business_group', company)).toBeUndefined()
+    expect(notThePlansRefusal(added(`LENS_PLAN_GATES: ${studio}`, 'business_studio', 'business_company'), 'business_studio', 'business_company', studio)).toContain('LENS_PLAN_GATES')
+    expect(notThePlansRefusal({ ...added(studio, 'business_studio', 'business_company'), status: 201 }, 'business_studio', 'business_company', studio)).toBe('the member was added (201)')
   })
 })
 
 describe('the fees Lens states (B35.7)', () => {
-  const fees: Fees = { market_take_bps: 1500, services_take_bps: 500, platform_fee_bps: { free: 550, team: 300, business: 100, enterprise: 100 } }
+  const fees: Fees = { market_take_bps: 1500, services_take_bps: 500, platform_fee_bps: { business_studio: 550, business_company: 300, business_group: 100, business_custom: 100 } }
 
-  it('takes the platform fee of the plan Lens holds the workspace to, as Lens picks it', () => {
-    expect(['free', 'team', 'business', 'plus', 'byok', 'nothing'].map((p) => platformFeeBPS(fees, p))).toEqual([550, 300, 100, 300, 300, 550])
+  it('takes the platform fee of the plan Lens holds the workspace to, by its key, as Lens picks it (B61.90)', () => {
+    expect(['business_studio', 'business_company', 'business_group', 'nothing'].map((p) => platformFeeBPS(fees, p))).toEqual([550, 300, 100, 0])
   })
 
   it('leaves a payee the payment less the services fee, and a seller the sale less the take, rounded down to the µUSD', () => {

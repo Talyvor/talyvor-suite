@@ -35,7 +35,7 @@ async function runAgainstStub(broken: string): Promise<{ verdict: Verdict; evide
     stub?.on('exit', (code) => reject(new Error(`the stub exited ${code}`)))
   })
   const lens = new LensClient(`http://127.0.0.1:${port}`, 'messages-key', undefined, undefined, undefined, 'tlv_mod_messages')
-  const [user] = await lens.createUsers(1, 'team')
+  const [user] = await lens.createUsers(1, 'business_company')
   const evidence: Evidence[] = []
   const ctx = { app: { user }, env: { lens }, evidence } as unknown as ScenarioCtx
   return { verdict: await roomMessages(8).run(ctx), evidence }

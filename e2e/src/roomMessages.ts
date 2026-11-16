@@ -54,7 +54,7 @@ export function roomMessages(i: number): Scenario {
     id: 'room-messages',
     owner: 'talyvor-lens',
     feature: 'Rooms',
-    plan: 'team',
+    plan: 'business_company',
     own: true,
     title: "a public room's message reaches another member's event stream within two seconds; a message carrying a key is 422 naming its kind and stored nowhere; " +
       "an author's edit and the owner's delete read back as the edit and a tombstone; a private room's messages are 404 to a stranger; " +

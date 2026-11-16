@@ -47,7 +47,7 @@ export function roomsPrivate(seed: number): Scenario {
     id: 'rooms-private',
     owner: 'talyvor-suite',
     title: 'a private room opened on /rooms/new is the workspace’s on Lens, in Chat’s rail and the directory, and 404 to another company; its screen posts, streams, proposes, forks and votes; its settings invite, give may_spend, refuse a budget past the plan and post a prize',
-    plan: 'team',
+    plan: 'business_company',
     own: true,
     run: async (ctx) => {
       const { page, user } = ctx.app
