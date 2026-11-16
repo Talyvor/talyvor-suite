@@ -17,7 +17,7 @@ const aspect = 1536 / 968
 
 /** B61.13 — also New agent's pictures, larger and without the helper's name; B61.102 — any picture of the gallery. */
 export function Portrait({ picture, className = 'size-5.5' }: { picture: AgentPicture; className?: string }) {
-  if (picture.art === null) return <span className={`${className} shrink-0 rounded-pill bg-agent-lime`} aria-hidden="true" />
+  if (picture.art === null) return <span className={`${className} shrink-0 rounded-pill bg-agent-lime`} aria-hidden="true" data-picture={picture.id} />
   const [x, y] = picture.head
   const pct = (n: number) => `${(n * 100).toFixed(1)}%`
   const img = (
@@ -50,6 +50,44 @@ export function Portrait({ picture, className = 'size-5.5' }: { picture: AgentPi
 
 const pick = `inline-flex h-8.5 items-center gap-2 whitespace-nowrap rounded-pill bg-cloud pl-1.5 pr-3 text-body font-semibold text-ink transition-colors duration-200 aria-pressed:bg-page aria-pressed:shadow-pick ${pocketFocusRing}`
 const round = `inline-flex size-8.5 rounded-pill p-0.5 aria-pressed:shadow-pick ${pocketFocusRing}`
+
+// B57.186 — the gallery New agent and an agent's name and look both choose from, drawn as Pocket draws a picture
+// (pocket.css .av.md): 56 round, each portrait on a rim of its own colour, and the picked one inside the reference's
+// 2px ink ring with the page between. The pictures carry no name; a screen reader hears their place in the gallery.
+const galleryPick = `inline-flex size-14 shrink-0 rounded-pill p-0.5 transition-shadow duration-200 aria-checked:ring-2 aria-checked:ring-ink aria-checked:ring-offset-2 aria-checked:ring-offset-page ${pocketFocusRing}`
+
+/** The 27 pictures as one choice: picking the picked one again hands back null when the screen lets it go unpicked. */
+export function PictureGallery({
+  label,
+  value,
+  onChange,
+  optional = false,
+}: {
+  label: string
+  value: string | null
+  onChange: (p: AgentPicture | null) => void
+  optional?: boolean
+}) {
+  return (
+    <div data-design="pocket" className="flex flex-wrap gap-2" role="radiogroup" aria-label={label}>
+      {AGENT_PICTURES.map((p, i) => (
+        <button
+          key={p.id}
+          type="button"
+          role="radio"
+          aria-checked={value === p.id}
+          aria-label={`Picture ${i + 1}`}
+          className={galleryPick}
+          data-rim={p.colour}
+          style={{ background: `var(--agent-${p.colour})` }}
+          onClick={() => onChange(optional && value === p.id ? null : p)}
+        >
+          <Portrait picture={p} className="size-full" />
+        </button>
+      ))}
+    </div>
+  )
+}
 
 /** The gallery: value and onChange are Lens's picture ids. */
 export function HelperPicker({ label, value, onChange }: { label: string; value: string | null; onChange: (p: AgentPicture) => void }) {

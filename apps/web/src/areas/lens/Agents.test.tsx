@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { pressEverything } from '../../test/pressEverything'
+import { AGENT_PICTURES } from '../../cards/agentPictures'
 
 // B57.19 — /agents as Pocket's w-agents: the workspace's total, one card per agent, the room's wallet that takes no agent
 // place, and New agent, which says the plan's limit before you try (GET /api/plan) and shows the create form below it.
@@ -198,7 +199,7 @@ describe('New agent (B61.13)', () => {
     const dialog = await screen.findByRole('dialog', { name: 'New agent' })
     fireEvent.click(await within(dialog).findByRole('button', { name: /^Make your own/ }))
     fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Ledger' } })
-    fireEvent.click(within(within(dialog).getByRole('group', { name: 'Picture' })).getByRole('button', { name: 'Picture 3' }))
+    fireEvent.click(within(within(dialog).getByRole('radiogroup', { name: 'Its picture' })).getByRole('radio', { name: 'Picture 3' }))
     fireEvent.click(within(within(dialog).getByRole('group', { name: 'What it does' })).getByRole('button', { name: 'Bookkeeping' }))
     expect(within(dialog).getByTestId('new-agent-every-payment')).toHaveTextContent('With none of these set, every payment waits for your yes.')
     fireEvent.click(within(dialog).getByRole('button', { name: 'More rules' }))
@@ -219,16 +220,39 @@ describe('New agent (B61.13)', () => {
     await openNewAgent()
     const dialog = await screen.findByRole('dialog', { name: 'New agent' })
     fireEvent.click(await within(dialog).findByRole('button', { name: /^Make your own/ }))
-    const pictures = within(within(dialog).getByRole('group', { name: 'Picture' })).getAllByRole('button')
+    const pictures = within(within(dialog).getByRole('radiogroup', { name: 'Its picture' })).getAllByRole('radio')
     expect(pictures.map((b) => b.getAttribute('aria-label'))).toEqual(Array.from({ length: 27 }, (_, i) => `Picture ${i + 1}`))
     for (const b of pictures) expect(b.textContent).toBe('')
     const chef = pictures.find((b) => b.querySelector('[data-picture="chef"]'))!
     fireEvent.click(chef)
-    expect(chef).toHaveAttribute('aria-pressed', 'true')
+    expect(chef).toHaveAttribute('aria-checked', 'true')
     fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Supper' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
     await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_2'))
     expect(sent[0]).toEqual({ method: 'POST', url: '/api/agents', body: { name: 'Supper', picture: 'chef', fiat_currency: 'USD' } })
+  })
+
+  // B57.186 — in Pocket, the gallery draws each picture as pocket.css .av.md: 56 round, on a rim of the colour Lens
+  // gives it, and the picked one inside the 2px ink ring; picking it again leaves the picture to Lens, as before.
+  it('your own draws the 27 as Pocket round pictures, each on a rim of its colour, the picked one ringed in ink', async () => {
+    mockBff({ agents: [agent('agt_1', 'Books')], plan: { plan: 'free', agents: 3, agents_used: 1 } })
+    await openNewAgent()
+    const dialog = await screen.findByRole('dialog', { name: 'New agent' })
+    fireEvent.click(await within(dialog).findByRole('button', { name: /^Make your own/ }))
+    const gallery = within(dialog).getByRole('radiogroup', { name: 'Its picture' })
+    expect(gallery).toHaveAttribute('data-design', 'pocket')
+    const pictures = within(gallery).getAllByRole('radio')
+    expect(pictures.map((b) => b.querySelector('[data-picture]')!.getAttribute('data-picture'))).toEqual(AGENT_PICTURES.map((p) => p.id))
+    pictures.forEach((b, i) => {
+      expect(b).toHaveClass('size-14', 'rounded-pill', 'p-0.5', 'aria-checked:ring-2', 'aria-checked:ring-ink', 'aria-checked:ring-offset-page')
+      expect(b).toHaveAttribute('data-rim', AGENT_PICTURES[i].colour)
+      expect(b.style.background).toBe(`var(--agent-${AGENT_PICTURES[i].colour})`)
+    })
+    const chef = pictures[AGENT_PICTURES.findIndex((p) => p.id === 'chef')]
+    fireEvent.click(chef)
+    expect(pictures.filter((b) => b.getAttribute('aria-checked') === 'true')).toEqual([chef])
+    fireEvent.click(chef)
+    expect(pictures.filter((b) => b.getAttribute('aria-checked') === 'true')).toEqual([])
   })
 
   it('offers no helper name, no fixed rule set and no LXC, and keeps Create off until a name is typed', async () => {
