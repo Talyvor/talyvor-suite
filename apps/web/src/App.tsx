@@ -617,8 +617,6 @@ function ConsoleShell() {
           {/* B57.118 — the label, top right on every screen, before Pause every agent (the launch pack's W2 to W5). */}
           <WorkspaceStatus />
           <EveryAgentSwitch />
-          {/* B61.38 — Help, on every signed-in page: the chat answered by AI, with our team one press away. */}
-          <HelpButton />
           <Avatar />
         </>
       }
@@ -706,6 +704,10 @@ function ConsoleShell() {
       {/* B61.9 — Your accounts, over whichever page ?accounts=open is on. */}
       <YourAccountsHost />
     </PocketShell>
+    {/* B61.38 — Help, on every signed-in page: the chat answered by AI, with our team one press away. B57.175 — at the
+        bottom right, as Pocket Live draws it, outside the page's main like the top bar's controls, so it is not the
+        page's one main action. Chat has the whole page, and its composer that corner. */}
+    {chat ? null : <HelpButton />}
     </div>
     </>
   )

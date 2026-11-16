@@ -1,0 +1,5 @@
+[
+  { "route": "/agents", "steps": ["Help"] },
+  { "route": "/agents", "steps": ["Help"], "dark": true },
+  { "route": "/approvals", "steps": ["Help"], "answers": { "/api/help/chat": { "messages": [], "kept_days": 30 } } }
+]

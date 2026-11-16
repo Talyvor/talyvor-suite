@@ -59,6 +59,15 @@ export function greeting(hour: number, firstName: string): string {
   return firstName ? `${part}, ${firstName}` : part
 }
 
+/** The person's first name, when it is known: a Personal account's name is the person's own (sign-up step 1); a
+ * Business's is the company's, so there it is ''. Home's greeting and Help's (B57.175) say it. */
+export function useFirstName(): string {
+  const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
+  const { account } = useAccount()
+  const own = workspace.data && workspace.data.name !== workspace.data.id ? workspace.data.name : ''
+  return account?.account_type === 'personal' ? own.trim().split(/\s+/)[0] ?? '' : ''
+}
+
 const CAUGHT_UP = 'You’re all caught up.'
 
 /** "2 things are waiting for you." — or that nothing is. */
@@ -147,7 +156,6 @@ export function Home() {
   const prepared = useQuery({ queryKey: PREPARED_KEY, queryFn: agentBankApi.pendingPaymentRequests })
   // B55.40 — an agent's mandate request waits on Approvals too, so Home counts it and opens it there.
   const mandates = useQuery({ queryKey: MANDATE_REQUESTS_KEY, queryFn: agentBankApi.requestedMandates })
-  const workspace = useQuery({ queryKey: WORKSPACE_NAME_KEY, queryFn: agentBankApi.workspaceName, staleTime: 60_000, retry: false })
   const { account, shows } = useAccount()
   // B28.8 — the first agent made here keeps its onboarding open after the book lists it, until the person is done with it.
   const [onboarding, setOnboarding] = useState(false)
@@ -160,10 +168,7 @@ export function Home() {
   const asked = (mandates.data?.granted ?? []).filter((m) => m.status === 'requested').length
   const waiting = pending.length + requests.length + asked
 
-  // A Personal account's name is the person's own (sign-up step 1); a Business's is the company's, so it greets by the
-  // time of day alone.
-  const own = workspace.data && workspace.data.name !== workspace.data.id ? workspace.data.name : ''
-  const firstName = account?.account_type === 'personal' ? own.trim().split(/\s+/)[0] ?? '' : ''
+  const firstName = useFirstName()
   const status = [waitingKnown ? waitingLine(waiting) : '', book.data ? pausedLine(book.data) : ''].filter((x) => x !== '').join(' ')
 
   return (
