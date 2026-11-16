@@ -57,7 +57,7 @@ TRACK_PORT=$track_port DOCS_PORT=$docs_port GATEWAY_SECRET=$gateway LENS_URL="ht
 products=$!
 sleep 1
 env -i PATH="$PATH" HOME="$HOME" \
-  BFF_AUTH_MODE=oidc BFF_ADDR="127.0.0.1:$bff_port" BFF_PUBLIC_BASE_URL="http://localhost:$bff_port" \
+  BFF_AUTH_MODE=oidc BFF_GOOGLE_SIGNIN=off BFF_ADDR="127.0.0.1:$bff_port" BFF_PUBLIC_BASE_URL="http://localhost:$bff_port" \
   OIDC_ISSUER="http://127.0.0.1:$stub_port" OIDC_CLIENT_ID=selftest OIDC_CLIENT_SECRET=selftest OIDC_ALLOWED_EMAILS='*' \
   LENS_BASE_URL="http://127.0.0.1:$stub_port" LENS_PROVISION_SECRET=selftest LENS_SYNTHETIC_KEY=$key \
   TRACK_BASE_URL="http://127.0.0.1:$track_port" TRACK_GATEWAY_SECRET=$gateway \

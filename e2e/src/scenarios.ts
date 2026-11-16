@@ -90,6 +90,7 @@ import { deviceKeyApproval } from './deviceKeyApproval.ts'
 import { connectPay } from './connectPay.ts'
 import { screeningTravelRule } from './screeningTravelRule.ts'
 import { phoneKeyWeb } from './phoneKeyWeb.ts'
+import { doorScenarios } from './door.ts'
 import { trustLayer } from './trustLayer.ts'
 import { batchApproval } from './batchApproval.ts'
 import { moneyLayerContract } from './moneyContract.ts'
@@ -1598,7 +1599,7 @@ export function signinBoard(): Scenario {
   return {
     id: 'signin-board',
     owner: 'talyvor-suite',
-    title: '/signin and /signup are Pocket’s auth card, the streams flowing into it at 1440 and the card alone at 390, signed out',
+    title: '/signin and /signup are Pocket’s auth card, the streams flowing into it at 1440 and the card alone at 390, signed out; its one ink action is the phone door’s Continue, never Google',
     run: async (ctx) => {
       const browser = ctx.app.context.browser()
       if (browser === null) throw new CannotTest('no browser to open a signed-out context in')
@@ -1606,7 +1607,7 @@ export function signinBoard(): Scenario {
       const context = await browser.newContext({ colorScheme: 'light' })
       const wrong: string[] = []
       try {
-        for (const [path, action] of [['/signin', 'Sign in'], ['/signup', 'Continue']] as const) {
+        for (const [path, action] of [['/signin', 'Continue'], ['/signup', 'Continue']] as const) {
           const page = await context.newPage()
           await page.goto(origin + path)
           await page.locator('h1').waitFor({ state: 'visible' })
@@ -1625,14 +1626,15 @@ export function signinBoard(): Scenario {
               const card = h1.parentElement!
               const s = streams?.getBoundingClientRect()
               const c = card.getBoundingClientRect()
-              const primary = Array.from(document.querySelectorAll<HTMLAnchorElement>('main a')).filter((a) => a.textContent?.trim() === label)
+              // B61.28 — the door is the phone number (B61.26): its one main action is Continue under the number's field.
+              const primary = Array.from(document.querySelectorAll<HTMLElement>('main a, main button')).filter((a) => a.textContent?.trim() === label)
               const ink = Array.from(document.querySelectorAll('a, button')).filter((el) => getComputedStyle(el).backgroundColor === 'rgb(17, 18, 22)')
               return {
                 streams: streams === undefined || s === undefined ? null : { left: s.left, right: s.right, loaded: streams.naturalWidth > 0, src: new URL(streams.src).pathname },
                 card: { bg: getComputedStyle(card).backgroundColor, page: getComputedStyle(document.querySelector('main')!.parentElement!).backgroundColor, left: c.left },
                 logo: logo === undefined ? '' : `${new URL(logo.src).pathname}${logo.naturalWidth > 0 ? '' : ' (not loaded)'}`,
                 logoInCardAboveH1: logo !== undefined && card.contains(logo) && logo.getBoundingClientRect().bottom <= h1.getBoundingClientRect().top,
-                primary: primary.length === 1 ? primary[0].getAttribute('href') ?? '' : null,
+                primary: primary.length === 1 ? (primary[0].closest('form')?.querySelector('input[type="tel"]') ? 'the phone number' : primary[0].getAttribute('href') ?? primary[0].tagName.toLowerCase()) : null,
                 inkCount: ink.length,
                 primaryIsInk: primary.length === 1 && ink.includes(primary[0]),
                 scroll: document.documentElement.scrollWidth,
@@ -1645,7 +1647,7 @@ export function signinBoard(): Scenario {
             if (got.card.page !== 'rgb(243, 244, 246)') wrong.push(`${at}: the page is not Pocket's cloud (${got.card.page})`)
             if (!/^\/brand\/logo\/talyvor-logo-small-on-light\.svg$/.test(got.logo)) wrong.push(`${at}: logo "${got.logo}"`)
             else if (!got.logoInCardAboveH1) wrong.push(`${at}: the logo is not in the card above the heading`)
-            if (got.primary === null || !got.primary.startsWith('/auth/login')) wrong.push(`${at}: "${action}" is not one link to /auth/login (${got.primary})`)
+            if (got.primary !== 'the phone number') wrong.push(`${at}: "${action}" is not the one button under the phone number's field (${got.primary})`)
             if (!got.primaryIsInk || got.inkCount !== 1) wrong.push(`${at}: "${action}" is not the one ink action (${got.inkCount} ink)`)
             if (got.scroll > got.client) wrong.push(`${at}: scrolls sideways (${got.scroll} > ${got.client})`)
             if (width === 1440) {
@@ -1660,7 +1662,7 @@ export function signinBoard(): Scenario {
         await context.close()
       }
       return wrong.length === 0
-        ? { pass: true, detail: 'signed out: Pocket’s white auth card on the cloud page with the logo above the heading, the streams flowing into it at 1440 and hidden at 390, one ink action to /auth/login, no sideways scroll, on /signin and /signup' }
+        ? { pass: true, detail: 'signed out: Pocket’s white auth card on the cloud page with the logo above the heading, the streams flowing into it at 1440 and hidden at 390, one ink action, Continue under the phone number, no sideways scroll, on /signin and /signup' }
         : { pass: false, detail: wrong.join('; ') }
     },
   }
@@ -5264,6 +5266,10 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // workspace of its own: the metadata address, loopback and private addresses given as a node or the audit webhook are
   // refused or never reached, and a zip bomb or an oversized document is refused or capped with Lens still up.
   if (i === 8) list.push(ssrfRefused(), fileBombBounded())
+  // B61.28 — the door, once a run, in a signed-out browser of its own: a test number joins with the code read from the
+  // screen and a passcode chosen twice; it signs in with the passcode, then with the passkey it made; a wrong passcode
+  // is refused in Lens's words; the phone's session through the BFF locks and opens; five wrong passcodes make it wait.
+  if (i === 8) list.push(...doorScenarios())
   // B28.286 — the session cookie and the app's writes, once a run, each on a workspace of its own: a write from anywhere but
   // the app's own Origin is refused 403 with nothing written, and a script in a Chat answer or a room message never runs.
   if (i === 1) list.push(csrfRefused(), scriptInert())
