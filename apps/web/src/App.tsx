@@ -51,8 +51,7 @@ import { ApprovalsScreen, StatementsScreen, usePendingApprovals } from './areas/
 import { ApprovalSheetHost } from './areas/lens/ApprovalSheet'
 import { MarketplaceArea } from './areas/marketplace/Marketplace'
 import { TryConversion, TryTare } from './areas/lens/TryIt'
-import { TopUp } from './areas/lens/TopUp'
-import { Plans } from './areas/lens/Plans'
+import { PlanSettings } from './areas/lens/PlanSettings'
 import { BillingCancel, BillingSuccess } from './areas/lens/BillingReturn'
 import { Chat } from './areas/chat/Chat'
 import { ChatHelp } from './areas/chat/ChatHelp'
@@ -224,9 +223,9 @@ export const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   // design assumed the suite owned them. A customer arrives here by full page load from Stripe,
   // so both must resolve on a cold navigation, not only in-app. They title as Billing because
   // that is the page the customer is on, not as Overview.
-  { path: '/billing', title: 'Billing', element: <TopUp /> },
-  // B13.3 — Plus · Pro · Max, the usage meter and what a subscriber's answers earned.
-  { path: '/plans', title: 'Plans', element: <Plans /> },
+  // B61.59 — Settings, Plan: the account's plan and its ladder, one page; /plans opens it.
+  { path: '/billing', title: 'Plan', element: <PlanSettings /> },
+  { path: '/plans', title: 'Plan', element: <PlanSettings /> },
   { path: '/billing/success', title: 'Billing', element: <BillingSuccess /> },
   { path: '/billing/cancel', title: 'Billing', element: <BillingCancel /> },
   { path: '/keys', title: 'API keys', element: <Keys /> },

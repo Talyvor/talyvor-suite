@@ -41,6 +41,9 @@ import (
 //     Lens will not say. plan_gates.built and fees.charged (talyvor-lens B56.8) say which gates Lens enforces and
 //     which fees it charges, each OMITTED when Lens does not state it. These three change with the facts, so they
 //     are reused for publicLabelTTL, not publicPegTTL, and the reply may be kept no longer than that.
+//   - ladders (B61.59) is Lens's public GET /v1/public/plans (talyvor-lens B61.57): both ladders, each plan's name, its
+//     monthly price in every currency, the agents and people it allows. Settings, Plan and /pricing draw every plan
+//     figure from it. OMITTED when Lens will not state it whole; reused for publicLabelTTL, as the gates are.
 func (a *app) handlePricing(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -70,6 +73,9 @@ func (a *app) handlePricing(w http.ResponseWriter, r *http.Request) {
 	}
 	if gates, ok := a.public.gates.getWithin(publicLabelTTL, func() (planGates, bool) { return a.readPlanGates(r) }); ok {
 		out["plan_gates"] = gates
+	}
+	if ladders, ok := a.public.ladders.getWithin(publicLabelTTL, func() (planLadders, bool) { return a.readLadders(r) }); ok {
+		out["ladders"] = ladders
 	}
 	if fees, ok := a.public.fees.getWithin(publicLabelTTL, func() (publicFees, bool) { return a.readFees(r) }); ok {
 		out["fees"] = fees
@@ -168,6 +174,47 @@ func (a *app) readPlanGates(r *http.Request) (planGates, bool) {
 	return g, true
 }
 
+// ladderPlan is one plan as Lens's GET /v1/public/plans states it (talyvor-lens B61.57). -1 is unlimited.
+type ladderPlan struct {
+	ID string `json:"id"`
+	// Name is the plan as people read it: Solo, Crew, Fleet, Studio, Company, Group or Custom.
+	Name string `json:"name"`
+	// PriceMinor is the monthly price in minor units by currency; nil on Custom, which a contract prices.
+	PriceMinor map[string]int64 `json:"price_minor"`
+	ByContract bool             `json:"by_contract,omitempty"`
+	Agents     int64            `json:"agents"`
+	People     int64            `json:"people"`
+}
+
+// planLadders is Lens's GET /v1/public/plans: the plans a Personal account chooses from and a Business's, each from
+// the smallest up, the currencies they are priced in, and the one a stablecoin account pays in.
+type planLadders struct {
+	Currencies         []string     `json:"currencies"`
+	StablecoinPricedIn string       `json:"stablecoin_priced_in"`
+	Personal           []ladderPlan `json:"personal"`
+	Business           []ladderPlan `json:"business"`
+}
+
+// readLadders reads the ladders with no credential. ok=false unless both ladders are stated and every plan is whole:
+// an id, a name, counts of -1 or more, and a price of 0 or more in every currency, or none and by contract.
+func (a *app) readLadders(r *http.Request) (planLadders, bool) {
+	var l planLadders
+	if !a.readPublic(r, "/v1/public/plans", &l) || len(l.Currencies) == 0 || len(l.Personal) == 0 || len(l.Business) == 0 {
+		return planLadders{}, false
+	}
+	for _, p := range append(append([]ladderPlan{}, l.Personal...), l.Business...) {
+		if p.ID == "" || p.Name == "" || p.Agents < -1 || p.People < -1 || (p.ByContract != (p.PriceMinor == nil)) {
+			return planLadders{}, false
+		}
+		for _, c := range l.Currencies {
+			if n, ok := p.PriceMinor[c]; p.PriceMinor != nil && (!ok || n < 0) {
+				return planLadders{}, false
+			}
+		}
+	}
+	return l, true
+}
+
 // publicFees is Lens's GET /v1/public/fees (talyvor-lens B32.8), under its names: basis points, or minor
 // units of the currency named.
 type publicFees struct {
@@ -263,12 +310,13 @@ const publicLabelTTL = time.Minute
 
 // pricingReads are /api/pricing's Lens reads, each cached on its own.
 type pricingReads struct {
-	peg    publicCache[float64]
-	plans  publicCache[planCard]
-	gates  publicCache[planGates]
-	fees   publicCache[publicFees]
-	cards  publicCache[string]
-	labels publicCache[map[string]string]
+	peg     publicCache[float64]
+	plans   publicCache[planCard]
+	gates   publicCache[planGates]
+	fees    publicCache[publicFees]
+	ladders publicCache[planLadders]
+	cards   publicCache[string]
+	labels  publicCache[map[string]string]
 }
 
 // publicCache holds the last CONFIRMED answer to one public read. A failure is never cached, so a

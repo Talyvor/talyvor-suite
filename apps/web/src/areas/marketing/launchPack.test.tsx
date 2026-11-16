@@ -39,6 +39,12 @@ const CARD = {
   company_plans: [{ id: 'team', usd_cents: 5900 }],
   enterprise_from_usd_cents: 300000,
   card_payments: 'live',
+  ladders: {
+    currencies: ['USD'],
+    stablecoin_priced_in: 'USD',
+    personal: [{ id: 'personal_crew', name: 'Crew', price_minor: { USD: 399 }, agents: 10, people: 1 }],
+    business: [{ id: 'business_custom', name: 'Custom', price_minor: null, by_contract: true, agents: -1, people: -1 }],
+  },
   plan_gates: {
     order: ['free', 'team', 'enterprise'],
     plans: {
@@ -114,7 +120,7 @@ describe('B59.5 — the public website shows the launch pack only', () => {
         : new Response('null', { status: 404 }),
     )
     const { container } = render(<Pricing />)
-    await screen.findByTestId('company-plan-enterprise')
+    await screen.findByTestId('ladder-plan-business_custom')
     await screen.findByTestId('fees-money-features')
     const { text, hrefs } = read(container)
     expect(named(text)).toEqual([])

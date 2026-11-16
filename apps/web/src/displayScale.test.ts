@@ -275,7 +275,7 @@ describe('the marketing type scale stops at the AuthGate', () => {
     // make impossible, and a count derived from the thing being checked cannot see it.
     const console = consoleRouteComponents()
     expect(console.length, 'CONSOLE_ROUTES yielded no components — the gated closure would be empty').toBeGreaterThanOrEqual(10)
-    for (const name of ['Overview', 'TrackArea', 'DocsArea', 'TopUp']) {
+    for (const name of ['Overview', 'TrackArea', 'DocsArea', 'PlanSettings']) {
       expect(console, `${name} is a console page but the table reader missed it`).toContain(name)
     }
   })

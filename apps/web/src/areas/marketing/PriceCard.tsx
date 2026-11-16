@@ -166,3 +166,6 @@ export function CompanyCard({
 
 export const TAX_LINE =
   'Prices are in US dollars. Where Talyvor must charge VAT or sales tax, it is added at checkout and shown before you pay.'
+
+/** B61.59 — the tax line under the two ladders, which are priced in pounds, euros and dollars. */
+export const LADDER_TAX_LINE = 'Each plan is paid in your account’s currency. Where Talyvor must charge VAT or sales tax, it is added at checkout and shown before you pay.'

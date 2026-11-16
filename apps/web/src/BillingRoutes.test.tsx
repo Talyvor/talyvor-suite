@@ -14,6 +14,24 @@ import { App } from './App'
 // tests pin the contract at the URL, not at the component: renaming a route or
 // mounting it one level deeper breaks them, which is the point.
 
+// B61.59 — /billing is Settings, Plan: the plan Lens has the account on, and its ladder from Lens's public plans read.
+const LADDERS = {
+  currencies: ['GBP', 'EUR', 'USD'],
+  stablecoin_priced_in: 'USD',
+  personal: [{ id: 'personal_solo', name: 'Solo', price_minor: { GBP: 0, EUR: 0, USD: 0 }, agents: 3, people: 1 }],
+  business: [{ id: 'business_studio', name: 'Studio', price_minor: { GBP: 1000, EUR: 1000, USD: 1000 }, agents: 3, people: 1 }],
+}
+const PLAN = {
+  plan: 'business_studio',
+  name: 'Studio',
+  account_type: 'business',
+  on_contract: false,
+  price_minor: { GBP: 1000, EUR: 1000, USD: 1000 },
+  agents: 3,
+  agents_used: 1,
+  seats: 1,
+}
+
 function mockBff() {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
     const url = String(input)
@@ -36,7 +54,8 @@ function mockBff() {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
     }
-    if (url === '/api/pricing') return new Response(JSON.stringify({ card_payments: 'live' }), { status: 200 })
+    if (url === '/api/pricing') return new Response(JSON.stringify({ card_payments: 'live', ladders: LADDERS }), { status: 200 })
+    if (url === '/api/plan') return new Response(JSON.stringify(PLAN), { status: 200 })
     if (url === '/api/lxc/topup-options') {
       return new Response(JSON.stringify({ allowed_usd_cents: [1000, 5000, 10000] }), {
         status: 200,
@@ -73,22 +92,16 @@ describe('the billing routes Lens already redirects to', () => {
     expect(await screen.findByText(/nothing was charged/i)).toBeInTheDocument()
   })
 
-  it('resolves /billing, where a customer starts a top-up', async () => {
+  it('resolves /billing, Settings, Plan, with the plan and its price', async () => {
     at('/billing')
-    expect(await screen.findByRole('button', { name: '$10' })).toBeInTheDocument()
+    expect(await screen.findByText('You are on Studio.')).toBeInTheDocument()
+    expect(screen.getByTestId('plan-current')).toHaveTextContent('$10.00 a month')
   })
 
-  it('reaches the top-up screen from Settings, so buying is discoverable', async () => {
+  it('reaches the plan from Settings, so changing it is discoverable', async () => {
     at('/settings')
     // B61.3 — Billing and Plans are Settings' one row, Plan.
     const pages = await screen.findByRole('navigation', { name: 'Settings pages' })
     expect(within(pages).getByRole('link', { name: /^Plan/ })).toHaveAttribute('href', '/billing')
-  })
-
-  it('B57.8 — Billing links Overview and Ledger, which left the sidebar', async () => {
-    at('/billing')
-    const links = await screen.findByRole('navigation', { name: 'Where the money went' })
-    expect(within(links).getByRole('link', { name: /^Spend and earnings/ })).toHaveAttribute('href', '/overview')
-    expect(within(links).getByRole('link', { name: /^Ledger/ })).toHaveAttribute('href', '/ledger')
   })
 })

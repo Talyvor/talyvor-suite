@@ -2663,9 +2663,15 @@ export function readWorkspaceAccount(): Promise<WorkspaceAccount> {
 }
 
 /** B57.18 — the workspace's plan as Lens has it: its name, the agents it takes (-1 is unlimited) and the agents it has.
- *  B57.44 — and the members it takes (-1 is unlimited), for Members' "Free has 1 seat". */
+ *  B57.44 — and the members it takes (-1 is unlimited), for Members' "Free has 1 seat".
+ *  B61.59 — and the plan as people read it, the ladder it is chosen from, whether a contract sets it, and its monthly
+ *  price in minor units by currency (null on Custom, which a contract prices), for Settings, Plan. */
 export interface WorkspacePlan {
   plan: string
+  name?: string
+  account_type?: 'personal' | 'business'
+  on_contract?: boolean
+  price_minor?: Record<string, number> | null
   agents: number
   agents_used: number
   seats: number
@@ -2676,6 +2682,28 @@ export const PLAN_KEY = ['workspace-plan'] as const
 /** GET /api/plan — Lens's /v1/workspaces/{ws}/plan, as Home's "3 of 3 on Free" reads it. */
 export function readWorkspacePlan(): Promise<WorkspacePlan> {
   return getJSON<WorkspacePlan>('/api/plan', { plan: 'string', agents: 'number', agents_used: 'number', seats: 'number' })
+}
+
+/** A plan change Lens refused, with its sentence: a move down under too many agents, a plan that cannot be chosen yet. */
+export class PlanChangeError extends ApiError {
+  constructor(
+    status: number,
+    readonly sentence: string,
+  ) {
+    super(status, '/api/plan')
+  }
+}
+
+/** B61.59 — PUT /api/plan: the owner moves the account to another plan of its own ladder (Lens B61.57). */
+export async function changeWorkspacePlan(plan: string): Promise<{ from: string; plan: string; name: string }> {
+  const res = await fetch('/api/plan', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ plan }),
+  })
+  const body = (await res.json().catch(() => ({}))) as { from: string; plan: string; name: string; error?: string }
+  if (!res.ok) throw new PlanChangeError(res.status, res.status < 500 ? (body.error ?? '') : '')
+  return body
 }
 
 /** What a workspace's type and kind show. */

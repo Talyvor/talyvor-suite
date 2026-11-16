@@ -26,6 +26,16 @@ const lensFees = `{"market_take_bps":1500,"services_take_bps":500,"compute_take_
 	`"fx_margin_bps":{"free":0,"team":50,"business":25,"enterprise":15},` +
 	`"intl_payment_fee_minor":{"GBP":500,"EUR":600,"USD":700},"merchant_fee_bps":75,"merchant_a2a_fee_bps":100}`
 
+// lensLadders is talyvor-lens B61.57's GET /v1/public/plans with its defaults.
+const lensLadders = `{"currencies":["GBP","EUR","USD"],"stablecoin_priced_in":"USD","personal":[` +
+	`{"id":"personal_solo","name":"Solo","price_minor":{"GBP":0,"EUR":0,"USD":0},"agents":3,"people":1},` +
+	`{"id":"personal_crew","name":"Crew","price_minor":{"GBP":399,"EUR":399,"USD":399},"agents":10,"people":1},` +
+	`{"id":"personal_fleet","name":"Fleet","price_minor":{"GBP":799,"EUR":899,"USD":999},"agents":25,"people":1}],"business":[` +
+	`{"id":"business_studio","name":"Studio","price_minor":{"GBP":1000,"EUR":1000,"USD":1000},"agents":3,"people":1},` +
+	`{"id":"business_company","name":"Company","price_minor":{"GBP":3500,"EUR":3500,"USD":3500},"agents":25,"people":5},` +
+	`{"id":"business_group","name":"Group","price_minor":{"GBP":12500,"EUR":12500,"USD":12500},"agents":-1,"people":25},` +
+	`{"id":"business_custom","name":"Custom","price_minor":null,"by_contract":true,"agents":-1,"people":-1}]}`
+
 // pricingApp: an oidc-mode app with NO session seeded, pointed at a fake Lens whose public
 // conversion-rate and plans routes answer `status` and record whether a credential was sent.
 func pricingApp(t *testing.T, status int) (*app, *string, map[string]int) {
@@ -41,12 +51,14 @@ func pricingApp(t *testing.T, status int) (*app, *string, map[string]int) {
 			body = lensPlanGates
 		case "/v1/public/fees":
 			body = lensFees
+		case "/v1/public/plans":
+			body = lensLadders
 		case "/v1/pricing":
 			body = `{"card_payments":"live"}`
 		case "/v1/public/labels":
 			body = lensLabels
 		default:
-			t.Errorf("/api/pricing dialled %s — it may read the public peg, plans, plan gates, fees, card payments and labels and nothing else", r.URL.Path)
+			t.Errorf("/api/pricing dialled %s — it may read the public peg, plans, plan gates, ladders, fees, card payments and labels and nothing else", r.URL.Path)
 		}
 		hits[r.URL.Path]++
 		if auth := r.Header.Get("Authorization"); auth != "" {
@@ -124,6 +136,47 @@ func TestPricing_ServesEachPlansIncludedUsageAsLensStatesIt(t *testing.T) {
 	}
 }
 
+// B61.59 — both ladders exactly as Lens's GET /v1/public/plans states them, so Settings, Plan and /pricing print Lens's
+// figures and never one typed into this repo; a ladder with a plan that is not whole is left out, never half-drawn.
+func TestPricing_ServesBothLaddersAsLensStatesThem(t *testing.T) {
+	a, gotAuth, hits := pricingApp(t, http.StatusOK)
+	got, _ := json.Marshal(getPricing(t, a)["ladders"])
+	var want any
+	_ = json.Unmarshal([]byte(lensLadders), &want)
+	if wantJSON, _ := json.Marshal(want); string(got) != string(wantJSON) {
+		t.Errorf("ladders = %s, want Lens's %s", got, wantJSON)
+	}
+	if *gotAuth != "" {
+		t.Errorf("the public ladders read sent Authorization %q — an anonymous route has no credential to send", *gotAuth)
+	}
+	getPricing(t, a)
+	if n := hits["/v1/public/plans"]; n != 1 {
+		t.Errorf("Lens's ladders were read %d times for two anonymous reads, want 1", n)
+	}
+
+	for _, broken := range []string{
+		strings.Replace(lensLadders, `"name":"Crew",`, ``, 1),
+		strings.Replace(lensLadders, `{"GBP":399,"EUR":399,"USD":399}`, `{"GBP":399,"EUR":399}`, 1),
+		strings.Replace(lensLadders, `"USD":999`, `"USD":-1`, 1),
+		strings.Replace(lensLadders, `"price_minor":null,`, `"price_minor":{"GBP":1,"EUR":1,"USD":1},`, 1),
+		`{"currencies":["USD"],"personal":[],"business":[]}`,
+	} {
+		up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/public/plans" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = io.WriteString(w, broken)
+		}))
+		b, _, _ := pricingApp(t, http.StatusOK)
+		b.cfg.lensBaseURL = up.URL
+		if v, present := getPricing(t, b)["ladders"]; present {
+			t.Errorf("ladders = %v from Lens's %s — want it omitted", v, broken)
+		}
+		up.Close()
+	}
+}
+
 // When Lens will not confirm the peg (economy off ⇒ 404), the field is ABSENT — never 0.
 func TestPricing_OmitsThePegLensWillNotConfirm(t *testing.T) {
 	a, _, _ := pricingApp(t, http.StatusNotFound)
@@ -183,7 +236,7 @@ func TestPricing_ServesThePriceCardLensStates(t *testing.T) {
 func TestPricing_OmitsGatesAndFeesLensWillNotState(t *testing.T) {
 	a, _, _ := pricingApp(t, http.StatusServiceUnavailable)
 	out := getPricing(t, a)
-	for _, k := range []string{"plan_gates", "fees", "company_plans", "byok_add_on_usd_cents", "enterprise_from_usd_cents", "card_payments", "labels"} {
+	for _, k := range []string{"plan_gates", "ladders", "fees", "company_plans", "byok_add_on_usd_cents", "enterprise_from_usd_cents", "card_payments", "labels"} {
 		if _, ok := out[k]; ok {
 			t.Errorf("%s = %v from a Lens that answered 503 — want it omitted", k, out[k])
 		}

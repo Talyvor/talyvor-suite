@@ -81,6 +81,7 @@ const PLACEMENTS: [string, string[]][] = [
   ['/approve/:id', ['payments_out']],
   ['/money/pay', ['payments_out']],
   ['/money/invoices', ['payments_in']],
+  // B61.59 — Settings, Plan: a plan is paid to Talyvor, so its chip is spending on Talyvor's.
   ['/billing', ['spend_on_talyvor']],
   ['/plans', ['spend_on_talyvor']],
   ['/chat', ['pay_another_owner', 'escrow', 'pay_another_owner']],

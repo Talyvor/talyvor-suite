@@ -1,23 +1,20 @@
-import { Button, Card, Eyebrow } from '@talyvor/ui/pocket'
+import { Button, Eyebrow } from '@talyvor/ui/pocket'
 import { useDocumentTitle } from '../../documentTitle'
-import { formatCents, formatLXC, lxcForCents } from '../lens/topupApi'
-import { formatPeg, usePricing, type PricingState } from './pricingApi'
+import { usePricing, type Pricing as PricingRead } from './pricingApi'
 import { PublicFooter, PublicHeader } from '../../components/SiteChrome'
-import { TAX_LINE } from './PriceCard'
-import { CompanyPlans, FeesOnAnyPlan, MoneyFeatureFees, RequestCost } from './PricingPlans'
+import { LADDER_TAX_LINE } from './PriceCard'
+import { FeesOnAnyPlan, MoneyFeatureFees, PlanLadderCards } from './PricingPlans'
 import { LABEL_LINES, StatusLabel } from '../../labels/StatusLabel'
-import { CREDIT_FOR_AGENTS } from '../../labels/capabilities'
 import { POSITIONING_LINE } from '../../positioning'
 
 // /pricing (B5.2) — what anything costs, for a buyer who has not signed up. Public, OUTSIDE the
 // AuthGate like /marketing, and built the same way: no router context, plain anchors.
 //
-// ⚠ EVERY FIGURE IS SERVED. The peg, the plans, the gates and the fees come from GET /api/pricing (see
-// pricingApi.ts). What is written here is only the RULES the figures obey — how a request is charged — each read
-// from talyvor-lens:
-//   request charge   internal/proxy/agent_allocator.go settleReservationBasis:
-//                    ceil(delivered USD / peg × 1e6) µLXC — the model's catalog rate, rounded UP
-//   platform fee     internal/economy/platform_fee.go: the plan's platform_fee_bps, its own row (B56.2)
+// ⚠ EVERY FIGURE IS SERVED. The ladders and the fees come from GET /api/pricing (see pricingApi.ts); nothing here is a
+// price, a count or a fee.
+//
+// B61.59 — the plans are Lens's two ladders (GET /v1/public/plans), for a person and for a company, with no 5 Oct plan
+// left; the rate line and Credit for agents, both in LXC, are gone with them.
 //
 // B57.61 — the page is Pocket's (design/pocket s-pricing): the headline and Create your workspace, the four company
 // plans with Team highlighted, credit for agents and what a request costs, the fees on any plan and on money features,
@@ -25,21 +22,10 @@ import { POSITIONING_LINE } from '../../positioning'
 // are left out: the headline states the rate, and the billing screen sells the top-ups. B59.5: the chat plans and the
 // Marketplace bill are left out too, with every other hidden area (LAUNCH-PACK.md section 2).
 
-/** The amount the headline converts at the served rate. An AMOUNT, not a price: what it buys is computed. */
-const EXAMPLE_CENTS = 1000
-
-/** The headline's second line: the served rate and what the example amount buys at it, or nothing unconfirmed. */
-function RateLine({ state }: { state: PricingState }) {
-  const peg = state.status === 'ok' ? state.pricing.usd_per_lxc : undefined
-  const lxc = lxcForCents(EXAMPLE_CENTS, peg)
-  if (typeof peg !== 'number' || lxc === null) return null
-  return (
-    <>
-      {' '}
-      <span className="font-figure">1 LXC</span> is <span className="font-figure">{formatPeg(peg)}</span>, so{' '}
-      <span className="font-figure">{formatCents(EXAMPLE_CENTS)}</span> buys <span className="font-figure">{formatLXC(lxc)}</span>.
-    </>
-  )
+/** The priced plans of both ladders, Custom (by contract) left out: the FX line names each plan's margin. */
+function pricedPlanIds(pricing: PricingRead): string[] {
+  const l = pricing.ladders
+  return l ? [...l.personal, ...l.business].filter((p) => !p.by_contract).map((p) => p.id) : []
 }
 
 /** A section heading in Pocket's display face (pocket.css .ssec h2), with any chip beside it. */
@@ -89,7 +75,6 @@ export function Pricing() {
           </h1>
           <p className="mt-3 max-w-2xl text-lede text-ink-2">
             Every plan has wallets, rules, approvals and statements.
-            <RateLine state={state} />
           </p>
           <div className="mt-5">
             <Button asChild variant="primary" size="lg">
@@ -100,10 +85,10 @@ export function Pricing() {
 
         <Band label="plans-heading">
           <h2 id="plans-heading" className="sr-only">
-            Plans for companies
+            Plans
           </h2>
           {pricing ? (
-            <CompanyPlans pricing={pricing} />
+            <PlanLadderCards pricing={pricing} />
           ) : state.status === 'loading' ? (
             <p className="text-body text-ink-2">Reading the price card…</p>
           ) : (
@@ -111,33 +96,6 @@ export function Pricing() {
               The price card could not be read from this deployment just now, so no price is printed here.
             </p>
           )}
-        </Band>
-
-        <Band label="credit-heading">
-          <Split
-            left={
-              <>
-                <SectionHeading id="credit-heading" chip={<StatusLabel capability={CREDIT_FOR_AGENTS} labels={labels} />}>
-                  Credit for agents
-                </SectionHeading>
-                <p className="mt-5 text-lede text-ink-2">
-                  Each agent spends LXC from its own wallet. When its wallet is empty, its next call is refused rather than
-                  billed to you.
-                </p>
-              </>
-            }
-            right={
-              <Card tone="white">
-                <h3 className="font-display text-head font-bold text-ink">What a request costs</h3>
-                <p className="mt-1 text-body text-ink-2">The model’s list price, and your plan’s platform fee on its own line:</p>
-                {pricing?.fees ? (
-                  <div data-testid="platform-fee-line">
-                    <RequestCost fees={pricing.fees} planIds={pricing.plan_gates?.order ?? []} />
-                  </div>
-                ) : null}
-              </Card>
-            }
-          />
         </Band>
 
         <Band label="fees-heading">
@@ -156,7 +114,7 @@ export function Pricing() {
           <Band label="money-fees-heading">
             <Split
               left={<SectionHeading id="money-fees-heading">Fees on money features</SectionHeading>}
-              right={<MoneyFeatureFees fees={pricing.fees} planIds={pricing.plan_gates?.order ?? []} labels={labels} />}
+              right={<MoneyFeatureFees fees={pricing.fees} planIds={pricedPlanIds(pricing)} labels={labels} />}
             />
           </Band>
         ) : null}
@@ -181,7 +139,7 @@ export function Pricing() {
 
         <section aria-label="Tax" className="mx-auto w-full max-w-6xl px-gutter pb-4 pt-10 wide:px-12">
           <p data-testid="tax-line" className="text-body text-ink-3">
-            {TAX_LINE}
+            {LADDER_TAX_LINE}
           </p>
         </section>
       </main>

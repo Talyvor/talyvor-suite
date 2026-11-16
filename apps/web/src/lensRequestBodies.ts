@@ -706,6 +706,17 @@ export const LENS_BODIES: LensBody[] = [
     upstreamAnchor: 'r.Put("/v1/workspaces/{wsID}/account/money-kind", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensWorkspaceMoneyKindBody",
   },
+  // B61.59 — the owner changes the account's plan from Settings, Plan (Lens B61.57).
+  {
+    route: "PUT /v1/workspaces/{wsID}/plan",
+    file: "apps/bff/workspace_plan.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleWorkspacePlanChange(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/plan_gates_handler.go",
+    upstreamAnchor: "func newWorkspacePlanChangeHandler(pool *pgxpool.Pool, paidRefused bool) http.HandlerFunc {",
+    subject: "lensWorkspacePlanChangeBody",
+  },
   {
     route: "POST /v1/workspaces/{wsID}/agents/push/subscriptions",
     file: "apps/bff/agent_bank.go",
