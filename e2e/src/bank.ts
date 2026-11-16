@@ -2932,6 +2932,9 @@ export function chatForecastAnswer(seed: number): Scenario {
  * Pacific/Kiritimati (UTC+14), it is funded 5 LXC and pays 4.999 LXC away, so it runs out this month. The day Home shows
  * is Lens's /forecast runs_out_on for it, and that is the day runs_out_at falls on in Kiritimati, recomputed here.
  */
+// B57.114 — Home's agent rows draw the line as `home-runs-out-<agent id>` (Agent Wallets' is the bare `runs-out-…`).
+export const HOME_RUNS_OUT = 'home-runs-out'
+
 export function agentRunsOutDate(seed: number): Scenario {
   const [funded, paid, zone] = [5e6, 4_999_000, 'Pacific/Kiritimati']
   return {
@@ -2963,7 +2966,7 @@ export function agentRunsOutDate(seed: number): Scenario {
         const page = await app.tab('/')
         try {
           await page.setViewportSize({ width: 1440, height: 900 })
-          const row = page.getByTestId(`runs-out-${spender.id}`)
+          const row = page.getByTestId(`${HOME_RUNS_OUT}-${spender.id}`)
           try {
             await row.waitFor({ timeout: ACTION_TIMEOUT_MS })
           } catch {
