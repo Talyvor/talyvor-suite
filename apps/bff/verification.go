@@ -10,8 +10,9 @@ import (
 //
 //	GET  /api/verification                                    the level, the live level and every check
 //	POST /api/verification/contact   {email, phone}           L1: email and phone confirmed
-//	POST /api/verification/identity  {name, country, date_of_birth}
-//	                                                          L2: identity checked
+//	POST /api/verification/identity  {name, country, date_of_birth, address?}
+//	                                                          L2: identity checked; address is the home address
+//	                                                          {lines, town, postcode, country} (Lens B61.45)
 //	POST /api/verification/company   {name, country, company_number, directors, people_with_significant_control}
 //	                                                          L3: company checked
 //
@@ -44,9 +45,18 @@ func (a *app) handleVerificationContact(w http.ResponseWriter, r *http.Request, 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	// UPSTREAM-BINDS-ONLY lensVerificationContactBody: company_number, country, date_of_birth, directors, name, people_with_significant_control
+	// UPSTREAM-BINDS-ONLY lensVerificationContactBody: address, company_number, country, date_of_birth, directors, name, people_with_significant_control
 	body, _ := json.Marshal(in)
 	a.agentBankRelay(w, r, t, http.MethodPost, "/verification/contact", body)
+}
+
+// homeAddress — B61.46: the person's home address for an identity check (Lens economy.HomeAddress, B61.45), sent whole
+// or not at all: Lens refuses one without its lines, town, postcode or country.
+type homeAddress struct {
+	Lines    []string `json:"lines"`
+	Town     string   `json:"town"`
+	Postcode string   `json:"postcode"`
+	Country  string   `json:"country"`
 }
 
 // handleVerificationIdentity — POST /api/verification/identity: the identity check (L2).
@@ -56,9 +66,10 @@ func (a *app) handleVerificationIdentity(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	var in struct {
-		Name        string `json:"name"`
-		Country     string `json:"country"`
-		DateOfBirth string `json:"date_of_birth"`
+		Name        string       `json:"name"`
+		Country     string       `json:"country"`
+		DateOfBirth string       `json:"date_of_birth"`
+		Address     *homeAddress `json:"address,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -86,7 +97,7 @@ func (a *app) handleVerificationCompany(w http.ResponseWriter, r *http.Request, 
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	// UPSTREAM-BINDS-ONLY lensVerificationCompanyBody: date_of_birth, email, phone
+	// UPSTREAM-BINDS-ONLY lensVerificationCompanyBody: address, date_of_birth, email, phone
 	body, _ := json.Marshal(in)
 	a.agentBankRelay(w, r, t, http.MethodPost, "/verification/company", body)
 }

@@ -233,6 +233,9 @@ describe('step 4: confirm who you are (B61.20)', () => {
     type('Phone number', '+447700900123')
     type('Legal name', 'Maya Lind')
     type('Date of birth', '1990-04-01')
+    type('Address line 1', ' 12 Marlborough Road ')
+    type('Town or city', 'Twickenham')
+    type('Postcode', 'TW1 3AA')
     fireEvent.change(screen.getByLabelText('Country you live in'), { target: { value: 'GB' } })
   }
   const run = () => fireEvent.click(screen.getByRole('button', { name: 'Confirm who I am' }))
@@ -262,7 +265,16 @@ describe('step 4: confirm who you are (B61.20)', () => {
     expect(screen.getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
     expect(sent).toEqual([
       { url: '/api/verification/contact', body: { email: 'maya@example.com', phone: '+447700900123' } },
-      { url: '/api/verification/identity', body: { name: 'Maya Lind', country: 'GB', date_of_birth: '1990-04-01' } },
+      {
+        url: '/api/verification/identity',
+        body: {
+          name: 'Maya Lind',
+          country: 'GB',
+          date_of_birth: '1990-04-01',
+          // B61.46 — the home address goes with the identity check, its country the one they live in
+          address: { lines: ['12 Marlborough Road'], town: 'Twickenham', postcode: 'TW1 3AA', country: 'GB' },
+        },
+      },
     ])
   })
 
@@ -277,6 +289,9 @@ describe('step 4: confirm who you are (B61.20)', () => {
       'Add your phone number with its country code, like +447700900123.',
       'Add your legal name.',
       'Add your date of birth.',
+      'Add the first line of your home address.',
+      'Add your town or city.',
+      'Add your postcode.',
       'Pick the country you live in.',
     ]) {
       expect(screen.getByText(line)).toBeInTheDocument()
@@ -303,7 +318,7 @@ describe('step 4: confirm who you are (B61.20)', () => {
     await screen.findByLabelText('Legal name')
     fillYou()
     run()
-    expect(await screen.findByText('We couldn’t confirm who you are. Check your legal name, date of birth and country, and try again.')).toBeInTheDocument()
+    expect(await screen.findByText('We couldn’t confirm who you are. Check your legal name, date of birth, home address and country, and try again.')).toBeInTheDocument()
     expect(within(row('contact')).getByText('Passed in Sandbox')).toBeInTheDocument()
     expect(within(row('person')).getByText('Not passed')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Open the app' })).toBeNull()

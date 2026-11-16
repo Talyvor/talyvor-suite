@@ -44,7 +44,7 @@ func TestVerificationChecksReachLensWithOnlyTheirOwnFields(t *testing.T) {
 	if rec := doJSON(a, http.MethodPost, "/api/verification/contact", `{"email":"o@example.com","phone":"+447700900123","name":"Smuggled"}`); rec.Code != http.StatusCreated {
 		t.Fatalf("contact = %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := doJSON(a, http.MethodPost, "/api/verification/identity", `{"name":"Ada Owner","country":"GB","date_of_birth":"1990-04-01","phone":"+1"}`); rec.Code != http.StatusCreated {
+	if rec := doJSON(a, http.MethodPost, "/api/verification/identity", `{"name":"Ada Owner","country":"GB","date_of_birth":"1990-04-01","address":{"lines":["12 Marlborough Road"],"town":"Twickenham","postcode":"TW1 3AA","country":"GB","flat":"x"},"phone":"+1"}`); rec.Code != http.StatusCreated {
 		t.Fatalf("identity = %d %s", rec.Code, rec.Body.String())
 	}
 	rec := doJSON(a, http.MethodPost, "/api/verification/company", `{"name":"Owner Ltd","country":"GB","company_number":"01234567","directors":["Ada Owner"],"people_with_significant_control":["Ada Owner"]}`)
@@ -64,7 +64,7 @@ func TestVerificationChecksReachLensWithOnlyTheirOwnFields(t *testing.T) {
 		keys []string
 	}{
 		{"POST /v1/workspaces/" + ws + "/verification/contact ", []string{"email", "phone"}},
-		{"POST /v1/workspaces/" + ws + "/verification/identity ", []string{"country", "date_of_birth", "name"}},
+		{"POST /v1/workspaces/" + ws + "/verification/identity ", []string{"address", "country", "date_of_birth", "name"}},
 		{"POST /v1/workspaces/" + ws + "/verification/company ", []string{"company_number", "country", "directors", "name", "people_with_significant_control"}},
 		{"GET /v1/workspaces/" + ws + "/verification ", nil},
 	}
@@ -87,5 +87,33 @@ func TestVerificationChecksReachLensWithOnlyTheirOwnFields(t *testing.T) {
 		if strings.Join(keys, " ") != strings.Join(w.keys, " ") {
 			t.Fatalf("request %d sent %v, want exactly the keys %v", i+1, sent, w.keys)
 		}
+	}
+	// B61.46 — the identity check carries the home address whole, and only its own four parts.
+	if want := `"address":{"lines":["12 Marlborough Road"],"town":"Twickenham","postcode":"TW1 3AA","country":"GB"}`; !strings.Contains(got[1], want) {
+		t.Fatalf("the identity check reached Lens as %q, want it to carry %s", got[1], want)
+	}
+}
+
+// B61.46 — an identity check without a home address reaches Lens without one: Lens takes it as optional.
+func TestVerificationIdentityWithoutAnAddressSendsNone(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == provisionPath {
+			serveFakeProvision(w, r)
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		got = string(raw)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"check":{"level":"L2"},"verification":{"level":"L2"}}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := newApp(config{addr: "127.0.0.1:0", lensBaseURL: srv.URL, provisionSecret: testProvisionSecret, webDist: t.TempDir(), authMode: authModeDisabled}, nil)
+	if rec := doJSON(a, http.MethodPost, "/api/verification/identity", `{"name":"Ada Owner","country":"GB","date_of_birth":"1990-04-01"}`); rec.Code != http.StatusCreated {
+		t.Fatalf("identity = %d %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(got, "address") {
+		t.Fatalf("an identity check without a home address reached Lens as %s, want no address key", got)
 	}
 }
