@@ -45,8 +45,8 @@ import { dailyReconciliation } from './reconciliation.ts'
 import { siteTruth } from './siteTruth.ts'
 import { statusTruth } from './statusTruth.ts'
 import { crossCompanyTestMoney } from './testmoney.ts'
-import { seatsFree, seatsTeam } from './seats.ts'
-import { type Plan, feeOn, planAgents, pricingApproved, pricingFee, pricingFreeAgents, pricingOwnKey, pricingSellerSplit, within } from './pricing.ts'
+import { seatsCompany, seatsStudio } from './seats.ts'
+import { type Plan, feeOn, planAgents, pricingApproved, pricingFee, pricingStudioAgents, pricingOwnKey, pricingSellerSplit, within } from './pricing.ts'
 import { gatewayAuth, gatewayKeys, gatewayMCP, gatewayProviders, gatewaySessions, verdictOf } from './gateway.ts'
 import { roomsPrivate } from './rooms.ts'
 import { roomsModeration } from './roomsModeration.ts'
@@ -5211,20 +5211,20 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   if (i % 10 === 6) list.push(planOnTestCard(i), planCancelResume())
   // B32.71 — a Free workspace's second member, refused in Lens's words; then, once a run, the same workspace on
   // Team takes its fifth and is refused its sixth. Team comes last, on a user nobody else asks as (4, 14, …).
-  if (i % 10 === 4) list.push(seatsFree(i))
-  if (i % 100 === 4) list.push(seatsTeam(i))
+  if (i % 10 === 4) list.push(seatsStudio(i))
+  if (i % 100 === 4) list.push(seatsCompany(i))
   // B32.15 — the approved prices, once a run, last on users nobody else signs in or trades as (4, 14, … and
-  // 40, 42 never are): the same call on Free (24), Team (34) and Business (14), whose fee rows the ledger
-  // must hold at 5.5%, 3% and 1%; then Business on its own key; Free's fourth agent; /pricing's prices; and a
-  // first $1.00 sale by 42, bought by 40, who buys nothing else.
-  if (i === 14) list.push(pricingFee('business', i), pricingOwnKey(i))
-  if (i === 24) list.push(pricingApproved(), pricingFee('free', i), pricingFreeAgents(i))
-  if (i === 34) list.push(pricingFee('team', i))
+  // 40, 42 never are): the same call on Studio (24), Company (34) and Group (14), whose fee rows the ledger
+  // must hold at the rate Lens states for each; then Group on its own key; Studio's agent past its gate; /pricing's
+  // prices; and a first $1.00 sale by 42, bought by 40, who buys nothing else.
+  if (i === 14) list.push(pricingFee('business_group'), pricingOwnKey(i))
+  if (i === 24) list.push(pricingApproved(), pricingFee('business_studio'), pricingStudioAgents(i))
+  if (i === 34) list.push(pricingFee('business_company'))
   if (i === 40 && i + 2 < users) list.push(pricingSellerSplit(i, i + 2))
-  // B35.7 — each paid plan's own gate, once a run, each on a workspace of its own: Team refuses its 26th agent,
-  // Business does not, and both offer Slack and Teams approvals. The gates above that need Free (seats-free,
-  // pricing-free-agents, pricing-fee-free) run on workspaces of their own on Free, whatever plan their user is on.
-  if (i % 100 === 5) list.push(planAgents('team', i), planAgents('business', i))
+  // B35.7 — each paid plan's own gate, once a run, each on a workspace of its own: Company refuses its agent past its
+  // gate, Group does not, and both offer Slack and Teams approvals. The gates above that need Studio (seats-studio,
+  // pricing-studio-agents, pricing-fee-studio) run on workspaces of their own on Studio, whatever plan their user is on.
+  if (i % 100 === 5) list.push(planAgents('business_company', i), planAgents('business_group', i))
   // B34.5 — every screen and BFF route a person reaches, once a run, each checked on what Lens, Track or Docs stored.
   // Never on 9, 19, …, the other company others trade with; Delete everything stored on 2, whose stored answers nobody
   // reads after; the ledger-still checks (lens-convert, chat-tool-guard) on 0 and 4, whose ledgers only they move.

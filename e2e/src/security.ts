@@ -98,7 +98,7 @@ export function moneyTampered(): Scenario {
     id: 'money-tampered',
     owner: 'talyvor-lens',
     own: true,
-    plan: 'team',
+    plan: 'business_company',
     agents: 1,
     feature: 'Agent Wallets',
     items: ['B50.7'],
@@ -366,7 +366,7 @@ export function xssShownBack(): Scenario {
     id: 'xss-shown-back',
     owner: 'talyvor-suite',
     own: true,
-    plan: 'team',
+    plan: 'business_company',
     agents: 1,
     items: ['B50.7'],
     title: "an agent's name, a saved payee's name and an invoice's customer and line, each carrying an event handler and a <script>, are shown on " +

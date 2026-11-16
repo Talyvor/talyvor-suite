@@ -325,7 +325,7 @@ export function scriptInert(): Scenario {
     owner: 'talyvor-suite',
     own: true,
     // A private room: Free opens none.
-    plan: 'team',
+    plan: 'business_company',
     title: 'an answer in Chat and a message in a private room carrying a <script>, event handlers, javascript: and data: links and an <iframe srcdoc> ' +
       'are shown and nothing in them runs: no flag set, no dialog, and no script, frame, event handler or javascript:/data:/vbscript: link on the page',
     run: async (ctx) => {

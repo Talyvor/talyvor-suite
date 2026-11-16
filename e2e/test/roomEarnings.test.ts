@@ -36,7 +36,7 @@ async function runAgainstStub(broken: string): Promise<{ verdict: Verdict; evide
     stub?.on('exit', (code) => reject(new Error(`the stub exited ${code}`)))
   })
   const lens = new LensClient(base, 'room-earnings')
-  const [user] = await lens.createUsers(1, 'team')
+  const [user] = await lens.createUsers(1, 'business_company')
   const evidence: Evidence[] = []
   const ctx = { env: { lens }, app: { user }, evidence } as unknown as ScenarioCtx
   const byCard = async (_: ScenarioCtx, token: string) => {

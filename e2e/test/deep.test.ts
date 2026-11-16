@@ -38,7 +38,7 @@ describe('the deep red-team pass (B28.292, B50.7)', () => {
     expect(deep[0].find((s) => s.id === 'cross-company-test-money')?.partners).toEqual([11])
     expect(deep[2].find((s) => s.id === 'cross-company-test-money')?.partners).toEqual([13])
     const c = cast([...night, ...deep])
-    expect([c.plans[11], c.plans[13]]).toEqual(['business', 'business'])
+    expect([c.plans[11], c.plans[13]]).toEqual(['business_group', 'business_group'])
     expect(c.own.filter((o) => o.user >= 10).map((o) => o.scenario)).toEqual([...RED_TEAM, ...RED_TEAM].filter((id) => id !== 'cross-company-test-money'))
     expect([9, 10, 11, 12, 13].map((i) => roundOf(i, 10))).toEqual([undefined, 1, 1, 2, 2])
   })

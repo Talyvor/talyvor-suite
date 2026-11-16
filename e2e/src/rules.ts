@@ -95,7 +95,7 @@ export function agentRulesUnbypassable(): Scenario {
     id: 'agent-rules-unbypassable',
     owner: 'talyvor-lens',
     own: true,
-    plan: 'team',
+    plan: 'business_company',
     agents: 2,
     feature: 'Agent Wallets',
     title: "a funded agent's own key is refused, with nothing posted and no balance moved, a request over its daily limit, one outside its hours, " +

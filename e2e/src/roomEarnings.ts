@@ -56,7 +56,7 @@ export function roomEarnings(fund: (ctx: ScenarioCtx, token: string) => Promise<
     owner: 'talyvor-lens',
     own: true,
     feature: 'Rooms',
-    plan: 'team',
+    plan: 'business_company',
     items: ['B46.21', 'B55.28'],
     title: "a Room's £10.00 split equally among its three members is £3.34, £3.33 and £3.33 in three earnings_payout rows under the room's " +
       'terms: the two with verified payout details completed, the pending one held; the same payout again makes nothing new',

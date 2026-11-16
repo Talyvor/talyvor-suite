@@ -58,7 +58,7 @@ export function ledgerMovesAtOnce(): Scenario {
     id: 'ledger-moves-at-once',
     owner: 'talyvor-lens',
     own: true,
-    plan: 'team',
+    plan: 'business_company',
     agents: 1,
     feature: 'Agent Wallets',
     title: `an agent funded ${MOVES} times and withdrawn from ${MOVES} times at once, with one funding and one withdrawal each sent ${REPLAYS} times at once ` +
@@ -184,7 +184,7 @@ export function ledgerCallOnce(): Scenario {
     id: 'ledger-call-once',
     owner: 'talyvor-lens',
     own: true,
-    plan: 'team',
+    plan: 'business_company',
     agents: 1,
     feature: 'Agent Wallets',
     title: "an agent's request sent twice at once and once after under one Idempotency-Key is billed once, and a streamed answer the agent hangs up on " +

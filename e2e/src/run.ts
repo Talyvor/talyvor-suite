@@ -357,7 +357,7 @@ export async function run(cfg: RunConfig): Promise<RunResult> {
     const seated = await seat(lens, cast(journeys))
     users = seated.users
     const onPlan = (plan: string) => users.filter((u) => u.plan === plan).length
-    console.log(`created ${users.length} synthetic users (free ${onPlan('free')}, team ${onPlan('team')}, business ${onPlan('business')}) ` +
+    console.log(`created ${users.length} synthetic users (studio ${onPlan('business_studio')}, company ${onPlan('business_company')}, group ${onPlan('business_group')}) ` +
       `and ${seated.own.size} workspace(s) of their own for the plan gates` +
       (cfg.deepRounds > 0 ? `; the last ${users.length - cfg.users} are the weekly deep red-team pass's ${cfg.deepRounds} round(s)` : ''))
     // B27.16 — this run's users only: another run going on at the same time keeps its answers and credits.

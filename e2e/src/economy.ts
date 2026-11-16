@@ -704,7 +704,7 @@ const WEBHOOK_WAIT_MS = 60_000
  * Credits bought, on the workspace's own token, and paid with Stripe's test card: below the smallest top-up Lens refuses
  * (400) and nothing moves; the smallest opens Stripe's checkout, and once paid the ledger takes one credit of exactly
  * what was bought, at Lens's price of an LXC, and the balance moves by exactly that. Before it, the testers' key puts
- * the workspace on Team and back on Free (POST /v1/synthetic/workspaces/{ws}/plan), and Lens holds it to each.
+ * the workspace on Company and back on Studio (POST /v1/synthetic/workspaces/{ws}/plan), and Lens holds it to each.
  */
 export function creditsTopUp(seed: number): Scenario {
   return {
@@ -716,7 +716,7 @@ export function creditsTopUp(seed: number): Scenario {
     run: async (ctx) => {
       const wrong: string[] = []
       const { env, app } = ctx
-      for (const plan of ['team', 'free'] as const) {
+      for (const plan of ['business_company', 'business_studio'] as const) {
         const set = await env.lens.setTestPlan(app.user, plan)
         const held = await env.lens.workspacePlan(app.user)
         if (!set.ok || set.value.plan.plan !== plan || held.plan !== plan) wrong.push(`the testers' key putting the workspace on ${plan} answered ${set.ok ? set.value.plan.plan : `${set.status} ${set.error}`}, and Lens holds it to ${held.plan}`)

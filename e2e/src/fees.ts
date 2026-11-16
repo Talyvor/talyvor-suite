@@ -7,12 +7,12 @@ import type { Fees } from './lens.ts'
 export const BPS = 10_000
 
 /**
- * The platform fee on a workspace's AI spend charged to credits, as Lens picks it (billing.PlatformFeeBPS): the chat
- * plans plus, pro and max, and byok, take team's; a plan the fees do not name takes free's.
+ * The platform fee on a workspace's AI spend charged to credits, as Lens picks it (billing.PlatformFeeBPS): B61.90 —
+ * the rate Lens states for the plan it holds the workspace to, by the plan's key (talyvor-lens B61.57); a plan the fees
+ * do not name pays none, as Lens reads a plan missing from LENS_PLATFORM_FEE_BPS.
  */
 export function platformFeeBPS(fees: Fees, plan: string): number {
-  const p = ['plus', 'pro', 'max', 'byok'].includes(plan) ? 'team' : plan
-  return fees.platform_fee_bps[p] ?? fees.platform_fee_bps.free
+  return fees.platform_fee_bps[plan] ?? 0
 }
 
 /** What a seller or payee keeps of `gross` µUSD once Talyvor takes `takeBPS` of it, rounded down to the µUSD. */

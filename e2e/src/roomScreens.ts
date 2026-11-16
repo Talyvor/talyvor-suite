@@ -64,7 +64,7 @@ export function roomInviteScreen(i: number): Scenario {
     id: 'room-invite-screen',
     owner: 'talyvor-suite',
     feature: FEATURE,
-    plan: 'team',
+    plan: 'business_company',
     own: true,
     title: "the owner's new terms are Lens's next version; another company cannot join a private room by its id, and its invite link's screen shows the room on Lens's terms, " +
       'joins it on them and is used up',
@@ -184,7 +184,7 @@ export function roomDecideRun(): Scenario {
     id: 'room-decide-run',
     owner: 'talyvor-suite',
     feature: FEATURE,
-    plan: 'team',
+    plan: 'business_company',
     own: true,
     title: 'the owner accepts a contribution on the room screen and Lens holds it accepted; run without the variable its template needs, it is refused naming it, ' +
       'the screen asks for it, and the ledger and the room gain nothing',
