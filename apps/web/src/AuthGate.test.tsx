@@ -49,9 +49,11 @@ afterEach(() => {
 
 describe('AuthGate', () => {
   it('renders the sign-in card (and not the app) when oidc mode has no session', async () => {
-    stubMe({ mode: 'oidc', authenticated: false, user: null })
+    stubMe({ mode: 'oidc', authenticated: false, user: null, google_signin: true })
     renderGate()
-    const link = await screen.findByRole('link', { name: /sign in/i })
+    // B61.26 — the card is the door: the phone number. While the move runs, Google is the small link under it.
+    expect(await screen.findByRole('heading', { name: 'What’s your phone number?' })).toBeInTheDocument()
+    const link = screen.getByRole('link', { name: 'Continue with Google' })
     // The link must start the BFF's OIDC flow and return to the current path.
     expect(link).toHaveAttribute('href', expect.stringContaining('/auth/login'))
     expect(link).toHaveAttribute('href', expect.stringContaining('return_to='))

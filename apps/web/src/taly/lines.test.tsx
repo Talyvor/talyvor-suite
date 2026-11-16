@@ -70,7 +70,7 @@ describe('Taly’s lines', () => {
       mockBff('oidc')
       window.history.pushState({}, '', '/signin')
       render(<App />)
-      await screen.findByRole('heading', { name: 'Sign in to Talyvor' })
+      await screen.findByRole('heading', { name: 'What’s your phone number?' })
     }],
   ]
 

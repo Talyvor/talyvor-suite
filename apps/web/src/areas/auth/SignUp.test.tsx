@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 
@@ -10,6 +10,8 @@ const MEANINGS = ['signed in', 'email and phone confirmed', 'identity checked', 
 
 interface MockOptions {
   authenticated?: boolean
+  /** B61.26 — a new number's sign-up session (the door's join), which steps 1 and 2 belong to */
+  joining?: boolean
   passkeys?: unknown[]
   devices?: unknown[]
   /** B61.20 — the account's type, and the check the provider does not pass */
@@ -43,7 +45,12 @@ function mockFetch(o: MockOptions = {}) {
       return json({ check, verification: record() }, 201)
     }
     if (url === '/auth/me') {
-      return json({ mode: 'oidc', authenticated: o.authenticated ?? false, user: o.authenticated ? { sub: 's', email: 'maya@example.com' } : null, signup_open: true })
+      const authed = o.authenticated ?? o.joining ?? false
+      return json({ mode: 'oidc', authenticated: authed, user: authed ? { sub: 's', email: 'maya@example.com' } : null, signup_open: true, ...(o.joining ? { signup_unfinished: true } : {}) })
+    }
+    if (url === '/auth/signup/account' && init?.method === 'POST') {
+      sent.push({ url, body: JSON.parse(String(init.body)) as unknown })
+      return json({ account_id: 'ws_1', created: true })
     }
     if (url === '/api/agents/passkeys') return json({ passkeys: o.passkeys ?? [] })
     if (url === '/api/money/devices') return json({ devices: o.devices ?? [] })
@@ -91,7 +98,7 @@ async function throughStep1(kind: 'Personal' | 'Business') {
 
 describe('step 1: who is this account for?', () => {
   it('says the spec’s words, asks each type for its own profile and no identity document', async () => {
-    mockFetch()
+    mockFetch({ joining: true })
     at('/signup')
     await screen.findByRole('heading', { level: 1, name: 'Who is this account for?' })
     const steps = within(screen.getByRole('list', { name: 'Sign-up steps' })).getAllByRole('listitem')
@@ -110,7 +117,7 @@ describe('step 1: who is this account for?', () => {
   })
 
   it('cannot continue until a type is picked, and says what each type is missing', async () => {
-    mockFetch()
+    mockFetch({ joining: true })
     at('/signup')
     await screen.findByRole('heading', { level: 1, name: 'Who is this account for?' })
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
@@ -128,7 +135,7 @@ describe('step 1: who is this account for?', () => {
 
 describe('step 2: pick the kind of money', () => {
   it('says the spec’s words and W1’s lists, for the account it is making', async () => {
-    mockFetch()
+    mockFetch({ joining: true })
     at('/signup')
     await throughStep1('Personal')
     expect(screen.getByText('For Maya Lind, a Personal account.')).toBeInTheDocument()
@@ -153,21 +160,24 @@ describe('step 2: pick the kind of money', () => {
   it('sends each of the six choices to the BFF’s sign-up as its type and kind, with the country and a business’s registration number, landing on step 3', async () => {
     for (const kind of ['Personal', 'Business'] as const) {
       for (const [money, value] of [['Fiat only', 'fiat'], ['Stablecoin and crypto only', 'stablecoin'], ['Hybrid', 'hybrid']] as const) {
-        mockFetch()
+        const sent = mockFetch({ joining: true })
         at('/signup')
         await throughStep1(kind)
         if (kind === 'Business') expect(screen.getByText('For Northwind Studio, a Business account.')).toBeInTheDocument()
         pick(new RegExp(`^${money}`))
-        const go = new URL(screen.getByRole('link', { name: 'Continue' }).getAttribute('href')!, 'https://app.example')
-        expect(go.pathname).toBe('/auth/login')
-        expect(Object.fromEntries(go.searchParams)).toEqual({
-          money_kind: value,
-          account_type: kind.toLowerCase(),
-          name: kind === 'Personal' ? 'Maya Lind' : 'Northwind Studio',
-          country: 'GB',
-          ...(kind === 'Business' ? { registration_number: '12345678' } : {}),
-          return_to: '/signup/key',
-        })
+        cont()
+        // B61.26 — the sign-up session makes its account at the BFF, then lands on step 3.
+        await waitFor(() => expect(window.location.pathname).toBe('/signup/key'))
+        expect(sent).toEqual([{
+          url: '/auth/signup/account',
+          body: {
+            money_kind: value,
+            account_type: kind.toLowerCase(),
+            name: kind === 'Personal' ? 'Maya Lind' : 'Northwind Studio',
+            country: 'GB',
+            ...(kind === 'Business' ? { registration_number: '12345678' } : {}),
+          },
+        }])
         cleanup()
         queryClient.clear()
         vi.restoreAllMocks()
@@ -211,11 +221,10 @@ describe('step 3: add a passkey or pair your phone', () => {
     expect(await screen.findByText('Status unknown')).toBeInTheDocument()
   })
 
-  it('asks someone with no session to sign in first, and brings them back to step 3', async () => {
+  it('asks someone with no session to sign in first, at the door', async () => {
     mockFetch({ authenticated: false })
     at('/signup/key')
-    const signIn = await screen.findByRole('link', { name: /^sign in$/i })
-    expect(signIn).toHaveAttribute('href', `/auth/login?return_to=${encodeURIComponent('/signup/key')}`)
+    expect(await screen.findByRole('heading', { level: 1, name: 'What’s your phone number?' })).toBeInTheDocument()
   })
 })
 

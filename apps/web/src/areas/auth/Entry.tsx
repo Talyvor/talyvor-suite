@@ -3,6 +3,8 @@ import { Button, PageBackground, personalHues, pocketFocusRing } from '@talyvor/
 import { CompanyLine } from '../../components/CompanyLine'
 import { ACCESS_LINE, useSignupProbe, type SignupState } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
+import { useAuthMeReader } from '../../lib/authMe'
+import { Door } from './Door'
 
 // Entry.tsx — the two front doors: /signup for a stranger, /signin for someone coming back.
 //
@@ -37,16 +39,12 @@ import { useDocumentTitle } from '../../documentTitle'
 // B59.8 — /signup itself is SignUp.tsx: who the account is for, the kind of money, then a key. What it shares with
 // /signin (the card, the access line, Privacy and Terms) is exported from here.
 //
+// B61.26 — THE DOOR IS NOW THE PHONE NUMBER (Door.tsx), on /signin, on /signup and in AuthGate's card: a code, then the
+// passcode for a known number or a new passcode and sign-up's steps for a new one. Google (/auth/login, above) stays
+// only while the move from it runs, small under the door, for existing accounts.
+//
 // B57.49 — BOTH PAGES ARE POCKET'S AUTH CARD (reference w-signup, w-signin): a white card on the cloud page with the
 // logo's streams flowing into it from the left. The streams are the kit's own brand art, decorative.
-
-/** The BFF's OIDC entry point. Both pages end here; nothing else in this file is a destination. */
-function loginHref(returnTo?: string): string {
-  return returnTo ? `/auth/login?return_to=${encodeURIComponent(returnTo)}` : '/auth/login'
-}
-
-/** A link inside the card's words: pocket.css's bold ink link. */
-const cardLink = cn('font-semibold text-ink', pocketFocusRing)
 
 /** Privacy and Terms, small and underlined, at the foot of each card. */
 const footLink = cn('underline underline-offset-2 transition-colors duration-200 hover:text-ink', pocketFocusRing)
@@ -194,27 +192,13 @@ export function SignIn({ returnTo }: { returnTo?: string } = {}) {
   )
 }
 
-/** The card's words on their own, so AuthGate can render the identical words in its own AuthCard without a second
- *  probe (it has already asked /auth/me — that is how it knows to show this at all). B56.19's email-first step is
- *  added here when it lands. */
-export function SignInCard({ returnTo }: { returnTo?: string }) {
+/** The card's words on their own, so AuthGate can render the identical door in its own AuthCard. B61.26 — the door is
+ *  the phone number (Door.tsx); Google stays small under it while the move runs, and only while the BFF offers it. */
+export function SignInCard({ returnTo, foot }: { returnTo?: string; foot?: React.ReactNode }) {
+  const me = useAuthMeReader()
   return (
     <>
-      <CardLogo />
-      <CardHeading>Sign in to Talyvor</CardHeading>
-      <Lead>
-        Use the same account you signed up with. You’ll be taken there to confirm it’s you, and returned here. There is
-        no password for Talyvor itself.
-      </Lead>
-      <Button asChild size="lg" className="w-full">
-        <a href={loginHref(returnTo)}>Sign in</a>
-      </Button>
-      <p className="text-body text-ink-2">
-        New to Talyvor?{' '}
-        <a href="/signup" className={cardLink}>
-          Create a workspace
-        </a>
-      </p>
+      <Door returnTo={returnTo} google={me.data?.google_signin === true} foot={foot} />
       <PrivacyTerms />
     </>
   )

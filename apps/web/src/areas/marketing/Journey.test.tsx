@@ -81,8 +81,9 @@ describe('a signed-out visitor arrives from talyvor.com and can act', () => {
 
     mockBff()
     at(href)
-    // ARRIVAL: content only the signup screen carries.
-    expect(await screen.findByRole('heading', { name: 'Who is this account for?' })).toBeInTheDocument()
+    // ARRIVAL: content only the signup screen carries — B61.26, the door, with the access line a stranger reads there.
+    expect(await screen.findByRole('heading', { name: 'What’s your phone number?' })).toBeInTheDocument()
+    expect(document.querySelector('[data-access-line]')).not.toBeNull()
   })
 
   it('reaches privacy before handing over an account', async () => {

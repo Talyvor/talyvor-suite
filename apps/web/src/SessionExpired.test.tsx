@@ -207,7 +207,7 @@ describe('when the BFF session itself is gone, the gate handles it alone', () =>
       return new Response(JSON.stringify({ error: 'authentication required' }), { status: 401 })
     })
     at('/')
-    await screen.findByRole('heading', { name: /sign in to talyvor/i })
+    await screen.findByRole('heading', { name: 'What’s your phone number?' })
     expect(screen.queryByRole('alert')).toBeNull()
   })
 })
