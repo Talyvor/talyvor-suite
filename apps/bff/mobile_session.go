@@ -33,7 +33,7 @@ func (a *app) handleMobileSession(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodPost)
 		return
 	}
-	if a.handleAuthUnavailable(w) {
+	if a.googleOff(w) || a.handleAuthUnavailable(w) {
 		return
 	}
 	if a.auth.mobileVerifier == nil {
@@ -111,6 +111,7 @@ func (a *app) handleMobileSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.signedInAt = authTimeOf(idt)
+	s.phone, s.lastSeen = true, time.Now() // its lock covers it once it has moved to a number (B61.25)
 	sid, err := a.auth.storeSession(s)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})

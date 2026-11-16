@@ -242,7 +242,7 @@ func (a *app) tenantFrom(r *http.Request) (tenant, bool) {
 		return tenant{}, false
 	}
 	s = a.refreshWorkspaceToken(r.Context(), sid, s)
-	t := tenant{workspaceID: s.workspaceID, token: s.lensToken, signedInAt: s.signedInAt, person: provisionIdentity(a.cfg.oidcIssuer, s.sub)}
+	t := tenant{workspaceID: s.workspaceID, token: s.lensToken, signedInAt: s.signedInAt, person: a.identityOf(s.sub)}
 	return t, t.ok()
 }
 
@@ -297,7 +297,7 @@ func (a *app) refreshWorkspaceToken(ctx context.Context, sid string, s session) 
 	}
 	// For the account the session is on (B61.8), never the identity's first: that would move a person who switched
 	// back to their first account when the token ran out.
-	prov, err := a.provisionAccount(ctx, provisionIdentity(a.cfg.oidcIssuer, s.sub), s.workspaceID)
+	prov, err := a.provisionAccount(ctx, a.identityOf(s.sub), s.workspaceID)
 	if err != nil {
 		log.Printf("bff: workspace token re-mint FAILED for sub=%s (request continues with the "+
 			"expired one, and will surface as a 401): %s", s.sub, redactSecret(err.Error()))

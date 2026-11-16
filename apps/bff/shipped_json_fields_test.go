@@ -94,6 +94,9 @@ var builtByThisService = map[string]string{
 // reply. The BFF never fills these, so "no assignment" is correct rather than
 // suspicious and checking them would report the decoder as a defect.
 var decodedFromUpstream = map[string]string{
+	"keyAnswer":              "a key's answer to a sign-in challenge, decoded from the request body and relayed to Lens (B61.25)",
+	"keySignedIn":            "Lens's answer to POST /v1/auth/passkey/finish, decoded in handleKeySignInFinish and handleUnlock (B61.25)",
+	"lensPerson":             "Lens's person in its phone and key sign-in answers, decoded with them (B61.25)",
 	"talyAnswer":             "Lens's model proxy's Anthropic Messages answer to Taly, decoded in talyAsk (B45.41)",
 	"talyTurn":               "a turn of the desktop app's ask_taly thread, decoded in askTaly and sent on to the model (B45.41)",
 	"pendingRequest":         "a request in Lens's GET /v1/money/payment-requests?status=pending_approval, decoded in mcpApprovals (B45.41)",
@@ -302,7 +305,10 @@ func scanBFF(t *testing.T) *bffFacts {
 					// Claims is go-oidc's IDToken.Claims, which is a
 					// json.Unmarshal into the argument — a decode target under
 					// another name.
-					if sel.Sel.Name == "Decode" || sel.Sel.Name == "Unmarshal" || sel.Sel.Name == "Claims" {
+					// lensDoor and decodeDoor (phone_signin.go, B61.25) are a json.Unmarshal of Lens's answer and a
+					// Decode of the request body into their argument, the same.
+					if sel.Sel.Name == "Decode" || sel.Sel.Name == "Unmarshal" || sel.Sel.Name == "Claims" ||
+						sel.Sel.Name == "lensDoor" || sel.Sel.Name == "decodeDoor" {
 						for _, a := range x.Args {
 							if u, ok := a.(*ast.UnaryExpr); ok {
 								if id, ok := u.X.(*ast.Ident); ok {

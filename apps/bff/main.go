@@ -82,8 +82,10 @@ type config struct {
 	oidcClientSecret string // oidc: confidential-client secret (PKCE is added on top)
 	// oidc: the phone app's public client ids (iOS, Android). Empty ⇒ POST /auth/mobile/session refuses.
 	oidcMobileClientIDs []string
-	allowedEmails       []string      // oidc: lower-cased allowlist; ["*"] = any issuer identity
-	sessionTTL          time.Duration // oidc: absolute session lifetime
+	// googleSignInOff (BFF_GOOGLE_SIGNIN=off) removes Google sign-in: its routes answer 404 (B61.25; B61.29 sets it).
+	googleSignInOff bool
+	allowedEmails   []string      // oidc: lower-cased allowlist; ["*"] = any issuer identity
+	sessionTTL      time.Duration // oidc: absolute session lifetime
 
 	// Track/Docs upstreams (inc6). Both gate /v1 behind gatewayauth: the request
 	// must carry X-Gateway-Auth == their GATEWAY_AUTH_SECRET before the identity
@@ -221,6 +223,7 @@ func loadOIDCConfig(cfg config) (config, error) {
 	cfg.oidcIssuer = os.Getenv("OIDC_ISSUER")
 	cfg.oidcClientID = os.Getenv("OIDC_CLIENT_ID")
 	cfg.oidcClientSecret = os.Getenv("OIDC_CLIENT_SECRET")
+	cfg.googleSignInOff = strings.EqualFold(strings.TrimSpace(os.Getenv("BFF_GOOGLE_SIGNIN")), "off")
 	for _, id := range strings.Split(os.Getenv("OIDC_MOBILE_CLIENT_IDS"), ",") {
 		if id = strings.TrimSpace(id); id != "" {
 			cfg.oidcMobileClientIDs = append(cfg.oidcMobileClientIDs, id)

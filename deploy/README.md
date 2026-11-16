@@ -382,13 +382,15 @@ Every variable the BFF reads, and what happens without it:
 | `BFF_SESSION_TTL` | no | `12h` | Absolute session lifetime (Go duration). Unparseable or ≤0 → refuses to start. Sessions are **in-memory**: every BFF restart signs everyone out (they just re-login). |
 | `TRACK_BASE_URL` | no† | — | Track upstream base (reachable from this box). |
 | `TRACK_GATEWAY_SECRET` | no† | — | Track's own `GATEWAY_AUTH_SECRET`, replayed as the `X-Gateway-Auth` transit proof. Held server-side, never emitted. |
-| ~~`TRACK_WORKSPACE_ID`~~ | **MUST BE ABSENT** | — | ⚠ **The BFF now REFUSES TO START if this is set** (`apps/bff/main.go:173`). Track is per-session: each person is bootstrapped their own workspace at login. Delete the line from any existing env file. |
+| ~~`TRACK_WORKSPACE_ID`~~ | **MUST BE ABSENT** | — | ⚠ **The BFF now REFUSES TO START if this is set** (`apps/bff/main.go:175`). Track is per-session: each person is bootstrapped their own workspace at login. Delete the line from any existing env file. |
 | `DOCS_BASE_URL` | no‡ | — | Docs upstream base. |
 | `DOCS_GATEWAY_SECRET` | no‡ | — | Docs' `GATEWAY_AUTH_SECRET`, as above. |
+| `BFF_GOOGLE_SIGNIN` | no | (on) | B61.25 — `off` removes Google sign-in: `/auth/login`, `/auth/callback`, `/auth/mobile/session` and `/auth/google/move` answer 404, and `/auth/me` says `google_signin: false`. B61.29 sets it. |
 | `OIDC_MOBILE_CLIENT_IDS` | no | (empty) | The phone app's client ids at the same issuer (iOS, Android), comma-separated. Its ID token is traded at `POST /auth/mobile/session` for a Bearer session. Empty → that route answers 404. |
 | `BFF_DATABASE_URL` | no | (unset) | Postgres for Talyvor Connect's sign-ins: OAuth clients, codes, grants and tokens (tokens by SHA-256 only) are kept there and read back at boot, so a restart signs no assistant out. The BFF creates its `oauth_*` tables itself. Unreachable at boot → refuses to start. **Unset: in memory, and every restart signs every connected assistant out.** Sign out everywhere (B52.9) ends browser and phone sessions, and Connect's grants and codes, in the memory of the BFF that serves it, so **the stack runs one BFF instance** until sessions and that revocation are shared. |
 | `BFF_CONNECT_REGISTER_PER_IP_HOUR` | no | `10` | B52.3 — Talyvor Connect's client registrations per IP per hour; also the cap on unused clients one address holds (an unused one is forgotten after an hour, in memory and in the table). Over a Connect limit → 429 with `Retry-After`. A number for Nicolai to confirm. |
 | `BFF_CONNECT_AUTHORIZE_PER_IP_MINUTE` | no | `60` | B52.3 — `/oauth/authorize` requests per IP per minute. |
+| `BFF_PHONE_DOOR_PER_IP_MINUTE` | no | `60` | B61.25 — requests per IP per minute to each sign-in route of the phone door (`/auth/phone/*`, `/auth/passkey/challenge`, `/auth/passkey/finish`, `/auth/unlock*`, `/auth/google/move`), beside Lens's own limits on texts and passcode tries. |
 | `BFF_CONNECT_TOKEN_PER_IP_MINUTE` | no | `60` | B52.3 — `/oauth/token` requests per IP per minute. |
 | `BFF_CONNECT_TOKEN_PER_CONNECTION_MINUTE` | no | `10` | B52.3 — token refreshes per connection per minute. |
 | `BFF_CONNECT_MCP_PER_IP_MINUTE` | no | `600` | B52.3 — `/mcp` requests per IP per minute. |
