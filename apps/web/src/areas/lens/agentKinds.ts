@@ -1,4 +1,5 @@
-import { cardArt, type AgentCardArt } from '../../cards/cardArt'
+import { AGENT_PICTURES, type AgentPicture } from '../../cards/agentPictures'
+import type { AgentCardArt } from '../../cards/cardArt'
 
 // agentKinds.ts — B61.13: the six agents Talyvor offers, each named by what it does, with its picture (today's helper
 // art) and the rules it suggests, in dollars. The helper's own name belongs to the picture's file and is never shown:
@@ -19,12 +20,11 @@ export interface AgentKindChoice {
   kind: AgentKind
   /** one line on what it does */
   line: string
-  picture: AgentCardArt
+  picture: AgentPicture
   rules: SuggestedRules
 }
 
-const art = (helper: AgentCardArt['helper']): AgentCardArt =>
-  cardArt.find((c): c is AgentCardArt => c.family === 'agent' && c.helper === helper)!
+const art = (helper: AgentCardArt['helper']): AgentPicture => AGENT_PICTURES.find((p) => p.helper === helper)!
 
 export const AGENT_KINDS: readonly AgentKindChoice[] = [
   { kind: 'Research', line: 'Pays for the data, papers and tools it reads.', picture: art('Remy'), rules: { perPayment: 50, perDay: 200, perMonth: 2000, askAbove: 25 } },

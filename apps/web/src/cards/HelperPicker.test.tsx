@@ -102,17 +102,47 @@ describe('the helper picker', () => {
     expect(screen.getByTestId('agent-setting-Name, description, colour and face')).toHaveTextContent('Books: rose, a flower face')
   })
 
+  // B61.102 — the name-and-look dialog offers the gallery's 27 pictures: one of the twenty is sent as its picture, and
+  // an agent that wears one reads it back as the picture picked.
+  it('editing an agent offers its 27 pictures, sends the chef as its picture and reads it back as picked', async () => {
+    const { sent } = mockBff({ name: 'Ledger', colour: 'mint' })
+    window.history.pushState({}, '', '/agents/agt_1')
+    render(<App />)
+
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Name, description, colour and face')).getByRole('button'))
+    let look = await screen.findByRole('dialog', { name: 'Ledger’s name and look' })
+    let pictures = within(within(look).getByRole('radiogroup', { name: 'Picture' })).getAllByRole('radio')
+    expect(pictures).toHaveLength(27)
+    expect(pictures.find((p) => p.getAttribute('aria-checked') === 'true')?.querySelector('[data-picture]')).toHaveAttribute('data-picture', 'mint')
+    for (const p of pictures) expect(p.textContent).toBe('')
+    fireEvent.click(pictures.find((p) => p.querySelector('[data-picture="chef"]'))!)
+    expect(within(look).getByRole('radio', { name: 'lemon' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(within(look).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]).toEqual({ method: 'PATCH', url: '/api/agents/agt_1', body: { name: 'Ledger', description: '', picture: 'chef' } })
+
+    // Lens answers the agent in the chef's colour, wearing the chef.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    fireEvent.click(within(await screen.findByTestId('agent-setting-Name, description, colour and face')).getByRole('button'))
+    look = await screen.findByRole('dialog', { name: 'Ledger’s name and look' })
+    pictures = within(within(look).getByRole('radiogroup', { name: 'Picture' })).getAllByRole('radio')
+    expect(pictures.find((p) => p.getAttribute('aria-checked') === 'true')?.querySelector('[data-picture]')).toHaveAttribute('data-picture', 'chef')
+  })
+
   // B57.141 — in Pocket, both places draw the helpers as Pocket draws a choice of several (pocket.css .pill.pick):
   // a cloud pill 34 tall with the portrait 22 across, and the picked one on the page inside a 2px ink ring.
   // B57.22: editing moved to the name-and-look dialog, which draws the seven colours as the reference does.
+  // B61.102: then the twenty pictures, each a round pick of the same height with no name.
   it('draws each helper as a Pocket pick where the agent is created', async () => {
     mockBff({ name: 'Ledger', colour: 'mint' })
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
     for (const name of ['Its helper']) {
-      const choices = within(await screen.findByRole('group', { name })).getAllByRole('button')
-      expect(choices.map((b) => b.textContent)).toEqual(['Remy', 'Sunny', 'Penny', 'Max', 'Nova', 'Ollie', 'Lime'])
+      const all = within(await screen.findByRole('group', { name })).getAllByRole('button')
+      const choices = all.slice(0, 7)
+      expect(all.map((b) => b.textContent)).toEqual(['Remy', 'Sunny', 'Penny', 'Max', 'Nova', 'Ollie', 'Lime', ...Array<string>(20).fill('')])
+      for (const b of all.slice(7)) expect(b.className.split(' ')).toEqual(expect.arrayContaining(['size-8.5', 'rounded-pill', 'aria-pressed:shadow-pick']))
       for (const b of choices) {
         expect(b.className.split(' ')).toEqual(expect.arrayContaining(['h-8.5', 'rounded-pill', 'bg-cloud', 'aria-pressed:bg-page', 'aria-pressed:shadow-pick']))
         expect(b.firstElementChild?.className.split(' ')).toContain('size-5.5')

@@ -41,6 +41,8 @@ export interface Agent {
   colour?: string
   /** B57.10 — its face's shape: circle, squircle, hexagon or flower; absent from a Lens older than B57.10. */
   face?: string
+  /** B61.35 — the picture it wears (B61.102: one of the gallery's 27), which its colour follows; absent from an older Lens. */
+  picture?: string
   /** B48.1 — fiat, crypto or both: the wallets it owns, and the currency its fiat wallet is in (B61.87: its rules' currency). */
   wallet_kind?: 'fiat' | 'crypto' | 'both'
   fiat_currency?: string
@@ -1175,8 +1177,14 @@ export const agentBankApi = {
     }),
   /** B57.124 — with the colour of the helper its owner picked; without one, Lens picks. */
   /** B61.87 — with fiat_currency (GBP, EUR or USD), its own account is opened in that currency; Lens picks one otherwise. */
-  create: (name: string, colour?: string, fiat_currency?: string) =>
-    send<Agent>('POST', '/api/agents', { name, ...(colour ? { colour } : {}), ...(fiat_currency ? { fiat_currency } : {}) }),
+  /** B61.102 — or with one of the twenty pictures, which sets its colour. */
+  create: (name: string, look: { colour?: string; picture?: string } = {}, fiat_currency?: string) =>
+    send<Agent>('POST', '/api/agents', {
+      name,
+      ...(look.colour ? { colour: look.colour } : {}),
+      ...(look.picture ? { picture: look.picture } : {}),
+      ...(fiat_currency ? { fiat_currency } : {}),
+    }),
   /** B46.16 — the workspace's name (Lens B46.15): asked at sign-up on Home's first-agent card, shown in the sidebar. */
   workspaceName: () => getJSON<{ id: string; name: string }>('/api/workspace/name', { name: 'string' }),
   setWorkspaceName: (name: string) => send<{ id: string; name: string }>('PUT', '/api/workspace/name', { name }),
@@ -1258,8 +1266,8 @@ export const agentBankApi = {
   /** B28.360 — every purchase on the agent's card refused until it is unfrozen; Lens answers the card. */
   freezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/freeze`),
   unfreezeCard: (id: string) => send<AgentCard>('POST', `/api/agents/${e(id)}/card/unfreeze`),
-  /** B28.21 — renames the agent and/or sets what it is for, and (B57.124) its helper's colour; Lens answers the agent. */
-  update: (id: string, change: { name?: string; description?: string; colour?: string; face?: string }) => send<Agent>('PATCH', `/api/agents/${e(id)}`, change),
+  /** B28.21 — renames the agent and/or sets what it is for, and (B57.124) its helper's colour or (B61.102) its picture; Lens answers the agent. */
+  update: (id: string, change: { name?: string; description?: string; colour?: string; face?: string; picture?: string }) => send<Agent>('PATCH', `/api/agents/${e(id)}`, change),
   /** B28.21 — retires the agent: its balance back to the workspace, its keys revoked, its top-up and schedules stopped. */
   archive: (id: string) => send<AgentArchive>('POST', `/api/agents/${e(id)}/archive`),
   /** B19.23 — the signed-in person becomes the owner of an agent that has none. */

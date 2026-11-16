@@ -212,6 +212,25 @@ describe('New agent (B61.13)', () => {
     expect(put).toMatchObject({ currency: 'USD', max_per_payment_minor: 0, daily_limit_minor: 0, monthly_limit_minor: 0, approval_above_minor: 1, allowed_payees: ['pye_1'] })
   })
 
+  // B61.102 — Make your own offers the gallery's 27 pictures (the six helpers, lime and the twenty), none with a name;
+  // the chef goes to the BFF as its picture, which Lens draws in lemon.
+  it('your own offers 27 pictures, and the chef creates the agent wearing picture chef', async () => {
+    const { sent } = mockBff({ agents: [agent('agt_1', 'Books')], plan: { plan: 'free', agents: 3, agents_used: 1 } })
+    await openNewAgent()
+    const dialog = await screen.findByRole('dialog', { name: 'New agent' })
+    fireEvent.click(await within(dialog).findByRole('button', { name: /^Make your own/ }))
+    const pictures = within(within(dialog).getByRole('group', { name: 'Picture' })).getAllByRole('button')
+    expect(pictures.map((b) => b.getAttribute('aria-label'))).toEqual(Array.from({ length: 27 }, (_, i) => `Picture ${i + 1}`))
+    for (const b of pictures) expect(b.textContent).toBe('')
+    const chef = pictures.find((b) => b.querySelector('[data-picture="chef"]'))!
+    fireEvent.click(chef)
+    expect(chef).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Supper' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create agent' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/agents/agt_2'))
+    expect(sent[0]).toEqual({ method: 'POST', url: '/api/agents', body: { name: 'Supper', picture: 'chef', fiat_currency: 'USD' } })
+  })
+
   it('offers no helper name, no fixed rule set and no LXC, and keeps Create off until a name is typed', async () => {
     const { sent } = mockBff({ agents: [agent('agt_1', 'Books')], plan: { plan: 'free', agents: 3, agents_used: 1 } })
     await openNewAgent()

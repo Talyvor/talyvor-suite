@@ -17,7 +17,7 @@ import (
 // (B19.3), reached with this session's own token:
 //
 //	GET  /api/agents                                   the agents and their balances, reconciled with the workspace
-//	POST /api/agents                    {"name", "colour"?}   create an agent; B57.124: its helper's colour
+//	POST /api/agents                    {"name", "colour"?, "picture"?}   create an agent; B57.124: its helper's colour; B61.102: or its picture
 //	POST /api/agents/{id}/fund          {"amount_ulxc"}   move the workspace's LXC to the agent
 //	POST /api/agents/{id}/withdraw      {"amount_ulxc"}   take it back
 //	POST /api/agents/{id}/keys          {"name"}       issue the agent a proxy key of its own, shown once
@@ -38,7 +38,7 @@ import (
 //	GET  /api/agents/{id}/analytics?from=&to=          B28.53: its spend for a period by day, model and destination
 //	GET  /api/agents/statement?from=&to=&format=json|csv|pdf|journal        B19.22: every account in the bank, for a period
 //	POST /api/agents/{id}/claim                        B19.23: the signed-in person becomes an ownerless agent's owner
-//	PATCH /api/agents/{id}              {"name"?, "description"?, "colour"?, "face"?}   B28.21: rename it, describe it; B57.124: its helper; B57.22: its face
+//	PATCH /api/agents/{id}              {"name"?, "description"?, "colour"?, "face"?, "picture"?}   B28.21: rename it, describe it; B57.124: its helper; B57.22: its face; B61.102: its picture
 //	POST /api/agents/{id}/archive                      B28.21: retire it — its balance back to the workspace, its keys revoked
 //	GET  /api/agents/{id}/card                         B19.24: its test-mode card and every purchase on it (404: none)
 //	POST /api/agents/{id}/card          {cardholder}   B19.24: issue it one, the cardholder's name and billing address
@@ -141,6 +141,8 @@ func (a *app) handleAgents(w http.ResponseWriter, r *http.Request, t tenant) {
 		var in struct {
 			Name   string `json:"name"`
 			Colour string `json:"colour"` // B57.124: the helper the owner picked; Lens picks one when it is ""
+			// B61.102: one of the gallery's pictures, which sets its colour; "" names none.
+			Picture string `json:"picture"`
 			// B61.87: the currency its own account opens in, the account's, which its rules are typed in; Lens picks one when "".
 			FiatCurrency string `json:"fiat_currency"`
 		}
@@ -152,8 +154,8 @@ func (a *app) handleAgents(w http.ResponseWriter, r *http.Request, t tenant) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "an agent needs a name"})
 			return
 		}
-		// UPSTREAM-BINDS-ONLY lensAgentCreateBody: face, owner_user_id, template, wallet_kind
-		body, _ := json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour, "fiat_currency": in.FiatCurrency})
+		// UPSTREAM-BINDS-ONLY lensAgentCreateBody: face, owner_user_id, role, role_word, template, wallet_kind
+		body, _ := json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour, "picture": in.Picture, "fiat_currency": in.FiatCurrency})
 		a.agentBankRelay(w, r, t, http.MethodPost, "/agents", body)
 	default:
 		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
@@ -696,8 +698,8 @@ func (a *app) handleAgentClaim(w http.ResponseWriter, r *http.Request, t tenant)
 }
 
 // handleAgent — PATCH /api/agents/{id} (B28.21): renames the agent and/or sets what it is for, and (B57.124) its
-// helper's colour, and (B57.22) its face. Any of them; an absent name or description is sent as null and an absent
-// colour or face not at all, which Lens leaves as it is. Lens answers the agent.
+// helper's colour, (B57.22) its face, and (B61.102) its picture. Any of them; an absent name or description is sent as
+// null and an absent colour, face or picture not at all, which Lens leaves as it is. Lens answers the agent.
 func (a *app) handleAgent(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodPatch {
 		methodNotAllowed(w, http.MethodPatch)
@@ -710,18 +712,19 @@ func (a *app) handleAgent(w http.ResponseWriter, r *http.Request, t tenant) {
 	var in struct {
 		Name        *string `json:"name"`
 		Description *string `json:"description"`
-		Colour      *string `json:"colour,omitempty"` // B57.124: its helper; left out, Lens keeps the colour it has
-		Face        *string `json:"face,omitempty"`   // B57.22: circle, squircle, hexagon or flower; left out, Lens keeps it
+		Colour      *string `json:"colour,omitempty"`  // B57.124: its helper; left out, Lens keeps the colour it has
+		Face        *string `json:"face,omitempty"`    // B57.22: circle, squircle, hexagon or flower; left out, Lens keeps it
+		Picture     *string `json:"picture,omitempty"` // B61.102: one of the gallery's; Lens sets the colour it is drawn in
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	if in.Name == nil && in.Description == nil && in.Colour == nil && in.Face == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send a new name, a description, a colour, a face, or any of them"})
+	if in.Name == nil && in.Description == nil && in.Colour == nil && in.Face == nil && in.Picture == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "send a new name, a description, a colour, a face, a picture, or any of them"})
 		return
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentUpdateBody: none
+	// UPSTREAM-BINDS-ONLY lensAgentUpdateBody: role, role_word
 	body, _ := json.Marshal(in)
 	a.agentBankRelay(w, r, t, http.MethodPatch, "/agents/"+url.PathEscape(id), body)
 }
