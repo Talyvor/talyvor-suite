@@ -123,7 +123,7 @@
   "src/areas/lens/HeldCalls.test.tsx": 4,
   "src/areas/lens/HelpAndAccount.test.tsx": 7,
   "src/areas/lens/Home.test.tsx": 26,
-  "src/areas/lens/InstantTransfer.test.tsx": 15,
+  "src/areas/lens/InstantTransfer.test.tsx": 16,
   "src/areas/lens/Invoices.test.tsx": 5,
   "src/areas/lens/KeyRecovery.test.tsx": 7,
   "src/areas/lens/Keys.test.tsx": 27,
