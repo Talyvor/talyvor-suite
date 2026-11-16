@@ -44,7 +44,6 @@ export const POCKET_PENDING: readonly string[] = [
   '/marketplace/*',
   '/spend',
   '/settings/payout-details',
-  '/money/invoices',
   '/money/subscriptions',
   '/money/budgets',
   '/scan/reports',
