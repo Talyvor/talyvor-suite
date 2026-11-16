@@ -123,8 +123,13 @@ const OPEN: Record<string, string> = {
     'pocket and pocket-lg are Pocket\'s two shadows (white cards, the sheet), ADDED beside ' +
     'Tailwind\'s; screens not yet redrawn keep shadow-sm/md/lg until Pocket redraws them',
   scale:
-    'one added step, 98, the press. Tailwind\'s scale-95/100 remain reachable and ' +
+    'one added step, 97, the press (B61.72, Pocket Live). Tailwind\'s scale-95/100 remain reachable and ' +
     'apps/web/src/motion.test.tsx is what pins the press to one step',
+  transitionDuration:
+    'Pocket Live\'s motion tokens (B61.72: press-in, press-out, fast, tab, page-in, panel-in, panel-out, roll, shimmer) ' +
+    'ADDED beside Tailwind\'s numeric durations, which screens not yet moved keep (duration-200 is the site\'s)',
+  transitionTimingFunction:
+    'Pocket Live\'s three easings (B61.72: out, pop, std) ADDED beside Tailwind\'s ease-in/out, which stay reachable',
 }
 
 /**

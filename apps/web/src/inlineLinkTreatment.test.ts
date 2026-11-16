@@ -74,6 +74,11 @@ const NOT_LINKS: Record<string, string> = {
   'packages/ui/src/components/MuNumeral.tsx': 'the µ-tail of a numeral, underlined to set it apart from the whole units',
 }
 
+/** Links that are not inline: a whole block that is one link, which tints under a pointer rather than underlining. */
+const BLOCK_LINKS: Record<string, string> = {
+  'packages/ui/src/pocket/Row.tsx': 'a Pocket row that is one link tints on hover, as Pocket Live\'s rows do (B61.72)',
+}
+
 describe('every inline link in the product takes the one shape', () => {
   const all = classNames()
   const links = all.filter(isLink)
@@ -85,7 +90,7 @@ describe('every inline link in the product takes the one shape', () => {
 
   it('no link writes its own underline or hover — it takes inlineLink', () => {
     const own = links
-      .filter((s) => !usesInlineLink(s) && /\b(underline|hover:\S+)/.test(s.cls))
+      .filter((s) => !usesInlineLink(s) && !(s.file in BLOCK_LINKS) && /\b(underline|hover:\S+)/.test(s.cls))
       .map((s) => `${s.file}: <${s.tag} className="${s.cls}">`)
     expect(
       own,

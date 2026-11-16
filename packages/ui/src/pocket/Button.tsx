@@ -48,7 +48,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       aria-describedby={disabledReason ? reasonId : undefined}
       className={cn(
         'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill font-semibold leading-none',
-        'transition-colors duration-200 active:scale-98 disabled:cursor-not-allowed disabled:opacity-50',
+        'transition-press active:scale-97 disabled:cursor-not-allowed disabled:opacity-50',
         pocketFocusRing,
         variants[variant],
         sizes[size],

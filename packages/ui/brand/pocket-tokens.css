@@ -1,4 +1,4 @@
-/* Verbatim: lines 1-56 of ~/talyvor-queue/design/pocket/pocket.css, the Pocket reference (B57.2).
+/* Verbatim, all but the motion block at the end (B61.72): lines 1-56 of ~/talyvor-queue/design/pocket/pocket.css, the Pocket reference (B57.2).
    site-parity.test.ts reads this file; tokens.ts must match it in both themes. Do not edit by hand. */
 /* Talyvor Pocket v4: design tokens and components.
    The logo is the kit Nick chose on 4 Nov 2026 (design/logo/talyvor-logo/): drawn from its SVG files, never redrawn.
@@ -55,4 +55,13 @@
   --pk-shadow-lg: 0 2px 6px rgba(0, 0, 0, .5), 0 24px 60px rgba(0, 0, 0, .55);
   --pk-scrim: rgba(0, 0, 0, .6);
   color-scheme: dark;
+}
+
+/* B61.72 — motion, from ~/talyvor-queue/design/pocket-live/DESIGN.md section 4 (Pocket Live, approved by Nick 15 Nov 2026),
+   named as its index.html names them: --m-* a duration, --e-* an easing. The web's are here (page-in 300, the phone's page 420);
+   packages/ui/src/preset.ts carries the same values and apps/web/src/motion.test.tsx fails if the two differ. */
+:root {
+  --m-press-in: 90ms; --m-press-out: 420ms; --m-fast: 160ms; --m-tab: 240ms; --m-page-in: 300ms;
+  --m-panel-in: 420ms; --m-panel-out: 280ms; --m-roll: 700ms; --m-shimmer: 1100ms;
+  --e-out: cubic-bezier(.22, 1, .36, 1); --e-pop: cubic-bezier(.34, 1.56, .64, 1); --e-std: cubic-bezier(.4, 0, .2, 1);
 }

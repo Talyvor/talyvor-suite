@@ -45,7 +45,7 @@ export function Tabs<T extends string>({ label, tabs, value, onChange, className
             onClick={() => onChange(t)}
             onKeyDown={(e) => onKeyDown(e, i)}
             className={cn(
-              'inline-flex h-8.5 items-center whitespace-nowrap rounded-pill px-3.5 text-body font-semibold transition-colors duration-200',
+              'inline-flex h-8.5 items-center whitespace-nowrap rounded-pill px-3.5 text-body font-semibold transition-press active:scale-97',
               on ? 'bg-primary text-on-primary' : 'bg-cloud text-ink-2 hover:bg-cloud-2',
               pocketFocusRing,
             )}

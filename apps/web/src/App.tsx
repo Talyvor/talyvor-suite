@@ -600,7 +600,7 @@ function ConsoleShell() {
                 aria-keyshortcuts={ariaKeys('palette')}
                 className={cn(
                   'flex h-10 min-w-0 flex-1 items-center gap-2 rounded-pill bg-cloud px-3.5 text-left text-body text-ink-3 wide:max-w-md',
-                  'transition-colors duration-200 active:scale-98',
+                  'transition-press active:scale-97',
                   pocketFocusRing,
                 )}
               >
