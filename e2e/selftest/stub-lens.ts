@@ -127,6 +127,7 @@ import { DOC_CAP, auditWebhook, docxDocument, nodesAvailable, nodesRoute } from 
 import { roomAgentTool, roomListingRoute, roomsModeratorRoute, roomsRoute, setRoomWallets } from './stub-rooms.ts'
 import { lensOpenAPI, lensPage } from './stub-openapi.ts'
 import { PhysicalCardDesk } from './stub-physical-cards.ts'
+import { StubDoor } from './stub-door.ts'
 import { hiddenPathsFrom } from '../src/launch.ts'
 
 const PORT = Number(process.env.STUB_PORT ?? 9911)
@@ -171,6 +172,8 @@ const webhookEvents = new Set<string>()
 const creditedSessions = new Set<string>()
 /** Where Stripe sends the browser back to: the app's /billing/success (LENS_BILLING_SUCCESS_URL). */
 const APP_URL = process.env.STUB_APP_URL ?? 'http://localhost:8797'
+/** B61.28 — the front door: a code by text, a passcode, a passkey (stub-door.ts). */
+const door = new StubDoor(process.env.STUB_PROVISION_SECRET ?? '', new URL(APP_URL).hostname, json)
 /** What each plan costs a month, in cents, and the allowance a period grants (LENS_SUBSCRIPTION_ALLOWANCE_ULXC). */
 const PLAN_FEES: Record<string, number> = { plus: 2000, pro: 10000, max: 20000 }
 /** B32.71 — the company plans Lens sells a test workspace (B32.10). They grant no allowance. */
@@ -1402,10 +1405,15 @@ createServer(async (req, res) => {
       if ((process.env.STUB_PROVISION_SECRET ?? '') === '' || req.headers['x-gateway-auth'] !== process.env.STUB_PROVISION_SECRET) {
         return json(res, 401, { error: 'provisioning credentials required' })
       }
-      const { identity = '' } = JSON.parse((await read(req)) || '{}') as { identity?: string }
+      const { identity = '', mode = '', account_id = '', display_name = '' } = JSON.parse((await read(req)) || '{}') as { identity?: string; mode?: string; account_id?: string; display_name?: string }
       if (identity === '') return json(res, 400, { error: 'identity required' })
       const id = 'u' + createHash('sha256').update(identity).digest('hex').slice(0, 26)
       const existed = workspaces.has(id)
+      // talyvor-lens B61.7 — the identity's accounts (one here, or none yet), and a session for one of them only.
+      if (mode === 'list') {
+        return json(res, 200, { accounts: existed ? [{ id, name: display_name || 'Personal', type: 'personal', kind: 'fiat', opened_at: '2026-11-16T00:00:00Z', current: false }] : [] })
+      }
+      if (mode === 'session' && (!existed || account_id !== id)) return json(res, 404, { error: 'no such account' })
       const ws = workspaces.get(id) ?? newWorkspace(id, 'tok-' + randomBytes(16).toString('hex'))
       workspaces.set(id, ws)
       byToken.set(ws.token, ws)
@@ -1417,6 +1425,8 @@ createServer(async (req, res) => {
         ...(started === undefined ? {} : { first_agent: { agent: { id: started.agent.id, name: started.agent.name }, rules: started.agent.rules,
           template: 'support-bot', key: started.key, key_id: started.key_id, test_money_ulxc: Math.max(money, 0) } }) })
     }
+    // talyvor-lens B61.22 to B61.24 — the front door, on the provision secret (stub-door.ts).
+    if (await door.route(req, res, p, read)) return
     if (p === '/v1/economy/conversion-rate') return json(res, 200, { lens_per_lxc: 1, rate: 1, usd_per_lxc: USD_PER_LXC })
     // B51.4 — the rest of /documentation's "No key needed", answered without a key as Lens answers them.
     // STUB_BREAK=no-key-401: one of them asks for a key, as /v1/tokens/rates did while listed there (site-truth must FAIL).
