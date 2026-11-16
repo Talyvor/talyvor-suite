@@ -29,4 +29,4 @@ for facts with no page; every path must be a page the app mounts.
 - Ask for a copy of this account's data, or ask Talyvor to delete it. A person at Talyvor handles each request. Only the account's owner can ask.
 - When your copy is ready, Download appears beside your request.
 - Billing and ledger records, statements included, are kept as the law requires.
-- Help chats are kept for 30 days and are listed on this page, where you can delete yours.
+- Help chats are kept for 30 days and are listed on this page, where you can delete yours. Your Help chat is yours alone: no one else in the account sees it.

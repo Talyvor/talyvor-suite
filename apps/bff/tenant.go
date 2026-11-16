@@ -53,6 +53,9 @@ type tenant struct {
 	token       string
 	// signedInAt is when the session's person signed in; zero without a session (B55.54, key_recovery.go).
 	signedInAt time.Time
+	// person is who the session's person is, the identity Lens knows them by (provisionIdentity): Help keeps each
+	// person's chat apart (B61.69, help_chat.go). Empty without a session.
+	person string
 }
 
 func (t tenant) ok() bool { return t.workspaceID != "" && t.token != "" }
@@ -239,7 +242,7 @@ func (a *app) tenantFrom(r *http.Request) (tenant, bool) {
 		return tenant{}, false
 	}
 	s = a.refreshWorkspaceToken(r.Context(), sid, s)
-	t := tenant{workspaceID: s.workspaceID, token: s.lensToken, signedInAt: s.signedInAt}
+	t := tenant{workspaceID: s.workspaceID, token: s.lensToken, signedInAt: s.signedInAt, person: provisionIdentity(a.cfg.oidcIssuer, s.sub)}
 	return t, t.ok()
 }
 
@@ -331,7 +334,7 @@ func (a *app) devTenant(ctx context.Context) (tenant, bool) {
 	if err != nil {
 		return tenant{}, false
 	}
-	a.devCached = tenant{workspaceID: prov.WorkspaceID, token: prov.Token}
+	a.devCached = tenant{workspaceID: prov.WorkspaceID, token: prov.Token, person: devIdentity}
 	return a.devCached, true
 }
 

@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate } from 'react-router-dom'
 import { Logo, cn, inlineLink } from '@talyvor/ui'
-import { Button, Card, Chip, EmptyState, Eyebrow, Facts, Field, Input, Money, SnackHost, showSnack } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, EmptyState, Eyebrow, Facts, Field, Input, Money, PageBackground, SnackHost, businessHues, personalHues, showSnack } from '@talyvor/ui/pocket'
 import { CompanyLine } from '../../components/CompanyLine'
 import { useDocumentTitle } from '../../documentTitle'
 import { WorkspaceStatus } from '../../labels/workspace'
@@ -13,7 +13,7 @@ import { BOOK_KEY, rulesKey } from '../lens/AgentBank'
 import { nameFromEmail } from '../lens/Onboarding'
 import { ShareMyAnswers } from '../lens/Sharing'
 import { RULE_TEMPLATES } from '../lens/ruleTemplates'
-import { WORKSPACE_NAME_KEY, type Agent, type AgentRules, agentBankApi, refusalText } from '../lens/agentBankApi'
+import { WORKSPACE_NAME_KEY, type Agent, type AgentRules, agentBankApi, refusalText, usePersonal } from '../lens/agentBankApi'
 import { readFailure } from '../lens/WalletMoney'
 
 // Welcome.tsx — B57.50: a new workspace's first page (Pocket's w-first-home), in its own layout. Lens names a new
@@ -294,17 +294,20 @@ export function Welcome() {
   const sawUnnamed = useRef(false)
   if (unnamed(workspace.data)) sawUnnamed.current = true
   useEffect(markWelcomed, [])
+  const personal = usePersonal()
   if (workspace.data && !sawUnnamed.current) return <Navigate to="/" replace />
   return (
-    <div data-design="pocket" className="flex min-h-screen flex-col bg-page text-ink">
-      <header className="flex items-center justify-between gap-4 border-b border-line px-gutter py-4 wide:px-10">
+    <div data-design="pocket" className="relative flex min-h-screen flex-col bg-page text-ink">
+      {/* B61.70 — the moving background, as behind every page, in the account's colours. */}
+      <PageBackground hues={personal ? personalHues : businessHues} />
+      <header className="relative flex items-center justify-between gap-4 border-b border-line px-gutter py-4 wide:px-10">
         <Logo width={144} />
         <div className="flex items-center gap-3">
           <WorkspaceStatus />
           <SignOut />
         </div>
       </header>
-      <main className="mx-auto grid w-full max-w-5xl flex-1 content-start gap-4.5 px-gutter pb-16 pt-6 wide:px-10">
+      <main className="relative mx-auto grid w-full max-w-5xl flex-1 content-start gap-4.5 px-gutter pb-16 pt-6 wide:px-10">
         <div>
           <Eyebrow>A new workspace</Eyebrow>
           <h1 className="mt-1 font-display text-title font-bold text-ink">Welcome to Talyvor</h1>

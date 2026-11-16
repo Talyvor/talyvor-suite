@@ -102,7 +102,7 @@ describe('amounts in your own currency and plain-English rules', () => {
     expect(screen.getByLabelText('Time zone for Researcher').tagName).toBe('SELECT')
     fireEvent.change(screen.getByLabelText('At most a day for Researcher, in dollars'), { target: { value: '$3.50' } })
     const words = await save(saved, 1)
-    expect(saved[0]).toMatchObject({ daily_limit_ulxc: 35 * M, approval_above_ulxc: 5 * M })
+    expect(saved[0]).toMatchObject({ currency: 'USD', daily_limit_minor: 350, approval_above_minor: 50 })
     await waitFor(() => expect(words.textContent).toContain('Researcher may spend at most $3.50 a day.'))
   })
 
@@ -127,7 +127,7 @@ describe('amounts in your own currency and plain-English rules', () => {
 
     fireEvent.change(screen.getByLabelText('At most a day for Researcher, in dollars'), { target: { value: '1' } })
     const words = await save(saved, 1)
-    expect(saved[0]).toMatchObject({ daily_limit_ulxc: 10 * M, ...held })
+    expect(saved[0]).toMatchObject({ currency: 'USD', daily_limit_minor: 100, ...held })
     await waitFor(() => expect(words.textContent).toContain('Researcher may spend at most $1.00 a day.'))
     expect(words.textContent).toContain('On one model it may spend at most $0.05 a day on GPT-4o and $0.20 a day on Claude Haiku 4.5.')
     expect(words.textContent).toContain('It may make at most 60 requests a minute.')
@@ -145,7 +145,7 @@ describe('amounts in your own currency and plain-English rules', () => {
     more('At most a week')
     fireEvent.change(screen.getByLabelText('At most a week for Researcher, in dollars'), { target: { value: '5' } })
     const words = await save(saved, 1)
-    expect(saved[0]).toMatchObject({ hourly_limit_ulxc: 1 * M, daily_limit_ulxc: 20 * M, weekly_limit_ulxc: 50 * M })
+    expect(saved[0]).toMatchObject({ currency: 'USD', hourly_limit_minor: 10, daily_limit_minor: 200, weekly_limit_minor: 500 })
     await waitFor(() =>
       expect(words.textContent).toContain('Researcher may spend at most $0.10 an hour, $2.00 a day and $5.00 a week.'),
     )

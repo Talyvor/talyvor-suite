@@ -401,7 +401,7 @@ const PINS: Record<string, Pin> = {
     fragment: '!body.url',
     why: 'the reason a 200 with no url is NOT the finding — it is already converted, so the gate lets it through',
   },
-  'apps/web/src/checkoutRefusalSurface.test.tsx:59|apps/web/src/App.tsx:129': {
+  'apps/web/src/checkoutRefusalSurface.test.tsx:59|apps/web/src/App.tsx:135': {
     kind: 'LIVE',
     fragment: 'onError',
     why: 'the app\'s only global error handler, quoted to show it hangs off the QUERY cache and cannot see a mutation',
@@ -464,17 +464,17 @@ const PINS: Record<string, Pin> = {
   // A deployer following one of these is mid-deploy and checking a refusal before they trip it.
   // The fragment is the REFUSAL ITSELF: a claim that the BFF stops for a variable is worth
   // exactly the line that stops it, so deleting the refusal reds the runbook that promises it.
-  'deploy/README.md:385|apps/bff/main.go:169': {
+  'deploy/README.md:385|apps/bff/main.go:173': {
     kind: 'LIVE',
     fragment: 'TRACK_WORKSPACE_ID must not be set',
     why: 'the ~~TRACK_WORKSPACE_ID~~ row promises "the BFF now REFUSES TO START if this is set"; it cited 112, which is a closing brace',
   },
-  'deploy/FULL-STACK-DEPLOY.md:39|apps/bff/main.go:163': {
+  'deploy/FULL-STACK-DEPLOY.md:39|apps/bff/main.go:167': {
     kind: 'LIVE',
     fragment: 'LENS_PROVISION_SECRET is required',
     why: '"BFF requires LENS_PROVISION_SECRET … Refuses to start, names itself" — it cited 94, a comment line naming a test',
   },
-  'deploy/FULL-STACK-DEPLOY.md:40|apps/bff/main.go:172': {
+  'deploy/FULL-STACK-DEPLOY.md:40|apps/bff/main.go:176': {
     kind: 'LIVE',
     fragment: 'LENS_API_KEY must not be set',
     why: '"BFF refuses to boot if LENS_API_KEY is set" — it cited 96, the docsGatewaySecret field',

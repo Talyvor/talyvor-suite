@@ -1,5 +1,5 @@
 import { Logo, cn } from '@talyvor/ui'
-import { Button, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Button, PageBackground, personalHues, pocketFocusRing } from '@talyvor/ui/pocket'
 import { CompanyLine } from '../../components/CompanyLine'
 import { ACCESS_LINE, useSignupProbe, type SignupState } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
@@ -106,6 +106,8 @@ function CardLogo() {
 export function EntryFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-cloud text-ink">
+      {/* B61.70 — the moving background, as behind every page, in a Personal account's colours. */}
+      <PageBackground hues={personalHues} />
       <Streams />
       {/* B57.58 — no theme control here: Settings' Appearance is the one, and before you sign in the page follows the device. */}
       {/* `main`, NOT `div`: the page's words are in a landmark region (LandmarkCoverage.test.tsx measures it). */}

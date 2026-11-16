@@ -5,6 +5,7 @@ import {
   Link,
   Route,
   Routes,
+  matchPath,
   matchRoutes,
   useHref,
   useLinkClickHandler,
@@ -16,8 +17,12 @@ import {
   Button as PocketButton,
   EmptyState,
   Icon as PocketIcon,
+  PageBackground,
   PageHeading,
   Shell as PocketShell,
+  agentHues,
+  businessHues,
+  personalHues,
   SnackHost,
   pocketFocusRing,
   type IconName as PocketIconName,
@@ -46,6 +51,7 @@ import { HelpButton, HelpChatHost } from './components/HelpChat'
 import { YourAccountsHost, withAccountsOpen } from './areas/lens/YourAccounts'
 import { Features } from './areas/lens/Features'
 import { AgentPage, AgentRulesPage } from './areas/lens/AgentPageRoute'
+import { BOOK_KEY } from './areas/lens/AgentBank'
 import { Agents } from './areas/lens/Agents'
 import { CardsScreen } from './areas/lens/Cards'
 import { ApprovalsScreen, StatementsScreen, usePendingApprovals } from './areas/lens/WalletScreens'
@@ -531,6 +537,25 @@ function Palette({ pages, trigger }: { pages: PalettePage[]; trigger: (open: () 
   return <CommandPalette pages={offered} trigger={trigger} />
 }
 
+/**
+ * B61.70 — the moving background behind every signed-in page: the account's two colours (Personal tangerine and cobalt,
+ * Business cobalt and mint), and on an agent's page and its rules page the agent's own colour. Its own component, so
+ * the account's and the book's reads re-render the background alone and never the shell. The book is the agent page's
+ * own read (one cache entry), asked for only on an agent's page.
+ */
+function Background({ pathname }: { pathname: string }) {
+  const personal = usePersonal()
+  const agentId = matchPath('/agents/:id/*', pathname)?.params.id
+  const agent = useQuery({
+    queryKey: BOOK_KEY,
+    queryFn: agentBankApi.book,
+    enabled: agentId !== undefined,
+    select: (b) => b.agents.find((a) => a.id === agentId),
+  }).data
+  const hues = agentId ? agentHues(agent ?? { id: agentId }) : personal ? personalHues : businessHues
+  return <PageBackground hues={hues} />
+}
+
 /** B57.50 — behind the gate: a new workspace's first page in its own layout, and every other address in the console's shell. */
 function AppShell() {
   return useLocation().pathname === WELCOME_PATH ? <Welcome /> : <ConsoleShell />
@@ -560,6 +585,7 @@ function ConsoleShell() {
     <div className="contents" data-design="pocket">
     <PocketShell
       drawer={chat}
+      background={<Background pathname={pathname} />}
       sidebar={<Sidebar />}
       bar={
         <>
