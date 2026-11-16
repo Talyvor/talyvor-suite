@@ -268,6 +268,9 @@ export function homeCards(): Scenario {
         try {
           await page.getByRole('heading', { level: 2, name: /^Good (morning|afternoon|evening)/ }).waitFor({ timeout: HEADING_TIMEOUT_MS })
           const link = page.locator(`main a[href="${card.href ?? card.path}"]`).filter({ hasText: card.title })
+          // B17.476 — the greeting is drawn at once; the total, the agents and the cards (and their links) only once
+          // the agents and the account are read. Counting the link straight after the greeting found none of them.
+          await link.first().waitFor({ timeout: HEADING_TIMEOUT_MS }).catch(() => undefined)
           if ((await link.count()) < 1) {
             wrong.push(`Home has no "${card.title}" link to ${card.path}`)
             continue
