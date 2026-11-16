@@ -16,6 +16,8 @@ import {
   type PayeeAllowance,
   type PayeeDetails,
   type PayoutBatch,
+  type PersonPayment,
+  type PersonPaymentRequest,
   type RecoveryPasskey,
 } from './agentBankApi'
 import { showRecoveryCode } from './recoveryCodeStore'
@@ -137,6 +139,15 @@ export async function signPayeeDetails(payeeID: string, details: PayeeDetails): 
 export async function payOutsideSigned(body: OutsidePaymentRequest): Promise<OutsidePayment> {
   const c = await agentBankApi.paymentChallenge(body)
   return agentBankApi.payOutside(body, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
+}
+
+/**
+ * B61.33 — a payment to a person is signed as a payment out is (Lens B61.32): once the account has a passkey, it asks
+ * here over the challenge naming exactly this payment. Lens refuses the first payment to a person unsigned, in words.
+ */
+export async function payPersonSigned(body: PersonPaymentRequest): Promise<PersonPayment> {
+  const c = await agentBankApi.personPaymentChallenge(body)
+  return agentBankApi.payPerson(body, (c.allow_credentials ?? []).length > 0 ? await assertOver(c) : undefined)
 }
 
 /**

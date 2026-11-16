@@ -250,7 +250,7 @@ jobs:
             -e OIDC_ALLOWED_EMAILS='*' -e BFF_PUBLIC_BASE_URL=https://app.example.test \
             -e LENS_PROVISION_SECRET=ci talyvor-suite:ci
           trap 'docker logs bff' EXIT
-          get() { curl -fsS --retry 15 --retry-connrefused --retry-delay 1 "http://127.0.0.1:8787$1"; }
+          get() { curl -fsS --retry 15 --retry-connrefused --retry-all-errors --retry-delay 1 "http://127.0.0.1:8787$1"; }
           get /healthz | grep '"status":"ok"'
           get / | grep -c '<div id="root">'
           v="$(get /api/version)"; echo "$v"

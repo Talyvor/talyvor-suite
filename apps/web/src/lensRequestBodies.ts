@@ -1332,6 +1332,29 @@ export const LENS_BODIES: LensBody[] = [
       'r.Post("/v1/money/accounts/{id}/test-money", func(w http.ResponseWriter, req *http.Request) {',
     subject: "lensTestMoneyBody",
   },
+  // B61.33 — Pay, to a person on Talyvor: the lookup, and the payment and its challenge (Lens B61.32).
+  {
+    route: "POST /v1/money/people/find",
+    file: "apps/bff/money_people.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPeopleFind(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/people_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/people/find", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPersonFindBody",
+  },
+  {
+    route: "POST /v1/money/people/pay",
+    file: "apps/bff/money_people.go",
+    kind: "anon-struct",
+    fn: "func (a *app) handleMoneyPeoplePay(",
+    anchor: "var in struct {",
+    upstreamFile: "cmd/lens/people_handler.go",
+    upstreamAnchor:
+      'r.Post("/v1/money/people/pay", func(w http.ResponseWriter, req *http.Request) {',
+    subject: "lensPersonPaymentBody",
+  },
   // B61.84 — Add money and Take back between the company's account and an agent's (Lens B61.66).
   {
     route: "POST /v1/money/accounts/{id}/funding",
