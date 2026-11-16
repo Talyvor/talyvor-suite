@@ -1623,7 +1623,9 @@ export function signinBoard(): Scenario {
               await loaded(streams)
               await loaded(logo)
               const h1 = document.querySelector('h1')!
-              const card = h1.parentElement!
+              // B61.28 — the card is the heading's nearest painted ancestor: the door's heading sits inside its form (B61.26).
+              let card = h1.parentElement!
+              while (card.parentElement !== null && getComputedStyle(card).backgroundColor === 'rgba(0, 0, 0, 0)') card = card.parentElement
               const s = streams?.getBoundingClientRect()
               const c = card.getBoundingClientRect()
               // B61.28 — the door is the phone number (B61.26): its one main action is Continue under the number's field.
