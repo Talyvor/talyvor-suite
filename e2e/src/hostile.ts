@@ -100,7 +100,7 @@ export const HOSTILE_PRS: HostilePR[] = [
   {
     id: 'admin-gate-lens',
     repo: 'talyvor-lens',
-    what: 'takes requireAdmin off POST /v1/admin/lxc/grant, the route that mints LXC; the admin-route classification tests stay green',
+    what: 'takes requireAdminStepUp and requireAdmin off POST /v1/admin/lxc/grant, the route that mints LXC; the admin-route classification tests stay green',
     guard: 'TestEveryAdminRegistrationReachesAnAuthorizationDecision (go test ./...)',
     workflow: '.github/workflows/ci.yaml',
     step: /^\s*run: go test .*\.\/\.\.\.\s*$/m,
@@ -108,7 +108,7 @@ export const HOSTILE_PRS: HostilePR[] = [
     check: { file: 'go', args: ['test', '-count=1', '-run', '^TestEveryAdminRegistrationReachesAnAuthorizationDecision$', './cmd/lens/'], env: { CGO_ENABLED: '0' }, timeoutMs: GO_TEST_MS },
     names: ['FAIL: TestEveryAdminRegistrationReachesAnAuthorizationDecision', '/v1/admin/lxc/grant'],
     apply: (dir) => changeOnce(dir, 'cmd/lens/main.go',
-      'authed.Post("/v1/admin/lxc/grant", requireAdmin(authManager, newAdminLXCGrantHandler(dualToken)))',
+      'authed.Post("/v1/admin/lxc/grant", requireAdminStepUp(authManager, stepUp, operatorAudit, "lxc.grant", requireAdmin(authManager, newAdminLXCGrantHandler(dualToken))))',
       'authed.Post("/v1/admin/lxc/grant", newAdminLXCGrantHandler(dualToken))'),
   },
   ...([
