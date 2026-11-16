@@ -23,6 +23,9 @@ import {
 // its company, from the company details B59.31 saved) and shows each as it passes. No document is asked for: the
 // document step is the place the identity partner's own screen will open, and in Sandbox it collects nothing.
 //
+// B61.46: the person gives their home address with the identity check (Lens B61.45 passes it to the provider and keeps
+// none of it); its country is the one they live in.
+//
 // A Personal account is confirmed at L2, a Business at L3. Until then Home says so in one sentence (IdentityGate).
 
 export const VERIFICATION_KEY = ['verification']
@@ -100,6 +103,10 @@ interface Draft {
   phone: string
   name: string
   dob: string
+  line1: string
+  line2: string
+  town: string
+  postcode: string
   country: string
 }
 
@@ -111,13 +118,20 @@ function missing(d: Draft, level: number): Errors {
   if (level < 1 && !E164.test(d.phone.replace(/\s/g, ''))) out.phone = IDENTITY_ERRORS.phone
   if (level < 2 && !d.name.trim()) out.name = IDENTITY_ERRORS.legalName
   if (level < 2 && !/^\d{4}-\d{2}-\d{2}$/.test(d.dob)) out.dob = IDENTITY_ERRORS.dateOfBirth
+  if (level < 2 && !d.line1.trim()) out.line1 = IDENTITY_ERRORS.addressLine1
+  if (level < 2 && !d.town.trim()) out.town = IDENTITY_ERRORS.town
+  if (level < 2 && !d.postcode.trim()) out.postcode = IDENTITY_ERRORS.postcode
   if (level < 2 && !d.country) out.country = IDENTITY_ERRORS.country
   return out
 }
 
 function bodyFor(kind: VerificationBody['kind'], d: Draft): VerificationBody {
   if (kind === 'contact') return { kind, email: d.email.trim(), phone: d.phone.replace(/\s/g, '') }
-  if (kind === 'identity') return { kind, name: d.name.trim(), country: d.country, date_of_birth: d.dob }
+  if (kind === 'identity') {
+    const lines = [d.line1, d.line2].map((l) => l.trim()).filter(Boolean)
+    const address = { lines, town: d.town.trim(), postcode: d.postcode.trim(), country: d.country }
+    return { kind, name: d.name.trim(), country: d.country, date_of_birth: d.dob, address }
+  }
   // Lens fills an empty company check from the saved company details (talyvor-lens B59.30).
   return { kind, name: '', country: '', company_number: '', directors: [], people_with_significant_control: [] }
 }
@@ -143,7 +157,7 @@ export function IdentityChecks({ done }: { done?: React.ReactNode }) {
   const [tried, setTried] = useState(false)
   // The email starts as the one signed in with, until the person types their own (null: not typed yet).
   const [typedEmail, setTypedEmail] = useState<string | null>(null)
-  const [draft, setDraft] = useState<Omit<Draft, 'email'>>({ phone: '', name: '', dob: '', country: '' })
+  const [draft, setDraft] = useState<Omit<Draft, 'email'>>({ phone: '', name: '', dob: '', line1: '', line2: '', town: '', postcode: '', country: '' })
   const v = useVerification()
   const company = useCompanyDetails(type === 'business')
   if (v.isError) return <p className="text-body text-ink-2">Your checks could not be read just now.</p>
@@ -247,6 +261,11 @@ export function IdentityChecks({ done }: { done?: React.ReactNode }) {
                       ) : null}
                       {field('name', IDENTITY_WORDS.legalName, <Input autoComplete="name" maxLength={200} value={d.name} onChange={set('name')} {...invalid('name')} />, IDENTITY_WORDS.legalNameHint)}
                       {field('dob', IDENTITY_WORDS.dateOfBirth, <Input type="date" autoComplete="bday" className="font-figure" value={d.dob} onChange={set('dob')} {...invalid('dob')} />)}
+                      <h4 className="font-display text-body font-bold text-ink wide:col-span-2">{IDENTITY_WORDS.homeAddress}</h4>
+                      {field('line1', IDENTITY_WORDS.addressLine1, <Input autoComplete="address-line1" maxLength={200} value={d.line1} onChange={set('line1')} {...invalid('line1')} />)}
+                      {field('line2', IDENTITY_WORDS.addressLine2, <Input autoComplete="address-line2" maxLength={200} value={d.line2} onChange={set('line2')} />)}
+                      {field('town', IDENTITY_WORDS.town, <Input autoComplete="address-level2" maxLength={100} value={d.town} onChange={set('town')} {...invalid('town')} />)}
+                      {field('postcode', IDENTITY_WORDS.postcode, <Input autoComplete="postal-code" maxLength={20} className="font-figure" value={d.postcode} onChange={set('postcode')} {...invalid('postcode')} />)}
                       {field(
                         'country',
                         IDENTITY_WORDS.country,
