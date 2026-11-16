@@ -31,6 +31,10 @@ type app struct {
 	devMu     sync.Mutex
 	devCached tenant
 
+	// lastAccounts is the account each person was last on (identity → account id), so a sign-in by phone or key lands
+	// there (B61.25, B61.8). In memory: after a restart a sign-in lands on the first account, as it did before.
+	lastAccounts sync.Map
+
 	// streamClient serves the SSE relay ONLY, and it deliberately has no http.Client.Timeout —
 	// that field bounds reading the body, so it truncates every completion longer than it. See
 	// stream.go. `client` keeps its 10s whole-exchange bound, which is right for the JSON reads it
@@ -106,6 +110,21 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/auth/logout-everywhere", a.handleLogoutEverywhere) // B52.9 — signout_everywhere.go
 	a.mux.HandleFunc("/auth/me", a.handleMe)
 	a.mux.HandleFunc("/auth/mobile/session", a.handleMobileSession)
+	// B61.25 — the door by phone number, the passcode and the passkey; the phone app's lock; the move from Google.
+	// See phone_signin.go.
+	a.mux.HandleFunc("/auth/phone/start", a.doorPerIP(a.handlePhoneStart))
+	a.mux.HandleFunc("/auth/phone/finish", a.doorPerIP(a.handlePhoneFinish))
+	a.mux.HandleFunc("/auth/phone/signin", a.doorPerIP(a.handlePhoneSignIn))
+	a.mux.HandleFunc("/auth/phone/join", a.doorPerIP(a.handlePhoneJoin))
+	a.mux.HandleFunc("/auth/signup/account", a.handleSignupAccount)
+	a.mux.HandleFunc("/auth/passkey/challenge", a.doorPerIP(a.handleKeySignInChallenge))
+	a.mux.HandleFunc("/auth/passkey/finish", a.doorPerIP(a.handleKeySignInFinish))
+	a.mux.HandleFunc("/auth/passkey/register/challenge", a.handlePasskeyRegisterChallenge)
+	a.mux.HandleFunc("/auth/passkey/register", a.handlePasskeyRegister)
+	a.mux.HandleFunc("/auth/lock", a.handleLock)
+	a.mux.HandleFunc("/auth/unlock/challenge", a.doorPerIP(a.handleUnlockChallenge))
+	a.mux.HandleFunc("/auth/unlock", a.doorPerIP(a.handleUnlock))
+	a.mux.HandleFunc("/auth/google/move", a.doorPerIP(a.handleGoogleMove))
 	// B17.2 — a synthetic test user signs in with the operator key; 404 unless LENS_SYNTHETIC_KEY
 	// is set. See synthetic.go.
 	a.mux.HandleFunc("/auth/synthetic", a.handleSyntheticSignIn)
@@ -932,6 +951,10 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"error": "cross-origin write refused: the Origin header must be the app origin"})
 		return
 	}
+	// B61.25 — a sign-up session reaches only sign-up, and a locked phone session only unlock (phone_signin.go).
+	if a.lockedOrJoining(w, r) {
+		return
+	}
 	// B59.2 — a route of an area this workspace does not have is not there (areas.go).
 	if a.areaHidden(r) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such endpoint"})
@@ -952,7 +975,8 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func originExemptPath(path string) bool {
 	return oauthMachinePath(path) ||
 		path == mobileSessionPath || // the phone app; the ID token is its proof
-		path == syntheticMobilePath // the phone harness; the operator key is its proof, and no cookie is read or set
+		path == syntheticMobilePath || // the phone harness; the operator key is its proof, and no cookie is read or set
+		phoneDoorPath(path) // B61.25: the phone app before it has a session; the code, the passcode or the key is its proof
 }
 
 // sameOriginWriteAllowed is the SINGLE decider. Reads are never gated: applying this to GET
@@ -979,8 +1003,10 @@ func (a *app) sameOriginWriteAllowed(r *http.Request) bool {
 		return true
 	}
 	// B50.36 — the phone harness sends no Origin; a page on another site always does, and then the door is gated like any write.
-	origin := r.Header.Get("Origin")
-	if originExemptPath(r.URL.Path) && (r.URL.Path != syntheticMobilePath || origin == "") {
+	origin := requestOrigin(r)
+	// B61.25 — the same for the phone door: without an Origin it answers a Bearer token and sets no cookie; a browser's
+	// write always names its Origin, and that must be this app's.
+	if originExemptPath(r.URL.Path) && (r.URL.Path != syntheticMobilePath && !phoneDoorPath(r.URL.Path) || origin == "") {
 		return true
 	}
 	// A Bearer session is the phone app's, and it is then the request's only identity
@@ -997,6 +1023,10 @@ func (a *app) sameOriginWriteAllowed(r *http.Request) bool {
 	}
 	return origin == a.cfg.publicBaseURL
 }
+
+// requestOrigin is the request's Origin header, read here alone: the guard above decides by it, and the phone door
+// (phone_signin.go) only asks whether there was one, after the guard let the request through.
+func requestOrigin(r *http.Request) string { return r.Header.Get("Origin") }
 
 // writeJSON emits a small JSON object. Used only for BFF-originated responses (context,
 // errors); upstream bodies are streamed verbatim by copyUpstream.

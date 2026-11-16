@@ -83,6 +83,18 @@ type session struct {
 	// (B50.49), never when this session was made: a browser still signed in at the provider gets a new session
 	// without anyone signing in. Zero when the provider did not say, and then no recovery.
 	signedInAt time.Time
+
+	// B61.25 (phone_signin.go). personID is the person Lens knows, empty for a Google sign-in that has not moved;
+	// joining is a sign-up session with no account yet, which may only finish sign-up. phone is the phone app's
+	// session, whose lock is the server's: locked, and lastSeen and awayAt, which lock it after phoneLockAfter.
+	personID string
+	joining  bool
+	phone    bool
+	locked   bool
+	lastSeen time.Time
+	awayAt   time.Time
+	// keyTicket is the ticket of the key sign-in that opened this session, the proof for its next key.
+	keyTicket keyTicket
 }
 
 func (s session) expiresAt() time.Time { return s.expires }
@@ -230,6 +242,8 @@ type authenticator struct {
 	httpClient     *http.Client
 	pending        *ttlMap[pendingLogin]
 	sessions       *ttlMap[session]
+	// phoneChecks are right codes waiting for their passcode (phone_signin.go, B61.25).
+	phoneChecks *ttlMap[phoneCheck]
 	// sealer makes a session id carry its session, so a restart does not sign anyone out (B17.40).
 	// Nil without LENS_PROVISION_SECRET: sessions are then in memory only.
 	sealer *sessionSealer
@@ -267,6 +281,7 @@ func newAuthenticator(ctx context.Context, cfg config) (*authenticator, error) {
 func newSessionOnlyAuthenticator(cfg config) *authenticator {
 	return &authenticator{cfg: cfg, pending: newTTLMap[pendingLogin](), sessions: newTTLMap[session](),
 		spentIDTokens: newTTLMap[spentIDToken](),
+		phoneChecks:   newTTLMap[phoneCheck](),
 		sealer:        newSessionSealer(cfg.provisionSecret, cfg.sessionTTL)}
 }
 
@@ -397,7 +412,7 @@ func (a *app) handleLogin(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	if a.handleAuthUnavailable(w) {
+	if a.googleOff(w) || a.handleAuthUnavailable(w) {
 		return
 	}
 	q := r.URL.Query()
@@ -456,7 +471,7 @@ func (a *app) handleCallback(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w, http.MethodGet)
 		return
 	}
-	if a.handleAuthUnavailable(w) {
+	if a.googleOff(w) || a.handleAuthUnavailable(w) {
 		return
 	}
 
@@ -595,7 +610,7 @@ func (a *app) provisionSession(ctx context.Context, sub, email string, signup si
 	if another && signup != (signupAccount{}) {
 		ask.mode = "open"
 	}
-	prov, perr := a.provisionAs(ctx, provisionIdentity(a.cfg.oidcIssuer, sub), ask, nil, signup)
+	prov, perr := a.provisionAs(ctx, a.identityOf(sub), ask, nil, signup)
 	if perr != nil {
 		log.Printf("bff: provisioning FAILED for sub=%s: %s", sub, redactSecret(perr.Error()))
 		return session{}, perr
@@ -849,6 +864,10 @@ func authorizeIdentity(allowed []string, sub, email string, verified *bool) (rea
 		}
 		return "the issuer marks this email as unverified", false
 	}
+	// B61.25: a sub in the form Lens names a person who joined by phone would be taken for that person (identityOf).
+	if strings.HasPrefix(sub, personIdentityPrefix) {
+		return "the issuer's subject has the form of a phone person's identity", false
+	}
 	if signupIsOpen(allowed) {
 		if sub == "" {
 			return "issuer returned an empty subject", false
@@ -923,6 +942,11 @@ func (a *app) handleMe(w http.ResponseWriter, r *http.Request) {
 			// B20.12 — whether THIS person is on OPERATOR_SUBS, so the sidebar offers the review
 			// queue only to someone it will admit. About the asker alone; requireOperator still decides.
 			"operator": a.isOperator(s),
+			// B61.25 — a Google sign-in still to take a number and a passcode (the move), and a sign-up still to
+			// choose its account. google_signin says whether the Google button is offered at all.
+			"phone_needed":      !a.cfg.googleSignInOff && s.personID == "" && !s.synthetic,
+			"signup_unfinished": s.joining,
+			"google_signin":     !a.cfg.googleSignInOff,
 		})
 		return
 	}
@@ -942,7 +966,7 @@ func (a *app) handleMe(w http.ResponseWriter, r *http.Request) {
 	// about to do anyway.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"mode": authModeOIDC, "authenticated": false, "user": nil,
-		"signup_open": signupIsOpen(a.cfg.allowedEmails)})
+		"signup_open": signupIsOpen(a.cfg.allowedEmails), "google_signin": !a.cfg.googleSignInOff})
 }
 
 // requireSession gates every /api route. Disabled mode passes through — the

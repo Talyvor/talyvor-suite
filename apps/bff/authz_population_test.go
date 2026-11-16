@@ -293,6 +293,16 @@ var publicWriteRoutes = map[string]string{
 		"answers 404 and nothing is reached, so there is no session to require",
 	"/auth/mobile/session": "B40.24 — the phone app's sign-in, which by definition runs before any session exists. " +
 		"The ID token for a phone client is its credential; mobile_session_test.go asserts a web-client token gets 401",
+	"/auth/phone/start": "B61.25 — the phone door, before any session exists: it asks Lens to text a code and is limited " +
+		"per address by the BFF and by Lens; b6125_phone_signin_test.go owns it",
+	"/auth/phone/finish": "B61.25 — the texted code is its credential; a wrong one opens nothing — b6125_phone_signin_test.go",
+	"/auth/phone/signin": "B61.25 — the check from a right code plus the person's passcode, checked by Lens, are its credential; " +
+		"without them it answers 400 and signs nobody in — b6125_phone_signin_test.go",
+	"/auth/phone/join": "B61.25 — the check from a right code for a number nobody holds is its credential; without one it " +
+		"answers 400 — b6125_phone_signin_test.go",
+	"/auth/passkey/challenge": "B61.25 — a key sign-in starts before any session exists; the challenge opens nothing by itself",
+	"/auth/passkey/finish": "B61.25 — the key's answer, verified by Lens, is its credential; a wrong or replayed one answers " +
+		"4xx — b6125_phone_signin_test.go",
 	"/auth/synthetic": "B17.2 — the synthetic sign-in, which by definition runs before any session " +
 		"exists. It needs the operator key instead (401 without it) and answers 404 while " +
 		"LENS_SYNTHETIC_KEY is unset, as here; synthetic_test.go owns both refusals",
