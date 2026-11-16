@@ -270,7 +270,7 @@ export const LENS_BODIES: LensBody[] = [
     route: "POST /v1/workspaces/{wsID}/agents",
     file: "apps/bff/agent_bank.go",
     kind: "map-literal",
-    anchor: 'json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour})',
+    anchor: 'json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour, "fiat_currency": in.FiatCurrency})',
     upstreamFile: "cmd/lens/agent_accounts_handler.go",
     upstreamAnchor:
       'r.Post("/v1/workspaces/{wsID}/agents", ownerOnly(func(w http.ResponseWriter, req *http.Request) {',

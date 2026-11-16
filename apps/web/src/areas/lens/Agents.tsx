@@ -13,11 +13,10 @@ import { AgentCard } from './AgentCard'
 import { AgentFace } from './AgentFace'
 import { AlertChannelsCard } from './AlertChannelsCard'
 import { LimitAlertsCard } from './LimitAlertsCard'
-import { AGENT_KINDS, EVERY_PAYMENT_ASKS_ULXC, type AgentKindChoice, type SuggestedRules, ulxcForCents } from './agentKinds'
-import { pegQuery } from './money'
+import { AGENT_KINDS, EVERY_PAYMENT_ASKS_MINOR, type AgentKindChoice, type SuggestedRules } from './agentKinds'
+import { CURRENCY_WORDS, parseRuleAmount, useAccountCurrency } from './rulesCurrency'
 import { PAYEES_KEY } from './Pay'
-import { dollarsToCents } from './topupApi'
-import { type Agent, type AgentRules, type WorkspacePlan, AgentBankError, PLAN_KEY, agentBankApi, readWorkspacePlan, refusalText } from './agentBankApi'
+import { type Agent, type AgentRulesSave, type WorkspacePlan, AgentBankError, PLAN_KEY, agentBankApi, readWorkspacePlan, refusalText } from './agentBankApi'
 
 // Agents.tsx — B57.19: /agents as Pocket's w-agents. The workspace's total, split between its agents and what is free to
 // fund them; Statements and New agent; one AgentCard (B57.16) per agent, each opening its own page; and a room's wallet,
@@ -110,10 +109,10 @@ function StartChoice({ picture, name, line, onPick }: { picture: React.ReactNode
 
 /** B61.13 — the four rules New agent asks for, as the approved rules screen names them (launch pack W4). */
 const RULE_FIELDS = [
-  ['perPayment', 'Per payment', 'max_per_request_ulxc'],
-  ['perDay', 'Per day', 'daily_limit_ulxc'],
-  ['perMonth', 'Per month', 'monthly_limit_ulxc'],
-  ['askAbove', 'Ask me above', 'approval_above_ulxc'],
+  ['perPayment', 'Per payment', 'max_per_payment_minor'],
+  ['perDay', 'Per day', 'daily_limit_minor'],
+  ['perMonth', 'Per month', 'monthly_limit_minor'],
+  ['askAbove', 'Ask me above', 'approval_above_minor'],
 ] as const
 type RuleKey = keyof SuggestedRules
 type Typed = Record<RuleKey, string>
@@ -125,31 +124,38 @@ const typedFrom = (r: SuggestedRules): Typed => ({
   askAbove: r.askAbove > 0 ? String(r.askAbove) : '',
 })
 
-/** Each typed amount in cents, 0 for one left empty; null while any is not an amount. */
-function centsOf(typed: Typed): Record<RuleKey, number> | null {
+/** Each typed amount in currency's minor units, 0 for one left empty; null while any is not an amount in it. */
+function minorOf(typed: Typed, currency: string): Record<RuleKey, number> | null {
   const out = { perPayment: 0, perDay: 0, perMonth: 0, askAbove: 0 }
   for (const [key] of RULE_FIELDS) {
-    if (typed[key].trim() === '') continue
-    const cents = dollarsToCents(typed[key])
-    if (cents === null) return null
-    out[key] = cents
+    const minor = parseRuleAmount(typed[key], currency)
+    if (minor === null) return null
+    out[key] = minor
   }
   return out
 }
 
 /**
- * The rules New agent saves: the four amounts in Lens's units at the peg, and the payees More rules names. With none of
- * the four typed, every payment waits for the owner's yes; null while an amount typed has no peg to back it.
+ * B61.87 — the rules New agent saves: held in the account's currency, the four amounts in its minor units and no µLXC
+ * limit, and the payees More rules names. With none of the four typed, every payment waits for the owner's yes.
  */
-export function newAgentRules(cents: Record<RuleKey, number>, usdPerLXC: number | undefined, payees: string[]): AgentRules | null {
-  const rules: AgentRules = { max_per_request_ulxc: 0, daily_limit_ulxc: 0, monthly_limit_ulxc: 0, approval_above_ulxc: 0, allowed_models: [], allowed_providers: [], active_from: '', active_until: '', timezone: 'UTC' }
-  for (const [key, , field] of RULE_FIELDS) {
-    if (cents[key] === 0) continue
-    const ulxc = ulxcForCents(cents[key], usdPerLXC)
-    if (ulxc === null) return null
-    rules[field] = ulxc
+export function newAgentRules(minor: Record<RuleKey, number>, currency: string, payees: string[]): AgentRulesSave {
+  const rules: AgentRulesSave = {
+    currency,
+    max_per_payment_minor: 0,
+    hourly_limit_minor: 0,
+    daily_limit_minor: 0,
+    weekly_limit_minor: 0,
+    monthly_limit_minor: 0,
+    approval_above_minor: 0,
+    allowed_models: [],
+    allowed_providers: [],
+    active_from: '',
+    active_until: '',
+    timezone: 'UTC',
   }
-  if (RULE_FIELDS.every(([key]) => cents[key] === 0)) rules.approval_above_ulxc = EVERY_PAYMENT_ASKS_ULXC
+  for (const [key, , field] of RULE_FIELDS) rules[field] = minor[key]
+  if (RULE_FIELDS.every(([key]) => minor[key] === 0)) rules.approval_above_minor = EVERY_PAYMENT_ASKS_MINOR
   if (payees.length > 0) rules.allowed_payees = payees
   return rules
 }
@@ -188,13 +194,26 @@ function StartWith({ onPick, onClose }: { onPick: (start: AgentKindChoice | 'own
  * under More rules. Created, then what it does and its rules saved, in the one press. When Lens refuses either the
  * agent still exists, so the dialog says what was not saved and opens it.
  */
-function CreateForm({ onClose, onRefused }: { onClose: () => void; onRefused: (at: AtLimit) => void }) {
+function CreateForm({ currency, onClose, onRefused }: { currency: string; onClose: () => void; onRefused: (at: AtLimit) => void }) {
   const [start, setStart] = useState<AgentKindChoice | 'own' | null>(null)
   if (start === null) return <StartWith onPick={setStart} onClose={onClose} />
-  return <Details key={start === 'own' ? 'own' : start.kind} start={start} onBack={() => setStart(null)} onClose={onClose} onRefused={onRefused} />
+  return <Details key={start === 'own' ? 'own' : start.kind} start={start} currency={currency} onBack={() => setStart(null)} onClose={onClose} onRefused={onRefused} />
 }
 
-function Details({ start, onBack, onClose, onRefused }: { start: AgentKindChoice | 'own'; onBack: () => void; onClose: () => void; onRefused: (at: AtLimit) => void }) {
+function Details({
+  start,
+  currency,
+  onBack,
+  onClose,
+  onRefused,
+}: {
+  start: AgentKindChoice | 'own'
+  /** B61.87 — the account's own currency, which the rules are typed in and the agent's account opens in */
+  currency: string
+  onBack: () => void
+  onClose: () => void
+  onRefused: (at: AtLimit) => void
+}) {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const ours = start === 'own' ? null : start
@@ -204,19 +223,19 @@ function Details({ start, onBack, onClose, onRefused }: { start: AgentKindChoice
   const [typed, setTyped] = useState<Typed>(ours ? typedFrom(ours.rules) : NOTHING_TYPED)
   const [more, setMore] = useState(false)
   const [payees, setPayees] = useState<string[]>([])
-  const peg = useQuery(pegQuery)
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const saved = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees, retry: false, enabled: more })
   const payeeChoices = [
     ...(book.data?.agents ?? []).filter((a) => !a.archived_at && a.kind !== 'room').map((a) => ({ id: a.id, name: a.name })),
     ...(saved.data?.payees ?? []).map((p) => ({ id: p.id, name: p.name })),
   ]
-  const cents = centsOf(typed)
+  const minor = minorOf(typed, currency)
   const nothingTyped = RULE_FIELDS.every(([key]) => typed[key].trim() === '')
-  const rules = cents ? newAgentRules(cents, peg.data?.usd_per_lxc, payees) : null
+  const rules = minor ? newAgentRules(minor, currency, payees) : null
   const create = useMutation({
-    mutationFn: async (r: AgentRules) => {
-      const a = await agentBankApi.create(name.trim(), picture?.colour)
+    mutationFn: async (r: AgentRulesSave) => {
+      // B61.87 — the agent's own account is opened in the account's currency, the one its rules are typed in.
+      const a = await agentBankApi.create(name.trim(), picture?.colour, r.currency === 'USDC' ? undefined : r.currency)
       const unsaved: string[] = []
       if (does.trim() !== '') {
         try {
@@ -260,13 +279,9 @@ function Details({ start, onBack, onClose, onRefused }: { start: AgentKindChoice
   const why =
     name.trim() === ''
       ? 'Name it first.'
-      : cents === null
-        ? 'Type each amount in dollars, like 50 or 12.50.'
-        : rules === null
-          ? peg.isError
-            ? 'The dollar rate could not be read. Try again in a moment.'
-            : 'Reading the dollar rate…'
-          : undefined
+      : minor === null
+        ? `Type each amount in ${CURRENCY_WORDS[currency] ?? currency}, like 50 or 12.50.`
+        : undefined
   return (
     <form
       className="grid gap-3.5"
@@ -339,7 +354,7 @@ function Details({ start, onBack, onClose, onRefused }: { start: AgentKindChoice
               <Input
                 inputMode="decimal"
                 className="min-w-0"
-                unit="USD"
+                unit={currency}
                 placeholder="None"
                 value={typed[key]}
                 onChange={(e) => setTyped((t) => ({ ...t, [key]: e.target.value }))}
@@ -405,6 +420,7 @@ function Details({ start, onBack, onClose, onRefused }: { start: AgentKindChoice
 export function NewAgent({ open, onClose, names }: { open: boolean; onClose: () => void; names: string[] }) {
   const plan = useQuery({ queryKey: PLAN_KEY, queryFn: readWorkspacePlan, staleTime: 60_000, retry: false, enabled: open })
   const [refused, setRefused] = useState<AtLimit | null>(null)
+  const currency = useAccountCurrency()
   const close = () => {
     setRefused(null)
     onClose()
@@ -415,10 +431,12 @@ export function NewAgent({ open, onClose, names }: { open: boolean; onClose: () 
     <Dialog open={open} onClose={close} title={at ? `${planName(at.plan)} has room for ${agentsWord(at.limit)}` : 'New agent'} className="max-h-screen overflow-y-auto">
       {plan.isPending && !refused ? (
         <p>Reading your plan…</p>
+      ) : currency === null && !refused ? (
+        <p>Reading…</p>
       ) : at ? (
         <LimitReached at={at} names={names} onClose={close} />
       ) : (
-        <CreateForm onClose={close} onRefused={setRefused} />
+        <CreateForm currency={currency ?? 'USD'} onClose={close} onRefused={setRefused} />
       )}
     </Dialog>
   )

@@ -221,6 +221,23 @@ interface Rules {
   may_instant_transfer?: boolean
   /** B41.4 — "always allow": a payee paid without a person up to an amount a day or a month, saved by an approval. */
   payee_allowances?: Record<string, { amount_ulxc: number; per: 'day' | 'month' }>
+  /** B61.87 — Lens B61.12: the currency the rules are held in and each limit in its minor units, once a save names one. */
+  currency?: string
+  max_per_payment_minor?: number; hourly_limit_minor?: number; daily_limit_minor?: number
+  weekly_limit_minor?: number; monthly_limit_minor?: number; approval_above_minor?: number
+}
+/** B61.87 — each limit in the rules' currency, and the µLXC form Lens B61.12 writes beside it for the parked gateway. */
+const ULXC_TWIN = { max_per_payment_minor: 'max_per_request_ulxc', hourly_limit_minor: 'hourly_limit_ulxc', daily_limit_minor: 'daily_limit_ulxc',
+  weekly_limit_minor: 'weekly_limit_ulxc', monthly_limit_minor: 'monthly_limit_ulxc', approval_above_minor: 'approval_above_ulxc' } as const
+/** Minor units of currency in µLXC as Lens B61.12 writes them: dollars and USDC at the $0.10 peg, exact; pounds and euros at SIM_QUOTES, rounded (up when up). */
+function ulxcOfMinor(minor: number, currency: string, up = false): number | undefined {
+  if (!(minor > 0)) return 0
+  if (currency === 'USD') return minor * 100_000
+  if (currency === 'USDC') return minor * 10
+  const usd = SIM_QUOTES.find((q) => q.instrument === currency)?.price_usd
+  if (usd === undefined) return undefined
+  const v = minor * Number(usd) * 100_000
+  return up ? Math.ceil(v) : Math.max(Math.floor(v), 1)
 }
 interface Agent {
   id: string; ws: string; name: string; owner_user_id: string; created_at: string; keys: string[]; paused_at?: string; paused_reason?: string; rules: Rules; description?: string; archived_at?: string; wallet_kind?: string; fiat_currency?: string; versions?: RulesVersion[]; boosts?: Boost[]
@@ -2373,7 +2390,9 @@ export class Bank {
       return json(res, 200, { id: ws.id, name: this.workspaceNames.get(ws.id) ?? ws.id }), true
     }
     if (rest === '/agents' && method === 'POST') {
-      const { name = '', wallet_kind = 'crypto', fiat_currency = 'EUR' } = await this.body<{ name?: string; wallet_kind?: string; fiat_currency?: string }>(req)
+      // A workspace here is Hybrid (stub-launch.ts), whose new agent Lens makes both fiat and crypto (agentKindOf).
+      const { name = '', wallet_kind = 'both', fiat_currency: asked } = await this.body<{ name?: string; wallet_kind?: string; fiat_currency?: string }>(req)
+      const fiat_currency = asked || 'EUR' // Lens's checkWalletKind reads "" as euros (B61.87 sends it empty when the account names none)
       if (name === '') return json(res, 400, { error: 'body must be {"name": "<agent name>"}' }), true
       if (!walletKindOK(wallet_kind, fiat_currency)) return json(res, 400, { error: WALLET_KIND_REFUSED }), true
       const a: Agent = { id: id('agt_'), ws: ws.id, name, owner_user_id: ws.id, created_at: now, keys: [], rules: noRules(), wallet_kind, fiat_currency }
@@ -2634,8 +2653,12 @@ export class Bank {
         return res.writeHead(204).end(), true
       }
       if (m[2] === undefined && method === 'POST') {
-        const { rule = '', value = 0, until = '' } = await this.body<{ rule?: string; value?: number; until?: string }>(req)
-        if (rule === '' || until === '') return json(res, 400, { error: 'body must be {"rule": <the limit, e.g. daily_limit_ulxc>, "value": <raised to>, "until": <RFC 3339 time>}' }), true
+        const { rule: asked = '', value: raisedTo = 0, until = '' } = await this.body<{ rule?: string; value?: number; until?: string }>(req)
+        if (asked === '' || until === '') return json(res, 400, { error: 'body must be {"rule": <the limit, e.g. daily_limit_ulxc>, "value": <raised to>, "until": <RFC 3339 time>}' }), true
+        // B61.87 — a limit in the rules' currency is raised here on its µLXC form, as the stub judges by it.
+        const twin = (ULXC_TWIN as Record<string, string>)[asked]
+        const rule = twin ?? asked
+        const value = twin === undefined ? raisedTo : (ulxcOfMinor(raisedTo, a.rules.currency ?? 'USD') ?? 0)
         const field = BOOSTABLE.find((f) => f === rule)
         if (field === undefined) return json(res, 400, { error: `economy: invalid agent rule: "${rule}" is not a limit a boost can raise` }), true
         if (!(Date.parse(until) > Date.now())) return json(res, 400, { error: 'economy: invalid agent rule: a boost needs a time in the future to last until' }), true
@@ -2651,8 +2674,9 @@ export class Bank {
     if ((m = /^\/agents\/([^/]+)\/rules\/simulate$/.exec(rest)) !== null && method === 'POST') {
       const a = this.agents.get(m[1])
       if (a === undefined || a.ws !== ws.id) return json(res, 404, { error: 'economy: no such agent in this workspace' }), true
-      const b = await this.body<{ amount_ulxc?: number; model?: string; payee?: { kind: string; id: string } }>(req)
-      const n = b.amount_ulxc ?? 0
+      const b = await this.body<{ amount_ulxc?: number; amount_minor?: number; currency?: string; model?: string; payee?: { kind: string; id: string } }>(req)
+      // B61.87 — Lens B61.12: a payment from an account names amount_minor and its currency, judged at what it is worth, rounded up.
+      const n = b.currency !== undefined ? (ulxcOfMinor(b.amount_minor ?? 0, b.currency, true) ?? -1) : (b.amount_ulxc ?? 0)
       if (n < 0) return json(res, 400, { error: 'economy: the simulated request cannot be judged: amount_ulxc cannot be negative' }), true
       const filed = this.approvals.length
       const fingerprint = `simulated\0${randomBytes(8).toString('hex')}`
@@ -2768,6 +2792,15 @@ export class Bank {
       if (action === '/rules/challenge' && method === 'POST') return json(res, 200, { looser: false, changes: [], allow_credentials: [] }), true
       if (action === '/rules' && method === 'PUT') {
         const r = await this.body<Partial<Rules>>(req)
+        // B61.87 — Lens B61.12: a save in a currency names each limit in its minor units; Lens writes their µLXC forms.
+        if (r.currency !== undefined) {
+          for (const [minor, ulxc] of Object.entries(ULXC_TWIN) as [keyof typeof ULXC_TWIN, (typeof ULXC_TWIN)[keyof typeof ULXC_TWIN]][]) {
+            if (r[minor] === undefined) continue
+            const v = ulxcOfMinor(r[minor] ?? 0, r.currency)
+            if (v === undefined) return json(res, 400, { error: `economy: invalid agent rule: rules are held in GBP, EUR, USD or USDC, not "${r.currency}"` }), true
+            r[ulxc] = v
+          }
+        }
         const both = (r.allowed_payees ?? []).find((x) => (r.blocked_payees ?? []).includes(x))
         if (both !== undefined) return json(res, 400, { error: `"${both}" is both allowed and blocked; give it one` }), true
         a.rules = { ...noRules(), ...r, allowed_listings: r.allowed_listings ?? a.rules.allowed_listings,

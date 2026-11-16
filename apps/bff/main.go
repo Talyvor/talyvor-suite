@@ -128,6 +128,9 @@ type config struct {
 	// team's button. helpQuestionsPerDay (HELP_QUESTIONS_PER_DAY) is how many questions one account may ask a day.
 	helpLensKey         string
 	helpQuestionsPerDay int
+	// helpModel (HELP_MODEL) is the model Help asks (B61.69). Unset, Help asks Lens's catalog on HELP_LENS_KEY for its
+	// newest Anthropic model, which Lens answers only for an account the old gateway's area is on.
+	helpModel string
 }
 
 func loadConfig() (config, error) {
@@ -149,6 +152,7 @@ func loadConfig() (config, error) {
 		openAIAppsChallenge: strings.TrimSpace(os.Getenv("BFF_OPENAI_APPS_CHALLENGE")),
 
 		helpLensKey: strings.TrimSpace(os.Getenv("HELP_LENS_KEY")),
+		helpModel:   strings.TrimSpace(os.Getenv("HELP_MODEL")),
 	}
 	if v := os.Getenv("HELP_QUESTIONS_PER_DAY"); v != "" {
 		n, err := strconv.Atoi(v)

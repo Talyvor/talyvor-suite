@@ -41,6 +41,9 @@ export interface Agent {
   colour?: string
   /** B57.10 — its face's shape: circle, squircle, hexagon or flower; absent from a Lens older than B57.10. */
   face?: string
+  /** B48.1 — fiat, crypto or both: the wallets it owns, and the currency its fiat wallet is in (B61.87: its rules' currency). */
+  wallet_kind?: 'fiat' | 'crypto' | 'both'
+  fiat_currency?: string
 }
 
 /** Lens economy.AgentArchive (B28.21): what archiving an agent did. */
@@ -57,7 +60,11 @@ export interface AgentArchive {
  * payment to that payee; without one a question to the model through the provider.
  */
 export interface SimulatedRequest {
+  /** 0 with amount_minor: a payment from one of the agent's accounts is asked in its own currency (B61.87). */
   amount_ulxc: number
+  /** B61.87 — a payment in currency's minor units (Lens B61.12). */
+  amount_minor?: number
+  currency?: string
   model?: string
   provider?: string
   payee?: { kind: 'agent' | 'listing' | 'company' | 'merchant'; id: string }
@@ -109,7 +116,7 @@ export interface AgentRuleBoost {
 
 /** B55.14 — one change to an agent's rules, as Lens judges it (economy.RulesProposal, B55.13). */
 export type RulesChange =
-  | { rules: AgentRules }
+  | { rules: AgentRulesSave }
   | { rollback_to: number }
   | { template: string }
   | { boost: { rule: string; value: number; until: string } }
@@ -656,7 +663,23 @@ export interface AgentRules {
   pause_on_unusual_spend?: boolean
   /** B59.19 — "Can use Instant transfer" (Lens B59.15), off by default. A save without it keeps what Lens holds. */
   may_instant_transfer?: boolean
+  /**
+   * B61.87 — the currency the rules are held in, GBP, EUR, USD or USDC (Lens B61.12), and each amount limit in its minor
+   * units. The µLXC limits above are what these are worth for the parked gateway; a save names these and not those.
+   * Absent from a Lens older than B61.12.
+   */
+  currency?: string
+  max_per_payment_minor?: number
+  hourly_limit_minor?: number
+  daily_limit_minor?: number
+  weekly_limit_minor?: number
+  monthly_limit_minor?: number
+  approval_above_minor?: number
 }
+
+/** B61.87 — the rules as a save names them: the currency and its minor-unit limits, and no µLXC limit. */
+export type AgentRulesSave = Omit<AgentRules, 'max_per_request_ulxc' | 'daily_limit_ulxc' | 'monthly_limit_ulxc' | 'approval_above_ulxc'> &
+  Partial<Pick<AgentRules, 'max_per_request_ulxc' | 'daily_limit_ulxc' | 'monthly_limit_ulxc' | 'approval_above_ulxc'>>
 
 /** Lens economy.Payee. `name` is empty when the payee no longer exists. */
 export interface ApprovalPayee {
@@ -1151,7 +1174,9 @@ export const agentBankApi = {
       agents: 'array',
     }),
   /** B57.124 — with the colour of the helper its owner picked; without one, Lens picks. */
-  create: (name: string, colour?: string) => send<Agent>('POST', '/api/agents', colour ? { name, colour } : { name }),
+  /** B61.87 — with fiat_currency (GBP, EUR or USD), its own account is opened in that currency; Lens picks one otherwise. */
+  create: (name: string, colour?: string, fiat_currency?: string) =>
+    send<Agent>('POST', '/api/agents', { name, ...(colour ? { colour } : {}), ...(fiat_currency ? { fiat_currency } : {}) }),
   /** B46.16 — the workspace's name (Lens B46.15): asked at sign-up on Home's first-agent card, shown in the sidebar. */
   workspaceName: () => getJSON<{ id: string; name: string }>('/api/workspace/name', { name: 'string' }),
   setWorkspaceName: (name: string) => send<{ id: string; name: string }>('PUT', '/api/workspace/name', { name }),
@@ -1169,7 +1194,7 @@ export const agentBankApi = {
       approval_above_ulxc: 'number',
     }),
   /** B55.14: a looser save carries the passkey's assertion beside the rules (Lens B55.13). */
-  setRules: (id: string, rules: AgentRules, assertion?: PasskeyAssertion) =>
+  setRules: (id: string, rules: AgentRulesSave, assertion?: PasskeyAssertion) =>
     send<AgentRules>('PUT', `/api/agents/${e(id)}/rules`, assertion ? { rules, assertion } : rules),
   /** B55.14 — what a change would do to the agent's rules, and the challenge a looser one is signed over; saves nothing. */
   rulesChallenge: (id: string, change: RulesChange) => send<RulesJudgement>('POST', `/api/agents/${e(id)}/rules-challenge`, change),

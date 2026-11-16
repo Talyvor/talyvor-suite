@@ -158,6 +158,7 @@
   "src/areas/lens/pocketMoney.test.tsx": 10,
   "src/areas/lens/pushActions.test.ts": 14,
   "src/areas/lens/RecurringPlan.test.tsx": 5,
+  "src/areas/lens/RulesCurrency.test.tsx": 4,
   "src/areas/lens/RulesHistory.test.tsx": 3,
   "src/areas/lens/RuleSimulator.test.tsx": 3,
   "src/areas/lens/RulesPage.test.tsx": 4,
