@@ -332,3 +332,166 @@ export function contrastProblems(doc: Document): string[] {
   }
   return [...out]
 }
+
+/** B61.98 — one line of text as it is laid out: where it is, the colour its glyphs are painted, and whether it is large. */
+export interface TextLine {
+  name: string
+  x: number
+  y: number
+  w: number
+  h: number
+  /** The text's colour with its opacity, 0 to 255 and alpha 0 to 1. */
+  fg: [number, number, number, number]
+  /** WCAG's large text, held to 3:1: 24 px, or 18.66 px at bold. */
+  large: boolean
+}
+
+/**
+ * B61.98 — every line of text showing in the window, as textLines' boxes: one per line a text runs onto (a Range's
+ * client rects), clipped to the window and to the parts of it nothing else is laid over. It reads the text as contrastProblems does (a disabled control's words, a
+ * picture's, an svg's and anything hidden are not held to it) and, like it, is self-contained and needs a real browser.
+ */
+export function textLines(doc: Document): TextLine[] {
+  const win = doc.defaultView!
+  const canvas = doc.createElement('canvas')
+  canvas.width = canvas.height = 1
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  // Any way of writing a colour (rgb, oklch, color-mix): the browser paints it and the pixel is read.
+  const parse = (c: string): [number, number, number, number] => {
+    if (!ctx || !c || c === 'transparent') return [0, 0, 0, 0]
+    ctx.clearRect(0, 0, 1, 1)
+    ctx.fillStyle = c
+    ctx.fillRect(0, 0, 1, 1)
+    const d = ctx.getImageData(0, 0, 1, 1).data
+    return [d[0], d[1], d[2], d[3] / 255]
+  }
+  const opacity = (el: Element) => {
+    let o = 1
+    for (let e: Element | null = el; e; e = e.parentElement) o *= parseFloat(win.getComputedStyle(e).opacity || '1')
+    return o
+  }
+  const name = (el: Element) => `${el.tagName.toLowerCase()} “${(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60)}”`
+  const W = win.innerWidth
+  const H = win.innerHeight
+  // What floats over the page (the Help button), with room for its shadow: text it is laid over, or that sits in its
+  // shadow, is passed by here, as the press check passes by a control it covers.
+  const floating = Array.from(doc.body.querySelectorAll('*'))
+    .filter((e) => win.getComputedStyle(e).position === 'fixed' && win.getComputedStyle(e).pointerEvents !== 'none')
+    .map((e) => ({ e, r: e.getBoundingClientRect() }))
+    .filter(({ r }) => r.width > 0 && r.height > 0 && (r.width < W || r.height < H))
+  const SHADOW = 24
+  const out: TextLine[] = []
+  for (const el of Array.from(doc.body.querySelectorAll('*'))) {
+    if (el.closest('script, style, svg, option, [role="img"], [disabled], [aria-disabled="true"], [hidden], [aria-hidden="true"]')) continue
+    if (typeof (el as HTMLElement).checkVisibility === 'function' && !(el as HTMLElement).checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue
+    const texts = Array.from(el.childNodes).filter((n) => n.nodeType === 3 && (n.nodeValue || '').trim())
+    if (!texts.length) continue
+    const cs = win.getComputedStyle(el)
+    const c = parse(cs.color)
+    const a = c[3] * opacity(el)
+    if (!a) continue
+    // A box a pixel wide is kept for screen readers only (sr-only).
+    if (cs.display !== 'inline' && ((el as HTMLElement).offsetWidth <= 1 || (el as HTMLElement).offsetHeight <= 1)) continue
+    const size = parseFloat(cs.fontSize)
+    const large = size >= 24 || (size >= 18.66 && parseInt(cs.fontWeight, 10) >= 700)
+    // One box per line: a text's fragments on the same line are joined.
+    const lines = new Map<number, { l: number; t: number; r: number; b: number }>()
+    for (const t of texts) {
+      const range = doc.createRange()
+      range.selectNodeContents(t)
+      for (const r of Array.from(range.getClientRects())) {
+        if (r.width < 1 || r.height < 1) continue
+        const key = Math.round(r.top + r.height / 2)
+        const line = lines.get(key)
+        if (line) Object.assign(line, { l: Math.min(line.l, r.left), t: Math.min(line.t, r.top), r: Math.max(line.r, r.right), b: Math.max(line.b, r.bottom) })
+        else lines.set(key, { l: r.left, t: r.top, r: r.right, b: r.bottom })
+      }
+    }
+    for (const r of lines.values()) {
+      const y = Math.max(0, Math.floor(r.t))
+      const h = Math.min(H, Math.ceil(r.b)) - y
+      if (h < 2) continue
+      // Only where the text is on top: a part something else is laid over (the Help button, a bar) is that thing's.
+      const mid = y + h / 2
+      const under = floating.filter(({ e, r: f }) => !e.contains(el) && y < f.bottom + SHADOW && y + h > f.top - SHADOW)
+      const mine = (x: number) => {
+        if (under.some(({ r: f }) => x > f.left - SHADOW && x < f.right + SHADOW)) return false
+        const top = doc.elementFromPoint(x, mid)
+        return !top || top === el || el.contains(top) || top.contains(el)
+      }
+      const left = Math.max(0, Math.floor(r.l))
+      const right = Math.min(W, Math.ceil(r.r))
+      for (let x = left; x < right; ) {
+        let end = x
+        while (end < right && mine(Math.min(right - 1, end + 1))) end = Math.min(right, end + 4)
+        if (end - x >= 2) out.push({ name: name(el), x, y, w: end - x, h, fg: [c[0], c[1], c[2], a], large })
+        x = end + 4
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * B61.98 — the contrast check on the real pixels: each line of text against what is drawn behind it. `bare` is the
+ * window's picture with every text drawn clear (the moving background, cards and all, as it stands); `drawn` the same
+ * moment with the text, so a line something else covers (no pixel of it differs) is passed by. Each line is cut into
+ * cells as wide as it is tall, about a glyph or two each, and every cell is held to 4.5:1 (3:1 for large text): the
+ * text's colour laid over each pixel behind it, against that pixel, averaged as light over the cell. So a whole wash
+ * behind a word counts, and a hairline stream crossing it is averaged with the glyph it crosses. Self-contained: it
+ * runs in the page that decodes the pictures.
+ */
+export function pixelContrastProblems(lines: TextLine[], bare: ArrayLike<number>, drawn: ArrayLike<number>, width: number, height: number): string[] {
+  const lin = (v: number) => {
+    const s = v / 255
+    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  }
+  const lum = (r: number, g: number, b: number) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+  const hex = (c: number[]) => '#' + c.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase()
+  const out: string[] = []
+  for (const line of lines) {
+    const x1 = Math.min(width, line.x + line.w)
+    const y1 = Math.min(height, line.y + line.h)
+    let differs = false
+    for (let y = line.y; y < y1 && !differs; y++) for (let x = line.x; x < x1; x++) {
+      const i = (y * width + x) * 4
+      if (Math.abs(bare[i] - drawn[i]) > 2 || Math.abs(bare[i + 1] - drawn[i + 1]) > 2 || Math.abs(bare[i + 2] - drawn[i + 2]) > 2) {
+        differs = true
+        break
+      }
+    }
+    if (!differs) continue
+    const [fr, fg, fb, fa] = line.fg
+    const cell = Math.max(8, line.h)
+    let worst = Infinity
+    let at: number[] = []
+    for (let cx = line.x; cx < x1; cx += cell) {
+      const cx1 = Math.min(x1, cx + cell)
+      if (cx1 - cx < 2) continue
+      let lt = 0
+      let lb = 0
+      let n = 0
+      const sum = [0, 0, 0]
+      for (let y = line.y; y < y1; y++) for (let x = cx; x < cx1; x++) {
+        const i = (y * width + x) * 4
+        const [r, g, b] = [bare[i], bare[i + 1], bare[i + 2]]
+        lb += lum(r, g, b)
+        lt += lum(fr * fa + r * (1 - fa), fg * fa + g * (1 - fa), fb * fa + b * (1 - fa))
+        sum[0] += r
+        sum[1] += g
+        sum[2] += b
+        n++
+      }
+      if (!n) continue
+      const [hi, lo] = [lt / n, lb / n].sort((p, q) => q - p)
+      const ratio = (hi + 0.05) / (lo + 0.05)
+      if (ratio < worst) {
+        worst = ratio
+        at = sum.map((s) => s / n)
+      }
+    }
+    const need = line.large ? 3 : 4.5
+    if (worst < need) out.push(`text at ${worst.toFixed(2)}:1 over the background (needs ${need}): ${line.name} (${hex([fr, fg, fb])}${fa < 1 ? ` at ${Math.round(fa * 100)}%` : ''} on ${hex(at)})`)
+  }
+  return out
+}

@@ -499,7 +499,7 @@ function AgentsList() {
   return (
     <div className="grid min-w-0 gap-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <p className="max-w-3xl text-reading text-ink-2" data-testid="agents-totals">
+        <p className="max-w-3xl text-reading pk-on-bg" data-testid="agents-totals">
           Each agent spends its own money, inside its own rules.
         </p>
         <div className="flex flex-wrap gap-2.5">

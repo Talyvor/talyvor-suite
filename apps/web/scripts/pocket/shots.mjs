@@ -9,6 +9,15 @@
  * and every dark shot also runs the contrast check: every text pair at 4.5:1, every field's and switch's edge at 3:1.
  * --no-press leaves out the press check, which opens a fresh page for each control and is most of the time a sweep takes.
  *
+ *   pnpm --filter @talyvor/web pocket:shots <item> --pixels [checks.json]
+ *
+ * B61.98 — --pixels is the contrast check on the real pixels, over the moving background: each check (with no checks file,
+ * routes.ts's BACKGROUND_PAGES: the seven sidebar pages, sign-in, sign-up and welcome) in light and dark at both sizes,
+ * with the background frozen at 0, 4, 8 and 12 s (its CSS animations paused at that time, the streams' canvas drawn by a
+ * paused clock run on to it). At each moment the window is shot twice, as it is and with every text drawn clear, and
+ * every line of text in the window is held to 4.5:1 (3:1 large) against the pixels behind it (pocketCheck's
+ * pixelContrastProblems). It writes the 0 s frame of each, as <name>-pixels[-dark]-<size>.png, and needs no reference.
+ *
  * checks.json is a list of { route, screen, steps?, dark?, frame?, answers?, state? }: the app's address, the reference's screen id
  * (README.md's tables; leave it out for a page with no reference, such as the story page), the words or aria-labels to press in the app to reach the screen as a person would
  * (w-home+sheet-A is reached by pressing "Review"), whether to shoot it dark, and whether the reference is only the
@@ -54,12 +63,13 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 const args = process.argv.slice(2)
 const DARK = args.includes('--dark')
 const PRESS = !args.includes('--no-press')
+const PIXELS = args.includes('--pixels')
 const [item, checksArg] = args.filter((a) => !a.startsWith('--'))
-if (!item || (!checksArg && !DARK) || !/^[\w.-]+$/.test(item)) {
-  console.error('usage: pnpm --filter @talyvor/web pocket:shots <item> <checks.json> | <item> --dark [checks.json] [--no-press]')
+if (!item || (!checksArg && !DARK && !PIXELS) || !/^[\w.-]+$/.test(item)) {
+  console.error('usage: pnpm --filter @talyvor/web pocket:shots <item> <checks.json> | <item> --dark [checks.json] [--no-press] | <item> --pixels [checks.json]')
   process.exit(2)
 }
-if (!existsSync(join(REFERENCE, 'index.html'))) {
+if (!PIXELS && !existsSync(join(REFERENCE, 'index.html'))) {
   console.error(`no Pocket reference at ${REFERENCE}: set POCKET_REFERENCE`)
   process.exit(2)
 }
@@ -69,9 +79,10 @@ const overrides = JSON.parse(await readFile(join(WEB, 'scripts/pocket/overrides.
 const loader = await createServer({ root: WEB, logLevel: 'error', server: { middlewareMode: true, hmr: false }, appType: 'custom', optimizeDeps: { noDiscovery: true } })
 const { sampleBodyFor, sampleReset, SAMPLE_NOW, SAMPLE_TIME_ZONE } = await loader.ssrLoadModule('/scripts/pocket/sample.ts')
 const check = await loader.ssrLoadModule('/src/test/pocketCheck.ts')
-const { SHOT_ROUTES } = await loader.ssrLoadModule('/scripts/pocket/routes.ts')
+const { SHOT_ROUTES, BACKGROUND_PAGES } = await loader.ssrLoadModule('/scripts/pocket/routes.ts')
 // pnpm runs the script in apps/web; a relative path means where the person typed it.
-const checks = (checksArg ? JSON.parse(await readFile(resolve(process.env.INIT_CWD || process.cwd(), checksArg), 'utf8')) : Object.values(SHOT_ROUTES).map((route) => ({ route }))).map(
+const fallback = PIXELS ? BACKGROUND_PAGES : Object.values(SHOT_ROUTES).map((route) => ({ route }))
+const checks = (checksArg ? JSON.parse(await readFile(resolve(process.env.INIT_CWD || process.cwd(), checksArg), 'utf8')) : fallback).map(
   (c) => (DARK ? { ...c, dark: true } : c),
 )
 await loader.close()
@@ -130,11 +141,23 @@ async function press(page, words) {
 }
 
 /** The app at `route` after `steps`, in a fresh page at `size`. */
-async function openApp(c, size) {
+async function openApp(c, size, { clock = false } = {}) {
   sampleReset()
   const ctx = await browser.newContext({ viewport: size, timezoneId: SAMPLE_TIME_ZONE, colorScheme: c.dark ? 'dark' : 'light' })
   const page = await ctx.newPage()
-  await page.clock.setFixedTime(new Date(SAMPLE_NOW))
+  if (clock) {
+    // B61.98 — a clock the check can stop and run on (the streams draw on its frames), and the same streams every run.
+    await page.clock.install({ time: new Date(SAMPLE_NOW) })
+    await page.addInitScript(() => {
+      let s = 0x5eed
+      Math.random = () => {
+        s = (s + 0x6d2b79f5) | 0
+        let r = Math.imul(s ^ (s >>> 15), 1 | s)
+        r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296
+      }
+    })
+  } else await page.clock.setFixedTime(new Date(SAMPLE_NOW))
   const t = tracker(page)
   if (c.answers) {
     await page.route(
@@ -230,6 +253,81 @@ async function deadControls(c) {
     }
   }
   return dead
+}
+
+/**
+ * B61.98 — the contrast check on the real pixels: the page frozen at each moment, shot as it is and with its text drawn
+ * clear, and every line of text measured against the pixels behind it. Returns its problems, each once.
+ */
+const MOMENTS = [0, 4, 8, 12]
+const CLEAR_TEXT = '*, *::before, *::after, *::placeholder { color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; text-decoration-color: transparent !important; caret-color: transparent !important; }'
+async function pixelProblems(c, size, file) {
+  const { ctx, page, missed } = await openApp(c, size, { clock: true })
+  const found = new Set(missed ? [missed] : [])
+  try {
+    await page.evaluate(() => document.fonts.ready)
+    // No transition runs while the text is drawn clear and back, so each picture is the moment it says.
+    await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; }' })
+    await page.clock.pauseAt(new Date(new Date(SAMPLE_NOW).getTime() + 60_000))
+    const decoder = await browser.newPage()
+    for (const [n, t] of MOMENTS.entries()) {
+      if (n) await page.clock.runFor((t - MOMENTS[n - 1]) * 1000)
+      await page.evaluate((ms) => document.getAnimations().forEach((a) => (a.pause(), (a.currentTime = ms))), t * 1000)
+      const drawn = await page.screenshot()
+      if (!n) await sideBySide(drawn, null, file, `The app at ${size.width}x${size.height}, the background at 0 s`)
+      const lines = await page.evaluate(`(${check.textLines})(document)`)
+      const clear = await page.addStyleTag({ content: CLEAR_TEXT })
+      const bare = await page.screenshot()
+      await clear.evaluate((el) => el.remove())
+      const problems = await decoder.evaluate(
+        async ([lines, bare, drawn, fn]) => {
+          const read = async (b64) => {
+            const img = new Image()
+            img.src = 'data:image/png;base64,' + b64
+            await img.decode()
+            const cv = document.createElement('canvas')
+            cv.width = img.naturalWidth
+            cv.height = img.naturalHeight
+            const g = cv.getContext('2d', { willReadFrequently: true })
+            g.drawImage(img, 0, 0)
+            return g.getImageData(0, 0, cv.width, cv.height)
+          }
+          const [b, d] = [await read(bare), await read(drawn)]
+          return (0, eval)(`(${fn})`)(lines, b.data, d.data, b.width, b.height)
+        },
+        [lines, bare.toString('base64'), drawn.toString('base64'), String(check.pixelContrastProblems)],
+      )
+      for (const p of problems) found.add(`${p} at ${t} s`)
+    }
+    await decoder.close()
+  } finally {
+    await ctx.close()
+  }
+  return [...found]
+}
+
+if (PIXELS) {
+  for (const c of checks) {
+    const name = c.route.replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '') || 'home'
+    for (const dark of [false, true]) {
+      const label = `${name}${dark ? '-dark' : ''}`
+      console.log(`\n${label} — the app at ${c.route}, the background frozen at ${MOMENTS.join(', ')} s`)
+      for (const size of SIZES) {
+        const file = join(OUT, `${name}-pixels${dark ? '-dark' : ''}-${size.name}.png`)
+        const found = await pixelProblems({ ...c, dark }, size, file)
+        console.log(`  wrote ${file.slice(REPO.length + 1)}${found.length ? `, ${found.length} line${found.length === 1 ? '' : 's'} under` : ''}`)
+        for (const p of found) failures.push(`${label} at ${size.name}: ${p}`)
+      }
+    }
+  }
+  await browser.close()
+  server.close()
+  if (failures.length) {
+    console.log(`\n${failures.length} problem${failures.length === 1 ? '' : 's'}:\n${failures.map((f) => `  ✗ ${f}`).join('\n')}`)
+    process.exit(1)
+  }
+  console.log(`\nevery line of text on ${checks.length} page${checks.length === 1 ? '' : 's'}, light and dark, at both sizes and at ${MOMENTS.join(', ')} s, reads at 4.5:1 (3:1 large) on the pixels behind it`)
+  process.exit(0)
 }
 
 for (const c of checks) {

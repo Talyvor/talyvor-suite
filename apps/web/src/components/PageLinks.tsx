@@ -169,7 +169,7 @@ export function SignedIn() {
   const line = self ? `Signed in as ${who}, ${self.role === 'owner' ? 'the owner' : 'a member'} of ${where}.` : `Signed in as ${who}.`
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <p className="min-w-0 truncate text-reading text-ink-2" title={email} data-testid="settings-signed-in">
+      <p className="min-w-0 truncate text-reading pk-on-bg" title={email} data-testid="settings-signed-in">
         {line}
       </p>
       <Button
