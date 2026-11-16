@@ -125,15 +125,18 @@ export function everyScreen(): Scenario {
   }
 }
 
-/** B29.2, B58.16 — the two dark planes, as the browser paints them: Pocket's page #0F1013 and cloud #181A1F
- *  (packages/ui/src/theme.css), the logo kit's dark page. brand-v4's Obsidian and Surface are retired. */
-export const DARK_PLANES = { canvas: 'rgb(15, 16, 19)', sidebar: 'rgb(24, 26, 31)' } as const
+/** B29.2, B58.16, B17.475 — the dark planes, as the browser paints them: the canvas is Pocket's page #0F1013
+ *  (packages/ui/src/theme.css), the logo kit's dark page, and the sidebar is a solid page panel set apart by its
+ *  hairline #2A2E36, as Pocket Live draws it (design/pocket-live DESIGN.md: "The sidebar stays a solid `page` panel
+ *  with its hairline"). brand-v4's Obsidian and Surface are retired. */
+export const DARK_PLANES = { canvas: 'rgb(15, 16, 19)', sidebar: 'rgb(15, 16, 19)', hairline: 'rgb(42, 46, 54)' } as const
 
 export function brandPlanes(): Scenario {
   return {
     id: 'brand-planes',
     owner: 'talyvor-suite',
-    title: 'in the dark theme the page canvas is Pocket’s page and the sidebar its cloud',
+    items: ['B29.2', 'B58.16', 'B17.475'],
+    title: 'in the dark theme the page canvas and the sidebar are Pocket’s page, the sidebar set apart by its hairline',
     run: async (ctx) => {
       const page = await ctx.app.tab('/')
       try {
@@ -141,15 +144,20 @@ export function brandPlanes(): Scenario {
         // The theme a person picks is the attribute on <html>; setting it here leaves their stored choice alone.
         const seen = await page.evaluate(() => {
           document.documentElement.setAttribute('data-theme', 'dark')
+          const aside = document.querySelector('aside[aria-label="Primary"]')
           const bg = (el: Element | null) => (el === null ? 'no element' : getComputedStyle(el).backgroundColor)
-          return { canvas: bg(document.body), sidebar: bg(document.querySelector('aside[aria-label="Primary"]')) }
+          return {
+            canvas: bg(document.body),
+            sidebar: bg(aside),
+            hairline: aside === null || getComputedStyle(aside).borderRightWidth === '0px' ? 'no hairline' : getComputedStyle(aside).borderRightColor,
+          }
         })
-        ctx.evidence.push({ note: `dark: canvas ${seen.canvas}, sidebar ${seen.sidebar}` })
+        ctx.evidence.push({ note: `dark: canvas ${seen.canvas}, sidebar ${seen.sidebar}, its hairline ${seen.hairline}` })
         const wrong = (Object.keys(DARK_PLANES) as (keyof typeof DARK_PLANES)[])
           .filter((k) => seen[k] !== DARK_PLANES[k])
           .map((k) => `the ${k} is ${seen[k]}, not ${DARK_PLANES[k]}`)
         return wrong.length === 0
-          ? { pass: true, detail: `dark canvas ${seen.canvas} and sidebar ${seen.sidebar}, as Pocket draws them` }
+          ? { pass: true, detail: `dark canvas ${seen.canvas} and sidebar ${seen.sidebar} with its hairline ${seen.hairline}, as Pocket Live draws them` }
           : { pass: false, detail: wrong.join('; '), where: ['/'] }
       } finally {
         await page.close()
