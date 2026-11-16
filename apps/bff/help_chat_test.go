@@ -24,6 +24,11 @@ type helpLens struct {
 	keysSeen []string
 }
 
+// devHelpWho is the loopback-dev person's chat in ws.
+func devHelpWho(ws string) helpWho {
+	return helpWho{ws: ws, person: helpPersonKey(tenant{person: devIdentity})}
+}
+
 func newHelpApp(t *testing.T, l *helpLens, key string, perDay int) *app {
 	t.Helper()
 	own := deriveWorkspaceIDLikeLens(devIdentity)
@@ -266,22 +271,22 @@ func TestHelpChatKeptThirtyDaysInPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-31 * 24 * time.Hour)
-	_ = first.add(ctx, "ws_a", helpMessage{By: "you", Text: "old", At: old}, helpMessage{By: "you", Text: "new", At: time.Now()})
-	_ = first.add(ctx, "ws_b", helpMessage{By: "you", Text: "theirs", At: time.Now()})
+	_ = first.add(ctx, helpWho{"ws_a", "p_a"}, helpMessage{By: "you", Text: "old", At: old}, helpMessage{By: "you", Text: "new", At: time.Now()})
+	_ = first.add(ctx, helpWho{"ws_b", "p_b"}, helpMessage{By: "you", Text: "theirs", At: time.Now()})
 
 	again := newHelpStore()
 	if err := again.useDB(ctx, db.pool); err != nil {
 		t.Fatal(err)
 	}
-	got, err := again.chat(ctx, "ws_a")
+	got, err := again.chat(ctx, helpWho{"ws_a", "p_a"})
 	if err != nil || len(got) != 1 || got[0].Text != "new" {
 		t.Fatalf("after a restart ws_a's chat = %+v %v, want the one message under 30 days", got, err)
 	}
-	_ = again.forget(ctx, "ws_a")
-	if got, _ := again.chat(ctx, "ws_a"); len(got) != 0 {
+	_ = again.forget(ctx, helpWho{"ws_a", "p_a"})
+	if got, _ := again.chat(ctx, helpWho{"ws_a", "p_a"}); len(got) != 0 {
 		t.Errorf("deleted, ws_a's chat = %+v", got)
 	}
-	if got, _ := again.chat(ctx, "ws_b"); len(got) != 1 {
+	if got, _ := again.chat(ctx, helpWho{"ws_b", "p_b"}); len(got) != 1 {
 		t.Errorf("ws_b's chat = %+v, want it untouched", got)
 	}
 	for i := 1; i <= 3; i++ {
@@ -291,7 +296,7 @@ func TestHelpChatKeptThirtyDaysInPostgres(t *testing.T) {
 		}
 	}
 	// B61.65: a closed account's chat and its questions counted go, rows and all; ws_b's stay.
-	_ = again.add(ctx, "ws_a", helpMessage{By: "you", Text: "before closing", At: time.Now()})
+	_ = again.add(ctx, helpWho{"ws_a", "p_a"}, helpMessage{By: "you", Text: "before closing", At: time.Now()})
 	if err := again.closed(ctx, "ws_a"); err != nil {
 		t.Fatal(err)
 	}
@@ -307,8 +312,25 @@ func TestHelpChatKeptThirtyDaysInPostgres(t *testing.T) {
 	if shut, _ := again.isClosed(ctx, "ws_b"); shut {
 		t.Error("ws_b reads as closed")
 	}
-	if got, _ := again.chat(ctx, "ws_b"); len(got) != 1 {
+	if got, _ := again.chat(ctx, helpWho{"ws_b", "p_b"}); len(got) != 1 {
 		t.Errorf("ws_b's chat = %+v, want it untouched by ws_a's closing", got)
+	}
+	// B61.69: each person's chat is their own, and one kept before (no person) stays with the account's owner, the one
+	// person who holds it and opens Help on it.
+	if _, err := db.pool.Exec(ctx, `INSERT INTO help_messages (workspace_id, by_whom, body, page, team, topic, at)
+		VALUES ('ws_c', 'you', 'kept before', '', false, '', now())`); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := again.chat(ctx, helpWho{"ws_c", "p_owner"}); len(got) != 1 || got[0].Text != "kept before" {
+		t.Errorf("the owner's chat = %+v, want the one kept before", got)
+	}
+	_ = again.add(ctx, helpWho{"ws_c", "p_member"}, helpMessage{By: "you", Text: "the member's", At: time.Now()})
+	if got, _ := again.chat(ctx, helpWho{"ws_c", "p_member"}); len(got) != 1 || got[0].Text != "the member's" {
+		t.Errorf("the member's chat = %+v, want their own line only", got)
+	}
+	_ = again.forget(ctx, helpWho{"ws_c", "p_member"})
+	if got, _ := again.chat(ctx, helpWho{"ws_c", "p_owner"}); len(got) != 1 {
+		t.Errorf("after the member deleted theirs the owner's chat = %+v, want it kept", got)
 	}
 }
 
@@ -333,5 +355,74 @@ func TestHelpWritesRefuseAnotherSite(t *testing.T) {
 	}
 	for ws, msgs := range a.help.chats {
 		t.Errorf("a refused write kept %s's chat: %+v", ws, msgs)
+	}
+}
+
+// helpAs is one request to a Help route as a person on the dev workspace: the route's handler, called with that
+// person's tenant, as requireTenant would call it for their session.
+func helpAs(t *testing.T, a *app, person string, h func(http.ResponseWriter, *http.Request, tenant), method, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	own := deriveWorkspaceIDLikeLens(devIdentity)
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h(rec, req, tenant{workspaceID: own, token: "jwt-for-" + own, person: person})
+	return rec
+}
+
+// B61.69 — two people in one account each see, send and delete only their own Help chat; the day's limit stays the
+// account's.
+func TestHelpChatIsThePersonsOwn(t *testing.T) {
+	l := &helpLens{said: `{"answer":"","page":"","known":false,"team":false}`}
+	a := newHelpApp(t, l, testHelpKey, 3)
+	helpAs(t, a, "owner-identity", a.handleHelpAsk, http.MethodPost, "/api/help/ask", `{"question":"Where is the owner's statement?"}`)
+	helpAs(t, a, "member-identity", a.handleHelpAsk, http.MethodPost, "/api/help/ask", `{"question":"Where is the member's card?"}`)
+
+	for person, want := range map[string]string{"owner-identity": "owner's", "member-identity": "member's"} {
+		kept := helpAs(t, a, person, a.handleHelpChat, http.MethodGet, "/api/help/chat", "").Body.String()
+		other := map[string]string{"owner's": "member's", "member's": "owner's"}[want]
+		if !strings.Contains(kept, want) || strings.Contains(kept, other) {
+			t.Errorf("%s reads %s, want their own question only", person, kept)
+		}
+	}
+
+	helpAs(t, a, "member-identity", a.handleHelpTeam, http.MethodPost, "/api/help/team", `{}`)
+	if len(l.filed) != 1 || !strings.Contains(l.filed[0], "member's card") || strings.Contains(l.filed[0], "owner's") {
+		t.Errorf("the member's Send to our team filed %q, want their own lines only", l.filed)
+	}
+
+	helpAs(t, a, "member-identity", a.handleHelpChat, http.MethodDelete, "/api/help/chat", "")
+	if kept := helpAs(t, a, "owner-identity", a.handleHelpChat, http.MethodGet, "/api/help/chat", "").Body.String(); !strings.Contains(kept, "owner's") {
+		t.Errorf("the member's delete took the owner's chat: %s", kept)
+	}
+
+	helpAs(t, a, "owner-identity", a.handleHelpAsk, http.MethodPost, "/api/help/ask", `{"question":"three?"}`)
+	if rec := helpAs(t, a, "member-identity", a.handleHelpAsk, http.MethodPost, "/api/help/ask", `{"question":"four?"}`); rec.Code != http.StatusTooManyRequests {
+		t.Errorf("the account's fourth question = %d, want 429: the day's limit is the account's", rec.Code)
+	}
+}
+
+// B61.69 — with HELP_MODEL set, Help asks that model and never reads Lens's catalog.
+func TestHelpModelSettingNeedsNoCatalog(t *testing.T) {
+	l := &helpLens{said: `{"answer":"Yes.","page":"","known":true,"team":false}`}
+	a := newHelpApp(t, l, testHelpKey, 0)
+	a.cfg.helpModel = "claude-set-for-help"
+	var catalog int
+	base := a.client.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	a.client.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if strings.HasPrefix(r.URL.Path, "/v1/catalog") {
+			catalog++
+		}
+		return base.RoundTrip(r)
+	})
+	_, msgs, _ := helpReply(t, a, `{"question":"Can I fund an agent?"}`)
+	if got := lastOf(t, msgs); got.Text != "Yes." || len(l.bodies) != 1 || l.bodies[0]["model"] != "claude-set-for-help" {
+		t.Errorf("reply %+v on model %v, want the answer on HELP_MODEL", got, l.bodies)
+	}
+	if catalog != 0 {
+		t.Errorf("Help read Lens's catalog %d times with HELP_MODEL set", catalog)
 	}
 }

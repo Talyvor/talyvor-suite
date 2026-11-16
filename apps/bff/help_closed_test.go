@@ -33,7 +33,7 @@ func TestHelpChatGoesWhenTalyvorClosesTheAccount(t *testing.T) {
 		authMode: authModeDisabled, operatorReadKey: testOperatorReadKey}, nil)
 	ctx := context.Background()
 	for _, ws := range []string{"ws_closed", "ws_open"} {
-		_ = a.help.add(ctx, ws, helpMessage{By: "you", Text: "a question from " + ws, At: time.Now()})
+		_ = a.help.add(ctx, helpWho{ws, "p_" + ws}, helpMessage{By: "you", Text: "a question from " + ws, At: time.Now()})
 		_, _ = a.help.ask(ctx, ws, 1)
 	}
 
@@ -42,13 +42,13 @@ func TestHelpChatGoesWhenTalyvorClosesTheAccount(t *testing.T) {
 	if len(asked) != 1 {
 		t.Fatalf("Lens was asked %q, want the operator inbox once", asked)
 	}
-	if got, _ := a.help.chat(ctx, "ws_closed"); len(got) != 0 {
+	if got, _ := a.help.chat(ctx, helpWho{"ws_closed", "p_ws_closed"}); len(got) != 0 {
 		t.Errorf("the closed account's Help chat = %+v, want it gone", got)
 	}
 	if ok, _ := a.help.ask(ctx, "ws_closed", 1); !ok {
 		t.Error("the closed account's questions counted today were kept")
 	}
-	if got, _ := a.help.chat(ctx, "ws_open"); len(got) != 1 {
+	if got, _ := a.help.chat(ctx, helpWho{"ws_open", "p_ws_open"}); len(got) != 1 {
 		t.Errorf("an open account's Help chat = %+v, want it kept", got)
 	}
 }
@@ -63,17 +63,17 @@ func TestHelpChatGoesWhenTheAccountReadsItsClosureDone(t *testing.T) {
 			`"filed_by":"user:u_1","message":"","answer":"","filed_at":"2026-11-14T09:00:00Z","updated_at":"2026-11-15T09:00:00Z"}]}`)
 	}, &calls)
 	own := deriveWorkspaceIDLikeLens(devIdentity)
-	_ = a.help.add(context.Background(), own, helpMessage{By: "you", Text: "How do I close my account?", At: time.Now()})
+	_ = a.help.add(context.Background(), devHelpWho(own), helpMessage{By: "you", Text: "How do I close my account?", At: time.Now()})
 
 	doJSON(a, http.MethodGet, "/api/workspace/requests", "")
-	if got, _ := a.help.chat(context.Background(), own); len(got) != 1 {
+	if got, _ := a.help.chat(context.Background(), devHelpWho(own)); len(got) != 1 {
 		t.Fatalf("with the closure in progress the Help chat = %+v, want it kept", got)
 	}
 	state = "done"
 	if rec := doJSON(a, http.MethodGet, "/api/workspace/requests", ""); rec.Code != http.StatusOK {
 		t.Fatalf("GET /api/workspace/requests = %d %s", rec.Code, rec.Body.String())
 	}
-	if got, _ := a.help.chat(context.Background(), own); len(got) != 0 {
+	if got, _ := a.help.chat(context.Background(), devHelpWho(own)); len(got) != 0 {
 		t.Errorf("with the closure done the Help chat = %+v, want it gone", got)
 	}
 }

@@ -2,7 +2,7 @@ package main
 
 // help_chat.go — B61.38: Help is a chat, answered by AI, with our team one press away.
 //
-//	GET    /api/help/chat                       the workspace's Help chat, kept 30 days → {"messages": [...], "kept_days": 30}
+//	GET    /api/help/chat                       the person's Help chat, kept 30 days → {"messages": [...], "kept_days": 30}
 //	DELETE /api/help/chat                       deletes it (Your data)
 //	POST   /api/help/ask {"question", "page"}   asks; answers the chat with the reply last. 429 past the day's questions.
 //	POST   /api/help/team                       files the chat so far as a support request (as Help's form does)
@@ -20,11 +20,19 @@ package main
 // THE TEAM. When the pages do not answer, when the person asks for a person, and for a payment gone wrong, a locked
 // account, a complaint or their data, the reply offers "Send to our team" (team: true). Those topics are recognised
 // here before any model call (helpTeamTopic), so they never depend on the model choosing to say so.
+//
+// A CHAT IS THE PERSON'S (B61.69). It is kept by the account and the person who asked (the session's identity, held
+// only as a hash, helpPersonKey), and only that person reads it, sends it to the team or deletes it: a member's
+// question is never shown to the owner or another member. The day's limit stays the account's. The model is
+// HELP_MODEL; only when that is unset is Lens's catalog asked, which Lens answers only where the old gateway's area
+// is on.
 
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -170,11 +178,26 @@ func helpRedact(s string) string {
 
 var helpPagePattern = regexp.MustCompile(`^/[a-z0-9/_-]{0,80}$`)
 
-// helpStore keeps each workspace's Help chat for helpKeptFor and counts its questions a day. With BFF_DATABASE_URL set
-// it is Postgres (help_store.sql), so a chat survives a restart; without it, memory.
+// helpPersonKey is the key a person's Help chat is kept under: a hash of their identity, so the store never holds
+// the identity itself. Empty without one.
+func helpPersonKey(t tenant) string {
+	if t.person == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte("talyvor-help\x00" + t.person))
+	return "h" + hex.EncodeToString(sum[:16])
+}
+
+// helpWho is whose chat: the account and the person in it (helpPersonKey).
+type helpWho struct{ ws, person string }
+
+func helpWhoOf(t tenant) helpWho { return helpWho{ws: t.workspaceID, person: helpPersonKey(t)} }
+
+// helpStore keeps each person's Help chat for helpKeptFor and counts each workspace's questions a day. With
+// BFF_DATABASE_URL set it is Postgres (help_store.sql), so a chat survives a restart; without it, memory.
 type helpStore struct {
 	mu    sync.Mutex
-	chats map[string][]helpMessage
+	chats map[helpWho][]helpMessage
 	asked map[string]int  // workspace + "|" + UTC day
 	shut  map[string]bool // workspaces Talyvor closed (help_closed.go)
 	db    *pgxpool.Pool
@@ -182,7 +205,7 @@ type helpStore struct {
 }
 
 func newHelpStore() *helpStore {
-	return &helpStore{chats: map[string][]helpMessage{}, asked: map[string]int{}, shut: map[string]bool{}, now: time.Now}
+	return &helpStore{chats: map[helpWho][]helpMessage{}, asked: map[string]int{}, shut: map[string]bool{}, now: time.Now}
 }
 
 func (s *helpStore) useDB(ctx context.Context, pool *pgxpool.Pool) error {
@@ -193,13 +216,19 @@ func (s *helpStore) useDB(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-func (s *helpStore) chat(ctx context.Context, ws string) ([]helpMessage, error) {
+func (s *helpStore) chat(ctx context.Context, who helpWho) ([]helpMessage, error) {
 	since := s.now().Add(-helpKeptFor)
 	if s.db != nil {
 		if _, err := s.db.Exec(ctx, `DELETE FROM help_messages WHERE at < $1`, since); err != nil {
 			return nil, err
 		}
-		rows, err := s.db.Query(ctx, `SELECT by_whom, body, page, team, topic, at FROM help_messages WHERE workspace_id = $1 ORDER BY id`, ws)
+		// The chats kept before B61.69 have no person, and stay with the workspace's owner. Lens lets one person hold
+		// an account (talyvor-lens person_accounts, keyed by the account), so the person who opens Help on it is
+		// its owner, and takes them.
+		if _, err := s.db.Exec(ctx, `UPDATE help_messages SET person = $2 WHERE workspace_id = $1 AND person = ''`, who.ws, who.person); err != nil {
+			return nil, err
+		}
+		rows, err := s.db.Query(ctx, `SELECT by_whom, body, page, team, topic, at FROM help_messages WHERE workspace_id = $1 AND person = $2 ORDER BY id`, who.ws, who.person)
 		if err != nil {
 			return nil, err
 		}
@@ -217,20 +246,20 @@ func (s *helpStore) chat(ctx context.Context, ws string) ([]helpMessage, error) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := []helpMessage{}
-	for _, m := range s.chats[ws] {
+	for _, m := range s.chats[who] {
 		if !m.At.Before(since) {
 			out = append(out, m)
 		}
 	}
-	s.chats[ws] = out
+	s.chats[who] = out
 	return append([]helpMessage{}, out...), nil
 }
 
-func (s *helpStore) add(ctx context.Context, ws string, msgs ...helpMessage) error {
+func (s *helpStore) add(ctx context.Context, who helpWho, msgs ...helpMessage) error {
 	if s.db != nil {
 		for _, m := range msgs {
-			if _, err := s.db.Exec(ctx, `INSERT INTO help_messages (workspace_id, by_whom, body, page, team, topic, at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-				ws, m.By, m.Text, m.Page, m.Team, m.Topic, m.At); err != nil {
+			if _, err := s.db.Exec(ctx, `INSERT INTO help_messages (workspace_id, person, by_whom, body, page, team, topic, at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				who.ws, who.person, m.By, m.Text, m.Page, m.Team, m.Topic, m.At); err != nil {
 				return err
 			}
 		}
@@ -238,18 +267,19 @@ func (s *helpStore) add(ctx context.Context, ws string, msgs ...helpMessage) err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.chats[ws] = append(s.chats[ws], msgs...)
+	s.chats[who] = append(s.chats[who], msgs...)
 	return nil
 }
 
-func (s *helpStore) forget(ctx context.Context, ws string) error {
+// forget deletes the person's chat, and no one else's in the account.
+func (s *helpStore) forget(ctx context.Context, who helpWho) error {
 	if s.db != nil {
-		_, err := s.db.Exec(ctx, `DELETE FROM help_messages WHERE workspace_id = $1`, ws)
+		_, err := s.db.Exec(ctx, `DELETE FROM help_messages WHERE workspace_id = $1 AND person = $2`, who.ws, who.person)
 		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.chats, ws)
+	delete(s.chats, who)
 	return nil
 }
 
@@ -286,9 +316,13 @@ func (a *app) helpQuestionsPerDay() int {
 
 // handleHelpChat — GET the chat, DELETE it.
 func (a *app) handleHelpChat(w http.ResponseWriter, r *http.Request, t tenant) {
+	who, ok := helpPerson(w, t)
+	if !ok {
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
-		msgs, err := a.help.chat(r.Context(), t.workspaceID)
+		msgs, err := a.help.chat(r.Context(), who)
 		if err != nil {
 			log.Printf("bff: help chat: %v", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not read the Help chat"})
@@ -296,7 +330,7 @@ func (a *app) handleHelpChat(w http.ResponseWriter, r *http.Request, t tenant) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"messages": msgs, "kept_days": int(helpKeptFor.Hours() / 24)})
 	case http.MethodDelete:
-		if err := a.help.forget(r.Context(), t.workspaceID); err != nil {
+		if err := a.help.forget(r.Context(), who); err != nil {
 			log.Printf("bff: help chat delete: %v", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not delete the Help chat"})
 			return
@@ -307,10 +341,24 @@ func (a *app) handleHelpChat(w http.ResponseWriter, r *http.Request, t tenant) {
 	}
 }
 
+// helpPerson is whose chat a request is, or a 401 when the session names no person.
+func helpPerson(w http.ResponseWriter, t tenant) (helpWho, bool) {
+	who := helpWhoOf(t)
+	if who.person == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Sign in again to use Help."})
+		return helpWho{}, false
+	}
+	return who, true
+}
+
 // handleHelpAsk — POST a question; the reply is the chat with the answer last.
 func (a *app) handleHelpAsk(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	who, ok := helpPerson(w, t)
+	if !ok {
 		return
 	}
 	var in struct {
@@ -340,7 +388,7 @@ func (a *app) handleHelpAsk(w http.ResponseWriter, r *http.Request, t tenant) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": helpClosedAccount}) // B61.65
 		return
 	}
-	before, err := a.help.chat(ctx, ws)
+	before, err := a.help.chat(ctx, who)
 	if err != nil {
 		log.Printf("bff: help ask: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not read the Help chat"})
@@ -372,7 +420,7 @@ func (a *app) handleHelpAsk(w http.ResponseWriter, r *http.Request, t tenant) {
 		reply = a.helpAnswer(ctx, t, before, question, page)
 	}
 	reply.At = a.help.now()
-	if err := a.help.add(ctx, ws, asked, reply); err != nil {
+	if err := a.help.add(ctx, who, asked, reply); err != nil {
 		log.Printf("bff: help keep: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not keep the Help chat"})
 		return
@@ -471,8 +519,15 @@ func helpUntag(q string) string {
 	return strings.NewReplacer("<question>", "", "</question>", "").Replace(q)
 }
 
-// helpModel is the model Help is asked on: Lens's catalog's newest Anthropic model, as Taly's is (talyModel).
+// helpCatalogMissing is said once: Lens has no catalog for Talyvor's own account, so Help needs HELP_MODEL.
+var helpCatalogMissing sync.Once
+
+// helpModel is the model Help is asked on: HELP_MODEL, or, when that is unset, Lens's catalog's newest Anthropic
+// model, as Taly's is (talyModel).
 func (a *app) helpModel(ctx context.Context) (string, error) {
+	if a.cfg.helpModel != "" {
+		return a.cfg.helpModel, nil
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.cfg.lensBaseURL+"/v1/catalog/models", nil)
 	if err != nil {
 		return "", err
@@ -485,6 +540,12 @@ func (a *app) helpModel(ctx context.Context) (string, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if resp.StatusCode == http.StatusNotFound {
+		helpCatalogMissing.Do(func() {
+			log.Printf("bff: help: Lens has no model catalog for HELP_LENS_KEY's account (GET /v1/catalog/models answered 404), " +
+				"so Help cannot answer: put the model Help should ask in HELP_MODEL in bff.env, for example the model Taly uses")
+		})
+	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("lens answered GET /v1/catalog/models %d", resp.StatusCode)
 	}
@@ -520,22 +581,26 @@ func (a *app) helpCall(ctx context.Context, body map[string]any) (talyAnswer, er
 	return answer, json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&answer)
 }
 
-// handleHelpTeam — POST: the chat so far, as kept (cut), filed as a support request in the help inbox, as Help's form
+// handleHelpTeam — POST: the person's chat so far, as kept (cut), filed as a support request in the help inbox, as Help's form
 // files one. The browser then opens the person's own email to Talyvor with the question.
 func (a *app) handleHelpTeam(w http.ResponseWriter, r *http.Request, t tenant) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
 		return
 	}
-	msgs, err := a.help.chat(r.Context(), t.workspaceID)
+	who, ok := helpPerson(w, t)
+	if !ok {
+		return
+	}
+	msgs, err := a.help.chat(r.Context(), who)
 	if err != nil || len(msgs) == 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Ask your question first."})
 		return
 	}
-	who := map[string]string{"you": "You", "ai": "Talyvor AI", "team": "Talyvor team"}
+	byWhom := map[string]string{"you": "You", "ai": "Talyvor AI", "team": "Talyvor team"}
 	lines := []string{}
 	for _, m := range msgs {
-		lines = append(lines, who[m.By]+": "+m.Text)
+		lines = append(lines, byWhom[m.By]+": "+m.Text)
 	}
 	// Help's form takes 4000 characters; the newest lines are the ones the team needs.
 	text := "From the Help chat.\n\n" + strings.Join(lines, "\n")

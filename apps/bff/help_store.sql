@@ -11,9 +11,13 @@ CREATE TABLE IF NOT EXISTS help_messages (
     at           timestamptz NOT NULL
 );
 CREATE INDEX IF NOT EXISTS help_messages_workspace ON help_messages (workspace_id, id);
+-- B61.69: a chat is the person's who asked, as helpPersonKey's hash of their identity. The rows kept before have none,
+-- and the workspace's owner takes them the first time they open Help (help_chat.go chat).
+ALTER TABLE help_messages ADD COLUMN IF NOT EXISTS person text NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS help_messages_person ON help_messages (workspace_id, person, id);
 CREATE INDEX IF NOT EXISTS help_messages_at ON help_messages (at);
 
--- How many questions a workspace asked on a UTC day, for the day's limit.
+-- How many questions a workspace asked on a UTC day, for the day's limit: the account's, whoever in it asked.
 CREATE TABLE IF NOT EXISTS help_asked (
     workspace_id text NOT NULL,
     day          date NOT NULL,
