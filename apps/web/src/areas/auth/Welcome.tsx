@@ -309,9 +309,9 @@ export function Welcome() {
       </header>
       <main className="relative mx-auto grid w-full max-w-5xl flex-1 content-start gap-4.5 px-gutter pb-16 pt-6 wide:px-10">
         <div>
-          <Eyebrow>A new workspace</Eyebrow>
+          <Eyebrow className="pk-on-bg">A new workspace</Eyebrow>
           <h1 className="mt-1 font-display text-title font-bold text-ink">Welcome to Talyvor</h1>
-          <p className="mt-1 text-reading text-ink-2">
+          <p className="mt-1 text-reading pk-on-bg">
             Every agent gets a wallet: a budget, rules and approvals, checked by Talyvor before the model is called or a payment moves.
           </p>
         </div>
@@ -327,7 +327,7 @@ export function Welcome() {
             <Link to="/">Go to Home</Link>
           </Button>
         </Card>
-        <CompanyLine className="mt-6" />
+        <CompanyLine onBackground className="mt-6" />
       </main>
       <SnackHost view={WELCOME_PATH} />
     </div>
