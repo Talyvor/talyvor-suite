@@ -1,0 +1,16 @@
+[
+  {
+    "route": "/?accounts=open",
+    "answers": {
+      "/api/accounts": {
+        "accounts": [
+          { "id": "ws_nicks_team", "name": "Northwind Studio", "type": "business", "kind": "hybrid", "opened_at": "2026-09-01T00:00:00Z", "current": true },
+          { "id": "ws_maya", "name": "Maya Lind", "type": "personal", "kind": "fiat", "opened_at": "2026-11-15T00:00:00Z", "current": false }
+        ]
+      },
+      "/api/workspace/name": { "id": "ws_nicks_team", "name": "Northwind Studio" }
+    }
+  },
+  { "route": "/accounts/new" },
+  { "route": "/settings" }
+]

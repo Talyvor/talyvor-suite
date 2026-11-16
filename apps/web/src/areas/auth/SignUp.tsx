@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Logo, cn } from '@talyvor/ui'
 import { Button, Field, Icon, Input, KindTile, PageBackground, Select, personalHues, pocketFocusRing } from '@talyvor/ui/pocket'
@@ -11,7 +12,8 @@ import { useAuthMeReader } from '../../lib/authMe'
 import { useSignupProbe } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
 import { usePricing } from '../marketing/pricingApi'
-import { agentBankApi } from '../lens/agentBankApi'
+import { AgentBankError, agentBankApi } from '../lens/agentBankApi'
+import { openAccount } from '../lens/accountsApi'
 import { DEVICES_KEY, PASSKEYS_KEY, deviceText } from '../lens/AgentBank'
 import { passkeysSupported, registerThisDevice } from '../lens/passkeys'
 import { IdentityChecks } from '../lens/IdentityChecks'
@@ -49,6 +51,12 @@ const PICK_KIND = 'Pick the kind of money.'
 
 export const SIGNUP_KEY_PATH = '/signup/key'
 export const SIGNUP_CONFIRM_PATH = '/signup/confirm'
+
+/** B61.9 — "Open another account": sign-up's steps for a person already signed in. The key step is left out: the
+ *  person's passkey or phone is theirs already. */
+export const ANOTHER_PATH = '/accounts/new'
+export const ANOTHER_CONFIRM_PATH = '/accounts/new/confirm'
+const ANOTHER_STEPS = [SIGNUP_STEPS[0], SIGNUP_STEPS[1], SIGNUP_STEPS[3]] as const
 
 /** The BFF's sign-up entry: /auth/login with the answers, landing on step 3. */
 function signupLoginHref(type: AccountType, kind: MoneyKind, profile: Profile): string {
@@ -94,24 +102,27 @@ function SignUpFrame({ children, label = <SandboxLabel /> }: { children: React.R
  *  B57.133 — a narrow screen gets P1's step bars instead: a bar a step, tangerine once reached, then "Step n of 4". */
 type StepAt = 1 | 2 | 3 | 4
 
-function Stepper({ at }: { at: StepAt }) {
+/** B61.9 — the steps a page walks: sign-up's four, or another account's three (no key: the person has theirs). */
+type Steps = readonly string[]
+
+function Stepper({ at, steps = SIGNUP_STEPS }: { at: StepAt; steps?: Steps }) {
   return (
     <>
       <p className="flex items-center gap-1.5 text-body font-semibold text-ink-2 wide:hidden">
-        {SIGNUP_STEPS.map((title, i) => (
+        {steps.map((title, i) => (
           <span key={title} aria-hidden="true" data-step-bar={i < at ? 'reached' : 'ahead'} className={cn('h-1.5 w-7 rounded-pill', i < at ? 'bg-tangerine' : 'bg-cloud-2')} />
         ))}
-        <span className="ml-2.5">{`Step ${at} of ${SIGNUP_STEPS.length}`}</span>
+        <span className="ml-2.5">{`Step ${at} of ${steps.length}`}</span>
       </p>
-      <StepDots at={at} />
+      <StepDots at={at} steps={steps} />
     </>
   )
 }
 
-function StepDots({ at }: { at: StepAt }) {
+function StepDots({ at, steps }: { at: StepAt; steps: Steps }) {
   return (
     <ol aria-label="Sign-up steps" className="hidden flex-wrap items-center gap-x-6 gap-y-2 wide:flex">
-      {SIGNUP_STEPS.map((title, i) => {
+      {steps.map((title, i) => {
         const n = i + 1
         const reached = n <= at
         return (
@@ -227,12 +238,14 @@ function ProfileField({ field, value, error, onChange, children }: {
 }
 
 /** Step 1 (P1's words): who the account is for, and the profile for that type. */
-function StepWho({ type, setType, profile, setProfile, onContinue }: {
+function StepWho({ type, setType, profile, setProfile, onContinue, another = false }: {
   type: AccountType | null
   setType: (t: AccountType) => void
   profile: Profile
   setProfile: (p: Profile) => void
   onContinue: () => void
+  /** B61.9 — a signed-in person opening another account: no sign-in, waitlist or stranger's notes. */
+  another?: boolean
 }) {
   const { signup } = useSignupProbe()
   const [tried, setTried] = useState(false)
@@ -249,7 +262,7 @@ function StepWho({ type, setType, profile, setProfile, onContinue }: {
         if (!Object.keys(missing(type, profile)).length) onContinue()
       }}
     >
-      <Stepper at={1} />
+      <Stepper at={1} steps={another ? ANOTHER_STEPS : SIGNUP_STEPS} />
       <StepTitle id="signup-who">{SIGNUP_STEPS[0]}</StepTitle>
       <div role="radiogroup" aria-labelledby="signup-who" className="grid gap-3 wide:grid-cols-2">
         {ACCOUNT_TYPES.map((t) => (
@@ -283,32 +296,50 @@ function StepWho({ type, setType, profile, setProfile, onContinue }: {
         <Button type="submit" disabledReason={type ? undefined : PICK_TYPE}>
           Continue
         </Button>
-        <a href="/signin" className={cn('text-reading font-semibold text-ink', pocketFocusRing)}>
-          Sign in instead
-        </a>
+        {another ? null : (
+          <a href="/signin" className={cn('text-reading font-semibold text-ink', pocketFocusRing)}>
+            Sign in instead
+          </a>
+        )}
       </div>
-      <AccessLine state={signup} />
-      {/* B44.1 — while sign-up is closed, a stranger can still leave an email. */}
-      {signup === 'closed' && <Waitlist pocket className="w-full max-w-md" />}
-      {/* B27.22 — sharing is on from the first request, so a stranger is told before they continue. */}
-      <SharedAnswersFact className="text-body text-ink-3" />
+      {another ? null : (
+        <>
+          <AccessLine state={signup} />
+          {/* B44.1 — while sign-up is closed, a stranger can still leave an email. */}
+          {signup === 'closed' && <Waitlist pocket className="w-full max-w-md" />}
+          {/* B27.22 — sharing is on from the first request, so a stranger is told before they continue. */}
+          <SharedAnswersFact className="text-body text-ink-3" />
+        </>
+      )}
       <PrivacyTerms />
     </form>
   )
 }
 
 /** Step 2 (W1's words): the kind of money. Continue goes to the identity provider with every answer. */
-function StepKind({ type, profile, kind, setKind, onBack }: {
+function StepKind({ type, profile, kind, setKind, onBack, another = false }: {
   type: AccountType
   profile: Profile
   kind: MoneyKind | null
   setKind: (k: MoneyKind) => void
   onBack: () => void
+  /** B61.9 — Continue opens another account for the person signed in, rather than going to the identity provider. */
+  another?: boolean
 }) {
   const name = (type === 'personal' ? profile.name : profile.companyName).trim()
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  const open = useMutation({
+    mutationFn: (k: MoneyKind) => openAccount({ type, kind: k, name, country: profile.country, ...(type === 'business' ? { registration_number: profile.registrationNumber.trim() } : {}) }),
+    onSuccess: async () => {
+      navigate(ANOTHER_CONFIRM_PATH)
+      // The session is on the new account: nothing read for the one it left is kept.
+      await qc.resetQueries()
+    },
+  })
   return (
     <div className="grid gap-5">
-      <Stepper at={2} />
+      <Stepper at={2} steps={another ? ANOTHER_STEPS : SIGNUP_STEPS} />
       <StepTitle id="signup-kind">{SIGNUP_STEPS[1]}</StepTitle>
       <p className="text-reading text-ink-2">{kindFor(name, type)}</p>
       <div role="radiogroup" aria-labelledby="signup-kind" className="grid gap-4 wide:grid-cols-3">
@@ -331,7 +362,11 @@ function StepKind({ type, profile, kind, setKind, onBack }: {
           <Button variant="outline" onClick={onBack}>
             Back
           </Button>
-          {kind ? (
+          {kind && another ? (
+            <Button disabled={open.isPending} onClick={() => open.mutate(kind)}>
+              {open.isPending ? 'Opening…' : 'Continue'}
+            </Button>
+          ) : kind ? (
             <Button asChild>
               <a href={signupLoginHref(type, kind, profile)}>Continue</a>
             </Button>
@@ -340,8 +375,14 @@ function StepKind({ type, profile, kind, setKind, onBack }: {
           )}
         </div>
       </div>
+      {open.isError ? <FieldError id="signup-open-error">{openFailure(open.error)}</FieldError> : null}
     </div>
   )
+}
+
+/** Lens's own sentence for a refusal it worded (the eleventh account), and otherwise one of ours. */
+function openFailure(err: unknown): string {
+  return err instanceof AgentBankError && err.sentence && err.status < 500 ? err.sentence : 'The account didn’t open. Try again.'
 }
 
 // ─── /signup ────────────────────────────────────────────────────────────────
@@ -526,6 +567,65 @@ export function SignUpConfirm() {
   return (
     <SignUpFrame label={<WorkspaceStatus />}>
       <Stepper at={4} />
+      <StepTitle id="signup-confirm">{SIGNUP_STEPS[3]}</StepTitle>
+      <IdentityChecks
+        done={
+          <Button asChild>
+            <a href="/">{IDENTITY_WORDS.open}</a>
+          </Button>
+        }
+      />
+    </SignUpFrame>
+  )
+}
+
+// ─── /accounts/new and /accounts/new/confirm ───────────────────────────────
+
+/** Someone not signed in has no account to open another beside: they sign in, and come back here. */
+function useSignedIn(returnTo: string): React.ReactNode | null {
+  const me = useAuthMeReader()
+  if (me.isLoading) return <SignUpFrame label={null}>{null}</SignUpFrame>
+  if (me.data?.mode === 'oidc' && !me.data.authenticated) {
+    return (
+      <EntryFrame>
+        <SignInCard returnTo={returnTo} />
+      </EntryFrame>
+    )
+  }
+  return null
+}
+
+/**
+ * B61.9 — "Open another account", from Your accounts: who it is for and the kind of money, as sign-up asks them, then
+ * the BFF's POST /api/accounts (B61.8) opens it and moves the session there, and the identity check runs for it.
+ */
+export function OpenAnotherAccount() {
+  const [step, setStep] = useState<1 | 2>(1)
+  const [type, setType] = useState<AccountType | null>(null)
+  const [profile, setProfile] = useState<Profile>(EMPTY)
+  const [kind, setKind] = useState<MoneyKind | null>(null)
+  useDocumentTitle('Open another account')
+  const gate = useSignedIn(ANOTHER_PATH)
+  if (gate) return gate
+  return (
+    <SignUpFrame label={<WorkspaceStatus />}>
+      {step === 1 || !type ? (
+        <StepWho another type={type} setType={setType} profile={profile} setProfile={setProfile} onContinue={() => setStep(2)} />
+      ) : (
+        <StepKind another type={type} profile={profile} kind={kind} setKind={setKind} onBack={() => setStep(1)} />
+      )}
+    </SignUpFrame>
+  )
+}
+
+/** B61.9 — the new account's identity check, its last step; then its Home. */
+export function OpenAnotherConfirm() {
+  useDocumentTitle(SIGNUP_STEPS[3])
+  const gate = useSignedIn(ANOTHER_CONFIRM_PATH)
+  if (gate) return gate
+  return (
+    <SignUpFrame label={<WorkspaceStatus />}>
+      <Stepper at={3} steps={ANOTHER_STEPS} />
       <StepTitle id="signup-confirm">{SIGNUP_STEPS[3]}</StepTitle>
       <IdentityChecks
         done={

@@ -36,7 +36,8 @@ describe('the background on every page (B61.70)', () => {
     const addresses = within(nav)
       .getAllByRole('link')
       .map((a) => a.getAttribute('href') ?? '')
-      .filter((h) => h.startsWith('/') && !['/privacy', '/terms'].includes(h))
+      // B61.9's account tile (`?accounts=open`) opens a sheet over the page, not a page of its own.
+      .filter((h) => h.startsWith('/') && !h.includes('?') && !['/privacy', '/terms'].includes(h))
     expect(addresses.length).toBeGreaterThanOrEqual(7)
     for (const address of addresses) {
       fireEvent.click(within(screen.getByRole('navigation', { name: 'Sections' })).getAllByRole('link').find((a) => a.getAttribute('href') === address)!)
