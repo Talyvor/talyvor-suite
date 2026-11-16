@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS help_messages (
 );
 CREATE INDEX IF NOT EXISTS help_messages_workspace ON help_messages (workspace_id, id);
 -- B61.69: a chat is the person's who asked, as helpPersonKey's hash of their identity. The rows kept before have none,
--- and the workspace's owner takes them the first time they open Help (help_chat.go chat).
+-- and the workspace's owner takes them the first time they open Help (help_chat.go chat); no one else sees them.
 ALTER TABLE help_messages ADD COLUMN IF NOT EXISTS person text NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS help_messages_person ON help_messages (workspace_id, person, id);
 CREATE INDEX IF NOT EXISTS help_messages_at ON help_messages (at);

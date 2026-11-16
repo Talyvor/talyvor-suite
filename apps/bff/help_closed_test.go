@@ -33,7 +33,7 @@ func TestHelpChatGoesWhenTalyvorClosesTheAccount(t *testing.T) {
 		authMode: authModeDisabled, operatorReadKey: testOperatorReadKey}, nil)
 	ctx := context.Background()
 	for _, ws := range []string{"ws_closed", "ws_open"} {
-		_ = a.help.add(ctx, helpWho{ws, "p_" + ws}, helpMessage{By: "you", Text: "a question from " + ws, At: time.Now()})
+		_ = a.help.add(ctx, helpWho{ws: ws, person: "p_" + ws}, helpMessage{By: "you", Text: "a question from " + ws, At: time.Now()})
 		_, _ = a.help.ask(ctx, ws, 1)
 	}
 
@@ -42,13 +42,13 @@ func TestHelpChatGoesWhenTalyvorClosesTheAccount(t *testing.T) {
 	if len(asked) != 1 {
 		t.Fatalf("Lens was asked %q, want the operator inbox once", asked)
 	}
-	if got, _ := a.help.chat(ctx, helpWho{"ws_closed", "p_ws_closed"}); len(got) != 0 {
+	if got, _ := a.help.chat(ctx, helpWho{ws: "ws_closed", person: "p_ws_closed"}); len(got) != 0 {
 		t.Errorf("the closed account's Help chat = %+v, want it gone", got)
 	}
 	if ok, _ := a.help.ask(ctx, "ws_closed", 1); !ok {
 		t.Error("the closed account's questions counted today were kept")
 	}
-	if got, _ := a.help.chat(ctx, helpWho{"ws_open", "p_ws_open"}); len(got) != 1 {
+	if got, _ := a.help.chat(ctx, helpWho{ws: "ws_open", person: "p_ws_open"}); len(got) != 1 {
 		t.Errorf("an open account's Help chat = %+v, want it kept", got)
 	}
 }

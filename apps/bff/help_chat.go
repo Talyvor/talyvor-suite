@@ -32,6 +32,7 @@ import (
 	"context"
 	"crypto/sha256"
 	_ "embed"
+	"encoding/base32"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -188,10 +189,23 @@ func helpPersonKey(t tenant) string {
 	return "h" + hex.EncodeToString(sum[:16])
 }
 
-// helpWho is whose chat: the account and the person in it (helpPersonKey).
-type helpWho struct{ ws, person string }
+// helpWho is whose chat: the account and the person in it (helpPersonKey). owner is true when the account is the one
+// Lens derives from the person's identity, their first: then they are provably its owner.
+type helpWho struct {
+	ws, person string
+	owner      bool
+}
 
-func helpWhoOf(t tenant) helpWho { return helpWho{ws: t.workspaceID, person: helpPersonKey(t)} }
+func helpWhoOf(t tenant) helpWho {
+	return helpWho{ws: t.workspaceID, person: helpPersonKey(t), owner: t.person != "" && t.workspaceID == helpFirstAccount(t.person)}
+}
+
+// helpFirstAccount is the workspace id Lens's provision derives from identity (talyvor-lens cmd/lens
+// provision_handler.go deriveWorkspaceID): the person's first account, which they opened and own.
+func helpFirstAccount(identity string) string {
+	sum := sha256.Sum256([]byte(identity))
+	return "u" + strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(sum[:]))[:26]
+}
 
 // helpStore keeps each person's Help chat for helpKeptFor and counts each workspace's questions a day. With
 // BFF_DATABASE_URL set it is Postgres (help_store.sql), so a chat survives a restart; without it, memory.
@@ -222,11 +236,13 @@ func (s *helpStore) chat(ctx context.Context, who helpWho) ([]helpMessage, error
 		if _, err := s.db.Exec(ctx, `DELETE FROM help_messages WHERE at < $1`, since); err != nil {
 			return nil, err
 		}
-		// The chats kept before B61.69 have no person, and stay with the workspace's owner. Lens lets one person hold
-		// an account (talyvor-lens person_accounts, keyed by the account), so the person who opens Help on it is
-		// its owner, and takes them.
-		if _, err := s.db.Exec(ctx, `UPDATE help_messages SET person = $2 WHERE workspace_id = $1 AND person = ''`, who.ws, who.person); err != nil {
-			return nil, err
+		// The chats kept before B61.69 have no person, and stay with the workspace's owner: only a person who provably
+		// owns the account (helpWho.owner) takes them. On any other account they are shown to no one, and go at 30
+		// days or with the account.
+		if who.owner {
+			if _, err := s.db.Exec(ctx, `UPDATE help_messages SET person = $2 WHERE workspace_id = $1 AND person = ''`, who.ws, who.person); err != nil {
+				return nil, err
+			}
 		}
 		rows, err := s.db.Query(ctx, `SELECT by_whom, body, page, team, topic, at FROM help_messages WHERE workspace_id = $1 AND person = $2 ORDER BY id`, who.ws, who.person)
 		if err != nil {

@@ -271,22 +271,22 @@ func TestHelpChatKeptThirtyDaysInPostgres(t *testing.T) {
 		t.Fatal(err)
 	}
 	old := time.Now().Add(-31 * 24 * time.Hour)
-	_ = first.add(ctx, helpWho{"ws_a", "p_a"}, helpMessage{By: "you", Text: "old", At: old}, helpMessage{By: "you", Text: "new", At: time.Now()})
-	_ = first.add(ctx, helpWho{"ws_b", "p_b"}, helpMessage{By: "you", Text: "theirs", At: time.Now()})
+	_ = first.add(ctx, helpWho{ws: "ws_a", person: "p_a"}, helpMessage{By: "you", Text: "old", At: old}, helpMessage{By: "you", Text: "new", At: time.Now()})
+	_ = first.add(ctx, helpWho{ws: "ws_b", person: "p_b"}, helpMessage{By: "you", Text: "theirs", At: time.Now()})
 
 	again := newHelpStore()
 	if err := again.useDB(ctx, db.pool); err != nil {
 		t.Fatal(err)
 	}
-	got, err := again.chat(ctx, helpWho{"ws_a", "p_a"})
+	got, err := again.chat(ctx, helpWho{ws: "ws_a", person: "p_a"})
 	if err != nil || len(got) != 1 || got[0].Text != "new" {
 		t.Fatalf("after a restart ws_a's chat = %+v %v, want the one message under 30 days", got, err)
 	}
-	_ = again.forget(ctx, helpWho{"ws_a", "p_a"})
-	if got, _ := again.chat(ctx, helpWho{"ws_a", "p_a"}); len(got) != 0 {
+	_ = again.forget(ctx, helpWho{ws: "ws_a", person: "p_a"})
+	if got, _ := again.chat(ctx, helpWho{ws: "ws_a", person: "p_a"}); len(got) != 0 {
 		t.Errorf("deleted, ws_a's chat = %+v", got)
 	}
-	if got, _ := again.chat(ctx, helpWho{"ws_b", "p_b"}); len(got) != 1 {
+	if got, _ := again.chat(ctx, helpWho{ws: "ws_b", person: "p_b"}); len(got) != 1 {
 		t.Errorf("ws_b's chat = %+v, want it untouched", got)
 	}
 	for i := 1; i <= 3; i++ {
@@ -296,7 +296,7 @@ func TestHelpChatKeptThirtyDaysInPostgres(t *testing.T) {
 		}
 	}
 	// B61.65: a closed account's chat and its questions counted go, rows and all; ws_b's stay.
-	_ = again.add(ctx, helpWho{"ws_a", "p_a"}, helpMessage{By: "you", Text: "before closing", At: time.Now()})
+	_ = again.add(ctx, helpWho{ws: "ws_a", person: "p_a"}, helpMessage{By: "you", Text: "before closing", At: time.Now()})
 	if err := again.closed(ctx, "ws_a"); err != nil {
 		t.Fatal(err)
 	}
@@ -312,24 +312,27 @@ func TestHelpChatKeptThirtyDaysInPostgres(t *testing.T) {
 	if shut, _ := again.isClosed(ctx, "ws_b"); shut {
 		t.Error("ws_b reads as closed")
 	}
-	if got, _ := again.chat(ctx, helpWho{"ws_b", "p_b"}); len(got) != 1 {
+	if got, _ := again.chat(ctx, helpWho{ws: "ws_b", person: "p_b"}); len(got) != 1 {
 		t.Errorf("ws_b's chat = %+v, want it untouched by ws_a's closing", got)
 	}
-	// B61.69: each person's chat is their own, and one kept before (no person) stays with the account's owner, the one
-	// person who holds it and opens Help on it.
+	// B61.69: each person's chat is their own, and one kept before (no person) stays with the account's owner: a
+	// person who does not own it never takes it.
 	if _, err := db.pool.Exec(ctx, `INSERT INTO help_messages (workspace_id, by_whom, body, page, team, topic, at)
 		VALUES ('ws_c', 'you', 'kept before', '', false, '', now())`); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := again.chat(ctx, helpWho{"ws_c", "p_owner"}); len(got) != 1 || got[0].Text != "kept before" {
+	if got, _ := again.chat(ctx, helpWho{ws: "ws_c", person: "p_member"}); len(got) != 0 {
+		t.Errorf("a person who does not own the account reads %+v, want none of the chat kept before", got)
+	}
+	if got, _ := again.chat(ctx, helpWho{ws: "ws_c", person: "p_owner", owner: true}); len(got) != 1 || got[0].Text != "kept before" {
 		t.Errorf("the owner's chat = %+v, want the one kept before", got)
 	}
-	_ = again.add(ctx, helpWho{"ws_c", "p_member"}, helpMessage{By: "you", Text: "the member's", At: time.Now()})
-	if got, _ := again.chat(ctx, helpWho{"ws_c", "p_member"}); len(got) != 1 || got[0].Text != "the member's" {
+	_ = again.add(ctx, helpWho{ws: "ws_c", person: "p_member"}, helpMessage{By: "you", Text: "the member's", At: time.Now()})
+	if got, _ := again.chat(ctx, helpWho{ws: "ws_c", person: "p_member"}); len(got) != 1 || got[0].Text != "the member's" {
 		t.Errorf("the member's chat = %+v, want their own line only", got)
 	}
-	_ = again.forget(ctx, helpWho{"ws_c", "p_member"})
-	if got, _ := again.chat(ctx, helpWho{"ws_c", "p_owner"}); len(got) != 1 {
+	_ = again.forget(ctx, helpWho{ws: "ws_c", person: "p_member"})
+	if got, _ := again.chat(ctx, helpWho{ws: "ws_c", person: "p_owner", owner: true}); len(got) != 1 {
 		t.Errorf("after the member deleted theirs the owner's chat = %+v, want it kept", got)
 	}
 }
@@ -354,7 +357,7 @@ func TestHelpWritesRefuseAnotherSite(t *testing.T) {
 		}
 	}
 	for ws, msgs := range a.help.chats {
-		t.Errorf("a refused write kept %s's chat: %+v", ws, msgs)
+		t.Errorf("a refused write kept %v's chat: %+v", ws, msgs)
 	}
 }
 
@@ -394,6 +397,11 @@ func TestHelpChatIsThePersonsOwn(t *testing.T) {
 	helpAs(t, a, "member-identity", a.handleHelpChat, http.MethodDelete, "/api/help/chat", "")
 	if kept := helpAs(t, a, "owner-identity", a.handleHelpChat, http.MethodGet, "/api/help/chat", "").Body.String(); !strings.Contains(kept, "owner's") {
 		t.Errorf("the member's delete took the owner's chat: %s", kept)
+	}
+
+	if own := deriveWorkspaceIDLikeLens(devIdentity); !helpWhoOf(tenant{workspaceID: own, person: devIdentity}).owner ||
+		helpWhoOf(tenant{workspaceID: own, person: "member-identity"}).owner {
+		t.Error("the owner is not told from a member by the account Lens derives from their identity")
 	}
 
 	helpAs(t, a, "owner-identity", a.handleHelpAsk, http.MethodPost, "/api/help/ask", `{"question":"three?"}`)
