@@ -113,7 +113,7 @@ Lens, Track and Docs from `--lens-src`, `--track-src` and `--docs-src`, brought 
 | Pull request | Repo | The guard that must stop it |
 |---|---|---|
 | `postinstall-suite` — the web app gains a dependency whose postinstall runs code, lockfile updated | talyvor-suite | `pnpm install --frozen-lockfile`: `allowBuilds` in pnpm-workspace.yaml refuses it with `ERR_PNPM_IGNORED_BUILDS`, and the postinstall must not have run |
-| `admin-gate-lens` — `requireAdmin` comes off `POST /v1/admin/lxc/grant`, the route that mints LXC; the admin-route classification tests stay green | talyvor-lens | `TestEveryAdminRegistrationReachesAnAuthorizationDecision` (in `go test ./...`), naming the route |
+| `admin-gate-lens` — `requireAdminStepUp` and `requireAdmin` come off `POST /v1/admin/lxc/grant`, the route that mints LXC; the admin-route classification tests stay green | talyvor-lens | `TestEveryAdminRegistrationReachesAnAuthorizationDecision` (in `go test ./...`), naming the route |
 | `compose-secret-lens`, `-track`, `-docs` — a compose secret that compose refused to start without gets a default | each | `scripts/check-compose-secrets.sh`, naming the variable |
 
 A pull request is **caught** only when its guard passes on main as it is (a guard already red proves nothing), goes red on
