@@ -396,7 +396,8 @@ describe('a brand-new workspace with zero data', () => {
     // on the rendered element rather than on the source it was scanned from.
     for (const a of links) {
       if (/\btransition-/.test(a.className)) {
-        expect(a.className, `"${a.textContent?.trim()}" transitions for an unnamed duration`).toMatch(/\bduration-\d+\b/)
+        // B61.72 — `transition-press` times itself, per property, from the preset's motion tokens.
+        expect(a.className, `"${a.textContent?.trim()}" transitions for an unnamed duration`).toMatch(/\bduration-\d+\b|\btransition-press\b/)
       }
     }
   })

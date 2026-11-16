@@ -313,7 +313,7 @@
   "src/meteredFaultClaim.test.tsx": 12,
   "src/meteredSurfacePopulation.test.ts": 8,
   "src/mirrorSubsetRegister.test.ts": 83,
-  "src/motion.test.tsx": 34,
+  "src/motion.test.tsx": 36,
   "src/NavReach.test.tsx": 3,
   "src/noFlashTheme.test.ts": 8,
   "src/NoLxc.test.tsx": 10,

@@ -40,7 +40,7 @@ export function HelpButton() {
       onClick={() => navigate(helpHref(pathname, search))}
       className={cn(
         'flex h-9 shrink-0 items-center gap-1.5 rounded-pill bg-cloud px-2.5 text-body font-semibold text-ink wide:px-3.5',
-        'transition-colors duration-200 active:scale-98',
+        'transition-press active:scale-97',
         pocketFocusRing,
       )}
     >

@@ -1,11 +1,50 @@
-import type { Config, PluginUtils } from 'tailwindcss/types/config'
+import type { Config, PluginAPI, PluginUtils } from 'tailwindcss/types/config'
 
 /**
  * The locked preset. Every value the components may use is a NAMED token here;
  * arbitrary values (text-[#…], p-[13px]) are forbidden by local/no-arbitrary-value
  * so this file is the only door to the palette, scale, spacing and radii.
  */
+/**
+ * MOTION (B61.72) — Pocket Live's DESIGN.md section 4, the same values as brand/pocket-tokens.css's motion block
+ * (--m-* and --e-*); apps/web/src/motion.test.tsx fails if the two differ. The web's page-in is 300 (the phone's page,
+ * 420), named page-in because `page` is already the heading size (text-page).
+ */
+export const motion = {
+  duration: {
+    'press-in': '90ms', 'press-out': '420ms', fast: '160ms', tab: '240ms', 'page-in': '300ms',
+    'panel-in': '420ms', 'panel-out': '280ms', roll: '700ms', shimmer: '1100ms',
+  },
+  easing: {
+    out: 'cubic-bezier(.22, 1, .36, 1)', pop: 'cubic-bezier(.34, 1.56, .64, 1)', std: 'cubic-bezier(.4, 0, .2, 1)',
+  },
+}
+
+/**
+ * `transition-press`, the one transition a pressable control wears. A control shrinks to 0.97 over press-in on std and
+ * springs back over press-out on pop, while its colours change over fast: three timings on one element, which
+ * Tailwind's single-value duration-* and ease-* cannot say, so the lists are written here one entry per property.
+ * The :active rule times the way in; the resting rule times the way back. Reduced motion zeroes every entry and
+ * theme.css returns the scale to identity.
+ */
+const PRESS_COLOURS = ['color', 'background-color', 'border-color', 'text-decoration-color', 'fill', 'stroke', 'box-shadow']
+const pressTimings = (transform: string, easing: string) => ({
+  'transition-duration': [transform, ...PRESS_COLOURS.map(() => motion.duration.fast)].join(', '),
+  'transition-timing-function': [easing, ...PRESS_COLOURS.map(() => motion.easing.std)].join(', '),
+})
+const pressPlugin = {
+  handler: ({ addUtilities }: PluginAPI) =>
+    addUtilities({
+      '.transition-press': {
+        'transition-property': ['transform', ...PRESS_COLOURS].join(', '),
+        ...pressTimings(motion.duration['press-out'], motion.easing.pop),
+        '&:active': pressTimings(motion.duration['press-in'], motion.easing.std),
+      },
+    }),
+}
+
 const preset = {
+  plugins: [pressPlugin],
   theme: {
     extend: {
       // Named breakpoint so the Shell can stack under 840px without an arbitrary value.
@@ -227,23 +266,27 @@ const preset = {
         figure: ['28px', { lineHeight: '1', fontWeight: '560' }],
       },
       /**
-       * THE PRESS — `active:scale-98`, the one motion token in the system.
+       * THE PRESS — `active:scale-97` beside `transition-press` (B61.72, Pocket Live).
        *
        * The site writes it `active:scale-[0.98]`. That exact string is what
        * `local/no-arbitrary-value` exists to refuse, and the refusal is right: an escaped
        * 0.98 in one component and an escaped 0.97 in the next is not a system. So the scale
        * is EXTENDED by one step instead. Tailwind's own scale is keyed in percent
-       * (scale-95 = .95); 98 continues it rather than inventing a naming.
+       * (scale-95 = .95); 97 continues it rather than inventing a naming. Pocket Live
+       * (DESIGN.md section 4, approved by Nick on 15 Nov 2026) set the depth at 0.97.
        *
-       * ⚠ ONE STEP, NOT A RAMP. There is no scale-99 or scale-97 here because nothing needs
-       * one. A second press depth would be a second answer to a question with one answer.
+       * ⚠ ONE STEP, NOT A RAMP. A second press depth would be a second answer to a question
+       * with one answer.
        *
        * ⚠ THE SCALE IS NEUTRALISED UNDER prefers-reduced-motion IN theme.css, and it has to
        * be: zeroing transition-duration removes the tween, not the transform, so without
-       * that block this token is an instant 2% jump for the users who asked for less motion.
+       * that block this token is an instant 3% jump for the users who asked for less motion.
        * apps/web/src/motion.test.tsx pins both halves.
        */
-      scale: { 98: '0.98' },
+      scale: { 97: '0.97' },
+      // B61.72 — the motion tokens (`duration-fast`, `ease-pop`, …), the values of brand/pocket-tokens.css.
+      transitionDuration: motion.duration,
+      transitionTimingFunction: motion.easing,
       borderColor: { DEFAULT: 'var(--rule)' },
       // Pocket's: cards 24 and 18, inputs 14 (control), the sheet 28, pills for buttons and chips; B57.4's icon tiles 12
       // (pocket.css .kindico, .roomico) and the facts inset in a card or sheet 16 (.facts2).

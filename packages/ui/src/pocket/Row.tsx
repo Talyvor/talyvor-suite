@@ -42,7 +42,7 @@ export function Row({ leading, title, line, amount, action, href, wrap = false, 
   const row = cn('flex items-center gap-3 border-t border-line py-2.5 text-reading first:border-t-0', wrap && 'flex-wrap wide:flex-nowrap', className)
   if (href) {
     return (
-      <a href={href} className={cn(row, 'rounded-control', pocketFocusRing)}>
+      <a href={href} className={cn(row, 'rounded-control transition-colors duration-fast hover:bg-cloud-2', pocketFocusRing)}>
         {body}
         <Chevron />
       </a>

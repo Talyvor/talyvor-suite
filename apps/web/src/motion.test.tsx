@@ -129,7 +129,7 @@ function declarations(css: string): Decl[] {
 /**
  * THE PRESS SCALE AND ITS NEUTRALISATION — one cascade, decided by importance alone.
  *
- * `active:scale-98` sets `--tw-scale-x/y: 0.98` from a class selector, unimportant. The
+ * `active:scale-97` sets `--tw-scale-x/y: 0.97` from a class selector, unimportant. The
  * reduced-motion block sets them back to 1 from the universal selector, IMPORTANT. Those
  * are the only two rules in the sheet that touch these variables (preflight's defaults are
  * also unimportant and also 1), and `!important` beats unimportant regardless of
@@ -151,7 +151,7 @@ function pressScaleProblems(css: string): string[] {
   //     unimportant 0.98 decls      6 ->      6   (4 with the negations intact; the floor is 2)
   //
   // Nothing moved, because Tailwind's extractor reads RAW TEXT and cannot tell a class from a
-  // sentence about a class: `preset.ts:232` writes `active:scale-[0.98]` in a COMMENT and
+  // sentence about a class: `preset.ts:271` writes `active:scale-[0.98]` in a COMMENT and
   // `packages/ui/src/components/Button.tsx:37` writes `active:scale-98` in a COMMENT, so the sentences EXPLAINING the press
   // compile the press into the stylesheet. The feature can leave the product entirely and this
   // check keeps counting the prose. It is W1.8's mechanism turning a guard into a no-op.
@@ -162,9 +162,9 @@ function pressScaleProblems(css: string): string[] {
   //
   // What this check still legitimately asserts is that the sheet EMITS the rule at all. The real
   // vacuity guard is `pressSitesInCode` below, which reads comment-stripped SOURCE.
-  const press = scale.filter((d) => !d.important && d.value === '0.98')
+  const press = scale.filter((d) => !d.important && d.value === '0.97')
   if (press.length < 2) {
-    problems.push(`no press scale in the sheet: expected --tw-scale-x and --tw-scale-y at 0.98, found ${press.length}`)
+    problems.push(`no press scale in the sheet: expected --tw-scale-x and --tw-scale-y at 0.97, found ${press.length}`)
   }
 
   const overrides = scale.filter((d) => d.important)
@@ -356,8 +356,11 @@ function tokensOf(list: string): string[] {
 /** `hover:transition-colors` → `transition-colors`. Variants do not change what the utility is. */
 const base = (token: string) => token.split(':').pop() ?? token
 
-const TRANSITION = /^transition(-(all|colors|opacity|shadow|transform))?$/
-const DURATION = /^duration-\d+$/
+const TRANSITION = /^transition(-(all|colors|opacity|shadow|transform|press))?$/
+// B61.72 — a duration is a number or one of the preset's motion tokens (duration-fast, duration-tab, …).
+const DURATION = /^duration-(\d+|press-in|press-out|fast|tab|page-in|panel-in|panel-out|roll|shimmer)$/
+// B61.72 — `transition-press` writes its own per-property durations; a duration-* beside it would flatten them.
+const SELF_TIMED = new Set(['transition-press'])
 
 /**
  * A `transition-*` with no `duration-*` beside it is not a neutral omission — it is a
@@ -371,6 +374,7 @@ function transitionsWithoutDuration(files: SourceFile[]): string[] {
       const tokens = tokensOf(list).map(base)
       const transitions = tokens.filter((t) => TRANSITION.test(t))
       if (transitions.length === 0) continue
+      if (transitions.every((t) => SELF_TIMED.has(t))) continue
       if (tokens.some((t) => DURATION.test(t))) continue
       problems.add(`${f.path}: "${transitions.join(' ')}" with no duration-* in the same class list`)
     }
@@ -474,20 +478,11 @@ const TWEENABLE = new Set([
  * ⚠ CHECKED BOTH DIRECTIONS: an entry that stops being a gap fails as stale, so this table
  * cannot quietly outlive the code it excuses.
  *
- * ⚠ THE PRESS ENTRY CORRECTS THIS FILE'S OWN PROSE, which is the part worth keeping. The
- * docstring at the top of this file argues that a zeroed `transition-duration` under reduced
- * motion delivers "the same 2% shrink arriving INSTANTLY, delivered to exactly the people who
- * asked for less of it" — a sentence whose force comes from everyone ELSE getting a tween.
- * MEASURED at `9a18533` from the built sheet: the press rides `transition-colors`, which does
- * not cover `transform`, so THE PRESS IS INSTANT FOR EVERYONE AND ALWAYS HAS BEEN. The
- * neutralisation is still right and still needed — it removes the shrink rather than its tween —
- * but the contrast the comment draws does not exist. Whether the press SHOULD tween is a feel
- * decision with a design conversation behind it, so this merge corrects the claim and changes
- * no timing.
+ * ⚠ THE PRESS LEFT THIS TABLE IN B61.72. It rode `transition-colors`, which does not cover `transform`, so it was
+ * instant for everyone (measured at `9a18533`), and this table called a tween "a feel decision". Nick made it on
+ * 15 Nov 2026 when he approved Pocket Live: every press site now wears `transition-press`, which covers transform.
  */
 const NOT_TWEENED: Record<string, string> = {
-  'active:scale-98':
-    'the press. It rides transition-colors, which does not cover transform, so it is instant for everyone — see the note above. Making it tween is a feel decision, not a typo, and it belongs to whoever owns the press',
   'disabled:opacity-50':
     'disabled is a terminal state reached by the app, not a pointer gesture the reader is aiming at. Every design-system control snaps here and they agree with each other',
   'data-[disabled]:opacity-50':
@@ -560,7 +555,7 @@ function stateChangesWithoutTransition(files: SourceFile[], css: string, applyEx
 
 // ── the press, asked of the CODE rather than of the sheet ───────────────────────────────
 
-const PRESS = 'active:scale-98'
+const PRESS = 'active:scale-97'
 
 /**
  * EVERY FILE WHOSE CODE PUTS THE PRESS ON AN ELEMENT.
@@ -600,6 +595,8 @@ const PRESS_SITES: Record<string, string> = {
     'the design-system button — every primary action in the product presses through this one class list',
   'packages/ui/src/pocket/Button.tsx':
     'B57.4 — Pocket\'s button, which screens move to one by one; it presses as today\'s does, through the same token',
+  'packages/ui/src/pocket/Tabs.tsx':
+    'B61.72 — Pocket\'s tabs are buttons, and Pocket Live presses every pressable control',
   'packages/ui/src/components/ThemeToggle.tsx':
     'a hand-rolled <button>, not a Button, so it inherits nothing and must carry the press itself',
   'apps/web/src/App.tsx':
@@ -682,7 +679,7 @@ describe('a state change has a transition at all — the half of the lock that w
     const byClass = propertiesByClass(await shippedCss())
     expect(byClass.size, 'no classes were read out of the sheet').toBeGreaterThan(100)
     expect([...(byClass.get('hover:text-ink') ?? [])]).toEqual(['color'])
-    expect([...(byClass.get('active:scale-98') ?? [])]).toContain('transform')
+    expect([...(byClass.get('active:scale-97') ?? [])]).toContain('transform')
     // a custom property alone must not count as a change worth tweening
     expect([...(byClass.get('hover:text-ink') ?? [])].some((p) => p.startsWith('--'))).toBe(false)
   })
@@ -706,7 +703,7 @@ describe('a state change has a transition at all — the half of the lock that w
     // This is also the press's exact shape: a transform riding transition-colors.
     const css = await shippedCss()
     const found = stateChangesWithoutTransition(
-      [{ path: 'f.tsx', text: '<div className="transition-colors duration-200 active:scale-98" />' }], css, false)
+      [{ path: 'f.tsx', text: '<div className="transition-colors duration-200 active:scale-97" />' }], css, false)
     expect(found.map((g) => g.prop)).toEqual(['transform'])
   })
 
@@ -738,26 +735,26 @@ describe('a state change has a transition at all — the half of the lock that w
 })
 
 describe('the press affordance is a token, and it is on the things you press', () => {
-  it('active:scale-98 is a class Tailwind emits, at 0.98 — an EXTENDED token, not an escaped one', async () => {
-    // scale-[0.98] is what the site writes and what `local/no-arbitrary-value` refuses here.
+  it('active:scale-97 is a class Tailwind emits, at 0.97 — an EXTENDED token, not an escaped one', async () => {
+    // scale-[0.98] is what the site writes and what `local/no-arbitrary-value` refuses here; Pocket Live's depth is 0.97.
     // The scale is extended in preset.ts instead, so asking the generator is the proof it took.
-    const press = declarations(await shippedCss()).filter((d) => d.selector === '.active\\:scale-98:active')
+    const press = declarations(await shippedCss()).filter((d) => d.selector === '.active\\:scale-97:active')
     const vars = press.filter((d) => d.prop.startsWith('--tw-scale')).map((d) => `${d.prop}=${d.value}`).sort()
-    expect(vars).toEqual(['--tw-scale-x=0.98', '--tw-scale-y=0.98'])
+    expect(vars).toEqual(['--tw-scale-x=0.97', '--tw-scale-y=0.97'])
     expect(press.some((d) => d.prop === 'transform')).toBe(true)
   })
 
   it('Button presses', () => {
     render(<Button>Save</Button>)
     const cls = screen.getByRole('button', { name: 'Save' }).className
-    expect(cls).toContain('active:scale-98')
-    expect(cls).toContain('duration-200')
+    expect(cls).toContain('active:scale-97')
+    expect(cls).toContain('transition-press')
   })
 
   it('ThemeToggle presses — it is a hand-rolled button, not a Button', () => {
     render(<ThemeToggle />)
     const cls = screen.getByRole('button').className
-    expect(cls).toContain('active:scale-98')
+    expect(cls).toContain('active:scale-97')
   })
 
   // ── the vacuity guard that can actually fail ──────────────────────────────────────────
@@ -825,7 +822,7 @@ describe('reduced motion', () => {
   })
 
   it('positive control: remove the press scale and the check goes red rather than passing by absence', async () => {
-    const broken = (await shippedCss()).replace(/--tw-scale-([xy]):\s*0\.98/g, '--tw-scale-$1: 1')
+    const broken = (await shippedCss()).replace(/--tw-scale-([xy]):\s*0\.97/g, '--tw-scale-$1: 1')
     expect(pressScaleProblems(broken).join(' ')).toContain('no press scale in the sheet')
   })
 
@@ -845,5 +842,68 @@ describe('reduced motion', () => {
     render(<Switch checked onCheckedChange={() => {}} aria-label="Pooling" />)
     const thumb = screen.getByRole('switch').firstElementChild
     expect(thumb?.className).toContain('data-[state=checked]:translate-x-3.5')
+  })
+})
+
+// ── B61.72: the press springs back (Pocket Live, DESIGN.md section 4) ───────────────────────────────────────────
+//
+// The press used to ride transition-colors, which does not cover transform, so it snapped (NOT_TWEENED said so and
+// called a tween "a feel decision"). Nick made it on 15 Nov: 0.97 over press-in (90 ms, std) and back over press-out
+// (420 ms, pop), colours on fast (160 ms). `transition-press` carries all of it, one entry per property.
+
+/** The duration and easing a rule gives one property, read off its comma lists the way the browser pairs them.
+ *  The :active rule sets no property list of its own, so it pairs against the resting rule's. */
+function timingOf(css: string, selector: string, prop: string) {
+  const decls = (sel: string) => {
+    const out: Record<string, string> = {}
+    postcss.parse(css).walkRules((r) => {
+      if (r.selector === sel) r.walkDecls((d) => void (out[d.prop] = d.value))
+    })
+    return out
+  }
+  const own = decls(selector)
+  const list = (v = '') => v.split(/,(?![^(]*\))/).map((s) => s.trim())
+  const props = list(own['transition-property'] ?? decls(selector.replace(/:active$/, ''))['transition-property'])
+  expect(props, `${selector} has no transition-property to pair with`).toContain(prop)
+  const i = props.indexOf(prop)
+  const durations = list(own['transition-duration'])
+  const easings = list(own['transition-timing-function'])
+  return { duration: durations[i % durations.length], easing: easings[i % easings.length] }
+}
+
+describe('B61.72 — the press shrinks and springs back on the motion tokens', () => {
+  it('a Pocket Button carries a transition that covers transform, at the token durations', async () => {
+    const { Button: PocketButton } = await import('@talyvor/ui/pocket')
+    render(
+      <div data-design="pocket" className="bg-page">
+        <PocketButton>Pay</PocketButton>
+      </div>,
+    )
+    const cls = screen.getByRole('button', { name: 'Pay' }).className.split(/\s+/)
+    expect(cls).toEqual(expect.arrayContaining(['transition-press', 'active:scale-97']))
+
+    const css = await shippedCss()
+    const coverage = transitionCoverage(css).get('transition-press')
+    expect([...(coverage ?? [])]).toEqual(expect.arrayContaining(['transform', 'background-color', 'color', 'box-shadow']))
+    // Springing back: the resting rule times the return.
+    expect(timingOf(css, '.transition-press', 'transform')).toEqual({ duration: '420ms', easing: 'cubic-bezier(.34, 1.56, .64, 1)' })
+    expect(timingOf(css, '.transition-press', 'background-color')).toEqual({ duration: '160ms', easing: 'cubic-bezier(.4, 0, .2, 1)' })
+    // Shrinking: the :active rule times the way in.
+    expect(timingOf(css, '.transition-press:active', 'transform')).toEqual({ duration: '90ms', easing: 'cubic-bezier(.4, 0, .2, 1)' })
+    const press = declarations(css).filter((d) => d.selector === '.active\\:scale-97:active')
+    expect(press.map((d) => `${d.prop}=${d.value}`).filter((s) => s.startsWith('--tw-scale'))).toEqual(['--tw-scale-x=0.97', '--tw-scale-y=0.97'])
+  })
+
+  it('the preset carries the motion values of pocket-tokens.css, every one', async () => {
+    const { motion } = await import('@talyvor/ui/preset')
+    const reference = readFileSync(resolve(appRoot, '../../packages/ui/brand/pocket-tokens.css'), 'utf8')
+    const block = reference.slice(reference.indexOf(':root {'))
+    const vars = Object.fromEntries([...block.matchAll(/--[me]-([\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]))
+    expect(vars).toEqual({
+      'press-in': '90ms', 'press-out': '420ms', fast: '160ms', tab: '240ms', 'page-in': '300ms',
+      'panel-in': '420ms', 'panel-out': '280ms', roll: '700ms', shimmer: '1100ms',
+      out: 'cubic-bezier(.22, 1, .36, 1)', pop: 'cubic-bezier(.34, 1.56, .64, 1)', std: 'cubic-bezier(.4, 0, .2, 1)',
+    })
+    expect({ ...motion.duration, ...motion.easing }).toEqual(vars)
   })
 })
