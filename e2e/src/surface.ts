@@ -16,7 +16,7 @@ import { ACTION_TIMEOUT_MS, agentIn, bookOf, card, fail, openAgent, withBank } f
 import { bff } from './routes.ts'
 import { RUN_SALT, freshWord, parseFooter } from './oracles.ts'
 import { CannotTest, eventually, metered } from './scenarios.ts'
-import { DocsPage, FeaturesScreen, TrackScreen, payCheckout, subscribeWithTestCard } from './screens.ts'
+import { DocsPage, FeaturesScreen, TrackScreen, payCheckout } from './screens.ts'
 import type { Scenario } from './scenarios.ts'
 import { until } from './trade.ts'
 
@@ -1908,68 +1908,3 @@ const WEBHOOK_WAIT_MS = 60_000
 /** How long Lens may keep answering a revoked key: its key cache, five minutes, and a little over. */
 const KEY_CACHE_MS = 330_000
 
-/**
- * A plan changed on Plans, on a workspace of its own: Plus is bought with the test card, then "Switch to Pro" and its
- * confirmation — Lens's subscription is on Pro, and the period's allowance is Pro's price, its included usage moved from
- * Plus's toward Pro's by the share of the period left (Lens B18.14), as Lens's own plans read states both. The
- * subscription is cancelled at the end.
- */
-export function planChange(seed: number): Scenario {
-  return {
-    id: 'plan-change',
-    owner: 'talyvor-lens',
-    own: true,
-    title: 'Plus bought with the test card, then moved to Pro on Plans: Lens\'s subscription is on Pro and its allowance is Pro\'s price, its usage moved by the share of the month left',
-    feature: 'Plans',
-    run: async (ctx) => {
-      const { env, app } = ctx
-      const plans = await env.lens.plans()
-      const plus = plans?.find((p) => p.id === 'plus')
-      const pro = plans?.find((p) => p.id === 'pro')
-      if (plus === undefined || pro === undefined) throw new CannotTest(`Lens's plans read sells ${plans === null ? 'no plan' : plans.map((p) => p.id).join(', ')} here`)
-      try {
-        const s = await subscribeWithTestCard(app, 'Plus', `tester-${seed}@example.com`)
-        ctx.evidence.push({ note: `Plans → Choose Plus: ${s.checkout === undefined ? 'never reached Stripe' : `paid on ${s.checkout}`}${s.refused === undefined ? '' : `; ${s.refused}`}` })
-        if (s.checkout === undefined || s.refused !== undefined) return fail(`buying Plus with the test card: ${s.refused}`)
-        const fee = (x: Awaited<ReturnType<typeof env.lens.allowance>>) => (x.ok && x.value !== null ? x.value.fee_usd_cents : undefined)
-        const onPlus = await until(() => env.lens.allowance(app.user), (x) => fee(x) === plus.usd_cents, WEBHOOK_WAIT_MS)
-        if (fee(onPlus) !== plus.usd_cents) return fail(`paid for Plus, and Lens's allowance is for ${fee(onPlus) ?? 'nothing'} cents, not ${plus.usd_cents}`)
-
-        const page = await app.tab('/plans')
-        let moved = ''
-        const pressed = Date.now()
-        try {
-          await page.getByRole('button', { name: 'Switch to Pro', exact: true }).click()
-          await page.getByRole('button', { name: 'Move to Pro', exact: true }).click()
-          const said = page.getByTestId('plan-moved').or(page.getByRole('alert')).first()
-          await said.waitFor({ timeout: 30_000 }).catch(() => undefined)
-          moved = (await said.innerText().catch(() => '')).trim()
-        } finally {
-          await page.close()
-        }
-        const sub = await until(() => lensRead<{ plan?: string; subscribed: boolean }>(ctx, '/v1/workspaces/{ws}/billing/subscription'), (x) => x.ok && x.value.plan === 'pro', WEBHOOK_WAIT_MS)
-        type Period = { allowance: { granted_ulxc: number; fee_usd_cents: number; period_start?: string; period_end?: string } | null }
-        const onPro = await until(() => lensRead<Period>(ctx, '/v1/workspaces/{ws}/billing/allowance'), (x) => x.ok && x.value.allowance?.fee_usd_cents === pro.usd_cents, WEBHOOK_WAIT_MS)
-        const seen = Date.now()
-        const a = onPro.ok ? onPro.value.allowance : null
-        ctx.evidence.push({ note: `Move to Pro: Plans says "${moved}"; Lens's subscription ${sub.ok ? JSON.stringify(sub.value) : sub.status}; its allowance ${onPro.ok ? JSON.stringify(a) : onPro.status}` })
-        const failures: string[] = []
-        if (!sub.ok || sub.value.plan !== 'pro') failures.push(`moved to Pro on Plans ("${moved}"), and Lens's subscription is on ${sub.ok ? sub.value.plan : sub.status}`)
-        if (a?.fee_usd_cents !== pro.usd_cents) failures.push(`moved to Pro, and Lens's allowance is for ${a?.fee_usd_cents ?? 'nothing'} cents, not Pro's ${pro.usd_cents}`)
-        else {
-          // Lens B18.14: the allowance moves by the difference in included usage times the share of the period left
-          // when Stripe's update arrived — some moment between the press and the read (a minute's slack each way).
-          const [start, end] = [Date.parse(a.period_start ?? ''), Date.parse(a.period_end ?? '')]
-          const share = (at: number) => Math.min(1, Math.max(0, (end - at) / (end - start)))
-          const [lo, hi] = [share(seen + 60_000), share(pressed - 60_000)].map((left) => plus.included_ulxc + (pro.included_ulxc - plus.included_ulxc) * left)
-          if (!(end > start) || a.granted_ulxc < Math.floor(lo) || a.granted_ulxc > Math.ceil(hi)) {
-            failures.push(`on Pro Lens grants ${a.granted_ulxc} µLXC for ${a.period_start} – ${a.period_end}; Plus's ${plus.included_ulxc} moved by the share of the period left toward Pro's ${pro.included_ulxc} is ${Math.floor(lo)}–${Math.ceil(hi)}`)
-          }
-        }
-        return failures.length === 0 ? { pass: true, detail: `Plus by test card, moved to Pro on Plans: Lens's subscription on Pro, its allowance Pro's ${pro.usd_cents} cents and ${a?.granted_ulxc} µLXC, Plus's included usage moved toward Pro's by the share of the period left` } : fail(failures.join('; '))
-      } finally {
-        await env.lens.cancelSubscription(app.user).catch(() => undefined)
-      }
-    },
-  }
-}

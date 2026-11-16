@@ -88,6 +88,8 @@
 //   label-live  — /v1/public/labels labels fx live while /status.json's fx rail is in test (B56.13)
 //   pool-off    — pooling is off for the deployment: GET /v1/pooling says so and why, and the pool serves nothing (B58.15)
 //   pool-dead   — GET /v1/pooling says pooling is on, and the pool serves nothing (B58.15)
+//   old-plans   — GET /v1/public/plans serves the 5 Oct four (Free, Team, Business, Enterprise) on the company ladder
+//                 and none for a person, as Lens before B61.57 (B61.61)
 //
 // B17.6 adds the Agent Bank and the marketplace (stub-bank.ts): agents with keys of their own, whose
 // requests through the proxy are judged by their rules and spent from their own balance.
@@ -1430,6 +1432,12 @@ createServer(async (req, res) => {
         company_plans: Object.entries(COMPANY_PLANS).map(([id, cents]) => ({ id, usd_cents: cents })), byok_add_on_usd_cents: 19900, enterprise_from_usd_cents: 250000 })
     }
     // talyvor-lens B61.57 — both ladders, each plan's monthly price by currency and what it allows (GET /v1/public/plans).
+    if (p === '/v1/public/plans' && BREAK === 'old-plans') {
+      const old = (id: string, name: string, agents: number, people: number, usd: number | null) => ({ id, name, price_minor: usd === null ? null : { GBP: usd, EUR: usd, USD: usd },
+        agents, people, gates: { agents, seats: people, own_provider_keys: 'none', slack_teams_approvals: id !== 'free' } })
+      return json(res, 200, { currencies: ['GBP', 'EUR', 'USD'], stablecoin_priced_in: 'USD', personal: [],
+        business: [old('free', 'Free', 3, 1, 0), old('team', 'Team', 25, 5, 4900), old('business', 'Business', -1, 25, 29900), old('enterprise', 'Enterprise', -1, -1, null)] })
+    }
     if (p === '/v1/public/plans') {
       const gates = planGates()
       const ladder = (ids: string[]) => ids.map((id) => ({ id, name: PLAN_NAMES[id], price_minor: PLAN_PRICES_MINOR[id] ?? null,
@@ -1885,8 +1893,27 @@ createServer(async (req, res) => {
         const gated = gatedAs(ws)
         const byok = ws.plan?.byok ?? false
         const gates = planGates()[gated]
-        return json(res, 200, { plan: gated, gated_as: gated, byok_add_on: byok, own_provider_keys_allowed: byok || gates.own_provider_keys === 'included',
+        // talyvor-lens B61.57 — and the plan as people read it, its ladder, whether a contract sets it, and its price.
+        return json(res, 200, { plan: gated, name: PLAN_NAMES[gated], account_type: 'business', on_contract: false,
+          price_minor: PLAN_PRICES_MINOR[gated] ?? null, gated_as: gated, byok_add_on: byok, own_provider_keys_allowed: byok || gates.own_provider_keys === 'included',
           gates, agents_used: bank.activeAgents(ws.id) })
+      }
+      // talyvor-lens B61.57 — the owner moves the account to another plan of its ladder (internal/plans Change): 409 in
+      // Lens's words for Custom, the other ladder, the same plan or a move down under too many agents; 400 for no plan.
+      if (rest === '/plan' && req.method === 'PUT') {
+        const { plan: to = '' } = JSON.parse((await read(req)) || '{}') as { plan?: string }
+        const from = gatedAs(ws)
+        const refuse = (status: number, error: string) => json(res, status, { error, plan: from, ...(status === 409 ? { to } : {}) })
+        const agents = bank.activeAgents(ws.id)
+        const allows = PLAN_AGENTS[to]
+        const count = (n: number) => `${n} ${n === 1 ? 'agent' : 'agents'}`
+        if (!(to in PLAN_NAMES)) return refuse(400, `There is no plan called "${to}".`)
+        if (to === 'business_custom') return refuse(409, 'Custom is set by a contract with Talyvor.')
+        if (!BUSINESS_LADDER.includes(to)) return refuse(409, 'A business account chooses Studio, Company or Group.')
+        if (to === from) return refuse(409, `This account is already on ${PLAN_NAMES[to]}.`)
+        if (allows !== -1 && agents > allows) return refuse(409, `${PLAN_NAMES[to]} allows ${count(allows)}, and this account has ${agents}. Archive ${count(agents - allows)} first.`)
+        ws.syntheticPlan = to
+        return json(res, 200, { from, plan: to, name: PLAN_NAMES[to] })
       }
       // B28.364 — Lens's routing advisor (GET …/routing/recommendation) as one that has learned a provider's cheapest chat
       // model answers every question well: that model, on the quality-per-dollar basis, in Lens's routing.Recommendation.

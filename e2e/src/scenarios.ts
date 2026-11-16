@@ -33,7 +33,7 @@ import { BillingPlanCard, DocsPage, FeaturesScreen, type LoggingPolicy, TrackScr
 import { ACTION_TIMEOUT_MS, agentApproval, agentWalletsEmpty, agentApprovalPush, spendNoticePush, approvalsBadge, approvalsInbox, approveAlwaysAllow, chatApprovalFaceID, chatLaunchAgent, chatAskAbove, chatForecastAnswer, agentRunsOutDate, chatSafeToSpend, homeDailyBriefing, chatLiveStatement, chatPaidBy, chatAgentTask, chatScheduledPrompt, chatCardFreeze, chatStatement, chatRecentCalls, chatPlainRule, chatWalletAlerts, chatWalletButtons, agentArchive, agentBalanceStored, agentHourlyLimit, agentLimit, agentLimitBoost, agentModelLimit, agentOpenFund, agentPauseAll, agentPayeeDailyCap, agentPayeeLists, agentRequestRate, agentRuleSimulator, agentRulesRollback, agentRuleTemplate, agentSpendQuestion, billingReturnPages, companyPayment, ledgerReadsCorrectly, marketplaceSale, spendPlainWords, spendPlatformFee, statementReconciles, walletCurrency, walletFirstNav, sidebarUnnamedWorkspace, walletHome, walletOnboarding } from './bank.ts'
 import { chatMoneyRequests, marketAbuse, marketAgentCommitment, marketAgentMCP, marketBillRefund, marketJournal, marketOffers, marketPayout, marketRent, marketTrial, marketPayoutConnect, marketHeldSeller, marketReview, marketTakedown, walletCard, walletCardPurchase, walletCashOut, walletEscrow, walletLoan, walletLoanDefault, walletLoanRepay, walletPots, walletGiveBack, walletRecurring, walletRequest, walletSendRefund } from './trade.ts'
 import type { Inventory } from './coverage.ts'
-import { apiKeyRevoke, byokAddon, chatConnectors, chatDocsPage, chatExportImport, chatFileBug, chatShareLink, chatToolGuard, chatTrackIssue, docsShareCollab, docsTeamGrant, docsTools, lensConvert, patternMiningSwitch, planChange, providerKeys, sessionSignOut, trackProject, trackSearchCycleBoard, trackWorkspaceRestore, walletFX, wrongAnswerStored } from './surface.ts'
+import { apiKeyRevoke, byokAddon, chatConnectors, chatDocsPage, chatExportImport, chatFileBug, chatShareLink, chatToolGuard, chatTrackIssue, docsShareCollab, docsTeamGrant, docsTools, lensConvert, patternMiningSwitch, providerKeys, sessionSignOut, trackProject, trackSearchCycleBoard, trackWorkspaceRestore, walletFX, wrongAnswerStored } from './surface.ts'
 import { agentApprovalDenied, lxcConvertBonds, marketRemixLicence, walletCardFreeze, walletEscrowLens, walletHandlePause, walletLoansAnswered, walletRequestsAnswered, walletScheduleTopUpPot, walletTradingSim } from './routes.ts'
 import { appShell, brandPlanes, chatBrand, chatHelpInFull, everyScreen, homeCards, lensReads, marketBrand, screensBrand, walletBrand } from './tour.ts'
 import { sdkWalletQuickstart } from './sdk.ts'
@@ -46,7 +46,7 @@ import { siteTruth } from './siteTruth.ts'
 import { statusTruth } from './statusTruth.ts'
 import { crossCompanyTestMoney } from './testmoney.ts'
 import { seatsCompany, seatsStudio } from './seats.ts'
-import { type Plan, feeOn, planAgents, pricingApproved, pricingFee, pricingStudioAgents, pricingOwnKey, pricingSellerSplit, within } from './pricing.ts'
+import { type Plan, feeOn, planAgents, pricingFee, pricingStudioAgents, pricingOwnKey, pricingSellerSplit, within } from './pricing.ts'
 import { gatewayAuth, gatewayKeys, gatewayMCP, gatewayProviders, gatewaySessions, verdictOf } from './gateway.ts'
 import { roomsPrivate } from './rooms.ts'
 import { roomsModeration } from './roomsModeration.ts'
@@ -165,6 +165,7 @@ import { openapiWallets } from './openapiWallets.ts'
 import { instantTransferOffered, instantTransferQuote } from './instantTransfer.ts'
 import { helpComplaint, helpNoDeadControl, helpRequest, yourDataRequest } from './helpScreen.ts'
 import { sandboxLabelEveryScreen } from './sandboxLabel.ts'
+import { decidedLaddersVerdict, planChange, pricingApproved } from './planLadders.ts'
 
 export interface Evidence {
   note?: string
@@ -1740,6 +1741,8 @@ export function honestPages(): Scenario {
       for (const [path] of HONEST_PAGES) {
         const page = await ctx.app.tab(path)
         try {
+          // B61.61 — /pricing draws its plans once /api/pricing answers: read it after the ladders are drawn.
+          if (path === '/pricing') await page.getByTestId('ladder-business').waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS }).catch(() => undefined)
           const text = await page.locator('body').innerText()
           ctx.evidence.push({ note: `${path}: ${text.length} chars read` })
           missing.push(...honestPageFaults(path, text))
@@ -1794,92 +1797,72 @@ export function legalPagesWhole(): Scenario {
   }
 }
 
-/** B28.4 — /pricing lists every offer once, at the price the signed-in /plans screen sells it at. B32.14 — the offers
- *  are the approved price card: Free, Team, Business and Enterprise for companies; BYOK as Team's add-on. B59.5: the
- *  chat plans and the Marketplace bill are hidden areas, so /pricing lists neither. The oracle is /plans itself: no
- *  price is typed in here. */
+/** B28.4 — /pricing lists every offer once. B61.61 — the offers are our two ladders (Lens B61.57): each plan of each
+ *  ladder once, as Lens's public plans read names them, in Lens's order, and no 5 Oct company plan, no chat plan and no
+ *  Marketplace bill (B59.5: hidden areas). Each plan's figures are pricing-approved's. */
 export function pricingTruth(): Scenario {
   return {
     id: 'pricing-truth',
     owner: 'talyvor-suite',
-    items: ['B28.4'],
-    title: 'pricing lists every company plan and BYOK once, at the prices /plans sells, and no chat plan or marketplace bill',
+    items: ['B28.4', 'B61.57', 'B61.59'],
+    title: 'pricing lists each plan of both ladders once, in the order Lens states them, and no 5 Oct plan, chat plan or marketplace bill',
     run: async (ctx) => {
-      const money = /\$[\d,]+(?:\.\d\d)?/
+      const served = await ctx.env.lens.publicPlans()
+      const decided = decidedLaddersVerdict(served)
+      if (!decided.pass) return decided
       const pricing = await ctx.app.tab('/pricing')
-      let listed = 0
-      const companies: Record<string, { cards: number; price: string }> = {}
-      let byokOnTeam = ''
+      const drawn: Record<'personal' | 'business', string[]> = { personal: [], business: [] }
+      let old = 0
+      let chat = 0
       let bills = 0
       try {
-        await pricing.getByTestId('company-plan-team').waitFor({ state: 'visible' })
-        listed = await pricing.getByTestId('pricing-plan').count()
-        for (const id of COMPANY_OFFERS) {
-          const card = pricing.getByTestId(`company-plan-${id}`)
-          const n = await card.count()
-          companies[id] = { cards: n, price: n === 1 ? (await card.getByTestId(`price-${id}`).innerText()).trim() : '' }
+        await pricing.getByTestId('ladder-business').waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS })
+        for (const type of ['personal', 'business'] as const) {
+          const cards = pricing.getByTestId(`ladder-${type}`).locator('[data-testid^="ladder-plan-"]')
+          for (let i = 0; i < (await cards.count()); i++) drawn[type].push(((await cards.nth(i).getAttribute('data-testid')) ?? '').slice('ladder-plan-'.length))
         }
-        byokOnTeam = (await pricing.getByTestId('company-plan-team').locator('div').filter({ has: pricing.getByText('Own provider keys', { exact: true }) })
-          .locator('dd').first().innerText().catch(() => '')).replace(/\s+/g, ' ').trim()
+        old = await pricing.locator('[data-testid^="company-plan-"]').count()
+        chat = await pricing.getByTestId('pricing-plan').count()
         bills = await pricing.getByRole('heading', { level: 2, name: /one bill a month/i }).count()
       } finally {
         await pricing.close()
       }
-      const plans = await ctx.app.tab('/plans')
-      const sold: Record<string, string> = {}
-      try {
-        for (const id of COMPANY_OFFERS.filter((c) => c !== 'free')) {
-          const price = plans.getByTestId(`price-${id}`)
-          await price.waitFor({ state: 'visible' })
-          sold[id] = (await price.innerText()).match(money)?.[0] ?? '(no price)'
-        }
-        const byok = plans.getByTestId('plan-price-byok')
-        await byok.waitFor({ state: 'visible' })
-        sold.BYOK = (await byok.innerText()).match(money)?.[0] ?? '(no price)'
-      } finally {
-        await plans.close()
-      }
-      ctx.evidence.push({ note: `/pricing chat plans ${listed}, companies ${JSON.stringify(companies)}, BYOK on Team "${byokOnTeam}"; /plans ${JSON.stringify(sold)}; marketplace bill headings ${bills}` })
+      ctx.evidence.push({ note: `/pricing draws ${JSON.stringify(drawn)}; 5 Oct company plan cards ${old}, chat plans ${chat}, marketplace bill headings ${bills}` })
       const wrong = [
-        listed === 0 ? '' : `${listed} chat plans listed, not none`,
-        ...COMPANY_OFFERS.map((id) => {
-          const c = companies[id]
-          if (c.cards !== 1) return `${id} listed ${c.cards} times`
-          const want = id === 'free' ? '$0' : sold[id]
-          return c.price === want ? '' : `${id} is ${c.price} on /pricing but ${want} on /plans`
+        ...(['personal', 'business'] as const).map((type) => {
+          const want = served[type].map((p) => p.id).join(', ')
+          return drawn[type].join(', ') === want ? '' : `the ${type} ladder lists ${drawn[type].join(', ') || 'no plan'}, not ${want}, once each`
         }),
-        byokOnTeam.includes(`${sold.BYOK} add-on`) ? '' : `Team's own provider keys read "${byokOnTeam}", not BYOK's ${sold.BYOK} add-on`,
+        old === 0 ? '' : `${old} 5 Oct company plan cards listed, not none`,
+        chat === 0 ? '' : `${chat} chat plans listed, not none`,
         bills === 0 ? '' : `the marketplace bill is listed ${bills} times, not none`,
       ].filter((m) => m !== '')
       return wrong.length === 0
-        ? { pass: true, detail: `Free, Team ${sold.team}, Business ${sold.business}, Enterprise ${sold.enterprise}; BYOK ${sold.BYOK} on Team — once each, as /plans sells them; no chat plan or marketplace bill` }
+        ? { pass: true, detail: `${served.personal.map((p) => p.name).join(', ')} for a person and ${served.business.map((p) => p.name).join(', ')} for a company, once each in Lens's order; no 5 Oct plan, chat plan or marketplace bill` }
         : { pass: false, detail: `/pricing: ${wrong.join('; ')}` }
     },
   }
 }
 
-/** B32.14 — the company plans, smallest first, as the price card draws them. */
-const COMPANY_OFFERS = ['free', 'team', 'business', 'enterprise'] as const
-
-/** B57.61 — /pricing in Pocket (design/pocket s-pricing), at 1440 and at 390: Team and only Team highlighted (white with
- *  the ink ring), every other plan card on cloud, each with one outlined button while card_payments is "live" (B51.3;
- *  none otherwise), every price in Figtree (the font loaded, not just named), each of the reference's sections, the
- *  H1 unchanged, one ink action (Create your workspace), nothing sideways. The cards are the approved price card: four
- *  company plans (Start free, Choose Team, Choose Business, Talk to us); B59.5 took the chat plans off with Chat. */
+/** B57.61 — /pricing in Pocket (design/pocket s-pricing), at 1440 and at 390. B61.61 — the cards are our two ladders
+ *  (B61.59): every plan Lens states, in its order, each on cloud and none highlighted, every price in Figtree (the font
+ *  loaded, not just named), Custom with its one outlined "Custom: talk to us" to an email and every other card with no
+ *  button; each of the page's sections, the H1 unchanged, one ink action (Create your workspace), nothing sideways. */
 export function pricingBoard(): Scenario {
   return {
     id: 'pricing-board',
     owner: 'talyvor-suite',
-    title: '/pricing is Pocket’s: Team highlighted, the rest on cloud, one outlined button each, Figtree prices, every section, at 1440 and 390',
+    items: ['B57.61', 'B61.59'],
+    title: '/pricing is Pocket’s: both ladders as Lens states them, every card on cloud, Custom’s one outlined button, Figtree prices, every section, at 1440 and 390',
     run: async (ctx) => {
+      const served = await ctx.env.lens.publicPlans()
+      const decided = decidedLaddersVerdict(served)
+      if (!decided.pass) return decided
+      const ladder = [...served.personal, ...served.business]
       const page = await ctx.app.tab('/pricing')
       const wrong: string[] = []
       try {
-        await page.getByTestId('company-plan-team').waitFor({ state: 'visible' })
-        // B51.3: a plan has its button only while a card can be charged.
-        const priced = await page.request.get(new URL('/api/pricing', page.url()).href)
-        const cardPayments = ((await priced.json().catch(() => null)) as { card_payments?: string } | null)?.card_payments
-        ctx.evidence.push({ note: `/api/pricing ${priced.status()}: card_payments ${cardPayments ?? 'not served'}` })
+        await page.getByTestId('ladder-business').waitFor({ state: 'visible', timeout: ACTION_TIMEOUT_MS })
         for (const [width, height] of [[1440, 900], [390, 844]] as const) {
           await page.setViewportSize({ width, height })
           const got = await page.evaluate(async () => {
@@ -1896,27 +1879,26 @@ export function pricingBoard(): Scenario {
             const cloud = resolve('var(--cloud)')
             const white = resolve('var(--page)')
             const primary = resolve('var(--primary)')
-            const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="pricing-plan"], [data-testid^="company-plan-"]')).map((card) => {
-              const price = card.querySelector<HTMLElement>('[data-testid="pricing-plan-price"], [data-testid^="price-"]')
+            const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="ladder-plan-"]')).map((card) => {
+              const price = card.querySelector<HTMLElement>('[data-testid^="price-"]')
               const style = getComputedStyle(card)
               return {
-                name: (card.querySelector('[data-testid="pricing-plan-name"]') ?? card.querySelector('p'))?.textContent?.trim() ?? '',
+                name: card.querySelector('p')?.textContent?.trim() ?? '',
                 plane: style.backgroundColor === cloud ? 'cloud' : style.backgroundColor === white ? 'white' : style.backgroundColor,
                 ringed: style.boxShadow.includes('inset'),
-                buttons: Array.from(card.querySelectorAll<HTMLAnchorElement>('a')).map((a) => ({
+                buttons: Array.from(card.querySelectorAll<HTMLAnchorElement>('a, button')).map((a) => ({
                   text: a.innerText.trim(),
                   href: a.getAttribute('href') ?? '',
                   outlined: getComputedStyle(a).boxShadow.includes('inset') && getComputedStyle(a).backgroundColor !== primary,
                 })),
-                figtree: price !== null && /Figtree/.test(getComputedStyle(price).fontFamily) && document.fonts.check('28px "Figtree"'),
+                figtree: price === null ? null : /Figtree/.test(getComputedStyle(price).fontFamily) && document.fonts.check('28px "Figtree"'),
               }
             })
             const headings = Array.from(document.querySelectorAll('main h1, main h2, main h3, main p')).map((e) => e.textContent?.trim() ?? '')
             return {
               cards,
               h1: document.querySelector('h1')!.textContent!.trim(),
-              missing: ['Credit for agents', 'What a request costs', 'Fees on any plan', 'What the labels mean']
-                .filter((h) => !headings.some((t) => t === h || t.startsWith(h))),
+              missing: ['Fees on any plan', 'Fees on money features', 'What the labels mean'].filter((h) => !headings.some((t) => t === h || t.startsWith(h))),
               primaries: Array.from(document.querySelectorAll<HTMLAnchorElement>('main a, main button'))
                 .filter((a) => getComputedStyle(a).backgroundColor === primary)
                 .map((a) => a.innerText.trim()),
@@ -1927,17 +1909,15 @@ export function pricingBoard(): Scenario {
           ctx.evidence.push({ note: `${width}: ${JSON.stringify(got.cards.map((c) => ({ ...c, buttons: c.buttons.map((b) => b.text) })))}; scroll ${got.scroll}/${got.client}` })
           const at = `${width}px`
           const names = got.cards.map((c) => c.name)
-          if (names.join() !== PRICE_CARDS.map((c) => c.name).join()) wrong.push(`${at}: the plan cards are [${names.join(', ')}], not [${PRICE_CARDS.map((c) => c.name).join(', ')}]`)
+          if (names.join() !== ladder.map((p) => p.name).join()) wrong.push(`${at}: the plan cards are [${names.join(', ')}], not Lens's [${ladder.map((p) => p.name).join(', ')}]`)
           for (const c of got.cards) {
-            const want = PRICE_CARDS.find((p) => p.name === c.name)
-            const plane = c.name === 'Team' ? 'white' : 'cloud'
-            if (c.plane !== plane) wrong.push(`${at}: ${c.name} is on ${c.plane}, not ${plane}`)
-            const buttons = want === undefined ? '' : planButtonFault(c.name, c.buttons, want, cardPayments)
+            if (c.plane !== 'cloud') wrong.push(`${at}: ${c.name} is on ${c.plane}, not cloud`)
+            const buttons = ladderButtonFault(c.name, c.buttons, ladder.find((p) => p.name === c.name)?.by_contract === true)
             if (buttons !== '') wrong.push(`${at}: ${buttons}`)
-            if (!c.figtree) wrong.push(`${at}: ${c.name}'s price is not in Figtree`)
+            if (c.figtree === false) wrong.push(`${at}: ${c.name}'s price is not in Figtree`)
           }
           const ringed = got.cards.filter((c) => c.ringed).map((c) => c.name)
-          if (ringed.join() !== 'Team') wrong.push(`${at}: highlighted: [${ringed.join(', ')}], not [Team]`)
+          if (ringed.length > 0) wrong.push(`${at}: highlighted: [${ringed.join(', ')}], not none`)
           if (got.primaries.join() !== 'Create your workspace') wrong.push(`${at}: the ink actions are [${got.primaries.join(', ')}], not [Create your workspace]`)
           if (got.h1 !== 'Credit for your agents. A plan for your people.') wrong.push(`${at}: the H1 reads "${got.h1}"`)
           if (got.missing.length > 0) wrong.push(`${at}: no section ${got.missing.join(', ')}`)
@@ -1947,34 +1927,19 @@ export function pricingBoard(): Scenario {
         await page.close()
       }
       return wrong.length === 0
-        ? { pass: true, detail: 'four company plan cards, Team highlighted and the rest on cloud, one outlined button each while a card can be charged and none while it cannot, Figtree prices, every section, one ink action, at 1440 and 390' }
+        ? { pass: true, detail: `${ladder.length} plan cards as Lens states them, every one on cloud and none highlighted, Custom's one outlined button to an email, Figtree prices, every section, one ink action, at 1440 and 390` }
         : { pass: false, detail: `/pricing: ${wrong.join('; ')}` }
     },
   }
 }
 
-/** B51.3 — a plan card's buttons: one outlined button (B57.61; the page's one ink action is Create your workspace) to
- *  the plan's place while a card can be charged, and none while it cannot. */
-export function planButtonFault(
-  name: string,
-  buttons: { text: string; href: string; outlined: boolean }[],
-  want: { button: string; href: string },
-  cardPayments: string | undefined,
-): string {
-  if (cardPayments !== 'live') {
-    return buttons.length === 0 ? '' : `${name}'s buttons are ${JSON.stringify(buttons)} while card_payments is "${cardPayments ?? 'not served'}", not none`
-  }
-  const ok = buttons.length === 1 && buttons[0].text === want.button && buttons[0].href.startsWith(want.href) && buttons[0].outlined
-  return ok ? '' : `${name}'s buttons are ${JSON.stringify(buttons)}, not one outlined "${want.button}" to ${want.href}`
+/** B61.61 — a ladder card's buttons: Custom, which a contract prices, has one outlined "Custom: talk to us" to an email;
+ *  every other plan has none on /pricing (it is chosen on Settings, Plan). */
+export function ladderButtonFault(name: string, buttons: { text: string; href: string; outlined: boolean }[], byContract: boolean): string {
+  if (!byContract) return buttons.length === 0 ? '' : `${name}'s buttons are ${JSON.stringify(buttons)}, not none`
+  const ok = buttons.length === 1 && buttons[0].text === 'Custom: talk to us' && buttons[0].href.startsWith('mailto:') && buttons[0].outlined
+  return ok ? '' : `${name}'s buttons are ${JSON.stringify(buttons)}, not one outlined "Custom: talk to us" to an email`
 }
-
-/** B32.14 — the price card's plans in the order /pricing draws them, each with its one button and where it goes. */
-const PRICE_CARDS = [
-  { name: 'Free', button: 'Start free', href: '/signup' },
-  { name: 'Team', button: 'Choose Team', href: '/plans' },
-  { name: 'Business', button: 'Choose Business', href: '/plans' },
-  { name: 'Enterprise', button: 'Talk to us', href: 'mailto:' },
-] as const
 
 export function streamsProgressively(): Scenario {
   return {

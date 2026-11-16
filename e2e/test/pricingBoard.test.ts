@@ -1,18 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { planButtonFault } from '../src/scenarios.ts'
+import { ladderButtonFault } from '../src/scenarios.ts'
 
-const want = { button: 'Choose Team', href: '/plans' }
-const choose = [{ text: 'Choose Team', href: '/plans', outlined: true }]
+const talk = [{ text: 'Custom: talk to us', href: 'mailto:hello@talyvor.com', outlined: true }]
 
-describe('pricing-board plan buttons (B51.3)', () => {
-  it('wants one outlined button while a card can be charged', () => {
-    expect(planButtonFault('Team', choose, want, 'live')).toBe('')
-    expect(planButtonFault('Team', [], want, 'live')).toContain('not one outlined "Choose Team"')
+describe('pricing-board plan buttons (B61.61)', () => {
+  it('wants Custom’s one outlined button to an email', () => {
+    expect(ladderButtonFault('Custom', talk, true)).toBe('')
+    expect(ladderButtonFault('Custom', [], true)).toContain('not one outlined "Custom: talk to us"')
+    expect(ladderButtonFault('Custom', [{ ...talk[0], href: '/plans' }], true)).toContain('to an email')
   })
 
-  it('wants no button while it cannot', () => {
-    expect(planButtonFault('Team', [], want, 'test')).toBe('')
-    expect(planButtonFault('Team', [], want, undefined)).toBe('')
-    expect(planButtonFault('Team', choose, want, 'off')).toContain('while card_payments is "off", not none')
+  it('wants no button on a plan chosen on Settings, Plan', () => {
+    expect(ladderButtonFault('Company', [], false)).toBe('')
+    expect(ladderButtonFault('Team', [{ text: 'Choose Team', href: '/plans', outlined: true }], false)).toContain('not none')
   })
 })

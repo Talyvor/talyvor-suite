@@ -48,12 +48,12 @@ describe('the site-truth oracle (B51.4)', () => {
     ])
   })
 
-  // B56.2: the page prints each plan's served platform fee, and no merged fee or gate row.
-  it('catches a platform fee /pricing leaves out and a merged Services or sign-on row', () => {
-    const served = (r: SiteRead) => { r.platformFeeBps = { free: 600, team: 325, enterprise: 100 } }
-    expect(planted((r) => { served(r); at(r, '/pricing').text += ' Free 6% · Team 3.25% · Enterprise agreed' })).toEqual([])
-    expect(planted((r) => { served(r); at(r, '/pricing').text += ' Free 6% · Team 3% · Services and compute 4% · SSO and audit export' })).toEqual([
-      "/pricing does not say team's platform fee is 3.25%, as /api/pricing serves it",
+  // B56.2: the page prints each plan's served fee, and no merged fee or gate row. B61.61: our plans' exchange fee, by name.
+  it('catches an exchange fee /pricing leaves out and a merged Services or sign-on row', () => {
+    const served = (r: SiteRead) => { r.fxMarginBps = { personal_solo: 100, business_studio: 60, business_custom: 15 }; r.planNames = { personal_solo: 'Solo', business_studio: 'Studio' } }
+    expect(planted((r) => { served(r); at(r, '/pricing').text += ' Solo 1% · Studio 0.6%' })).toEqual([])
+    expect(planted((r) => { served(r); at(r, '/pricing').text += ' Solo 1% · Studio 3% · Services and compute 4% · SSO and audit export' })).toEqual([
+      "/pricing does not say Studio's exchange fee is 0.6%, as /api/pricing serves it",
       '/pricing still shows one "Services and compute" row',
       '/pricing still shows one "SSO and audit export" row',
     ])
@@ -77,16 +77,18 @@ describe('the site-truth oracle (B51.4)', () => {
     ])
   })
 
-  // B56.4: /pricing and /terms say the served split from the first sale, and no page offers a first-million tier.
+  // B56.4: /terms says the served split from the first sale, and no page offers a first-million tier. B61.61: /pricing
+  // prices no Marketplace (B59.5), so it is not asked for the split.
   it('catches a split without "from the first sale" and a first-million tier', () => {
     const SPLIT = 'Sellers earn 85% of every paid use, rental and purchase, from the first sale; Talyvor keeps 15%.'
     expect(splitSentence(1500)).toBe(SPLIT)
     const served = (r: SiteRead) => { r.marketTakeBps = 1500 }
     expect(planted((r) => { served(r); at(r, '/pricing').text += ` ${SPLIT}`; at(r, '/terms').text += ` Sellers earn 85% of every paid use,\nrental and purchase, from the first sale; Talyvor keeps 15%.` })).toEqual([])
-    expect(planted((r) => { served(r); at(r, '/pricing').text += ' Sellers earn 85%; Talyvor keeps 15%'; at(r, '/terms').text += ` ${SPLIT} 100% of a seller’s first $1M` })).toEqual([
-      `/pricing does not say "${SPLIT}"`,
+    expect(planted((r) => { served(r); at(r, '/terms').text += ' Sellers earn 85%; Talyvor keeps 15%. 100% of a seller’s first $1M' })).toEqual([
+      `/terms does not say "${SPLIT}"`,
       '/terms offers a first-million tier',
     ])
+    expect(planted((r) => { served(r); at(r, '/terms').text += ` ${SPLIT}` })).toEqual([])
   })
 
   // B56.3: no investing on the legal pages or the documentation, and Privacy names every wallet record.

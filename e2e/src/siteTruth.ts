@@ -3,10 +3,10 @@
 // (once Lens serves it, B51.2) and Lens's /status.json rails. It fails on any disagreement:
 //   /marketing shows an email box or "place opens" while sign-up is open;
 //   /pricing shows "Top up any amount" or a Choose button while card_payments is there and not "live";
-//   /pricing leaves out a plan's platform fee as /api/pricing serves it, or merges Services with Compute or sign-on with
-//     audit export in one row (B56.2);
-//   /pricing or /terms leaves out "Sellers earn 85% … from the first sale; Talyvor keeps 15%." at the served take, or any
-//     public page offers a first-$1M or "100% of" tier (B56.4);
+//   /pricing leaves out a plan's exchange fee as /api/pricing serves it (B61.61: our plans, by Lens's names; the platform
+//     fee on AI spend is the hidden gateway's), or merges Services with Compute or sign-on with audit export in one row (B56.2);
+//   /terms leaves out "Sellers earn 85% … from the first sale; Talyvor keeps 15%." at the served take (B61.61: /pricing
+//     prices no Marketplace since B59.5 hid it), or any public page offers a first-$1M or "100% of" tier (B56.4);
 //   /terms, /privacy or /documentation puts investing on a public page, or Privacy leaves out a record Agent Wallets
 //     keeps (B56.3);
 //   a page draws Live for money /api/pricing's labels do not call live, or /marketing or /pricing draws no Live or
@@ -73,8 +73,10 @@ export interface SiteRead {
   signup: 'open' | 'closed' | 'unknown'
   /** /api/pricing's card_payments; undefined while Lens does not serve it. */
   cardPayments: string | undefined
-  /** /api/pricing's fees.platform_fee_bps by plan; undefined while it serves no fees. */
-  platformFeeBps?: Record<string, number>
+  /** B61.61 — /api/pricing's fees.fx_margin_bps by plan; undefined while it serves no fees. */
+  fxMarginBps?: Record<string, number>
+  /** B61.61 — each plan /api/pricing's ladders price (not Custom, which a contract prices), by id: its name. */
+  planNames?: Record<string, string>
   /** /api/pricing's fees.market_take_bps; undefined while it serves no fees. */
   marketTakeBps?: number
   /** /api/pricing's labels (B56.10); undefined while it serves none. */
@@ -119,11 +121,12 @@ export function siteFaults(r: SiteRead): string[] {
   }
 
   if (pricing !== undefined) {
-    // Enterprise's fee is agreed per contract, so the page says "agreed" in place of its served figure.
-    for (const [id, bps] of Object.entries(r.platformFeeBps ?? {})) {
-      if (id === 'enterprise') continue
+    // B61.61 — each priced plan's exchange fee, by its name, as the money features' fees list it; Custom's is a contract's.
+    for (const [id, name] of Object.entries(r.planNames ?? {})) {
+      const bps = r.fxMarginBps?.[id]
+      if (bps === undefined) continue
       const rate = formatBPS(bps)
-      if (!new RegExp(`\\b${id}\\s+${rate.replace('.', '\\.')}`, 'i').test(pricing.text)) wrong.push(`/pricing does not say ${id}'s platform fee is ${rate}, as /api/pricing serves it`)
+      if (!new RegExp(`\\b${name}\\s+${rate.replace('.', '\\.')}`).test(pricing.text)) wrong.push(`/pricing does not say ${name}'s exchange fee is ${rate}, as /api/pricing serves it`)
     }
     for (const merged of ['Services and compute', 'SSO and audit export']) {
       if (pricing.text.toLowerCase().includes(merged.toLowerCase())) wrong.push(`/pricing still shows one "${merged}" row`)
@@ -132,7 +135,7 @@ export function siteFaults(r: SiteRead): string[] {
 
   for (const p of r.pages) {
     const text = p.text.replace(/\s+/g, ' ')
-    if (r.marketTakeBps !== undefined && ['/pricing', '/terms'].includes(p.path) && !text.includes(splitSentence(r.marketTakeBps)))
+    if (r.marketTakeBps !== undefined && p.path === '/terms' && !text.includes(splitSentence(r.marketTakeBps)))
       wrong.push(`${p.path} does not say "${splitSentence(r.marketTakeBps)}"`)
     if (FIRST_MILLION.test(text)) wrong.push(`${p.path} offers a first-million tier`)
     if (['/terms', '/privacy', '/documentation'].includes(p.path) && INVESTING.test(p.text)) wrong.push(`${p.path} puts investing on a public page`)
@@ -213,7 +216,7 @@ export function siteTruth(): Scenario {
     owner: 'talyvor-suite',
     feature: 'Public site',
     items: ['B51.1', 'B51.4', 'B56.2', 'B56.3', 'B56.4', 'B56.10'],
-    title: 'the public pages, read signed out, agree with the product: no waitlist while sign-up is open, no top-up or Choose while card payments are not live, each plan\'s served platform fee on /pricing, the 85/15 split from the first sale on /pricing and /terms, Live only where Lens labels the money live, no investing and every wallet record on the legal pages, ' +
+    title: 'the public pages, read signed out, agree with the product: no waitlist while sign-up is open, no top-up or Choose while card payments are not live, each plan\'s served exchange fee on /pricing, the 85/15 split from the first sale on /pricing and /terms, Live only where Lens labels the money live, no investing and every wallet record on the legal pages, ' +
       '"No key needed" routes answer without a key, Privacy\'s Cookies section matches the pages, the shared header and footer, and no link to a 404 or the not-found page',
     run: async (ctx) => {
       const browser = ctx.app.context.browser()
@@ -228,9 +231,13 @@ export function siteTruth(): Scenario {
         const meBody = (await me.json().catch(() => null)) as { signup_open?: boolean | null } | null
         const signup = typeof meBody?.signup_open === 'boolean' ? (meBody.signup_open ? 'open' : 'closed') : 'unknown'
         const priced = await stranger.request.get(`${origin}/api/pricing`)
-        const served = (await priced.json().catch(() => null)) as { card_payments?: string; fees?: { platform_fee_bps?: Record<string, number>; market_take_bps?: number }; labels?: Record<string, string> } | null
+        type Rung = { id: string; name: string; by_contract?: boolean }
+        const served = (await priced.json().catch(() => null)) as { card_payments?: string; fees?: { fx_margin_bps?: Record<string, number>; market_take_bps?: number };
+          labels?: Record<string, string>; ladders?: { personal?: Rung[]; business?: Rung[] } } | null
         const cardPayments = served?.card_payments
-        const platformFeeBps = served?.fees?.platform_fee_bps
+        const fxMarginBps = served?.fees?.fx_margin_bps
+        const rungs = [...(served?.ladders?.personal ?? []), ...(served?.ladders?.business ?? [])].filter((p) => p.by_contract !== true)
+        const planNames = served?.ladders === undefined ? undefined : Object.fromEntries(rungs.map((p) => [p.id, p.name]))
         const marketTakeBps = served?.fees?.market_take_bps
         const labels = served?.labels
         ctx.evidence.push({ note: `/auth/me ${me.status()}: sign-up ${signup}; /api/pricing ${priced.status()}: card_payments ${cardPayments ?? 'not served yet (B51.2)'}` })
@@ -282,7 +289,7 @@ export function siteTruth(): Scenario {
         const unreached = links.filter((l) => l.status === 0).map((l) => l.href)
         ctx.evidence.push({ note: `${links.length} links followed${unreached.length > 0 ? `; no answer from ${unreached.join(', ')}` : ''}` })
 
-        const wrong = siteFaults({ signup, cardPayments, platformFeeBps, marketTakeBps, labels, pages, privacyCookies, facebook: [...facebook], noKey, links })
+        const wrong = siteFaults({ signup, cardPayments, fxMarginBps, planNames, marketTakeBps, labels, pages, privacyCookies, facebook: [...facebook], noKey, links })
         return wrong.length === 0
           ? { pass: true, detail: `${PUBLIC_PAGES.length} public pages agree with the product (sign-up ${signup}, card_payments ${cardPayments ?? 'not served'}); ` +
               `${noKey.length} "No key needed" routes answer without a key; ${links.length} links land` }
