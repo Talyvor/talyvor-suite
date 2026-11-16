@@ -1,0 +1,6 @@
+[
+  { "route": "/agents", "steps": ["New agent", "Make your own", "Picture 20"] },
+  { "route": "/agents", "steps": ["New agent", "Make your own", "Picture 20"], "dark": true },
+  { "route": "/agents/agt_research", "steps": ["Name, description, colour and face"] },
+  { "route": "/agents/agt_research", "steps": ["Name, description, colour and face"], "dark": true }
+]

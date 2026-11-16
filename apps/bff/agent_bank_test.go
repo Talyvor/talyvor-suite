@@ -194,7 +194,7 @@ func TestAgentCreateNamesTheAccountsCurrency(t *testing.T) {
 	doJSON(a, http.MethodPost, "/api/agents", `{"name":"Atlas","fiat_currency":"GBP"}`)
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if len(f.got) != 1 || !strings.HasSuffix(f.got[0], `/agents {"colour":"","fiat_currency":"GBP","name":"Atlas"}`) {
+	if len(f.got) != 1 || !strings.HasSuffix(f.got[0], `/agents {"colour":"","fiat_currency":"GBP","name":"Atlas","picture":""}`) {
 		t.Fatalf("Lens got %q; want the agent created in pounds", f.got)
 	}
 }
@@ -679,7 +679,22 @@ func TestAgentHelperColourReachesLens(t *testing.T) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// B61.87: a create that names no currency sends it empty, which Lens reads as it reads none.
-	want := []string{`/agents {"colour":"cobalt","fiat_currency":"","name":"Atlas"}`, `/agents/agt_1 {"name":null,"description":null,"colour":"rose"}`}
+	want := []string{`/agents {"colour":"cobalt","fiat_currency":"","name":"Atlas","picture":""}`, `/agents/agt_1 {"name":null,"description":null,"colour":"rose"}`}
+	if len(f.got) != 2 || !strings.HasSuffix(f.got[0], want[0]) || !strings.HasSuffix(f.got[1], want[1]) {
+		t.Fatalf("Lens got %q; want …%q", f.got, want)
+	}
+}
+
+// B61.102 — one of the twenty pictures reaches Lens as the agent's picture, on create and on edit; Lens sets its colour.
+func TestAgentPictureReachesLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	doJSON(a, http.MethodPost, "/api/agents", `{"name":"Atlas","picture":"chef"}`)
+	if rec := doJSON(a, http.MethodPatch, "/api/agents/agt_1", `{"picture":"gardener"}`); rec.Code != http.StatusOK {
+		t.Fatalf("pick the gardener = %d %s", rec.Code, rec.Body.String())
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	want := []string{`/agents {"colour":"","fiat_currency":"","name":"Atlas","picture":"chef"}`, `/agents/agt_1 {"name":null,"description":null,"picture":"gardener"}`}
 	if len(f.got) != 2 || !strings.HasSuffix(f.got[0], want[0]) || !strings.HasSuffix(f.got[1], want[1]) {
 		t.Fatalf("Lens got %q; want …%q", f.got, want)
 	}

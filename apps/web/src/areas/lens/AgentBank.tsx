@@ -15,7 +15,6 @@ import {
   RoomBadge,
   Select,
   faceOf,
-  type FaceColour,
 } from '@talyvor/ui/pocket'
 import { Card, pressed } from './walletBrand'
 import { Region, RegionScreen } from '../../components/Region'
@@ -34,6 +33,7 @@ import { AgentCard } from './AgentCard'
 import { AgentCardPanel } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
 import { HelperPicker } from '../../cards/HelperPicker'
+import { lookFor, pictureOf, type AgentPicture } from '../../cards/agentPictures'
 import { AgentSettings } from './AgentSettings'
 import { limitAlertText } from './LimitAlertsCard'
 import { AllowedUpTo, AlwaysAllow } from './AlwaysAllow'
@@ -505,10 +505,10 @@ function CreateAgent({ first = false, onCreated }: { first?: boolean; onCreated:
   const qc = useQueryClient()
   const [name, setName] = useState('')
   const [template, setTemplate] = useState<RuleTemplate | null>(null)
-  const [colour, setColour] = useState<FaceColour | null>(null)
+  const [picture, setPicture] = useState<AgentPicture | null>(null)
   const create = useMutation({
     mutationFn: async () => {
-      const a = await agentBankApi.create(name.trim(), colour ?? undefined)
+      const a = await agentBankApi.create(name.trim(), picture ? lookFor(picture) : {})
       if (template === null) return { a, unsaved: null }
       try {
         qc.setQueryData(rulesKey(a.id), await agentBankApi.setRules(a.id, template.rules))
@@ -519,7 +519,7 @@ function CreateAgent({ first = false, onCreated }: { first?: boolean; onCreated:
     },
     onSuccess: ({ a }) => {
       setName('')
-      setColour(null)
+      setPicture(null)
       onCreated(a)
     },
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
@@ -558,7 +558,7 @@ function CreateAgent({ first = false, onCreated }: { first?: boolean; onCreated:
         ))}
       </div>
       {template ? <p className="text-caption text-muted">{template.summary}</p> : null}
-      <HelperPicker label="Its helper" value={colour} onChange={setColour} />
+      <HelperPicker label="Its helper" value={picture?.id ?? null} onChange={setPicture} />
       {create.isError ? <Note ok={false}>{refusalText(create.error)}</Note> : null}
       {create.data?.unsaved ? <Note ok={false}>{create.data.unsaved}</Note> : null}
     </form>
@@ -656,14 +656,16 @@ function AgentDetails({ agent }: { agent: Agent }) {
   const [name, setName] = useState(agent.name)
   const [description, setDescription] = useState(agent.description ?? '')
   // B57.124 — the helper it wears now; its colour is sent only when the owner picks another, so Lens keeps it.
-  const current = faceOf(agent).colour
-  const [colour, setColour] = useState<FaceColour>(current)
+  // B61.102 — or the picture it wears, one of the gallery's 27: one of the twenty is sent as its picture.
+  const current = pictureOf({ picture: agent.picture, colour: faceOf(agent).colour })?.id ?? null
+  const [picture, setPicture] = useState<AgentPicture | null>(null)
+  const chosen = picture?.id ?? current
   const save = useMutation({
     mutationFn: () =>
-      agentBankApi.update(agent.id, { name: name.trim(), description: description.trim(), ...(colour !== current ? { colour } : {}) }),
+      agentBankApi.update(agent.id, { name: name.trim(), description: description.trim(), ...(picture && picture.id !== current ? lookFor(picture) : {}) }),
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
-  const changed = name.trim() !== agent.name || description.trim() !== (agent.description ?? '') || colour !== current
+  const changed = name.trim() !== agent.name || description.trim() !== (agent.description ?? '') || chosen !== current
   return (
     <Card>
       <CardHeader>Name and description</CardHeader>
@@ -684,7 +686,7 @@ function AgentDetails({ agent }: { agent: Agent }) {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
-        <HelperPicker label={`Helper for ${agent.name}`} value={colour} onChange={setColour} />
+        <HelperPicker label={`Helper for ${agent.name}`} value={chosen} onChange={setPicture} />
         <div>
           <Button type="submit" disabled={!changed || name.trim() === '' || save.isPending}>
             Save

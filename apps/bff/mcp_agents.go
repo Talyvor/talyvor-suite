@@ -312,7 +312,7 @@ func (a *app) mcpCreateAgent(ctx context.Context, t tenant, g oauthGrant, args m
 	if currency == "USDC" {
 		kind, fiat = "crypto", ""
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentCreateBody: colour, face, owner_user_id, template
+	// UPSTREAM-BINDS-ONLY lensAgentCreateBody: colour, face, owner_user_id, picture, role, role_word, template
 	nameBody, _ := json.Marshal(map[string]string{"name": name, "wallet_kind": kind, "fiat_currency": fiat})
 	raw, err := a.lensOK(ctx, t, lensCall{method: http.MethodPost, path: lensWorkspacePath(t, "/agents"), body: nameBody})
 	var agent map[string]any
@@ -327,7 +327,7 @@ func (a *app) mcpCreateAgent(ctx context.Context, t tenant, g oauthGrant, args m
 		return nil, fmt.Errorf("lens created an agent with no id: %v", agent)
 	}
 	path := lensWorkspacePath(t, "/agents/"+url.PathEscape(id))
-	// UPSTREAM-BINDS-ONLY lensAgentUpdateBody: colour, face, name
+	// UPSTREAM-BINDS-ONLY lensAgentUpdateBody: colour, face, name, picture, role, role_word
 	described, _ := json.Marshal(map[string]string{"description": purpose})
 	_, err = a.lensOK(ctx, t, lensCall{method: http.MethodPatch, path: path, body: described})
 	if err == nil {

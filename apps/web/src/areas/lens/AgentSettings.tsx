@@ -20,6 +20,8 @@ import type { FaceColour, FaceShape } from '@talyvor/ui/pocket'
 import { BOOK_KEY, SCHEDULES_KEY, rulesKey, statementKey } from './AgentBank'
 import { cardKey } from './AgentCardPanel'
 import { DESIGN_ATTR } from '../../pocketPending'
+import { Portrait } from '../../cards/HelperPicker'
+import { AGENT_PICTURES, lookFor, pictureOf } from '../../cards/agentPictures'
 import { type Agent, type AgentArchive, agentBankApi, refusalText } from './agentBankApi'
 
 // AgentSettings.tsx — B57.22: the Settings section of an agent's page, as Pocket's w-agent-research draws it. One row
@@ -81,13 +83,17 @@ function SettingRow({ icon, title, line, onOpen }: { icon: IconName; title: stri
   )
 }
 
-/** B57.22 — the agent's name, what it is for, and the colour and face it wears everywhere it is drawn. */
+/** B57.22 — the agent's name, what it is for, and the colour and face it wears everywhere it is drawn. B61.102 — and its
+ *  picture, one of the gallery's 27: a picture sets its colour, and a colour picked alone takes that colour's helper, as
+ *  Lens does, so the two never disagree. */
 export function LookDialog({ agent, open, onClose }: { agent: Agent; open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
   const now = faceOf(agent)
   const [name, setName] = useState(agent.name)
   const [description, setDescription] = useState(agent.description ?? '')
+  const nowPicture = pictureOf({ picture: agent.picture, colour: now.colour })
   const [colour, setColour] = useState<FaceColour>(now.colour)
+  const [picture, setPicture] = useState(nowPicture)
   const [shape, setShape] = useState<FaceShape>(now.shape)
   const save = useMutation({
     // Only what moved is sent as a colour or a face, so Lens keeps the rest as it is.
@@ -95,13 +101,14 @@ export function LookDialog({ agent, open, onClose }: { agent: Agent; open: boole
       agentBankApi.update(agent.id, {
         name: name.trim(),
         description: description.trim(),
-        ...(colour !== now.colour ? { colour } : {}),
+        ...(picture && picture.id !== nowPicture?.id ? lookFor(picture) : colour !== now.colour ? { colour } : {}),
         ...(shape !== now.shape ? { face: shape } : {}),
       }),
     onSuccess: onClose,
     onSettled: () => qc.invalidateQueries({ queryKey: BOOK_KEY }),
   })
-  const changed = name.trim() !== agent.name || description.trim() !== (agent.description ?? '') || colour !== now.colour || shape !== now.shape
+  const changed =
+    name.trim() !== agent.name || description.trim() !== (agent.description ?? '') || colour !== now.colour || picture?.id !== nowPicture?.id || shape !== now.shape
   const look = { id: agent.id, name: name || agent.name, colour, face: shape }
   return (
     <Dialog
@@ -140,6 +147,28 @@ export function LookDialog({ agent, open, onClose }: { agent: Agent; open: boole
           onChange={(e) => setDescription(e.target.value)}
         />
       </div>
+      <div className="grid gap-1.5" role="radiogroup" aria-label="Picture">
+        <span className="text-body font-semibold text-ink-2">Picture</span>
+        <div className="flex flex-wrap gap-2">
+          {AGENT_PICTURES.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              role="radio"
+              aria-checked={picture?.id === p.id}
+              aria-label={`Picture ${i + 1}`}
+              onClick={() => {
+                setPicture(p)
+                setColour(p.colour)
+              }}
+              className={`inline-flex rounded-pill p-0.5 ${picture?.id === p.id ? 'ring-2 ring-ink ring-offset-2 ring-offset-page' : ''} ${pocketFocusRing}`}
+              style={{ background: `var(--agent-${p.colour})` }}
+            >
+              <Portrait picture={p} className="size-9" />
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="grid gap-1.5" role="radiogroup" aria-label="Colour">
         <span className="text-body font-semibold text-ink-2">Colour</span>
         <div className="flex flex-wrap gap-2">
@@ -150,7 +179,10 @@ export function LookDialog({ agent, open, onClose }: { agent: Agent; open: boole
               role="radio"
               aria-checked={colour === c}
               aria-label={c}
-              onClick={() => setColour(c)}
+              onClick={() => {
+                setColour(c)
+                setPicture(AGENT_PICTURES.find((p) => p.id === c))
+              }}
               className={`h-9 w-9 rounded-pill ${colour === c ? 'ring-2 ring-ink ring-offset-2 ring-offset-page' : ''} ${pocketFocusRing}`}
               style={{ background: `var(--agent-${c})` }}
             />

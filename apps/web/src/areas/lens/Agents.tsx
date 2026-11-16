@@ -6,7 +6,7 @@ import { cn, inlineLink } from '@talyvor/ui'
 import { InlineFailure } from '../../components/SessionExpiredBar'
 import { IfArea } from '../../lib/workspaceAreas'
 import { Portrait } from '../../cards/HelperPicker'
-import type { AgentCardArt } from '../../cards/cardArt'
+import { AGENT_PICTURES, lookFor, type AgentPicture } from '../../cards/agentPictures'
 import { planName, usePricing } from '../marketing/pricingApi'
 import { BOOK_KEY, rulesKey } from './AgentBank'
 import { AgentCard } from './AgentCard'
@@ -178,7 +178,7 @@ function StartWith({ onPick, onClose }: { onPick: (start: AgentKindChoice | 'own
       <h3 className="text-body font-semibold text-ink-2">Start with one of ours</h3>
       <div className="grid gap-2" data-testid="new-agent-kinds">
         {AGENT_KINDS.map((k) => (
-          <StartChoice key={k.kind} picture={<Portrait helper={k.picture} className="size-12" />} name={k.kind} line={k.line} onPick={() => onPick(k)} />
+          <StartChoice key={k.kind} picture={<Portrait picture={k.picture} className="size-12" />} name={k.kind} line={k.line} onPick={() => onPick(k)} />
         ))}
       </div>
       <StartChoice
@@ -225,7 +225,7 @@ function Details({
   const navigate = useNavigate()
   const ours = start === 'own' ? null : start
   const [name, setName] = useState('')
-  const [picture, setPicture] = useState<AgentCardArt | null>(ours?.picture ?? null)
+  const [picture, setPicture] = useState<AgentPicture | null>(ours?.picture ?? null)
   const [does, setDoes] = useState<string>(ours?.kind ?? '')
   const [typed, setTyped] = useState<Typed>(ours ? typedFrom(ours.rules) : NOTHING_TYPED)
   const [more, setMore] = useState(false)
@@ -242,7 +242,7 @@ function Details({
   const create = useMutation({
     mutationFn: async (r: AgentRulesSave) => {
       // B61.87 — the agent's own account is opened in the account's currency, the one its rules are typed in.
-      const a = await agentBankApi.create(name.trim(), picture?.colour, r.currency === 'USDC' ? undefined : r.currency)
+      const a = await agentBankApi.create(name.trim(), picture ? lookFor(picture) : {}, r.currency === 'USDC' ? undefined : r.currency)
       const unsaved: string[] = []
       if (does.trim() !== '') {
         try {
@@ -300,7 +300,7 @@ function Details({
       <div className="flex items-center gap-3 rounded-inset bg-cloud p-2.5 pr-3" data-testid="new-agent-start">
         {ours ? (
           <>
-            <Portrait helper={ours.picture} className="size-12" />
+            <Portrait picture={ours.picture} className="size-12" />
             <span className="grid min-w-0 flex-1 gap-0.5">
               <span className="font-semibold text-ink">{ours.kind}</span>
               <span className="text-body text-ink-3">{ours.line}</span>
@@ -324,16 +324,16 @@ function Details({
           <div className="grid gap-1.5">
             <span className="text-body font-semibold text-ink-2">Picture</span>
             <div className="flex flex-wrap gap-2" role="group" aria-label="Picture">
-              {AGENT_KINDS.map((k, i) => (
+              {AGENT_PICTURES.map((g, i) => (
                 <button
-                  key={k.picture.id}
+                  key={g.id}
                   type="button"
                   aria-label={`Picture ${i + 1}`}
-                  aria-pressed={picture?.id === k.picture.id}
+                  aria-pressed={picture?.id === g.id}
                   className={cn('inline-flex rounded-pill p-0.5 aria-pressed:shadow-pick', pocketFocusRing)}
-                  onClick={() => setPicture((p) => (p?.id === k.picture.id ? null : k.picture))}
+                  onClick={() => setPicture((p) => (p?.id === g.id ? null : g))}
                 >
-                  <Portrait helper={k.picture} className="size-11" />
+                  <Portrait picture={g} className="size-11" />
                 </button>
               ))}
             </div>
