@@ -1,0 +1,5 @@
+[
+  { "route": "/money/invoices", "screen": "w-invoices" },
+  { "route": "/money/invoices", "screen": "w-invoices+new-invoice", "steps": ["New invoice"] },
+  { "route": "/money/invoices", "screen": "w-invoices+void-inv", "steps": ["Void"] }
+]

@@ -196,8 +196,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/settings/help': 0, // B59.28: Pocket's own section titles, no CardHeader
   '/settings/close': 0,
   '/settings/data': 0,
-  // B30.97 — the accounts, the new invoice form, and the invoices issued.
-  '/money/invoices': 3,
+  '/money/invoices': 0, // B57.33: Pocket's Issued and Accounts, no CardHeader
   // B30.96 — payees, send, payments out, standing orders, mandates and bulk payouts.
   '/money/spending': 0, // B57.89: drawn in Pocket, whose cards head themselves with an h2 or h3
   '/money/card': 0, // B57.97: drawn in Pocket, whose cards head themselves with an h3

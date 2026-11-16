@@ -196,6 +196,18 @@ const SAMPLE: Record<string, unknown> = {
       { id: 'macc_company_usdc', agent_id: '', currency: 'USDC', purpose: 'company', status: 'open', name: 'USDC account', balance_minor: 1_500_000_000, test_minor: 1_500_000_000, live_minor: 0 },
     ],
   },
+  // B57.33 — the reference's w-invoices: Orbit Studio's sent and Fennel Labs' paid, both into Research's dollars.
+  '/api/money/invoices': {
+    invoices: [
+      { id: 'inv_orbit', agent_id: 'agt_research', account_id: 'macc_research_usd', issuer: 'Nick’s team', number: 'INV-000002', reference: 'b2c3d4e5f6a1',
+        pay_url: 'https://app.talyvor.com/pay/orbit', currency: 'USD', customer_name: 'Orbit Studio', lines: [{ description: 'Agent pricing research', quantity: 1, unit_amount_minor: 150_000, vat_rate_bps: 0 }],
+        subtotal_minor: 150_000, vat_minor: 0, total_minor: 150_000, paid_minor: 0, due_minor: 150_000, due_date: '2026-11-30', remind_days_before: 0, status: 'sent', created_at: '2026-10-20T09:00:00Z' },
+      { id: 'inv_fennel', agent_id: 'agt_research', account_id: 'macc_research_usd', issuer: 'Nick’s team', number: 'INV-000001', reference: 'a1b2c3d4e5f6',
+        currency: 'USD', customer_name: 'Fennel Labs', lines: [{ description: 'Agent pricing report', quantity: 1, unit_amount_minor: 40_000, vat_rate_bps: 0 }],
+        subtotal_minor: 40_000, vat_minor: 0, total_minor: 40_000, paid_minor: 40_000, due_minor: 0, due_date: '2026-10-31', remind_days_before: 0, status: 'paid',
+        paid_at: '2026-10-12T14:20:00Z', created_at: '2026-10-01T09:00:00Z', payments: [{ entry_id: 'ment_fennel', method: 'agent', amount_minor: 40_000, paid_at: '2026-10-12T14:20:00Z' }] },
+    ],
+  },
   // B57.18 — every agent's wallet, opened with the agent (Lens B46.4), as Home reads each one's stablecoin balance.
   '/api/agents/agt_research/wallet': { account_id: 'macc_research', agent_id: 'agt_research', asset: 'USDC', partner: 'sandbox', balance_minor: 300_000_000, receive: { asset: 'USDC' }, mode: 'TEST' },
   '/api/agents/agt_sales/wallet': { account_id: 'macc_sales', agent_id: 'agt_sales', asset: 'USDC', partner: 'sandbox', balance_minor: 80_000_000, receive: { asset: 'USDC' }, mode: 'TEST' },
