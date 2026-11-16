@@ -231,3 +231,25 @@ describe('New agent (B61.13)', () => {
   })
 })
 
+// B57.172 — the two ways in Pocket: each start is a row button (cloud, 16 round, its picture, its two lines and a
+// chevron), one under another at every width; on the long form Cancel and Create agent stay at the dialog's foot.
+describe('New agent in Pocket (B57.172)', () => {
+  it('draws every start as a row button with its chevron, and keeps the form’s actions in view', async () => {
+    mockBff({ agents: [agent('agt_1', 'Books')], plan: { plan: 'free', agents: 3, agents_used: 1 } })
+    await openNewAgent()
+    const dialog = await screen.findByRole('dialog', { name: 'New agent' })
+    const kinds = await within(dialog).findByTestId('new-agent-kinds')
+    expect(kinds.className).not.toMatch(/grid-cols-2/)
+    const starts = within(dialog).getAllByTestId('new-agent-way')
+    expect(starts.map((s) => within(s).getByRole('button').textContent)).toEqual(['Research', 'Sales', 'Bookkeeping', 'Ads', 'Travel', 'Support', 'Make your own'])
+    for (const s of starts) {
+      expect(s).toHaveClass('rounded-inset', 'bg-cloud')
+      expect(s.querySelector('[data-icon="chev"]')).not.toBeNull()
+    }
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Make your own/ }))
+    expect(within(dialog).getByTestId('new-agent-start')).toHaveClass('rounded-inset', 'bg-cloud')
+    const create = within(dialog).getByRole('button', { name: 'Create agent' })
+    expect(create.closest('[data-testid="new-agent-actions"]')).toHaveClass('sticky', '-bottom-8.5', 'bg-page')
+  })
+})
+
