@@ -35,12 +35,15 @@ describe('Settings, Account: the type and the kind are facts', () => {
       const kind = within(main).getByTestId('settings-money-kind')
       const type = within(main).getByTestId('settings-account-type')
       expect(within(kind).getByText(kindChip)).toBeInTheDocument()
-      expect(within(kind).getByText(KIND)).toBeInTheDocument()
+      expect(kind.querySelector('p')?.textContent).toBe(KIND)
       expect(within(type).getByText(typeChip)).toBeInTheDocument()
-      expect(within(type).getByText(TYPE)).toBeInTheDocument()
+      expect(type.querySelector('p')?.textContent).toBe(TYPE)
       for (const card of [kind, type]) {
-        expect(card.querySelector('button, input, select, a, [role="radio"], [tabindex]')).toBeNull()
-        for (const el of card.querySelectorAll('*')) fireEvent.click(el)
+        // B61.9 — the one control is the sentence's link to Your accounts, where another account is opened.
+        expect(card.querySelector('button, input, select, [role="radio"], [tabindex]')).toBeNull()
+        const links = Array.from(card.querySelectorAll('a'))
+        expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([['open another account', '/settings?accounts=open']])
+        for (const el of card.querySelectorAll('*')) if (el.tagName !== 'A') fireEvent.click(el)
       }
       expect(within(main).queryByRole('radiogroup', { name: 'Kind of money' })).toBeNull()
       expect(screen.queryByRole('dialog')).toBeNull()

@@ -14,6 +14,8 @@ export const SHOT_ROUTES: Record<string, string> = {
   '/signup': '/signup',
   '/signup/key': '/signup/key',
   '/signup/confirm': '/signup/confirm',
+  '/accounts/new': '/accounts/new',
+  '/accounts/new/confirm': '/accounts/new/confirm',
   '/signin': '/signin',
   '/board/:token': '/board/brd_sample',
   '/share/:token': '/share/shr_sample',

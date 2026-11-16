@@ -65,7 +65,10 @@ describe('the navigation is wallet-first (B28.7)', () => {
     const links = Array.from(nav.querySelectorAll<HTMLAnchorElement>('a[href]'))
     expect(links[0].getAttribute('aria-label')).toBe('Talyvor, Home')
     expect(links[0].getAttribute('href')).toBe('/')
-    expect(links.slice(1).map((el) => (el.textContent ?? '').replace(/\d+ waiting$/, '').trim())).toEqual(ORDER)
+    // B61.9 — then the account tile, which opens Your accounts over the page it is on.
+    expect(links[1].getAttribute('aria-label')).toMatch(/^Switch account\. /)
+    expect(links[1].getAttribute('href')).toBe('/?accounts=open')
+    expect(links.slice(2).map((el) => (el.textContent ?? '').replace(/\d+ waiting$/, '').trim())).toEqual(ORDER)
     expect(nav.querySelectorAll('button[aria-expanded]')).toHaveLength(0)
     expect(nav.querySelector('[role="separator"]')).toBeNull()
   })
