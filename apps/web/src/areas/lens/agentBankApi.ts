@@ -1483,6 +1483,13 @@ export const agentBankApi = {
     send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/money/payments/challenge', body),
   payOutside: (body: OutsidePaymentRequest, assertion?: PasskeyAssertion) =>
     send<OutsidePayment>('POST', '/api/money/payments', assertion ? { ...body, assertion } : body),
+  // B61.33 — Pay, to a person on Talyvor (BFF B61.33, Lens B61.32): find answers their shown name and nothing else, or
+  // Lens's one answer for nobody found; a payment is signed over its own challenge and paid once under its key.
+  findPerson: (to: string) => send<FoundPerson>('POST', '/api/money/people/find', { to }),
+  personPaymentChallenge: (body: PersonPaymentRequest) =>
+    send<{ challenge: string; allow_credentials: string[] | null }>('POST', '/api/money/people/pay/challenge', body),
+  payPerson: (body: PersonPaymentRequest, assertion?: PasskeyAssertion) =>
+    send<PersonPayment>('POST', '/api/money/people/pay', assertion ? { ...body, assertion } : body),
   // B40.35 — payees and permission mandates an assistant asked for, saved or signed only by the person.
   assistantRequests: () => getJSON<{ requests: AssistantRequest[] | null }>('/api/money/assistant-requests', { requests: 'list' }),
   dismissAssistantRequest: (id: string) => send<void>('POST', `/api/money/assistant-requests/${e(id)}/dismiss`),
@@ -1887,6 +1894,36 @@ export interface OutsidePaymentRequest {
   currency: string
   reference: string
   idempotency_key: string
+}
+
+/** B61.33 — Lens economy.FoundPerson: a person on Talyvor as a lookup shows them, by their shown name only. */
+export interface FoundPerson {
+  shown_name: string
+}
+
+/** B61.33 — a payment to a person as the Pay screen sends it (Lens cmd/lens personPaymentBody), funding left to Lens. */
+export interface PersonPaymentRequest {
+  /** the Talyvor name, phone number or email typed */
+  to: string
+  amount_minor: number
+  currency: string
+  /** the account's own account it leaves, in that currency */
+  account_id: string
+  note: string
+  idempotency_key: string
+}
+
+/** B61.33 — Lens economy.PersonPayment: one payment to a person, as the sender sees it. */
+export interface PersonPayment {
+  id: string
+  to_shown_name: string
+  from_account_id: string
+  amount_minor: number
+  currency: string
+  funding: string
+  note?: string
+  idempotency_key: string
+  created_at: string
 }
 
 /** Lens economy.MandateGrant (B30.19): on an agent's account, to a Talyvor company or an outside business with a saved payee. */

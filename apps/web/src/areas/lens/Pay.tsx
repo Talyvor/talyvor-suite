@@ -53,6 +53,7 @@ import {
 import { WorkspaceLabel, useWorkspaceLabels } from '../../labels/workspace'
 import { PAY_OUT } from '../../labels/capabilities'
 import { DESIGN_ATTR } from '../../pocketPending'
+import { PayToAPerson } from './PayPerson'
 
 // Pay.tsx — B30.96: money out of an account. Saved payees outside Talyvor, each checked against its account by the account
 // partner (Lens B30.16); a payment to one, from the company's or an agent's account (B30.17), with an agent's requests that
@@ -65,6 +66,7 @@ import { DESIGN_ATTR } from '../../pocketPending'
 // it) and Add a payee's dialog. B57.32 — standing orders, mandates, bulk payouts and bills each have a page under /money/pay
 // (w-pay-orders, w-pay-mandates, w-pay-bulk, w-pay-bills), reached from Also on Pay; what an assistant asked for is a card
 // on Pay; an agent's payment its rules hold waits on Approvals and Home, which Also on Pay links to.
+// B61.33 — To a person, first on Pay (PayPerson.tsx): find a person on Talyvor by their name, phone number or email and pay them.
 
 export const PAYEES_KEY = ['money-payees']
 export const PAYMENTS_KEY = ['money-payments']
@@ -197,6 +199,10 @@ export function PayScreen() {
       </div>
       <div className="grid items-start gap-4 wide:grid-cols-5">
         <div className="grid min-w-0 gap-4 wide:col-span-3">
+          {/* B61.33 — To a person, first: from the account's own accounts, in any currency it holds (Lens B61.32). */}
+          {accounts.isSuccess ? (
+            <PayToAPerson accounts={(accounts.data?.accounts ?? []).filter((a) => a.status === 'open' && a.purpose === 'company')} owner={shows.owner} />
+          ) : null}
           {reading(accounts, 'Your accounts') ??
             (open.length === 0 ? (
               <p className="text-body text-muted" data-testid="pay-no-account">
