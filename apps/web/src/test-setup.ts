@@ -449,3 +449,7 @@ beforeEach(() => {
   // until a live issuer serves them, is tested in areas/lens/HeldCalls.test.tsx.
   physicalCardSource.served = true
 })
+
+// B61.70 — every signed-in page draws the background's canvas, and jsdom has no 2D context: answer null, as jsdom does,
+// without its "Not implemented" stack on every page. A test that needs a context stubs one (page-background.test.tsx).
+HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext

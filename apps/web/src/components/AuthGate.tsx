@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { PageBackground, personalHues } from '@talyvor/ui/pocket'
 import { api } from '../lib/api'
 import { useDocumentTitle } from '../documentTitle'
 import { AuthCard, SignInCard } from '../areas/auth/Entry'
@@ -99,7 +100,9 @@ function SignedOut() {
     // way while twelve addresses were swept for headings twice. Zero-pixel: no rule in the built
     // stylesheet names a sectioning element. LandmarkCoverage.test.tsx asserts it as a state.
     // B57.49 — Pocket's auth card on the cloud page, held to Pocket's rules at whichever address it stands in for.
-    <main data-design="pocket" className="flex min-h-screen items-center justify-center bg-cloud px-gutter">
+    <main data-design="pocket" className="relative flex min-h-screen items-center justify-center overflow-hidden bg-cloud px-gutter">
+      {/* B61.70 — the moving background, as behind every page, in a Personal account's colours. */}
+      <PageBackground hues={personalHues} />
       <AuthCard>
         <SignInCard returnTo={returnTo} />
       </AuthCard>

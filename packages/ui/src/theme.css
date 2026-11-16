@@ -309,3 +309,82 @@ h1, h2, h3, h4 { font-family: var(--display); }
     --tw-scale-y: 1 !important;
   }
 }
+
+/* ── B61.70: THE BACKGROUND (Pocket Live, DESIGN.md section 6) ───────────────────────────────────────────────
+   PageBackground.tsx draws it at the top of every page: the logo's streams on one canvas over a satin glass of the page's
+   two colours (--h1, --h2, set by the component). The glass reaches 70% of the window, full to 52% of that and gone by
+   its foot; the streams are 380 px tall, full to 152 px and gone by 380. Only transforms and opacity move, nothing takes
+   a press, and with reduced motion the washes and the sheen stand at their first frame. */
+:root,
+[data-theme='light'] {
+  --bg-wash: 40%;
+  --bg-veil: 22%;
+  --bg-sheen: rgba(255, 255, 255, .5);
+  --bg-grain: .38;
+  --bg-streams: .5;
+}
+
+[data-theme='dark'] {
+  --bg-wash: 34%;
+  --bg-veil: 12%;
+  --bg-sheen: rgba(255, 255, 255, .08);
+  --bg-grain: .26;
+  --bg-streams: .9;
+}
+
+.pk-bg {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 0; height: max(70vh, 380px);
+  overflow: hidden; pointer-events: none; user-select: none;
+  /* The Shell's scroll: over the first 80 px the background fades to 45% and lifts 24 px. */
+  opacity: calc(1 - var(--bg-scroll, 0) * .55); transform: translateY(calc(var(--bg-scroll, 0) * -24px));
+}
+.pk-bg-glass {
+  position: absolute; left: 0; right: 0; top: 0; height: 70vh; overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 0, #000 52%, rgba(0, 0, 0, .55) 76%, transparent 100%);
+  mask-image: linear-gradient(#000 0, #000 52%, rgba(0, 0, 0, .55) 76%, transparent 100%);
+}
+.pk-bg-tint { position: absolute; inset: -14% -6% -8%; overflow: hidden; }
+.pk-bg-tint i {
+  position: absolute; width: 54%; aspect-ratio: 1; border-radius: 50%; will-change: transform, opacity;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--hc) var(--bg-wash), transparent),
+    color-mix(in srgb, var(--hc) calc(var(--bg-wash) * .45), transparent) 55%, transparent);
+  animation: pk-bg-a 15s ease-in-out infinite alternate;
+}
+.pk-bg-tint .pk-bg-b1 { --hc: var(--h1); left: 50%; top: -30%; }
+.pk-bg-tint .pk-bg-b2 { --hc: var(--h2); left: -2%; top: 2%; opacity: .6; animation-name: pk-bg-b; animation-duration: 19s; }
+.pk-bg-tint .pk-bg-b3 { --hc: color-mix(in srgb, var(--h1) 50%, var(--h2)); left: 30%; top: 30%; width: 48%; opacity: .25; animation-name: pk-bg-c; animation-duration: 24s; }
+@keyframes pk-bg-a { 0% { transform: translate(0, 0) scale(1); opacity: 1; } 50% { transform: translate(-24%, 12%) scale(1.18); opacity: .4; } 100% { transform: translate(8%, -6%) scale(.92); opacity: .95; } }
+@keyframes pk-bg-b { 0% { transform: translate(0, 0) scale(1.05); opacity: .6; } 50% { transform: translate(20%, 14%) scale(.9); opacity: 1; } 100% { transform: translate(34%, -4%) scale(1.12); opacity: .5; } }
+@keyframes pk-bg-c { 0% { transform: translate(0, 0) scale(.9); opacity: .25; } 50% { transform: translate(24%, -12%) scale(1.16); opacity: 1; } 100% { transform: translate(-14%, 8%) scale(1); opacity: .45; } }
+.pk-bg-satin { position: absolute; inset: 0; overflow: hidden; background-color: color-mix(in srgb, var(--page) var(--bg-veil), transparent); }
+.pk-bg-satin::before {
+  content: ""; position: absolute; top: -40%; bottom: -40%; left: -60%; width: 120%; will-change: transform;
+  background: linear-gradient(105deg, transparent 32%, var(--bg-sheen) 50%, transparent 68%);
+  animation: pk-bg-sheen 13s ease-in-out infinite alternate;
+}
+@keyframes pk-bg-sheen { from { transform: translateX(-10%); } to { transform: translateX(90%); } }
+.pk-bg-grain { position: absolute; inset: 0; background-repeat: repeat; background-size: 128px 128px; opacity: var(--bg-grain); mix-blend-mode: soft-light; }
+.pk-bg-streams {
+  position: absolute; left: 0; right: 0; top: 0; display: block; width: 100%; height: 380px; opacity: var(--bg-streams);
+  -webkit-mask-image: linear-gradient(#000 40%, transparent); mask-image: linear-gradient(#000 40%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pk-bg-tint i, .pk-bg-satin::before { animation: none !important; }
+}
+
+/* B61.70 — the top bar has no ground of its own over the background; once the page scrolls past 4 px it turns to glass
+   (the Shell adds .pk-top-glass), so what passes under it stays readable. */
+:root,
+[data-theme='light'] {
+  --top-glass: 78%;
+}
+
+[data-theme='dark'] {
+  --top-glass: 74%;
+}
+
+.pk-top-glass {
+  background-color: color-mix(in srgb, var(--page) var(--top-glass), transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2); backdrop-filter: blur(18px) saturate(1.2);
+  border-color: var(--line);
+}
