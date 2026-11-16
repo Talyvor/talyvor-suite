@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { Button, Input, Row, focusRing } from '@talyvor/ui'
 import { fetchModels, pickerCatalog } from '../chat/chatApi'
-import type { AgentRules } from './agentBankApi'
+import { type AgentRules, formatMinor } from './agentBankApi'
+import { heldIn } from './rulesCurrency'
 import { Lxc } from './money'
 
 // B28.22 — an agent's rules are chosen, not typed: a model or provider name with a typo was saved as
@@ -209,15 +210,20 @@ export function RulesInWords({ agentName, rules, payeeName = (id) => id }: { age
   const choices = useRuleChoices()
   const modelName = (id: string) => modelLabel(choices.models, id)
   const providerName = (id: string) => choices.providers.find((p) => p.value === id)?.label ?? id
+  // B61.87 — rules held in a currency (Lens B61.12) read in it, from their minor units; a Lens older than that, in µLXC.
+  const inCurrency = rules.currency !== undefined
+  const amount = (minor: number | undefined, ulxc: number | undefined) => (inCurrency ? (minor ?? 0) : (ulxc ?? 0))
+  const figure = (v: number) => (inCurrency ? <span className="font-figure">{formatMinor(v, heldIn(rules))}</span> : <Lxc ulxc={v} />)
   const limits: [number, string][] = (
     [
-      [rules.max_per_request_ulxc, 'on one request'],
-      [rules.hourly_limit_ulxc ?? 0, 'an hour'],
-      [rules.daily_limit_ulxc, 'a day'],
-      [rules.weekly_limit_ulxc ?? 0, 'a week'],
-      [rules.monthly_limit_ulxc, 'a month'],
+      [amount(rules.max_per_payment_minor, rules.max_per_request_ulxc), 'on one request'],
+      [amount(rules.hourly_limit_minor, rules.hourly_limit_ulxc), 'an hour'],
+      [amount(rules.daily_limit_minor, rules.daily_limit_ulxc), 'a day'],
+      [amount(rules.weekly_limit_minor, rules.weekly_limit_ulxc), 'a week'],
+      [amount(rules.monthly_limit_minor, rules.monthly_limit_ulxc), 'a month'],
     ] as [number, string][]
   ).filter(([v]) => v > 0)
+  const asksAbove = amount(rules.approval_above_minor, rules.approval_above_ulxc)
   const models = rules.allowed_models ?? []
   const providers = rules.allowed_providers ?? []
   const listings = rules.allowed_listings ?? []
@@ -234,7 +240,7 @@ export function RulesInWords({ agentName, rules, payeeName = (id) => id }: { age
             {limits.map(([v, when], i) => (
               <span key={when}>
                 {i > 0 ? (i === limits.length - 1 ? ' and ' : ', ') : null}
-                <Lxc ulxc={v} /> {when}
+                {figure(v)} {when}
               </span>
             ))}
             .
@@ -249,9 +255,9 @@ export function RulesInWords({ agentName, rules, payeeName = (id) => id }: { age
           {rules.requests_per_minute === 1 ? 'request' : 'requests'} a minute.
         </li>
       ) : null}
-      {rules.approval_above_ulxc > 0 ? (
+      {asksAbove > 0 ? (
         <li>
-          A person must approve any request or payment above <Lxc ulxc={rules.approval_above_ulxc} />.
+          A person must approve any request or payment above {figure(asksAbove)}.
         </li>
       ) : null}
       <li>

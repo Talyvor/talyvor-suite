@@ -5,9 +5,10 @@ import { pressEverything } from '../../test/pressEverything'
 
 // B57.23 — an agent's rules on their own page, /agents/:id/rules. Every row and every More rules field saves into the
 // rules body Lens takes today (PUT /api/agents/{id}/rules); Always allow is a field there now; a save that changes
-// nothing sends nothing and says so. B61.14 — every amount is typed in dollars at Lens's peg ($0.10 a LXC here, so $25
-// is 250,000,000 µLXC), and the model, provider and requests-a-minute rules are not drawn: a save sends back what Lens
-// holds for them.
+// nothing sends nothing and says so. B61.14 — every amount is typed in money, and the model, provider and
+// requests-a-minute rules are not drawn: a save sends back what Lens holds for them. B61.87 — the limits are typed in the
+// rules' currency and saved in its minor units ($25 is 2,500 cents); payee amounts stay in dollars at Lens's peg ($0.10
+// a LXC here, so $40 is 400,000,000 µLXC).
 
 const M = 1_000_000
 
@@ -118,8 +119,9 @@ describe('an agent’s rules page', () => {
       method: 'PUT',
       url: '/api/agents/agt_1/rules',
       body: {
-        max_per_request_ulxc: 1000 * M, hourly_limit_ulxc: 50 * M, daily_limit_ulxc: 500 * M, weekly_limit_ulxc: 1500 * M, monthly_limit_ulxc: 2000 * M,
-        approval_above_ulxc: 250 * M, requests_per_minute: 0, model_daily_limits_ulxc: {},
+        // B61.87 — the limits in the rules' currency (dollars, as Lens names none here), in cents, and no µLXC limit.
+        currency: 'USD', max_per_payment_minor: 10000, hourly_limit_minor: 500, daily_limit_minor: 5000, weekly_limit_minor: 15000,
+        monthly_limit_minor: 20000, approval_above_minor: 2500, requests_per_minute: 0, model_daily_limits_ulxc: {},
         allowed_models: [], allowed_providers: [], allowed_listings: [], allowed_payees: ['agt_2', 'mrc_compute'],
         blocked_payees: ['mrc_casino'], payee_daily_limits_ulxc: { agt_2: 5 * M }, payee_monthly_limits_ulxc: { agt_2: 60 * M },
         active_from: '08:00', active_until: '20:00', timezone: 'Europe/London', pause_on_unusual_spend: true,
@@ -163,8 +165,11 @@ describe('an agent’s rules page', () => {
     field('At most a day for Research, in dollars', '4.5')
     fireEvent.click(screen.getByRole('button', { name: 'Save rules' }))
     await waitFor(() => expect(sent.some((s) => s.method === 'PUT')).toBe(true))
-    // $4.50 at $0.10 a LXC is 45 LXC. Always allow did not change, so it is not sent (toEqual reads undefined as absent).
-    expect(sent.find((s) => s.method === 'PUT')?.body).toEqual({ ...RULES, ...held, daily_limit_ulxc: 45 * M, payee_allowances: undefined })
+    // B61.87 — $4.50 is 450 cents, and no µLXC limit is sent. Always allow did not change, so it is not sent (toEqual reads
+    // undefined as absent).
+    const noULXC = { max_per_request_ulxc: undefined, hourly_limit_ulxc: undefined, daily_limit_ulxc: undefined, weekly_limit_ulxc: undefined, monthly_limit_ulxc: undefined, approval_above_ulxc: undefined }
+    const inCents = { currency: 'USD', max_per_payment_minor: 0, hourly_limit_minor: 0, daily_limit_minor: 450, weekly_limit_minor: 0, monthly_limit_minor: 0, approval_above_minor: 0 }
+    expect(sent.find((s) => s.method === 'PUT')?.body).toEqual({ ...RULES, ...held, ...noULXC, ...inCents, payee_allowances: undefined })
   })
 
   it('has no control that does nothing', { timeout: 120_000 }, async () => {

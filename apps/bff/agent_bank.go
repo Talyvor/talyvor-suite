@@ -141,6 +141,8 @@ func (a *app) handleAgents(w http.ResponseWriter, r *http.Request, t tenant) {
 		var in struct {
 			Name   string `json:"name"`
 			Colour string `json:"colour"` // B57.124: the helper the owner picked; Lens picks one when it is ""
+			// B61.87: the currency its own account opens in, the account's, which its rules are typed in; Lens picks one when "".
+			FiatCurrency string `json:"fiat_currency"`
 		}
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
@@ -150,8 +152,8 @@ func (a *app) handleAgents(w http.ResponseWriter, r *http.Request, t tenant) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "an agent needs a name"})
 			return
 		}
-		// UPSTREAM-BINDS-ONLY lensAgentCreateBody: face, fiat_currency, owner_user_id, template, wallet_kind
-		body, _ := json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour})
+		// UPSTREAM-BINDS-ONLY lensAgentCreateBody: face, owner_user_id, template, wallet_kind
+		body, _ := json.Marshal(map[string]string{"name": in.Name, "colour": in.Colour, "fiat_currency": in.FiatCurrency})
 		a.agentBankRelay(w, r, t, http.MethodPost, "/agents", body)
 	default:
 		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
@@ -266,19 +268,21 @@ func agentRulesFields(w http.ResponseWriter, raw []byte) ([]byte, bool) {
 	// Lens's economy.AgentRules. Lens decodes it with DisallowUnknownFields, so a field named here
 	// that Lens does not have is a 400, never a rule silently dropped.
 	var in struct {
-		MaxPerRequestULXC int64 `json:"max_per_request_ulxc"`
-		DailyLimitULXC    int64 `json:"daily_limit_ulxc"`
-		MonthlyLimitULXC  int64 `json:"monthly_limit_ulxc"`
+		// B61.87 — the µLXC limits are relayed only as a client names them: a save in the rules' currency names none,
+		// and Lens refuses a µLXC limit on rules held in pounds or euros.
+		MaxPerRequestULXC *int64 `json:"max_per_request_ulxc,omitempty"`
+		DailyLimitULXC    *int64 `json:"daily_limit_ulxc,omitempty"`
+		MonthlyLimitULXC  *int64 `json:"monthly_limit_ulxc,omitempty"`
 		// B28.24 — absent (null) keeps the cap Lens holds, as AllowedListings does; zero clears it.
-		HourlyLimitULXC *int64 `json:"hourly_limit_ulxc"`
-		WeeklyLimitULXC *int64 `json:"weekly_limit_ulxc"`
+		HourlyLimitULXC *int64 `json:"hourly_limit_ulxc,omitempty"`
+		WeeklyLimitULXC *int64 `json:"weekly_limit_ulxc,omitempty"`
 		// B28.25 — a daily cap per model, keyed by the model as the agent asks for it. Absent (null) keeps
 		// the caps Lens holds; sent, it replaces them whole, so a model left out has no cap.
 		ModelDailyLimitsULXC map[string]int64 `json:"model_daily_limits_ulxc"`
 		// B28.26 — the questions the agent may ask in any sixty seconds. Absent (null) keeps the cap Lens
 		// holds; zero clears it.
 		RequestsPerMinute *int64   `json:"requests_per_minute"`
-		ApprovalAboveULXC int64    `json:"approval_above_ulxc"`
+		ApprovalAboveULXC *int64   `json:"approval_above_ulxc,omitempty"`
 		AllowedModels     []string `json:"allowed_models"`
 		AllowedProviders  []string `json:"allowed_providers"`
 		// B19.19 — the marketplace listings the agent may use; empty allows any. Absent (null) keeps
@@ -304,12 +308,21 @@ func agentRulesFields(w http.ResponseWriter, raw []byte) ([]byte, bool) {
 		// B59.19 — "Can use Instant transfer" (Lens B59.15), off by default. Absent (null) keeps what Lens holds, so a
 		// save from a screen that does not show the switch never turns it off.
 		MayInstantTransfer *bool `json:"may_instant_transfer"`
+		// B61.87 — the currency the rules are held in and each limit in its minor units (Lens B61.12). Absent, Lens reads
+		// the µLXC limits as before; a change of currency names every limit in the new one, as Lens requires.
+		Currency           string `json:"currency,omitempty"`
+		MaxPerPaymentMinor *int64 `json:"max_per_payment_minor,omitempty"`
+		HourlyLimitMinor   *int64 `json:"hourly_limit_minor,omitempty"`
+		DailyLimitMinor    *int64 `json:"daily_limit_minor,omitempty"`
+		WeeklyLimitMinor   *int64 `json:"weekly_limit_minor,omitempty"`
+		MonthlyLimitMinor  *int64 `json:"monthly_limit_minor,omitempty"`
+		ApprovalAboveMinor *int64 `json:"approval_above_minor,omitempty"`
 	}
 	if err := json.Unmarshal(raw, &in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return nil, false
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_licences, max_commitment_ulxc, may_subscribe
+	// UPSTREAM-BINDS-ONLY lensAgentRulesBody: allowed_currencies, allowed_licences, fx_daily_limit_ulxc, max_commitment_ulxc, may_subscribe
 	body, _ := json.Marshal(in)
 	return body, true
 }
@@ -392,6 +405,10 @@ func (a *app) handleAgentRulesSimulate(w http.ResponseWriter, r *http.Request, t
 		At         *time.Time      `json:"at"`
 		// B41.4: judged as though this allowance for the payee were saved (Lens B41.104); it is not.
 		AlwaysAllow *payeeAllowance `json:"always_allow,omitempty"`
+		// B61.87: a payment from one of the agent's accounts, in its currency's minor units (Lens B61.12); amount_ulxc is
+		// then 0.
+		AmountMinor int64  `json:"amount_minor,omitempty"`
+		Currency    string `json:"currency,omitempty"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&in); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})

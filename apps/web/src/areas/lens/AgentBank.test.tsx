@@ -177,7 +177,7 @@ describe('Agent Bank', () => {
     await createAgent('Researcher')
 
     await saveRules('Researcher', [['At most a day', '0.5'], ['Asks you above', '0.2']])
-    expect(bff.rules.agt_2).toMatchObject({ daily_limit_ulxc: 5 * M, approval_above_ulxc: 2 * M }) // $0.50 and $0.20 at $0.10 a LXC
+    expect(bff.rules.agt_2).toMatchObject({ currency: 'USD', daily_limit_minor: 50, approval_above_minor: 20 }) // $0.50 and $0.20, in cents (B61.87)
 
     // Researcher asks Lens itself for a payment above its approval amount: Lens holds it for the workspace's yes.
     bff.approvals.push({ id: 'apr_1', agent_id: 'agt_2', amount_ulxc: 3 * M, model: '', status: 'pending', created_at: '2026-09-28T06:05:00Z', fp: 'agt_2>agt_1:3000000:draft',

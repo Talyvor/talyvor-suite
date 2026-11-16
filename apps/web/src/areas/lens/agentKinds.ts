@@ -35,16 +35,5 @@ export const AGENT_KINDS: readonly AgentKindChoice[] = [
   { kind: 'Support', line: 'Pays refunds and the tools that answer customers.', picture: art('Ollie'), rules: { perPayment: 25, perDay: 100, perMonth: 1000, askAbove: 10 } },
 ]
 
-/** Lens's smallest amount. "Ask me above" it means every payment asks: Lens holds no rule that says so in other words. */
-export const EVERY_PAYMENT_ASKS_ULXC = 1
-
-/** Typed cents → µLXC at the peg (dollars per LXC), in whole integers; null while no peg backs it. */
-export function ulxcForCents(cents: number, usdPerLXC: number | undefined): number | null {
-  if (typeof usdPerLXC !== 'number' || !Number.isFinite(usdPerLXC) || usdPerLXC <= 0) return null
-  const microUsdPerLXC = BigInt(Math.round(usdPerLXC * 1_000_000))
-  if (microUsdPerLXC <= 0n) return null
-  // cents × 10,000 is micro-dollars; × 1,000,000 ÷ micro-dollars per LXC is µLXC, rounded to the nearest.
-  const ulxc = (BigInt(cents) * 10_000n * 1_000_000n + microUsdPerLXC / 2n) / microUsdPerLXC
-  const n = Number(ulxc)
-  return Number.isSafeInteger(n) ? n : null
-}
+/** Lens's smallest amount: one minor unit. "Ask me above" it means every payment asks: Lens holds no rule that says so in other words. */
+export const EVERY_PAYMENT_ASKS_MINOR = 1

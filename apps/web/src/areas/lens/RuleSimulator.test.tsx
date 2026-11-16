@@ -5,7 +5,7 @@ import { App, queryClient } from '../../App'
 // B28.30 — "would this request pass my rules?", on the agent's rules page (B57.23). The mock BFF judges the request the way Lens
 // B28.306 does for a daily limit of 5 LXC: above it refused with the rule's sentence, at or below it allowed. It
 // moves nothing, so the only write the screen sends is the question itself.
-// B61.14 — the amount is typed in dollars at Lens's peg ($0.10 a LXC here), the question is only a payment to another of the
+// B61.14 — the amount is typed in money (B61.87: the rules' currency, dollars here, sent in cents), the question is only a payment to another of the
 // workspace's agents (a question to a model is the parked gateway's), and Lens's "5 LXC" in its reason reads in dollars.
 
 function mockBff({ paused = false, allPaused = false, alone = false } = {}) {
@@ -25,7 +25,8 @@ function mockBff({ paused = false, allPaused = false, alone = false } = {}) {
     if (url === '/api/agents')
       return json({ workspace_balance_ulxc: 20_000_000, allocated_ulxc: 10_000_000, unallocated_ulxc: 10_000_000, spent_ulxc: 0, agents, ...(allPaused ? { all_paused_at: '2026-10-05T08:00:00Z' } : {}) })
     if (url === '/api/agents/agt_1/rules/simulate') {
-      const amount = (body as { amount_ulxc: number }).amount_ulxc
+      // B61.87 — asked in the rules' currency's minor units: cents here.
+      const amount = (body as { amount_minor: number }).amount_minor * 100_000
       // Lens (refuseIfPaused) refuses a paused agent first, with its own sentence.
       if (allPaused) return json({ verdict: 'refused', reason: "every agent in this workspace is paused (paused by the workspace's owner) — the workspace's owner can resume them", amount_ulxc: amount, at: '2026-10-05T09:00:00Z', balance_ulxc: 10_000_000 })
       if (paused) return json({ verdict: 'refused', reason: "the agent is paused (paused from its page) — the workspace's owner can resume it", amount_ulxc: amount, at: '2026-10-05T09:00:00Z', balance_ulxc: 10_000_000 })
@@ -67,7 +68,7 @@ describe('asking whether an agent’s rules would let a request through', () => 
     const who = within(card).getByLabelText('Who Researcher would pay') as HTMLSelectElement
     expect([...who.options].map((o) => [o.value, o.text])).toEqual([['agt_2', 'Writer']])
     expect(who.value).toBe('agt_2')
-    // $0.60 at $0.10 a LXC is 6 LXC, over the daily limit of 5 LXC ($0.50).
+    // $0.60 is 60 cents, over the daily limit of $0.50.
     fireEvent.change(within(card).getByLabelText('Amount in dollars to try for Researcher'), { target: { value: '0.60' } })
     fireEvent.click(within(card).getByRole('button', { name: 'Would it pass?' }))
     expect((await within(card).findByRole('alert')).textContent).toBe(
@@ -79,8 +80,8 @@ describe('asking whether an agent’s rules would let a request through', () => 
     expect((await within(card).findByRole('status')).textContent).toBe('AllowedResearcher’s rules would let this through. Nothing was spent.')
 
     expect(sent).toEqual([
-      { method: 'POST', url: '/api/agents/agt_1/rules/simulate', body: { amount_ulxc: 6_000_000, payee: { kind: 'agent', id: 'agt_2' } } },
-      { method: 'POST', url: '/api/agents/agt_1/rules/simulate', body: { amount_ulxc: 1_000_000, payee: { kind: 'agent', id: 'agt_2' } } },
+      { method: 'POST', url: '/api/agents/agt_1/rules/simulate', body: { amount_ulxc: 0, amount_minor: 60, currency: 'USD', payee: { kind: 'agent', id: 'agt_2' } } },
+      { method: 'POST', url: '/api/agents/agt_1/rules/simulate', body: { amount_ulxc: 0, amount_minor: 10, currency: 'USD', payee: { kind: 'agent', id: 'agt_2' } } },
     ])
   })
 
@@ -96,7 +97,7 @@ describe('asking whether an agent’s rules would let a request through', () => 
       fireEvent.change(within(card).getByLabelText('Amount in dollars to try for Researcher'), { target: { value: '0.1' } })
       fireEvent.click(within(card).getByRole('button', { name: 'Would it pass?' }))
       expect((await within(card).findByRole('alert')).textContent).toBe(words)
-      expect(sent).toEqual([{ method: 'POST', url: '/api/agents/agt_1/rules/simulate', body: { amount_ulxc: 1_000_000, payee: { kind: 'agent', id: 'agt_2' } } }])
+      expect(sent).toEqual([{ method: 'POST', url: '/api/agents/agt_1/rules/simulate', body: { amount_ulxc: 0, amount_minor: 10, currency: 'USD', payee: { kind: 'agent', id: 'agt_2' } } }])
       cleanup()
       vi.restoreAllMocks()
       queryClient.clear()
