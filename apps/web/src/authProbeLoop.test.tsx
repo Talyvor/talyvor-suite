@@ -286,7 +286,7 @@ describe('and the halves that must not change', () => {
   it('still gates a signed-out oidc session to the sign-in card', async () => {
     answerProbe({ mode: 'oidc', authenticated: false })
     render(<App />)
-    expect(await screen.findByText('Sign in to Talyvor')).toBeInTheDocument()
+    expect(await screen.findByText('What’s your phone number?')).toBeInTheDocument()
   })
 
   /**

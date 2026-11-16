@@ -279,7 +279,7 @@ describe('the refused-session card is a STATE, not an address, and no sweep saw 
       render(<App />)
       // The gate's own words, from the shared SignInCard — proof this is the refused card and not
       // the page, so "0 outside" cannot come from a screen that never appeared.
-      await screen.findByText(/Sign in to Talyvor/i)
+      await screen.findByText('What’s your phone number?')
 
       const { total, outside, samples } = outsideLandmark(document.body)
       expect(

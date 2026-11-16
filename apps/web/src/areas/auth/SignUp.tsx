@@ -12,12 +12,14 @@ import { useAuthMeReader } from '../../lib/authMe'
 import { useSignupProbe } from '../../lib/signupOpen'
 import { useDocumentTitle } from '../../documentTitle'
 import { usePricing } from '../marketing/pricingApi'
-import { AgentBankError, agentBankApi } from '../lens/agentBankApi'
+import { AgentBankError, agentBankApi, type EnrolmentWaiting } from '../lens/agentBankApi'
 import { openAccount } from '../lens/accountsApi'
 import { DEVICES_KEY, PASSKEYS_KEY, deviceText } from '../lens/AgentBank'
 import { passkeysSupported, registerThisDevice } from '../lens/passkeys'
+import { showRecoveryCode } from '../lens/recoveryCodeStore'
 import { IdentityChecks } from '../lens/IdentityChecks'
 import { AccessLine, AlreadyIn, EntryFrame, PrivacyTerms, SignInCard } from './Entry'
+import { DoorError, makeSignInKey, rememberPasskeyHere, signupAccount, takePasscode, thisBrowserName } from './doorApi'
 import {
   ACCOUNT_TYPES,
   COUNTRIES,
@@ -36,9 +38,9 @@ import {
 // SignUp.tsx — B59.8: /signup asks who the account is for and the kind of money, then the identity provider, then a
 // key (SPEC 3.2; the design's P1, P2 and W1, the web drawing step 2).
 //
-// Steps 1 and 2 are asked BEFORE the identity provider, because Lens sets the type and the kind only on the call that
-// makes the workspace. Step 2's Continue is a link to the BFF's /auth/login with the answers in its query: the BFF holds them with the login in progress and sends them to Lens's POST /v1/provision at the callback, and it
-// refuses a sign-up without both. The callback lands on step 3, /signup/key, with a session.
+// B61.26 — a stranger meets the door first (Door.tsx): the phone number, the code and a passcode chosen twice. That
+// opens a sign-up session (B61.25), which may only finish sign-up: steps 1 and 2 here, then Continue is the BFF's
+// POST /auth/signup/account with the answers, which makes the account and lands on step 3, /signup/key.
 //
 // B61.20 — step 4, /signup/confirm, is the identity check (IdentityChecks): the account opens on Home once it passes.
 //
@@ -57,15 +59,6 @@ export const SIGNUP_CONFIRM_PATH = '/signup/confirm'
 export const ANOTHER_PATH = '/accounts/new'
 export const ANOTHER_CONFIRM_PATH = '/accounts/new/confirm'
 const ANOTHER_STEPS = [SIGNUP_STEPS[0], SIGNUP_STEPS[1], SIGNUP_STEPS[3]] as const
-
-/** The BFF's sign-up entry: /auth/login with the answers, landing on step 3. */
-function signupLoginHref(type: AccountType, kind: MoneyKind, profile: Profile): string {
-  const name = (type === 'personal' ? profile.name : profile.companyName).trim()
-  const q = new URLSearchParams({ account_type: type, money_kind: kind, name, country: profile.country })
-  if (type === 'business') q.set('registration_number', profile.registrationNumber.trim())
-  q.set('return_to', SIGNUP_KEY_PATH)
-  return `/auth/login?${q.toString()}`
-}
 
 /** pocket.css's Sandbox label, read from Lens's labels for every money capability; nothing until Lens answers. */
 function SandboxLabel() {
@@ -296,17 +289,11 @@ function StepWho({ type, setType, profile, setProfile, onContinue, another = fal
         <Button type="submit" disabledReason={type ? undefined : PICK_TYPE} reasonClassName="pk-on-bg">
           Continue
         </Button>
-        {another ? null : (
-          <a href="/signin" className={cn('text-reading font-semibold text-ink', pocketFocusRing)}>
-            Sign in instead
-          </a>
-        )}
       </div>
       {another ? null : (
         <>
           <AccessLine state={signup} onBackground />
           {/* B44.1 — while sign-up is closed, a stranger can still leave an email. */}
-          {signup === 'closed' && <Waitlist pocket className="w-full max-w-md" />}
           {/* B27.22 — sharing is on from the first request, so a stranger is told before they continue. */}
           <SharedAnswersFact className="text-body pk-on-bg" />
         </>
@@ -329,10 +316,15 @@ function StepKind({ type, profile, kind, setKind, onBack, another = false }: {
   const name = (type === 'personal' ? profile.name : profile.companyName).trim()
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const registration = type === 'business' ? { registration_number: profile.registrationNumber.trim() } : {}
   const open = useMutation({
-    mutationFn: (k: MoneyKind) => openAccount({ type, kind: k, name, country: profile.country, ...(type === 'business' ? { registration_number: profile.registrationNumber.trim() } : {}) }),
+    // B61.26 — sign-up's session makes its account at the BFF's /auth/signup/account; another account at /api/accounts.
+    mutationFn: (k: MoneyKind) =>
+      another
+        ? openAccount({ type, kind: k, name, country: profile.country, ...registration })
+        : signupAccount({ account_type: type, money_kind: k, name, country: profile.country, ...registration }),
     onSuccess: async () => {
-      navigate(ANOTHER_CONFIRM_PATH)
+      navigate(another ? ANOTHER_CONFIRM_PATH : SIGNUP_KEY_PATH)
       // The session is on the new account: nothing read for the one it left is kept.
       await qc.resetQueries()
     },
@@ -362,13 +354,9 @@ function StepKind({ type, profile, kind, setKind, onBack, another = false }: {
           <Button variant="outline" onClick={onBack}>
             Back
           </Button>
-          {kind && another ? (
+          {kind ? (
             <Button disabled={open.isPending} onClick={() => open.mutate(kind)}>
               {open.isPending ? 'Opening…' : 'Continue'}
-            </Button>
-          ) : kind ? (
-            <Button asChild>
-              <a href={signupLoginHref(type, kind, profile)}>Continue</a>
             </Button>
           ) : (
             <Button disabledReason={PICK_KIND}>Continue</Button>
@@ -382,22 +370,43 @@ function StepKind({ type, profile, kind, setKind, onBack, another = false }: {
 
 /** Lens's own sentence for a refusal it worded (the eleventh account), and otherwise one of ours. */
 function openFailure(err: unknown): string {
+  if (err instanceof DoorError && err.status > 0 && err.status < 500) return err.message
   return err instanceof AgentBankError && err.sentence && err.status < 500 ? err.sentence : 'The account didn’t open. Try again.'
 }
 
 // ─── /signup ────────────────────────────────────────────────────────────────
 
 export function SignUp() {
-  const { authenticated } = useSignupProbe()
+  const me = useAuthMeReader()
+  const { signup } = useSignupProbe()
   const [step, setStep] = useState<1 | 2>(1)
   const [type, setType] = useState<AccountType | null>(null)
   const [profile, setProfile] = useState<Profile>(EMPTY)
   const [kind, setKind] = useState<MoneyKind | null>(null)
-  useDocumentTitle(authenticated ? 'You’re signed in' : 'Create a workspace')
-  if (authenticated) {
+  const authenticated = me.data?.authenticated === true
+  const joining = authenticated && me.data?.signup_unfinished === true
+  useDocumentTitle(authenticated && !joining ? 'You’re signed in' : 'Create a workspace')
+  if (authenticated && !joining) {
     return (
       <EntryFrame>
         <AlreadyIn />
+      </EntryFrame>
+    )
+  }
+  // B61.26 — a stranger: the door, drawn while /auth/me is still answering too, as most who open /signup are strangers.
+  // A new number's session comes back here for steps 1 and 2.
+  if (!joining && me.data?.mode !== 'disabled') {
+    return (
+      <EntryFrame>
+        <SignInCard
+          foot={
+            <>
+              <AccessLine state={signup} />
+              {/* B44.1 — while sign-up is closed, a stranger can still leave an email. */}
+              {signup === 'closed' && <Waitlist pocket className="w-full" />}
+            </>
+          }
+        />
       </EntryFrame>
     )
   }
@@ -480,16 +489,35 @@ function KeyDone({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * B61.26 — a person who joined by phone makes one passkey for both: the BFF's key challenge is the account's approval
+ * challenge too (B61.25), so the same key is kept as their sign-in key (proved by the passcode they just chose, held in
+ * memory from the door) and given to the account's approvals. Without that passcode it is the approval key alone, and
+ * "Sign in faster next time" offers the sign-in key at the next sign-in.
+ */
+async function makeKeyHere(person: boolean): Promise<EnrolmentWaiting | null> {
+  const passcode = person ? takePasscode() : undefined
+  if (!passcode) return registerThisDevice(navigator.userAgent.includes('iPhone') ? 'iPhone' : 'This device')
+  const key = await makeSignInKey(thisBrowserName(), passcode)
+  rememberPasskeyHere()
+  const registered = await agentBankApi.registerPasskey(key)
+  if ('enrolment' in registered) return registered.enrolment
+  if (registered.recovery_code) showRecoveryCode(registered.recovery_code)
+  return null
+}
+
 function KeyChoices() {
   const qc = useQueryClient()
+  const me = useAuthMeReader()
+  const person = me.data?.user?.sub.startsWith('person:') === true
   const passkeys = useQuery({ queryKey: PASSKEYS_KEY, queryFn: agentBankApi.passkeys })
   // Asked every 3 seconds until a key is here, so the phone's key shows up the moment the app makes it.
   const devices = useQuery({ queryKey: DEVICES_KEY, queryFn: agentBankApi.devices, refetchInterval: (q) => ((q.state.data?.devices ?? []).length > 0 ? false : 3000) })
   const [said, setSaid] = useState<string | null>(null)
   const make = useMutation({
-    mutationFn: () => registerThisDevice(navigator.userAgent.includes('iPhone') ? 'iPhone' : 'This device'),
+    mutationFn: () => makeKeyHere(person),
     onSuccess: () => setSaid(null),
-    onError: (err) => setSaid(deviceText(err, 'No passkey was made.')),
+    onError: (err) => setSaid(err instanceof DoorError ? err.message : deviceText(err, 'No passkey was made.')),
     onSettled: () => qc.invalidateQueries({ queryKey: PASSKEYS_KEY }),
   })
   const hasPasskey = (passkeys.data?.passkeys ?? []).length > 0

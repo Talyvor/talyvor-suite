@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
 import { pressEverything } from '../../test/pressEverything'
 
-// Entry.test.tsx — THE TWO FRONT DOORS.
+// Entry.test.tsx — THE FRONT DOOR.
+//
+// B61.26 — /signin and /signup are now ONE door, the phone number (Door.tsx, Door.test.tsx): a known number signs in
+// with its passcode, a new one chooses a passcode and goes on to sign-up's steps. What still differs is what a
+// stranger is told on /signup (the access line), and what an already-signed-in person is told. The history below is
+// why the words, and not the mechanism, are what these tests read.
 //
 // Sign up and sign in are ONE mechanism (the same OIDC round-trip at /auth/login) and must not
 // be one page. The person reading them wants opposite reassurances:
@@ -36,6 +41,9 @@ type MeOverrides = {
   labels?: Record<string, string>
   signup_open?: boolean
   authenticated?: boolean
+  /** B61.26 — a new number's sign-up session */
+  signup_unfinished?: boolean
+  google_signin?: boolean
   /** Simulate an unreachable/failed probe: the page must claim NOTHING either way. */
   fail?: boolean
 }
@@ -51,6 +59,8 @@ function mockMe(o: MeOverrides = {}) {
           authenticated: o.authenticated ?? false,
           user: o.authenticated ? { sub: 's', email: 'someone@example.com' } : null,
           ...(o.signup_open === undefined ? {} : { signup_open: o.signup_open }),
+          ...(o.signup_unfinished ? { signup_unfinished: true } : {}),
+          ...(o.google_signin ? { google_signin: true } : {}),
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       )
@@ -88,34 +98,42 @@ describe('/signup and /signin are public routes', () => {
     at('/signup')
     // The gate's card would be the failure: a signup page you must already be signed in to
     // read is not a signup page.
-    expect(await screen.findByRole('heading', { name: 'Who is this account for?' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'What’s your phone number?' })).toBeInTheDocument()
     expect(screen.queryByText(/this workspace requires authentication/i)).toBeNull()
   })
 
   it('/signin renders for someone with no session', async () => {
     mockMe({ signup_open: true })
     at('/signin')
-    expect(await screen.findByRole('heading', { name: /sign in/i })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'What’s your phone number?' })).toBeInTheDocument()
   })
 
-  it('they are DIFFERENT pages, not one page behind two paths', async () => {
-    mockMe({ signup_open: true })
-    at('/signup')
-    const signupHeading = (await screen.findByRole('heading', { level: 1 })).textContent
+  // B61.26 — one door: the number decides whether it signs in or joins, so both addresses ask the same question.
+  it('they are ONE door: both ask for the phone number, and neither has a password field', async () => {
+    for (const path of ['/signup', '/signin']) {
+      mockMe({ signup_open: true })
+      at(path)
+      expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('What’s your phone number?')
+      expect(screen.getByLabelText('Your phone number')).toHaveAttribute('type', 'tel')
+      expect(document.querySelector('input[type="password"]')).toBeNull()
+      cleanup()
+      queryClient.clear()
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('Google is offered small under the door only while the BFF still offers it', async () => {
+    mockMe({ signup_open: true, google_signin: true })
+    at('/signin')
+    const google = await screen.findByRole('link', { name: 'Continue with Google' })
+    expect(google.getAttribute('href')).toMatch(/^\/auth\/login/)
     cleanup()
     queryClient.clear()
+    vi.restoreAllMocks()
     mockMe({ signup_open: true })
     at('/signin')
-    const signinHeading = (await screen.findByRole('heading', { level: 1 })).textContent
-    expect(signupHeading).not.toEqual(signinHeading)
-  })
-
-  // B59.8: /signup reaches /auth/login from its step 2, with its answers (SignUp.test.tsx).
-  it('sign-in ends at /auth/login', async () => {
-    mockMe({ signup_open: true })
-    at('/signin')
-    const action = await screen.findByRole('link', { name: /^sign in$/i })
-    expect(action.getAttribute('href')).toMatch(/^\/auth\/login/)
+    await screen.findByRole('heading', { level: 1 })
+    expect(screen.queryByRole('link', { name: 'Continue with Google' })).toBeNull()
   })
 })
 
@@ -137,7 +155,8 @@ describe('the signup page is written for someone who has never heard of us', () 
   // B27.22 — sharing is on by default, so the page says so before Continue, and links to the
   // switch itself (Features.test.tsx: that address lands on the Answer sharing row's switch).
   it('says answers may be reused for other companies, and links to the sharing switch', async () => {
-    mockMe({ signup_open: true })
+    // B61.26 — said on sign-up's first step, after the door and before the account is made.
+    mockMe({ signup_open: true, authenticated: true, signup_unfinished: true })
     at('/signup')
     const sentence = await screen.findByText(/Answers you get may be reused/)
     expect(sentence).toHaveTextContent(
@@ -187,6 +206,13 @@ describe('what the page promises tracks the actual gate', () => {
     expect(screen.getByRole('button', { name: /^continue$/i })).toBeInTheDocument()
   })
 
+  it('a stranger on /signup reads the access line under the door', async () => {
+    mockMe({ signup_open: true })
+    at('/signup')
+    await screen.findByRole('heading', { name: 'What’s your phone number?' })
+    expect(document.querySelector('[data-access-line]')).toHaveTextContent('Open to anyone, no invitation needed.')
+  })
+
   it('an OLDER BFF that does not report signup_open is treated as unknown, not as open', async () => {
     // signup_open omitted entirely. Silence must not manufacture a promise.
     //
@@ -223,7 +249,7 @@ describe('an already-signed-in person is not asked to sign up again', () => {
 // B59.8: /signup is its own wide page now (SignUp.test.tsx).
 describe('the sign-in page is Pocket’s auth card', () => {
   it('the streams behind a white card on the cloud page, the logo to the website, one ink action', async () => {
-    for (const [path, action] of [['/signin', /^sign in$/i]] as const) {
+    for (const path of ['/signin', '/signup']) {
       mockMe({ signup_open: true })
       const { container } = at(path)
       const h1 = await screen.findByRole('heading', { level: 1 })
@@ -248,8 +274,8 @@ describe('the sign-in page is Pocket’s auth card', () => {
       ])
       // No teal and no lake any more, and the page's one primary action is Pocket's ink pill.
       expect(container.querySelector('figure.tal-entry-photo, .bg-accent')).toBeNull()
-      expect(container.querySelectorAll('a.bg-primary')).toHaveLength(1)
-      expect(screen.getByRole('link', { name: action })).toHaveClass('bg-primary', 'rounded-pill')
+      expect(container.querySelectorAll('.bg-primary')).toHaveLength(1)
+      expect(screen.getByRole('button', { name: 'Continue' })).toHaveClass('bg-primary', 'rounded-pill')
       cleanup()
       queryClient.clear()
       vi.restoreAllMocks()
@@ -261,9 +287,11 @@ describe('the sign-in page is Pocket’s auth card', () => {
 
 describe('every control on both pages does something', () => {
   it.each(['/signup', '/signin'])('%s', async (route) => {
-    const report = await pressEverything(route, { '/auth/me': { mode: 'oidc', authenticated: false, user: null, signup_open: true } })
+    // B61.26 — the door is one field and one button (Continue waits, saying why, until a number is typed); the rest
+    // are the logo, Google while the move runs, Privacy and Terms.
+    const report = await pressEverything(route, { '/auth/me': { mode: 'oidc', authenticated: false, user: null, signup_open: true, google_signin: true } })
     expect(report.dead).toEqual([])
-    expect(report.pressed).toBeGreaterThan(4)
+    expect(report.pressed).toBeGreaterThan(3)
   })
 })
 
@@ -275,14 +303,5 @@ describe('the sign-in page is written for someone who already has a workspace', 
     at('/signin')
     await screen.findByRole('heading', { level: 1 })
     expect(screen.queryByRole('heading', { name: /create your/i })).toBeNull()
-  })
-
-  it('offers the stranger a way across, so a wrong landing is not a dead end', async () => {
-    mockMe({ signup_open: true })
-    at('/signin')
-    const cross = await screen.findByRole('link', {
-      name: /new (here|to talyvor)|create a workspace|sign up/i,
-    })
-    expect(cross.getAttribute('href')).toBe('/signup')
   })
 })
