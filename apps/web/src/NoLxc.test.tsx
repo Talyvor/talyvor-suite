@@ -100,11 +100,12 @@ describe('an amount typed in dollars', () => {
     expect(parseDollars(daily.value, 0.1)).toBe(42_500_000)
   })
 
-  it('Connect your AI shows the new-agent limits in dollars', async () => {
+  // B61.19 — in the account's own currency, pounds here.
+  it('Connect your AI shows the new-agent limits in the account’s currency', async () => {
     await at('/settings/connect')
-    expect(((await screen.findByLabelText('One payment, in dollars')) as HTMLInputElement).value).toBe('0.05')
-    expect((screen.getByLabelText('A day, in dollars') as HTMLInputElement).value).toBe('0.5')
-    expect((screen.getByLabelText('A month, in dollars') as HTMLInputElement).value).toBe('5')
+    expect(((await screen.findByLabelText('One payment, in pounds')) as HTMLInputElement).value).toBe('0.05')
+    expect((screen.getByLabelText('A day, in pounds') as HTMLInputElement).value).toBe('0.5')
+    expect((screen.getByLabelText('A month, in pounds') as HTMLInputElement).value).toBe('5')
   })
 })
 

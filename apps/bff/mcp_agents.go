@@ -13,7 +13,12 @@ package main
 //	open_topup              the link to top up in Talyvor: nothing is charged in the chat
 //
 //	GET /api/connect/agent-ceiling   the ceiling, or {} when the person has not set one
-//	PUT /api/connect/agent-ceiling   {max_per_request_ulxc, daily_limit_ulxc, monthly_limit_ulxc}, each above 0; the owner or an admin only
+//	PUT /api/connect/agent-ceiling   {currency, max_per_payment_minor, daily_limit_minor, monthly_limit_minor}, each above 0;
+//	                                 the owner or an admin only
+//
+// B61.19 — every amount is in the account's own currency, in its minor units, with the currency beside it: a payment is
+// paid from the agent's account in that currency (Lens B61.18), and limits are the rules' own (Lens B61.12). Nothing an
+// assistant reads or names is in LXC.
 //
 // Every call but send_payment's is on the person's own Lens credential, as every other tool's is (mcp.go).
 
@@ -25,31 +30,39 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 )
 
-// agentLimits are the three limits an assistant may give or lower, named as Lens's agent rules name them. Zero is no limit.
-var agentLimits = []string{"max_per_request_ulxc", "daily_limit_ulxc", "monthly_limit_ulxc"}
+// agentLimits are the three limits an assistant may give or lower, named as Lens's agent rules name them (B61.12): in the
+// minor units of the rules' currency. Zero is no limit.
+var agentLimits = []string{"max_per_payment_minor", "daily_limit_minor", "monthly_limit_minor"}
 
-// connectCeiling is the most an assistant may give a new agent, per payment, per day and per month.
+// agentCurrencies are the currencies an agent's account and rules are held in (Lens economy.MoneyCurrencies).
+var agentCurrencies = []string{"GBP", "EUR", "USD", "USDC"}
+
+// connectCeiling is the most an assistant may give a new agent, per payment, per day and per month, in Currency's minor units.
 type connectCeiling struct {
-	MaxPerRequestULXC int64 `json:"max_per_request_ulxc"`
-	DailyLimitULXC    int64 `json:"daily_limit_ulxc"`
-	MonthlyLimitULXC  int64 `json:"monthly_limit_ulxc"`
+	Currency           string `json:"currency"`
+	MaxPerPaymentMinor int64  `json:"max_per_payment_minor"`
+	DailyLimitMinor    int64  `json:"daily_limit_minor"`
+	MonthlyLimitMinor  int64  `json:"monthly_limit_minor"`
 }
 
 func (c connectCeiling) of(limit string) int64 {
-	return map[string]int64{"max_per_request_ulxc": c.MaxPerRequestULXC, "daily_limit_ulxc": c.DailyLimitULXC, "monthly_limit_ulxc": c.MonthlyLimitULXC}[limit]
+	return map[string]int64{"max_per_payment_minor": c.MaxPerPaymentMinor, "daily_limit_minor": c.DailyLimitMinor, "monthly_limit_minor": c.MonthlyLimitMinor}[limit]
 }
 
 var (
-	mcpAgentID    = map[string]any{"type": "string", "description": "One of the person's agents, from list_agents."}
-	mcpULXC       = map[string]any{"type": "integer", "minimum": 1, "description": "In µLXC: 1,000,000 is one LXC."}
+	mcpAgentID       = map[string]any{"type": "string", "description": "One of the person's agents, from list_agents."}
+	mcpAgentCurrency = map[string]any{"type": "string", "enum": agentCurrencies, "description": "The currency of the agent's account: GBP, EUR, USD or USDC."}
+	mcpAgentMinor    = map[string]any{"type": "integer", "minimum": 1,
+		"description": "In the currency's minor units: pence, cents, or millionths of a USDC. 1250 in GBP is £12.50."}
 	mcpLimitProps = map[string]any{
-		"max_per_request_ulxc": map[string]any{"type": "integer", "minimum": 0, "description": "The most one payment may be, in µLXC."},
-		"daily_limit_ulxc":     map[string]any{"type": "integer", "minimum": 0, "description": "The most it may spend in a day, in µLXC."},
-		"monthly_limit_ulxc":   map[string]any{"type": "integer", "minimum": 0, "description": "The most it may spend in a month, in µLXC."},
+		"max_per_payment_minor": map[string]any{"type": "integer", "minimum": 0, "description": "The most one payment may be, in the currency's minor units."},
+		"daily_limit_minor":     map[string]any{"type": "integer", "minimum": 0, "description": "The most it may spend in a day, in the currency's minor units."},
+		"monthly_limit_minor":   map[string]any{"type": "integer", "minimum": 0, "description": "The most it may spend in a month, in the currency's minor units."},
 	}
 )
 
@@ -64,19 +77,20 @@ func withAgentID(props map[string]any) map[string]any {
 // mcpAgentTools join mcpTools (mcp.go).
 var mcpAgentTools = []mcpTool{
 	{name: "send_payment", title: "Pay from an agent's wallet", scope: "payments:send", kind: mcpSends,
-		description: "Pays another agent on Talyvor from one of the person's agents. Inside the limits the person set for that agent it pays at once; " +
+		description: "Pays another agent on Talyvor from one of the person's agents, from its account in the currency named into the other agent's " +
+			"account in the same currency. Inside the limits the person set for that agent it pays at once; " +
 			"above them it pays nothing and waits for the person to approve it with their passkey in Talyvor.",
 		props: withIdemKey(withAgentID(map[string]any{"to_agent_id": map[string]any{"type": "string", "description": "The agent paid: its id or wallet id."},
-			"amount_ulxc": mcpULXC, "memo": map[string]any{"type": "string", "maxLength": 140}})),
-		required: []string{"idempotency_key", "agent_id", "to_agent_id", "amount_ulxc"},
+			"amount_minor": mcpAgentMinor, "currency": mcpAgentCurrency, "memo": map[string]any{"type": "string", "maxLength": 140}})),
+		required: []string{"idempotency_key", "agent_id", "to_agent_id", "amount_minor", "currency"},
 		run:      (*app).mcpSendPayment},
 	{name: "create_agent", title: "Create an agent", scope: "agents:write", kind: mcpWrites,
-		description: "Creates an agent with its own wallet and starting limits, each no higher than the most the person lets an assistant give a new agent. " +
-			"It starts with no money: the person funds it in Talyvor.",
+		description: "Creates an agent with its own account and starting limits, each no higher than the most the person lets an assistant give a " +
+			"new agent, in the currency that most is set in. It starts with no money: the person funds it in Talyvor.",
 		props: map[string]any{"name": map[string]any{"type": "string", "maxLength": 100}, "purpose": map[string]any{"type": "string", "maxLength": 500},
-			"max_per_request_ulxc": mcpLimitProps["max_per_request_ulxc"], "daily_limit_ulxc": mcpLimitProps["daily_limit_ulxc"],
-			"monthly_limit_ulxc": mcpLimitProps["monthly_limit_ulxc"]},
-		required: []string{"name", "purpose", "max_per_request_ulxc", "daily_limit_ulxc", "monthly_limit_ulxc"},
+			"currency": mcpAgentCurrency, "max_per_payment_minor": mcpLimitProps["max_per_payment_minor"],
+			"daily_limit_minor": mcpLimitProps["daily_limit_minor"], "monthly_limit_minor": mcpLimitProps["monthly_limit_minor"]},
+		required: []string{"name", "purpose", "currency", "max_per_payment_minor", "daily_limit_minor", "monthly_limit_minor"},
 		run:      (*app).mcpCreateAgent},
 	{name: "pause_agent", title: "Pause an agent", scope: "agents:write", kind: mcpWrites,
 		description: "Stops one of the person's agents spending. Only the person can resume it, in Talyvor.",
@@ -90,8 +104,9 @@ var mcpAgentTools = []mcpTool{
 				body: pauseBody(strings.TrimSuffix("Paused by "+g.ClientName+": "+a.str("reason"), ": "))}, nil
 		}},
 	{name: "set_agent_limits", title: "Lower an agent's limits", scope: "agents:write", kind: mcpWrites,
-		description: "Lowers one of the person's agents' limits at once. A higher limit, or none, is not applied: the person raises it in Talyvor.",
-		props:       withAgentID(mcpLimitProps), required: []string{"agent_id"},
+		description: "Lowers one of the person's agents' limits at once, in the currency its limits are held in. A higher limit, or none, " +
+			"is not applied: the person raises it in Talyvor.",
+		props: withAgentID(withCurrency(mcpLimitProps)), required: []string{"agent_id", "currency"},
 		run: (*app).mcpSetAgentLimits},
 	{name: "get_statement", title: "Agent statement", scope: "wallets:read", kind: mcpReads,
 		description: "One of the person's agents' statement: what it was paid and what it paid, with its balance.",
@@ -120,6 +135,23 @@ func pauseBody(reason string) []byte {
 	return body
 }
 
+func withCurrency(props map[string]any) map[string]any {
+	out := map[string]any{"currency": mcpAgentCurrency}
+	for k, v := range props {
+		out[k] = v
+	}
+	return out
+}
+
+// currencyArg is the currency argument: one an agent's account is held in.
+func currencyArg(a mcpArgs) (string, error) {
+	c := a.str("currency")
+	if !slices.Contains(agentCurrencies, c) {
+		return "", fmt.Errorf("%w: currency is one of GBP, EUR, USD or USDC", errMCPArgs)
+	}
+	return c, nil
+}
+
 func agentIDArg(a mcpArgs) (string, error) {
 	id := a.str("agent_id")
 	if id == "" || len(id) > 200 {
@@ -128,14 +160,14 @@ func agentIDArg(a mcpArgs) (string, error) {
 	return id, nil
 }
 
-// ulxcArg is a whole µLXC amount argument; named is false when it was left out.
-func ulxcArg(a mcpArgs, k string) (n int64, named bool, err error) {
+// minorArg is a whole amount argument in the currency's minor units; named is false when it was left out.
+func minorArg(a mcpArgs, k string) (n int64, named bool, err error) {
 	raw, named := a[k]
 	if !named {
 		return 0, false, nil
 	}
 	if json.Unmarshal(raw, &n) != nil || n < 0 {
-		return 0, true, fmt.Errorf("%w: %s is a whole number of µLXC, 0 or more", errMCPArgs, k)
+		return 0, true, fmt.Errorf("%w: %s is a whole number of the currency's minor units, 0 or more", errMCPArgs, k)
 	}
 	return n, true, nil
 }
@@ -175,9 +207,13 @@ func (a *app) mcpSendPayment(ctx context.Context, t tenant, g oauthGrant, args m
 		return nil, err
 	}
 	to, memo := args.str("to_agent_id"), args.str("memo")
-	amount, _, err := ulxcArg(args, "amount_ulxc")
+	currency, err := currencyArg(args)
+	var amount int64
+	if err == nil {
+		amount, _, err = minorArg(args, "amount_minor")
+	}
 	if err == nil && (to == "" || len(to) > 200 || amount < 1 || len(memo) > 140) {
-		err = fmt.Errorf("%w: to_agent_id and an amount_ulxc above 0 are required, the memo at most 140 characters", errMCPArgs)
+		err = fmt.Errorf("%w: to_agent_id and an amount_minor above 0 are required, the memo at most 140 characters", errMCPArgs)
 	}
 	if err != nil {
 		return nil, err
@@ -205,8 +241,9 @@ func (a *app) mcpSendPayment(ctx context.Context, t tenant, g oauthGrant, args m
 	}
 	// The approval screen and both statements show the memo, so it names the assistant that asked.
 	memo = strings.TrimSpace(memo + " (asked by " + g.ClientName + ")")
-	// UPSTREAM-BINDS-ONLY lensAgentPayBody: none
-	body, _ := json.Marshal(map[string]any{"to_agent_id": to, "amount_ulxc": amount, "memo": memo})
+	// From the agent's account in the currency, into the other agent's in the same one (Lens B61.18).
+	// UPSTREAM-BINDS-ONLY lensAgentPayBody: amount_ulxc, funding
+	body, _ := json.Marshal(map[string]any{"to_agent_id": to, "amount_minor": amount, "currency": currency, "memo": memo})
 	connectToken, _ := minted["token"].(string)
 	status, raw, err := a.mcpLens(ctx, tenant{workspaceID: t.workspaceID, token: connectToken},
 		lensCall{method: http.MethodPost, path: lensWorkspacePath(t, "/agents/"+url.PathEscape(agentID)+"/pay"), body: body, idempotencyKey: key})
@@ -216,12 +253,16 @@ func (a *app) mcpSendPayment(ctx context.Context, t tenant, g oauthGrant, args m
 	case status >= 500:
 		return nil, fmt.Errorf("lens answered pay %d", status)
 	case status == http.StatusAccepted:
-		var pending map[string]any
+		var pending struct {
+			ApprovalID string `json:"approval_id"`
+			Message    string `json:"message"`
+		}
 		if err := json.Unmarshal(raw, &pending); err != nil {
 			return nil, err
 		}
-		pending["approval_url"] = a.cfg.publicBaseURL + "/approvals"
-		return pending, nil
+		// Lens's 202 still names the amount in µLXC: the assistant is answered with the amount it asked for, in its currency.
+		return map[string]any{"status": "pending_approval", "approval_id": pending.ApprovalID, "amount_minor": amount, "currency": currency,
+			"message": pending.Message, "approval_url": a.cfg.publicBaseURL + "/approvals"}, nil
 	case status >= 400:
 		return nil, lensRefusal(raw)
 	}
@@ -237,6 +278,10 @@ func (a *app) mcpCreateAgent(ctx context.Context, t tenant, g oauthGrant, args m
 	if name == "" || len(name) > 100 || purpose == "" || len(purpose) > 500 {
 		return nil, fmt.Errorf("%w: a name of at most 100 characters and a purpose of at most 500 are required", errMCPArgs)
 	}
+	currency, err := currencyArg(args)
+	if err != nil {
+		return nil, err
+	}
 	ceiling, set, err := a.agentCeiling(ctx, t.workspaceID)
 	if err != nil {
 		return nil, err
@@ -245,19 +290,30 @@ func (a *app) mcpCreateAgent(ctx context.Context, t tenant, g oauthGrant, args m
 		return nil, mcpSaid("The person has not said how much an assistant may let a new agent spend. They set it in Talyvor at " +
 			a.cfg.publicBaseURL + "/settings/connect, then ask again.")
 	}
+	if currency != ceiling.Currency {
+		return nil, mcpSaid("The most the person lets an assistant give a new agent is in " + ceiling.Currency + ": name the agent's currency and its limits in " +
+			ceiling.Currency + ".")
+	}
 	limits := map[string]int64{}
 	for _, k := range agentLimits {
-		n, _, err := ulxcArg(args, k)
+		n, _, err := minorArg(args, k)
 		if err != nil {
 			return nil, err
 		}
 		if n < 1 || n > ceiling.of(k) {
-			return nil, mcpSaid(fmt.Sprintf("%s must be from 1 to %d µLXC, the most the person lets an assistant give a new agent.", k, ceiling.of(k)))
+			return nil, mcpSaid(fmt.Sprintf("%s must be from 1 to %d in %s's minor units: the most the person lets an assistant give a new agent.",
+				k, ceiling.of(k), currency))
 		}
 		limits[k] = n
 	}
-	// UPSTREAM-BINDS-ONLY lensAgentCreateBody: colour, face, fiat_currency, owner_user_id, template, wallet_kind
-	nameBody, _ := json.Marshal(map[string]string{"name": name})
+	// Its own account opens in the currency its limits are in: USDC is a crypto agent's (Lens B48.1), and "" leaves the
+	// kind to the workspace.
+	kind, fiat := "", currency
+	if currency == "USDC" {
+		kind, fiat = "crypto", ""
+	}
+	// UPSTREAM-BINDS-ONLY lensAgentCreateBody: colour, face, owner_user_id, template
+	nameBody, _ := json.Marshal(map[string]string{"name": name, "wallet_kind": kind, "fiat_currency": fiat})
 	raw, err := a.lensOK(ctx, t, lensCall{method: http.MethodPost, path: lensWorkspacePath(t, "/agents"), body: nameBody})
 	var agent map[string]any
 	if err == nil {
@@ -275,7 +331,7 @@ func (a *app) mcpCreateAgent(ctx context.Context, t tenant, g oauthGrant, args m
 	described, _ := json.Marshal(map[string]string{"description": purpose})
 	_, err = a.lensOK(ctx, t, lensCall{method: http.MethodPatch, path: path, body: described})
 	if err == nil {
-		_, _, err = a.putAgentLimits(ctx, t, id, limits)
+		_, _, err = a.putAgentLimits(ctx, t, id, currency, true, limits)
 	}
 	if err != nil {
 		// A new agent's rules are no rules, so one whose limits were not saved stays paused until the person sets them.
@@ -283,8 +339,8 @@ func (a *app) mcpCreateAgent(ctx context.Context, t tenant, g oauthGrant, args m
 		_, _, _ = a.mcpLens(ctx, t, lensCall{method: http.MethodPost, path: path + "/pause", body: pauseBody("Its starting limits were not saved")})
 		return nil, mcpSaid("The agent " + name + " was made but its limits were not saved, so it is paused. The person sets its limits in Talyvor.")
 	}
-	agent["description"], agent["limits"] = purpose, limits
-	return agent, nil
+	agentName, _ := agent["name"].(string)
+	return map[string]any{"id": id, "name": agentName, "description": purpose, "currency": currency, "limits": limits}, nil
 }
 
 func (a *app) mcpSetAgentLimits(ctx context.Context, t tenant, _ oauthGrant, args mcpArgs) (map[string]any, error) {
@@ -292,9 +348,13 @@ func (a *app) mcpSetAgentLimits(ctx context.Context, t tenant, _ oauthGrant, arg
 	if err != nil {
 		return nil, err
 	}
+	currency, err := currencyArg(args)
+	if err != nil {
+		return nil, err
+	}
 	asked := map[string]int64{}
 	for _, k := range agentLimits {
-		n, named, err := ulxcArg(args, k)
+		n, named, err := minorArg(args, k)
 		if err != nil {
 			return nil, err
 		}
@@ -302,11 +362,11 @@ func (a *app) mcpSetAgentLimits(ctx context.Context, t tenant, _ oauthGrant, arg
 			asked[k] = n
 		}
 	}
-	applied, waiting, err := a.putAgentLimits(ctx, t, id, asked)
+	applied, waiting, err := a.putAgentLimits(ctx, t, id, currency, false, asked)
 	if err != nil {
 		return nil, err
 	}
-	out := map[string]any{"agent_id": id, "applied": applied, "waiting": waiting}
+	out := map[string]any{"agent_id": id, "currency": currency, "applied": applied, "waiting": waiting}
 	if len(waiting) > 0 {
 		out["message"] = "A higher limit, or none, is not applied from the chat: the person raises it in Talyvor at " + a.cfg.publicBaseURL + "/agents."
 	}
@@ -314,8 +374,10 @@ func (a *app) mcpSetAgentLimits(ctx context.Context, t tenant, _ oauthGrant, arg
 }
 
 // putAgentLimits reads the agent's rules and saves them with each asked limit that is lower than the one it has: zero is
-// no limit, so any limit is lower than none. A higher one, or none, is left as it is and returned as waiting.
-func (a *app) putAgentLimits(ctx context.Context, t tenant, agentID string, asked map[string]int64) (applied, waiting map[string]int64, err error) {
+// no limit, so any limit is lower than none. A higher one, or none, is left as it is and returned as waiting. The limits
+// are in currency's minor units: rules held in another currency are refused, but for first, a new agent's first limits,
+// which are saved in currency.
+func (a *app) putAgentLimits(ctx context.Context, t tenant, agentID, currency string, first bool, asked map[string]int64) (applied, waiting map[string]int64, err error) {
 	// Lens's economy.AgentRules as Lens sent them, kept raw: every rule but the lowered limits goes back byte for byte,
 	// including any this BFF does not know, so a limit set from the chat never erases another rule.
 	var rules map[string]json.RawMessage
@@ -329,6 +391,19 @@ func (a *app) putAgentLimits(ctx context.Context, t tenant, agentID string, aske
 	}
 	if err != nil {
 		return nil, nil, err
+	}
+	held := "USD" // rules Lens holds in no currency are in dollars (B61.12)
+	if v, ok := rules["currency"]; ok {
+		var c string
+		if json.Unmarshal(v, &c) == nil && c != "" {
+			held = c
+		}
+	}
+	switch {
+	case first && held != currency: // a new agent has no limits yet, so its rules move to currency whole
+		rules["currency"] = json.RawMessage(strconv.Quote(currency))
+	case held != currency:
+		return nil, nil, mcpSaid("This agent's limits are held in " + held + ": name them in " + held + ".")
 	}
 	applied, waiting = map[string]int64{}, map[string]int64{}
 	for _, k := range agentLimits {
@@ -403,8 +478,8 @@ func (a *app) handleAgentCeiling(w http.ResponseWriter, r *http.Request, t tenan
 		var c connectCeiling
 		d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		d.DisallowUnknownFields()
-		if d.Decode(&c) != nil || c.MaxPerRequestULXC < 1 || c.DailyLimitULXC < 1 || c.MonthlyLimitULXC < 1 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "each limit is a whole number of µLXC above 0"})
+		if d.Decode(&c) != nil || !slices.Contains(agentCurrencies, c.Currency) || c.MaxPerPaymentMinor < 1 || c.DailyLimitMinor < 1 || c.MonthlyLimitMinor < 1 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "the limit is in GBP, EUR, USD or USDC, each a whole number of its minor units above 0"})
 			return
 		}
 		// Lens decides who may set it: its GET /v1/money/access answers the workspace's owner or an admin alone.

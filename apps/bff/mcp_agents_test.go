@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -55,7 +56,7 @@ func text(r map[string]any) string {
 // prepare-only setting on, or without the mint key, nothing is minted and nothing is paid.
 func TestConnectSendPayment(t *testing.T) {
 	a, lens, token := agentsApp(t)
-	pay := map[string]any{"agent_id": "agt-1", "to_agent_id": "agt-2", "amount_ulxc": 400, "memo": "GPU hour", "idempotency_key": "k-1"}
+	pay := map[string]any{"agent_id": "agt-1", "to_agent_id": "agt-2", "amount_minor": 400, "currency": "GBP", "memo": "GPU hour", "idempotency_key": "k-1"}
 
 	r := toolCall(t, a, token, "send_payment", pay)
 	if r["isError"] != false || structured(r)["status"] != "paid" {
@@ -73,7 +74,7 @@ func TestConnectSendPayment(t *testing.T) {
 		t.Fatalf("the payment must name the assistant that asked: memo %q", memo)
 	}
 
-	pay["amount_ulxc"], pay["idempotency_key"] = 5000, "k-2"
+	pay["amount_minor"], pay["idempotency_key"] = 5000, "k-2"
 	r = toolCall(t, a, token, "send_payment", pay)
 	if s := structured(r); r["isError"] != false || s["status"] != "pending_approval" || s["approval_id"] != "apr-1" ||
 		s["approval_url"] != oauthOrigin+"/approvals" || !strings.Contains(text(r), "Nothing has been paid") {
@@ -82,7 +83,7 @@ func TestConnectSendPayment(t *testing.T) {
 
 	a.cfg.connectPrepareOnly = true
 	before := len(lens.calls)
-	pay["amount_ulxc"], pay["idempotency_key"] = 400, "k-3"
+	pay["amount_minor"], pay["idempotency_key"] = 400, "k-3"
 	if r = toolCall(t, a, token, "send_payment", pay); r["isError"] != true || !strings.Contains(text(r), "Nothing has been paid") {
 		t.Fatalf("prepare-only: %v", r)
 	}
@@ -100,7 +101,7 @@ func TestConnectSendPayment(t *testing.T) {
 func TestConnectSendPaymentNeedsItsScope(t *testing.T) {
 	a, lens, token := agentsApp(t)
 	a.oauth.grants.update("g-seed", func(g oauthGrant) oauthGrant { g.Scope = "wallets:read payments:prepare"; return g })
-	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"send_payment","arguments":{"agent_id":"agt-1","to_agent_id":"agt-2","amount_ulxc":1,"idempotency_key":"k"}}}`
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"send_payment","arguments":{"agent_id":"agt-1","to_agent_id":"agt-2","amount_minor":1,"currency":"GBP","idempotency_key":"k"}}}`
 	rec := serve(a, "POST", "/mcp", "", body, map[string]string{"Authorization": "Bearer " + token}, nil)
 	if rec.Code != http.StatusForbidden || !strings.Contains(rec.Header().Get("WWW-Authenticate"), "payments:send") || len(lens.calls) != 0 {
 		t.Fatalf("send_payment without payments:send: %d %q, Lens calls %v", rec.Code, rec.Header().Get("WWW-Authenticate"), lens.calls)
@@ -112,7 +113,7 @@ func TestConnectSendPaymentNeedsItsScope(t *testing.T) {
 func TestAgentCeilingOwnerOrAdminOnly(t *testing.T) {
 	a, lens, _ := agentsApp(t)
 	ck := &http.Cookie{Name: sessionCookieName, Value: "sid-ada"}
-	ceiling := `{"max_per_request_ulxc":1000,"daily_limit_ulxc":5000,"monthly_limit_ulxc":10000}`
+	ceiling := `{"currency":"GBP","max_per_payment_minor":1000,"daily_limit_minor":5000,"monthly_limit_minor":10000}`
 
 	lens.notOwner = true
 	if rec := serve(a, "PUT", "/api/connect/agent-ceiling", oauthOrigin, ceiling, nil, ck); rec.Code != http.StatusForbidden {
@@ -136,27 +137,27 @@ func TestAgentCeilingOwnerOrAdminOnly(t *testing.T) {
 func TestConnectCreateAgentUnderTheCeiling(t *testing.T) {
 	a, lens, token := agentsApp(t)
 	ck := &http.Cookie{Name: sessionCookieName, Value: "sid-ada"} // agentsApp's person
-	args := map[string]any{"name": "Research buyer", "purpose": "Buys datasets", "max_per_request_ulxc": 1000, "daily_limit_ulxc": 5000, "monthly_limit_ulxc": 20000}
+	args := map[string]any{"name": "Research buyer", "purpose": "Buys datasets", "currency": "GBP", "max_per_payment_minor": 1000, "daily_limit_minor": 5000, "monthly_limit_minor": 20000}
 
 	if r := toolCall(t, a, token, "create_agent", args); r["isError"] != true || !strings.Contains(text(r), "/settings/connect") || len(lens.calls) != 0 {
 		t.Fatalf("with no ceiling set: %v, Lens calls %v", r, lens.calls)
 	}
-	ceiling := `{"max_per_request_ulxc":1000,"daily_limit_ulxc":5000,"monthly_limit_ulxc":10000}`
+	ceiling := `{"currency":"GBP","max_per_payment_minor":1000,"daily_limit_minor":5000,"monthly_limit_minor":10000}`
 	if rec := serve(a, "PUT", "/api/connect/agent-ceiling", "https://evil.example", ceiling, nil, ck); rec.Code != http.StatusForbidden {
 		t.Fatalf("another site sets the ceiling: %d %s", rec.Code, rec.Body.String())
 	}
-	if rec := serve(a, "PUT", "/api/connect/agent-ceiling", oauthOrigin, `{"max_per_request_ulxc":1000,"daily_limit_ulxc":5000,"monthly_limit_ulxc":10000}`, nil, ck); rec.Code != http.StatusOK {
+	if rec := serve(a, "PUT", "/api/connect/agent-ceiling", oauthOrigin, `{"currency":"GBP","max_per_payment_minor":1000,"daily_limit_minor":5000,"monthly_limit_minor":10000}`, nil, ck); rec.Code != http.StatusOK {
 		t.Fatalf("setting the ceiling: %d %s", rec.Code, rec.Body.String())
 	}
-	if got := jsonOf(t, serve(a, "GET", "/api/connect/agent-ceiling", "", "", nil, ck)); got["monthly_limit_ulxc"] != float64(10000) {
+	if got := jsonOf(t, serve(a, "GET", "/api/connect/agent-ceiling", "", "", nil, ck)); got["monthly_limit_minor"] != float64(10000) || got["currency"] != "GBP" {
 		t.Fatalf("the ceiling reads back: %v", got)
 	}
 	before := len(lens.calls) // the save asked Lens who may set it
-	if r := toolCall(t, a, token, "create_agent", args); r["isError"] != true || !strings.Contains(text(r), "monthly_limit_ulxc") || len(lens.calls) != before {
+	if r := toolCall(t, a, token, "create_agent", args); r["isError"] != true || !strings.Contains(text(r), "monthly_limit_minor") || len(lens.calls) != before {
 		t.Fatalf("a monthly limit above the ceiling: %v, Lens calls %v", r, lens.calls[before:])
 	}
 
-	args["monthly_limit_ulxc"] = 10000
+	args["monthly_limit_minor"] = 10000
 	r := toolCall(t, a, token, "create_agent", args)
 	if r["isError"] != false || structured(r)["id"] != "agt-new" {
 		t.Fatalf("under the ceiling: %v", r)
@@ -166,7 +167,7 @@ func TestConnectCreateAgentUnderTheCeiling(t *testing.T) {
 		t.Fatalf("the agent's name and purpose: %v", lens.sent)
 	}
 	rules := lens.sent["PUT /v1/workspaces/ws-ada/agents/agt-new/rules"]
-	if rules["max_per_request_ulxc"] != float64(1000) || rules["daily_limit_ulxc"] != float64(5000) || rules["monthly_limit_ulxc"] != float64(10000) {
+	if rules["currency"] != "GBP" || rules["max_per_payment_minor"] != float64(1000) || rules["daily_limit_minor"] != float64(5000) || rules["monthly_limit_minor"] != float64(10000) {
 		t.Fatalf("the agent's starting limits: %v", rules)
 	}
 }
@@ -175,24 +176,24 @@ func TestConnectCreateAgentUnderTheCeiling(t *testing.T) {
 // applied and waits for the person in Talyvor.
 func TestConnectSetAgentLimits(t *testing.T) {
 	a, lens, token := agentsApp(t)
-	r := toolCall(t, a, token, "set_agent_limits", map[string]any{"agent_id": "agt-1", "max_per_request_ulxc": 200, "daily_limit_ulxc": 9000, "monthly_limit_ulxc": 0})
+	r := toolCall(t, a, token, "set_agent_limits", map[string]any{"agent_id": "agt-1", "currency": "GBP", "max_per_payment_minor": 200, "daily_limit_minor": 9000, "monthly_limit_minor": 0})
 	if r["isError"] != false {
 		t.Fatalf("set_agent_limits: %v", r)
 	}
 	rules := lens.sent["PUT /v1/workspaces/ws-ada/agents/agt-1/rules"]
-	if rules["max_per_request_ulxc"] != float64(200) || rules["daily_limit_ulxc"] != float64(2000) || rules["monthly_limit_ulxc"] != float64(0) ||
-		rules["approval_above_ulxc"] != float64(300) || len(rules["allowed_models"].([]any)) != 1 {
+	if rules["max_per_payment_minor"] != float64(200) || rules["daily_limit_minor"] != float64(2000) || rules["monthly_limit_minor"] != float64(0) ||
+		rules["approval_above_minor"] != float64(300) || rules["daily_limit_ulxc"] != float64(20000000) || len(rules["allowed_models"].([]any)) != 1 {
 		t.Fatalf("only the lower limit changes, every other rule kept: %v", rules)
 	}
 	s := structured(r)
 	waiting, _ := s["waiting"].(map[string]any)
-	if s["applied"].(map[string]any)["max_per_request_ulxc"] != float64(200) || waiting["daily_limit_ulxc"] != float64(9000) ||
+	if s["applied"].(map[string]any)["max_per_payment_minor"] != float64(200) || waiting["daily_limit_minor"] != float64(9000) ||
 		!strings.Contains(text(r), oauthOrigin+"/agents") {
 		t.Fatalf("the raise waits for the person: %v", r)
 	}
 
 	before := lens.count("PUT ")
-	if r = toolCall(t, a, token, "set_agent_limits", map[string]any{"agent_id": "agt-1", "daily_limit_ulxc": 0}); r["isError"] != false || lens.count("PUT ") != before {
+	if r = toolCall(t, a, token, "set_agent_limits", map[string]any{"agent_id": "agt-1", "currency": "GBP", "daily_limit_minor": 0}); r["isError"] != false || lens.count("PUT ") != before {
 		t.Fatalf("removing a limit is a raise and saves nothing: %v", r)
 	}
 }
@@ -209,12 +210,12 @@ func TestConnectLimitsKeepEveryOtherRule(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, lens, token := agentsApp(t)
-	a.oauth.ceilings.Store("ws-ada", connectCeiling{MaxPerRequestULXC: 1000, DailyLimitULXC: 5000, MonthlyLimitULXC: 10000})
-	if r := toolCall(t, a, token, "set_agent_limits", map[string]any{"agent_id": "agt-1", "daily_limit_ulxc": 1500}); r["isError"] != false {
+	a.oauth.ceilings.Store("ws-ada", connectCeiling{Currency: "GBP", MaxPerPaymentMinor: 1000, DailyLimitMinor: 5000, MonthlyLimitMinor: 10000})
+	if r := toolCall(t, a, token, "set_agent_limits", map[string]any{"agent_id": "agt-1", "currency": "GBP", "daily_limit_minor": 1500}); r["isError"] != false {
 		t.Fatalf("set_agent_limits: %v", r)
 	}
-	if r := toolCall(t, a, token, "create_agent", map[string]any{"name": "Buyer", "purpose": "Buys", "max_per_request_ulxc": 100,
-		"daily_limit_ulxc": 200, "monthly_limit_ulxc": 300}); r["isError"] != false {
+	if r := toolCall(t, a, token, "create_agent", map[string]any{"name": "Buyer", "purpose": "Buys", "currency": "GBP", "max_per_payment_minor": 100,
+		"daily_limit_minor": 200, "monthly_limit_minor": 300}); r["isError"] != false {
 		t.Fatalf("create_agent: %v", r)
 	}
 	for _, put := range []string{"PUT /v1/workspaces/ws-ada/agents/agt-1/rules", "PUT /v1/workspaces/ws-ada/agents/agt-new/rules"} {
@@ -254,5 +255,70 @@ func TestConnectAgentReadsAndTopUp(t *testing.T) {
 	}
 	if hints["send_payment"]["destructiveHint"] != true || hints["open_topup"]["readOnlyHint"] != true || hints["create_agent"]["readOnlyHint"] != false {
 		t.Fatalf("annotations: %v", hints)
+	}
+}
+
+// mcpSaysLXC is LXC, or a field in µLXC, anywhere in what the connector shows an assistant.
+var mcpSaysLXC = regexp.MustCompile(`(?i)ulxc|µlxc|\blxc\b`)
+
+// TestConnectSpeaksTheAccountsCurrency is B61.19: no tool's schema says LXC or names a µLXC field, and the agent tools
+// take and answer amounts in the account's currency. A payment inside the limits is made once in it and one above them
+// waits; a new agent's limits and a lowered limit are in the rules' currency, and a limit named in another is refused.
+func TestConnectSpeaksTheAccountsCurrency(t *testing.T) {
+	a, lens, token := agentsApp(t)
+	listed, _ := json.Marshal(rpc(t, a, token, "tools/list", nil)["tools"])
+	if m := mcpSaysLXC.FindString(string(listed)); m != "" {
+		t.Fatalf("the tools' schemas say %q: %s", m, listed)
+	}
+	noLXC := func(tool string, r map[string]any) {
+		t.Helper()
+		if got, _ := json.Marshal(r); mcpSaysLXC.Match(got) {
+			t.Errorf("%s answers in LXC: %s", tool, got)
+		}
+	}
+
+	const payPath = "POST /v1/workspaces/ws-ada/agents/agt-1/pay"
+	paid := toolCall(t, a, token, "send_payment", map[string]any{"idempotency_key": "k-gbp", "agent_id": "agt-1", "to_agent_id": "agt-2",
+		"amount_minor": 400, "currency": "GBP", "memo": "GPU hour"})
+	payment, _ := structured(paid)["payment"].(map[string]any)
+	if sent := lens.sent[payPath]; paid["isError"] != false || structured(paid)["status"] != "paid" || payment["amount_minor"] != float64(400) ||
+		payment["currency"] != "GBP" || sent["amount_minor"] != float64(400) || sent["currency"] != "GBP" || sent["amount_ulxc"] != nil {
+		t.Fatalf("inside the limits it pays £4.00 from the agent's pounds: sent %v, answered %v", sent, paid)
+	}
+	if n := lens.count(payPath + " Bearer jwt-connect k-gbp"); n != 1 {
+		t.Fatalf("the payment must be made once under its key; calls %v", lens.calls)
+	}
+	noLXC("send_payment", paid)
+
+	held := toolCall(t, a, token, "send_payment", map[string]any{"idempotency_key": "k-gbp-2", "agent_id": "agt-1", "to_agent_id": "agt-2",
+		"amount_minor": 5000, "currency": "GBP"})
+	if s := structured(held); held["isError"] != false || s["status"] != "pending_approval" || s["approval_id"] != "apr-1" ||
+		s["amount_minor"] != float64(5000) || s["currency"] != "GBP" || !strings.Contains(text(held), "Nothing has been paid") {
+		t.Fatalf("above the limits it waits for the person, in pounds: %v", held)
+	}
+	noLXC("send_payment", held)
+
+	a.oauth.ceilings.Store("ws-ada", connectCeiling{Currency: "GBP", MaxPerPaymentMinor: 1000, DailyLimitMinor: 5000, MonthlyLimitMinor: 10000})
+	created := toolCall(t, a, token, "create_agent", map[string]any{"name": "Buyer", "purpose": "Buys", "currency": "GBP",
+		"max_per_payment_minor": 100, "daily_limit_minor": 200, "monthly_limit_minor": 300})
+	rules := lens.sent["PUT /v1/workspaces/ws-ada/agents/agt-new/rules"]
+	if created["isError"] != false || lens.sent["POST /v1/workspaces/ws-ada/agents"]["fiat_currency"] != "GBP" || rules["currency"] != "GBP" ||
+		rules["max_per_payment_minor"] != float64(100) || rules["daily_limit_minor"] != float64(200) || rules["monthly_limit_minor"] != float64(300) {
+		t.Fatalf("a new agent opens in pounds with its limits in pence: rules %v, answered %v", rules, created)
+	}
+	noLXC("create_agent", created)
+
+	lowered := toolCall(t, a, token, "set_agent_limits", map[string]any{"agent_id": "agt-1", "currency": "GBP", "daily_limit_minor": 1500})
+	rules = lens.sent["PUT /v1/workspaces/ws-ada/agents/agt-1/rules"]
+	if lowered["isError"] != false || rules["currency"] != "GBP" || rules["daily_limit_minor"] != float64(1500) || rules["max_per_payment_minor"] != float64(500) ||
+		structured(lowered)["currency"] != "GBP" {
+		t.Fatalf("lowering the daily limit to £15.00: rules %v, answered %v", rules, lowered)
+	}
+	noLXC("set_agent_limits", lowered)
+
+	puts := lens.count("PUT ")
+	if r := toolCall(t, a, token, "set_agent_limits", map[string]any{"agent_id": "agt-1", "currency": "EUR", "daily_limit_minor": 100}); r["isError"] != true ||
+		!strings.Contains(text(r), "GBP") || lens.count("PUT ") != puts {
+		t.Fatalf("a limit named in euros on rules held in pounds is refused, naming pounds: %v", r)
 	}
 }
