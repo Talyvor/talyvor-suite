@@ -298,6 +298,10 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/money/convert/quote", body: `{"sell_currency":"GBP","buy_currency":"USDC","sell_minor":100}`},                                                     // B59.52
 		{method: http.MethodPost, path: "/api/money/convert/challenge", body: `{"quote_id":"x1"}`},                                                                                              // B59.52
 		{method: http.MethodPost, path: "/api/money/convert", body: `{"quote_id":"x1"}`},                                                                                                        // B59.52
+		// B61.33 — Pay, to a person.
+		{method: http.MethodPost, path: "/api/money/people/find", body: `{"to":"grace.h"}`},
+		{method: http.MethodPost, path: "/api/money/people/pay", body: `{"to":"grace.h","amount_minor":100,"currency":"GBP","idempotency_key":"k"}`},
+		{method: http.MethodPost, path: "/api/money/people/pay/challenge", body: `{"to":"grace.h","amount_minor":100,"currency":"GBP","idempotency_key":"k"}`},
 		{method: http.MethodPost, path: "/api/money/mandates", body: `{"grant":{"account_id":"x1","payee_business_id":"b","payee_id":"x1","payee_name":"n","max_per_pull_minor":1,"max_per_month_minor":1,"expires_at":"2099-01-01T00:00:00Z"}}`},
 		{method: http.MethodPost, path: "/api/money/mandates/challenge", body: `{"mandate_id":"x1"}`},                  // B55.56
 		{method: http.MethodPost, path: "/api/money/mandates/x1/approve", body: `{"assertion":{"credential_id":"c"}}`}, // B55.56

@@ -23,7 +23,7 @@ const ACCOUNT_WORDS: Record<string, string> = { USD: 'US dollar account', GBP: '
 const accountWords = (currency: string) => ACCOUNT_WORDS[currency] ?? `${currency} account`
 
 /** "12.50" → 1250, or for USDC (six places) 12500000; null when it is not a positive amount. */
-function typedMinor(text: string, currency: string): number | null {
+export function typedMinor(text: string, currency: string): number | null {
   const places = currency === 'USDC' ? 6 : 2
   const m = new RegExp(`^\\s*(\\d+)(?:\\.(\\d{1,${places}}))?\\s*$`).exec(text)
   if (m === null) return null
