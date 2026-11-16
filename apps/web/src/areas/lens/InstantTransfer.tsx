@@ -127,8 +127,8 @@ function sendRefusal(err: unknown, agent: string, account: CurrencyAccount | und
     if (err.status === 409 && /holds/i.test(err.sentence) && account)
       return (
         <>
-          {agent}’s {BALANCE_WORDS[account.currency] ?? account.currency} balance holds <Money minor={account.test_minor} currency={account.currency} />. Lower the amount or top
-          up.
+          {agent}’s {BALANCE_WORDS[account.currency] ?? account.currency} balance holds <Money minor={account.test_minor} currency={account.currency} />. Lower the amount or add
+          money.
         </>
       )
   }

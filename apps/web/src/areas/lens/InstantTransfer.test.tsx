@@ -165,6 +165,16 @@ describe('sending it', () => {
     expect(within(refused).getByRole('link', { name: 'Open Remy’s rules' }).getAttribute('href')).toBe('/agents/agt_remy/rules')
   })
 
+  it('B61.80 — more than the agent holds says to lower the amount or add money', async () => {
+    sendAnswers.push(json({ error: 'the account holds $6,200.00 of test money' }, 409))
+    const card = await fillIn()
+    await within(card).findByText('$5,000.00')
+    fireEvent.click(within(card).getByRole('button', { name: 'Continue' }))
+    const refused = await within(card).findByTestId('instant-refused')
+    expect(read(refused)).toContain('Remy’s US dollar balance holds $6,200.00. Lower the amount or add money.')
+    expect(read(refused)).not.toMatch(/top.?up/i)
+  })
+
   it('when Lens asks for the owner’s approval, approving sends it again at a fresh quote under the same key', async () => {
     sendAnswers.push(json({ error: 'This request would cost up to $5,000.00, above the agent’s approval amount. Approval apr_1 must be approved by the workspace’s owner before it is retried' }, 403))
     const card = await fillIn()

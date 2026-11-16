@@ -1,0 +1,5 @@
+[
+  { "route": "/" },
+  { "route": "/money/wallets" },
+  { "route": "/money/wallets", "steps": ["Add money"], "frame": true }
+]

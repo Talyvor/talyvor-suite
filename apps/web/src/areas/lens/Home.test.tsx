@@ -361,8 +361,10 @@ describe('Home — the total (B57.18)', () => {
     expect(screen.getByTestId('home-stablecoin')).toHaveTextContent('Stablecoin$15,500.00USDC15,500.00')
     expect(screen.getByRole('img', { name: 'Fiat 68%, Stablecoin 32%' })).toBeInTheDocument()
     // Only the actions with a screen behind them.
-    // B59.53: Top up and Convert open Wallets at that action, and See all in Wallets opens it.
-    expect(screen.getByRole('link', { name: 'Top up' })).toHaveAttribute('href', '/money/wallets?do=top-up')
+    // B59.53: Add money (B61.80) and Convert open Wallets at that action, and See all in Wallets opens it.
+    expect(screen.getByRole('link', { name: 'Add money' })).toHaveAttribute('href', '/money/wallets?do=top-up')
+    // B61.80 — "Add money" is the word, on every screen: "Top up" is read nowhere.
+    expect(screen.queryByText(/top.?up/i)).toBeNull()
     expect(screen.getByRole('link', { name: 'Convert' })).toHaveAttribute('href', '/money/wallets?do=convert')
     expect(screen.queryByRole('link', { name: 'Withdraw' })).toBeNull()
     expect(screen.getByRole('link', { name: 'See all in Wallets' })).toHaveAttribute('href', '/money/wallets')
@@ -383,19 +385,28 @@ describe('Home — the total (B57.18)', () => {
     expect(screen.queryByTestId('home-stablecoin')).toBeNull()
     expect(screen.getByTestId('home-fiat')).not.toHaveTextContent('Fiat$')
     expect(screen.queryByRole('img', { name: /^Fiat \d+%/ })).toBeNull()
-    // B59.53 (P3): Top up, Pay and Withdraw; no Convert.
+    // B59.53 (P3): Add money, Pay and Withdraw; no Convert.
     expect(screen.getByRole('link', { name: 'Withdraw' })).toHaveAttribute('href', '/money/wallets?do=withdraw')
     expect(screen.queryByRole('link', { name: 'Convert' })).toBeNull()
   })
 
-  it('a Stablecoin only account has no fiat side and no Top up; an empty one says how to start', async () => {
+  it('a Stablecoin only account has no fiat side and no Add money; an empty one says how to start', async () => {
     mockBff({ agents: AGENTS, account: { account_type: 'personal', money_kind: 'stablecoin' } })
     render(<App />)
 
     await waitFor(() => expect(screen.getByTestId('home-total')).toHaveTextContent('$0.00'))
     expect(screen.getByText('Receive stablecoins to get started.')).toBeInTheDocument()
     expect(screen.queryByTestId('home-fiat')).toBeNull()
-    expect(screen.queryByRole('link', { name: 'Top up' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Add money' })).toBeNull()
+  })
+
+  it('B61.80 — an empty Fiat only account says Add money to get started, never Top up', async () => {
+    mockBff({ agents: AGENTS, account: { account_type: 'personal', money_kind: 'fiat' } })
+    render(<App />)
+
+    expect(await screen.findByText('Add money to get started.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Add money' })).toHaveAttribute('href', '/money/wallets?do=top-up')
+    expect(screen.queryByText(/top.?up/i)).toBeNull()
   })
 
   it('a balance read that failed says so and never draws a total', async () => {

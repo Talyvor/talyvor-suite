@@ -430,12 +430,12 @@ function Waiting({
 
 function Actions({ shows }: { shows: Shows }) {
   // Only the actions with a screen to open: Receive and Send join them with theirs. B59.19: Instant transfer, for a Hybrid
-  // account. B59.53: Top up, Withdraw (P3) and, for a Hybrid account, Convert (P5, W2) open Wallets at that action.
+  // account. B59.53: Add money (B61.80's word for Top up), Withdraw (P3) and, for a Hybrid account, Convert (P5, W2) open Wallets at that action.
   return (
     <div className="flex flex-wrap gap-2 wide:justify-end">
       {shows.bankTransfers ? (
         <Button asChild icon={<Icon name="plus" size={18} />}>
-          <Link to="/money/wallets?do=top-up">Top up</Link>
+          <Link to="/money/wallets?do=top-up">Add money</Link>
         </Button>
       ) : null}
       <Button asChild variant={shows.bankTransfers ? 'white' : 'primary'}>
@@ -531,7 +531,7 @@ function Total({ agents, shows }: { agents: Agent[]; shows: Shows }) {
             </span>
           )}
           {!reading && total === 0 ? (
-            <p className="text-body text-ink-2">{shows.bankTransfers ? 'Top up to get started.' : 'Receive stablecoins to get started.'}</p>
+            <p className="text-body text-ink-2">{shows.bankTransfers ? 'Add money to get started.' : 'Receive stablecoins to get started.'}</p>
           ) : null}
         </div>
         <Actions shows={shows} />
