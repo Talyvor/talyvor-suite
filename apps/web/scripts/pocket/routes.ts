@@ -93,3 +93,20 @@ export const SHOT_ROUTES: Record<string, string> = {
   '/operator/compliance': '/operator/compliance',
   '/earnings': '/earnings',
 }
+
+/**
+ * B61.98 — the pages `pocket:shots <item> --pixels` holds to contrast on the real pixels over the moving background: the
+ * seven sidebar pages, then sign-in and sign-up signed out, and the welcome a workspace with no name yet is shown.
+ */
+export const BACKGROUND_PAGES: { route: string; answers?: Record<string, unknown> }[] = [
+  { route: '/' },
+  { route: '/agents' },
+  { route: '/cards' },
+  { route: '/money/pay' },
+  { route: '/approvals' },
+  { route: '/activity' },
+  { route: '/settings' },
+  { route: '/signin', answers: { '/auth/me': { authenticated: false } } },
+  { route: '/signup', answers: { '/auth/me': { authenticated: false } } },
+  { route: '/welcome', answers: { '/api/workspace/name': { id: 'ws_nicks_team', name: '' } } },
+]

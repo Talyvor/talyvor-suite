@@ -339,7 +339,9 @@ h1, h2, h3, h4 { font-family: var(--display); }
   opacity: calc(1 - var(--bg-scroll, 0) * .55); transform: translateY(calc(var(--bg-scroll, 0) * -24px));
 }
 .pk-bg-glass {
-  position: absolute; left: 0; right: 0; top: 0; height: 70vh; overflow: hidden;
+  /* B61.98 — its own ground of the page colour, as Pocket Live's .glass: the grain's soft-light then blends with the page
+     and the washes. Without it the masked layer blends the grain with nothing, and draws it as grey noise over the page. */
+  position: absolute; left: 0; right: 0; top: 0; height: 70vh; overflow: hidden; background-color: var(--page);
   -webkit-mask-image: linear-gradient(#000 0, #000 52%, rgba(0, 0, 0, .55) 76%, transparent 100%);
   mask-image: linear-gradient(#000 0, #000 52%, rgba(0, 0, 0, .55) 76%, transparent 100%);
 }
@@ -371,6 +373,21 @@ h1, h2, h3, h4 { font-family: var(--display); }
 @media (prefers-reduced-motion: reduce) {
   .pk-bg-tint i, .pk-bg-satin::before { animation: none !important; }
 }
+
+/* B61.98 — small text that sits straight on the background, with no card under it (a page's line under its title,
+   section labels, captions, the company line): ink-2, never ink-3 or faint. In dark it is ink: measured on the real
+   pixels (pocket:shots --pixels), ink-2 reads at 4.0 to 4.5:1 where the streams meet behind a line at 390 wide and over
+   the tangerine wash at its strongest. `:root` puts it over a colour utility the same element may carry. */
+:root,
+[data-theme='light'] {
+  --ink-on-bg: var(--ink-2);
+}
+
+[data-theme='dark'] {
+  --ink-on-bg: var(--ink);
+}
+
+:root .pk-on-bg { color: var(--ink-on-bg); }
 
 /* B61.70 — the top bar has no ground of its own over the background; once the page scrolls past 4 px it turns to glass
    (the Shell adds .pk-top-glass), so what passes under it stays readable. */

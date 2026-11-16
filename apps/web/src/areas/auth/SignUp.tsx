@@ -91,7 +91,7 @@ function SignUpFrame({ children, label = <SandboxLabel /> }: { children: React.R
       </header>
       <main className="relative mx-auto grid w-full max-w-5xl flex-1 content-start gap-5 px-gutter pb-16 pt-6 wide:px-10">
         {children}
-        <CompanyLine className="mt-6" />
+        <CompanyLine onBackground className="mt-6" />
       </main>
     </div>
   )
@@ -108,7 +108,7 @@ type Steps = readonly string[]
 function Stepper({ at, steps = SIGNUP_STEPS }: { at: StepAt; steps?: Steps }) {
   return (
     <>
-      <p className="flex items-center gap-1.5 text-body font-semibold text-ink-2 wide:hidden">
+      <p className="flex items-center gap-1.5 text-body font-semibold pk-on-bg wide:hidden">
         {steps.map((title, i) => (
           <span key={title} aria-hidden="true" data-step-bar={i < at ? 'reached' : 'ahead'} className={cn('h-1.5 w-7 rounded-pill', i < at ? 'bg-tangerine' : 'bg-cloud-2')} />
         ))}
@@ -133,7 +133,7 @@ function StepDots({ at, steps }: { at: StepAt; steps: Steps }) {
             >
               {n < at ? <Icon name="check" size={14} /> : n}
             </span>
-            <span className={cn(n === at ? 'font-semibold text-ink' : 'text-ink-2')}>{title}</span>
+            <span className={cn(n === at ? 'font-semibold text-ink' : 'pk-on-bg')}>{title}</span>
           </li>
         )
       })}
@@ -291,9 +291,9 @@ function StepWho({ type, setType, profile, setProfile, onContinue, another = fal
           </ProfileField>
         </div>
       ) : null}
-      <p className="text-body text-ink-3">{TYPE_NOTE}</p>
+      <p className="text-body pk-on-bg">{TYPE_NOTE}</p>
       <div className="flex flex-wrap items-center gap-4">
-        <Button type="submit" disabledReason={type ? undefined : PICK_TYPE}>
+        <Button type="submit" disabledReason={type ? undefined : PICK_TYPE} reasonClassName="pk-on-bg">
           Continue
         </Button>
         {another ? null : (
@@ -304,14 +304,14 @@ function StepWho({ type, setType, profile, setProfile, onContinue, another = fal
       </div>
       {another ? null : (
         <>
-          <AccessLine state={signup} />
+          <AccessLine state={signup} onBackground />
           {/* B44.1 — while sign-up is closed, a stranger can still leave an email. */}
           {signup === 'closed' && <Waitlist pocket className="w-full max-w-md" />}
           {/* B27.22 — sharing is on from the first request, so a stranger is told before they continue. */}
-          <SharedAnswersFact className="text-body text-ink-3" />
+          <SharedAnswersFact className="text-body pk-on-bg" />
         </>
       )}
-      <PrivacyTerms />
+      <PrivacyTerms onBackground />
     </form>
   )
 }
@@ -357,7 +357,7 @@ function StepKind({ type, profile, kind, setKind, onBack, another = false }: {
         ))}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <p className="text-body text-ink-3">{KIND_NOTE}</p>
+        <p className="text-body pk-on-bg">{KIND_NOTE}</p>
         <div className="flex gap-3">
           <Button variant="outline" onClick={onBack}>
             Back

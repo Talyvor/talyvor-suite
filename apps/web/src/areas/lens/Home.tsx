@@ -175,7 +175,7 @@ export function Home() {
     <div className="grid gap-4 px-gutter pb-10 pt-4 wide:px-7 wide:pb-12 wide:pt-6">
       <div className="grid gap-1">
         <h2 className="font-display text-title font-bold text-ink">{greeting(new Date().getHours(), firstName)}</h2>
-        <p className="text-reading text-ink-2" data-testid="home-status">
+        <p className="text-reading pk-on-bg" data-testid="home-status">
           {status || 'Reading…'}
           {waitingKnown && waiting === 0 ? (
             <>

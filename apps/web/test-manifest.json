@@ -353,6 +353,7 @@
   "src/statusChangeRefusal.test.tsx": 7,
   "src/taly/lines.test.tsx": 5,
   "src/taly/TalyButton.test.tsx": 4,
+  "src/test/pixelContrast.test.ts": 3,
   "src/test/pressEverything.test.ts": 2,
   "src/test/shotRoutes.test.ts": 1,
   "src/test/shots.test.ts": 5,
