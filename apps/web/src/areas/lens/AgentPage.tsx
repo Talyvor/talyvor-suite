@@ -12,6 +12,7 @@ import { BOOK_KEY, rulesKey } from './AgentBank'
 import { ResumeAgent, StartEveryAgent } from './AgentCard'
 import { IssueCard, cardKey } from './AgentCardPanel'
 import { AgentFace } from './AgentFace'
+import { AgentFundingButtons } from './AgentFunding'
 import { AgentMoneySection } from './AgentMoney'
 import { DownloadFailed, dayIn, lineWhat, lineWhen, useMonthFile } from './AgentStatement'
 import { approvalSheetTo } from './ApprovalSheet'
@@ -25,6 +26,7 @@ import { useMoney } from './money'
 // the rules (B61.14: LXC is parked, so nothing moves LXC and its credit balance is not drawn); the card tile freezes and unfreezes the agent's card. What today's agent view has that this
 // page does not draw yet stays below it, as it was, until B57.22 redraws it. B57.21: its Money card, below the others.
 // B57.111: its spend by day, model and destination, across the page under the statement and the rules.
+// B61.84: its Balance card's Add money and Take back move money between the company's account and the agent's.
 
 /** Under BOOK_KEY, so every pause, resume, move and archive that refreshes the book refreshes the page too. */
 export const summaryKey = (id: string) => [...BOOK_KEY, 'summary', id]
@@ -171,6 +173,8 @@ function BalanceCard({ s }: { s: AgentSummary }) {
           <Money minor={acc.balance_minor} currency={acc.currency} />
         </Link>
       ))}
+      {/* B61.84 — Add money from the company's account, and Take back, in its first account's currency to begin with. */}
+      <AgentFundingButtons agent={s.agent} />
     </Card>
   )
 }

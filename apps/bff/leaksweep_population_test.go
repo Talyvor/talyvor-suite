@@ -640,9 +640,12 @@ func TestLeakSweep_CoversEveryMountedGETRoute(t *testing.T) {
 	//
 	// THE HUNDRED-AND-NINETY-SIXTH IS B61.8'S, POST only: /api/accounts/switch moves the session to another of the
 	// person's accounts, read back through GET /api/accounts, in the sweep's reach.
-	if len(methodOnly) > 196 {
+	//
+	// THE HUNDRED-AND-NINETY-SEVENTH IS B61.84'S, POST only: /api/money/accounts/{id}/funding moves money between the
+	// company's account and an agent's, both read back through GET /api/money/accounts, in the sweep's reach.
+	if len(methodOnly) > 197 {
 		sort.Strings(methodOnly)
-		t.Fatalf("routes answering 405 to GET = %d, want at most 196 — a route left the leak sweep's "+
+		t.Fatalf("routes answering 405 to GET = %d, want at most 197 — a route left the leak sweep's "+
 			"reach; confirm it is genuinely write-only and raise this bound with the reason:\n  %s",
 			len(methodOnly), strings.Join(methodOnly, "\n  "))
 	}

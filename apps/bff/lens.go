@@ -578,6 +578,8 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/money/convert/quote", a.requireTenant(a.handleMoneyConvertQuote))
 	a.mux.HandleFunc("/api/money/convert", a.requireTenant(a.handleMoneyConvert(false)))
 	a.mux.HandleFunc("/api/money/convert/challenge", a.requireTenant(a.handleMoneyConvert(true)))
+	// B61.84 — the owner gives an agent money from the company's account, and takes it back (Lens B61.66).
+	a.mux.HandleFunc("/api/money/accounts/{id}/funding", a.requireTenant(a.handleMoneyAccountFunding))
 	a.mux.HandleFunc("/api/money/invoices", a.requireTenant(a.handleMoneyInvoices))
 	a.mux.HandleFunc("/api/money/invoices/{id}/send", a.requireTenant(a.handleMoneyInvoiceMove("send")))
 	a.mux.HandleFunc("/api/money/invoices/{id}/void", a.requireTenant(a.handleMoneyInvoiceMove("void")))

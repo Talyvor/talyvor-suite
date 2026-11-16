@@ -250,6 +250,7 @@ func everyMutatingRoute() []mutatingRoute {
 		{method: http.MethodPost, path: "/api/kya/verify", body: `{"credential":"a.b.c"}`},
 		// B30.97 — invoices and their pay page. The card button is public (no session) and still same-Origin: it is a write.
 		{method: http.MethodPost, path: "/api/money/accounts", body: `{"currency":"GBP","agent_id":"x1"}`},
+		{method: http.MethodPost, path: "/api/money/accounts/x1/funding", body: `{"direction":"to_agent","amount_minor":1000}`}, // B61.84
 		{method: http.MethodPost, path: "/api/money/invoices", body: `{"account_id":"x1","customer_name":"a","lines":[{"description":"d","quantity":1,"unit_amount_minor":1}],"due_date":"2026-12-31"}`},
 		{method: http.MethodPost, path: "/api/money/invoices/x1/send", body: `{}`},
 		{method: http.MethodPost, path: "/api/money/invoices/x1/void", body: `{}`},
