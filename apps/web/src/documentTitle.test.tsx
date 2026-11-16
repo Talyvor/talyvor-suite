@@ -146,8 +146,8 @@ const PINNED_CONSOLE: Readonly<Record<string, string>> = {
   '/rooms/*': 'Rooms',
   // B28.10 — Earnings became Royalties, under Statements; /earnings redirects to it.
   '/statements/royalties': 'Royalties',
-  '/billing': 'Billing',
-  '/plans': 'Plans',
+  '/billing': 'Plan',
+  '/plans': 'Plan',
   '/billing/success': 'Billing',
   '/billing/cancel': 'Billing',
   '/keys': 'API keys',

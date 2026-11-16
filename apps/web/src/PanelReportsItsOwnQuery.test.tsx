@@ -173,13 +173,14 @@ const ADDRESS_ROUTES: Record<string, string[]> = {
   '/': ['/api/agents', '/api/agents/agt_1/rules', '/api/agents/agt_1/wallet', '/api/agents/approvals', '/api/agents/briefing', '/api/agents/forecast', '/api/agents/keys/recover', '/api/lxc/topup-options', '/api/money/accounts', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/verification', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/overview': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/bonds', '/api/docs/spaces', '/api/lxc/balance', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/spend/month', '/api/tokens/balance', '/api/tokens/history', '/api/track/workspaces', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/ledger': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
-  '/billing': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/billing/allowance', '/api/lxc/balance', '/api/lxc/topup-options', '/api/money/mandates', '/api/money/payment-requests', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  // B61.59 — Settings, Plan reads the plan and the ladders, and no longer the top-up, the balance or the allowance.
+  '/billing': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/pricing', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/keys': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/connect/assistants', '/api/keys', '/api/money/access', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/setup': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/context', '/api/keys', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/spend': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/members': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B57.42 — Settings' cards read the plan and the members; Shared answers its counts; Documents you attach left for /features.
-  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/billing/subscription', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B8.1 made every gated address ask for /api/docs/spaces, for the sidebar's list of spaces. B10.6
   // replaced that list with the pages this browser pinned or opened, which needs no read — so only
   // Overview (its product status) and /docs itself still ask for it. B18.27 moved the pins to Docs,
@@ -282,7 +283,9 @@ describe('the swept set', () => {
     // 133 → 132 at B57.18: `/` drops the cards, passkeys, safe to spend and devices reads, and reads the balances, each
     // agent's wallet and the plan.
     // 132 → 133 at B61.20: `/` reads the verification record, for the one sentence while the identity check is unfinished.
-    expect(pairs).toBe(133)
+    // 133 → 131 at B61.59: /billing is Settings, Plan, reading the plan instead of the top-up, the balance and the
+    // allowance; /settings' Plan row reads the plan's name instead of the subscription.
+    expect(pairs).toBe(131)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {

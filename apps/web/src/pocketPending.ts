@@ -36,8 +36,6 @@ export const POCKET_PENDING: readonly string[] = [
   '/chat/files',
   '/chat/connectors',
   '/rooms/*',
-  '/billing',
-  '/plans',
   '/billing/success',
   '/billing/cancel',
   // B57.20 draws the agent's page above today's view, which stays under it until B57.21 and B57.22 redraw the rest.

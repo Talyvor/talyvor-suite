@@ -5,10 +5,8 @@ import { cn } from '@talyvor/ui'
 import { getJSONArray } from '../lib/api'
 import { useAuthMeReader } from '../lib/authMe'
 import { useWorkspaceAreas } from '../lib/workspaceAreas'
-import { WORKSPACE_NAME_KEY, agentBankApi, useAccount } from '../areas/lens/agentBankApi'
+import { PLAN_KEY, WORKSPACE_NAME_KEY, agentBankApi, readWorkspacePlan, useAccount } from '../areas/lens/agentBankApi'
 import type { RosterMember } from '../areas/lens/Members'
-import { SUBSCRIPTION_KEY } from '../areas/lens/Plans'
-import { planApi } from '../areas/lens/planApi'
 
 /**
  * B57.8 — a page's links to the pages that left the sidebar, as Pocket draws them (pocket.css .card.setc): Billing
@@ -107,9 +105,6 @@ const SETTINGS_ICON: Record<string, IconName> = {
 /** "1 person" or "3 people". */
 const people = (n: number) => (n === 1 ? `${n} person` : `${n} people`)
 
-/** The plan Lens bills, by its name: free, plus, pro, max, byok, team, business or enterprise. */
-const planName = (plan: string) => (plan === 'byok' ? 'BYOK' : `${plan.charAt(0).toUpperCase()}${plan.slice(1)}`)
-
 /** Every settings page this person may open: a page for an area the workspace does not have is not linked (B59.2). */
 export function useSettingsLinks(): SettingsLink[] {
   const me = useAuthMeReader()
@@ -124,13 +119,8 @@ export function useSettingsLinks(): SettingsLink[] {
     queryFn: () => getJSONArray<{ id: string }>('/api/members'),
     enabled: team,
   })
-  const sub = useQuery({
-    queryKey: SUBSCRIPTION_KEY,
-    queryFn: planApi.subscription,
-    retry: false,
-  })
-  const st = sub.data?.enabled ? sub.data.data : null
-  const plan = st ? planName(st.subscribed && st.plan ? st.plan : 'free') : undefined
+  // B61.59 — the plan Lens has the account on, by its name (Solo, Crew, Fleet, Studio, Company, Group or Custom).
+  const plan = useQuery({ queryKey: PLAN_KEY, queryFn: readWorkspacePlan, retry: false }).data?.name
   const links: PageLink[] = [
     // B57.43 — the keys that approve, first, as w-settings draws it.
     { to: '/settings/devices', title: 'Approvals and devices', line: 'Your passkeys, your phone, and notifications' },

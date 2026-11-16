@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { App, queryClient } from './App'
-import { PENDING_TOPUP_KEY } from './areas/lens/topupApi'
+import { QueryClientProvider } from '@tanstack/react-query'; import { MemoryRouter } from 'react-router-dom'; import { queryClient } from './App'
+import { PENDING_TOPUP_KEY } from './areas/lens/topupApi'; import { TopUp } from './areas/lens/TopUp'; import { AppMoney } from './areas/lens/money'
 
 // checkoutRefusalSurface.test.tsx — THE PAYMENT BUTTON THAT SAID NOTHING WHEN THE REQUEST
 // NEVER GOT AN ANSWER.
@@ -56,7 +56,7 @@ import { PENDING_TOPUP_KEY } from './areas/lens/topupApi'
 // ⚠ AND NO BAR COVERS FOR IT. Measured false above: a fetch rejection carries no status, so
 // `isSessionExpired` (ApiError + 401) is false, and the mutation error never reaches the query
 // cache that SessionExpiredBar derives from. The App's only global handler is
-// `QueryCache.onError` (App.tsx:135) — queries, not mutations.
+// `QueryCache.onError` (App.tsx:134) — queries, not mutations.
 //
 // THE FIX SAYS NOTHING NEW. The fallback is the sentence topupApi.ts already raises for an
 // answer it cannot use (`'upstream'`, topupApi.ts:264): "Couldn't start the payment — nothing
@@ -127,10 +127,18 @@ afterEach(() => {
   window.history.pushState({}, '', '/')
 })
 
-/** Open /billing on the real App, click the $10 button, and hand back what the page gained. */
+/** Open the top-up screen with the shipped queryClient, click the $10 button, and hand back what the page gained. B61.59 —
+ *  /billing is Settings, Plan now, so the screen is rendered on its own. */
 async function buyTenDollars(): Promise<{ added: number; text: string }> {
-  window.history.pushState({}, '', '/billing')
-  render(<App />)
+  render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <AppMoney>
+          <TopUp />
+        </AppMoney>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
   const btn = await screen.findByRole('button', { name: '$10' })
   const before = document.body.textContent?.length ?? 0
   fireEvent.click(btn)

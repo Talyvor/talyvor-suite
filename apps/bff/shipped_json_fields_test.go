@@ -129,6 +129,8 @@ var decodedFromUpstream = map[string]string{
 	"planGates":              "Lens's public GET /v1/public/plan-gates reply, decoded in readPlanGates() and served on /api/pricing (B32.14)",
 	"planGate":               "one plan's gates in Lens's public GET /v1/public/plan-gates reply, served on /api/pricing (B32.14)",
 	"publicFees":             "Lens's public GET /v1/public/fees reply, decoded in readFees() and served on /api/pricing (B32.14)",
+	"planLadders":            "Lens's public GET /v1/public/plans reply, decoded in readLadders() and served on /api/pricing (B61.59)",
+	"ladderPlan":             "one plan of a ladder in Lens's public GET /v1/public/plans reply, served on /api/pricing (B61.59)",
 	"lensPricing":            "Lens's public GET /v1/pricing reply, decoded in readCardPayments() and served on /api/pricing (B51.3)",
 	"publicLabels":           "Lens's public GET /v1/public/labels reply, decoded in readLabels() and served on /api/pricing (B56.9)",
 	"simulatedPayee":         "a simulated payment's payee, decoded from the browser's rules/simulate body and relayed to Lens as it came (B28.30)",

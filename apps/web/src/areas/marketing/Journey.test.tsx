@@ -31,7 +31,18 @@ function mockBff() {
     if (url.startsWith('/auth/me'))
       return json({ mode: 'oidc', authenticated: false, user: null, signup_open: true })
     if (url.startsWith('/api/pricing'))
-      return json({ usd_per_lxc: 0.1, min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000] })
+      return json({
+        usd_per_lxc: 0.1,
+        min_usd_cents: 1000,
+        max_usd_cents: 1_000_000,
+        preset_usd_cents: [1000],
+        ladders: {
+          currencies: ['USD'],
+          stablecoin_priced_in: 'USD',
+          personal: [{ id: 'personal_solo', name: 'Solo', price_minor: { USD: 0 }, agents: 3, people: 1 }],
+          business: [{ id: 'business_studio', name: 'Studio', price_minor: { USD: 1000 }, agents: 3, people: 1 }],
+        },
+      })
     return new Response('null', { status: 404 })
   })
 }
@@ -87,7 +98,7 @@ describe('a signed-out visitor arrives from talyvor.com and can act', () => {
     expect((await screen.findAllByText(/needs legal review/i)).length).toBeGreaterThan(0)
   })
 
-  it('reaches pricing — and the price list it arrives at says what a credit costs', async () => {
+  it('reaches pricing — and the price list it arrives at shows the plans Lens states', async () => {
     mockBff()
     const { unmount } = at('/marketing')
     const link = (await screen.findAllByRole('link', { name: /^pricing$/i }))[0]
@@ -98,7 +109,8 @@ describe('a signed-out visitor arrives from talyvor.com and can act', () => {
     mockBff()
     at(href)
     expect(await screen.findByRole('heading', { name: /credit for your agents/i })).toBeInTheDocument()
-    expect(await screen.findByText('$0.10')).toBeInTheDocument()
+    // B61.59 — the two ladders, from Lens's public plans read; no LXC rate.
+    expect(await screen.findByTestId('ladder-plan-personal_solo')).toHaveTextContent('Solo')
   })
 
   it('reaches terms', async () => {

@@ -87,7 +87,7 @@ describe.each(['business', 'personal'] as const)('a %s account', (type) => {
       .queryAllByRole('option')
       .map((o) => (o.textContent ?? '').trim())
     expect(options).toContain('Statements · in Activity')
-    expect(options).toContain('Billing · in Settings')
+    expect(options).toContain('Plan · in Settings')
     expect(options.includes('Invoices · in Pay')).toBe(business)
     expect(options.includes('API keys · in Settings')).toBe(business)
   })

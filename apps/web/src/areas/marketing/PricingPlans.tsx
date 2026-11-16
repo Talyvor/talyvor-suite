@@ -1,25 +1,64 @@
 import type { ReactNode } from 'react'
-import { Button, Card, Facts } from '@talyvor/ui/pocket'
+import { Button, Card } from '@talyvor/ui/pocket'
 import { COMPANY_CONTACT } from '../../company'
-import { formatCents } from '../lens/topupApi'
-import { CONTRACTED, included, ownKeys } from './PriceCard'
-import { formatBPS, formatLimit, formatMinor, planName, type Fees, type PlanGate, type Pricing } from './pricingApi'
+import { formatBPS, formatLimit, formatMinor, planName, type Fees, type LadderPlan, type PlanLadders, type Pricing } from './pricingApi'
 import { StatusLabel } from '../../labels/StatusLabel'
-import { MONEY_FEATURES } from '../../labels/capabilities'
 
 // B57.61 — /pricing in Pocket (design/pocket s-pricing). The plan cards and both fee lists, drawn in
-// Pocket's components for /pricing alone; /plans keeps PriceCard.tsx's CompanyCard, in today's design, until its own
-// B57 item. Every figure is still served (pricingApi.ts), and every label is the one B56.10 placed. B59.5: no row or
+// Pocket's components. B61.59: the plan cards are Lens's two ladders (GET /v1/public/plans), for a person and for a
+// company, and no 5 Oct plan is left. Every figure is still served (pricingApi.ts), and every label is the one B56.10 placed. B59.5: no row or
 // fee for a hidden area (LAUNCH-PACK.md section 2): no Edge, no Marketplace, compute or loan fee.
 //
 // Prices are Figtree's tabular figures (font-figure), as every money figure outside <Money> is; the reference's
 // display face for them needs <Money>'s provider, which a public page rendered bare does not have.
 
-/** The company plan drawn highlighted: Team, as the reference draws it. A mark of where most companies start, not a
- *  claim that it sells most, so no words go with it. */
-const HIGHLIGHTED_PLAN = 'team'
+/** A plan's monthly price in every currency Lens prices it in: "£3.99 · €3.99 · $3.99 a month", or By contract. */
+function LadderPrice({ plan, currencies }: { plan: LadderPlan; currencies: string[] }) {
+  if (plan.price_minor === null) return <p className="text-body font-semibold text-ink">By contract</p>
+  const prices = currencies.filter((c) => typeof plan.price_minor?.[c] === 'number')
+  return (
+    <p className="flex flex-wrap items-baseline gap-1.5">
+      <span data-testid={`price-${plan.id}`} className="font-figure text-bar font-extrabold text-ink">
+        {prices.map((c) => formatMinor(plan.price_minor?.[c] ?? 0, c)).join(' · ')}
+      </span>{' '}
+      <span className="text-body font-semibold text-ink-3">a month</span>
+    </p>
+  )
+}
 
-/** One row of a plan card: pocket.css .prows, the label (and its chip) over what the plan gives. */
+/** One plan of a ladder on /pricing: its price, agents, people and exchange fee, as Lens states them. */
+function LadderCard({ plan, ladders, pricing }: { plan: LadderPlan; ladders: PlanLadders; pricing: Pricing }) {
+  const fees = pricing.fees
+  const fx = fees?.fx_margin_bps[plan.id]
+  return (
+    <div data-testid={`ladder-plan-${plan.id}`} className="grid content-start gap-3 rounded-card bg-cloud p-6">
+      <p className="font-display text-bar font-bold text-ink">{plan.name}</p>
+      <LadderPrice plan={plan} currencies={ladders.currencies} />
+      {plan.by_contract ? (
+        <div>
+          <Button asChild variant="outline" size="sm">
+            <a href={`mailto:${COMPANY_CONTACT}`}>Custom: talk to us</a>
+          </Button>
+        </div>
+      ) : null}
+      <dl className="m-0 grid">
+        <PlanRow label="Agents">
+          <span className="font-figure">{formatLimit(plan.agents)}</span>
+        </PlanRow>
+        <PlanRow label="People">
+          <span className="font-figure">{formatLimit(plan.people)}</span>
+        </PlanRow>
+        {typeof fx === 'number' && !plan.by_contract ? (
+          <PlanRow label="Exchange fee" chip={<StatusLabel capability="fx" labels={pricing.labels} />}>
+            <span className="font-figure">{fx === 0 ? 'None' : formatBPS(fx)}</span>
+          </PlanRow>
+        ) : null}
+      </dl>
+    </div>
+  )
+}
+
+/** One plan of a card: pocket.css .prows, the label (and its chip) over what the plan gives. */
 function PlanRow({ label, chip, children }: { label: string; chip?: ReactNode; children: ReactNode }) {
   return (
     <div className="grid gap-0.5 border-t border-line py-2 first:border-t-0">
@@ -32,113 +71,27 @@ function PlanRow({ label, chip, children }: { label: string; chip?: ReactNode; c
   )
 }
 
-/** A price as pocket.css .pprice draws it: the figure in the display face, its words small beside it. */
-function PlanPrice({ id, pricing }: { id: string; pricing: Pricing }) {
-  const listed = pricing.company_plans?.find((p) => p.id === id)
-  const cents =
-    id === CONTRACTED ? pricing.enterprise_from_usd_cents : listed ? listed.usd_cents : id === 'free' ? 0 : undefined
-  if (cents === undefined) {
-    return <p className="text-body text-ink-2">Price not stated by this deployment just now</p>
-  }
-  return (
-    <p className="flex flex-wrap items-baseline gap-1.5">
-      {id === CONTRACTED ? <span className="text-body font-semibold text-ink-3">From</span> : null}
-      <span data-testid={`price-${id}`} className="font-figure text-pocket-balance-sm font-extrabold text-ink">
-        {formatCents(cents)}
-      </span>
-      {/* Free has no price, so nothing is "a month" about it. */}
-      {cents > 0 ? <span className="text-body font-semibold text-ink-3">a month</span> : null}
-    </p>
-  )
-}
-
-/** One company plan on /pricing: its price, what it unlocks and its fees, each row with the label B56.10 gives it. */
-function PlanCard({ id, gate, pricing }: { id: string; gate: PlanGate; pricing: Pricing }) {
-  const name = planName(id)
-  const fees = pricing.fees
-  const contracted = id === CONTRACTED
-  const fx = fees?.fx_margin_bps[id]
-  const built = pricing.plan_gates?.built
-  const highlighted = id === HIGHLIGHTED_PLAN
-  // B51.3 — a plan's button only while a card can be charged; until then the page's one action is Create your workspace.
-  const action =
-    pricing.card_payments !== 'live' ? null : contracted ? (
-      <a href={`mailto:${COMPANY_CONTACT}`}>Talk to us</a>
-    ) : id === 'free' ? (
-      <a href="/signup">Start free</a>
-    ) : (
-      <a href="/plans">Choose {name}</a>
-    )
-  return (
-    <div
-      data-testid={`company-plan-${id}`}
-      data-highlighted={highlighted ? 'true' : undefined}
-      className={`grid content-start gap-3 rounded-card p-6 ${highlighted ? 'bg-page shadow-pocket ring-2 ring-inset ring-ink' : 'bg-cloud'}`}
-    >
-      <p className="font-display text-bar font-bold text-ink">{name}</p>
-      <PlanPrice id={id} pricing={pricing} />
-      {action ? (
-        <div>
-          <Button asChild variant="outline" size="sm">
-            {action}
-          </Button>
-        </div>
-      ) : null}
-      <dl className="m-0 grid">
-        <PlanRow label="Agents">
-          <span className="font-figure">{formatLimit(gate.agents)}</span>
-        </PlanRow>
-        <PlanRow label="Seats">
-          <span className="font-figure">{formatLimit(gate.seats)}</span>
-        </PlanRow>
-        {fees ? (
-          <PlanRow label="Platform fee on AI spend">
-            {contracted ? 'Agreed' : <span className="font-figure">{formatBPS(fees.platform_fee_bps[id] ?? 0)}</span>}
-          </PlanRow>
-        ) : null}
-        <PlanRow label="Own provider keys">{ownKeys(gate, pricing)}</PlanRow>
-        <PlanRow label="Live money" chip={gate.live_money ? <StatusLabel capability={MONEY_FEATURES} labels={pricing.labels} /> : null}>
-          {included(gate.live_money)}
-        </PlanRow>
-        <PlanRow label="Single sign-on" chip={gate.sso && built?.sso !== true ? <StatusLabel building="sso" /> : null}>
-          {included(gate.sso)}
-        </PlanRow>
-        <PlanRow label="Audit export">{included(gate.audit_export)}</PlanRow>
-        <PlanRow
-          label="Slack and Teams approvals"
-          chip={gate.slack_teams_approvals && built?.slack_teams_approvals !== true ? <StatusLabel building="slack_teams_approvals" /> : null}
-        >
-          {included(gate.slack_teams_approvals)}
-        </PlanRow>
-        {fees ? (
-          <PlanRow
-            label="FX margin over the reference rate"
-            chip={
-              contracted || fx ? <StatusLabel capability="fx" labels={pricing.labels} /> : null
-            }
-          >
-            {contracted ? 'Agreed' : fx ? <span className="font-figure">{formatBPS(fx)}</span> : 'Not offered'}
-          </PlanRow>
-        ) : null}
-      </dl>
-    </div>
-  )
-}
-
-/** For companies: each plan Lens gates, from the smallest up. */
-export function CompanyPlans({ pricing }: { pricing: Pricing }) {
-  const gates = pricing.plan_gates
-  if (!gates) {
+/** B61.59 — both ladders, from Lens's GET /v1/public/plans: for a person, then for a company. */
+export function PlanLadderCards({ pricing }: { pricing: Pricing }) {
+  const ladders = pricing.ladders
+  if (!ladders) {
     return (
       <p className="max-w-xl text-body text-ink-2">
-        What each plan includes could not be read from this deployment just now, so no plan is printed here.
+        The plans could not be read from this deployment just now, so no plan is printed here.
       </p>
     )
   }
   return (
-    <div className="grid gap-4 wide:grid-cols-2 lg:grid-cols-4">
-      {gates.order.map((id) => (
-        <PlanCard key={id} id={id} gate={gates.plans[id]} pricing={pricing} />
+    <div className="grid gap-10">
+      {(['personal', 'business'] as const).map((type) => (
+        <div key={type} data-testid={`ladder-${type}`} className="grid gap-4">
+          <h3 className="font-display text-head font-bold text-ink">{type === 'personal' ? 'For a person' : 'For a company'}</h3>
+          <div className={`grid gap-4 wide:grid-cols-2 ${type === 'personal' ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
+            {ladders[type].map((p) => (
+              <LadderCard key={p.id} plan={p} ladders={ladders} pricing={pricing} />
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   )
@@ -168,20 +121,6 @@ function FeeList({ testId, children }: { testId: string; children: ReactNode }) 
   )
 }
 
-/** What a request costs: each plan's platform fee as served, on its own line (B56.2). */
-export function RequestCost({ fees, planIds }: { fees: Fees; planIds: string[] }) {
-  const ids = planIds.length > 0 ? planIds : Object.keys(fees.platform_fee_bps)
-  return (
-    <Facts
-      className="mt-3"
-      facts={ids.map((id) => ({
-        label: planName(id),
-        value: id === CONTRACTED ? 'Agreed' : formatBPS(fees.platform_fee_bps[id] ?? 0),
-      }))}
-    />
-  )
-}
-
 /** The fees on any plan, each as Lens states it. */
 export function FeesOnAnyPlan({ fees, labels }: { fees: Fees | undefined; labels?: Record<string, string> }) {
   if (!fees) {
@@ -206,9 +145,7 @@ export function FeesOnAnyPlan({ fees, labels }: { fees: Fees | undefined; labels
  * the plan cards show it.
  */
 export function MoneyFeatureFees({ fees, planIds, labels }: { fees: Fees; planIds: string[]; labels?: Record<string, string> }) {
-  const fx = planIds
-    .filter((id) => id !== 'free')
-    .map((id) => `${planName(id)} ${id === CONTRACTED ? 'agreed' : formatBPS(fees.fx_margin_bps[id] ?? 0)}`)
+  const fx = planIds.map((id) => `${planName(id)} ${formatBPS(fees.fx_margin_bps[id] ?? 0)}`)
   return (
     <FeeList testId="fees-money-features">
       <FeeRow label="International payments" chips={<StatusLabel capability="payments_out" labels={labels} />}>

@@ -64,6 +64,27 @@ export interface Fees {
   charged?: Record<string, boolean>
 }
 
+/** B61.59 — one plan of a ladder, as Lens's GET /v1/public/plans states it (talyvor-lens B61.57). -1 is unlimited. */
+export interface LadderPlan {
+  id: string
+  /** The plan as people read it: Solo, Crew, Fleet, Studio, Company, Group or Custom. */
+  name: string
+  /** The monthly price in minor units, by currency; null on Custom, which a contract prices. */
+  price_minor: Record<string, number> | null
+  by_contract?: boolean
+  agents: number
+  people: number
+}
+
+/** B61.59 — both ladders, each from the smallest plan up, and the currencies they are priced in. */
+export interface PlanLadders {
+  currencies: string[]
+  /** The currency a stablecoin account pays its plan in. */
+  stablecoin_priced_in: string
+  personal: LadderPlan[]
+  business: LadderPlan[]
+}
+
 export interface Pricing {
   /** USD per LXC. ABSENT when Lens would not confirm it — the page then prints no rate at all. */
   usd_per_lxc?: number
@@ -79,6 +100,8 @@ export interface Pricing {
   /** The figure an Enterprise contract starts from. */
   enterprise_from_usd_cents?: number
   plan_gates?: PlanGates
+  /** B61.59 — the plans a Personal account chooses from and a Business's; ABSENT when Lens did not state them whole. */
+  ladders?: PlanLadders
   fees?: Fees
   /** B51.3 — whether a card can be charged (talyvor-lens B51.2); ABSENT when Lens did not say. */
   card_payments?: 'live' | 'test' | 'off'
@@ -88,6 +111,14 @@ export interface Pricing {
 
 /** The plans' names. Words, not figures: every figure about a plan is read from Lens. */
 export const PLAN_NAMES: Record<string, string> = {
+  // B61.59 — the two ladders (talyvor-lens B61.57).
+  personal_solo: 'Solo',
+  personal_crew: 'Crew',
+  personal_fleet: 'Fleet',
+  business_studio: 'Studio',
+  business_company: 'Company',
+  business_group: 'Group',
+  business_custom: 'Custom',
   free: 'Free',
   team: 'Team',
   business: 'Business',

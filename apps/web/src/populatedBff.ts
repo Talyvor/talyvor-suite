@@ -229,7 +229,16 @@ const BODIES: Record<string, unknown> = {
     ],
   },
   // B57.18 — Home's "2 of 3 on Free" (Lens's plan through GET /api/plan), and the ECB's rates its total is valued at.
-  '/api/plan': { plan: 'free', agents: 3, agents_used: 2, seats: 1 },
+  '/api/plan': {
+    plan: 'business_studio',
+    name: 'Studio',
+    account_type: 'business',
+    on_contract: false,
+    price_minor: { GBP: 1000, EUR: 1000, USD: 1000 },
+    agents: 3,
+    agents_used: 2,
+    seats: 1,
+  },
   '/api/fx': { rate_date: '2026-10-09', usd_per_eur: 1.17, gbp_per_eur: 0.86 },
   // B59.31 — Settings → Company details, as a company with two people with control.
   '/api/workspace/business': {
@@ -344,6 +353,22 @@ const BODIES: Record<string, unknown> = {
       { id: 'pro', usd_cents: 10000, included_ulxc: 968_000_000 },
       { id: 'max', usd_cents: 20000, included_ulxc: 1_939_000_000 },
     ],
+    // B61.59 — Lens's two ladders (GET /v1/public/plans), with its defaults.
+    ladders: {
+      currencies: ['GBP', 'EUR', 'USD'],
+      stablecoin_priced_in: 'USD',
+      personal: [
+        { id: 'personal_solo', name: 'Solo', price_minor: { GBP: 0, EUR: 0, USD: 0 }, agents: 3, people: 1 },
+        { id: 'personal_crew', name: 'Crew', price_minor: { GBP: 399, EUR: 399, USD: 399 }, agents: 10, people: 1 },
+        { id: 'personal_fleet', name: 'Fleet', price_minor: { GBP: 799, EUR: 899, USD: 999 }, agents: 25, people: 1 },
+      ],
+      business: [
+        { id: 'business_studio', name: 'Studio', price_minor: { GBP: 1000, EUR: 1000, USD: 1000 }, agents: 3, people: 1 },
+        { id: 'business_company', name: 'Company', price_minor: { GBP: 3500, EUR: 3500, USD: 3500 }, agents: 25, people: 5 },
+        { id: 'business_group', name: 'Group', price_minor: { GBP: 12500, EUR: 12500, USD: 12500 }, agents: -1, people: 25 },
+        { id: 'business_custom', name: 'Custom', price_minor: null, by_contract: true, agents: -1, people: -1 },
+      ],
+    },
   },
 
   // B18.61 — the subscriber's plan renews at the end of the period.

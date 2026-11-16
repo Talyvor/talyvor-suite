@@ -149,9 +149,9 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // built from Region and renders no Card at all; its regions carry their own headings. B28.10
   // moved it under Statements; /earnings redirects to the same screen.
   '/statements/royalties': 0,
-  '/billing': 3,
-  // B13.3 — the usage meter and the earnings card; the populated fixture is a subscriber.
-  '/plans': 2,
+  // B61.59 — Settings, Plan is Pocket's: its cards carry their own headings, no CardHeader.
+  '/billing': 0,
+  '/plans': 0,
   // 0 → 1 at W1.1.17b: the return screen draws a card, and the old census was reading its
   // pre-query state. 1 → 0 at B28.270: opened bare, with no session_id, no checkout is returning,
   // and the page says there is no payment to confirm — it draws no card.
