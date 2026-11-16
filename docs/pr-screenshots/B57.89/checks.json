@@ -1,0 +1,650 @@
+[
+ {
+  "route": "/money/spending",
+  "screen": "w-spending",
+  "answers": {
+   "/api/money/spending": {
+    "from": "",
+    "to": "",
+    "categories": [],
+    "payments": [
+     {
+      "entry_id": "ent_1",
+      "kind": "card",
+      "merchant": "Acme Hosting",
+      "amount_minor": 3400,
+      "currency": "USD",
+      "category": "ai_software",
+      "category_source": "merchant",
+      "created_at": "2026-11-16T08:41:00Z",
+      "agent_id": "agt_scout"
+     },
+     {
+      "entry_id": "ent_2",
+      "kind": "payment_out",
+      "merchant": "Skyline Air",
+      "amount_minor": 20131,
+      "currency": "USD",
+      "category": "travel",
+      "category_source": "merchant",
+      "created_at": "2026-11-12T14:05:00Z"
+     },
+     {
+      "entry_id": "ent_3",
+      "kind": "card",
+      "merchant": "Northwind Data",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "category": "subscriptions",
+      "category_source": "merchant",
+      "created_at": "2026-11-11T07:00:00Z",
+      "agent_id": "agt_scout"
+     }
+    ],
+    "totals": [
+     {
+      "currency": "USD",
+      "total_minor": 25331,
+      "by_category": {
+       "travel": 20131,
+       "ai_software": 3400,
+       "subscriptions": 1800
+      }
+     }
+    ]
+   },
+   "/api/money/spending/unusual": {
+    "findings": [
+     {
+      "rule": "new_merchant",
+      "entry_id": "ent_2",
+      "merchant": "Skyline Air",
+      "amount_minor": 20131,
+      "currency": "USD",
+      "at": "2026-11-12T14:05:00Z"
+     }
+    ]
+   },
+   "/api/money/coach": {
+    "lines": [
+     {
+      "fact": {
+       "kind": "new_merchant",
+       "merchant": "Skyline Air",
+       "amount": "$201.31"
+      },
+      "sentence": "You paid Skyline Air $201.31, somewhere new for you.",
+      "source": "template"
+     }
+    ],
+    "review": []
+   },
+   "/api/money/budgets": {
+    "budgets": [
+     {
+      "id": "bdg_1",
+      "agent_id": "all",
+      "category": "ai_software",
+      "period": "month",
+      "amount_minor": 10000,
+      "currency": "USD",
+      "timezone": "UTC",
+      "period_start": "2026-11-01T00:00:00Z",
+      "period_end": "2026-12-01T00:00:00Z",
+      "spent_minor": 8200,
+      "left_minor": 1800,
+      "percent": 82
+     },
+     {
+      "id": "bdg_2",
+      "agent_id": "",
+      "category": "travel",
+      "period": "month",
+      "amount_minor": 50000,
+      "currency": "USD",
+      "timezone": "UTC",
+      "period_start": "2026-11-01T00:00:00Z",
+      "period_end": "2026-12-01T00:00:00Z",
+      "spent_minor": 20131,
+      "left_minor": 29869,
+      "percent": 40
+     }
+    ]
+   },
+   "/api/money/budgets/alerts": {
+    "alerts": [
+     {
+      "id": "sal_1",
+      "kind": "budget",
+      "subject": "bdg_1",
+      "agent_id": "all",
+      "category": "ai_software",
+      "period": "month",
+      "period_start": "2026-11-01T00:00:00Z",
+      "percent": 50,
+      "spent_minor": 5000,
+      "limit_minor": 10000,
+      "currency": "USD",
+      "created_at": "2026-11-08T09:00:00Z"
+     },
+     {
+      "id": "sal_2",
+      "kind": "budget",
+      "subject": "bdg_1",
+      "agent_id": "all",
+      "category": "ai_software",
+      "period": "month",
+      "period_start": "2026-11-01T00:00:00Z",
+      "percent": 80,
+      "spent_minor": 8000,
+      "limit_minor": 10000,
+      "currency": "USD",
+      "created_at": "2026-11-14T09:00:00Z"
+     }
+    ]
+   },
+   "/api/money/spending/subscriptions": {
+    "subscriptions": [
+     {
+      "merchant": "Northwind Data",
+      "category": "subscriptions",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "interval": "monthly",
+      "charges": 3,
+      "last_at": "2026-11-11T07:00:00Z",
+      "next_at": "2026-12-11T07:00:00Z",
+      "remind_on": "2026-12-08T07:00:00Z",
+      "monthly_minor": 1800,
+      "yearly_minor": 21600,
+      "agent_id": "agt_scout"
+     }
+    ]
+   },
+   "/api/money/notices": {
+    "settings": {
+     "timezone": "UTC",
+     "quiet_from": "22:00",
+     "quiet_until": "07:00",
+     "off": [
+      "tip"
+     ]
+    },
+    "notices": [
+     {
+      "id": "ntc_1",
+      "kind": "budget",
+      "title": "AI and software is at 80%",
+      "body": "$82.00 of $100.00 this month.",
+      "status": "sent",
+      "created_at": "2026-11-14T09:00:00Z"
+     }
+    ]
+   },
+   "/api/money/plan": {
+    "currency": "USD",
+    "until": "2026-11-30",
+    "next_income": "2026-11-28",
+    "days": 12,
+    "money_now_minor": 90000,
+    "upcoming_minor": 1800,
+    "budgets_left_minor": 31669,
+    "safe_per_day_minor": 4711,
+    "pace_per_day_minor": 3619,
+    "payments": [
+     {
+      "source": "subscription",
+      "id": "Northwind Data",
+      "payee": "Northwind Data",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "due": "2026-11-20",
+      "covered": true
+     }
+    ],
+    "income": {
+     "payday": 28,
+     "amount_minor": 450000,
+     "currency": "USD",
+     "payer": "Northwind Studio"
+    },
+    "findings": []
+   },
+   "/api/agents/schedules": {
+    "schedules": []
+   }
+  }
+ },
+ {
+  "route": "/money/budgets",
+  "screen": "w-budgets",
+  "answers": {
+   "/api/money/spending": {
+    "from": "",
+    "to": "",
+    "categories": [],
+    "payments": [
+     {
+      "entry_id": "ent_1",
+      "kind": "card",
+      "merchant": "Acme Hosting",
+      "amount_minor": 3400,
+      "currency": "USD",
+      "category": "ai_software",
+      "category_source": "merchant",
+      "created_at": "2026-11-16T08:41:00Z",
+      "agent_id": "agt_scout"
+     },
+     {
+      "entry_id": "ent_2",
+      "kind": "payment_out",
+      "merchant": "Skyline Air",
+      "amount_minor": 20131,
+      "currency": "USD",
+      "category": "travel",
+      "category_source": "merchant",
+      "created_at": "2026-11-12T14:05:00Z"
+     },
+     {
+      "entry_id": "ent_3",
+      "kind": "card",
+      "merchant": "Northwind Data",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "category": "subscriptions",
+      "category_source": "merchant",
+      "created_at": "2026-11-11T07:00:00Z",
+      "agent_id": "agt_scout"
+     }
+    ],
+    "totals": [
+     {
+      "currency": "USD",
+      "total_minor": 25331,
+      "by_category": {
+       "travel": 20131,
+       "ai_software": 3400,
+       "subscriptions": 1800
+      }
+     }
+    ]
+   },
+   "/api/money/spending/unusual": {
+    "findings": [
+     {
+      "rule": "new_merchant",
+      "entry_id": "ent_2",
+      "merchant": "Skyline Air",
+      "amount_minor": 20131,
+      "currency": "USD",
+      "at": "2026-11-12T14:05:00Z"
+     }
+    ]
+   },
+   "/api/money/coach": {
+    "lines": [
+     {
+      "fact": {
+       "kind": "new_merchant",
+       "merchant": "Skyline Air",
+       "amount": "$201.31"
+      },
+      "sentence": "You paid Skyline Air $201.31, somewhere new for you.",
+      "source": "template"
+     }
+    ],
+    "review": []
+   },
+   "/api/money/budgets": {
+    "budgets": [
+     {
+      "id": "bdg_1",
+      "agent_id": "all",
+      "category": "ai_software",
+      "period": "month",
+      "amount_minor": 10000,
+      "currency": "USD",
+      "timezone": "UTC",
+      "period_start": "2026-11-01T00:00:00Z",
+      "period_end": "2026-12-01T00:00:00Z",
+      "spent_minor": 8200,
+      "left_minor": 1800,
+      "percent": 82
+     },
+     {
+      "id": "bdg_2",
+      "agent_id": "",
+      "category": "travel",
+      "period": "month",
+      "amount_minor": 50000,
+      "currency": "USD",
+      "timezone": "UTC",
+      "period_start": "2026-11-01T00:00:00Z",
+      "period_end": "2026-12-01T00:00:00Z",
+      "spent_minor": 20131,
+      "left_minor": 29869,
+      "percent": 40
+     }
+    ]
+   },
+   "/api/money/budgets/alerts": {
+    "alerts": [
+     {
+      "id": "sal_1",
+      "kind": "budget",
+      "subject": "bdg_1",
+      "agent_id": "all",
+      "category": "ai_software",
+      "period": "month",
+      "period_start": "2026-11-01T00:00:00Z",
+      "percent": 50,
+      "spent_minor": 5000,
+      "limit_minor": 10000,
+      "currency": "USD",
+      "created_at": "2026-11-08T09:00:00Z"
+     },
+     {
+      "id": "sal_2",
+      "kind": "budget",
+      "subject": "bdg_1",
+      "agent_id": "all",
+      "category": "ai_software",
+      "period": "month",
+      "period_start": "2026-11-01T00:00:00Z",
+      "percent": 80,
+      "spent_minor": 8000,
+      "limit_minor": 10000,
+      "currency": "USD",
+      "created_at": "2026-11-14T09:00:00Z"
+     }
+    ]
+   },
+   "/api/money/spending/subscriptions": {
+    "subscriptions": [
+     {
+      "merchant": "Northwind Data",
+      "category": "subscriptions",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "interval": "monthly",
+      "charges": 3,
+      "last_at": "2026-11-11T07:00:00Z",
+      "next_at": "2026-12-11T07:00:00Z",
+      "remind_on": "2026-12-08T07:00:00Z",
+      "monthly_minor": 1800,
+      "yearly_minor": 21600,
+      "agent_id": "agt_scout"
+     }
+    ]
+   },
+   "/api/money/notices": {
+    "settings": {
+     "timezone": "UTC",
+     "quiet_from": "22:00",
+     "quiet_until": "07:00",
+     "off": [
+      "tip"
+     ]
+    },
+    "notices": [
+     {
+      "id": "ntc_1",
+      "kind": "budget",
+      "title": "AI and software is at 80%",
+      "body": "$82.00 of $100.00 this month.",
+      "status": "sent",
+      "created_at": "2026-11-14T09:00:00Z"
+     }
+    ]
+   },
+   "/api/money/plan": {
+    "currency": "USD",
+    "until": "2026-11-30",
+    "next_income": "2026-11-28",
+    "days": 12,
+    "money_now_minor": 90000,
+    "upcoming_minor": 1800,
+    "budgets_left_minor": 31669,
+    "safe_per_day_minor": 4711,
+    "pace_per_day_minor": 3619,
+    "payments": [
+     {
+      "source": "subscription",
+      "id": "Northwind Data",
+      "payee": "Northwind Data",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "due": "2026-11-20",
+      "covered": true
+     }
+    ],
+    "income": {
+     "payday": 28,
+     "amount_minor": 450000,
+     "currency": "USD",
+     "payer": "Northwind Studio"
+    },
+    "findings": []
+   },
+   "/api/agents/schedules": {
+    "schedules": []
+   }
+  }
+ },
+ {
+  "route": "/money/subscriptions",
+  "screen": "w-subscriptions",
+  "answers": {
+   "/api/money/spending": {
+    "from": "",
+    "to": "",
+    "categories": [],
+    "payments": [
+     {
+      "entry_id": "ent_1",
+      "kind": "card",
+      "merchant": "Acme Hosting",
+      "amount_minor": 3400,
+      "currency": "USD",
+      "category": "ai_software",
+      "category_source": "merchant",
+      "created_at": "2026-11-16T08:41:00Z",
+      "agent_id": "agt_scout"
+     },
+     {
+      "entry_id": "ent_2",
+      "kind": "payment_out",
+      "merchant": "Skyline Air",
+      "amount_minor": 20131,
+      "currency": "USD",
+      "category": "travel",
+      "category_source": "merchant",
+      "created_at": "2026-11-12T14:05:00Z"
+     },
+     {
+      "entry_id": "ent_3",
+      "kind": "card",
+      "merchant": "Northwind Data",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "category": "subscriptions",
+      "category_source": "merchant",
+      "created_at": "2026-11-11T07:00:00Z",
+      "agent_id": "agt_scout"
+     }
+    ],
+    "totals": [
+     {
+      "currency": "USD",
+      "total_minor": 25331,
+      "by_category": {
+       "travel": 20131,
+       "ai_software": 3400,
+       "subscriptions": 1800
+      }
+     }
+    ]
+   },
+   "/api/money/spending/unusual": {
+    "findings": [
+     {
+      "rule": "new_merchant",
+      "entry_id": "ent_2",
+      "merchant": "Skyline Air",
+      "amount_minor": 20131,
+      "currency": "USD",
+      "at": "2026-11-12T14:05:00Z"
+     }
+    ]
+   },
+   "/api/money/coach": {
+    "lines": [
+     {
+      "fact": {
+       "kind": "new_merchant",
+       "merchant": "Skyline Air",
+       "amount": "$201.31"
+      },
+      "sentence": "You paid Skyline Air $201.31, somewhere new for you.",
+      "source": "template"
+     }
+    ],
+    "review": []
+   },
+   "/api/money/budgets": {
+    "budgets": [
+     {
+      "id": "bdg_1",
+      "agent_id": "all",
+      "category": "ai_software",
+      "period": "month",
+      "amount_minor": 10000,
+      "currency": "USD",
+      "timezone": "UTC",
+      "period_start": "2026-11-01T00:00:00Z",
+      "period_end": "2026-12-01T00:00:00Z",
+      "spent_minor": 8200,
+      "left_minor": 1800,
+      "percent": 82
+     },
+     {
+      "id": "bdg_2",
+      "agent_id": "",
+      "category": "travel",
+      "period": "month",
+      "amount_minor": 50000,
+      "currency": "USD",
+      "timezone": "UTC",
+      "period_start": "2026-11-01T00:00:00Z",
+      "period_end": "2026-12-01T00:00:00Z",
+      "spent_minor": 20131,
+      "left_minor": 29869,
+      "percent": 40
+     }
+    ]
+   },
+   "/api/money/budgets/alerts": {
+    "alerts": [
+     {
+      "id": "sal_1",
+      "kind": "budget",
+      "subject": "bdg_1",
+      "agent_id": "all",
+      "category": "ai_software",
+      "period": "month",
+      "period_start": "2026-11-01T00:00:00Z",
+      "percent": 50,
+      "spent_minor": 5000,
+      "limit_minor": 10000,
+      "currency": "USD",
+      "created_at": "2026-11-08T09:00:00Z"
+     },
+     {
+      "id": "sal_2",
+      "kind": "budget",
+      "subject": "bdg_1",
+      "agent_id": "all",
+      "category": "ai_software",
+      "period": "month",
+      "period_start": "2026-11-01T00:00:00Z",
+      "percent": 80,
+      "spent_minor": 8000,
+      "limit_minor": 10000,
+      "currency": "USD",
+      "created_at": "2026-11-14T09:00:00Z"
+     }
+    ]
+   },
+   "/api/money/spending/subscriptions": {
+    "subscriptions": [
+     {
+      "merchant": "Northwind Data",
+      "category": "subscriptions",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "interval": "monthly",
+      "charges": 3,
+      "last_at": "2026-11-11T07:00:00Z",
+      "next_at": "2026-12-11T07:00:00Z",
+      "remind_on": "2026-12-08T07:00:00Z",
+      "monthly_minor": 1800,
+      "yearly_minor": 21600,
+      "agent_id": "agt_scout"
+     }
+    ]
+   },
+   "/api/money/notices": {
+    "settings": {
+     "timezone": "UTC",
+     "quiet_from": "22:00",
+     "quiet_until": "07:00",
+     "off": [
+      "tip"
+     ]
+    },
+    "notices": [
+     {
+      "id": "ntc_1",
+      "kind": "budget",
+      "title": "AI and software is at 80%",
+      "body": "$82.00 of $100.00 this month.",
+      "status": "sent",
+      "created_at": "2026-11-14T09:00:00Z"
+     }
+    ]
+   },
+   "/api/money/plan": {
+    "currency": "USD",
+    "until": "2026-11-30",
+    "next_income": "2026-11-28",
+    "days": 12,
+    "money_now_minor": 90000,
+    "upcoming_minor": 1800,
+    "budgets_left_minor": 31669,
+    "safe_per_day_minor": 4711,
+    "pace_per_day_minor": 3619,
+    "payments": [
+     {
+      "source": "subscription",
+      "id": "Northwind Data",
+      "payee": "Northwind Data",
+      "amount_minor": 1800,
+      "currency": "USD",
+      "due": "2026-11-20",
+      "covered": true
+     }
+    ],
+    "income": {
+     "payday": 28,
+     "amount_minor": 450000,
+     "currency": "USD",
+     "payer": "Northwind Studio"
+    },
+    "findings": []
+   },
+   "/api/agents/schedules": {
+    "schedules": []
+   }
+  }
+ }
+]

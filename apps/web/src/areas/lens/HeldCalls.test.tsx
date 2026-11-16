@@ -32,7 +32,7 @@ afterEach(() => {
 describe('no calls to held or missing routes (B60.6)', () => {
   it('Spending does not ask for physical cards while no issuer serves them', async () => {
     const asked = open('/money/spending', [])
-    await screen.findByText('Where your money went')
+    await screen.findByText('Spent this month')
     await settleQueries(queryClient, waitFor)
     expect(reads(asked, '/api/money/physical-cards')).toEqual([])
     expect(screen.queryByRole('link', { name: 'Your Talyvor Card' })).toBeNull()

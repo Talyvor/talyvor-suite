@@ -198,14 +198,14 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   '/settings/data': 0,
   '/money/invoices': 0, // B57.33: Pocket's Issued and Accounts, no CardHeader
   // B30.96 — payees, send, payments out, standing orders, mandates and bulk payouts.
-  '/money/spending': 10, // B53.8: this week, this month, budgets, unusual, payments, subscriptions and the latest notices; B53.16: safe to spend, off plan and the payments due, under the populated fixture
+  '/money/spending': 0, // B57.89: drawn in Pocket, whose cards head themselves with an h2 or h3
   '/money/card': 0, // B57.97: drawn in Pocket, whose cards head themselves with an h3
   '/scan/reports': 1, // B52.28: the library's one card, under the populated fixture's one report
   '/scan/reports/:id': 1, // B52.28: the report's card (the box is a header-less card)
   '/scan/agents': 1, // B52.28: the populated fixture's one Scan agent
   '/scan/track-record': 1, // B52.28: the Reports card
-  '/money/budgets': 1, // B41.39: the Budgets card, under the populated fixture's one budget
-  '/money/subscriptions': 1, // B41.20: the Subscriptions card, under the populated fixture's two found subscriptions
+  '/money/budgets': 0, // B57.89: drawn in Pocket
+  '/money/subscriptions': 0, // B57.89: drawn in Pocket
   '/money/wallets': 0, // B59.53: Wallets is drawn in Pocket
   '/money/pay': 0, // B57.32: all of Pay is drawn in Pocket, its standing orders, mandates, bulk payouts and bills each on its own page
   '/money/pay/standing-orders': 0,

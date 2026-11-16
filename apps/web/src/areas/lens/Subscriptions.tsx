@@ -1,22 +1,21 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { CardHeader, Pill, Row } from '@talyvor/ui'
-import { Card } from './walletBrand'
-import { Region, RegionScreen } from '../../components/Region'
+import { Card, Chip, EmptyState, Icon, Money, RoomBadge, Row, type IconName } from '@talyvor/ui/pocket'
 import { formatUSD } from './format'
 import { readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
 import { PAYEES_KEY, SCHEDULES_KEY } from './Pay'
 import { LICENCES_KEY } from '../marketplace/Licences'
 import { type Listing, type MarketLicence, marketApi } from '../marketplace/marketApi'
-import { type AgentSchedule, agentBankApi, formatMinor } from './agentBankApi'
+import { type AgentSchedule, agentBankApi } from './agentBankApi'
 import { useLxcText } from './money'
 import { ApiError } from '../../lib/api'
 import { useWorkspaceAreas } from '../../lib/workspaceAreas'
+import { DESIGN_ATTR } from '../../pocketPending'
 
 // Subscriptions.tsx — B41.20: everything that charges again, in one list, soonest first — the payments Lens found recurring
 // on a card or a payment out (B41.120), the standing orders an agent pays (B30.18) and the marketplace rentals and
 // subscriptions that renew (B32.20). Each shows its next charge, what it costs a month, and the day a reminder is due:
-// three days before it renews. From that day until it charges, the row says so.
+// three days before it renews. From that day until it charges, the row says so. B57.89 draws it in Pocket, a tab of Activity.
 
 export const SUBSCRIPTIONS_KEY = ['money-subscriptions']
 /** Lens economy.RemindDaysBeforeRenewal: Lens's own subscriptions carry remind_on; the others are counted the same way. */
@@ -28,10 +27,11 @@ interface Renewal {
   what: string
   whose: string
   source: string
+  icon: IconName
   every: string
-  amount: string
+  amount: React.ReactNode
   /** null: not known until the listing's offer is read */
-  monthly: string | null
+  monthly: React.ReactNode | null
   next: Date
   remind: Date
 }
@@ -67,7 +67,8 @@ export function SubscriptionsScreen() {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const payees = useQuery({ queryKey: PAYEES_KEY, queryFn: agentBankApi.payees })
   const lxc = useLxcText()
-  const money = (minor: number, currency: string) => (currency === 'LXC' ? lxc(minor) : formatMinor(minor, currency))
+  const money = (minor: number, currency: string) =>
+    currency === 'LXC' ? <span className="font-figure">{lxc(minor)}</span> : <Money minor={minor} currency={currency} />
   const renewing = (market ? (licences.data ?? []) : []).filter((l) => l.status === 'active' && l.auto_renew && l.kind !== 'buy' && l.ends_at !== null)
   // A rental's period and price are its offer's, on its listing.
   const listings = useQueries({
@@ -85,6 +86,7 @@ export function SubscriptionsScreen() {
         what: payeeName(s.to_payee_id),
         whose: agentName(s.from_agent_id),
         source: 'Standing order',
+        icon: 'send',
         every: EVERY[s.every],
         amount: money(s.amount_minor ?? 0, s.currency ?? ''),
         monthly: money(orderMonthly(s.amount_minor ?? 0, s.every), s.currency ?? ''),
@@ -102,23 +104,33 @@ export function SubscriptionsScreen() {
         what: l.title,
         whose: agentName(l.agent_id),
         source: l.kind === 'rent' ? 'Marketplace rental' : 'Marketplace subscription',
+        icon: 'marketplace',
         every: days === 30 ? 'monthly' : days === 7 ? 'weekly' : days > 0 ? `every ${days} days` : '',
-        amount: formatUSD(offer?.price_usd_micros ?? l.price_ulxc / 10),
+        amount: <span className="font-figure">{formatUSD(offer?.price_usd_micros ?? l.price_ulxc / 10)}</span>,
         // shortcut: a month is 30 days for a rental, exact for the usual 30-day period; Lens could serve monthly_minor for rentals too.
-        monthly: offer && days > 0 ? formatUSD(Math.round((offer.price_usd_micros * 30) / days)) : null,
+        monthly: offer && days > 0 ? <span className="font-figure">{formatUSD(Math.round((offer.price_usd_micros * 30) / days))}</span> : null,
         next,
         remind: daysBefore(next, REMIND_DAYS),
       }
     }),
     // Lens finds a standing order's own payments recurring too, once it has paid three: those are already listed above.
     ...(found.data?.subscriptions ?? [])
-      .filter((f) => !orders.some((s) => s.from_agent_id === f.agent_id && s.currency === f.currency && s.amount_minor === f.amount_minor &&
-        payeeName(s.to_payee_id).toLowerCase() === f.merchant.toLowerCase()))
+      .filter(
+        (f) =>
+          !orders.some(
+            (s) =>
+              s.from_agent_id === f.agent_id &&
+              s.currency === f.currency &&
+              s.amount_minor === f.amount_minor &&
+              payeeName(s.to_payee_id).toLowerCase() === f.merchant.toLowerCase(),
+          ),
+      )
       .map((f): Renewal => ({
         id: `sub-${f.agent_id ?? 'own'}-${f.merchant}-${f.currency}`,
         what: f.merchant,
         whose: agentName(f.agent_id),
         source: 'Card or payment',
+        icon: 'card',
         every: f.interval,
         amount: money(f.amount_minor, f.currency),
         monthly: money(f.monthly_minor, f.currency),
@@ -133,75 +145,74 @@ export function SubscriptionsScreen() {
   // A rental's row waits for its listing: without the offer it would show no period and no monthly cost (B17.348).
   const pending = found.isPending || schedules.isPending || !areas.settled || (market && licences.isPending) || listings.some((q) => q.isPending)
   return (
-    <RegionScreen>
-      <Region
-        index="00"
-        label="Subscriptions"
-        heading="Everything that charges again"
-        sectionClassName="pb-10 pt-4 wide:pb-12"
-        className="flex max-w-2xl flex-col gap-3"
-      >
-        <p className="text-body text-muted">
-          The payments your agents and you make again and again (a card or a payment out that recurs, a standing order
-          {market ? ', a marketplace rental or subscription that renews' : ''}), each with its next charge, what it costs a month,
-          and a reminder three days before it renews.
-        </p>
-        {!pending ? (
-          <p className="text-body text-ink" data-testid="subscriptions-count">
-            <span className="font-figure">{rows.length}</span> {rows.length === 1 ? 'renews' : 'renew'}
-            {dueSoon.length > 0 ? (
-              <>
-                , <span className="font-figure">{dueSoon.length}</span> in the next {REMIND_DAYS} days
-              </>
-            ) : null}
-          </p>
-        ) : null}
-      </Region>
-      <Region index="01" label="Renewing" heading="Soonest first" className="flex max-w-2xl flex-col gap-3">
-        {failed ? <p className="text-body text-muted">{readFailure(failed.error, 'Some of your subscriptions')}</p> : null}
+    <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid max-w-3xl gap-5 px-gutter py-4 wide:py-6">
+      <p className="text-body text-ink-2">
+        The payments your agents and you make again and again (a card or a payment out that recurs, a standing order
+        {market ? ', a marketplace rental or subscription that renews' : ''}), each with its next charge, what it costs a month, and a reminder three days
+        before it renews.
+      </p>
+      <section className="grid gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-display text-reading font-bold text-ink">Soonest first</h2>
+          {!pending ? (
+            <p className="text-body text-ink-2" data-testid="subscriptions-count">
+              <span className="font-figure">{rows.length}</span> {rows.length === 1 ? 'renews' : 'renew'}
+              {dueSoon.length > 0 ? (
+                <>
+                  , <span className="font-figure">{dueSoon.length}</span> in the next {REMIND_DAYS} days
+                </>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
+        {failed ? <p className="text-body text-ink-2">{readFailure(failed.error, 'Some of your subscriptions')}</p> : null}
         {pending ? (
-          <p className="text-body text-muted">Reading…</p>
+          <p className="text-body text-ink-3">Reading…</p>
         ) : rows.length === 0 ? (
-          <p className="text-body text-muted">
-            Nothing renews yet. One appears here when you set up a standing order on Pay,
-            {market ? ' rent a listing that renews in the Marketplace,' : ''} or pay the same merchant the same amount three times on
-            a schedule.
-          </p>
+          <EmptyState
+            icon={<Icon name="clock" />}
+            title="Nothing renews yet"
+            line={
+              <>
+                One appears here when you set up a standing order on Pay,
+                {market ? ' rent a listing that renews in the Marketplace,' : ''} or pay the same merchant the same amount three times on a schedule.
+              </>
+            }
+          />
         ) : (
           <Card>
-            <CardHeader>Subscriptions</CardHeader>
             {rows.map((r) => {
               const left = Math.ceil((r.next.getTime() - now) / DAY_MS)
               return (
-                <Row
-                  key={r.id}
-                  stack
-                  data-testid={`subscription-${r.id}`}
-                  label={r.what}
-                  hint={
-                    <>
-                      {r.source} · {r.whose} · {r.amount}
-                      {r.every ? ` ${r.every}` : ''}
-                      <br />
-                      Next charge <span className="font-figure">{day(r.next)}</span> ·{' '}
-                      {r.monthly !== null ? (
-                        <>
-                          <span className="font-figure">{r.monthly}</span> a month ·{' '}
-                        </>
-                      ) : null}
-                      Reminder <span className="font-figure">{day(r.remind)}</span>
-                    </>
-                  }
-                >
-                  {r.remind.getTime() <= now ? (
-                    <Pill status="held">{left <= 0 ? 'Renews today' : `Renews in ${left} ${left === 1 ? 'day' : 'days'}`}</Pill>
-                  ) : null}
-                </Row>
+                <div key={r.id} data-testid={`subscription-${r.id}`}>
+                  <Row
+                    wrap
+                    leading={<RoomBadge icon={<Icon name={r.icon} />} />}
+                    title={r.what}
+                    line={
+                      <>
+                        <span className="block">
+                          {r.source} · {r.whose} · {r.amount}
+                          {r.every ? ` ${r.every}` : ''}
+                        </span>
+                        <span className="block">
+                          Next charge <span className="font-figure">{day(r.next)}</span> · {r.monthly !== null ? <>{r.monthly} a month · </> : null}
+                          Reminder <span className="font-figure">{day(r.remind)}</span>
+                        </span>
+                      </>
+                    }
+                    action={
+                      r.remind.getTime() <= now ? (
+                        <Chip tone="wait">{left <= 0 ? 'Renews today' : `Renews in ${left} ${left === 1 ? 'day' : 'days'}`}</Chip>
+                      ) : undefined
+                    }
+                  />
+                </div>
               )
             })}
           </Card>
         )}
-      </Region>
-    </RegionScreen>
+      </section>
+    </div>
   )
 }

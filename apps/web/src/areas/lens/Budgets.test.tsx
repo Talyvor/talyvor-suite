@@ -51,14 +51,14 @@ describe('budgets by category (B41.39)', () => {
     expect(row.textContent).toContain('£80.50 of £100.00 this month · £19.50 left')
     await waitFor(() => expect(row.textContent).toContain('Alerted at 80%'))
     expect(row.textContent).not.toContain('100%')
-    expect(screen.getByRole('progressbar', { name: 'AI and software · Every wallet: budget used' }).getAttribute('aria-valuenow')).toBe('80')
+    expect(screen.getByRole('img', { name: 'AI and software · Every wallet: 80% of budget used' })).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'travel' } })
     fireEvent.change(screen.getByLabelText('Period'), { target: { value: 'week' } })
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '250' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save budget' }))
     await waitFor(() => expect(puts).toHaveLength(1))
-    expect(puts[0]).toEqual({ agent_id: 'all', category: 'travel', period: 'week', amount_minor: 25_000, currency: 'GBP',
+    expect(puts[0]).toEqual({ agent_id: 'all', category: 'travel', period: 'week', amount_minor: 25_000, currency: 'USD',
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })
   })
 
