@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { inlineLink } from '@talyvor/ui'
-import { Button, Card, Chip, Eyebrow, Money } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, EmptyState, Icon, KindTile, Money, Row } from '@talyvor/ui/pocket'
 import { AgentCard as AgentCardFace } from '../../cards/AgentCard'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { BOOK_KEY, PASSKEYS_KEY, rulesKey } from './AgentBank'
@@ -17,6 +17,10 @@ import { readFailure } from './WalletMoney'
 // decided, in the phone's words. The card's details stay hidden until the owner's passkey says it is them, and hide
 // again when they leave the page. Freeze and Unfreeze are Lens's own: a frozen card is refused every purchase and
 // nothing leaves the agent's wallet.
+//
+// B57.155 — drawn in Pocket as REFERENCE 4.1 draws a card page (w-card) and an agent's rules (w-agent-research): each card
+// a white card headed by its agent, the art and its controls beside the details, limits and purchases, each under its own
+// heading; the details on a row behind the lock, the limits as the rules card's list of ticks.
 
 export function frozenText(name: string, card: AgentCard): string {
   return card.frozen
@@ -69,21 +73,43 @@ async function checkItsYou(credentialIDs: string[]): Promise<'ok' | 'off' | 'can
   }
 }
 
+/** A section of a card, under its own heading, as w-card heads "Your card". */
+function Section({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
+  return (
+    <section className={className}>
+      <h3 className="font-display text-reading font-bold text-ink">{title}</h3>
+      {children}
+    </section>
+  )
+}
+
 function Details({ card, shown, onShow, onHide }: { card: AgentCard; shown: boolean; onShow: () => void; onHide: () => void }) {
   return (
-    <Card className="grid justify-items-start gap-2">
-      <Eyebrow>Card details</Eyebrow>
-      {shown ? (
-        <div data-testid="card-details" className="grid gap-1">
-          <span className="font-figure text-reading font-semibold text-ink">•••• {card.last4}</span>
-          <span className="text-body text-ink-3">{expiry(card)}</span>
+    <Card>
+      <Section title="Card details">
+        <div data-testid="card-details-row" className="mt-1">
+          <Row
+            wrap
+            leading={<KindTile icon={<Icon name={shown ? 'card' : 'lock'} size={18} />} />}
+            title={
+              shown ? (
+                <span data-testid="card-details" className="grid">
+                  <span className="font-figure">•••• {card.last4}</span>
+                  <span className="text-body font-normal text-ink-3">{expiry(card)}</span>
+                </span>
+              ) : (
+                <span className="font-figure">•••• ••••</span>
+              )
+            }
+            line={shown ? undefined : 'Hidden until you check it is you with your passkey.'}
+            action={
+              <Button variant="secondary" size="sm" onClick={shown ? onHide : onShow}>
+                {shown ? 'Hide card details' : 'Show card details'}
+              </Button>
+            }
+          />
         </div>
-      ) : (
-        <p className="text-body text-ink-3">Hidden until you check it is you with your passkey.</p>
-      )}
-      <Button variant="secondary" onClick={shown ? onHide : onShow}>
-        {shown ? 'Hide card details' : 'Show card details'}
-      </Button>
+      </Section>
     </Card>
   )
 }
@@ -110,53 +136,70 @@ function AgentCardEntry({ agent, shown, onShown }: { agent: Agent; shown: boolea
     onSettled: () => qc.invalidateQueries({ queryKey: cardKey(agent.id) }),
   })
 
+  const limits = (
+    <Section title="Limits">
+      <p className="text-body text-ink-3">Each purchase is paid from its wallet only if its rules allow it.</p>
+      {rules.isError ? (
+        <p className="text-body text-ink-2">{readFailure(rules.error, 'Its limits')}</p>
+      ) : rules.data ? (
+        <ul aria-label="Limits" className="mt-1">
+          {limitsInWords(rules.data).map((line, i) => (
+            <li key={i} className="flex gap-2.5 border-t border-line py-2.5 first:border-t-0">
+              <Icon name="check" size={16} className="mt-0.5 shrink-0 text-success" />
+              <span className="text-body text-ink">{line}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Section>
+  )
+
   return (
-    <Card tone="white" className="grid gap-4" data-testid={`card-${agent.id}`}>
-      <AgentCardFace agent={agent} className="max-w-78" />
-      {held.isError ? (
-        <p className="text-body text-ink-2">{readFailure(held.error, 'Its card')}</p>
-      ) : held.isPending ? (
-        <p className="text-body text-ink-2">Reading…</p>
-      ) : card === null ? (
-        <p className="text-body text-ink-2">
-          No card for {agent.name} yet.{' '}
-          <Link className={`text-ink ${inlineLink}`} to={`/agents?${new URLSearchParams({ agent: agent.id }).toString()}`}>
-            Issue one on Agents
-          </Link>
-        </p>
-      ) : (
-        <>
-          {card.frozen ? (
-            <div>
-              <Chip tone="bad">Frozen</Chip>
-            </div>
-          ) : null}
-          <Details card={card} shown={shown} onShow={() => void show()} onHide={() => onShown(null)} />
-          <section className="grid gap-1">
-            <Eyebrow>Limits</Eyebrow>
-            <p className="text-body text-ink-3">Each purchase is paid from its wallet only if its rules allow it.</p>
-            {rules.isError ? (
-              <p className="text-body text-ink-2">{readFailure(rules.error, 'Its limits')}</p>
-            ) : rules.data ? (
-              limitsInWords(rules.data).map((line, i) => (
-                <p key={i} className="text-body text-ink">
-                  {line}
-                </p>
-              ))
-            ) : null}
-          </section>
-          <div>
+    <Card tone="white" className="grid gap-5" data-testid={`card-${agent.id}`}>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <h2 className="font-display text-title font-bold text-ink">{agent.name}</h2>
+        {card?.frozen ? <Chip tone="bad">Frozen</Chip> : null}
+      </div>
+      <div className="grid items-start gap-5 wide:grid-cols-12">
+        <div className="grid justify-items-start gap-4 wide:col-span-5">
+          <AgentCardFace agent={agent} className="max-w-78" />
+          {card !== null && !held.isPending && !held.isError ? (
             <Button variant={card.frozen ? 'outline' : 'danger'} disabled={freeze.isPending} onClick={() => freeze.mutate()}>
               {card.frozen ? 'Unfreeze card' : 'Freeze card'}
             </Button>
-          </div>
+          ) : null}
           {said !== null ? (
             <p role="alert" className="text-body text-ink">
               {said}
             </p>
           ) : null}
-          <section className="grid gap-1">
-            <Eyebrow>Purchases</Eyebrow>
+        </div>
+        <div className="grid gap-5 wide:col-span-7">
+          {held.isError ? (
+            <p className="text-body text-ink-2">{readFailure(held.error, 'Its card')}</p>
+          ) : held.isPending ? (
+            <p className="text-body text-ink-2">Reading…</p>
+          ) : card === null ? (
+            <EmptyState
+              icon={<Icon name="card" size={18} />}
+              title={`No card for ${agent.name} yet.`}
+              line={
+                <Link className={`text-ink ${inlineLink}`} to={`/agents?${new URLSearchParams({ agent: agent.id }).toString()}`}>
+                  Issue one on Agents
+                </Link>
+              }
+            />
+          ) : (
+            <>
+              <Details card={card} shown={shown} onShow={() => void show()} onHide={() => onShown(null)} />
+              <Card>{limits}</Card>
+            </>
+          )}
+        </div>
+      </div>
+      {card !== null && !held.isPending && !held.isError ? (
+        <>
+          <Section title="Purchases">
             {(held.data?.authorizations ?? []).length === 0 ? (
               <p className="text-body text-ink-2">
                 No purchases yet. Each one appears here when the agent pays with this card, with what its rules decided and why.
@@ -164,12 +207,12 @@ function AgentCardEntry({ agent, shown, onShown }: { agent: Agent; shown: boolea
             ) : (
               <Purchases auths={held.data?.authorizations ?? []} />
             )}
-          </section>
+          </Section>
           <div className="-mx-5 border-t border-line px-1">
             <CardDisputesAndRefunds agentID={agent.id} />
           </div>
         </>
-      )}
+      ) : null}
     </Card>
   )
 }
@@ -180,19 +223,24 @@ export function CardsScreen() {
   // Whose details show: one card at a time, and none once you leave the page.
   const [shown, setShown] = useState<string | null>(null)
   return (
-    <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid max-w-3xl gap-5 px-gutter py-4 wide:py-6">
+    <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-5 px-gutter py-4 wide:py-6">
       {book.isError ? (
         <p className="text-body text-ink-2">{readFailure(book.error, 'The agents')}</p>
       ) : book.isPending ? (
         <p className="text-body text-ink-2">Reading…</p>
       ) : agents.length === 0 ? (
-        <p className="text-body text-ink-2">
-          No agents yet.{' '}
-          <Link className={`text-ink ${inlineLink}`} to="/agents">
-            Create one on Agents
-          </Link>
-          , then issue its card there.
-        </p>
+        <EmptyState
+          icon={<Icon name="agents" size={18} />}
+          title="No agents yet."
+          line={
+            <>
+              <Link className={`text-ink ${inlineLink}`} to="/agents">
+                Create one on Agents
+              </Link>
+              , then issue its card there.
+            </>
+          }
+        />
       ) : (
         <>
           {agents.map((a) => (
