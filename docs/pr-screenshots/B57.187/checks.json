@@ -1,0 +1,4 @@
+[
+  { "route": "/settings/data" },
+  { "route": "/settings/data", "dark": true }
+]
