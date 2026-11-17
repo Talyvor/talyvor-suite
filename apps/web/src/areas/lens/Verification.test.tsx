@@ -109,4 +109,35 @@ describe('the Verification screen', () => {
       },
     ])
   })
+
+  // B57.173 — drawn as Pocket's w-verification lays it out: one line under the title, and every check on the record
+  // in the column beside the form, under the checks.
+  it('says its one line under the title and lists every check on the record beside the form', async () => {
+    mockBff()
+    window.history.pushState({}, '', '/settings/verification')
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Confirm who you are' })).toBeTruthy()
+    expect(await screen.findByTestId('identity-contact')).toBeTruthy()
+    const ledes = Array.from(document.querySelectorAll('main p')).filter((p) => /It takes a minute|never a copy of a document/.test(p.textContent ?? ''))
+    expect(ledes.map((p) => p.textContent)).toEqual([
+      'Talyvor checks who you are before your account can move money. It takes a minute. Talyvor keeps what each check found, who checked it and when, never a copy of a document.',
+    ])
+
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'owner@example.com' } })
+    fireEvent.change(screen.getByLabelText('Phone number'), { target: { value: '+447700900123' } })
+    fireEvent.change(screen.getByLabelText('Legal name'), { target: { value: 'Ada Owner' } })
+    fireEvent.change(screen.getByLabelText('Date of birth'), { target: { value: '1990-04-01' } })
+    fireEvent.change(screen.getByLabelText('Address line 1'), { target: { value: '1 High Street' } })
+    fireEvent.change(screen.getByLabelText('Town or city'), { target: { value: 'London' } })
+    fireEvent.change(screen.getByLabelText('Postcode'), { target: { value: 'N1 9GU' } })
+    fireEvent.change(screen.getByLabelText('Country you live in'), { target: { value: 'GB' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm who I am' }))
+    await screen.findAllByTestId('verification-check')
+
+    const column = screen.getByTestId('identity-aside')
+    expect(within(column).getByRole('heading', { name: 'The checks' })).toBeTruthy()
+    expect(within(column).getByText('Every check on your record')).toBeTruthy()
+    expect(within(column).getAllByTestId('verification-check')).toHaveLength(2)
+  })
 })

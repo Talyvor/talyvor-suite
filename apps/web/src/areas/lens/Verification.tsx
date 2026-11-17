@@ -10,6 +10,9 @@ import { IdentityChecks, LEVELS, failedText, rank, useVerification } from './Ide
 // parts and words (IdentityChecks): the checks for the account and the fields the next one needs, then every check on
 // the record in words, and beside each capability what it needs for live money. The provider's reference is behind
 // "Reference for support" (B60.5); no provider or state name reaches the page.
+//
+// B57.173 — laid out as Pocket's w-verification: one line under the title, and every check on the record under the
+// checks, beside the form.
 
 export { VERIFICATION_KEY } from './IdentityChecks'
 
@@ -42,18 +45,17 @@ export function VerificationScreen() {
   return (
     <div className="grid min-w-0 gap-5">
       <Crumb trail={[{ label: 'Settings', href: '/settings' }, { label: 'Verification' }]} />
-      <div className="grid gap-1">
-        <h2 className="font-display text-bar font-bold text-ink">{SIGNUP_STEPS[3]}</h2>
-        <p className="max-w-3xl text-body text-ink-3">
-          Talyvor keeps what each check found, who checked it and when, never a copy of a document.
-        </p>
-      </div>
-      <IdentityChecks />
-      {v.isSuccess ? (
-        <section aria-label="Every check" className="grid max-w-3xl gap-3">
-          <CheckList />
-        </section>
-      ) : null}
+      <h2 className="-mb-3 font-display text-bar font-bold text-ink">{SIGNUP_STEPS[3]}</h2>
+      <IdentityChecks
+        note="Talyvor keeps what each check found, who checked it and when, never a copy of a document."
+        aside={
+          v.isSuccess ? (
+            <section aria-label="Every check" className="grid gap-3">
+              <CheckList />
+            </section>
+          ) : null
+        }
+      />
       <section aria-label="What each part needs" className="grid gap-3">
         <h2 className="font-display text-bar font-bold text-ink">What live money needs</h2>
         <div className="grid items-start gap-4 wide:grid-cols-3">
