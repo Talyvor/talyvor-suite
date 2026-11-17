@@ -9,6 +9,7 @@ import { lineWhen } from './AgentStatement'
 import { accountOwner, kindWords } from './AccountStatement'
 import { DisputePayment } from './CardDisputes'
 import { receiptText } from './InstantTransferReceipt'
+import { PaymentProofSection, paymentProofQuery } from './PaymentProof'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { agentBankApi } from './agentBankApi'
 import { WorkspaceLabel } from '../../labels/workspace'
@@ -19,6 +20,7 @@ import { DESIGN_ATTR } from '../../pocketPending'
  * B61.2 — /activity/<account>/<entry>: one payment, read from the same statement Activity lists it from.
  * B57.170 — drawn as the launch pack's P10 receipt: its state chip with its mark, the amount large, who, its facts, then
  * Done and Download receipt.
+ * B62.3 — then the agent's task in its own words and the payment's proof (Lens B62.1), with a button that copies it.
  */
 export function ActivityPaymentScreen() {
   const { account: accountID = '', entry = '' } = useParams()
@@ -26,6 +28,7 @@ export function ActivityPaymentScreen() {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
   const st = useQuery({ queryKey: statementKey(accountID, to), queryFn: () => agentBankApi.accountStatement(accountID, ACTIVITY_FROM, to) })
+  useQuery(paymentProofQuery(entry)) // B62.3: read beside the statement, drawn below its facts
   const list = accounts.data?.accounts ?? []
   const agents = book.data?.agents ?? []
   const account = list.find((a) => a.id === accountID)
@@ -83,6 +86,7 @@ export function ActivityPaymentScreen() {
               ]}
             />
           </div>
+          <PaymentProofSection entry={entry} task={l.task} />
           {l.kind === 'card_charge' && l.partner_ref ? (
             <DisputePayment paymentID={l.partner_ref} payment={{ what: who, when: lineWhen(l.at), minor: amount, currency: account.currency }} />
           ) : null}

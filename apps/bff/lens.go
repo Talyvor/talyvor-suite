@@ -486,6 +486,7 @@ func newApp(cfg config, auth *authenticator) *app {
 	a.mux.HandleFunc("/api/agents/approvals", a.requireTenant(a.handleAgentApprovals))
 	a.mux.HandleFunc("/api/agents/approvals/{id}/approve", a.requireTenant(a.handleAgentDecision("approve")))
 	a.mux.HandleFunc("/api/agents/approvals/{id}/deny", a.requireTenant(a.handleAgentDecision("deny")))
+	a.mux.HandleFunc("/api/payment-proofs/{id}", a.requireTenant(a.handlePaymentProof)) // B62.3
 	// B19.10 — approvals with Face ID and a push on the phone (Lens B19.16 keeps the passkeys and subscriptions).
 	a.mux.HandleFunc("/api/agents/approvals/{id}/challenge", a.requireTenant(a.handleApprovalChallenge))
 	a.mux.HandleFunc("/api/agents/passkeys", a.requireTenant(a.handlePasskeys))

@@ -65,6 +65,14 @@ const BODIES: Record<string, unknown> = {
       { entry_id: 'ment_itr', line: 1, at: '2026-10-23T09:00:00Z', kind: 'instant_transfer_convert', amount_minor: -50000, funding: 'test', counterparty: 'sandbox', memo: 'Instant transfer itr_sample to Acme Hosting Ltd: £500.00 sent', balance_after_minor: 12000 },
     ],
   },
+  // B62.3 — the payment out's proof (Lens B62.1): approved by the owner's phone key, and sent as approved.
+  '/api/payment-proofs/ment_out': {
+    id: 'pp_out', rule: 'approval_above', rules_version: 3, approval_id: 'apr_out', key_kind: 'device', key_id: 'dk_1', signed_at: '2026-10-10T09:58:00Z',
+    shown: { agent_id: 'agt_research', agent_name: 'Researcher', payee: { kind: 'outside', id: 'payee_1', name: 'Acme Hosting Ltd' }, amount_minor: 2000, currency: 'GBP' },
+    sent: { agent_id: 'agt_research', payee: { kind: 'outside', id: 'payee_1', name: 'Acme Hosting Ltd' }, amount_minor: 2000, currency: 'GBP', rail: 'account', reference: 'ment_out', task: 'Pay October’s hosting' },
+    created_at: '2026-10-10T10:00:00Z', verified: true,
+  },
+  '/api/payment-proofs/%3Aentry': null, // the route-template sweep's payment, which the rules never judged
   '/api/money/accounts/%3Aaccount/statement': { account_id: ':account', currency: 'GBP', opening_minor: 0, in_minor: 0, out_minor: 0, closing_minor: 0, lines: [] },
   '/api/money/instant-transfers/itr_sample': {
     id: 'itr_sample', agent_id: 'agt_research', from_account_id: 'macc_agt', to_payee_id: 'payee_1', beneficiary_name: 'Acme Hosting Ltd',
