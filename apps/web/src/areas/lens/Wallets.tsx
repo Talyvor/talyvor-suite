@@ -7,6 +7,7 @@ import {
   Card as PocketCard,
   Dialog,
   Eyebrow,
+  Face,
   Facts,
   Field,
   Icon,
@@ -27,6 +28,7 @@ import {
   type Shows,
   type SideConversion,
   FIATS,
+  KIND_LABEL,
   agentBankApi,
   newMoveKey,
   refusalText,
@@ -44,6 +46,9 @@ import { AgentFundingButtons } from './AgentFunding'
 // Home's Add money, Withdraw and Convert open it at that action (?do=). Lens decides everything and every refusal is its own
 // sentence. A side, an action or a field the kind does not have is not rendered.
 // B61.84 — beside each agent's account, Add money from the company's account in its currency and Take back (AgentFunding.tsx).
+// B57.168 — drawn as Pocket Live's Balances (design/pocket-live, the phone's view wallets): each side a card with a row per
+// currency, what the agents hold of it or "All yours"; the actions under it (Home's, with Withdraw and Convert opening
+// here); the agents beside it, each account with Add money and Take back; then which kind of account this is.
 
 export type Side = 'fiat' | 'stablecoin'
 export type WalletAction = 'top-up' | 'withdraw' | 'convert'
@@ -54,19 +59,25 @@ export const CURRENCY_NAME: Record<string, string> = { USD: 'US dollar', EUR: 'E
 const FIAT_ORDER = ['USD', 'EUR', 'GBP']
 const isCoin = (currency: string) => !FIATS.includes(currency)
 
-/** Each side the kind shows: what each currency holds across it, and its open accounts, the company's first. */
+/** Each side the kind shows: what each currency holds across it and how much of that the agents hold, and the agents'
+ * open accounts on it. */
 export function walletSides(accounts: readonly CurrencyAccount[], shows: Pick<Shows, 'bankTransfers' | 'onChain'>) {
   const open = accounts.filter((a) => a.status !== 'closed')
   const sides: Side[] = [...(shows.bankTransfers ? (['fiat'] as const) : []), ...(shows.onChain ? (['stablecoin'] as const) : [])]
   const rank = (c: string) => (isCoin(c) ? 10 : FIAT_ORDER.indexOf(c))
   return sides.map((side) => {
     const own = open.filter((a) => isCoin(a.currency) === (side === 'stablecoin'))
-    const sums = new Map<string, number>()
-    for (const a of own) sums.set(a.currency, (sums.get(a.currency) ?? 0) + a.balance_minor)
+    const sums = new Map<string, { minor: number; agents: number }>()
+    for (const a of own) {
+      const sum = sums.get(a.currency) ?? { minor: 0, agents: 0 }
+      sum.minor += a.balance_minor
+      if (a.purpose === 'agent') sum.agents += a.balance_minor
+      sums.set(a.currency, sum)
+    }
     return {
       side,
-      totals: [...sums].map(([currency, minor]) => ({ currency, minor })).sort((a, b) => rank(a.currency) - rank(b.currency) || a.currency.localeCompare(b.currency)),
-      accounts: [...own].sort((a, b) => Number(b.purpose === 'company') - Number(a.purpose === 'company') || rank(a.currency) - rank(b.currency)),
+      totals: [...sums].map(([currency, sum]) => ({ currency, ...sum })).sort((a, b) => rank(a.currency) - rank(b.currency) || a.currency.localeCompare(b.currency)),
+      agentAccounts: own.filter((a) => a.purpose === 'agent' && a.agent_id).sort((a, b) => rank(a.currency) - rank(b.currency)),
     }
   })
 }
@@ -80,15 +91,13 @@ export function amountMinor(text: string, currency: string): number | null {
   return Number.isSafeInteger(minor) && minor > 0 ? minor : null
 }
 
-/** "The company · USD" or "Your account · USD" for the company's, "Remy · USD" for an agent's. */
-function nameOf(a: CurrencyAccount, owner: string, agents: { id: string; name: string }[]): string {
-  if (a.purpose === 'company') return `${owner} · ${a.currency}`
-  return `${agents.find((x) => x.id === a.agent_id)?.name ?? a.name} · ${a.currency}`
-}
+/** The mark in a currency's round tile, as the reference draws it: "$", "€", "£", or a stablecoin's first letter. */
+const SYMBOL: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' }
+const symbolOf = (currency: string) => SYMBOL[currency] ?? currency.slice(0, 1)
 
-/** B59.53 — /money/wallets. */
+/** B59.53, drawn as Pocket Live's Balances (B57.168) — /money/wallets. */
 export function WalletsScreen() {
-  const { shows } = useAccount()
+  const { account, shows } = useAccount()
   const [params, setParams] = useSearchParams()
   const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
@@ -98,71 +107,100 @@ export function WalletsScreen() {
   const all = accounts.data?.accounts ?? []
   const action: WalletAction | null =
     asked === 'top-up' || (asked === 'withdraw' && shows?.bankTransfers) || (asked === 'convert' && shows?.convert) ? (asked as WalletAction) : null
+  const sides = shows ? walletSides(all, shows) : []
+  const agentAccounts = sides.flatMap((s) => s.agentAccounts)
 
   return (
     <div {...{ [DESIGN_ATTR]: 'pocket' }} className="grid gap-5 pb-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        {shows ? (
-          <div className="flex flex-wrap gap-2" data-testid="wallets-actions">
-            <PocketButton type="button" icon={<Icon name="plus" size={18} />} onClick={() => open('top-up')}>
-              Add money
-            </PocketButton>
-            {shows.bankTransfers ? (
-              <PocketButton type="button" variant="white" onClick={() => open('withdraw')}>
-                Withdraw
-              </PocketButton>
-            ) : null}
-            {shows.convert ? (
-              <PocketButton type="button" variant="white" onClick={() => open('convert')}>
-                Convert
-              </PocketButton>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
       {!shows || accounts.isPending ? (
         <p className="text-body text-ink-3">Reading…</p>
       ) : accounts.isError ? (
         <p className="text-body text-ink-2">{readFailure(accounts.error, 'Your accounts')}</p>
       ) : (
-        <div className={cn('grid items-start gap-5', shows.bankTransfers && shows.onChain && 'wide:grid-cols-2')}>
-          {walletSides(all, shows).map((s) => (
-            <section key={s.side} aria-label={SIDE_WORD[s.side]} data-testid={`wallets-${s.side}`} className="grid content-start gap-3">
-              <Eyebrow>{SIDE_WORD[s.side]}</Eyebrow>
-              {s.totals.length === 0 ? (
-                <p className="text-body text-ink-2">{s.side === 'fiat' ? 'Add money to get started.' : 'Receive stablecoins to get started.'}</p>
-              ) : (
-                <>
-                  <div className="grid grid-cols-3 gap-y-3.5 rounded-card bg-cloud p-4">
-                    {s.totals.map(({ currency, minor }) => (
-                      <div key={currency} className="grid gap-0.5" data-testid={`wallets-tile-${currency}`}>
-                        <span className="text-body text-ink-3">{CURRENCY_NAME[currency] ?? currency}</span>
-                        <Money minor={minor} currency={currency} className="font-semibold text-ink" />
+        <div className={cn('grid items-start gap-5', agentAccounts.length > 0 && 'wide:grid-cols-12')}>
+          <div className="grid min-w-0 content-start gap-5 wide:col-span-7">
+            {sides.map((s) => (
+              <section key={s.side} aria-label={SIDE_WORD[s.side]} data-testid={`wallets-${s.side}`} className="grid content-start gap-3">
+                <Eyebrow>{SIDE_WORD[s.side]}</Eyebrow>
+                {s.totals.length === 0 ? (
+                  <p className="text-body text-ink-2">{s.side === 'fiat' ? 'Add money to get started.' : 'Receive stablecoins to get started.'}</p>
+                ) : (
+                  <PocketCard tone="white" className="grid">
+                    {s.totals.map(({ currency, minor, agents: held }) => (
+                      <div key={currency} data-testid={`wallets-tile-${currency}`}>
+                        <Row
+                          leading={
+                            <span aria-hidden="true" className="grid h-10 w-10 place-items-center rounded-pill bg-cloud font-display font-bold text-ink">
+                              {symbolOf(currency)}
+                            </span>
+                          }
+                          title={CURRENCY_NAME[currency] ?? currency}
+                          line={held > 0 ? <>Agents hold <Money minor={held} currency={currency} className="font-normal text-ink-3" /></> : 'All yours'}
+                          amount={<Money minor={minor} currency={currency} />}
+                        />
                       </div>
                     ))}
-                  </div>
-                  <PocketCard tone="white" className="grid">
-                    {s.accounts.map((a) => (
-                      <Row
-                        key={a.id}
-                        title={nameOf(a, shows.owner, agents)}
-                        line={CURRENCY_NAME[a.currency] ?? a.currency}
-                        amount={<Money minor={a.balance_minor} currency={a.currency} />}
-                        wrap={a.purpose === 'agent'}
-                        action={
-                          a.purpose === 'agent' && a.agent_id ? (
-                            <AgentFundingButtons agent={{ id: a.agent_id, name: agents.find((x) => x.id === a.agent_id)?.name ?? a.name }} currency={a.currency} size="sm" />
-                          ) : undefined
-                        }
-                      />
-                    ))}
                   </PocketCard>
-                </>
-              )}
-            </section>
-          ))}
+                )}
+              </section>
+            ))}
+            <div className="flex flex-wrap gap-2" data-testid="wallets-actions">
+              <PocketButton type="button" icon={<Icon name="plus" size={18} />} onClick={() => open('top-up')}>
+                Add money
+              </PocketButton>
+              <PocketButton asChild variant="white">
+                <Link to="/money/pay">Pay</Link>
+              </PocketButton>
+              {shows.bankTransfers ? (
+                <PocketButton type="button" variant="white" onClick={() => open('withdraw')}>
+                  Withdraw
+                </PocketButton>
+              ) : null}
+              {shows.convert ? (
+                <PocketButton type="button" variant="white" onClick={() => open('convert')}>
+                  Convert
+                </PocketButton>
+              ) : null}
+              {shows.instantTransfer ? (
+                <PocketButton asChild variant="white">
+                  <Link to="/money/pay/instant-transfer">Instant transfer</Link>
+                </PocketButton>
+              ) : null}
+            </div>
+          </div>
+          {agentAccounts.length > 0 ? (
+            <PocketCard tone="white" aria-labelledby="wallets-agents" className="min-w-0 wide:col-span-5" data-testid="wallets-agents">
+              <h3 id="wallets-agents" className="font-display text-head font-bold text-ink">
+                {shows.agents}
+              </h3>
+              <div className="mt-1 grid">
+                {agentAccounts.map((a) => {
+                  const agent = agents.find((x) => x.id === a.agent_id)
+                  const paused = !!agent?.paused_at || !!book.data?.all_paused_at
+                  const job = (agent?.description ?? '').split(' · ')[0].trim()
+                  return (
+                    <Row
+                      key={a.id}
+                      leading={agent ? <Face agent={agent} size={40} state={paused ? 'asleep' : 'happy'} /> : undefined}
+                      title={agent?.name ?? a.name}
+                      line={agent ? [job, paused ? 'Paused' : 'Running'].filter((x) => x !== '').join(' · ') : CURRENCY_NAME[a.currency] ?? a.currency}
+                      amount={<Money minor={a.balance_minor} currency={a.currency} />}
+                      wrap
+                      action={<AgentFundingButtons agent={{ id: a.agent_id ?? '', name: agent?.name ?? a.name }} currency={a.currency} size="sm" />}
+                    />
+                  )
+                })}
+              </div>
+            </PocketCard>
+          ) : null}
         </div>
       )}
+      {account ? (
+        <p className="flex items-start gap-2 text-body text-ink-3" data-testid="wallets-kind">
+          <Icon name="lock" size={16} />
+          <span>This is a {KIND_LABEL[account.money_kind]} account. Another kind of money is another account, opened and checked on its own.</span>
+        </p>
+      ) : null}
       {shows ? (
         <>
           <TopUp open={action === 'top-up'} onClose={() => open(null)} shows={shows} />
