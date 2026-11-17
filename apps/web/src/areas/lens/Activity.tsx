@@ -18,6 +18,8 @@ import { DESIGN_ATTR } from '../../pocketPending'
 // first, each in its account's own currency (Nick, 15 Nov: no LXC), read from each currency account's statement (Lens
 // B56.14), with a search and filters for agent, kind and state. A row opens that payment: an Instant transfer its
 // receipt, any other line its own page, /activity/<account>/<entry> (ActivityPayment.tsx).
+// B57.170 — drawn as the launch pack's W5 Payments out card: a white card of rows, each led by its kind, who over what,
+// whose account and when, and at its end the amount over its state.
 
 /** Every line since the first: Activity is not a month, it is everything. */
 export const ACTIVITY_FROM = '2020-01-01'
@@ -32,7 +34,9 @@ const KINDS: readonly [Kind | '', string][] = [
   ['in', 'Payments in'],
   ['instant', 'Instant transfers'],
 ]
-const KIND_ICON: Record<Kind, IconName> = { card: 'card', out: 'send', in: 'arrow', instant: 'send' }
+const KIND_ICON: Record<Kind, IconName> = { card: 'card', out: 'arrow', in: 'arrow', instant: 'send' }
+// B57.170 — W5's Payments out rows lead with an arrow up and away; a payment in comes down and in.
+const KIND_TURN: Partial<Record<Kind, string>> = { out: '-rotate-45', in: '-rotate-45 -scale-x-100 -scale-y-100' }
 
 interface ActivityRow {
   key: string
@@ -201,19 +205,22 @@ export function ActivityScreen() {
       ) : shown.length === 0 ? (
         <p className="text-body text-ink-2">No payment matches.</p>
       ) : (
-        <Card>
+        <Card tone="white">
           <ul className="divide-y divide-line" data-testid="activity">
             {shown.map((r) => (
               <li key={r.key}>
                 <Link to={r.href} data-testid="activity-row" className={cn('block rounded-control', pocketFocusRing)}>
                   <Row
-                    wrap
                     className="border-t-0"
-                    leading={<RoomBadge icon={<Icon name={KIND_ICON[r.kind]} />} />}
+                    leading={<RoomBadge icon={<Icon name={KIND_ICON[r.kind]} className={KIND_TURN[r.kind]} />} />}
                     title={r.who}
-                    line={[r.what, accountOwner(r.account, agents), lineWhen(r.at, now)].join(' · ')}
-                    amount={<Money minor={r.amount_minor} currency={r.account.currency} signed className={r.amount_minor > 0 ? 'text-success' : ''} />}
-                    action={<Chip tone={r.tone}>{r.state}</Chip>}
+                    line={<span data-testid="activity-line">{[r.what, accountOwner(r.account, agents), lineWhen(r.at, now)].join(' · ')}</span>}
+                    amount={
+                      <span className="grid justify-items-end gap-1" data-testid="activity-figure">
+                        <Money minor={r.amount_minor} currency={r.account.currency} signed className={r.amount_minor > 0 ? 'text-success' : ''} />
+                        <Chip tone={r.tone}>{r.state}</Chip>
+                      </span>
+                    }
                   />
                 </Link>
               </li>

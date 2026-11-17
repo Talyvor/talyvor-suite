@@ -126,6 +126,39 @@ describe('Activity, every payment in and out', () => {
     expect(await screen.findByText('No payment matches.')).toBeTruthy()
   })
 
+  it('draws each row as Pay’s Payments out: its amount over its state, at the row’s end', async () => {
+    show()
+    await waitFor(async () => expect((await rows()).length).toBe(3))
+    const out = (await rows())[2]
+    const figure = within(out).getByTestId('activity-figure')
+    expect(figure.textContent).toBe('−$450.00Paid')
+    expect(within(out).getByTestId('activity-line').textContent).toMatch(/^Paid out · Company · \d{1,2} Nov, \d\d:\d\d$/)
+  })
+
+  it('ends a payment’s page with Done, back to Activity, and Download receipt', async () => {
+    const saved: Blob[] = []
+    URL.createObjectURL = vi.fn((b: Blob) => {
+      saved.push(b)
+      return 'blob:receipt'
+    })
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    show('/activity/acct_usd/ent_kite')
+    const page = await screen.findByTestId('activity-payment')
+    expect(within(page).getByRole('link', { name: 'Done' }).getAttribute('href')).toBe('/activity')
+    fireEvent.click(within(page).getByRole('button', { name: 'Download receipt' }))
+    expect(saved).toHaveLength(1)
+    const text = await new Promise<string>((done) => {
+      const r = new FileReader()
+      r.onload = () => done(String(r.result))
+      r.readAsText(saved[0])
+    })
+    expect(text).toContain('−$450.00')
+    expect(text).toContain('to Kite Accounting')
+    expect(text).toContain('Reference: October bookkeeping')
+    expect(text).toContain('Account: Company · USD')
+  })
+
   it('says so when nothing has moved', async () => {
     lines = {}
     show()

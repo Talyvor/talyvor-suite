@@ -75,7 +75,7 @@
   "src/areas/documentation/helpPages.test.ts": 1,
   "src/areas/lens/AccountSettings.test.tsx": 3,
   "src/areas/lens/AccountStatement.test.tsx": 6,
-  "src/areas/lens/Activity.test.tsx": 5,
+  "src/areas/lens/Activity.test.tsx": 7,
   "src/areas/lens/AgentAnalytics.test.tsx": 4,
   "src/areas/lens/AgentBank.test.tsx": 5,
   "src/areas/lens/agentBankApi.test.ts": 4,
