@@ -11,6 +11,7 @@ import { APPROVALS_KEY, BOOK_KEY, OnThePhone, rulesKey, useKeys } from './AgentB
 import { type AgentApproval, agentBankApi } from './agentBankApi'
 import { useMoney } from './money'
 import { signApproval } from './passkeys'
+import { TaskSays } from './PaymentProof'
 
 // ApprovalSheet.tsx — B57.15: the approval sheet (Pocket w-home+sheet-A, w-home+sheet-L), over the page you are on.
 // ?approval=<id> on any page opens it, for links from pushes and emails, and so does /approvals#approval-<id>, the
@@ -263,6 +264,7 @@ function Sheet({ a, onClose }: { a: AgentApproval; onClose: () => void }) {
                 {name} wants to {uses ? 'use' : 'pay'}
               </div>
               {a.memo || a.reason ? <div className="text-caption text-ink-3">{a.memo || a.reason}</div> : null}
+              <TaskSays task={a.task} className="text-caption text-ink-2" />
             </div>
           </>
         }

@@ -220,8 +220,19 @@ const SAMPLE: Record<string, unknown> = {
   },
   '/api/money/accounts/macc_research_usd/statement': {
     account_id: 'macc_research_usd', agent_id: 'agt_research', currency: 'USD', from: '2026-10-01T00:00:00Z', to: '2026-10-21T00:00:00Z',
-    opening_minor: 0, in_minor: 40_000, out_minor: 0, closing_minor: 40_000,
-    lines: [{ entry_id: 'ment_fennel', line: 1, at: '2026-10-12T14:20:00Z', kind: 'invoice_payment', amount_minor: 40_000, funding: 'test', counterparty: 'Fennel Labs', memo: 'INV-000001', balance_after_minor: 40_000 }],
+    opening_minor: 0, in_minor: 40_000, out_minor: 15_000, closing_minor: 25_000,
+    lines: [
+      { entry_id: 'ment_fennel', line: 1, at: '2026-10-12T14:20:00Z', kind: 'invoice_payment', amount_minor: 40_000, funding: 'test', counterparty: 'Fennel Labs', memo: 'INV-000001', balance_after_minor: 40_000 },
+      // B62.3 — a payment out Research asked for with its task, above its approval amount, approved with Face ID.
+      { entry_id: 'ment_acme', line: 1, at: '2026-10-14T10:05:00Z', kind: 'payment_out', amount_minor: -15_000, funding: 'test', counterparty: 'Acme Hosting', memo: 'October hosting', balance_after_minor: 25_000, task: 'Renew the hosting for the research cluster' },
+    ],
+  },
+  // B62.3 — that payment's proof (Lens B62.1).
+  '/api/payment-proofs/ment_acme': {
+    id: 'pp_acme', rule: 'approval_above', rules_version: 4, approval_id: 'apr_acme', key_kind: 'device', key_id: 'dk_iphone', signed_at: '2026-10-14T10:03:00Z',
+    shown: { agent_id: 'agt_research', agent_name: 'Research', payee: { kind: 'outside', id: 'payee_acme', name: 'Acme Hosting' }, amount_minor: 15_000, currency: 'USD' },
+    sent: { agent_id: 'agt_research', payee: { kind: 'outside', id: 'payee_acme', name: 'Acme Hosting' }, amount_minor: 15_000, currency: 'USD', rail: 'account', reference: 'ment_acme', task: 'Renew the hosting for the research cluster' },
+    created_at: '2026-10-14T10:05:00Z', verified: true,
   },
   // B61.2 — the company's USDC account, as Activity reads every account: a top-up in.
   '/api/money/accounts/macc_company_usdc/statement': {

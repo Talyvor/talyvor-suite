@@ -45,6 +45,7 @@ import (
 //	POST /api/agents/{id}/pay           {"to_agent_id", "amount_ulxc", "memo"}   pay another of this workspace's agents
 //	GET  /api/agents/approvals                         what the agents' rules sent to a person, newest first
 //	POST /api/agents/approvals/{id}/approve, …/deny    decide one; approve {"always_allow": {"amount_ulxc", "per"}} also saves it for the payee (B41.4); deny {"reason"} says why (B55.19)
+//	GET  /api/payment-proofs/{id}                      B62.3: the proof of one payment the rules let through (Lens B62.1), by its money entry or reference
 //
 // Lens decides who may move money (the workspace's owner or an admin) and judges every rule. A
 // refusal comes back with Lens's status AND its sentence — which rule, what the agent holds, which
@@ -862,6 +863,17 @@ func (a *app) handleAgentApprovals(w http.ResponseWriter, r *http.Request, t ten
 		return
 	}
 	a.agentBankRelay(w, r, t, http.MethodGet, "/agents/approvals", nil)
+}
+
+// handlePaymentProof — GET /api/payment-proofs/{id} (B62.3): what the owner was shown and signed, the rule, the key
+// and what was sent. Lens answers it to the workspace's owner only, and 404 for a payment of another workspace or one
+// with no record.
+func (a *app) handlePaymentProof(w http.ResponseWriter, r *http.Request, t tenant) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+	a.agentBankRelay(w, r, t, http.MethodGet, "/agents/payment-proofs/"+url.PathEscape(r.PathValue("id")), nil)
 }
 
 // handleAgentDecision — POST /api/agents/approvals/{id}/approve and /deny.
