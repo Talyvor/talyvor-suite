@@ -404,7 +404,7 @@ function PastAgentStatements() {
           if (valid && !get.isPending) get.mutate()
         }}
       >
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 wide:grid-cols-2">
           <Field label="From">
             <Input type="date" value={period.from} onChange={(e) => setPeriod((p) => ({ ...p, from: e.target.value }))} />
           </Field>
