@@ -17,7 +17,13 @@ interface MockOptions {
   /** B61.20 — the account's type, and the check the provider does not pass */
   accountType?: 'personal' | 'business'
   fails?: 'contact' | 'identity' | 'company'
+  /** B61.110 — the countries Lens serves (GET /v1/public/countries, on /api/pricing), and one it refuses */
+  served?: string[]
+  refuses?: string
 }
+
+/** talyvor-lens B61.53's refusal of a country Talyvor does not serve. */
+const NOT_SERVED = { code: 'country_not_served', error: 'Talyvor is not available in that country yet.', field: 'country' }
 
 function mockFetch(o: MockOptions = {}) {
   const sent: Array<{ url: string; body: unknown }> = []
@@ -32,11 +38,13 @@ function mockFetch(o: MockOptions = {}) {
     if (url === '/api/workspace/business') {
       return json({ company_name: 'Northwind Studio', registration_number: '12345678', country: 'GB', people: [{ name: 'Maya Lind', role: 'director', share_bps: 10000 }] })
     }
+    if (url === '/api/pricing' && o.served) return json({ min_usd_cents: 1000, max_usd_cents: 1000000, preset_usd_cents: [1000], countries: o.served })
     if (url === '/api/verification') return json(record())
     const m = /^\/api\/verification\/(contact|identity|company)$/.exec(url)
     if (m && init?.method === 'POST') {
-      const body = JSON.parse(String(init.body)) as unknown
+      const body = JSON.parse(String(init.body)) as { country?: string }
       sent.push({ url, body })
+      if (o.refuses && body.country === o.refuses) return json(NOT_SERVED, 400)
       const level = ['contact', 'identity', 'company'].indexOf(m[1]) + 1
       if (reached() < level - 1) return json({ error: 'economy: verification levels are reached in order' }, 409)
       const status = o.fails === m[1] ? 'failed' : 'completed'
@@ -49,7 +57,9 @@ function mockFetch(o: MockOptions = {}) {
       return json({ mode: 'oidc', authenticated: authed, user: authed ? { sub: 's', email: 'maya@example.com' } : null, signup_open: true, ...(o.joining ? { signup_unfinished: true } : {}) })
     }
     if (url === '/auth/signup/account' && init?.method === 'POST') {
-      sent.push({ url, body: JSON.parse(String(init.body)) as unknown })
+      const body = JSON.parse(String(init.body)) as { country?: string }
+      sent.push({ url, body })
+      if (o.refuses && body.country === o.refuses) return json(NOT_SERVED, 400)
       return json({ account_id: 'ws_1', created: true })
     }
     if (url === '/api/agents/passkeys') return json({ passkeys: o.passkeys ?? [] })
@@ -330,5 +340,55 @@ describe('step 4: confirm who you are (B61.20)', () => {
     const gate = await screen.findByTestId('identity-gate')
     expect(gate).toHaveTextContent('Your account can look around but can’t move money until you confirm who you are.')
     expect(within(gate).getByRole('link', { name: 'Finish confirming who you are' })).toHaveAttribute('href', '/signup/confirm')
+  })
+})
+
+describe('the countries Lens serves (B61.110)', () => {
+  const offered = (label: string) =>
+    Array.from((screen.getByLabelText(label) as HTMLSelectElement).options).filter((o) => o.value).map((o) => [o.value, o.textContent])
+
+  it('sign-up and the identity check offer exactly the codes Lens serves, by the app’s names, and a code it has no name for by its code', async () => {
+    mockFetch({ joining: true, served: ['US', 'XK', 'GB'] })
+    at('/signup')
+    await screen.findByRole('heading', { level: 1, name: 'Who is this account for?' })
+    pick(/^Personal/)
+    await waitFor(() => expect(offered('Country')).toEqual([['GB', 'United Kingdom'], ['US', 'United States'], ['XK', 'XK']]))
+    cleanup()
+    queryClient.clear()
+    vi.restoreAllMocks()
+
+    mockFetch({ authenticated: true, served: ['US', 'XK', 'GB'] })
+    at('/signup/confirm')
+    await screen.findByLabelText('Legal name')
+    await waitFor(() => expect(offered('Country you live in')).toEqual([['GB', 'United Kingdom'], ['US', 'United States'], ['XK', 'XK']]))
+  })
+
+  it('a country Lens refuses at sign-up goes back to step 1 with Lens’s sentence on the country field', async () => {
+    mockFetch({ joining: true, refuses: 'GB' })
+    at('/signup')
+    await throughStep1('Personal')
+    pick(/^Hybrid/)
+    cont()
+    await screen.findByRole('heading', { level: 1, name: 'Who is this account for?' })
+    const said = screen.getByText('Talyvor is not available in that country yet.')
+    expect(screen.getByLabelText('Country')).toHaveAttribute('aria-describedby', said.closest('p')!.id)
+    expect(window.location.pathname).toBe('/signup')
+  })
+
+  it('a country Lens refuses at the identity check puts Lens’s sentence on the country field', async () => {
+    mockFetch({ authenticated: true, refuses: 'GB' })
+    at('/signup/confirm')
+    await screen.findByLabelText('Legal name')
+    type('Phone number', '+447700900123')
+    type('Legal name', 'Maya Lind')
+    type('Date of birth', '1990-04-01')
+    type('Address line 1', '12 Marlborough Road')
+    type('Town or city', 'Twickenham')
+    type('Postcode', 'TW1 3AA')
+    fireEvent.change(screen.getByLabelText('Country you live in'), { target: { value: 'GB' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm who I am' }))
+    const said = await screen.findByText('Talyvor is not available in that country yet.')
+    expect(screen.getByLabelText('Country you live in')).toHaveAttribute('aria-describedby', said.closest('p')!.id)
+    expect(screen.queryByText('We couldn’t confirm who you are. Check your legal name, date of birth, home address and country, and try again.')).toBeNull()
   })
 })

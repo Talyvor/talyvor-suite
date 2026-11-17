@@ -43,7 +43,9 @@ async function door<T>(path: string, body: object = {}): Promise<T> {
     // A 5xx carries no sentence of the door's own, but for the passcode that cannot be set just now (B61.112).
     const worded = res.status < 500 || got.reason === 'passcode_unavailable'
     const said = typeof got.error === 'string' && got.error && worded ? got.error : DOOR_FAILED
-    throw new DoorError(res.status, typeof got.reason === 'string' ? got.reason : '', said, path)
+    // B61.110 — Lens's own code, like country_not_served, when the door relayed one of Lens's refusals.
+    const reason = typeof got.reason === 'string' ? got.reason : typeof got.code === 'string' ? got.code : ''
+    throw new DoorError(res.status, reason, said, path)
   }
   return got as T
 }

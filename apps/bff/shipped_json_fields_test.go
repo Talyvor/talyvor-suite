@@ -137,6 +137,7 @@ var decodedFromUpstream = map[string]string{
 	"ladderPlan":             "one plan of a ladder in Lens's public GET /v1/public/plans reply, served on /api/pricing (B61.59)",
 	"lensPricing":            "Lens's public GET /v1/pricing reply, decoded in readCardPayments() and served on /api/pricing (B51.3)",
 	"publicLabels":           "Lens's public GET /v1/public/labels reply, decoded in readLabels() and served on /api/pricing (B56.9)",
+	"publicCountries":        "Lens's public GET /v1/public/countries reply, decoded in readCountries() and served on /api/pricing (B61.110)",
 	"simulatedPayee":         "a simulated payment's payee, decoded from the browser's rules/simulate body and relayed to Lens as it came (B28.30)",
 	"payeeAllowance":         "an always-allow (B41.4), decoded from the browser's approve or rules/simulate body and relayed to Lens as it came",
 	"ruleBoostBody":          "a boost to judge (B55.14), decoded from the browser's rules-challenge body and relayed to Lens as it came",

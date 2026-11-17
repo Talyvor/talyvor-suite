@@ -219,7 +219,7 @@ func (a *app) moveSession(w http.ResponseWriter, r *http.Request, c accountsOf, 
 func writeProvisionFailed(w http.ResponseWriter, err error) {
 	var refused provisionRefused
 	if errors.As(err, &refused) {
-		writeJSON(w, refused.status, map[string]string{"error": refused.msg})
+		writeJSON(w, refused.status, refusalBody(refused.msg, refused.code, refused.field))
 		return
 	}
 	writeJSON(w, http.StatusBadGateway, map[string]string{"error": "could not provision your workspace — try again shortly"})
