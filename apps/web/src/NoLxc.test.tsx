@@ -120,3 +120,35 @@ it('Home draws no credit figures beside the total', async () => {
   expect(screen.queryByTestId('home-unallocated')).toBeNull()
   expect(document.body.textContent).not.toMatch(/Not yet given to an agent|Across your agents/)
 })
+
+// B61.55 — the parked credit wallet is not drawn under an agent's page or on Statements either: no credit balance, no
+// "safe to spend" in credits, no rule on models, and no credit statement. Statements lists the accounts' statements
+// (the agents' past statements download under Settings › Your data: AgentStatementDownload.test.tsx).
+describe('the credit wallet is parked', () => {
+  const CREDIT = /credit|safe to spend|any model|may use only|on one model|statement for every agent/i
+
+  async function at(route: string) {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    populatedBff((impl) => vi.spyOn(globalThis, 'fetch').mockImplementation(impl as never))
+    window.history.pushState({}, '', route)
+    render(<App />)
+    await screen.findByRole('navigation', { name: 'Sections' })
+    await settleQueries(queryClient, waitFor)
+    await settleQueries(queryClient, waitFor)
+  }
+
+  it('an agent’s page draws no credit balance, model rule or credit statement', { timeout: 30_000 }, async () => {
+    await at('/agents/agt_research')
+    await screen.findByTestId('agent-page-rules')
+    expect(said(document.body).match(new RegExp(`.{0,40}(${CREDIT.source}).{0,30}`, 'i'))?.[0]).toBeUndefined()
+    expect(screen.queryByTestId('agent-balance-agt_research')).toBeNull()
+  })
+
+  it('Statements lists the accounts’ statements only', { timeout: 30_000 }, async () => {
+    await at('/statements')
+    const tabs = await screen.findByRole('tablist', { name: 'Statements' })
+    expect([...tabs.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toEqual(['Company · GBP', 'Researcher · GBP'])
+    expect(said(document.body).match(new RegExp(`.{0,40}(${CREDIT.source}).{0,30}`, 'i'))?.[0]).toBeUndefined()
+  })
+
+})

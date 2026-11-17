@@ -86,7 +86,7 @@ describe('renaming, describing and archiving an agent on Agent Wallets', () => {
     const archived = await screen.findByTestId('agent-archived')
     expect(archived.textContent).toMatch(/: \$0\.75 went back to the workspace and 1 key was revoked\./)
     expect(archived).not.toHaveTextContent(/LXC/)
-    expect(await screen.findByText('Taken back by the workspace')).toBeTruthy()
+    expect(archived.textContent).toMatch(/its statement is kept\.$/)
     // Archived, it can no longer be given a key: that card is gone.
     expect(screen.queryByRole('button', { name: 'Issue a key' })).toBeNull()
     expect(screen.getByText('Archived')).toBeTruthy()

@@ -530,16 +530,28 @@ export class AgentBankScreen {
     return err === undefined ? { said: (await done.innerText()).trim() } : { err }
   }
 
-  /** Downloads "Statement for every agent" for this month as JSON; the file's name and text. */
-  async statementThisMonth(): Promise<{ name: string; text: string }> {
-    await this.fresh()
-    const c = card(this.page, 'Statement for every agent')
-    await c.getByRole('button', { name: 'This month', exact: true }).click()
-    await c.getByLabel('File type of every agent’s statement').selectOption('json')
+  /**
+   * B61.55 — every agent's statement from `from` through `through` (YYYY-MM-DD, the last day included) as `type`, from
+   * Settings › Your data, where the agents' past statements download now their credit wallets are parked.
+   */
+  private async pastStatements(from: string, through: string, type: 'csv' | 'json' | 'pdf' | 'journal') {
+    await this.page.goto(new URL('/settings/data', this.page.url()).toString())
+    const c = this.page.getByRole('heading', { name: 'Your agents’ past statements', exact: true }).locator('xpath=..')
+    await c.getByLabel('From', { exact: true }).fill(from)
+    await c.getByLabel('To', { exact: true }).fill(through)
+    await c.getByLabel('File type', { exact: true }).selectOption(type)
     const [download] = await Promise.all([
       this.page.waitForEvent('download', { timeout: ACTION_TIMEOUT_MS }),
       c.getByRole('button', { name: 'Download', exact: true }).click(),
     ])
+    return download
+  }
+
+  /** Downloads every agent's statement for this month as JSON (B61.55: under Your data); the file's name and text. */
+  async statementThisMonth(): Promise<{ name: string; text: string }> {
+    await this.fresh()
+    const today = new Date().toISOString().slice(0, 10)
+    const download = await this.pastStatements(`${today.slice(0, 8)}01`, today, 'json')
     return { name: download.suggestedFilename(), text: await readFile(await download.path(), 'utf8') }
   }
 
@@ -549,7 +561,11 @@ export class AgentBankScreen {
    */
   async statementPDF(agent: Agent | undefined, from: string, through: string): Promise<{ name: string; text: string }> {
     await this.fresh(agent)
-    const form = this.page.getByTestId(agent === undefined ? 'bank-statement-download' : 'agent-statement-download')
+    if (agent === undefined) {
+      const download = await this.pastStatements(from, through, 'pdf')
+      return { name: download.suggestedFilename(), text: await readFile(await download.path(), 'latin1') }
+    }
+    const form = this.page.getByTestId('agent-statement-download')
     await form.getByLabel(/^First day of/).fill(from)
     await form.getByLabel(/^Last day of/).fill(through)
     await form.getByLabel(/^File type of/).selectOption('pdf')
@@ -566,7 +582,11 @@ export class AgentBankScreen {
    */
   async statementJournal(agent: Agent | undefined, from: string, through: string): Promise<{ name: string; text: string }> {
     await this.fresh(agent)
-    const form = this.page.getByTestId(agent === undefined ? 'bank-statement-download' : 'agent-statement-download')
+    if (agent === undefined) {
+      const download = await this.pastStatements(from, through, 'journal')
+      return { name: download.suggestedFilename(), text: await readFile(await download.path(), 'utf8') }
+    }
+    const form = this.page.getByTestId('agent-statement-download')
     await form.getByLabel(/^First day of/).fill(from)
     await form.getByLabel(/^Last day of/).fill(through)
     await form.getByLabel(/^File type of/).selectOption('journal')

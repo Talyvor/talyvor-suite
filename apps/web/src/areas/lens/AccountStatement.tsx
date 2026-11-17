@@ -199,7 +199,7 @@ export function AccountStatement({ account, agent }: { account: CurrencyAccount;
                         ) : null}
                       </td>
                       <td className="py-2.5 pl-4 text-right">
-                        <Money minor={l.amount_minor} currency={account.currency} signed className={l.amount_minor > 0 ? 'text-success' : ''} />
+                        <Money minor={l.amount_minor} currency={account.currency} signed />
                       </td>
                     </tr>
                   )
@@ -210,7 +210,7 @@ export function AccountStatement({ account, agent }: { account: CurrencyAccount;
         </>
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-micro text-ink-3">Payments in and out of this account. An agent’s LXC is on its own statement.</span>
+        <span className="text-micro text-ink-3">Payments in and out of this account.</span>
         <Button asChild variant="secondary" size="sm">
           <Link to="/money/invoices">Accounts, on Invoices</Link>
         </Button>
@@ -244,7 +244,7 @@ function InstantRow({ row, currency, when }: { row: { transfer: string; to: stri
         ) : null}
       </td>
       <td className="py-2.5 pl-4 text-right align-top">
-        <Money minor={row.amount_minor} currency={currency} signed className={row.amount_minor > 0 ? 'text-success' : ''} />
+        <Money minor={row.amount_minor} currency={currency} signed />
       </td>
     </tr>
   )

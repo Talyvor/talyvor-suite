@@ -73,11 +73,12 @@ const PLACEMENTS: [string, string[]][] = [
   // the agent's balance is gone with the balance (B61.14: the LXC wallet is not drawn on a launch screen).
   // B57.21 — its money features are panels of its Money card, each with its label (AgentMoney.test.tsx, WalletMoney.test.tsx).
   // B57.22 — the card's agent_card chip is inside its Settings row.
-  ['/agents/agt_research', [AGENT_CREDIT, AGENT_CREDIT, 'payments_out', 'pay_another_owner', AGENT_CREDIT]],
+  // B61.55 — nor the Statement for every agent card's chip, nor the credit statement's.
+  ['/agents/agt_research', [AGENT_CREDIT, 'payments_out', 'pay_another_owner']],
   // B57.17 — the agents' requests first, then the prepared payments, as w-approvals lists them.
   ['/approvals', ['pay_another_owner', 'payments_out']],
-  // B57.24 — one chip, on the agent's statement document.
-  ['/statements', [AGENT_CREDIT]],
+  // B61.55 — one chip, on the company account's statement, which Statements opens on now the agents' credits are parked.
+  ['/statements', ['currency_accounts']],
   ['/approve/:id', ['payments_out']],
   ['/money/pay', ['payments_out']],
   ['/money/invoices', ['payments_in']],

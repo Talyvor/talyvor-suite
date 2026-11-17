@@ -47,8 +47,8 @@ describe('the wallet screens in the brand', () => {
 
   it.each(SCREENS)('%s: at most one teal action, cards on raised, and every LXC amount on the figure face', async (address, teal) => {
     const main = await at(address)
-    // B56.15 — Statements' wallets are tabs, so its LXC amounts are the open statement's lines, read once they arrive.
-    if (address === '/statements') await screen.findByTestId('statement-lines')
+    // B56.15 — Statements' accounts are tabs, so its amounts are the open statement's band, read once it arrives.
+    if (address === '/statements') await screen.findByTestId('account-statement-band')
     expect(primaries(main), 'the teal fill is the one primary action').toEqual(teal)
 
     const cards = Array.from(main.querySelectorAll('.rounded-card'))
@@ -76,17 +76,11 @@ describe('the wallet screens in the brand', () => {
     if (['/agents/agt_research', '/approvals', '/statements'].includes(address)) expect(amounts, 'no LXC amount was read').toBeGreaterThan(0)
   })
 
-  it('shows each state as a pill: a waiting approval, settled statement lines, settled and held royalties', async () => {
+  // B61.55 — the agent's credit statement, whose lines said Settled or Held, is parked.
+  it('shows each state as a pill: a waiting approval, settled and held royalties', async () => {
     const approvals = await at('/agents/agt_research')
     const waiting = within(approvals).getByText(/wants to pay Acme Hosting/).closest('.min-h-row') as HTMLElement
     expect(pills(waiting)).toEqual(['Waiting'])
-    document.body.replaceChildren()
-
-    // B57.24 — the statement document says each line's state in words after it, as the reference does.
-    await at('/statements')
-    const what = within(await screen.findByTestId('statement-lines')).getAllByTestId('statement-doc-what').map((w) => w.textContent)
-    expect(what.length).toBeGreaterThan(0)
-    for (const w of what) expect(w).toMatch(/ · (Settled|Held|On those requests|\d+ requests?( today)?)$/)
     document.body.replaceChildren()
 
     const royalties = await at('/statements/royalties')

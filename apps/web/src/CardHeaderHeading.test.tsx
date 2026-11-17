@@ -164,7 +164,7 @@ const CARD_HEADER_CENSUS: Readonly<Record<string, number>> = {
   // also draws the workspace's Requests, Credit line, Loans, Escrow and Cash-outs as its own panels.
   // B57.43: one fewer, the Face ID and notifications card moved to Approvals and devices.
   // B57.22 — eight more (name and description, pay, schedules, top-up, key, credential, limit boost, archive) open from its Settings rows.
-  '/agents/:id': 10, // 14 → 12 at B57.23: Would it pass? and the rules history moved to the agent's rules page; 12 → 11 at B57.111: its spend by day, model and destination is a Pocket card with its own heading; 11 → 10 at B61.14: the old view's Money card (its LXC and Move LXC) is not drawn
+  '/agents/:id': 8, // 14 → 12 at B57.23: Would it pass? and the rules history moved to the agent's rules page; 12 → 11 at B57.111: its spend by day, model and destination is a Pocket card with its own heading; 11 → 10 at B61.14: the old view's Money card (its LXC and Move LXC) is not drawn; 10 → 8 at B61.55: nor its Statement for every agent and its credit Statement
   '/agents/:id/rules': 0, // B57.23 drew it in Pocket
   '/agents': 0, // B57.19 drew /agents in Pocket: its cards are AgentCards, so today's card headers are on /agents/:id alone
   // B20.3 — the catalog's Listings card. 1 → 0 at B29.11: the listings are cards of their own, a list
