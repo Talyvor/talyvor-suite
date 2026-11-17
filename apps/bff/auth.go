@@ -244,6 +244,9 @@ type authenticator struct {
 	sessions       *ttlMap[session]
 	// phoneChecks are right codes waiting for their passcode (phone_signin.go, B61.25).
 	phoneChecks *ttlMap[phoneCheck]
+	// checkSealer makes a check id carry its check, so a restart keeps a confirmed number (B61.115).
+	// Nil without LENS_PROVISION_SECRET: checks are then in memory only.
+	checkSealer *checkSealer
 	// sealer makes a session id carry its session, so a restart does not sign anyone out (B17.40).
 	// Nil without LENS_PROVISION_SECRET: sessions are then in memory only.
 	sealer *sessionSealer
@@ -282,6 +285,7 @@ func newSessionOnlyAuthenticator(cfg config) *authenticator {
 	return &authenticator{cfg: cfg, pending: newTTLMap[pendingLogin](), sessions: newTTLMap[session](),
 		spentIDTokens: newTTLMap[spentIDToken](),
 		phoneChecks:   newTTLMap[phoneCheck](),
+		checkSealer:   newCheckSealer(cfg.provisionSecret),
 		sealer:        newSessionSealer(cfg.provisionSecret, cfg.sessionTTL)}
 }
 
