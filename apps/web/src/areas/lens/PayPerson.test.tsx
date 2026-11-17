@@ -103,6 +103,34 @@ describe('Pay, to a person (B61.33)', () => {
     expect(posts).toEqual([{ path: '/api/money/people/find', body: { to: 'dana' } }])
   })
 
+  it('is drawn as Pocket Live draws it: the person found is one row to press, From is picked by what each account holds, then Send', async () => {
+    const card = await openPay()
+    // B57.182 — the field is the reference's search pill, named by its placeholder alone.
+    expect(within(card).queryByText('Name, phone number or email', { selector: 'label' })).toBeNull()
+    await find(card, 'dana')
+    const found = await within(card).findByTestId('pay-a-person-found')
+    expect(within(card).getByRole('button', { name: 'Pay Dana R.' })).toBe(found)
+    expect(text(found)).toContain('On Talyvor')
+    fireEvent.click(found)
+    const dialog = await screen.findByRole('dialog', { name: 'Pay Dana R.' })
+    expect(text(within(dialog).getByTestId('pay-a-person-who'))).toBe('On Talyvor')
+    expect(within(dialog).getByText('Type the amount')).toBeTruthy()
+    const from = within(dialog).getByRole('radiogroup', { name: 'From' })
+    const picks = within(from).getAllByRole('radio')
+    expect(picks.map((r) => (r as HTMLInputElement).checked)).toEqual([true, false])
+    expect(text(from)).toContain('Holds $2,400.00')
+    expect(text(from)).toContain('Holds £1,560.00')
+    fireEvent.click(picks[1])
+    fireEvent.change(within(dialog).getByLabelText('Amount in GBP'), { target: { value: '5' } })
+    // One main action a step: no Cancel beside Review, the close x is there.
+    expect(within(dialog).queryByRole('button', { name: 'Cancel' })).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Review' }))
+    await within(dialog).findByTestId('pay-a-person-review')
+    const order = Array.from(dialog.querySelectorAll('button')).map((b) => text(b))
+    expect(order.indexOf('Send')).toBeGreaterThan(-1)
+    expect(order.indexOf('Send')).toBeLessThan(order.indexOf('Change something'))
+  })
+
   it('says Lens’s words when nobody is found, and at the limit of lookups', async () => {
     const card = await openPay()
     await find(card, 'grace')
