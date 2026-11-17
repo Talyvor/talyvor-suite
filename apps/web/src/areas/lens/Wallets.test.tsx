@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WalletsScreen } from './Wallets'
 import { AppMoney } from './money'
 
-// B59.53 — Wallets on the web: each side the account's kind shows (SPEC 3.3), a tile per currency and each account with
-// what it holds; Top up, Withdraw and, for Hybrid, Convert, each with a confirm step, the last two signed with the owner's
+// B59.53 — Wallets on the web, drawn as Pocket Live's Balances (B57.168): each side the account's kind shows (SPEC 3.3), a
+// row per currency with what the agents hold, and each agent's account with Add money and Take back; Top up, Withdraw and, for Hybrid, Convert, each with a confirm step, the last two signed with the owner's
 // passkey over Lens's challenge under the same key as the move.
 
 /** What the browser's passkey prompt answers, once the owner has signed. */
@@ -76,26 +76,41 @@ function show(at = '/money/wallets') {
 }
 
 describe('Wallets — the sides by kind', () => {
-  it('Hybrid: Fiat and Stablecoin side by side, a tile per currency and each account, with Add money, Withdraw and Convert', async () => {
+  it('Hybrid: a row per currency on each side with what the agents hold, then Add money, Pay, Withdraw, Convert and Instant transfer', async () => {
     show()
     const fiat = await screen.findByTestId('wallets-fiat')
-    expect(read(within(fiat).getByTestId('wallets-tile-USD'))).toBe('US dollar$24,600.00')
-    expect(read(within(fiat).getByTestId('wallets-tile-EUR'))).toBe('Euro€7,500.00')
-    expect(read(fiat)).toContain('The company · USD')
-    expect(read(fiat)).toContain('Remy · USD')
+    expect(read(within(fiat).getByTestId('wallets-tile-USD'))).toBe('$US dollarAgents hold $6,200.00$24,600.00')
+    expect(read(within(fiat).getByTestId('wallets-tile-EUR'))).toBe('€EuroAll yours€7,500.00')
     const coins = screen.getByTestId('wallets-stablecoin')
+    expect(read(within(coins).getByTestId('wallets-tile-USDC'))).toContain('All yours')
     expect(read(within(coins).getByTestId('wallets-tile-USDC'))).toContain('14,000.00 USDC')
     const actions = screen.getByTestId('wallets-actions')
     expect(within(actions).getAllByRole('button').map((b) => b.textContent)).toEqual(['Add money', 'Withdraw', 'Convert'])
+    expect(within(actions).getByRole('link', { name: 'Pay' })).toHaveAttribute('href', '/money/pay')
+    expect(within(actions).getByRole('link', { name: 'Instant transfer' })).toHaveAttribute('href', '/money/pay/instant-transfer')
     expect(screen.queryByText(/top.?up/i)).toBeNull()
   })
 
-  it('Fiat only: no stablecoin side and no Convert', async () => {
+  it('the agents beside it, each with what it holds, Add money and Take back; then the kind of account', async () => {
+    show()
+    const agents = await screen.findByTestId('wallets-agents')
+    await waitFor(() => expect(read(agents)).toContain('Remy'))
+    expect(within(agents).getByRole('heading', { name: 'Your team’s agents' })).toBeTruthy()
+    expect(read(agents)).toContain('$6,200.00')
+    expect(within(agents).getByRole('button', { name: 'Add money to Remy' })).toBeTruthy()
+    expect(within(agents).getByRole('button', { name: 'Take back from Remy' })).toBeTruthy()
+    expect(read(screen.getByTestId('wallets-kind'))).toBe('This is a Hybrid account. Another kind of money is another account, opened and checked on its own.')
+  })
+
+  it('Fiat only: no stablecoin side, no Convert and no Instant transfer', async () => {
     kind = 'fiat'
     show()
     await screen.findByTestId('wallets-fiat')
     expect(screen.queryByTestId('wallets-stablecoin')).toBeNull()
-    expect(within(screen.getByTestId('wallets-actions')).getAllByRole('button').map((b) => b.textContent)).toEqual(['Add money', 'Withdraw'])
+    const actions = screen.getByTestId('wallets-actions')
+    expect(within(actions).getAllByRole('button').map((b) => b.textContent)).toEqual(['Add money', 'Withdraw'])
+    expect(within(actions).queryByRole('link', { name: 'Instant transfer' })).toBeNull()
+    expect(read(screen.getByTestId('wallets-kind'))).toContain('This is a Fiat only account.')
   })
 
   it('Stablecoin and crypto only: no fiat side, no Withdraw and no Convert', async () => {

@@ -187,7 +187,7 @@
   "src/areas/lens/WalletCurrency.test.tsx": 8,
   "src/areas/lens/WalletHoldings.test.tsx": 3,
   "src/areas/lens/WalletMoney.test.tsx": 3,
-  "src/areas/lens/Wallets.test.tsx": 7,
+  "src/areas/lens/Wallets.test.tsx": 8,
   "src/areas/lens/YourAccounts.test.tsx": 5,
   "src/areas/marketing/economics.test.ts": 3,
   "src/areas/marketing/Journey.test.tsx": 5,
