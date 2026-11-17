@@ -581,7 +581,18 @@ function CreateAgent({ first = false, onCreated }: { first?: boolean; onCreated:
   )
 }
 
-function AgentList({ agents, selected, onSelect }: { agents: Agent[]; selected: string | null; onSelect: (id: string) => void }) {
+// B61.55 — `credit`: each agent's spend and balance in credits; not under an agent's page, where the credit wallet is parked.
+function AgentList({
+  agents,
+  selected,
+  onSelect,
+  credit = true,
+}: {
+  agents: Agent[]
+  selected: string | null
+  onSelect: (id: string) => void
+  credit?: boolean
+}) {
   return (
     <Card>
       <CardHeader>Agents</CardHeader>
@@ -596,8 +607,8 @@ function AgentList({ agents, selected, onSelect }: { agents: Agent[]; selected: 
           }
           hint={
             <>
-              Spent {lxc(a.spent_ulxc)} · <span className="font-figure">{a.keys.length}</span>{' '}
-              {a.keys.length === 1 ? 'key' : 'keys'}
+              {credit ? <>Spent {lxc(a.spent_ulxc)} · </> : null}
+              <span className="font-figure">{a.keys.length}</span> {a.keys.length === 1 ? 'key' : 'keys'}
             </>
           }
         >
@@ -605,9 +616,11 @@ function AgentList({ agents, selected, onSelect }: { agents: Agent[]; selected: 
             {a.archived_at ? <Pill status="idle">Archived</Pill> : null}
             {a.paused_at ? <Pill status="parked">Paused</Pill> : null}
             {a.owner_user_id === '' ? <Pill status="held">No owner</Pill> : a.verified ? <Pill status="settled">Verified</Pill> : null}
-            <span className="font-figure text-body text-ink" data-testid={`agent-balance-${a.id}`}>
-              {lxc(a.balance_ulxc)}
-            </span>
+            {credit ? (
+              <span className="font-figure text-body text-ink" data-testid={`agent-balance-${a.id}`}>
+                {lxc(a.balance_ulxc)}
+              </span>
+            ) : null}
             <Button aria-pressed={selected === a.id} onClick={() => onSelect(a.id)}>
               {selected === a.id ? 'Open' : 'Manage'}
             </Button>
@@ -711,7 +724,7 @@ function Archived({ agent, done }: { agent: Agent; done: AgentArchive | undefine
           revoked
         </>
       ) : null}
-      . It can no longer be funded, spend or pay; its statement is kept below.
+      . It can no longer be funded, spend or pay; its statement is kept.
     </p>
   )
 }
@@ -1187,7 +1200,12 @@ function RulesSummary({ agent, agents }: { agent: Agent; agents: Agent[] }) {
       <CardHeader>Rules</CardHeader>
       {rules.isSuccess ? (
         <>
-          <RulesInWords agentName={agent.name} rules={rules.data} payeeName={(id) => agents.find((a) => a.id === id)?.name ?? id} />
+          <RulesInWords
+            agentName={agent.name}
+            rules={rules.data}
+            payeeName={(id) => agents.find((a) => a.id === id)?.name ?? id}
+            gateway={false}
+          />
           <p className="px-gutter pb-3 text-body">
             <Link className={inlineLink} to={`/agents/${encodeURIComponent(agent.id)}/rules`}>
               Edit {agent.name}’s rules, see their history or ask whether a request would pass
@@ -2646,7 +2664,10 @@ function Framed({ title, children }: { title: string; children: React.ReactNode 
   )
 }
 
-/** `moneyOnPage`: under an agent's page, which draws its money features (B57.21) and its spend card (B57.111) itself. */
+/**
+ * `moneyOnPage`: under an agent's page, which draws its money features (B57.21) and its spend card (B57.111) itself. B61.55:
+ * and its statement, so the parked credit wallet's balances and statement are not drawn here, nor its rules on models.
+ */
 export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {}) {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
   // B28.349 — /agents?agent=…&entry=… (a statement line a spend answer in Chat links to) opens that agent at that line.
@@ -2698,7 +2719,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
             ) : null}
             {/* A pause already set still says so: it holds an agent created later too. */}
             {hasAgents || book.data.all_paused_at ? <PauseEveryAgent book={book.data} /> : null}
-            {hasAgents ? (
+            {hasAgents && !moneyOnPage ? (
               <Card>
                 <CardHeader aside={<WorkspaceLabel capability={AGENT_CREDIT} />}>Statement for every agent</CardHeader>
                 <StatementDownload agent={null} />
@@ -2731,7 +2752,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
         {book.isError ? (
           <p className="text-body text-muted">{readFailure(book.error, 'The agents')}</p>
         ) : hasAgents ? (
-          <AgentList agents={agents} selected={agent?.id ?? null} onSelect={setChosen} />
+          <AgentList agents={agents} selected={agent?.id ?? null} onSelect={setChosen} credit={!moneyOnPage} />
         ) : null}
       </Region>
 
@@ -2761,7 +2782,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
               <Archived agent={agent} done={archived[agent.id]} />
               <AgentDetails key={`details-${agent.id}`} agent={agent} />
               {moneyOnPage ? null : <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />}
-              <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
+              {moneyOnPage ? null : <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />}
             </>
           ) : (
             <>
@@ -2772,7 +2793,7 @@ export function AgentBank({ moneyOnPage = false }: { moneyOnPage?: boolean } = {
               <RulesSummary key={`rules-${agent.id}`} agent={agent} agents={live} />
               {moneyOnPage ? null : <AgentMoneySection key={`money-${agent.id}`} agent={agent} />}
               {moneyOnPage ? null : <AgentAnalytics key={`analytics-${agent.id}`} agent={agent} nameOf={nameOf} />}
-              <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />
+              {moneyOnPage ? null : <Statement agent={agent} nameOf={nameOf} entry={agent.id === linkedAgent ? linkedEntry : undefined} />}
               {/* B57.22 — its Settings: each row opens its form over the page, each posting what it posted before. */}
               <AgentSettings
                 key={`settings-${agent.id}`}

@@ -72,29 +72,12 @@ afterEach(() => {
 })
 
 describe('plain-language mode (B41.40)', () => {
-  it('explains every line and column of the statement in one tap, and Statements has no critical accessibility issue', async () => {
+  // B61.55 — the agent's credit statement, whose lines and columns the ? explained, is parked; Statements lists the accounts.
+  it('Statements has no critical accessibility issue', async () => {
     mockBff()
-    // B57.24 — Statements draws an agent's statement as Pocket's document, without the ?; the agent's own page keeps it.
-    window.history.pushState({}, '', '/agents?agent=agt_1')
-    render(<App />)
-    const table = await screen.findByTestId('agent-statement')
-    const rows = within(table).getAllByRole('row').slice(1)
-    expect(rows).toHaveLength(KINDS.length)
-    for (const row of rows) {
-      const said = explain(within(row).getByRole('button', { name: /^What does “.+” mean\?$/ }))
-      expect(said).toMatch(/\. (Held|Settled) means /)
-      expect(said.split('.')[0].length).toBeGreaterThan(10)
-    }
-    // B61.14 — the Amount column reads in dollars alone, so it no longer explains LXC.
-    expect(within(table).queryByRole('button', { name: 'What does “LXC” mean?' })).toBeNull()
-    expect(table.textContent).not.toMatch(/LXC/)
-    expect(explain(within(table).getByRole('button', { name: 'What does “Balance” mean?' }))).toMatch(/^Balance is /)
-    expect(await critical()).toEqual([])
-    cleanup()
-
     window.history.pushState({}, '', '/statements')
     render(<App />)
-    await screen.findByTestId('statement-lines')
+    await screen.findByText(/^(No accounts yet|The currency accounts)/)
     expect(await critical()).toEqual([])
   })
 

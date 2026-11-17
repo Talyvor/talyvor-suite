@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { StatementsScreen } from './WalletScreens'
 import { AppMoney } from './money'
 
-// B56.15 — Statements has a tab per wallet: each agent's credits, the room's wallet, then every currency account the
-// company or an agent holds, each in its own currency with the opening, in, out and balance band and Download CSV.
+// B56.15 — Statements has a tab per account: every currency account the company or an agent holds, each in its own
+// currency with the opening, in, out and balance band and Download CSV. B61.55: the agents' credits are parked.
 // B57.25 — each currency account's statement is Pocket's document (w-stmt-cusd, w-stmt-rausd): the account's name and
 // kind, this month so far in its own currency, the band, its lines newest first, and Accounts, on Invoices.
 
@@ -81,27 +81,13 @@ function show(at = '/statements') {
 const tabs = async () => within(await screen.findByRole('tablist', { name: 'Statements' })).findAllByRole('tab')
 
 describe('Statements, a tab per wallet and account', () => {
-  it('lists each agent, then the room’s wallet, then every currency account, and opens on the first agent', async () => {
+  // B61.55 — the agents' credit statements are parked: Statements lists the currency accounts alone.
+  it('lists every currency account and opens on the first, and reads no agent’s credit statement', async () => {
     show()
-    await waitFor(async () => expect((await tabs()).map((t) => t.textContent)).toEqual(['Research', 'Room: Agent pricing', 'Company · USD', 'Research · USD', 'Research · USDC', 'Research · EUR', 'Research · GBP']))
+    await waitFor(async () => expect((await tabs()).map((t) => t.textContent)).toEqual(['Company · USD', 'Research · USD', 'Research · USDC', 'Research · EUR', 'Research · GBP']))
     expect((await tabs())[0].getAttribute('aria-selected')).toBe('true')
-    expect(await screen.findByText('Nothing has moved in this wallet yet. Fund it under Money to start.')).toBeTruthy()
-  })
-
-  it('puts what an agent used on the marketplace on its tab, each line on the marketplace bill', async () => {
-    show()
-    const bill = await screen.findByTestId('marketplace-bill-lines')
-    expect(bill.textContent).toContain('Lead finder · on the marketplace bill')
-    // 0.5 LXC at Lens's peg of $0.10 a LXC, in dollars alone (B61.14).
-    await waitFor(() => expect(bill.textContent).toContain('$0.05'))
-    expect(bill.textContent).not.toContain('LXC')
-  })
-
-  it('shows the room’s wallet on its own tab', async () => {
-    show()
-    fireEvent.click((await tabs())[1])
-    expect(await screen.findByLabelText('Search Room: Agent pricing’s statement')).toBeTruthy()
-    expect(asked.some((u) => u.startsWith('/api/agents/room_1/statement?'))).toBe(true)
+    expect(within(await screen.findByTestId('account-statement-doc')).getByRole('heading', { level: 2 }).textContent).toBe('Company · US dollar account')
+    expect(asked.some((u) => u.includes('/statement') && u.startsWith('/api/agents/'))).toBe(false)
   })
 
   const band = async () => {
@@ -126,7 +112,7 @@ describe('Statements, a tab per wallet and account', () => {
     expect(labels).toEqual([expect.stringMatching(/^Opening, 1 \w+$/), 'Money in', 'Money out', 'Balance now'])
     expect(figures).toEqual(['$3,650.00', '$0.00', '−$450.00', '$3,200.00'])
     expect(lineCells()).toEqual([['Kite Accounting · Paid out · October bookkeeping', '−$450.00']])
-    expect(within(doc).getByText('Payments in and out of this account. An agent’s LXC is on its own statement.')).toBeTruthy()
+    expect(within(doc).getByText('Payments in and out of this account.')).toBeTruthy()
     expect(within(doc).getByRole('link', { name: 'Accounts, on Invoices' }).getAttribute('href')).toBe('/money/invoices')
 
     URL.createObjectURL = vi.fn(() => 'blob:x')

@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Chip, Crumb, EmptyState, Field, Icon, KindTile, Money, Row, Select, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Button, Card, Chip, Crumb, EmptyState, Field, Icon, Input, KindTile, Money, Row, Select, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
 import { cn } from '@talyvor/ui'
 import { isSessionExpired } from '../../lib/productState'
 import { readFailure } from './WalletMoney'
@@ -17,6 +17,9 @@ import {
 } from './accountRequests'
 import { HELP_BY, HELP_CHAT_KEY, deleteHelpChat, useHelpChat } from './helpChat'
 import { helpHref } from '../../components/HelpChat'
+import { BOOK_KEY, dayAfter, monthPeriod, saveFile } from './AgentBank'
+import { DownloadFailed, MONTH_FILE_TYPES } from './AgentStatement'
+import { type StatementFormat, agentBankApi } from './agentBankApi'
 
 // HelpAndAccount.tsx — B59.28: Settings' Help and complaints, Close this account and Your data. Each sends a request
 // that a person at Talyvor answers (Lens B59.27), and lists what was sent with its state and, for a complaint, its
@@ -368,6 +371,68 @@ function HelpChatKept() {
   )
 }
 
+/**
+ * B61.55 — the agents' statements from their parked credit wallets: every agent's movements for a period, as the file
+ * Statements once offered. Statements lists the accounts only now, so what the agents spent before stays downloadable here.
+ */
+function PastAgentStatements() {
+  const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
+  const [period, setPeriod] = useState(() => monthPeriod('last'))
+  const [format, setFormat] = useState<StatementFormat>('csv')
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(period.from) && /^\d{4}-\d{2}-\d{2}$/.test(period.through) && period.from <= period.through
+  const get = useMutation({
+    mutationFn: async () => {
+      const name =
+        format === 'journal'
+          ? `agent-wallets-journal-${period.from}-to-${period.through}.csv`
+          : `agent-wallets-statement-${period.from}-to-${period.through}.${format}`
+      saveFile(name, await agentBankApi.statementFile(null, period.from, dayAfter(period.through), format))
+      return name
+    },
+    onSuccess: (name) => showSnack({ title: 'Downloading', line: name }),
+  })
+  // A workspace whose agents cannot be read keeps the download: it is Lens's file, and says so itself if it fails.
+  if (!book.isError && (book.data?.agents ?? []).length === 0) return null
+  return (
+    <Card>
+      <h3 className="font-display text-reading font-bold text-ink">Your agents’ past statements</h3>
+      <p className="mt-1 text-body text-ink-2">The opening balance, every movement and the closing balance of your agents’ wallets, for the days you choose, in one file. Days are UTC; the last day is included.</p>
+      <form
+        className="mt-3 grid gap-3"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (valid && !get.isPending) get.mutate()
+        }}
+      >
+        <div className="grid gap-3 wide:grid-cols-2">
+          <Field label="From">
+            <Input type="date" value={period.from} onChange={(e) => setPeriod((p) => ({ ...p, from: e.target.value }))} />
+          </Field>
+          <Field label="To">
+            <Input type="date" value={period.through} onChange={(e) => setPeriod((p) => ({ ...p, through: e.target.value }))} />
+          </Field>
+        </div>
+        <Field label="File type">
+          <Select value={format} onChange={(e) => setFormat(e.target.value as StatementFormat)}>
+            {MONTH_FILE_TYPES.map((t) => (
+              <option key={t.format} value={t.format}>
+                {t.words}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {!valid ? <p className="text-body text-ink-2">Choose a first day on or before the last day.</p> : null}
+        {get.isError ? <DownloadFailed error={get.error} /> : null}
+        <div>
+          <Button type="submit" variant="secondary" icon={<Icon name="download" />} disabled={!valid || get.isPending}>
+            {get.isPending ? 'Preparing…' : 'Download'}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  )
+}
+
 /** /settings/data — ask for a copy of the account's data and download it, or ask for it to be deleted. */
 export function YourDataScreen() {
   const [message, setMessage] = useState('')
@@ -383,6 +448,7 @@ export function YourDataScreen() {
           <div className="grid gap-4">
             <SentList kinds={['data_export', 'data_deletion']} title="What you asked" empty="You have not asked for your data." />
             <HelpChatKept />
+            <PastAgentStatements />
           </div>
         </div>
         <div className="grid gap-4 wide:col-span-5">

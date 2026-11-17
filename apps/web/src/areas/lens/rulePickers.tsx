@@ -206,7 +206,18 @@ const or = (items: string[]) => new Intl.ListFormat('en', { type: 'disjunction' 
 const and = (items: string[]) => new Intl.ListFormat('en', { type: 'conjunction' }).format(items)
 
 /** The agent's saved rules, one plain sentence each. `payeeName` names a payee by its id (B28.27); by default, the id. */
-export function RulesInWords({ agentName, rules, payeeName = (id) => id }: { agentName: string; rules: AgentRules; payeeName?: (id: string) => string }) {
+/** `gateway` false (B61.55): the parked gateway's rules on models, providers and requests a minute are not stated. */
+export function RulesInWords({
+  agentName,
+  rules,
+  payeeName = (id) => id,
+  gateway = true,
+}: {
+  agentName: string
+  rules: AgentRules
+  payeeName?: (id: string) => string
+  gateway?: boolean
+}) {
   const choices = useRuleChoices()
   const modelName = (id: string) => modelLabel(choices.models, id)
   const providerName = (id: string) => choices.providers.find((p) => p.value === id)?.label ?? id
@@ -249,7 +260,7 @@ export function RulesInWords({ agentName, rules, payeeName = (id) => id }: { age
           <>{agentName} may spend everything its wallet holds. No limit is set.</>
         )}
       </li>
-      {(rules.requests_per_minute ?? 0) > 0 ? (
+      {gateway && (rules.requests_per_minute ?? 0) > 0 ? (
         <li>
           It may make at most <span className="font-figure">{rules.requests_per_minute}</span>{' '}
           {rules.requests_per_minute === 1 ? 'request' : 'requests'} a minute.
@@ -260,11 +271,13 @@ export function RulesInWords({ agentName, rules, payeeName = (id) => id }: { age
           A person must approve any request or payment above {figure(asksAbove)}.
         </li>
       ) : null}
-      <li>
-        {models.length > 0 ? `It may use only ${or(models.map(modelName))}` : 'It may use any model'}
-        {providers.length > 0 ? `, from ${or(providers.map(providerName))}` : models.length > 0 ? '' : ' from any provider'}.
-      </li>
-      {modelCaps.length > 0 ? (
+      {gateway ? (
+        <li>
+          {models.length > 0 ? `It may use only ${or(models.map(modelName))}` : 'It may use any model'}
+          {providers.length > 0 ? `, from ${or(providers.map(providerName))}` : models.length > 0 ? '' : ' from any provider'}.
+        </li>
+      ) : null}
+      {gateway && modelCaps.length > 0 ? (
         <li>
           On one model it may spend at most{' '}
           {modelCaps.map(([model, v], i) => (
