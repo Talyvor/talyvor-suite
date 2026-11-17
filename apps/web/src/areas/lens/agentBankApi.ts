@@ -715,6 +715,8 @@ export interface AgentApproval {
   /** The approval amount it was above, and the month's budget left after it (null with no monthly limit) (Lens B57.11). */
   asks_above_ulxc?: number | null
   budget_left_after_ulxc?: number | null
+  /** B62.3 — what the agent says the payment is for, in its own words (Lens B62.2); "" when it gave none. Never a fact. */
+  task?: string
 }
 
 /** Lens economy.PaidFrom: the agent's LXC, one of its accounts, the monthly marketplace bill or its card. */
@@ -1238,6 +1240,15 @@ export const agentBankApi = {
   accountStatement: (id: string, from: string, to: string) =>
     getSaid<MoneyStatement>(`/api/money/accounts/${e(id)}/statement?${new URLSearchParams({ from, to })}`),
   accountStatementFile,
+  /** B62.3 — a payment's proof, by its money entry (Lens B62.1); null for a payment the rules never judged. */
+  paymentProof: async (entry: string): Promise<PaymentProof | null> => {
+    try {
+      return await getSaid<PaymentProof>(`/api/payment-proofs/${e(entry)}`)
+    } catch (err) {
+      if (err instanceof AgentBankError && err.status === 404) return null
+      throw err
+    }
+  },
   /** B59.25 — the workspace's card disputes, newest first, and where each stands (Lens B59.24). */
   cardDisputes: async (): Promise<CardDispute[]> =>
     (await getSaid<{ card_disputes: CardDispute[] | null }>('/api/money/card-disputes')).card_disputes ?? [],
@@ -2605,6 +2616,36 @@ export interface MoneyStatementLine {
   memo?: string
   partner_ref?: string
   balance_after_minor: number
+  /** B62.3 — on money out, what the paying agent says it is for (Lens B62.2). */
+  task?: string
+}
+
+/** B62.3 — one side of a payment's proof, as the owner was shown it or as it was sent (Lens economy.ProofShown, ProofSent). */
+export interface ProofPayment {
+  agent_id: string
+  payee: ApprovalPayee
+  amount_minor: number
+  /** LXC for a payment of the agent's LXC, its amount then in µLXC */
+  currency: string
+}
+
+/** B62.3 — the proof of one payment the rules let through (Lens B62.1 economy.PaymentProof). */
+export interface PaymentProof {
+  id: string
+  /** approval_above | prepared | within_rules | always_allow | mandate | no_rules */
+  rule: string
+  rules_version: number | null
+  approval_id?: string
+  shown: ProofPayment & { agent_name: string }
+  /** passkey | device | approver_agent; none when the rules passed it without asking */
+  key_kind?: string
+  key_id?: string
+  signed_at?: string
+  /** account | card | lxc | marketplace_bill */
+  sent: ProofPayment & { rail: string; reference: string; memo?: string; task?: string }
+  created_at: string
+  /** the signature is by its key, over exactly what was shown */
+  verified: boolean
 }
 
 /** B56.15 — a currency account over [from, to) (Lens economy.MoneyStatement): opening + in − out = closing. */

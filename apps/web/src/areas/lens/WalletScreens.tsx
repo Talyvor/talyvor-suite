@@ -28,6 +28,7 @@ import { AccountStatement, accountTitle, useAccountMonthCsv } from './AccountSta
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { CardExport } from './CardDisputes'
+import { TaskSays } from './PaymentProof'
 
 // B28.7 — the sidebar is wallet-first: Approvals and Statements are destinations of their own, not
 // regions a person scrolls to inside Agent Wallets. Both read the same cache as Agent Wallets and Home,
@@ -331,6 +332,8 @@ function ApprovalsPage() {
                                     .filter(Boolean)
                                     .join(' · ')}
                                 </span>
+                                {/* B62.3 — the agent's task, in its own words. */}
+                                <TaskSays inline task={a.task} className="basis-full text-ink-2" />
                               </span>
                             }
                             amount={amountOf(a)}

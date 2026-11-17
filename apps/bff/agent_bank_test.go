@@ -118,6 +118,9 @@ func newFakeLensAgentBank(t *testing.T) (*app, *fakeLensAgentBank) {
 			_, _ = w.Write(raw)
 		case strings.HasSuffix(r.URL.Path, "/agents/agt_1/rules"):
 			_, _ = w.Write(raw)
+		case strings.HasSuffix(r.URL.Path, "/agents/payment-proofs/me_1"): // B62.3: Lens B62.1's record of one payment
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "pp_1", "rule": "approval_above", "key_kind": "device", "verified": true,
+				"sent": map[string]any{"amount_minor": 15_000, "currency": "EUR", "task": "Renew the data licence"}})
 		case strings.HasSuffix(r.URL.Path, "/agents/approvals"):
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "internal server error"})
@@ -637,6 +640,24 @@ func TestAgentClaimReachesLens(t *testing.T) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if len(f.got) != 1 || !strings.HasSuffix(f.got[0], "/agents/agt_1/claim ") || !strings.HasPrefix(f.got[0], "POST ") {
+		t.Fatalf("Lens got %q", f.got)
+	}
+}
+
+// B62.3 — a payment's page reads its proof from Lens on the session's own workspace, and Lens's 404 for a payment with
+// no record (or another workspace's) comes back as a 404.
+func TestPaymentProofReachesLens(t *testing.T) {
+	a, f := newFakeLensAgentBank(t)
+	rec := doJSON(a, http.MethodGet, "/api/payment-proofs/me_1", "")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"verified":true`) || !strings.Contains(rec.Body.String(), `"task":"Renew the data licence"`) {
+		t.Fatalf("proof = %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(a, http.MethodGet, "/api/payment-proofs/me_other", ""); rec.Code != http.StatusNotFound {
+		t.Fatalf("another payment's proof = %d %s", rec.Code, rec.Body.String())
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.got) != 2 || !strings.HasPrefix(f.got[0], "GET /v1/workspaces/") || !strings.HasSuffix(f.got[0], "/agents/payment-proofs/me_1 ") {
 		t.Fatalf("Lens got %q", f.got)
 	}
 }
