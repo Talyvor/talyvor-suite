@@ -78,7 +78,7 @@ async function find(card: HTMLElement, to: string) {
 /** Pays Dana R. $12.50 from the dollar account with a note, up to the review. */
 async function review(card: HTMLElement) {
   await find(card, 'dana')
-  fireEvent.click(await within(card).findByRole('button', { name: 'Pay' }))
+  fireEvent.click(await within(card).findByRole('button', { name: 'Pay Dana R.' }))
   const dialog = await screen.findByRole('dialog', { name: 'Pay Dana R.' })
   fireEvent.change(within(dialog).getByLabelText('Amount in USD'), { target: { value: '12.50' } })
   fireEvent.change(within(dialog).getByLabelText('Note'), { target: { value: 'Lunch' } })
@@ -97,7 +97,7 @@ describe('Pay, to a person (B61.33)', () => {
     await find(card, 'dana')
     const found = await within(card).findByTestId('pay-a-person-found')
     expect(text(found)).toContain('Dana R.')
-    expect(within(found).getByRole('button', { name: 'Pay' })).toBeTruthy()
+    expect(within(card).getByRole('button', { name: 'Pay Dana R.' })).toBe(found)
     // One main action: Find goes once there is someone to pay.
     expect(within(card).queryByRole('button', { name: 'Find' })).toBeNull()
     expect(posts).toEqual([{ path: '/api/money/people/find', body: { to: 'dana' } }])
