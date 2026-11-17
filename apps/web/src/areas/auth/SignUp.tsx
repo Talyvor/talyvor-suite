@@ -20,9 +20,9 @@ import { showRecoveryCode } from '../lens/recoveryCodeStore'
 import { IdentityChecks } from '../lens/IdentityChecks'
 import { AccessLine, AlreadyIn, EntryFrame, PrivacyTerms, SignInCard } from './Entry'
 import { DoorError, makeSignInKey, rememberPasskeyHere, signupAccount, takePasscode, thisBrowserName } from './doorApi'
+import { countryRefusal, useServedCountries } from './servedCountries'
 import {
   ACCOUNT_TYPES,
-  COUNTRIES,
   IDENTITY_WORDS,
   KIND_NOTE,
   MONEY_KINDS,
@@ -231,19 +231,26 @@ function ProfileField({ field, value, error, onChange, children }: {
 }
 
 /** Step 1 (P1's words): who the account is for, and the profile for that type. */
-function StepWho({ type, setType, profile, setProfile, onContinue, another = false }: {
+function StepWho({ type, setType, profile, setProfile, onContinue, refused, setRefused, another = false }: {
   type: AccountType | null
   setType: (t: AccountType) => void
   profile: Profile
   setProfile: (p: Profile) => void
   onContinue: () => void
+  /** B61.110 — Lens's sentence for the country it refused at Continue on step 2, until another is picked. */
+  refused: string | null
+  setRefused: (said: string | null) => void
   /** B61.9 — a signed-in person opening another account: no sign-in, waitlist or stranger's notes. */
   another?: boolean
 }) {
   const { signup } = useSignupProbe()
+  const countries = useServedCountries()
   const [tried, setTried] = useState(false)
-  const errors = type && tried ? missing(type, profile) : {}
-  const set = (field: keyof Profile) => (v: string) => setProfile({ ...profile, [field]: v })
+  const errors = { ...(type && tried ? missing(type, profile) : {}), ...(refused ? { country: refused } : {}) }
+  const set = (field: keyof Profile) => (v: string) => {
+    if (field === 'country') setRefused(null)
+    setProfile({ ...profile, [field]: v })
+  }
   return (
     <form
       noValidate
@@ -252,7 +259,7 @@ function StepWho({ type, setType, profile, setProfile, onContinue, another = fal
         e.preventDefault()
         if (!type) return
         setTried(true)
-        if (!Object.keys(missing(type, profile)).length) onContinue()
+        if (!Object.keys(missing(type, profile)).length && !refused) onContinue()
       }}
     >
       <Stepper at={1} steps={another ? ANOTHER_STEPS : SIGNUP_STEPS} />
@@ -276,7 +283,7 @@ function StepWho({ type, setType, profile, setProfile, onContinue, another = fal
             <option value="" hidden>
               {PROFILE_LABELS.country}
             </option>
-            {COUNTRIES.map(([code, name]) => (
+            {countries.map(([code, name]) => (
               <option key={code} value={code}>
                 {name}
               </option>
@@ -304,12 +311,14 @@ function StepWho({ type, setType, profile, setProfile, onContinue, another = fal
 }
 
 /** Step 2 (W1's words): the kind of money. Continue goes to the identity provider with every answer. */
-function StepKind({ type, profile, kind, setKind, onBack, another = false }: {
+function StepKind({ type, profile, kind, setKind, onBack, onCountryRefused, another = false }: {
   type: AccountType
   profile: Profile
   kind: MoneyKind | null
   setKind: (k: MoneyKind) => void
   onBack: () => void
+  /** B61.110 — Lens does not serve the country: back to step 1, with Lens's sentence on the country field. */
+  onCountryRefused: (said: string) => void
   /** B61.9 — Continue opens another account for the person signed in, rather than going to the identity provider. */
   another?: boolean
 }) {
@@ -327,6 +336,10 @@ function StepKind({ type, profile, kind, setKind, onBack, another = false }: {
       navigate(another ? ANOTHER_CONFIRM_PATH : SIGNUP_KEY_PATH)
       // The session is on the new account: nothing read for the one it left is kept.
       await qc.resetQueries()
+    },
+    onError: (err) => {
+      const said = countryRefusal(err)
+      if (said) onCountryRefused(said)
     },
   })
   return (
@@ -383,6 +396,7 @@ export function SignUp() {
   const [type, setType] = useState<AccountType | null>(null)
   const [profile, setProfile] = useState<Profile>(EMPTY)
   const [kind, setKind] = useState<MoneyKind | null>(null)
+  const [refused, setRefused] = useState<string | null>(null)
   const authenticated = me.data?.authenticated === true
   const joining = authenticated && me.data?.signup_unfinished === true
   useDocumentTitle(authenticated && !joining ? 'You’re signed in' : 'Create a workspace')
@@ -413,7 +427,7 @@ export function SignUp() {
   return (
     <SignUpFrame>
       {step === 1 || !type ? (
-        <StepWho type={type} setType={setType} profile={profile} setProfile={setProfile} onContinue={() => setStep(2)} />
+        <StepWho type={type} setType={setType} profile={profile} setProfile={setProfile} onContinue={() => setStep(2)} refused={refused} setRefused={setRefused} />
       ) : (
         <StepKind
           type={type}
@@ -421,6 +435,10 @@ export function SignUp() {
           kind={kind}
           setKind={setKind}
           onBack={() => setStep(1)}
+          onCountryRefused={(said) => {
+            setRefused(said)
+            setStep(1)
+          }}
         />
       )}
     </SignUpFrame>
@@ -632,15 +650,27 @@ export function OpenAnotherAccount() {
   const [type, setType] = useState<AccountType | null>(null)
   const [profile, setProfile] = useState<Profile>(EMPTY)
   const [kind, setKind] = useState<MoneyKind | null>(null)
+  const [refused, setRefused] = useState<string | null>(null)
   useDocumentTitle('Open another account')
   const gate = useSignedIn(ANOTHER_PATH)
   if (gate) return gate
   return (
     <SignUpFrame label={<WorkspaceStatus />}>
       {step === 1 || !type ? (
-        <StepWho another type={type} setType={setType} profile={profile} setProfile={setProfile} onContinue={() => setStep(2)} />
+        <StepWho another type={type} setType={setType} profile={profile} setProfile={setProfile} onContinue={() => setStep(2)} refused={refused} setRefused={setRefused} />
       ) : (
-        <StepKind another type={type} profile={profile} kind={kind} setKind={setKind} onBack={() => setStep(1)} />
+        <StepKind
+          another
+          type={type}
+          profile={profile}
+          kind={kind}
+          setKind={setKind}
+          onBack={() => setStep(1)}
+          onCountryRefused={(said) => {
+            setRefused(said)
+            setStep(1)
+          }}
+        />
       )}
     </SignUpFrame>
   )

@@ -44,6 +44,9 @@ import (
 //   - ladders (B61.59) is Lens's public GET /v1/public/plans (talyvor-lens B61.57): both ladders, each plan's name, its
 //     monthly price in every currency, the agents and people it allows. Settings, Plan and /pricing draw every plan
 //     figure from it. OMITTED when Lens will not state it whole; reused for publicLabelTTL, as the gates are.
+//   - countries (B61.110) is Lens's public GET /v1/public/countries (talyvor-lens B61.53): the ISO codes of the
+//     countries Talyvor serves, which sign-up and the identity check offer. OMITTED when Lens will not state it, or
+//     states one that is not a two-letter code; reused for publicLabelTTL, as the list may change.
 func (a *app) handlePricing(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w, http.MethodGet)
@@ -85,6 +88,9 @@ func (a *app) handlePricing(w http.ResponseWriter, r *http.Request) {
 	}
 	if labels, ok := a.public.labels.getWithin(publicLabelTTL, func() (map[string]string, bool) { return a.readLabels(r) }); ok {
 		out["labels"] = labels
+	}
+	if countries, ok := a.public.countries.getWithin(publicLabelTTL, func() ([]string, bool) { return a.readCountries(r) }); ok {
+		out["countries"] = countries
 	}
 	w.Header().Set("Cache-Control", "public, max-age=60")
 	writeJSON(w, http.StatusOK, out)
@@ -280,6 +286,26 @@ func (a *app) readLabels(r *http.Request) (map[string]string, bool) {
 	return out, len(out) > 0
 }
 
+// publicCountries is Lens's GET /v1/public/countries (talyvor-lens B61.53).
+type publicCountries struct {
+	Countries []string `json:"countries"`
+}
+
+// readCountries reads Lens's GET /v1/public/countries: every country Talyvor serves, as ISO 3166-1 alpha-2 codes. The
+// whole list or none: a code that is not two capital letters makes it unread, as a picker offering half a list is wrong.
+func (a *app) readCountries(r *http.Request) ([]string, bool) {
+	var body publicCountries
+	if !a.readPublic(r, "/v1/public/countries", &body) || len(body.Countries) == 0 {
+		return nil, false
+	}
+	for _, c := range body.Countries {
+		if len(c) != 2 || c[0] < 'A' || c[0] > 'Z' || c[1] < 'A' || c[1] > 'Z' {
+			return nil, false
+		}
+	}
+	return body.Countries, true
+}
+
 // readPublic GETs one of Lens's public reads with no credential and decodes a 200 into `into`.
 func (a *app) readPublic(r *http.Request, path string, into any) bool {
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, a.cfg.lensBaseURL+path, nil)
@@ -310,13 +336,14 @@ const publicLabelTTL = time.Minute
 
 // pricingReads are /api/pricing's Lens reads, each cached on its own.
 type pricingReads struct {
-	peg     publicCache[float64]
-	plans   publicCache[planCard]
-	gates   publicCache[planGates]
-	fees    publicCache[publicFees]
-	ladders publicCache[planLadders]
-	cards   publicCache[string]
-	labels  publicCache[map[string]string]
+	peg       publicCache[float64]
+	plans     publicCache[planCard]
+	gates     publicCache[planGates]
+	fees      publicCache[publicFees]
+	ladders   publicCache[planLadders]
+	cards     publicCache[string]
+	labels    publicCache[map[string]string]
+	countries publicCache[[]string]
 }
 
 // publicCache holds the last CONFIRMED answer to one public read. A failure is never cached, so a

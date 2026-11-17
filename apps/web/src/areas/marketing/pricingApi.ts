@@ -107,6 +107,8 @@ export interface Pricing {
   card_payments?: 'live' | 'test' | 'off'
   /** B56.9 — each money capability live or sandbox (talyvor-lens B56.7), for StatusLabel; ABSENT when Lens did not say. */
   labels?: Record<string, string>
+  /** B61.110 — the countries Talyvor serves, as ISO codes (talyvor-lens B61.53); ABSENT when Lens did not say. */
+  countries?: string[]
 }
 
 /** The plans' names. Words, not figures: every figure about a plan is read from Lens. */

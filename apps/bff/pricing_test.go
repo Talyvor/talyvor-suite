@@ -57,8 +57,10 @@ func pricingApp(t *testing.T, status int) (*app, *string, map[string]int) {
 			body = `{"card_payments":"live"}`
 		case "/v1/public/labels":
 			body = lensLabels
+		case "/v1/public/countries":
+			body = `{"countries":["DE","GB","US"]}`
 		default:
-			t.Errorf("/api/pricing dialled %s — it may read the public peg, plans, plan gates, ladders, fees, card payments and labels and nothing else", r.URL.Path)
+			t.Errorf("/api/pricing dialled %s — it may read the public peg, plans, plan gates, ladders, fees, card payments, labels and countries and nothing else", r.URL.Path)
 		}
 		hits[r.URL.Path]++
 		if auth := r.Header.Get("Authorization"); auth != "" {
@@ -236,7 +238,7 @@ func TestPricing_ServesThePriceCardLensStates(t *testing.T) {
 func TestPricing_OmitsGatesAndFeesLensWillNotState(t *testing.T) {
 	a, _, _ := pricingApp(t, http.StatusServiceUnavailable)
 	out := getPricing(t, a)
-	for _, k := range []string{"plan_gates", "ladders", "fees", "company_plans", "byok_add_on_usd_cents", "enterprise_from_usd_cents", "card_payments", "labels"} {
+	for _, k := range []string{"plan_gates", "ladders", "fees", "company_plans", "byok_add_on_usd_cents", "enterprise_from_usd_cents", "card_payments", "labels", "countries"} {
 		if _, ok := out[k]; ok {
 			t.Errorf("%s = %v from a Lens that answered 503 — want it omitted", k, out[k])
 		}
@@ -263,5 +265,24 @@ func TestPricing_SaysWhetherACardCanBeCharged(t *testing.T) {
 		} else if c.want != "" && got != c.want {
 			t.Errorf("Lens said %q: card_payments = %v, want %q", c.lens, got, c.want)
 		}
+	}
+}
+
+// B61.110 — /api/pricing serves the countries Lens serves (talyvor-lens B61.53), for sign-up's and the identity check's
+// pickers, and leaves out a list holding anything but two-letter codes.
+func TestPricing_ServesTheCountriesLensServes(t *testing.T) {
+	a, _, _ := pricingApp(t, http.StatusOK)
+	got, _ := json.Marshal(getPricing(t, a)["countries"])
+	if string(got) != `["DE","GB","US"]` {
+		t.Errorf("countries = %s, want Lens's [\"DE\",\"GB\",\"US\"]", got)
+	}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"countries":["GB","Britain"]}`)
+	}))
+	t.Cleanup(up.Close)
+	a, _, _ = pricingApp(t, http.StatusOK)
+	a.cfg.lensBaseURL = up.URL
+	if c, ok := getPricing(t, a)["countries"]; ok {
+		t.Errorf("countries = %v from a list with a name in it — want it omitted", c)
 	}
 }

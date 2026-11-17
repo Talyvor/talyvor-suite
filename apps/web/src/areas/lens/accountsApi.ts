@@ -43,13 +43,15 @@ async function post(path: string, body: object): Promise<{ account_id: string }>
     body: JSON.stringify(body),
   })
   if (!res.ok) {
-    let sentence = ''
+    let body: Record<string, unknown> = {}
     try {
-      sentence = ((await res.json()) as { error?: string }).error ?? ''
+      const parsed: unknown = await res.json()
+      if (parsed !== null && typeof parsed === 'object') body = parsed as Record<string, unknown>
     } catch {
       // a body that is not JSON carries no sentence
     }
-    throw new AgentBankError(res.status, path, sentence)
+    // B61.110 — the whole body too, so a refused country is read from Lens's code.
+    throw new AgentBankError(res.status, path, typeof body.error === 'string' ? body.error : '', '', body)
   }
   return (await res.json()) as { account_id: string }
 }
