@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { JOURNAL_SENTENCE } from './AgentStatement'
 
 // B19.22 — the DONE line: Nicolai downloads last month's CSV statement for the whole bank, and the file opens with its
 // opening and closing balances. The mock BFF answers the period
@@ -62,7 +63,7 @@ function mockBff() {
       asked.push(url)
       return new Response(PDF, { status: 200, headers: { 'Content-Type': 'application/pdf' } })
     }
-    if (url === '/api/agents/agt_1/statement?from=2026-08-01&to=2026-09-01&format=pdf') {
+    if (url === '/api/agents/agt_1/statement?from=2026-08-01&to=2026-09-01&format=pdf' || url === '/api/agents/statement?from=2026-08-01&to=2026-09-01&format=pdf') {
       asked.push(url)
       return new Response(PDF, { status: 200, headers: { 'Content-Type': 'application/pdf' } })
     }
@@ -118,7 +119,7 @@ describe('the agents’ past statements under Your data', () => {
     const card = await yourData()
     expect((card.getByLabelText('From') as HTMLInputElement).value).toBe('2026-08-01')
     expect((card.getByLabelText('To') as HTMLInputElement).value).toBe('2026-08-31')
-    fireEvent.click(card.getByRole('button', { name: 'Download' }))
+    fireEvent.click(card.getByRole('button', { name: 'Download CSV' }))
 
     await waitFor(() => expect(saved[0]?.name).toBe('agent-wallets-statement-2026-08-01-to-2026-08-31.csv'))
     expect(asked).toEqual(['/api/agents/statement?from=2026-08-01&to=2026-09-01&format=csv'])
@@ -133,11 +134,29 @@ describe('the agents’ past statements under Your data', () => {
     const type = card.getByLabelText('File type') as HTMLSelectElement
     expect([...type.options].map((o) => o.text)).toEqual(['CSV', 'JSON', 'PDF', 'Journal for Xero or QuickBooks'])
     fireEvent.change(type, { target: { value: 'journal' } })
-    fireEvent.click(card.getByRole('button', { name: 'Download' }))
+    fireEvent.click(card.getByRole('button', { name: 'Download journal' }))
 
     await waitFor(() => expect(saved[0]?.name).toBe('agent-wallets-journal-2026-08-01-to-2026-08-31.csv'))
     expect(asked).toEqual(['/api/agents/statement?from=2026-08-01&to=2026-09-01&format=journal'])
     expect(await saved[0].text).toBe(JOURNAL)
+  })
+
+  // B57.187 — drawn in Pocket as Statements' downloads (w-stmt-cusd): a form card beside Your data's list, with the
+  // button naming its file, the journal's sentence when the journal is chosen, and the download's toast.
+  it('is a form beside the list, drawn as Statements’ downloads', async () => {
+    mockBff()
+    const card = await yourData()
+    // The nearest box that holds both this card and the copy's form holds no list: they share the form column.
+    let column = card.getByRole('heading', { name: 'Your agents’ past statements' }).parentElement as HTMLElement
+    while (!within(column).queryByRole('heading', { name: 'A copy of your data' })) column = column.parentElement as HTMLElement
+    expect(within(column).queryByRole('heading', { name: 'What you asked' })).toBeNull()
+
+    expect(card.queryByText(JOURNAL_SENTENCE)).toBeNull()
+    fireEvent.change(card.getByLabelText('File type'), { target: { value: 'journal' } })
+    expect(card.getByText(JOURNAL_SENTENCE)).toBeTruthy()
+    fireEvent.change(card.getByLabelText('File type'), { target: { value: 'pdf' } })
+    fireEvent.click(card.getByRole('button', { name: 'Download PDF' }))
+    expect(await screen.findByText('Downloading your agents’ statement for August as a PDF file')).toBeTruthy()
   })
 
   it('says so when Lens cannot write the file', async () => {
@@ -147,7 +166,7 @@ describe('the agents’ past statements under Your data', () => {
       String(input) === '/api/agents/statement?from=2026-08-01&to=2026-09-01&format=csv' ? new Response('{}', { status: 502 }) : bff(input, init),
     )
     const card = await yourData()
-    fireEvent.click(card.getByRole('button', { name: 'Download' }))
+    fireEvent.click(card.getByRole('button', { name: 'Download CSV' }))
     expect(await card.findByText('The statement could not be read just now.')).toBeTruthy()
     expect(saved).toEqual([])
   })
