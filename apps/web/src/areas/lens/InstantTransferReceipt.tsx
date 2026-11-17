@@ -208,8 +208,8 @@ function whenSent(at: Date, now = new Date()): string {
 const said = (n: Element | null) => (n?.textContent ?? '').replace(/\u00a0/g, ' ').trim()
 
 /** The receipt as a text file, line by line from the receipt on the screen, each reference whole. */
-function receiptText(card: HTMLElement): string {
-  const lines = ['Instant transfer receipt']
+export function receiptText(card: HTMLElement, title = 'Instant transfer receipt'): string {
+  const lines = [title]
   for (const n of card.querySelectorAll('[data-receipt-line], dl > div, li')) {
     if (n.matches('dl > div')) lines.push(`${said(n.querySelector('dt'))}: ${n.querySelector('[title]')?.getAttribute('title') ?? said(n.querySelector('dd'))}`)
     else if (n.matches('li')) lines.push(`${said(n.firstElementChild)}. ${[...(n.lastElementChild?.children ?? [])].map(said).join(' · ')}`)
