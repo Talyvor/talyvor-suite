@@ -5,13 +5,17 @@ import { App, queryClient } from '../../App'
 // B41.39 — /money/budgets: a £100 monthly AI and software budget across every wallet, £80.50 spent, shows its progress and
 // the one alert Lens raised at 80% this period (last period's does not count); saving a budget sends only its fields.
 
-function mockBff(puts: unknown[], refusals: string[] = []) {
+function mockBff(puts: unknown[], refusals: string[] = [], accountCurrencies?: string[]) {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
     const url = String(input)
     const json = (v: unknown) => new Response(JSON.stringify(v), { status: 200, headers: { 'Content-Type': 'application/json' } })
     if (url === '/auth/me') return json({ mode: 'disabled', authenticated: false, user: null })
     if (url === '/api/agents') return json({ workspace_balance_ulxc: 0, allocated_ulxc: 0, unallocated_ulxc: 0, spent_ulxc: 0, agents: [] })
+    if (url === '/api/money/accounts' && accountCurrencies) {
+      return json({ accounts: accountCurrencies.map((currency, i) => ({ id: `acc_${i}`, agent_id: '', currency, purpose: 'company', status: 'active',
+        name: currency, balance_minor: 0, test_minor: 0, live_minor: 0 })) })
+    }
     if (url === '/api/money/budgets' && init?.method === 'PUT') {
       puts.push(JSON.parse(String(init.body)))
       const refusal = refusals.shift()
@@ -96,5 +100,25 @@ describe('budgets by category (B41.39)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Save budget' }))
       expect(await screen.findByText(said)).toBeTruthy()
     }
+  })
+
+  // B61.97 — a new budget starts in the account's own currency, the one Home shows first; the list keeps the others.
+  it.each([
+    ['a pounds account', ['GBP'], 'GBP'],
+    ['a dollars account', ['USD'], 'USD'],
+  ])('starts a new budget in %s’s currency and saves it in that currency', async (_, currencies, want) => {
+    const puts: unknown[] = []
+    mockBff(puts, [], currencies)
+    window.history.pushState({}, '', '/money/budgets')
+    render(<App />)
+    await screen.findByTestId('budget-bdg_1')
+
+    const currency = screen.getByLabelText<HTMLSelectElement>('Currency')
+    await waitFor(() => expect(currency.value).toBe(want))
+    expect([...currency.options].map((o) => o.value)).toEqual(['USD', 'EUR', 'GBP'])
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '40' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save budget' }))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toMatchObject({ amount_minor: 4000, currency: want })
   })
 })

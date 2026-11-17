@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bar, Button, Card, EmptyState, Field, Icon, Input, Money, Select } from '@talyvor/ui/pocket'
 import { Note, readFailure } from './WalletMoney'
 import { BOOK_KEY } from './AgentBank'
-import { AgentBankError, type SpendBudget, agentBankApi, minorOf, refusalText } from './agentBankApi'
+import { MONEY_ACCOUNTS_KEY } from './Invoices'
+import { AgentBankError, type CurrencyAccount, type SpendBudget, agentBankApi, minorOf, refusalText } from './agentBankApi'
 import { DESIGN_ATTR } from '../../pocketPending'
 
 // Budgets.tsx — B41.39: a weekly or monthly budget per category (AI and software, travel …) for your own wallet, one
@@ -32,6 +33,12 @@ export const CATEGORIES: readonly [string, string][] = [
 ]
 /** B57.89 — dollars first (B55.38). */
 const CURRENCIES = ['USD', 'EUR', 'GBP']
+
+/** B61.97 — the account's own currency, the first Home shows (its order is this list's), or USD before the accounts are read. */
+export function accountCurrency(accounts: CurrencyAccount[]): string {
+  const held = new Set(accounts.filter((a) => a.status !== 'closed').map((a) => a.currency))
+  return CURRENCIES.find((c) => held.has(c)) ?? 'USD'
+}
 export const categoryName = (c: string) => CATEGORIES.find(([v]) => v === c)?.[1] ?? c.replace(/_/g, ' ')
 /** A category's name inside a sentence: "eating out", but "AI and software". */
 export const categoryWords = (c: string) => categoryName(c).replace(/^(?!AI\b)./, (f) => f.toLowerCase())
@@ -95,11 +102,14 @@ export function BudgetsScreen() {
   const budgets = useQuery({ queryKey: BUDGETS_KEY, queryFn: agentBankApi.budgets })
   const alerts = useQuery({ queryKey: LIMIT_ALERTS_KEY, queryFn: agentBankApi.limitAlerts })
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
+  const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
   const agents = book.data?.agents ?? []
   const whose = (id: string) => (id === '' ? 'Your own wallet' : id === 'all' ? 'Every wallet' : (agents.find((a) => a.id === id)?.name ?? 'An agent'))
 
-  const [form, setForm] = useState({ category: 'ai_software', agent_id: 'all', period: 'month' as SpendBudget['period'], amount: '', currency: 'USD' })
+  const [form, setForm] = useState({ category: 'ai_software', agent_id: 'all', period: 'month' as SpendBudget['period'], amount: '', currency: null as string | null })
   const set = (p: Partial<typeof form>) => setForm((f) => ({ ...f, ...p }))
+  // Until the owner picks one, a new budget is in the account's own currency.
+  const currency = form.currency ?? accountCurrency(accounts.data?.accounts ?? [])
   const amountMinor = minorOf(form.amount)
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: BUDGETS_KEY })
@@ -112,7 +122,7 @@ export function BudgetsScreen() {
         category: form.category,
         period: form.period,
         amount_minor: amountMinor ?? 0,
-        currency: form.currency,
+        currency,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }),
     onSuccess: () => {
@@ -192,7 +202,7 @@ export function BudgetsScreen() {
             <Input placeholder="100.00" inputMode="decimal" value={form.amount} onChange={(e) => set({ amount: e.target.value })} />
           </Field>
           <Field label="Currency">
-            <Select value={form.currency} onChange={(e) => set({ currency: e.target.value })}>
+            <Select value={currency} onChange={(e) => set({ currency: e.target.value })}>
               {CURRENCIES.map((c) => (
                 <option key={c} value={c}>
                   {c}
