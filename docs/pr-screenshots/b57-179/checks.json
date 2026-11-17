@@ -1,0 +1,8 @@
+[
+  { "route": "/money/wallets" },
+  { "route": "/money/wallets", "steps": ["Add money to Research"] },
+  { "route": "/agents/agt_research", "steps": ["Take back from Research"] },
+  { "route": "/money/wallets", "dark": true },
+  { "route": "/money/wallets", "steps": ["Add money to Research"], "dark": true },
+  { "route": "/agents/agt_research", "steps": ["Take back from Research"], "dark": true }
+]
