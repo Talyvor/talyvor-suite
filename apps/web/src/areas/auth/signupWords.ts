@@ -106,6 +106,9 @@ export const IDENTITY_WORDS = {
   documentLine: 'When our identity partner is live, its own screen opens here to photograph your ID. In Sandbox nothing is asked for and nothing is kept.',
   done: 'You’re confirmed. Your account is open.',
   open: 'Open the app',
+  // B61.118 — the way into the app while a check waits, or after one did not pass; never says the check passed.
+  openWaiting: 'We’ll finish checking your identity in the background. Live money waits for it; everything in Sandbox works now.',
+  openNotPassed: 'You can try the check again from Settings, Verification.',
   gate: 'Your account can look around but can’t move money until you confirm who you are.',
   finish: 'Finish confirming who you are',
 } as const
