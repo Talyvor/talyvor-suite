@@ -331,12 +331,11 @@ func (a *app) handlePhoneFinish(w http.ResponseWriter, r *http.Request) {
 		writeDoorFailure(w, "phone finish", errors.New("lens gave no ticket"))
 		return
 	}
-	id, err := randomToken()
+	id, err := a.auth.storeCheck(phoneCheck{phone: in.Phone, ticket: out.Ticket, hasPerson: out.HasPerson, expires: expires})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "entropy unavailable"})
 		return
 	}
-	a.auth.phoneChecks.put(id, phoneCheck{phone: in.Phone, ticket: out.Ticket, hasPerson: out.HasPerson, expires: expires})
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"check": id, "has_person": out.HasPerson, "expires_at": out.ExpiresAt})
 }
@@ -359,7 +358,7 @@ func (a *app) redeem(ctx context.Context, checkID string, c phoneCheck, identity
 	case errors.As(err, &down):
 	case errors.As(err, &refused) && slices.Contains([]any{"wrong_passcode", "passcode_wait", "passcode_needed", "weak_passcode"}, refused.body["reason"]):
 	default:
-		a.auth.phoneChecks.delete(checkID)
+		a.auth.endCheck(checkID, c)
 	}
 	if err == nil && out.Person.ID == "" {
 		err = errors.New("lens gave no person")
@@ -367,8 +366,49 @@ func (a *app) redeem(ctx context.Context, checkID string, c phoneCheck, identity
 	return out.Person, out.Created, err
 }
 
+// storeCheck stores a new check and returns its id: sealed with the check when there is a sealer (B61.115).
+func (auth *authenticator) storeCheck(c phoneCheck) (string, error) {
+	var id string
+	var err error
+	if auth.checkSealer != nil {
+		id, err = auth.checkSealer.seal(c)
+	} else {
+		id, err = randomToken()
+	}
+	if err != nil {
+		return "", err
+	}
+	auth.phoneChecks.put(id, c)
+	return id, nil
+}
+
+// check returns the check stored under id, restoring it from its seal when this process has not seen it.
+func (auth *authenticator) check(id string) (phoneCheck, bool) {
+	if c, ok := auth.phoneChecks.get(id); ok {
+		return c, true
+	}
+	if auth.checkSealer == nil {
+		return phoneCheck{}, false
+	}
+	c, ok := auth.checkSealer.open(id)
+	if !ok {
+		return phoneCheck{}, false
+	}
+	log.Printf("bff: phone check restored from its seal")
+	auth.phoneChecks.put(id, c)
+	return c, true
+}
+
+// endCheck spends id for good: gone from the map, and its seal can no longer restore it.
+func (auth *authenticator) endCheck(id string, c phoneCheck) {
+	auth.phoneChecks.delete(id)
+	if auth.checkSealer != nil {
+		auth.checkSealer.end(id, c.expires)
+	}
+}
+
 func (a *app) takeCheck(w http.ResponseWriter, id string) (phoneCheck, bool) {
-	c, ok := a.auth.phoneChecks.get(id)
+	c, ok := a.auth.check(id)
 	if !ok || id == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "That confirmation has ended. Confirm the number again.",
 			"reason": "ticket_ended"})

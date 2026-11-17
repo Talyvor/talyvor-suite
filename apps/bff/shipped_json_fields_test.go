@@ -65,6 +65,7 @@ var builtByThisService = map[string]string{
 	"homeAddress":          "the person's home address, decoded from the identity check's POST and re-encoded for Lens in handleVerificationIdentity (B61.46)",
 	"binaryVersion":        "build identity of this binary; assembled by describeBinary",
 	"sealedSession":        "the session sealed into its own cookie id, filled from a session in sessionSealer.seal (B17.40)",
+	"sealedCheck":          "the phone check sealed into its own id, filled from a phoneCheck in checkSealer.seal (B61.115)",
 	"bundleVersion":        "identity of the web bundle on disk; assembled by readBundleVersion",
 	"convertQuote":         "the LENS->LXC quote returned to the money screen",
 	"distillState":         "the distill panel's state, assembled in readDistillState",

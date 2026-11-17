@@ -1685,6 +1685,10 @@ export const NON_LENS_ANON_SITES = [
     what: "sessionSealer.seal (B17.40) marshals sealedSession, the session sealed into its own cookie id so a restart does not sign anyone out. It is encrypted and only this BFF ever reads it back — no request body, sent to no repository, so there is no key set to ask about and this site is exempt.",
   },
   {
+    file: "phone_check_seal.go",
+    what: "checkSealer.seal (B61.115) marshals sealedCheck, a confirmed number's check sealed into its own id so a restart does not send the person back to the number. It is encrypted and only this BFF ever reads it back — no request body, sent to no repository, so there is no key set to ask about and this site is exempt.",
+  },
+  {
     file: "mcp_drafts.go",
     what: "mcpCreatePayeeRequest (B40.35) marshals mcpPayeeDetails, an assistant's create_payee_request arguments, to KEEP them in the BFF's memory for the person — no request body, sent to no repository. The person's Save sends them through POST /api/money/payees, whose own marshal is the lensPayeeCreateBody row, so the key set Lens binds is asked there and this site is exempt.",
   },
