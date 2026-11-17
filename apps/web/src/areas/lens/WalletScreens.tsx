@@ -1,8 +1,7 @@
-import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { inlineLink } from '@talyvor/ui'
-import { Button as PocketButton, Card, Chip, Face, Facts, Icon, Money, RoomBadge, Row, Select, Tabs, pocketFocusRing, showSnack, type ChipTone } from '@talyvor/ui/pocket'
+import { Button as PocketButton, Card, Chip, Face, Facts, Icon, Money, RoomBadge, Row, Tabs, pocketFocusRing, showSnack, type ChipTone } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { WorkspaceLabel, approvalCapability } from '../../labels/workspace'
 import { ApiError } from '../../lib/api'
@@ -16,17 +15,16 @@ import {
   PAYEE_KIND,
   PREPARED_KEY,
   PreparedRow,
-  Statement,
   preparedBy,
   preparedWords,
   useKeys,
 } from './AgentBank'
 import { approvalDeclineTo, approvalSheetTo, expiresText } from './ApprovalSheet'
-import { AgentStatement, DownloadFailed, JOURNAL_SENTENCE, MONTH_FILE_TYPES, downloadWords, useMonthFile } from './AgentStatement'
-import { agentBankApi, type Agent, type AgentApproval, type CurrencyAccount, type PaymentRequest, type StatementFormat } from './agentBankApi'
+import { DownloadFailed } from './AgentStatement'
+import { agentBankApi, type Agent, type AgentApproval, type PaymentRequest } from './agentBankApi'
 import { formatDecided } from './format'
 import { signApproval } from './passkeys'
-import { AccountStatement, MarketplaceBill, accountTitle, useAccountMonthCsv } from './AccountStatement'
+import { AccountStatement, accountTitle, useAccountMonthCsv } from './AccountStatement'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { CardExport } from './CardDisputes'
@@ -442,72 +440,34 @@ function ApprovalsPage() {
   )
 }
 
-/** B56.15 — one tab on Statements: an agent's or the room's wallet in LXC, or a currency account in its own currency. */
-type StatementTab = { id: string; title: string; agent: Agent; account?: undefined } | { id: string; title: string; account: CurrencyAccount; agent?: undefined }
-
 export function StatementsScreen() {
-  const { book, agents, nameOf } = useAgentNames()
+  const { book, agents } = useAgentNames()
   const accounts = useQuery({ queryKey: MONEY_ACCOUNTS_KEY, queryFn: agentBankApi.moneyAccounts })
   const [params, setParams] = useSearchParams()
-  // B56.15 — each agent's credits, then each room's wallet, then every currency account the company or an agent holds.
-  const tabs: StatementTab[] = [
-    ...agents.filter((a) => a.kind !== 'room').map((a) => ({ id: a.id, title: a.name, agent: a })),
-    ...agents.filter((a) => a.kind === 'room').map((a) => ({ id: a.id, title: a.name, agent: a })),
-    ...(accounts.data?.accounts ?? []).map((a) => ({ id: a.id, title: accountTitle(a, agents), account: a })),
-  ]
+  // B56.15 — every currency account the company or an agent holds. B61.55: the agents' credit statements are parked;
+  // their past statements download under Settings › Your data.
+  const tabs = (accounts.data?.accounts ?? []).map((a) => ({ id: a.id, title: accountTitle(a, agents), account: a }))
   const tab = tabs.find((t) => t.id === params.get('wallet')) ?? tabs[0] ?? null
-  // B57.24 — an agent's tab is its statement as a document; B57.25 — so is a currency account's.
-  const agentTab = tab?.agent && tab.agent.kind !== 'room' ? tab.agent : null
-  const accountTab = tab?.account ?? null
-  const everyAgent = useMonthFile(null)
-  const thisAgent = useMonthFile(agentTab)
-  // B57.112 — the file type both agent downloads save; a currency account's statement is Lens's CSV only.
-  const [format, setFormat] = useState<StatementFormat>('csv')
-  const thisAccount = useAccountMonthCsv(accountTab, tab?.title ?? '')
-  // Pocket's tabs choose by their words, so two wallets of one name take the first's tab.
+  // B57.25 — a currency account's statement is its document, and Lens's CSV.
+  const thisAccount = useAccountMonthCsv(tab?.account ?? null, tab?.title ?? '')
+  // Pocket's tabs choose by their words, so two accounts of one name take the first's tab.
   const titles = [...new Set(tabs.map((t) => t.title))]
   return (
     <RegionScreen>
       <Region index="00" label="Statements" sectionClassName="pb-10 pt-4 wide:pb-12" className="flex max-w-4xl flex-col gap-4">
-        {book.isError ? (
-          <p className="text-body text-muted">{readFailure(book.error, 'The agents')}</p>
-        ) : book.isPending ? (
+        {accounts.isError ? (
+          <p className="text-body text-muted">{readFailure(accounts.error, 'The currency accounts')}</p>
+        ) : accounts.isPending || book.isPending ? (
           <p className="text-body text-muted">Reading…</p>
-        ) : agents.length === 0 ? (
-          <p className="text-body text-muted">
-            No agents yet.{' '}
-            <Link className={`text-ink ${inlineLink}`} to="/agents">
-              Create one on Agent Wallets
-            </Link>
-            ; its statement starts the first time its wallet is funded.
-          </p>
+        ) : tabs.length === 0 ? (
+          <p className="text-body text-muted">No accounts yet. An account’s statement starts with its first payment in or out.</p>
         ) : (
           <div {...{ [DESIGN_ATTR]: 'pocket' }} className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <Select aria-label="File type" className="w-auto" value={format} onChange={(e) => setFormat(e.target.value as StatementFormat)}>
-                {MONTH_FILE_TYPES.map((t) => (
-                  <option key={t.format} value={t.format}>
-                    {t.words}
-                  </option>
-                ))}
-              </Select>
-              <PocketButton variant="secondary" disabled={everyAgent.isPending} onClick={() => everyAgent.mutate(format)}>
-                Statement for every agent
+              <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAccount.isPending} onClick={() => thisAccount.mutate()}>
+                Download CSV
               </PocketButton>
-              {agentTab ? (
-                <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAgent.isPending} onClick={() => thisAgent.mutate(format)}>
-                  {downloadWords(format)}
-                </PocketButton>
-              ) : accountTab ? (
-                <PocketButton variant="secondary" icon={<Icon name="download" />} disabled={thisAccount.isPending} onClick={() => thisAccount.mutate()}>
-                  Download CSV
-                </PocketButton>
-              ) : null}
             </div>
-            {/* B57.113 — B28.56's sentence for the journal, under the downloads it rides with. */}
-            <p className="text-right text-micro text-ink-3">{JOURNAL_SENTENCE}</p>
-            {everyAgent.isError ? <DownloadFailed error={everyAgent.error} /> : null}
-            {thisAgent.isError ? <DownloadFailed error={thisAgent.error} /> : null}
             {thisAccount.isError ? <DownloadFailed error={thisAccount.error} /> : null}
             {/* B59.25 — every card payment, dispute and refund of a date range, as one file. */}
             <div className="flex justify-end">
@@ -515,7 +475,6 @@ export function StatementsScreen() {
             </div>
           </div>
         )}
-        {accounts.isError ? <p className="text-body text-muted">{readFailure(accounts.error, 'The currency accounts')}</p> : null}
         {tab ? (
           <div {...{ [DESIGN_ATTR]: 'pocket' }}>
             <Tabs
@@ -526,25 +485,14 @@ export function StatementsScreen() {
             />
           </div>
         ) : null}
-        {agentTab ? (
-          <>
-            <AgentStatement key={agentTab.id} agent={agentTab} nameOf={nameOf} />
-            <MarketplaceBill key={`bill-${agentTab.id}`} agent={agentTab} />
-          </>
-        ) : accountTab ? (
+        {tab ? (
           <AccountStatement
-            key={accountTab.id}
-            account={accountTab}
-            agent={accountTab.purpose === 'agent' ? (agents.find((a) => a.id === accountTab.agent_id) ?? null) : null}
+            key={tab.id}
+            account={tab.account}
+            agent={tab.account.purpose === 'agent' ? (agents.find((a) => a.id === tab.account.agent_id) ?? null) : null}
           />
         ) : null}
       </Region>
-      {tab?.agent && !agentTab ? (
-        <Region index="01" label={tab.title} className="flex max-w-2xl flex-col gap-3">
-          <Statement key={tab.id} agent={tab.agent} nameOf={nameOf} />
-          <MarketplaceBill key={`bill-${tab.id}`} agent={tab.agent} />
-        </Region>
-      ) : null}
     </RegionScreen>
   )
 }

@@ -98,9 +98,8 @@ describe('asking what the agents spent (B28.349)', () => {
     const link = within(lines).getByRole('link', { name: /^Researcher: −\$0\.12 / })
     expect(link).toHaveAttribute('href', '/agents?agent=agt_1&entry=ent_9')
     fireEvent.click(link)
-    const row = await screen.findByTestId('statement-line-linked')
-    expect(row).toHaveAttribute('aria-current', 'true')
-    expect(row).toHaveTextContent('−$0.12')
-    expect(screen.getByTestId('agent-open')).toHaveTextContent('Researcher')
+    // B61.55 — the link opens the agent; its credit statement, where the line was marked, is parked.
+    expect(await screen.findByTestId('agent-open')).toHaveTextContent('Researcher')
+    expect(screen.queryByTestId('statement-line-linked')).toBeNull()
   })
 })

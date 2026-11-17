@@ -194,13 +194,12 @@ describe('money between owners on Agent Wallets', () => {
     expect((await within(await openPanel('credit')).findByTestId('no-credit-line')).textContent).toContain('no credit line')
   })
 
-  it('gives back a received transfer, asked twice: the refund shows, the original is marked, and the balance falls by it', async () => {
+  it('gives back a received transfer, asked twice: the refund shows and the original is marked', async () => {
     const sent = mockBff({ received: true })
     window.history.pushState({}, '', '/agents/agt_1')
     render(<App />)
 
-    // B61.14 — in dollars alone: 50 LXC at $0.10 is $5.00.
-    await vi.waitFor(async () => expect((await screen.findByTestId('agent-balance-agt_1')).textContent).toBe('$5.00'))
+    // B61.55 — the agent's credit balance is parked, so the page draws none to fall.
     const panel = await openPanel('transfers')
     expect(await within(panel).findByText('Received from agt_bea · overpaid')).toBeTruthy()
     fireEvent.click(within(panel).getByRole('button', { name: 'Give back' }))
@@ -212,6 +211,6 @@ describe('money between owners on Agent Wallets', () => {
     expect(await within(panel).findByText('Gave back to agt_bea · refund: overpaid')).toBeTruthy()
     expect(within(panel).getByText('Given back')).toBeTruthy()
     expect(within(panel).queryByRole('button', { name: 'Give back' })).toBeNull()
-    await vi.waitFor(() => expect(screen.getByTestId('agent-balance-agt_1').textContent).toBe('$4.85'))
+    expect(screen.queryByTestId('agent-balance-agt_1')).toBeNull()
   })
 })

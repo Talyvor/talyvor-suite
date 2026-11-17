@@ -8,6 +8,7 @@ import { FIAT_KEY } from './money'
 // B61.14 — LXC is parked: 12.5 LXC renders as its dollar value alone, and the rules page types every amount in dollars
 // at Lens's peg ($0.10 a LXC here, so $0.50 is 5 LXC). The model, provider and requests-a-minute rules are the parked
 // gateway's: the rules page does not draw them, and a save sends back what Lens holds for them unchanged.
+// B61.55 — nor does the agent's page state them, or draw the agent's credit balance: 12.5 LXC is its month on its card.
 
 const M = 1_000_000
 
@@ -47,6 +48,11 @@ function mockBff(held: Record<string, unknown> = {}) {
       return json(rules)
     }
     if (url === '/api/agents/approvals') return json({ approvals: [] })
+    if (url === '/api/agents/forecast')
+      return json({
+        at: '2026-10-02T12:00:00Z', month_start: '2026-10-01', month_end: '2026-10-31', spent_ulxc: 12.5 * M, forecast_ulxc: 0,
+        agents: [{ agent_id: 'agt_1', name: 'Researcher', spent_ulxc: 12.5 * M, forecast_ulxc: 0 }],
+      })
     return new Response('null', { status: 404 })
   })
   return { saved }
@@ -60,7 +66,7 @@ afterEach(() => {
   window.history.pushState({}, '', '/')
 })
 
-const balanceRow = () => screen.getByTestId('agent-balance-agt_1')
+const balanceRow = () => screen.getByTestId('agent-card-month-agt_1')
 
 describe('amounts in your own currency and plain-English rules', () => {
   it('shows 12.5 LXC as its dollar value alone, and in pounds once pounds are chosen', async () => {
@@ -69,13 +75,13 @@ describe('amounts in your own currency and plain-English rules', () => {
     render(<App />)
 
     await waitFor(() => expect(balanceRow().textContent).toBe('$1.25'))
-    expect(within(balanceRow()).getByTestId('fiat').className).toContain('font-figure')
+    expect(balanceRow().querySelector('[data-money]')?.className).toContain('font-figure')
 
     // B57.42 — Show amounts in moved to Settings: chosen there, followed here.
     fireEvent.click(screen.getByRole('link', { name: 'Settings' }))
     fireEvent.click(within(await screen.findByRole('tablist', { name: 'Show amounts in' })).getByRole('tab', { name: 'Pounds' }))
     fireEvent.click(screen.getByRole('link', { name: 'Agents' }))
-    // B61.14 — the agent's card no longer draws its credit balance: the agent's own page does, in pounds.
+    // The agent's month on its card, in pounds.
     fireEvent.click(await screen.findByRole('link', { name: 'Researcher' }))
     // 1.25 USD ÷ 1.1672 USD per EUR × 0.8354 GBP per EUR = £0.8947.
     await waitFor(() => expect(balanceRow().textContent).toBe('£0.89'))
@@ -91,7 +97,7 @@ describe('amounts in your own currency and plain-English rules', () => {
     const before = await screen.findByTestId('rules-in-words')
     await waitFor(() => expect(before.textContent).toContain('Researcher may spend at most $2.00 a day.'))
     expect(before.textContent).toContain('A person must approve any request or payment above $0.50.')
-    expect(before.textContent).toContain('It may use any model from any provider.')
+    expect(before.textContent).not.toMatch(/model|provider/)
 
     await rulesPage()
     // Held in µLXC, typed in dollars: 20 LXC a day is $2, and above 5 LXC is $0.50.
@@ -129,8 +135,7 @@ describe('amounts in your own currency and plain-English rules', () => {
     const words = await save(saved, 1)
     expect(saved[0]).toMatchObject({ currency: 'USD', daily_limit_minor: 100, ...held })
     await waitFor(() => expect(words.textContent).toContain('Researcher may spend at most $1.00 a day.'))
-    expect(words.textContent).toContain('On one model it may spend at most $0.05 a day on GPT-4o and $0.20 a day on Claude Haiku 4.5.')
-    expect(words.textContent).toContain('It may make at most 60 requests a minute.')
+    expect(words.textContent).not.toMatch(/model|provider|a minute/)
   })
 
   // B28.24 — the hourly and weekly caps are typed like the others, saved, and read back as one sentence.

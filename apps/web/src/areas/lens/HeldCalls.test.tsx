@@ -47,7 +47,7 @@ describe('no calls to held or missing routes (B60.6)', () => {
 
   it('Statements does not ask for the old gateway’s model catalog', async () => {
     const asked = open('/statements', [])
-    await screen.findByTestId('statement-doc')
+    await screen.findByTestId('account-statement-doc')
     await settleQueries(queryClient, waitFor)
     expect(reads(asked, '/api/models')).toEqual([])
   })

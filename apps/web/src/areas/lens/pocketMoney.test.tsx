@@ -160,7 +160,6 @@ const NOT_YET = [
   'areas/chat/Savings.tsx',
   'areas/chat/ScheduledPrompt.tsx',
   'areas/chat/WalletButtons.tsx',
-  'areas/lens/AccountStatement.tsx',
   'areas/lens/AgentBank.tsx',
   'areas/lens/AgentCardPanel.tsx',
   'areas/lens/AgentMoneyWallet.tsx',
