@@ -120,3 +120,25 @@ func TestWorkspacePlanChangeSendsThePlanAndPassesLensRefusalOn(t *testing.T) {
 		t.Errorf("PUT /api/plan with no plan = %d, Lens sent %q; want 400 and nothing sent", rec.Code, sent)
 	}
 }
+
+// B61.116 — Pay's fee line: Lens's allowances this month pass through as Lens counts them, and an answer whose
+// allowances are not counts leaves them out rather than passing a guess on.
+func TestWorkspacePlanPassesThePlansAllowancesOn(t *testing.T) {
+	const plan = `{"plan":"business_studio","name":"Studio","account_type":"business","on_contract":false,"price_minor":{"GBP":1000},` +
+		`"gates":{"agents":3,"seats":1},"agents_used":1,"allowances_month":"2026-11","allowances":`
+	var paths []string
+	a := fakeLensPlan(t, plan+`[{"allowance":"fx","currency":"GBP","free":100000,"used":0,"left":100000,"fee_bps":50},`+
+		`{"allowance":"local","free":10,"used":7,"left":3,"fee_minor":{"EUR":20,"GBP":20,"USD":20}}]}`, &paths)
+	rec := doJSON(a, http.MethodGet, "/api/plan", "")
+	if want := `"allowances":[{"allowance":"fx","currency":"GBP","free":100000,"used":0,"left":100000,"fee_bps":50},` +
+		`{"allowance":"local","free":10,"used":7,"left":3,"fee_minor":{"EUR":20,"GBP":20,"USD":20}}]}`; rec.Code != http.StatusOK || !strings.HasSuffix(strings.TrimSpace(rec.Body.String()), want) {
+		t.Fatalf("GET /api/plan = %d %s, want it to end %s", rec.Code, rec.Body.String(), want)
+	}
+	for _, bad := range []string{`[{"allowance":"local","free":10,"used":-1,"left":3}]`, `[{"allowance":"local","free":10,"used":7}]`,
+		`[{"allowance":"local","free":10,"used":7,"left":3,"fee_minor":{"GBP":-20}}]`, `[{"free":10,"used":7,"left":3}]`} {
+		rec := doJSON(fakeLensPlan(t, plan+bad+`}`, &paths), http.MethodGet, "/api/plan", "")
+		if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "allowances") {
+			t.Errorf("Lens answered allowances %s: BFF = %d %s, want 200 without them", bad, rec.Code, rec.Body.String())
+		}
+	}
+}

@@ -238,6 +238,8 @@ const BODIES: Record<string, unknown> = {
     agents: 3,
     agents_used: 2,
     seats: 1,
+    // B61.116 — Pay's fee line: Studio's local payments this month (Lens B61.58).
+    allowances: [{ allowance: 'local', free: 10, used: 7, left: 3, fee_minor: { GBP: 20, EUR: 20, USD: 20 } }],
   },
   '/api/fx': { rate_date: '2026-10-09', usd_per_eur: 1.17, gbp_per_eur: 0.86 },
   // B59.31 — Settings → Company details, as a company with two people with control.

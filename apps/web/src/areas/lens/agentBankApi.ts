@@ -2759,7 +2759,8 @@ export function readWorkspaceAccount(): Promise<WorkspaceAccount> {
 /** B57.18 — the workspace's plan as Lens has it: its name, the agents it takes (-1 is unlimited) and the agents it has.
  *  B57.44 — and the members it takes (-1 is unlimited), for Members' "Free has 1 seat".
  *  B61.59 — and the plan as people read it, the ladder it is chosen from, whether a contract sets it, and its monthly
- *  price in minor units by currency (null on Custom, which a contract prices), for Settings, Plan. */
+ *  price in minor units by currency (null on Custom, which a contract prices), for Settings, Plan.
+ *  B61.116 — and its allowances this month (Lens B61.58), for Pay's fee line; absent when Lens's are not counts. */
 export interface WorkspacePlan {
   plan: string
   name?: string
@@ -2769,6 +2770,31 @@ export interface WorkspacePlan {
   agents: number
   agents_used: number
   seats: number
+  allowances?: PlanAllowance[]
+}
+
+/** B61.116 — one of the plan's allowances this month: fx per currency sold, or local or international payments, with
+ *  what is free, used and left (-1 is no limit) and, for payments, the fee above it in minor units by currency. */
+export interface PlanAllowance {
+  allowance: string
+  currency?: string
+  free: number
+  used: number
+  left: number
+  fee_bps?: number
+  fee_minor?: Record<string, number>
+}
+
+/** B61.116 — what a payment out in currency from this account costs before it is sent, as Lens prices it (B61.58):
+ *  free while the plan's local payments this month last (left, or -1 for no limit), then fee_minor in that currency.
+ *  undefined when Lens has not said: no allowance read, or no fee set for that currency (Lens refuses that one). */
+export type PaymentFee = { free: true; left: number } | { free: false; fee_minor: number }
+export function localPaymentFee(plan: WorkspacePlan | undefined, currency: string): PaymentFee | undefined {
+  const local = plan?.allowances?.find((a) => a.allowance === 'local')
+  if (local === undefined || currency === 'USDC') return undefined
+  if (local.left !== 0) return { free: true, left: local.left }
+  const fee = local.fee_minor?.[currency]
+  return fee === undefined ? undefined : { free: false, fee_minor: fee }
 }
 
 export const PLAN_KEY = ['workspace-plan'] as const
