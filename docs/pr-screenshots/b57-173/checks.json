@@ -1,0 +1,195 @@
+[
+ {
+  "route": "/signup/confirm?personal",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L0",
+    "meaning": "signed in",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": null
+   }
+  },
+  "dark": false
+ },
+ {
+  "route": "/signup/confirm?business",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "business",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L0",
+    "meaning": "signed in",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": null
+   },
+   "/api/workspace/business": {
+    "company_name": "Northwind Studio Ltd",
+    "registration_number": "12345678",
+    "country": "GB",
+    "people": [
+     {
+      "name": "Maya Lind",
+      "role": "director",
+      "share_bps": 6000
+     }
+    ]
+   }
+  },
+  "dark": false
+ },
+ {
+  "route": "/signup/confirm?passed",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L2",
+    "meaning": "identity checked",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": [
+     {
+      "level": "L2",
+      "subject": "person",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_sample_2",
+      "started_at": "2026-11-15T09:00:00Z",
+      "checked_at": "2026-11-15T09:00:00Z",
+      "verified_name": "Maya Lind"
+     },
+     {
+      "level": "L1",
+      "subject": "contact",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_sample_1",
+      "started_at": "2026-11-15T09:00:00Z",
+      "checked_at": "2026-11-15T09:00:00Z"
+     }
+    ]
+   }
+  },
+  "dark": false
+ },
+ {
+  "route": "/settings/verification",
+  "answers": {
+   "/api/workspace/account": {
+    "account_type": "personal",
+    "money_kind": "hybrid"
+   },
+   "/api/verification": {
+    "workspace_id": "ws_sample",
+    "level": "L1",
+    "meaning": "email and phone confirmed",
+    "live_level": "L0",
+    "live_meaning": "signed in",
+    "checks": [
+     {
+      "level": "L1",
+      "subject": "contact",
+      "method": "test",
+      "test": true,
+      "status": "completed",
+      "evidence_ref": "test_kyc_sample_1",
+      "started_at": "2026-11-15T09:00:00Z",
+      "checked_at": "2026-11-15T09:00:00Z"
+     }
+    ]
+   },
+   "/api/wallets/capabilities": {
+    "capabilities": [
+     {
+      "capability": "spend_on_talyvor",
+      "name": "Spending on Talyvor",
+      "class": "RED",
+      "real_money": false,
+      "label": "sandbox",
+      "level_needed": "L0"
+     },
+     {
+      "capability": "move_between_own_agents",
+      "name": "Moving money between one owner’s own agents",
+      "class": "RED",
+      "real_money": false,
+      "label": "sandbox",
+      "level_needed": "L0"
+     },
+     {
+      "capability": "rules_approvals_statements_pots",
+      "name": "Rules, approvals, statements and pots",
+      "class": "RED",
+      "real_money": false,
+      "label": "sandbox",
+      "level_needed": "L0"
+     },
+     {
+      "capability": "agent_card",
+      "name": "Cards",
+      "class": "RED",
+      "real_money": false,
+      "label": "sandbox",
+      "level_needed": "L2"
+     },
+     {
+      "capability": "currency_accounts",
+      "name": "Accounts in pounds, euros, dollars and USDC",
+      "class": "RED",
+      "real_money": false,
+      "label": "sandbox",
+      "level_needed": "L2"
+     },
+     {
+      "capability": "payments_in",
+      "name": "Receiving money from outside Talyvor",
+      "class": "RED",
+      "real_money": false,
+      "label": "sandbox",
+      "level_needed": "L2"
+     },
+     {
+      "capability": "payments_out",
+      "name": "Paying people and companies outside Talyvor",
+      "class": "RED",
+      "real_money": false,
+      "label": "sandbox",
+      "level_needed": "L2"
+     },
+     {
+      "capability": "fx",
+      "name": "Converting between currencies",
+      "class": "RED",
+      "real_money": false,
+      "label": "sandbox",
+      "level_needed": "L2"
+     },
+     {
+      "capability": "accept_agent_payments",
+      "name": "Accepting payments from agents as a business",
+      "class": "RED",
+      "real_money": false,
+      "label": "sandbox",
+      "level_needed": "L3"
+     }
+    ]
+   }
+  },
+  "dark": false
+ }
+]

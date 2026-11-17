@@ -149,8 +149,9 @@ function FieldError({ id, children }: { id?: string; children: React.ReactNode }
   )
 }
 
-/** The checks for this account, the fields the next ones need, and the document step. `done` is drawn once they pass. */
-export function IdentityChecks({ done }: { done?: React.ReactNode }) {
+/** The checks for this account, the fields the next ones need, and the document step. `done` is drawn once they pass;
+ *  `note` goes on the end of the line under the title, and `aside` under the checks, beside the form (B57.173). */
+export function IdentityChecks({ done, note, aside }: { done?: React.ReactNode; note?: string; aside?: React.ReactNode }) {
   const qc = useQueryClient()
   const { account, shows } = useAccount()
   const type = account?.account_type ?? (shows ? 'business' : null)
@@ -220,9 +221,10 @@ export function IdentityChecks({ done }: { done?: React.ReactNode }) {
 
   return (
     <div className="grid gap-5">
-      <p className="max-w-2xl text-reading text-ink-2">{IDENTITY_WORDS.intro[type]}</p>
+      <p className="max-w-2xl text-reading text-ink-2">{note ? `${IDENTITY_WORDS.intro[type]} ${note}` : IDENTITY_WORDS.intro[type]}</p>
       <div className="grid items-start gap-4 wide:grid-cols-12">
-        <section aria-labelledby="identity-checks" className="wide:col-span-5 wide:col-start-8 wide:row-start-1">
+        <div data-testid="identity-aside" className="grid gap-4 wide:col-span-5 wide:col-start-8 wide:row-start-1">
+        <section aria-labelledby="identity-checks">
           <Card tone="white">
             <h2 id="identity-checks" className="font-display text-reading font-bold text-ink">
               {IDENTITY_WORDS.checks}
@@ -243,6 +245,8 @@ export function IdentityChecks({ done }: { done?: React.ReactNode }) {
             </ul>
           </Card>
         </section>
+        {aside}
+        </div>
         <div className="grid min-w-0 gap-4 wide:col-span-7 wide:col-start-1 wide:row-start-1">
           {level >= need ? (
             <div className="grid justify-items-start gap-3" role="status">
