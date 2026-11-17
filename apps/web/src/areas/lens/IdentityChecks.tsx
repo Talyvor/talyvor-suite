@@ -6,7 +6,8 @@ import { Button, Card, Chip, Field, Icon, Input, Select, type ChipTone } from '@
 import { isSessionExpired } from '../../lib/productState'
 import { useAuthMeReader } from '../../lib/authMe'
 import { WorkspaceStatus } from '../../labels/workspace'
-import { COUNTRIES, IDENTITY_ERRORS, IDENTITY_WORDS } from '../auth/signupWords'
+import { IDENTITY_ERRORS, IDENTITY_WORDS } from '../auth/signupWords'
+import { countryRefusal, useServedCountries } from '../auth/servedCountries'
 import { CompanyDetailsSection } from './CompanyDetails'
 import { type CompanyDetails, useCompanyDetails } from './companyDetailsApi'
 import {
@@ -85,6 +86,8 @@ export function failedText(c: VerificationCheck): string {
 /** Lens's refusal of a check, in words. */
 function refusedText(err: unknown, subject: Subject): string {
   if (isSessionExpired(err)) return 'Nothing changed. Sign in again.'
+  const country = countryRefusal(err)
+  if (country) return country
   if (err instanceof AgentBankError && err.status < 500) return IDENTITY_ERRORS.failed[subject]
   return IDENTITY_ERRORS.unknown
 }
@@ -154,6 +157,9 @@ export function IdentityChecks({ done }: { done?: React.ReactNode }) {
   const me = useAuthMeReader()
   const [running, setRunning] = useState<Subject | null>(null)
   const [said, setSaid] = useState<string | null>(null)
+  // B61.110 — Lens's sentence for the country it refused, on the country field until another is picked.
+  const [countrySaid, setCountrySaid] = useState<string | null>(null)
+  const countries = useServedCountries()
   const [tried, setTried] = useState(false)
   // The email starts as the one signed in with, until the person types their own (null: not typed yet).
   const [typedEmail, setTypedEmail] = useState<string | null>(null)
@@ -167,9 +173,12 @@ export function IdentityChecks({ done }: { done?: React.ReactNode }) {
   const need = neededLevel(type)
   const steps = STEPS.filter((s) => s.level <= need)
   const d: Draft = { ...draft, email: typedEmail ?? me.data?.user?.email ?? '' }
-  const errors = tried ? missing(d, level) : {}
-  const set = (k: keyof Draft) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    k === 'email' ? setTypedEmail(e.target.value) : setDraft({ ...draft, [k]: e.target.value })
+  const errors: Errors = { ...(tried ? missing(d, level) : {}), ...(countrySaid ? { country: countrySaid } : {}) }
+  const set = (k: keyof Draft) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    if (k === 'country') setCountrySaid(null)
+    if (k === 'email') setTypedEmail(e.target.value)
+    else setDraft({ ...draft, [k]: e.target.value })
+  }
   const personName = level >= 2 ? latest(v.data, 2)?.verified_name ?? '' : d.name
 
   async function run() {
@@ -191,7 +200,9 @@ export function IdentityChecks({ done }: { done?: React.ReactNode }) {
           break
         }
       } catch (err) {
-        setSaid(refusedText(err, s.subject))
+        const country = s.subject === 'person' ? countryRefusal(err) : null
+        if (country) setCountrySaid(country)
+        else setSaid(refusedText(err, s.subject))
         break
       }
     }
@@ -273,7 +284,7 @@ export function IdentityChecks({ done }: { done?: React.ReactNode }) {
                           <option value="" hidden>
                             {IDENTITY_WORDS.country}
                           </option>
-                          {COUNTRIES.map(([code, name]) => (
+                          {countries.map(([code, name]) => (
                             <option key={code} value={code}>
                               {name}
                             </option>

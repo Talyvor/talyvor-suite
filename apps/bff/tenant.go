@@ -92,10 +92,14 @@ type provisionAsk struct {
 var errNoSuchAccount = errors.New("no such account")
 
 // provisionRefused is a refusal Lens words for the person: the eleventh account (409), or a sign-up answer Lens
-// checks further than parseSignupAccount does, like a country that does not exist (400).
+// checks further than parseSignupAccount does, like a country that does not exist (400). code and field are Lens's
+// own when it gave them, like country_not_served on the country (talyvor-lens B61.53), so the page can put the
+// sentence on that field.
 type provisionRefused struct {
 	status int
 	msg    string
+	code   string
+	field  string
 }
 
 func (e provisionRefused) Error() string {
@@ -189,6 +193,8 @@ func (a *app) provisionPost(ctx context.Context, identity string, ask provisionA
 	if resp.StatusCode != http.StatusOK {
 		var said struct {
 			Error string `json:"error"`
+			Code  string `json:"code"`
+			Field string `json:"field"`
 		}
 		_ = json.Unmarshal(raw, &said)
 		switch {
@@ -200,7 +206,7 @@ func (a *app) provisionPost(ctx context.Context, identity string, ask provisionA
 		case resp.StatusCode == http.StatusNotFound:
 			return nil, errors.New("lens has no provisioning route (LENS_PROVISION_SECRET unset upstream)")
 		case (resp.StatusCode == http.StatusConflict || resp.StatusCode == http.StatusBadRequest) && said.Error != "":
-			return nil, provisionRefused{status: resp.StatusCode, msg: said.Error}
+			return nil, provisionRefused{status: resp.StatusCode, msg: said.Error, code: said.Code, field: said.Field}
 		}
 		return nil, fmt.Errorf("provision: lens returned %d", resp.StatusCode)
 	}

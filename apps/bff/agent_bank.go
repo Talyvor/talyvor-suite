@@ -122,14 +122,42 @@ func (a *app) lensRelayHeaders(w http.ResponseWriter, r *http.Request, bearer, m
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
 		var refusal struct {
 			Error string `json:"error"`
+			Code  string `json:"code"`
+			Field string `json:"field"`
 		}
 		if json.Unmarshal(raw, &refusal) != nil || refusal.Error == "" {
 			refusal.Error = "Lens refused this"
 		}
-		writeJSON(w, resp.StatusCode, map[string]string{"error": refusal.Error})
+		writeJSON(w, resp.StatusCode, refusalBody(refusal.Error, refusal.Code, refusal.Field))
 	default:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Lens could not answer just now"})
 	}
+}
+
+// refusalBody is a refusal Lens worded for the person: its sentence, and (B61.110) its code and the field it names
+// when Lens gave them, like country_not_served on the country, so the page puts the sentence on that field. A code or
+// field that is not a short snake_case word is left out.
+func refusalBody(sentence, code, field string) map[string]string {
+	out := map[string]string{"error": sentence}
+	if refusalWord(code) {
+		out["code"] = code
+	}
+	if refusalWord(field) {
+		out["field"] = field
+	}
+	return out
+}
+
+func refusalWord(s string) bool {
+	if s == "" || len(s) > 64 {
+		return false
+	}
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 // handleAgents — GET /api/agents reads the book; POST creates an agent.
@@ -675,11 +703,13 @@ func (a *app) statementRelay(w http.ResponseWriter, r *http.Request, t tenant, p
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
 		var refusal struct {
 			Error string `json:"error"`
+			Code  string `json:"code"`
+			Field string `json:"field"`
 		}
 		if json.Unmarshal(raw, &refusal) != nil || refusal.Error == "" {
 			refusal.Error = "Lens refused this"
 		}
-		writeJSON(w, resp.StatusCode, map[string]string{"error": refusal.Error})
+		writeJSON(w, resp.StatusCode, refusalBody(refusal.Error, refusal.Code, refusal.Field))
 	default:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "Lens could not answer just now"})
 	}
