@@ -53,3 +53,7 @@ auditConfig:
     # ^10, and the one fix, 11.0.1 of 27 Oct 2026, is a major above both and younger than minimumReleaseAge. Drop this
     # line once eslint takes minimatch >=11.0.1.
     - GHSA-g3hv-75wg-m249
+    # B61.118 — picomatch <=4.0.7, ReDoS in extglob patterns (via typescript-eslint, vite, vitest's tinyglobby and fdir,
+    # build and test time only, on the repo's own globs): no patched picomatch release exists (4.0.7 is the latest, 17 Nov
+    # 2026). Drop this line and refresh the lockfile once a release >=4.0.8 is past minimumReleaseAge.
+    - GHSA-fc5q-39xc-vjpf

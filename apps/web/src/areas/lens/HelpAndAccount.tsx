@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Chip, Crumb, EmptyState, Field, Icon, Input, KindTile, Money, Row, Select, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
+import { Button, Card, Chip, Crumb, EmptyState, Field, Icon, Input, KindTile, Money, Row, Select, pocketFocusRing, showSnack, showToast } from '@talyvor/ui/pocket'
 import { cn } from '@talyvor/ui'
 import { isSessionExpired } from '../../lib/productState'
 import { readFailure } from './WalletMoney'
@@ -18,7 +18,7 @@ import {
 import { HELP_BY, HELP_CHAT_KEY, deleteHelpChat, useHelpChat } from './helpChat'
 import { helpHref } from '../../components/HelpChat'
 import { BOOK_KEY, dayAfter, monthPeriod, saveFile } from './AgentBank'
-import { DownloadFailed, MONTH_FILE_TYPES } from './AgentStatement'
+import { DownloadFailed, JOURNAL_SENTENCE, MONTH_FILE_TYPES, downloadWords } from './AgentStatement'
 import { type StatementFormat, agentBankApi } from './agentBankApi'
 
 // HelpAndAccount.tsx — B59.28: Settings' Help and complaints, Close this account and Your data. Each sends a request
@@ -371,9 +371,19 @@ function HelpChatKept() {
   )
 }
 
+/** The days a download covers, in its toast: "for August" for a whole month, else "from 3 Aug to 20 Aug". */
+function periodWords(from: string, through: string): string {
+  const at = (d: string) => new Date(`${d}T00:00:00Z`)
+  const short = (d: string) => at(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+  const whole = from.endsWith('-01') && from.slice(0, 7) === through.slice(0, 7) && dayAfter(through).endsWith('-01')
+  return whole ? `for ${at(from).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' })}` : `from ${short(from)} to ${short(through)}`
+}
+
 /**
  * B61.55 — the agents' statements from their parked credit wallets: every agent's movements for a period, as the file
  * Statements once offered. Statements lists the accounts only now, so what the agents spent before stays downloadable here.
+ * B57.187 — a form card beside Your data's list, drawn as Statements' downloads (w-stmt-cusd): the button names the file,
+ * the journal's sentence shows when the journal is chosen, and the download says what it is in a toast.
  */
 function PastAgentStatements() {
   const book = useQuery({ queryKey: BOOK_KEY, queryFn: agentBankApi.book })
@@ -389,7 +399,14 @@ function PastAgentStatements() {
       saveFile(name, await agentBankApi.statementFile(null, period.from, dayAfter(period.through), format))
       return name
     },
-    onSuccess: (name) => showSnack({ title: 'Downloading', line: name }),
+    onSuccess: () => {
+      const days = periodWords(period.from, period.through)
+      showToast(
+        format === 'journal'
+          ? `Downloading your agents’ journal ${days}, for Xero or QuickBooks`
+          : `Downloading your agents’ statement ${days} as a ${format.toUpperCase()} file`,
+      )
+    },
   })
   // A workspace whose agents cannot be read keeps the download: it is Lens's file, and says so itself if it fails.
   if (!book.isError && (book.data?.agents ?? []).length === 0) return null
@@ -421,11 +438,12 @@ function PastAgentStatements() {
             ))}
           </Select>
         </Field>
+        {format === 'journal' ? <p className="text-body text-ink-2">{JOURNAL_SENTENCE}</p> : null}
         {!valid ? <p className="text-body text-ink-2">Choose a first day on or before the last day.</p> : null}
         {get.isError ? <DownloadFailed error={get.error} /> : null}
         <div>
           <Button type="submit" variant="secondary" icon={<Icon name="download" />} disabled={!valid || get.isPending}>
-            {get.isPending ? 'Preparing…' : 'Download'}
+            {get.isPending ? 'Preparing…' : downloadWords(format)}
           </Button>
         </div>
       </form>
@@ -448,7 +466,6 @@ export function YourDataScreen() {
           <div className="grid gap-4">
             <SentList kinds={['data_export', 'data_deletion']} title="What you asked" empty="You have not asked for your data." />
             <HelpChatKept />
-            <PastAgentStatements />
           </div>
         </div>
         <div className="grid gap-4 wide:col-span-5">
@@ -466,6 +483,7 @@ export function YourDataScreen() {
               </Button>
             </div>
           </Card>
+          <PastAgentStatements />
           <Card>
             <h3 className="font-display text-reading font-bold text-ink">Delete your data</h3>
             <p className="mt-1 text-body text-ink-2">
