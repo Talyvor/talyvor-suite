@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Dialog, Eyebrow, Facts, Field, Icon, Input, Money, Select, pocketFocusRing } from '@talyvor/ui/pocket'
+import { Button, Card, Dialog, Eyebrow, Facts, Field, Icon, Input, Money, pocketFocusRing } from '@talyvor/ui/pocket'
 import { cn, inlineLink } from '@talyvor/ui'
 import { useAuthMeReader } from '../../lib/authMe'
 import { typedMinor } from './AgentFunding'
@@ -59,11 +59,22 @@ const initials = (name: string) =>
     .slice(0, 2)
     .toUpperCase()
 
-function Initials({ name }: { name: string }) {
+function Initials({ name, large = false }: { name: string; large?: boolean }) {
   return (
-    <span aria-hidden="true" className="inline-grid h-9.5 w-9.5 shrink-0 place-items-center rounded-pill bg-cloud-2 text-body font-bold text-ink">
+    <span
+      aria-hidden="true"
+      className={cn('inline-grid shrink-0 place-items-center rounded-pill bg-cloud-2 font-bold text-ink', large ? 'h-12 w-12 text-reading' : 'h-9.5 w-9.5 text-body')}
+    >
       {initials(name)}
     </span>
+  )
+}
+
+function Chevron() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-none stroke-current text-ink-3" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 7l5 5-5 5" />
+    </svg>
   )
 }
 
@@ -100,11 +111,15 @@ export function PayToAPerson({ accounts, owner }: { accounts: CurrencyAccount[];
         }}
       >
         <h2 className="font-display text-head font-bold text-ink">To a person</h2>
-        <Field label="Name, phone number or email">
+        {/* B57.182 — the reference's search pill: the placeholder names it, with the search mark before it. */}
+        <span className="relative block">
+          <span aria-hidden="true" className="pointer-events-none absolute left-4 top-1/2 z-10 -translate-y-1/2 text-ink-3">
+            <Icon name="search" size={16} />
+          </span>
           <Input
             aria-label="Name, phone number or email"
             placeholder="Name, phone number or email"
-            className="font-sans"
+            className="rounded-pill pl-10 font-sans font-semibold"
             autoComplete="off"
             value={typed}
             onChange={(e) => {
@@ -113,7 +128,7 @@ export function PayToAPerson({ accounts, owner }: { accounts: CurrencyAccount[];
               find.reset()
             }}
           />
-        </Field>
+        </span>
         {found === null ? (
           <div>
             <Button type="submit" variant="primary" disabled={find.isPending} disabledReason={typed.trim() === '' ? 'Type a name, phone number or email first.' : undefined}>
@@ -121,16 +136,21 @@ export function PayToAPerson({ accounts, owner }: { accounts: CurrencyAccount[];
             </Button>
           </div>
         ) : (
-          <div className="flex items-center gap-3" data-testid="pay-a-person-found">
+          // The reference's row: the person found is the one control, and pressing it opens the panel.
+          <button
+            type="button"
+            data-testid="pay-a-person-found"
+            aria-label={`Pay ${found.shown_name}`}
+            className={cn('-mx-2.5 flex items-center gap-3 rounded-control px-2.5 py-2.5 text-left text-reading transition-colors duration-fast hover:bg-cloud-2', pocketFocusRing)}
+            onClick={() => setPaying(found)}
+          >
             <Initials name={found.shown_name} />
             <span className="min-w-0 flex-1">
-              <span className="block text-reading font-semibold text-ink">{found.shown_name}</span>
+              <span className="block font-semibold text-ink">{found.shown_name}</span>
               <span className="block text-body text-ink-3">On Talyvor</span>
             </span>
-            <Button type="button" variant="primary" onClick={() => setPaying(found)}>
-              Pay
-            </Button>
-          </div>
+            <Chevron />
+          </button>
         )}
         {find.isError ? (
           <p role="alert" className="flex items-start gap-1.5 text-body text-ink" data-testid="pay-a-person-nobody">
@@ -199,6 +219,7 @@ export function PayPersonDialog({
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [step, setStep] = useState<'amount' | 'review'>('amount')
+  const fromID = useId()
   const [key, setKey] = useState(newMoveKey)
   const account = accounts.find((a) => a.id === accountID) ?? accounts[0]
   const currency = account?.currency ?? ''
@@ -221,41 +242,54 @@ export function PayPersonDialog({
     <Dialog
       open
       onClose={onClose}
-      title={sent ? 'Sent' : `Pay ${name}`}
-      actions={
+      title={
         sent ? (
-          <Button type="button" onClick={onClose}>
+          'Sent'
+        ) : (
+          // The reference's head: their initials, then Pay and their name; the initials are not read, so the panel is
+          // named "Pay <name>".
+          <span className="flex items-center gap-3">
+            <Initials name={name} large />
+            {`Pay ${name}`}
+          </span>
+        )
+      }
+      actions={
+        // One main action a step, full width as the reference stacks them: the main one first.
+        sent ? (
+          <Button type="button" className="w-full" onClick={onClose}>
             Done
           </Button>
         ) : step === 'review' && minor !== null ? (
           <>
-            <Button type="button" variant="secondary" disabled={pay.isPending} onClick={() => setStep('amount')}>
-              Change something
-            </Button>
-            <Button type="button" disabled={pay.isPending} onClick={() => pay.mutate()}>
+            <Button type="button" className="w-full" disabled={pay.isPending} onClick={() => pay.mutate()}>
               {pay.isPending ? 'Sending…' : send}
+            </Button>
+            <Button type="button" variant="secondary" className="w-full" disabled={pay.isPending} onClick={() => setStep('amount')}>
+              Change something
             </Button>
           </>
         ) : (
-          <>
-            <Button type="button" variant="secondary" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabledReason={account === undefined ? 'Open an account first.' : minor === null ? 'Add an amount first.' : undefined}
-              onClick={() => setStep('review')}
-            >
-              Review
-            </Button>
-          </>
+          <Button
+            type="button"
+            className="w-full"
+            disabledReason={account === undefined ? 'Open an account first.' : minor === null ? 'Add an amount first.' : undefined}
+            onClick={() => setStep('review')}
+          >
+            Review
+          </Button>
         )
       }
     >
       {sent ? (
-        <p className="text-reading text-ink-2" data-testid="pay-a-person-sent">
-          <Money minor={sent.amount_minor} currency={sent.currency} /> to {sent.to_shown_name || name}. It is there now.
-        </p>
+        <div className="grid justify-items-center gap-3 py-6 text-center">
+          <span aria-hidden="true" className="inline-grid h-14 w-14 place-items-center rounded-pill bg-ink text-page">
+            <Icon name="check" size={28} />
+          </span>
+          <p className="text-reading text-ink-2" data-testid="pay-a-person-sent">
+            <Money minor={sent.amount_minor} currency={sent.currency} /> to {sent.to_shown_name || name}. It is there now.
+          </p>
+        </div>
       ) : account === undefined ? (
         <p className="text-body text-ink-2" data-testid="pay-a-person-no-account">
           No currency account yet: open {owner === 'Your account' ? 'your account' : 'the company’s account'} on{' '}
@@ -266,9 +300,8 @@ export function PayPersonDialog({
         </p>
       ) : step === 'review' && minor !== null ? (
         <div className="grid gap-3" data-testid="pay-a-person-review">
-          <p className="font-display text-title font-bold text-ink">
-            <Money minor={minor} currency={currency} />
-          </p>
+          <p className="text-body text-ink-3">On Talyvor</p>
+          <Money size="sheet" minor={minor} currency={currency} />
           <Facts
             facts={[
               { label: 'From', value: `${owner} · ${currency}` },
@@ -296,21 +329,51 @@ export function PayPersonDialog({
         </div>
       ) : (
         <div className="grid gap-3">
-          <Field label={`Amount in ${currency}`}>
-            <Input aria-label={`Amount in ${currency}`} inputMode="decimal" placeholder="20.00" unit={currency} value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </Field>
-          <Field label="From">
-            <Select aria-label="From" value={account.id} onChange={(e) => setAccountID(e.target.value)}>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {owner} · {a.currency}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <p className="text-body text-ink-3" data-testid="pay-a-person-holds">
-            It holds <Money minor={account.test_minor} currency={currency} />.
+          <p className="text-body text-ink-3" data-testid="pay-a-person-who">
+            On Talyvor
           </p>
+          {/* The reference's amount: the figure itself, large, with its currency beside it and the line under it. */}
+          <span className="grid min-w-0 gap-1">
+            <span className="flex min-w-0 items-center gap-2">
+              <input
+                aria-label={`Amount in ${currency}`}
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0"
+                className={cn('w-0 min-w-0 flex-1 rounded-control bg-page px-3.5 py-1 font-figure text-pocket-amount text-ink shadow-edge transition-colors duration-200 placeholder:text-faint hover:border-rule-strong disabled:cursor-not-allowed disabled:opacity-50', pocketFocusRing)}
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+              <span className="shrink-0 font-figure text-head text-ink-3">{currency}</span>
+            </span>
+            <span className="text-body text-ink-3">Type the amount</span>
+          </span>
+          <div className="grid gap-2">
+            <Eyebrow id={fromID}>From</Eyebrow>
+            <div role="radiogroup" aria-labelledby={fromID} className="grid gap-2" data-testid="pay-a-person-from">
+              {accounts.map((a) => (
+                <label
+                  key={a.id}
+                  className={cn(
+                    'relative grid min-w-0 cursor-pointer gap-0.5 rounded-card-tight bg-cloud py-3 pl-11 pr-3.5',
+                    'has-[:focus-visible]:outline has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-tangerine',
+                    a.id === account.id && 'shadow-pick',
+                  )}
+                >
+                  <input type="radio" name={fromID} className={cn('sr-only', pocketFocusRing)} checked={a.id === account.id} onChange={() => setAccountID(a.id)} />
+                  <span aria-hidden="true" className={cn('absolute left-3.5 top-1/2 inline-grid h-5 w-5 -translate-y-1/2 place-items-center rounded-pill shadow-edge', a.id === account.id && 'bg-ink')}>
+                    {a.id === account.id ? <span className="h-2 w-2 rounded-pill bg-page" /> : null}
+                  </span>
+                  <span className="font-semibold text-ink">
+                    {owner} · {a.currency}
+                  </span>
+                  <span className="text-body text-ink-2">
+                    Holds <Money minor={a.test_minor} currency={a.currency} />
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
           <Field label="Note">
             <Input aria-label="Note" placeholder={`What ${name} sees`} className="font-sans" maxLength={140} value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>
