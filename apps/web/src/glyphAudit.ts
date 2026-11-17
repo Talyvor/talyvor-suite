@@ -552,6 +552,8 @@ export function unservedGlyphsIn(root: ParentNode): RenderedGlyph[] {
   for (const el of Array.from(root.querySelectorAll('*'))) {
     // B28.134 — KaTeX draws a formula in the math faces its own stylesheet serves.
     if (el.closest('.katex') !== null) continue
+    // A <style> or <script> is never drawn: its text is a stylesheet's or a program's (B64.1's page ships one).
+    if (el.tagName === 'STYLE' || el.tagName === 'SCRIPT') continue
     const text = ownText(el)
     if (!text) continue
     const family = effectiveFamily(el)
@@ -587,6 +589,8 @@ let currentFile = ''
 function scan(scope: ParentNode): void {
   for (const el of Array.from(scope.querySelectorAll('*'))) {
     if (el.closest('.katex') !== null) continue
+    // A <style> or <script> is never drawn: its text is a stylesheet's or a program's (B64.1's page ships one).
+    if (el.tagName === 'STYLE' || el.tagName === 'SCRIPT') continue
     const text = ownText(el)
     if (!text) continue
     const className = el.getAttribute('class') ?? ''
@@ -659,8 +663,7 @@ export const MUST_AUDIT_MONO_TEXT: Record<string, string> = {
   // left the product GREEN. The three sibling tables in figureAudit/focusAudit/caseAudit were
   // right all along; this one copied their shape and not their keys.
   // B57.2: the figure face is Figtree now (the sans family), so the figure-only files left this
-  // table; the two that render identifiers in font-mono stay.
-  'src/areas/marketing/Landing.test.tsx': 'the contact address, font-mono',
+  // table; the two that render identifiers in font-mono stayed, and B64.1's website left (its address is not mono).
   'src/areas/lens/Keys.test.tsx': 'the key prefixes, font-mono identifiers',
 }
 

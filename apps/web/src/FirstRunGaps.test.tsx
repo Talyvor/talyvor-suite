@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { queryClient } from './App'
@@ -84,44 +84,36 @@ describe('the marketing page offers a way in', () => {
   it('has a primary action that reaches the signup page, not only an email link', async () => {
     mockBff()
     at('/marketing')
-    // B57.59: Pocket's header carries Open the app only, so the page's own "Get started" is the one —
-    // and it must go to /signup, not /auth/login directly: a stranger is told what this is and what
-    // happens next BEFORE being redirected to a third party. A mailto: or an in-app path is not a way
-    // in for someone with no session; nor is a bare redirect they cannot evaluate.
-    const ctas = await screen.findAllByRole('link', { name: /get started/i })
-    expect(ctas.map((a) => a.getAttribute('href'))).toEqual(['/signup'])
+    // B64.1: version 4's "Open your account" and "Open an account" are the way in, and every one goes to /signup, not
+    // /auth/login directly: a stranger is told what this is and what happens next BEFORE being redirected to a third
+    // party. A mailto: or an in-app path is not a way in for someone with no session.
+    const ctas = await screen.findAllByRole('link', { name: /open (your|an) account/i })
+    expect(ctas.length).toBeGreaterThanOrEqual(4)
+    expect(new Set(ctas.map((a) => a.getAttribute('href')))).toEqual(new Set(['/signup']))
   })
 
   // THE PREMISE OF THIS TEST CHANGED, so the test changed with it rather than being deleted.
   //
   // It used to assert that NO self-serve promise ever appears, on the grounds that "the Google
   // app is in Testing mode, so a person not on the test-user list hits a wall at the IdP". That
-  // was inferred from config and never checked. Google's current documentation says of the
-  // Testing state: "Exception: If the app only requests basic identity scopes (openid, email,
-  // profile), any user can access without being on the allowlist" — and apps/bff/auth.go
-  // requests exactly those three. Nobody is stopped at Google.
-  //
-  // The wall is OURS: OIDC_ALLOWED_EMAILS. So the guard worth keeping is not "never promise" —
-  // it is "the promise must track the gate", asserted in BOTH directions, because a page that
-  // can only ever say one thing is a page that will be wrong half the time.
+  // was inferred from config and never checked. The wall is OURS: OIDC_ALLOWED_EMAILS. So the
+  // guard worth keeping is not "never promise" — it is "the promise must track the gate",
+  // asserted in BOTH directions. B64.1: version 4's promise is its "Early access is open" chip.
   it('promises self-serve signup only when the gate actually allows it', async () => {
     mockBff({ signupOpen: false })
     at('/marketing')
-    await screen.findAllByRole('link', { name: /get started/i })
-    await waitFor(() => {
-      expect(screen.getByText(/first companies in one at a time/i)).toBeInTheDocument()
-    })
-    expect(screen.queryByText(/no invitation needed/i)).toBeNull()
+    await screen.findAllByRole('link', { name: /open your account/i })
+    // The answer is read, then nothing is said: the open case below is this one's positive control.
+    await waitFor(() => expect(vi.mocked(globalThis.fetch).mock.calls.some(([u]) => String(u) === '/auth/me')).toBe(true))
+    await act(() => new Promise((r) => setTimeout(r, 50)))
+    expect(screen.queryByText(/early access is open/i)).toBeNull()
   })
 
   it('says a stranger can just start, once the gate is open', async () => {
     mockBff({ signupOpen: true })
     at('/marketing')
-    await screen.findAllByRole('link', { name: /get started/i })
-    await waitFor(() => {
-      expect(screen.getByText(/no invitation needed/i)).toBeInTheDocument()
-    })
-    expect(screen.queryByText(/closed trial just now/i)).toBeNull()
+    await screen.findAllByRole('link', { name: /open your account/i })
+    expect(await screen.findByText(/early access is open/i)).toBeInTheDocument()
   })
 
   it('claims NOTHING about access while the answer is unknown', async () => {
@@ -129,9 +121,8 @@ describe('the marketing page offers a way in', () => {
     // could have signed up; guessing "open" walks them into a refusal. Neither is printed.
     mockBff()
     at('/marketing')
-    await screen.findAllByRole('link', { name: /get started/i })
-    expect(screen.queryByText(/closed trial just now/i)).toBeNull()
-    expect(screen.queryByText(/no invitation needed/i)).toBeNull()
+    await screen.findAllByRole('link', { name: /open your account/i })
+    expect(screen.queryByText(/early access is open/i)).toBeNull()
   })
 })
 

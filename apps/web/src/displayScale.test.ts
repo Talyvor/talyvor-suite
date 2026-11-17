@@ -189,7 +189,7 @@ for (const m of appSource.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['
  * file-reading guard goes quiet is a moved path turning its sweep into an empty set.
  */
 function resolveModule(spec: string, fromFile: string): string | null {
-  if (/\.(css|svg|png|jpg|json)$/.test(spec)) return null
+  if (/\.(css|svg|png|jpg|json)(\?raw)?$/.test(spec)) return null // B64.1: Landing reads its stylesheet as text (?raw)
   let base: string
   if (spec.startsWith('.')) base = resolve(dirname(fromFile), spec)
   else if (spec === '@talyvor/ui') base = resolve(UI_SRC, 'index.ts')
@@ -335,9 +335,10 @@ describe('the marketing type scale stops at the AuthGate', () => {
   it('the scale is still in use on the public page — this rule is not about nothing', () => {
     // ⚠ CANNOT PASS BY ABSENCE. Delete the hero's step and every "no violations" assertion below
     // goes green over a scale no one uses; that is a deleted rule wearing a passing test.
-    const landing = stripComments(readFileSync(resolve(WEB_SRC, 'areas/marketing/Landing.tsx'), 'utf8'))
-    expect(/\btext-display-1\b/.test(landing)).toBe(true)
-    expect(/\btext-lede\b/.test(landing)).toBe(true)
+    // B64.1: /marketing is drawn by the website's own stylesheet now, so the public page that holds the scale is /pricing.
+    const pricing = stripComments(readFileSync(resolve(WEB_SRC, 'areas/marketing/Pricing.tsx'), 'utf8'))
+    expect(/\btext-display-1\b/.test(pricing)).toBe(true)
+    expect(/\btext-lede\b/.test(pricing)).toBe(true)
   })
 
   it('no console surface reaches for it', () => {
