@@ -43,10 +43,13 @@ import {
   type PaymentRequest,
   type PayoutBatch,
   FIATS,
+  PLAN_KEY,
   agentBankApi,
   formatMinor,
+  localPaymentFee,
   minorOf,
   newMoveKey,
+  readWorkspacePlan,
   refusalText,
   useAccount,
 } from './agentBankApi'
@@ -424,6 +427,9 @@ function PayForm({
   // (Lens B58.7), so with none the step to add one stands where Send would. The Sandbox pays as before.
   const keys = useKeys()
   const keyFirst = useWorkspaceLabels()?.payments_out === 'live' && keys.isSuccess && (!keys.signed || keys.noLiveKey)
+  // B61.116 — Lens takes a local payment's fee once the plan's free ones this month are used (B61.58), so it is said here first.
+  const plan = useQuery({ queryKey: PLAN_KEY, queryFn: readWorkspacePlan, staleTime: 60_000, retry: false })
+  const fee = localPaymentFee(plan.data, currency)
   // Reset per payee: the questions are about this payee's details.
   useEffect(() => {
     setAnswers({})
@@ -440,6 +446,7 @@ function PayForm({
       setStillPay(false)
       void qc.invalidateQueries({ queryKey: PAYMENTS_KEY })
       void qc.invalidateQueries({ queryKey: MONEY_ACCOUNTS_KEY })
+      void qc.invalidateQueries({ queryKey: PLAN_KEY })
     },
   })
   const why =
@@ -499,6 +506,23 @@ function PayForm({
             <PocketInput aria-label={`Amount in ${currency}`} inputMode="decimal" placeholder="20.00" unit={currency} value={amount} onChange={(e) => setAmount(e.target.value)} />
           </Field>
         </div>
+        {fee !== undefined && !(fee.free && fee.left < 0) ? (
+          <p className="text-body text-ink-3" data-testid="pay-fee">
+            {fee.free ? (
+              `Free. You have ${fee.left} free ${fee.left === 1 ? 'payment' : 'payments'} left this month.`
+            ) : (
+              <>
+                Fee <span className="font-figure">{formatMinor(fee.fee_minor, currency)}</span>
+                {minor !== null ? (
+                  <>
+                    {' '}
+                    · Total <span className="font-figure">{formatMinor(minor + fee.fee_minor, currency)}</span>
+                  </>
+                ) : null}
+              </>
+            )}
+          </p>
+        ) : null}
         <Field label="Reference">
           <PocketInput aria-label="Reference" placeholder="What the payee sees" className="font-sans" value={reference} onChange={(e) => setReference(e.target.value)} />
         </Field>

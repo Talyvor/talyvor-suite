@@ -14,6 +14,9 @@ import (
 //	    "seats": the members that plan takes (-1 is unlimited), Lens's gates.seats (B57.44)
 //	    "name", "account_type", "on_contract", "price_minor": the plan as people read it, the ladder it is chosen from
 //	    (personal or business), whether a contract sets it, and its monthly price by currency, null on Custom (B61.59)
+//	    "allowances": what the plan sends and converts free this month, what of it is used and left (-1 is no limit) and
+//	    the fee above it (Lens B61.58), for Pay's "Free. You have 3 free payments left this month." (B61.116). An
+//	    answer whose allowances are not counts leaves them out, so Pay says nothing rather than a guess.
 //
 //	PUT /api/plan {"plan"} → PUT /v1/workspaces/{ws}/plan (B61.59): the owner moves the account to another plan of its
 //	    own ladder. Lens decides; its refusal (a move down under too many agents, a paid plan while none can be
@@ -46,7 +49,8 @@ func (a *app) handleWorkspacePlan(w http.ResponseWriter, r *http.Request, t tena
 			Agents *int64 `json:"agents"`
 			Seats  *int64 `json:"seats"`
 		} `json:"gates"`
-		AgentsUsed *int64 `json:"agents_used"`
+		AgentsUsed *int64          `json:"agents_used"`
+		Allowances []planAllowance `json:"allowances"`
 	}
 	if err := json.Unmarshal(raw, &got); err != nil || got.Plan == "" || got.Gates.Agents == nil || *got.Gates.Agents < -1 ||
 		got.AgentsUsed == nil || *got.AgentsUsed < 0 || got.Gates.Seats == nil || *got.Gates.Seats < -1 ||
@@ -63,7 +67,32 @@ func (a *app) handleWorkspacePlan(w http.ResponseWriter, r *http.Request, t tena
 		Agents      int64            `json:"agents"`
 		AgentsUsed  int64            `json:"agents_used"`
 		Seats       int64            `json:"seats"`
-	}{got.Plan, got.Name, got.AccountType, got.OnContract, got.PriceMinor, *got.Gates.Agents, *got.AgentsUsed, *got.Gates.Seats})
+		Allowances  []planAllowance  `json:"allowances,omitempty"`
+	}{got.Plan, got.Name, got.AccountType, got.OnContract, got.PriceMinor, *got.Gates.Agents, *got.AgentsUsed, *got.Gates.Seats, countedAllowances(got.Allowances)})
+}
+
+// planAllowance is one of the plan's allowances this month as Lens's PlanAllowance answers it: fx (per currency sold,
+// in minor units, fee_bps above it), local or international (in payments, fee_minor by currency above them).
+type planAllowance struct {
+	Allowance string           `json:"allowance"`
+	Currency  string           `json:"currency,omitempty"`
+	Free      *int64           `json:"free"`
+	Used      *int64           `json:"used"`
+	Left      *int64           `json:"left"`
+	FeeBPS    *int64           `json:"fee_bps,omitempty"`
+	FeeMinor  map[string]int64 `json:"fee_minor,omitempty"`
+}
+
+// countedAllowances is all, or nil when any of it is not a count: a name, free and left of -1 (no limit) or more, used
+// of 0 or more, and fees of 0 or more.
+func countedAllowances(all []planAllowance) []planAllowance {
+	for _, a := range all {
+		if a.Allowance == "" || a.Free == nil || *a.Free < -1 || a.Used == nil || *a.Used < 0 || a.Left == nil || *a.Left < -1 ||
+			(a.FeeBPS != nil && *a.FeeBPS < 0) || !wholePrices(a.FeeMinor) {
+			return nil
+		}
+	}
+	return all
 }
 
 // wholePrices reports whether a plan's monthly prices are each a currency with 0 or more minor units. nil is Custom,

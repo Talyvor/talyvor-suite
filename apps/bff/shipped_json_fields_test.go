@@ -145,6 +145,7 @@ var decodedFromUpstream = map[string]string{
 	"sellerTIN":              "one of a seller's TINs, decoded from the browser's seller-tax PUT body and relayed to Lens as it came (B32.60)",
 	"marketParent":           "a listing version a new listing builds on, decoded from the browser's publish body and relayed to Lens as it came (B32.58)",
 	"taskKey":                "Lens's POST …/agents/{id}/keys reply, decoded in issueTaskKey() and held only for the task (B28.359)",
+	"planAllowance":          "one of the plan's allowances in Lens's GET /v1/workspaces/{ws}/plan reply, decoded in handleWorkspacePlan() and passed on for Pay's fee line (B61.116)",
 }
 
 // filledByAssignment names fields that are NOT set in a composite literal but

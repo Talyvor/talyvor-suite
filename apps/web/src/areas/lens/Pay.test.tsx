@@ -930,3 +930,50 @@ describe('the first live payment, before the workspace has a key (B58.8)', () =>
     expect(within(form).queryByTestId('pay-key-first')).toBeNull()
   })
 })
+
+// B61.116 — a payment out says its fee before it is sent: Lens's local allowance this month, through GET /api/plan.
+describe('the fee line under the amount (B61.116)', () => {
+  function withPlan(left: number) {
+    const inner = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      if (String(input) !== '/api/plan') return inner(input, init)
+      return new Response(
+        JSON.stringify({ plan: 'business_studio', name: 'Studio', agents: 3, agents_used: 1, seats: 1,
+          allowances: [{ allowance: 'local', free: 10, used: left < 0 ? 0 : 10 - left, left, fee_minor: { GBP: 20, EUR: 20, USD: 20 } }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    })
+  }
+  async function payForm() {
+    window.history.pushState({}, '', '/money/pay#payee-payee_1')
+    render(<App />)
+    const form = await screen.findByTestId('send-payment')
+    fireEvent.change(within(form).getByLabelText('Amount in GBP'), { target: { value: '20.00' } })
+    return form
+  }
+
+  it('says how many free payments are left while the plan has some', async () => {
+    mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')])
+    withPlan(3)
+    const form = await payForm()
+    expect((await within(form).findByTestId('pay-fee')).textContent).toBe('Free. You have 3 free payments left this month.')
+    expect(form.textContent).not.toMatch(/Total/)
+  })
+
+  it('once they are used, says Lens’s fee in the payment’s currency and the total with it', async () => {
+    mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')])
+    withPlan(0)
+    const form = await payForm()
+    expect((await within(form).findByTestId('pay-fee')).textContent).toBe('Fee £0.20 · Total £20.20')
+  })
+
+  it('says nothing about a fee when the plan has no limit', async () => {
+    mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')])
+    withPlan(-1)
+    const form = await payForm()
+    await vi.waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u) === '/api/plan')).toBe(true))
+    await within(form).findByRole('button', { name: 'Send £20.00' })
+    expect(within(form).queryByTestId('pay-fee')).toBeNull()
+    expect(form.textContent).not.toMatch(/fee|free/i)
+  })
+})
