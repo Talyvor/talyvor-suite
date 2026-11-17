@@ -79,6 +79,24 @@ describe('Cards on the web', () => {
     expect(await within(writer).findByText('No card for Writer yet.')).toBeTruthy()
   })
 
+  // B57.155 — drawn as Pocket's card page (REFERENCE 4.1 w-card) and the agent page's rules card (w-agent-research): each
+  // card headed by its agent, its sections under their own headings, the details on a row behind the lock, the limits as
+  // the rules card's list.
+  it("draws each agent's card in Pocket: its name over its sections, the details on a row, the limits as a list", async () => {
+    mockBff()
+    window.history.pushState({}, '', '/cards')
+    render(<App />)
+
+    const researcher = await screen.findByTestId('card-agt_1')
+    expect(within(researcher).getByRole('heading', { level: 2, name: 'Researcher' })).toBeTruthy()
+    for (const name of ['Card details', 'Limits', 'Purchases']) expect(await within(researcher).findByRole('heading', { level: 3, name })).toBeTruthy()
+    const details = within(researcher).getByTestId('card-details-row')
+    expect(within(details).getByText('Hidden until you check it is you with your passkey.')).toBeTruthy()
+    expect(within(details).getByRole('button', { name: 'Show card details' })).toBeTruthy()
+    const limits = await within(researcher).findByRole('list', { name: 'Limits' })
+    expect(within(limits).getAllByRole('listitem').map((li) => li.textContent)).toEqual([expect.stringMatching(/^Spends at most .+ on one request\.$/)])
+  })
+
   it('freezes a card, shows it Frozen, and unfreezes it', async () => {
     const sent = mockBff()
     window.history.pushState({}, '', '/cards')
