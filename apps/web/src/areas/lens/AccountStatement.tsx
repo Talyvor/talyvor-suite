@@ -1,24 +1,21 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { CardHeader, Logo, inlineLink } from '@talyvor/ui'
+import { Logo, inlineLink } from '@talyvor/ui'
 import { Button, Card as PocketCard, Icon, KindTile, Money, pocketFocusRing, showToast } from '@talyvor/ui/pocket'
-import { Card } from './walletBrand'
 import { dayAfter, monthPeriod, readFailure, saveFile } from './AgentBank'
 import { AgentFace } from './AgentFace'
 import { lineWhen } from './AgentStatement'
 import { AgentBankError, agentBankApi, refusalText, type Agent, type CurrencyAccount, type MoneyStatementLine } from './agentBankApi'
-import { formatWhen } from './format'
-import { Lxc } from './money'
 import { DisputePayment } from './CardDisputes'
 import { InstantLegs, groupInstant } from './InstantTransferReceipt'
 import { DESIGN_ATTR } from '../../pocketPending'
 import { WorkspaceLabel } from '../../labels/workspace'
 import { CURRENCY_ACCOUNT } from '../../labels/capabilities'
 
-// B56.15 — Statements for the dollar, pound, euro and USDC accounts (Lens B56.14), beside each agent's credit statement:
-// a period's opening, money in, money out and balance, every posting to the account, and Download CSV. And, under an
-// agent's credit statement, what it put on the company's marketplace bill, which moves no balance of its own.
+// B56.15 — Statements for the dollar, pound, euro and USDC accounts (Lens B56.14): a period's opening, money in, money
+// out and balance, every posting to the account, and Download CSV. B61.55: the agents' credit statements, and the
+// marketplace bill under them, are parked.
 // B57.25 — a currency account's statement as the reference draws it (w-stmt-cusd, w-stmt-rausd): a document card with
 // the agent's face or the company's tile, this month so far in the account's own currency, the band, its lines newest
 // first, and the way back to Accounts on Invoices. Download CSV sits at the top of Statements, as an agent's does.
@@ -219,7 +216,6 @@ export function AccountStatement({ account, agent }: { account: CurrencyAccount;
   )
 }
 
-/** What an agent put on the company's marketplace bill this month: each line says so, and none moves its balance. */
 /** B59.19 — an Instant transfer's lines as one: "Instant transfer to Lumen Freight GmbH", its total, and its legs when opened. */
 function InstantRow({ row, currency, when }: { row: { transfer: string; to: string; amount_minor: number }; currency: string; when: string }) {
   const [open, setOpen] = useState(false)
@@ -247,35 +243,5 @@ function InstantRow({ row, currency, when }: { row: { transfer: string; to: stri
         <Money minor={row.amount_minor} currency={currency} signed />
       </td>
     </tr>
-  )
-}
-
-export function MarketplaceBill({ agent }: { agent: Agent }) {
-  const period = monthPeriod('this')
-  const to = dayAfter(period.through)
-  const bill = useQuery({
-    queryKey: ['agent-marketplace-bill', agent.id, period.from, to],
-    queryFn: () => agentBankApi.marketplaceBill(agent.id, period.from, to),
-  })
-  if (bill.isError) return <p className="text-body text-muted">{readFailure(bill.error, 'What this agent put on the marketplace bill')}</p>
-  const lines = bill.data?.marketplace_bill ?? []
-  if (lines.length === 0) return null
-  return (
-    <Card>
-      <CardHeader>On the marketplace bill this month</CardHeader>
-      <table className="w-full text-body" data-testid="marketplace-bill-lines">
-        <tbody>
-          {lines.map((l) => (
-            <tr key={l.use_id} className="border-t border-rule text-ink first:border-t-0">
-              <td className="px-gutter py-2 font-figure text-caption text-muted">{formatWhen(l.at)}</td>
-              <td className="py-2">{[l.memo, l.label].filter(Boolean).join(' · ')}</td>
-              <td className="px-gutter py-2 text-right font-figure">
-                <Lxc ulxc={l.amount_ulxc} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Card>
   )
 }
