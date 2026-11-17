@@ -66,8 +66,9 @@ type sealedCheck struct {
 
 // seal returns a new check id carrying c.
 func (z *checkSealer) seal(c phoneCheck) (string, error) {
-	plain, err := json.Marshal(sealedCheck{Issued: time.Now().UnixNano(), Expires: c.expires.UnixNano(), Phone: c.phone,
-		Ticket: c.ticket, HasPerson: c.hasPerson})
+	p := sealedCheck{Issued: time.Now().UnixNano(), Expires: c.expires.UnixNano(), Phone: c.phone, Ticket: c.ticket,
+		HasPerson: c.hasPerson}
+	plain, err := json.Marshal(p)
 	if err != nil {
 		return "", err
 	}
