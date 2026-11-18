@@ -76,7 +76,9 @@ function serve(port: number, name: string, route: (req: IncomingMessage, res: Se
       }
       await route(req, res, url.pathname, url)
     } catch (e) {
-      json(res, 500, { error: String(e) })
+      // The failure goes to the stub's own log; the answer names no more of it than the product's own 500 would.
+      console.error(`stub ${name}:`, e)
+      json(res, 500, { error: 'the stub failed; see its log' })
     }
   }).listen(port, '127.0.0.1', () => console.log(`stub ${name} on http://127.0.0.1:${port}${BREAK !== '' ? ` (broken: ${BREAK})` : ''}`))
 }

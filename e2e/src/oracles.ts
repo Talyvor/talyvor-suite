@@ -1,6 +1,8 @@
 // B17.3 — the oracles: how a scenario knows an answer is right without trusting the thing it tests.
 // Pure functions, unit-tested in test/oracles.test.ts.
 
+import { randomInt } from 'node:crypto'
+
 /** One row of Lens's model catalog, as GET /v1/catalog/models serves it. */
 export interface CatalogModel {
   id: string
@@ -147,7 +149,7 @@ export function statesNumber(answer: string, n: number): boolean {
   const plain = String(n)
   const grouped = n.toLocaleString('en-US')
   // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
-  return [plain, grouped].some((form) => new RegExp(`(^|[^\\d.,])${form.replace(/[.,]/g, '\\$&')}(?![\\d]|[.,]\\d)`).test(answer))
+  return [plain, grouped].some((form) => new RegExp(`(^|[^\\d.,])${form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\d]|[.,]\\d)`).test(answer))
 }
 
 /** True when `answer` names `word`, case-insensitively, as a whole word. */
@@ -170,7 +172,7 @@ export function judgeVerdict(reply: string): boolean | undefined {
  * context, a model priced at its catalog rate — asks one no other run asked. Fixed for the process, so every user
  * of the run shares it and each user's own number still keeps them apart.
  */
-export const RUN_SALT = 1 + Math.floor(Math.random() * 999_999)
+export const RUN_SALT = randomInt(1, 1_000_000)
 
 const CONSONANTS = 'bdfgklmnprstvz'
 const VOWELS = 'aeiou'
