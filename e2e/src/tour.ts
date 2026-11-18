@@ -301,43 +301,46 @@ export function homeCards(): Scenario {
 
 /**
  * B29.9 — the wallet screens in the brand, as the browser paints them in the dark theme: each screen's one
- * filled action (Fund on Agent Wallets, Approve on Approvals, Download on Statements, Open Setup on Royalties while nothing
- * has earned, none elsewhere), its
- * cards on the raised plane, every LXC amount on the figure face with tabular figures, and a pill on each
- * waiting approval and each statement line. Runs after wallet-home, whose agent is funded and waiting; when the
- * user's spend cap skipped wallet-home, Lens has nothing pending and Approvals holds no Approve to fill (B17.141).
+ * filled action, its cards on Pocket's planes, every amount on the figure face with tabular figures, and each
+ * waiting approval drawn with its Review. Runs after wallet-home, whose agent is funded and waiting; when the
+ * user's spend cap skipped wallet-home, Lens has nothing pending (B17.141).
  *
  * B17.379 — the colours and the figure face are read from the page's own tokens, as chat-brand reads them: Pocket
  * (B57.2) fills the action in --accent, not the 4 Oct board's teal, and sets figures in its UI face, not IBM Plex Mono.
+ *
+ * B17.477 — held to the approved design (design/pocket-live, Nick, 15 Nov), as pocketRules.ts holds the unit tests:
+ * - Agents' one filled action is New agent (w-agents); Fund left the list for the agent's page as Add money.
+ * - The tab that is on in a tab row is ink by design (`.seg button.on`): a state, not an action, so it is not counted.
+ * - A card is Pocket's: cloud on the page, or the page with its shadow (`.card`, `.card.white`); the old raised plane
+ *   is the page itself now. Pocket's empty card (`rounded-card-tight`) is a card.
+ * - Amounts are Pocket's <Money> in the person's currency, never LXC, so every [data-money] is read.
+ * - Approvals' Review is secondary (w-approvals) and a waiting request has no Waiting pill: it carries its Review.
+ * - Royalties, the Ledger and Spend and routing are LXC's and the old gateway's (B61.17, B61.3): a workspace without
+ *   the gateway area is sent Home from them, so they are not wallet screens at launch.
  */
 export const WALLET_SCREENS = [
-  { path: '/agents', title: 'Agents', teal: 'Fund' },
-  { path: '/approvals', title: 'Approvals', teal: 'Approve' },
+  { path: '/agents', title: 'Agents', filled: 'New agent' },
+  { path: '/approvals', title: 'Approvals', filled: null },
   // B57.24 — Statements' two downloads are Pocket's secondary buttons, as w-stmt-research draws them: nothing is filled.
-  { path: '/statements', title: 'Statements', teal: null },
-  // B34.1 — nothing has earned on this user's work, so Royalties' one action is Open Setup, where poolable work is consented to.
-  { path: '/statements/royalties', title: 'Royalties', teal: 'Open Setup' },
-  { path: '/ledger', title: 'Ledger', teal: null },
-  { path: '/spend', title: 'Spend and routing', teal: null },
+  { path: '/statements', title: 'Statements', filled: null },
 ] as const
 
 export function walletBrand(): Scenario {
   return {
     id: 'wallet-brand',
     owner: 'talyvor-suite',
-    title: 'the wallet screens carry one filled action each, raised cards, figure-face amounts and status pills',
+    title: 'the wallet screens carry one filled action each, Pocket cards, figure-face amounts and a Review on each waiting approval',
     run: async (ctx) => {
       const wrong: string[] = []
       const seenAll: string[] = []
       const pending = (await ctx.env.lens.agentApprovals(ctx.app.user)).filter((x) => x.status === 'pending').length
       for (const screen of WALLET_SCREENS) {
-        const teal = screen.path === '/approvals' && pending === 0 ? null : screen.teal
         const page = await ctx.app.tab(screen.path)
         try {
           await page.locator('main h1').filter({ hasText: screen.title }).waitFor({ timeout: HEADING_TIMEOUT_MS })
           await page.waitForLoadState('networkidle', { timeout: SETTLE_TIMEOUT_MS }).catch(() => undefined)
           // B17.237 — the heading is the shell's; a screen's cards come with its first read, which can outlast the settle.
-          await page.locator('main .rounded-card').first().waitFor({ timeout: HEADING_TIMEOUT_MS }).catch(() => undefined)
+          await page.locator('main .rounded-card, main .rounded-card-tight').first().waitFor({ timeout: HEADING_TIMEOUT_MS }).catch(() => undefined)
           // B17.298 — and a card can come before the read: Approvals' Face ID card is drawn while its list still says "Reading…".
           await page
             .waitForFunction(() => !Array.from(document.querySelectorAll('main p')).some((p) => (p.textContent ?? '').trim() === 'Reading…'), undefined, { timeout: HEADING_TIMEOUT_MS })
@@ -349,57 +352,64 @@ export function walletBrand(): Scenario {
           await page
             .waitForFunction(() => document.getAnimations().every((a) => !(a instanceof CSSTransition) || a.playState !== 'running'), undefined, { timeout: SETTLE_TIMEOUT_MS })
             .catch(() => undefined)
+          const at = new URL(page.url()).pathname
           const seen = await page.evaluate(() => {
             const main = document.querySelector('main')
             if (!main) return null
-            // The token as this theme computes it, and the figure face as a font-figure span computes it.
+            // The tokens as this theme computes them, and the figure face as a font-figure span computes it.
             const probe = document.createElement('span')
             probe.className = 'font-figure'
             main.appendChild(probe)
             probe.style.backgroundColor = 'var(--accent)'
             const filled = getComputedStyle(probe).backgroundColor
-            probe.style.backgroundColor = 'var(--raised)'
+            probe.style.backgroundColor = 'var(--cloud)'
+            const cloud = getComputedStyle(probe).backgroundColor
+            probe.style.backgroundColor = 'var(--page)'
             const plane = getComputedStyle(probe).backgroundColor
             const figure = getComputedStyle(probe).fontFamily
             probe.remove()
-            const want = { filled, raised: plane, figure }
-            const teal = Array.from(main.querySelectorAll('button, a'))
-              .filter((b) => getComputedStyle(b).backgroundColor === want.filled)
+            const actions = Array.from(main.querySelectorAll('button, a'))
+              .filter((b) => b.getAttribute('role') !== 'tab')
+              .filter((b) => getComputedStyle(b).backgroundColor === filled)
               .map((b) => (b.textContent ?? '').trim())
-            const cards = Array.from(main.querySelectorAll('.rounded-card')).map((c) => getComputedStyle(c).backgroundColor)
-            const amounts: string[] = []
-            const notMono: string[] = []
-            const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT)
-            for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-              const el = n.parentElement
-              if (!el || !/^\s*LXC\b/.test(n.textContent ?? '') || !/\d\s+LXC\b/.test(el.textContent ?? '')) continue
-              const st = getComputedStyle(el)
-              amounts.push((el.textContent ?? '').trim())
-              if (st.fontFamily !== want.figure || !st.fontFeatureSettings.includes('tnum')) notMono.push(`"${(el.textContent ?? '').trim()}" in ${st.fontFamily} ${st.fontFeatureSettings}`)
-            }
-            const lines = Array.from(main.querySelectorAll('[data-testid="agent-statement"] tbody tr'))
-            const pilled = lines.filter((tr) => tr.querySelector('span.rounded-pill') !== null).length
-            const waiting = Array.from(main.querySelectorAll('span.rounded-pill')).filter((p) => (p.textContent ?? '').trim() === 'Waiting').length
+            const offPlane = Array.from(main.querySelectorAll('.rounded-card, .rounded-card-tight'))
+              .map((c) => getComputedStyle(c))
+              .filter((st) => !(st.backgroundColor === cloud || (st.backgroundColor === plane && st.boxShadow !== 'none')))
+              .map((st) => `${st.backgroundColor}${st.boxShadow === 'none' ? ' with no shadow' : ''}`)
+            const cards = main.querySelectorAll('.rounded-card, .rounded-card-tight').length
+            const money = Array.from(main.querySelectorAll('[data-money]'))
+            const notFigure = money
+              .filter((m) => {
+                const st = getComputedStyle(m)
+                return st.fontFamily !== figure || !st.fontFeatureSettings.includes('tnum')
+              })
+              .map((m) => `"${(m.textContent ?? '').trim()}" in ${getComputedStyle(m).fontFamily} ${getComputedStyle(m).fontFeatureSettings}`)
+            const waiting = Array.from(main.querySelectorAll('[data-approval]'))
+            const reviewed = waiting.filter((row) => Array.from(row.querySelectorAll('a')).some((a) => (a.textContent ?? '').trim() === 'Review')).length
             const unread = Array.from(main.querySelectorAll('p'))
               .map((p) => (p.textContent ?? '').trim())
               .find((t) => /^Reading…$|could not be read|can’t be read/.test(t))
-            return { teal, raised: want.raised, cards, amounts: amounts.length, notMono, lines: lines.length, pilled, waiting, unread }
+            return { actions, cards, offPlane, amounts: money.length, notFigure, waiting: waiting.length, reviewed, unread }
           })
           if (seen === null) {
             wrong.push(`${screen.path} has no main`)
             continue
           }
-          seenAll.push(`${screen.path}: filled [${seen.teal.join(', ')}], ${seen.cards.length} cards, ${seen.amounts} LXC amounts, ${seen.pilled}/${seen.lines} statement lines pilled, ${seen.waiting} waiting`)
-          // Approve reads "Approve with Face ID" once the workspace signs its approvals.
-          const one = teal === null ? seen.teal.length === 0 : seen.teal.length === 1 && seen.teal[0].startsWith(teal)
-          if (!one) wrong.push(`${screen.path} fills [${seen.teal.join(', ')}] in the accent; want ${teal ?? 'nothing'}${screen.path === '/approvals' ? ` (Lens has ${pending} pending)` : ''}`)
-          if (seen.cards.length === 0) wrong.push(`${screen.path} shows no card${seen.unread ? ` ("${seen.unread}")` : ''}`)
+          if (at !== screen.path) {
+            wrong.push(`${screen.path} opened ${at}`)
+            continue
+          }
+          seenAll.push(`${screen.path}: filled [${seen.actions.join(', ')}], ${seen.cards} cards, ${seen.amounts} amounts, ${seen.reviewed}/${seen.waiting} waiting with Review`)
+          const one = screen.filled === null ? seen.actions.length === 0 : seen.actions.length === 1 && seen.actions[0] === screen.filled
+          if (!one) wrong.push(`${screen.path} fills [${seen.actions.join(', ')}] in the accent; want ${screen.filled ?? 'nothing'}`)
+          if (seen.cards === 0) wrong.push(`${screen.path} shows no card${seen.unread ? ` ("${seen.unread}")` : ''}`)
           else if (seen.unread === 'Reading…') wrong.push(`${screen.path} still says "Reading…" after ${HEADING_TIMEOUT_MS / 1000}s`)
-          const flat = seen.cards.filter((c) => c !== seen.raised)
-          if (flat.length > 0) wrong.push(`${screen.path}: ${flat.length} card(s) not on raised ${seen.raised}: ${flat.join(', ')}`)
-          if (seen.notMono.length > 0) wrong.push(`${screen.path}: amounts off the figure face: ${seen.notMono.slice(0, 3).join('; ')}`)
-          if (seen.pilled !== seen.lines) wrong.push(`${screen.path}: ${seen.lines - seen.pilled} statement line(s) without a pill`)
-          if (screen.path === '/approvals' && pending > 0 && seen.waiting === 0) wrong.push(`Lens has ${pending} approval(s) pending; Approvals shows no Waiting pill`)
+          if (seen.offPlane.length > 0) wrong.push(`${screen.path}: ${seen.offPlane.length} card(s) neither cloud nor the page with its shadow: ${seen.offPlane.join(', ')}`)
+          if (seen.notFigure.length > 0) wrong.push(`${screen.path}: amounts off the figure face: ${seen.notFigure.slice(0, 3).join('; ')}`)
+          if (screen.path === '/approvals') {
+            if (seen.reviewed !== seen.waiting) wrong.push(`Approvals: ${seen.waiting - seen.reviewed} waiting request(s) without a Review`)
+            if (pending > 0 && seen.waiting === 0) wrong.push(`Lens has ${pending} approval(s) pending; Approvals shows none waiting`)
+          }
         } finally {
           await page.close()
         }

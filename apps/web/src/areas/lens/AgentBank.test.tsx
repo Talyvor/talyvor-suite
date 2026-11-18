@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { primaryActions } from '../../pocketRules'
 
 // B19.4 — the Agent Bank, walked the way its DONE line reads: create an agent, set its limits, and approve a payment
 // from the inbox. B61.14 — funding an agent and paying one agent from another moved the parked LXC credit wallet and are
@@ -101,6 +102,8 @@ describe('Agent Bank', () => {
     window.history.pushState({}, '', '/agents')
     render(<App />)
     expect(await screen.findByText('No agents yet')).toBeInTheDocument()
+    // B17.477 — the page's New agent is its one filled action; the empty card's is secondary beside it.
+    expect(primaryActions(document.querySelector('main') as HTMLElement)).toEqual(['New agent'])
     // B57.8 — the top bar's Pause every agent is on every page; the page draws none of its own.
     expect(screen.queryByTestId('pause-every-agent')).toBeNull()
     expect(screen.queryByTestId('agents-list')).toBeNull()

@@ -1,0 +1,29 @@
+[
+  {
+    "route": "/agents",
+    "screen": "w-agents",
+    "dark": true
+  },
+  {
+    "route": "/agents",
+    "dark": true,
+    "answers": {
+      "/api/agents": {
+        "workspace_balance_ulxc": 0,
+        "allocated_ulxc": 0,
+        "unallocated_ulxc": 0,
+        "spent_ulxc": 0,
+        "agents": []
+      }
+    }
+  },
+  {
+    "route": "/statements",
+    "dark": true,
+    "answers": {
+      "/api/money/accounts": {
+        "accounts": []
+      }
+    }
+  }
+]
