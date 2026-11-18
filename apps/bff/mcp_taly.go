@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -182,15 +183,25 @@ func (a *app) talyAsk(ctx context.Context, key string, body map[string]any) (tal
 }
 
 // talyModel is the model Taly is asked on: the newest of Lens's catalog's Anthropic models, a frontier one first, as
-// Chat's picker chooses its default (chatApi.ts pickerCatalog).
+// Chat's picker chooses its default (chatApi.ts pickerCatalog). Lens hides its catalog with the old gateway's area
+// (Lens B59.1), off on every launch workspace, so there the catalog answers 404 and Taly reads the model ids Lens
+// lists with their capabilities instead (B17.481).
 // shortcut: Anthropic only, since askTaly speaks its Messages API; ask the catalog's default across providers if one is added.
 func (a *app) talyModel(ctx context.Context, t tenant) (string, error) {
 	status, raw, err := a.mcpLens(ctx, t, lensCall{method: http.MethodGet, path: "/v1/catalog/models"})
-	if err == nil && status != http.StatusOK {
-		err = fmt.Errorf("lens answered GET /v1/catalog/models %d", status)
-	}
 	var best string
-	if err == nil {
+	switch {
+	case err == nil && status == http.StatusNotFound:
+		status, raw, err = a.mcpLens(ctx, t, lensCall{method: http.MethodGet, path: "/v1/models/capabilities"})
+		if err == nil && status != http.StatusOK {
+			err = fmt.Errorf("lens answered GET /v1/models/capabilities %d", status)
+		}
+		if err == nil {
+			best, err = newestClaudeID(raw)
+		}
+	case err == nil && status != http.StatusOK:
+		err = fmt.Errorf("lens answered GET /v1/catalog/models %d", status)
+	case err == nil:
 		best, err = newestAnthropicModel(raw)
 	}
 	if err != nil {
@@ -222,6 +233,40 @@ func newestAnthropicModel(raw []byte) (string, error) {
 		rank := map[bool]string{true: "1", false: "0"}[m.Tier == "frontier"] + m.ReleaseDate
 		if rank > bestRank {
 			best, bestRank = m.ID, rank
+		}
+	}
+	return best, nil
+}
+
+// newestClaudeID picks from Lens's model ids (GET /v1/models/capabilities, keyed by id) the newest Claude model, a
+// frontier one (Opus or Fable) first, by the version in its id; "" when there is none.
+// shortcut: the ids carry no tier or release date, so they are read from the id's family and version.
+func newestClaudeID(raw []byte) (string, error) {
+	var models map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &models); err != nil {
+		return "", err
+	}
+	best, bestRank := "", ""
+	for id := range models {
+		parts := strings.Split(strings.TrimPrefix(id, "claude-"), "-")
+		if !strings.HasPrefix(id, "claude-") || len(parts) < 2 || len(parts) > 3 {
+			continue
+		}
+		version := [2]int{}
+		for i, v := range parts[1:] {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 || n > 99 {
+				version[0] = -1 // a dated snapshot or a name that is no version
+				break
+			}
+			version[i] = n
+		}
+		if version[0] < 0 {
+			continue
+		}
+		rank := fmt.Sprintf("%d%02d%02d", map[bool]int{true: 1, false: 0}[parts[0] == "opus" || parts[0] == "fable"], version[0], version[1])
+		if rank > bestRank || rank == bestRank && id < best {
+			best, bestRank = id, rank
 		}
 	}
 	return best, nil
