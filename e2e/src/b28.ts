@@ -116,7 +116,7 @@ export function b28Report(buildMd: string, named: ReadonlyMap<string, readonly s
 
 export const untestedMarker = (f: Pick<B28Feature, 'id'>): string => `b28-untested-${f.id}`
 
-const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|')
+const cell = (s: string): string => s.replace(/\r?\n/g, ' ').replace(/[\\|]/g, '\\$&')
 
 function verdictText(f: B28Feature, filed: Readonly<Record<string, string>>): string {
   if (f.state === 'not run') return 'not run — no user reached it this run'

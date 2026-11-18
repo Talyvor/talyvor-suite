@@ -236,7 +236,9 @@ async function deadControls(c) {
   for (let i = 0; i < names.length; i++) {
     const { ctx, page, t } = await openApp(c, size)
     try {
-      const why = await page.evaluate(`(() => { const el = (${check.controlsOf})(document.body)[${i}]; if (!el || (${check.controlName})(el) !== ${JSON.stringify(names[i])}) return 'not there on a fresh page'; el.setAttribute('data-pocket-press', ''); return (${check.notPressed})(el) })()`)
+      // The name goes in as data, not as code: the evaluated text holds only this script's own check functions.
+      await page.evaluate((name) => (window.__pocketName = name), names[i])
+      const why = await page.evaluate(`(() => { const el = (${check.controlsOf})(document.body)[${i}]; if (!el || (${check.controlName})(el) !== window.__pocketName) return 'not there on a fresh page'; el.setAttribute('data-pocket-press', ''); return (${check.notPressed})(el) })()`)
       if (why) {
         if (why === 'DISABLED WITHOUT SAYING WHY' || why === 'not there on a fresh page') dead.push(`${names[i]}: ${why.toLowerCase()}`)
         continue

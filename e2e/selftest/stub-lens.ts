@@ -432,12 +432,16 @@ function filedOf(result: string): { identifier: string; title: string } | undefi
 /** HTML (or anything else, as it is) to the Markdown Lens's conversion produces. */
 function toMarkdown(raw: string, mediaType: string): string {
   if (!/html/.test(mediaType)) return raw.trim()
-  return raw
-    .replace(/<(script|style|title)[^>]*>[\s\S]*?<\/\1>/gi, '')
+  // Each removal runs until nothing is left to remove, so a tag split by another (`<scr<b>ipt>`) cannot survive it.
+  const untilStable = (s: string, re: RegExp): string => {
+    for (let prev = ''; prev !== s; ) [prev, s] = [s, s.replace(re, '')]
+    return s
+  }
+  const md = untilStable(raw, /<(script|style|title)[^>]*>[\s\S]*?<\/\1>/gi)
     .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_, n: string, t: string) => `\n${'#'.repeat(Number(n))} ${t.trim()}\n`)
     .replace(/<\/t[dh]>/gi, ' | ')
     .replace(/<\/(p|tr|table|div)>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
+  return untilStable(md, /<[^>]+>/g)
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
@@ -1022,7 +1026,7 @@ async function proxy(req: IncomingMessage, res: ServerResponse, provider: string
   // talyvor-lens B19.2 — an agent's byte-identical retry under one Idempotency-Key (same key, model and prompt) is
   // answered and charged once; STUB_BREAK=call-replay charges every copy.
   const idem = agentCall === undefined ? '' : String(req.headers['idempotency-key'] ?? '')
-  const retryKey = idem === '' || broke('call-replay') ? undefined : createHash('sha256').update([credential, idem, model.id, said].join('\0')).digest('hex')
+  const retryKey = idem === '' || broke('call-replay') ? undefined : [credential, idem, model.id, said].join('\0')
   const retried = retryKey === undefined ? undefined : retries.get(retryKey)
   if (retried !== undefined) {
     answer = retried
@@ -2004,6 +2008,8 @@ createServer(async (req, res) => {
     }
     return miss(req, res, p)
   } catch (e) {
-    return json(res, 500, { error: String(e) })
+    // The failure goes to the stub's own log; the answer names no more of it than Lens's own 500 would.
+    console.error('stub lens:', e)
+    return json(res, 500, { error: 'the stub failed; see its log' })
   }
 }).listen(PORT, '127.0.0.1', () => console.log(`stub lens on ${BASE}${BREAK !== '' ? ` (broken: ${BREAK})` : ''}`))
