@@ -732,8 +732,10 @@ func TestLeakSweep_CoversEveryMountedWriteRoute(t *testing.T) {
 		t.Fatalf("mounted patterns found = %d, want at least 20 — the route-table scan read almost nothing", len(patterns))
 	}
 
-	// B52.9: sign out everywhere ends every fixture's sessions and assistants, so it is swept after every other route.
-	patterns = append(slices.DeleteFunc(patterns, func(p string) bool { return p == "/auth/logout-everywhere" }), "/auth/logout-everywhere")
+	// B52.9: sign out everywhere ends every fixture's sessions and assistants, so it is swept after every other route;
+	// signing out ends the fixture's session too, so it comes last (B61.29: with Google gone it no longer answers 503).
+	patterns = append(slices.DeleteFunc(patterns, func(p string) bool { return p == "/auth/logout-everywhere" || p == "/auth/logout" }),
+		"/auth/logout-everywhere", "/auth/logout")
 
 	reached, succeeded := map[string]bool{}, map[string]bool{}
 	accepted := map[string]bool{}

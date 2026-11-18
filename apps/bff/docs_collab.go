@@ -40,7 +40,7 @@ func (a *app) docsCollab() http.HandlerFunc {
 		}
 		sess, ok := a.auth.sessionFrom(r)
 		if !ok {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required — sign in at /auth/login"})
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required — sign in at /signin"})
 			return
 		}
 		if _, ok := a.docsWorkspaceFor(w, r); !ok {

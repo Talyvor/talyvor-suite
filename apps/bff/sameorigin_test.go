@@ -106,7 +106,7 @@ func sameOriginAppRecording(t *testing.T) (*app, string, *originUpstream) {
 		// B20.12: an operator holding a moderator key, so the review queue's writes reach Lens here too.
 		operatorSubs: []string{"u1"}, moderatorKey: "tlv_mod_sameorigin_fixture",
 	}
-	auth := newSessionOnlyAuthenticator(cfg)
+	auth := newAuthenticator(cfg)
 	seedProvisionedSession(auth, "so-sid", "u1", "ng@example.com", "u-test-workspace")
 	s, _ := auth.sessions.get("so-sid")
 	s.trackWorkspaceID = "track-ws-7"
@@ -577,7 +577,6 @@ var notSweptWrite = map[string]string{
 	"/oauth/register":        "B40.6 — exempt from the Origin rule (oauthMachinePath): an assistant's server sends no Origin, and the call creates nothing a person has agreed to",
 	"/oauth/token":           "B40.6 — exempt (oauthMachinePath): an assistant's server calls it with the PKCE verifier or refresh token as its credential",
 	"/oauth/revoke":          "B40.6 — exempt (oauthMachinePath): the token being revoked is its own credential",
-	"/auth/mobile/session":   "B40.24 — exempt (originExemptPath): the phone app sends no Origin, and its ID token is the credential",
 	"/auth/synthetic/mobile": "B57.86 — exempt (originExemptPath) only with no Origin: the phone harness sends none, and the operator key is the credential; another site's Origin is refused (B50.36, TestSyntheticPhoneSignInRefusesAnotherSite)",
 	"/api/connect/agent-ceiling": "B52.6 — Origin-GATED, but it is kept in the BFF and writes nothing upstream, so this table's arrival " +
 		"assertion cannot hold for it; TestConnectCreateAgentUnderTheCeiling puts one from another site and asserts the 403",
@@ -603,7 +602,6 @@ var notSweptWrite = map[string]string{
 	"/auth/lock":                       "B61.25 — Origin-GATED, and its one upstream is Lens's /v1/auth/* or /v1/provision, which this table's fixture does not answer; TestB6125_DoorRefusesAnotherSite posts it from another site and asserts the 403 and that nothing reached Lens",
 	"/auth/unlock/challenge":           "B61.25 — Origin-GATED, and its one upstream is Lens's /v1/auth/* or /v1/provision, which this table's fixture does not answer; TestB6125_DoorRefusesAnotherSite posts it from another site and asserts the 403 and that nothing reached Lens",
 	"/auth/unlock":                     "B61.25 — Origin-GATED, and its one upstream is Lens's /v1/auth/* or /v1/provision, which this table's fixture does not answer; TestB6125_DoorRefusesAnotherSite posts it from another site and asserts the 403 and that nothing reached Lens",
-	"/auth/google/move":                "B61.25 — Origin-GATED, and its one upstream is Lens's /v1/auth/* or /v1/provision, which this table's fixture does not answer; TestB6125_DoorRefusesAnotherSite posts it from another site and asserts the 403 and that nothing reached Lens",
 	"/auth/logout-everywhere": "B52.9 — Origin-GATED, but it answers in the BFF and writes nothing upstream; " +
 		"TestSignOutEverywhereEndsEveryAssistant posts it from another site and asserts the 403 and that nothing ended",
 	"/api/admin/billing/purchases":   "operator read surface, adminNotWired — see the note above",

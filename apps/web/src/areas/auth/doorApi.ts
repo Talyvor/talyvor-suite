@@ -72,8 +72,23 @@ export const phoneStart = (phone: string) => door<PhoneStarted>('/auth/phone/sta
 export const phoneFinish = (phone: string, code: string) => door<PhoneChecked>('/auth/phone/finish', { phone, code })
 export const phoneSignIn = (check: string, passcode: string) => door<SignedIn>('/auth/phone/signin', { check, passcode })
 export const phoneJoin = (check: string, passcode: string) => door<SignedIn>('/auth/phone/join', { check, passcode })
-/** The one move from Google: the Google session takes the number and a passcode. */
-export const googleMove = (check: string, passcode: string) => door<{ moved: boolean }>('/auth/google/move', { check, passcode })
+/** Leaving the app for a page the BFF serves (an assistant's Connect page, /oauth/): a page load. Tests replace it. */
+export const doorNav = { leave: (url: string) => window.location.assign(url) }
+
+/** "Sign in again" (B61.29): the door, which lands back on returnTo. */
+export const signInAgainHref = (returnTo: string) => `/signin?return_to=${encodeURIComponent(returnTo)}`
+
+/** Ends this session first, so the door is a fresh sign-in (a key recovery needs one within 10 minutes), then opens it. */
+export async function signInAgain(returnTo: string) {
+  await fetch('/auth/logout', { method: 'POST' }).catch(() => undefined)
+  doorNav.leave(signInAgainHref(returnTo))
+}
+
+/** return_to as the door may follow it: a path in this app, never another site; anything else is Home. */
+export function safeReturnTo(raw: string | null): string | undefined {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\') || [...raw].some((c) => c.charCodeAt(0) < 32)) return undefined
+  return raw
+}
 
 /** Sign-up's account, from the sign-up session: who it is for and the kind of money. */
 export const signupAccount = (body: { account_type: string; money_kind: string; name: string; country: string; registration_number?: string }) =>

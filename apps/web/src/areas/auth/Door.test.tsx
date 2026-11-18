@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, queryClient } from '../../App'
+import { doorNav } from './doorApi'
 
 // Door.test.tsx — B61.26: the web's door. The phone number, the code, the passcode (a known number) or a passcode
 // chosen twice (a new one), "Sign in with a passkey", "Sign in faster next time", and each refusal in Lens's words.
@@ -331,24 +332,37 @@ describe('the passkey', () => {
   })
 })
 
-describe('the one move from Google', () => {
-  it('a Google sign-in with no number yet confirms one and chooses a passcode, then the app opens', async () => {
-    const sent = mockDoor(
-      { '/auth/phone/start': START, '/auth/phone/finish': fresh, '/auth/google/move': () => ({ body: { moved: true, account_id: 'ws_1' } }) },
-      { mode: 'oidc', authenticated: true, user: { sub: 'g1', email: 'maya@example.com' }, phone_needed: true, google_signin: true },
-    )
-    at('/agents')
+describe('B61.29 — Google sign-in is gone', () => {
+  it('the door offers no Google, whatever /auth/me says', async () => {
+    mockDoor({}, { mode: 'oidc', authenticated: false, user: null, signup_open: true, google_signin: true })
+    at('/signin')
     await screen.findByRole('heading', { level: 1, name: 'What’s your phone number?' })
-    expect(screen.getByText('From now on you sign in with your phone number and a passcode. We text you a code to check it’s yours.')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Continue with Google' })).toBeNull()
+    expect(screen.queryByText('Continue with Google')).toBeNull()
+    expect(document.querySelector('a[href^="/auth/login"]')).toBeNull()
+  })
+
+  it('a sign-in that started at an assistant’s Connect page goes back to it, as a page load', async () => {
+    const leave = vi.spyOn(doorNav, 'leave').mockImplementation(() => {})
+    mockDoor({ '/auth/phone/start': START, '/auth/phone/finish': known, '/auth/phone/signin': SIGNED })
+    const connect = '/oauth/authorize?client_id=c1&state=s1'
+    at(`/signin?return_to=${encodeURIComponent(connect)}`)
     await throughPhone()
     paste('The code', '482913')
-    await screen.findByRole('heading', { level: 1, name: 'Choose a passcode' })
+    await screen.findByRole('heading', { level: 1, name: 'Enter your passcode' })
     typeDigits('Passcode', '135790')
-    await screen.findByRole('heading', { level: 1, name: 'Type it again' })
+    await waitFor(() => expect(leave).toHaveBeenCalledWith(connect))
+  })
+
+  it('a return_to that leaves the app is not followed', async () => {
+    const leave = vi.spyOn(doorNav, 'leave').mockImplementation(() => {})
+    mockDoor({ '/auth/phone/start': START, '/auth/phone/finish': known, '/auth/phone/signin': SIGNED })
+    at(`/signin?return_to=${encodeURIComponent('//evil.example/oauth/authorize')}`)
+    await throughPhone()
+    paste('The code', '482913')
+    await screen.findByRole('heading', { level: 1, name: 'Enter your passcode' })
     typeDigits('Passcode', '135790')
-    await waitFor(() => expect(sent.filter((x) => x.url === '/auth/google/move').map((x) => x.body)).toEqual([{ check: 'chk_1', passcode: '135790' }]))
-    expect(sent.some((x) => x.url === '/auth/phone/join')).toBe(false)
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
+    expect(leave).not.toHaveBeenCalled()
   })
 })
 

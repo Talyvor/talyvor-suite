@@ -1594,7 +1594,7 @@ export function marketingBoard(): Scenario {
 
 /** B57.49 — /signin and /signup are Pocket's auth card, as a signed-out stranger sees them: a white card on the cloud
  *  page with the kit's logo in it, above the heading; at 1440 the logo's streams flow into the card from the left; at
- *  390 the streams are not shown and nothing scrolls sideways. One ink action on each page, and it goes to /auth/login. */
+ *  390 the streams are not shown and nothing scrolls sideways. One ink action on each page. */
 export function signinBoard(): Scenario {
   return {
     id: 'signin-board',

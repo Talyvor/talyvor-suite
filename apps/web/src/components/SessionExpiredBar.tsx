@@ -1,6 +1,7 @@
 import { Button, KindTile } from '@talyvor/ui/pocket'
 import { isSessionExpired, sessionExpiredCopy } from '../lib/productState'
 import { useSessionExpired } from '../lib/useSessionExpired'
+import { signInAgain, signInAgainHref } from '../areas/auth/doorApi'
 
 // ONE dead session is ONE message.
 //
@@ -17,7 +18,7 @@ export function SessionExpiredBar() {
   const expired = useSessionExpired()
   if (!expired) return null
 
-  // Come back to the page they were on. The BFF re-sanitises this server-side (sanitizeReturnTo),
+  // Come back to the page they were on. The door follows only a path in this app (safeReturnTo),
   // so a hostile value cannot make this an open redirect.
   const returnTo = window.location.pathname + window.location.search
 
@@ -39,12 +40,19 @@ export function SessionExpiredBar() {
         }
       />
       <p className="min-w-0 flex-1 text-body text-ink">{sessionExpiredCopy}</p>
-      {/* THE FIX AS A CLICK, not as advice. /auth/login rotates the session and re-provisions,
-          which mints a fresh workspace token — so this one link is the whole remedy. The manual
-          workaround during the incident was "sign out and back in", which is two steps for the
-          same effect and which nobody could have guessed from "Couldn't load". */}
+      {/* THE FIX AS A CLICK, not as advice. It ends the dead session and opens the door, whose
+          sign-in provisions afresh and mints a fresh workspace token — so this one link is the whole
+          remedy (B61.29: the door, now Google sign-in is gone). */}
       <Button asChild size="sm">
-        <a href={`/auth/login?return_to=${encodeURIComponent(returnTo)}`}>Sign in again</a>
+        <a
+          href={signInAgainHref(returnTo)}
+          onClick={(e) => {
+            e.preventDefault()
+            void signInAgain(returnTo)
+          }}
+        >
+          Sign in again
+        </a>
       </Button>
     </div>
   )

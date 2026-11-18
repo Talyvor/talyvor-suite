@@ -22,10 +22,7 @@ func TestVoiceKeyGoesOnlyToASignedInPhone(t *testing.T) {
 	t.Setenv("BFF_VOICE_KEY_PER_SESSION_HOUR", "3")
 	t.Setenv("PICOVOICE_ACCESS_KEY", pvKey)
 
-	idp := newFakeIDP(t)
-	a, ts, _ := startOIDCBFF(t, idp, nil, func(c *config) {
-		c.oidcMobileClientIDs = []string{"phone-ios"}
-	})
+	a, ts, browser := startOIDCBFF(t, nil, nil)
 	phone := &http.Client{Transport: ts.Client().Transport}
 	get := func(bearer string) (int, string, http.Header) {
 		t.Helper()
@@ -49,20 +46,8 @@ func TestVoiceKeyGoesOnlyToASignedInPhone(t *testing.T) {
 		t.Fatalf("unknown Bearer: %d %s, want 401 without the key", code, body)
 	}
 
-	idp.aud = "phone-ios"
-	resp, err := phone.Post(ts.URL+mobileSessionPath, "application/json",
-		strings.NewReader(`{"id_token":"`+idp.mintIDToken("")+`"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var signedIn struct {
-		Token string `json:"token"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&signedIn)
-	resp.Body.Close()
-	if signedIn.Token == "" {
-		t.Fatalf("phone sign-in: status %d, no token", resp.StatusCode)
-	}
+	var signedIn struct{ Token string }
+	signedIn.Token = signInAsSub(t, a, ts, browser, "voice-sub", "ng@example.com", signupAccount{})
 
 	code, body, h := get(signedIn.Token)
 	var got map[string]string

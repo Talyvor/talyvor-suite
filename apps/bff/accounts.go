@@ -62,7 +62,7 @@ func (a *app) accountsCaller(w http.ResponseWriter, r *http.Request) (accountsOf
 	}
 	sid, s, ok := a.auth.sessionAndIDFrom(r)
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required — sign in at /auth/login"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required — sign in at /signin"})
 		return accountsOf{}, false
 	}
 	return accountsOf{identity: a.identityOf(s.sub), current: s.workspaceID, sid: sid, s: s}, true

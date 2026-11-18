@@ -10,7 +10,7 @@ import { pressEverything } from '../../test/pressEverything'
 // stranger is told on /signup (the access line), and what an already-signed-in person is told. The history below is
 // why the words, and not the mechanism, are what these tests read.
 //
-// Sign up and sign in are ONE mechanism (the same OIDC round-trip at /auth/login) and must not
+// Sign up and sign in are ONE mechanism (the same door) and must not
 // be one page. The person reading them wants opposite reassurances:
 //
 //   A STRANGER needs to know what this is, that they can start, and what they will have when
@@ -122,15 +122,8 @@ describe('/signup and /signin are public routes', () => {
     }
   })
 
-  it('Google is offered small under the door only while the BFF still offers it', async () => {
+  it('B61.29 — no Google under the door, even if /auth/me still says google_signin', async () => {
     mockMe({ signup_open: true, google_signin: true })
-    at('/signin')
-    const google = await screen.findByRole('link', { name: 'Continue with Google' })
-    expect(google.getAttribute('href')).toMatch(/^\/auth\/login/)
-    cleanup()
-    queryClient.clear()
-    vi.restoreAllMocks()
-    mockMe({ signup_open: true })
     at('/signin')
     await screen.findByRole('heading', { level: 1 })
     expect(screen.queryByRole('link', { name: 'Continue with Google' })).toBeNull()
@@ -288,10 +281,11 @@ describe('the sign-in page is Pocket’s auth card', () => {
 describe('every control on both pages does something', () => {
   it.each(['/signup', '/signin'])('%s', async (route) => {
     // B61.26 — the door is one field and one button (Continue waits, saying why, until a number is typed); the rest
-    // are the logo, Google while the move runs, Privacy and Terms.
-    const report = await pressEverything(route, { '/auth/me': { mode: 'oidc', authenticated: false, user: null, signup_open: true, google_signin: true } })
+    // are the logo, Privacy and Terms.
+    const report = await pressEverything(route, { '/auth/me': { mode: 'oidc', authenticated: false, user: null, signup_open: true } })
     expect(report.dead).toEqual([])
-    expect(report.pressed).toBeGreaterThan(3)
+    // The logo, Privacy and Terms: three, since B61.29 took Google away.
+    expect(report.pressed).toBeGreaterThanOrEqual(3)
   })
 })
 

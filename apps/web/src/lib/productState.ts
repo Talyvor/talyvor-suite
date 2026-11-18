@@ -116,8 +116,8 @@ export function notConfiguredCopy(product: string): string {
 // ── WHICH STATUS MEANS "SIGN IN AGAIN" ───────────────────────────────────────
 //
 //   401 — the only one. From requireSession (no BFF session) or passed through verbatim from
-//         Lens (stale workspace token). Both are cured by the same single click: /auth/login
-//         rotates the session and re-provisions, minting a fresh workspace token.
+//         Lens (stale workspace token). Both are cured by the same single click: "Sign in again"
+//         ends the session and opens the door, whose sign-in mints a fresh workspace token.
 //
 // Everything else stays where it was. 503 remains isUnconfigured's calm "not wired here" (404 was
 // removed from it — see above); 404/500/502/403 remain genuine faults. THAT SEPARATION IS THE POINT — a change that makes 401

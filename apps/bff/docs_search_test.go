@@ -165,8 +165,8 @@ func TestDocsSearch_AttachesGatewayCredentialsServerSide(t *testing.T) {
 // deleted the wrapper and NOTHING IN THE PACKAGE FAILED — not this test, not the anonymous-read
 // sweep. Measured directly, both ways, one mutation at a time:
 //
-//	with requireSession:     401 {"error":"authentication required — sign in at /auth/login"}
-//	without requireSession:  401 {"error":"authentication required — sign in at /auth/login"}
+//	with requireSession:     401 {"error":"authentication required — sign in at /signin"}
+//	without requireSession:  401 {"error":"authentication required — sign in at /signin"}
 //
 // BYTE-IDENTICAL, because `docsWorkspaceFor` → `trackWorkspaceFor` refuses a session-less caller
 // with the same message before any dial. The route fails closed either way — that is defence in
