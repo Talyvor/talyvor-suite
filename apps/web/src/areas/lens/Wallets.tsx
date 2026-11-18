@@ -178,16 +178,18 @@ export function WalletsScreen() {
                   const agent = agents.find((x) => x.id === a.agent_id)
                   const paused = !!agent?.paused_at || !!book.data?.all_paused_at
                   const job = (agent?.description ?? '').split(' · ')[0].trim()
+                  // B57.179 — pocket.css .agmove: the agent's row, then Add money and Take back side by side under it.
                   return (
-                    <Row
-                      key={a.id}
-                      leading={agent ? <Face agent={agent} size={40} state={paused ? 'asleep' : 'happy'} /> : undefined}
-                      title={agent?.name ?? a.name}
-                      line={agent ? [job, paused ? 'Paused' : 'Running'].filter((x) => x !== '').join(' · ') : CURRENCY_NAME[a.currency] ?? a.currency}
-                      amount={<Money minor={a.balance_minor} currency={a.currency} />}
-                      wrap
-                      action={<AgentFundingButtons agent={{ id: a.agent_id ?? '', name: agent?.name ?? a.name }} currency={a.currency} size="sm" />}
-                    />
+                    <div key={a.id} className="border-t border-line pb-3.5 first:border-t-0" data-testid={`wallets-agent-${a.id}`}>
+                      <Row
+                        className="border-t-0"
+                        leading={agent ? <Face agent={agent} size={40} state={paused ? 'asleep' : 'happy'} /> : undefined}
+                        title={agent?.name ?? a.name}
+                        line={agent ? [job, paused ? 'Paused' : 'Running'].filter((x) => x !== '').join(' · ') : CURRENCY_NAME[a.currency] ?? a.currency}
+                        amount={<Money minor={a.balance_minor} currency={a.currency} />}
+                      />
+                      <AgentFundingButtons agent={{ id: a.agent_id ?? '', name: agent?.name ?? a.name }} currency={a.currency} />
+                    </div>
                   )
                 })}
               </div>

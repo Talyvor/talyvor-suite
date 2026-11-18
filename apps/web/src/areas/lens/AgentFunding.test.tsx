@@ -45,6 +45,8 @@ beforeEach(() => {
         approvals: [], statement: [], statement_time_zone: 'UTC', rules: { version: 1, saved_at: '2026-11-01T09:00:00Z' }, card: { status: 'none' },
         currency_accounts: [acct('macc_research', 'USD', 'agent', agent, 'agt_1')],
       })
+    if (path === '/api/wallets/capabilities')
+      return json({ capabilities: [{ capability: 'currency_accounts', name: 'Currency accounts', class: 'GREEN', real_money: false, label: 'sandbox' }] })
     if (path === '/api/money/accounts')
       return json({ accounts: [acct('macc_usd', 'USD', 'company', company), acct('macc_eur', 'EUR', 'company', 5_000), acct('macc_research', 'USD', 'agent', agent, 'agt_1')] })
     if (path === '/api/money/accounts/macc_research/funding') {
@@ -77,7 +79,7 @@ describe('Add money and Take back on an agent’s page (B61.84)', () => {
   it('adds $10.00 from the company account once under one key, says so, and reads both balances again', async () => {
     const page = await openAgentPage()
     fireEvent.click(within(page).getByRole('button', { name: 'Add money to Research' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Add money to Research' })
+    const dialog = await screen.findByRole('dialog', { name: /^Add money to Research/ })
     await waitFor(() => expect(text(within(dialog).getByTestId('agent-funding-line'))).toBe('From the company account. It holds $100.00.'))
     fireEvent.change(within(dialog).getByLabelText('Amount'), { target: { value: '10' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Continue' }))
@@ -99,7 +101,7 @@ describe('Add money and Take back on an agent’s page (B61.84)', () => {
     refusal = { status: 403, error: 'only the workspace’s owner or an admin may move money between the company and an agent' }
     const page = await openAgentPage()
     fireEvent.click(within(page).getByRole('button', { name: 'Take back from Research' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Take back from Research' })
+    const dialog = await screen.findByRole('dialog', { name: /^Take back from Research/ })
     await waitFor(() => expect(text(within(dialog).getByTestId('agent-funding-line'))).toBe('Into the company account. Research holds $0.00.'))
     fireEvent.change(within(dialog).getByLabelText('Amount'), { target: { value: '4' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Continue' }))
@@ -109,10 +111,30 @@ describe('Add money and Take back on an agent’s page (B61.84)', () => {
     expect(company).toBe(10_000)
   })
 
+  it('is drawn as the fund panel: Sandbox beside the heading, 50, 100 and 200 with 100 chosen, and a pick is what moves (B57.179)', async () => {
+    const page = await openAgentPage()
+    expect(within(page).getByTestId('agent-funding-agt_1').className).toContain('grid-cols-2')
+    fireEvent.click(within(page).getByRole('button', { name: 'Add money to Research' }))
+    const dialog = await screen.findByRole('dialog', { name: /^Add money to Research/ })
+    expect(await within(dialog).findByText('Sandbox')).toBeTruthy()
+    const presets = await within(dialog).findByRole('radiogroup', { name: 'Amount to move' })
+    expect(within(presets).getAllByRole('radio').map((r) => [text(r), r.getAttribute('aria-checked')])).toEqual([
+      ['$50.00', 'false'],
+      ['$100.00', 'true'],
+      ['$200.00', 'false'],
+    ])
+    fireEvent.click(within(presets).getByRole('radio', { name: '$50.00' }))
+    expect(within(dialog).getByLabelText('Amount')).toHaveValue('50')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Continue' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Move $50.00' }))
+    await waitFor(() => expect(text(document.body)).toContain('$50.00 moved to Research'))
+    expect(posts.map((p) => p.body)).toEqual([{ direction: 'to_agent', amount_minor: 5000 }])
+  })
+
   it('says when the agent has no account in the currency chosen, and offers the ones it has', async () => {
     const page = await openAgentPage()
     fireEvent.click(within(page).getByRole('button', { name: 'Add money to Research' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Add money to Research' })
+    const dialog = await screen.findByRole('dialog', { name: /^Add money to Research/ })
     fireEvent.change(await within(dialog).findByLabelText('Currency'), { target: { value: 'EUR' } })
     expect(text(within(dialog).getByTestId('agent-funding-other-currencies'))).toContain('Research has no Euro account. It has:')
     expect(within(dialog).getByRole('button', { name: 'Continue' })).toBeDisabled()
