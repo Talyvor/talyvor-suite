@@ -2,7 +2,6 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import { matchRoutes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, CONSOLE_ROUTES, queryClient } from './App'
-import { Landing } from './areas/marketing/Landing'
 import lensRoutes from './areas/documentation/lens-routes.json'
 import { COMPANY_CONTACT, COMPANY_LINE, COMPANY_NAME } from './company'
 import { FOOTER_LINE } from './positioning'
@@ -68,50 +67,8 @@ afterEach(() => {
   window.history.pushState({}, '', '/')
 })
 
-describe('the waitlist on /marketing follows the sign-up state', () => {
-  it('open: Get started is the way in — no email box and no "place opens"', async () => {
-    stranger(true)
-    render(<Landing />)
-    expect(await screen.findByText(/no invitation needed/i)).toBeInTheDocument()
-    expect(screen.queryByLabelText('Email address')).toBeNull()
-    expect(document.body.textContent).not.toMatch(/place opens|Join the waitlist/)
-    expect(screen.getAllByRole('link', { name: 'Get started' })[0]).toHaveAttribute('href', '/signup')
-  })
-
-  it('closed: the email box and the closed sentence', async () => {
-    stranger(false)
-    render(<Landing />)
-    expect(await screen.findByText(/letting the first companies in one at a time/)).toBeInTheDocument()
-    expect(screen.getByLabelText('Email address')).toBeInTheDocument()
-    expect(screen.getByText(/place opens/)).toBeInTheDocument()
-  })
-
-  it('unknown: neither', async () => {
-    stranger(undefined)
-    render(<Landing />)
-    await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled())
-    expect(screen.queryByLabelText('Email address')).toBeNull()
-    expect(document.body.textContent).not.toMatch(/place opens|no invitation needed|one at a time/i)
-  })
-})
-
-// B58.17: one sign-up door. The homepage and /signup say the same sentence about who may start, in both states.
-describe('the homepage and /signup say the same words about getting in', () => {
-  const accessLine = (root: HTMLElement) =>
-    [...root.querySelectorAll('[data-access-line]')].map((el) => el.textContent ?? '')
-
-  it.each([true, false])('signup_open %s', async (open) => {
-    stranger(open)
-    const home = render(<Landing />)
-    await vi.waitFor(() => expect(accessLine(home.container)).toHaveLength(1))
-    const said = accessLine(home.container)[0]
-    home.unmount()
-    const signup = await at('/signup')
-    await vi.waitFor(() => expect(accessLine(signup.container)).toHaveLength(1))
-    expect(accessLine(signup.container)[0]).toContain(said)
-    expect(said).toMatch(open ? /no invitation needed/i : /first companies in one at a time/)
-  })
-})
+// B64.1: version 4 of /marketing has no waitlist and no access sentence; its one claim about access is the "Early
+// access is open" chip, which follows the gate (FirstRunGaps.test.tsx). /signup keeps the sentence.
 
 const FOOTER_LINKS = [
   'Pricing /pricing',
@@ -127,7 +84,8 @@ const linksOf = (el: HTMLElement) =>
     .getAllByRole('link')
     .map((a) => `${a.textContent?.trim()} ${a.getAttribute('href')}`)
 
-describe.each(PUBLIC_PAGES)('%s', (path) => {
+// B64.1: /marketing is version 4, with its own nav and footer (Landing.test.tsx holds them).
+describe.each(PUBLIC_PAGES.filter((p) => p !== '/marketing'))('%s', (path) => {
   it('wears the one header and the one footer', async () => {
     stranger()
     await at(path)

@@ -13,8 +13,9 @@ import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH } from './areas/documentation
 
 const PUBLIC_ROUTES = ['/marketing', '/pricing', '/your-money', '/signup', '/signin', DOCUMENTATION_PATH, CLAUDE_CONNECTOR_PATH, '/privacy', '/terms']
 // The pages that name the product carry the line; /signin is a door with nothing to pitch, and so is /signup since
-// B59.8 made it the launch pack's form (who the account is for, the kind of money, then a key).
-const NAMES_THE_PRODUCT = new Set(['/marketing', '/pricing', '/your-money', DOCUMENTATION_PATH, '/privacy', '/terms'])
+// B59.8 made it the launch pack's form (who the account is for, the kind of money, then a key). /marketing says
+// version 4's words (B64.1, Nick approved 17 Nov 2026), which name the product their own way: Landing.test.tsx holds them.
+const NAMES_THE_PRODUCT = new Set(['/pricing', '/your-money', DOCUMENTATION_PATH, '/privacy', '/terms'])
 
 const FORBIDDEN: [string, RegExp][] = [
   ['MIXT', /\bmixt\b/i],

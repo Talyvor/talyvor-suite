@@ -249,10 +249,10 @@ export function takeEyebrowOffenders(): EyebrowOffender[] {
  *
  * A floor, not a census: a new surface is audited the moment its test renders it, listed or not.
  * B57.44 — Members left the list when it was drawn in Pocket, which has no eyebrows: its roles are chips now.
+ * B64.1 — Landing left it, and focusAudit's and glyphAudit's lists: the website is drawn by its own stylesheet (onSite).
  */
 export const MUST_RENDER_EYEBROW: Record<string, string> = {
   'src/areas/lens/Overview.test.tsx': 'the console surface with the most eyebrows in the product',
-  'src/areas/marketing/Landing.test.tsx': 'the public page eyebrows, over the quoted ledger figures',
   'src/areas/lens/Ledger.test.tsx': 'MuNumeral unit labels — an eyebrow wrapping a protected µ',
   'src/areas/docs/pm.test.tsx': 'the code-fence language label, the other fragile site',
 }

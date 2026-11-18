@@ -58,7 +58,10 @@ describe('StatusLabel is the only label', () => {
     const drawn: string[] = []
     for (const file of [...sources(WEB_SRC), ...sources(UI_SRC)]) {
       if (file === join(__dirname, 'StatusLabel.tsx')) continue
-      const text = readFileSync(file, 'utf8')
+      let text = readFileSync(file, 'utf8')
+      // B64.1 — the website's Penny demo keeps the dashed Sandbox chip design/website-2026-11-17-v4 draws (FOR-V7.md
+      // section 3: "the Sandbox label stays in the demo"), on the site's own dark stylesheet. That one chip, nothing else.
+      if (file.endsWith(join('areas', 'marketing', 'Landing.tsx'))) text = text.replace('<span className="sandbox">Sandbox</span>', '')
       for (const re of CHIP_WORDS) if (re.test(text)) drawn.push(`${file}: ${re}`)
     }
     expect(drawn).toEqual([])

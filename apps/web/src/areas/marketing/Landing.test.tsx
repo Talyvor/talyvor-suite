@@ -1,328 +1,138 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { readFileSync } from 'node:fs'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CONTACT_EMAIL, Landing, PICTURE_LINE } from './Landing'
-import { ON_ITS_WAY, POSITIONING_SENTENCES } from '../../positioning'
-import { COMPANY_CONTACT } from '../../company'
-import { BUILDING } from '../../labels/StatusLabel'
-import { WALLETS } from '../../labels/capabilities'
+import { CONTACT_EMAIL, Landing } from './Landing'
+import { COMPANY_CONTACT, COMPANY_LINE } from '../../company'
 
-// Area-owned test — replaces the deleted shared areas/scaffold.test.tsx (the
-// deadlock: a shared test over per-area screens; see #7). The marketing tab
-// owns this file with its screen. Kept from the scaffold contract: the landing
-// renders with NO providers — no auth gate, no query client, no router —
-// because it is a public page. Added on top: the page's honesty invariants
-// (no unmeasured numbers) and the flagged contact wiring.
+// Area-owned test. Kept from the scaffold contract: the landing renders with NO providers — no auth gate, no query
+// client, no router — because it is a public page. B64.1: the page is version 4 (design/website-2026-11-17-v4,
+// Nick approved 17 Nov 2026), so what is pinned here is that page's words and the rules FOR-V7.md section 3 keeps on.
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+})
+
+/** What a visitor reads: the page without its <style>. */
+function pageText(container: HTMLElement): string {
+  const page = container.cloneNode(true) as HTMLElement
+  page.querySelectorAll('style').forEach((s) => s.remove())
+  return page.textContent ?? ''
+}
 
 describe('Landing', () => {
-  it('renders standalone — no router, no providers — with exactly one Talyvor heading', () => {
+  it('renders standalone — no router, no providers — under version 4’s one headline', () => {
     render(<Landing />)
-    // One heading names the product; keeping it unique keeps every
-    // getByRole('heading', { name: /talyvor/i }) consumer unambiguous.
-    const headings = screen.getAllByRole('heading')
-    expect(headings.filter((h) => /talyvor/i.test(h.textContent ?? ''))).toHaveLength(1)
+    const h1 = screen.getAllByRole('heading', { level: 1 })
+    expect(h1).toHaveLength(1)
+    expect(h1[0]).toHaveTextContent('Your AI agent wants your card.Give it its own.')
   })
 
-  it('keeps the single "Open the app" link pointing at the console', () => {
+  it('draws index.html section by section, each under its own heading', () => {
     render(<Landing />)
-    expect(screen.getByRole('link', { name: /open the app/i })).toHaveAttribute('href', '/')
-  })
-
-  // B51.1: every public footer names the company's address, so the page offers it rather than saying there is no inbox.
-  it('offers the company address and never says there is no inbox', () => {
-    expect(CONTACT_EMAIL).toBe(COMPANY_CONTACT)
-    render(<Landing />)
-    const mailtos = screen.getAllByRole('link').filter((a) => a.getAttribute('href')?.startsWith('mailto:'))
-    expect(mailtos.length).toBeGreaterThan(0)
-    for (const a of mailtos) expect(a).toHaveAttribute('href', `mailto:${COMPANY_CONTACT}`)
-    expect(screen.queryByText(/no inbox/)).toBeNull()
-  })
-
-  // B28.2: a percentage on this page would be an unmeasured claim. The one measured one, the pooled discount, left with
-  // pooling (B59.5), so none is printed.
-  it('prints no percentage', () => {
-    const { container } = render(<Landing />)
-    // The page's own <style> block (B29.4's photo scrim and crops) is CSS, not copy a visitor reads.
-    const page = container.cloneNode(true) as HTMLElement
-    page.querySelectorAll('style').forEach((s) => s.remove())
-    const percents = new Set(page.textContent?.match(/\d+%/g) ?? [])
-    expect([...percents]).toEqual([])
-  })
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // CHECKABLE CLAIMS. This page went live making four statements that source
-  // does not support. Each assertion below names the string and the reason —
-  // a test that only checked "the page renders" would pass on any wording.
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // ⚠ THE REASON THIS ASSERTION USED TO CARRY IS FALSE, AND THIS ASSERTION COULD NOT HAVE TOLD
-  // ANYONE. It read "Docs tags its own Lens calls by FEATURE (docs-ai-write / docs-ai-summarize)
-  // and never by page, so no per-page attribution exists to report" — measured against
-  // talyvor-docs `63b7ea6` that is no longer true (migration 0018's page_ai_spend_events ledger,
-  // pages.own_ai_cost_usd, and cmd/docs/main.go's WithSpendBinder wiring; Landing.tsx carries the
-  // three commands). The assertion below is an ABSENCE test on THIS page's text: it is green for
-  // every possible state of the upstream, so no amount of drift over there can red it. That is not
-  // a flaw to fix here — a claim guard's job is to hold the page — it is the reason the premise now
-  // lives in deploy/decision-expiry.sh's uncheckable half, where a deployer is told to run it in a
-  // talyvor-docs checkout. Read the register entry, not this comment, for the live premise.
-  //
-  // WHAT KEEPS THE SENTENCE OFF THE PAGE TODAY: the claim is the enumeration "an issue, a document
-  // or a change" and the change half has no surface at all (the assertion two below), and
-  // own_ai_cost_usd is a documented LOWER BOUND — docs-ai-ask and docs-search have no single page
-  // and are excluded by design. Restoring the sentence is a claim decision, not a session's.
-  it('does not claim a per-document cost, whose upstream number is a lower bound', () => {
-    const { container } = render(<Landing />)
-    expect(container.textContent ?? '').not.toMatch(/cost of (an issue, )?a document/i)
-  })
-
-  // ⚠ Code has no surface in this app at all — no route in App.tsx, no proxy in the BFF — so
-  // there is no "cost of a change" a reader could go and look at.
-  // The live wording is "the cost of an issue, a document or a change", so a literal
-  // /cost of a change/ never appears and would pass without the page changing at all. The
-  // assertion has to name the enumeration that actually makes the claim.
-  it('does not claim a per-change cost, which has no surface', () => {
-    const { container } = render(<Landing />)
-    expect(container.textContent ?? '').not.toMatch(/a document or a change/i)
-  })
-
-  // ⚠ THE SHARPEST ONE: it named a channel nobody can connect to. deploy/Caddyfile publishes ONE
-  // origin (app.talyvor.com → the BFF on :8787), the BFF registers no /mcp route, and Track and
-  // Docs are not publicly routed. The MCP server exists in Track — it is simply not reachable by
-  // any customer of the hosted product, so advertising it as a SURFACE is a promise the deployment
-  // cannot keep.
-  it('does not advertise MCP as a surface customers can reach', () => {
-    const { container } = render(<Landing />)
-    expect(container.textContent ?? '').not.toMatch(/\bMCP\b/)
-  })
-
-  // B28.2: the page leads with wallets, and the price-curve claim is gone — "toward zero" and
-  // the "near-zero" ninety-day bill were a projected shape, and no ledger row supports either.
-  it('leads with wallets, and makes no price-curve claim', () => {
-    const { container } = render(<Landing />)
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('An account for every AI agent.')
-    const text = container.textContent ?? ''
-    // B57.60: the reference's sections less B59.5's hidden areas (Chat, the Marketplace and pooling), in its order.
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Talyvor checks the rules before the money moves.',
-      'You always know what is real.',
-      'Start free. Grow when you need to.',
-      'Before you start.',
-      'Give your first agent a wallet.',
+      'Stop lending your agent your card.',
+      'Agent money shouldn’t need a manual.',
+      'One minute. The whole app.',
+      'Press it. You’ll get it in ten seconds.',
+      'Your shopping agent. Your company’s agent army.',
+      'Claude does the legwork. You keep the final say.',
+      'They built it for engineers. We built it for you.',
+      'Start free. Seriously.',
+      'Built. Running. Moving fast.',
+      'Your move.',
     ])
-    expect(text).not.toMatch(/toward zero|ninety\s+days|90 days|near-zero/i)
-    // B44.4: the footer carries positioning v2's line.
-    expect(text).toContain('Talyvor Ltd · the financial ecosystem for the AI agent economy')
   })
 
-  // B44.4: the hero is positioning v2 as Nick wrote it — the two sentences and what is coming said as coming;
-  // since B46.1 in passing, with no status line. Credit and trading are not offered, "accounts" is not the
-  // word, and no loans.
-  it('says the two sentences and what is on its way', () => {
+  it('says no LXC, never that Talyvor is or is not a bank, and none of the words FOR-V7.md keeps off the page', () => {
     const { container } = render(<Landing />)
-    const text = container.textContent ?? ''
-    for (const s of POSITIONING_SENTENCES) expect(text).toContain(s)
-    expect(text).toContain(ON_ITS_WAY)
-    expect(text).not.toMatch(/Accounts, cards|accounts in currencies|loans between companies/i)
-    expect(text).not.toMatch(/with credit and trading through licensed partners/i)
+    const text = pageText(container)
+    expect(text).not.toMatch(/LXC/)
+    expect(text).not.toMatch(/not a bank/i)
+    expect(text).not.toMatch(/\bbank\b|licensed partners|coming soon|ChatGPT/i)
   })
 
-  // B56.1: every line on the page is true today (Nick, 1 Nov 2026). Outside a limit Lens refuses, so only a payment
-  // above the approval amount waits; an empty wallet refuses; Always allow and a mandate move money with no approval.
-  // B59.5: Hey Taly and the credit line left with Chat and lending.
-  it('says the true lines and none of the old ones', () => {
-    const { container } = render(<Landing />)
-    const text = container.textContent ?? ''
-    expect(text).toContain('all within limits the owner sets, with any payment above the amount they choose waiting for one tap.')
-    expect(ON_ITS_WAY).toBe('Next we’re building payments for everyone, not only businesses.')
-    expect(text).toContain(
-      'when the money runs out the next call is refused rather than billed to you.',
-    )
-    expect(text).toContain('A payment above the line you set waits for a person, unless you always allow that payee or a mandate covers it.')
-    expect(text).not.toMatch(/anything outside waiting|Next we.re building Hey Taly|Nothing moves until someone approves it/)
-  })
-
-  // B58.17 (Nick, 10 Nov 2026): the hero is the agent accounts story, always with who owns the account, and the page
-  // says nothing about running on your own infrastructure, which Talyvor does not offer.
-  it('leads with an account for every AI agent, owned by you and run by your agent, and has no Sovereign tile', () => {
-    const { container } = render(<Landing />)
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^An account for every AI agent\.$/)
-    const hero = container.querySelector('#hero-heading')!.closest('section')!
-    expect(hero.textContent).toContain('You own it. Your agent runs it.')
-    const text = container.textContent ?? ''
-    expect(text).not.toMatch(/the financial ecosystem for the AI agent economy\./i)
-    expect(text).not.toMatch(/sovereign|own infrastructure/i)
-  })
-
-  it('writes positioning.ts with no em or en dash', () => {
-    const src = readFileSync(resolve(__dirname, '../../positioning.ts'), 'utf8')
-    expect(src).not.toMatch(/[\u2013\u2014]/)
-  })
-
-  // B57.60: Pocket's hero (design/pocket s-home): on ink, the logo kit's three streams (decorative, and the image
-  // index.html preloads) flowing into a picture of the approval sheet, with two agent cards. The photograph and the
-  // section icons are gone; no retired verb sits on the page (B32.1).
-  it('draws the hero on ink: the streams, the sheet as a picture and two agent cards, without the photo or the verbs', () => {
-    const { container } = render(<Landing />)
-    // B51.1: the site's one header, with the kit's logo (B57.6).
-    expect(container.querySelector('header [data-brand="lockup"] img[data-brand="logo"]')).not.toBeNull()
-
-    const hero = container.querySelector('#hero-heading')!.closest('section')!
-    expect(hero).toHaveAttribute('data-theme', 'dark')
-    const streams = hero.querySelector('img.tal-streams')!
-    expect(streams.getAttribute('src')).toBe('/brand/logo/talyvor-streams-on-dark.svg')
-    expect(streams).toHaveAttribute('aria-hidden', 'true')
-    expect(streams).toHaveAttribute('alt', '')
-    const html = readFileSync(resolve(__dirname, '../../../index.html'), 'utf8')
-    expect(html, 'index.html must preload the art the page uses').toContain(`l.href = '${streams.getAttribute('src')}'`)
-
-    const sheet = hero.querySelector('[data-picture="approval-sheet"]')!
-    for (const line of ['Research wants to pay', '$340.00', 'to Acme Hosting', 'This approves this payment only.'])
-      expect(sheet.textContent).toContain(line)
-    // Dollars only: a picture's figures, never credit standing in for an account's money.
-    expect(sheet.textContent).not.toMatch(/LXC/)
-    expect([...hero.querySelectorAll('[data-agent-card]')].map((c) => c.textContent)).toEqual(['Research$1,650.00', 'Sales$1,200.00'])
-
-    expect(container.querySelector('img[src^="/brand/photos/"]')).toBeNull()
-    expect(container.querySelectorAll('img[src^="/brand/svg/"]')).toHaveLength(0)
-    // Per text node: the page's textContent joins adjacent spans, so "Route" + "Prove" reads as one word.
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
-    const words: string[] = []
-    while (walker.nextNode()) words.push(...(walker.currentNode.textContent!.match(/\b(route|prove|reuse|compound)\b/gi) ?? []))
-    expect(words, 'a retired verb shows as a word').toEqual([])
-  })
-
-  it('says the sheet is a picture when its buttons are pressed', () => {
+  it('sends every Open your account and Open an account to /signup', () => {
     render(<Landing />)
-    const line = screen.getByText(PICTURE_LINE)
-    expect(line).toHaveClass('sr-only')
-    for (const name of [/approve with your passkey/i, /^decline$/i])
-      expect(screen.getByRole('button', { name })).toHaveAccessibleDescription(PICTURE_LINE)
-    fireEvent.click(screen.getByRole('button', { name: /^decline$/i }))
-    expect(line).not.toHaveClass('sr-only')
+    const ctas = screen.getAllByRole('link', { name: /open (your|an) account/i })
+    expect(ctas).toHaveLength(4)
+    for (const a of ctas) expect(a).toHaveAttribute('href', '/signup')
   })
 
-  it('leads every door where the reference does', () => {
+  it('keeps the Sandbox label in the demo and the "Where we are" block, and says real money is next, not live', () => {
     const { container } = render(<Landing />)
-    const hero = container.querySelector('#hero-heading')!.closest('section')!
-    expect(within(hero).getByRole('link', { name: 'Get started' })).toHaveAttribute('href', '/signup')
-    expect(within(hero).getByRole('link', { name: 'See how it works' })).toHaveAttribute('href', '#wallets')
-    expect(container.querySelector('section#wallets')).not.toBeNull()
-    expect(screen.getByRole('link', { name: 'See pricing' })).toHaveAttribute('href', '/pricing')
-    expect(screen.getByRole('link', { name: 'Create your workspace' })).toHaveAttribute('href', '/signup')
+    expect(within(container.querySelector<HTMLElement>('#try')!).getByText('Sandbox')).toBeInTheDocument()
+    expect(screen.getByText('Sandbox today')).toBeInTheDocument()
+    expect(screen.getByText('It switches on with our launch partner, and early users go first.')).toBeInTheDocument()
   })
 
-  it('asks the four questions', () => {
+  it('offers the company address and line, the policies, and the AI Agents Directory badge as they give it', () => {
+    render(<Landing />)
+    expect(CONTACT_EMAIL).toBe(COMPANY_CONTACT)
+    expect(screen.getByText(CONTACT_EMAIL, { selector: 'p' })).toBeInTheDocument()
+    const footer = screen.getByRole('contentinfo')
+    expect(within(footer).getByText(COMPANY_LINE)).toBeInTheDocument()
+    expect(within(footer).getByRole('link', { name: 'Privacy' })).toHaveAttribute('href', '/privacy')
+    expect(within(footer).getByRole('link', { name: 'Terms' })).toHaveAttribute('href', '/terms')
+    const badge = within(footer).getByRole('link', { name: 'Talyvor - Featured on AI Agents Directory' })
+    expect(badge).toHaveAttribute('href', 'https://aiagentsdirectory.com/agent/talyvor')
+    expect(badge).toHaveAttribute('target', '_blank')
+    expect(badge).toHaveAttribute('rel', 'noopener')
+    expect(badge).toHaveAttribute('title', 'Discover Talyvor on AI Agents Directory')
+  })
+
+  it('serves every film, poster and picture it names from the app’s own /site', () => {
     const { container } = render(<Landing />)
-    const asked = [...container.querySelectorAll('dl dt')].map((d) => d.textContent).filter((q) => q?.endsWith('?'))
-    expect(asked).toEqual(['Can my agents spend real money?', 'What is LXC?', 'Who approves payments?', 'Is Talyvor a bank?'])
-    expect(screen.getByText(/Talyvor is not a bank, and LXC is not money/)).toBeInTheDocument()
+    const urls = [...container.querySelectorAll('video, img')].flatMap((el) =>
+      ['src', 'poster', 'data-src', 'data-small'].map((a) => el.getAttribute(a)).filter((v): v is string => !!v),
+    )
+    expect(urls.length).toBeGreaterThanOrEqual(13)
+    const missing = urls.filter((u) => !u.startsWith('/site/') || !existsSync(resolve(__dirname, '../../../public', u.slice(1))))
+    expect(missing).toEqual([])
   })
 })
 
-// B56.10 — Live or Sandbox on the money sections as /api/pricing serves Lens's labels, and Building only from the registry.
-describe('Landing labels', () => {
-  afterEach(() => vi.restoreAllMocks())
-
-  function serveLabels(labels: Record<string, string> | undefined) {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
-      String(input) === '/api/pricing'
-        ? new Response(JSON.stringify({ min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000], labels }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          })
-        : new Response('null', { status: 404 }),
-    )
-  }
-
-  const chip = (container: HTMLElement, key: string) => container.querySelector(`[data-status-key="${key}"]`)?.textContent
-
-  it('draws Wallets as Lens labels it: Live only when every capability is live', async () => {
-    serveLabels({ ...Object.fromEntries(WALLETS.map((k) => [k, 'live'])), payments_out: 'sandbox' })
+describe('Try Penny', () => {
+  it('pays inside the rules on its own, asks above the line, and lands what you approve on the statement', () => {
+    vi.useFakeTimers()
     const { container } = render(<Landing />)
-    await vi.waitFor(() => expect(chip(container, WALLETS.join(' '))).toBe('Sandbox'))
-    expect(container.querySelector(`#wallets [data-status-key="${WALLETS.join(' ')}"]`)).not.toBeNull()
-  })
+    const tryIt = container.querySelector<HTMLElement>('#try')!
+    fireEvent.click(within(tryIt).getByRole('button', { name: /Acme Hosting/ }))
+    expect(within(tryIt).getByText('Paid on its own')).toBeInTheDocument()
 
-  it('draws no Live or Sandbox while Lens serves no labels', async () => {
-    serveLabels(undefined)
-    const { container } = render(<Landing />)
-    await screen.findByTestId('labels-meaning')
-    await new Promise((done) => setTimeout(done, 20))
-    expect(container.querySelectorAll('[data-status-key][data-status-label="live"], [data-status-key][data-status-label="sandbox"]')).toHaveLength(0)
-  })
+    fireEvent.click(within(tryIt).getByRole('button', { name: /Northwind Data/ }))
+    const sheet = screen.getByRole('dialog', { hidden: true })
+    expect(sheet).toHaveClass('on')
+    expect(within(sheet).getByText('Above your $50 line')).toBeInTheDocument()
+    expect(document.documentElement.style.overflow).toBe('hidden')
 
-  // B56.15 — the currency accounts' statements shipped, so the band and card 04 are true as written and carry no Building.
-  it('carries Building from building.json only on what is on its way', () => {
-    const { container } = render(<Landing />)
-    const building = [...container.querySelectorAll('[data-status-key][data-status-label="building"]')].map((el) => el.getAttribute('data-status-key'))
-    expect(building).toEqual(['payments_for_everyone'])
-    for (const key of building) expect(BUILDING.some((e) => e.key === key), key!).toBe(true)
-    expect(screen.queryByText('Statements for dollar, pound, euro and USDC accounts')).toBeNull()
-    expect(screen.getByText(ON_ITS_WAY).querySelector('[data-status-label="building"]')).not.toBeNull()
-  })
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Approve with Face ID' }))
+    act(() => void vi.runAllTimers())
+    expect(sheet).not.toHaveClass('on')
+    expect(document.documentElement.style.overflow).toBe('')
+    expect(within(tryIt).getByText('You approved')).toBeInTheDocument()
+    expect(within(tryIt).getByText('$186.00')).toBeInTheDocument()
 
-  it('says what the labels mean', () => {
-    render(<Landing />)
-    const block = screen.getByTestId('labels-meaning')
-    for (const line of ['Moves real money.', 'Works. No real money moves.', 'In our build queue. Not shipped yet.'])
-      expect(block.textContent).toContain(line)
+    fireEvent.click(within(tryIt).getByRole('button', { name: /Brightline Leads/ }))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(sheet).not.toHaveClass('on')
+    expect(within(tryIt).getByText('You declined')).toBeInTheDocument()
   })
+})
 
-  // B57.129 — the approved deck faces (talyvor-cards-final/deck): one owner card of each family, then the six agents.
-  it('shows the approved card faces, each a WebP with a PNG fallback under 300 KB and alt text', () => {
-    const deck = ['premium', 'business', 'stable-premium', 'agent-remy', 'agent-sunny', 'agent-penny', 'agent-max', 'agent-nova', 'agent-ollie']
+describe('Pricing on the page', () => {
+  it('switches between people and companies, and between dollars, pounds and euros', () => {
     const { container } = render(<Landing />)
-    const faces = [...container.querySelectorAll('#wallets picture img')]
-    expect(faces.map((img) => img.getAttribute('src'))).toEqual(deck.map((id) => `/card-faces/${id}.png`))
-    for (const img of faces) {
-      expect(img.getAttribute('alt')).toMatch(/\S card$/)
-      const webp = img.parentElement!.querySelector('source[type="image/webp"]')!.getAttribute('srcset')!
-      expect(webp).toBe(img.getAttribute('src')!.replace(/\.png$/, '.webp'))
-      const png = readFileSync(resolve(__dirname, '../../../public', img.getAttribute('src')!.slice(1)))
-      const riff = readFileSync(resolve(__dirname, '../../../public', webp.slice(1)))
-      expect(png.subarray(1, 4).toString('latin1')).toBe('PNG')
-      expect(riff.subarray(8, 12).toString('latin1')).toBe('WEBP')
-      expect(png.length).toBeLessThan(300 * 1024)
-      expect(riff.length).toBeLessThan(300 * 1024)
-    }
-    expect(screen.getByAltText('Remy, Research’s agent card')).toBeInTheDocument()
-    // No card network's mark: the network corner stays empty until the issuer gives the artwork.
-    const words = `${container.textContent} ${faces.map((img) => img.getAttribute('alt')).join(' ')}`
-    expect(words).not.toMatch(/visa|mastercard/i)
-  })
-  // B57.60: the four plans as /api/pricing serves them, and the LXC answer at the served rate; the page types no price.
-  it('prints each plan and the LXC rate as served, and none while unserved', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
-      String(input) === '/api/pricing'
-        ? new Response(
-            JSON.stringify({
-              usd_per_lxc: 0.1, min_usd_cents: 1000, max_usd_cents: 1_000_000, preset_usd_cents: [1000],
-              company_plans: [{ id: 'team', usd_cents: 4900 }, { id: 'business', usd_cents: 29900 }],
-              enterprise_from_usd_cents: 250000,
-              plan_gates: { order: ['free', 'team', 'business', 'enterprise'], plans: {
-                free: { agents: 3 }, team: { agents: 25 }, business: { agents: -1 }, enterprise: { agents: -1 } } },
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          )
-        : new Response('null', { status: 404 }),
-    )
-    const { container } = render(<Landing />)
-    await vi.waitFor(() => expect(container.querySelectorAll('[data-plan]')).toHaveLength(4))
-    expect([...container.querySelectorAll('[data-plan]')].map((p) => p.textContent)).toEqual([
-      'Free$0up to 3 agents', 'Team$49a month', 'Business$299a month', 'EnterpriseFrom $2,500a month',
-    ])
-    expect(screen.getByText('What is LXC?').nextElementSibling!.textContent).toBe(
-      'Talyvor credit, and 1 LXC is $0.10. Agents spend it on AI requests and Talyvor’s services.',
-    )
-    cleanup()
-    vi.restoreAllMocks()
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('null', { status: 503 }))
-    const again = render(<Landing />)
-    await new Promise((done) => setTimeout(done, 20))
-    expect(again.container.querySelectorAll('[data-plan]')).toHaveLength(0)
-    expect(screen.getByText('What is LXC?').nextElementSibling!.textContent).not.toMatch(/\$/)
+    const plans = () => container.querySelector('#plans')!.textContent
+    expect(plans()).toContain('Fleet$9.99 a month')
+    fireEvent.click(screen.getByRole('button', { name: '£' }))
+    expect(plans()).toContain('Fleet£7.99 a month')
+    fireEvent.click(screen.getByRole('button', { name: '€' }))
+    expect(plans()).toContain('Fleet€8.99 a month')
+    fireEvent.click(screen.getByRole('button', { name: 'For companies' }))
+    expect(plans()).toContain('Group€125 a month')
+    expect(plans()).toContain('CustomLet’s talk')
   })
 })

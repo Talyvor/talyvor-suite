@@ -78,7 +78,8 @@ function stripInterpolations(text: string): string {
  */
 function handWrittenClassNames(): Set<string> {
   const names = new Set<string>()
-  const files = [resolve(appRoot, 'src/styles.css'), resolve(appRoot, '../../packages/ui/src/theme.css')]
+  // B64.1: and the website's own stylesheet, which Landing.tsx renders in its <style>.
+  const files = [resolve(appRoot, 'src/styles.css'), resolve(appRoot, '../../packages/ui/src/theme.css'), resolve(appRoot, 'src/areas/marketing/site.css')]
   const collect = (text: string) => {
     for (const m of text.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*)\s*(?=[\s,{:>+~])/g)) names.add(m[1])
   }

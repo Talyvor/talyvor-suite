@@ -157,7 +157,7 @@ describe('the policies are not a dead end', () => {
     fireEvent.click(await returnLink())
 
     // Arrived at the marketing page — not merely "left the document".
-    expect(await screen.findByRole('link', { name: /see how it works/i })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /watch the one-minute how-to/i })).toBeInTheDocument()
     // And NOT dropped at a sign-in card, which is where /  would have put a stranger.
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument()
   })

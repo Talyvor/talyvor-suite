@@ -68,8 +68,8 @@
         document.documentElement.setAttribute('data-theme', t)
       })()
     </script>
-    <!-- B57.60: the /marketing hero's art, the logo kit's three streams, preloaded before the bundle runs. Only on
-         that address — every other screen would pay for a picture it never shows. The href is the src Landing.tsx
+    <!-- B64.1: the /marketing hero film's poster (its first frame), preloaded before the bundle runs. Only on that
+         address — every other screen would pay for a picture it never shows. The href is the poster Landing.tsx
          draws, so the preload is the image the page uses. The attribute keeps it apart from the no-flash script,
          which noFlashTheme.test.ts runs. -->
     <script data-preload="marketing-hero">
@@ -78,7 +78,7 @@
         var l = document.createElement('link')
         l.rel = 'preload'
         l.as = 'image'
-        l.href = '/brand/logo/talyvor-streams-on-dark.svg'
+        l.href = '/site/hero-loop-poster.jpg'
         l.setAttribute('fetchpriority', 'high')
         document.head.appendChild(l)
       })()

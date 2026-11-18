@@ -109,7 +109,10 @@ describe('B59.5 — the public website shows the launch pack only', () => {
   it('the home page names and links to no hidden area', () => {
     const { container } = render(<Landing />)
     const { text, hrefs } = read(container)
-    expect(named(text)).toEqual([])
+    // B64.1 — three of version 4's lines use the words for something else: the usual way's docs, and your own card.
+    const own = ['Read the docs, install an SDK, wire up keys', 'No borrowing your card', 'Stop lending your agent']
+    for (const line of own) expect(text).toContain(line)
+    expect(named(own.reduce((t, line) => t.split(line).join(' '), text))).toEqual([])
     expect(hrefs.filter((h) => HIDDEN_HREF.test(h))).toEqual([])
   })
 

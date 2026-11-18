@@ -62,19 +62,19 @@ afterEach(() => {
 })
 
 describe('a signed-out visitor arrives from talyvor.com and can act', () => {
-  it('lands on the page and is told the product — an account for every AI agent — not a placeholder', async () => {
+  it('lands on the page and is told the product — its agent gets its own card — not a placeholder', async () => {
     mockBff()
     at('/marketing')
-    // The claim the page exists to make. If this heading goes, the page has lost its argument.
-    expect(await screen.findByRole('heading', { level: 1, name: /an account for every ai agent/i })).toBeInTheDocument()
-    // And what Talyvor is for, in Nicolai's two sentences.
-    expect(screen.getByText(/all within limits the owner sets, with any payment above the amount they choose waiting for one tap/i)).toBeInTheDocument()
+    // The claim the page exists to make (B64.1, version 4). If this heading goes, the page has lost its argument.
+    expect(await screen.findByRole('heading', { level: 1, name: /your ai agent wants your card\. give it its own\./i })).toBeInTheDocument()
+    // And the three steps it promises.
+    expect(screen.getByText(/sign up, open an account, give your agent a card\. it pays inside your rules/i)).toBeInTheDocument()
   })
 
   it('reaches signup — the address it publishes resolves to the real signup screen', async () => {
     mockBff()
     const { unmount } = at('/marketing')
-    const cta = (await screen.findAllByRole('link', { name: /get started/i }))[0]
+    const cta = (await screen.findAllByRole('link', { name: /open your account/i }))[0]
     const href = cta.getAttribute('href') ?? ''
     expect(href).toBe('/signup')
     unmount()
@@ -99,19 +99,17 @@ describe('a signed-out visitor arrives from talyvor.com and can act', () => {
     expect((await screen.findAllByText(/needs legal review/i)).length).toBeGreaterThan(0)
   })
 
-  it('reaches pricing — and the price list it arrives at shows the plans Lens states', async () => {
+  it('reaches pricing — the section the nav names is on the page, with its plans', async () => {
     mockBff()
-    const { unmount } = at('/marketing')
+    const { container } = at('/marketing')
     const link = (await screen.findAllByRole('link', { name: /^pricing$/i }))[0]
     const href = link.getAttribute('href') ?? ''
-    expect(href).toBe('/pricing')
-    unmount()
-
-    mockBff()
-    at(href)
-    expect(await screen.findByRole('heading', { name: /credit for your agents/i })).toBeInTheDocument()
-    // B61.59 — the two ladders, from Lens's public plans read; no LXC rate.
-    expect(await screen.findByTestId('ladder-plan-personal_solo')).toHaveTextContent('Solo')
+    // B64.1: version 4 carries its plans on the page (B64.3 draws them from Lens's plan table).
+    expect(href).toBe('#pricing')
+    const section = container.querySelector(href)
+    expect(section).not.toBeNull()
+    expect(section).toHaveTextContent('Start free. Seriously.')
+    expect(section).toHaveTextContent('Solo')
   })
 
   it('reaches terms', async () => {
