@@ -4,7 +4,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import { matchRoutes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, CONSOLE_ROUTES, queryClient } from '../../App'
-import { Landing } from '../marketing/Landing'
+import { Pricing } from '../marketing/Pricing'
 import { pressEverything } from '../../test/pressEverything'
 import { CLAUDE_CONNECTOR_PATH, DOCUMENTATION_PATH, LICENCES } from './content'
 
@@ -154,9 +154,11 @@ describe('/documentation', () => {
     expect(LICENCES.find((l) => l.repo === 'talyvor-suite')?.licence).toBe(first)
   })
 
+  // B64.1: the website (/marketing) draws its own nav and footer from version 4; the site's shared header and footer
+  // are the other public pages', /pricing among them.
   it('is linked from the site’s header and footer', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('null', { status: 404 }))
-    render(<Landing />)
+    render(<Pricing />)
     for (const region of [screen.getByRole('banner'), screen.getByRole('contentinfo')]) {
       expect(within(region).getByRole('link', { name: 'Documentation' })).toHaveAttribute('href', DOCUMENTATION_PATH)
     }

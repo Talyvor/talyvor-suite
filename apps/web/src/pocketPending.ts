@@ -86,3 +86,14 @@ export function designOf(pathname: string, routes: readonly string[], pending: r
 export function inPocket(el: Element | null): boolean {
   return el?.closest(`[${DESIGN_ATTR}]`)?.getAttribute(DESIGN_ATTR) === 'pocket'
 }
+
+/**
+ * B64.1 — the website (/marketing, design/website-2026-11-17-v4) is drawn by its own stylesheet (site.css), not by
+ * Tailwind classes, and carries `data-site` on its root. The audits that read a face or a focus ring off an element's
+ * classes cannot see that stylesheet, so they leave the site's elements to it: Pocket's faces and a tangerine
+ * :focus-visible ring on everything.
+ */
+export const SITE_ATTR = 'data-site'
+export function onSite(el: Element): boolean {
+  return el.closest(`[${SITE_ATTR}]`) !== null
+}

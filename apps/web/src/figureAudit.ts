@@ -1,5 +1,5 @@
 import { onCommit } from './auditScope'
-import { inPocket } from './pocketPending'
+import { inPocket, onSite } from './pocketPending'
 
 /**
  * THE RENDERED-FIGURE AUDIT — what the user actually sees, not what the code called it.
@@ -185,6 +185,8 @@ export function figuresIn(root: ParentNode): RenderedFigure[] {
   for (const el of Array.from(root.querySelectorAll('*'))) {
     // B28.134 — a formula's digits are mathematics, drawn by KaTeX in its own faces, not figures.
     if (el.closest('.katex') !== null) continue
+    // B64.1 — the website sets its figures in Bricolage Grotesque or Figtree from its own stylesheet (onSite).
+    if (onSite(el)) continue
     const text = ownText(el)
     const kind = figureKind(text)
     if (!kind) continue

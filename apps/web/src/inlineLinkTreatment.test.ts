@@ -110,9 +110,10 @@ describe('every inline link in the product takes the one shape', () => {
   it('the front page’s inline links take it too — the shape is the site’s, not only the console’s', () => {
     // (Its contact address is an <a> dressed as a Button — a control, not a link in prose.)
     const landing = links.filter((s) => s.file.endsWith('areas/marketing/Landing.tsx'))
-    // B51.1: its header and footer links are the shared SiteChrome's now, which take the shape there. B57.60: Privacy
-    // and Terms left the hero for that footer, so the contact address in the close is the page's own inline link.
-    expect(landing.filter(usesInlineLink).length).toBeGreaterThanOrEqual(1)
+    // B64.1: the website (version 4) has no link in prose, only buttons and its nav; the public page that keeps inline
+    // links in the site's shape is /documentation. The front page still underlines nothing outside the shape.
+    const docs = links.filter((s) => s.file.endsWith('areas/documentation/Documentation.tsx'))
+    expect(docs.filter(usesInlineLink).length).toBeGreaterThanOrEqual(1)
     expect(landing.filter((s) => !usesInlineLink(s) && /\bunderline\b/.test(s.cls)).map((s) => s.cls)).toEqual([])
   })
 

@@ -1,5 +1,5 @@
 import { onCommit } from './auditScope'
-import { inPocket } from './pocketPending'
+import { inPocket, onSite } from './pocketPending'
 
 /**
  * THE FOCUS AUDIT — the accent is the product's focus signal, and it must be the ONLY one.
@@ -148,6 +148,8 @@ export function focusOffendersIn(root: ParentNode): FocusOffender[] {
   for (const el of Array.from(root.querySelectorAll('*'))) {
     if (!isKeyboardFocusable(el)) continue
     if (carriesFocusRing(el)) continue
+    // B64.1 — the website's stylesheet rings every focusable element in tangerine (onSite).
+    if (onSite(el)) continue
     if (isProseLink(el)) continue
     const cs = classesOf(el)
     out.push({
@@ -247,7 +249,6 @@ export const MUST_RENDER_FOCUS_RING: Record<string, string> = {
   'src/areas/docs/DocsArea.test.tsx': 'the space rows, the create-space field and the page editor',
   'src/areas/track/IssueList.test.tsx': 'the new-issue field and the per-row status select',
   'src/areas/track/IssueDetail.test.tsx': 'the description editor and its save/cancel buttons',
-  'src/areas/marketing/Landing.test.tsx': 'the public page: the worked-hit stepper',
   'src/areas/lens/TopUp.test.tsx': 'the buy buttons — pressed immediately before spending money',
   'src/areas/lens/Keys.test.tsx': 'the mint and revoke controls',
   'src/areas/auth/Entry.test.tsx': 'the way in: the sign-in and sign-up actions',
