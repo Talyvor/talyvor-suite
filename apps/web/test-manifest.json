@@ -307,7 +307,7 @@
   "src/labels/registry.test.ts": 4,
   "src/labels/StatusLabel.test.tsx": 6,
   "src/LandmarkCoverage.test.tsx": 93,
-  "src/landmarkIds.test.tsx": 11,
+  "src/landmarkIds.test.tsx": 86,
   "src/Legal.test.tsx": 30,
   "src/lensRequestBodyRegister.test.ts": 749,
   "src/lib/awaiting.test.ts": 9,
