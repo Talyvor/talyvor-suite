@@ -507,21 +507,20 @@ function PayForm({
           </Field>
         </div>
         {fee !== undefined && !(fee.free && fee.left < 0) ? (
-          <p className="text-body text-ink-3" data-testid="pay-fee">
+          // B57.188 — drawn as w-pay draws its review rows: the fee, then the total in bold once there is an amount.
+          <div className="grid gap-2" data-testid="pay-fee">
+            <Facts
+              facts={[
+                { label: 'Fee', value: formatMinor(fee.free ? 0 : fee.fee_minor, currency) },
+                ...(!fee.free && minor !== null
+                  ? [{ label: <span className="font-semibold text-ink">Total</span>, value: formatMinor(minor + fee.fee_minor, currency) }]
+                  : []),
+              ]}
+            />
             {fee.free ? (
-              `Free. You have ${fee.left} free ${fee.left === 1 ? 'payment' : 'payments'} left this month.`
-            ) : (
-              <>
-                Fee <span className="font-figure">{formatMinor(fee.fee_minor, currency)}</span>
-                {minor !== null ? (
-                  <>
-                    {' '}
-                    · Total <span className="font-figure">{formatMinor(minor + fee.fee_minor, currency)}</span>
-                  </>
-                ) : null}
-              </>
-            )}
-          </p>
+              <p className="text-body text-ink-3">{`Free. You have ${fee.left} free ${fee.left === 1 ? 'payment' : 'payments'} left this month.`}</p>
+            ) : null}
+          </div>
         ) : null}
         <Field label="Reference">
           <PocketInput aria-label="Reference" placeholder="What the payee sees" className="font-sans" value={reference} onChange={(e) => setReference(e.target.value)} />
