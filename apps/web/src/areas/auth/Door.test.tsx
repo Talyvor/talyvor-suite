@@ -406,3 +406,45 @@ describe('sign-up’s key step, for a person who joined by phone', () => {
     expect(approvals.body).toMatchObject({ credential_id: 'BQUF', public_key: 'BwcH' })
   })
 })
+
+// B57.184 — the door in Pocket: Pocket Live's phone `su0`, `su1`, `su2` and `lock`, one question per page in the auth card.
+describe('the door, drawn as Pocket Live’s su steps', () => {
+  it('asks the question in the 30px display step, with the globe and the calling code as the country picker’s face', async () => {
+    mockDoor()
+    at('/signin')
+    const title = await screen.findByRole('heading', { level: 1, name: 'What’s your phone number?' })
+    expect(title).toHaveClass('text-pocket-question')
+    const face = screen.getByTestId('door-country')
+    expect(face).toHaveTextContent(/^\+44$/)
+    expect(face.querySelector('svg[data-icon="globe"]')).not.toBeNull()
+    // The field is named for a screen reader, and shows the reference's example number instead of a visible label.
+    expect(screen.getByText('Your phone number')).toHaveClass('sr-only')
+    expect(screen.getByLabelText('Your phone number')).toHaveAttribute('placeholder', '7700 900456')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Country' }), { target: { value: 'MD' } })
+    expect(face).toHaveTextContent(/^\+373$/)
+  })
+
+  it('puts Back and the Sandbox label across the top, and the Sandbox code in a note', async () => {
+    mockDoor({ '/auth/phone/start': START })
+    at('/signin')
+    await throughPhone()
+    const top = screen.getByTestId('door-top')
+    expect(within(top).getByText('Sandbox')).toBeInTheDocument()
+    expect(screen.getByText('In Sandbox no text is sent. Your code is 482 913.').closest('[data-door-note]')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Use another number' })).toBeNull()
+    fireEvent.click(within(top).getByRole('button', { name: 'Back' }))
+    await screen.findByRole('heading', { level: 1, name: 'What’s your phone number?' })
+  })
+
+  it('goes Back from "Type it again" to "Choose a passcode"', async () => {
+    mockDoor({ '/auth/phone/start': START, '/auth/phone/finish': fresh })
+    at('/signin')
+    await throughPhone()
+    paste('The code', '482913')
+    await screen.findByRole('heading', { level: 1, name: 'Choose a passcode' })
+    paste('Passcode', '271828')
+    await screen.findByRole('heading', { level: 1, name: 'Type it again' })
+    fireEvent.click(within(screen.getByTestId('door-top')).getByRole('button', { name: 'Back' }))
+    await screen.findByRole('heading', { level: 1, name: 'Choose a passcode' })
+  })
+})
