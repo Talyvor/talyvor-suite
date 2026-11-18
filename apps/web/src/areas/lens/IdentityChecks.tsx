@@ -376,16 +376,18 @@ export function IdentityChecks({
           ) : null}
           {partnerLink ? null : (
             <div className="grid wide:flex wide:justify-end">
-              <Button disabled={running !== null} onClick={() => void run()}>
+              {/* B57.192 — once there is a way in, it is the page's one primary action and trying again steps back */}
+              <Button variant={wayIn ? 'outline' : 'primary'} disabled={running !== null} onClick={() => void run()}>
                 {running ? IDENTITY_WORDS.running : again ? IDENTITY_WORDS.again : IDENTITY_WORDS.run}
               </Button>
             </div>
           )}
           {wayIn ? (
-            <div data-testid="identity-way-in" className="grid justify-items-start gap-2 border-t border-line pt-4" role="status">
+            // B57.192 — drawn as Home's one sentence is (IdentityGate): a white card, the line, then the way on.
+            <Card tone="white" data-testid="identity-way-in" role="status" className="flex flex-wrap items-center justify-between gap-3">
+              <p className="max-w-2xl text-reading text-ink">{wayIn}</p>
               {done}
-              <p className="max-w-2xl text-body text-ink-2">{wayIn}</p>
-            </div>
+            </Card>
           ) : null}
         </>
       ) : null}

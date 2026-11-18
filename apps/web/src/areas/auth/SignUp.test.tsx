@@ -372,6 +372,20 @@ describe('step 4: confirm who you are (B61.20)', () => {
     expect(screen.queryByText('You’re confirmed. Your account is open.')).toBeNull()
   })
 
+  it('the way in while a check waits is a Pocket card, and Open the app is the page’s one primary action (B57.192)', async () => {
+    mockFetch({ authenticated: true, pending: 'identity' })
+    const { container } = at('/signup/confirm')
+    await screen.findByLabelText('Legal name')
+    fillYou()
+    run()
+    const wayIn = await screen.findByTestId('identity-way-in')
+    expect(wayIn).toHaveClass('rounded-card', 'bg-page', 'shadow-pocket')
+    expect(container.querySelectorAll('.bg-primary')).toHaveLength(1)
+    expect(within(wayIn).getByRole('link', { name: 'Open the app' })).toHaveClass('bg-primary')
+    // trying the check again stays on the page, a step back from the way in
+    expect(screen.getByRole('button', { name: 'Confirm who I am' })).toHaveClass('shadow-edge')
+  })
+
   it('a new account’s identity step has the same way into the app while its check waits (B61.118)', async () => {
     mockFetch({ authenticated: true, pending: 'identity' })
     at('/accounts/new/confirm')
