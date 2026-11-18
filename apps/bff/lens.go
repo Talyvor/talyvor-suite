@@ -1659,6 +1659,8 @@ func (a *app) spaHandler() http.Handler {
 		if st, err := os.Stat(full); err == nil && !st.IsDir() {
 			if isUnhashedBundleFile(clean) {
 				setMustRevalidate(w)
+			} else if hashedSiteMedia.MatchString(clean) {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
 			fs.ServeHTTP(w, r)
 			return

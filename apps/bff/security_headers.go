@@ -67,6 +67,8 @@ func appPagePolicy(page []byte) string {
 
 // B44.2 — talyvor.com's public pages may load Meta's pixel once the visitor accepts it: its script from
 // connect.facebook.net, its events to www.facebook.com. Every other page, the app's included, keeps the policy above.
+// B64.4 — and the marketing page fetches each loop whole from this origin and plays it from a blob: URL, so a film
+// never stalls mid-play (media-src 'self' blob:).
 func isPublicSitePath(p string) bool {
 	switch p {
 	case "/pricing", "/signup", "/privacy", "/terms", "/marketing", "/documentation":
@@ -77,5 +79,5 @@ func isPublicSitePath(p string) bool {
 
 func publicSitePolicy(policy string) string {
 	return strings.Replace(policy, "script-src 'self'", "script-src 'self' https://connect.facebook.net", 1) +
-		"; connect-src 'self' https://www.facebook.com https://connect.facebook.net"
+		"; connect-src 'self' https://www.facebook.com https://connect.facebook.net; media-src 'self' blob:"
 }

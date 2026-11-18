@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CONTACT_EMAIL, Landing } from './Landing'
@@ -91,6 +92,62 @@ describe('Landing', () => {
     expect(urls.length).toBeGreaterThanOrEqual(13)
     const missing = urls.filter((u) => !u.startsWith('/site/') || !existsSync(resolve(__dirname, '../../../public', u.slice(1))))
     expect(missing).toEqual([])
+  })
+
+  // B64.4 — the BFF caches /site for a year, so a file there is never changed under its name: its name carries the
+  // first eight hex of its own sha256, and a new cut of a film is a new name. index.html preloads the hero's poster.
+  it('names every file in /site by its own content, and preloads the poster the hero draws', () => {
+    const dir = resolve(__dirname, '../../../public/site')
+    const wrong = readdirSync(dir).filter((f) => {
+      const m = /^[a-z0-9-]+\.([0-9a-f]{8})\.[a-z0-9]+$/.exec(f)
+      return !m || createHash('sha256').update(readFileSync(resolve(dir, f))).digest('hex').slice(0, 8) !== m[1]
+    })
+    expect(wrong).toEqual([])
+    const { container } = render(<Landing />)
+    const poster = container.querySelector('.hero video.film')!.getAttribute('poster')!
+    expect(readFileSync(resolve(__dirname, '../../../index.html'), 'utf8')).toContain(`l.href = '${poster}'`)
+  })
+})
+
+// B64.4 — each loop is fetched whole and plays from a blob, so it never stalls mid-film: hero, phone, robot, one at a
+// time, the 720 cut below 768 px. A fetch that fails falls back to the file's own URL.
+describe('the loops', () => {
+  const loops = (c: HTMLElement) => [...c.querySelectorAll<HTMLVideoElement>('video[data-loop]')]
+  const withBlobs = () => {
+    let n = 0
+    Object.assign(URL, { createObjectURL: vi.fn(() => `blob:loop-${++n}`), revokeObjectURL: vi.fn() })
+  }
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    delete (URL as { createObjectURL?: unknown }).createObjectURL
+    delete (URL as { revokeObjectURL?: unknown }).revokeObjectURL
+  })
+
+  it('fetches each in full, in page order, one at a time, and plays it from a blob (720 on a phone)', async () => {
+    const fetched: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (u: string) => (u.startsWith('/site/') && fetched.push(u), new Response('film'))))
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: false, media: q }))
+    withBlobs()
+    const { container } = render(<Landing />)
+    const [hero, phone, robot] = loops(container)
+    await vi.waitFor(() => expect(hero.getAttribute('src')).toBe('blob:loop-1'))
+    expect(fetched).toEqual([hero.dataset.small])
+    act(() => void hero.dispatchEvent(new Event('canplaythrough')))
+    await vi.waitFor(() => expect(phone.getAttribute('src')).toBe('blob:loop-2'))
+    expect(fetched).toEqual([hero.dataset.small, phone.dataset.src])
+    act(() => void phone.dispatchEvent(new Event('canplaythrough')))
+    await vi.waitFor(() => expect(robot.getAttribute('src')).toBe('blob:loop-3'))
+    expect(fetched).toEqual([hero.dataset.small, phone.dataset.src, robot.dataset.small])
+    expect(hero.dataset.small).toMatch(/-720\.[0-9a-f]{8}\.mp4$/)
+  })
+
+  it('falls back to the file URL when the fetch fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })))
+    withBlobs()
+    const { container } = render(<Landing />)
+    const [hero] = loops(container)
+    await vi.waitFor(() => expect(hero.getAttribute('src')).toBe(hero.dataset.src))
+    expect(hero.dataset.src).toMatch(/-1080\.[0-9a-f]{8}\.mp4$/)
   })
 })
 

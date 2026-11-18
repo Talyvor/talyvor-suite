@@ -14,8 +14,8 @@ import SITE_CSS from './site.css?raw'
 // (site.css, scoped under .tv4) and its media, served from the app at /site/. Its script is ported to React
 // state, with the differences the site's rules make: every "Open your account" goes to /signup on this origin (B64.2),
 // the company line is company.ts's (B32), the footer links Privacy and Terms, and "Early access is open" shows only
-// while the sign-up gate says so. The loops play from their file URL; loading them whole into a blob first needs
-// media-src blob: in the CSP and is B64.4.
+// while the sign-up gate says so. B64.4: each loop is fetched whole and plays from a blob (useLoops), and every file
+// in /site is named by its own content so the BFF caches it a year.
 //
 // Rules that stay on (FOR-V7.md section 3): the Sandbox label in the demo and "Where we are" stay, no line says real
 // money is live, and the page never says LXC or that Talyvor is not a bank (Landing.test.tsx).
@@ -32,7 +32,8 @@ export function TealRule({ className = '' }: { className?: string }) {
   return <span className={`block h-0.5 w-8 bg-accent ${className}`} aria-hidden="true" />
 }
 
-/** Where the page's media is served from (apps/web/public/site, copied from the design's media/). */
+/** Where the page's media is served from (apps/web/public/site, copied from the design's media/). Each name carries the
+ *  first 8 hex of the file's sha256 (B64.4, Landing.test.tsx), so the BFF caches it a year: a new cut is a new name. */
 const MEDIA = '/site'
 const SIGNUP = '/signup'
 
@@ -52,7 +53,8 @@ const PlayIcon = () => (
 // ── The loops ────────────────────────────────────────────────────────────────────────────────────
 
 /** Each film starts on its own first frame (the poster), loads one at a time in page order, and runs only while on
- *  screen and in a visible tab. Reduced motion keeps the posters. */
+ *  screen and in a visible tab. Reduced motion keeps the posters. B64.4: a film is fetched in full and plays from a
+ *  blob, so it never stalls mid-loop; a failed fetch, or a blob the browser will not play, falls back to its file URL. */
 function useLoops(root: React.RefObject<HTMLDivElement>) {
   useEffect(() => {
     const el = root.current
@@ -64,12 +66,32 @@ function useLoops(root: React.RefObject<HTMLDivElement>) {
       (typeof matchMedia === 'function' && !matchMedia('(min-width: 768px)').matches) ||
       !!(navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData
     let stopped = false
+    const blobs: string[] = []
     const run = (v: HTMLVideoElement, on: boolean | undefined) => {
       if (on && v.dataset.ready && !REDUCE && !document.hidden) v.play()?.catch(() => {})
       else v.pause()
     }
     const load = async (v: HTMLVideoElement) => {
-      v.src = (small && v.dataset.small) || v.dataset.src || ''
+      const url = (small && v.dataset.small) || v.dataset.src || ''
+      v.addEventListener(
+        'error',
+        () => {
+          if (v.src.startsWith('blob:')) v.src = url
+        },
+        { once: true },
+      )
+      let src = url
+      try {
+        const r = await fetch(url)
+        if (r.ok) {
+          src = URL.createObjectURL(await r.blob())
+          blobs.push(src)
+        }
+      } catch {
+        src = url // the file URL plays it, streamed
+      }
+      if (stopped) return
+      v.src = src
       await new Promise<void>((res) => {
         if (v.readyState >= 3) return res()
         v.addEventListener('canplaythrough', () => res(), { once: true })
@@ -106,6 +128,7 @@ function useLoops(root: React.RefObject<HTMLDivElement>) {
       observer?.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
       loops.forEach((v) => v.pause())
+      blobs.forEach((b) => URL.revokeObjectURL(b))
     }
   }, [root])
 }
@@ -117,7 +140,7 @@ function Nav() {
     <nav className="nav" aria-label="Main">
       <div className="wrap">
         <a className="logo" href="#top" aria-label="Talyvor home">
-          <img src={`${MEDIA}/logo.svg`} alt="Talyvor" />
+          <img src={`${MEDIA}/logo.ee7e151a.svg`} alt="Talyvor" />
         </a>
         <div className="links">
           <a href="#how">How it works</a>
@@ -174,9 +197,9 @@ function Hero({ onWatch }: { onWatch: () => void }) {
         <video
           className="film"
           data-loop
-          data-src={`${MEDIA}/hero-loop-1080.mp4`}
-          data-small={`${MEDIA}/hero-loop-720.mp4`}
-          poster={`${MEDIA}/hero-loop-poster.jpg`}
+          data-src={`${MEDIA}/hero-loop-1080.17564a42.mp4`}
+          data-small={`${MEDIA}/hero-loop-720.be13b400.mp4`}
+          poster={`${MEDIA}/hero-loop-poster.cf75267b.jpg`}
           muted
           loop
           playsInline
@@ -187,8 +210,8 @@ function Hero({ onWatch }: { onWatch: () => void }) {
           <div className="phone">
             <video
               data-loop
-              data-src={`${MEDIA}/approve-loop-hd.mp4`}
-              poster={`${MEDIA}/approve-loop-poster.jpg`}
+              data-src={`${MEDIA}/approve-loop-hd.0322c6fb.mp4`}
+              poster={`${MEDIA}/approve-loop-poster.2c32b32e.jpg`}
               muted
               loop
               playsInline
@@ -247,9 +270,9 @@ function Idea() {
     <section className="cine" aria-labelledby="g-h">
       <video
         data-loop
-        data-src={`${MEDIA}/give-it-loop-1080.mp4`}
-        data-small={`${MEDIA}/give-it-loop-720.mp4`}
-        poster={`${MEDIA}/give-it-loop-poster.jpg`}
+        data-src={`${MEDIA}/give-it-loop-1080.ae1d7901.mp4`}
+        data-small={`${MEDIA}/give-it-loop-720.0f1cf383.mp4`}
+        poster={`${MEDIA}/give-it-loop-poster.64b81cdb.jpg`}
         muted
         loop
         playsInline
@@ -449,8 +472,8 @@ function HowTo({ playRef }: { playRef: React.MutableRefObject<(t: number | null)
             <video
               id="howvid"
               ref={vid}
-              src={`${MEDIA}/how-it-works.mp4`}
-              poster={`${MEDIA}/how-it-works-poster.jpg`}
+              src={`${MEDIA}/how-it-works.11b64358.mp4`}
+              poster={`${MEDIA}/how-it-works-poster.bd2e3ba7.jpg`}
               muted
               playsInline
               preload="metadata"
@@ -1082,7 +1105,7 @@ function Footer() {
   return (
     <footer>
       <div className="wrap">
-        <img src={`${MEDIA}/logo.svg`} alt="Talyvor" />
+        <img src={`${MEDIA}/logo.ee7e151a.svg`} alt="Talyvor" />
         <nav aria-label="Footer">
           <a href="#how">How it works</a>
           <a href="#try">Try it</a>
@@ -1093,7 +1116,7 @@ function Footer() {
         </nav>
         <span data-company-line>{COMPANY_LINE}</span>
         <a href="https://aiagentsdirectory.com/agent/talyvor" target="_blank" rel="noopener" title="Discover Talyvor on AI Agents Directory">
-          <img src={`${MEDIA}/aad-badge.svg`} alt="Talyvor - Featured on AI Agents Directory" width="200" height="50" style={{ width: 160, height: 'auto' }} />
+          <img src={`${MEDIA}/aad-badge.d703eba9.svg`} alt="Talyvor - Featured on AI Agents Directory" width="200" height="50" style={{ width: 160, height: 'auto' }} />
         </a>
       </div>
     </footer>
