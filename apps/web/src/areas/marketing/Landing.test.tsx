@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CONTACT_EMAIL, Landing } from './Landing'
@@ -81,6 +81,25 @@ describe('Landing', () => {
     expect(badge).toHaveAttribute('target', '_blank')
     expect(badge).toHaveAttribute('rel', 'noopener')
     expect(badge).toHaveAttribute('title', 'Discover Talyvor on AI Agents Directory')
+  })
+
+  it('carries the AI Agents Directory snippet in the bytes their crawler reads, before any script runs', () => {
+    // B64.6: the listing goes live when their crawler finds the snippet on talyvor.com, and a crawler reads
+    // index.html and never runs the bundle, so the footer above is invisible to it.
+    const doc = new DOMParser().parseFromString(readFileSync(resolve(__dirname, '../../../index.html'), 'utf8'), 'text/html')
+    const noscript = doc.body.querySelector('noscript')
+    expect(noscript, 'index.html has no <noscript> in its body').not.toBeNull()
+    // A parser with scripting off reads <noscript> as markup; one with scripting on, as text. Accept either.
+    const a = (noscript!.querySelector('a') ??
+      new DOMParser().parseFromString(noscript!.textContent ?? '', 'text/html').querySelector('a'))!
+    expect(a.getAttribute('href')).toBe('https://aiagentsdirectory.com/agent/talyvor')
+    expect(a.getAttribute('target')).toBe('_blank')
+    expect(a.getAttribute('rel')).toBe('noopener')
+    expect(a.getAttribute('title')).toBe('Discover Talyvor on AI Agents Directory')
+    const img = a.querySelector('img')!
+    expect(img.getAttribute('src')).toBe('https://aiagentsdirectory.com/featured-badge.svg?v=2024')
+    expect(img.getAttribute('alt')).toBe('Talyvor - Featured on AI Agents Directory')
+    expect([img.getAttribute('width'), img.getAttribute('height')]).toEqual(['200', '50'])
   })
 
   it('serves every film, poster and picture it names from the app’s own /site', () => {

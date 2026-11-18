@@ -86,6 +86,14 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- B64.6: the AI Agents Directory's snippet, exactly as they give it (FOR-V7.md item 6). The listing goes live
+         when their crawler finds it on talyvor.com, and a crawler reads these bytes and never runs the bundle, so
+         the badge in Landing.tsx's footer is invisible to it. A reader with scripts on sees that footer instead. -->
+    <noscript>
+      <a href="https://aiagentsdirectory.com/agent/talyvor" target="_blank" rel="noopener" title="Discover Talyvor on AI Agents Directory">
+        <img src="https://aiagentsdirectory.com/featured-badge.svg?v=2024" alt="Talyvor - Featured on AI Agents Directory" width="200" height="50" />
+      </a>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
