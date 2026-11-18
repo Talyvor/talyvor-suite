@@ -133,7 +133,8 @@ describe('no two things in this product answer to the same name', () => {
   it(
     'every address renders unique ids and no dangling reference',
     // Slow by nature: it renders every address in the product in turn, so it grows with the console.
-    { timeout: 60_000 },
+    // B17.492 — about 50 s on a quiet CI runner, past 60 s on a busy one (18 Nov: three runs in a row): 120 s.
+    { timeout: 120_000 },
     async () => {
       const problems: string[] = []
       let idsSeen = 0
