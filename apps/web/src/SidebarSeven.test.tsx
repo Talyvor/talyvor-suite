@@ -6,7 +6,8 @@ import { areaSource } from './lib/workspaceAreas'
 
 // B61.3 — the sidebar is the approved seven (launch-pack DESIGN.md W2), on either type of account, and every page that
 // left it opens from where a person looks for it: Activity's tabs, Pay's Invoices tab on a Business, and Settings' Plan
-// and (on a Business) Developers rows. Spend and routing and the Try pages are the old gateway's.
+// and (on a Business) Developers rows. Spend and routing and the Try pages are the old gateway's. B57.171 — the rows in
+// Pocket Live's words: Activity's All first, Pay's every page the account has, Plan's line and Developer tools.
 
 const SEVEN = ['Home', 'Agents', 'Cards', 'Pay', 'Approvals', 'Activity', 'Settings']
 
@@ -43,40 +44,53 @@ describe.each(['business', 'personal'] as const)('a %s account', (type) => {
     expect(rows(nav)).toEqual(SEVEN)
   })
 
-  it('Activity opens Statements, Spending, Budgets and Subscriptions as its tabs, Activity first', async () => {
+  it('Activity opens Spending, Budgets, Subscriptions and Statements as its tabs, All first', async () => {
     const { main } = await at('/activity', type)
     const tabs = within(main).getByRole('tablist', { name: 'Activity' })
-    expect(within(tabs).getAllByRole('tab').map((t) => t.textContent)).toEqual(['Activity', 'Statements', 'Spending', 'Budgets', 'Subscriptions'])
-    for (const [tab, path] of [['Statements', '/statements'], ['Spending', '/money/spending'], ['Budgets', '/money/budgets'], ['Subscriptions', '/money/subscriptions']]) {
+    expect(within(tabs).getAllByRole('tab').map((t) => t.textContent)).toEqual(['All', 'Spending', 'Budgets', 'Subscriptions', 'Statements'])
+    for (const [tab, path] of [['Spending', '/money/spending'], ['Budgets', '/money/budgets'], ['Subscriptions', '/money/subscriptions'], ['Statements', '/statements'], ['All', '/activity']]) {
       fireEvent.click(within(screen.getByRole('tablist', { name: 'Activity' })).getByRole('tab', { name: tab }))
       await waitFor(() => expect(window.location.pathname).toBe(path))
       expect(within(screen.getByRole('tablist', { name: 'Activity' })).getByRole('tab', { name: tab }).getAttribute('aria-selected')).toBe('true')
     }
   })
 
-  it('Invoices is a tab of Pay only on a Business account', async () => {
+  it('Pay’s tabs are every page the account has, Invoices and Payout batches only on a Business', async () => {
     const { main } = await at('/money/pay', type)
-    const tabs = within(main).queryByRole('tablist', { name: 'Pay' })
-    if (!business) {
-      expect(tabs).toBeNull()
-      return
+    const tabs = within(main).getByRole('tablist', { name: 'Pay' })
+    expect(within(tabs).getAllByRole('tab').map((t) => t.textContent)).toEqual(
+      business
+        ? ['One payment', 'Invoices', 'Instant transfer', 'Standing orders', 'Mandates', 'Payout batches']
+        : ['One payment', 'Instant transfer', 'Standing orders', 'Mandates'],
+    )
+    const pages = [
+      ...(business ? [['Invoices', '/money/invoices']] : []),
+      ['Instant transfer', '/money/pay/instant-transfer'],
+      ['Standing orders', '/money/pay/standing-orders'],
+      ['Mandates', '/money/pay/mandates'],
+      ...(business ? [['Payout batches', '/money/pay/bulk-payouts']] : []),
+      ['One payment', '/money/pay'],
+    ]
+    for (const [tab, path] of pages) {
+      fireEvent.click(within(screen.getByRole('tablist', { name: 'Pay' })).getByRole('tab', { name: tab }))
+      await waitFor(() => expect(window.location.pathname).toBe(path))
+      expect(within(screen.getByRole('tablist', { name: 'Pay' })).getByRole('tab', { name: tab }).getAttribute('aria-selected')).toBe('true')
     }
-    expect(within(tabs!).getAllByRole('tab').map((t) => t.textContent)).toEqual(['One payment', 'Invoices'])
-    fireEvent.click(within(tabs!).getByRole('tab', { name: 'Invoices' }))
-    await waitFor(() => expect(window.location.pathname).toBe('/money/invoices'))
   })
 
-  it('Settings has Plan, and Developers last only on a Business account', async () => {
+  it('Settings has Plan, and Developer tools last only on a Business account', async () => {
     const { main } = await at('/settings', type)
     const pages = within(main).getByRole('navigation', { name: 'Settings pages' })
     expect(within(pages).getByRole('link', { name: /^Plan/ }).getAttribute('href')).toBe('/billing')
+    expect(within(pages).getByRole('link', { name: /^Plan/ }).textContent).toBe('PlanWhat you have and what it costs')
     expect(within(pages).queryByRole('link', { name: /^Billing/ })).toBeNull()
     const links = within(pages).getAllByRole('link')
-    const developers = within(pages).queryByRole('link', { name: /^Developers/ })
+    const developers = within(pages).queryByRole('link', { name: /^Developer tools/ })
     expect(developers !== null).toBe(business)
     if (business) {
       expect(links[links.length - 1]).toBe(developers)
       expect(developers!.getAttribute('href')).toBe('/setup')
+      expect(developers!.textContent).toBe('Developer toolsAPI keys, connect an agent')
     }
   })
 
