@@ -494,6 +494,18 @@ describe('Home — the agents and the cards (B57.18)', () => {
     expect(screen.getByTestId('home-onboarding')).toHaveTextContent('Give an agent its own account, wallet and card.')
     expect(screen.getByRole('button', { name: 'Create my first agent' })).toBeEnabled()
   })
+
+  // B17.492 — the testers' home-cards: with no agent yet Home still has See all to Agents, and the Cards card's See
+  // all opens the Cards tab, not /money/card, which sends the person to Spending while the physical card is off.
+  it('with no agents, See all opens Agents, and the Cards card\'s See all opens Cards', async () => {
+    mockBff({ agents: [] })
+    render(<App />)
+
+    const onboarding = await screen.findByTestId('home-onboarding')
+    expect(within(onboarding).getByRole('link', { name: 'See all' })).toHaveAttribute('href', '/agents')
+    const cards = (await screen.findByRole('heading', { level: 3, name: 'Cards' })).closest<HTMLElement>('[aria-labelledby="home-cards"]')!
+    expect(within(cards).getByRole('link', { name: 'See all' })).toHaveAttribute('href', '/cards')
+  })
 })
 
 
