@@ -580,6 +580,17 @@ export class Bank {
     this.launch = new LaunchDesk(d.json, (req) => this.body(req), (name) => this.broken(name), (ws, id) => {
       const a = this.agents.get(id)
       return a === undefined || a.ws !== ws ? undefined : a.rules.may_instant_transfer === true
+    }, (ws) => this.payees.accountsOf(ws), (ws, agentID, ulxc, fingerprint, newPayee, memo) => {
+      // B61.67 — a send judged as Lens judges it: to an account the agent never sent one to it waits for the owner's approval
+      // whatever its rules allow, and once that is approved one send of the same goes through; else its rules judge it.
+      const a = this.agents.get(agentID)
+      if (a === undefined || a.ws !== ws) return { status: 404, error: 'economy: no such agent in this workspace' }
+      if (!newPayee) return this.broken('instant-above-sent') ? undefined : this.judge(a, ulxc, { payment: true, fingerprint, memo })
+      const ok = this.approvals.find((x) => x.agent_id === a.id && x.fingerprint === fingerprint && x.status === 'approved')
+      if (ok !== undefined) return (ok.status = 'used'), undefined
+      const filed: Approval = { id: id('apr_'), ws, agent_id: a.id, amount_ulxc: ulxc, model: '', status: 'pending', created_at: new Date().toISOString(), fingerprint, memo }
+      this.approvals.unshift(filed)
+      return { status: 403, error: `economy: this Instant transfer is to an account the agent has never sent one to — approval ${filed.id} must be approved by the workspace's owner before it is sent again` }
     })
     this.payees = new PayeeDesk(d.json, (req) => this.body(req), (name) => this.broken(name),
       (ws) => (this.passkeys.get(ws) ?? []).map((k) => ({ credential_id: k.credential_id, public_key: this.passkeyKeys.get(k.credential_id) ?? '' })),

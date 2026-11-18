@@ -85,6 +85,8 @@
 // holds its amount on the wallet's ledger (payment_out_hold), read on GET /v1/workspaces/{ws}/agents/{id}/wallet/activity. Its defects:
 //   address-unscreened     — a payment to the flagged address is paid
 //   self-hosted-unproved   — more than 1,000 USDC to a self-hosted address is paid without the owner's proof
+// B61.67 — and the owner moving money between the company's account and an agent's (POST /v1/money/accounts/{id}/funding,
+// Lens B61.66), which is how instant-transfer-send funds its sender.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createHash, createPublicKey, randomBytes, randomUUID, verify } from 'node:crypto'
@@ -260,6 +262,8 @@ export class PayeeDesk {
     if (path === '/v1/money/payments/challenge' && req.method === 'POST') return this.paymentChallenge(req, res, ws), true
     const funded = /^\/v1\/money\/accounts\/([^/]+)\/test-money$/.exec(path)
     if (funded !== null && req.method === 'POST') return this.testMoney(req, res, ws, funded[1]), true
+    const moved = /^\/v1\/money\/accounts\/([^/]+)\/funding$/.exec(path)
+    if (moved !== null && req.method === 'POST') return this.agentFunding(req, res, ws, moved[1]), true
     if (await this.invoiceRoute(req, res, ws, path)) return true
     if (await this.mandateRoute(req, res, ws, path, list)) return true
     if (await this.payoutRoute(req, res, ws, path, list)) return true
@@ -739,6 +743,40 @@ export class PayeeDesk {
     account.balance_minor += b.amount_minor ?? 0
     this.line(ws, account, 'payment_in', b.amount_minor ?? 0)
     return this.json(res, 201, account)
+  }
+
+  /** B61.67 — `ws`'s open accounts, the company's and its agents', as Instant transfer sends from and to them (stub-launch.ts). */
+  accountsOf(ws: string): Account[] {
+    return this.accounts.get(ws) ?? []
+  }
+
+  /**
+   * B61.67 — Lens B61.66: POST /v1/money/accounts/{id}/funding {direction, amount_minor, idempotency_key}: the owner moves test
+   * money now between the company's account and agent account `id` in its currency, once a key; more than the side it leaves
+   * holds is refused 409 and moves nothing.
+   */
+  private async agentFunding(req: IncomingMessage, res: ServerResponse, ws: string, id: string): Promise<void> {
+    const b = await this.body<{ direction?: string; amount_minor?: number; idempotency_key?: string }>(req)
+    const accounts = this.accounts.get(ws) ?? []
+    const agent = accounts.find((a) => a.id === id && a.purpose === 'agent')
+    const company = accounts.find((a) => a.purpose === 'company' && a.currency === agent?.currency)
+    if (agent === undefined || company === undefined) return this.json(res, 404, { error: 'economy: no such money account' })
+    const amount = b.amount_minor ?? 0
+    if ((b.direction !== 'to_agent' && b.direction !== 'to_company') || !Number.isInteger(amount) || amount <= 0 || !b.idempotency_key) {
+      return this.json(res, 400, { error: 'economy: invalid agent funding: direction is to_agent or to_company, with a positive amount_minor and an idempotency_key' })
+    }
+    const [from, to] = b.direction === 'to_agent' ? [company, agent] : [agent, company]
+    const out = () => ({ direction: b.direction, currency: agent.currency, amount_minor: amount, company_account_id: company.id, agent_account_id: agent.id,
+      agent_id: agent.agent_id, company_balance_minor: company.test_minor, agent_balance_minor: agent.test_minor })
+    if (this.testMoneyKeys.has(`${ws}\nfunding\n${b.idempotency_key}`)) return this.json(res, 201, out())
+    if (from.test_minor < amount) return this.json(res, 409, { error: `economy: not enough to move: the account holds ${from.test_minor} of test money` })
+    this.testMoneyKeys.add(`${ws}\nfunding\n${b.idempotency_key}`)
+    for (const [a, by] of [[from, -amount], [to, amount]] as const) {
+      a.test_minor += by
+      a.balance_minor += by
+      this.line(ws, a, b.direction === 'to_agent' ? 'agent_funding' : 'agent_funding_back', by)
+    }
+    return this.json(res, 201, out())
   }
 
   /** B48.27 — a line on `account`'s wallet ledger, as Lens's wallet activity reads its postings. */
