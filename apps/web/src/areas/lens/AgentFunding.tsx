@@ -110,6 +110,7 @@ export function AgentFundingDialog({
   const ready = agentAccount !== undefined && companyAccount !== undefined && minor !== null
   return (
     <Dialog
+      position="panel"
       open
       onClose={onClose}
       title={

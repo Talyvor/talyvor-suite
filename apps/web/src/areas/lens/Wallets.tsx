@@ -308,6 +308,7 @@ function TopUp({ open, onClose, shows }: { open: boolean; onClose: () => void; s
   })
   return (
     <Dialog
+      position="panel"
       open={open}
       onClose={close}
       title="Add money"
@@ -399,6 +400,7 @@ function Withdraw({ open, onClose, shows }: { open: boolean; onClose: () => void
   return (
     <>
       <Dialog
+        position="panel"
         open={open && !adding}
         onClose={close}
         title="Withdraw"
@@ -523,6 +525,7 @@ function Convert({ open, onClose, shows }: { open: boolean; onClose: () => void;
   const why = read.isError ? 'We couldn’t read your accounts.' : targets.length === 0 ? 'Open an account on the other side first.' : minor === null ? 'Add an amount first.' : undefined
   return (
     <Dialog
+      position="panel"
       open={open}
       onClose={close}
       title="Convert"
