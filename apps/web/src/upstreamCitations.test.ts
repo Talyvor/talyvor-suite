@@ -338,7 +338,7 @@ describe('citations of upstream Go source', () => {
   const lineCitationOf = (base: string) =>
     // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- test-only: the pattern is built from this repo's own source names or the test's own constants, never from a person's input
     new RegExp(
-      `\\b${base.replace(/\./g, '\\.')}(?::\\d+(?:[-/]\\d+)*|[^\\n]{0,24}?\\blines?\\s+\\d+)`,
+      `\\b${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?::\\d+(?:[-/]\\d+)*|[^\\n]{0,24}?\\blines?\\s+\\d+)`,
       'g',
     )
 
