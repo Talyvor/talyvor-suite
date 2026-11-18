@@ -124,7 +124,7 @@ describe('Spending, Budgets and Subscriptions in Pocket (B57.89)', () => {
         within(row)
           .getAllByRole('tab')
           .map((t) => t.textContent),
-      ).toEqual(['Activity', 'Statements', 'Spending', 'Budgets', 'Subscriptions'])
+      ).toEqual(['All', 'Spending', 'Budgets', 'Subscriptions', 'Statements'])
       expect(within(row).getByRole('tab', { selected: true }).textContent).toBe(tab)
       expect(inPocket(await screen.findByText(mark))).toBe(true)
     })

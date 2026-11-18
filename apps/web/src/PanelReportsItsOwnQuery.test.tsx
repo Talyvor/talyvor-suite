@@ -180,7 +180,8 @@ const ADDRESS_ROUTES: Record<string, string[]> = {
   '/spend': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/lxc/history', '/api/money/mandates', '/api/money/payment-requests', '/api/savings/month', '/api/spend/by-feature', '/api/spend/month', '/api/tokens/history', '/api/usage', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   '/members': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B57.42 — Settings' cards read the plan and the members; Shared answers its counts; Documents you attach left for /features.
-  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/plan', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
+  // B57.171 — Settings' Plan row says what the page holds, so /settings no longer reads the plan itself.
+  '/settings': ['/api/agents', '/api/agents/approvals', '/api/agents/keys/recover', '/api/features/stored-answers', '/api/members', '/api/money/mandates', '/api/money/payment-requests', '/api/provider-keys', '/api/wallets/capabilities', '/api/workspace/account', '/api/workspace/name'],
   // B8.1 made every gated address ask for /api/docs/spaces, for the sidebar's list of spaces. B10.6
   // replaced that list with the pages this browser pinned or opened, which needs no read — so only
   // Overview (its product status) and /docs itself still ask for it. B18.27 moved the pins to Docs,
@@ -285,7 +286,8 @@ describe('the swept set', () => {
     // 132 → 133 at B61.20: `/` reads the verification record, for the one sentence while the identity check is unfinished.
     // 133 → 131 at B61.59: /billing is Settings, Plan, reading the plan instead of the top-up, the balance and the
     // allowance; /settings' Plan row reads the plan's name instead of the subscription.
-    expect(pairs).toBe(131)
+    // 131 → 130 at B57.171: /settings' Plan row is Pocket Live's line, and the plan's name is on Settings, Plan.
+    expect(pairs).toBe(130)
   })
 
   for (const [addr, routes] of Object.entries(ADDRESS_ROUTES)) {
