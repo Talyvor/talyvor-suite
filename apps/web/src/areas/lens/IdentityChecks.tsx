@@ -149,8 +149,19 @@ function FieldError({ id, children }: { id?: string; children: React.ReactNode }
   )
 }
 
-/** The checks for this account, the fields the next ones need, and the document step. `done` is drawn once they pass;
- *  `note` goes on the end of the line under the title, and `aside` under the checks, beside the form (B57.173). */
+/** B61.118 — the line under the way into the app while the next check waits on the provider or did not pass; null
+ *  while nothing has been asked of the provider yet. */
+function wayInLine(v: WorkspaceVerification): string | null {
+  const c = latest(v, rank(v.level) + 1)
+  if (c?.status === 'pending') return IDENTITY_WORDS.openWaiting
+  if (c?.status === 'failed' || c?.status === 'returned') return IDENTITY_WORDS.openNotPassed
+  return null
+}
+
+/** The checks for this account, the fields the next ones need, and the document step. `done` is drawn once they pass,
+ *  and (B61.118) also while a check waits or after one did not pass, with a line that says so, so sign-up's last step
+ *  always has a way into the app; `note` goes on the end of the line under the title, and `aside` under the checks,
+ *  beside the form (B57.173). */
 export function IdentityChecks({ done, note, aside }: { done?: React.ReactNode; note?: string; aside?: React.ReactNode }) {
   const qc = useQueryClient()
   const { account, shows } = useAccount()
@@ -180,6 +191,7 @@ export function IdentityChecks({ done, note, aside }: { done?: React.ReactNode; 
     if (k === 'email') setTypedEmail(e.target.value)
     else setDraft({ ...draft, [k]: e.target.value })
   }
+  const wayIn = done && level < need && running === null ? wayInLine(v.data) : null
   const personName = level >= 2 ? latest(v.data, 2)?.verified_name ?? '' : d.name
 
   async function run() {
@@ -318,6 +330,12 @@ export function IdentityChecks({ done, note, aside }: { done?: React.ReactNode; 
               {running ? IDENTITY_WORDS.running : IDENTITY_WORDS.run}
             </Button>
           </div>
+          {wayIn ? (
+            <div data-testid="identity-way-in" className="grid justify-items-start gap-2 border-t border-line pt-4" role="status">
+              {done}
+              <p className="max-w-2xl text-body text-ink-2">{wayIn}</p>
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>

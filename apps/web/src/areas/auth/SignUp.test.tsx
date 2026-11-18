@@ -17,6 +17,8 @@ interface MockOptions {
   /** B61.20 — the account's type, and the check the provider does not pass */
   accountType?: 'personal' | 'business'
   fails?: 'contact' | 'identity' | 'company'
+  /** B61.118 — the check the provider has not decided yet */
+  pending?: 'contact' | 'identity' | 'company'
   /** B61.110 — the countries Lens serves (GET /v1/public/countries, on /api/pricing), and one it refuses */
   served?: string[]
   refuses?: string
@@ -47,7 +49,7 @@ function mockFetch(o: MockOptions = {}) {
       if (o.refuses && body.country === o.refuses) return json(NOT_SERVED, 400)
       const level = ['contact', 'identity', 'company'].indexOf(m[1]) + 1
       if (reached() < level - 1) return json({ error: 'economy: verification levels are reached in order' }, 409)
-      const status = o.fails === m[1] ? 'failed' : 'completed'
+      const status = o.fails === m[1] ? 'failed' : o.pending === m[1] ? 'pending' : 'completed'
       const check = { level: `L${level}`, subject: ['contact', 'person', 'company'][level - 1], method: 'test', test: true, status, evidence_ref: `test_kyc_${level}`, verified_name: level === 2 ? 'Maya Lind' : undefined, started_at: '2026-11-15T09:00:00Z', checked_at: '2026-11-15T09:00:00Z' }
       checks.unshift(check)
       return json({ check, verification: record() }, 201)
@@ -273,6 +275,9 @@ describe('step 4: confirm who you are (B61.20)', () => {
     expect(within(row('contact')).getByText('Passed in Sandbox')).toBeInTheDocument()
     expect(within(row('person')).getByText('Passed in Sandbox')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
+    // B61.118 — once passed, no line about finishing the check later
+    expect(screen.queryByTestId('identity-way-in')).toBeNull()
+    expect(screen.queryByText(/in the background|try the check again/)).toBeNull()
     expect(sent).toEqual([
       { url: '/api/verification/contact', body: { email: 'maya@example.com', phone: '+447700900123' } },
       {
@@ -322,7 +327,7 @@ describe('step 4: confirm who you are (B61.20)', () => {
     expect(sent.map((s) => s.url)).toEqual(['/api/verification/contact', '/api/verification/identity', '/api/verification/company'])
   })
 
-  it('a check that does not pass says what to fix, and the app stays shut', async () => {
+  it('a check that does not pass says what to fix, and still lets the person into the app (B61.118)', async () => {
     mockFetch({ authenticated: true, fails: 'identity' })
     at('/signup/confirm')
     await screen.findByLabelText('Legal name')
@@ -331,7 +336,37 @@ describe('step 4: confirm who you are (B61.20)', () => {
     expect(await screen.findByText('We couldn’t confirm who you are. Check your legal name, date of birth, home address and country, and try again.')).toBeInTheDocument()
     expect(within(row('contact')).getByText('Passed in Sandbox')).toBeInTheDocument()
     expect(within(row('person')).getByText('Not passed')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Open the app' })).toBeNull()
+    const wayIn = screen.getByTestId('identity-way-in')
+    expect(within(wayIn).getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
+    expect(wayIn).toHaveTextContent('You can try the check again from Settings, Verification.')
+    expect(screen.queryByText('You’re confirmed. Your account is open.')).toBeNull()
+    // the form stays, to try again here
+    expect(screen.getByRole('button', { name: 'Confirm who I am' })).toBeInTheDocument()
+  })
+
+  it('while the person check waits for the checker, a way into the app says the check finishes in the background (B61.118)', async () => {
+    mockFetch({ authenticated: true, pending: 'identity' })
+    at('/signup/confirm')
+    await screen.findByLabelText('Legal name')
+    fillYou()
+    run()
+    const wayIn = await screen.findByTestId('identity-way-in')
+    expect(within(row('contact')).getByText('Passed in Sandbox')).toBeInTheDocument()
+    expect(within(row('person')).getByText('Waiting for the checker')).toBeInTheDocument()
+    expect(within(wayIn).getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
+    expect(wayIn).toHaveTextContent('You can look around now. Once your identity check passes, you can move money.')
+    expect(screen.queryByText('You’re confirmed. Your account is open.')).toBeNull()
+  })
+
+  it('a new account’s identity step has the same way into the app while its check waits (B61.118)', async () => {
+    mockFetch({ authenticated: true, pending: 'identity' })
+    at('/accounts/new/confirm')
+    await screen.findByLabelText('Legal name')
+    fillYou()
+    run()
+    const wayIn = await screen.findByTestId('identity-way-in')
+    expect(within(wayIn).getByRole('link', { name: 'Open the app' })).toHaveAttribute('href', '/')
+    expect(wayIn).toHaveTextContent('You can look around now. Once your identity check passes, you can move money.')
   })
 
   it('until the checks pass, Home says so in one sentence and leads back to the step', async () => {
