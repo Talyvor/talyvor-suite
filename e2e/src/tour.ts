@@ -273,7 +273,8 @@ export const HOME_CARDS: readonly { title: string; path: string; heading: string
   { title: 'Add money', path: '/money/wallets', heading: 'Wallets', href: '/money/wallets?do=top-up' },
   { title: 'Pay', path: '/money/pay', heading: 'Pay' },
   { title: 'See all', path: '/agents', heading: 'Agents' },
-  { title: 'See all', path: '/money/card', heading: 'Talyvor Card' },
+  // B17.492 — the Cards card's See all opens the Cards tab, as design/pocket-live draws it.
+  { title: 'See all', path: '/cards', heading: 'Cards' },
 ]
 
 export function homeCards(): Scenario {
