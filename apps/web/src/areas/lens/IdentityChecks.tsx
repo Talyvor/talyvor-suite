@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { cn } from '@talyvor/ui'
+import { cn, inlineLink } from '@talyvor/ui'
 import { Button, Card, Chip, Field, Icon, Input, Select, type ChipTone } from '@talyvor/ui/pocket'
 import { isSessionExpired } from '../../lib/productState'
 import { useAuthMeReader } from '../../lib/authMe'
@@ -11,6 +11,7 @@ import { countryRefusal, useServedCountries } from '../auth/servedCountries'
 import { CompanyDetailsSection } from './CompanyDetails'
 import { type CompanyDetails, useCompanyDetails } from './companyDetailsApi'
 import {
+  type CheckReturn,
   type VerificationBody,
   type VerificationCheck,
   type WorkspaceVerification,
@@ -28,6 +29,12 @@ import {
 // none of it); its country is the one they live in.
 //
 // A Personal account is confirmed at L2, a Business at L3. Until then Home says so in one sentence (IdentityGate).
+//
+// B65.2 — when Lens answers the person check pending with a `link` (Persona's one-time page, Lens B30.112 and B65.1), the
+// document step's button "Verify your ID" opens it in this tab; Persona's page takes the photo of the ID and the selfie,
+// and sends the person back here. The step then reads the record until the check is decided: a pass on sign-up opens
+// Home, a check that failed or expired offers Start again, which is the same check started anew. The link lives only
+// in the record's read and on the button; Persona's own words and the query it sends back are never drawn.
 
 export const VERIFICATION_KEY = ['verification']
 
@@ -53,13 +60,21 @@ export const neededLevel = (type: 'personal' | 'business') => (type === 'busines
 const E164 = /^\+[1-9][0-9]{7,14}$/
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-/** A check the provider has not decided yet, for the level after the one reached. */
+/** A check the provider has not decided yet, for the level after the one reached. B65.2: one waiting for the person at
+ *  its link is not asked again on a timer: nothing changes until they come back, and each read makes a fresh link. */
 const waitingOnNext = (v: WorkspaceVerification | undefined) =>
-  (v?.checks ?? []).some((c) => c.status === 'pending' && rank(c.level) === rank(v?.level) + 1)
+  (v?.checks ?? []).some((c) => c.status === 'pending' && !c.link && rank(c.level) === rank(v?.level) + 1)
 
-/** Lens's record, asked again every 5 seconds while the next check waits on the provider. */
-export const useVerification = () =>
-  useQuery({ queryKey: VERIFICATION_KEY, queryFn: agentBankApi.verification, refetchInterval: (q) => (waitingOnNext(q.state.data) ? 5000 : false) })
+const verificationKey = (returnTo?: CheckReturn) => (returnTo ? [...VERIFICATION_KEY, returnTo] : VERIFICATION_KEY)
+
+/** Lens's record, asked again every 5 seconds while the next check waits on the provider; B65.2: its links send the
+ *  person back to returnTo (Settings, Verification when none). */
+export const useVerification = (returnTo?: CheckReturn) =>
+  useQuery({
+    queryKey: verificationKey(returnTo),
+    queryFn: () => agentBankApi.verification(returnTo),
+    refetchInterval: (q) => (waitingOnNext(q.state.data) ? 5000 : false),
+  })
 
 /** The newest check Lens has for a level. */
 function latest(v: WorkspaceVerification | undefined, level: number): VerificationCheck | undefined {
@@ -71,6 +86,8 @@ function stateOf(v: WorkspaceVerification | undefined, level: number, running: b
   const c = latest(v, level)
   if (rank(v?.level) >= level) return c?.test === false ? { text: IDENTITY_WORDS.passed, tone: 'good' } : { text: IDENTITY_WORDS.passedSandbox, tone: 'good' }
   if (running) return { text: IDENTITY_WORDS.checking, tone: 'wait' }
+  // B65.2 — a check waiting for the person at the partner's page is not checked yet
+  if (c?.status === 'pending' && c.link) return { text: IDENTITY_WORDS.notYet, tone: 'plain' }
   if (c?.status === 'pending') return { text: IDENTITY_WORDS.waiting, tone: 'wait' }
   if (c?.status === 'failed' || c?.status === 'returned') return { text: IDENTITY_WORDS.notPassed, tone: 'bad' }
   return { text: IDENTITY_WORDS.notYet, tone: 'plain' }
@@ -128,12 +145,12 @@ function missing(d: Draft, level: number): Errors {
   return out
 }
 
-function bodyFor(kind: VerificationBody['kind'], d: Draft): VerificationBody {
+function bodyFor(kind: VerificationBody['kind'], d: Draft, returnTo?: CheckReturn): VerificationBody {
   if (kind === 'contact') return { kind, email: d.email.trim(), phone: d.phone.replace(/\s/g, '') }
   if (kind === 'identity') {
     const lines = [d.line1, d.line2].map((l) => l.trim()).filter(Boolean)
     const address = { lines, town: d.town.trim(), postcode: d.postcode.trim(), country: d.country }
-    return { kind, name: d.name.trim(), country: d.country, date_of_birth: d.dob, address }
+    return { kind, name: d.name.trim(), country: d.country, date_of_birth: d.dob, address, ...(returnTo ? { return_to: returnTo } : {}) }
   }
   // Lens fills an empty company check from the saved company details (talyvor-lens B59.30).
   return { kind, name: '', country: '', company_number: '', directors: [], people_with_significant_control: [] }
@@ -161,8 +178,21 @@ function wayInLine(v: WorkspaceVerification): string | null {
 /** The checks for this account, the fields the next ones need, and the document step. `done` is drawn once they pass,
  *  and (B61.118) also while a check waits or after one did not pass, with a line that says so, so sign-up's last step
  *  always has a way into the app; `note` goes on the end of the line under the title, and `aside` under the checks,
- *  beside the form (B57.173). */
-export function IdentityChecks({ done, note, aside }: { done?: React.ReactNode; note?: string; aside?: React.ReactNode }) {
+ *  beside the form (B57.173). B65.2: `returnTo` names the page the identity partner sends the person back to, and
+ *  `onPassed` runs once the checks pass after a check waited (back from the partner's page). */
+export function IdentityChecks({
+  done,
+  note,
+  aside,
+  returnTo,
+  onPassed,
+}: {
+  done?: React.ReactNode
+  note?: string
+  aside?: React.ReactNode
+  returnTo?: CheckReturn
+  onPassed?: () => void
+}) {
   const qc = useQueryClient()
   const { account, shows } = useAccount()
   const type = account?.account_type ?? (shows ? 'business' : null)
@@ -176,8 +206,21 @@ export function IdentityChecks({ done, note, aside }: { done?: React.ReactNode; 
   // The email starts as the one signed in with, until the person types their own (null: not typed yet).
   const [typedEmail, setTypedEmail] = useState<string | null>(null)
   const [draft, setDraft] = useState<Omit<Draft, 'email'>>({ phone: '', name: '', dob: '', line1: '', line2: '', town: '', postcode: '', country: '' })
-  const v = useVerification()
+  const v = useVerification(returnTo)
   const company = useCompanyDetails(type === 'business')
+  // B65.2 — the partner sends the person back with its own query (the inquiry and its status): it is taken off the
+  // address at once, and only says that a check waited.
+  const location = useLocation()
+  const navigate = useNavigate()
+  const waited = useRef(new URLSearchParams(location.search).has('inquiry-id'))
+  useEffect(() => {
+    if (new URLSearchParams(location.search).has('inquiry-id')) navigate(location.pathname, { replace: true })
+  }, [location.search, location.pathname, navigate])
+  const passed = v.isSuccess && type !== null && rank(v.data.level) >= neededLevel(type)
+  if (v.isSuccess && waitingOnNext(v.data)) waited.current = true
+  useEffect(() => {
+    if (passed && waited.current) onPassed?.()
+  }, [passed, onPassed])
   if (v.isError) return <p className="text-body text-ink-2">Your checks could not be read just now.</p>
   if (v.isPending || type === null) return <p className="text-body text-ink-2">Reading…</p>
 
@@ -192,6 +235,12 @@ export function IdentityChecks({ done, note, aside }: { done?: React.ReactNode; 
     else setDraft({ ...draft, [k]: e.target.value })
   }
   const wayIn = done && level < need && running === null ? wayInLine(v.data) : null
+  // B65.2 — the next check, when it waits for the person at the partner's page, or did not pass and can be started again
+  const next = latest(v.data, level + 1)
+  if (next?.status === 'pending' && next.link) waited.current = true
+  const partnerLink = next?.status === 'pending' ? next.link : undefined
+  const again = next?.subject === 'person' && (next.status === 'failed' || next.status === 'returned')
+  const shownSaid = said ?? (again && !tried ? failedText(next) : null)
   const personName = level >= 2 ? latest(v.data, 2)?.verified_name ?? '' : d.name
 
   async function run() {
@@ -206,8 +255,8 @@ export function IdentityChecks({ done, note, aside }: { done?: React.ReactNode; 
       if (s.level <= level) continue
       setRunning(s.subject)
       try {
-        const ans = await agentBankApi.verify(bodyFor(s.kind, d))
-        qc.setQueryData(VERIFICATION_KEY, ans.verification)
+        const ans = await agentBankApi.verify(bodyFor(s.kind, d, returnTo))
+        qc.setQueryData(verificationKey(returnTo), ans.verification)
         if (ans.check.status !== 'completed') {
           if (ans.check.status !== 'pending') setSaid(failedText(ans.check))
           break
@@ -270,7 +319,7 @@ export function IdentityChecks({ done, note, aside }: { done?: React.ReactNode; 
             </div>
           ) : (
             <>
-              {level < 2 ? (
+              {level < 2 && !partnerLink ? (
                 <section aria-label={IDENTITY_WORDS.you}>
                   <Card tone="white" className="grid gap-4">
                     <h3 className="font-display text-reading font-bold text-ink">{IDENTITY_WORDS.you}</h3>
@@ -319,17 +368,19 @@ export function IdentityChecks({ done, note, aside }: { done?: React.ReactNode; 
         <>
           {/* the company form is as wide as the page, as in Settings: its people's rows need the room */}
           {type === 'business' ? <CompanyDetailsSection titled /> : null}
-          <DocumentStep />
-          {said ? (
+          <DocumentStep link={partnerLink} />
+          {shownSaid ? (
             <div role="alert">
-              <FieldError>{said}</FieldError>
+              <FieldError>{shownSaid}</FieldError>
             </div>
           ) : null}
-          <div className="grid wide:flex wide:justify-end">
-            <Button disabled={running !== null} onClick={() => void run()}>
-              {running ? IDENTITY_WORDS.running : IDENTITY_WORDS.run}
-            </Button>
-          </div>
+          {partnerLink ? null : (
+            <div className="grid wide:flex wide:justify-end">
+              <Button disabled={running !== null} onClick={() => void run()}>
+                {running ? IDENTITY_WORDS.running : again ? IDENTITY_WORDS.again : IDENTITY_WORDS.run}
+              </Button>
+            </div>
+          )}
           {wayIn ? (
             <div data-testid="identity-way-in" className="grid justify-items-start gap-2 border-t border-line pt-4" role="status">
               {done}
@@ -342,17 +393,30 @@ export function IdentityChecks({ done, note, aside }: { done?: React.ReactNode; 
   )
 }
 
-/** Where the identity partner's own screen will open for a photo of the ID. It collects nothing. */
-function DocumentStep() {
+/** B65.2 — the identity partner's step: what it checks, our privacy notice, and once the check waits for the person,
+ *  the one button that opens the partner's page in this tab. Nothing is collected on our pages. */
+function DocumentStep({ link }: { link?: string }) {
   return (
-    <section aria-labelledby="identity-document" className={cn('grid gap-1.5 rounded-card bg-cloud p-5')}>
+    <section aria-labelledby="identity-document" className={cn('grid gap-3 rounded-card bg-cloud p-5')}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 id="identity-document" className="font-display text-reading font-bold text-ink">
           {IDENTITY_WORDS.documentTitle}
         </h3>
         <WorkspaceStatus />
       </div>
-      <p className="text-body text-ink-2">{IDENTITY_WORDS.documentLine}</p>
+      <p className="text-body text-ink-2">
+        {IDENTITY_WORDS.documentLine}{' '}
+        <Link className={inlineLink} to="/privacy">
+          {IDENTITY_WORDS.privacy}
+        </Link>
+      </p>
+      {link ? (
+        <div className="grid wide:flex wide:justify-end">
+          <Button asChild>
+            <a href={link}>{IDENTITY_WORDS.verify}</a>
+          </Button>
+        </div>
+      ) : null}
     </section>
   )
 }
