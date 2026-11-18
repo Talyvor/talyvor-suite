@@ -1,7 +1,7 @@
 {
   "src/AdminRemoved.test.tsx": 5,
   "src/aiRequestBodyRegister.test.ts": 33,
-  "src/areas/auth/Door.test.tsx": 16,
+  "src/areas/auth/Door.test.tsx": 18,
   "src/areas/auth/Entry.test.tsx": 16,
   "src/areas/auth/SignUp.test.tsx": 18,
   "src/areas/auth/Welcome.test.tsx": 4,
@@ -250,7 +250,7 @@
   "src/areas/track/WorkspaceSettings.test.tsx": 1,
   "src/asyncUtilTimeout.test.ts": 1,
   "src/auditScope.test.ts": 3,
-  "src/AuthGate.test.tsx": 5,
+  "src/AuthGate.test.tsx": 6,
   "src/authProbeLoop.test.tsx": 10,
   "src/bffRequestFieldRegister.test.ts": 6,
   "src/BillingRoutes.test.tsx": 4,
