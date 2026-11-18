@@ -163,7 +163,7 @@ import { agentAnalytics } from './agentAnalytics.ts'
 import { statementPDF } from './statementPDF.ts'
 import { statementJournal } from './statementJournal.ts'
 import { openapiWallets } from './openapiWallets.ts'
-import { instantTransferOffered, instantTransferQuote } from './instantTransfer.ts'
+import { instantTransferOffered, instantTransferQuote, instantTransferSend } from './instantTransfer.ts'
 import { helpComplaint, helpNoDeadControl, helpRequest, yourDataRequest } from './helpScreen.ts'
 import { sandboxLabelEveryScreen } from './sandboxLabel.ts'
 import { decidedLaddersVerdict, planChange, pricingApproved } from './planLadders.ts'
@@ -5642,7 +5642,9 @@ export function journeyFor(i: number, users: number, streamable: readonly string
   // quote shows what leaves, the fee, the rate and what arrives, holds 30 seconds and is refused in words after; Pay offers it to a
   // Hybrid account alone. Help: a question and a complaint filed and said so, a copy of the data asked for and listed, no dead
   // control. The Sandbox label on every signed-in launch screen, none Live and none calling the money test money.
-  if (i === 4) list.push(instantTransferQuote(), instantTransferOffered())
+  // B61.67 — and an Instant transfer sent from an agent's account the owner funded: it waits for the owner's key, arrives once on
+  // both sides, sends once under one Idempotency-Key, and waits above "ask me above" with an unsigned decision refused.
+  if (i === 4) list.push(instantTransferQuote(), instantTransferOffered(), instantTransferSend())
   if (i === 3) list.push(helpRequest(), helpComplaint(), yourDataRequest(), helpNoDeadControl())
   if (i === 2) list.push(sandboxLabelEveryScreen())
   return list

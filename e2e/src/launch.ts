@@ -74,7 +74,7 @@ export const SCENARIO_AREAS: Record<Area, readonly string[]> = {
     'xss-shown-back', 'pocket-03', 'pocket-04', 'pocket-05', 'pocket-06', 'pocket-08', 'pocket-13', 'pocket-15', 'pocket-16',
     'pocket-17',
   ],
-  'instant-transfer': ['instant-transfer-offered', 'instant-transfer-quote'],
+  'instant-transfer': ['instant-transfer-offered', 'instant-transfer-quote', 'instant-transfer-send'],
   activity: [
     'account-statements', 'agent-analytics', 'alert-channels', 'budgets-by-category', 'coach-week', 'daily-briefing',
     'ledger-reads-correctly', 'limit-alerts', 'month-plan', 'spend-notice-push', 'spending-screen', 'statement-journal',
