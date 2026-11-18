@@ -660,3 +660,14 @@ Then re-record with `selftest/record-lens-shapes.ts`, against a Lens built from 
 `E2E_FAULTS=1` (B26.18) kills the run's browser after a few verdicts. After a user passes on the browser that
 replaced it, it stops the stub Lens. Then it checks that the report and TESTERS.md say the run stopped early,
 name ECONNREFUSED and the browser that went away, and state the spend; and that the run exits 1.
+
+## One sign-up by phone on the live site (B64.2)
+
+```sh
+pnpm --filter @talyvor/e2e signup-live --app https://app.talyvor.com
+```
+
+No key: it does what a visitor does. It checks that every "Open your account" button on the marketing page goes to
+/signup on the app, that /signup signed out shows the door's phone number field, then plays `door-join` and
+`door-passcode` (src/door.ts) once, on a number from the range kept for tests. Each line is PASS, FAIL, SKIP, ERROR or
+NONE (the page has no sign-up button); it exits 1 on a FAIL or an ERROR.

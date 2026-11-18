@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { inlineLink } from '@talyvor/ui'
-import { Button as PocketButton, Card, Chip, Face, Facts, Icon, Money, RoomBadge, Row, Tabs, pocketFocusRing, showSnack, type ChipTone } from '@talyvor/ui/pocket'
+import { Button as PocketButton, Card, Chip, EmptyState, Face, Facts, Icon, Money, RoomBadge, Row, Tabs, pocketFocusRing, showSnack, type ChipTone } from '@talyvor/ui/pocket'
 import { Region, RegionScreen } from '../../components/Region'
 import { WorkspaceLabel, approvalCapability } from '../../labels/workspace'
 import { ApiError } from '../../lib/api'
@@ -463,7 +463,10 @@ export function StatementsScreen() {
         ) : accounts.isPending || book.isPending ? (
           <p className="text-body text-muted">Reading…</p>
         ) : tabs.length === 0 ? (
-          <p className="text-body text-muted">No accounts yet. An account’s statement starts with its first payment in or out.</p>
+          // B17.477 — Pocket's empty card, as every other wallet screen says it has nothing yet.
+          <div {...{ [DESIGN_ATTR]: 'pocket' }}>
+            <EmptyState icon={<Icon name="statements" />} title="No accounts yet" line="An account’s statement starts with its first payment in or out." />
+          </div>
         ) : (
           <div {...{ [DESIGN_ATTR]: 'pocket' }} className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center justify-end gap-2">

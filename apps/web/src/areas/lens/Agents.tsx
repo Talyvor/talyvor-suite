@@ -517,7 +517,7 @@ function AgentsList() {
           title="No agents yet"
           line="Give an agent its own account, wallet and card."
           action={
-            <Button size="sm" icon={<Icon name="plus" size={16} />} onClick={() => setCreating(true)}>
+            <Button variant="secondary" size="sm" icon={<Icon name="plus" size={16} />} onClick={() => setCreating(true)}>
               New agent
             </Button>
           }

@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { inlineLink } from '@talyvor/ui'
-import { Button, Dialog, Field, Icon, Input, Money, Select, showSnack } from '@talyvor/ui/pocket'
+import { cn, inlineLink } from '@talyvor/ui'
+import { Button, Dialog, Field, Icon, Input, Money, Select, pocketFocusRing, showSnack } from '@talyvor/ui/pocket'
+import { WorkspaceLabel } from '../../labels/workspace'
+import { CURRENCY_ACCOUNT } from '../../labels/capabilities'
 import { BOOK_KEY } from './AgentBank'
 import { MONEY_ACCOUNTS_KEY } from './Invoices'
 import { readFailure } from './WalletMoney'
@@ -15,12 +17,19 @@ import { type CurrencyAccount, agentBankApi, newMoveKey, refusalText, useAccount
 // twice; then the snack says what moved and both balances are read again. Lens decides who may and how much: every
 // refusal is its own sentence. Where the agent has no account in the currency chosen, the dialog says so and offers
 // the currencies it has.
+// B57.179 — drawn as Pocket Live's fund and take panels: the Sandbox label beside the heading, the line, the three amounts
+// the reference offers (50, 100 and 200 in the account's currency, 100 to begin with) over the typed amount, and on
+// Wallets the two buttons side by side under each agent's row. The review step stays, as Wallets' Add money has it.
 
 export type FundingDirection = 'to_agent' | 'to_company'
 
 /** An account's currency in words, as the agent's page names it: "US dollar account". */
 const ACCOUNT_WORDS: Record<string, string> = { USD: 'US dollar account', GBP: 'Pound account', EUR: 'Euro account', USDC: 'USDC account' }
 const accountWords = (currency: string) => ACCOUNT_WORDS[currency] ?? `${currency} account`
+
+/** The reference's three amounts, in major units of the account's currency. */
+const PRESETS = [50, 100, 200] as const
+const majorMinor = (major: number, currency: string) => major * 10 ** (currency === 'USDC' ? 6 : 2)
 
 /** "12.50" → 1250, or for USDC (six places) 12500000; null when it is not a positive amount. */
 export function typedMinor(text: string, currency: string): number | null {
@@ -32,15 +41,22 @@ export function typedMinor(text: string, currency: string): number | null {
 }
 
 /** Add money and Take back, side by side, each opening its dialog; currency picks the account it opens on. */
-export function AgentFundingButtons({ agent, currency, size = 'md' }: { agent: { id: string; name: string }; currency?: string; size?: 'sm' | 'md' }) {
+export function AgentFundingButtons({ agent, currency, className }: { agent: { id: string; name: string }; currency?: string; className?: string }) {
   const [direction, setDirection] = useState<FundingDirection | null>(null)
   return (
     <>
-      <span className="flex flex-wrap gap-2" data-testid={`agent-funding-${agent.id}${currency ? `-${currency}` : ''}`}>
-        <Button type="button" size={size} variant="secondary" icon={<Icon name="plus" size={16} />} aria-label={`Add money to ${agent.name}`} onClick={() => setDirection('to_agent')}>
+      <span className={cn('grid grid-cols-2 gap-2', className)} data-testid={`agent-funding-${agent.id}${currency ? `-${currency}` : ''}`}>
+        <Button type="button" variant="secondary" className="w-full px-3" icon={<Icon name="plus" size={18} />} aria-label={`Add money to ${agent.name}`} onClick={() => setDirection('to_agent')}>
           Add money
         </Button>
-        <Button type="button" size={size} variant="secondary" aria-label={`Take back from ${agent.name}`} onClick={() => setDirection('to_company')}>
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full px-3"
+          icon={<Icon name="arrow" size={18} className="rotate-90" />}
+          aria-label={`Take back from ${agent.name}`}
+          onClick={() => setDirection('to_company')}
+        >
           Take back
         </Button>
       </span>
@@ -72,7 +88,7 @@ export function AgentFundingDialog({
   const currency = chosen || its[0]?.currency || currencies[0] || ''
   const agentAccount = its.find((a) => a.currency === currency)
   const companyAccount = company.find((a) => a.currency === currency)
-  const [amount, setAmount] = useState('')
+  const [amount, setAmount] = useState(String(PRESETS[1]))
   const [confirming, setConfirming] = useState(false)
   const [key, setKey] = useState(newMoveKey)
   const minor = currency ? typedMinor(amount, currency) : null
@@ -96,7 +112,12 @@ export function AgentFundingDialog({
     <Dialog
       open
       onClose={onClose}
-      title={title}
+      title={
+        <span className="flex flex-wrap items-center justify-between gap-2">
+          {title}
+          <WorkspaceLabel capability={CURRENCY_ACCOUNT} />
+        </span>
+      }
       actions={
         confirming && ready ? (
           <>
@@ -166,16 +187,19 @@ export function AgentFundingDialog({
               </span>
             </div>
           ) : null}
-          <div className="grid gap-3 wide:grid-cols-2">
-            <Field label="Currency">
-              <Select aria-label="Currency" value={currency} onChange={(e) => setChosen(e.target.value)}>
-                {currencies.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
-            </Field>
+          {currency ? <Presets currency={currency} minor={minor} onPick={(major) => setAmount(String(major))} /> : null}
+          <div className={cn('grid gap-3', currencies.length > 1 && 'wide:grid-cols-2')}>
+            {currencies.length > 1 ? (
+              <Field label="Currency">
+                <Select aria-label="Currency" value={currency} onChange={(e) => setChosen(e.target.value)}>
+                  {currencies.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : null}
             <Field label="Amount">
               <Input aria-label="Amount" inputMode="decimal" unit={currency} value={amount} onChange={(e) => setAmount(e.target.value)} />
             </Field>
@@ -221,6 +245,33 @@ function Line({
         </>
       )}
     </p>
+  )
+}
+
+/** pocket.css .seg in the fund and take panels: 50, 100 and 200, the one the amount is now in ink. */
+function Presets({ currency, minor, onPick }: { currency: string; minor: number | null; onPick: (major: number) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Amount to move" className="flex gap-1.5" data-testid="agent-funding-presets">
+      {PRESETS.map((major) => {
+        const on = minor === majorMinor(major, currency)
+        return (
+          <button
+            key={major}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onPick(major)}
+            className={cn(
+              'h-12 flex-1 whitespace-nowrap rounded-pill px-3.5 font-figure text-reading font-semibold transition-colors duration-fast wide:h-9.5',
+              on ? 'bg-primary text-on-primary' : 'bg-cloud text-ink-2 shadow-edge hover:bg-cloud-2',
+              pocketFocusRing,
+            )}
+          >
+            <Money minor={majorMinor(major, currency)} currency={currency} />
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
