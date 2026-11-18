@@ -944,6 +944,10 @@ describe('the fee line under the amount (B61.116)', () => {
       )
     })
   }
+  // B57.188 — drawn as w-pay draws its review rows (Pocket's Facts): each a label and its figure.
+  function rows(line: HTMLElement) {
+    return Array.from(line.querySelectorAll('dl > div')).map((r) => [r.querySelector('dt')?.textContent, r.querySelector('dd')?.textContent])
+  }
   async function payForm() {
     window.history.pushState({}, '', '/money/pay#payee-payee_1')
     render(<App />)
@@ -956,7 +960,9 @@ describe('the fee line under the amount (B61.116)', () => {
     mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')])
     withPlan(3)
     const form = await payForm()
-    expect((await within(form).findByTestId('pay-fee')).textContent).toBe('Free. You have 3 free payments left this month.')
+    const line = await within(form).findByTestId('pay-fee')
+    expect(rows(line)).toEqual([['Fee', '£0.00']])
+    expect(within(line).getByText('Free. You have 3 free payments left this month.')).toBeTruthy()
     expect(form.textContent).not.toMatch(/Total/)
   })
 
@@ -964,7 +970,11 @@ describe('the fee line under the amount (B61.116)', () => {
     mockBff([], [], [PAYEE('payee_1', 'Acme Ltd')])
     withPlan(0)
     const form = await payForm()
-    expect((await within(form).findByTestId('pay-fee')).textContent).toBe('Fee £0.20 · Total £20.20')
+    const line = await within(form).findByTestId('pay-fee')
+    expect(rows(line)).toEqual([
+      ['Fee', '£0.20'],
+      ['Total', '£20.20'],
+    ])
   })
 
   it('says nothing about a fee when the plan has no limit', async () => {
