@@ -23,6 +23,17 @@ describe('statement-paging', () => {
     expect(v.pass).toBe(true)
   })
 
+  // B17.484 — the screen draws balances to the cent, so the withdrawal leaving 1.043 LXC reads as the 1.04 LXC an
+  // earlier funding left: the same balance on two different lines is not a line shown twice.
+  it('passes when the screen rounds a withdrawal’s balance onto a funding’s', () => {
+    const cents = (l: AgentLine): StatementRow => ({ ...row(l), amount: `${l.amount_ulxc > 0 ? '+' : '−'}${(Math.abs(l.amount_ulxc) / 1e6).toFixed(2)} LXC`, balance: `${(l.balance_after_ulxc / 1e6).toFixed(2)} LXC` })
+    const drawn = lines.map(cents)
+    expect(drawn[0].balance).toBe(drawn[3].balance)
+    const v = statementPagingVerdict(made, lines, { first: drawn.slice(0, 100), all: drawn, filtered: lines.filter((l) => l.kind === 'withdraw').map(cents) })
+    expect(v.detail).not.toContain('a line is shown twice')
+    expect(v.pass).toBe(true)
+  })
+
   it('fails when Show older lines shows page 1 again', () => {
     const again = [...all.slice(0, 100), ...all.slice(0, 7)]
     const v = statementPagingVerdict(made, lines, { first: all.slice(0, 100), all: again, filtered })
