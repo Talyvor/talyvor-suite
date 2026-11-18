@@ -37,8 +37,11 @@ export function statementPagingVerdict(
   if (first.length !== PAGE_LINES) wrong.push(`the Statement's first page shows ${first.length} row(s), want ${PAGE_LINES}`)
   if (all.length !== lines.length) wrong.push(`after Show older lines the Statement shows ${all.length} row(s) for Lens's ${lines.length}`)
   if (first.some((r, i) => all[i]?.balance !== r.balance)) wrong.push('after Show older lines the first page is no longer on top')
-  const balances = all.map((r) => r.balance)
-  if (new Set(balances).size !== balances.length) wrong.push(`a line is shown twice: balances ${balances.join(', ')}`)
+  // B17.484 — the screen draws a balance to the cent, so a withdrawal's balance can read as a funding's: a line shown
+  // twice is a whole row drawn twice, its words, amount and balance.
+  const drawn = all.map((r) => `${r.what} ${r.amount} ${r.balance}`)
+  const twice = drawn.filter((d, i) => drawn.indexOf(d) !== i)
+  if (twice.length > 0) wrong.push(`a line is shown twice: ${twice.map((d) => `"${d}"`).join(', ')}`)
   lines.forEach((l, i) => {
     const row = all[i]
     if (row !== undefined && row.what !== WORDS[l.kind]) wrong.push(`row ${i + 1} reads "${row.what}" for Lens's ${l.kind} line`)
@@ -75,7 +78,7 @@ export function statementPaging(seed: number): Scenario {
         await env.lens.fundAgent(app.user, a.id, each)
         made.push({ kind: 'fund', amount_ulxc: each })
       }
-      // Two withdrawals of different amounts, so no balance on the statement repeats.
+      // Two withdrawals of different amounts, so no row on the statement repeats.
       for (const back of [3_000, 4_000]) {
         await env.lens.withdrawAgent(app.user, a.id, back)
         made.push({ kind: 'withdraw', amount_ulxc: -back })
